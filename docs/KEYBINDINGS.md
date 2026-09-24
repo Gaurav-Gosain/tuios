@@ -123,8 +123,9 @@ nothing on the screen to read.
 
 These keys are bound for the agent review, triage, reply and approval work.
 Each one is being built: until its work lands, a key does what it did before
-it was bound (nothing in the Inbox, and the rail's own binding on an agent
-row). The prefix menu and the help overlay list them only once an agent has
+it was bound: nothing in the Inbox, the rail's own binding on an agent row,
+and after `ctrl+b` in terminal mode, the key typed into the focused pane, with
+no repeat window opened. The prefix menu and the help overlay list them only once an agent has
 been seen, like the rest of the Agents section.
 
 | Keys | Where | What it does |

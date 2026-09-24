@@ -1088,6 +1088,10 @@ const (
 	ActionAgentReview       = "agent_review"
 	ActionAgentCancelQueued = "agent_cancel_queued"
 
+	// The prefix keys of the review and triage work (ctrl+b v, ctrl+b O).
+	ActionPrefixReview       = "prefix_review"
+	ActionPrefixNextFinished = "prefix_next_finished"
+
 	ActionPeekApprove       = "peek_approve"
 	ActionPeekApproveAlways = "peek_approve_always"
 	ActionPeekDeny          = "peek_deny"

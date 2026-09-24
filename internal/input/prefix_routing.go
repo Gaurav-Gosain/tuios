@@ -49,6 +49,15 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetPrefixAction)
+		if app.PrefixWorkActions[action] {
+			if cmd, handled := runPrefixWork(action, o); handled {
+				armIfRepeatable(o, action)
+				return o, cmd
+			}
+			// Not built yet: the key is treated as unbound below.
+			o.ClearPrefixRepeat()
+			action = ""
+		}
 		if m, cmd, ok := dispatchAction(action, msg, o); ok {
 			armIfRepeatable(m, action)
 			return m, cmd
@@ -66,6 +75,21 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		forwardKeyToFocusedWindow(msg, o)
 	}
 	return o, nil
+}
+
+// runPrefixWork runs one of the review and triage prefix actions, which say
+// whether they did anything. Only one that did is recorded as run, the way
+// the Inbox's own work keys are, so until its work lands the key is exactly
+// the unbound key it was before: forwarded to the pane in terminal mode.
+func runPrefixWork(action string, o *app.OS) (tea.Cmd, bool) {
+	cmd, handled := o.PrefixWorkAction(action)
+	if handled {
+		o.NoteAction(action)
+		if o.OnAction != nil {
+			o.OnAction(action)
+		}
+	}
+	return cmd, handled
 }
 
 // HandleWorkspacePrefixCommand handles the key after leader+w.

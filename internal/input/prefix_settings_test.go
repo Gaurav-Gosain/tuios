@@ -119,6 +119,11 @@ func TestPrefixActionsDoNotLeakToGuest(t *testing.T) {
 		if len(keys) == 0 {
 			continue
 		}
+		// A pending action does nothing yet, so its chord is typed into the
+		// pane on purpose; TestPendingActionsStillDoNothing checks that.
+		if _, pending := pendingActions[action]; pending {
+			continue
+		}
 		_, pty := pressLeaderThen(t, cfg, app.TerminalMode, keys[0])
 		if got := string(pty.got); got != "" {
 			t.Errorf("%s (leader %q) leaked %q to the guest", action, keys[0], got)

@@ -511,3 +511,37 @@ func TestTheFanVerifyFieldIsAdditive(t *testing.T) {
 		t.Errorf("round trip gave %+v (%v)", out.Verify, err)
 	}
 }
+
+// TestHostAgentQueuedIsClamped holds a linked host's queue count to what a
+// queue of this build can hold: a host is untrusted, and the count is drawn
+// on the rail.
+func TestHostAgentQueuedIsClamped(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"negative", -5, 0},
+		{"zero", 0, 0},
+		{"inside", 3, 3},
+		{"at the cap", config.MaxQueueMax, config.MaxQueueMax},
+		{"over the cap", 1 << 40, config.MaxQueueMax},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{
+				"session": "work",
+				"agents":  []map[string]any{{"window_id": "w1", "name": "a", "state": "working", "queued": tc.in}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows, err := decodeHostAgents(raw, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || rows[0].Queued != tc.want {
+				t.Fatalf("queued %d read as %+v, want %d", tc.in, rows, tc.want)
+			}
+		})
+	}
+}

@@ -45,6 +45,8 @@ var repeatablePrefixActions = map[string]bool{
 	// presses walks the Inbox without opening it.
 	"prefix_next_attention": true,
 	// The same for the newest finished turn nobody has seen, walking back.
+	// Until that work lands the action reports it did nothing, and neither
+	// the prefix press nor a repeat arms the window (see runPrefixWork).
 	"prefix_next_finished": true,
 }
 
@@ -79,6 +81,17 @@ func tryPrefixRepeat(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	if !repeatablePrefixActions[action] {
 		o.ClearPrefixRepeat()
 		return o, nil, false
+	}
+	// A work action that did nothing closes the window and leaves the key to
+	// the ordinary path, so it is not swallowed while its work is unbuilt.
+	if app.PrefixWorkActions[action] {
+		cmd, handled := runPrefixWork(action, o)
+		if !handled {
+			o.ClearPrefixRepeat()
+			return o, nil, false
+		}
+		o.ArmPrefixRepeat()
+		return o, cmd, true
 	}
 	m, cmd, ok := dispatchAction(action, msg, o)
 	if !ok {

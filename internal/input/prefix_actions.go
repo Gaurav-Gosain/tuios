@@ -381,12 +381,18 @@ func handlePrefixNextAttention(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return o, o.JumpToNextAttention()
 }
 
+// handlePrefixReview and handlePrefixNextFinished are what the dispatcher runs
+// when something other than the prefix key names the action (a menu row, a
+// tape). The prefix key itself goes through runPrefixWork, which can tell an
+// action that did nothing from one that ran.
 func handlePrefixReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.ReviewFocusedPane()
+	cmd, _ := o.ReviewFocusedPane()
+	return o, cmd
 }
 
 func handlePrefixNextFinished(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.JumpToNewestFinished()
+	cmd, _ := o.JumpToNewestFinished()
+	return o, cmd
 }
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

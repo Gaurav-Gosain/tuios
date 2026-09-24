@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
@@ -355,7 +356,9 @@ func (d *Daemon) fetchHostAgents(ctx context.Context, host string, all bool) ([]
 }
 
 // decodeHostAgents reads a host's list-agents answer. A row from a host that
-// does not name its session is given the session the answer names.
+// does not name its session is given the session the answer names, and a
+// queue count is held to 0..config.MaxQueueMax, since no queue of this build
+// can hold more and the host is not trusted to say otherwise.
 func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, error) {
 	var decoded struct {
 		Session string           `json:"session"`
@@ -369,6 +372,7 @@ func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, er
 		if decoded.Agents[i].Session == "" {
 			decoded.Agents[i].Session = fallback
 		}
+		decoded.Agents[i].Queued = min(max(decoded.Agents[i].Queued, 0), config.MaxQueueMax)
 	}
 	return decoded.Agents, nil
 }

@@ -108,3 +108,46 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	saveFrame(t, term, "agent-work-inbox-unchanged")
 	alive(t, term, "after the Inbox's new keys")
 }
+
+// TestPendingPrefixKeysReachThePane checks that ctrl+b v and ctrl+b O, bound
+// ahead of their work, still do what they did before they were bound: in
+// terminal mode the key after the leader is typed into the focused pane. A
+// second O, where the repeat window of a working ctrl+b O would be, is typed
+// too rather than swallowed. The shell then echoes what reached it.
+//
+// Negative control: with the prefix path dispatching the two stubs as if they
+// had run, v and both Os are dropped and the echo prints PENDZ.
+func TestPendingPrefixKeysReachThePane(t *testing.T) {
+	term, base := attachClientBase(t)
+	// An agent in view, so the keys are the ones a person with agents has.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "working",
+		"--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	enterTerminalMode(t, term)
+
+	if err := term.SendKeys("echo PEND"); err != nil {
+		t.Fatalf("type the command: %v", err)
+	}
+	time.Sleep(insertGuard)
+	for _, key := range []string{"v", "O"} {
+		if err := term.SendKeys(tuitest.Ctrl('b'), key); err != nil {
+			t.Fatalf("press ctrl+b %s: %v", key, err)
+		}
+		time.Sleep(insertGuard)
+	}
+	if err := term.SendKeys("O"); err != nil {
+		t.Fatalf("press O again: %v", err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys("Z", tuitest.Enter); err != nil {
+		t.Fatalf("finish the command: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), "PENDvOOZ") >= 2
+	}, shellTimeout); err != nil {
+		t.Fatalf("the keys after the leader did not all reach the shell: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "agent-work-pending-prefix-keys")
+	alive(t, term, "after the pending prefix keys")
+}

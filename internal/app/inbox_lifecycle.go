@@ -29,9 +29,11 @@ func (m *OS) InboxToggleSnoozed() (tea.Cmd, bool) {
 }
 
 // JumpToNewestFinished goes to the newest finished turn nobody has seen, and
-// on a repeat within 5 seconds to the next older one (ctrl+b O).
-func (m *OS) JumpToNewestFinished() tea.Cmd {
-	return nil
+// on a repeat within 5 seconds to the next older one (ctrl+b O). handled is
+// false while the work has not landed, and the prefix path then treats the
+// key as unbound and does not arm the repeat window.
+func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
+	return nil, false
 }
 
 // SidebarAgentUnread marks a rail agent row's finished turn unread again.

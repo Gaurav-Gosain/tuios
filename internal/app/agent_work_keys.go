@@ -11,10 +11,31 @@ import (
 // Every one of them returns whether it did anything. A key whose work has not
 // landed answers false, and the input path then leaves the key exactly as it
 // was before the key was bound: an Inbox key does nothing and records nothing,
-// and a rail key on an agent row falls through to the rail's own binding, so r
+// a rail key on an agent row falls through to the rail's own binding, so r
 // still renames and x still opens the destructive menu there until reply and
-// cancel are built. The bodies live in review_overlay.go, inbox_lifecycle.go,
+// cancel are built, and ctrl+b v or ctrl+b O in terminal mode types v or O
+// into the focused pane without arming the prefix repeat window. The bodies live in review_overlay.go, inbox_lifecycle.go,
 // inbox_reply.go and inbox_approvals_ext.go.
+
+// PrefixWorkActions are the prefix actions PrefixWorkAction answers.
+var PrefixWorkActions = map[string]bool{
+	config.ActionPrefixReview:       true,
+	config.ActionPrefixNextFinished: true,
+}
+
+// PrefixWorkAction runs one of PrefixWorkActions. handled is false when the
+// action did nothing, which is every one of them until its work lands; the
+// prefix path then does what it does for an unbound key, so in terminal mode
+// the key reaches the focused pane, and the repeat window is not armed.
+func (m *OS) PrefixWorkAction(action string) (cmd tea.Cmd, handled bool) {
+	switch action {
+	case config.ActionPrefixReview:
+		return m.ReviewFocusedPane()
+	case config.ActionPrefixNextFinished:
+		return m.JumpToNewestFinished()
+	}
+	return nil, false
+}
 
 // InboxWorkActions are the Inbox actions InboxWorkAction answers.
 var InboxWorkActions = map[string]bool{

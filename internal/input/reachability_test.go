@@ -242,25 +242,29 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 // both directions: an action here that starts to run fails it, and moves out
 // of this list into the table above.
 var pendingActions = map[string]string{
-	config.ActionInboxReview:       "review overlay",
-	config.ActionInboxSnooze:       "Inbox lifecycle",
-	config.ActionInboxUndo:         "Inbox lifecycle",
-	config.ActionInboxShowSnoozed:  "Inbox lifecycle",
-	config.ActionInboxDenyReason:   "safer approvals",
-	config.ActionInboxDetailDown:   "safer approvals",
-	config.ActionInboxDetailUp:     "safer approvals",
-	config.ActionAgentUnread:       "Inbox lifecycle",
-	config.ActionAgentSnooze:       "Inbox lifecycle",
-	config.ActionAgentReply:        "rows and replies",
-	config.ActionAgentReview:       "review overlay",
-	config.ActionAgentCancelQueued: "rows and replies",
+	config.ActionInboxReview:        "review overlay",
+	config.ActionInboxSnooze:        "Inbox lifecycle",
+	config.ActionInboxUndo:          "Inbox lifecycle",
+	config.ActionInboxShowSnoozed:   "Inbox lifecycle",
+	config.ActionInboxDenyReason:    "safer approvals",
+	config.ActionInboxDetailDown:    "safer approvals",
+	config.ActionInboxDetailUp:      "safer approvals",
+	config.ActionAgentUnread:        "Inbox lifecycle",
+	config.ActionAgentSnooze:        "Inbox lifecycle",
+	config.ActionAgentReply:         "rows and replies",
+	config.ActionAgentReview:        "review overlay",
+	config.ActionAgentCancelQueued:  "rows and replies",
+	config.ActionPrefixReview:       "review overlay",
+	config.ActionPrefixNextFinished: "Inbox lifecycle",
 }
 
 // TestPendingActionsStillDoNothing presses every key of a pending action the
 // way the table above would, and asserts that the action is not recorded and
-// that the key did what it did before it was bound: nothing in the Inbox, and
-// the rail's own binding on an agent row.
+// that the key did what it did before it was bound: nothing in the Inbox, the
+// rail's own binding on an agent row, and after the leader key in terminal
+// mode, the key typed into the focused pane with no repeat window left open.
 func TestPendingActionsStillDoNothing(t *testing.T) {
+	k := config.DefaultConfig().Keybindings
 	for _, sec := range reachSections(t) {
 		for _, action := range sortedActions(sec.binds) {
 			if _, pending := pendingActions[action]; !pending {
@@ -270,8 +274,36 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 				t.Run(sec.name+"/"+action+"/"+key, func(t *testing.T) {
 					o := sec.newOS(t)
 					o.Mode = app.WindowManagementMode
+					if sec.leader {
+						o.Mode = app.TerminalMode
+					}
+					var typed []byte
+					if w := o.GetFocusedWindow(); w != nil {
+						w.DaemonMode = true
+						w.DaemonWriteFunc = func(b []byte) error { typed = append(typed, b...); return nil }
+					}
 					before := len(o.RecentActions())
+					if sec.leader {
+						o = pressKey(t, o, k.LeaderKey)
+					}
+					if sec.gate != "" {
+						o = pressKey(t, o, gateKey(t, k, sec.gate))
+					}
 					o = pressKey(t, o, key)
+					if sec.leader && sec.gate == "" {
+						if string(typed) != key {
+							t.Errorf("%s in terminal mode typed %q into the pane, want %q as before it was bound", describeChord(k, sec, key), typed, key)
+						}
+						if o.PrefixRepeatLive() {
+							t.Errorf("%s left the repeat window open although it did nothing", describeChord(k, sec, key))
+						}
+						// A second press, where a repeat would land, is typed
+						// too rather than swallowed.
+						o = pressKey(t, o, key)
+						if string(typed) != key+key {
+							t.Errorf("a second %s after %s typed %q into the pane, want %q", key, describeChord(k, sec, key), typed, key+key)
+						}
+					}
 					got := o.RecentActions()
 					for _, a := range got[before:] {
 						if a == action {

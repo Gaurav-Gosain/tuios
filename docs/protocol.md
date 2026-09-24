@@ -971,7 +971,9 @@ caller that sends nothing new is answered as before:
 - `get-agent-state` and every `list-agents` entry gain `queued`, the length of
   the pane's delivery queue, 0 until the queue is built. The synced window
   state gains `agent_queued`, omitted when zero and taken from the daemon's
-  own state on every client push.
+  own state on every client push. A row of another machine's agents
+  (`list-hosts` with agents) keeps that host's `queued`, held to 0 through
+  `[agents.queue]`'s ceiling of 64, display only.
 - A worktree's record gains `verify`, the last `verify-fan` check in it,
   omitted when none has run.
 - The event type `agent-activity` exists and is opt-in: a subscription

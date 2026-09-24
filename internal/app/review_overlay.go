@@ -11,9 +11,11 @@ import tea "charm.land/bubbletea/v2"
 // a rail agent row. The overlay itself has not landed; the entry points below
 // do nothing yet, and say so by answering false where the input path asks.
 
-// ReviewFocusedPane opens the review of the focused pane (ctrl+b v).
-func (m *OS) ReviewFocusedPane() tea.Cmd {
-	return nil
+// ReviewFocusedPane opens the review of the focused pane (ctrl+b v). handled
+// is false while the overlay has not landed, and the prefix path then treats
+// the key as unbound: in terminal mode it reaches the pane.
+func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
+	return nil, false
 }
 
 // InboxReview opens the review of the selected Inbox item's pane.
