@@ -369,10 +369,33 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: DimUnfocusedMax,
 		Percent: true,
 	},
+	// The backgrounds. appearance.background is the default for every surface;
+	// each surface's own option overrides it, and empty follows it. See
+	// ResolveBackground.
+	{
+		Path: "appearance.background", Type: OptionString, Section: "appearance",
+		Description: "Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a #RRGGBB literal",
+		Accepted:    Backgrounds, Default: BackgroundOff, Color: true,
+	},
 	{
 		Path: "appearance.pane_background", Type: OptionString, Section: "appearance",
-		Description: "Background behind pane content: off (your terminal shows through), theme, or a #RRGGBB literal",
-		Accepted:    PaneBackgrounds, Default: PaneBackgroundOff, Color: true,
+		Description: "Background behind pane content: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Accepted:    Backgrounds, Default: "", Color: true,
+	},
+	{
+		Path: "appearance.desktop_background", Type: OptionString, Section: "appearance",
+		Description: "Background behind and between panes, including gaps and an empty workspace: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Accepted:    Backgrounds, Default: "", Color: true,
+	},
+	{
+		Path: "appearance.window_chrome_background", Type: OptionString, Section: "appearance",
+		Description: "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Accepted:    Backgrounds, Default: "", Color: true,
+	},
+	{
+		Path: "appearance.dock_background", Type: OptionString, Section: "dock",
+		Description: "Background under the dock: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
 		Path: "appearance.clock_format", Type: OptionString, Section: "dock",
@@ -610,6 +633,11 @@ var optionSpecs = []Option{
 		Path: "appearance.sidebar.tooltips", Type: OptionBool, Section: "sidebar",
 		Description: "Label the collapsed strip on hover",
 		Default:     "true",
+	},
+	{
+		Path: "appearance.sidebar.background", Type: OptionString, Section: "sidebar",
+		Description: "Background under the rail: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
 		Path: "appearance.sidebar.sections", Type: OptionString, Section: "sidebar",

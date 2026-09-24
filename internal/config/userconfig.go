@@ -255,7 +255,15 @@ type AppearanceConfig struct {
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
-	PaneBackground    string `toml:"pane_background"`     // Ground painted behind pane content: off, theme, or #RRGGBB (default: off)
+	// The backgrounds tuios paints on cells that have none of their own. Each
+	// takes off, theme or #RRGGBB. background is the default for every
+	// surface; a surface's own key overrides it, and empty follows it. See
+	// ResolveBackground.
+	Background             string `toml:"background"`               // Ground for every surface not set on its own (default: off)
+	PaneBackground         string `toml:"pane_background"`          // Ground behind pane content (default: empty, follows background)
+	DesktopBackground      string `toml:"desktop_background"`       // Ground behind and between panes (default: empty, follows background)
+	WindowChromeBackground string `toml:"window_chrome_background"` // Ground under pane borders and title bars (default: empty, follows background)
+	DockBackground         string `toml:"dock_background"`          // Ground under the dock (default: empty, follows background)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -425,20 +433,31 @@ const (
 // #RRGGBB literal is also accepted.
 var ScrollbarTints = []string{ScrollbarTintQuiet, ScrollbarTintBorder, ScrollbarTintMuted}
 
-// Pane backgrounds. See AppearanceConfig.PaneBackground.
+// Backgrounds. See AppearanceConfig.Background and ResolveBackground.
 const (
-	// PaneBackgroundOff paints nothing: a cell the program left on the
-	// default background shows the host terminal through it. The default.
-	PaneBackgroundOff = "off"
-	// PaneBackgroundTheme paints the active theme's background, and the
-	// theme's foreground on text left in the default colour. With no theme
-	// set there is no background to paint, so it behaves as off.
-	PaneBackgroundTheme = "theme"
+	// BackgroundOff paints nothing: a cell left on the default background
+	// shows the host terminal through it. The default.
+	BackgroundOff = "off"
+	// BackgroundTheme paints the active theme's background, and the theme's
+	// foreground on text left in the default colour. With no theme set there
+	// is no background to paint, so it behaves as off.
+	BackgroundTheme = "theme"
 )
 
-// PaneBackgrounds lists the keyword values for appearance.pane_background; a
-// #RRGGBB literal is also accepted.
-var PaneBackgrounds = []string{PaneBackgroundOff, PaneBackgroundTheme}
+// Backgrounds lists the keyword values every background option takes; a
+// #RRGGBB literal is also accepted, and a surface's own option also takes
+// empty, which follows appearance.background.
+var Backgrounds = []string{BackgroundOff, BackgroundTheme}
+
+// The pane background's names from before the other surfaces had one. They
+// are the same values.
+const (
+	PaneBackgroundOff   = BackgroundOff
+	PaneBackgroundTheme = BackgroundTheme
+)
+
+// PaneBackgrounds lists the keyword values for appearance.pane_background.
+var PaneBackgrounds = Backgrounds
 
 // ScrollbarTrackNone is the track value that draws no track at all, which is
 // what the thin style looked like before it grew one.
@@ -533,6 +552,9 @@ type SidebarConfig struct {
 	// FileDelete is where a delete sends the file: trash or permanent
 	// (default: trash).
 	FileDelete string `toml:"file_delete"`
+	// Background is the ground painted under the rail: off, theme or
+	// #RRGGBB, and empty follows appearance.background (default: empty).
+	Background string `toml:"background"`
 	// AgentRow is the [appearance.sidebar.agent_row] table: the tokens an
 	// agent row draws and the value rules that colour them. Decoded as generic
 	// TOML and read by ParseSidebarAgentRow, so a wrong value in it is a
@@ -640,7 +662,7 @@ func DefaultConfig() *UserConfig {
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
-			PaneBackground:           PaneBackgroundOff,
+			Background:               BackgroundOff,
 			Selection: SelectionConfig{
 				Bg: DefaultSelectionBg, Fg: DefaultSelectionFg,
 				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
@@ -1509,8 +1531,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Scrollbar.Tint == "" {
 		cfg.Appearance.Scrollbar.Tint = defaultCfg.Appearance.Scrollbar.Tint
 	}
-	if cfg.Appearance.PaneBackground == "" {
-		cfg.Appearance.PaneBackground = defaultCfg.Appearance.PaneBackground
+	// Only the default for every surface is filled in. A surface's own key is
+	// left empty, because empty is what makes it follow that default.
+	if cfg.Appearance.Background == "" {
+		cfg.Appearance.Background = defaultCfg.Appearance.Background
 	}
 
 	// Note: HideWindowButtons defaults to false (zero value)
@@ -1692,10 +1716,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
 	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
 	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
-	// Assigned as written, for the tint's reason: PaneBackgroundResolved and
-	// PaneBackgroundHex settle empty and a typo to off, so an edit made live
-	// cannot paint a colour the file's validation would have refused.
+	// Assigned as written, for the tint's reason: ResolveBackground settles a
+	// typo to off and empty to the default for every surface, so an edit made
+	// live cannot paint a colour the file's validation would have refused.
+	s.Background = cfg.Appearance.Background
 	s.PaneBackground = cfg.Appearance.PaneBackground
+	s.DesktopBackground = cfg.Appearance.DesktopBackground
+	s.WindowChromeBackground = cfg.Appearance.WindowChromeBackground
+	s.DockBackground = cfg.Appearance.DockBackground
+	s.SidebarBackground = cfg.Appearance.Sidebar.Background
 
 	// A pointer because zero is a real value here: it turns the repeat window
 	// off, and a plain int could not tell that from an absent key.

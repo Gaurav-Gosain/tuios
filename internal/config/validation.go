@@ -345,34 +345,50 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
-	validatePaneBackground(cfg, result)
+	validateBackgrounds(cfg, result)
 }
 
-// validatePaneBackground warns about a pane background that is neither a
+// validateBackgrounds warns about a background option that is neither a
 // keyword nor a colour, and about theme asked for with no theme to take it
-// from. Either way the pane is left transparent, which is the default, so the
-// frame stays drawable and the warning says why nothing was painted.
-func validatePaneBackground(cfg *UserConfig, result *ValidationResult) {
-	v := cfg.Appearance.PaneBackground
+// from. Either way that surface is left transparent, which is the default, so
+// the frame stays drawable and the warning says why nothing was painted.
+func validateBackgrounds(cfg *UserConfig, result *ValidationResult) {
+	a := &cfg.Appearance
+	for _, bg := range []struct {
+		key, value, surface string
+	}{
+		{"background", a.Background, "every surface it reaches stays transparent"},
+		{"pane_background", a.PaneBackground, "panes stay transparent"},
+		{"desktop_background", a.DesktopBackground, "the desktop stays transparent"},
+		{"window_chrome_background", a.WindowChromeBackground, "pane borders and title bars stay transparent"},
+		{"dock_background", a.DockBackground, "the dock stays transparent"},
+		{"sidebar.background", a.Sidebar.Background, "the rail stays transparent"},
+	} {
+		validateBackground(bg.key, bg.value, bg.surface, a.Theme != "", result)
+	}
+}
+
+// validateBackground is validateBackgrounds for one option.
+func validateBackground(key, v, surface string, themed bool, result *ValidationResult) {
 	switch {
-	case v == "" || v == PaneBackgroundOff || IsHexColor(v):
+	case v == "" || v == BackgroundOff || IsHexColor(v):
 		return
-	case v == PaneBackgroundTheme:
-		if cfg.Appearance.Theme != "" {
+	case v == BackgroundTheme:
+		if themed {
 			return
 		}
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: "appearance",
-			Key:   "pane_background",
-			Message: "pane_background is theme but no theme is set, so there is no theme background " +
-				"to paint and panes stay transparent; set a theme or a #RRGGBB colour",
+			Key:   key,
+			Message: fmt.Sprintf("%s is theme but no theme is set, so there is no theme background "+
+				"to paint and %s; set a theme or a #RRGGBB colour", key, surface),
 		})
 	default:
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: "appearance",
-			Key:   "pane_background",
-			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); panes stay transparent",
-				v, strings.Join(PaneBackgrounds, ", ")),
+			Key:   key,
+			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); %s",
+				v, strings.Join(Backgrounds, ", "), surface),
 		})
 	}
 }

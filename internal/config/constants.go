@@ -1031,25 +1031,65 @@ func (s *Settings) ScrollbarTintResolved() string {
 	return s.ScrollbarTint
 }
 
-// PaneBackgroundHex returns the configured pane background when it is a colour
-// literal rather than a keyword.
-func (s *Settings) PaneBackgroundHex() (string, bool) {
-	if IsHexColor(s.PaneBackground) {
-		return s.PaneBackground, true
+// ResolveBackground is what one surface's background is behaving as, given its
+// own setting and appearance.background: off, theme, or a #RRGGBB literal.
+//
+// The surface's own setting wins whenever it holds a value, off included, so
+// one surface can be left bare while the rest are painted. Empty follows the
+// default for every surface. Anything unrecognised, in either place, resolves
+// to off, the documented default, so a typo paints nothing rather than a
+// guess.
+func ResolveBackground(own, all string) string {
+	v := own
+	if v == "" {
+		v = all
 	}
-	return "", false
-}
-
-// PaneBackgroundResolved is what the pane background is behaving as: off,
-// theme, or a #RRGGBB literal. Empty and anything unrecognised resolve to off,
-// the documented default, so a typo paints nothing rather than a guess.
-func (s *Settings) PaneBackgroundResolved() string {
-	switch v := s.PaneBackground; {
-	case v == PaneBackgroundTheme, IsHexColor(v):
+	switch {
+	case v == BackgroundTheme, IsHexColor(v):
 		return v
 	default:
-		return PaneBackgroundOff
+		return BackgroundOff
 	}
+}
+
+// PaneBackgroundResolved is the background behind pane content.
+func (s *Settings) PaneBackgroundResolved() string {
+	return ResolveBackground(s.PaneBackground, s.Background)
+}
+
+// DesktopBackgroundResolved is the background behind and between panes.
+func (s *Settings) DesktopBackgroundResolved() string {
+	return ResolveBackground(s.DesktopBackground, s.Background)
+}
+
+// WindowChromeBackgroundResolved is the background under pane borders and
+// title bars.
+func (s *Settings) WindowChromeBackgroundResolved() string {
+	return ResolveBackground(s.WindowChromeBackground, s.Background)
+}
+
+// DockBackgroundResolved is the background under the dock.
+func (s *Settings) DockBackgroundResolved() string {
+	return ResolveBackground(s.DockBackground, s.Background)
+}
+
+// SidebarBackgroundResolved is the background under the rail.
+func (s *Settings) SidebarBackgroundResolved() string {
+	return ResolveBackground(s.SidebarBackground, s.Background)
+}
+
+// AllBackgroundResolved is appearance.background on its own.
+func (s *Settings) AllBackgroundResolved() string {
+	return ResolveBackground("", s.Background)
+}
+
+// PaneBackgroundHex returns the pane background in force when it is a colour
+// literal rather than a keyword.
+func (s *Settings) PaneBackgroundHex() (string, bool) {
+	if v := s.PaneBackgroundResolved(); IsHexColor(v) {
+		return v, true
+	}
+	return "", false
 }
 
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.

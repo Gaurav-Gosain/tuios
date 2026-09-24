@@ -49,7 +49,7 @@ daemon runs needs `tuios kill-server` to take effect.
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 158 options above are scalars, and spacing and composition are set with them
+The 163 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are names from an open set, each standing for a
 file in a directory, so each has a verb of its own.
 
@@ -151,22 +151,28 @@ done
   terminal fills the colour indices. "Match my terminal" means importing its
   scheme file.
 
-### Colour: the pane background
+### Colour: the backgrounds
 
 ```sh
-tuios set-config appearance.pane_background theme
-tuios set-config appearance.pane_background '#1e1e2e'
-tuios set-config appearance.pane_background off
+tuios set-config appearance.background theme                 # every surface
+tuios set-config appearance.pane_background '#1e1e2e'         # one surface
+tuios set-config appearance.dock_background off               # keep one bare
+tuios set-config appearance.sidebar.background ''             # follow background again
 ```
 
-A cell a program leaves on the default background is transparent, so the
-person's terminal shows through. `pane_background` paints it instead: `off`
-(the default) paints nothing, `theme` paints the theme's background and gives
-default-coloured text the theme's foreground, and `#RRGGBB` paints that colour.
-A background the program set itself always wins. Only pane content is painted;
-borders, the rail and the dock are not. `theme` with no theme set paints
-nothing. A colour literal with no theme keeps the terminal's own text colour,
-so pick one that reads under it.
+A cell with no background of its own is transparent, so the person's terminal
+shows through. The background options paint it instead: `off` paints nothing,
+`theme` paints the theme's background and gives default-coloured text the
+theme's foreground, and `#RRGGBB` paints that colour. `appearance.background`
+(default `off`) covers every surface; `pane_background`,
+`desktop_background` (gaps, the space around panes, an empty workspace),
+`window_chrome_background` (borders, title bars, shared-border lines),
+`dock_background` and `sidebar.background` each override it for one surface,
+and empty follows it. A colour a program or the chrome set itself always wins,
+so a border keeps its ink. `theme` with no theme set paints nothing. A colour
+literal with no theme keeps the terminal's own text colour, so pick one that
+reads under it. While panes are painted, a program's OSC 11 and OSC 10 queries
+are answered with the painted colours.
 
 ## The dock's components
 

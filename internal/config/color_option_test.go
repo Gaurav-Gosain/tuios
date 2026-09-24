@@ -34,6 +34,13 @@ func TestColorOptionsAreMarked(t *testing.T) {
 		"appearance.border_unfocused_color": true,
 		"appearance.scrollbar.tint":         true,
 		"appearance.pane_background":        true,
+		// The rest of the backgrounds: the default for every surface, and each
+		// surface's own.
+		"appearance.background":               true,
+		"appearance.desktop_background":       true,
+		"appearance.window_chrome_background": true,
+		"appearance.dock_background":          true,
+		"appearance.sidebar.background":       true,
 		// The marks a pane paints over its own output. Each background has a
 		// text colour beside it, and each text colour may be left empty to
 		// keep whatever the program wrote.
