@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -1238,7 +1239,7 @@ func (s *Session) forgetBroadcastFingerprint() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil, nil)
+	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil, nil, nil)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1247,13 +1248,13 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil)
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil, nil)
 }
 
 // restorePTYWithGrants is RestorePTY for a window that was saved with grants
 // of its own, which the new process holds from its first instruction.
 func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, grants)
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil, grants)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
@@ -1266,13 +1267,14 @@ func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd s
 // stdout, when non-nil, is the process's standard output instead of the PTY:
 // a popup's captured output goes to a pipe the daemon reads, while the program
 // still draws on the PTY through stderr or /dev/tty. It is only honoured for a
+// local process. extraFiles are inherited as fd 3 and up, again only by a
 // local process.
 //
 // grants is what the pane may do through tuios, nil for the default. A local
 // pane is entered in the grant table before its process starts and leaves it
 // when the process exits, so the process is never placed in a pane the table
 // does not know. See pane_grants.go.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File, grants *Grants) (*PTY, error) {
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File, extraFiles []*os.File, grants *Grants) (*PTY, error) {
 	// A window that was given grants and gets a new process with none named
 	// keeps what it was given, even when its last process has already gone
 	// and taken its entry in the grant table with it. Read before ptysMu is
@@ -1347,6 +1349,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			cmd.Env = s.buildEnvWith(windowID, restored, extraEnv)
 			if stdout != nil {
 				cmd.Stdout = stdout
+			}
+			if len(extraFiles) > 0 && runtime.GOOS != "windows" {
+				cmd.ExtraFiles = extraFiles
 			}
 			// Start the shell in cwd when one was named and still exists; otherwise
 			// fall back to the shell's default (inherited) directory.

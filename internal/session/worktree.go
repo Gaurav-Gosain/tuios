@@ -81,6 +81,9 @@ type FanVerify struct {
 	// the command runs.
 	StartedAt  int64 `json:"started_at,omitempty"`
 	FinishedAt int64 `json:"finished_at,omitempty"`
+	// Note says why a failed check has no exit status: it timed out, or the
+	// daemon restarted while it ran. Empty otherwise.
+	Note string `json:"note,omitempty"`
 }
 
 // Verify states, as the wire carries them.

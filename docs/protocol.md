@@ -1091,6 +1091,32 @@ has no queue until something is queued. For one that does:
   queued on the same connection. `queue-prompt` and `cancel-queued` from a pane
   on another machine, forwarded through its report channel, are `forbidden`.
 
+**Fan compare, verify and keep are built.** `compare-fan`, `verify-fan` and
+`keep-fan` answer instead of `internal` (see [compare-fan](#compare-fan),
+[verify-fan](#verify-fan) and [keep-fan](#keep-fan)). What changes for an
+existing caller:
+
+- `verify-fan` takes `env`, with the rules of `fan`'s `env`: a call over a
+  link that passes it is refused with `forbidden`.
+- A worktree's `verify` record gains `note`, omitted when empty, saying why a
+  failed check has no exit status: it timed out, or the daemon restarted
+  while it ran. A record saved as `running` by a daemon that has since
+  restarted is reported by `compare-fan` as `failed` with that note; the
+  saved record itself is not rewritten.
+- `verify-fan` opens a window named `verify` in each fan session it reaches.
+  An attached client shows it like any other new window, without focusing
+  it. It closes when the check passes and stays open when it fails, until
+  someone presses enter in it.
+- The daemon's shell facts gain the time the last command finished, which
+  `compare-fan` reports as `last_command.at`. No other verb reports it.
+- `tuios fan keep` calls `keep-fan`, and falls back to the loop over
+  `remove-worktree` it ran before when the daemon answers `unknown_verb`.
+  Its output and `--json` shape are unchanged, except that a sibling left
+  dirty is described by the daemon's refusal plus a sentence naming
+  `--stash` and `--force`, and siblings are now matched by the repository's
+  main checkout rather than its directory name, so two checkouts that share
+  a name no longer count as one fan.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -2297,6 +2323,133 @@ and answers the agent `cancelled` (Codex: `cancel`).
 The result gains `protocol`, and `command` is the agent's command, not the pane
 program's. `list-agents` shows `protocol` for the pane.
 
+### compare-fan
+
+The attempts of a fan side by side: one row per session of the fan, in the
+order fan made them. Name any session of the fan; a worktree session that is
+not part of a fan is `invalid_params`, with the fan sessions there are in the
+hint, and a session that is not a worktree is `not_worktree`.
+
+Params: `session`, `changes` (default true: count each attempt's changes,
+which runs a few git calls per sibling, each bounded at 10 seconds).
+
+Each row carries `session`, `branch`, `path`, `agent` (as the fan named it),
+`harness`, `state` (rolled up over the session's windows), `prompt_status`,
+and:
+
+- `files`, `added`, `removed`: what the attempt changed against its base,
+  committed and uncommitted work together, untracked files included and
+  ignored files left out. The working state is read through a temporary
+  index, so the worktree's own index and files are not touched. The base is
+  the fan's `base`, or for a fan made from `HEAD`, where the attempt's branch
+  left the main checkout's `HEAD`. `ahead` counts its commits past the base,
+  `dirty` says whether it holds uncommitted work, and `base_sha` is the
+  commit counted from. All are omitted with `changes` false, and when git
+  could not count, in which case `note` says why.
+- `verify`: the last `verify-fan` check, as the worktree record holds it.
+- `last_command`: the newest command a shell in the session finished, from
+  its OSC 133 marks: `cmdline`, `exit` (omitted when the shell sent none),
+  `at` (unix nanoseconds) and `window`. Omitted when no shell has marked one.
+  An agent's own tool runs do not show here, which is what `verify-fan` is
+  for.
+- `gone` when the worktree directory no longer exists.
+
+A pane without `admin`, or a connection restricted to its own session, gets
+rows only for the sessions it could name itself: its own session, its fan
+group, and the sessions a fan run from it started. Over a link it needs `list`,
+because it returns counts and states, not file contents.
+
+```json
+{"verb": "compare-fan", "params": {"session": "api-fan-retry"}}
+```
+
+```json
+{"result": {"type": "fan_compare", "group": "fan/retry", "repo": "api", "repo_root": "/src/api",
+ "base": "main", "total": 2, "rows": [
+  {"session": "api-fan-retry", "branch": "fan/retry", "agent": "claude", "harness": "claude-code",
+   "state": "done", "files": 4, "added": 120, "removed": 31, "ahead": 2, "dirty": true,
+   "prompt_status": "sent", "verify": {"command": "go test ./...", "state": "passed", "exit": 0,
+   "started_at": 1790000000000000000, "finished_at": 1790000012000000000}},
+  {"session": "api-fan-retry-2", "branch": "fan/retry-2", "agent": "codex", "harness": "codex",
+   "state": "working", "files": 2, "added": 40, "removed": 3, "ahead": 0, "dirty": true,
+   "prompt_status": "sent", "last_command": {"cmdline": "make lint", "exit": 1, "at": 1790000030000000000, "window": "9c2e..."}}]}}
+```
+
+### verify-fan
+
+Run one check in every attempt of a fan. Each session of the fan the caller
+reaches gets a window named `verify`, in its worktree, running the command
+with `sh -c` (`cmd.exe /c` on Windows). The call returns once the windows are
+open; each result lands in the session's worktree record as `verify`, which
+reaches clients with the ordinary state push and which `compare-fan` reports.
+
+- The command is always the caller's, at most 4096 bytes. tuios never reads a
+  check from the repository, so cloning a repository cannot make `fan` run
+  its code.
+- The window holds the grants `none`, whatever the default is, so the check
+  cannot call tuios.
+- The check's exit status reaches the daemon on a pipe the check itself does
+  not inherit, so nothing it prints can pass for its status. A check that
+  passes closes its window. One that fails keeps it open, with the output, and
+  says so; enter closes it. On Windows the window closes either way.
+- `timeout_ms` fails a check that runs longer and closes its window; the
+  record's `note` says it timed out. Without it a check runs until it ends.
+- A check still running in a session is stopped, and its window closed,
+  before the new one starts.
+- A session whose worktree directory is gone is skipped, and `skipped` says
+  so. When nothing could be started the call is `internal`, with the reasons
+  in the hint.
+- `env` adds variables for the check, with the rules of `fan`'s `env`. The
+  tuios CLI sends its `PATH`.
+
+A pane needs the `fan` grant, and reaches its own fan group; the checks start
+only in the sessions it reaches. Over a link it needs `open` and `write`.
+
+Params: `session`, `command` (required), `timeout_ms`, `env`.
+
+```json
+{"verb": "verify-fan", "params": {"session": "api-fan-retry", "command": "go test ./...", "timeout_ms": 600000}}
+```
+
+```json
+{"result": {"type": "fan_verify_started", "group": "fan/retry", "command": "go test ./...",
+ "sessions": ["api-fan-retry", "api-fan-retry-2"]}}
+```
+
+The record while it runs and once it ends:
+
+```json
+{"command": "go test ./...", "state": "running", "started_at": 1790000000000000000}
+{"command": "go test ./...", "state": "failed", "exit": 1, "started_at": 1790000000000000000, "finished_at": 1790000042000000000}
+```
+
+### keep-fan
+
+Keep one attempt of a fan and remove the others. Each sibling is removed the
+way `remove-worktree` removes it, each on its own: a sibling with uncommitted
+changes is left in place, with `worktree_dirty`, unless `stash` or `force`
+says what to do with them, and the others still go. Branches are never
+deleted. A check running in a removed sibling is stopped. A session that is
+not part of a fan is `invalid_params`.
+
+Only the person or a caller with `admin` may call it: a pane without `admin`
+and any restricted connection are refused. Over a link it needs `write`.
+
+Params: `session` (required), `stash`, `force`.
+
+```json
+{"verb": "keep-fan", "params": {"session": "api-fan-retry-2"}}
+```
+
+```json
+{"result": {"type": "fan_kept", "kept": "api-fan-retry-2", "branch": "fan/retry-2", "group": "fan/retry",
+ "repo": "api", "left": 1, "removed": [
+  {"session": "api-fan-retry", "removed": true, "branch": "fan/retry", "path": "/home/u/.local/share/tuios/worktrees/api/fan-retry",
+   "changes": 0, "stashed": false, "discarded": false, "session_killed": true, "branch_kept": true},
+  {"session": "api-fan-retry-3", "removed": false, "code": "worktree_dirty",
+   "note": "/home/u/.local/share/tuios/worktrees/api/fan-retry-3 holds 1 uncommitted change. Nothing was removed."}]}}
+```
+
 ### bundle-worktree
 
 Read a worktree session's work out in chunks, so it can cross a link that caps
@@ -3404,8 +3557,9 @@ resume; read the ring instead.
 
 These verbs are registered with their parameters, scope and link capability,
 and answer `internal` ("not built yet") until their work lands. These have
-landed: `agent-activity` (see [agent-activity](#agent-activity)) and the
-delivery queue's three (see [The delivery queue](#the-delivery-queue)).
+landed: `agent-activity` (see [agent-activity](#agent-activity)), the
+delivery queue's three (see [The delivery queue](#the-delivery-queue)), and
+`compare-fan`, `verify-fan` and `keep-fan`, which have sections of their own.
 `list-verbs` describes each one's parameters and result. What is fixed now is
 who may call them:
 

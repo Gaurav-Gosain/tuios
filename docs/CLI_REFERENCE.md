@@ -466,6 +466,9 @@ Fan a prompt out across several agents, each in its own worktree.
 tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--host <host> [--clone]] [--wait] <prompt>
 tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
 tuios fan keep [<host>:]<session> [--stash | --force]
+tuios fan compare [[<host>:]<session>] [--no-changes] [--json]
+tuios fan verify [<host>:]<session> [--timeout <duration>] [--no-wait] [--json] -- <command>...
+tuios fan diff <session-a> <session-b> [--stat]
 ```
 
 **Flags:**
@@ -482,6 +485,9 @@ tuios fan 3 --agent 'claude,codex --model o5,gemini' 'Add a retry with backoff.'
 tuios fan --agent claude --env ANTHROPIC_API_KEY --prompt 'Add a retry.' --prompt 'Add a timeout.'
 tuios worktree ls --group fan/add-retry-backoff-http   # Which prompts were sent, what changed
 tuios worktree diff api-fan-add-retry-backoff-http-2   # What one of them produced
+tuios fan compare api-fan-add-retry-backoff-http       # Every attempt side by side
+tuios fan verify api-fan-add-retry-backoff-http -- go test ./...
+tuios fan diff api-fan-add-retry-backoff-http api-fan-add-retry-backoff-http-2
 tuios fan keep api-fan-add-retry-backoff-http-2 --stash
 ```
 
@@ -503,9 +509,41 @@ The agent string is split into words the way a shell splits them and exec'd
 directly: nothing in it is expanded. `TUIOS_` variables, `TMUX` and
 `TMUX_PANE` cannot be passed with `--env`.
 
+`fan compare` prints one line per attempt of the fan the session belongs to:
+its agent and state, the files and lines it changed against the fan's base
+(committed or not, untracked files included, ignored files left out), and its
+last check. The check is the last `fan verify` result, or else the last
+command a shell in the session finished, from its OSC 133 marks. The counts
+run git in every worktree; `--no-changes` skips them. The worktrees are read
+through a temporary index, so nothing in them changes.
+
+```
+fan/retry in api, 3 attempts against main
+  api-fan-retry    claude  done     4 files  +120 -31  go test ./... passed 14m ago
+  api-fan-retry-2  codex   working  2 files    +40 -3  no check yet
+  api-fan-retry-3  claude  errored  0 files     +0 -0  last command exited 1 (make lint)
+Keep one with 'tuios fan keep <session>'. Compare two with 'tuios fan diff A B'.
+```
+
+`fan verify` runs the command after `--` in every attempt, in a window named
+`verify` in each session, with `sh -c` in the worktree and your `PATH`. The
+command is always yours: tuios never reads one from the repository. The
+window holds no grants, so the check cannot drive tuios. A window whose check
+passed closes; one whose check failed stays open with the output until you
+press enter in it. The command waits for every check, prints one line each,
+and exits 1 when any failed. `--timeout` fails a check that runs longer and
+closes its window. `--no-wait` returns once the checks are started. A check
+still running in an attempt is stopped first.
+
+`fan diff A B` shows what B's files hold that A's do not, committed or not,
+untracked files included. git runs on this machine, as for `worktree diff`,
+so both sessions must be here.
+
 `fan keep` removes every sibling of the session you keep, the way `worktree rm`
 does: a sibling with uncommitted changes is left in place unless `--stash` or
-`--force` is passed, and the command exits 1 to say so.
+`--force` is passed, and the command exits 1 to say so. The daemon does the
+removal (`keep-fan`), so the TUI and the CLI share it; against a daemon from
+before that verb the CLI removes the siblings itself, with the same result.
 
 `--host` runs the fan-out on another machine, in its checkout of the repository
 you are in, found and cloned the way `worktree new --host` does it. The agent

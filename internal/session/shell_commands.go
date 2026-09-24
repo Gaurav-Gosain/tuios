@@ -76,6 +76,8 @@ type shellTrack struct {
 	lastCmdline  string
 	lastExit     *int
 	lastDuration time.Duration
+	// lastAt is when the most recent command finished.
+	lastAt time.Time
 
 	// commands is true once the shell has sent a C mark. A shell whose
 	// integration marks only its prompts never sends one: bash older than
@@ -113,6 +115,8 @@ type ShellFacts struct {
 	LastCmdline  string
 	LastExit     *int
 	LastDuration time.Duration
+	// LastAt is when that command finished, zero when none has.
+	LastAt time.Time
 	// MarksCommands is true once the shell has sent a C mark, so the daemon
 	// has seen it mark a command start.
 	MarksCommands bool
@@ -133,6 +137,7 @@ func (t *shellTrack) facts() ShellFacts {
 		CommandSeq:    t.seq,
 		LastCmdline:   t.lastCmdline,
 		LastDuration:  t.lastDuration,
+		LastAt:        t.lastAt,
 		MarksCommands: t.commands,
 		PromptOnly:    t.promptOnly,
 	}
@@ -238,6 +243,7 @@ func (t *shellTrack) finishLocked(code *int, now time.Time) SessionEvent {
 	t.lastCmdline = t.cmdline
 	t.lastExit = code
 	t.lastDuration = max(now.Sub(t.started), 0)
+	t.lastAt = now
 	t.cmdline = ""
 	t.phase = shellUnknown
 	ev := SessionEvent{

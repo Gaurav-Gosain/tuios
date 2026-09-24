@@ -117,16 +117,18 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_fan_compare.go
 		"compare-fan": {
-			description: "Compare the attempts of a fan: one row per sibling session with its branch, agent, state, changed files against the base, the last verify-fan check and the last command its shells finished.",
+			description: "Compare the attempts of a fan: one row per sibling session with its branch, agent, state, changed files and lines against the base (committed and uncommitted work, untracked files included), the last verify-fan check and the last command its shells finished. A sibling the caller could not name itself is left out.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
-				{Name: "changes", Type: "bool", Description: "Count the changed files and lines of each attempt, one git call per sibling.", Default: "true"},
+				{Name: "changes", Type: "bool", Description: "Count the changed files and lines of each attempt, a few git calls per sibling.", Default: "true"},
 			},
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The fan's group."},
 				{Name: "repo", Type: "string", Description: "The repository the fan is of."},
-				{Name: "base", Type: "string", Description: "The base the attempts were made from."},
-				{Name: "rows", Type: "[]object", Description: "One per sibling: session, branch, agent, harness, state, files, added, removed, ahead, dirty, prompt_status, verify and last_command (cmdline, exit, at)."},
+				{Name: "repo_root", Type: "string", Description: "The repository's main checkout."},
+				{Name: "base", Type: "string", Description: "The base the attempts were made from: the fan's base, or the main checkout's branch for a fan made from HEAD."},
+				{Name: "rows", Type: "[]object", Description: "One per sibling: session, branch, path, agent, harness, state, files, added, removed, ahead, dirty, base_sha, prompt_status, verify, last_command (cmdline, exit, at, window), gone, and note when git could not count."},
+				{Name: "total", Type: "int", Description: "How many rows."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"compare-fan","params":{"session":"api-fan-retry-1"}}`,
@@ -134,14 +136,18 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbCompareFan,
 		},
 		"verify-fan": {
-			description: "Run one check in every attempt of a fan: a window named verify in each sibling session runs the command with sh -c and records whether it passed. The window holds no grants, so the check cannot call tuios, and it closes when the check passes. The command is always the caller's; none is read from the repository.",
+			description: "Run one check in every attempt of a fan: a window named verify in each sibling session runs the command with sh -c and records whether it passed. The window holds no grants, so the check cannot call tuios. It closes when the check passes and stays open, so the output can be read, when it fails. The command is always the caller's; none is read from the repository. A check still running in a sibling is stopped first.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
-				{Name: "command", Type: "string", Required: true, Description: "The command to run, as a shell line."},
-				{Name: "timeout_ms", Type: "int", Description: "How long a check may run before it counts as failed, in milliseconds. Omit for no limit."},
+				{Name: "command", Type: "string", Required: true, Description: "The command to run, as a shell line, at most 4096 bytes."},
+				{Name: "timeout_ms", Type: "int", Description: "How long a check may run before it counts as failed and its window is closed, in milliseconds. Omit for no limit."},
+				{Name: "env", Type: "object", Description: "Environment variables for the check, name to value, on top of the daemon's, with the rules of fan's env. The tuios CLI sends its PATH. A call from another machine may not pass env."},
 			},
 			returns: []verbParam{
-				{Name: "sessions", Type: "[]string", Description: "The sessions a check was started in. Results reach clients as the verify field of each session's worktree."},
+				{Name: "group", Type: "string", Description: "The fan's group."},
+				{Name: "command", Type: "string", Description: "The command as it runs."},
+				{Name: "sessions", Type: "[]string", Description: "The sessions a check was started in. Results reach clients as the verify field of each session's worktree, and compare-fan reports them."},
+				{Name: "skipped", Type: "[]object", Description: "Siblings no check was started in: session and reason. Omitted when none."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"verify-fan","params":{"session":"api-fan-retry-1","command":"go test ./..."}}`,
@@ -149,7 +155,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbVerifyFan,
 		},
 		"keep-fan": {
-			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them. A sibling with uncommitted changes is refused unless stash or force says what to do with them.",
+			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Branches are never deleted.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "The attempt to keep."},
 				{Name: "stash", Type: "bool", Description: "Stash a sibling's uncommitted changes before removing it.", Default: "false"},
@@ -157,10 +163,14 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			returns: []verbParam{
 				{Name: "kept", Type: "string", Description: "The session kept."},
-				{Name: "removed", Type: "[]object", Description: "One per sibling: session, removed, and a note when it was not."},
+				{Name: "branch", Type: "string", Description: "The kept session's branch."},
+				{Name: "group", Type: "string", Description: "The fan's group."},
+				{Name: "removed", Type: "[]object", Description: "One per sibling: session and removed, with remove-worktree's result when it was removed, or note and code when it was not."},
+				{Name: "left", Type: "int", Description: "How many siblings were not removed."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"keep-fan","params":{"session":"api-fan-retry-1"}}`,
+				`{"id":1,"verb":"keep-fan","params":{"session":"api-fan-retry-1","stash":true}}`,
 			},
 			handler: (*Daemon).verbKeepFan,
 		},

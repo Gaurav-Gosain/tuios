@@ -193,14 +193,15 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"review-note#0":  {errCode: ErrVerbInternal, why: "review-note is not built yet"},
 	"review-note#1":  {errCode: ErrVerbInternal, why: "review-note is not built yet"},
 	"send-review#0":  {errCode: ErrVerbInternal, why: "send-review is not built yet"},
-	"compare-fan#0":  {errCode: ErrVerbInternal, why: "compare-fan is not built yet"},
-	"verify-fan#0":   {errCode: ErrVerbInternal, why: "verify-fan is not built yet"},
-	"keep-fan#0":     {errCode: ErrVerbInternal, why: "keep-fan is not built yet"},
 	"get-approval#0": {errCode: ErrVerbInternal, why: "get-approval is not built yet"},
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
 	"cancel-queued#1": {errCode: ErrVerbInvalidParams, why: "nothing is queued, so q3 is not an entry"},
+	"compare-fan#0":   {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
+	"verify-fan#0":    {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
+	"keep-fan#0":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
+	"keep-fan#1":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	// The person's proof comes first, so the nonce the example names is
 	// what refuses it, as for dismiss-attention.
 	"mark-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},

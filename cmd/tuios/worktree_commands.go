@@ -19,9 +19,10 @@ import (
 
 // The worktree commands are thin: every decision is the daemon's, made in the
 // worktree verbs, so a person at a shell and an agent on the socket get the
-// same refusals for the same reasons. What lives here is the argument shapes,
-// the sentences, and the one composition the daemon does not do: fan keep,
-// which is remove-worktree over every sibling but one.
+// same refusals for the same reasons. What lives here is the argument shapes
+// and the sentences. fan keep is the daemon's keep-fan; against a daemon from
+// before that verb it is composed here, as remove-worktree over every sibling
+// but one.
 
 // worktreeRow is one entry of list-worktrees as the CLI reads it.
 type worktreeRow struct {
@@ -273,6 +274,11 @@ respond, admin, or none. Without it they hold the default of
 [agents.permissions]; a fan run from a pane without admin gives them that
 pane's own grants.
 
+'tuios fan compare <session>' shows the attempts side by side, with what each
+changed and its last check. 'tuios fan verify <session> -- <command>' runs
+one check in every attempt, and 'tuios fan diff A B' shows what two attempts
+did differently.
+
 When one result is the one you want, 'tuios fan keep <session>' removes the
 others. It refuses to discard their uncommitted work unless you say so.
 
@@ -371,7 +377,7 @@ its siblings there.`,
 	keepCmd.Flags().BoolVar(&keepForce, "force", false, "Discard every sibling's uncommitted changes")
 	keepCmd.Flags().BoolVar(&keepJSON, "json", false, "Output result as JSON")
 
-	fanCmd.AddCommand(keepCmd)
+	fanCmd.AddCommand(keepCmd, newFanCompareCommand(), newFanDiffCommand(), newFanVerifyCommand())
 	return fanCmd
 }
 
@@ -886,8 +892,92 @@ func waitFanPrompts(host, group string) ([]worktreeRow, error) {
 	}
 }
 
+// fanKeepOutcome is one sibling of a fan keep, as the CLI reports it.
+type fanKeepOutcome struct {
+	Session string `json:"session"`
+	Removed bool   `json:"removed"`
+	Note    string `json:"note"`
+}
+
+// runFanKeep keeps one session of a fan with the daemon's keep-fan. A daemon
+// from before the verb gets the loop the CLI ran before it, with the same
+// output.
 func runFanKeep(target string, stash, force, jsonOutput bool) error {
 	host, winner := splitHostSession(target)
+	t, err := dialHost(host)
+	if err != nil {
+		return err
+	}
+	raw, err := t.client.CallWithTimeout("keep-fan", map[string]any{"session": winner, "stash": stash, "force": force}, 5*time.Minute)
+	t.Close()
+	var call *session.VerbCallError
+	if err != nil && errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
+		return runFanKeepLoop(host, winner, stash, force, jsonOutput)
+	}
+	if err != nil {
+		return reportVerbError(t.explain("keep-fan", err), jsonOutput)
+	}
+	var res struct {
+		Kept    string            `json:"kept"`
+		Branch  string            `json:"branch"`
+		Group   string            `json:"group"`
+		Left    int               `json:"left"`
+		Removed []json.RawMessage `json:"removed"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	outcomes := make([]fanKeepOutcome, 0, len(res.Removed))
+	for _, entry := range res.Removed {
+		var head struct {
+			Session string `json:"session"`
+			Removed bool   `json:"removed"`
+			Note    string `json:"note"`
+			Code    string `json:"code"`
+		}
+		if err := json.Unmarshal(entry, &head); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if !head.Removed {
+			note := head.Note
+			if head.Code == session.ErrVerbWorktreeDirty {
+				note += " Pass --stash to keep the changes in git stash, or --force to discard them."
+			}
+			outcomes = append(outcomes, fanKeepOutcome{Session: head.Session, Note: note})
+			continue
+		}
+		var removed removedWorktree
+		if err := json.Unmarshal(entry, &removed); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		outcomes = append(outcomes, fanKeepOutcome{Session: head.Session, Removed: true, Note: removed.sentences()})
+	}
+	return reportFanKeep(t, res.Kept, res.Branch, res.Group, outcomes, res.Left, jsonOutput)
+}
+
+// reportFanKeep prints what a fan keep did, and exits 1 when a sibling was
+// left in place.
+func reportFanKeep(t *verbTarget, winner, branch, group string, outcomes []fanKeepOutcome, left int, jsonOutput bool) error {
+	if jsonOutput {
+		out := map[string]any{"kept": winner, "group": group, "siblings": outcomes, "left": left}
+		if t.host != "" {
+			out["host"] = t.host
+		}
+		return printJSON(out)
+	}
+	fmt.Printf("Kept %s on %s%s.\n", winner, branch, t.on())
+	for _, o := range outcomes {
+		fmt.Println(strings.TrimRight(o.Note, "\n"))
+	}
+	if left > 0 {
+		return &statusError{code: 1}
+	}
+	return nil
+}
+
+// runFanKeepLoop is fan keep for a daemon without keep-fan: remove-worktree
+// over every sibling but the kept one.
+func runFanKeepLoop(host, winner string, stash, force, jsonOutput bool) error {
 	rows, err := listWorktreesOn(host, "", "", false)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -920,12 +1010,7 @@ func runFanKeep(target string, stash, force, jsonOutput bool) error {
 	defer t.Close()
 	client := t.client
 
-	type outcome struct {
-		Session string `json:"session"`
-		Removed bool   `json:"removed"`
-		Note    string `json:"note"`
-	}
-	var outcomes []outcome
+	var outcomes []fanKeepOutcome
 	left := 0
 	for _, r := range rows {
 		if r.Group != kept.Group || r.Repo != kept.Repo || r.Session == winner {
@@ -936,31 +1021,16 @@ func runFanKeep(target string, stash, force, jsonOutput bool) error {
 		}, 60*time.Second)
 		if err != nil {
 			left++
-			outcomes = append(outcomes, outcome{Session: r.Session, Note: t.explain("remove-worktree", err).Error()})
+			outcomes = append(outcomes, fanKeepOutcome{Session: r.Session, Note: t.explain("remove-worktree", err).Error()})
 			continue
 		}
 		var res removedWorktree
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
-		outcomes = append(outcomes, outcome{Session: r.Session, Removed: true, Note: res.sentences()})
+		outcomes = append(outcomes, fanKeepOutcome{Session: r.Session, Removed: true, Note: res.sentences()})
 	}
-
-	if jsonOutput {
-		out := map[string]any{"kept": winner, "group": kept.Group, "siblings": outcomes, "left": left}
-		if t.host != "" {
-			out["host"] = t.host
-		}
-		return printJSON(out)
-	}
-	fmt.Printf("Kept %s on %s%s.\n", winner, kept.Branch, t.on())
-	for _, o := range outcomes {
-		fmt.Println(strings.TrimRight(o.Note, "\n"))
-	}
-	if left > 0 {
-		return &statusError{code: 1}
-	}
-	return nil
+	return reportFanKeep(t, winner, kept.Branch, kept.Group, outcomes, left, jsonOutput)
 }
 
 // completeWorktreeSessions offers the worktree session names to the shell.

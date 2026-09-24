@@ -128,6 +128,9 @@ type Daemon struct {
 	// prompt each window was answered on, so two clients answering the same
 	// prompt get one answer through and the other refused. See verb_respond.go.
 	responds respondSlots
+	// fanVerifies holds the verify-fan checks running now, one per fan
+	// session. See verb_fan_compare.go.
+	fanVerifies fanVerifyRuns
 	// respondFromShell is the [daemon] respond_from_shell grant: a caller
 	// outside every pane may call respond without an attach nonce.
 	respondFromShell bool

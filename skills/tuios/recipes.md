@@ -13,6 +13,8 @@ tuios fan 3 --agent claude --grants read,write --name fan/retry 'Add a retry wit
 tuios list-agents --select 'group:fan/retry'
 tuios wait-for agent-state --select 'group:fan/retry' --until idle,done,errored --every --timeout 3600000
 tuios worktree ls --group fan/retry
+tuios fan compare api-fan-retry
+tuios fan verify api-fan-retry -- go test ./...
 tuios worktree diff api-fan-retry-2 --stat
 tuios fan keep api-fan-retry-2 --stash
 ```

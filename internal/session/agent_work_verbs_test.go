@@ -72,9 +72,6 @@ func TestAgentWorkVerbsAnswerNotBuilt(t *testing.T) {
 		"review-diff":  {"session": "work", "window": a},
 		"review-note":  {"action": "list", "session": "work", "window": a},
 		"send-review":  {"session": "work", "window": a},
-		"compare-fan":  {"session": "work"},
-		"verify-fan":   {"session": "work", "command": "true"},
-		"keep-fan":     {"session": "work"},
 		"get-approval": {"request_id": "9f86d081884c7d65"},
 	} {
 		resp := callP(c, t, verb, params)
@@ -125,11 +122,9 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	// Its own session: the grant check passes and the stub answers.
 	for verb, params := range map[string]map[string]any{
 		"review-diff":  {"window": a2},
-		"compare-fan":  {},
 		"get-approval": {"request_id": "9f86d081884c7d65"},
 		"review-note":  {"action": "list", "window": a2},
 		"send-review":  {"window": a2},
-		"verify-fan":   {"command": "true"},
 	} {
 		mustRefuse(t, callP(c, t, verb, params), ErrVerbInternal, verb+" in the pane's own session")
 	}
@@ -139,6 +134,10 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	result(t, callP(c, t, "list-queued", map[string]any{"window": a2}))
 	result(t, callP(c, t, "cancel-queued", map[string]any{"window": a2, "all": true}))
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "hi"}), ErrVerbInvalidParams, "queue-prompt in the pane's own session, for a pane with no agent")
+	// The built fan verbs pass the grant check and reach their handler, which
+	// answers for a session that is not a fan.
+	wantReached(t, "compare-fan in the pane's own session", callP(c, t, "compare-fan", map[string]any{}))
+	wantReached(t, "verify-fan in the pane's own session", callP(c, t, "verify-fan", map[string]any{"command": "true"}))
 	// Another session is out of reach for every one of them.
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "b", "window": b1},
@@ -237,8 +236,8 @@ func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	})
 	viewer := dialLink(t, sp)
 	result(t, linkPeer(t, viewer, "viewer"))
+	wantReached(t, "compare-fan from a machine that may list", callP(viewer, t, "compare-fan", map[string]any{"session": "work"}))
 	for verb, params := range map[string]map[string]any{
-		"compare-fan":  {"session": "work"},
 		"get-approval": {"request_id": "9f86d081884c7d65"},
 	} {
 		mustRefuse(t, callP(viewer, t, verb, params), ErrVerbInternal, verb+" from a machine that may list")

@@ -123,6 +123,7 @@ dies with the daemon. `tuios --skill mail` has the whole contract.
 | `tuios fan N --agent claude 'PROMPT'` | N worktrees, an agent in each, and the prompt typed into each once it is at its prompt. `--agent 'claude,codex'` mixes agents, `--prompt` repeated gives each its own |
 | `tuios start-agent claude --name reviewer` | One agent in a new pane beside you, returning once it is ready. `--protocol acp` or `codex` runs it headless |
 | `tuios worktree ls`, `tuios worktree diff`, `tuios fan keep SESSION` | Watch them, read what one changed, keep one and remove the rest without losing uncommitted work |
+| `tuios fan compare SESSION`, `tuios fan verify SESSION -- CMD`, `tuios fan diff A B` | Every attempt side by side with its changes and last check, one check run in all of them, and what two did differently |
 | `--select 'group:fan/retry needs:you'` | Address every agent pane a selector matches, on `list-agents`, `list-attention`, `wait-for`, `send-agent-message` and `ask-agent` |
 | `--grants read,write` | On `fan`, `start-agent` and `new-window`: what the new panes may do |
 
@@ -1723,6 +1724,14 @@ built, so their rules are fixed before any of them does anything:
 
 The activity ring behind `agent-activity` has landed: see
 [What the agent has been doing](#what-the-agent-has-been-doing).
+
+Comparing a fan has landed. `compare-fan` counts what each attempt changed
+against the fan's base without touching its index or files, and reports the
+last `verify-fan` check and the last command a shell in it finished.
+`verify-fan` runs a command you give, never one read from the repository, in
+a window named `verify` in each attempt; the window holds no grants, closes
+when the check passes and stays open when it fails. `keep-fan` is `tuios fan
+keep` moved into the daemon, so the TUI and the CLI share it.
 
 Who may do what is settled now, whatever is built. A pane without the `admin`
 grant reads a diff, a comparison, an activity ring, a queue or a held approval

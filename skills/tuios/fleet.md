@@ -106,6 +106,27 @@ expanded. Any program works; one no manifest recognises gets its prompt only
 once it reports a state. The CLI sends your `PATH`, and `--env NAME` sends one
 more variable. `TUIOS_` names, `TMUX` and `TMUX_PANE` are refused.
 
+### Comparing the attempts
+
+```sh
+tuios fan compare api-fan-add-retry-backoff-http
+tuios fan verify api-fan-add-retry-backoff-http -- go test ./...
+tuios fan diff api-fan-add-retry-backoff-http api-fan-add-retry-backoff-http-2
+```
+
+`fan compare` (the `compare-fan` verb) gives one row per attempt: agent,
+state, files and lines changed against the fan's base (committed or not,
+untracked included), `verify`, and `last_command`, the last command a shell in
+the session finished. An agent's own tool runs are not shell commands, so run
+the check you trust with `fan verify` (`verify-fan`): it opens a window named
+`verify` in each attempt, runs your command with `sh -c` in the worktree, and
+records `passed` or `failed` with the exit status. The window holds no grants.
+It closes on a pass and stays open on a failure so the output can be read.
+`fan verify` waits and exits 1 when any failed; `--no-wait` returns at once and
+`fan compare` shows the results. From a pane, `verify-fan` needs the `fan`
+grant and `compare-fan` needs `read`, and both reach only your own fan group.
+`fan diff` shows what the second attempt's files hold that the first's do not.
+
 ## One agent beside you: start-agent
 
 `start-agent` opens a pane with an agent in the session you are in and returns
@@ -168,8 +189,9 @@ tuios worktree rm api-feat-retry --force    # discard them
 tuios worktree rm api-feat-retry --keep-session
 ```
 
-The branch is never deleted. `tuios fan keep <session>` applies the same rule to
-every sibling of the session you keep, and leaves a dirty sibling in place.
+The branch is never deleted. `tuios fan keep <session>` (the `keep-fan` verb)
+applies the same rule to every sibling of the session you keep, and leaves a
+dirty sibling in place. Only the person or a pane with `admin` may keep a fan.
 Nothing here runs `git worktree prune`.
 
 Agents and worktrees on another machine, and `worktree pull`, are in

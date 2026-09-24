@@ -121,8 +121,9 @@ else you run talks to the machine you are on.
 
 ## Agents and worktrees on another machine
 
-`fan`, `worktree new` and `worktree ls` take `--host`; `worktree rm`, `fan keep`
-and `worktree pull` take `HOST:SESSION`. Run them from inside your checkout: the
+`fan`, `worktree new` and `worktree ls` take `--host`; `worktree rm`, `fan keep`,
+`fan compare`, `fan verify` and `worktree pull` take `HOST:SESSION`. `fan diff`
+runs git here, so pull the work first. Run them from inside your checkout: the
 repository is sent by its origin URL, and the other machine finds its own
 checkout under its `repos_root`, or under `~/src`, `~/dev`, `~/code`,
 `~/projects`, `~/repos`, `~/git`, `~/work` and `~/go/src` there. `--clone`
