@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
@@ -90,5 +91,88 @@ func TestDiffWorkingComparesTwoAttempts(t *testing.T) {
 	stat, err := DiffWorking(context.Background(), a, b, true)
 	if err != nil || !strings.Contains(stat, "2 files changed") {
 		t.Errorf("stat = %q, %v; want the two files", stat, err)
+	}
+}
+
+// TestSnapshotTreeStartsFromTheWorktreeIndex: the temporary index is a copy of
+// the worktree's own, so a tracked file whose stat data matches the index is
+// not hashed again. The test makes one file that only a rehash can tell apart
+// from what the index says: new content of the same size, with the old
+// modification time put back. A snapshot built from an empty index reads the
+// new content; one built from the copy trusts the stat cache, as git status
+// does.
+func TestSnapshotTreeStartsFromTheWorktreeIndex(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	path := filepath.Join(t.TempDir(), "wt")
+	if _, err := Add(repo, path, "x", "main"); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	file := filepath.Join(path, "cached.txt")
+	if err := os.WriteFile(file, []byte("aaaa\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "add", "cached.txt")
+	testutil.Git(t, path, "commit", "-q", "-m", "cached")
+	// The index now holds the file's stat data, written after the file's
+	// modification time, so git trusts it.
+	testutil.Git(t, path, "update-index", "--refresh")
+	want := testutil.Git(t, path, "rev-parse", "HEAD^{tree}")
+
+	if err := os.WriteFile(file, []byte("bbbb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if st := testutil.Git(t, path, "status", "--porcelain"); st != "" {
+		t.Skipf("git rehashed the file itself (status %q), so the stat cache cannot be observed here", st)
+	}
+	got, err := SnapshotTree(context.Background(), path)
+	if err != nil {
+		t.Fatalf("SnapshotTree: %v", err)
+	}
+	if got != want {
+		t.Errorf("SnapshotTree = %s, want HEAD's tree %s: the file was hashed again, so the worktree's index was not used", got, want)
+	}
+}
+
+// TestSnapshotTreeWithoutAUsableIndex: a worktree whose index is missing, and
+// a repository with no commit, still snapshot from scratch.
+func TestSnapshotTreeWithoutAUsableIndex(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	path := filepath.Join(t.TempDir(), "wt")
+	if _, err := Add(repo, path, "x", "main"); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "new.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	index := testutil.Git(t, path, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	if err := os.Remove(index); err != nil {
+		t.Fatal(err)
+	}
+	tree, err := SnapshotTree(context.Background(), path)
+	if err != nil {
+		t.Fatalf("SnapshotTree with no index: %v", err)
+	}
+	if ls := testutil.Git(t, path, "ls-tree", "--name-only", tree); !strings.Contains(ls, "README") || !strings.Contains(ls, "new.txt") {
+		t.Errorf("snapshot with no index holds %q, want README and new.txt", ls)
+	}
+
+	empty := filepath.Join(t.TempDir(), "empty")
+	testutil.Git(t, filepath.Dir(empty), "init", "-q", "-b", "main", empty)
+	if err := os.WriteFile(filepath.Join(empty, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tree, err = SnapshotTree(context.Background(), empty)
+	if err != nil {
+		t.Fatalf("SnapshotTree with no commit: %v", err)
+	}
+	if ls := testutil.Git(t, empty, "ls-tree", "--name-only", tree); ls != "a.txt" {
+		t.Errorf("snapshot with no commit holds %q, want a.txt", ls)
 	}
 }
