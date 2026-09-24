@@ -321,18 +321,14 @@ func (r *rig) ptySize(ptyID string) (int, int) {
 // pane is still producing while the caller goes on.
 func (r *rig) startPTY(ptyID, command string) {
 	r.t.Helper()
-	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
-		r.t.Fatalf("write pty: %v", err)
-	}
+	r.typeAtPrompt(ptyID, command)
 }
 
 // feedPTY is feed addressed by PTY, for the shapes that run while the client
 // holds no window for the pane at all.
 func (r *rig) feedPTY(ptyID, command, want string) {
 	r.t.Helper()
-	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
-		r.t.Fatalf("write pty: %v", err)
-	}
+	r.typeAtPrompt(ptyID, command)
 	r.waitDaemonShows(ptyID, want)
 }
 
@@ -341,19 +337,83 @@ func (r *rig) feedPTY(ptyID, command, want string) {
 // side before anything is compared.
 func (r *rig) feed(w *terminal.Window, command, want string) {
 	r.t.Helper()
-	if err := r.ctl.WritePTY(w.PTYID, []byte(command+"\n")); err != nil {
+	r.typeAtPrompt(w.PTYID, command)
+	r.waitDaemonShows(w.PTYID, want)
+}
+
+// typeAtPrompt waits for the shell to be sitting at an empty prompt and then
+// types command at it.
+//
+// Typing before that is typing ahead of the shell, and a shell with line
+// editing does not take typed-ahead input cleanly. macOS's /bin/sh is bash:
+// input that arrives while the terminal is still in cooked mode is echoed by the
+// line discipline, echoed again when readline takes it, and the command's output
+// then starts on the row the second echo left the cursor on instead of a row of
+// its own. At the rig's pane width that wraps the sentinel mid-word, so the wait
+// for it spends its whole deadline and the case fails as a timeout. Under load
+// the window before the first prompt is long enough to hit on every shape.
+func (r *rig) typeAtPrompt(ptyID, command string) {
+	r.t.Helper()
+	deadline := time.Now().Add(rigWait)
+	for !r.atPrompt(ptyID) {
+		if time.Now().After(deadline) {
+			st, err := r.daemonCells(ptyID, -1)
+			screen := ""
+			if err == nil && st != nil {
+				screen = fmt.Sprintf("cursor %d,%d\n%s", st.CursorX, st.CursorY, stateText(st))
+			}
+			r.t.Fatalf("timed out waiting for the shell's prompt before typing %q (err %v); the daemon's screen:\n%s", command, err, screen)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
 		r.t.Fatalf("write pty: %v", err)
 	}
-	r.waitDaemonShows(w.PTYID, want)
+}
+
+// atPrompt reports whether the daemon's copy of the pane has the cursor just
+// past the rig's "$ " prompt with nothing typed after it.
+func (r *rig) atPrompt(ptyID string) bool {
+	st, err := r.daemonCells(ptyID, -1)
+	if err != nil || st == nil || st.CursorY < 0 || st.CursorY >= len(st.Screen) {
+		return false
+	}
+	row := st.Screen[st.CursorY]
+	var before strings.Builder
+	for x := 0; x < st.CursorX && x < len(row); x++ {
+		if c := row[x].Content; c != "" {
+			before.WriteString(c)
+		} else {
+			before.WriteByte(' ')
+		}
+	}
+	if !strings.HasSuffix(before.String(), "$ ") {
+		return false
+	}
+	for x := st.CursorX; x < len(row); x++ {
+		if c := row[x].Content; c != "" && c != " " {
+			return false
+		}
+	}
+	return true
 }
 
 // waitDaemonShows blocks until the daemon's emulator shows want on screen or in
 // its scrollback.
 func (r *rig) waitDaemonShows(ptyID, want string) {
 	r.t.Helper()
-	rigWaitUntil(r.t, "the daemon to show "+want, func() bool {
-		return r.daemonShows(ptyID, want)
-	})
+	deadline := time.Now().Add(rigWait)
+	for !r.daemonShows(ptyID, want) {
+		if time.Now().After(deadline) {
+			st, err := r.daemonCells(ptyID, -1)
+			screen := ""
+			if err == nil && st != nil {
+				screen = stateText(st)
+			}
+			r.t.Fatalf("timed out waiting for the daemon to show %s (err %v); the daemon's screen:\n%s", want, err, screen)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // daemonShows asks once instead of waiting, for the cases that need to know
