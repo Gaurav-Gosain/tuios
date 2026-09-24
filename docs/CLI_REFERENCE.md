@@ -697,7 +697,12 @@ TUIOS provides commands to control a running session from external scripts and t
 
 ### `tuios send-keys`
 
-Send keystrokes to a TUIOS session.
+Send keys to the program in a window: arrows, page keys, Enter, `ctrl+c`.
+
+With `-w` the keys go to that window's terminal, whether or not a client is
+attached and whichever window has the focus. Without `-w` they go to the
+attached client as if the person pressed them, which drives the window manager
+or the focused window; with no client attached they go to the focused window.
 
 **Usage:**
 ```bash
@@ -706,45 +711,68 @@ tuios send-keys <keys> [flags]
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
-- `-l, --literal`: Send keys directly to terminal PTY (bypass TUIOS key handling)
-- `-r, --raw`: Treat each character as a separate key (no splitting on space/comma). **Required when sending text containing spaces or commas**
+- `-w, --window <target>`: Target window: full id, the index `list-windows` prints, a unique id prefix, or the exact name (default: the attached client, else the focused window)
+- `-N, --repeat <n>`: Send the whole sequence n times, 1 to 1000 (default 1)
+- `-l, --literal`: Write the argument to the window's terminal unchanged, with no key names
+- `-r, --raw`: Treat each character as a separate key (no splitting on space/comma)
+- `--json`: Output the result as JSON
 
-**Key Format:**
-- Single keys: `i`, `n`, `Enter`, `Escape`, `Space`
-- Key combos: `ctrl+b`, `alt+1`, `shift+Enter` (case-insensitive)
-- Sequences: space or comma separated, e.g. `"ctrl+b q"` or `"ctrl+b,q"`
-- Special token: `$PREFIX` or `PREFIX` expands to configured leader key
+**Output:**
+Where the keys went:
 
-**IMPORTANT:** By default, spaces and commas separate multiple key arguments. To send literal text containing spaces (e.g., to type in a terminal), use BOTH `--literal` and `--raw` flags together
+```
+sent 5 keys to window docs (3a42ab8f)
+```
 
-**Special Keys:** `Enter`, `Return`, `Space`, `Tab`, `Escape`, `Esc`, `Backspace`, `Delete`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `F1`-`F12`
+or `sent 2 keys to the attached client (...)` without `-w`. `--json` gives
+`sent_to` (`window` or `client`), `keys`, and for a window `window_id` and
+`window`.
 
-**Modifiers:** `ctrl`, `alt`, `shift`, `super`, `meta`
+**Keys:** the argument is split on spaces and commas. Names are
+case-insensitive.
+
+| Key | Name | Other spellings that work |
+| --- | --- | --- |
+| Arrows | `Up` `Down` `Left` `Right` | `up`, `UP`, `arrow-up`, `ArrowUp`, `up-arrow`, `KEY_UP`, `<Up>` |
+| Page keys | `PageUp` `PageDown` | `PgUp`, `PgDn`, `Page_Down`, `NPage`, `PPage`, `KEY_NPAGE` |
+| Line ends | `Home` `End` | `KEY_HOME`, `<End>` |
+| Enter | `Enter` | `Return`, `CR`, `KEY_ENTER` |
+| Escape | `Escape` | `Esc` |
+| Editing | `Tab` `BTab` `Space` `Backspace` `Delete` `Insert` | `shift+Tab`, `BSpace`, `BS`, `Del`, `DC`, `Ins`, `IC` |
+| Function keys | `F1` to `F12` | `f5`, `KEY_F5` |
+| A character | `q` `j` `G` `/` | any single character |
+| With modifiers | `ctrl+c` `alt+b` `shift+Up` `ctrl+Right` | `C-c`, `M-b`, `S-Up`, `^C`, `Ctrl+C` |
+| A raw sequence | `\e[A` | `\x1b[A`, `\033[A`, `^[[A` |
+| The leader key | `PREFIX` | `$PREFIX`; only without `-w`, with a client attached |
+
+Arrows, `Home` and `End` are sent in the form the program asked for
+(application cursor keys). A word that looks like a key but is not one (`Dwon`,
+`KEY_FOO`, `F13`) is refused with the key names and the closest one, and
+nothing is sent. A plain lower-case word such as `ls` is typed as its letters.
+
+**send-keys is not for text.** `send-keys 'echo hello'` types `echohello`. Use
+[`tuios send-text`](#tuios-send-text).
 
 **Examples:**
 ```bash
-# Enter terminal mode (press 'i')
-tuios send-keys i
+# Scroll the pager in the window named docs
+tuios send-keys -w docs Down
+tuios send-keys -w docs Down --repeat 10
+tuios send-keys -w docs 'PageDown PageDown'
 
-# Press Enter
-tuios send-keys Enter
+# Interrupt what runs in the window named build
+tuios send-keys -w build ctrl+c
 
-# Trigger prefix key followed by 'q' (quit)
+# A window by the id new-window printed
+id=$(tuios new-window logs --print-id)
+tuios send-keys -w "$id" End
+
+# Keys for the window manager: the leader key and then q, no -w
 tuios send-keys "ctrl+b q"
 tuios send-keys "\$PREFIX q"
 
-# Send Ctrl+C to TUIOS
-tuios send-keys ctrl+c
-
-# Send literal text directly to terminal PTY (use --raw to prevent space splitting)
-tuios send-keys --literal --raw "echo hello"
-
-# Send text with spaces (each character is a key)
-tuios send-keys --raw "hello world"
-
-# Send to a specific session
-tuios send-keys --session mysession Escape
-tuios send-keys -s mysession Escape
+# Enter terminal mode in the attached client (press 'i')
+tuios send-keys i
 ```
 
 ### `tuios send-text`
@@ -803,6 +831,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 - `--host <name>`: Run the window's process on this machine from the `[hosts]` table (default: this machine)
 - `--grants <grant>[,<grant>...]`: What the window's process may do through tuios: `read`, `write`, `fan`, `respond`, `admin`, or `none` (default: `[agents.permissions]`). See [`tuios pane-grants`](#tuios-pane-grants)
 - `--json`: Output result as JSON
+- `--print-id`: Print only the new window's full id
 
 **Output:**
 The 8-character window id and the window's name, separated by two spaces:
@@ -811,7 +840,8 @@ The 8-character window id and the window's name, separated by two spaces:
 a1b2c3d4  build
 ```
 
-That id prefix is what `-w` accepts everywhere else.
+That id prefix, and the name, are what `-w` accepts everywhere else. With
+`--print-id` the output is the full id alone, for `id=$(tuios new-window build --print-id)`.
 
 **Examples:**
 ```bash
@@ -824,6 +854,7 @@ tuios send-text -w build 'go build ./...
 '
 
 # Capture the new window's id for scripting
+id=$(tuios new-window build --print-id)
 tuios new-window --json | jq -r .window_id
 
 # JSON output carries the full id and the name

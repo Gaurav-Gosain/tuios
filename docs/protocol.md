@@ -880,6 +880,63 @@ every call is answered exactly as before. What changes:
 The new verbs `pane-grants`, `set-pane-grants` and `get-window` change no
 old one.
 
+**send-keys with a window goes to that window.** With a client attached,
+`send-keys` used to hand every parsed key to the client, which read them as
+the person's keys and ignored `window`: in window-management mode an arrow
+moved the selection, in terminal mode it went to the focused window, and the
+call answered ok either way. Now:
+
+- With `window`, the keys are written to that window's terminal whether or
+  not a client is attached. `PREFIX` with `window` and a client attached is
+  `invalid_params`, because the window manager acts on the focused window and
+  not the one named. A caller that sent the leader chord with a window leaves
+  the window out.
+- Without `window`, keys go to the attached client as before, or to the
+  focused window's terminal when none is attached. `literal` always writes to
+  a terminal: routed to the client it waited out the 10 second timeout and
+  answered `command_failed` on a send that had worked.
+- Every key is parsed before anything is sent, on both routes. Names are
+  case-insensitive and take the spellings of tmux, curses, vim and the DOM:
+  `up`, `arrow-up`, `ArrowUp`, `KEY_UP`, `<Up>`, `PgDn`, `BSpace`, `C-c`,
+  `M-x`, `^C`. New names: `BTab` (shift+Tab) and `shift+` on named keys.
+  A token written as an escape sequence (`\e[A`, `\x1b[A`, `\033[A`, `^[[A`)
+  is sent as those bytes. A word that looks like a key name and is not one
+  (`Dwon`, `KEY_FOO`, `F13`, `a+b`) used to be typed as its letters; it is now
+  `invalid_params` with `param: keys`, the key names in `accepted` and the
+  closest name in `did_you_mean`, and nothing is sent. A plain lower-case
+  word such as `ls` is still typed.
+- Arrows, `Home` and `End` written to a terminal follow the pane's
+  application cursor keys mode (DECCKM): `ESC O A` when the program turned it
+  on, as `less` and `vim` do, `ESC [ A` otherwise. Modified named keys use
+  xterm's form (`ctrl+Up` is `ESC [ 1 ; 5 A`), where `alt+Up` used to be
+  `ESC ESC [ A`.
+- The new param `repeat` (1 to 1000, default 1) sends the sequence that many
+  times.
+- The result gains `sent_to` (`window` or `client`), `keys` (how many were
+  sent), and for `window` the `window_id` and `window` name it went to.
+  `tuios send-keys` prints that as `sent 3 keys to window docs (3a42ab8f)`
+  and takes `--repeat` (`-N`) and `--json`.
+
+**A window's name wins over another window's title.** A window target that
+is not an id, index or prefix used to match a name or a title alike, so a
+program that set its title to another window's name made both ambiguous. A
+name given with `new-window` or `set-window --name` is now matched first, and
+titles only when no name matches. An ambiguous prefix or name still answers
+`window_not_found`; the message now lists the index, short id and name of
+each window it matched, and the hint says it matched more than one.
+
+**new-window can print the id alone.** `tuios new-window --print-id` prints
+the full window id and nothing else, for `id=$(tuios new-window --print-id)`.
+
+**new-window waits for an attached client to place the window.** With a
+client attached, `new-window` now answers once the client has placed the
+window and sized its terminal, up to one second, so `unplaced` is `false` in
+the usual case. It used to answer at once with the nominal geometry, and a
+program started in the pane straight after the call got a resize while it
+drew: glow's pager then showed a blank screen and ignored keys. With no client
+attached nothing changes. A client that does not place the window within the
+second leaves the answer as it was, `unplaced: true`.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -995,9 +1052,10 @@ own and clears the flag by pushing the geometry it chose. A window state without
 the field is placed, so state written before this existed is read exactly as
 before.
 
-The verbs a live renderer still has to own to stay in sync (`send-keys` and the
-live apply half of `set-option`) route to the attached TUI when one is present
-and act on daemon owned state otherwise. The routing is transparent to the
+The verbs a live renderer still has to own to stay in sync (`send-keys` with
+no window, and the live apply half of `set-option`) route to the attached TUI
+when one is present and act on daemon owned state otherwise. `send-keys` with
+a window writes to that window's terminal either way. The routing is transparent to the
 caller: it is still one request and one response.
 
 A verb that genuinely cannot run without a renderer (tiling geometry, animation,
@@ -1511,27 +1569,47 @@ Response:
 
 ### send-keys
 
-Send parsed key tokens to a window. Tokens are split on spaces and commas and
-each is mapped to its terminal byte sequence (named keys such as `enter` and
-`tab`, `ctrl+x`, `alt+x`, function keys, or a literal character). With a TUI
-attached the keys route to it so window manager keys such as the prefix are
-honored; otherwise the parsed bytes go straight to the target PTY.
+Send keys to a window's program: arrows, page keys, Enter, `ctrl+c`. Tokens
+are split on spaces and commas, and every token is parsed before anything is
+sent. A token is a key name (`Enter` `Tab` `BTab` `Space` `Escape`
+`Backspace` `Up` `Down` `Right` `Left` `Home` `End` `PageUp` `PageDown`
+`Insert` `Delete` `F1` to `F12`, case-insensitive, also spelled `arrow-up`,
+`ArrowUp`, `KEY_UP`, `<Up>`, `PgDn`, `Esc`, `Return`, `BSpace` and the like),
+a single character, either of those after `ctrl+`, `alt+` or `shift+` (or
+tmux's `C-`, `M-`, `S-`, or `^C`), an escape sequence written `\e[A`,
+`\x1b[A`, `\033[A` or `^[[A`, or `PREFIX` for the leader key. A word that
+looks like a key name and is not one is `invalid_params` and nothing is
+sent; any other word is typed as its letters.
+
+Where the keys go:
+
+- With `window`, to that window's terminal, attached or not. Arrows, `Home`
+  and `End` follow the pane's application cursor keys mode. `PREFIX` with a
+  window and a client attached is `invalid_params`.
+- Without `window` and with a client attached, to the client, which reads
+  them as the person's keys: the window manager or the focused window.
+- Otherwise, and always for `literal` or a pane without `admin`, to the
+  terminal of the window named or the focused one.
 
 Params: `session` (optional), `window` (optional), `keys` (required), `literal`
 (optional bool, send the text through unchanged), `raw` (optional bool, treat
-each character as its own key).
+each character as its own key), `repeat` (optional int, 1 to 1000, send the
+sequence that many times).
 
 Request:
 
 ```json
-{"verb": "send-keys", "params": {"session": "work", "keys": "ctrl+c"}}
+{"verb": "send-keys", "params": {"session": "work", "window": "docs", "keys": "Down", "repeat": 5}}
 ```
 
 Response:
 
 ```json
-{"result": {"type": "ok"}}
+{"result": {"type": "ok", "sent_to": "window", "window_id": "3a42ab8f-9eca-4738-8991-5f21aeb206f3", "window": "docs", "keys": 5}}
 ```
+
+`sent_to` is `client` when the attached client took the keys; there is no
+window then.
 
 ### send-text
 
