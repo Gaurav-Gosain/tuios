@@ -1896,3 +1896,41 @@ while a writer polls the state lock. Three runs of 300 scans each:
 The scan costs what it did; it no longer holds the write lock while it runs,
 and an idle scan never takes it. The remaining writer wait is scheduling noise
 of the polling goroutine.
+
+## 2026-09 every surface's background
+
+`appearance.background` and the per-surface options (desktop, window chrome,
+dock, rail) extend the pane background's design to every transparent cell: each
+layer's parsed cells are painted by the surface its id belongs to, and the
+desktop is the value the canvas is cleared to. Same machine and flags as above
+(M3 Pro, 207x55, `-cpu 4`, other work on the machine; allocation counts exact,
+times directional).
+
+**Everything off, before and after** (`BenchmarkKeystrokeFrame`,
+`BenchmarkKeystrokeFrameTiled`, `BenchmarkCompositorGetCanvas`,
+`BenchmarkRenderTerminalUnfocused`; the test binaries of 603eac51 and of this
+change run interleaved, eight rounds each): allocations per op are identical on
+all fourteen benchmarks, bytes per op within 0.1%, and no time moved by a
+significant amount (p between 0.16 and 1.0; geomean 727 us before, 699 us
+after). With everything off a frame resolves five settings to off, clears the
+canvas as before, and looks nothing up per layer;
+`TestBackgroundsOffAllocateNothing` holds the resolve and the clear to zero
+allocations.
+
+**All surfaces on, against off** (`BenchmarkBackgrounds`, rail and dock on,
+six runs each):
+
+| | off | all | allocs/op off to all |
+|---|---|---|---|
+| keystroke, 1 pane | 2.30 ms | 3.79 ms | 1253 to 1311 |
+| keystroke, 4 panes | 2.06 ms | 2.15 ms | 1057 to 1117 |
+| keystroke, 9 panes | 2.16 ms | 2.08 ms | 1045 to 1109 |
+| compositor, 1/4/9 panes, all re-rendered | 582/1008/786 us | 678/644/626 us | unchanged |
+
+The one-pane keystroke frame pays the most for the reason the pane background
+alone does: its fast path stands down for a painted pane, border or dock, and
+only for those, so the desktop and rail backgrounds leave it alone. The extra
+allocations are again in emitting the frame, where painted cells carry a
+background SGR. The compositor rows do not move beyond noise because a layer
+whose string and grounds did not change is copied with its paint; the variance
+on the "off" compositor rows is the machine, not the option.

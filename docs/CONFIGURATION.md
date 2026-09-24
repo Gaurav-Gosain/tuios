@@ -6,34 +6,78 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
-## The pane background
+## Backgrounds
 
-`appearance.pane_background` decides what is behind a pane's content where the
-program running in it left the default background:
+A cell that has no background of its own is transparent, so your terminal's
+own background shows through it. That is the default everywhere: pane content
+a program left on the default background, the space between panes, the
+borders, the dock and the rail. The background options paint those cells
+instead, one surface at a time or all at once.
+
+| Option | Surface | Values | Default |
+|---|---|---|---|
+| `appearance.background` | Every surface below that is not set on its own | `off`, `theme`, `#RRGGBB` | `off` |
+| `appearance.pane_background` | Pane content, the thin scrollbar over it and the scrollback browser | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+| `appearance.desktop_background` | Behind and between panes: gaps between tiled panes, the space around floating ones, an empty workspace and its welcome splash | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+| `appearance.window_chrome_background` | Pane borders and title bars, the lines between shared-border panes, the capture marquee | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+| `appearance.dock_background` | The dock | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+| `appearance.sidebar.background` | The rail | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+
+What each value paints:
 
 | Value | What is painted |
 |---|---|
-| `off` (default) | Nothing. The cell is transparent and your terminal's own background shows through. |
+| `off` | Nothing. The cell is transparent and your terminal's own background shows through. |
 | `theme` | The active theme's background, with the theme's foreground on text left in the default colour. With no theme set there is no theme background, so it behaves as `off`. |
 | `#RRGGBB` | That colour. With a theme set, default-coloured text takes the theme's foreground, lifted until it reads on the colour; with none, it keeps your terminal's own. |
 
+**Precedence.** A surface's own option wins whenever it holds a value, `off`
+included. Left empty, it follows `appearance.background`. So one line paints
+everything, and a second line changes or clears one surface:
+
 ```toml
 [appearance]
-pane_background = "theme"
+background = "theme"          # every surface on the theme's background
+dock_background = "#11111b"   # the dock a shade darker
+pane_background = "off"       # panes keep the terminal's own background
+
+[appearance.sidebar]
+background = "#181825"
 ```
 
-A background the program chose for a cell always wins, and so do the marks
-tuios paints over a pane: the selection, search matches and the copy mode
-cursor. Only the pane's content area is painted. The border, the title bar, the
-gap between panes, the rail and the dock stay on your terminal's background,
-because they are chrome rather than the ground a program draws on.
+A value that is not a keyword or a `#RRGGBB` literal resolves to `off` for that
+surface (it does not fall back to `background`), and the validator warns about
+it, as it does about `theme` with no theme set.
 
-It hot-reloads, it is on the Appearance tab of the settings page (a colour row
-that opens the same picker as the border colours, with `off` and `theme` offered
-beside the grid), and `tuios set-config appearance.pane_background <value>` sets
-it from a script. It reaches every client of the session, SSH and browser ones
-included, since they draw the same frame. A screenshot of one pane is drawn on
-the painted colour.
+**What is kept.** Only cells with no background of their own are painted. A
+background a program chose for a cell always wins, and so do the marks tuios
+paints over a pane (the selection, search matches, the copy mode cursor) and
+every colour the chrome sets itself: a border's ink stays its focus colour, the
+title bar's buttons keep theirs, the dock's pills and the rail's highlighted
+rows keep their fills. The overlay panels (the palette, settings, which-key,
+the Inbox, every picker, the tooltips and badges) are not on the list because
+they have no transparent cells: each fills its whole rectangle with its own
+surface colour.
+
+**Programs that ask.** A program can ask the terminal for its background with
+OSC 11 and its default text colour with OSC 10, and some pick a dark or light
+palette from the answer. While the pane background paints a colour, a pane's
+OSC 11 is answered with that colour and OSC 10 with the text colour tuios gives
+default text there, so the program sees what it is drawn on. A program that set
+its own colours with OSC 10 or 11 gets its own back. With the pane background
+off the answers are what they always were. In a daemon session the daemon's
+emulator answers, and the client tells it the painted pair when it syncs; with
+several clients attached, the last one to sync decides.
+
+All six hot-reload and are on the **Backgrounds** tab of the settings page
+(`Ctrl+B ,`, then `]`): an All surfaces row and one row per surface, each a
+colour row that opens the same picker as the border colours, with `off` and
+`theme` beside the grid and `x` to clear a surface back to following All
+surfaces. `tuios set-config appearance.dock_background <value>` sets one from a
+script. They reach every client of the session, SSH and browser ones included,
+since they draw the same frame. A screenshot of one pane is drawn on the pane's
+painted colour, and a screen or region capture carries every painted surface
+as it is drawn.
 
 ## The dock's components
 
