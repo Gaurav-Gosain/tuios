@@ -84,6 +84,9 @@ func (d *Daemon) verbScreenshot(_ *connState, params json.RawMessage) (any, *ver
 	if warn != "" {
 		warnings = append(warnings, warn)
 	}
+	// The pane as the session draws it: a painted pane background is the
+	// ground its default cells sit on.
+	palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
 
 	// lines bounds the history above the screen. Without --scrollback there is
 	// no history in the picture at all, which is what a plain capture means.
@@ -177,7 +180,9 @@ func (d *Daemon) screenshotSettings(sess *Session, themeOverride string) (captur
 		themeID = ""
 	}
 	glyphs := sessOption(sess, "appearance.glyphs")
-	return capture.SettingsFrom(cfg, themeID, glyphs), nil
+	s := capture.SettingsFrom(cfg, themeID, glyphs)
+	s.PaneBackground = sessOption(sess, "appearance.pane_background")
+	return s, nil
 }
 
 // sessOption reads a session option, falling back to the registry default so

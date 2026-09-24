@@ -58,6 +58,9 @@ type Settings struct {
 	HostCellW, HostCellH int
 	Scale                int
 	Cursor               bool
+	// PaneBackground is appearance.pane_background as the session holds it:
+	// off, theme, or a #RRGGBB literal. See WithPaneBackground.
+	PaneBackground string
 	// Directory is where a generated filename lands.
 	Directory string
 }
@@ -117,6 +120,36 @@ func Palette(themeID string) (p *shot.Palette, warn string) {
 		out.ANSI[i] = toShot(c, fallback.ANSI[i])
 	}
 	return out, ""
+}
+
+// WithPaneBackground returns the palette a capture of one pane is drawn in
+// when appearance.pane_background paints a ground behind it, so the picture
+// shows the pane as tuios draws it.
+//
+// A capture already draws a cell with no background of its own in the
+// palette's background, since it has no terminal behind it to show through.
+// For off and for theme that is already right: the palette is the theme's,
+// and with no theme there is no theme background to paint. Only a colour
+// literal changes anything. It becomes the background, and when a theme is set
+// the theme's foreground is lifted until it reads on it, which is the same
+// foreground the live pane gives text left in the default colour.
+//
+// The palette passed in is not modified.
+func WithPaneBackground(p *shot.Palette, setting, themeID string) *shot.Palette {
+	if p == nil || !config.IsHexColor(setting) {
+		return p
+	}
+	bg, ok := shot.ParseHex(setting)
+	if !ok {
+		return p
+	}
+	out := *p
+	out.BG = bg
+	if themeID != "" {
+		fg := theme.ReadableAt(p.FG, bg, theme.ContrastFloor)
+		out.FG = toShot(fg, p.FG)
+	}
+	return &out
 }
 
 // toShot converts a theme colour to a shot colour, falling back when the value
