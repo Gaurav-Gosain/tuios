@@ -355,7 +355,9 @@ go run ./cmd/tuios tape play examples/demo.tape
 
 - Theme colors only apply to ANSI colors 0-15
 - RGB/truecolor passes through unchanged
-- Background is transparent (nil) for TUI app compatibility
+- Background is transparent (nil) for TUI app compatibility. `appearance.pane_background`
+  paints default-background cells in the compositor (`internal/app/pane_background.go`),
+  never in the emulator, so the cells themselves stay nil
 
 ### Performance Considerations
 

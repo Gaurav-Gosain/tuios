@@ -6,6 +6,35 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+## The pane background
+
+`appearance.pane_background` decides what is behind a pane's content where the
+program running in it left the default background:
+
+| Value | What is painted |
+|---|---|
+| `off` (default) | Nothing. The cell is transparent and your terminal's own background shows through. |
+| `theme` | The active theme's background, with the theme's foreground on text left in the default colour. With no theme set there is no theme background, so it behaves as `off`. |
+| `#RRGGBB` | That colour. With a theme set, default-coloured text takes the theme's foreground, lifted until it reads on the colour; with none, it keeps your terminal's own. |
+
+```toml
+[appearance]
+pane_background = "theme"
+```
+
+A background the program chose for a cell always wins, and so do the marks
+tuios paints over a pane: the selection, search matches and the copy mode
+cursor. Only the pane's content area is painted. The border, the title bar, the
+gap between panes, the rail and the dock stay on your terminal's background,
+because they are chrome rather than the ground a program draws on.
+
+It hot-reloads, it is on the Appearance tab of the settings page (a colour row
+that opens the same picker as the border colours, with `off` and `theme` offered
+beside the grid), and `tuios set-config appearance.pane_background <value>` sets
+it from a script. It reaches every client of the session, SSH and browser ones
+included, since they draw the same frame. A screenshot of one pane is drawn on
+the painted colour.
+
 ## The dock's components
 
 The `[dock]` table is the one part of the configuration that is not a set of

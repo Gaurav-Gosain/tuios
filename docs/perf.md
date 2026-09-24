@@ -1817,3 +1817,34 @@ five patterns, which had no test and would otherwise fail only on first use.
 - **`RestoreTerminalStates`**, serial `GetTerminalState` round trips at about
   0.2 ms per pane on top of about 2 ms fixed, and **`ensureAttachTarget`**, an
   extra verb connection of 0.4 to 0.6 ms at attach.
+
+## 2026-09 pane background
+
+`appearance.pane_background` paints default-background cells in the
+compositor, on the cells a pane's layer parses to, and keeps the paint with
+those cells. Measured on an M3 Pro at 207x55, `-cpu 4`, with other work on the
+machine; allocation counts are exact, times are directional.
+
+**Off, before and after** (`BenchmarkKeystrokeFrame`, `BenchmarkKeystrokeFrameTiled`,
+`BenchmarkCompositorGetCanvas`, `BenchmarkRenderTerminalUnfocused`; the two
+test binaries run interleaved, eight rounds each): allocations per op are
+identical on every benchmark, and no time moved by a significant amount on the
+keystroke frames or the unfocused render (p between 0.5 and 1.0). With the
+option off the frame pays one string comparison per layer and no map writes;
+`TestPaneBackgroundOffAllocatesNothing` holds the resolve to zero allocations.
+
+**On, against off** (`BenchmarkPaneBackground`, six runs each):
+
+| | off | on | allocs/op off to on |
+|---|---|---|---|
+| keystroke, 1 fullscreen pane | 1.45 ms | 2.31 ms | 1134 to 1302 |
+| keystroke, 4 panes | 1.79 ms | 2.01 ms | 1065 to 1168 |
+| keystroke, 9 panes | 1.94 ms | 1.97 ms | 1051 to 1196 |
+| compositor, 1/4/9 panes, all re-rendered | 518/504/477 us | 535/515/508 us | unchanged |
+
+The lone fullscreen pane pays the most because the fast path that skips the
+compositor builds no layer to paint, so it stands down while the option is on.
+The extra allocations are in emitting the frame: painted cells carry a
+background SGR that bare ones do not. A pane whose layer string did not change
+is copied with its paint, which is why the all-dirty compositor numbers, whose
+strings are identical from frame to frame, do not move.

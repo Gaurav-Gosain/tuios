@@ -1043,6 +1043,7 @@ tuios set-config <path> <value> [flags]
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
+| `pane_background` | `off`, `theme`, `#RRGGBB` | Background painted behind pane content where the program left the default (default `off`) |
 
 **Examples:**
 ```bash
@@ -1059,6 +1060,10 @@ tuios set-config animations_enabled false
 tuios set-config hide_window_buttons true
 tuios set-config window_button_style dots
 tuios set-config window_button_position left
+
+# Paint the theme's background behind pane content, or a colour of your own
+tuios set-config pane_background theme
+tuios set-config pane_background '#1e1e2e'
 
 # Target a specific session
 tuios set-config -s mysession dockbar_position hidden

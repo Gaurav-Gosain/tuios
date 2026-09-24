@@ -372,6 +372,8 @@ Most TUI applications (vim, tmux, htop, etc.) expect to control their own backgr
 
 By keeping the background transparent, applications can freely use indexed background colors while the outer terminal's background shows through, providing the expected visual appearance.
 
+**The pane background option.** `appearance.pane_background` (`off`, `theme`, or `#RRGGBB`; default `off`) paints a ground behind pane content without changing any of the above: the emulator's cells keep their nil background. The paint is applied in the compositor (`internal/app/pane_background.go`), on the cells a pane's layer parses to, and only to cells inside the pane's content rectangle whose background is nil. A background the application set is never replaced, and the border, title bar, gaps, rail and dock are not painted. Because every render path for a pane (the unfocused fast path, the per-cell path, cached content, scrollback and copy mode, zoomed and floating panes, both VT backends, and the SSH and browser clients, which receive the same composed frame) reaches the screen through that one parse, one pass covers them all. The paint is stored with the parsed cells and keyed on the setting, the theme and the content rectangle, so a pane that did not change costs nothing extra on the next frame; with the option off the cost is one string comparison per layer. The fullscreen fast path builds no layer, so it stands down while the option is on.
+
 ### Dynamic Theme Updates
 
 TUIOS supports live theme switching without restarting windows:
