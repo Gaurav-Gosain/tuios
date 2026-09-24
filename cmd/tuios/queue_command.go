@@ -28,7 +28,12 @@ away.
 The daemon watches for the agent to take it. A message the agent shows no sign
 of taking is marked stalled, is never typed again, and opens a question in the
 Inbox: look at the pane. A stalled message holds the ones behind it until the
-agent next works or you drop it with 'tuios queue rm'.
+agent next works or you drop it with 'tuios queue rm', and the next is then
+typed at the next rest.
+
+For an agent that cannot show it is working (Aider, Crush, or a pane with no
+harness), a rest after a typed message is also new output followed by 5
+seconds of silence.
 
 A pane holds at most [agents.queue] max messages (8 by default), of at most
 16 KiB each. The queue is kept in the daemon's memory: it is dropped when the

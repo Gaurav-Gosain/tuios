@@ -22,6 +22,23 @@ import (
 // a parameter: human only with a live human_nonce (verifyAnyHumanNonce, which
 // also refuses any process inside a pane), link:HOST for a call over a link,
 // the pane's window id for a process in a pane, and shell for anything else.
+// A call a pane on another machine forwards through its report channel
+// (paneOnly) is none of these: paneAuthority places it nowhere, which would
+// read as shell, so both writing verbs refuse it (refuseForwardedPane).
+
+// refuseForwardedPane refuses a queue write from a hosted pane's report
+// channel. Such a call is a pane by construction, but not one of this
+// daemon's, so it has no grants here to check an entry against, and it must
+// not pass for the person's shell. The queue verbs are not forwarded today
+// (hostedCallVerbs); this holds if they ever are.
+func refuseForwardedPane(cs *connState, verb string) *verbError {
+	if cs == nil || !cs.paneOnly {
+		return nil
+	}
+	return hintedVerbError(ErrVerbForbidden, verb+" from a pane on another machine is refused", &VerbHint{
+		Detail: "Nothing changed. A pane that runs here for another machine queues through the machine that owns it.",
+	})
+}
 
 // ErrVerbQueueFull reports a pane whose delivery queue holds as many entries
 // as [agents.queue] max allows. Nothing was queued.
@@ -116,6 +133,9 @@ func queueTarget(sess *Session, state *SessionState, window string) (WindowState
 // sender: a window of the session, resolved like ask-agent's, or a free label
 // over a link. A pane may name only itself, and human needs the nonce.
 func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState, text, from, nonce string) (*queueEntry, *verbError) {
+	if verr := refuseForwardedPane(cs, "queue-prompt"); verr != nil {
+		return nil, verr
+	}
 	e := &queueEntry{text: text}
 	human := nonce != "" && d.verifyAnyHumanNonce(nonce, cs)
 	if nonce != "" && !human {
@@ -129,7 +149,7 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 		cs.mu.Lock()
 		peer := cs.linkPeer
 		cs.mu.Unlock()
-		e.origin = queueOrigin{kind: "link", peer: peer}
+		e.origin = queueOrigin{kind: "link", peer: peer, conn: cs.clientID}
 		e.by = queueByLinkPrefix + firstNonEmpty(peer, "*")
 		if human {
 			e.by = queueByHuman
@@ -247,12 +267,17 @@ type cancelQueuedParams struct {
 // verbCancelQueued answers cancel-queued.
 //
 // Who may drop what: the person, with a live human_nonce, any entry. A pane
-// only the entries it queued. A linked machine only the entries it queued. A
-// caller outside every pane without the nonce every entry but the person's,
-// which need the nonce.
+// only the entries it queued. A linked machine only the entries it queued:
+// matched by the name its link-peer handshake gave, or, for a machine that
+// gave none, by the connection that queued them. A caller outside every pane
+// without the nonce every entry but the person's, which need the nonce. A
+// pane on another machine, forwarded through its report channel, nothing.
 func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p cancelQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if verr := refuseForwardedPane(cs, "cancel-queued"); verr != nil {
 		return nil, verr
 	}
 	if p.ID == "" && !p.All {
@@ -280,8 +305,14 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 		cs.mu.Lock()
 		peer := cs.linkPeer
 		cs.mu.Unlock()
+		conn := cs.clientID
 		mayDrop = func(e *queueEntry) bool {
-			return e.origin.kind == "link" && e.origin.peer == peer && e.by != queueByHuman
+			if e.origin.kind != "link" || e.by == queueByHuman || e.origin.peer != peer {
+				return false
+			}
+			// Every machine that gave no name shares the empty peer, so
+			// for those only the connection that queued it may drop it.
+			return peer != "" || e.origin.conn == conn
 		}
 	default:
 		if pa := d.paneAuthority(cs); pa != nil {
@@ -340,7 +371,9 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 		}
 		if len(gone) > 0 {
 			// A stalled head held the rest; with it gone, the next is
-			// looked at on the pane's next rest, or now if it rests.
+			// looked at again. It is typed at a rest reached after the
+			// stalled one was typed, since that text may still sit in
+			// the agent's input box.
 			if len(pq.entries) > 0 && !pq.delivering && pq.entries[0].state == queueWaiting {
 				q.armLocked(d, window, pq, q.restFor())
 			}

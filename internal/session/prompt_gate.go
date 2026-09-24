@@ -76,11 +76,17 @@ func (d *Daemon) newPromptGate(sess *Session, windowID string) *promptGate {
 	w := st.Windows[i]
 	g.startSeq = w.CompletionSeq
 	g.startState = w.AgentState
-	harnessID := firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness)
-	if reg := d.agentMatcher.registry; reg != nil && harnessID != "" && reg.CanProveWorking(harnessID) {
-		g.outputCounts = false
-	}
+	g.outputCounts = d.outputShowsTaking(sess, w)
 	return g
+}
+
+// outputShowsTaking reports whether output from the pane counts as evidence
+// that its agent took a prompt: true unless its harness has a rule that shows
+// working. See the file comment.
+func (d *Daemon) outputShowsTaking(sess *Session, w WindowState) bool {
+	harnessID := firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness)
+	reg := d.agentMatcher.registry
+	return reg == nil || harnessID == "" || !reg.CanProveWorking(harnessID)
 }
 
 // markSubmitted records when the Enter went out.

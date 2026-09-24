@@ -19,8 +19,9 @@ import (
 // the daemon through queuePrompt, which is how send-review hands over its
 // notes. Nothing polls. The queue acts on the agent-state events the session
 // sink already produces (noteQueueEvent, called beside the Inbox's own
-// noteSessionEvent), and a pane with nothing queued costs one atomic load per
-// event. A timer exists only for a pane that has something queued.
+// noteSessionEvent), and a daemon with nothing queued and nothing typed costs
+// two atomic loads per event. A timer exists only for a pane that has
+// something queued.
 //
 // Delivery, one entry at a time per pane:
 //
@@ -28,7 +29,14 @@ import (
 //     (agentReady with fanReadyStates): idle or done, and unknown only for a
 //     harness whose rules can never show idle. It must have been in that state
 //     for queueRest, and, after an earlier delivery, have reached it after that
-//     delivery was typed, so the next entry waits for the next rest.
+//     delivery was typed, so the next entry waits for the next rest. When the
+//     last entry was typed is kept per pane (typedStamp), not per queue, so an
+//     entry queued after the queue emptied still waits for that rest.
+//   - A pane whose harness cannot show working (the prompt gate counts its
+//     output as taking a prompt) may never change state after taking one: an
+//     unknown pane stays unknown. For it a rest is also output printed after
+//     the last entry was typed, followed by queueQuiet of silence. Only such a
+//     pane with something queued is looked at on a timer.
 //   - The entry's origin is checked again (queueOriginRefusal): a pane's
 //     grants as they are now, a link's policy as it is now. A refusal drops
 //     the entry and logs it; nothing is typed.
@@ -41,7 +49,8 @@ import (
 //     and never typed again, and the Inbox gets a question on the pane's
 //     blocking key. A stalled entry holds the entries behind it until the pane
 //     next shows working (the agent took it late, or the person dealt with the
-//     pane), which drops it, or until someone cancels it.
+//     pane), which drops it, or until someone cancels it. Either way the next
+//     entry still waits for a rest reached after the stalled one was typed.
 //
 // A queue is memory only. It is dropped when the daemon stops, when its pane
 // closes, when the agent leaves the pane (state none), and when its session
@@ -73,6 +82,13 @@ const (
 // agent flickers to idle between two tool calls.
 const queueRestDefault = time.Second
 
+// queueQuietDefault is how long a pane whose harness cannot show working must
+// have been silent, after printing something since the last entry was typed,
+// before the next entry is typed into it. It is longer than the rest, since
+// silence is weaker evidence than a state: an agent may pause while it waits
+// on its model.
+const queueQuietDefault = 5 * time.Second
+
 // queuePreviewLen bounds the preview list-queued shows, in characters.
 const queuePreviewLen = 80
 
@@ -89,6 +105,10 @@ type queueOrigin struct {
 	// peer is the linked machine, for kind link, as its link-peer handshake
 	// named it; empty for a link that gave no name.
 	peer string
+	// conn is the client id of the link connection that queued it, for kind
+	// link. Two machines that gave no name share the empty peer, so only
+	// the connection tells their entries apart.
+	conn string
 }
 
 // queueEntry is one queued message.
@@ -114,9 +134,16 @@ type paneQueue struct {
 	delivering bool
 	// timer is the pending look at the pane, nil when none is armed.
 	timer *time.Timer
-	// typedAt is when the last entry was typed, in Unix nanoseconds, so the
-	// next one waits for a rest reached after it.
-	typedAt int64
+}
+
+// typedStamp is when the last queued entry was typed into a pane, in Unix
+// nanoseconds, so the next one waits for a rest reached after it. It outlives
+// the pane's queue: a queue that empties is deleted, and an entry queued a
+// moment later must still wait. It goes when the pane closes, when the agent
+// leaves it, and when its session ends.
+type typedStamp struct {
+	at      int64
+	session string
 }
 
 // agentQueues holds every pane's queue. The zero value is ready.
@@ -128,13 +155,22 @@ type agentQueues struct {
 	mu    sync.Mutex
 	panes map[string]*paneQueue
 	seq   uint64
-	// total counts entries across every pane, so the event sink returns at
-	// once on a daemon where nothing is queued.
-	total atomic.Int64
+	// typed holds each pane's typedStamp, and stamped its length.
+	typed map[string]typedStamp
+	// total counts entries across every pane, and stamped the panes with a
+	// typedStamp, so the event sink returns at once on a daemon where nothing
+	// is queued and nothing was typed.
+	total   atomic.Int64
+	stamped atomic.Int64
 	// max is [agents.queue] max; zero reads as the default.
 	max atomic.Int64
-	// rest replaces queueRestDefault when set. Only tests set it.
-	rest time.Duration
+	// rest replaces queueRestDefault, and quiet queueQuietDefault, when set.
+	// Only tests set them.
+	rest  time.Duration
+	quiet time.Duration
+	// beforeType, when set, runs right before an entry is typed, after the
+	// look found the pane ready. Only tests set it.
+	beforeType func(window string)
 }
 
 // SetQueueMax applies [agents.queue] max. A queue already longer keeps its
@@ -157,6 +193,89 @@ func (q *agentQueues) restFor() time.Duration {
 		return q.rest
 	}
 	return queueRestDefault
+}
+
+// quietFor is how long a pane that cannot show working must be silent.
+func (q *agentQueues) quietFor() time.Duration {
+	if q.quiet > 0 {
+		return q.quiet
+	}
+	return queueQuietDefault
+}
+
+// stampLocked records that an entry was typed into window at at. It holds mu.
+func (q *agentQueues) stampLocked(window, session string, at int64) {
+	if q.typed == nil {
+		q.typed = make(map[string]typedStamp)
+	}
+	if _, ok := q.typed[window]; !ok {
+		q.stamped.Add(1)
+	}
+	q.typed[window] = typedStamp{at: at, session: session}
+}
+
+// unstampLocked forgets when an entry was last typed into window. It holds mu.
+func (q *agentQueues) unstampLocked(window string) {
+	if _, ok := q.typed[window]; ok {
+		delete(q.typed, window)
+		q.stamped.Add(-1)
+	}
+}
+
+// paneRest is what a look at a pane reads before it takes mu, since reading
+// it may take the session's locks.
+type paneRest struct {
+	// ready is agentReady with fanReadyStates.
+	ready bool
+	// stateAt is when the pane's agent state last changed.
+	stateAt int64
+	// outputRest says output then silence counts as a rest: the pane's
+	// harness cannot show working. lastOutput is the pane's output clock.
+	outputRest bool
+	lastOutput int64
+}
+
+// readPaneRest reads what restLocked decides on.
+func (d *Daemon) readPaneRest(sess *Session, target WindowState) paneRest {
+	r := paneRest{ready: d.agentReady(target, fanReadyStates), stateAt: target.AgentStateAt}
+	if r.ready && d.outputShowsTaking(sess, target) {
+		r.outputRest = true
+		if pty, err := d.resolvePTYForTarget(sess, target.ID); err == nil {
+			r.lastOutput = pty.LastOutput()
+		}
+	}
+	return r
+}
+
+// restLocked decides whether a pane may take its next entry now. When it may
+// not, look says whether a look should be armed, after wait; false leaves it
+// to the pane's next state change. stamp is when the last entry was typed, 0
+// for none. It holds mu.
+func (q *agentQueues) restLocked(r paneRest, stamp int64, now time.Time) (ready bool, wait time.Duration, look bool) {
+	if !r.ready {
+		return false, 0, false
+	}
+	if stamp == 0 || r.stateAt > stamp {
+		rested := now.Sub(time.Unix(0, r.stateAt))
+		if rested >= q.restFor() {
+			return true, 0, true
+		}
+		return false, q.restFor() - rested, true
+	}
+	// The pane has not changed state since the last entry was typed.
+	if !r.outputRest {
+		return false, 0, false
+	}
+	if r.lastOutput <= stamp {
+		// Nothing printed since. No event says when it does, so look again
+		// after the quiet window while something waits.
+		return false, q.quietFor(), true
+	}
+	silent := now.Sub(time.Unix(0, r.lastOutput))
+	if silent >= q.quietFor() {
+		return true, 0, true
+	}
+	return false, q.quietFor() - silent, true
 }
 
 // queuedResult is what queuePrompt reports about an entry it queued.
@@ -187,6 +306,7 @@ func queueFullError(target WindowState, limit int) *verbError {
 func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (queuedResult, *verbError) {
 	q := &d.queue
 	limit := q.maxEntries()
+	rest := d.readPaneRest(sess, target)
 	now := time.Now()
 	q.mu.Lock()
 	if q.panes == nil {
@@ -212,13 +332,16 @@ func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (
 	pq.entries = append(pq.entries, e)
 	q.total.Add(1)
 	res := queuedResult{ID: e.id, Position: len(pq.entries), Queued: len(pq.entries)}
-	ready := d.agentReady(target, fanReadyStates)
-	if res.Position == 1 && ready && !pq.delivering {
+	stamp := q.typed[target.ID].at
+	if res.Position == 1 && !pq.delivering && rest.ready && (stamp == 0 || rest.stateAt > stamp) {
+		// At a rest reached since the last entry was typed, so it goes
+		// once the rest is a second old.
 		res.Delivering = true
 	}
 	if !pq.delivering && pq.entries[0].state == queueWaiting {
-		wait := q.restFor() - now.Sub(time.Unix(0, target.AgentStateAt))
-		q.armLocked(d, target.ID, pq, max(wait, 0))
+		if _, wait, look := q.restLocked(rest, stamp, now); look {
+			q.armLocked(d, target.ID, pq, wait)
+		}
 	}
 	q.mu.Unlock()
 	LogBasic("Queued %s for window %s (by %s, %d queued)", e.id, shortWindowID(target.ID), e.by, res.Queued)
@@ -319,7 +442,7 @@ func (d *Daemon) sessionHolding(window string) *Session {
 // goroutine.
 func (d *Daemon) noteQueueEvent(sessionName string, ev SessionEvent) {
 	q := &d.queue
-	if q.total.Load() == 0 {
+	if q.total.Load() == 0 && q.stamped.Load() == 0 {
 		return
 	}
 	switch ev.Type {
@@ -331,6 +454,9 @@ func (d *Daemon) noteQueueEvent(sessionName string, ev SessionEvent) {
 	case EventAgentState:
 		q.mu.Lock()
 		defer q.mu.Unlock()
+		if ev.State == AgentStateNone.Name() {
+			q.unstampLocked(ev.Window)
+		}
 		pq := q.panes[ev.Window]
 		if pq == nil {
 			return
@@ -366,6 +492,7 @@ func (d *Daemon) noteQueueEvent(sessionName string, ev SessionEvent) {
 func (q *agentQueues) dropWindow(window string) []string {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.unstampLocked(window)
 	var touched []string
 	if pq := q.panes[window]; pq != nil {
 		pq.delivering = false
@@ -388,11 +515,16 @@ func (q *agentQueues) dropWindow(window string) []string {
 // what names them.
 func (d *Daemon) forgetQueuedSession(name string) {
 	q := &d.queue
-	if q.total.Load() == 0 {
+	if q.total.Load() == 0 && q.stamped.Load() == 0 {
 		return
 	}
 	var touched []string
 	q.mu.Lock()
+	for id, st := range q.typed {
+		if st.session == name {
+			q.unstampLocked(id)
+		}
+	}
 	for id, pq := range q.panes {
 		if pq.session == name {
 			pq.delivering = false
@@ -424,8 +556,7 @@ func (d *Daemon) deliverQueued(window string) {
 	if !ok {
 		return
 	}
-	ready := d.agentReady(target, fanReadyStates)
-	restedFor := time.Since(time.Unix(0, target.AgentStateAt))
+	rest := d.readPaneRest(sess, target)
 
 	q.mu.Lock()
 	pq := q.panes[window]
@@ -433,38 +564,53 @@ func (d *Daemon) deliverQueued(window string) {
 		q.mu.Unlock()
 		return
 	}
-	switch {
-	case !ready || (pq.typedAt != 0 && target.AgentStateAt <= pq.typedAt):
+	if ready, wait, look := q.restLocked(rest, q.typed[window].at, time.Now()); !ready {
 		// Not at rest, or not at a rest reached since the last entry was
-		// typed. The pane's next state change arms the look again.
-		q.mu.Unlock()
-		return
-	case restedFor < q.restFor():
-		q.armLocked(d, window, pq, q.restFor()-restedFor)
+		// typed. Either a look is due later, or the pane's next state
+		// change arms one.
+		if look {
+			q.armLocked(d, window, pq, wait)
+		}
 		q.mu.Unlock()
 		return
 	}
 	e := pq.entries[0]
 	e.state = queueDelivering
 	pq.delivering = true
+	hook := q.beforeType
 	q.mu.Unlock()
 
-	status, note := d.typeQueued(sess, target, e)
+	if hook != nil {
+		hook(window)
+	}
+	status, note, at := d.typeQueued(sess, target, e)
+	if at == 0 {
+		at = time.Now().UnixNano()
+	}
 
 	q.mu.Lock()
 	pq.delivering = false
+	// A pane that closed, or whose session ended or agent left, while the
+	// gate waited has dropped its queue, and it gets no stamp.
+	live := q.panes[window] == pq
 	var stalled bool
 	switch status {
 	case PromptSent:
-		pq.typedAt = time.Now().UnixNano()
+		// Stamped with when the Enter went out, not now: a fast turn can
+		// reach its rest while the gate waits, and that rest counts.
+		if live {
+			q.stampLocked(window, sess.Name, at)
+		}
 		q.removeLocked(window, pq, func(x *queueEntry) bool { return x == e })
 		LogBasic("Typed queued %s into window %s", e.id, shortWindowID(window))
 	case PromptStalled:
-		pq.typedAt = time.Now().UnixNano()
+		if live {
+			q.stampLocked(window, sess.Name, at)
+		}
 		e.state = queueStalled
 		// A pane that closed while the gate waited has dropped its queue,
 		// and there is no pane left to look at.
-		stalled = q.panes[window] == pq
+		stalled = live
 		LogBasic("Queued %s was typed into window %s and not taken: %s", e.id, shortWindowID(window), note)
 	case queueRefused:
 		q.removeLocked(window, pq, func(x *queueEntry) bool { return x == e })
@@ -508,16 +654,16 @@ const queueRefused = "refused"
 
 // typeQueued checks e once more and types it: the origin's authority as it is
 // now, then that the pane is not on a prompt, then the prompt path fan uses.
-// It returns the prompt status, or queueRefused, and a note.
-func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (string, string) {
+// It returns the prompt status, or queueRefused, a note, and when the Enter
+// went out (0 when nothing was typed).
+func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (string, string, int64) {
 	if why := d.queueOriginRefusal(e, sess, target); why != "" {
-		return queueRefused, why
+		return queueRefused, why, 0
 	}
 	if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
-		return PromptNotSent, verr.Message
+		return PromptNotSent, verr.Message, 0
 	}
-	status, note, _ := d.typeFirstPrompt(sess, target.ID, e.text)
-	return status, note
+	return d.typeFirstPrompt(sess, target.ID, e.text)
 }
 
 // queueOriginRefusal says why the entry's origin may no longer type into

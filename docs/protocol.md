@@ -1076,6 +1076,20 @@ has no queue until something is queued. For one that does:
   `question` item and closes like one.
 - `[agents.queue] max` is read at start and again when the config file
   changes.
+- One message per rest holds across an emptied queue: a message queued just
+  after the last one was typed waits for a rest the agent reaches after that
+  typing, and `delivering` is false until then. The typing time is the moment
+  the Enter went out, so a turn that ends while the daemon is still watching
+  for the agent to take the message counts as that rest.
+- For a pane whose harness cannot show working (the daemon counts its output
+  as taking a message), a rest after a typed message is also output followed
+  by 5 seconds of silence, since such a pane may never change state.
+- `cancel-queued` of a stalled message closes its question, and the messages
+  behind it are typed at the pane's next rest, not in the rest the stalled one
+  was typed into: its text may still sit in the agent's input box.
+- A linked machine that gave no name drops, with `cancel-queued`, only what it
+  queued on the same connection. `queue-prompt` and `cancel-queued` from a pane
+  on another machine, forwarded through its report channel, are `forbidden`.
 
 ### list-verbs
 
@@ -3421,7 +3435,10 @@ on any restricted connection.
 is typed as a prompt once the agent in the pane has been at rest for a
 second: `idle` or `done`, or `unknown` for a harness whose rules can never
 show idle. One message is typed per rest, never over a pane on
-`needs_input`, and never twice. [AGENT_STATE.md](AGENT_STATE.md#queued-messages)
+`needs_input`, and never twice. After a message is typed, the next waits for a
+rest reached after it, even if the queue emptied in between; a pane whose
+harness cannot show working, and so may never change state, also reaches one
+by printing something and then going silent for 5 seconds. [AGENT_STATE.md](AGENT_STATE.md#queued-messages)
 describes the whole lifecycle.
 
 `queue-prompt` params: `session`, `window` (default the focused window; it
@@ -3446,7 +3463,8 @@ characters, control characters left out) and `state` (`waiting`,
 
 `cancel-queued` params: `session`, `window`, and `id` or `all`, and
 `human_nonce`. It answers `cancelled` (the ids dropped) and `queued` (what the
-pane holds now).
+pane holds now). Dropping a stalled entry leaves the next to the pane's next
+rest.
 
 Who queued an entry, `by`, is the daemon's own reading of the connection:
 `human` only with a live `human_nonce`, `link:HOST` over a link (the peer the
@@ -3457,11 +3475,13 @@ in a pane, and `shell` for anything else. What each is held to:
 | --- | --- | --- | --- |
 | `human` | the nonce | nothing more | every entry |
 | a pane | `write`, and the typing rules of `send-text` | its grants as they are then, against the target; a refusal drops the entry | only its own |
-| `link:HOST` | `write` in its `[hosts]` policy | the policy as it is then; a refusal drops the entry | only its own |
+| `link:HOST` | `write` in its `[hosts]` policy | the policy as it is then; a refusal drops the entry | only its own; for a machine that gave no name, only what it queued on the same connection |
 | `shell` | nothing new | nothing new | every entry but `human`'s |
 
 For every entry the pane is checked for `needs_input` right before it is
-typed. An entry being typed cannot be dropped.
+typed. An entry being typed cannot be dropped. A pane on another machine,
+whose calls arrive through its report channel, may neither queue nor drop:
+both verbs answer `forbidden`.
 
 ## Event stream
 

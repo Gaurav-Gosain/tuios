@@ -251,7 +251,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbListQueued,
 		},
 		"cancel-queued": {
-			description: "Drop messages from a pane's delivery queue before they are typed. The person, with a live human_nonce, may drop any entry; a pane only the entries it queued; a linked machine only the entries it queued; a caller outside every pane every entry but the person's. An entry being typed cannot be dropped. Dropping a stalled entry closes its Inbox question and lets the entries behind it be typed.",
+			description: "Drop messages from a pane's delivery queue before they are typed. The person, with a live human_nonce, may drop any entry; a pane only the entries it queued; a linked machine only the entries it queued; a caller outside every pane every entry but the person's. An entry being typed cannot be dropped. Dropping a stalled entry closes its Inbox question; the entries behind it are typed at the pane's next rest, one reached after the stalled entry was typed. A linked machine that gave no name drops only what it queued on the same connection.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window id or name. With all, omit it to target the focused window. With id, omit it to find the entry in any pane of the session."},

@@ -1497,13 +1497,15 @@ tuios respond -w review choose 2
 ### `tuios queue`
 
 Queue a message for the agent in a pane. It is typed as a prompt once the
-agent has been at rest (`idle` or `done`) for a second, one message per rest,
-and never over a prompt the agent is waiting on. If the agent is at rest now,
+agent has been at rest (`idle` or `done`, or `unknown` for a harness that can
+never show idle) for a second, one message per rest, and never over a prompt
+the agent is waiting on. For a harness that cannot show working, a rest after a
+typed message is also new output followed by 5 seconds of silence. If the agent is at rest now,
 it is typed right away. The daemon then waits for the agent to show it took
 the message, the way `fan` waits for its first prompt. A message the agent
 shows no sign of taking is marked `stalled`, is never typed again, and opens a
 question in the Inbox; it holds the messages behind it until the agent next
-works or you drop it.
+works or you drop it, and the next message is then typed at the next rest.
 
 A pane holds at most `[agents.queue] max` messages (8 by default) of at most
 16 KiB each. The queue lives in the daemon's memory, so a daemon restart drops

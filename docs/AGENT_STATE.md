@@ -2322,7 +2322,17 @@ message is typed when:
 - it has been at rest for a second, so a message does not land in the moment
   an agent flickers to idle between two tool calls;
 - after an earlier message, the rest was reached after that message was
-  typed: one message per rest, and the next waits for the next rest.
+  typed: one message per rest, and the next waits for the next rest. This
+  holds when the queue emptied in between, so a message you queue just after
+  the last one was typed does not land while the agent is still on it. The
+  typing time is when the Enter went out, so a turn that ends while the daemon
+  still watches for the agent to take the message counts.
+
+A harness whose rules cannot show working (Aider, Crush, or a pane with no
+harness) may sit on `unknown` before and after it takes a message, so no
+state change marks the next rest. For such a pane a rest after a typed message
+is also new output followed by 5 seconds of silence. Only such a pane, with
+something queued, is looked at on a timer.
 
 It is typed the way `fan` types its first prompt (see
 [Typing a prompt](#typing-a-prompt)), and the daemon then waits for the agent
@@ -2376,7 +2386,11 @@ message can never answer an approval or a question.
 drop any. A pane may drop only what it queued, a linked machine only what it
 queued, and a shell every message but yours. A message being typed cannot be
 dropped. Dropping a stalled message closes its Inbox question and lets the
-ones behind it be typed at the next rest.
+ones behind it be typed at the pane's next rest, one reached after the stalled
+message was typed, since its text may still sit in the input box. Linked
+machines are told apart by the name their link gave; two that gave none each
+drop only what they queued on the same connection. A pane on another machine,
+whose calls arrive through its report channel, may neither queue nor drop.
 
 ## Environment
 

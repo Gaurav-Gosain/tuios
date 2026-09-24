@@ -2,6 +2,7 @@ package session
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -376,5 +377,243 @@ func TestQueuePreview(t *testing.T) {
 		if got := queuePreview(tc.in); got != tc.want {
 			t.Errorf("queuePreview(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestQueueQuietRestOnAPaneThatCannotShowWorking: a pane whose harness shows
+// neither idle nor working rests on unknown and never changes state after it
+// takes a prompt. The entry after the first is typed once the pane has printed
+// something since the first and then been silent for the quiet window, and
+// not before.
+func TestQueueQuietRestOnAPaneThatCannotShowWorking(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	d.queue.quiet = time.Second
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateUnknown}); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := findWindowState(sess.GetState(), b)
+	if !d.agentReady(w, fanReadyStates) || !d.outputShowsTaking(sess, w) {
+		t.Fatal("a pane with no harness on unknown should be at rest, with output as its evidence")
+	}
+	stateAt := w.AgentStateAt
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo quiet-$((40+1))"}))
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo quiet-$((40+2))"}))
+	eventually(t, "the first entry is typed", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "quiet-41") })
+	time.Sleep(300 * time.Millisecond)
+	if paneShows(t, d, sess, b, "quiet-$((40+2))") {
+		t.Fatal("the second entry followed the first before the pane was quiet")
+	}
+	eventually(t, "the second entry is typed after the quiet", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "quiet-42") })
+	if w, _ := findWindowState(sess.GetState(), b); w.AgentStateAt != stateAt {
+		t.Fatalf("the pane changed state (%s), so this did not test the quiet rest", w.AgentState.Name())
+	}
+}
+
+// TestQueueStampOutlivesTheQueue: an entry queued just after the queue
+// emptied still waits for a rest reached after the last entry was typed,
+// rather than being typed at once into an agent still on that entry.
+func TestQueueStampOutlivesTheQueue(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	d.queue.quiet = 1500 * time.Millisecond
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateUnknown}); err != nil {
+		t.Fatal(err)
+	}
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo stamp-$((10+1))"}))
+	eventually(t, "the first entry is typed and the queue empties", 5*time.Second, func() bool {
+		return paneShows(t, d, sess, b, "stamp-11") && d.queue.count(b) == 0
+	})
+	second := result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo stamp-$((10+2))"}))
+	if second["delivering"] != false {
+		t.Errorf("an entry queued while the agent is still on the last one reports delivering %v, want false", second["delivering"])
+	}
+	time.Sleep(300 * time.Millisecond)
+	if paneShows(t, d, sess, b, "stamp-$((10+2))") {
+		t.Fatal("the entry was typed without a new rest after the last one")
+	}
+	eventually(t, "the entry is typed at the next rest", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "stamp-12") })
+
+	// The stamp goes with the agent, and with the pane.
+	d.queue.mu.Lock()
+	_, stamped := d.queue.typed[b]
+	d.queue.mu.Unlock()
+	if !stamped {
+		t.Fatal("no stamp was kept for the pane")
+	}
+	setAgentState(t, c, "work", b, "none", "", "")
+	eventually(t, "the stamp goes when the agent leaves", 2*time.Second, func() bool {
+		d.queue.mu.Lock()
+		defer d.queue.mu.Unlock()
+		_, ok := d.queue.typed[b]
+		return !ok && d.queue.stamped.Load() == 0
+	})
+}
+
+// TestQueueStampIsTheSubmitTime: an agent quick enough to go working and back
+// to done before the prompt gate returns has reached a rest after the entry
+// was typed, and the next entry is typed at it.
+func TestQueueStampIsTheSubmitTime(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	if reg := d.agentMatcher.registry; reg == nil || !reg.CanProveWorking("claude-code") {
+		t.Skip("the registry has no claude-code rules that show working")
+	}
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle, Harness: "claude-code"}); err != nil {
+		t.Fatal(err)
+	}
+	// The fast turn: once the first command has run, which is after its
+	// Enter, the agent reports working and done back to back.
+	pty, err := d.resolvePTYForTarget(sess, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turned := make(chan struct{})
+	var workingAt int64
+	go func() {
+		defer close(turned)
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if strings.Contains(pty.CaptureContent(true, false), "fast-7") {
+				_, _, _ = sess.ApplyAgentReport(b, AgentReport{State: AgentStateWorking, Harness: "claude-code"})
+				w, _ := findWindowState(sess.GetState(), b)
+				workingAt = w.AgentStateAt
+				_, _, _ = sess.ApplyAgentReport(b, AgentReport{State: AgentStateDone, Harness: "claude-code"})
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo fast-$((3+4))"}))
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo fast-$((4+4))"}))
+	<-turned
+	if workingAt == 0 {
+		t.Fatal("the first entry never ran")
+	}
+	// The gate can return only after it saw working, so a stamp taken when
+	// it returned would be later than working and hide the rest after it.
+	eventually(t, "the first entry is stamped", 5*time.Second, func() bool {
+		d.queue.mu.Lock()
+		defer d.queue.mu.Unlock()
+		return d.queue.typed[b].at != 0
+	})
+	d.queue.mu.Lock()
+	stamp := d.queue.typed[b].at
+	d.queue.mu.Unlock()
+	if stamp >= workingAt {
+		t.Fatalf("the stamp %d is not before the working report at %d: it is not the submit time", stamp, workingAt)
+	}
+	eventually(t, "the second entry is typed at the rest the fast turn reached", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "fast-8") })
+}
+
+// TestQueueRechecksNeedsInputRightBeforeTyping: a pane that reaches
+// needs_input after the look found it at rest, and before the entry is typed,
+// is not typed into, and the entry waits.
+func TestQueueRechecksNeedsInputRightBeforeTyping(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	setAgentState(t, c, "work", b, "idle", "", "")
+	var once sync.Once
+	d.queue.beforeType = func(window string) {
+		once.Do(func() {
+			if _, _, err := sess.ApplyAgentReport(window, AgentReport{State: AgentStateNeedsInput, Kind: "question", Message: "pick one"}); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo blocked-entry"}))
+	eventually(t, "the look reaches the pane", 3*time.Second, func() bool {
+		w, _ := findWindowState(sess.GetState(), b)
+		return w.AgentState == AgentStateNeedsInput
+	})
+	time.Sleep(400 * time.Millisecond)
+	if paneShows(t, d, sess, b, "blocked-entry") {
+		t.Fatal("a queued entry was typed into a pane on needs_input")
+	}
+	if got := queuedEntries(t, c, b); len(got) != 1 || got[0]["state"] != queueWaiting {
+		t.Fatalf("list-queued = %v, want the entry waiting again", got)
+	}
+}
+
+// TestQueueCancelOfAStalledEntryWaitsForTheNextRest: dropping a stalled entry
+// does not type the next one into the same rest, since the stalled text may
+// still sit in the input box. The next rest types it.
+func TestQueueCancelOfAStalledEntryWaitsForTheNextRest(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	d.promptStallOverride = 600 * time.Millisecond
+	d.queue.quiet = 300 * time.Millisecond
+	silenceWindow(t, d, sess, b)
+	setAgentState(t, c, "work", b, "idle", "", "")
+	first := result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "first"}))
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "second"}))
+	eventually(t, "the entry stalls", 5*time.Second, func() bool {
+		got := queuedEntries(t, c, b)
+		return len(got) == 2 && got[0]["state"] == queueStalled
+	})
+	result(t, callP(c, t, "cancel-queued", map[string]any{"session": "work", "id": first["id"]}))
+	time.Sleep(600 * time.Millisecond)
+	if got := queuedEntries(t, c, b); len(got) != 1 || got[0]["preview"] != "second" || got[0]["state"] != queueWaiting {
+		t.Fatalf("list-queued = %v, want the second entry still waiting", got)
+	}
+	setAgentState(t, c, "work", b, "working", "", "")
+	setAgentState(t, c, "work", b, "idle", "", "")
+	eventually(t, "the second entry is typed at the next rest", 5*time.Second, func() bool {
+		got := queuedEntries(t, c, b)
+		return len(got) == 0 || got[0]["state"] != queueWaiting
+	})
+}
+
+// TestCancelQueuedUnnamedLinks: two linked machines that gave no name share
+// the empty peer, and neither may drop what the other queued. Each drops its
+// own.
+func TestCancelQueuedUnnamedLinks(t *testing.T) {
+	d, _, _, c, _, b := queueFixture(t)
+	setAgentState(t, c, "work", b, "working", "", "")
+	one := &connState{clientID: "link-one", viaLink: true, done: make(chan struct{})}
+	two := &connState{clientID: "link-two", viaLink: true, done: make(chan struct{})}
+	queue := func(cs *connState, text string) string {
+		res, verr := d.verbQueuePrompt(cs, mustJSON(map[string]any{"session": "work", "window": b, "text": text}))
+		if verr != nil {
+			t.Fatalf("queue-prompt over a link: %v", verr.Message)
+		}
+		return res.(map[string]any)["id"].(string)
+	}
+	idOne := queue(one, "from link one")
+	idTwo := queue(two, "from link two")
+	if _, verr := d.verbCancelQueued(two, mustJSON(map[string]any{"session": "work", "id": idOne})); verr == nil || verr.Code != ErrVerbForbidden {
+		t.Fatalf("an unnamed link dropping another unnamed link's entry = %v, want forbidden", verr)
+	}
+	res, verr := d.verbCancelQueued(two, mustJSON(map[string]any{"session": "work", "window": b, "all": true}))
+	if verr != nil {
+		t.Fatal(verr.Message)
+	}
+	if ids := res.(map[string]any)["cancelled"].([]string); len(ids) != 1 || ids[0] != idTwo {
+		t.Fatalf("an unnamed link's cancel all = %v, want only its own entry", ids)
+	}
+	if _, verr := d.verbCancelQueued(one, mustJSON(map[string]any{"session": "work", "id": idOne})); verr != nil {
+		t.Fatalf("an unnamed link dropping its own entry: %v", verr.Message)
+	}
+
+	// A named machine drops what it queued, on any connection.
+	named := &connState{clientID: "link-three", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
+	again := &connState{clientID: "link-four", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
+	id := queue(named, "from laptop")
+	if _, verr := d.verbCancelQueued(again, mustJSON(map[string]any{"session": "work", "id": id})); verr != nil {
+		t.Fatalf("laptop dropping its own entry after reconnecting: %v", verr.Message)
+	}
+}
+
+// TestQueueRefusesAForwardedPane: a call a pane on another machine forwards
+// through its report channel is refused by both writing verbs, rather than
+// passing for the person's shell.
+func TestQueueRefusesAForwardedPane(t *testing.T) {
+	d, _, _, c, _, b := queueFixture(t)
+	setAgentState(t, c, "work", b, "working", "", "")
+	byShell := result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "from a shell"}))
+	hosted := &connState{clientID: "hosted:box", paneOnly: true, done: make(chan struct{})}
+	if _, verr := d.verbQueuePrompt(hosted, mustJSON(map[string]any{"session": "work", "window": b, "text": "x"})); verr == nil || verr.Code != ErrVerbForbidden {
+		t.Fatalf("queue-prompt from a forwarded pane = %v, want forbidden", verr)
+	}
+	if _, verr := d.verbCancelQueued(hosted, mustJSON(map[string]any{"session": "work", "id": byShell["id"]})); verr == nil || verr.Code != ErrVerbForbidden {
+		t.Fatalf("cancel-queued from a forwarded pane = %v, want forbidden", verr)
+	}
+	if got := queuedEntries(t, c, b); len(got) != 1 {
+		t.Fatalf("list-queued = %v, want the shell's entry still there", got)
 	}
 }

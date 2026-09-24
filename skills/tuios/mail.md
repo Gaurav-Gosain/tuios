@@ -264,6 +264,7 @@ tuios queue rm -s work q3        # changed your mind; only what you queued
 ```
 
 A message the agent did not take is marked `stalled`, opens a question in the
-person's Inbox, and is not typed again. The queue dies with the daemon, the
+person's Inbox, and is not typed again. Dropping it lets the next be typed at
+the agent's next rest, not at once. The queue dies with the daemon, the
 pane, or the agent leaving the pane. To message or ask many panes at once, use a selector
 (`tuios --skill fleet`).
