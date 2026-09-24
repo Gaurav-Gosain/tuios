@@ -104,7 +104,7 @@ func getSettingPaletteItems(m *OS) []CommandPaletteItem {
 		for ii, item := range cat.Items {
 			ci, ii := ci, ii
 			items = append(items, CommandPaletteItem{
-				Name:     "Settings: " + item.Label,
+				Name:     item.Label,
 				Shortcut: cat.Name,
 				Category: "Settings",
 				Setting:  true,

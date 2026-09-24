@@ -999,14 +999,26 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	if strings.TrimSpace(query) == "" || len(settings) == 0 {
 		return out
 	}
+	// A setting row is matched as "Settings: <name>", so typing the word the
+	// row is tagged with reaches it, and drawn as its name alone beside the
+	// [Settings] tag. The highlight is moved back by the prefix it was matched
+	// with.
 	var m fuzzy.Matcher
-	for _, h := range m.FilterIndex(query, len(settings), func(i int) string { return settings[i].Name }) {
+	for _, h := range m.FilterIndex(query, len(settings), func(i int) string { return paletteSettingPrefix + settings[i].Name }) {
 		item := settings[h.Index]
-		item.Match = h.Positions
+		item.Match = nil
+		for _, p := range h.Positions {
+			if p >= len(paletteSettingPrefix) {
+				item.Match = append(item.Match, p-len(paletteSettingPrefix))
+			}
+		}
 		out = append(out, item)
 	}
 	return out
 }
+
+// paletteSettingPrefix is what a setting row is matched with ahead of its name.
+const paletteSettingPrefix = "Settings: "
 
 // matchPaletteItems is the scored pass, with no token handling: names first,
 // then rows admitted only by their category.

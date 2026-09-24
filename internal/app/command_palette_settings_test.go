@@ -1,9 +1,6 @@
 package app
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func paletteSettingsOS(t *testing.T) *OS {
 	t.Helper()
@@ -22,7 +19,7 @@ func TestPaletteReachesASettingByName(t *testing.T) {
 	m := paletteSettingsOS(t)
 	for _, q := range []string{"settings: pane background", "pane background"} {
 		got := FilterCommandPalette(m.allPaletteItems(), q)
-		if len(got) == 0 || got[0].Name != "Settings: Pane background" {
+		if len(got) == 0 || !got[0].Setting || got[0].Name != "Pane background" {
 			names := []string{}
 			for _, it := range got[:min(len(got), 5)] {
 				names = append(names, it.Name)
@@ -31,6 +28,12 @@ func TestPaletteReachesASettingByName(t *testing.T) {
 		}
 		if got[0].Shortcut != "Backgrounds" {
 			t.Errorf("the row names tab %q, want Backgrounds", got[0].Shortcut)
+		}
+		// The highlight is on the name as drawn, never past its end.
+		for _, p := range got[0].Match {
+			if p < 0 || p >= len(got[0].Name) {
+				t.Errorf("%q lights byte %d of %q", q, p, got[0].Name)
+			}
 		}
 	}
 
@@ -68,7 +71,7 @@ func TestPaletteSettingRowsStayOutOfTheWay(t *testing.T) {
 		t.Errorf("the empty palette counts %d reachable rows, but lists %d", n, len(FilterCommandPalette(m.allPaletteItems(), "")))
 	}
 	for _, it := range FilterCommandPalette(m.allPaletteItems(), "#theme") {
-		if strings.HasPrefix(it.Name, "Settings: ") {
+		if it.Setting {
 			t.Errorf("the keybind search lists setting row %q", it.Name)
 		}
 	}
