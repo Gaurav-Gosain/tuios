@@ -1,34 +1,71 @@
 name: Issue labeler
+
+# Reads the platform and install method from a bug report form and labels the
+# issue with them.
+#
+# The labels used to come from redhat-plumbers-in-action/advanced-issue-labeler,
+# which still runs on Node 20 in its latest release, and every run failed before
+# it got that far: the parser was pointed at .github/ISSUE_TEMPLATE/bug.yml, a
+# file that does not exist. The mapping is a few lines of shell, so it lives
+# here now, next to the form it reads.
+
 on:
   issues:
-    types: [ opened ]
+    types: [opened]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   label-component:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
     permissions:
-      # required for all workflows
-      issues: write
-
-      # only required for workflows in private repositories
-      actions: read
+      # The parser reads the form template from the checkout.
       contents: read
+      issues: write
 
     steps:
       - uses: actions/checkout@v7
 
       - name: Parse issue form
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
         id: issue-parser
         with:
-          template-path: .github/ISSUE_TEMPLATE/bug.yml
+          template-path: .github/ISSUE_TEMPLATE/bug_report.yml
 
+      # The keys are the option text in bug_report.yml, and the values are
+      # labels that exist in the repository. An issue from another form has
+      # neither field, so it gets no label.
       - name: Set labels based on the provided fields
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
-        with:
-          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          FORM: ${{ steps.issue-parser.outputs.jsonString }}
+        run: |
+          set -eu
+          platform=$(printf '%s' "$FORM" | jq -r '.platform // ""')
+          method=$(printf '%s' "$FORM" | jq -r '."install-method" // ""')
+
+          labels=()
+          case "$platform" in
+            "Linux ("*) labels+=("linux") ;;
+            "Darwin ("*) labels+=("darwin") ;;
+            "FreeBSD ("*) labels+=("FreeBSD") ;;
+            "Windows ("*) labels+=("ew windows") ;;
+            "Docker") labels+=("ew docker") ;;
+          esac
+          case "$method" in
+            "Bash Script (curl / wget)") labels+=("bash script") ;;
+            "Arch Linux (AUR)") labels+=("arch btw") ;;
+            "Nix") labels+=("nix") ;;
+            "Docker") labels+=("ew docker") ;;
+          esac
+
+          if [ "${#labels[@]}" -eq 0 ]; then
+            echo "no label applies (platform: '$platform', install method: '$method')"
+            exit 0
+          fi
+          for label in "${labels[@]}"; do
+            gh issue edit "$ISSUE" --add-label "$label"
+          done
