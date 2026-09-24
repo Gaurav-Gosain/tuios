@@ -216,6 +216,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.wrap_lists", Type: OptionBool, Section: "appearance",
+		Description: "Up on a list's first row goes to its last, and down on the last goes to the first",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.whichkey_position", Type: OptionString, Section: "appearance",
 		Description: "Corner the which-key popup opens in (empty: bottom-right)",
 		Accepted:    WhichKeyPositions, Default: "",

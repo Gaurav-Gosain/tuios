@@ -128,12 +128,9 @@ func (m *OS) buildQuitMenuItems(others []string, busy bool) []QuitMenuItem {
 	return items
 }
 
-// QuitMenuMove moves the quit menu selection by delta, clamped to the rows.
+// QuitMenuMove moves the quit menu selection by delta under the list rule.
 func (m *OS) QuitMenuMove(delta int) {
-	if len(m.QuitMenuItems) == 0 {
-		return
-	}
-	m.QuitMenuSelected = clampInt(m.QuitMenuSelected+delta, 0, len(m.QuitMenuItems)-1)
+	m.moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), listOverlayRows, delta)
 }
 
 // QuitMenuIndexOfKind returns the first row matching any of the given kinds,

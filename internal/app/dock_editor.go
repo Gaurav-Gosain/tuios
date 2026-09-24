@@ -236,26 +236,8 @@ func (m *OS) DockEditorMove(delta int) {
 	if len(rows) == 0 {
 		return
 	}
-	step := 1
-	if delta < 0 {
-		step = -1
-	}
-	next := m.DockEditorSelected
-	for range max(delta, -delta) {
-		candidate := next
-		for {
-			candidate += step
-			if candidate < 0 || candidate >= len(rows) {
-				candidate = next
-				break
-			}
-			if rows[candidate].Kind != dockRowHeader {
-				break
-			}
-		}
-		next = candidate
-	}
-	m.DockEditorSelected = clampInt(next, 0, len(rows)-1)
+	m.DockEditorSelected = m.listStepSkip(m.DockEditorSelected, delta, len(rows),
+		func(i int) bool { return rows[i].Kind != dockRowHeader })
 	m.scrollDockEditor(len(rows))
 }
 

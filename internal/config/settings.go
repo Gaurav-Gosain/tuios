@@ -71,6 +71,11 @@ type Settings struct {
 	// Set via appearance.whichkey_position config
 	WhichKeyPosition string
 
+	// WrapLists makes a single step off either end of a list land on the other
+	// end: up on the first row goes to the last. Set via appearance.wrap_lists.
+	// See internal/listnav.
+	WrapLists bool
+
 	// SharedBorders controls whether adjacent tiled windows share a single border
 	// instead of having two separate borders side by side.
 	// Set via --shared-borders flag or appearance.shared_borders config
@@ -598,6 +603,7 @@ func DefaultSettings() Settings {
 		AlwaysConfirmQuit:           false,
 		WhichKeyEnabled:             true,
 		WhichKeyPosition:            "bottom-right",
+		WrapLists:                   true,
 		SharedBorders:               false,
 		BorderStyle:                 "rounded",
 		ZenMode:                     ZenModeDisabled,

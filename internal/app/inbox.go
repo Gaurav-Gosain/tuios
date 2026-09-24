@@ -1018,23 +1018,8 @@ func (m *OS) InboxMove(delta int) {
 	if len(rows) == 0 || delta == 0 {
 		return
 	}
-	step := 1
-	if delta < 0 {
-		step, delta = -1, -delta
-	}
-	i := st.Selected
-	for delta > 0 {
-		next := i + step
-		for next >= 0 && next < len(rows) && rows[next].item == nil {
-			next += step
-		}
-		if next < 0 || next >= len(rows) {
-			break
-		}
-		i = next
-		delta--
-	}
-	st.Selected = i
+	st.Selected = m.listStepSkip(st.Selected, delta, len(rows),
+		func(i int) bool { return rows[i].item != nil })
 	m.syncInboxSelectedID()
 }
 

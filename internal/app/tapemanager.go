@@ -227,28 +227,17 @@ func (m *OS) ToggleTapeManager() {
 }
 
 // TapeManagerSelectNext moves selection down
-func (m *OS) TapeManagerSelectNext() {
-	if m.TapeManager == nil || len(m.TapeManager.Files) == 0 {
-		return
-	}
-
-	m.TapeManager.SelectedIndex++
-	if m.TapeManager.SelectedIndex >= len(m.TapeManager.Files) {
-		m.TapeManager.SelectedIndex = 0
-	}
-	m.clampTapeScroll()
-}
+func (m *OS) TapeManagerSelectNext() { m.TapeManagerMove(1) }
 
 // TapeManagerSelectPrev moves selection up
-func (m *OS) TapeManagerSelectPrev() {
+func (m *OS) TapeManagerSelectPrev() { m.TapeManagerMove(-1) }
+
+// TapeManagerMove moves the selection by delta under the list rule.
+func (m *OS) TapeManagerMove(delta int) {
 	if m.TapeManager == nil || len(m.TapeManager.Files) == 0 {
 		return
 	}
-
-	m.TapeManager.SelectedIndex--
-	if m.TapeManager.SelectedIndex < 0 {
-		m.TapeManager.SelectedIndex = len(m.TapeManager.Files) - 1
-	}
+	m.TapeManager.SelectedIndex = m.listStep(m.TapeManager.SelectedIndex, delta, len(m.TapeManager.Files))
 	m.clampTapeScroll()
 }
 

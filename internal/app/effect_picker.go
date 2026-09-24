@@ -241,7 +241,7 @@ func (m *OS) EffectPickerMove(delta int) tea.Cmd {
 	if len(items) == 0 {
 		return nil
 	}
-	next := clampInt(m.EffectPickerSelected+delta, 0, len(items)-1)
+	next := m.listStep(m.EffectPickerSelected, delta, len(items))
 	if next == m.EffectPickerSelected {
 		return nil
 	}

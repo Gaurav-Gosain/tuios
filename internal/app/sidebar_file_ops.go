@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // # File actions on the rail
@@ -417,12 +418,14 @@ func (m *OS) closeFilePrompt() {
 	m.filePrompt = filePromptState{Busy: busy}
 }
 
-// FileConfirmMove steps the confirmation's cursor, clamped to its rows.
+// FileConfirmMove steps the confirmation's cursor, clamped to its rows. It
+// does not wrap, for the reason SessionCloseMove gives: up from Cancel must
+// not land on the answer that deletes.
 func (m *OS) FileConfirmMove(delta int) {
 	if m.filePrompt.Kind != filePromptConfirm {
 		return
 	}
-	m.filePrompt.Selected = clampInt(m.filePrompt.Selected+delta, 0, fileConfirmRowCount-1)
+	m.filePrompt.Selected = listnav.Step(m.filePrompt.Selected, delta, fileConfirmRowCount, false)
 }
 
 // FilePromptSubmit runs what the open dialog asks for.

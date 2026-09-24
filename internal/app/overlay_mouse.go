@@ -238,6 +238,9 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 			return false
 		}
 	}
+	// A wheel move stops at the ends of a list. See listWraps.
+	m.wheelMoving = true
+	defer func() { m.wheelMoving = false }()
 	switch h.Kind {
 	case "help":
 		if up {
@@ -246,11 +249,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 			m.HelpScrollOffset += 2 // clamped against row count on next render
 		}
 	case "settings":
-		if up {
-			m.SettingsMoveUp()
-		} else {
-			m.SettingsMoveDown()
-		}
+		m.SettingsMove(wheelDelta(up))
 	case "palette":
 		m.PaletteMove(wheelDelta(up))
 	case "keybinds":
@@ -268,21 +267,25 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "sectioneditor":
 		m.SectionEditorMove(wheelDelta(up))
 	case "session":
-		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
-		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
+		m.SessionSwitcherMove(wheelDelta(up))
 	case "agentmail":
 		m.AgentMailMove(wheelDelta(up))
 	case "inbox":
 		m.InboxMove(wheelDelta(up))
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
-		moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, n, workspaceSwitcherRows, wheelDelta(up))
+		m.WorkspaceSwitcherMove(wheelDelta(up), n)
 	case "layout":
-		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
-		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
+		m.LayoutPickerMove(wheelDelta(up))
 	case "hostpicker":
-		n := len(FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery))
-		moveListSelection(&m.HostPickerSelected, &m.HostPickerScroll, n, 10, wheelDelta(up))
+		m.HostPickerMove(wheelDelta(up))
+	case "aggregate":
+		// The one list overlay the wheel did nothing on.
+		m.AggregateViewMove(wheelDelta(up))
+	case "sessionclose":
+		m.SessionCloseMove(wheelDelta(up))
+	case "filedialog":
+		m.FileConfirmMove(wheelDelta(up))
 	case "accent":
 		// The wheel drives whatever is under it: the strip turns the hue, the
 		// grid steps through lightness.
@@ -293,7 +296,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 			m.AccentPickerMoveCell(0, wheelDelta(up))
 		}
 	case "quit":
-		moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), 10, wheelDelta(up))
+		m.QuitMenuMove(wheelDelta(up))
 	default:
 		return false
 	}

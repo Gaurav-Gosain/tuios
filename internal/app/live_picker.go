@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -13,20 +14,15 @@ import (
 // frame are shared here. What each picker applies, persists and previews stays
 // with the picker.
 
-// livePickerMove moves *selected by delta within n items, keeping it inside
-// the scroll window of visible rows that starts at *scroll. It reports false
-// when there are no items, in which case nothing is moved.
-func livePickerMove(selected, scroll *int, delta, n, visible int) bool {
+// livePickerMove moves *selected by delta within n items under the list rule,
+// keeping it inside the scroll window of visible rows that starts at *scroll.
+// It reports false when there are no items, in which case nothing is moved.
+func livePickerMove(selected, scroll *int, delta, n, visible int, wrap bool) bool {
 	if n == 0 {
 		return false
 	}
-	*selected = clampInt(*selected+delta, 0, n-1)
-	if *selected < *scroll {
-		*scroll = *selected
-	}
-	if *selected >= *scroll+visible {
-		*scroll = *selected - visible + 1
-	}
+	*selected = listnav.Step(*selected, delta, n, wrap)
+	*scroll = listnav.Scroll(*scroll, *selected, n, visible)
 	return true
 }
 

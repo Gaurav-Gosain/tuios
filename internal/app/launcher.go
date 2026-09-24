@@ -2,6 +2,7 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -225,14 +226,15 @@ func (m *OS) LauncherMove(delta int) {
 		m.LauncherSelected = 0
 		return
 	}
-	m.LauncherSelected = clampInt(m.LauncherSelected+delta, 0, n-1)
+	m.LauncherSelected = m.listStep(m.LauncherSelected, delta, n)
 	_, visible, _ := m.launcherLayout()
-	if m.LauncherSelected < m.LauncherScroll {
-		m.LauncherScroll = m.LauncherSelected
-	}
-	if m.LauncherSelected >= m.LauncherScroll+visible {
-		m.LauncherScroll = m.LauncherSelected - visible + 1
-	}
+	m.LauncherScroll = listnav.Scroll(m.LauncherScroll, m.LauncherSelected, n, visible)
+}
+
+// LauncherPageRows is how many rows a page key moves the launcher by.
+func (m *OS) LauncherPageRows() int {
+	_, visible, _ := m.launcherLayout()
+	return max(visible, 1)
 }
 
 // LauncherRefilter resets the selection after the query changes.

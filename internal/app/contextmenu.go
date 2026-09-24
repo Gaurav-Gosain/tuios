@@ -259,16 +259,14 @@ func (m *OS) ClearMenuTarget() {
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed
 // rows.
 func (m *OS) ContextMenuMove(delta int) {
-	if m.ContextMenu == nil {
+	cm := m.ContextMenu
+	if cm == nil || len(cm.Items) == 0 {
 		return
 	}
-	dir := 1
-	if delta < 0 {
-		dir = -1
-	}
-	for range abs(delta) {
-		m.ContextMenu.Move(dir)
-	}
+	// The list rule, over the rows that can be run: the menu wrapped at its
+	// ends before any other list did, and now it does so only when the lists
+	// do.
+	cm.Selected = m.listStepSkip(cm.Selected, delta, len(cm.Items), cm.selectable)
 }
 
 // ContextMenuClick routes a click at screen (x, y) while a menu is open. It

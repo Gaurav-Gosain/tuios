@@ -26,15 +26,11 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ChooseHost(filtered[o.HostPickerSelected])
 
 	case "up", "ctrl+p":
-		if o.HostPickerSelected > 0 {
-			o.HostPickerSelected--
-		}
+		o.HostPickerMove(-1)
 		return o, nil
 
 	case "down", "ctrl+n":
-		if o.HostPickerSelected < len(filtered)-1 {
-			o.HostPickerSelected++
-		}
+		o.HostPickerMove(1)
 		return o, nil
 	}
 

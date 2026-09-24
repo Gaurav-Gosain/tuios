@@ -216,6 +216,14 @@ func (m *OS) OpenHelpAtCategory(name string) {
 	}
 }
 
+// HelpStepCategory moves the help's section strip by delta under the list
+// rule, so left on the first section goes to the last. A section not yet
+// chosen (-1, before the first frame picked one) steps from the first.
+func (m *OS) HelpStepCategory(delta int) {
+	n := len(m.HelpCategories())
+	m.HelpCategory = m.listStep(max(m.HelpCategory, 0), delta, n)
+}
+
 // generateCategoryBindings generates bindings for a specific category
 func generateCategoryBindings(registry *config.KeybindRegistry, categoryName string, actions []string) []HelpBinding {
 	presses := config.PressesByAction(registry)

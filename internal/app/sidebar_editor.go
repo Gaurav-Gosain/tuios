@@ -170,26 +170,8 @@ func (m *OS) SectionEditorMove(delta int) {
 	if len(rows) == 0 {
 		return
 	}
-	step := 1
-	if delta < 0 {
-		step = -1
-	}
-	next := m.SectionEditorSelected
-	for range max(delta, -delta) {
-		candidate := next
-		for {
-			candidate += step
-			if candidate < 0 || candidate >= len(rows) {
-				candidate = next
-				break
-			}
-			if rows[candidate].Kind != railRowHeader {
-				break
-			}
-		}
-		next = candidate
-	}
-	m.SectionEditorSelected = clampInt(next, 0, len(rows)-1)
+	m.SectionEditorSelected = m.listStepSkip(m.SectionEditorSelected, delta, len(rows),
+		func(i int) bool { return rows[i].Kind != railRowHeader })
 	m.scrollSectionEditor(len(rows))
 }
 

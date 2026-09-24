@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // allPaletteItems returns the merged palette list: the static commands, and the
@@ -67,14 +69,15 @@ func (m *OS) PaletteMove(delta int) {
 		m.CommandPaletteSelected = 0
 		return
 	}
-	m.CommandPaletteSelected = clampInt(m.CommandPaletteSelected+delta, 0, n-1)
+	m.CommandPaletteSelected = m.listStep(m.CommandPaletteSelected, delta, n)
 	_, visible, _ := m.paletteLayout()
-	if m.CommandPaletteSelected < m.CommandPaletteScroll {
-		m.CommandPaletteScroll = m.CommandPaletteSelected
-	}
-	if m.CommandPaletteSelected >= m.CommandPaletteScroll+visible {
-		m.CommandPaletteScroll = m.CommandPaletteSelected - visible + 1
-	}
+	m.CommandPaletteScroll = listnav.Scroll(m.CommandPaletteScroll, m.CommandPaletteSelected, n, visible)
+}
+
+// PalettePageRows is how many rows a page key moves the palette by.
+func (m *OS) PalettePageRows() int {
+	_, visible, _ := m.paletteLayout()
+	return max(visible, 1)
 }
 
 // CloseCommandPalette hides the palette and resets its state.

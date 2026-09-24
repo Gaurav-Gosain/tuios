@@ -199,7 +199,7 @@ func (m *OS) applyGlyphSet(id string) {
 func (m *OS) GlyphPickerMove(delta int) {
 	items := m.glyphPickerItems()
 	_, visible, _ := m.glyphPickerLayout()
-	if !livePickerMove(&m.GlyphPickerSelected, &m.GlyphPickerScroll, delta, len(items), visible) {
+	if !livePickerMove(&m.GlyphPickerSelected, &m.GlyphPickerScroll, delta, len(items), visible, m.listWraps()) {
 		return
 	}
 	m.applyGlyphSet(items[m.GlyphPickerSelected])

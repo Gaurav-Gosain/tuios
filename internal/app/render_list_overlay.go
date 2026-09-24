@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -222,20 +223,49 @@ func wrapPlain(s string, width int) []string {
 }
 
 // moveListSelection advances a (selected, scroll) pair by delta within a list
-// of count items showing maxVisible rows, keeping the selection in view. Shared
-// by the mouse wheel for the list overlays.
-func moveListSelection(selected, scroll *int, count, maxVisible, delta int) {
+// of count items showing maxVisible rows under the list rule (see listWraps),
+// keeping the selection in view. Shared by the keyboard and the mouse wheel
+// for the list overlays.
+func (m *OS) moveListSelection(selected, scroll *int, count, maxVisible, delta int) {
 	if count == 0 {
 		return
 	}
-	*selected = clampInt(*selected+delta, 0, count-1)
-	if *selected < *scroll {
-		*scroll = *selected
-	}
-	if *selected >= *scroll+maxVisible {
-		*scroll = *selected - maxVisible + 1
-	}
+	*selected = m.listStep(*selected, delta, count)
+	*scroll = listnav.Scroll(*scroll, *selected, count, maxVisible)
 }
+
+// SessionSwitcherMove moves the session switcher's selection by delta.
+func (m *OS) SessionSwitcherMove(delta int) {
+	n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
+	m.moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, listOverlayRows, delta)
+}
+
+// LayoutPickerMove moves the layout picker's selection by delta.
+func (m *OS) LayoutPickerMove(delta int) {
+	n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
+	m.moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, listOverlayRows, delta)
+}
+
+// HostPickerMove moves the machine picker's selection by delta.
+func (m *OS) HostPickerMove(delta int) {
+	n := len(FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery))
+	m.moveListSelection(&m.HostPickerSelected, &m.HostPickerScroll, n, listOverlayRows, delta)
+}
+
+// AggregateViewMove moves the window picker's selection by delta. The renderer
+// keeps it in view.
+func (m *OS) AggregateViewMove(delta int) {
+	n := len(FilterAggregateViewItems(m.GetAggregateViewItems(), m.AggregateViewQuery))
+	if n == 0 {
+		m.AggregateViewSelected = 0
+		return
+	}
+	m.AggregateViewSelected = m.listStep(m.AggregateViewSelected, delta, n)
+}
+
+// listOverlayRows is the page the list overlays scroll by before the renderer
+// fits them to the screen, and the page a page key moves them by.
+const listOverlayRows = 10
 
 // listRowMarker returns the two-cell leading marker for a list row.
 func listRowMarker(selected bool) string {

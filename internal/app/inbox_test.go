@@ -173,9 +173,19 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 	if it, _ := m.inboxSelected(); it.ID != "3" {
 		t.Errorf("two moves down landed on %s, want 3 (over the heading)", it.ID)
 	}
+	// One step past the end wraps to the first item, over the heading at the
+	// top (appearance.wrap_lists), and a step back up wraps back.
 	m.InboxMove(1)
+	if it, _ := m.inboxSelected(); it.ID != "2" {
+		t.Errorf("moving past the end left %s selected, want the first item 2", it.ID)
+	}
+	m.InboxMove(-1)
 	if it, _ := m.inboxSelected(); it.ID != "3" {
-		t.Errorf("moving past the end left %s selected", it.ID)
+		t.Errorf("moving up from the first item left %s selected, want the last item 3", it.ID)
+	}
+	m.InboxMove(10)
+	if it, _ := m.inboxSelected(); it.ID != "3" {
+		t.Errorf("a page past the end left %s selected, want it to stop on 3", it.ID)
 	}
 	m.InboxMove(-10)
 	if it, _ := m.inboxSelected(); it.ID != "2" {

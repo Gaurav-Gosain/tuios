@@ -451,6 +451,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.confirm_quit"),
 			opt("appearance.whichkey_enabled"),
 			opt("appearance.whichkey_position"),
+			opt("appearance.wrap_lists"),
 			opt("appearance.focus_follows_mouse"),
 			opt("appearance.click_to_type"),
 			opt("appearance.auto_enter_terminal_on_focus"),
@@ -877,37 +878,48 @@ func (m *OS) settingsCurrentItems() []settingItem {
 }
 
 // SettingsMoveUp/Down move the row selection within the active category.
-func (m *OS) SettingsMoveUp() {
-	if m.SettingsSelected > 0 {
-		m.SettingsSelected--
-	}
-}
+func (m *OS) SettingsMoveUp() { m.SettingsMove(-1) }
 
 // SettingsMoveDown moves the row selection down within the active category.
-func (m *OS) SettingsMoveDown() {
+func (m *OS) SettingsMoveDown() { m.SettingsMove(1) }
+
+// SettingsMove moves the row selection by delta under the list rule: one step
+// off either end wraps, a page or a jump stops at the end. The renderer keeps
+// the selection in view.
+func (m *OS) SettingsMove(delta int) {
 	items := m.settingsCurrentItems()
-	if m.SettingsSelected < len(items)-1 {
-		m.SettingsSelected++
-	}
+	m.SettingsSelected = m.listStep(m.SettingsSelected, delta, len(items))
 }
 
-// SettingsNextCategory switches to the next settings tab.
-func (m *OS) SettingsNextCategory() {
+// SettingsPageRows is how many rows a page key moves the settings list by:
+// the rows the panel shows.
+func (m *OS) SettingsPageRows() int {
 	cats := m.settingsCategories()
-	if m.SettingsCategory < len(cats)-1 {
-		m.SettingsCategory++
-		m.SettingsSelected = 0
-		m.SettingsScroll = 0
+	tabs := make([]string, len(cats))
+	for i, c := range cats {
+		tabs[i] = c.Name
 	}
+	_, rows, _, _ := m.settingsLayout(tabs, len(m.settingsCurrentItems()))
+	return max(rows, 1)
 }
 
-// SettingsPrevCategory switches to the previous settings tab.
-func (m *OS) SettingsPrevCategory() {
-	if m.SettingsCategory > 0 {
-		m.SettingsCategory--
-		m.SettingsSelected = 0
-		m.SettingsScroll = 0
+// SettingsNextCategory switches to the next settings tab, wrapping from the
+// last to the first under the list rule.
+func (m *OS) SettingsNextCategory() { m.settingsStepCategory(1) }
+
+// SettingsPrevCategory switches to the previous settings tab, wrapping from
+// the first to the last under the list rule.
+func (m *OS) SettingsPrevCategory() { m.settingsStepCategory(-1) }
+
+func (m *OS) settingsStepCategory(delta int) {
+	cats := m.settingsCategories()
+	next := m.listStep(m.SettingsCategory, delta, len(cats))
+	if next == m.SettingsCategory {
+		return
 	}
+	m.SettingsCategory = next
+	m.SettingsSelected = 0
+	m.SettingsScroll = 0
 }
 
 // SettingsAdjust changes the focused setting by dir (-1 or +1) and persists it.

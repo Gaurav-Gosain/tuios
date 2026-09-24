@@ -978,6 +978,9 @@ type OS struct {
 	SettingsScroll     int    // scroll offset within the active category
 	SettingsEditing    bool   // true while a text setting is being edited inline
 	SettingsEditBuffer string // in-progress text for the setting being edited
+	// wheelMoving is set while the mouse wheel moves a list, which never wraps
+	// at the ends. See listWraps.
+	wheelMoving bool
 
 	// Keybind manager overlay state. ShowKeybindManager and KeybindTab are
 	// exported because the renderer and the input handler live in other

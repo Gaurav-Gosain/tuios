@@ -210,6 +210,7 @@ type AppearanceConfig struct {
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WrapLists                *bool                   `toml:"wrap_lists"`                   // Up on a list's first row goes to its last, and down on the last to the first (default: true)
 	WindowTitlePosition      string                  `toml:"window_title_position"`        // Window title position: bottom, top, hidden (default: top). Shows CustomName if set, else terminal title.
 	HideClock                bool                    `toml:"hide_clock"`                   // Hide the clock overlay (deprecated, use show_clock)
 	ShowClock                bool                    `toml:"show_clock"`                   // Show the clock overlay (default: false)
@@ -1836,6 +1837,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// WhichKeyEnabled defaults to true (nil means use default)
 	if cfg.Appearance.WhichKeyEnabled != nil {
 		s.WhichKeyEnabled = *cfg.Appearance.WhichKeyEnabled
+	}
+
+	// WrapLists defaults to true (nil means use default)
+	if cfg.Appearance.WrapLists != nil {
+		s.WrapLists = *cfg.Appearance.WrapLists
 	}
 
 	// WhichKeyPosition defaults to bottom-right

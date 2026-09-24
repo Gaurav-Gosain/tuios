@@ -108,7 +108,7 @@ func (m *OS) WorkspaceSwitcherTarget(idx int) (WorkspaceItem, bool) {
 // WorkspaceSwitcherMove steps the selection by delta over count rows, keeping
 // it in view by the same page the renderer draws.
 func (m *OS) WorkspaceSwitcherMove(delta, count int) {
-	moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, count, workspaceSwitcherRows, delta)
+	m.moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, count, workspaceSwitcherRows, delta)
 }
 
 // WorkspaceSwitcherActivate switches to the workspace at the given row of the

@@ -225,7 +225,7 @@ func (m *OS) KeybindMove(delta int) {
 		m.keybinds.selected, m.keybinds.scroll = 0, 0
 		return
 	}
-	m.keybinds.selected = clampInt(m.keybinds.selected+delta, 0, count-1)
+	m.keybinds.selected = m.listStep(m.keybinds.selected, delta, count)
 }
 
 // KeybindSetTab switches tabs, resetting the list position: the tabs list

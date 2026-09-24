@@ -31,8 +31,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	}
 
-	filtered := app.FilterSessionItems(o.SessionSwitcherItems, o.SessionSwitcherQuery)
-
 	switch keyStr {
 	case "esc":
 		o.ShowSessionSwitcher = false
@@ -65,22 +63,11 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 
 	case "up", "ctrl+p":
-		if o.SessionSwitcherSelected > 0 {
-			o.SessionSwitcherSelected--
-			if o.SessionSwitcherSelected < o.SessionSwitcherScroll {
-				o.SessionSwitcherScroll = o.SessionSwitcherSelected
-			}
-		}
+		o.SessionSwitcherMove(-1)
 		return o, nil
 
 	case "down", "ctrl+n":
-		if o.SessionSwitcherSelected < len(filtered)-1 {
-			o.SessionSwitcherSelected++
-			maxVisible := 10
-			if o.SessionSwitcherSelected >= o.SessionSwitcherScroll+maxVisible {
-				o.SessionSwitcherScroll = o.SessionSwitcherSelected - maxVisible + 1
-			}
-		}
+		o.SessionSwitcherMove(1)
 		return o, nil
 
 	case "backspace":

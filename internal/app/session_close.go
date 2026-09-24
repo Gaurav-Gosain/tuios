@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -170,8 +171,12 @@ func (m *OS) CloseSessionClose() {
 }
 
 // SessionCloseMove moves the selection by delta, clamped to the rows.
+//
+// This is the one kind of list that does not wrap: the cursor opens on
+// Cancel, and up from Cancel landing on the row that kills the session is a
+// keystroke that walks onto the destructive answer without meaning to.
 func (m *OS) SessionCloseMove(delta int) {
-	m.SessionCloseSelected = clampInt(m.SessionCloseSelected+delta, 0, sessionCloseRowCount-1)
+	m.SessionCloseSelected = listnav.Step(m.SessionCloseSelected, delta, sessionCloseRowCount, false)
 }
 
 // SessionCloseActivate runs the row at idx and dismisses the dialog. Closing

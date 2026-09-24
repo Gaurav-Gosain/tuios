@@ -559,7 +559,7 @@ func (m *OS) AgentMailMove(delta int) {
 		st.Selected = 0
 		return
 	}
-	st.Selected = clampInt(st.Selected+delta, 0, n-1)
+	st.Selected = m.listStep(st.Selected, delta, n)
 }
 
 // AgentMailSelect puts the list cursor on row idx.

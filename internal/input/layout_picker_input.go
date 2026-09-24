@@ -87,22 +87,11 @@ func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.
 		return o, nil
 
 	case "up", "ctrl+p":
-		if o.LayoutPickerSelected > 0 {
-			o.LayoutPickerSelected--
-			if o.LayoutPickerSelected < o.LayoutPickerScroll {
-				o.LayoutPickerScroll = o.LayoutPickerSelected
-			}
-		}
+		o.LayoutPickerMove(-1)
 		return o, nil
 
 	case "down", "ctrl+n":
-		if o.LayoutPickerSelected < len(filtered)-1 {
-			o.LayoutPickerSelected++
-			maxVisible := 10
-			if o.LayoutPickerSelected >= o.LayoutPickerScroll+maxVisible {
-				o.LayoutPickerScroll = o.LayoutPickerSelected - maxVisible + 1
-			}
-		}
+		o.LayoutPickerMove(1)
 		return o, nil
 
 	case "backspace":

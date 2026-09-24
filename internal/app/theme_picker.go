@@ -84,7 +84,7 @@ func (m *OS) CancelThemePicker() tea.Cmd {
 func (m *OS) ThemePickerMove(delta int) {
 	items := m.themePickerItems()
 	_, visible, _ := m.themePickerLayout()
-	if !livePickerMove(&m.ThemePickerSelected, &m.ThemePickerScroll, delta, len(items), visible) {
+	if !livePickerMove(&m.ThemePickerSelected, &m.ThemePickerScroll, delta, len(items), visible, m.listWraps()) {
 		return
 	}
 	// Live preview.

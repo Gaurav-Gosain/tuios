@@ -9,9 +9,6 @@ import (
 
 // handleAggregateViewInput handles keyboard input when the aggregate view is open.
 func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	items := o.GetAggregateViewItems()
-	filtered := app.FilterAggregateViewItems(items, o.AggregateViewQuery)
-
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		o.ShowAggregateView = false
@@ -29,15 +26,11 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	// rows of its own, so on any screen not showing twelve the list scrolled at
 	// the wrong time or not at all.
 	case "up", "ctrl+p":
-		if o.AggregateViewSelected > 0 {
-			o.AggregateViewSelected--
-		}
+		o.AggregateViewMove(-1)
 		return o, nil
 
 	case "down", "ctrl+n":
-		if o.AggregateViewSelected < len(filtered)-1 {
-			o.AggregateViewSelected++
-		}
+		o.AggregateViewMove(1)
 		return o, nil
 
 	case "backspace":
