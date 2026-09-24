@@ -210,6 +210,10 @@ type SessionEvent struct {
 	hookKind          string
 	completionSeq     uint64
 	prevCompletionSeq uint64
+	// hookRoot is the window's worktree root, else its working directory:
+	// where the risk rules measure "outside the worktree" from, carried so the
+	// queue never reads session state under its own lock.
+	hookRoot string
 }
 
 // eventCompletionSeen is raised when an attached client's state push shows it

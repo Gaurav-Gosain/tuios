@@ -188,12 +188,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The agent work's verbs are registered ahead of their handlers, which
 	// answer internal until they land (notBuilt). Each row goes when its
 	// verb is built: the test fails on a row whose example starts to work.
-	"review-diff#0":  {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
-	"review-diff#1":  {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
-	"review-note#0":  {errCode: ErrVerbInternal, why: "review-note is not built yet"},
-	"review-note#1":  {errCode: ErrVerbInternal, why: "review-note is not built yet"},
-	"send-review#0":  {errCode: ErrVerbInternal, why: "send-review is not built yet"},
-	"get-approval#0": {errCode: ErrVerbInternal, why: "get-approval is not built yet"},
+	"review-diff#0": {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
+	"review-diff#1": {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
+	"review-note#0": {errCode: ErrVerbInternal, why: "review-note is not built yet"},
+	"review-note#1": {errCode: ErrVerbInternal, why: "review-note is not built yet"},
+	"send-review#0": {errCode: ErrVerbInternal, why: "send-review is not built yet"},
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
@@ -202,6 +201,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"verify-fan#0":    {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#0":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#1":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
+	"get-approval#0":  {errCode: ErrVerbInvalidParams, why: "no approval is held in the fixture"},
 	// The person's proof comes first, so the nonce the example names is
 	// what refuses it, as for dismiss-attention.
 	"mark-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},

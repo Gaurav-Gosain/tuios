@@ -290,6 +290,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold."},
 				{Name: "kind", Type: "string", Description: "approval or plan.", Accepted: approvalKinds},
+				{Name: "session", Type: "string", Description: "The session of the pane whose prompt is held."},
+				{Name: "window", Type: "string", Description: "The pane whose prompt is held."},
 				{Name: "summary", Type: "string", Description: "The line the person answers from."},
 				{Name: "tool", Type: "string", Description: "The tool the call is for, when the hook named it."},
 				{Name: "target", Type: "string", Description: "What the tool acts on: the command, or the path."},

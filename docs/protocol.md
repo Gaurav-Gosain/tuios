@@ -945,17 +945,17 @@ built yet in this daemon" until their work lands: `review-diff`,
 `mark-attention`, `agent-activity`, `queue-prompt`, `list-queued`,
 `cancel-queued` and `get-approval` (see
 [Agent review, triage and queue verbs](#agent-review-triage-and-queue-verbs)).
+`get-approval` is built (see [get-approval](#get-approval)).
 `mark-attention` checks the person's nonce first, so a caller without one gets
 `not_human` as it will once built. The older verbs change as follows, and a
 caller that sends nothing new is answered as before:
 
 - `request-approval` takes `kind` (`approval` or `plan`), `plan`, `tool`,
-  `target` and `deny_message`. A call that sets `kind` to `plan` or any of the
-  other four answers `internal`, holds nothing, and the hook gives the prompt
-  back to the pane. An unknown `kind` is `invalid_params`.
+  `target` and `deny_message` (see [Risky approvals and
+  plans](#risky-approvals-and-plans)). An unknown `kind` is `invalid_params`.
 - `reply-approval` takes `risk_ack` and `plan_sha`, and `respond` takes
-  `risk_ack`. A call that sets one answers `internal` and answers nothing;
-  `reply-approval` checks the nonce before that.
+  `risk_ack`. What changes for a caller that sends neither is under [Risky
+  approvals and plans](#risky-approvals-and-plans).
 - `set-agent-state` takes `activity`, one hook event for the pane's activity
   ring. Its `event` must be one of `prompt`, `tool`, `tool_done`,
   `tool_failed` or `turn_end`, or the call is `invalid_params` and nothing is
@@ -2849,12 +2849,13 @@ answers the verb with `unknown_verb`.
 
 List the Inbox: everything waiting for the person, in every session on this
 daemon and on every linked host it follows (see [Following linked
-hosts](#following-linked-hosts)). Each item is one of seven kinds, and the list
+hosts](#following-linked-hosts)). Each item is one of these kinds, and the list
 is grouped in this order, oldest first inside each group:
 
 | Kind | Opens when | Closes when |
 | --- | --- | --- |
-| `approval` | A pane goes to `needs_input` with `blocked_by` `approval`. | The pane leaves `needs_input`. |
+| `approval` | A pane goes to `needs_input` with `blocked_by` `approval`. `risk` names the risk rules its line matched. | The pane leaves `needs_input`. |
+| `plan` | A hook holds a plan with `request-approval` `kind: plan`. It is the pane's `approval` item for as long as the hold runs, with `plan_lines` and `plan_sha`. | The pane leaves `needs_input`, the person answers, or the hold ends (it is an `approval` again). |
 | `ask` | `ask-human` puts a question to the person. `summary` is the question, `options` its answers and `request_id` the question's id. | The person answers it (`answered`, with `answer` and `answered_by`) or dismisses it, the asking pane asks another (`superseded`) or closes. |
 | `question` | A pane goes to `needs_input` with any other `blocked_by`, or none. | The pane leaves `needs_input`. |
 | `mail` | A message to `human` lands in a thread. One item per thread; `count` is the unread messages. | The person's mail in the thread is read. |
@@ -3289,6 +3290,88 @@ older daemon answers `unknown_verb`, which the hook reads as no decision.
 `reply-approval` without `summary` answers as before, with no check of the
 line.
 
+### Risky approvals and plans
+
+Two additions to held approvals make an allow harder to give by mistake: risk
+rules, and plans.
+
+**Risk rules.** The daemon matches every approval against the rules of
+`[agents.approvals.risk]`: the shipped ones (recursive delete, force push, hard
+reset, clean, discard changes, pipe to shell, sudo, disk, wide permissions,
+database, infrastructure, outside the worktree) unless `builtin = false`, and
+the person's own. See [Risk rules](AGENT_STATE.md#risk-rules) for what each one
+matches. They run on a held call's `tool` and `target` when the hook names
+them, else on its `summary`, and on the line of every `approval` item nobody
+holds (tuios's own hooks report `approve <Tool>: <what>`, which is read as that
+tool and argument; any other line is read as a command). The names of the rules
+that matched are the item's `risk`.
+
+- `reply-approval` with `once` or `always` on an item with `risk` must carry
+  `risk_ack` naming exactly those rules, in any order. Otherwise the call is
+  refused with `risk_unacknowledged` (the hint's `accepted` lists the rules),
+  nothing is answered and the hold runs on. A deny needs none.
+- `respond` holds its allowing answers to the same rule, against the risk of
+  the pane's Inbox item: `approve`, `approve_always`, `text`, and `choose`
+  unless the option presses exactly the keys the prompt's deny does. From a
+  pane answering under its `respond` grant, such an answer is refused with
+  `forbidden` even with `risk_ack`, unless `panes_may_allow = true`. A deny is
+  always taken.
+- This is a change for an older client: one that sends no `risk_ack` cannot
+  allow a risky call from the Inbox or the peek. The harness asks in its pane
+  as before once the hold ends. Nothing changes for a call no rule matched.
+
+The rules are a speed bump, not a sandbox: a command written to hide what it
+does passes them, and the harness's own permission system stays the boundary.
+
+**Plans.** `request-approval` with `kind: plan` holds a plan an agent in plan
+mode asks to have approved (Claude Code's `ExitPlanMode`). `plan` is its text,
+at most 32 KiB of UTF-8, required with `kind: plan` and refused without it.
+`summary` is only its title: it is cleaned the way every item line is rather
+than refused. Nothing is held (reason `disabled`) when `hold_plans = false`.
+While the hold runs the pane's item is of kind `plan`, with `plan_lines` and
+`plan_sha` (the SHA-256 of the text, hex); the pane's `blocked_by` stays
+`approval`. When the hold ends without an answer, the item is the pane's
+`approval` again, with no plan fields.
+
+- `reply-approval` with `once` or `always` on a plan must carry `plan_sha`,
+  the digest of the plan that was shown. Without it, or with another, nothing
+  is answered: `applied: false`, reason `changed`, and the result carries the
+  hold's `plan_sha`. `deny` keeps the agent planning and needs none; its
+  `message` reaches the model.
+- `get-approval` serves the text while the hold runs.
+
+**Deny reasons.** `deny_message: true` on `request-approval` says the harness
+passes a deny's reason to its model (Claude Code, opencode, Kilo), and the item
+carries it so the Inbox offers to type one. The reason itself is
+`reply-approval`'s `message`, cleaned and cut to 500 bytes.
+
+`tool` (at most 128 bytes) and `target` (at most 16 KiB) are what the hook
+names the call as; longer is `invalid_params`.
+
+Wire compatibility: every field is additive. A hook sends `kind`, `plan`,
+`tool`, `target` and `deny_message` only to a daemon whose `request-approval`
+lists them, and does not hold a plan at all with a daemon that does not list
+`plan`, which would hold it as a plain approval.
+
+### get-approval
+
+Read a held approval or plan whole.
+
+Params: `request_id` (required), `session` (optional: when given, a hold in
+another session is not found; from a pane without `admin` it is the pane's own
+unless named).
+
+Response:
+
+```json
+{"result": {"type": "approval", "request_id": "9f86d081884c7d65", "kind": "plan", "session": "web", "window": "3f2a9c1e", "summary": "plan: Refactor the retry loop", "tool": "", "target": "", "options": ["once", "always", "deny"], "always_scope": ["Mode accept edits, for this session"], "plan": "# Refactor the retry loop\n1. ...", "plan_sha": "5d41402abc4b2a76b9719d911017c592...", "risk": [], "deny_message": true, "untrusted": true}}
+```
+
+`risk` is `[{"rule": "...", "why": "..."}]` for each rule the call matched. The
+text is the agent's, so the result is marked `untrusted`. A request that is not
+held, or held in another session than `session`, is `invalid_params`. Scope:
+`read`; over a link, `list`.
+
 ### ask-human
 
 Put a question with a fixed set of answers to the person, and wait for the
@@ -3687,7 +3770,7 @@ them:
 | `queue-prompt` | Queue a message, typed when the agent comes to rest and never over a prompt | `write`, and a typing verb as for `send-review`; checked again against the caller's grants when typed | `write` | "by the person" only with a live `human_nonce` |
 | `list-queued` | The messages waiting in a pane's queue | `read` | `list` | no |
 | `cancel-queued` | Drop queued messages; a pane drops only what it queued | `write` | `write` | the person's entries need a live `human_nonce` |
-| `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted` | `read`; its `session` is the pane's own unless named | `list` | no |
+| `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted`. Built: see [get-approval](#get-approval) | `read`; its `session` is the pane's own unless named | `list` | no |
 
 A connection restricted with `restrict-connection` is held the same way: with
 `read_only`, `review-note`, `send-review`, `queue-prompt`, `cancel-queued`

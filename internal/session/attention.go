@@ -10,8 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
 // The Inbox: one daemon-owned queue of everything waiting for the person.
@@ -325,6 +328,11 @@ type attentionStore struct {
 	// it takes mu for the reopen: the moment a pane's transition could slip
 	// through. Read and cleared under mu.
 	beforeRestore func()
+
+	// risk are the rules that mark an approval risky, set from the approval
+	// policy. It is read under mu and replaced whole, so a reload never
+	// changes a set a match is reading. See approval_risk.go.
+	risk atomic.Pointer[riskSet]
 }
 
 func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *attentionStore {
@@ -443,6 +451,10 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 				}
 				next.RequestID, next.Options, next.Expires = cur.RequestID, cur.Options, cur.Expires
 				next.AlwaysScope, next.Summary = cur.AlwaysScope, cur.Summary
+				// So is what the hold marked on it: a plan stays a plan, and
+				// the risk is the held call's, not the newer line's.
+				next.Kind, next.Risk, next.DenyMessage = cur.Kind, cur.Risk, cur.DenyMessage
+				next.PlanLines, next.PlanSHA = cur.PlanLines, cur.PlanSHA
 			} else {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
@@ -621,6 +633,9 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		it.Kind = AttentionQuestion
 		if ev.hookKind == "approval" {
 			it.Kind = AttentionApproval
+			// An approval nobody holds is marked from the line its pane
+			// reported. A held one keeps what its hold marked (upsertLocked).
+			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot))
 		}
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
 		a.upsertLocked(it)

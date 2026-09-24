@@ -1,6 +1,11 @@
 package session
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/risk"
+)
 
 // Reading a held approval whole, and the answers that need more than the
 // summary line: risk acknowledgements and plans.
@@ -22,7 +27,41 @@ type getApprovalParams struct {
 	Session   string `json:"session"`
 }
 
-// verbGetApproval answers get-approval.
+// ApprovalDetail is the get-approval result as a client decodes it. The
+// daemon writes the same fields in verbGetApproval.
+type ApprovalDetail struct {
+	RequestID   string     `json:"request_id"`
+	Kind        string     `json:"kind"`
+	Session     string     `json:"session"`
+	Window      string     `json:"window"`
+	Summary     string     `json:"summary"`
+	Tool        string     `json:"tool"`
+	Target      string     `json:"target"`
+	Options     []string   `json:"options"`
+	AlwaysScope []string   `json:"always_scope"`
+	Plan        string     `json:"plan"`
+	PlanSHA     string     `json:"plan_sha"`
+	Risk        []risk.Hit `json:"risk"`
+	DenyMessage bool       `json:"deny_message"`
+	Untrusted   bool       `json:"untrusted"`
+}
+
+// holdDetail copies a running hold and the scope its item shows.
+func (a *attentionStore) holdDetail(requestID string) (approvalHold, []string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	h, ok := a.holds[requestID]
+	if !ok {
+		return approvalHold{}, nil, false
+	}
+	var scope []string
+	if it, ok := a.items[h.itemID]; ok {
+		scope = slices.Clone(it.AlwaysScope)
+	}
+	return *h, scope, true
+}
+
+// verbGetApproval answers get-approval: a running hold, whole.
 func (d *Daemon) verbGetApproval(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p getApprovalParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -31,5 +70,46 @@ func (d *Daemon) verbGetApproval(_ *connState, params json.RawMessage) (any, *ve
 	if p.RequestID == "" {
 		return nil, invalidParam("request_id", "request_id is required: the request_id of the Inbox item")
 	}
-	return nil, notBuilt("get-approval")
+	h, scope, ok := d.attention.holdDetail(p.RequestID)
+	if ok && p.Session != "" {
+		sess, verr := d.resolveVerbSession(p.Session)
+		if verr != nil {
+			return nil, verr
+		}
+		// A hold in another session is not found, so a caller held to its
+		// own session learns nothing about the rest.
+		ok = sess.Name == h.session
+	}
+	if !ok {
+		return nil, noHoldError("no approval is held under request " + echoName(p.RequestID))
+	}
+	hits := h.risk
+	if hits == nil {
+		hits = []risk.Hit{}
+	}
+	options := h.options
+	if options == nil {
+		options = []string{}
+	}
+	if scope == nil {
+		scope = []string{}
+	}
+	return map[string]any{
+		"type":         "approval",
+		"request_id":   h.id,
+		"kind":         h.kind,
+		"session":      h.session,
+		"window":       h.window,
+		"summary":      h.summary,
+		"tool":         h.tool,
+		"target":       h.target,
+		"options":      options,
+		"always_scope": scope,
+		"plan":         h.plan,
+		"plan_sha":     h.planSHA,
+		"risk":         hits,
+		"deny_message": h.denyMessage,
+		// The summary, the target and the plan are the agent's text.
+		"untrusted": true,
+	}, nil
 }

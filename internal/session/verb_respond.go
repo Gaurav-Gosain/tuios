@@ -394,16 +394,12 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		PromptID   string `json:"prompt_id"`
 		HumanNonce string `json:"human_nonce"`
 		Timeout    int    `json:"timeout"`
-		// RiskAck acknowledges a risky prompt, which nothing marks until the
-		// risk rules are built. A call that sets it is refused and presses
-		// nothing.
+		// RiskAck acknowledges a risky prompt: the rules the pane's Inbox
+		// item says its call matched. See respondRiskRefusal.
 		RiskAck []string `json:"risk_ack"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
-	}
-	if len(p.RiskAck) > 0 {
-		return nil, notBuilt("respond with risk_ack")
 	}
 	if !isAnswerAction(p.Action) {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "action: "+echoName(p.Action)+" is not an answer", &VerbHint{
@@ -461,6 +457,9 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 			Available: look.prompt.Actions(),
 			Detail:    "The actions this prompt offers now are listed. Anything else is answered in the pane.",
 		})
+	}
+	if verr := d.respondRiskRefusal(sess, w.ID, look.prompt, p.Action, reply, p.RiskAck, byPane != ""); verr != nil {
+		return nil, verr
 	}
 	pty := sess.GetPTY(look.window.PTYID)
 	if pty == nil {

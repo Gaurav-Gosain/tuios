@@ -120,8 +120,9 @@ The one exception is a permission prompt the Inbox may answer. When
 [agents.approvals] in the config names the harness (claude-code, opencode or
 kilo), the hook for Claude Code's PermissionRequest, or for opencode's
 permission.asked, waits after its report for the person to answer the Inbox
-item, for up to hold_seconds (120 by default). It then prints the harness's
-own decision. It prints nothing, and the harness asks in its pane as before,
+item, for up to hold_seconds (120 by default). A Claude Code plan
+(ExitPlanMode) is held the same way unless hold_plans is false. It then prints
+the harness's own decision. It prints nothing, and the harness asks in its pane as before,
 when the wait ends without an answer, when approvals are off, when the daemon
 is gone or restarts, and on any error. It never prints an approval it was not
 given.`,
@@ -303,6 +304,40 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 	if len(out.Approval.Scope) > 0 {
 		params["always_scope"] = out.Approval.Scope
 	}
+	// The fields the risk rules, plans and deny reasons need go only to a
+	// daemon whose request-approval lists them. An older daemon would ignore
+	// them, which for a plan would hold it as a plain approval the person
+	// could allow without reading, so a plan is not sent to one at all.
+	extra := map[string]any{}
+	if a := out.Approval; a.IsPlan() {
+		extra["kind"], extra["plan"] = integration.KindPlan, a.Plan
+	} else {
+		if a.Tool != "" {
+			extra["tool"] = a.Tool
+		}
+		if a.Target != "" {
+			extra["target"] = a.Target
+		}
+	}
+	if out.Approval.DenyMessage {
+		extra["deny_message"] = true
+	}
+	if len(extra) > 0 {
+		known, err := verbParams(client, "request-approval")
+		if err != nil {
+			trace.Error = "could not ask the daemon what request-approval takes: " + err.Error()
+			return "", "", trace
+		}
+		if out.Approval.IsPlan() && !known["plan"] {
+			trace.Error = "the running daemon predates plans in the Inbox, so the plan was left to the pane"
+			return "", "", trace
+		}
+		for k, v := range extra {
+			if known[k] {
+				params[k] = v
+			}
+		}
+	}
 	var raw json.RawMessage
 	if tc, ok := client.(timedCaller); ok {
 		raw, err = tc.CallWithTimeout("request-approval", params, limit)
@@ -473,7 +508,12 @@ var hookFields = []string{"kind", "agent_session_id", "transcript_path", "if_sta
 // running across a tuios upgrade, which makes a new hook talking to an older
 // daemon the ordinary case right after one.
 func setAgentStateParams(client verbCaller) (map[string]bool, error) {
-	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-state"})
+	return verbParams(client, "set-agent-state")
+}
+
+// verbParams asks the daemon which params its verb takes, by name.
+func verbParams(client verbCaller, verb string) (map[string]bool, error) {
+	raw, err := client.Call("list-verbs", map[string]any{"verb": verb})
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +530,7 @@ func setAgentStateParams(client verbCaller) (map[string]bool, error) {
 	}
 	known := map[string]bool{}
 	for _, v := range res.Verbs {
-		if v.Verb != "set-agent-state" {
+		if v.Verb != verb {
 			continue
 		}
 		for _, p := range v.Params {

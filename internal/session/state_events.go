@@ -38,6 +38,9 @@ type lifecycleWindow struct {
 	// needs_input window is blocked by, and how many turns it has finished.
 	agentKind     string
 	completionSeq uint64
+	// root rides along for the risk rules: the session's worktree root, else
+	// the window's working directory.
+	root string
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -60,8 +63,16 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	snap.focused = state.FocusedWindowID
 	snap.workspace = state.CurrentWorkspace
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
+	worktreeRoot := ""
+	if state.Worktree != nil {
+		worktreeRoot = state.Worktree.Path
+	}
 	for i := range state.Windows {
 		w := &state.Windows[i]
+		root := worktreeRoot
+		if root == "" {
+			root = w.Cwd
+		}
 		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
 			id:            w.ID,
@@ -76,6 +87,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			agentStateAt:  w.AgentStateAt,
 			agentKind:     agentBlockedBy(*w),
 			completionSeq: w.CompletionSeq,
+			root:          root,
 		})
 	}
 	return snap
@@ -174,6 +186,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookMessage:   w.agentMessage,
 
 				hookKind:          w.agentKind,
+				hookRoot:          w.root,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: prev.completionSeq,
 			})
@@ -193,6 +206,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookMessage:   w.agentMessage,
 
 				hookKind:          w.agentKind,
+				hookRoot:          w.root,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: w.completionSeq,
 			})

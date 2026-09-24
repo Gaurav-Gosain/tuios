@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
 // Approvals answered from the Inbox.
@@ -125,12 +127,24 @@ type ApprovalPolicy struct {
 	Enabled map[string]bool
 	// Hold is how long a hold lasts, already bounded.
 	Hold time.Duration
+	// Plans says a plan may be held too (hold_plans), for the same harnesses.
+	Plans bool
+	// Risk are the rules that mark an approval risky: the shipped ones and
+	// the person's, from [agents.approvals.risk]. See internal/risk.
+	Risk []risk.Rule
+	// PanesMayAllow lets a pane with the respond grant allow a risky prompt.
+	PanesMayAllow bool
 }
 
 // ApprovalPolicyFromConfig reads the table. Harness names are resolved to the
 // ids hooks report under, so claude and claude-code are the same harness.
 func ApprovalPolicyFromConfig(c config.ApprovalsConfig) ApprovalPolicy {
-	p := ApprovalPolicy{Hold: time.Duration(c.HoldSeconds) * time.Second}
+	p := ApprovalPolicy{
+		Hold:          time.Duration(c.HoldSeconds) * time.Second,
+		Plans:         c.PlansHeld(),
+		Risk:          risk.FromConfig(c.Risk),
+		PanesMayAllow: c.Risk.PanesMayAllow,
+	}
 	for _, name := range c.Enabled {
 		id := canonicalHarness(name)
 		if id == "" {
@@ -170,6 +184,9 @@ func (p ApprovalPolicy) holdFor() time.Duration {
 // the length they started with.
 func (d *Daemon) SetApprovalPolicy(p ApprovalPolicy) {
 	d.approvals.Store(&p)
+	if d.attention != nil {
+		d.attention.setRisk(p.Risk)
+	}
 }
 
 // approvalPolicy is the current policy, never nil.
@@ -201,6 +218,22 @@ type approvalHold struct {
 	// latest is the newest message reported for the pane while the hold
 	// ran, shown on the item again once the hold ends. Empty when none came.
 	latest string
+	// kind is AttentionApproval or AttentionPlan.
+	kind string
+	// tool and target are the call the risk rules read, as the hook named
+	// it. Empty when the hook did not.
+	tool, target string
+	// root is the pane's worktree root, else its working directory, when
+	// the hold began: where the outside-the-worktree rule measures from.
+	root string
+	// risk are the rules the call matched. An allow needs risk_ack naming
+	// exactly these.
+	risk []risk.Hit
+	// plan and planSHA are a plan's text and its digest. An allow of a plan
+	// must name the digest of the plan it was made from.
+	plan, planSHA string
+	// denyMessage says the harness takes a reason with a deny.
+	denyMessage bool
 	// done receives the outcome exactly once. It is buffered, so whatever
 	// ends the hold never waits on the hook.
 	done chan approvalOutcome
@@ -215,21 +248,41 @@ func newApprovalID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// holdSpec is what a hold is opened with: the line and answers the item
+// shows, and what the risk rules, a plan and a deny reason need.
+type holdSpec struct {
+	session, window string
+	// kind is AttentionApproval or AttentionPlan.
+	kind    string
+	summary string
+	options []string
+	scope   []string
+	expires time.Time
+	// tool, target and root are the call as the risk rules read it.
+	tool, target, root string
+	// risk are the rules the call matched, computed before the hold opens.
+	risk []risk.Hit
+	// plan is a plan's text.
+	plan        string
+	denyMessage bool
+}
+
 // startHold opens a hold on a pane's approval item. It returns the reason
 // when there is nothing to hold: the pane has no open approval. A hold already
 // on the item ends as superseded, since one pane shows one prompt at a time.
 // The item shows summary, the held call's own line, and scope beside always,
-// until the hold ends.
-func (a *attentionStore) startHold(session, window, summary string, options, scope []string, expires time.Time) (*approvalHold, string) {
+// until the hold ends. A plan turns the item into a plan item for as long as
+// the hold runs.
+func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// A hold on a snoozed approval is news the person can act on from the
 	// Inbox now, so the approval wakes.
-	if sid, ok := a.snoozedKey[attentionKey(AttentionApproval, session, window, 0)]; ok && a.snoozed[sid].Kind == AttentionApproval {
+	if sid, ok := a.snoozedKey[attentionKey(AttentionApproval, spec.session, spec.window, 0)]; ok && a.snoozed[sid].Kind == AttentionApproval {
 		a.wakeLocked(sid)
 	}
-	id, ok := a.byKey[attentionKey(AttentionApproval, session, window, 0)]
-	if !ok || a.items[id].Kind != AttentionApproval {
+	id, ok := a.byKey[attentionKey(AttentionApproval, spec.session, spec.window, 0)]
+	if !ok || (a.items[id].Kind != AttentionApproval && a.items[id].Kind != AttentionPlan) {
 		return nil, approvalEndNotBlocked
 	}
 	it := a.items[id]
@@ -239,22 +292,41 @@ func (a *attentionStore) startHold(session, window, summary string, options, sco
 	if a.holds == nil {
 		a.holds = make(map[string]*approvalHold)
 	}
-	h := &approvalHold{
-		id:      newApprovalID(),
-		itemID:  id,
-		session: session,
-		window:  window,
-		options: slices.Clone(options),
-		summary: summary,
-		done:    make(chan approvalOutcome, 1),
+	kind := spec.kind
+	if kind != AttentionPlan {
+		kind = AttentionApproval
 	}
-	if !slices.Contains(options, ApprovalAlways) {
+	h := &approvalHold{
+		id:          newApprovalID(),
+		itemID:      id,
+		session:     spec.session,
+		window:      spec.window,
+		options:     slices.Clone(spec.options),
+		summary:     spec.summary,
+		kind:        kind,
+		tool:        spec.tool,
+		target:      spec.target,
+		root:        spec.root,
+		risk:        slices.Clone(spec.risk),
+		denyMessage: spec.denyMessage,
+		done:        make(chan approvalOutcome, 1),
+	}
+	if kind == AttentionPlan {
+		h.plan, h.planSHA = spec.plan, planDigest(spec.plan)
+	}
+	scope := spec.scope
+	if !slices.Contains(spec.options, ApprovalAlways) {
 		scope = nil
 	}
 	a.holds[h.id] = h
 	a.rev++
-	it.RequestID, it.Options, it.Expires = h.id, h.options, expires.UnixNano()
-	it.Summary, it.AlwaysScope = summary, slices.Clone(scope)
+	it.RequestID, it.Options, it.Expires = h.id, h.options, spec.expires.UnixNano()
+	it.Summary, it.AlwaysScope = spec.summary, slices.Clone(scope)
+	it.Kind, it.Risk, it.DenyMessage = kind, risk.Names(h.risk), h.denyMessage
+	it.PlanLines, it.PlanSHA = 0, h.planSHA
+	if kind == AttentionPlan {
+		it.PlanLines = planLineCount(h.plan)
+	}
 	it.Seq = a.rev
 	a.publish(attentionEvent(AttentionUpdated, *it))
 	a.changedLocked()
@@ -288,6 +360,11 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		if h.latest != "" {
 			it.Summary = h.latest
 		}
+		// With no hold there is no plan to serve and no deny to type a
+		// reason for, so the item is the pane's approval again, marked by
+		// what its line says now.
+		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
+		it.Risk = risk.Names(a.riskOfLine(it.Summary, h.root))
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
 		a.changedLocked()
@@ -332,7 +409,13 @@ var errNoHold = errors.New("no hold")
 // names the line it was made from (shown) is refused with applied false and
 // reason changed when the hold is on another line, so an answer can only
 // approve what the person read.
-func (a *attentionStore) answer(requestID, decision, message, by, shown string) (out approvalOutcome, h approvalHold, applied bool, err error) {
+//
+// An allow (once or always) must also say what the person saw: a plan's
+// digest (planSHA), without which or for another plan nothing is answered and
+// the reason is changed; and for a call the risk rules matched, riskAck naming
+// exactly those rules, without which errRiskUnacknowledged is returned and
+// nothing is answered. A deny needs neither.
+func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA string) (out approvalOutcome, h approvalHold, applied bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	hold, ok := a.holds[requestID]
@@ -352,6 +435,14 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string) 
 	}
 	if shown != "" && shown != hold.summary {
 		return approvalOutcome{Reason: approvalEndChanged}, *hold, false, nil
+	}
+	if decision != ApprovalDeny {
+		if hold.kind == AttentionPlan && planSHA != hold.planSHA {
+			return approvalOutcome{Reason: approvalEndChanged}, *hold, false, nil
+		}
+		if len(hold.risk) > 0 && !sameRuleSet(riskAck, risk.Names(hold.risk)) {
+			return approvalOutcome{}, *hold, false, errRiskUnacknowledged
+		}
 	}
 	out = approvalOutcome{Decision: decision, Message: message, Reason: approvalEndAnswered, By: by}
 	a.endHoldLocked(requestID, out, false)
@@ -444,9 +535,6 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		Summary string   `json:"summary"`
 		Scope   []string `json:"always_scope"`
 		// The fields a hook sends for risk rules, plans and deny reasons.
-		// Until those are built a request that sets any of them is refused,
-		// so the hook gives the prompt back to the pane rather than having
-		// half of what it asked for held.
 		Kind        string `json:"kind"`
 		Plan        string `json:"plan"`
 		Tool        string `json:"tool"`
@@ -464,8 +552,18 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if p.Kind != "" && !slices.Contains(approvalKinds, p.Kind) {
 		return nil, invalidParam("kind", "kind is approval or plan", approvalKinds...)
 	}
-	if p.Kind == AttentionPlan || p.Plan != "" || p.Tool != "" || p.Target != "" || p.DenyMessage {
-		return nil, notBuilt("request-approval with kind, plan, tool, target or deny_message")
+	isPlan := p.Kind == AttentionPlan
+	switch {
+	case isPlan && strings.TrimSpace(p.Plan) == "":
+		return nil, invalidParam("plan", "plan is required with kind plan: the plan's text")
+	case !isPlan && p.Plan != "":
+		return nil, invalidParam("plan", "plan is only taken with kind plan")
+	case len(p.Plan) > approvalMaxPlan || !utf8.ValidString(p.Plan):
+		return nil, invalidParam("plan", "plan must be UTF-8 text of at most "+strconv.Itoa(approvalMaxPlan)+" bytes")
+	case len(p.Tool) > approvalMaxTool:
+		return nil, invalidParam("tool", "tool is longer than "+strconv.Itoa(approvalMaxTool)+" bytes")
+	case len(p.Target) > approvalMaxTarget:
+		return nil, invalidParam("target", "target is longer than "+strconv.Itoa(approvalMaxTarget)+" bytes")
 	}
 	harnessID := canonicalHarness(p.Harness)
 	if harnessID == "" {
@@ -508,6 +606,9 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if !policy.Enabled[harnessID] && d.paneProtocol(w.ID) == "" {
 		return approvalResult("", approvalOutcome{Reason: approvalEndDisabled}), nil
 	}
+	if isPlan && !policy.Plans {
+		return approvalResult("", approvalOutcome{Reason: approvalEndDisabled}), nil
+	}
 	if fromPane, own := d.peerPane(cs); fromPane && own != w.ID {
 		return nil, hintedVerbError(ErrVerbForbidden, "request-approval from inside a pane may only hold that pane's own prompt", &VerbHint{
 			Param:  "window",
@@ -520,12 +621,39 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if d.paneInFrontOfPerson(sess, w.ID) {
 		return approvalResult("", approvalOutcome{Reason: approvalEndViewed}), nil
 	}
-	if !approvalLineShown(p.Summary) {
+	summary := p.Summary
+	if isPlan {
+		// A plan is answered from its whole text, which the Inbox shows and
+		// the answer names by digest, so its summary is only the title the
+		// row carries: cleaned the way every item line is, not refused.
+		summary = attentionText(summary, attentionMaxSummary)
+		if summary == "" {
+			return approvalResult("", approvalOutcome{Reason: approvalEndNotShown}), nil
+		}
+	} else if !approvalLineShown(summary) {
 		return approvalResult("", approvalOutcome{Reason: approvalEndNotShown}), nil
 	}
 
+	spec := holdSpec{
+		session:     sess.Name,
+		window:      w.ID,
+		kind:        AttentionApproval,
+		summary:     summary,
+		options:     options,
+		scope:       p.Scope,
+		tool:        p.Tool,
+		target:      p.Target,
+		root:        paneRoot(st, w),
+		denyMessage: p.DenyMessage,
+	}
+	if isPlan {
+		spec.kind, spec.plan, spec.tool, spec.target = AttentionPlan, p.Plan, "", ""
+	} else {
+		spec.risk = d.attention.riskOfCall(spec.tool, spec.target, summary, spec.root)
+	}
 	holdFor := policy.holdFor()
-	hold, reason := d.attention.startHold(sess.Name, w.ID, p.Summary, options, p.Scope, time.Now().Add(holdFor))
+	spec.expires = time.Now().Add(holdFor)
+	hold, reason := d.attention.startHold(spec)
 	if hold == nil {
 		return approvalResult("", approvalOutcome{Reason: reason}), nil
 	}
@@ -568,9 +696,9 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		// Summary is the line the decision was made from. When it is set
 		// and the hold is on another line, nothing is answered.
 		Summary string `json:"summary"`
-		// RiskAck and PlanSHA answer risky items and plans, which nothing
-		// holds until they are built. A reply that sets either is refused
-		// and answers nothing.
+		// RiskAck names the risk rules the person saw, for an allow of a
+		// risky call, and PlanSHA the plan they read, for an allow of a
+		// plan. See answer.
 		RiskAck []string `json:"risk_ack"`
 		PlanSHA string   `json:"plan_sha"`
 	}
@@ -590,9 +718,6 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer an approval, by passing the nonce its attach reply carried. An agent never can.",
 		})
-	}
-	if len(p.RiskAck) > 0 || p.PlanSHA != "" {
-		return nil, notBuilt("reply-approval with risk_ack or plan_sha")
 	}
 	requestID := p.RequestID
 	if requestID == "" {
@@ -615,17 +740,20 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		requestID = id
 	}
 	message := attentionText(p.Message, approvalMaxMessage)
-	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary)
+	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA)
 	switch {
 	case errors.Is(err, errNoHold):
 		return nil, noHoldError("no approval is held under request " + echoName(requestID))
 	case errors.Is(err, errBadDecision):
 		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
+	case errors.Is(err, errRiskUnacknowledged):
+		return nil, riskUnacknowledgedError(risk.Names(hold.risk), "Nothing was answered and the hold runs on. The Inbox allows a risky call on a second press of the same key; a client that predates that answers it in the pane.")
 	}
 	if !applied && out.Reason == approvalEndChanged {
-		// The hold is on another call than the one the person read. Nothing
-		// was answered and the hold runs on, so they can read it and answer.
-		return map[string]any{
+		// The hold is on another call, or another plan, than the one the
+		// person read. Nothing was answered and the hold runs on, so they can
+		// read it and answer.
+		res := map[string]any{
 			"type":       "approval_replied",
 			"request_id": requestID,
 			"decision":   "",
@@ -634,7 +762,11 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 			"summary":    hold.summary,
 			"session":    hold.session,
 			"window":     hold.window,
-		}, nil
+		}
+		if hold.planSHA != "" {
+			res["plan_sha"] = hold.planSHA
+		}
+		return res, nil
 	}
 	if !applied && out.Decision == "" && p.Decision != ApprovalAsk {
 		return nil, noHoldError("the hold on request " + echoName(requestID) + " ended (" + out.Reason + ") before this reply")

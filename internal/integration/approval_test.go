@@ -82,7 +82,7 @@ func TestNothingIsPrintedForAnythingElse(t *testing.T) {
 	}
 }
 
-// TestOnlyYesNoPromptsAreOffered keeps a question, a plan choice and every
+// TestOnlyYesNoPromptsAreOffered keeps a question, a plan with no text and every
 // other event to the harness's own dialog.
 func TestOnlyYesNoPromptsAreOffered(t *testing.T) {
 	for _, tool := range []string{"AskUserQuestion", "ExitPlanMode"} {

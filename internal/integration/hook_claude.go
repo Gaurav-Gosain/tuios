@@ -83,6 +83,10 @@ func translateClaude(in Input, p fields) Decision {
 		return send(ClaudeCode, event, r)
 	case "PermissionRequest":
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
+		if p.str("tool_name") == claudePlanTool {
+			// A plan is known by its title, not by the tool's name.
+			msg = PlanSummaryPrefix + PlanTitle(p.obj("tool_input").str("plan"))
+		}
 		d := send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
 		d.Approval = claudeApproval(p)
 		return d

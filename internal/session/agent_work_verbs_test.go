@@ -2,7 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -69,10 +68,9 @@ func TestAgentWorkVerbsAnswerNotBuilt(t *testing.T) {
 	_, a, _ := twoWindowSession(t, d, "work")
 	c := dialVerb(t, sp)
 	for verb, params := range map[string]map[string]any{
-		"review-diff":  {"session": "work", "window": a},
-		"review-note":  {"action": "list", "session": "work", "window": a},
-		"send-review":  {"session": "work", "window": a},
-		"get-approval": {"request_id": "9f86d081884c7d65"},
+		"review-diff": {"session": "work", "window": a},
+		"review-note": {"action": "list", "session": "work", "window": a},
+		"send-review": {"session": "work", "window": a},
 	} {
 		resp := callP(c, t, verb, params)
 		mustRefuse(t, resp, ErrVerbInternal, verb+" before it is built")
@@ -121,10 +119,9 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 
 	// Its own session: the grant check passes and the stub answers.
 	for verb, params := range map[string]map[string]any{
-		"review-diff":  {"window": a2},
-		"get-approval": {"request_id": "9f86d081884c7d65"},
-		"review-note":  {"action": "list", "window": a2},
-		"send-review":  {"window": a2},
+		"review-diff": {"window": a2},
+		"review-note": {"action": "list", "window": a2},
+		"send-review": {"window": a2},
 	} {
 		mustRefuse(t, callP(c, t, verb, params), ErrVerbInternal, verb+" in the pane's own session")
 	}
@@ -138,6 +135,9 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	// answers for a session that is not a fan.
 	wantReached(t, "compare-fan in the pane's own session", callP(c, t, "compare-fan", map[string]any{}))
 	wantReached(t, "verify-fan in the pane's own session", callP(c, t, "verify-fan", map[string]any{"command": "true"}))
+	// get-approval is built: in its own session the grant check passes and
+	// the handler finds no such hold.
+	mustRefuse(t, callP(c, t, "get-approval", map[string]any{"request_id": "9f86d081884c7d65"}), ErrVerbInvalidParams, "get-approval in the pane's own session")
 	// Another session is out of reach for every one of them.
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "b", "window": b1},
@@ -237,13 +237,9 @@ func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	viewer := dialLink(t, sp)
 	result(t, linkPeer(t, viewer, "viewer"))
 	wantReached(t, "compare-fan from a machine that may list", callP(viewer, t, "compare-fan", map[string]any{"session": "work"}))
-	for verb, params := range map[string]map[string]any{
-		"get-approval": {"request_id": "9f86d081884c7d65"},
-	} {
-		mustRefuse(t, callP(viewer, t, verb, params), ErrVerbInternal, verb+" from a machine that may list")
-	}
 	result(t, callP(viewer, t, "agent-activity", map[string]any{"session": "work", "window": a}))
 	result(t, callP(viewer, t, "list-queued", map[string]any{"session": "work", "window": a}))
+	mustRefuse(t, callP(viewer, t, "get-approval", map[string]any{"request_id": "9f86d081884c7d65"}), ErrVerbInvalidParams, "get-approval from a machine that may list")
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "work", "window": a},
 		"review-note":    {"action": "list", "session": "work", "window": a},
@@ -279,50 +275,23 @@ func TestNewParamsOfOlderVerbsDoNothingUntilBuilt(t *testing.T) {
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
 
-	// A plan or a risk field holds nothing: the hook gives the prompt back.
+	// The risk, plan and deny reason fields are built and tested in
+	// approval_risk_test.go. The kind is still checked here.
 	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
-	for _, extra := range []map[string]any{{"kind": "plan", "plan": "# Plan"}, {"tool": "Bash"}, {"target": "rm -rf build"}, {"deny_message": true}} {
-		params := map[string]any{"session": "work", "window": a, "harness": "claude", "summary": testHeldLine}
-		for k, v := range extra {
-			params[k] = v
-		}
-		mustRefuse(t, callP(c, t, "request-approval", params), ErrVerbInternal, fmt.Sprintf("request-approval with %v", extra))
-	}
 	mustRefuse(t, callP(c, t, "request-approval", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": testHeldLine, "kind": "poem"}),
 		ErrVerbInvalidParams, "an unknown kind")
 	if items, _ := listAttention(t, c, ""); len(items) != 1 || items[0]["request_id"] != nil {
 		t.Fatalf("a refused request held something: %v", items)
 	}
 
-	// An answer that names a risk or a plan answers nothing.
+	// A reply without the new fields is answered as before.
 	pending, _ := requestApproval(t, sp, "work", a, "once", "deny")
 	id := heldItem(t, c, a)["request_id"].(string)
-	for _, extra := range []map[string]any{{"risk_ack": []string{"sudo"}}, {"plan_sha": "abc"}} {
-		params := map[string]any{"request_id": id, "decision": "once", "human_nonce": tui.HumanNonce()}
-		for k, v := range extra {
-			params[k] = v
-		}
-		mustRefuse(t, callP(c, t, "reply-approval", params), ErrVerbInternal, fmt.Sprintf("reply-approval with %v", extra))
-	}
-	select {
-	case resp := <-pending:
-		t.Fatalf("the hold ended on a refused reply: %v", resp)
-	default:
-	}
-	// Without them the reply is answered as before.
 	res := result(t, reply(c, t, id, ApprovalOnce, tui.HumanNonce()))
 	if res["applied"] != true {
 		t.Fatalf("a plain reply answered %v", res)
 	}
 	awaitResult(t, pending)
-
-	// respond with risk_ack presses nothing.
-	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
-	mustRefuse(t, callP(c, t, "respond", map[string]any{"session": "work", "window": b, "action": "approve", "risk_ack": []string{"sudo"}, "human_nonce": tui.HumanNonce()}),
-		ErrVerbInternal, "respond with risk_ack")
-	if w, _ := findWindowState(sess.GetState(), b); w.AgentState != AgentStateNeedsInput {
-		t.Errorf("respond with risk_ack moved the pane to %s", w.AgentState.Name())
-	}
 
 	// activity rides a state report, so the state still applies; its shape is
 	// still checked.
