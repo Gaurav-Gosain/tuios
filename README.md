@@ -1,5 +1,11 @@
 <div align="center">
-  <h1>TUIOS: Terminal UI Operating System</h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/brand/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/brand/banner-light.png">
+    <img alt="tuios: a terminal window manager that knows what your agents are doing. Tilly, a small purple CRT whose screen is a tiled layout, stands beside the tuios wordmark and a tiled terminal session." src="./assets/brand/banner-light.png" width="100%">
+  </picture>
+
+  <p><strong>TUIOS: Terminal UI Operating System</strong></p>
 
   <a href="https://github.com/Gaurav-Gosain/tuios/releases"><img src="https://img.shields.io/github/release/Gaurav-Gosain/tuios.svg" alt="Latest Release"></a>
   <a href="https://pkg.go.dev/github.com/Gaurav-Gosain/tuios?tab=doc"><img src="https://godoc.org/github.com/Gaurav-Gosain/tuios?status.svg" alt="GoDoc"></a>
