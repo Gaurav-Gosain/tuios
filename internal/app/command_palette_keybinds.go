@@ -123,8 +123,13 @@ func splitPaletteKeybinds(query string) (keybinds bool, rest string) {
 // count the palette measures its result against.
 func paletteReachable(items []CommandPaletteItem, query string) int {
 	keybinds, _ := splitPaletteKeybinds(query)
+	// The setting rows are only offered to a typed query.
+	settings := !keybinds && strings.TrimSpace(query) != ""
 	n := 0
 	for _, item := range items {
+		if item.Setting && !settings {
+			continue
+		}
 		if item.Keybind == keybinds {
 			n++
 		}

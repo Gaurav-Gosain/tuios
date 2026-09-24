@@ -94,6 +94,11 @@ type CommandPaletteItem struct {
 	// which is what keeps a few hundred of them out of a list of twenty
 	// commands. See splitPaletteKeybinds.
 	Keybind bool
+	// Setting marks a row that opens the settings page on one row. There is
+	// one per settings row, so they are left out of the empty palette and
+	// ranked after every command, and a query that names a setting still
+	// reaches it: "pane background" or "settings: pane background".
+	Setting bool
 	Action  func(m *OS) (*OS, tea.Cmd)
 }
 
@@ -978,7 +983,29 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 		// prefix hit above a mid-word one.
 		return matchPaletteItems(kept, rest)
 	}
-	return matchPaletteItems(items, query)
+	// The setting rows are matched on their own and put after everything
+	// else, so the few hundred of them never bury a command, and an empty
+	// query does not list them at all.
+	commands := make([]CommandPaletteItem, 0, len(items))
+	var settings []CommandPaletteItem
+	for _, item := range items {
+		if item.Setting {
+			settings = append(settings, item)
+		} else {
+			commands = append(commands, item)
+		}
+	}
+	out := matchPaletteItems(commands, query)
+	if strings.TrimSpace(query) == "" || len(settings) == 0 {
+		return out
+	}
+	var m fuzzy.Matcher
+	for _, h := range m.FilterIndex(query, len(settings), func(i int) string { return settings[i].Name }) {
+		item := settings[h.Index]
+		item.Match = h.Positions
+		out = append(out, item)
+	}
+	return out
 }
 
 // matchPaletteItems is the scored pass, with no token handling: names first,

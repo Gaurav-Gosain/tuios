@@ -839,6 +839,9 @@ type OS struct {
 	// splitPaletteKeybinds): a few hundred rows in the palette's default list
 	// would bury the twenty commands it is actually for.
 	PaletteKeybindItems []CommandPaletteItem
+	// PaletteSettingItems is one row per settings row, built when the palette
+	// opens. See CommandPaletteItem.Setting.
+	PaletteSettingItems []CommandPaletteItem
 	// Launcher overlay: the programs a session can start, which is a separate
 	// list from the palette's commands (see launcher.go for why).
 	ShowLauncher     bool

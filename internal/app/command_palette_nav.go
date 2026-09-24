@@ -29,10 +29,11 @@ func (m *OS) rebuildPaletteItems() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
 	}
 	items := make([]CommandPaletteItem, 0,
-		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems))
+		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems)+len(m.PaletteSettingItems))
 	items = append(items, static...)
 	items = append(items, m.PaletteSessionItems...)
 	items = append(items, m.PaletteKeybindItems...)
+	items = append(items, m.PaletteSettingItems...)
 	m.PaletteItems = items
 }
 
@@ -57,6 +58,7 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 	// round trip, but the filtered list is rebuilt on every keystroke and the
 	// action rows are the larger half of it.
 	m.PaletteKeybindItems = getKeybindPaletteItems(m)
+	m.PaletteSettingItems = getSettingPaletteItems(m)
 	m.rebuildPaletteItems()
 	return nil
 }
@@ -90,6 +92,30 @@ func (m *OS) CloseCommandPalette() {
 	// on the next open, so dropping it costs nothing but that rebuild.
 	m.PaletteItems = nil
 	m.PaletteKeybindItems = nil
+	m.PaletteSettingItems = nil
+}
+
+// getSettingPaletteItems is one palette row per settings row, named the way
+// the page names it, with its tab in the meta slot. Running one opens the
+// settings page on that row.
+func getSettingPaletteItems(m *OS) []CommandPaletteItem {
+	var items []CommandPaletteItem
+	for ci, cat := range m.settingsCategories() {
+		for ii, item := range cat.Items {
+			ci, ii := ci, ii
+			items = append(items, CommandPaletteItem{
+				Name:     "Settings: " + item.Label,
+				Shortcut: cat.Name,
+				Category: "Settings",
+				Setting:  true,
+				Action: func(m *OS) (*OS, tea.Cmd) {
+					m.OpenSettingsAtRow(ci, ii)
+					return m, nil
+				},
+			})
+		}
+	}
+	return items
 }
 
 // ActivateCommandPalette runs the currently selected command and closes the
