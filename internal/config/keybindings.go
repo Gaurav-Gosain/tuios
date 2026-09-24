@@ -29,6 +29,13 @@ func IsAgentPrefixKeybinding(k Keybinding) bool {
 	return false
 }
 
+// IsReviewPrefixKeybinding reports whether a prefix menu line is the review
+// of the focused pane. The client leaves it out of the menu on a daemon that
+// cannot review.
+func IsReviewPrefixKeybinding(k Keybinding) bool {
+	return k.Description == whichKeyReview
+}
+
 // GetPrefixKeybindings returns keybindings for the prefix overlay.
 // isDaemonSession indicates whether we're running in daemon mode (affects detach/quit descriptions).
 func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybinding {

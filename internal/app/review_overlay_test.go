@@ -805,3 +805,260 @@ func TestReviewTextIsLaundered(t *testing.T) {
 		t.Error("the laundered line is not drawn")
 	}
 }
+
+// runningFan is a fan of two attempts with a check running in the second.
+func runningFan() map[string]any {
+	return map[string]any{"group": "g", "rows": []map[string]any{
+		{"session": "api-1"},
+		{"session": "api-2", "verify": session.FanVerify{Command: "go test ./...", State: session.VerifyRunning, StartedAt: time.Now().UnixNano()}},
+	}}
+}
+
+// openCompare shows the compare view and applies its first read, returning
+// the command the answer left, which is the first tick of a refresh chain
+// while a check runs.
+func openCompare(t *testing.T, m *OS) (ReviewCompareMsg, uint64) {
+	t.Helper()
+	cmd := m.ReviewCompare()
+	if cmd == nil {
+		t.Fatal("w read nothing")
+	}
+	msg := cmd().(ReviewCompareMsg)
+	return msg, m.review.compare.tickGen
+}
+
+// TestReviewCompareRunsOneRefreshChain: w, esc and w again while a check runs
+// leave one refresh chain, not two. The tick and the answer of the chain the
+// first w started end where they are; only the second chain reads.
+func TestReviewCompareRunsOneRefreshChain(t *testing.T) {
+	m, f := reviewOS(t)
+	f.fan = runningFan()
+	openReviewed(t, m)
+
+	first, gen1 := openCompare(t, m)
+	if m.applyReviewCompare(first) == nil {
+		t.Fatal("the first w started no refresh while a check runs")
+	}
+	if cmd := m.ReviewCompareBack(); cmd != nil {
+		m.Update(cmd())
+	}
+	second, gen2 := openCompare(t, m)
+	if gen1 == gen2 {
+		t.Error("the second w did not start a new chain")
+	}
+	if m.applyReviewCompare(second) == nil {
+		t.Fatal("the second w started no refresh while a check runs")
+	}
+	// An answer of the first chain arriving late starts nothing more.
+	if m.applyReviewCompare(first) != nil {
+		t.Error("a late answer to the first w started a second chain")
+	}
+	reads := 0
+	for _, gen := range []uint64{gen1, gen2} {
+		if m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: gen}) != nil {
+			reads++
+		}
+	}
+	if reads != 1 {
+		t.Errorf("a second each, %d chains read the rows, want 1", reads)
+	}
+
+	// A keep starts a new chain the same way.
+	m.ReviewCompareMove(-1)
+	m.ReviewCompareKeep()
+	m.Update(m.ReviewCompareConfirm(true)())
+	if m.review.compare.tickGen == gen2 {
+		t.Error("the read after a keep did not start a new chain")
+	}
+}
+
+// TestReviewCompareReadErrorKeepsTheRefresh: a read of the rows that fails
+// while a check runs, a timeout say, schedules the next read, so the rows do
+// not stay running until the view is opened again.
+func TestReviewCompareReadErrorKeepsTheRefresh(t *testing.T) {
+	m, f := reviewOS(t)
+	f.fan = runningFan()
+	openReviewed(t, m)
+	msg, gen := openCompare(t, m)
+	m.applyReviewCompare(msg)
+	f.fanErr = &session.VerbCallError{Code: session.ErrVerbTimeout, Message: "timed out"}
+	read := m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: gen})
+	if read == nil {
+		t.Fatal("the tick did not read the rows")
+	}
+	failed := read().(ReviewCompareMsg)
+	if failed.Err == nil {
+		t.Fatal("the read did not fail")
+	}
+	if m.applyReviewCompare(failed) == nil {
+		t.Error("a failed read ended the refresh while a check runs")
+	}
+	if row := rowWith(reviewFrameText(t, m), "api-2"); row < 0 || !strings.Contains(reviewFrameText(t, m)[row], "running") {
+		t.Error("a failed read changed the rows")
+	}
+	// A failed read of an older chain still starts nothing.
+	failed.TickGen = gen - 1
+	if m.applyReviewCompare(failed) != nil {
+		t.Error("a failed read of an older chain scheduled a read")
+	}
+}
+
+// TestReviewCompareRefreshOnlyWhileShown: the rows are not read while the
+// review of one attempt, or the review the view was opened from, is shown
+// instead, and the reads start again when the view comes back.
+func TestReviewCompareRefreshOnlyWhileShown(t *testing.T) {
+	m, f := reviewOS(t)
+	f.fan = runningFan()
+	openReviewed(t, m)
+	msg, _ := openCompare(t, m)
+	m.applyReviewCompare(msg)
+
+	// enter reviews an attempt: the tick of the running chain reads nothing.
+	runMsg(t, m, m.ReviewCompareOpen())
+	if m.ReviewCompareShown() {
+		t.Fatal("enter left the compare view up")
+	}
+	before := f.count("compare-fan")
+	if m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: m.review.compare.tickGen}) != nil {
+		t.Error("the rows were read with the review of an attempt on screen")
+	}
+	if m.reviewTickIfRunning() != nil {
+		t.Error("a tick was scheduled with the compare view hidden")
+	}
+
+	// esc comes back: the rows are read at once, under a new chain.
+	gen := m.review.compare.tickGen
+	back := m.ReviewClose()
+	if !m.ReviewCompareShown() {
+		t.Fatal("esc did not come back to the compare view")
+	}
+	if back == nil {
+		t.Fatal("coming back to the view with a check running read nothing")
+	}
+	if m.review.compare.tickGen == gen {
+		t.Error("coming back did not start a new chain")
+	}
+	if m.applyReviewCompare(back().(ReviewCompareMsg)) == nil {
+		t.Error("the read on coming back did not keep the refresh going")
+	}
+	if f.count("compare-fan") != before+1 {
+		t.Errorf("coming back read the rows %d times, want 1", f.count("compare-fan")-before)
+	}
+
+	// esc again goes to the review the view was opened from: no more reads.
+	if cmd := m.ReviewCompareBack(); cmd != nil {
+		m.Update(cmd())
+	}
+	if m.ReviewCompareShown() {
+		t.Fatal("esc did not leave the compare view")
+	}
+	if m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: m.review.compare.tickGen}) != nil {
+		t.Error("the rows were read with the review the view was opened from on screen")
+	}
+}
+
+// TestReviewCompareBackWithNoCheckReadsNothing: coming back to the view when
+// no check runs asks the daemon nothing.
+func TestReviewCompareBackWithNoCheckReadsNothing(t *testing.T) {
+	m, f := reviewOS(t)
+	f.fan = map[string]any{"group": "g", "rows": []map[string]any{{"session": "api-1"}, {"session": "api-2"}}}
+	openReviewed(t, m)
+	msg, _ := openCompare(t, m)
+	m.applyReviewCompare(msg)
+	runMsg(t, m, m.ReviewCompareOpen())
+	if cmd := m.ReviewClose(); cmd != nil {
+		t.Error("coming back to the view with no check running read the rows")
+	}
+}
+
+// TestReviewKeysOnAnOlderDaemon: a daemon whose list-verbs, probed as the
+// Inbox watch starts, leaves review-diff out gets no review keys: ctrl+b v, v
+// in the Inbox and v on a rail row do what an unbound key does, and the
+// prefix menu, the help and the palette leave the review out. A review that
+// comes back unknown_verb does the same from then on.
+func TestReviewKeysOnAnOlderDaemon(t *testing.T) {
+	offered := func(m *OS) (menu, help, palette bool) {
+		for _, b := range m.prefixMenuBindings() {
+			if b.Description == "Review changes" {
+				menu = true
+			}
+		}
+		for _, c := range m.HelpCategories() {
+			for _, b := range c.Bindings {
+				if isReviewHelpBinding(b) {
+					help = true
+				}
+			}
+		}
+		m.PaletteItems = nil
+		for _, it := range m.allPaletteItems() {
+			if it.Name == paletteReviewName {
+				palette = true
+			}
+		}
+		return menu, help, palette
+	}
+	for _, how := range []string{"probe", "unknown_verb"} {
+		t.Run(how, func(t *testing.T) {
+			m, f := reviewOS(t)
+			m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
+			m.Windows[0].AgentState = "working"
+			done := item("1", session.AttentionFinished, "work", "w-7", "done", time.Now().UnixNano())
+			m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}})
+			if menu, help, palette := offered(m); !menu || !help || !palette {
+				t.Fatalf("a newer daemon is not offered the review: menu %v, help %v, palette %v", menu, help, palette)
+			}
+			switch how {
+			case "probe":
+				m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}, NoReview: true})
+			case "unknown_verb":
+				f.diffErr = &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: "unknown verb"}
+				cmd, _ := m.ReviewFocusedPane()
+				runMsg(t, m, cmd)
+				if m.ReviewOpen() {
+					t.Fatal("a refused review opened")
+				}
+			}
+			if menu, help, palette := offered(m); menu || help || palette {
+				t.Errorf("an older daemon is offered the review: menu %v, help %v, palette %v", menu, help, palette)
+			}
+			calls := len(f.calls)
+			if _, handled := m.ReviewFocusedPane(); handled {
+				t.Error("ctrl+b v is handled on a daemon that cannot review")
+			}
+			m.OpenInbox("")
+			if _, handled := m.InboxReview(); handled {
+				t.Error("v in the Inbox is handled on a daemon that cannot review")
+			}
+			if _, handled := m.SidebarAgentReview("here", "w-2"); handled {
+				t.Error("v on a rail row is handled on a daemon that cannot review")
+			}
+			if len(f.calls) != calls {
+				t.Errorf("the review keys asked an older daemon %v", f.calls[calls:])
+			}
+			// A newer daemon after a restart is probed again.
+			m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}})
+			if _, handled := m.ReviewFocusedPane(); !handled {
+				t.Error("ctrl+b v is not handled once the daemon can review again")
+			}
+		})
+	}
+}
+
+// TestProbeReviewDiff: the probe asks list-verbs for review-diff by name.
+func TestProbeReviewDiff(t *testing.T) {
+	asked := ""
+	call := func(verb string, params map[string]any) ([]byte, error) {
+		asked, _ = params["verb"].(string)
+		return json.Marshal(map[string]any{"verbs": []map[string]string{{"verb": "review-diff"}}})
+	}
+	if s, k := probeVerb(call, "review-diff"); !s || !k || asked != "review-diff" {
+		t.Errorf("the probe asked for %q and read supported=%v known=%v", asked, s, k)
+	}
+	unknown := func(string, map[string]any) ([]byte, error) {
+		return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb}
+	}
+	if s, k := probeVerb(unknown, "review-diff"); s || !k {
+		t.Errorf("unknown_verb read as supported=%v known=%v", s, k)
+	}
+}

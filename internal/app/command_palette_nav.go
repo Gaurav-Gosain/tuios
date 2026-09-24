@@ -28,6 +28,10 @@ func (m *OS) rebuildPaletteItems() {
 	if !m.agentsSeen() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
 	}
+	// The review waits for a daemon that can review a pane's changes.
+	if !m.reviewSupported() {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteReviewName })
+	}
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems)+len(m.PaletteSettingItems))
 	items = append(items, static...)

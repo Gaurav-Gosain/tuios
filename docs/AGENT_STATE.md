@@ -2863,6 +2863,16 @@ pressed: it asks the daemon for `review-diff` once, and the overlay opens when
 the diff arrives. On a pane with no git repository under it the dock says "No
 git repository under this pane" and nothing opens.
 
+Attached to an older daemon, one whose `list-verbs` has no `review-diff` (asked
+once per attach, with the `mark-attention` question), the review keys are not
+offered: `ctrl+b v` does what an unbound key does (in terminal mode, `v` is
+typed into the focused pane), `v` in the Inbox does nothing and `v` on a rail
+agent row runs the rail's own binding, and the prefix menu, the help overlay
+and the palette leave the review out. A review that comes back `unknown_verb`,
+from a daemon the question could not reach, says so in the dock once and does
+the same from then on. Restart the daemon with a newer tuios
+(`tuios kill-server`) to get them back.
+
 The overlay covers the screen: a header with the session, the pane, the counts,
 the base and the number of notes; the changed files on the left; the file
 under the list's cursor on the right, with each note under the line it is on,
@@ -2884,8 +2894,13 @@ marks two and `d` diffs them with each other (`review-diff` with `against`,
 where notes are not offered), `V` runs a command you type in every attempt
 (`verify-fan`), and `K` keeps the attempt under the cursor and removes the
 others (`keep-fan`) once `y` answers a question that names each one removed.
-While a check runs, the view reads the rows again every second, without
-counting, until none runs; nothing is read otherwise.
+While a check runs and the compare view is on screen, it reads the rows again
+every second, without counting, until none runs. The reads stop while the
+review of one attempt, or the review the view was opened from, is shown
+instead, and start again, with one read at once, when the view comes back. A
+read that fails, a timeout say, leaves the rows as they were and the next
+second reads again. Opening the view again does not add a second round of
+reads beside the first. Nothing is read otherwise.
 
 Who acts:
 

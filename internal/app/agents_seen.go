@@ -62,10 +62,15 @@ func (m *OS) noteAgentsSeen() {
 
 // prefixMenuBindings is the which-key menu after the prefix key. The Inbox's
 // three lines wait until an agent has been seen; the keys work either way.
+// The review line is left out on a daemon that cannot review, where the key
+// does what an unbound key does.
 func (m *OS) prefixMenuBindings() []config.Keybinding {
 	bindings := config.GetPrefixKeybindings("", m.IsDaemonSession)
 	if !m.agentsSeen() {
 		bindings = slices.DeleteFunc(bindings, config.IsAgentPrefixKeybinding)
+	}
+	if !m.reviewSupported() {
+		bindings = slices.DeleteFunc(bindings, config.IsReviewPrefixKeybinding)
 	}
 	return bindings
 }

@@ -124,12 +124,37 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 // section waits until an agent has been seen, like the prefix menu's Inbox
 // lines: its keys mean nothing before, and the tab strip is one row wide
 // without it.
+//
+// On a daemon that cannot review a pane's changes, the review's keys are left
+// out of the Agents section, since each would do what an unbound key does.
 func (m *OS) HelpCategories() []HelpCategory {
 	cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
-	if m.agentsSeen() {
-		return cats
+	if !m.agentsSeen() {
+		return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
 	}
-	return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
+	if !m.reviewSupported() {
+		for i := range cats {
+			if cats[i].Name == HelpCategoryAgents {
+				cats[i].Bindings = slices.DeleteFunc(slices.Clone(cats[i].Bindings), isReviewHelpBinding)
+			}
+		}
+	}
+	return cats
+}
+
+// The help lines of the review's keys outside the overlay. The overlay's own
+// keys are the lines starting helpReviewPrefix.
+const (
+	helpRailReview   = "Rail agent row: review the pane's changes"
+	helpInboxReview  = "Inbox: review the changes in the item's pane"
+	helpReviewPrefix = "Review: "
+)
+
+// isReviewHelpBinding reports whether a help line is one of the review's.
+func isReviewHelpBinding(b HelpBinding) bool {
+	return b.Description == config.ActionDescriptions[config.ActionPrefixReview] ||
+		b.Description == helpRailReview || b.Description == helpInboxReview ||
+		strings.HasPrefix(b.Description, helpReviewPrefix)
 }
 
 // HelpCategoryAgents is the section gathering every key that deals with
@@ -181,7 +206,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		return out
 	}
 	add(agentRowKey(config.ActionAgentReply), "Rail agent row: reply to the agent")
-	add(agentRowKey(config.ActionAgentReview), "Rail agent row: review the pane's changes")
+	add(agentRowKey(config.ActionAgentReview), helpRailReview)
 	add(agentRowKey(config.ActionAgentUnread), "Rail agent row: mark its finished turn unread")
 	add(agentRowKey(config.ActionAgentSnooze), "Rail agent row: snooze its Inbox item")
 	add(agentRowKey(config.ActionAgentCancelQueued), "Rail agent row: drop the newest queued message")
@@ -199,7 +224,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionInboxFilter, "Inbox: show one kind, then the next")
 	inbox(config.ActionInboxSelect, "Inbox: narrow the list with a selector")
 	inbox(config.ActionInboxMailbox, "Inbox: open the whole mailbox")
-	inbox(config.ActionInboxReview, "Inbox: review the changes in the item's pane")
+	inbox(config.ActionInboxReview, helpInboxReview)
 	inbox(config.ActionInboxSnooze, "Inbox: snooze the item, then 1 to 4 for how long")
 	inbox(config.ActionInboxUndo, "Inbox: undo the last dismiss or snooze")
 	inbox(config.ActionInboxShowSnoozed, "Inbox: show or hide snoozed items")

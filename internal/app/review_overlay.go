@@ -312,8 +312,22 @@ func (m *OS) ReviewConfirming() bool {
 	return m.ReviewCompareShown() && m.review.compare.confirmKeep != ""
 }
 
-// ReviewFocusedPane opens the review of the focused pane (ctrl+b v).
+// reviewSupported reports whether the daemon can review a pane's changes, as
+// far as this client knows: false only once its list-verbs left review-diff
+// out, or a review came back unknown_verb. The review keys then do what an
+// unbound key does, and the prefix menu, the help and the palette leave them
+// out.
+func (m *OS) reviewSupported() bool {
+	return !m.Inbox.noReview
+}
+
+// ReviewFocusedPane opens the review of the focused pane (ctrl+b v). handled
+// is false on a daemon without review-diff, so in terminal mode the key
+// reaches the focused pane as it did before it was bound.
 func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
+	if !m.reviewSupported() {
+		return nil, false
+	}
 	w := m.GetFocusedWindow()
 	if w == nil {
 		m.ShowNotification("No pane to review", "info", m.Settings.NotificationDuration)
@@ -327,8 +341,12 @@ func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
 }
 
 // InboxReview opens the review of the selected Inbox item's pane. handled is
-// false with nothing selected, where v does what an unbound key does.
+// false with nothing selected, or on a daemon without review-diff, where v
+// does what an unbound key does.
 func (m *OS) InboxReview() (tea.Cmd, bool) {
+	if !m.reviewSupported() {
+		return nil, false
+	}
 	it, ok := m.inboxSelected()
 	if !ok {
 		return nil, false
@@ -345,7 +363,12 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 }
 
 // SidebarAgentReview opens the review of the pane of a rail agent row.
+// handled is false on a daemon without review-diff, and the rail's own
+// binding for the key then runs.
 func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
+	if !m.reviewSupported() {
+		return nil, false
+	}
 	_, _, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
 		m.ShowNotification("That pane is on another machine. Attach there to review it", "info", m.Settings.NotificationDuration)
@@ -452,6 +475,12 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	if msg.Err != nil {
 		r.pending = false
 		text := reviewErrorText(msg.Err)
+		var callErr *session.VerbCallError
+		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+			// An older daemon than the probe found, or one the probe could
+			// not ask: the review keys stop being offered from here on.
+			m.Inbox.noReview = true
+		}
 		if first {
 			m.review = reviewState{gen: r.gen}
 		} else if r.diff == nil {
@@ -577,7 +606,7 @@ func (m *OS) ReviewClose() tea.Cmd {
 	if r.backToCompare && r.compare != nil {
 		r.backToCompare = false
 		r.compare.shown = true
-		return nil
+		return m.reviewCompareResume()
 	}
 	m.CloseReview()
 	return nil

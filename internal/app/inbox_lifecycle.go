@@ -102,7 +102,14 @@ func (m *OS) inboxMarkSupported() bool {
 // mark-attention. known is false when the probe itself failed for a reason
 // that says nothing about the verb, and the caller then assumes nothing.
 func probeMarkAttention(call func(verb string, params map[string]any) ([]byte, error)) (supported, known bool) {
-	raw, err := call("list-verbs", map[string]any{"verb": "mark-attention"})
+	return probeVerb(call, "mark-attention")
+}
+
+// probeVerb asks a daemon's list-verbs whether it has the verb name. known is
+// false when the probe itself failed for a reason that says nothing about the
+// verb, and the caller then assumes nothing.
+func probeVerb(call func(verb string, params map[string]any) ([]byte, error), name string) (supported, known bool) {
+	raw, err := call("list-verbs", map[string]any{"verb": name})
 	if err != nil {
 		var callErr *session.VerbCallError
 		if errors.As(err, &callErr) && (callErr.Code == session.ErrVerbUnknownVerb || callErr.Code == session.ErrVerbInvalidParams) {
@@ -119,7 +126,7 @@ func probeMarkAttention(call func(verb string, params map[string]any) ([]byte, e
 		return false, false
 	}
 	for _, v := range res.Verbs {
-		if v.Verb == "mark-attention" {
+		if v.Verb == name {
 			return true, true
 		}
 	}

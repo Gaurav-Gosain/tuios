@@ -140,7 +140,10 @@ the help overlay list them only once an agent has been seen, like the rest of
 the Agents section. Attached to a daemon without `mark-attention` (an older
 one, found by asking its `list-verbs` once per attach), the Inbox's `z`, `u`
 and `S` and the rail's `z` are not offered and do what an unbound key does,
-and the rail's `u` clears only this client's seen marks.
+and the rail's `u` clears only this client's seen marks. Attached to a daemon
+without `review-diff`, found the same way, `ctrl+b v` and the two `v` keys are
+not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
+`v` is typed into the focused pane.
 
 | Keys | Where | What it does |
 | --- | --- | --- |

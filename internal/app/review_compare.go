@@ -25,8 +25,14 @@ import (
 // back to the review the view was opened from.
 //
 // The rows are read with compare-fan when the view opens. While a check runs
-// they are read again every second, without counting, until none runs; the
-// view costs nothing otherwise.
+// and the view is on screen they are read again every second, without
+// counting, until none runs. The reads stop while the review of one attempt,
+// or the review the view was opened from, is shown instead, and start again
+// when the view comes back. The view costs nothing otherwise.
+//
+// Only one refresh chain runs at a time. Each read that may start a chain
+// (opening the view, coming back to it, a check or a keep) moves tickGen on,
+// and a tick or an answer that carries an older tickGen ends where it is.
 
 // ReviewCompare opens the compare view, for a pane in a fan.
 func (m *OS) ReviewCompare() tea.Cmd {
@@ -47,7 +53,10 @@ func (m *OS) ReviewCompare() tea.Cmd {
 			c.cursor = i
 		}
 	}
-	return m.reviewCompareCmd(true, 0)
+	// A new chain: a chain a check started before esc left the view ends at
+	// its next tick instead of running beside this one.
+	c.tickGen++
+	return m.reviewCompareCmd(true, c.tickGen)
 }
 
 // reviewCompareCmd reads the fan's rows, with changes counted or not.
@@ -103,7 +112,13 @@ func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 		if msg.Changes {
 			m.ShowNotification("The attempts could not be read: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		}
-		return nil
+		// A read that failed, a timeout say, leaves the rows as they were.
+		// While they say a check runs, the chain goes on and the next tick
+		// reads again, so a check that ends is still seen to end.
+		if msg.TickGen != c.tickGen {
+			return nil
+		}
+		return m.reviewTickIfRunning()
 	}
 	selected := ""
 	if c.cursor >= 0 && c.cursor < len(c.rows) {
@@ -127,20 +142,25 @@ func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 	if r.fan != nil {
 		r.fan.Rows = slices.Clone(c.rows)
 	}
-	if msg.TickGen != 0 && msg.TickGen != c.tickGen {
+	if msg.TickGen != c.tickGen {
 		return nil
 	}
 	return m.reviewTickIfRunning()
 }
 
+// reviewChecking reports whether the rows say a check runs in an attempt.
+func (c *reviewCompare) reviewChecking() bool {
+	return slices.ContainsFunc(c.rows, func(row reviewFanRow) bool {
+		return row.Verify != nil && row.Verify.State == session.VerifyRunning
+	})
+}
+
 // reviewTickIfRunning schedules the next read while a check runs in an
-// attempt and the view is open. Nothing is scheduled otherwise.
+// attempt and the compare view is on screen. Nothing is scheduled otherwise.
 func (m *OS) reviewTickIfRunning() tea.Cmd {
 	r := &m.review
 	c := r.compare
-	if c == nil || !r.open || !slices.ContainsFunc(c.rows, func(row reviewFanRow) bool {
-		return row.Verify != nil && row.Verify.State == session.VerifyRunning
-	}) {
+	if c == nil || !r.open || !c.shown || !c.reviewChecking() {
 		return nil
 	}
 	gen, tickGen := r.gen, c.tickGen
@@ -150,10 +170,23 @@ func (m *OS) reviewTickIfRunning() tea.Cmd {
 // applyReviewTick reads the rows again for a tick of the current chain.
 func (m *OS) applyReviewTick(msg ReviewTickMsg) tea.Cmd {
 	r := &m.review
-	if msg.Gen != r.gen || r.compare == nil || msg.TickGen != r.compare.tickGen || !r.open {
+	if msg.Gen != r.gen || r.compare == nil || msg.TickGen != r.compare.tickGen || !r.open || !r.compare.shown {
 		return nil
 	}
 	return m.reviewCompareCmd(false, msg.TickGen)
+}
+
+// reviewCompareResume starts the refresh again for a compare view back on
+// screen, when a check was running as it was left: the rows are read now,
+// without counting, under a new chain. Nothing is read otherwise.
+func (m *OS) reviewCompareResume() tea.Cmd {
+	r := &m.review
+	c := r.compare
+	if c == nil || !r.open || !c.shown || !c.reviewChecking() {
+		return nil
+	}
+	c.tickGen++
+	return m.reviewCompareCmd(false, c.tickGen)
 }
 
 // ReviewCompareMove moves the compare view's cursor.
@@ -437,7 +470,8 @@ func (m *OS) applyReviewKept(msg ReviewKeptMsg) tea.Cmd {
 	if r.fan != nil {
 		r.fan.Rows = slices.Clone(c.rows)
 	}
-	return m.reviewCompareCmd(true, 0)
+	c.tickGen++
+	return m.reviewCompareCmd(true, c.tickGen)
 }
 
 // reviewCheckWords says an attempt's last check, in full on a wide screen and

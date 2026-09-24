@@ -8,14 +8,22 @@ import (
 // The keys of the agent review, triage, reply and approval work, and where
 // each one lands.
 //
-// Every one of them returns whether it did anything. A key whose work has not
-// landed answers false, and the input path then leaves the key exactly as it
-// was before the key was bound: an Inbox key does nothing and records nothing,
-// a rail key on an agent row falls through to the rail's own binding (x on a
-// row with nothing queued still opens the destructive menu there), and
-// ctrl+b v or ctrl+b O in terminal mode types v or O
-// into the focused pane without arming the prefix repeat window. The bodies live in review_overlay.go, inbox_lifecycle.go,
-// inbox_reply.go and inbox_approvals_ext.go.
+// Every one of them returns whether it did anything. A key that has nothing to
+// do answers false, and the input path then leaves the key exactly as it was
+// before the key was bound: an Inbox key does nothing and records nothing, a
+// rail key on an agent row falls through to the rail's own binding (x on a row
+// with nothing queued still opens the destructive menu there), and a prefix
+// key in terminal mode types its letter into the focused pane without arming
+// the prefix repeat window.
+//
+// When each answers false: ctrl+b O until an agent has been seen; ctrl+b v,
+// and v in the Inbox and on a rail agent row, only on a daemon without
+// review-diff (ctrl+b v otherwise always reviews, agent seen or not); the
+// snooze, undo and unread keys on a daemon without mark-attention; the reply
+// keys on one without queue-prompt; and an Inbox key with nothing selected or
+// on an item it does not apply to.
+// The bodies live in review_overlay.go, inbox_lifecycle.go, inbox_reply.go
+// and inbox_approvals_ext.go.
 
 // PrefixWorkActions are the prefix actions PrefixWorkAction answers.
 var PrefixWorkActions = map[string]bool{
@@ -24,9 +32,10 @@ var PrefixWorkActions = map[string]bool{
 }
 
 // PrefixWorkAction runs one of PrefixWorkActions. handled is false when the
-// action did nothing, which is every one of them until its work lands; the
-// prefix path then does what it does for an unbound key, so in terminal mode
-// the key reaches the focused pane, and the repeat window is not armed.
+// action did nothing: ctrl+b O before an agent has been seen, and ctrl+b v on
+// a daemon without review-diff. The prefix path then does what it does for an
+// unbound key, so in terminal mode the key reaches the focused pane, and the
+// repeat window is not armed.
 func (m *OS) PrefixWorkAction(action string) (cmd tea.Cmd, handled bool) {
 	switch action {
 	case config.ActionPrefixReview:
@@ -49,8 +58,8 @@ var InboxWorkActions = map[string]bool{
 }
 
 // InboxWorkAction runs one of InboxWorkActions on the selected item. handled
-// is false when the action did nothing, which is every one of them until its
-// work lands.
+// is false when the action did nothing: with nothing selected, on an item
+// the action does not apply to, or on a daemon without the verb it needs.
 func (m *OS) InboxWorkAction(action string) (cmd tea.Cmd, handled bool) {
 	switch action {
 	case config.ActionInboxReview:

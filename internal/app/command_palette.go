@@ -12,6 +12,9 @@ import (
 // paletteCategoryAgents is the palette's section for the agent entries.
 const paletteCategoryAgents = "Agents"
 
+// paletteReviewName is the palette row of the review of the focused pane.
+const paletteReviewName = "Agents: Review changes of the focused pane"
+
 // ConfigReloadedMsg carries a config parsed by the file watcher goroutine so it
 // can be applied on the Bubble Tea goroutine. The watcher must not touch the
 // appearance globals directly (the render loop reads them concurrently); it
@@ -755,7 +758,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			// The review overlay on the focused pane's changes. The word
 			// "review" finds it, like "Review changes" in the prefix menu.
-			Name:     "Agents: Review changes of the focused pane",
+			Name:     paletteReviewName,
 			Shortcut: "prefix+v",
 			Category: paletteCategoryAgents,
 			Action: func(m *OS) (*OS, tea.Cmd) {
