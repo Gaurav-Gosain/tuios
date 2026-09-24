@@ -2022,6 +2022,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
+	clearNowAtRestLocked(before, s.state)
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
 	// is what advances the version. A client that pushes a snapshot built before
 	// this point is reconciled by UpdateState rather than winning by arriving

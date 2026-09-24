@@ -995,9 +995,11 @@ verbs change:
   call sent `activity`. The state part is handled exactly as before.
 - `set-agent-state` with `activity` also moves the pane's metadata: a `tool`
   sets `now` to `<tool>: <target>`, a `prompt` sets `prompt` to its first line
-  and clears `now`, a `tool_failed` or `turn_end` clears `now`, and so does
-  any report that leaves the pane in a state other than `working` or
-  `needs_input`. A `model` in the activity sets `model` (source `hook`) when
+  and clears `now`, and a `tool_failed` or `turn_end` clears `now`.
+- The daemon clears `now` whenever a pane's agent state moves to one other
+  than `working` or `needs_input`, however it moved: a report with or without
+  `activity`, a screen rule, an OSC sequence, the foreground detector or the
+  silence timer. A pane at rest never keeps a stale `now`. A `model` in the activity sets `model` (source `hook`) when
   the pane does not already show that model from any source. These keys ride
   the window state's `agent_meta` like any other, so `get-agent-state`,
   `list-agents` and older clients see them as ordinary metadata.
@@ -3255,13 +3257,20 @@ Each entry has `seq` (per pane, from 1), `at` (unix nanoseconds) and `kind`:
 | `tool` | a tool call starting | `tool`, `target` (the command, file, URL or pattern) |
 | `tool_done` | a tool call that finished | `tool`, `target`, `files` it wrote, `ok` when the harness said |
 | `tool_failed` | a tool call that failed | `tool`, `target`, `ok` false, `text`: the error's first line |
-| `turn_end` | the agent finishing a turn | `text`: the first line of what it said last |
+| `turn_end` | the agent finishing a turn | `text`: the first line of what it said last, absent when the harness sent none |
 | `command` | a command the pane's shell finished | `target`: the command line, `exit` when the shell sent one |
 | `state` | the pane's agent state changing | `text`: the new state |
 
 Every string is the agent's or its shell's: one line, control characters
 removed, likely secrets masked, cut to 160 bytes (a file path to 256, a tool
-name to 64). The answer is marked `untrusted`.
+name to 64). A `command` entry's command line is held to the same 160 bytes,
+although the shell's own record of it (`last_cmdline`, the
+`command-finished` event) keeps up to 512. The answer is marked `untrusted`.
+
+A pane's first report with activity gets its ring before its state applies,
+so a first report that finishes a turn (a `Stop` from hooks installed
+mid-session, or after a daemon restart mid-turn) records its `state` entry
+and counts the turn, like any later one.
 
 With `recap`, the answer also summarises every entry after `since` and
 `since_seq`, whatever the `limit`:

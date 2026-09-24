@@ -42,7 +42,7 @@
   {
     "name": "Stop",
     "payload": {"session_id": "th-1", "hook_event_name": "Stop", "turn_id": "t1"},
-    "want": {"state": "done", "agent_session_id": "th-1"}
+    "want": {"state": "done", "agent_session_id": "th-1", "activity": {"event": "turn_end"}}
   },
   {
     "name": "Stop with what the turn ended on",
@@ -84,7 +84,7 @@
     "name": "own thread id in the environment",
     "env": {"CODEX_THREAD_ID": "th-1"},
     "payload": {"session_id": "th-1", "hook_event_name": "Stop"},
-    "want": {"state": "done", "agent_session_id": "th-1"}
+    "want": {"state": "done", "agent_session_id": "th-1", "activity": {"event": "turn_end"}}
   },
   {
     "name": "legacy notify payload",

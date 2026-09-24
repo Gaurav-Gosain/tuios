@@ -1621,9 +1621,12 @@ Output:
 14:02:15  tool      Bash: go test ./api/
 14:02:40  failed    Bash: go test ./api/  Exit code 1
 14:03:02  done      Edit: api/retry.go  (wrote api/retry.go)
-14:05:30  said      Added retry with backoff and tests.
 14:05:30  state     done
+14:05:30  said      Added retry with backoff and tests.
 ```
+
+A turn the harness ended without saying anything (an older Claude Code sends
+no text on `Stop`) prints as `finished`.
 
 With `--recap`:
 ```

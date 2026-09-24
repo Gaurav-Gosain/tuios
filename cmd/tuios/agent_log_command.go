@@ -180,6 +180,10 @@ func agentLogLabel(e agentLogEntry) string {
 	case session.ActivityToolFailed:
 		return "failed"
 	case session.ActivityTurnEnd:
+		// A turn can end with nothing said: an older harness sends no text.
+		if e.Text == "" {
+			return "finished"
+		}
 		return "said"
 	}
 	return plainLine(e.Kind)

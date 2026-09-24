@@ -505,3 +505,135 @@ func TestRecapTestPatternsDefault(t *testing.T) {
 		t.Errorf("after reset = %v", got)
 	}
 }
+
+// TestNowClearedWhenThePaneRestsWithoutActivity: now is cleared whenever the
+// pane comes to rest, not only by a report that carries activity. An idle
+// report with none (a Notification idle_prompt, a Codex Interrupt, a Gemini
+// AfterAgent, an older Claude Code Stop) and a mutation that is no report at
+// all (the silence timer, the detector) both clear it. A state that keeps the
+// agent busy keeps it, and so does a mutation that leaves the state alone.
+func TestNowClearedWhenThePaneRestsWithoutActivity(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	c := dialVerb(t, sp)
+	meta := func() map[string]string {
+		return agentMetaMap(sess.GetState().Windows[0].AgentMeta, time.Now().UnixNano())
+	}
+	busy := func() {
+		t.Helper()
+		setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","activity":{"event":"prompt","text":"fix the retry test"}}`)
+		setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","activity":{"event":"tool","tool":"Bash","target":"go test ./..."}}`)
+		if m := meta(); m[AgentMetaNow] != "Bash: go test ./..." {
+			t.Fatalf("after a tool call: %v", m)
+		}
+	}
+
+	busy()
+	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"needs_input","kind":"approval"}`)
+	if m := meta(); m[AgentMetaNow] != "Bash: go test ./..." {
+		t.Fatalf("needs_input cleared now: %v", m)
+	}
+	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"idle"}`)
+	m := meta()
+	if _, ok := m[AgentMetaNow]; ok {
+		t.Fatalf("an idle report with no activity left now: %v", m)
+	}
+	if m[AgentMetaPrompt] != "fix the retry test" {
+		t.Errorf("the prompt went with now: %v", m)
+	}
+
+	// A mutation that is no report: the silence timer or the detector moving
+	// the pane to unknown.
+	busy()
+	id := sess.GetState().Windows[0].ID
+	setState := func(state AgentState) {
+		t.Helper()
+		if err := sess.mutateState(func(st *SessionState) error {
+			idx, err := findWindowStateIndex(st.Windows, id)
+			if err != nil {
+				return err
+			}
+			st.Windows[idx].AgentState = state
+			st.Windows[idx].Title = st.Windows[idx].Title + "."
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setState(AgentStateWorking)
+	if m := meta(); m[AgentMetaNow] != "Bash: go test ./..." {
+		t.Fatalf("a mutation that left the state alone cleared now: %v", m)
+	}
+	setState(AgentStateUnknown)
+	if m := meta(); m[AgentMetaNow] != "" {
+		t.Fatalf("the silence timer's move to unknown left now: %v", m)
+	}
+}
+
+// TestShellCommandTargetIsCut: a shell command line reaches the ring cut to
+// activityTextMax like every other target, although the shell's own record of
+// it keeps up to shellCmdlineMax bytes, and a secret in it is masked.
+func TestShellCommandTargetIsCut(t *testing.T) {
+	store := newActivityStore(nil)
+	s := &Session{ID: "sid", Name: "work"}
+	store.add(s.ID, s.Name, "w", AgentActivityEntry{Kind: ActivityPrompt, Text: "go"}, true)
+	long := "API_TOKEN=abc123def go test " + strings.Repeat("./pkg/x ", shellCmdlineMax/8)
+	store.noteSessionEvent(s, SessionEvent{Type: EventCommandFinished, Window: "w", Cmdline: long, ExitCode: intp(0)})
+	got, _, _ := store.read(s.ID, "w")
+	if len(got) != 2 {
+		t.Fatalf("ring = %+v", got)
+	}
+	if n := len(got[1].Target); n == 0 || n > activityTextMax {
+		t.Errorf("command target is %d bytes, want 1 to %d", n, activityTextMax)
+	}
+	if strings.Contains(got[1].Target, "abc123def") {
+		t.Errorf("command target kept a secret: %q", got[1].Target)
+	}
+}
+
+// TestActivityForAClosedWindowLeavesNoRing: the window a report named can
+// close between the report resolving it and its activity being added. The
+// sink has already forgotten the window's ring by then, so the add must not
+// leave a new one behind.
+func TestActivityForAClosedWindowLeavesNoRing(t *testing.T) {
+	d, _ := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	d.recordAgentActivity(sess, "closed-window", &AgentActivityReport{Event: ActivityTool, Tool: "Bash", Target: "make"}, AgentStateWorking)
+	if d.activity.has(sess.ID, "closed-window") {
+		t.Error("activity for a closed window left a ring")
+	}
+	id := sess.GetState().Windows[0].ID
+	d.recordAgentActivity(sess, id, &AgentActivityReport{Event: ActivityTool, Tool: "Bash", Target: "make"}, AgentStateWorking)
+	if !d.activity.has(sess.ID, id) {
+		t.Error("activity for a live window left no ring")
+	}
+}
+
+// TestFirstActivityThatFinishesATurnCountsIt: when a pane's first report with
+// activity is a Stop (hooks installed mid-session, or a daemon restarted
+// mid-turn), the turn it finished is counted in the recap along with its
+// turn_end entry.
+func TestFirstActivityThatFinishesATurnCountsIt(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	c := dialVerb(t, sp)
+	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working"}`)
+	if d.activity.has(sess.ID, sess.GetState().Windows[0].ID) {
+		t.Fatal("a report with no activity made a ring")
+	}
+	res := setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"done","activity":{"event":"turn_end","text":"Fixed it."}}`)
+	if res["activity_recorded"] != true {
+		t.Fatalf("the Stop: %v", res)
+	}
+	entries, out := activityOf(t, c, map[string]any{"session": "work", "window": "Window", "recap": true})
+	var kinds []string
+	for _, e := range entries {
+		kinds = append(kinds, e.Kind)
+	}
+	if want := []string{ActivityState, ActivityTurnEnd}; !slices.Equal(kinds, want) {
+		t.Errorf("the ring holds %q, want %q", kinds, want)
+	}
+	if rc, _ := out["recap"].(map[string]any); rc["turns"] != float64(1) {
+		t.Errorf("recap = %v, want the finished turn counted", rc)
+	}
+}

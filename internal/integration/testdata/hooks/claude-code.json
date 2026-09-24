@@ -147,7 +147,7 @@
   {
     "name": "Stop",
     "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "stop_hook_active": false},
-    "want": {"state": "done", "agent_session_id": "sess-1"}
+    "want": {"state": "done", "agent_session_id": "sess-1", "activity": {"event": "turn_end"}}
   },
   {
     "name": "Stop with what the turn ended on",
@@ -200,7 +200,7 @@
     "name": "a pane TUIOS_AGENT names as Claude",
     "env": {"TUIOS_AGENT": "claude"},
     "payload": {"session_id": "sess-1", "hook_event_name": "Stop"},
-    "want": {"state": "done", "agent_session_id": "sess-1"}
+    "want": {"state": "done", "agent_session_id": "sess-1", "activity": {"event": "turn_end"}}
   },
   {
     "name": "unmapped event",
@@ -211,7 +211,7 @@
     "name": "event from the command line",
     "event": "Stop",
     "payload": {"session_id": "sess-1"},
-    "want": {"state": "done", "agent_session_id": "sess-1"}
+    "want": {"state": "done", "agent_session_id": "sess-1", "activity": {"event": "turn_end"}}
   },
   {
     "name": "broken payload never becomes done",
@@ -246,6 +246,6 @@
     "name": "TUIOS_AGENT names a harness tuios does not know",
     "env": {"TUIOS_AGENT": "my-own-agent"},
     "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},
-    "want": {"state": "done", "agent_session_id": "sess-1"}
+    "want": {"state": "done", "agent_session_id": "sess-1", "activity": {"event": "turn_end"}}
   }
 ]

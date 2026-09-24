@@ -1106,7 +1106,11 @@ The Claude Code and Codex hooks feed three keys from what the agent does (see
 
 - `now`: the tool it is running and on what, such as `Bash: go test ./...` or
   `Edit: src/app.tsx`. It is cleared when the tool fails, when the turn ends,
-  when a new prompt starts, and whenever the pane comes to rest.
+  when a new prompt starts, and whenever the pane comes to rest: any move to
+  a state other than `working` or `needs_input` clears it, whether a hook
+  reported the move with activity, without it (an `idle_prompt`, a Codex
+  `Interrupt`, a Gemini `AfterAgent`), or a screen rule, an OSC sequence or
+  the silence timer made it.
 - `prompt`: the first line of the last prompt you gave it.
 - `model`: the model the harness named (Codex names it on every event), unless
   the pane already shows that model from another feed.
@@ -1905,7 +1909,7 @@ arrives as the last argument) and sends one `set-agent-state`, or nothing.
 | `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
 | `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |
 | `Notification` `auth_success` and the rest | nothing |
-| `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity |
+| `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity. A `Stop` without the field (older Claude Code) or with an empty one reports `done` with no message and a `turn_end` activity with no text |
 | `StopFailure` | `errored`, message `stopped on <error_type>` |
 | `SessionEnd` | `none` |
 | `SubagentStop`, anything with `agent_id` | nothing |

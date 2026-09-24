@@ -148,10 +148,12 @@ func TestAgentHookHandlesAnOldDaemon(t *testing.T) {
 	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{old: true}}
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
 	r := h.daemon.reports()
-	if len(r) != 1 || r[0]["state"] != "done" || r[0]["agent_session_id"] != nil || r[0]["harness_pid"] != nil {
+	if len(r) != 1 || r[0]["state"] != "done" || r[0]["agent_session_id"] != nil || r[0]["harness_pid"] != nil || r[0]["activity"] != nil {
 		t.Fatalf("reports = %v", r)
 	}
-	if !strings.Contains(h.stderr.String(), `"unsupported":["agent_session_id","harness_pid"]`) {
+	// A Stop carries turn_end activity even without a message, and an old
+	// daemon does not list it either.
+	if !strings.Contains(h.stderr.String(), `"unsupported":["agent_session_id","harness_pid","activity"]`) {
 		t.Fatalf("explain does not name the dropped fields: %s", h.stderr.String())
 	}
 

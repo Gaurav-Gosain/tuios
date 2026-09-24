@@ -1069,8 +1069,21 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 	if p.Activity != nil {
 		windowID, guard = sess.agentReportGuard(target, report)
 	}
+	// A pane's first activity gets its ring before the report applies, so
+	// the state change the report makes reaches the ring through the session
+	// event sink, completion_seq step included, the same as for a pane that
+	// already had one. Without this a first report that finished a turn, a
+	// Stop after the hooks were installed mid-session or after a daemon
+	// restart, kept its turn_end entry but did not count the turn.
+	created := false
+	if p.Activity != nil && windowID != "" && guard == "" {
+		created = d.activity.ensure(sess.ID, windowID)
+	}
 	effective, applied, reason, err := sess.applyAgentReport(target, report)
 	if err != nil {
+		if created {
+			d.activity.forgetIfEmpty(sess.ID, windowID)
+		}
 		return nil, mapResolveErr(err, sess)
 	}
 	// Activity is recorded for a report from the pane's own agent, applied or
@@ -1082,6 +1095,11 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness {
 		d.recordAgentActivity(sess, windowID, p.Activity, effective)
 		recorded = true
+	} else if created {
+		// The guard read before the report let it through and the report
+		// then found a nested run: the ring made for it holds nothing of the
+		// pane's agent.
+		d.activity.forgetIfEmpty(sess.ID, windowID)
 	}
 	if applied && p.TranscriptPath != "" {
 		d.joinReportedTranscript(sess, target, p.Harness, p.TranscriptPath)

@@ -208,6 +208,22 @@ func (a *activityStore) add(sessionID, sessionName, windowID string, e AgentActi
 	return true
 }
 
+// ensure gives the pane a ring if it has none, and reports whether it made
+// one.
+func (a *activityStore) ensure(sessionID, windowID string) bool {
+	if a == nil || windowID == "" {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	key := activityKey{sessionID, windowID}
+	if _, ok := a.rings[key]; ok {
+		return false
+	}
+	a.rings[key] = &activityRing{}
+	return true
+}
+
 // has reports whether the pane has a ring.
 func (a *activityStore) has(sessionID, windowID string) bool {
 	if a == nil {
@@ -242,6 +258,20 @@ func (a *activityStore) forgetWindow(sessionID, windowID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.rings, activityKey{sessionID, windowID})
+}
+
+// forgetIfEmpty drops the pane's ring when nothing was ever added to it: a
+// ring ensure made for a report that then did not record anything.
+func (a *activityStore) forgetIfEmpty(sessionID, windowID string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	key := activityKey{sessionID, windowID}
+	if ring, ok := a.rings[key]; ok && ring.seq == 0 {
+		delete(a.rings, key)
+	}
 }
 
 // forgetSession drops every ring of a session that ended.
@@ -280,7 +310,15 @@ func (a *activityStore) noteSessionEvent(s *Session, ev SessionEvent) {
 			c := *ev.ExitCode
 			exit = &c
 		}
-		a.add(s.ID, s.Name, ev.Window, AgentActivityEntry{Kind: ActivityCommand, Target: ev.Cmdline, Exit: exit}, false)
+		// Checked first, so a plain shell pane costs one map lookup and no
+		// text cleaning. The command line is cleaned and cut like every other
+		// target: shell_commands.go keeps up to shellCmdlineMax bytes of it,
+		// and the ring keeps activityTextMax.
+		if !a.has(s.ID, ev.Window) {
+			return
+		}
+		target := attentionText(ev.Cmdline, activityTextMax)
+		a.add(s.ID, s.Name, ev.Window, AgentActivityEntry{Kind: ActivityCommand, Target: target, Exit: exit}, false)
 	case EventAgentState:
 		e := AgentActivityEntry{Kind: ActivityState, Text: ev.State}
 		if ev.completionSeq > ev.prevCompletionSeq {
@@ -364,7 +402,29 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentActivityReport, state AgentState) {
 	e := activityEntryOf(r)
 	d.activity.add(sess.ID, sess.Name, windowID, e, true)
+	d.dropRingOfClosedWindow(sess, windowID)
 	sess.applyActivityMeta(windowID, activityMetaFor(e, r.Model, state))
+}
+
+// dropRingOfClosedWindow forgets the pane's ring when the window is gone. The
+// window id was resolved before the report applied, and a window that closed
+// since has already had its ring forgotten by the session event sink, so an
+// add after that would leave a ring nothing ever drops. The window leaves the
+// state and its close event reaches the sink under one hold of the state
+// lock, so either the sink forgets the ring after this check or this check
+// sees the window gone.
+func (d *Daemon) dropRingOfClosedWindow(sess *Session, windowID string) {
+	if !sess.hasWindowID(windowID) {
+		d.activity.forgetWindow(sess.ID, windowID)
+	}
+}
+
+// hasWindowID reports whether the session has a window with this id.
+func (s *Session) hasWindowID(windowID string) bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	_, err := findWindowStateIndex(s.state.Windows, windowID)
+	return err == nil
 }
 
 // activityMeta is what one activity entry does to the reserved metadata keys:
@@ -388,7 +448,7 @@ func activityMetaFor(e AgentActivityEntry, model string, state AgentState) activ
 	}
 	switch e.Kind {
 	case ActivityTool:
-		if state == AgentStateWorking || state == AgentStateNeedsInput {
+		if agentStateBusy(state) {
 			now := e.Tool
 			if e.Target != "" {
 				now += ": " + e.Target
@@ -405,13 +465,52 @@ func activityMetaFor(e AgentActivityEntry, model string, state AgentState) activ
 	case ActivityToolFailed, ActivityTurnEnd:
 		set(AgentMetaNow, nil)
 	}
-	if state != AgentStateWorking && state != AgentStateNeedsInput && !slices.Contains(m.keys, AgentMetaNow) {
+	if !agentStateBusy(state) && !slices.Contains(m.keys, AgentMetaNow) {
 		set(AgentMetaNow, nil)
 	}
 	if v, _ := CleanAgentMetaValue(model); v != "" {
 		m.model = v
 	}
 	return m
+}
+
+// agentStateBusy reports whether state is one in which the agent is doing
+// something, so the reserved now key may stand.
+func agentStateBusy(state AgentState) bool {
+	return state == AgentStateWorking || state == AgentStateNeedsInput
+}
+
+// clearNowAtRestLocked drops the reserved now key from every window whose
+// agent state moved, in this mutation, to a state other than working or
+// needs_input. It runs inside every daemon-side mutation, so now is cleared
+// however the pane came to rest: a report with no activity, a screen rule, an
+// OSC sequence, the detector or the silence timer. A new slice is built rather
+// than the old one edited, since a published snapshot may share it. The caller
+// holds stateMu.
+func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
+	for i := range st.Windows {
+		w := &st.Windows[i]
+		if agentStateBusy(w.AgentState) || len(w.AgentMeta) == 0 {
+			continue
+		}
+		idx, ok := before.index[w.ID]
+		if !ok || before.windows[idx].agentState == w.AgentState {
+			continue
+		}
+		if !slices.ContainsFunc(w.AgentMeta, func(t AgentMetaToken) bool { return t.Key == AgentMetaNow }) {
+			continue
+		}
+		kept := make([]AgentMetaToken, 0, len(w.AgentMeta)-1)
+		for _, t := range w.AgentMeta {
+			if t.Key != AgentMetaNow {
+				kept = append(kept, t)
+			}
+		}
+		if len(kept) == 0 {
+			kept = nil
+		}
+		w.AgentMeta = kept
+	}
 }
 
 // applyActivityMeta writes what activityMetaFor decided. A key already

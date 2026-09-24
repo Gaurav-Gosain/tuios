@@ -34,7 +34,8 @@ import "strings"
 //	PostToolUse           tool_done, ok: the files an edit tool wrote
 //	PostToolUseFailure    tool_failed: the first line of error
 //	Stop                  turn_end: the first line of last_assistant_message,
-//	                      which is also the done report's message
+//	                      which is also the done report's message, or no
+//	                      text when the field is missing or empty
 //
 // PermissionRequest is the approval signal. Notification's permission_prompt
 // also fires for one, but only after the user seems away, which is too late
@@ -171,13 +172,15 @@ func claudeNotification(event string, p fields) Decision {
 // turnEnd adds a Stop event's activity to its done report: the first line of
 // last_assistant_message, which also becomes the report's message, so a
 // finished pane says what it finished with. Claude Code and Codex both send
-// the field; a Stop without it reports done as before, with no activity.
+// the field. A Stop without it, from an older Claude Code or a turn that
+// ended with no text, still reports turn_end, with no text and no message, so
+// the ring records the end of the turn and the daemon clears what the agent
+// was doing.
 func turnEnd(r Report, p fields) Report {
 	text := activityText(p.str("last_assistant_message"))
-	if text == "" {
-		return r
+	if text != "" {
+		r.Message = text
 	}
-	r.Message = text
 	r.Activity = &Activity{Event: ActivityTurnEnd, Text: text}
 	return r
 }

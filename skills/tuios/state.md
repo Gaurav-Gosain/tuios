@@ -36,7 +36,8 @@ tuios set-agent-meta -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" summary=
 
 Writing the values a pane already holds changes nothing, so a feed may write
 on every tick. `now` and `prompt` are tuios's own keys, filled from your hooks,
-and `set-agent-meta` refuses them.
+and `set-agent-meta` refuses them. `now` is cleared whenever the pane leaves
+`working` and `needs_input`, however it left.
 
 ## What an agent has been doing
 

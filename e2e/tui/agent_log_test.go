@@ -76,4 +76,20 @@ func TestAgentLogFromRealHooks(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-agent-meta", "-s", "e2e-agent", "-w", "0", "now=typing"); err == nil {
 		t.Errorf("set-agent-meta wrote the reserved key now:\n%s", out)
 	}
+
+	// A turn interrupted with Esc ends on an idle_prompt, which carries no
+	// activity. The pane at rest must not keep showing the tool it ran.
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"e2e-log","prompt":"lint it"}`)
+	hook(`{"hook_event_name":"PreToolUse","session_id":"e2e-log","tool_name":"Bash","tool_input":{"command":"make lint"}}`)
+	if out, _ := tuiosCLI(t, base, "get-agent-state", "-s", "e2e-agent", "-w", "0", "--json"); !strings.Contains(out, `"now": "Bash: make lint"`) {
+		t.Fatalf("the running tool is not in now:\n%s", out)
+	}
+	hook(`{"hook_event_name":"Notification","notification_type":"idle_prompt","session_id":"e2e-log"}`)
+	out, err = tuiosCLI(t, base, "get-agent-state", "-s", "e2e-agent", "-w", "0", "--json")
+	if err != nil || !strings.Contains(out, `"state": "idle"`) {
+		t.Fatalf("get-agent-state after idle_prompt: %v\n%s", err, out)
+	}
+	if strings.Contains(out, `"now"`) {
+		t.Errorf("an idle pane kept now:\n%s", out)
+	}
 }

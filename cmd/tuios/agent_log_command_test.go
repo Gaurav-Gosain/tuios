@@ -114,6 +114,7 @@ func TestAgentLogPrinting(t *testing.T) {
 		{"seq": 2, "at": at, "kind": "tool_failed", "tool": "Bash", "target": "go test ./...", "text": "Exit code 1", "ok": false},
 		{"seq": 3, "at": at, "kind": "tool_done", "tool": "apply_patch", "target": "a.go", "files": []string{"a.go", "b.go", "c.go", "d.go"}},
 		{"seq": 4, "at": at, "kind": "command", "target": "make lint", "exit": 2},
+		{"seq": 5, "at": at, "kind": "turn_end"},
 	}})
 	var out bytes.Buffer
 	if err := printAgentLog(&out, raw); err != nil {
@@ -122,7 +123,8 @@ func TestAgentLogPrinting(t *testing.T) {
 	want := "14:02:11  prompt    fix[2J it\n" +
 		"14:02:11  failed    Bash: go test ./...  Exit code 1\n" +
 		"14:02:11  done      apply_patch: a.go  (wrote a.go, b.go, c.go and 1 more)\n" +
-		"14:02:11  command   make lint  (exit 2)\n"
+		"14:02:11  command   make lint  (exit 2)\n" +
+		"14:02:11  finished  \n"
 	if out.String() != want {
 		t.Errorf("printAgentLog =\n%s\nwant\n%s", out.String(), want)
 	}
