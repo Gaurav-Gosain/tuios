@@ -1031,6 +1031,27 @@ func (s *Settings) ScrollbarTintResolved() string {
 	return s.ScrollbarTint
 }
 
+// PaneBackgroundHex returns the configured pane background when it is a colour
+// literal rather than a keyword.
+func (s *Settings) PaneBackgroundHex() (string, bool) {
+	if IsHexColor(s.PaneBackground) {
+		return s.PaneBackground, true
+	}
+	return "", false
+}
+
+// PaneBackgroundResolved is what the pane background is behaving as: off,
+// theme, or a #RRGGBB literal. Empty and anything unrecognised resolve to off,
+// the documented default, so a typo paints nothing rather than a guess.
+func (s *Settings) PaneBackgroundResolved() string {
+	switch v := s.PaneBackground; {
+	case v == PaneBackgroundTheme, IsHexColor(v):
+		return v
+	default:
+		return PaneBackgroundOff
+	}
+}
+
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.
 // An empty string is a blank cell, which in the track style is its surface fill
 // and in the thin style is no track at all. That is also what ASCII

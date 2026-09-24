@@ -57,6 +57,8 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("#               all (every covered focus command, including Tab)\n")
 	sb.WriteString("# [appearance.scrollbar]: style = thin, track; thumb/track = a one-cell glyph\n")
 	sb.WriteString("#               (track also takes \"none\"); tint = border, muted, #RRGGBB\n")
+	sb.WriteString("# pane_background: off (your terminal shows through), theme (the theme's\n")
+	sb.WriteString("#               background), or #RRGGBB; a program's own background wins\n")
 	sb.WriteString("# ============================================================================\n\n")
 
 	sb.WriteString("# ============================================================================\n")

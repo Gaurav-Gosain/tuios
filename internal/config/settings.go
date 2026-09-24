@@ -536,6 +536,14 @@ type Settings struct {
 	// on a light theme as on a dark one.
 	DimUnfocused int
 
+	// PaneBackground is the ground painted behind pane content: "off", the
+	// default, leaves the default background transparent so the host terminal
+	// shows through; "theme" paints the active theme's background; a #RRGGBB
+	// literal paints that colour. Only cells a program left on the default
+	// background are painted, so a background the program chose wins. See
+	// PaneBackgroundResolved and PaneBackgroundHex.
+	PaneBackground string
+
 	// ClockFormat is the Go time layout the clock overlay draws with. Empty takes
 	// DefaultClockFormat.
 	//
@@ -660,6 +668,7 @@ func DefaultSettings() Settings {
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,
+		PaneBackground:              PaneBackgroundOff,
 		ClockFormat:                 "",
 		ZoomMaxWidth:                0,
 		GlyphSet:                    theme.GlyphSetNone,

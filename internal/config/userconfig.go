@@ -255,6 +255,7 @@ type AppearanceConfig struct {
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
+	PaneBackground    string `toml:"pane_background"`     // Ground painted behind pane content: off, theme, or #RRGGBB (default: off)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -423,6 +424,21 @@ const (
 // ScrollbarTints lists the keyword values for appearance.scrollbar.tint; a
 // #RRGGBB literal is also accepted.
 var ScrollbarTints = []string{ScrollbarTintQuiet, ScrollbarTintBorder, ScrollbarTintMuted}
+
+// Pane backgrounds. See AppearanceConfig.PaneBackground.
+const (
+	// PaneBackgroundOff paints nothing: a cell the program left on the
+	// default background shows the host terminal through it. The default.
+	PaneBackgroundOff = "off"
+	// PaneBackgroundTheme paints the active theme's background, and the
+	// theme's foreground on text left in the default colour. With no theme
+	// set there is no background to paint, so it behaves as off.
+	PaneBackgroundTheme = "theme"
+)
+
+// PaneBackgrounds lists the keyword values for appearance.pane_background; a
+// #RRGGBB literal is also accepted.
+var PaneBackgrounds = []string{PaneBackgroundOff, PaneBackgroundTheme}
 
 // ScrollbarTrackNone is the track value that draws no track at all, which is
 // what the thin style looked like before it grew one.
@@ -612,6 +628,7 @@ func DefaultConfig() *UserConfig {
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
+			PaneBackground:           PaneBackgroundOff,
 			Selection: SelectionConfig{
 				Bg: DefaultSelectionBg, Fg: DefaultSelectionFg,
 				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
@@ -1385,6 +1402,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Scrollbar.Tint == "" {
 		cfg.Appearance.Scrollbar.Tint = defaultCfg.Appearance.Scrollbar.Tint
 	}
+	if cfg.Appearance.PaneBackground == "" {
+		cfg.Appearance.PaneBackground = defaultCfg.Appearance.PaneBackground
+	}
 
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
@@ -1565,6 +1585,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
 	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
 	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
+	// Assigned as written, for the tint's reason: PaneBackgroundResolved and
+	// PaneBackgroundHex settle empty and a typo to off, so an edit made live
+	// cannot paint a colour the file's validation would have refused.
+	s.PaneBackground = cfg.Appearance.PaneBackground
 
 	// A pointer because zero is a real value here: it turns the repeat window
 	// off, and a plain int could not tell that from an absent key.

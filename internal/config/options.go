@@ -370,6 +370,11 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.pane_background", Type: OptionString, Section: "appearance",
+		Description: "Background behind pane content: off (your terminal shows through), theme, or a #RRGGBB literal",
+		Accepted:    PaneBackgrounds, Default: PaneBackgroundOff, Color: true,
+	},
+	{
 		Path: "appearance.clock_format", Type: OptionString, Section: "dock",
 		Description: "Go time layout the clock is drawn with, e.g. 15:04 or Mon 3:04PM",
 		Default:     DefaultClockFormat,

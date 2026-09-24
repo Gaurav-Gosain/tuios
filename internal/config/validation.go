@@ -342,6 +342,36 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
+	validatePaneBackground(cfg, result)
+}
+
+// validatePaneBackground warns about a pane background that is neither a
+// keyword nor a colour, and about theme asked for with no theme to take it
+// from. Either way the pane is left transparent, which is the default, so the
+// frame stays drawable and the warning says why nothing was painted.
+func validatePaneBackground(cfg *UserConfig, result *ValidationResult) {
+	v := cfg.Appearance.PaneBackground
+	switch {
+	case v == "" || v == PaneBackgroundOff || IsHexColor(v):
+		return
+	case v == PaneBackgroundTheme:
+		if cfg.Appearance.Theme != "" {
+			return
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance",
+			Key:   "pane_background",
+			Message: "pane_background is theme but no theme is set, so there is no theme background " +
+				"to paint and panes stay transparent; set a theme or a #RRGGBB colour",
+		})
+	default:
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance",
+			Key:   "pane_background",
+			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); panes stay transparent",
+				v, strings.Join(PaneBackgrounds, ", ")),
+		})
+	}
 }
 
 // validateGlyphSet warns about a set that does not resolve, and repeats the

@@ -49,7 +49,7 @@ daemon runs needs `tuios kill-server` to take effect.
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 157 options above are scalars, and spacing and composition are set with them
+The 158 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are names from an open set, each standing for a
 file in a directory, so each has a verb of its own.
 
@@ -150,6 +150,23 @@ done
 - **You cannot read the person's terminal colours.** With no theme set, the
   terminal fills the colour indices. "Match my terminal" means importing its
   scheme file.
+
+### Colour: the pane background
+
+```sh
+tuios set-config appearance.pane_background theme
+tuios set-config appearance.pane_background '#1e1e2e'
+tuios set-config appearance.pane_background off
+```
+
+A cell a program leaves on the default background is transparent, so the
+person's terminal shows through. `pane_background` paints it instead: `off`
+(the default) paints nothing, `theme` paints the theme's background and gives
+default-coloured text the theme's foreground, and `#RRGGBB` paints that colour.
+A background the program set itself always wins. Only pane content is painted;
+borders, the rail and the dock are not. `theme` with no theme set paints
+nothing. A colour literal with no theme keeps the terminal's own text colour,
+so pick one that reads under it.
 
 ## The dock's components
 
