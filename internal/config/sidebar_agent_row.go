@@ -18,7 +18,7 @@ import (
 // ordered text and numeric rules:
 //
 //	[appearance.sidebar.agent_row]
-//	tokens = ["session", "need", "harness", "name", "elapsed", "meta", "message"]
+//	tokens = ["session", "need", "harness", "name", "elapsed", "context", "meta", "now", "message"]
 //
 //	[appearance.sidebar.agent_row.name]
 //	fg = "text"
@@ -49,15 +49,37 @@ import (
 // person is most likely to want them listed.
 // Beside these, "$key" names one key of the pane's agent metadata (see
 // SidebarMetaTokenKey).
-var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "meta", "message", "session", "host"}
+//
+// now, prompt and context read the metadata tuios feeds itself, with a rule
+// of their own on top of the raw value: now draws only while the agent works,
+// prompt is the first line of the last prompt given to it, and context draws
+// "ctx 84%" only once the context is SidebarContextWarnAt percent full or
+// more, in the warning ink unless its table says otherwise. $now, $prompt and
+// $context draw the raw value on any row.
+var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "meta", "message", "session", "host"}
 
 // SidebarAgentRowDefaultTokens is the row as it ships. state and host are left
 // out because both have a value on every row and the glyph already says the
-// state. need and meta draw on the second line only: need says what a row
-// wants from you ("approval", "question", "errored", "finished"), and meta is
-// whatever the pane reported through set-agent-meta, which is nothing unless a
-// hook or statusline feed writes it.
-var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "meta", "message"}
+// state. need, context, meta and now draw on the second line only: need says
+// what a row wants from you ("approval", "question", "errored", "finished"),
+// context how full the agent's context is once that is worth a look, meta
+// whatever else the pane reported through set-agent-meta, which is nothing
+// unless a hook or statusline feed writes it, and now what a working agent is
+// doing ("Bash: go test ./..."). now comes last because the line cuts its
+// last token first, and a long command is what can best lose its tail.
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "context", "meta", "now", "message"}
+
+// SidebarContextWarnAt is the percent of its context window an agent must be
+// using before the context token draws. Below it the figure is noise on a
+// narrow rail; at it and over, the agent is close to compacting or running
+// out.
+const SidebarContextWarnAt = 80
+
+// SidebarFeedMetaKeys are the metadata keys tuios feeds from hooks, the
+// status line and protocol panes. The meta token leaves them out: each has a
+// token of its own (now, prompt, context, or $model, $cost and $plan), so the
+// model and the cost are not on every row unless a person places them.
+var SidebarFeedMetaKeys = []string{"now", "prompt", "model", "context", "cost", "plan"}
 
 // SidebarMetaTokenKey returns the metadata key a "$key" token names, and false
 // for any other token. The key rules match the daemon's set-agent-meta: 1 to 24

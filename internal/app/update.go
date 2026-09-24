@@ -1763,6 +1763,22 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxApprovalDetail(msg)
 		return m, nil
 
+	case InboxRepliedMsg:
+		m.applyInboxReplied(msg)
+		return m, nil
+
+	case InboxQueueDroppedMsg:
+		m.applyInboxQueueDropped(msg)
+		return m, nil
+
+	case InboxRecapMsg:
+		m.applyInboxRecap(msg)
+		return m, nil
+
+	case AgentReturnRecapMsg:
+		m.applyAgentReturnRecap(msg)
+		return m, nil
+
 	case InboxAskAnsweredMsg:
 		m.applyInboxAskAnswered(msg)
 		return m, nil

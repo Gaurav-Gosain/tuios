@@ -83,6 +83,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
+		// While the Inbox's reply editor is open the paste is the reply's text,
+		// one line of it.
+		if o.InboxReplyOpen() {
+			o.InboxReplyType(strings.Join(strings.Fields(msg.Content), " "))
+			return o, nil
+		}
 		if o.Mode == app.TerminalMode {
 			o.NotePaneKey()
 			forwardPasteToFocused(o, msg.Content)
@@ -106,8 +112,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// The Inbox reads a plan's text when one comes under the cursor, which
 	// any input can do. It costs a comparison when nothing needs reading.
 	if o.ShowInbox {
-		cmd = tea.Batch(cmd, o.InboxApprovalFetch())
+		cmd = tea.Batch(cmd, o.InboxApprovalFetch(), o.InboxRecapFetch())
 	}
+	// Focus landing on a pane that finished turns while the person was
+	// away has the dock say what it did. A nil check when it did not.
+	cmd = tea.Batch(cmd, o.AgentRecapFetch())
 
 	// Sync state to daemon after any input that might have changed state
 	// This ensures state persists across reconnects without explicit save

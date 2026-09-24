@@ -36,7 +36,8 @@ something for someone: there is a control they can adjust.
 
 Tables are not scalar options and are edited in config.toml:
 `[appearance.sidebar.agent_row]` (which tokens an agent row draws, their looks
-and value rules), `[dock]`, `[hooks]`, `[hosts]`, `[agents.approvals]`,
+and value rules; `now`, `context` and `prompt` read what the hooks and status
+line feed, and `meta` leaves those keys out), `[dock]`, `[hooks]`, `[hosts]`, `[agents.approvals]`,
 `[agents.permissions]` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 

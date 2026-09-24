@@ -76,7 +76,15 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		// detail and keys. See inbox_approvals_ext.go.
 		if detail, extraHints, drawn := m.inboxDetailExtras(selected); drawn {
 			detailFor, hints = detail, extraHints
+		} else if detail, drawn := m.inboxRecapDetail(selected); drawn {
+			detailFor = detail
 		}
+	}
+	// The reply editor takes the detail and the footer while it is open,
+	// whatever is under the cursor. See inbox_reply.go.
+	replyDetail, replyHints, replying := m.inboxReplyDetail()
+	if replying {
+		detailFor, hints = replyDetail, replyHints
 	}
 	if m.InboxSnoozePicking() {
 		// The next digit picks how long. The footer says the four lengths,
@@ -101,6 +109,10 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		}
 		if len(st.life.Snoozed) > 0 && !st.life.ShowSnoozed && st.Select == "" {
 			lines = append(slices.Clone(lines), "", m.inboxSnoozedNote())
+		}
+		if replying {
+			// A reply from the rail to a pane with nothing in the Inbox.
+			return m.simpleOverlayPanel("", title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
 		}
 		return m.simpleOverlayPanel("", title, lines, m.keyHints(
 			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
@@ -217,6 +229,11 @@ func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 			goLabel = "open"
 		}
 		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel)...)
+		// A finished or errored turn takes a reply, queued for when the
+		// agent is at rest. See inbox_reply.go.
+		if inboxReplyKind(it) && it.Host == "" && !it.Stale && m.inboxReplySupported() {
+			hints = append(hints, m.keyHints(config.ActionInboxReply, "reply")...)
+		}
 		// Snooze is offered where it works, and a snoozed item offers to
 		// wake on the same key.
 		switch {
@@ -399,6 +416,11 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		what = "is " + sidebarStateWords(pk.State) + " now, not waiting on a prompt"
 	}
 	add(pal.Fg, inboxWho(it)+" in "+m.inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
+	if it.Host == "" {
+		if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
+			add(pal.FgDim, facts)
+		}
+	}
 	if p.Note != "" {
 		add(pal.Warning, p.Note)
 	}

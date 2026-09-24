@@ -122,6 +122,12 @@ type InboxState struct {
 	// approvals is the state of the safer approvals: a risky allow's first
 	// press, the reason line, and the plan shown. See inbox_approvals_ext.go.
 	approvals inboxApprovalState
+	// reply is the reply editor and the replies this client queued. See
+	// inbox_reply.go.
+	reply inboxReplyState
+	// recap is the away recap shown for the selected finished turn. See
+	// inbox_recap.go.
+	recap inboxRecapView
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -430,7 +436,7 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	case nil:
 		return nil
 	}
-	return tea.Batch(cmd, m.InboxApprovalFetch(), listenForInbox(m.inboxEvents))
+	return tea.Batch(cmd, m.InboxApprovalFetch(), m.InboxRecapFetch(), listenForInbox(m.inboxEvents))
 }
 
 // applyInboxSnapshot replaces the mirror with a fresh listing.
@@ -1053,6 +1059,7 @@ func (m *OS) CloseInbox() {
 	m.ShowInbox = false
 	m.Inbox.Peek = nil
 	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
+	m.Inbox.reply.editor = nil
 }
 
 // InboxMove moves the cursor by delta items, stepping over group headings.

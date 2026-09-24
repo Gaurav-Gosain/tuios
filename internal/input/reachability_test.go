@@ -242,14 +242,12 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 // both directions: an action here that starts to run fails it, and moves out
 // of this list into the table above.
 var pendingActions = map[string]string{
-	config.ActionInboxReview:       "review overlay",
-	config.ActionInboxDenyReason:   "safer approvals",
-	config.ActionInboxDetailDown:   "safer approvals",
-	config.ActionInboxDetailUp:     "safer approvals",
-	config.ActionAgentReply:        "rows and replies",
-	config.ActionAgentReview:       "review overlay",
-	config.ActionAgentCancelQueued: "rows and replies",
-	config.ActionPrefixReview:      "review overlay",
+	config.ActionInboxReview:     "review overlay",
+	config.ActionInboxDenyReason: "safer approvals",
+	config.ActionInboxDetailDown: "safer approvals",
+	config.ActionInboxDetailUp:   "safer approvals",
+	config.ActionAgentReview:     "review overlay",
+	config.ActionPrefixReview:    "review overlay",
 	// Built, and handled only once an agent has been seen, so for a person
 	// who runs none the key after the prefix still reaches the pane. These
 	// fixtures have seen none; TestNextFinishedRunsOnceAnAgentIsSeen presses
@@ -364,6 +362,9 @@ func reachAgentsOS(t *testing.T) *app.OS {
 	o := railOS(t)
 	o.Windows[0].AgentState = "done"
 	o.Windows[0].AgentHarness = "claude-code"
+	// A message waits in its queue, so x on the row drops it rather than
+	// falling through to the rail's menu, which it does on a row with none.
+	o.Windows[0].AgentQueued = 1
 	o.ExitSidebarFocus()
 	o.EnterSidebarFocus()
 	o.View()

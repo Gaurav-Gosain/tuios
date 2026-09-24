@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +71,20 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		tk.Text = m.sidebarAgentNeedText(e, variant, now)
 	case "host":
 		tk.Text = printableTitle(e.Host)
+	case "now":
+		// What a working agent is doing. The daemon clears it at rest, and a
+		// pane blocked on a prompt says what it asks in its need and message,
+		// so it draws only while the agent works.
+		if e.State == "working" {
+			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "now"))
+		}
+	case "prompt":
+		tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "prompt"))
+	case "context":
+		if pct, ok := sidebarContextPercent(sidebarAgentMetaValue(e.Meta, "context")); ok && pct >= config.SidebarContextWarnAt {
+			tk.Text = "ctx " + strconv.Itoa(int(pct)) + "%"
+			tk.Number, tk.HasNumber = pct, true
+		}
 	default:
 		if key, ok := config.SidebarMetaTokenKey(name); ok {
 			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, key))
@@ -110,7 +125,7 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 			// in the pane's own order.
 			if tall {
 				for _, t := range e.Meta {
-					if spec.Has("$" + t.Key) {
+					if spec.Has("$"+t.Key) || slices.Contains(config.SidebarFeedMetaKeys, t.Key) {
 						continue
 					}
 					tk := sidebarAgentToken{Name: "$" + t.Key, Text: printableTitle(t.Value)}
@@ -168,7 +183,55 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 			}
 		}
 	}
+	plan.Note = sidebarAgentQuietMessage(plan.Note, e)
 	return plan
+}
+
+// sidebarAgentQuietMessage drops the message from a note line where it says
+// less than the row's own rule: on a working row that shows what the agent is
+// doing now, which is the same fact fresher, and on a row at rest, which
+// needs nothing from anyone and whose last note is old news. A finished turn
+// not yet seen keeps its message, which is the first line of what the agent
+// said, and a row that needs you keeps what it asks.
+func sidebarAgentQuietMessage(note []sidebarAgentToken, e sidebarAgentEntry) []sidebarAgentToken {
+	drop := false
+	switch sidebarAgentGroup(e.State, e.DoneSeen) {
+	case sidebarGroupWorking:
+		drop = slices.ContainsFunc(note, func(tk sidebarAgentToken) bool { return tk.Name == "now" && tk.Text != "" })
+	case sidebarGroupIdle:
+		drop = true
+	}
+	if !drop {
+		return note
+	}
+	return slices.DeleteFunc(note, func(tk sidebarAgentToken) bool { return tk.Name == "message" })
+}
+
+// sidebarContextPercent reads a context value as a percent: "42%", "42.5%" or
+// "42". ok is false for anything else, such as a token count a harness sent
+// on its own, which says nothing about how full the window is.
+func sidebarContextPercent(v string) (float64, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	num, _, _ := strings.Cut(v, "%")
+	num = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(num), " ctx"))
+	f, err := strconv.ParseFloat(num, 64)
+	if err != nil || f < 0 || f > 100 {
+		return 0, false
+	}
+	return f, true
+}
+
+// sidebarTokenDefaultLook is the look a token has before its table says
+// anything: the context warning is in the warning ink, and every other token
+// starts from the rail's own style.
+func sidebarTokenDefaultLook(name string) config.SidebarTokenLook {
+	if name == "context" {
+		return config.SidebarTokenLook{Fg: "warning"}
+	}
+	return config.SidebarTokenLook{}
 }
 
 // sidebarAgentNeedText is the need token as drawn: the word, and the wait when
@@ -199,7 +262,8 @@ func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Tim
 // pane's metadata. None of them has room on the identity line, which is the
 // name's.
 func sidebarNoteToken(name string) bool {
-	if name == "message" || name == "need" {
+	switch name {
+	case "message", "need", "now", "prompt", "context":
 		return true
 	}
 	_, ok := config.SidebarMetaTokenKey(name)
@@ -315,7 +379,7 @@ func sidebarTokenColor(name string, pal overlay.Palette) color.Color {
 // look written over it: fg replaces the colour, bold and dim replace the
 // rail's choice when they are set at all.
 func (m *OS) sidebarTokenStyle(base lipgloss.Style, tk sidebarAgentToken, pal overlay.Palette) lipgloss.Style {
-	look := m.Settings.SidebarAgentRow.Style(tk.Name).Resolve(tk.Text, tk.Number, tk.HasNumber)
+	look := sidebarTokenDefaultLook(tk.Name).Overlay(m.Settings.SidebarAgentRow.Style(tk.Name).Resolve(tk.Text, tk.Number, tk.HasNumber))
 	if c := sidebarTokenColor(look.Fg, pal); c != nil {
 		base = base.Foreground(c)
 	}

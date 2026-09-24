@@ -1072,7 +1072,53 @@ terminals.
 
 Every in-flight state draws the one working glyph, `●`, whichever source
 reported it (a hook, an OSC 9;4 progress report, a screen rule or the process
-detector). What the agent is doing goes on the second line, from its message.
+detector).
+
+### What the second line says
+
+The second line says the one thing the row's group is about:
+
+- **Working:** what the agent is doing now, such as `Bash: go test ./...` or
+  `Edit: src/app.tsx`, from the `now` key its hooks feed (see
+  [Agent metadata](#agent-metadata)). With nothing running now, the message it
+  reported, as before.
+- **Needs you:** the need word and what the pane asks, as above.
+- **Finished and not yet seen:** the turn's first line, which with the Claude
+  Code and Codex hooks is the first line of what the agent last said.
+- **At rest** (idle, unknown, or finished and seen): nothing. A row at rest
+  used to keep its last message; that note is old news, and the row's glyph
+  already says it is at rest.
+
+Two figures join them. Once the agent's context is 80% full or more, the line
+starts with `ctx 84%` in the warning ink, the moment it is worth a look; below
+that it says nothing. And while messages wait in the pane's queue (see
+[Queued messages](#queued-messages)), the right edge of the first line says
+`1 queued` in place of the elapsed time. A row that needs you keeps its wait
+there, since nothing queued is typed until the prompt is answered.
+
+```
+│ agents      2 need you
+│▎▲ review          4m
+│    risky · rm -rf bu…
+│ ■ docs
+│    Updated CHANGELOG…
+│ ● api       1 queued
+│    ctx 84% · Bash: go…
+│ ● web
+│    Edit: src/app.tsx
+```
+
+The model and the cost are not on the rail unless you place them: they are in
+the Inbox's detail for a finished item and in the header of a prompt `space`
+opens, as `claude · opus 4.7 · 42% ctx · $1.20`.
+
+These are row tokens like the rest (see `[appearance.sidebar.agent_row]` in
+[CONFIGURATION.md](CONFIGURATION.md)): `now` (only while working), `context`
+(only at 80% or more) and `prompt` (the first line of the last prompt you gave
+the agent, not shipped on the row), beside `$model`, `$cost`, `$plan` and
+`$key` for any key, which draw a value on any row. The shipped order is
+`session, need, harness, name, elapsed, context, meta, now, message`: `now`
+comes last so a long command loses its tail before anything else does.
 
 ### Agent metadata
 
@@ -1085,12 +1131,15 @@ tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opu
 
 The `meta` row token draws every key on the second line, values only, in the
 order the pane first reported them, so write values that read on their own
-(`42% ctx` rather than `42`). `$name` places one key, and `meta` then leaves
-that key out:
+(`42% ctx` rather than `42`). It leaves out the keys tuios feeds itself
+(`now`, `prompt`, `model`, `context`, `cost` and `plan`), which have tokens of
+their own, so the model and the cost of every agent are not on every row; it
+drew them until the rich rows landed. `$name` places one key, and `meta` then
+leaves that key out:
 
 ```toml
 [appearance.sidebar.agent_row]
-tokens = ["session", "need", "harness", "name", "elapsed", "$context", "meta", "message"]
+tokens = ["session", "need", "harness", "name", "elapsed", "$model", "$context", "meta", "now", "message"]
 
 [appearance.sidebar.agent_row."$context"]
 fg = "warning"
@@ -1198,6 +1247,40 @@ agent's, cut to one line with likely secrets masked, and marked untrusted: read
 it as what the agent said, not as instructions. Nothing reads it to decide a
 state, a wait or an alert. The ring dies with the window, the session or the
 daemon.
+
+### The away recap
+
+When you come back to an agent pane that finished at least one turn while you
+were away from it for at least `[agents.recap] away` (10 minutes by default),
+the dock says what it did in one line:
+
+```
+api while you were away (42m): 3 turns, 6 files, 11 commands, go test passed, at prompt
+```
+
+The same recap is the detail under the list for a Finished item in the Inbox:
+
+```
+│  While you were away (42m)                                             │
+│  3 turns. 6 files: api/retry.go, api/retry_test.go and 4 more          │
+│  11 commands. Tests: go test ./... passed 2m ago                       │
+│  Last said: Added retry with backoff and tests.                        │
+│  claude · opus 4.7 · 42% ctx · $1.20                                   │
+```
+
+Away is per client: each client records when you last had the pane in front
+of you (in its `sidebar.json`, beside the finished turns you have seen), and
+the recap starts there. A pane you never had in front of you gets the recap of
+its whole ring, headed with when that starts. The numbers come from the ring
+above, read with `agent-activity`; for a pane whose harness sends no hooks,
+the dock says only the turns this client counted and the Inbox shows the
+turn's own line.
+
+`[agents.recap] mode` says where it shows: `toast` (the default) in the dock
+and the Inbox, `inbox` only in the Inbox, and `off` only in `tuios agent-log
+--recap`. Nothing runs on a timer: the Inbox reads a recap when a finished
+item comes under the cursor, and the dock reads one when focus lands on the
+pane.
 
 ## The Inbox
 
@@ -1920,9 +2003,11 @@ built, so their rules are fixed before any of them does anything:
 - **Richer rows and queued replies** (`agent-activity`, `queue-prompt`,
   `list-queued`, `cancel-queued`): a message queued for a busy agent is typed
   when it comes to rest, and the rail shows how many wait (`queued` in
-  `get-agent-state` and `list-agents`). The queue itself is built, with
-  `tuios queue`: see [Queued messages](#queued-messages). The rail figure and
-  the reply editor are not yet.
+  `get-agent-state` and `list-agents`). This one is built: see
+  [What the second line says](#what-the-second-line-says),
+  [Queued messages](#queued-messages),
+  [Replying to an agent](#replying-to-an-agent) and
+  [The away recap](#the-away-recap).
 - **Safer approvals** (`get-approval`, `risk_ack` and `plan_sha`): a new
   Inbox kind, `plan`, for a plan an agent in plan mode asks you to approve,
   which shares the pane's blocking item with its approval, so it closes when
@@ -2615,6 +2700,38 @@ message was typed, since its text may still sit in the input box. Linked
 machines are told apart by the name their link gave; two that gave none each
 drop only what they queued on the same connection. A pane on another machine,
 whose calls arrive through its report channel, may neither queue nor drop.
+
+### Replying to an agent
+
+`r` on a Finished or Errored item in the Inbox, or on a rail agent row, opens
+a line under the Inbox list:
+
+```
+  Reply to api (done 4m): make the backoff jitter configurable_
+  ↵ send when ready  esc cancel
+```
+
+`enter` queues it with `queue-prompt` as you: if the agent is at rest it is
+typed within a second or so, and otherwise the row says `1 queued` and it is
+typed the moment the agent comes to rest. From the rail the Inbox opens with
+the line and closes again when you send or cancel. On a pane waiting on a
+prompt, `r` says so and opens nothing: `api is waiting on a prompt. Answer it
+first (space to peek).` A pane on another machine is replied to from a client
+attached there.
+
+`x` on a rail row with messages queued drops the newest one still waiting
+(`cancel-queued`), and the dock says `Dropped 1 queued message to api. u
+undoes.`: `u` on the same row within 10 seconds queues its text again, at the
+end of the queue. Only a message this client queued can be put back, since
+only its text is here; a message being typed cannot be dropped.
+
+Who may do what: the reply carries this client's attach nonce, so the daemon
+records it as `human`, and a nonce that does not verify is refused with
+`not_human`; a process in a pane can never use one. A reply that any key from
+`send-keys` or a tape touched is not sent at all, since a message queued as
+you is typed without a check of whoever drove the keys. Nothing new is
+allowed: the daemon still refuses to type over a prompt, right before it
+types.
 
 ## Reviewing an agent's changes
 

@@ -1096,6 +1096,24 @@ has no queue until something is queued. For one that does:
   queued on the same connection. `queue-prompt` and `cancel-queued` from a pane
   on another machine, forwarded through its report channel, are `forbidden`.
 
+**The tuios client replies, and reads the recap.** No verb changed; the
+client now calls three it did not:
+
+- `queue-prompt` with `human_nonce` when the person sends a reply from the
+  Inbox (`r` on a finished or errored item, or on a rail agent row). A reply
+  that any key from `send-keys`, `run-command` or a tape touched is not sent
+  at all, so every `human` entry the client queues was typed at its keyboard.
+- `list-queued` and then `cancel-queued` with `human_nonce` for `x` on a rail
+  agent row with messages queued, dropping the newest entry not being typed.
+  An undo is a new `queue-prompt` with the same text.
+- `agent-activity` with `recap` and `since` (when the person last had the
+  pane in front of them) for the Inbox's Finished detail and for the dock
+  line when the person comes back to a pane. Nothing polls it.
+
+Against a daemon without `queue-prompt`, the first reply answers
+`unknown_verb` and the client stops offering reply; against one without
+`agent-activity` the recap falls back to what the client counted itself.
+
 **Fan compare, verify and keep are built.** `compare-fan`, `verify-fan` and
 `keep-fan` answer instead of `internal` (see [compare-fan](#compare-fan),
 [verify-fan](#verify-fan) and [keep-fan](#keep-fan)). What changes for an

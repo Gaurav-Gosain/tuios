@@ -60,6 +60,11 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   or when your report changes it. A new message or state wakes it, so report
   something new when there is something new; repeating the same report does
   not. `tuios list-attention --snoozed` shows what is snoozed.
+- Your finished turn's row shows a recap of what you did (turns, files,
+  commands, the last test run, your last words), and the person can reply to
+  it with `r`. The reply is queued and typed when you are next at rest, so
+  end each turn at your prompt; a reply never lands while you wait on a
+  prompt.
 - Keep your prompt on screen with its options numbered. The person can then
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
   `d` presses the answer your harness's manifest declares).

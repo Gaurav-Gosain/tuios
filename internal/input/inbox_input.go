@@ -32,6 +32,9 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
 	}
+	if o.InboxReplyOpen() {
+		return handleInboxReplyInput(msg, o)
+	}
 	if o.InboxReasonOpen() {
 		return handleInboxReasonInput(msg, o)
 	}
@@ -131,6 +134,25 @@ func handleInboxReasonInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxReasonType(" ")
 	default:
 		o.InboxReasonType(msg.Text)
+	}
+	return o, nil
+}
+
+// handleInboxReplyInput handles keyboard input while the reply editor is
+// open: every printable key is text, enter queues the reply, backspace
+// deletes, and esc closes the editor and sends nothing.
+func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	switch key := msg.String(); key {
+	case "esc":
+		o.InboxReplyCancel()
+	case "enter":
+		return o, o.InboxReplySend()
+	case "backspace":
+		o.InboxReplyBackspace()
+	case "space":
+		o.InboxReplyType(" ")
+	default:
+		o.InboxReplyType(msg.Text)
 	}
 	return o, nil
 }

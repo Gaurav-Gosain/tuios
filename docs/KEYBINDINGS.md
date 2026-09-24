@@ -68,7 +68,7 @@ Everything waiting for you in every session is one list, the Inbox. See
 
 Inside it: `j` and `k` move, `enter` goes to the pane, `space` reads an
 approval's or a question's prompt so you can answer it there, `r` replies to
-mail, `y` resumes a conversation a restart left, `p` passes held mail on, `d`
+mail, or to the agent of a finished or errored item, `y` resumes a conversation a restart left, `p` passes held mail on, `d`
 dismisses, `f` steps through the kinds, `/` types a selector that narrows the
 list (such as `harness:codex needs:you`; `enter` applies it, an empty line
 clears it), `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o` because
@@ -76,7 +76,7 @@ clears it), `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o` because
 
 The footer offers the keys that act on the row under the cursor, the one that
 answers it first: `space answer` on an approval or a question, `r reply` on
-mail, `y resume` on a resume row. It offers `m mailbox` on a mail row, though
+mail and on a finished or errored item, `y resume` on a resume row. It offers `m mailbox` on a mail row, though
 `m` works on every row.
 
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
@@ -126,8 +126,10 @@ The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
 `z` on a rail agent row (see
 [Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)), and so
 do the approval keys: `n`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
-[Deny with a reason](AGENT_STATE.md#deny-with-a-reason)). The rest are being
-built: until its work lands, a key does what it did before it
+[Deny with a reason](AGENT_STATE.md#deny-with-a-reason)), and the reply keys:
+`r` in the Inbox on a finished or errored item, and `r` and `x` on a rail
+agent row (see [Replying to an agent](AGENT_STATE.md#replying-to-an-agent)).
+The rest are being built: until its work lands, a key does what it did before it
 was bound: nothing in the Inbox, the rail's own binding on an agent row, and
 after `ctrl+b` in terminal mode, the key typed into the focused pane, with no
 repeat window opened. `ctrl+b O` also does that until an agent has been seen,
@@ -151,9 +153,10 @@ and the rail's `u` clears only this client's seen marks.
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |
 | `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |
-| `r` | rail agent row | Reply to the agent |
+| `r` | Inbox, on a finished or errored item | Reply to the agent: a line under the list, queued with `enter` and typed when the agent is at rest |
+| `r` | rail agent row | Reply to the agent, the same line in the Inbox; refused while the pane waits on a prompt |
 | `v` | rail agent row | Review the pane's changes |
-| `x` | rail agent row | Drop the newest queued message |
+| `x` | rail agent row with messages queued | Drop the newest queued message still waiting; `u` on the row within 10 seconds queues it again. On a row with nothing queued, `x` opens the rail's menu as before |
 
 On a risky approval (one a [risk rule](AGENT_STATE.md#risk-rules) matched),
 `1` and `2` allow only on a second press of the same key within 3 seconds, and
@@ -173,6 +176,12 @@ The agent rows' keys are a section of their own,
 the rail's own keys and only while the cursor is on an agent row, the way
 `[keybindings.sidebar_files]` is on a file row, so `r` and `x` mean the agent
 on an agent row and keep renaming and opening the menu on every other row.
+
+In the reply line every printable key is typed, and a paste is typed as one
+line; `enter` queues it, `backspace` deletes, `esc` closes it and sends
+nothing. Attached to a daemon without `queue-prompt` (an older one), the
+first reply says to restart it, and after that `r` does what it did before:
+it says `r` replies to mail in the Inbox, and renames on the rail.
 
 ## macOS
 

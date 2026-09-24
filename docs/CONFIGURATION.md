@@ -196,7 +196,9 @@ max = 8
   `agent-log`), `away` how long you must have been away for the dock to show
   it, and `test_patterns` which commands count as a test run. The daemon
   reads `test_patterns` for `tuios agent-log --recap` and the
-  `agent-activity` verb, and picks up a change when the file is saved.
+  `agent-activity` verb, and picks up a change when the file is saved; the
+  client reads `mode` and `away` when it loads the config. The recap is
+  built: see [The away recap](AGENT_STATE.md#the-away-recap).
 - `[agents.queue]` bounds the messages waiting to be typed to one agent when
   it comes to rest (`tuios queue`, `queue-prompt`): `max`, 8 by default, at
   most 64. A message queued past it is refused with `queue_full`. The daemon
@@ -215,8 +217,19 @@ pane is focused. It
 takes two rows or more, and never a row that needs you, a finished turn not
 yet seen, a working agent, the pane you are in, or one with messages queued.
 
-The agent row's `$name` tokens in `[appearance.sidebar.agent_row]` can place
-the metadata keys tuios now feeds: `$model`, `$context`, `$cost` and `$plan`.
+The agent row in `[appearance.sidebar.agent_row]` has three tokens for what
+tuios feeds itself: `now` (what a working agent is doing, drawn only while it
+works), `context` (`ctx 84%` in the warning ink, drawn only at 80% or more)
+and `prompt` (the first line of the last prompt, not shipped on the row). The
+shipped `tokens` list is now `["session", "need", "harness", "name",
+"elapsed", "context", "meta", "now", "message"]`; a list you wrote keeps its
+own order and gains nothing. The `meta` token no longer draws the fed keys
+(`now`, `prompt`, `model`, `context`, `cost`, `plan`), so place any of them
+you want with its own token. See
+[What the second line says](AGENT_STATE.md#what-the-second-line-says).
+
+The `$name` tokens can place the metadata keys tuios now feeds: `$model`,
+`$context`, `$cost` and `$plan`.
 They come from Claude Code's status line once `tuios integration install
 claude-code --statusline` is installed, from the opencode and Kilo plugin, and
 from protocol panes, and a key the harness never states draws nothing (see

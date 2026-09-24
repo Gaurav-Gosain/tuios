@@ -39,6 +39,14 @@ on every tick. `now` and `prompt` are tuios's own keys, filled from your hooks,
 and `set-agent-meta` refuses them. `now` is cleared whenever the pane leaves
 `working` and `needs_input`, however it left.
 
+The rail's row shows `now` while you work, the first line of your last reply
+once you finish, `ctx 84%` once your context is 80% full or more, and `N
+queued` while messages wait for you. It does not show `model`, `cost`,
+`plan` or `prompt` unless the person placed them, and it shows your other
+keys as they are. The person replies to a finished turn with `r`, which
+queues the message as theirs (`by: human` in `tuios queue ls`) and types it
+when you are next at rest.
+
 tuios feeds `model`, `context`, `cost` and `plan` itself where it can: from a
 protocol pane (source `protocol`), from the opencode plugin, and from Claude
 Code's status line once the person opts in (source `statusline`). Leave those

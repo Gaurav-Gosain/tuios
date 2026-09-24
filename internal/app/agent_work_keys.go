@@ -11,9 +11,9 @@ import (
 // Every one of them returns whether it did anything. A key whose work has not
 // landed answers false, and the input path then leaves the key exactly as it
 // was before the key was bound: an Inbox key does nothing and records nothing,
-// a rail key on an agent row falls through to the rail's own binding, so r
-// still renames and x still opens the destructive menu there until reply and
-// cancel are built, and ctrl+b v or ctrl+b O in terminal mode types v or O
+// a rail key on an agent row falls through to the rail's own binding (x on a
+// row with nothing queued still opens the destructive menu there), and
+// ctrl+b v or ctrl+b O in terminal mode types v or O
 // into the focused pane without arming the prefix repeat window. The bodies live in review_overlay.go, inbox_lifecycle.go,
 // inbox_reply.go and inbox_approvals_ext.go.
 
@@ -93,6 +93,11 @@ func (m *OS) SidebarAgentAction(action string) (cmd tea.Cmd, handled bool) {
 	}
 	switch action {
 	case config.ActionAgentUnread:
+		// A moment after x dropped a queued message from this row, u puts
+		// it back. See inbox_reply.go.
+		if cmd, ok := m.sidebarAgentUndoDrop(row.SessionID, row.WindowID); ok {
+			return cmd, true
+		}
 		return m.SidebarAgentUnread(row.SessionID, row.WindowID)
 	case config.ActionAgentSnooze:
 		return m.SidebarAgentSnooze(row.SessionID, row.WindowID)

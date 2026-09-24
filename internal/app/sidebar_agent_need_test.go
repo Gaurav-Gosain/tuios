@@ -113,31 +113,36 @@ func TestAgentRowNeedWords(t *testing.T) {
 
 // TestAgentRowDrawsMetadata: the meta token draws what the pane reported, in
 // the pane's order, on the second line; a $key token places one key itself and
-// meta then leaves that key out.
+// meta then leaves that key out. The keys tuios feeds itself (model, context,
+// cost, plan, now, prompt) have tokens of their own, and meta leaves them out
+// too, so the model and cost are not on every row unless placed.
 func TestAgentRowDrawsMetadata(t *testing.T) {
 	m := needOS(t)
-	meta := []sessiontree.MetaToken{{Key: "model", Value: "opus"}, {Key: "context", Value: "42%"}}
+	meta := []sessiontree.MetaToken{{Key: "branch", Value: "main"}, {Key: "model", Value: "opus"}, {Key: "ticket", Value: "T-12"}, {Key: "context", Value: "42%"}}
 	tree := needTree(sessiontree.WindowInput{
 		ID: "dddddddd4444", Title: "server", AgentState: "working", Harness: "codex", Meta: meta,
 	})
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 	sep := sidebarAgentSep()
 	row := stripANSIForTrace(railAgentRow(m, lines, "dddddddd4444"))
-	if !strings.Contains(row, "codex"+sep+"opus"+sep+"42%") {
+	if !strings.Contains(row, "codex"+sep+"main"+sep+"T-12") {
 		t.Fatalf("row = %q, want the harness then the metadata in the pane's order", row)
+	}
+	if strings.Contains(row, "opus") || strings.Contains(row, "42%") {
+		t.Fatalf("row = %q, want the fed model and a context under 80%% left off the shipped row", row)
 	}
 
 	agentRowSpec(t, m, `
 [appearance.sidebar.agent_row]
-tokens = ["name", "$context", "meta"]
+tokens = ["name", "$context", "$model", "meta"]
 
 [appearance.sidebar.agent_row."$context"]
 fg = "warning"
 `)
 	lines, _ = m.sidebarPanelLinesForTree(tree)
 	row = stripANSIForTrace(railAgentRow(m, lines, "dddddddd4444"))
-	if !strings.Contains(row, "42%"+sep+"opus") || strings.Count(row, "42%") != 1 {
-		t.Fatalf("row = %q, want $context placed first and meta without it", row)
+	if !strings.Contains(row, "42%"+sep+"opus"+sep+"main") || strings.Count(row, "42%") != 1 {
+		t.Fatalf("row = %q, want $context and $model placed first and meta without them", row)
 	}
 	styled := railAgentRow(m, lines, "dddddddd4444")
 	if !strings.Contains(styled, fgParams(theme.UI().Warning)) {

@@ -132,7 +132,7 @@ func TestUnbuiltAgentWorkHooksChangeNothing(t *testing.T) {
 		}
 	}
 	it := session.AttentionItem{Kind: session.AttentionFinished, Summary: "done"}
-	if m.inboxRowExtras(it) != "" || m.sidebarAgentQueuedFigure(sidebarAgentEntry{Queued: 2}) != "" {
+	if m.inboxRowExtras(it) != "" {
 		t.Error("a render hook draws something before it is built")
 	}
 	if _, _, ok := m.inboxDetailExtras(it); ok {

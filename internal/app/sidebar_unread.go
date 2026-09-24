@@ -109,6 +109,9 @@ func (m *OS) markFocusedAgentSeen(i int) {
 	if w == nil {
 		return
 	}
+	// Before the marks below move: they are what the away recap measures
+	// from. See inbox_recap.go.
+	m.noteAgentReturn(w)
 	if w.AgentState == "done" {
 		m.markAgentSeen(w.ID)
 	}
