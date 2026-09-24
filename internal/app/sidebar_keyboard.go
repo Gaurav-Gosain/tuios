@@ -85,6 +85,8 @@ func (m *OS) ExitSidebarFocus() {
 		return
 	}
 	m.SidebarFocused = false
+	// The rows at rest fold away again once the rail lets go of the keyboard.
+	m.sidebarAgentsUnfolded = false
 	m.recordSidebarRow()
 	m.sidebarClearPeek()
 	m.endSidebarReturn()
@@ -166,7 +168,7 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
-	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail:
+	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold:
 		return sidebarSectionAgents
 	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
 		return sidebarSectionFiles
@@ -223,6 +225,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowAgentMail:
 		m.queueSidebarCmd(m.OpenAgentMail())
+	case sidebarRowAgentFold:
+		m.SidebarUnfoldAgents()
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:

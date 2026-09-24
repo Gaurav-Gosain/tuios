@@ -48,8 +48,13 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   `working` as soon as you are unblocked.
 - A summary is cut to 160 bytes and anything shaped like a credential is
   masked, but do not put secrets in a message in the first place.
-- You cannot dismiss a row. `dismiss-attention` answers `not_human` to any
-  caller inside a pane.
+- You cannot dismiss a row, nor snooze it, mark it unread or restore it.
+  `dismiss-attention` and `mark-attention` answer `not_human` to any caller
+  inside a pane.
+- The person can snooze a row: it leaves the list and comes back at a time,
+  or when your report changes it. A new message or state wakes it, so report
+  something new when there is something new; repeating the same report does
+  not. `tuios list-attention --snoozed` shows what is snoozed.
 - Keep your prompt on screen with its options numbered. The person can then
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
   `d` presses the answer your harness's manifest declares).

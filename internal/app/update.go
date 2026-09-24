@@ -1744,6 +1744,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxDismissed(msg)
 		return m, nil
 
+	case InboxMarkedMsg:
+		m.applyInboxMarked(msg)
+		return m, nil
+
 	case InboxPeekMsg:
 		m.applyInboxPeek(msg)
 		return m, nil

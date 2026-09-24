@@ -117,6 +117,11 @@ const (
 	// rather than the machine header's "+" because the global group is not a
 	// machine: there is no daemon called "global" to create a session on.
 	sidebarRowGlobalNew
+	// sidebarRowAgentFold is the "+3 at rest" line under the agents section:
+	// the rows at rest past appearance.sidebar.agent_rest_fold, folded into
+	// one. Activating it shows them until the rail loses the keyboard. See
+	// sidebarFoldAgents.
+	sidebarRowAgentFold
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -438,6 +443,10 @@ type sidebarAgentEntry struct {
 	// terminals section leaves agent panes to this section, so the focus mark
 	// goes on this row.
 	Focused bool
+	// Fold is set on the one entry that stands for the rows at rest the
+	// section folded away: how many, and FoldNames names them. It is no pane.
+	Fold      int
+	FoldNames string
 }
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
@@ -1269,6 +1278,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	terminals := m.sidebarTerminals(sessions, shown)
 	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
 	m.sidebarSortAgents(agents)
+	// Rows long at rest fold into one line at the end. The compact rule below
+	// reads every agent pane, folded or not, since a folded pane is still one
+	// the agents section lists.
+	allAgents := agents
+	agents = m.sidebarFoldAgents(agents, time.Now())
 	// The one section whose order moves on its own, so the one whose viewport is
 	// anchored to a row rather than to an index. Before the cursor's auto-scroll
 	// below, which gets the last word on what is on screen.
@@ -1289,7 +1303,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	emptyPeek := peeking && len(terminals) == 0
 	// A peek is a request to see that session's panes, so it lists them all.
 	if !peeking && sidebarCompactAgents(w, height, len(agents), &m.Settings) {
-		terminals = sidebarTerminalsWithoutAgents(terminals, agents)
+		terminals = sidebarTerminalsWithoutAgents(terminals, allAgents)
 	}
 
 	nS := len(sessionRows)
@@ -1812,6 +1826,16 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionAgents] {
 			idx := start[sidebarSectionAgents] + i
 			e := agents[idx]
+			if e.Fold > 0 {
+				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgentFold, e.SessionID, ""))
+				tall := rowH[sidebarSectionAgents] > 1
+				recordHit(sidebarRowAgentFold, e.SessionID, "", -1, rowH[sidebarSectionAgents])
+				lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, false)))
+				if tall {
+					lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, true)))
+				}
+				continue
+			}
 			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
@@ -2148,6 +2172,12 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	case sidebarRowAgent:
 		for i, e := range agents {
 			if e.WindowID == target.WindowID && e.SessionID == target.SessionID {
+				return sidebarSectionAgents, i, true
+			}
+		}
+	case sidebarRowAgentFold:
+		for i, e := range agents {
+			if e.Fold > 0 {
 				return sidebarSectionAgents, i, true
 			}
 		}

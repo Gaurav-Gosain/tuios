@@ -115,7 +115,13 @@ func TestThePlanKindWaitsOnThePerson(t *testing.T) {
 // they did.
 func TestUnbuiltAgentWorkHooksChangeNothing(t *testing.T) {
 	m := &OS{}
+	// The Inbox's lifecycle keys (inbox_lifecycle.go) are built, and answer
+	// on any list, empty or not.
+	built := map[string]bool{config.ActionInboxSnooze: true, config.ActionInboxUndo: true, config.ActionInboxShowSnoozed: true}
 	for action := range InboxWorkActions {
+		if built[action] {
+			continue
+		}
 		if _, handled := m.InboxWorkAction(action); handled {
 			t.Errorf("%s says it did something before it is built", action)
 		}

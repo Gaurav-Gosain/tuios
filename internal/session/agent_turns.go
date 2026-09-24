@@ -144,6 +144,29 @@ func (s *Session) MarkCompletionSeen(windowID string) {
 	s.markCompletionSeenLocked(windowID)
 }
 
+// MarkCompletionUnseen forgets that the person saw a window's last finished
+// turn, which is what marking it unread in the Inbox says: the next client
+// push with the window focused marks it seen again. It reports whether the
+// window has finished a turn at all.
+func (s *Session) MarkCompletionUnseen(windowID string) bool {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		if w.ID != windowID {
+			continue
+		}
+		if w.CompletionSeq == 0 {
+			return false
+		}
+		if s.completionSeen[w.ID] >= w.CompletionSeq {
+			s.completionSeen[w.ID] = w.CompletionSeq - 1
+		}
+		return true
+	}
+	return false
+}
+
 // finishedUnread reports the daemon's view of whether a window finished a turn
 // nobody has looked at: its CompletionSeq is past the one it had when an
 // attached client last pushed state with it focused, and it is still at rest.

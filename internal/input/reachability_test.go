@@ -242,20 +242,43 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 // both directions: an action here that starts to run fails it, and moves out
 // of this list into the table above.
 var pendingActions = map[string]string{
-	config.ActionInboxReview:        "review overlay",
-	config.ActionInboxSnooze:        "Inbox lifecycle",
-	config.ActionInboxUndo:          "Inbox lifecycle",
-	config.ActionInboxShowSnoozed:   "Inbox lifecycle",
-	config.ActionInboxDenyReason:    "safer approvals",
-	config.ActionInboxDetailDown:    "safer approvals",
-	config.ActionInboxDetailUp:      "safer approvals",
-	config.ActionAgentUnread:        "Inbox lifecycle",
-	config.ActionAgentSnooze:        "Inbox lifecycle",
-	config.ActionAgentReply:         "rows and replies",
-	config.ActionAgentReview:        "review overlay",
-	config.ActionAgentCancelQueued:  "rows and replies",
-	config.ActionPrefixReview:       "review overlay",
-	config.ActionPrefixNextFinished: "Inbox lifecycle",
+	config.ActionInboxReview:       "review overlay",
+	config.ActionInboxDenyReason:   "safer approvals",
+	config.ActionInboxDetailDown:   "safer approvals",
+	config.ActionInboxDetailUp:     "safer approvals",
+	config.ActionAgentReply:        "rows and replies",
+	config.ActionAgentReview:       "review overlay",
+	config.ActionAgentCancelQueued: "rows and replies",
+	config.ActionPrefixReview:      "review overlay",
+	// Built, and handled only once an agent has been seen, so for a person
+	// who runs none the key after the prefix still reaches the pane. These
+	// fixtures have seen none; TestNextFinishedRunsOnceAnAgentIsSeen presses
+	// it with one.
+	config.ActionPrefixNextFinished: "Inbox lifecycle, before any agent",
+}
+
+// TestNextFinishedRunsOnceAnAgentIsSeen: ctrl+b O, in either mode, runs its
+// action and types nothing into the pane once an agent has been seen.
+func TestNextFinishedRunsOnceAnAgentIsSeen(t *testing.T) {
+	k := config.DefaultConfig().Keybindings
+	for _, mode := range []app.Mode{app.WindowManagementMode, app.TerminalMode} {
+		o := reachOS(t)
+		o.Mode = mode
+		o.SidebarAgentsSeen = true
+		var typed []byte
+		w := o.GetFocusedWindow()
+		w.DaemonMode = true
+		w.DaemonWriteFunc = func(b []byte) error { typed = append(typed, b...); return nil }
+		o = pressKey(t, o, k.LeaderKey)
+		o = pressKey(t, o, "O")
+		got := o.RecentActions()
+		if len(got) == 0 || got[len(got)-1] != config.ActionPrefixNextFinished {
+			t.Errorf("mode %v: ctrl+b O ran %v", mode, got)
+		}
+		if len(typed) != 0 {
+			t.Errorf("mode %v: ctrl+b O typed %q into the pane", mode, typed)
+		}
+	}
 }
 
 // TestPendingActionsStillDoNothing presses every key of a pending action the

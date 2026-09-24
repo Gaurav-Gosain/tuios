@@ -223,6 +223,11 @@ func newApprovalID() string {
 func (a *attentionStore) startHold(session, window, summary string, options, scope []string, expires time.Time) (*approvalHold, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// A hold on a snoozed approval is news the person can act on from the
+	// Inbox now, so the approval wakes.
+	if sid, ok := a.snoozedKey[attentionKey(AttentionApproval, session, window, 0)]; ok && a.snoozed[sid].Kind == AttentionApproval {
+		a.wakeLocked(sid)
+	}
 	id, ok := a.byKey[attentionKey(AttentionApproval, session, window, 0)]
 	if !ok || a.items[id].Kind != AttentionApproval {
 		return nil, approvalEndNotBlocked

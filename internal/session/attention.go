@@ -298,6 +298,26 @@ type attentionStore struct {
 	// revision of the item at the time. The item stays hidden until the host
 	// changes it again.
 	hostHidden map[string]uint64
+
+	// snoozed are the items the person snoozed, by id, each with
+	// SnoozedUntil set, and snoozedKey finds one by what it is about, the way
+	// byKey finds an open item. An item is in items or in snoozed, never both.
+	// See attention_lifecycle.go.
+	snoozed    map[string]*AttentionItem
+	snoozedKey map[string]string
+	// hostSnoozed are host items the person snoozed here, with the host's
+	// revision kept on the copy. Like a dismiss, a snooze of another
+	// machine's item marks nothing on that machine.
+	hostSnoozed map[string]*AttentionItem
+	// wakeTimer wakes the snoozed items whose time has come. There is one,
+	// for the earliest, and only while a snooze with a time is running;
+	// wakeAt is when it fires.
+	wakeTimer *time.Timer
+	wakeAt    int64
+	// undo is the person's last closes, newest last, for restore.
+	undo []attentionUndo
+	// now is the clock, replaced in tests.
+	now func() time.Time
 }
 
 func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *attentionStore {
@@ -308,6 +328,7 @@ func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *att
 		hostHidden: make(map[string]uint64),
 		publish:    publish,
 		currentSeq: currentSeq,
+		now:        time.Now,
 	}
 }
 
@@ -429,6 +450,11 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 		a.changedLocked()
 		return
 	}
+	// A snoozed item whose fact changed wakes with its id and since. A
+	// report that says what the item already said leaves it asleep.
+	if a.wakeOnChangeLocked(key, next) {
+		return
+	}
 	if len(a.items) >= attentionMaxItems {
 		a.evictOldestLocked()
 	}
@@ -495,10 +521,14 @@ func (a *attentionStore) closeWithLocked(id, reason string, fill func(*Attention
 	return true
 }
 
-// closeKeyLocked closes the item open under key, if any.
+// closeKeyLocked closes the item open under key, if any. A snoozed item
+// under key is dropped for the same reason: what it was about is over.
 func (a *attentionStore) closeKeyLocked(key, reason string) {
 	if id, ok := a.byKey[key]; ok {
 		a.closeLocked(id, reason)
+	}
+	if id, ok := a.snoozedKey[key]; ok {
+		a.dropSnoozedLocked(id, reason)
 	}
 }
 
@@ -600,8 +630,8 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
 		it.CompletionSeq = ev.completionSeq
 		it.Count = 1
-		if id, ok := a.byKey[attentionKey(AttentionFinished, sessionName, ev.Window, 0)]; ok {
-			it.Count = a.items[id].Count + int(ev.completionSeq-ev.prevCompletionSeq)
+		if cur := a.openOrSnoozedLocked(attentionKey(AttentionFinished, sessionName, ev.Window, 0)); cur != nil {
+			it.Count = cur.Count + int(ev.completionSeq-ev.prevCompletionSeq)
 		}
 		a.upsertLocked(it)
 	}
@@ -612,7 +642,12 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 func (a *attentionStore) noteCompletionSeen(sessionName, window string, seen uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	id, ok := a.byKey[attentionKey(AttentionFinished, sessionName, window, 0)]
+	key := attentionKey(AttentionFinished, sessionName, window, 0)
+	// A snoozed finished turn the person has now looked at is seen too.
+	if id, ok := a.snoozedKey[key]; ok && a.snoozed[id].CompletionSeq <= seen {
+		a.dropSnoozedLocked(id, AttentionClosedSeen)
+	}
+	id, ok := a.byKey[key]
 	if !ok || a.items[id].CompletionSeq > seen {
 		return
 	}
@@ -688,7 +723,13 @@ func (a *attentionStore) closeHeldPrompt(sessionName, window, summary string) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	id, ok := a.byKey[attentionKey(AttentionQuestion, sessionName, window, 0)]
+	key := attentionKey(AttentionQuestion, sessionName, window, 0)
+	if id, ok := a.snoozedKey[key]; ok {
+		if it := a.snoozed[id]; it.Kind == AttentionQuestion && it.Summary == summary {
+			a.dropSnoozedLocked(id, AttentionClosedResolved)
+		}
+	}
+	id, ok := a.byKey[key]
 	if !ok {
 		return
 	}
@@ -717,6 +758,11 @@ func (a *attentionStore) closeSession(sessionName string) {
 	for _, id := range a.sortedIDsLocked() {
 		if a.items[id].Session == sessionName {
 			a.closeLocked(id, AttentionClosedSession)
+		}
+	}
+	for _, id := range a.snoozedIDsLocked() {
+		if a.snoozed[id].Session == sessionName {
+			a.dropSnoozedLocked(id, AttentionClosedSession)
 		}
 	}
 }
@@ -798,13 +844,33 @@ func (a *attentionStore) noteMailRead(sessionName string, thread uint64) {
 	a.closeKeyLocked(attentionKey(AttentionMail, sessionName, "", thread), AttentionClosedRead)
 }
 
-// dismiss closes one item and returns what it was.
+// dismiss closes one item and returns what it was. A snoozed item can be
+// dismissed too. The person can restore what they dismissed for a moment
+// after (see attention_lifecycle.go), except mail waiting for another machine,
+// which a dismiss discards, and a question put with ask-human, whose asker is
+// told it was dismissed.
 func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if it, ok := a.hostItems[id]; ok {
 		out := *it
 		a.hideHostLocked(id)
+		a.rememberUndoLocked(out, AttentionClosedDismissed)
+		return out, true
+	}
+	if it, ok := a.hostSnoozed[id]; ok {
+		out := *it
+		out.SnoozedUntil = 0
+		a.dropHostSnoozedLocked(id, AttentionClosedDismissed)
+		a.hostHidden[id] = out.remoteSeq
+		a.rememberUndoLocked(out, AttentionClosedDismissed)
+		return out, true
+	}
+	if it, ok := a.snoozed[id]; ok {
+		out := *it
+		out.SnoozedUntil = 0
+		a.dropSnoozedLocked(id, AttentionClosedDismissed)
+		a.rememberUndoLocked(out, AttentionClosedDismissed)
 		return out, true
 	}
 	it, ok := a.items[id]
@@ -813,6 +879,7 @@ func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	}
 	out := *it
 	a.closeLocked(id, AttentionClosedDismissed)
+	a.rememberUndoLocked(out, AttentionClosedDismissed)
 	return out, true
 }
 
@@ -820,6 +887,9 @@ func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 type attentionQuery struct {
 	session string
 	kinds   map[string]bool
+	// snoozed also lists the snoozed items, after the open ones. They are
+	// not in the counts, which are what is waiting.
+	snoozed bool
 	// host is empty for every machine, federation.LocalHostName for this one,
 	// or a linked host's name. A session with no host names a session on this
 	// machine, which is what session meant before items from other machines
@@ -875,6 +945,18 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 		add(it)
 	}
 	SortAttention(out)
+	if q.snoozed {
+		var sleeping []AttentionItem
+		for _, m := range []map[string]*AttentionItem{a.snoozed, a.hostSnoozed} {
+			for _, it := range m {
+				if q.matchHost(it.Host) && (q.session == "" || it.Session == q.session) && (len(q.kinds) == 0 || q.kinds[it.Kind]) {
+					sleeping = append(sleeping, *it)
+				}
+			}
+		}
+		SortAttention(sleeping)
+		out = append(out, sleeping...)
+	}
 	var seq uint64
 	if a.currentSeq != nil {
 		seq = a.currentSeq()
@@ -935,9 +1017,15 @@ func (a *attentionStore) changedLocked() {
 
 // encodeLocked serialises the queue. The caller holds mu.
 func (a *attentionStore) encodeLocked() []byte {
-	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items))}
+	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
 		f.Items = append(f.Items, *a.items[id])
+	}
+	// A snoozed item is saved with snoozed_until, and load puts it back to
+	// sleep. An older daemon reading the file lists it as open, which is
+	// what the item was before the snooze.
+	for _, id := range a.snoozedIDsLocked() {
+		f.Items = append(f.Items, *a.snoozed[id])
 	}
 	data, err := json.Marshal(f)
 	if err != nil {
@@ -1035,21 +1123,32 @@ func (a *attentionStore) load(path string, live func(session, window string) boo
 	a.nextID = max(a.nextID, f.NextID)
 	a.rev = max(a.rev, f.Rev)
 	for _, it := range kept {
-		if len(a.items) >= attentionMaxItems {
+		if len(a.items)+len(a.snoozed) >= attentionMaxItems {
 			break
 		}
 		key := attentionItemKey(&it)
 		if _, dup := a.byKey[key]; dup {
 			continue
 		}
+		if _, dup := a.snoozedKey[key]; dup {
+			continue
+		}
 		item := it
-		if _, taken := a.items[item.ID]; taken {
+		_, taken := a.items[item.ID]
+		if _, sleeping := a.snoozed[item.ID]; taken || sleeping {
 			a.nextID++
 			item.ID = strconv.FormatUint(a.nextID, 10)
+		}
+		// A snooze survives the restart. Its time may have passed while
+		// the daemon was down, and armWakeLocked below wakes it then.
+		if item.SnoozedUntil != 0 {
+			a.putSnoozedLocked(&item)
+			continue
 		}
 		a.items[item.ID] = &item
 		a.byKey[key] = item.ID
 	}
+	a.armWakeLocked()
 	// An item opened before load had no path to be saved to.
 	if opened {
 		a.changedLocked()

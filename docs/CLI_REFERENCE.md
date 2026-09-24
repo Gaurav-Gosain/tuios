@@ -1424,7 +1424,10 @@ the same list. A row of another machine names it,
 An item closes by itself when what opened it stops being true. Dismissing one
 is for the person at an attached client and is done from the Inbox; there is
 no command for it, because a command run from a pane is exactly what must not
-be able to clear the person's queue. Answering a held approval (`1`, `2`, `3`
+be able to clear the person's queue. Snoozing, marking unread and undo are the
+person's acts too and have no command either. `--snoozed` lists the items the
+person snoozed, after the rest under a Snoozed heading, each ending in
+`[snoozed until 15:30]` or `[snoozed until it changes]`. Answering a held approval (`1`, `2`, `3`
 in the Inbox) has no command for the same reason. The row of an approval a
 hook is holding ends with `(held: answer in the Inbox)`, since its pane shows
 no prompt while it is held. See
@@ -1441,6 +1444,7 @@ tuios list-attention [flags]
 - `--host <name>`: Only this machine: `local`, or a linked host by name (default: every machine)
 - `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`
 - `--select <selector>`: Only the items a [selector](AGENT_STATE.md#selectors) matches, such as `harness:codex needs:you`
+- `--snoozed`: Also list the items snoozed in the Inbox, after the rest
 - `--json`: Output the verb result as JSON
 
 **Examples:**
@@ -1456,6 +1460,9 @@ tuios list-attention --host build
 
 # The oldest approval's pane, for a script
 tuios list-attention --json --kind approval | jq -r '.items[0].window'
+
+# Everything, the snoozed items too
+tuios list-attention --snoozed
 ```
 
 Output:

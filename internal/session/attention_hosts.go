@@ -137,6 +137,11 @@ func (a *attentionStore) hostReplace(host string, items []AttentionItem) {
 			a.closeHostLocked(id, AttentionClosedResolved)
 		}
 	}
+	for _, id := range a.hostSnoozedIDsLocked(host) {
+		if !keep[id] {
+			a.dropHostSnoozedLocked(id, AttentionClosedResolved)
+		}
+	}
 	for id := range a.hostHidden {
 		if hostOfItemID(id) == host && !keep[id] {
 			delete(a.hostHidden, id)
@@ -159,6 +164,14 @@ func (a *attentionStore) hostApply(host, action string, raw AttentionItem) {
 	case AttentionOpened, AttentionUpdated:
 		a.upsertHostLocked(it, false)
 	case AttentionClosed:
+		if _, asleep := a.hostSnoozed[it.ID]; asleep {
+			reason := raw.Closed
+			if !slices.Contains(hostCloseReasons, reason) {
+				reason = AttentionClosedResolved
+			}
+			a.dropHostSnoozedLocked(it.ID, reason)
+			return
+		}
 		cur, ok := a.hostItems[it.ID]
 		if !ok {
 			delete(a.hostHidden, it.ID)
@@ -186,6 +199,15 @@ func (a *attentionStore) upsertHostLocked(it AttentionItem, fromListing bool) {
 			return
 		}
 		delete(a.hostHidden, it.ID)
+	}
+	// A snoozed item sleeps here until the host changes it, which is its fact
+	// changing, or until its time comes.
+	if asleep, ok := a.hostSnoozed[it.ID]; ok {
+		if it.remoteSeq <= asleep.remoteSeq {
+			return
+		}
+		delete(a.hostSnoozed, it.ID)
+		a.armWakeLocked()
 	}
 	if cur, ok := a.hostItems[it.ID]; ok {
 		if it.remoteSeq < cur.remoteSeq || (it.remoteSeq == cur.remoteSeq && !fromListing && !cur.Stale) {
@@ -288,6 +310,9 @@ func (a *attentionStore) hostDrop(host, reason string) {
 	for _, id := range a.hostIDsLocked(host) {
 		a.closeHostLocked(id, reason)
 	}
+	for _, id := range a.hostSnoozedIDsLocked(host) {
+		a.dropHostSnoozedLocked(id, reason)
+	}
 	for id := range a.hostHidden {
 		if hostOfItemID(id) == host {
 			delete(a.hostHidden, id)
@@ -307,6 +332,19 @@ func (a *attentionStore) hostIDsLocked(host string) []string {
 	slices.SortFunc(ids, func(x, y string) int {
 		return cmp.Compare(a.hostItems[x].Seq, a.hostItems[y].Seq)
 	})
+	return ids
+}
+
+// hostSnoozedIDsLocked lists a host's snoozed ids in a stable order. The
+// caller holds mu.
+func (a *attentionStore) hostSnoozedIDsLocked(host string) []string {
+	var ids []string
+	for id, it := range a.hostSnoozed {
+		if it.Host == host {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
 	return ids
 }
 

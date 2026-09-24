@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 )
 
 // sidebarRenderCache holds a fully styled rail so a frame composed for an
@@ -204,6 +205,16 @@ func (m *OS) sidebarSignature() uint64 {
 	// change ink with them, which is the other half of what the frame shows.
 	mixS(m.sidebarAgentsFilter())
 	mixS(m.sidebarAgentsSort())
+	// The fold of rows at rest: whether it is open, its threshold, and the
+	// minute, since a row crosses the threshold with nothing else moving. The
+	// minute is folded only once an agent has been seen and while folding is
+	// on, so a rail with no agents is never rebuilt for it, and one with
+	// agents at most once a minute, on a frame that was being drawn anyway.
+	mixB(m.sidebarAgentsUnfolded)
+	mixI(int(m.Settings.SidebarAgentRestFold / time.Second))
+	if m.Settings.SidebarAgentRestFold > 0 && m.SidebarAgentsSeen {
+		mixI(int(sidebarFoldClock().Unix() / 60))
+	}
 
 	// Rail keyboard focus: the accent edge and the cursor-row highlight both
 	// depend on it, so a focus change or a cursor move must rebuild.

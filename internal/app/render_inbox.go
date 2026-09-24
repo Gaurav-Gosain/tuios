@@ -78,6 +78,11 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			detailFor, hints = detail, extraHints
 		}
 	}
+	if m.InboxSnoozePicking() {
+		// The next digit picks how long. The footer says the four lengths,
+		// and nothing else answers until one is picked or the picker closes.
+		hints = inboxSnoozeHints()
+	}
 	m.noteInboxShown(selected, held && inboxShowsWhole(selected), time.Now())
 	rows := m.inboxRows()
 	if len(rows) == 0 {
@@ -93,6 +98,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			lines = []string{"Nothing under " + inboxGroupTitle(st.Filter) + ".", "f shows the next kind, and then all of them."}
 		case !m.IsDaemonSession:
 			lines = []string{"The Inbox needs the daemon.", "", "Start a daemon session with: tuios new"}
+		}
+		if len(st.life.Snoozed) > 0 && !st.life.ShowSnoozed && st.Select == "" {
+			lines = append(slices.Clone(lines), "", m.inboxSnoozedNote())
 		}
 		return m.simpleOverlayPanel("", title, lines, m.keyHints(
 			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
@@ -208,15 +216,33 @@ func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 		if it.Kind == session.AttentionMail {
 			goLabel = "open"
 		}
-		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel, config.ActionInboxDismiss, "dismiss")...)
+		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel)...)
+		// Snooze is offered where it works, and a snoozed item offers to
+		// wake on the same key.
+		switch {
+		case it.SnoozedUntil != 0:
+			hints = append(hints, m.keyHints(config.ActionInboxSnooze, "wake")...)
+		case inboxSnoozeRefusal(it) == "":
+			hints = append(hints, m.keyHints(config.ActionInboxSnooze, "snooze")...)
+		}
+		hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss")...)
 	}
+	rowHints := len(hints)
 	hints = append(hints, m.keyHints(config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select")...)
 	// The whole mailbox is one key from anywhere in the Inbox; it is offered
 	// where it is the next thing a person looks for, on a mail row.
 	if ok && it.Kind == session.AttentionMail {
 		hints = append(hints, m.keyHints(config.ActionInboxMailbox, "mailbox")...)
+		return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 	}
-	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	hints = append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	// The keys for the row come first and the footer keeps to one line: the
+	// keys that work on the whole list give way, the selector first, then the
+	// filter. Both are in help, and the empty Inbox offers them.
+	for len(hints)-1 > rowHints && overlay.HintRowCount(hints, inboxWidth) > 1 {
+		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
+	}
+	return hints
 }
 
 // renderInboxSelecting draws the Inbox with the selector line open over the
@@ -256,8 +282,12 @@ func (m *OS) renderInboxSelecting(title string) (string, overlay.Geometry, []ove
 	})
 }
 
-// inboxHeadingRow draws a group heading: the kind in words and how many.
+// inboxHeadingRow draws a group heading: the kind in words and how many. A
+// note row draws its words, muted.
 func (m *OS) inboxHeadingRow(r inboxRow, bg color.Color, pal overlay.Palette, width int) string {
+	if r.note != "" {
+		return overlay.Style(bg).Foreground(pal.FgMute).Render(overlay.Truncate(r.note, width))
+	}
 	text := r.heading + " " + strconv.Itoa(r.count)
 	return overlay.Style(bg).Foreground(pal.FgMute).Bold(true).Render(overlay.Truncate(text, width))
 }
@@ -276,6 +306,12 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	when := inboxWait(it.Since, now)
 	if it.Stale {
 		when = inboxSeen(it.SeenAt, now)
+	}
+	// A snoozed item says when it wakes where an open one says how long it
+	// has waited, and is drawn muted like a stale one.
+	snoozed := it.SnoozedUntil != 0
+	if snoozed {
+		when = inboxSnoozedWhen(it.SnoozedUntil, now)
 	}
 	right := overlay.Style(bg).Foreground(pal.FgMute).Render(m.inboxWhere(it)+sep) +
 		overlay.Style(bg).Foreground(pal.FgDim).Render(when)
@@ -312,7 +348,7 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		whoColor = pal.Fg
 	}
 	glyphColor := inboxKindColor(it.Kind, pal)
-	if it.Stale {
+	if it.Stale || snoozed {
 		whoColor, glyphColor = pal.FgMute, pal.FgMute
 	}
 	left := overlay.Style(bg).Foreground(glyphColor).Render(glyph) +

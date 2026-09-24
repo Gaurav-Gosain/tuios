@@ -17,8 +17,9 @@ import (
 // question ask-human put to the person, d dismisses, r replies to mail,
 // y resumes a conversation a restart left, p passes on mail another machine
 // sent an agent here that the link policy held, f steps the kind filter, /
-// types a selector that narrows the list, m opens the whole mailbox, and esc
-// or q closes.
+// types a selector that narrows the list, m opens the whole mailbox, z
+// snoozes (then 1 to 4 for how long) or wakes a snoozed item, u undoes the
+// last dismiss or snooze, S shows the snoozed items, and esc or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A question that opened the Inbox by itself a moment ago: the key was
 	// most likely typed for the pane, so it does nothing here.
@@ -30,6 +31,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	if o.InboxSelecting() {
 		return handleInboxSelectInput(msg, o)
+	}
+	// The snooze picker takes the next key: a digit from 1 to 4 is how long,
+	// anything else closes it.
+	if o.InboxSnoozePicking() {
+		return o, o.InboxSnoozeKey(msg.String())
 	}
 	// A digit answers by its number, which is the number the prompt shows, so
 	// it is not a binding.

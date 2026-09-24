@@ -1237,7 +1237,8 @@ Keys, after the prefix (`ctrl+b` by default):
 | Key | What it does |
 | --- | --- |
 | `i` | Open the Inbox. |
-| `o` | Go to the oldest item that needs you (approval, ask, question, mail, errored, resume), switching session and workspace. A question an agent asked you opens the Inbox on it instead, since that is where it is answered. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
+| `o` | Go to the oldest item that needs you (approval, ask, question, mail, errored, resume), switching session and workspace. A question an agent asked you opens the Inbox on it instead, since that is where it is answered. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox and to `O`. |
+| `O` | Go to the newest finished turn you have not seen. `O` again within 5 seconds goes to the next older one; a turn that finishes meanwhile starts the walk over at it. It waits until an agent has been seen: before that the key after the prefix reaches the pane as it always did. |
 | `M` | Open the Inbox on its mail. It used to open the mailbox; `m` in the Inbox does that now. |
 
 Inside the Inbox:
@@ -1253,7 +1254,10 @@ Inside the Inbox:
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
-| `d` | Dismiss the item. |
+| `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |
+| `z` | Snooze the item, then `1` 15 minutes, `2` an hour, `3` until 9:00 tomorrow, `4` until it changes. The footer shows the four while it waits for the digit; any other key cancels. On a snoozed item, wake it. See [Snoozing, undo and unread](#snoozing-undo-and-unread). |
+| `u` | Undo the last dismiss or snooze made in the last 10 seconds. Again, the one before. |
+| `S` | Show or hide the snoozed items, muted, under a Snoozed heading at the bottom. |
 | `f` | Show one kind, then the next, then all of them. |
 | `/` | Type a selector that narrows the list, such as `harness:codex needs:you` or `session:api-fan-*`: the syntax of [Selectors](#selectors). `enter` applies it and an empty line clears it; `esc` closes the line and keeps what was in force. While the line is open every key is text. The selector stays until you change it, and the title says it in words, `[select harness:codex]`, so a narrowed Inbox never reads as an empty one. It works with `f`. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
@@ -1698,6 +1702,56 @@ attach nonce, checked the way `dismiss-attention` is (see
 `ask-agent` or keystroke routed through the protocol can. The hold itself may
 be requested only for the caller's own pane, and never over a link.
 
+### Snoozing, undo and unread
+
+Some of what lands in the Inbox is for later. `z` on a row snoozes it: it
+leaves the list and the counts, and comes back, with its place in the order,
+at the time you picked (15 minutes, an hour, 9:00 tomorrow), or when what it
+is about changes. A pane that reports a new question, a new error, another
+finished turn, or a hook that starts holding the approval wakes it early; the
+same report again does not. When what it was about ends while it sleeps (the
+agent moves on, you look at the pane) it is gone rather than woken. The list
+says how many are snoozed and `S` shows them under a muted Snoozed heading,
+each with when it wakes; `z` on one wakes it now. `tuios list-attention
+--snoozed` lists them too.
+
+Snoozing is for what can wait: finished turns, errors, mail, resume rows, and
+approvals and questions no hook is holding. An approval the Inbox holds for
+your answer, a plan and a question put with `ask-human` are answered or
+dismissed, because an agent is waiting on them.
+
+A dismiss or a snooze can be undone for 10 seconds with `u` in the Inbox,
+and the dock says so. Mail waiting for another machine is not restored (its
+dismiss discarded the mail), nor is a question put with `ask-human` (its asker
+was told it was dismissed).
+
+On the rail, with the cursor on an agent row, `u` marks the pane's finished
+turn unread: the row reads as finished again, and its Done row opens in every
+client's Inbox marked unread until someone looks at the pane. The pane in
+front of you cannot be marked, since looking at it is what marks it seen. `z`
+opens the Inbox on the pane's row with the four lengths, and closes it once
+one is picked.
+
+Rows long at rest fold: agent rows that have been idle, unknown, or done and
+already seen for longer than `appearance.sidebar.agent_rest_fold` (an hour by
+default) become one muted line at the end of the agents section, `+3 at rest`,
+with their names under it when the section has room. `enter` on it or a
+click shows them until the rail lets go of the keyboard. A row that needs
+you, a turn you have not seen, a working agent, the pane you are in and one
+with messages queued never fold, and one row alone does not.
+
+Who may do what: only you, from an attached client. Snooze, wake, unread and
+restore are `mark-attention`, which takes the nonce your client got when it
+attached, is refused to a pane without the `admin` grant and to anything
+inside a pane even with the nonce, and needs `respond` over a link. An agent
+cannot hide, reorder or bring back what you read. Snoozing another machine's
+item hides it on this one only, like a dismiss, and `u` on the rail acts on
+this machine's panes.
+
+None of it costs anything without agents: the one timer that wakes snoozed
+items exists only while something is snoozed with a time, and the fold reads
+the state stamps the rail already has.
+
 ### Review, triage, replies and safer approvals (being built)
 
 The daemon already knows the shape of four pieces of work that are being
@@ -1708,7 +1762,8 @@ built, so their rules are fixed before any of them does anything:
   `verify-fan`, `keep-fan`).
 - **Triage in the Inbox** (`mark-attention`): snooze, wake, mark unread and
   undo. A snoozed item closes with the reason `snoozed` and opens again with
-  the same id.
+  the same id. This one is built: see
+  [Snoozing, undo and unread](#snoozing-undo-and-unread).
 - **Richer rows and queued replies** (`agent-activity`, `queue-prompt`,
   `list-queued`, `cancel-queued`): a message queued for a busy agent is typed
   when it comes to rest, and the rail shows how many wait (`queued` in

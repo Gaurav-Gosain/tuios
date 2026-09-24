@@ -91,7 +91,7 @@ func TestAgentWorkVerbsAnswerNotBuilt(t *testing.T) {
 }
 
 // TestMarkAttentionIsThePersonsOnly: the proof comes before anything else, so
-// a caller without a live nonce is refused even while the verb is a stub.
+// a caller without a live nonce is refused before the item is even looked up.
 func TestMarkAttentionIsThePersonsOnly(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	makeSessionWithWindow(t, d, "work")
@@ -101,10 +101,10 @@ func TestMarkAttentionIsThePersonsOnly(t *testing.T) {
 		mustRefuse(t, callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "snooze", "for_ms": 1000, "human_nonce": nonce}),
 			ErrVerbNotHuman, "mark-attention with nonce "+nonce)
 	}
-	// The person passes the proof and reaches the stub.
+	// The person passes the proof and reaches the item, which is not there.
 	tui := attachTUI(t, sp, "other")
 	mustRefuse(t, callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "snooze", "for_ms": 1000, "human_nonce": tui.HumanNonce()}),
-		ErrVerbInternal, "mark-attention from the person before it is built")
+		ErrVerbInvalidParams, "mark-attention from the person on an id that names nothing")
 	mustRefuse(t, callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "hide", "human_nonce": tui.HumanNonce()}),
 		ErrVerbInvalidParams, "an unknown action")
 }

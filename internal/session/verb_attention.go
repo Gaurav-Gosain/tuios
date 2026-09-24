@@ -31,9 +31,8 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 		Kinds   []string `json:"kinds"`
 		Host    string   `json:"host"`
 		Select  string   `json:"select"`
-		// IncludeSnoozed also lists snoozed items. Nothing can snooze an
-		// item until mark-attention is built, so there are none to add and
-		// the listing is the same either way.
+		// IncludeSnoozed also lists the snoozed items, after the open ones,
+		// each with snoozed_until. They are not in the counts.
 		IncludeSnoozed bool `json:"include_snoozed"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -51,7 +50,7 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 			return nil, verr
 		}
 	}
-	q := attentionQuery{session: p.Session, host: p.Host}
+	q := attentionQuery{session: p.Session, host: p.Host, snoozed: p.IncludeSnoozed}
 	for _, k := range p.Kinds {
 		if AttentionKindRank(k) == len(AttentionKindNames) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "kinds: "+echoName(k)+" is not an attention kind", &VerbHint{

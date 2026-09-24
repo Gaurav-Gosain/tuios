@@ -46,6 +46,10 @@ type attentionRow struct {
 	HeldID  uint64 `json:"held_id"`
 	// ForHost is the machine an outbox item's mail waits for.
 	ForHost string `json:"for_host"`
+	// SnoozedUntil is set on an item the person snoozed, listed with
+	// --snoozed: when it opens again (unix nanoseconds), -1 for when it
+	// changes.
+	SnoozedUntil int64 `json:"snoozed_until"`
 }
 
 // attentionHeldNote ends the row of an approval a hook is holding, so the
@@ -96,7 +100,7 @@ func waitedFor(since int64, now time.Time) string {
 	}
 }
 
-func runListAttention(sessionName, host string, kinds []string, selector string, jsonOutput bool) error {
+func runListAttention(sessionName, host string, kinds []string, selector string, snoozed, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -114,6 +118,9 @@ func runListAttention(sessionName, host string, kinds []string, selector string,
 	}
 	if selector != "" {
 		params["select"] = selector
+	}
+	if snoozed {
+		params["include_snoozed"] = true
 	}
 	raw, err := client.Call("list-attention", params)
 	if err != nil {
@@ -140,8 +147,16 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		return nil
 	}
 	heading := ""
+	waiting := 0
 	for _, it := range res.Items {
-		if title := attentionGroupTitle(it.Kind); title != heading {
+		title := attentionGroupTitle(it.Kind)
+		if it.SnoozedUntil != 0 {
+			// Listed after everything open, under a heading of their own.
+			title = "Snoozed"
+		} else {
+			waiting++
+		}
+		if title != heading {
 			if heading != "" {
 				fmt.Fprintln(w)
 			}
@@ -184,6 +199,9 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		case it.RequestID != "":
 			fmt.Fprintf(w, "  (%s)", attentionHeldNote)
 		}
+		if it.SnoozedUntil != 0 {
+			fmt.Fprintf(w, "  [%s]", snoozedUntilWords(it.SnoozedUntil, now))
+		}
 		if it.Stale {
 			// What that machine said last. Nobody can check it now.
 			seen := "never"
@@ -194,15 +212,27 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "\n%d waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.\n", len(res.Items))
+	fmt.Fprintf(w, "\n%d waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.\n", waiting)
 	return nil
+}
+
+// snoozedUntilWords says when a snoozed item opens again.
+func snoozedUntilWords(until int64, now time.Time) string {
+	if until < 0 {
+		return "snoozed until it changes"
+	}
+	at := time.Unix(0, until).In(now.Location())
+	if y, m, d := now.Date(); at.Year() == y && at.Month() == m && at.Day() == d {
+		return "snoozed until " + at.Format("15:04")
+	}
+	return "snoozed until " + at.Format("Mon Jan 2 15:04")
 }
 
 // newListAttentionCommand is `tuios list-attention`.
 func newListAttentionCommand() *cobra.Command {
 	var sessionName, host, selector string
 	var kinds []string
-	var jsonOutput bool
+	var jsonOutput, snoozed bool
 	cmd := &cobra.Command{
 		Use:   "list-attention",
 		Short: "List what is waiting for you in every session: the Inbox",
@@ -218,7 +248,10 @@ An item closes by itself when what opened it stops being true: the agent
 leaves needs_input or errored, the mail is read, a client focuses the pane
 that finished, or the conversation is resumed ('tuios resume-agent').
 Dismissing one is for the person at an attached client, from the Inbox
-(prefix i). 'tuios subscribe --types attention' streams every change.`,
+(prefix i), and so are snoozing, marking unread and undo: they have no command
+here. --snoozed also lists the items the person snoozed, after the rest, with
+when each opens again. 'tuios subscribe --types attention' streams every
+change.`,
 		Example: `  # What needs me?
   tuios list-attention
 
@@ -232,16 +265,20 @@ Dismissing one is for the person at an attached client, from the Inbox
   tuios list-attention --select 'harness:codex group:fan/add-retry'
 
   # The oldest approval's pane, for a script
-  tuios list-attention --json --kind approval | jq -r '.items[0].window'`,
+  tuios list-attention --json --kind approval | jq -r '.items[0].window'
+
+  # Everything, the snoozed items too
+  tuios list-attention --snoozed`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListAttention(sessionName, host, kinds, selector, jsonOutput)
+			return runListAttention(sessionName, host, kinds, selector, snoozed, jsonOutput)
 		},
 	}
 	cmd.Flags().StringVar(&selector, "select", "", "Only the items a selector matches: space-separated key:value terms, such as 'harness:codex needs:you'")
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session on this machine, or on --host (default: every session)")
 	cmd.Flags().StringVar(&host, "host", "", "Only this machine: local, or a linked host by name (default: every machine)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "Only these kinds: "+strings.Join(session.AttentionKindNames, ", "))
+	cmd.Flags().BoolVar(&snoozed, "snoozed", false, "Also list the items snoozed in the Inbox, after the rest")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("kind", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {

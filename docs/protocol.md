@@ -1117,6 +1117,36 @@ existing caller:
   main checkout rather than its directory name, so two checkouts that share
   a name no longer count as one fan.
 
+**The Inbox's lifecycle is built** ([mark-attention](#mark-attention)). The
+person can snooze an item, wake it, mark a finished pane unread, and restore
+an item they dismissed or snoozed in the last 10 seconds. What changes for a
+caller of the older verbs and for a subscriber:
+
+- `list-attention` with `include_snoozed` lists the snoozed items after the
+  open ones, each with `snoozed_until`. They are not in `counts`, which say
+  what is waiting. Without the parameter the listing is as before and leaves
+  them out.
+- A snooze publishes a `close` with the reason `snoozed`, the closing item
+  carrying `snoozed_until`. When the item wakes (its time comes, its fact
+  changes, the person wakes or restores it) an `open` follows with the same
+  `id` and `since`, so a subscriber that knows nothing of snoozing sees the
+  item close and open again.
+- When the fact behind a snoozed item ends (the pane leaves `needs_input`, a
+  client focuses a finished pane, the pane or session closes, the thread is
+  read), a `close` is published for it with that reason. A subscriber that
+  took the `snoozed` close as final gets a `close` for an id it no longer
+  holds, which changes nothing for it.
+- `dismiss-attention` accepts the id of a snoozed item. A dismiss of
+  anything but an `outbox` item or an `ask` can be undone for 10 seconds with
+  `mark-attention` `restore`, which reopens it with its id and `since`.
+- A hold that `request-approval` starts on a pane whose approval the person
+  snoozed wakes the approval first, so the Inbox can answer it.
+- The saved queue holds snoozed `finished` and `errored` items with
+  `snoozed_until`, and they come back asleep after a restart; one whose time
+  passed while the daemon was down wakes on start. An older daemon reading
+  the file lists them as open.
+- `not_human` is raised by `mark-attention` as by `dismiss-attention`.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1188,7 +1218,7 @@ catalog.
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
-| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `respond` and `reply-approval` raise it. |
+| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `mark-attention`, `respond` and `reply-approval` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `confirm_required` | A write by `select` sent nothing: it carried no `confirm` token, or a token for a different set of panes than the selector matches now. The hint lists the panes in `available` and carries their token in `confirm`. |
@@ -2851,7 +2881,10 @@ sent.
 
 Params: `session` (optional; unlike most verbs, omitted means every session;
 without `host` it names a session on this machine), `kinds` (optional list,
-from `approval`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`), `host`
+from `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`),
+`include_snoozed` (optional bool: also list the items the person snoozed,
+after the open ones and in the same order among themselves, each with
+`snoozed_until`; they are not in `counts`), `host`
 (optional: `local` for this machine or a linked host's name; omitted means
 every machine; an unknown name is `unknown_host`), `select` (optional, a
 [selector](#selectors): keeps the items it matches, reading an item's state
@@ -2875,7 +2908,10 @@ for this machine, the host's name for an item of a linked host), `session`,
 `since`
 (unix nanoseconds, when the item started waiting; an update keeps it), `seq`
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
-`completion_seq` (finished), `stale` and `seen_at` (an item of a host whose
+`completion_seq` (finished), `snoozed_until` (a snoozed item listed with
+`include_snoozed`: when it opens again, in unix nanoseconds, or -1 for when
+its fact changes), `marked_unread` (a finished item the person reopened with
+`mark-attention` `unread`), `stale` and `seen_at` (an item of a host whose
 link is down: what the host said last, and when this daemon last heard from
 it, in unix nanoseconds), `held_id` and `held_for` (mail from another machine
 held for the person by `hold_mail`: the message `release-agent-message` takes
@@ -2901,7 +2937,9 @@ does not survive a restart and thread ids start again from 1, so a saved item
 could only be merged into an unrelated new thread. An item opened while the
 saved queue is still loading keeps its id and wins over a saved item for the
 same pane and kind. A saved item whose id such an item already holds is kept
-under a fresh id, so no two items ever share one. It drops `resume` items
+under a fresh id, so no two items ever share one. A snoozed `finished` or
+`errored` item is saved with `snoozed_until` and comes back asleep; one whose
+time passed while the daemon was down wakes on start. It drops `resume` items
 too: the restore that runs on start opens them again from each window's
 `agent_session_id`, after the saved items are loaded. `outbox` items are
 opened again from the outbox, which is saved on its own and survives a
@@ -2989,7 +3027,11 @@ dismiss of the same item, or an id that is not open, is `invalid_params`.
 Dismissing a `finished` item marks the pane's turns seen. Dismissing a `mail`
 item marks the person's unread mail in the thread read. The other kinds only
 leave the list; the pane's agent state is not touched, and a later transition
-opens a new item.
+opens a new item. A snoozed item can be dismissed by its id too.
+
+For 10 seconds after, the dismiss can be undone with
+[mark-attention](#mark-attention) `restore`, except on an `outbox` item, whose
+dismiss discarded the mail, and an `ask`, whose asker was told.
 
 An item of a linked host is hidden on this daemon and nothing else: nothing on
 the host is marked, and the item comes back when the host changes it. The
@@ -2999,6 +3041,59 @@ Response:
 
 ```json
 {"result": {"type": "attention_dismissed", "id": "17", "kind": "approval", "session": "fan-3", "dismissed": true}}
+```
+
+### mark-attention
+
+Snooze an Inbox item, wake it, mark a finished pane unread, or restore an item
+dismissed or snoozed in the last 10 seconds, for the person.
+
+Params: `action` (required: `snooze`, `wake`, `unread` or `restore`), `id`, or
+`session`, `window` and `kind` to name the item by what it is about (`unread`
+needs only `session` and `window`), `human_nonce` (required, as for
+[dismiss-attention](#dismiss-attention)). With `snooze`, exactly one of
+`until` (unix milliseconds, within the next year), `for_ms` (at most a year)
+and `until_change` (true).
+
+- `snooze` closes an open item with the reason `snoozed`. It opens again with
+  its id and `since` when its time comes, when its fact changes (the pane
+  reports something the item does not already say, or a hook starts holding
+  the approval), or on `wake` or `restore`. A report that repeats what the
+  item says leaves it asleep. `until_change` waits only for the change. A
+  snooze of an item already asleep changes when it wakes. Only these kinds
+  can be snoozed: `finished`, `errored`, `mail`, `resume`, `question`, and an
+  `approval` no hook is holding. A held approval, a `plan` and an `ask` wait
+  on an answer, and `outbox` is about a link, so each is `invalid_params`.
+- `wake` opens a snoozed item now.
+- `unread` reopens a pane's finished turn: the daemon forgets that it was
+  seen, so the next client to focus the pane marks it seen again, and a
+  `finished` item opens (or an open one is marked) with `marked_unread`. The
+  pane must be on this machine, have finished a turn, and be at rest.
+- `restore` reopens an item this daemon closed for a dismiss or a snooze less
+  than 10 seconds ago, with its id and `since`. A restored `finished` item
+  forgets the look again, like `unread`; restored `mail` comes back as a row,
+  and its messages stay read. An approval, question, plan or error comes back
+  only while the pane is still in the state it was about, and nothing comes
+  back over a newer item about the same thing.
+
+An item of a linked host is snoozed on this daemon only, like a dismiss:
+nothing on the host changes, and the item wakes when the host changes it or
+its time comes. `unread` does not reach another machine's panes.
+
+Only the person can: the call is refused to a pane without `admin`
+(`forbidden`), needs `respond` over a link, and carries the nonce, checked as
+for `dismiss-attention` (`not_human`). An agent cannot hide, reorder or
+restore what the person reads.
+
+Errors: `not_human`, `forbidden`, `invalid_params` (an id that names nothing,
+an action the item's kind does not take, a length missing or given twice, a
+time in the past, a restore after 10 seconds or after the pane moved on),
+`session_not_found`, `window_not_found`.
+
+Response:
+
+```json
+{"result": {"type": "attention_marked", "id": "17", "action": "snooze", "snoozed_until": 1790146542055373000}}
 ```
 
 ### peek-prompt
@@ -3567,10 +3662,11 @@ resume; read the ring instead.
 These verbs are registered with their parameters, scope and link capability,
 and answer `internal` ("not built yet") until their work lands. These have
 landed: `agent-activity` (see [agent-activity](#agent-activity)), the
-delivery queue's three (see [The delivery queue](#the-delivery-queue)), and
-`compare-fan`, `verify-fan` and `keep-fan`, which have sections of their own.
-`list-verbs` describes each one's parameters and result. What is fixed now is
-who may call them:
+delivery queue's three (see [The delivery queue](#the-delivery-queue)),
+`compare-fan`, `verify-fan` and `keep-fan`, which have sections of their own,
+and `mark-attention` (see [mark-attention](#mark-attention)). `list-verbs`
+describes each one's parameters and result. What is fixed now is who may call
+them:
 
 | Verb | What it does | A pane without `admin` | Over a link | The person only |
 | --- | --- | --- | --- | --- |

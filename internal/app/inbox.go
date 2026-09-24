@@ -116,6 +116,9 @@ type InboxState struct {
 	// its user about, so a restore is announced once and not on every
 	// fresh listing.
 	announcedResume map[string]bool
+	// life is the snoozed items, the snooze picker, undo and the walk of
+	// finished turns. See inbox_lifecycle.go.
+	life inboxLifecycle
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -148,7 +151,12 @@ type InboxAlertDueMsg struct {
 
 // InboxDismissedMsg is the answer to a dismiss.
 type InboxDismissedMsg struct {
-	Err error
+	// ID, Kind and Who name the item, so a dismiss that went through can be
+	// offered for undo.
+	ID   string
+	Kind string
+	Who  string
+	Err  error
 	// Silent marks a dismiss the client sent on its own, such as a finished
 	// turn seen under the person's eyes. Its failure is never shown: the
 	// person did not ask for it, and the next event or listing corrects the
@@ -270,7 +278,14 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	defer stop()
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.CallWithTimeout("list-attention", map[string]any{}, 5*time.Second)
+	// The snoozed items are listed after the open ones, for the Inbox's
+	// Snoozed group. A daemon from before snoozing refuses the parameter,
+	// and has nothing snoozed, so it is asked without it.
+	raw, err := client.CallWithTimeout("list-attention", map[string]any{"include_snoozed": true}, 5*time.Second)
+	var callErr *session.VerbCallError
+	if errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams {
+		raw, err = client.CallWithTimeout("list-attention", map[string]any{}, 5*time.Second)
+	}
 	if err != nil {
 		return false, err
 	}
@@ -408,7 +423,9 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 // applyInboxSnapshot replaces the mirror with a fresh listing.
 func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	st := &m.Inbox
-	st.Items = append(st.Items[:0], msg.Items...)
+	open, snoozed := splitSnoozed(msg.Items)
+	st.Items = append(st.Items[:0], open...)
+	st.life.Snoozed = append(st.life.Snoozed[:0], snoozed...)
 	session.SortAttention(st.Items)
 	st.Live = true
 	st.Unsupported = false
@@ -467,6 +484,9 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 		if it == nil {
 			continue
 		}
+		if m.applySnoozedEvent(ev.Action, *it) {
+			continue
+		}
 		idx := m.inboxIndex(it.ID)
 		switch ev.Action {
 		case session.AttentionClosed:
@@ -487,7 +507,9 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
 				continue
 			}
-			if ev.Action == session.AttentionOpened || more {
+			// An item the person just woke, restored or marked unread here
+			// opens because they asked: it is not news to them.
+			if (ev.Action == session.AttentionOpened || more) && !m.inboxAskedFor(*it) {
 				alert = append(alert, it.ID)
 			}
 			cmds = append(cmds, m.inboxSeenUnderEyes(*it))
@@ -874,6 +896,9 @@ type inboxRow struct {
 	heading string
 	count   int
 	item    *session.AttentionItem
+	// note is a line of words under the list, such as how many items are
+	// snoozed. It is never selected.
+	note string
 }
 
 // inboxGroupTitle is the heading a kind's rows sit under. It is words, so the
@@ -947,7 +972,7 @@ func (m *OS) inboxRows() []inboxRow {
 		}
 		i = j
 	}
-	return rows
+	return m.inboxSnoozedRows(rows)
 }
 
 // clampInboxSelection keeps the cursor on an item row: on the selected item's
@@ -1013,6 +1038,7 @@ func (m *OS) OpenInbox(filter string) {
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
 	m.Inbox.Peek = nil
+	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
 }
 
 // InboxMove moves the cursor by delta items, stepping over group headings.
@@ -1538,7 +1564,16 @@ func (m *OS) InboxDismiss() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return m.inboxDismissCmd(it.ID, false)
+	cmd := m.inboxDismissCmd(it.ID, false)
+	if cmd == nil {
+		return nil
+	}
+	id, kind, who := it.ID, it.Kind, inboxWho(it)
+	return func() tea.Msg {
+		msg, _ := cmd().(InboxDismissedMsg)
+		msg.ID, msg.Kind, msg.Who = id, kind, who
+		return msg
+	}
 }
 
 // inboxDismissCmd is the dismiss-attention call, with this client's attach
@@ -1682,6 +1717,10 @@ func inboxDismissGone(err error) bool {
 // applyInboxDismissed says what went wrong, when something did. A dismiss the
 // client sent on its own, and an item that was already closed, say nothing.
 func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
+	if msg.Err == nil && !msg.Silent && msg.ID != "" {
+		m.noteInboxDismissed(msg.ID, msg.Kind, msg.Who)
+		return
+	}
 	if msg.Err == nil || msg.Silent || inboxDismissGone(msg.Err) {
 		return
 	}

@@ -109,14 +109,17 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	alive(t, term, "after the Inbox's new keys")
 }
 
-// TestPendingPrefixKeysReachThePane checks that ctrl+b v and ctrl+b O, bound
-// ahead of their work, still do what they did before they were bound: in
-// terminal mode the key after the leader is typed into the focused pane. A
-// second O, where the repeat window of a working ctrl+b O would be, is typed
-// too rather than swallowed. The shell then echoes what reached it.
+// TestPendingPrefixKeysReachThePane checks that ctrl+b v, bound ahead of its
+// work, still does what it did before it was bound: in terminal mode the key
+// after the leader is typed into the focused pane. ctrl+b O is built (the walk
+// of unseen finished turns), so with an agent in view it runs: it types
+// nothing, says in the dock that there is nothing to walk, and a second O
+// inside its repeat window runs it again rather than reaching the shell. The
+// shell then echoes what reached it.
 //
-// Negative control: with the prefix path dispatching the two stubs as if they
-// had run, v and both Os are dropped and the echo prints PENDZ.
+// Negative control: with the prefix path dispatching the review stub as if it
+// had run, v is dropped and the echo prints PENDZ; with ctrl+b O answering
+// "not handled", both Os reach the shell and it prints PENDvOOZ.
 func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	term, base := attachClientBase(t)
 	// An agent in view, so the keys are the ones a person with agents has.
@@ -136,6 +139,11 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 		}
 		time.Sleep(insertGuard)
 	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "No finished turns you have not seen")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+b O did not run: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys("O"); err != nil {
 		t.Fatalf("press O again: %v", err)
 	}
@@ -144,9 +152,9 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 		t.Fatalf("finish the command: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Count(s.Text(), "PENDvOOZ") >= 2
+		return strings.Count(s.Text(), "PENDvZ") >= 2
 	}, shellTimeout); err != nil {
-		t.Fatalf("the keys after the leader did not all reach the shell: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the keys after the leader did not reach the shell as expected: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "agent-work-pending-prefix-keys")
 	alive(t, term, "after the pending prefix keys")

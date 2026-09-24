@@ -1072,6 +1072,10 @@ type OS struct {
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
 	sidebarAgentAnchor sidebarScrollAnchor
+	// sidebarAgentsUnfolded shows the agent rows at rest that the section
+	// otherwise folds into one line, until the rail loses the keyboard. See
+	// sidebarFoldAgents.
+	sidebarAgentsUnfolded bool
 	// sidebarReveal is what the last frame was drawn for, so a focus change
 	// can scroll the terminals and sessions sections to the row that now
 	// matters and a frame with no change leaves them alone. See

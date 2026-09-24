@@ -1,6 +1,14 @@
 package app
 
-import "sort"
+import (
+	"image/color"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+)
 
 // The agents section answers "what should I handle next", which is a different
 // question from the one the rest of the rail answers. Its two controls live in
@@ -168,4 +176,93 @@ func (m *OS) sidebarSortAgents(agents []sidebarAgentEntry) {
 				sidebarAgentGroup(agents[b].State, agents[b].DoneSeen)
 		})
 	}
+}
+
+// sidebarFoldClock is the clock the rail's signature reads the minute from
+// for the fold. Tests replace it.
+var sidebarFoldClock = time.Now
+
+// sidebarAgentFoldID is the identity of the fold entry: no session is called
+// this, so the entry never matches a pane.
+const sidebarAgentFoldID = "\x00fold"
+
+// sidebarAgentFoldMin is the fewest rows the fold takes. One row folded into
+// one line saves nothing and hides a name.
+const sidebarAgentFoldMin = 2
+
+// sidebarAgentRests reports whether a row has been at rest long enough to
+// fold: idle, unknown or a finished turn already seen, in that state for at
+// least the threshold, not the focused pane and with nothing queued for it. A
+// row that needs the person, a finished turn not yet seen and a working agent
+// never fold.
+func sidebarAgentRests(e sidebarAgentEntry, threshold time.Duration, now time.Time) bool {
+	if threshold <= 0 || e.Fold > 0 || e.Focused || e.Queued > 0 || e.StateAt <= 0 {
+		return false
+	}
+	if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupIdle {
+		return false
+	}
+	return now.Sub(time.Unix(0, e.StateAt)) >= threshold
+}
+
+// sidebarFoldAgents folds the rows long at rest into one entry at the end of
+// the section, "+3 at rest", when there are at least two of them and the
+// person has not unfolded them. The rest keep their order. It is computed
+// while the rail is rebuilt, from the state stamps the rows already carry, so
+// it costs no timer: the rail's signature folds the minute once an agent has
+// been seen, which is what moves a row over the threshold.
+func (m *OS) sidebarFoldAgents(agents []sidebarAgentEntry, now time.Time) []sidebarAgentEntry {
+	threshold := m.Settings.SidebarAgentRestFold
+	if threshold <= 0 || m.sidebarAgentsUnfolded || len(agents) < sidebarAgentFoldMin {
+		return agents
+	}
+	n := 0
+	for _, e := range agents {
+		if sidebarAgentRests(e, threshold, now) {
+			n++
+		}
+	}
+	if n < sidebarAgentFoldMin {
+		return agents
+	}
+	kept := make([]sidebarAgentEntry, 0, len(agents)-n+1)
+	names := make([]string, 0, n)
+	for _, e := range agents {
+		if sidebarAgentRests(e, threshold, now) {
+			names = append(names, printableTitle(e.Title))
+			continue
+		}
+		kept = append(kept, e)
+	}
+	return append(kept, sidebarAgentEntry{
+		SessionID:   sidebarAgentFoldID,
+		WindowIndex: -1,
+		Fold:        n,
+		FoldNames:   strings.Join(names, ", "),
+	})
+}
+
+// SidebarUnfoldAgents shows the rows the fold took, until the rail lets go of
+// the keyboard.
+func (m *OS) SidebarUnfoldAgents() {
+	m.sidebarAgentsUnfolded = true
+	m.sidebarCache.invalidate()
+}
+
+// sidebarAgentFoldRow draws the fold line, "+3 at rest", muted, at the name
+// column. On a tall section the second line names the folded panes.
+func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palette, st sidebarRowState, names bool) string {
+	var rowBg color.Color
+	fg := pal.FgMute
+	if st.lit() {
+		rowBg, fg = pal.Surface, pal.Fg
+	}
+	indent := sidebarNameCol
+	text := "+" + strconv.Itoa(e.Fold) + " at rest"
+	if names {
+		indent++
+		text, fg = e.FoldNames, pal.FgMute
+	}
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+
+		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(sidebarNameAvail(cw, 0)-(indent-sidebarNameCol), 1))), cw, rowBg)
 }

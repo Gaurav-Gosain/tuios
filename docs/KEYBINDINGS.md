@@ -122,24 +122,30 @@ nothing on the screen to read.
 ### Review, triage and replies
 
 These keys are bound for the agent review, triage, reply and approval work.
-Each one is being built: until its work lands, a key does what it did before
-it was bound: nothing in the Inbox, the rail's own binding on an agent row,
-and after `ctrl+b` in terminal mode, the key typed into the focused pane, with
-no repeat window opened. The prefix menu and the help overlay list them only once an agent has
-been seen, like the rest of the Agents section.
+The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
+`z` on a rail agent row (see
+[Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)). The
+rest are being built: until its work lands, a key does what it did before it
+was bound: nothing in the Inbox, the rail's own binding on an agent row, and
+after `ctrl+b` in terminal mode, the key typed into the focused pane, with no
+repeat window opened. `ctrl+b O` also does that until an agent has been seen,
+so a person who runs none keeps typing `O` into the pane. The prefix menu and
+the help overlay list them only once an agent has been seen, like the rest of
+the Agents section.
 
 | Keys | Where | What it does |
 | --- | --- | --- |
 | `ctrl+b v` | anywhere | Review the focused pane's changes |
-| `ctrl+b O` | anywhere | Go to the newest finished turn nobody has seen; `O` again, inside the repeat window, goes to the next older one |
+| `ctrl+b O` | anywhere | Go to the newest finished turn nobody has seen; `O` again, inside the repeat window, goes to the next older one, and a turn that finishes meanwhile starts over |
 | `v` | Inbox | Review the changes in the item's pane |
-| `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes |
+| `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
 | `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
 | `S` | Inbox | Show or hide snoozed items |
 | `n` | Inbox | Deny a held approval or a plan with a reason (`3` stays the plain deny) |
 | `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
-| `u` | rail agent row | Mark the pane's finished turn unread |
-| `z` | rail agent row | Snooze the pane's Inbox item |
+| `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
+| `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |
+| `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard |
 | `r` | rail agent row | Reply to the agent |
 | `v` | rail agent row | Review the pane's changes |
 | `x` | rail agent row | Drop the newest queued message |
