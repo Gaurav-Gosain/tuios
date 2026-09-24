@@ -224,6 +224,13 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no process group to read on windows")
 	}
+	// A shell with no rc files and a prompt this test can recognise. The pane
+	// is only idle once the shell is at that prompt: a shell that is still
+	// starting can have its rc files' programs in the foreground.
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("ENV", "")
+	const prompt = "IDLE-PROMPT$"
+	t.Setenv("PS1", prompt+" ")
 	exit := make(chan string, 1)
 	win, err := terminal.NewWindow("idle-shell-01", "Test", 0, 0, 80, 24, 0, exit, nil, config.DefaultScrollbackLines)
 	if err != nil {
@@ -236,19 +243,30 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 	if win.ForegroundCommand() == "" {
 		t.Skip("this platform cannot name the foreground process, so the case does not arise")
 	}
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(screenText(win), prompt) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(screenText(win), prompt) {
+		t.Fatalf("the shell never printed its prompt:\n%s", screenText(win))
+	}
 	if why, ok := paneBusyReason(win); !ok {
 		t.Errorf("a pane at its shell prompt was refused: %s", why)
 	}
 
-	// And a program run from that prompt is still refused, by name.
+	// And a program run from that prompt is still refused, by name. The shell
+	// hands the terminal to its child before the child has run exec, and for
+	// that moment the foreground group is a copy of the shell still under the
+	// shell's name, so the wait is for sleep itself rather than for any
+	// foreground process.
 	if err := win.SendInput([]byte("sleep 30\r")); err != nil {
 		t.Fatalf("type into the pane: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !win.HasForegroundProcess() && time.Now().Before(deadline) {
+	deadline = time.Now().Add(10 * time.Second)
+	for !(win.HasForegroundProcess() && win.ForegroundCommand() == "sleep") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !win.HasForegroundProcess() {
+	if !win.HasForegroundProcess() || win.ForegroundCommand() != "sleep" {
 		t.Skip("sleep never became the foreground process")
 	}
 	why, ok := paneBusyReason(win)
