@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -52,8 +53,10 @@ func TestTranslateFixtures(t *testing.T) {
 					if got.Report == nil {
 						t.Fatalf("reported nothing (%s), want %+v", got.Skip, *tc.Want)
 					}
-					if *got.Report != *tc.Want {
-						t.Fatalf("report = %+v\nwant     %+v", *got.Report, *tc.Want)
+					if !reflect.DeepEqual(*got.Report, *tc.Want) {
+						gotJSON, _ := json.Marshal(got.Report)
+						wantJSON, _ := json.Marshal(tc.Want)
+						t.Fatalf("report = %s\nwant     %s", gotJSON, wantJSON)
 					}
 				case tc.Skip != "":
 					if got.Report != nil {

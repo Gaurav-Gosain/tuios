@@ -97,6 +97,13 @@ It asks the daemon which set-agent-state fields it supports and sends only
 those. A conditional report (if_state) is not sent to a daemon older than the
 condition, since that daemon would apply it unconditionally.
 
+For claude-code and codex, a prompt, a tool call, its result and the end of a
+turn also carry the event itself as activity (and gemini-cli's BeforeTool its
+tool name), which the daemon keeps in the pane's activity ring for
+'tuios agent-log' and the rail's "now" line. Only the first line of any text is
+sent, with likely secrets masked. A Stop's done report says the first line of
+what the agent said last.
+
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
 slow or gone. Use --explain to see on stderr what it decided and why.
@@ -156,7 +163,10 @@ type agentHookOutcome struct {
 	Applied     *bool    `json:"applied,omitempty"`
 	State       string   `json:"state,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	// ActivityRecorded says whether the daemon kept the event's activity,
+	// nil when none was sent.
+	ActivityRecorded *bool  `json:"activity_recorded,omitempty"`
+	Error            string `json:"error,omitempty"`
 	// Hold is what happened to a prompt the Inbox could answer, when the
 	// hook asked for one.
 	Hold *approvalTrace `json:"hold,omitempty"`
@@ -366,6 +376,7 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 		return out
 	}
 	out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
+	out.ActivityRecorded = res.ActivityRecorded
 	return out
 }
 
@@ -399,14 +410,17 @@ func resolveHookPane(o agentHookOptions, hio agentHookIO, client verbCaller, sid
 
 // hookReportResult is the part of set-agent-state's answer the hook reads.
 type hookReportResult struct {
-	Applied bool   `json:"applied"`
-	State   string `json:"state"`
-	Reason  string `json:"reason"`
+	Applied          bool   `json:"applied"`
+	State            string `json:"state"`
+	Reason           string `json:"reason"`
+	ActivityRecorded *bool  `json:"activity_recorded"`
 }
 
 // hookFields are the set-agent-state params a hook report may carry beyond
-// the ones every daemon takes.
-var hookFields = []string{"kind", "agent_session_id", "transcript_path", "if_state", "harness_pid"}
+// the ones every daemon takes. activity is the hook event for the pane's
+// activity ring; a daemon from before it drops it, and the report goes
+// without it.
+var hookFields = []string{"kind", "agent_session_id", "transcript_path", "if_state", "harness_pid", "activity"}
 
 // setAgentStateParams asks the daemon which params its set-agent-state takes.
 //
@@ -487,6 +501,9 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 	}
 	if harnessPID > 1 && r.SessionID != "" {
 		extra["harness_pid"] = harnessPID
+	}
+	if r.Activity != nil {
+		extra["activity"] = r.Activity
 	}
 	var dropped []string
 	if len(extra) > 0 {

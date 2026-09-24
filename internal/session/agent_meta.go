@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -67,13 +68,17 @@ type AgentMetaUpdate struct {
 	// Clear removes every token the source wrote, or every token when Source
 	// is empty, before the new ones are applied.
 	Clear bool
+	// Protect names keys Clear leaves in place. set-agent-meta protects the
+	// reserved keys, which only the daemon writes.
+	Protect []string
 }
 
 // errAgentMetaFull is the per-pane limit, reported to the caller.
 var errAgentMetaFull = fmt.Errorf("a pane holds at most %d metadata keys", AgentMetaMaxPerPane)
 
-// errNoAgentMetaChange tells mutateState a prune found nothing to drop, so it
-// neither bumps the version nor pushes to clients.
+// errNoAgentMetaChange tells mutateState a prune found nothing to drop, or a
+// write found nothing to change, so it neither bumps the version nor pushes to
+// clients.
 var errNoAgentMetaChange = errors.New("no agent metadata change")
 
 // ValidAgentMetaKey reports whether k can be a metadata key: 1 to 24 bytes of
@@ -153,15 +158,25 @@ func liveAgentMeta(cur []AgentMetaToken, now int64) []AgentMetaToken {
 	return out
 }
 
-// applyAgentMeta returns cur with u applied at now. It never writes into cur:
-// state snapshots share a window's slice, so a token list is replaced whole
-// and never edited in place. A key already present keeps its position, and a
-// new key goes at the end, so the rail's order is the order keys first
-// arrived in and does not reshuffle on every update.
-func applyAgentMeta(cur []AgentMetaToken, u AgentMetaUpdate, now int64) ([]AgentMetaToken, error) {
-	next := make([]AgentMetaToken, 0, len(cur)+len(u.Keys))
-	for _, t := range liveAgentMeta(cur, now) {
-		if u.Clear && (u.Source == "" || t.Source == u.Source) {
+// applyAgentMeta returns cur with u applied at now, and whether that changed
+// anything. It never writes into cur: state snapshots share a window's slice,
+// so a token list is replaced whole and never edited in place. A key already
+// present keeps its position, and a new key goes at the end, so the rail's
+// order is the order keys first arrived in and does not reshuffle on every
+// update.
+//
+// A key set to the value it holds, by the source that wrote it, is a change
+// only for its expiry: a write with no TTL makes a token that had one
+// permanent, and a write with a TTL renews it only once less than half of that
+// TTL remains. So a feed that rewrites the same values several times a second
+// changes nothing, and its caller pushes nothing to clients.
+func applyAgentMeta(cur []AgentMetaToken, u AgentMetaUpdate, now int64) ([]AgentMetaToken, bool, error) {
+	live := liveAgentMeta(cur, now)
+	changed := len(live) != len(cur)
+	next := make([]AgentMetaToken, 0, len(live)+len(u.Keys))
+	for _, t := range live {
+		if u.Clear && (u.Source == "" || t.Source == u.Source) && !slices.Contains(u.Protect, t.Key) {
+			changed = true
 			continue
 		}
 		next = append(next, t)
@@ -182,23 +197,41 @@ func applyAgentMeta(cur []AgentMetaToken, u AgentMetaUpdate, now int64) ([]Agent
 		if v == nil {
 			if at >= 0 {
 				next = append(next[:at], next[at+1:]...)
+				changed = true
 			}
 			continue
 		}
 		tok := AgentMetaToken{Key: key, Value: *v, Source: u.Source, Expires: expires}
-		if at >= 0 {
-			next[at] = tok
-		} else {
+		if at < 0 {
 			next = append(next, tok)
+			changed = true
+			continue
 		}
+		if old := next[at]; old.Value == tok.Value && old.Source == tok.Source && !metaExpiryMoves(old.Expires, u.TTL, now) {
+			continue
+		}
+		next[at] = tok
+		changed = true
 	}
 	if len(next) > AgentMetaMaxPerPane {
-		return nil, errAgentMetaFull
+		return nil, false, errAgentMetaFull
 	}
 	if len(next) == 0 {
-		return nil, nil
+		return nil, changed, nil
 	}
-	return next, nil
+	return next, changed, nil
+}
+
+// metaExpiryMoves reports whether rewriting a token that expires at expires
+// (0 for never) with ttl (0 for none) at now changes when it expires.
+func metaExpiryMoves(expires int64, ttl time.Duration, now int64) bool {
+	if ttl <= 0 {
+		return expires != 0
+	}
+	if expires == 0 {
+		return true
+	}
+	return expires-now < int64(ttl)/2
 }
 
 // earliestAgentMetaExpiry is the soonest a token in the session expires, or 0
@@ -216,7 +249,8 @@ func earliestAgentMetaExpiry(windows []WindowState) int64 {
 }
 
 // SetAgentMeta applies u to the window target resolves to and returns the
-// tokens the window holds afterwards.
+// tokens the window holds afterwards. A call that changes nothing (see
+// applyAgentMeta) leaves the session's version alone and pushes nothing.
 func (s *Session) SetAgentMeta(target string, u AgentMetaUpdate) ([]AgentMetaToken, error) {
 	var out []AgentMetaToken
 	var next int64
@@ -226,15 +260,23 @@ func (s *Session) SetAgentMeta(target string, u AgentMetaUpdate) ([]AgentMetaTok
 			return err
 		}
 		w := &st.Windows[idx]
-		tokens, err := applyAgentMeta(w.AgentMeta, u, time.Now().UnixNano())
+		tokens, changed, err := applyAgentMeta(w.AgentMeta, u, time.Now().UnixNano())
 		if err != nil {
 			return err
 		}
-		w.AgentMeta = tokens
 		out = tokens
+		if !changed {
+			// Nothing a client draws moved, so the version stays and
+			// nothing is pushed.
+			return errNoAgentMetaChange
+		}
+		w.AgentMeta = tokens
 		next = earliestAgentMetaExpiry(st.Windows)
 		return nil
 	})
+	if errors.Is(err, errNoAgentMetaChange) {
+		return out, nil
+	}
 	if err != nil {
 		return nil, err
 	}

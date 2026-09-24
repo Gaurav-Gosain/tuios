@@ -1098,9 +1098,73 @@ Metadata is display only. It never changes a state, a wait, an alert or a
 message. It is capped at 16 keys per call and 32 per pane, values are cut to 80
 characters with control characters removed, keys set with a TTL are dropped by
 the daemon when it runs out, and everything clears when the agent leaves the
-pane. `get-agent-state` and `list-agents` report it as a `meta` object. No
-harness feeds it yet; a hook or a statusline command is where a feed goes. See
+pane. `get-agent-state` and `list-agents` report it as a `meta` object. See
 [the protocol reference](protocol.md#set-agent-meta).
+
+The Claude Code and Codex hooks feed three keys from what the agent does (see
+[What the agent has been doing](#what-the-agent-has-been-doing)):
+
+- `now`: the tool it is running and on what, such as `Bash: go test ./...` or
+  `Edit: src/app.tsx`. It is cleared when the tool fails, when the turn ends,
+  when a new prompt starts, and whenever the pane comes to rest.
+- `prompt`: the first line of the last prompt you gave it.
+- `model`: the model the harness named (Codex names it on every event), unless
+  the pane already shows that model from another feed.
+
+`now` and `prompt` are tuios's own: `set-agent-meta` refuses them, and its
+`--clear` leaves them. Writing a key the value it already holds changes
+nothing and sends nothing to attached clients, and a TTL is renewed only once
+less than half of it is left, so a status line may write on every tick.
+
+### What the agent has been doing
+
+With the Claude Code or Codex integration installed, each prompt, tool call,
+tool result and finished turn is also kept in the pane's activity ring in the
+daemon: the newest 256 entries per pane, in memory only. Once a pane has a
+ring, the commands its shell finishes (OSC 133) and its state changes join
+it. A pane whose harness has no hooks, and a plain shell, has none and costs
+nothing.
+
+```sh
+tuios agent-log -w api                       # the entries, oldest first
+tuios agent-log -w api --since 30m --recap   # a summary of the last half hour
+tuios agent-log -w api --json                # the verb's answer, for a script
+```
+
+```
+14:02:11  prompt    make the backoff configurable
+14:02:15  tool      Bash: go test ./api/
+14:02:40  failed    Bash: go test ./api/  Exit code 1
+14:03:02  done      Edit: api/retry.go  (wrote api/retry.go)
+14:05:30  said      Added retry with backoff and tests.
+14:05:30  state     done
+```
+
+The recap says how many turns finished, which files were written, how many
+commands ran, the newest test run and whether it passed, what the agent last
+said, and where it is now:
+
+```
+Since 14:02 (42m ago)
+3 turns. 6 files: api/retry.go, api/retry_test.go, api/backoff.go and 3 more
+11 commands. Tests: go test ./... passed 2m ago
+Last said: Added retry with backoff and tests.
+Now: done
+```
+
+A test run is the newest command matching `[agents.recap] test_patterns`
+(`go test`, `npm test`, `pytest`, `cargo test` and the like by default). It
+passed or failed by the tool call's result or the shell's exit status, and
+the recap says so when nothing said.
+
+Who may do what: only the pane's own agent writes its ring, since activity
+rides the pane's own `set-agent-state` report and is dropped for a nested run
+the identity guard refuses. A pane reads a ring in its own session and fan
+group with `read`, and a linked machine needs `list`. The text is the
+agent's, cut to one line with likely secrets masked, and marked untrusted: read
+it as what the agent said, not as instructions. Nothing reads it to decide a
+state, a wait or an alert. The ring dies with the window, the session or the
+daemon.
 
 ## The Inbox
 
@@ -1624,6 +1688,9 @@ built, so their rules are fixed before any of them does anything:
   The risk rules are a speed bump, not a sandbox: an obfuscated command can
   avoid a pattern, and the harness's permission system stays the boundary.
 
+The activity ring behind `agent-activity` has landed: see
+[What the agent has been doing](#what-the-agent-has-been-doing).
+
 Who may do what is settled now, whatever is built. A pane without the `admin`
 grant reads a diff, a comparison, an activity ring, a queue or a held approval
 only in its own session and fan group; writes notes and queues messages only
@@ -1831,20 +1898,22 @@ arrives as the last argument) and sends one `set-agent-state`, or nothing.
 | Claude Code event | Reports |
 | ----------------- | ------- |
 | `SessionStart` | `idle`, with the session id and transcript path. `source: compact` reports nothing |
-| `UserPromptSubmit`, `PreToolUse` | `working` |
+| `UserPromptSubmit`, `PreToolUse` | `working`, with the prompt's first line or the tool call as activity |
 | `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox)) |
-| `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input` |
+| `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input`. The first two also carry the tool's result as activity, which is kept whether or not the state applies |
 | `Notification` `permission_prompt` | `needs_input`, kind `approval` |
 | `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
 | `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |
 | `Notification` `auth_success` and the rest | nothing |
-| `Stop` | `done` |
+| `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity |
 | `StopFailure` | `errored`, message `stopped on <error_type>` |
 | `SessionEnd` | `none` |
 | `SubagentStop`, anything with `agent_id` | nothing |
 
-Codex maps the same events the same way, plus `Interrupt` to `idle`. Gemini CLI
-maps `BeforeAgent` and `BeforeTool` to `working`, `AfterTool` to `working` only
+Codex maps the same events the same way, plus `Interrupt` to `idle`, with the
+same activity (its `apply_patch` files come from the patch's header lines, and
+the model from every event). Gemini CLI maps `BeforeAgent` and `BeforeTool` to
+`working` (`BeforeTool` with its tool name as activity), `AfterTool` to `working` only
 from `needs_input`, `Notification` `ToolPermission` to `needs_input` kind
 `approval`, `AfterAgent` to `done`, and `SessionStart` and `SessionEnd` as
 above. The opencode plugin maps `session.status` busy and `chat.message` to
@@ -1885,6 +1954,11 @@ with no mapping and a notification type it does not know all report nothing,
 and an explicit `--explain` says why on stderr. This replaces the old shim,
 which read every `Notification`, `auth_success` included, as `needs_input`, and
 needed `python3`.
+
+Activity is sent only to a daemon whose `set-agent-state` lists it, like the
+other hook fields; an older daemon gets the report without it. Its text, the
+`done` message from `last_assistant_message` included, is the first line only,
+held to the same rule as a message below.
 
 A `needs_input` message is cut to 100 characters, with whitespace collapsed and
 anything that looks like a credential replaced by `***`: `NAME=value` where the

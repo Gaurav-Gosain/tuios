@@ -136,6 +136,11 @@ type Daemon struct {
 	// permission prompt for an answer from the Inbox, and for how long. It is
 	// swapped whole when the config file changes. See approvals.go.
 	approvals atomic.Pointer[ApprovalPolicy]
+	// activity holds each agent pane's ring of hook events, and recapTests
+	// the [agents.recap] test_patterns its recap reads a test run by. See
+	// agent_activity.go.
+	activity   *activityStore
+	recapTests atomic.Pointer[[]string]
 	// approvalPeer places the process on a connection in a pane, for
 	// request-approval, restrict-connection and fan's launched_from. Nil uses
 	// peerPaneWindow; a test sets it to stand in for a process table.
@@ -526,6 +531,9 @@ type DaemonConfig struct {
 	// it: what each machine linked to this one may do here. Nil gives every
 	// link the built-in default. See link_policy.go.
 	LinkPolicies map[string]config.HostConfig
+	// RecapTestPatterns is [agents.recap] test_patterns: the commands an
+	// agent-activity recap reads as a test run. Nil means the defaults.
+	RecapTestPatterns []string
 	// Permissions is [agents.permissions]: what a pane started with no
 	// grants of its own may do through tuios. The zero value is mode open,
 	// under which such a pane holds admin, what every pane held before
@@ -556,6 +564,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
+	d.activity = newActivityStore(d.events.publish)
+	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
 	d.SetLinkPolicies(cfg.LinkPolicies)
 	d.manager.SetPanePermissions(cfg.Permissions)
 	d.outbox = newHostOutbox(d)
@@ -750,6 +760,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.attention.noteSessionEvent(name, ev)
 			return
 		}
+		// A pane with an activity ring gets its shell's commands and its
+		// state changes added to it. A pane without one costs a map lookup.
+		d.activity.noteSessionEvent(s, ev)
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.
@@ -790,6 +803,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name)
+	// And so are its panes' activity rings.
+	d.activity.forgetSession(s.ID)
 	// And nothing in it is waiting for anybody any more.
 	d.attention.closeSession(s.Name)
 	// And its stashed files go with it. This is the lifetime the stash promises,

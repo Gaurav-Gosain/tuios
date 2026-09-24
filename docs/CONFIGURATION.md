@@ -183,7 +183,9 @@ max = 8
   `mode` says where it is shown (`toast` in the dock when you come back to the
   pane, and in the Inbox; `inbox` only in the Inbox; `off` only in
   `agent-log`), `away` how long you must have been away for the dock to show
-  it, and `test_patterns` which commands count as a test run.
+  it, and `test_patterns` which commands count as a test run. The daemon
+  reads `test_patterns` for `tuios agent-log --recap` and the
+  `agent-activity` verb, and picks up a change when the file is saved.
 - `[agents.queue]` bounds the messages waiting to be typed to one agent when
   it comes to rest: `max`, 8 by default, at most 64.
 

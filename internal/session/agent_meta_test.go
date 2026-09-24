@@ -22,13 +22,13 @@ func metaKeys(tokens []AgentMetaToken) []string {
 // order the pane holds them, so an update to a key already there must not
 // move it, or every statusline tick would reshuffle the row.
 func TestApplyAgentMetaKeepsFirstArrivalOrder(t *testing.T) {
-	cur, err := applyAgentMeta(nil, AgentMetaUpdate{
+	cur, _, err := applyAgentMeta(nil, AgentMetaUpdate{
 		Keys: []string{"model", "context"}, Values: []*string{strp("opus"), strp("10%")},
 	}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := applyAgentMeta(cur, AgentMetaUpdate{
+	next, _, err := applyAgentMeta(cur, AgentMetaUpdate{
 		Keys: []string{"cost", "model", "context"}, Values: []*string{strp("$1"), strp("sonnet"), strp("42%")},
 	}, 2)
 	if err != nil {
@@ -46,18 +46,18 @@ func TestApplyAgentMetaKeepsFirstArrivalOrder(t *testing.T) {
 // TestApplyAgentMetaRemovesAndClears covers the three ways a key goes: null,
 // clear by source, and clear of everything.
 func TestApplyAgentMetaRemovesAndClears(t *testing.T) {
-	cur, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"a", "b"}, Values: []*string{strp("1"), strp("2")}, Source: "hook"}, 1)
-	cur, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"c"}, Values: []*string{strp("3")}, Source: "statusline"}, 1)
+	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"a", "b"}, Values: []*string{strp("1"), strp("2")}, Source: "hook"}, 1)
+	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"c"}, Values: []*string{strp("3")}, Source: "statusline"}, 1)
 
-	removed, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"a"}, Values: []*string{nil}}, 2)
+	removed, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"a"}, Values: []*string{nil}}, 2)
 	if got := metaKeys(removed); !slices.Equal(got, []string{"b=2", "c=3"}) {
 		t.Errorf("after removing a: %v", got)
 	}
-	bySource, _ := applyAgentMeta(cur, AgentMetaUpdate{Source: "hook", Clear: true}, 2)
+	bySource, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Source: "hook", Clear: true}, 2)
 	if got := metaKeys(bySource); !slices.Equal(got, []string{"c=3"}) {
 		t.Errorf("clear by source hook left %v, want only the statusline key", got)
 	}
-	all, _ := applyAgentMeta(cur, AgentMetaUpdate{Clear: true}, 2)
+	all, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Clear: true}, 2)
 	if all != nil {
 		t.Errorf("clear with no source left %v", metaKeys(all))
 	}
@@ -69,12 +69,12 @@ func TestApplyAgentMetaPerPaneLimit(t *testing.T) {
 	var cur []AgentMetaToken
 	for i := range AgentMetaMaxPerPane {
 		var err error
-		cur, err = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"k" + string(rune('a'+i%26)) + string(rune('a'+i/26))}, Values: []*string{strp("v")}}, 1)
+		cur, _, err = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"k" + string(rune('a'+i%26)) + string(rune('a'+i/26))}, Values: []*string{strp("v")}}, 1)
 		if err != nil {
 			t.Fatalf("key %d refused: %v", i, err)
 		}
 	}
-	if _, err := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"one-more"}, Values: []*string{strp("v")}}, 1); err == nil {
+	if _, _, err := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"one-more"}, Values: []*string{strp("v")}}, 1); err == nil {
 		t.Error("a pane took more than the per-pane limit")
 	}
 }
@@ -82,12 +82,12 @@ func TestApplyAgentMetaPerPaneLimit(t *testing.T) {
 // TestApplyAgentMetaTTL: an expired key is gone from the next write, and a key
 // with no TTL is not.
 func TestApplyAgentMetaTTL(t *testing.T) {
-	cur, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"short"}, Values: []*string{strp("x")}, TTL: time.Second}, 0)
-	cur, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{strp("y")}}, 0)
+	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"short"}, Values: []*string{strp("x")}, TTL: time.Second}, 0)
+	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{strp("y")}}, 0)
 	if cur[0].Expires != int64(time.Second) || cur[1].Expires != 0 {
 		t.Fatalf("expiry stamps = %d, %d", cur[0].Expires, cur[1].Expires)
 	}
-	later, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"z"}, Values: []*string{strp("z")}}, int64(2*time.Second))
+	later, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"z"}, Values: []*string{strp("z")}}, int64(2*time.Second))
 	if got := metaKeys(later); !slices.Equal(got, []string{"long=y", "z=z"}) {
 		t.Errorf("after the TTL: %v", got)
 	}

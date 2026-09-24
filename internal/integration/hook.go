@@ -137,7 +137,37 @@ type Report struct {
 	// IfState is a comma-separated state list: the report applies only when
 	// the pane is in one of them.
 	IfState string `json:"if_state,omitempty"`
+	// Activity is the hook event itself, for the pane's activity ring: what
+	// was asked, which tool ran on what and how it ended, and what a turn
+	// ended with. It rides the state report and is sent only to a daemon
+	// whose set-agent-state lists it.
+	Activity *Activity `json:"activity,omitempty"`
 }
+
+// Activity is set-agent-state's activity parameter, in the verb's own field
+// names. Every string in it is cut to one line and redacted here, and the
+// daemon cleans it again.
+type Activity struct {
+	// Event is one of the Activity* constants.
+	Event  string   `json:"event"`
+	Tool   string   `json:"tool,omitempty"`
+	Target string   `json:"target,omitempty"`
+	Text   string   `json:"text,omitempty"`
+	Files  []string `json:"files,omitempty"`
+	// OK says how a finished tool call ended, nil when the event did not say.
+	OK *bool `json:"ok,omitempty"`
+	// Model is the model the harness named on the event.
+	Model string `json:"model,omitempty"`
+}
+
+// Activity events, the values of Activity.Event.
+const (
+	ActivityPrompt     = "prompt"
+	ActivityTool       = "tool"
+	ActivityToolDone   = "tool_done"
+	ActivityToolFailed = "tool_failed"
+	ActivityTurnEnd    = "turn_end"
+)
 
 // Decision is what one hook event comes to: a report, or the reason there is
 // none. Exactly one of the two is set.

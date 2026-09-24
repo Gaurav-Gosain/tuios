@@ -1115,7 +1115,12 @@ agent's row. They are display only and never change the agent's state.
 Each argument is key=value. key= removes the key. Keys are lower-case letters,
 digits, '_' and '-'. Values are cut to 80 characters. --ttl drops the keys this
 call sets after that long, so a feed that stops writing leaves nothing stale.
-The metadata clears when the agent leaves the pane.`,
+The metadata clears when the agent leaves the pane.
+
+A call that repeats the values the pane already holds changes nothing, and
+renews a TTL only once less than half of it is left, so a feed may write as
+often as it likes. The keys now and prompt are written by tuios from the
+activity the harness hooks report, and are refused here.`,
 		Example: `  # From a statusline or hook: the model and context use, for a minute
   tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opus context=42%
 
@@ -2823,7 +2828,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
-	rootCmd.AddCommand(newAgentProtoCommand())
+	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand())
 
 	return rootCmd
 }

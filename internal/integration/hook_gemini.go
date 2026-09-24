@@ -18,14 +18,24 @@ package integration
 //	AfterAgent            done
 //	SessionEnd            none
 //	model and compression events: nothing
+//
+// BeforeTool also carries its tool_name as tool activity, for the rail's
+// "now" line. Nothing else in a Gemini payload is read for activity, since
+// nothing else was verified against the reference.
 
 func translateGemini(in Input, p fields) Decision {
 	event := eventName(in, p)
 	switch event {
 	case "SessionStart":
 		return send(GeminiCLI, event, identity(Report{State: "idle"}, p))
-	case "BeforeAgent", "BeforeTool":
+	case "BeforeAgent":
 		return send(GeminiCLI, event, identity(Report{State: "working"}, p))
+	case "BeforeTool":
+		r := identity(Report{State: "working"}, p)
+		if tool := Clip(p.str("tool_name")); tool != "" {
+			r.Activity = &Activity{Event: ActivityTool, Tool: tool}
+		}
+		return send(GeminiCLI, event, r)
 	case "AfterTool":
 		return send(GeminiCLI, event, identity(Report{State: "working", IfState: claudeClearsBlock}, p))
 	case "Notification":

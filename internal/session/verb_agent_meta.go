@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -37,6 +38,12 @@ func (d *Daemon) verbSetAgentMeta(_ *connState, params json.RawMessage) (any, *v
 			return nil, invalidParam("tokens", "metadata key "+echoName(k)+
 				" is not valid: use 1 to "+strconv.Itoa(AgentMetaMaxKey)+
 				" lower-case letters, digits, '_' or '-', starting with a letter")
+		}
+		if slices.Contains(reservedAgentMetaKeys, k) {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "metadata key "+echoName(k)+" is written by tuios from hook activity", &VerbHint{
+				Param:  "tokens",
+				Detail: "now and prompt are set by the daemon from the activity a harness hook reports with set-agent-state. Nothing was set.",
+			})
 		}
 		if values[i] == nil {
 			continue
@@ -77,6 +84,9 @@ func (d *Daemon) verbSetAgentMeta(_ *connState, params json.RawMessage) (any, *v
 		Source: source,
 		TTL:    time.Duration(p.TTLMs) * time.Millisecond,
 		Clear:  p.Clear,
+		// clear removes what callers wrote. The reserved keys are the
+		// daemon's, so they stay.
+		Protect: reservedAgentMetaKeys,
 	})
 	if errors.Is(err, errAgentMetaFull) {
 		return nil, invalidParam("tokens", err.Error()+". Remove keys by setting them to null, or pass clear")

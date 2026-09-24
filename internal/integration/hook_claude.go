@@ -26,6 +26,16 @@ import "strings"
 //	SessionEnd            none
 //	SubagentStop and any event with agent_id: nothing
 //
+// Five of them also carry activity for the pane's ring, read from the fields
+// the reference documents for them:
+//
+//	UserPromptSubmit      prompt: the first line of prompt
+//	PreToolUse            tool: tool_name, and what tool_input names
+//	PostToolUse           tool_done, ok: the files an edit tool wrote
+//	PostToolUseFailure    tool_failed: the first line of error
+//	Stop                  turn_end: the first line of last_assistant_message,
+//	                      which is also the done report's message
+//
 // PermissionRequest is the approval signal. Notification's permission_prompt
 // also fires for one, but only after the user seems away, which is too late
 // to be the only signal. The Post* events are what clears a block once it is
@@ -60,19 +70,42 @@ func translateClaude(in Input, p fields) Decision {
 			return skip(ClaudeCode, event, "compaction restarts the session mid-turn")
 		}
 		return send(ClaudeCode, event, identity(Report{State: "idle"}, p))
-	case "UserPromptSubmit", "PreToolUse":
-		return send(ClaudeCode, event, identity(Report{State: "working"}, p))
+	case "UserPromptSubmit":
+		r := identity(Report{State: "working"}, p)
+		if text := activityText(p.str("prompt")); text != "" {
+			r.Activity = &Activity{Event: ActivityPrompt, Text: text}
+		}
+		return send(ClaudeCode, event, r)
+	case "PreToolUse":
+		r := identity(Report{State: "working"}, p)
+		r.Activity = toolActivity(ActivityTool, p)
+		return send(ClaudeCode, event, r)
 	case "PermissionRequest":
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
 		d := send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
 		d.Approval = claudeApproval(p)
 		return d
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied", "ElicitationResult":
-		return send(ClaudeCode, event, identity(Report{State: "working", IfState: claudeClearsBlock}, p))
+		r := identity(Report{State: "working", IfState: claudeClearsBlock}, p)
+		switch event {
+		case "PostToolUse":
+			if a := toolActivity(ActivityToolDone, p); a != nil {
+				a.OK = boolPtr(true)
+				r.Activity = a
+			}
+		case "PostToolUseFailure":
+			if a := toolActivity(ActivityToolFailed, p); a != nil {
+				// orca's Claude reader takes error, then message.
+				a.OK = boolPtr(false)
+				a.Text = activityText(p.first("error", "message"))
+				r.Activity = a
+			}
+		}
+		return send(ClaudeCode, event, r)
 	case "Notification":
 		return claudeNotification(event, p)
 	case "Stop":
-		return send(ClaudeCode, event, identity(Report{State: "done"}, p))
+		return send(ClaudeCode, event, turnEnd(identity(Report{State: "done"}, p), p))
 	case "StopFailure":
 		msg := "stopped on an error"
 		if t := p.str("error_type"); t != "" {
@@ -133,4 +166,18 @@ func claudeNotification(event string, p fields) Decision {
 	default:
 		return skip(ClaudeCode, event, "notification type "+kind+" is not a state change")
 	}
+}
+
+// turnEnd adds a Stop event's activity to its done report: the first line of
+// last_assistant_message, which also becomes the report's message, so a
+// finished pane says what it finished with. Claude Code and Codex both send
+// the field; a Stop without it reports done as before, with no activity.
+func turnEnd(r Report, p fields) Report {
+	text := activityText(p.str("last_assistant_message"))
+	if text == "" {
+		return r
+	}
+	r.Message = text
+	r.Activity = &Activity{Event: ActivityTurnEnd, Text: text}
+	return r
 }

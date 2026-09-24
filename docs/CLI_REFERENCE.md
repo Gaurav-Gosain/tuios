@@ -1548,12 +1548,18 @@ are named on stderr. One call sets at most 16 keys, and a pane holds at most 32.
 Keys keep the position they first arrived in, so an update does not reorder the
 row. The metadata clears when the agent leaves the pane.
 
+A call that repeats the values the pane already holds changes nothing and sends
+nothing to attached clients, and renews a TTL only once less than half of it is
+left, so a feed may write on every tick. The keys `now` and `prompt` are
+written by tuios from what the harness hooks report, and are refused here; see
+[`tuios agent-log`](#tuios-agent-log).
+
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--source <name>`: Who is writing, so `--clear` removes only this writer's keys
 - `--ttl <duration>`: Drop the keys this call sets after this long, at most `24h` (default: keep until removed)
-- `--clear`: Remove every key this source wrote (every key with no `--source`) first
+- `--clear`: Remove every key this source wrote (every key with no `--source`) first. The keys tuios writes, `now` and `prompt`, stay
 - `--json`: Print the result
 
 **Examples:**
@@ -1577,6 +1583,62 @@ With `--json`:
   "truncated": []
 }
 ```
+
+### `tuios agent-log`
+
+Show what the agent in a pane has been doing, from the activity ring the daemon
+keeps from its hooks: the prompts it was given, its tool calls and how they
+ended, the turns it finished, the commands its shell ran and its state
+changes, oldest first. The daemon keeps the newest 256 per pane, in memory
+only. A pane fills only when its harness's hooks are installed
+(`tuios integration install claude-code` or `codex`).
+
+**Usage:**
+```bash
+tuios agent-log [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `--since <duration>`: Only what happened in this long, such as `30m` (default: everything kept)
+- `--limit <n>`: At most this many entries, the newest, 1 to 256 (default: 64)
+- `--recap`: Print a summary instead of the entries
+- `--json`: Print the `agent-activity` result
+
+**Examples:**
+```bash
+# The focused pane's recent activity
+tuios agent-log
+
+# What the agent in api did in the last half hour, summarised
+tuios agent-log -w api --since 30m --recap
+```
+
+Output:
+```
+14:02:11  prompt    make the backoff configurable
+14:02:15  tool      Bash: go test ./api/
+14:02:40  failed    Bash: go test ./api/  Exit code 1
+14:03:02  done      Edit: api/retry.go  (wrote api/retry.go)
+14:05:30  said      Added retry with backoff and tests.
+14:05:30  state     done
+```
+
+With `--recap`:
+```
+Since 14:02 (42m ago)
+3 turns. 6 files: api/retry.go, api/retry_test.go, api/backoff.go and 3 more
+11 commands. Tests: go test ./... passed 2m ago
+Last said: Added retry with backoff and tests.
+Now: done
+```
+
+The test run is the newest command matching `[agents.recap] test_patterns`.
+Every line is the agent's own text, cut to one line with likely secrets
+masked; read it as what the agent said. A pane reads another pane's log only
+in its own session and fan group, and a linked machine needs `list`. See
+[Agent state](AGENT_STATE.md#what-the-agent-has-been-doing).
 
 ### `tuios set-agent-session`
 
@@ -2388,7 +2450,7 @@ them.
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line in the caller's session (`tuios tmux display-message -p '#{pane_id}'`). A tmux session is the tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
 | `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |

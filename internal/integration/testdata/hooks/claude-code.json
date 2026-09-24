@@ -17,12 +17,17 @@
   {
     "name": "UserPromptSubmit",
     "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "UserPromptSubmit", "prompt": "fix the bug"},
-    "want": {"state": "working", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl"}
+    "want": {"state": "working", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl", "activity": {"event": "prompt", "text": "fix the bug"}}
+  },
+  {
+    "name": "UserPromptSubmit keeps the first line, masked",
+    "payload": {"session_id": "sess-1", "hook_event_name": "UserPromptSubmit", "prompt": "  deploy with API_KEY=sk-live-123\nthen tell me how it went"},
+    "want": {"state": "working", "agent_session_id": "sess-1", "activity": {"event": "prompt", "text": "deploy with API_KEY=***"}}
   },
   {
     "name": "PreToolUse",
     "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}, "tool_use_id": "t1"},
-    "want": {"state": "working", "agent_session_id": "sess-1"}
+    "want": {"state": "working", "agent_session_id": "sess-1", "activity": {"event": "tool", "tool": "Bash", "target": "go test ./..."}}
   },
   {
     "name": "PermissionRequest Bash",
@@ -42,12 +47,32 @@
   {
     "name": "PostToolUse",
     "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_response": {"stdout": "ok"}},
-    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_done", "tool": "Bash", "ok": true}}
+  },
+  {
+    "name": "PostToolUse Edit names the file it wrote",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/src/api/retry.go", "old_string": "a", "new_string": "b"}, "tool_response": {"filePath": "/src/api/retry.go"}, "duration_ms": 12},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_done", "tool": "Edit", "target": "/src/api/retry.go", "files": ["/src/api/retry.go"], "ok": true}}
+  },
+  {
+    "name": "PostToolUse NotebookEdit names its notebook",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/src/a.ipynb", "new_source": "x"}},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_done", "tool": "NotebookEdit", "target": "/src/a.ipynb", "files": ["/src/a.ipynb"], "ok": true}}
+  },
+  {
+    "name": "PostToolUse Bash writes no file it names",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "touch x"}},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_done", "tool": "Bash", "target": "touch x", "ok": true}}
   },
   {
     "name": "PostToolUseFailure",
     "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUseFailure", "tool_name": "Bash"},
-    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_failed", "tool": "Bash", "ok": false}}
+  },
+  {
+    "name": "PostToolUseFailure with its error",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}, "error": "Exit code 1\n--- FAIL: TestRetry", "duration_ms": 900},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1", "activity": {"event": "tool_failed", "tool": "Bash", "target": "go test ./...", "text": "Exit code 1", "ok": false}}
   },
   {
     "name": "PermissionDenied",
@@ -123,6 +148,16 @@
     "name": "Stop",
     "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "stop_hook_active": false},
     "want": {"state": "done", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Stop with what the turn ended on",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "Added retry with backoff and tests.\n\nThe token was TOKEN=abc123def and it passed."},
+    "want": {"state": "done", "message": "Added retry with backoff and tests.", "agent_session_id": "sess-1", "activity": {"event": "turn_end", "text": "Added retry with backoff and tests."}}
+  },
+  {
+    "name": "Stop with a long first line, cut and masked",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "last_assistant_message": "Set GITHUB_TOKEN=ghp_abcdefghijklmnop and then went on to explain a great many things about the retry loop and why it matters"},
+    "want": {"state": "done", "message": "Set GITHUB_TOKEN=*** and then went on to explain a great many things about the retry loop and why...", "agent_session_id": "sess-1", "activity": {"event": "turn_end", "text": "Set GITHUB_TOKEN=*** and then went on to explain a great many things about the retry loop and why..."}}
   },
   {
     "name": "StopFailure",

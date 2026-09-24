@@ -69,17 +69,16 @@ func TestAgentWorkVerbsAnswerNotBuilt(t *testing.T) {
 	_, a, _ := twoWindowSession(t, d, "work")
 	c := dialVerb(t, sp)
 	for verb, params := range map[string]map[string]any{
-		"review-diff":    {"session": "work", "window": a},
-		"review-note":    {"action": "list", "session": "work", "window": a},
-		"send-review":    {"session": "work", "window": a},
-		"compare-fan":    {"session": "work"},
-		"verify-fan":     {"session": "work", "command": "true"},
-		"keep-fan":       {"session": "work"},
-		"agent-activity": {"session": "work", "window": a},
-		"queue-prompt":   {"session": "work", "window": a, "text": "hello"},
-		"list-queued":    {"session": "work", "window": a},
-		"cancel-queued":  {"session": "work", "window": a, "all": true},
-		"get-approval":   {"request_id": "9f86d081884c7d65"},
+		"review-diff":   {"session": "work", "window": a},
+		"review-note":   {"action": "list", "session": "work", "window": a},
+		"send-review":   {"session": "work", "window": a},
+		"compare-fan":   {"session": "work"},
+		"verify-fan":    {"session": "work", "command": "true"},
+		"keep-fan":      {"session": "work"},
+		"queue-prompt":  {"session": "work", "window": a, "text": "hello"},
+		"list-queued":   {"session": "work", "window": a},
+		"cancel-queued": {"session": "work", "window": a, "all": true},
+		"get-approval":  {"request_id": "9f86d081884c7d65"},
 	} {
 		resp := callP(c, t, verb, params)
 		mustRefuse(t, resp, ErrVerbInternal, verb+" before it is built")
@@ -128,19 +127,20 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 
 	// Its own session: the grant check passes and the stub answers.
 	for verb, params := range map[string]map[string]any{
-		"review-diff":    {"window": a2},
-		"compare-fan":    {},
-		"agent-activity": {"window": a2},
-		"list-queued":    {"window": a2},
-		"get-approval":   {"request_id": "9f86d081884c7d65"},
-		"review-note":    {"action": "list", "window": a2},
-		"send-review":    {"window": a2},
-		"queue-prompt":   {"window": a2, "text": "hi"},
-		"cancel-queued":  {"window": a2, "all": true},
-		"verify-fan":     {"command": "true"},
+		"review-diff":   {"window": a2},
+		"compare-fan":   {},
+		"list-queued":   {"window": a2},
+		"get-approval":  {"request_id": "9f86d081884c7d65"},
+		"review-note":   {"action": "list", "window": a2},
+		"send-review":   {"window": a2},
+		"queue-prompt":  {"window": a2, "text": "hi"},
+		"cancel-queued": {"window": a2, "all": true},
+		"verify-fan":    {"command": "true"},
 	} {
 		mustRefuse(t, callP(c, t, verb, params), ErrVerbInternal, verb+" in the pane's own session")
 	}
+	// agent-activity is built: the grant check passes and it answers.
+	result(t, callP(c, t, "agent-activity", map[string]any{"window": a2}))
 	// Another session is out of reach for every one of them.
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "b", "window": b1},
@@ -239,13 +239,13 @@ func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	viewer := dialLink(t, sp)
 	result(t, linkPeer(t, viewer, "viewer"))
 	for verb, params := range map[string]map[string]any{
-		"compare-fan":    {"session": "work"},
-		"agent-activity": {"session": "work", "window": a},
-		"list-queued":    {"session": "work", "window": a},
-		"get-approval":   {"request_id": "9f86d081884c7d65"},
+		"compare-fan":  {"session": "work"},
+		"list-queued":  {"session": "work", "window": a},
+		"get-approval": {"request_id": "9f86d081884c7d65"},
 	} {
 		mustRefuse(t, callP(viewer, t, verb, params), ErrVerbInternal, verb+" from a machine that may list")
 	}
+	result(t, callP(viewer, t, "agent-activity", map[string]any{"session": "work", "window": a}))
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "work", "window": a},
 		"review-note":    {"action": "list", "session": "work", "window": a},

@@ -7,12 +7,17 @@
   {
     "name": "UserPromptSubmit",
     "payload": {"session_id": "th-1", "hook_event_name": "UserPromptSubmit", "turn_id": "t1", "prompt": "go"},
-    "want": {"state": "working", "agent_session_id": "th-1"}
+    "want": {"state": "working", "agent_session_id": "th-1", "activity": {"event": "prompt", "text": "go"}}
+  },
+  {
+    "name": "UserPromptSubmit names the model",
+    "payload": {"session_id": "th-1", "hook_event_name": "UserPromptSubmit", "turn_id": "t1", "model": "gpt-5-codex", "permission_mode": "default", "prompt": "fix the build"},
+    "want": {"state": "working", "agent_session_id": "th-1", "activity": {"event": "prompt", "text": "fix the build", "model": "gpt-5-codex"}}
   },
   {
     "name": "PreToolUse",
     "payload": {"session_id": "th-1", "hook_event_name": "PreToolUse", "turn_id": "t1", "tool_name": "shell", "tool_input": {"command": "ls"}},
-    "want": {"state": "working", "agent_session_id": "th-1"}
+    "want": {"state": "working", "agent_session_id": "th-1", "activity": {"event": "tool", "tool": "shell", "target": "ls"}}
   },
   {
     "name": "PermissionRequest",
@@ -22,12 +27,27 @@
   {
     "name": "PostToolUse",
     "payload": {"session_id": "th-1", "hook_event_name": "PostToolUse", "turn_id": "t1", "tool_name": "shell"},
-    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "th-1"}
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "th-1", "activity": {"event": "tool_done", "tool": "shell"}}
+  },
+  {
+    "name": "PostToolUse Bash with an exit code",
+    "payload": {"session_id": "th-1", "hook_event_name": "PostToolUse", "turn_id": "t1", "model": "gpt-5", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}, "tool_response": {"exit_code": 1, "output": "FAIL"}},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "th-1", "activity": {"event": "tool_done", "tool": "Bash", "target": "go test ./...", "ok": false, "model": "gpt-5"}}
+  },
+  {
+    "name": "PostToolUse apply_patch names the files the patch touched",
+    "payload": {"session_id": "th-1", "hook_event_name": "PostToolUse", "turn_id": "t1", "model": "gpt-5", "tool_name": "apply_patch", "tool_input": {"command": "*** Begin Patch\n*** Update File: api/retry.go\n@@\n-a\n+b\n*** Add File: api/retry_test.go\n+package api\n*** Delete File: api/old.go\n*** Update File: api/retry.go\n*** End Patch\n"}, "tool_response": "Success."},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "th-1", "activity": {"event": "tool_done", "tool": "apply_patch", "target": "api/retry.go", "files": ["api/retry.go", "api/retry_test.go", "api/old.go"], "model": "gpt-5"}}
   },
   {
     "name": "Stop",
     "payload": {"session_id": "th-1", "hook_event_name": "Stop", "turn_id": "t1"},
     "want": {"state": "done", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "Stop with what the turn ended on",
+    "payload": {"session_id": "th-1", "hook_event_name": "Stop", "turn_id": "t1", "model": "gpt-5", "stop_hook_active": false, "last_assistant_message": "Fixed the build.\nDetails follow."},
+    "want": {"state": "done", "message": "Fixed the build.", "agent_session_id": "th-1", "activity": {"event": "turn_end", "text": "Fixed the build.", "model": "gpt-5"}}
   },
   {
     "name": "Interrupt",

@@ -1280,12 +1280,13 @@ func init() {
 				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. Kept in daemon memory only."},
 				{Name: "if_state", Type: "string", Description: "Comma-separated states. The report applies only when the window is in one of them now, and is otherwise refused with reason if_state.", Accepted: AgentStateNames},
 				{Name: "harness_pid", Type: "int", Description: "The pid of the harness process that ran the hook. With agent_session_id, a different session from the same harness process is a new conversation in that process (/clear or /resume, even after an interrupted turn that never reported Stop), so it takes the pane over instead of being refused as foreign_session. Kept in daemon memory only."},
-				{Name: "activity", Type: "object", Description: "One hook event of the pane's own agent, for its activity ring: event (prompt, tool, tool_done, tool_failed or turn_end), tool, target, text, files, ok and model. It is recorded whenever the report passes the identity guard, whether or not the state applies. Display only. A hook sends it only to a daemon whose list-verbs lists it."},
+				{Name: "activity", Type: "object", Description: "One hook event of the pane's own agent, for its activity ring: event (prompt, tool, tool_done, tool_failed or turn_end), tool, target, text, files, ok and model. It is recorded whenever the report passes the identity guard, whether or not the state applies, and read back with agent-activity. It also sets the reserved metadata keys now (a tool call starting) and prompt (a prompt), and model when the harness named one. Display only. A hook sends it only to a daemon whose list-verbs lists it."},
 			},
 			returns: []verbParam{
 				{Name: "state", Type: "string", Description: "The state the window shows after the call, which is the reported one only when applied is true."},
 				{Name: "applied", Type: "bool", Description: "Whether this report set the state."},
 				{Name: "reason", Type: "string", Description: "Why the report was not applied. Absent when it was.", Accepted: []string{agentRefusedOutranked, agentRefusedIfState, agentRefusedForeignSession, agentRefusedForeignHarness}},
+				{Name: "activity_recorded", Type: "bool", Description: "With activity: whether it went into the pane's activity ring. False for a report the identity guard refused. Absent without activity."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,
@@ -1356,14 +1357,14 @@ func init() {
 			handler:  (*Daemon).verbResolvePane,
 		},
 		"set-agent-meta": {
-			description: "Record display metadata about the agent in a window's pane (model, context used, cost, a short summary). The rail draws it under the agent's row. It is display only: it never changes the agent state, a wait, an alert or a message. Keys keep the position they first arrived in. The metadata clears when the agent leaves the pane.",
+			description: "Record display metadata about the agent in a window's pane (model, context used, cost, a short summary). The rail draws it under the agent's row. It is display only: it never changes the agent state, a wait, an alert or a message. Keys keep the position they first arrived in. The metadata clears when the agent leaves the pane. A call that sets keys to the values they hold changes nothing and pushes nothing to clients; a TTL is renewed only once less than half of it remains. The keys now and prompt are written by tuios from hook activity and are refused here.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "tokens", Type: "object", Description: "Key to value. A string sets the key, null removes it. At most 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters, digits, '_' or '-', starting with a letter. A value has control characters replaced and is cut to 80 characters. Required unless clear is true."},
+				{Name: "tokens", Type: "object", Description: "Key to value. A string sets the key, null removes it. At most 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters, digits, '_' or '-', starting with a letter, and not now or prompt. A value has control characters replaced and is cut to 80 characters. Required unless clear is true."},
 				{Name: "source", Type: "string", Description: "Who is writing, recorded on each key so clear can remove only this writer's keys."},
 				{Name: "ttl_ms", Type: "int", Description: "Milliseconds the keys set by this call live before the daemon drops them. 0 keeps them until they are removed or the agent leaves. At most one day.", Default: "0"},
-				{Name: "clear", Type: "bool", Description: "Remove every key this source wrote, or every key when source is empty, before applying tokens.", Default: "false"},
+				{Name: "clear", Type: "bool", Description: "Remove every key this source wrote, or every key when source is empty, before applying tokens. The keys tuios writes, now and prompt, stay.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "The window the metadata was recorded on."},

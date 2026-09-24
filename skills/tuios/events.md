@@ -47,8 +47,10 @@ subscribe, so subscribe before you start the thing you want to watch. Useful
 types: `agent-state`, `attention` (the Inbox changed), `notification` (a pane
 sent OSC 9, 777 or 99), `command-started`, `command-finished` (with `exit_code`,
 `duration_ms`, `command_seq`), `prompt`, `window-created`, `window-exit`.
-`tuios list-verbs subscribe` lists them all. `agent-activity` is opt-in: it
-arrives only when `--types` names it.
+`tuios list-verbs subscribe` lists them all. `agent-activity` (one entry of
+a pane's activity ring, as `entry`: a prompt, a tool call, its result or a
+finished turn) is opt-in: it arrives only when `--types` names it, and a
+resumed stream does not replay it, so read `tuios agent-log` after a gap.
 
 ## Resuming a dropped stream
 

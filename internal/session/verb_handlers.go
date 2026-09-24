@@ -975,10 +975,9 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		TranscriptPath string `json:"transcript_path"`
 		IfState        string `json:"if_state"`
 		HarnessPID     int    `json:"harness_pid"`
-		// Activity is one hook event for the pane's activity ring. Its shape
-		// is checked here; the ring that records it is not built yet, and
-		// the report's state part is handled as if it were absent, so a hook
-		// that sends it never loses the state it reports.
+		// Activity is one hook event for the pane's activity ring. It is
+		// recorded when the report passes the identity guard, whether or not
+		// the state part applies. See agent_activity.go.
 		Activity *AgentActivityReport `json:"activity"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -1053,7 +1052,7 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		target = id
 	}
 
-	effective, applied, reason, err := sess.applyAgentReport(target, AgentReport{
+	report := AgentReport{
 		State:      state,
 		Message:    p.Message,
 		Source:     source,
@@ -1062,9 +1061,27 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		SessionID:  p.AgentSessionID,
 		HarnessPID: p.HarnessPID,
 		IfState:    ifState,
-	})
+	}
+	// The identity guard is read before the report applies, because it is
+	// about the pane as the report found it, and applyAgentReport checks
+	// if_state first and so may never reach it.
+	var windowID, guard string
+	if p.Activity != nil {
+		windowID, guard = sess.agentReportGuard(target, report)
+	}
+	effective, applied, reason, err := sess.applyAgentReport(target, report)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
+	}
+	// Activity is recorded for a report from the pane's own agent, applied or
+	// not: a PostToolUse refused by if_state still finished a tool call. A
+	// report the identity guard refuses is a nested run's, and its activity
+	// is not the pane's.
+	recorded := false
+	if p.Activity != nil && windowID != "" && guard == "" &&
+		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness {
+		d.recordAgentActivity(sess, windowID, p.Activity, effective)
+		recorded = true
 	}
 	if applied && p.TranscriptPath != "" {
 		d.joinReportedTranscript(sess, target, p.Harness, p.TranscriptPath)
@@ -1081,6 +1098,9 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 	}
 	if reason != "" {
 		out["reason"] = reason
+	}
+	if p.Activity != nil {
+		out["activity_recorded"] = recorded
 	}
 	return out, nil
 }

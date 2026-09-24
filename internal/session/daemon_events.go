@@ -154,6 +154,8 @@ type streamEvent struct {
 	ExitCode   *int   `json:"exit_code,omitempty"`
 	DurationMS int64  `json:"duration_ms,omitempty"`
 	CommandSeq uint64 `json:"command_seq,omitempty"`
+	// Entry is an agent-activity event's entry of the pane's activity ring.
+	Entry *AgentActivityEntry `json:"entry,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -319,12 +321,14 @@ type eventHub struct {
 	// ring is a circular buffer of the most recent retained events, oldest at
 	// ringStart. evictedSeq is the seq of the newest event pushed out of it, so
 	// the ring holds every retained event after evictedSeq. lastOutputSeq is
-	// the seq of the newest output event, which the ring does not keep.
-	ring          []streamEvent
-	ringStart     int
-	ringLen       int
-	evictedSeq    uint64
-	lastOutputSeq uint64
+	// the seq of the newest output event, which the ring does not keep, and
+	// lastActivitySeq the same for agent-activity events.
+	ring            []streamEvent
+	ringStart       int
+	ringLen         int
+	evictedSeq      uint64
+	lastOutputSeq   uint64
+	lastActivitySeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -422,7 +426,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 	switch {
 	case from.afterSeq < h.evictedSeq:
 		out = append(out, gap(GapEvicted))
-	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq:
+	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq,
+		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -437,10 +442,16 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 // retain records ev in the replay ring. The caller holds h.mu. Output events
 // are only counted: they fire on every PTY read, so keeping them would push the
 // agent and lifecycle events a reconnecting subscriber actually needs out of a
-// bounded ring within seconds.
+// bounded ring within seconds. Agent-activity events are counted the same way:
+// one fires on every tool call of every agent, and a subscriber that missed
+// some reads the pane's ring with agent-activity instead.
 func (h *eventHub) retain(ev streamEvent) {
-	if ev.Type == EventOutput {
+	switch ev.Type {
+	case EventOutput:
 		h.lastOutputSeq = ev.Seq
+		return
+	case EventAgentActivity:
+		h.lastActivitySeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {

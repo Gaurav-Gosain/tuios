@@ -17,8 +17,11 @@ type fakeDaemon struct {
 	// one it decodes params leniently: set-agent-state ignores a field it does
 	// not know and applies the report anyway, and list-verbs does not list the
 	// hook fields.
-	old      bool
-	resolved map[string]any
+	old bool
+	// noActivity stands in for a daemon that has every hook field but
+	// activity: the daemons from before the activity ring.
+	noActivity bool
+	resolved   map[string]any
 }
 
 // oldSetAgentStateParams are the params set-agent-state took before the hook
@@ -51,7 +54,12 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		names := oldSetAgentStateParams
 		if !f.old {
-			names = append(append([]string(nil), names...), hookFields...)
+			names = append([]string(nil), names...)
+			for _, n := range hookFields {
+				if n != "activity" || !f.noActivity {
+					names = append(names, n)
+				}
+			}
 		}
 		var ps []map[string]string
 		for _, n := range names {
@@ -169,6 +177,47 @@ func TestAgentHookHandlesAnOldDaemon(t *testing.T) {
 	r = h.daemon.reports()
 	if len(r) != 1 || r[0]["if_state"] == nil || r[0]["harness_pid"] != float64(4250) {
 		t.Fatalf("reports = %v", r)
+	}
+}
+
+// TestAgentHookSendsActivity: a tool call's activity rides its state report
+// to a daemon that lists the field, and a daemon from before it gets the
+// report without it, so the state is never lost.
+func TestAgentHookSendsActivity(t *testing.T) {
+	payload := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
+	h.run(t, agentHookOptions{}, payload, "claude-code")
+	r := h.daemon.reports()
+	if len(r) != 1 {
+		t.Fatalf("reports = %v", r)
+	}
+	activity, _ := r[0]["activity"].(map[string]any)
+	if activity["event"] != "tool" || activity["tool"] != "Bash" || activity["target"] != "go test ./..." {
+		t.Fatalf("activity = %v", r[0]["activity"])
+	}
+
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{noActivity: true}}
+	h.run(t, agentHookOptions{}, payload, "claude-code")
+	r = h.daemon.reports()
+	if len(r) != 1 || r[0]["state"] != "working" || r[0]["activity"] != nil || r[0]["agent_session_id"] != "s1" {
+		t.Fatalf("reports to a daemon without activity = %v", r)
+	}
+	if !strings.Contains(h.stderr.String(), `"unsupported":["activity"]`) {
+		t.Fatalf("explain does not name the dropped field: %s", h.stderr.String())
+	}
+}
+
+// TestAgentHookStopSaysWhatTheTurnEndedOn: the done report carries the first
+// line of what the agent said last, as its message and as activity.
+func TestAgentHookStopSaysWhatTheTurnEndedOn(t *testing.T) {
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1","last_assistant_message":"All tests pass.\nHere is why."}`, "claude-code")
+	r := h.daemon.reports()
+	if len(r) != 1 || r[0]["state"] != "done" || r[0]["message"] != "All tests pass." {
+		t.Fatalf("reports = %v", r)
+	}
+	if a, _ := r[0]["activity"].(map[string]any); a["event"] != "turn_end" || a["text"] != "All tests pass." {
+		t.Fatalf("activity = %v", r[0]["activity"])
 	}
 }
 

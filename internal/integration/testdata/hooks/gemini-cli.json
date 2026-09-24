@@ -12,7 +12,7 @@
   {
     "name": "BeforeTool",
     "payload": {"session_id": "g-1", "hook_event_name": "BeforeTool", "tool_name": "run_shell_command"},
-    "want": {"state": "working", "agent_session_id": "g-1"}
+    "want": {"state": "working", "agent_session_id": "g-1", "activity": {"event": "tool", "tool": "run_shell_command"}}
   },
   {
     "name": "AfterTool",

@@ -252,6 +252,22 @@ func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, r A
 	return ""
 }
 
+// agentReportGuard resolves target to a window id and runs sessionGuard for r
+// against the window as it stands, returning the id and the refusal reason,
+// or "" for a report the guard lets through. The id is empty when target
+// names no window.
+func (s *Session) agentReportGuard(target string, r AgentReport) (string, string) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	idx, err := findWindowStateIndex(s.state.Windows, target)
+	if err != nil {
+		return "", ""
+	}
+	w := &s.state.Windows[idx]
+	claim, held := s.agentClaims[w.ID]
+	return w.ID, sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r)
+}
+
 // applyAgentReport is ApplyAgentReport with the reason a refused report was
 // refused, empty when it was applied.
 func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bool, string, error) {

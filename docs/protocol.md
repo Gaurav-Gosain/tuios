@@ -982,6 +982,39 @@ caller that sends nothing new is answered as before:
 - The error codes `not_repo`, `no_notes`, `queue_full` and
   `risk_unacknowledged` are in the catalog.
 
+**The activity ring is built.** `agent-activity` answers (see
+[agent-activity](#agent-activity)) instead of `internal`, and these older
+verbs change:
+
+- `set-agent-state` records `activity` in the pane's activity ring when the
+  report passes the identity guard (the nested-session guard behind
+  `foreign_session` and `foreign_harness`), whether the state part applies or
+  not: a `PostToolUse` refused by `if_state` still records its tool result. A
+  report the guard refuses records nothing, even when `if_state` refused it
+  first. The answer gains `activity_recorded` (bool), present only when the
+  call sent `activity`. The state part is handled exactly as before.
+- `set-agent-state` with `activity` also moves the pane's metadata: a `tool`
+  sets `now` to `<tool>: <target>`, a `prompt` sets `prompt` to its first line
+  and clears `now`, a `tool_failed` or `turn_end` clears `now`, and so does
+  any report that leaves the pane in a state other than `working` or
+  `needs_input`. A `model` in the activity sets `model` (source `hook`) when
+  the pane does not already show that model from any source. These keys ride
+  the window state's `agent_meta` like any other, so `get-agent-state`,
+  `list-agents` and older clients see them as ordinary metadata.
+- `set-agent-meta` refuses the keys `now` and `prompt`, set or removed, with
+  `invalid_params`: they are written by tuios from hook activity. `clear`
+  leaves them in place, whatever `source` it names.
+- `set-agent-meta` no longer pushes state for a call that changes nothing. A
+  key set to the value it holds, by the source that wrote it, keeps its
+  expiry unless less than half of the TTL is left, and a call where every key
+  is like that leaves the session version alone and sends clients nothing. A
+  status line that writes the same values several times a second used to push
+  state each time. The answer is the same either way.
+- The event type `agent-activity` is published, one event per entry, carrying
+  the entry as `entry`. It is not kept in the replay ring, like `output`: a
+  resume whose `types` names it gets a `not_retained` gap when one was
+  published after `after_seq`. Read the ring with `agent-activity` instead.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -2316,6 +2349,15 @@ a hook reporter adds, each optional:
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
   with `agent_session_id`, and held in daemon memory. It lets a new session
   from the same harness process pass the nested-session guard below.
+- `activity`: the hook event itself, for the pane's activity ring: `event`
+  (`prompt`, `tool`, `tool_done`, `tool_failed` or `turn_end`), `tool`,
+  `target`, `text`, `files`, `ok` and `model`, all optional but `event`. It is
+  recorded when the report passes the nested-session guard below, whether or
+  not the state applies, and read back with
+  [agent-activity](#agent-activity). It also sets the reserved metadata keys
+  `now` and `prompt` (see [set-agent-meta](#set-agent-meta)). An unknown
+  `event` is `invalid_params` and nothing is applied. The answer then carries
+  `activity_recorded`.
 
 Request:
 
@@ -2342,12 +2384,13 @@ window's current session was reported with: that is a new conversation in the
 same process, such as `/clear` after an interrupted turn that never reported
 `Stop`.
 
-`reason` and the five hook fields are additive. A client that sends none of
-the fields is handled exactly as before. A daemon older than them does not
+`reason`, `activity_recorded` and the hook fields are additive. A client that
+sends none of the fields is handled exactly as before. A daemon older than them does not
 reject them: params are decoded leniently, so it ignores the fields and applies
 the report without them. A client that depends on one, `if_state` above all,
 has to ask `list-verbs` for `set-agent-state` first and check the field is
-listed. `tuios agent-hook` and `tuios set-agent-state --if-state` do.
+listed. `tuios agent-hook` and `tuios set-agent-state --if-state` do, and the
+hook sends `activity` only to a daemon that lists it.
 
 ### set-agent-session
 
@@ -2485,6 +2528,18 @@ digits, `_` or `-`, starting with a letter. A value has control characters
 replaced with spaces and is cut to 80 characters. A bad key, too many keys, or
 a TTL out of range is `invalid_params`; a cut value is not an error, and its
 key is listed in `truncated`.
+
+Reserved keys: `now` (what the agent is doing, such as `Bash: go test ./...`)
+and `prompt` (the first line of the last prompt) are written by tuios from the
+`activity` a hook reports with `set-agent-state`, with source `activity`. This
+verb refuses them with `invalid_params`, and its `clear` leaves them. A hook
+that names a model also sets `model`, with source `hook`, which a caller may
+still write.
+
+Unchanged writes: a key set to the value it holds, by the source that wrote
+it, changes nothing, and its TTL is renewed only once less than half of it is
+left. A call that changes nothing leaves the session version alone and pushes
+nothing to clients, so a feed may write as often as it likes.
 
 Order: a key keeps the position it first arrived in, and a new key goes at the
 end in the order the `tokens` object lists it, so a feed that rewrites every
@@ -3178,10 +3233,87 @@ while the message was held is `window_not_found`.
 
 Result: `held_id`, `message_id`, `to`, `to_name`, `thread_id`.
 
+### agent-activity
+
+Read what the agent in a pane has been doing. The daemon keeps a ring of the
+newest 256 entries per pane, in memory only, from the `activity` its hooks
+report with `set-agent-state`. A pane gets a ring on the first report that
+carries activity, so a plain shell pane and an agent whose harness has no
+hooks have none. Once it has one, the commands its shell finishes (OSC 133)
+and its agent state changes are added too. The ring goes when the window
+closes, when the session ends, and with the daemon.
+
+Params: `session`, `window` (default the focused pane), `since` (unix
+nanoseconds; entries after it), `since_seq` (entries after it), `limit` (1 to
+256, default 64: the newest that many), `recap` (bool).
+
+Each entry has `seq` (per pane, from 1), `at` (unix nanoseconds) and `kind`:
+
+| `kind` | From | Fields |
+| --- | --- | --- |
+| `prompt` | a prompt submitted | `text`: its first line |
+| `tool` | a tool call starting | `tool`, `target` (the command, file, URL or pattern) |
+| `tool_done` | a tool call that finished | `tool`, `target`, `files` it wrote, `ok` when the harness said |
+| `tool_failed` | a tool call that failed | `tool`, `target`, `ok` false, `text`: the error's first line |
+| `turn_end` | the agent finishing a turn | `text`: the first line of what it said last |
+| `command` | a command the pane's shell finished | `target`: the command line, `exit` when the shell sent one |
+| `state` | the pane's agent state changing | `text`: the new state |
+
+Every string is the agent's or its shell's: one line, control characters
+removed, likely secrets masked, cut to 160 bytes (a file path to 256, a tool
+name to 64). The answer is marked `untrusted`.
+
+With `recap`, the answer also summarises every entry after `since` and
+`since_seq`, whatever the `limit`:
+
+- `since`: where the summary starts, the `since` asked for, or the oldest
+  entry the ring holds when it was asked for everything or has dropped entries
+  after `since`;
+- `turns`: how many turns finished, the sum of the pane's `completion_seq`
+  steps its state entries recorded;
+- `files` (the first 20, first written first) and `files_total`;
+- `commands`: shell tool calls (`Bash`, `shell`, `exec_command`,
+  `local_shell`, `run_shell_command`) plus the shell's own commands;
+- `tests`: the newest command matching `[agents.recap] test_patterns`, with
+  `cmdline`, `at` and `ok`: true or false from a finished or failed tool call
+  or a shell exit status, and null when nothing said (a call still running, or
+  a shell that sent no status). Absent when no command matched;
+- `last_said`: the first line of the newest `turn_end`;
+- `state`: the pane's agent state now.
+
+Request:
+
+```json
+{"id": 1, "verb": "agent-activity", "params": {"session": "work", "window": "api", "since": 1790000000000000000, "recap": true}}
+```
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "agent_activity", "session": "work", "window": "3f2a9c1e", "last_seq": 42, "untrusted": true,
+  "entries": [{"seq": 41, "at": 1790000123000000000, "kind": "tool_done", "tool": "Bash", "target": "go test ./...", "ok": true},
+              {"seq": 42, "at": 1790000125000000000, "kind": "turn_end", "text": "Added retry with backoff and tests."}],
+  "recap": {"since": 1790000000000000000, "turns": 3, "files": ["api/retry.go", "api/retry_test.go"], "files_total": 2, "commands": 11,
+            "tests": {"cmdline": "go test ./...", "ok": true, "at": 1790000123000000000}, "last_said": "Added retry with backoff and tests.", "state": "done"}}}
+```
+
+Who may read it: from a pane, `read` reaches its own session and fan group, as
+for the other reads; over a link it needs `list`. Only the pane's own reports
+write the ring: activity rides `set-agent-state`, which a pane may call only
+for itself, and it is recorded only past the identity guard. Nothing reads the
+ring to decide a state, a wait or an alert.
+
+The event type `agent-activity` carries each entry as it is recorded, as
+`entry`, to a subscription whose `types` names it. It is not replayed on a
+resume; read the ring instead.
+
+`tuios agent-log` is this verb on the command line.
+
 ### Agent review, triage and queue verbs
 
 These verbs are registered with their parameters, scope and link capability,
-and answer `internal` ("not built yet") until their work lands. `list-verbs`
+and answer `internal` ("not built yet") until their work lands.
+`agent-activity` has landed (see [agent-activity](#agent-activity)). `list-verbs`
 describes each one's parameters and result. What is fixed now is who may call
 them:
 
@@ -3245,7 +3377,7 @@ Event types:
 | `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
-| `agent-activity` | One entry of an agent pane's activity ring. Opt-in: only a subscription whose `types` names it receives it. Nothing publishes it until the activity ring is built. | `session`, `window` |
+| `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
 
 ### What fires when
 
@@ -3338,7 +3470,8 @@ A second `subscribe` on the same connection is rejected with `invalid_request`.
 
 The daemon keeps the last 4096 events in a replay ring, apart from `output`
 events, which fire on every PTY read and would push everything else out within
-seconds. A subscriber that kept the `seq` of the last event it read, and the
+seconds, and `agent-activity` events, which fire on every tool call of every
+agent. A subscriber that kept the `seq` of the last event it read, and the
 `boot_id` that came with it, can reconnect and pass both:
 
 ```json
@@ -3365,7 +3498,7 @@ rather than assuming you saw every change:
 | --- | --- | --- |
 | `evicted` | Events after `after_seq` have already left the ring. | The events the ring still holds, then live. |
 | `boot_changed` | `boot_id` names another daemon start, or no `boot_id` was passed and `after_seq` is above anything this daemon has assigned. The numbers are not comparable. | Live events only. |
-| `not_retained` | The filter admits `output` events, and at least one was published after `after_seq`. Output is never replayed. | The retained events, then live. Leave `output` out of `types` for an exact replay. |
+| `not_retained` | The filter admits `output` events, or names `agent-activity`, and at least one such event was published after `after_seq`. Neither is ever replayed. | The retained events, then live. Leave `output` and `agent-activity` out of `types` for an exact replay. |
 
 Passing this daemon's own `boot_id` with an `after_seq` it has not reached yet
 is refused with `invalid_params`, and so is `boot_id` without `after_seq`.
