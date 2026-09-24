@@ -32,6 +32,9 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SettingsPrevCategory()
 	case "/":
 		o.SettingsSearchStart("")
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		// The first nine tabs by number, in the order the strip draws them.
+		o.SettingsSetCategory(int(msg.String()[0] - '1'))
 	default:
 		// A letter no key on this page answers to starts a search with it, so
 		// a person can type the name of the setting they came for. The letters

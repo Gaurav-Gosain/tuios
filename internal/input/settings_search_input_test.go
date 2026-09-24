@@ -39,6 +39,22 @@ func TestSettingsSlashSearchesAndEscBacksOut(t *testing.T) {
 	}
 }
 
+// TestSettingsNumberKeysPickATab: 3 goes to the third tab, and in the search
+// a digit is text.
+func TestSettingsNumberKeysPickATab(t *testing.T) {
+	o := listKeysOS(t)
+	o.OpenSettings()
+	o, _ = handleSettingsInput(press("3"), o)
+	if o.SettingsCategory != 2 {
+		t.Errorf("3 went to tab %d, want the third (2)", o.SettingsCategory)
+	}
+	o, _ = handleSettingsInput(press("/"), o)
+	o, _ = handleSettingsInput(press("5"), o)
+	if o.SettingsSearchQuery() != "5" {
+		t.Errorf("5 in the search left the query %q", o.SettingsSearchQuery())
+	}
+}
+
 // TestSettingsTypingALetterSearches: a letter the page does not use starts a
 // search with it, and a letter it does use keeps its meaning.
 func TestSettingsTypingALetterSearches(t *testing.T) {

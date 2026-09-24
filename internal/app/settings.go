@@ -829,29 +829,63 @@ func (m *OS) daemonLogLevel() string {
 
 // OpenSettings shows the settings overlay, initializing the theme registry so
 // the theme list is populated.
+//
+// It opens where the person left it: the same tab, the same row, and the same
+// search if one was open. The page is one a person comes back to while trying
+// a change out, and reopening on the first tab sent them looking for the row
+// they had just been on. The renderer clamps the remembered place if the rows
+// have changed since.
 func (m *OS) OpenSettings() {
 	theme.EnsureRegistry()
 	m.ShowSettings = true
-	m.SettingsCategory = 0
-	m.SettingsSelected = 0
-	m.SettingsScroll = 0
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
-	m.settingsSearch = settingsSearchState{}
+	if m.settingsSearch.open {
+		// Ranked again, because a value the search matched may have changed
+		// while the page was shut.
+		m.settingsSearch.hits = m.searchSettings(m.settingsCategories(), m.settingsSearch.query)
+	}
 }
 
 // OpenSettingsAt opens the settings overlay on the named category, for the
 // entry points that already know which part of the app the user is pointing at.
 // The name is resolved against the live category list rather than an index: the
 // list is built per call, so a hardcoded index would rot the moment a tab moves.
+//
+// An entry point that names a tab wants that tab, so a remembered search or
+// row gives way to it.
 func (m *OS) OpenSettingsAt(category string) {
 	m.OpenSettings()
 	for i, c := range m.settingsCategories() {
 		if c.Name == category {
+			m.settingsSearch = settingsSearchState{}
 			m.SettingsCategory = i
+			m.SettingsSelected = 0
+			m.SettingsScroll = 0
 			return
 		}
 	}
+}
+
+// OpenSettingsAtRow opens the settings page on one row of one tab: where a
+// command palette result for a setting goes.
+func (m *OS) OpenSettingsAtRow(category, row int) {
+	m.OpenSettings()
+	m.settingsSearch = settingsSearchState{}
+	m.SettingsCategory = category
+	m.SettingsSelected = row
+	m.SettingsScroll = 0
+}
+
+// SettingsSetCategory switches to tab i, when there is one. The number keys
+// come here.
+func (m *OS) SettingsSetCategory(i int) {
+	if i < 0 || i >= len(m.settingsCategories()) || i == m.SettingsCategory {
+		return
+	}
+	m.SettingsCategory = i
+	m.SettingsSelected = 0
+	m.SettingsScroll = 0
 }
 
 // CloseSettings hides the settings overlay.

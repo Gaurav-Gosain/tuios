@@ -75,7 +75,9 @@ func clickSettingsRow(t *testing.T, term *tuitest.Terminal, label string) {
 // openSettings opens the settings panel and waits for the colour rows.
 func openSettings(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
-	if err := term.SendKeys(","); err != nil {
+	// The page reopens on the tab it was left on, so 1 puts it back on the
+	// first tab, Appearance, whichever tab an earlier step left it on.
+	if err := term.SendKeys(",", "1"); err != nil {
 		t.Fatalf("open settings: %v", err)
 	}
 	if err := term.WaitForText("Focused border color", uiTimeout); err != nil {
