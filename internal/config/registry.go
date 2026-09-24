@@ -38,6 +38,7 @@ type sectionMaps struct {
 	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
+	inbox, inboxPeek, mail                                map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -86,6 +87,9 @@ func (r *KeybindRegistry) buildMappings() {
 		script:          r.sectionKeyMap(kb.Script),
 		sidebar:         r.sectionKeyMap(kb.Sidebar),
 		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
+		inbox:           r.sectionKeyMap(kb.Inbox),
+		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
+		mail:            r.sectionKeyMap(kb.Mail),
 	}
 }
 
@@ -201,6 +205,35 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 // share each mean the thing the row under the cursor is.
 func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
 	return r.lookupKey(key, r.sections.sidebarFiles)
+}
+
+// GetInboxAction returns the action a key runs in the Inbox's list.
+func (r *KeybindRegistry) GetInboxAction(key string) string {
+	return r.lookupKey(key, r.sections.inbox)
+}
+
+// GetInboxPeekAction returns the action a key runs in the prompt open over
+// the Inbox.
+func (r *KeybindRegistry) GetInboxPeekAction(key string) string {
+	return r.lookupKey(key, r.sections.inboxPeek)
+}
+
+// GetMailAction returns the action a key runs in the mailbox.
+func (r *KeybindRegistry) GetMailAction(key string) string {
+	return r.lookupKey(key, r.sections.mail)
+}
+
+// GetInboxKeys is GetKeys for the Inbox, its peek and the mailbox, whose
+// action names are their own: the key hints of those overlays read what the
+// config binds rather than a letter written into the renderer.
+func (r *KeybindRegistry) GetInboxKeys(action string) []string {
+	kb := &r.config.Keybindings
+	for _, section := range []map[string][]string{kb.Inbox, kb.InboxPeek, kb.Mail} {
+		if keys, ok := section[action]; ok {
+			return keys
+		}
+	}
+	return nil
 }
 
 // GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
@@ -324,7 +357,7 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeScript:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail:
 		return true
 	}
 	return false
@@ -359,6 +392,40 @@ var ActionDescriptions = map[string]string{
 	"file_cut":            "Files: cut this file",
 	"file_paste":          "Files: paste into this folder",
 	"file_open":           "Files: open this folder, or copy this file's path",
+
+	// The Inbox, the prompt open over it, and the mailbox. Each acts only
+	// while its overlay is up.
+	"inbox_down":          "Inbox: next item",
+	"inbox_up":            "Inbox: previous item",
+	"inbox_page_down":     "Inbox: ten items down",
+	"inbox_page_up":       "Inbox: ten items up",
+	"inbox_first":         "Inbox: first item",
+	"inbox_last":          "Inbox: last item",
+	"inbox_go":            "Inbox: go to the item's pane, or open its mail",
+	"inbox_peek":          "Inbox: read the prompt here and answer it",
+	"inbox_dismiss":       "Inbox: dismiss the item",
+	"inbox_reply":         "Inbox: reply to the mail",
+	"inbox_resume":        "Inbox: resume the conversation in its pane",
+	"inbox_pass_on":       "Inbox: pass held mail on to the agent it was for",
+	"inbox_filter":        "Inbox: show one kind, then the next",
+	"inbox_select":        "Inbox: narrow the list with a selector",
+	"inbox_mailbox":       "Inbox: open the whole mailbox",
+	"inbox_close":         "Inbox: close",
+	"peek_approve":        "Inbox prompt: approve",
+	"peek_approve_always": "Inbox prompt: approve and do not ask again",
+	"peek_deny":           "Inbox prompt: deny",
+	"peek_type":           "Inbox prompt: type an answer",
+	"peek_read_again":     "Inbox prompt: read the prompt again",
+	"peek_go":             "Inbox prompt: go to the pane",
+	"peek_back":           "Inbox prompt: back to the list",
+	"mail_down":           "Mailbox: next thread",
+	"mail_up":             "Mailbox: previous thread",
+	"mail_page_down":      "Mailbox: ten threads down",
+	"mail_page_up":        "Mailbox: ten threads up",
+	"mail_open":           "Mailbox: open the thread, or reply in an open one",
+	"mail_reply":          "Mailbox: reply in the open thread",
+	"mail_focus_pane":     "Mailbox: go to the pane that last wrote",
+	"mail_back":           "Mailbox: back, or close",
 
 	// The rail's reorder actions. They are here for the machine header's menu,
 	// which resolves every row's label and key hint from this table.

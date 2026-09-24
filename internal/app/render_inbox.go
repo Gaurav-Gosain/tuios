@@ -5,10 +5,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -48,32 +50,15 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	if !st.Live {
 		title += " (not connected)"
 	}
-	// The key after dismiss is what answers the selected item: y resumes a
-	// conversation, r replies to mail and to anything else.
-	answer := overlay.Hint{Key: "r", Label: "reply"}
-	if it, ok := m.inboxSelected(); ok && it.Kind == session.AttentionResume {
-		answer = overlay.Hint{Key: "y", Label: "resume"}
-	} else if ok && it.HeldID != 0 {
-		answer = overlay.Hint{Key: "p", Label: "pass on"}
-	}
-	hints := []overlay.Hint{
-		{Key: overlay.EnterKey(), Label: "go"},
-		{Key: "space", Label: "peek"},
-		{Key: "d", Label: "dismiss"},
-		answer,
-		{Key: "f", Label: "filter"},
-		{Key: "/", Label: "select"},
-		{Key: "m", Label: "mailbox"},
-		{Key: "esc", Label: "close"},
-	}
 	var detailFor func(int) []string
 	if st.selectEditing {
 		return m.renderInboxSelecting(title)
 	}
 	selected, ok := m.inboxSelected()
+	hints := m.inboxRowHints(selected, ok)
 	held := ok && selected.Kind == session.AttentionApproval && selected.RequestID != ""
 	if held {
-		hints = inboxApprovalHints(selected)
+		hints = m.inboxApprovalHints(selected)
 		// The row cuts the line to fit, so the held prompt is shown whole
 		// under the list, with what always adds beside its key. The keys
 		// only answer the item under the cursor, which is the one shown.
@@ -83,7 +68,7 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		// A question is shown whole with its answers numbered, and the
 		// digit keys pick one, under the same rule as a held approval.
 		held = true
-		hints = inboxAskHints(selected)
+		hints = m.inboxAskHints(selected)
 		detailFor = func(width int) []string { return inboxAskDetail(selected, width) }
 	}
 	m.noteInboxShown(selected, held && inboxShowsWhole(selected), time.Now())
@@ -102,7 +87,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		case !m.IsDaemonSession:
 			lines = []string{"The Inbox needs the daemon.", "", "Start a daemon session with: tuios new"}
 		}
-		return m.simpleOverlayPanel("", title, lines, []overlay.Hint{{Key: "f", Label: "filter"}, {Key: "/", Label: "select"}, {Key: "m", Label: "mailbox"}, {Key: "esc", Label: "close"}})
+		return m.simpleOverlayPanel("", title, lines, m.keyHints(
+			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
+			config.ActionInboxMailbox, "mailbox", config.ActionInboxClose, "close"))
 	}
 	now := time.Now()
 	return m.renderListOverlay(listOverlay{
@@ -122,6 +109,107 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			return m.inboxItemRow(*r.item, selected, rowBg, pal, width, now)
 		},
 	})
+}
+
+// defaultInboxKeys is the shipped bindings, for a client built without a
+// registry.
+var defaultInboxKeys = sync.OnceValue(func() *config.KeybindRegistry {
+	return config.NewKeybindRegistry(config.DefaultConfig())
+})
+
+// inboxKey is the key a hint names for an action of the Inbox, its peek or
+// the mailbox: the first key the config binds it to, as the hint strips spell
+// keys. Empty for an action bound to nothing, whose hint is left out.
+func (m *OS) inboxKey(action string) string {
+	reg := m.KeybindRegistry
+	if reg == nil {
+		reg = defaultInboxKeys()
+	}
+	for _, k := range reg.GetInboxKeys(action) {
+		switch k = strings.TrimSpace(k); k {
+		case "":
+			continue
+		case "enter":
+			return overlay.EnterGlyph
+		default:
+			return k
+		}
+	}
+	return ""
+}
+
+// inboxKeyOr is inboxKey with a word for an action bound to nothing, for a
+// message that has to name some key.
+func (m *OS) inboxKeyOr(action, fallback string) string {
+	if k := m.inboxKey(action); k != "" {
+		return k
+	}
+	return fallback
+}
+
+// pressFor is what to press for a prefix or mode action, chord included, as a
+// message spells it ("ctrl+b i"), or fallback when the config binds it to
+// nothing. For the rare message that names a key; it scans every binding.
+func (m *OS) pressFor(action, fallback string) string {
+	reg := m.KeybindRegistry
+	if reg == nil {
+		reg = defaultInboxKeys()
+	}
+	if presses := config.PressesByAction(reg)[action]; len(presses) > 0 {
+		return presses[0]
+	}
+	return fallback
+}
+
+// keyHints builds a footer from action and label pairs, leaving out an action
+// the config binds to nothing: a hint for a key that does nothing is worse than
+// no hint.
+func (m *OS) keyHints(pairs ...string) []overlay.Hint {
+	var hints []overlay.Hint
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if key := m.inboxKey(pairs[i]); key != "" {
+			hints = append(hints, overlay.Hint{Key: key, Label: pairs[i+1]})
+		}
+	}
+	return hints
+}
+
+// inboxRowHints is the Inbox footer for the row under the cursor: the key
+// that answers it first, then going to it and dismissing it, then the keys
+// that work on the list whatever is selected.
+//
+// It used to be the same eight hints on every row, over two lines, and said
+// "space peek" where space does nothing (an error, a finished turn, mail) and
+// "r reply" on rows that are not mail. A held approval and an ask-human
+// question draw their own hints (inboxApprovalHints, inboxAskHints).
+func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
+	var hints []overlay.Hint
+	if ok {
+		switch {
+		case it.HeldID != 0:
+			hints = m.keyHints(config.ActionInboxPassOn, "pass on")
+		case it.Kind == session.AttentionMail:
+			hints = m.keyHints(config.ActionInboxReply, "reply")
+		case it.Kind == session.AttentionResume:
+			hints = m.keyHints(config.ActionInboxResume, "resume")
+		case inboxPeekable(it) && it.RequestID == "" && it.Host == "" && m.AttachedHost == "":
+			// The one way to answer a prompt without leaving the Inbox: read it
+			// here and press its answer.
+			hints = m.keyHints(config.ActionInboxPeek, "answer")
+		}
+		goLabel := "go"
+		if it.Kind == session.AttentionMail {
+			goLabel = "open"
+		}
+		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel, config.ActionInboxDismiss, "dismiss")...)
+	}
+	hints = append(hints, m.keyHints(config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select")...)
+	// The whole mailbox is one key from anywhere in the Inbox; it is offered
+	// where it is the next thing a person looks for, on a mail row.
+	if ok && it.Kind == session.AttentionMail {
+		hints = append(hints, m.keyHints(config.ActionInboxMailbox, "mailbox")...)
+	}
+	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 }
 
 // renderInboxSelecting draws the Inbox with the selector line open over the
@@ -297,7 +385,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 			body = append(body, "")
 			add(pal.FgDim, capitalize(printableTitle(pk.Reason))+". Enter goes to the pane.")
 		}
-		hints = inboxPeekHints(pk)
+		hints = m.inboxPeekHints(pk)
 	}
 
 	if p.Composing {
@@ -318,10 +406,10 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		add(pal.Warn, p.Err)
 	}
 	if !p.Composing {
-		hints = append(hints,
-			overlay.Hint{Key: overlay.EnterKey(), Label: "go to pane"},
-			overlay.Hint{Key: "r", Label: "read again"},
-			overlay.Hint{Key: "esc", Label: "back"})
+		hints = append(hints, m.keyHints(
+			config.ActionPeekGo, "go to pane",
+			config.ActionPeekReadAgain, "read again",
+			config.ActionPeekBack, "back")...)
 	}
 
 	title := "Prompt"
@@ -357,8 +445,12 @@ func sepWord() string {
 }
 
 // inboxPeekHints are the keys that answer a peeked prompt: only the answers
-// the prompt takes now are offered.
-func inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
+// the prompt takes now are offered, and one way to give each. A prompt with
+// numbered options is answered by its digits, the numbers it shows; the
+// approve, always and deny keys are offered only for a prompt with no
+// options. It offered both, "1-3 choose" beside "a approve A always d deny",
+// two ways to say one thing. Every key still works.
+func (m *OS) inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 	var hints []overlay.Hint
 	if pk.Offers(harness.ActionChoose) && len(pk.Options) > 0 {
 		key := strconv.Itoa(pk.Options[0].N)
@@ -366,18 +458,19 @@ func inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 			key += "-" + strconv.Itoa(min(last, 9))
 		}
 		hints = append(hints, overlay.Hint{Key: key, Label: "choose"})
-	}
-	if pk.Offers(harness.ActionApprove) {
-		hints = append(hints, overlay.Hint{Key: "a", Label: "approve"})
-	}
-	if pk.Offers(harness.ActionApproveAlways) {
-		hints = append(hints, overlay.Hint{Key: "A", Label: "always"})
-	}
-	if pk.Offers(harness.ActionDeny) {
-		hints = append(hints, overlay.Hint{Key: "d", Label: "deny"})
+	} else {
+		if pk.Offers(harness.ActionApprove) {
+			hints = append(hints, m.keyHints(config.ActionPeekApprove, "approve")...)
+		}
+		if pk.Offers(harness.ActionApproveAlways) {
+			hints = append(hints, m.keyHints(config.ActionPeekApproveAlways, "always")...)
+		}
+		if pk.Offers(harness.ActionDeny) {
+			hints = append(hints, m.keyHints(config.ActionPeekDeny, "deny")...)
+		}
 	}
 	if pk.Offers(harness.ActionText) {
-		hints = append(hints, overlay.Hint{Key: "tab", Label: "type"})
+		hints = append(hints, m.keyHints(config.ActionPeekType, "type")...)
 	}
 	return hints
 }
@@ -453,18 +546,17 @@ func inboxShowsWhole(it session.AttentionItem) bool {
 
 // inboxApprovalHints are the hints for a held approval under the cursor: its
 // answers first, then going to the pane, which hands the prompt back there.
-func inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
+func (m *OS) inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
 	var hints []overlay.Hint
 	for _, a := range inboxAnswerOrder {
 		if slices.Contains(it.Options, a.decision) {
 			hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
 		}
 	}
-	return append(hints,
-		overlay.Hint{Key: overlay.EnterKey(), Label: "answer in pane"},
-		overlay.Hint{Key: "d", Label: "dismiss"},
-		overlay.Hint{Key: "esc", Label: "close"},
-	)
+	return append(hints, m.keyHints(
+		config.ActionInboxGo, "answer in pane",
+		config.ActionInboxDismiss, "dismiss",
+		config.ActionInboxClose, "close")...)
 }
 
 // inboxAskKeys is the digit keys that answer a question, such as "1-3".
@@ -503,15 +595,12 @@ func inboxAskDetail(it session.AttentionItem, width int) []string {
 
 // inboxAskHints are the hints for a question under the cursor: the digits
 // that pick an answer, then going to the pane that asked.
-func inboxAskHints(it session.AttentionItem) []overlay.Hint {
+func (m *OS) inboxAskHints(it session.AttentionItem) []overlay.Hint {
 	hints := []overlay.Hint{{Key: inboxAskKeys(it), Label: "answer"}}
 	if it.Window != "" {
-		hints = append(hints, overlay.Hint{Key: overlay.EnterKey(), Label: "go to pane"})
+		hints = append(hints, m.keyHints(config.ActionInboxGo, "go to pane")...)
 	}
-	return append(hints,
-		overlay.Hint{Key: "d", Label: "dismiss"},
-		overlay.Hint{Key: "esc", Label: "close"},
-	)
+	return append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxClose, "close")...)
 }
 
 // inboxKindColor is the ink of a kind's mark, the same the rail gives the

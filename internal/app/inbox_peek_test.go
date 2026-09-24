@@ -106,9 +106,16 @@ func TestInboxPeekShowsThePrompt(t *testing.T) {
 	}
 	out, _, _ := m.renderInbox()
 	plain := ansi.Strip(out)
-	for _, want := range []string{"Approval: agent-7", "rm -rf build", "Do you want to proceed?", "2m", "1  Yes", "choose", "approve", "always", "deny", "go to pane"} {
+	for _, want := range []string{"Approval: agent-7", "rm -rf build", "Do you want to proceed?", "2m", "1  Yes", "choose", "go to pane"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("the peek does not show %q:\n%s", want, plain)
+		}
+	}
+	// The digits are the one way offered to answer a numbered prompt; a, A
+	// and d still work but are not offered beside them.
+	for _, lack := range []string{"a approve", "A always", "d deny"} {
+		if strings.Contains(plain, lack) {
+			t.Errorf("the peek offers %q beside the digits:\n%s", lack, plain)
 		}
 	}
 	if strings.Contains(plain, "type") {

@@ -591,6 +591,18 @@ type KeybindingsConfig struct {
 	// cursor is on a row of the files section. See
 	// getDefaultSidebarFilesKeybinds for why they are not in Sidebar.
 	SidebarFiles map[string][]string `toml:"sidebar_files"`
+	// Inbox binds are live while the Inbox is open and its selector line is
+	// not, through GetInboxAction. The digits 1 to 9 are not in it: they
+	// answer a held approval or a question by its number, which is the number
+	// the prompt itself shows. See getDefaultInboxKeybinds.
+	Inbox map[string][]string `toml:"inbox"`
+	// InboxPeek binds are live while a prompt is open over the Inbox and its
+	// text line is not. A scope of its own because d dismisses in the list and
+	// denies in the peek.
+	InboxPeek map[string][]string `toml:"inbox_peek"`
+	// Mail binds are live while the mailbox is open and no reply is being
+	// written.
+	Mail map[string][]string `toml:"mail"`
 }
 
 // defaultPrefixRepeatTime is addressable so DefaultConfig can point at it.
@@ -938,6 +950,9 @@ func DefaultConfig() *UserConfig {
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
 			SidebarFiles: getDefaultSidebarFilesKeybinds(),
+			Inbox:        getDefaultInboxKeybinds(),
+			InboxPeek:    getDefaultInboxPeekKeybinds(),
+			Mail:         getDefaultMailKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -1000,6 +1015,98 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"menu":        {"m"},
 		"help":        {"?"},
 		"exit":        {"esc", "s"},
+	}
+}
+
+// The actions of the Inbox, the prompt open over it and the mailbox, named
+// once so the input path, the key hints and the defaults cannot drift apart.
+const (
+	ActionInboxDown     = "inbox_down"
+	ActionInboxUp       = "inbox_up"
+	ActionInboxPageDown = "inbox_page_down"
+	ActionInboxPageUp   = "inbox_page_up"
+	ActionInboxFirst    = "inbox_first"
+	ActionInboxLast     = "inbox_last"
+	ActionInboxGo       = "inbox_go"
+	ActionInboxPeek     = "inbox_peek"
+	ActionInboxDismiss  = "inbox_dismiss"
+	ActionInboxReply    = "inbox_reply"
+	ActionInboxResume   = "inbox_resume"
+	ActionInboxPassOn   = "inbox_pass_on"
+	ActionInboxFilter   = "inbox_filter"
+	ActionInboxSelect   = "inbox_select"
+	ActionInboxMailbox  = "inbox_mailbox"
+	ActionInboxClose    = "inbox_close"
+
+	ActionPeekApprove       = "peek_approve"
+	ActionPeekApproveAlways = "peek_approve_always"
+	ActionPeekDeny          = "peek_deny"
+	ActionPeekType          = "peek_type"
+	ActionPeekReadAgain     = "peek_read_again"
+	ActionPeekGo            = "peek_go"
+	ActionPeekBack          = "peek_back"
+
+	ActionMailDown      = "mail_down"
+	ActionMailUp        = "mail_up"
+	ActionMailPageDown  = "mail_page_down"
+	ActionMailPageUp    = "mail_page_up"
+	ActionMailOpen      = "mail_open"
+	ActionMailReply     = "mail_reply"
+	ActionMailFocusPane = "mail_focus_pane"
+	ActionMailBack      = "mail_back"
+)
+
+// getDefaultInboxKeybinds returns the Inbox's keys, live while it is open.
+// They were literals in the input path, so the one list KEYBINDINGS.md said
+// could all be rebound had a part that could not.
+func getDefaultInboxKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionInboxDown:     {"j", "down", "ctrl+n"},
+		ActionInboxUp:       {"k", "up", "ctrl+p"},
+		ActionInboxPageDown: {"pgdown"},
+		ActionInboxPageUp:   {"pgup"},
+		ActionInboxFirst:    {"g", "home"},
+		ActionInboxLast:     {"G", "end"},
+		ActionInboxGo:       {"enter"},
+		ActionInboxPeek:     {"space"},
+		ActionInboxDismiss:  {"d", "delete"},
+		ActionInboxReply:    {"r"},
+		ActionInboxResume:   {"y"},
+		ActionInboxPassOn:   {"p"},
+		ActionInboxFilter:   {"f"},
+		ActionInboxSelect:   {"/"},
+		ActionInboxMailbox:  {"m"},
+		ActionInboxClose:    {"esc", "q"},
+	}
+}
+
+// getDefaultInboxPeekKeybinds returns the keys of the prompt open over the
+// Inbox. A digit chooses that option and is not bindable, for the reason the
+// Inbox's digits are not.
+func getDefaultInboxPeekKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionPeekApprove:       {"a"},
+		ActionPeekApproveAlways: {"A"},
+		ActionPeekDeny:          {"d"},
+		ActionPeekType:          {"tab"},
+		ActionPeekReadAgain:     {"r"},
+		ActionPeekGo:            {"enter"},
+		ActionPeekBack:          {"esc", "q", "space"},
+	}
+}
+
+// getDefaultMailKeybinds returns the mailbox's keys, live while it is open and
+// no reply is being written.
+func getDefaultMailKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionMailDown:      {"j", "down", "ctrl+n"},
+		ActionMailUp:        {"k", "up", "ctrl+p"},
+		ActionMailPageDown:  {"pgdown"},
+		ActionMailPageUp:    {"pgup"},
+		ActionMailOpen:      {"enter"},
+		ActionMailReply:     {"r"},
+		ActionMailFocusPane: {"o"},
+		ActionMailBack:      {"esc", "q"},
 	}
 }
 
@@ -2071,6 +2178,15 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.SidebarFiles == nil {
 		cfg.Keybindings.SidebarFiles = make(map[string][]string)
 	}
+	if cfg.Keybindings.Inbox == nil {
+		cfg.Keybindings.Inbox = make(map[string][]string)
+	}
+	if cfg.Keybindings.InboxPeek == nil {
+		cfg.Keybindings.InboxPeek = make(map[string][]string)
+	}
+	if cfg.Keybindings.Mail == nil {
+		cfg.Keybindings.Mail = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
@@ -2110,6 +2226,12 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// before they existed has no sidebar_files section, and left unfilled the
 	// listing would have no way to create, rename or delete anything.
 	fillMapDefaults(cfg.Keybindings.SidebarFiles, defaultCfg.Keybindings.SidebarFiles)
+	// The Inbox, its peek and the mailbox had their keys written into the
+	// input path before these sections existed, so every config written
+	// before them has none and has to get the keys it always had.
+	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
+	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
+	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
 
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		dropStaleDuplicateKeys(section.target, section.defaults)
@@ -2147,6 +2269,9 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.TerminalMode, d.TerminalMode},
 		{c.Sidebar, d.Sidebar},
 		{c.SidebarFiles, d.SidebarFiles},
+		{c.Inbox, d.Inbox},
+		{c.InboxPeek, d.InboxPeek},
+		{c.Mail, d.Mail},
 		{c.Global, d.Global},
 		{c.Script, d.Script},
 	}

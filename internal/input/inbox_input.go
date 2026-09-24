@@ -1,8 +1,11 @@
 package input
 
 import (
+	"sync"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -28,43 +31,67 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxSelecting() {
 		return handleInboxSelectInput(msg, o)
 	}
-	switch msg.String() {
-	case "/":
+	// A digit answers by its number, which is the number the prompt shows, so
+	// it is not a binding.
+	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+		return o, o.InboxNumber(int(key[0] - '0'))
+	}
+	action := lookupAction(msg, overlayKeys(o).GetInboxAction)
+	if action == "" {
+		return o, nil
+	}
+	o.NoteAction(action)
+	switch action {
+	case config.ActionInboxSelect:
 		o.InboxStartSelect()
-	case "esc", "q":
+	case config.ActionInboxClose:
 		o.CloseInbox()
-	case "space":
+	case config.ActionInboxPeek:
 		return o, o.InboxPeek()
-	case "enter":
+	case config.ActionInboxGo:
 		return o, o.InboxActivate()
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		return o, o.InboxNumber(int(msg.String()[0] - '0'))
-	case "d", "delete":
+	case config.ActionInboxDismiss:
 		return o, o.InboxDismiss()
-	case "r":
+	case config.ActionInboxReply:
 		return o, o.InboxReply()
-	case "y":
+	case config.ActionInboxResume:
 		return o, o.InboxResume()
-	case "p":
+	case config.ActionInboxPassOn:
 		return o, o.InboxRelease()
-	case "f":
+	case config.ActionInboxFilter:
 		o.InboxCycleFilter()
-	case "m":
+	case config.ActionInboxMailbox:
 		return o, o.InboxOpenMailbox()
-	case "up", "k", "ctrl+p":
+	case config.ActionInboxUp:
 		o.InboxMove(-1)
-	case "down", "j", "ctrl+n":
+	case config.ActionInboxDown:
 		o.InboxMove(1)
-	case "pgup":
+	case config.ActionInboxPageUp:
 		o.InboxMove(-10)
-	case "pgdown":
+	case config.ActionInboxPageDown:
 		o.InboxMove(10)
-	case "home", "g":
+	case config.ActionInboxFirst:
 		o.InboxMove(-1 << 20)
-	case "end", "G":
+	case config.ActionInboxLast:
 		o.InboxMove(1 << 20)
 	}
 	return o, nil
+}
+
+// defaultOverlayKeys is the registry of the shipped bindings, for a client
+// built without one. The Inbox and the mailbox own the keyboard while they are
+// up, so a client with no registry must still be able to leave them.
+var defaultOverlayKeys = sync.OnceValue(func() *config.KeybindRegistry {
+	return config.NewKeybindRegistry(config.DefaultConfig())
+})
+
+// overlayKeys is the registry the Inbox, its peek and the mailbox read their
+// keys from.
+func overlayKeys(o *app.OS) *config.KeybindRegistry {
+	if o.KeybindRegistry != nil {
+		return o.KeybindRegistry
+	}
+	return defaultOverlayKeys()
 }
 
 // handleInboxSelectInput handles keyboard input while the selector line is
@@ -111,23 +138,29 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	switch key {
-	case "esc", "q", "space":
-		o.InboxPeekBack()
-	case "enter":
-		o.InboxPeekGo()
-	case "a":
-		return o, o.InboxAnswer(harness.ActionApprove, "")
-	case "A", "shift+a":
-		return o, o.InboxAnswer(harness.ActionApproveAlways, "")
-	case "d":
-		return o, o.InboxAnswer(harness.ActionDeny, "")
-	case "tab":
-		o.InboxPeekStartText()
-	case "r":
-		return o, o.InboxPeekRefresh()
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		return o, o.InboxAnswer(harness.ActionChoose, key)
+	}
+	action := lookupAction(msg, overlayKeys(o).GetInboxPeekAction)
+	if action == "" {
+		return o, nil
+	}
+	o.NoteAction(action)
+	switch action {
+	case config.ActionPeekBack:
+		o.InboxPeekBack()
+	case config.ActionPeekGo:
+		o.InboxPeekGo()
+	case config.ActionPeekApprove:
+		return o, o.InboxAnswer(harness.ActionApprove, "")
+	case config.ActionPeekApproveAlways:
+		return o, o.InboxAnswer(harness.ActionApproveAlways, "")
+	case config.ActionPeekDeny:
+		return o, o.InboxAnswer(harness.ActionDeny, "")
+	case config.ActionPeekType:
+		o.InboxPeekStartText()
+	case config.ActionPeekReadAgain:
+		return o, o.InboxPeekRefresh()
 	}
 	return o, nil
 }

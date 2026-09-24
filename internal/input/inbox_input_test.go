@@ -7,8 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // inboxInputOS is a two-pane model with an Inbox holding a question for pane a
@@ -167,5 +169,33 @@ func TestInboxSlashTypesASelector(t *testing.T) {
 	o, _ = HandleKeyPress(press("enter"), o)
 	if w := o.GetFocusedWindow(); w == nil || w.ID != "a" {
 		t.Errorf("enter on the one selected item did not focus pane a")
+	}
+}
+
+// TestInboxKeysAreRebindable: the Inbox's keys come from [keybindings.inbox]
+// and the mailbox's from [keybindings.mail], like every other key. They were
+// literals in this file, so KEYBINDINGS.md's "every binding is rebindable"
+// was not true of them.
+func TestInboxKeysAreRebindable(t *testing.T) {
+	o := osWithBindings(t, func(k *config.KeybindingsConfig) {
+		k.Inbox[config.ActionInboxFilter] = []string{"x"}
+		k.Mail[config.ActionMailFocusPane] = []string{"p"}
+	})
+	o.Width, o.Height = 120, 40
+	o.Windows = []*terminal.Window{{ID: "a", Width: 60, Height: 40, Workspace: o.CurrentWorkspace}}
+	o.Inbox.Live = true
+	o.Inbox.Items = []session.AttentionItem{{ID: "1", Kind: session.AttentionApproval, Session: "local", Window: "a", Since: 1}}
+	o.OpenInbox("")
+
+	o, _ = HandleKeyPress(press("f"), o)
+	if o.Inbox.Filter != "" {
+		t.Errorf("f still steps the filter after it was rebound: %q", o.Inbox.Filter)
+	}
+	o, _ = HandleKeyPress(press("x"), o)
+	if o.Inbox.Filter == "" {
+		t.Error("x, the rebound filter key, did nothing")
+	}
+	if got := o.KeybindRegistry.GetInboxKeys(config.ActionMailFocusPane); len(got) != 1 || got[0] != "p" {
+		t.Errorf("the mailbox's focus key reads back as %v", got)
 	}
 }

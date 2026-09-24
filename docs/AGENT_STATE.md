@@ -1143,6 +1143,12 @@ Inside the Inbox:
 | `m` | Open the mailbox, with every thread including the ones between agents. |
 | `esc` / `q` | Close. |
 
+These are the default keys. Every one but the digits can be rebound under
+`[keybindings.inbox]`, `[keybindings.inbox_peek]` and `[keybindings.mail]`
+(see [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox)), and the footers name the key
+the config binds. The footer lists only the keys that act on the selected row,
+the one that answers it first.
+
 Rows are grouped under headings in words, Approvals, Questions, Mail, Errored,
 Resume, Done, each with its count, and oldest first inside a group. Questions
 holds both a question an agent's prompt asks and one put with `ask-human`; they

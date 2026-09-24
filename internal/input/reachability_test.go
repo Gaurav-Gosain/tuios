@@ -1,6 +1,7 @@
 package input
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -11,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -144,7 +147,49 @@ func reachSections(t *testing.T) []bindingSection {
 		// The files section is read first, and only while the cursor is on a row
 		// of the listing.
 		{name: "sidebar_files", binds: k.SidebarFiles, modes: windowMode, newOS: reachFilesOS},
+		// The Inbox, the prompt open over it and the mailbox own the keyboard
+		// while they are up, in either mode.
+		{name: "inbox", binds: k.Inbox, modes: bothModes, newOS: reachInboxOS},
+		{name: "inbox_peek", binds: k.InboxPeek, modes: bothModes, newOS: reachInboxPeekOS},
+		{name: "mail", binds: k.Mail, modes: bothModes, newOS: reachMailOS},
 	}
+}
+
+// reachInboxOS is a client with the Inbox open on an approval and a question.
+func reachInboxOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := inboxInputOS(t)
+	o.OpenInbox("")
+	return o
+}
+
+// reachInboxPeekOS is reachInboxOS with the approval's prompt open over the
+// list.
+func reachInboxPeekOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := inboxInputOS(t)
+	o.SetInboxVerbCaller(func(verb string, _ map[string]any, _ time.Duration) (json.RawMessage, error) {
+		return json.Marshal(session.PromptPeek{
+			Session: "local", Window: "b", State: "needs_input", Blocked: true, Found: true, Answerable: true,
+			PromptID: "p1", Actions: []string{"approve", "approve_always", "deny", "text"},
+		})
+	}, func() string { return "n" })
+	o.OpenInbox("")
+	cmd := o.InboxPeek()
+	if !o.InboxPeeking() || cmd == nil {
+		t.Fatal("the fixture's approval did not open a peek")
+	}
+	o.Update(cmd())
+	return o
+}
+
+// reachMailOS is a client with the mailbox open on one thread.
+func reachMailOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := mailThreadOS(t)
+	o.OpenAgentMail()
+	o.AgentMail.Loading = false
+	return o
 }
 
 // TestEveryDefaultBindingReachesItsAction presses every key the default config
@@ -453,9 +498,18 @@ func modeName(m app.Mode) string {
 // The handled set is the dispatcher's table plus every action this package
 // names by string in a handler that takes it by section instead: the terminal
 // mode's own keys, the script keys, the global binds. The hold layer's held
-// key is read through its constant.
+// key is read through its constant. The Inbox, its peek and the mailbox name
+// their actions through config constants rather than strings, so their
+// sections count as handled through the reachability table, whose test
+// presses every key of them and sees its action run.
 func TestEveryDescribedActionIsHandled(t *testing.T) {
 	handled := map[string]bool{app.HoldModeAction: true}
+	k := config.DefaultConfig().Keybindings
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail} {
+		for action := range section {
+			handled[action] = true
+		}
+	}
 	d := GetDispatcher()
 	files, err := filepath.Glob("*.go")
 	if err != nil {

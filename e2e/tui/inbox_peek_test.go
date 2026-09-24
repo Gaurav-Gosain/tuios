@@ -65,8 +65,10 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
+		// A numbered menu is answered by its digits, which is the one way the
+		// footer offers; a still approves, as pressed below.
 		return strings.Contains(text, "Do you want to proceed?") && strings.Contains(text, "rm -rf build") &&
-			strings.Contains(text, "approve") && strings.Contains(text, "deny") && strings.Contains(text, "Yes, and don")
+			strings.Contains(text, "choose") && strings.Contains(text, "Yes, and don")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the peek never showed the menu and its answers: %v\n%s", err, term.Snapshot())
 	}

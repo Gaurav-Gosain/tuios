@@ -2,7 +2,7 @@
 
 The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindings
 
-Every binding lives in one of the 19 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
+Every binding lives in one of the 22 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
@@ -18,16 +18,42 @@ Everything waiting for you in every session is one list, the Inbox. See
 | `ctrl+b M` | Open the Inbox on its mail (`m` there opens the whole mailbox) |
 
 Inside it: `j` and `k` move, `enter` goes to the pane, `space` reads an
-approval's or a question's prompt, `r` replies to mail, `d` dismisses, `f` steps
-through the kinds, `/` types a selector that narrows the list (such as
-`harness:codex needs:you`; `enter` applies it, an empty line clears it), `m`
-opens the mailbox, `esc` closes. `ctrl+b o` is `o`
-because `ctrl+b a` is the launcher's.
+approval's or a question's prompt so you can answer it there, `r` replies to
+mail, `y` resumes a conversation a restart left, `p` passes held mail on, `d`
+dismisses, `f` steps through the kinds, `/` types a selector that narrows the
+list (such as `harness:codex needs:you`; `enter` applies it, an empty line
+clears it), `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o` because
+`ctrl+b a` is the launcher's.
+
+The footer offers the keys that act on the row under the cursor, the one that
+answers it first: `space answer` on an approval or a question, `r reply` on
+mail, `y resume` on a resume row. It offers `m mailbox` on a mail row, though
+`m` works on every row.
 
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
 approves and does not ask again, `d` denies, `tab` types an answer, `r` reads
-the prompt again, `enter` goes to the pane, `esc` goes back to the list. See
+the prompt again, `enter` goes to the pane, `esc` goes back to the list. A
+prompt with numbered options offers its digits in the footer and not `a`, `A`
+and `d`, which still work. See
 [Answering a prompt without attaching](AGENT_STATE.md#answering-a-prompt-without-attaching).
+
+These keys are in three sections of their own, rebindable like any other:
+`[keybindings.inbox]` (the list: `inbox_down`, `inbox_up`, `inbox_page_down`,
+`inbox_page_up`, `inbox_first`, `inbox_last`, `inbox_go`, `inbox_peek`,
+`inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
+`inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`),
+`[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
+`peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
+`[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
+`mail_page_up`, `mail_open`, `mail_reply`, `mail_focus_pane`, `mail_back`).
+The footers name whatever key the config binds. The digits `1` to `9` are not
+bindings: they pick an answer by the number the prompt shows. The selector
+line and the reply and answer lines take text, so every key there is typed.
+
+```toml
+[keybindings.inbox]
+inbox_dismiss = ["x"]
+```
 
 On an approval the Inbox is holding (`[agents.approvals]`, see
 [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox)), `1` allows it

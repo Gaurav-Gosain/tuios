@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -144,7 +145,7 @@ func (m *OS) InboxPeek() tea.Cmd {
 		return nil
 	}
 	if !inboxPeekable(it) {
-		m.ShowNotification("Space reads the prompt of an approval or a question. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(capitalize(m.inboxKeyOr(config.ActionInboxPeek, "space"))+" reads the prompt of an approval or a question. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if it.RequestID != "" {

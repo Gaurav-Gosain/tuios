@@ -3,6 +3,7 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleAgentMailInput handles keyboard input while the mailbox is open. Two
@@ -35,25 +36,30 @@ func handleAgentMailInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	switch key {
-	case "esc", "q":
+	action := lookupAction(msg, overlayKeys(o).GetMailAction)
+	if action == "" {
+		return o, nil
+	}
+	o.NoteAction(action)
+	switch action {
+	case config.ActionMailBack:
 		o.AgentMailBack()
-	case "enter":
+	case config.ActionMailOpen:
 		if o.AgentMail.Thread == 0 {
 			return o, o.AgentMailOpenSelected()
 		}
 		o.AgentMailStartReply()
-	case "r":
+	case config.ActionMailReply:
 		o.AgentMailStartReply()
-	case "o":
+	case config.ActionMailFocusPane:
 		o.AgentMailFocusPane()
-	case "up", "k", "ctrl+p":
+	case config.ActionMailUp:
 		o.AgentMailMove(-1)
-	case "down", "j", "ctrl+n":
+	case config.ActionMailDown:
 		o.AgentMailMove(1)
-	case "pgup":
+	case config.ActionMailPageUp:
 		o.AgentMailMove(-10)
-	case "pgdown":
+	case config.ActionMailPageDown:
 		o.AgentMailMove(10)
 	}
 	return o, nil

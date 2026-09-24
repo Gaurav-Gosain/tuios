@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -103,10 +104,7 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		Selected:   st.Selected,
 		Scroll:     &st.Scroll,
 		EmptyMsg:   "Reading mail",
-		Hints: []overlay.Hint{
-			{Key: overlay.EnterKey(), Label: "open"},
-			{Key: "esc", Label: "close"},
-		},
+		Hints:      m.keyHints(config.ActionMailOpen, "open", config.ActionMailBack, "close"),
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			return m.agentMailThreadRow(threads[i], selected, rowBg, pal, width, now)
 		},
@@ -242,12 +240,11 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 		extra += 2
 	} else {
-		hints = []overlay.Hint{
-			{Key: "r", Label: "reply"},
-			{Key: "o", Label: "open pane"},
-			{Key: "j/k", Label: "scroll"},
-			{Key: "esc", Label: "back"},
+		hints = m.keyHints(config.ActionMailReply, "reply", config.ActionMailFocusPane, "open pane")
+		if down, up := m.inboxKey(config.ActionMailDown), m.inboxKey(config.ActionMailUp); down != "" && up != "" {
+			hints = append(hints, overlay.Hint{Key: down + "/" + up, Label: "scroll"})
 		}
+		hints = append(hints, m.keyHints(config.ActionMailBack, "back")...)
 	}
 	if st.Error != "" {
 		extra++

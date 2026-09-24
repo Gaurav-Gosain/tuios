@@ -439,7 +439,8 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	if len(fresh) > 1 {
 		text = strconv.Itoa(len(fresh)) + " agent conversations can be resumed"
 	}
-	text += agentAlertSep() + "open the Inbox with the prefix key then i, and press y"
+	text += agentAlertSep() + "open the Inbox with " + m.pressFor("prefix_inbox", "the prefix key then i") +
+		", and press " + m.inboxKeyOr(config.ActionInboxResume, "y")
 	m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: fresh[0].Session, WindowID: fresh[0].Window})
 }
@@ -1474,7 +1475,7 @@ func (m *OS) InboxReply() tea.Cmd {
 		return nil
 	}
 	if it.Kind != session.AttentionMail {
-		m.ShowNotification("r replies to mail. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.inboxKeyOr(config.ActionInboxReply, "r")+" replies to mail. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.CloseInbox()

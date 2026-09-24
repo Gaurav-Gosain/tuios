@@ -68,6 +68,9 @@ const (
 	SectionTerminalMode     = "terminal_mode"
 	SectionSidebar          = "sidebar"
 	SectionSidebarFiles     = "sidebar_files"
+	SectionInbox            = "inbox"
+	SectionInboxPeek        = "inbox_peek"
+	SectionMail             = "mail"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 )
@@ -79,6 +82,9 @@ const (
 	ScopeTerminalMode   = "terminal"
 	ScopeSidebar        = "sidebar"
 	ScopeSidebarFiles   = "sidebar.files"
+	ScopeInbox          = "inbox"
+	ScopeInboxPeek      = "inbox.peek"
+	ScopeMail           = "mail"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -137,6 +143,25 @@ func Scopes(leader string) []Scope {
 			// be reporting a fault that does not exist.
 			ID: ScopeSidebarFiles, Name: "Sidebar files",
 			Sections: []string{SectionSidebarFiles},
+			Reaches:  ReachModal,
+		},
+		{
+			// The Inbox, the prompt open over it and the mailbox each own the
+			// keyboard while they are up, so each is a scope of its own: d
+			// dismisses in the list and denies in the peek, which is a
+			// resolution by context and not a clash.
+			ID: ScopeInbox, Name: "Inbox",
+			Sections: []string{SectionInbox},
+			Reaches:  ReachModal,
+		},
+		{
+			ID: ScopeInboxPeek, Name: "Inbox prompt",
+			Sections: []string{SectionInboxPeek},
+			Reaches:  ReachModal,
+		},
+		{
+			ID: ScopeMail, Name: "Mailbox",
+			Sections: []string{SectionMail},
 			Reaches:  ReachModal,
 		},
 		{
@@ -225,6 +250,12 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.Sidebar
 	case SectionSidebarFiles:
 		return k.SidebarFiles
+	case SectionInbox:
+		return k.Inbox
+	case SectionInboxPeek:
+		return k.InboxPeek
+	case SectionMail:
+		return k.Mail
 	}
 	return nil
 }
