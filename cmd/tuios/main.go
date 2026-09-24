@@ -2826,7 +2826,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
 	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand())
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand())
-	rootCmd.AddCommand(newAgentHookCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
+	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand())
 

@@ -82,7 +82,24 @@ type Notice struct {
 	Error bool
 }
 
+// Usage is what the agent said about its model, its context window and what
+// the conversation cost so far. Every field is optional: a zero field, or a
+// false Has flag, is one the agent did not state, and it changes nothing.
+type Usage struct {
+	// Model is the model now answering, when the agent named it.
+	Model string
+	// ContextUsed is the tokens in the context window, of ContextSize. The
+	// context is stated only when ContextSize is above zero.
+	ContextUsed, ContextSize int64
+	// Cost is the conversation's cost so far, in Currency (USD when empty),
+	// stated when HasCost is set.
+	Cost     float64
+	HasCost  bool
+	Currency string
+}
+
 func (Text) isEvent()        {}
+func (Usage) isEvent()       {}
 func (Tool) isEvent()        {}
 func (Plan) isEvent()        {}
 func (Notice) isEvent()      {}

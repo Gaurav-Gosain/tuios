@@ -27,6 +27,9 @@ import (
 //	item/agentMessage/delta                notification: the reply as it streams
 //	item/reasoning/summaryTextDelta        notification: the reasoning summary
 //	error                                  notification: a turn error, maybe retried
+//	thread/tokenUsage/updated              notification: tokens used, of the model's window
+//	turn/plan/updated                      notification: the turn's plan
+//	model/rerouted                         notification: another model answers now
 //	item/commandExecution/requestApproval  request: run this command?
 //	item/fileChange/requestApproval        request: apply this change?
 //
@@ -240,6 +243,52 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 			c.ended[p.Turn.ID] = r
 		}
 		c.mu.Unlock()
+	case "thread/tokenUsage/updated":
+		// The context is the last request's tokens of the model's window.
+		// The window is null when Codex does not know it, and then there is
+		// no context to state.
+		var p struct {
+			TokenUsage struct {
+				Last struct {
+					TotalTokens *int64 `json:"totalTokens"`
+				} `json:"last"`
+				ModelContextWindow *int64 `json:"modelContextWindow"`
+			} `json:"tokenUsage"`
+		}
+		if json.Unmarshal(params, &p) != nil {
+			return
+		}
+		u := p.TokenUsage
+		if u.Last.TotalTokens == nil || u.ModelContextWindow == nil || *u.ModelContextWindow <= 0 {
+			return
+		}
+		c.emit(Usage{ContextUsed: *u.Last.TotalTokens, ContextSize: *u.ModelContextWindow})
+	case "turn/plan/updated":
+		var p struct {
+			Plan []struct {
+				Step   string `json:"step"`
+				Status string `json:"status"`
+			} `json:"plan"`
+		}
+		if json.Unmarshal(params, &p) != nil {
+			return
+		}
+		plan := Plan{Entries: []PlanEntry{}}
+		for _, e := range p.Plan {
+			status := e.Status
+			if status == "inProgress" {
+				status = "in_progress"
+			}
+			plan.Entries = append(plan.Entries, PlanEntry{Content: e.Step, Status: status})
+		}
+		c.emit(plan)
+	case "model/rerouted":
+		var p struct {
+			ToModel string `json:"toModel"`
+		}
+		if json.Unmarshal(params, &p) == nil && p.ToModel != "" {
+			c.emit(Usage{Model: p.ToModel})
+		}
 	case "error":
 		var p struct {
 			Error struct {

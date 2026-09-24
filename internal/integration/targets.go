@@ -233,8 +233,9 @@ var targets = []*Target{
 	},
 	{
 		// Version 2 offers permission requests to the Inbox and sends the
-		// person's reply back to opencode.
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 2, Reports: ReportsState,
+		// person's reply back to opencode. Version 3 feeds the model and the
+		// session's cost to the pane's agent metadata.
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 3, Reports: ReportsState,
 		Source:    "https://opencode.ai/docs/plugins/ (global plugins load from ~/.config/opencode/plugins)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
@@ -342,8 +343,8 @@ var targets = []*Target{
 	},
 	{
 		// Version 2: the opencode plugin it shares offers permission requests
-		// to the Inbox.
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 2, Reports: ReportsState,
+		// to the Inbox. Version 3: it feeds the model and cost.
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 3, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),
@@ -574,6 +575,9 @@ type Status struct {
 	// MCP is the MCP server registration, for a harness tuios can register
 	// one with. See mcp.go.
 	MCP *MCPStatus `json:"mcp,omitempty"`
+	// StatusLine is the status line slot, for a harness tuios can feed from
+	// one (Claude Code). See statusline.go.
+	StatusLine *StatusLineStatus `json:"status_line,omitempty"`
 }
 
 var versionRe = regexp.MustCompile(`TUIOS_INTEGRATION_VERSION=(\d+)|` + managedMarker + ` (\d+)`)
@@ -594,6 +598,10 @@ func (t *Target) Status(env Env, tuios string) Status {
 	if t.SupportsMCP() {
 		m := t.MCPState(env, tuios)
 		st.MCP = &m
+	}
+	if t.SupportsStatusLine() {
+		sl := t.StatusLineState(env, tuios)
+		st.StatusLine = &sl
 	}
 	if fi, err := os.Stat(t.ConfigDir(env)); err == nil && fi.IsDir() {
 		st.ConfigDirExists = true

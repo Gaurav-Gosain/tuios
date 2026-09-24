@@ -75,6 +75,13 @@ type Session struct {
 	shownAt time.Time
 	hold    context.CancelFunc
 	holds   chan holdResult
+	// meta is the pane's agent metadata as the agent last stated it, and
+	// feed sends it, when the Reporter is a MetaReporter.
+	meta map[string]string
+	feed *metaFeed
+	// toolPhase is how far each tool call of the turn has been reported as
+	// activity: 1 started, 2 ended.
+	toolPhase map[string]int
 	// keysHandled, when set, is called after Run has handled the keys of one
 	// read. Tests use it to know a key was handled, not only read.
 	keysHandled func()
@@ -118,6 +125,10 @@ func (s *Session) Run(ctx context.Context) int {
 	}
 	if s.Settle <= 0 {
 		s.Settle = defaultSettle
+	}
+	if mr, ok := s.Reporter.(MetaReporter); ok {
+		s.feed = newMetaFeed(mr)
+		defer s.feed.stop()
 	}
 	keys := make(chan []key, 64)
 	go func() {
@@ -164,6 +175,9 @@ func (s *Session) Run(ctx context.Context) int {
 			s.ready = true
 			s.write(s.r.line(oneLine(startedLine(st.info))))
 			s.report("idle", "", "", "")
+			if st.info.Model != "" {
+				s.setMeta(map[string]string{MetaModel: oneLine(st.info.Model)})
+			}
 			s.write(s.r.line("Type a prompt and press Enter. Ctrl+C cancels a turn, Ctrl+D on an empty line quits."))
 			if s.queued != "" {
 				text := s.queued
@@ -246,6 +260,16 @@ func (s *Session) onEvent(ev Event) {
 		if !e.Thought && s.reply.Len() < 4096 {
 			s.reply.WriteString(e.Text)
 		}
+		s.write(s.r.event(e))
+	case Usage:
+		s.setMeta(metaFromUsage(e))
+	case Plan:
+		if p := planProgress(e); p != "" {
+			s.setMeta(map[string]string{MetaPlan: p})
+		}
+		s.write(s.r.event(e))
+	case Tool:
+		s.toolActivity(e)
 		s.write(s.r.event(e))
 	default:
 		s.write(s.r.event(ev))
@@ -401,6 +425,8 @@ func (s *Session) startTurn(ctx context.Context, text string, turns chan turnRes
 	s.reply.Reset()
 	s.write(s.r.prompt(text))
 	s.report("working", "", "", "")
+	s.toolPhase = nil
+	s.activity(Activity{Event: ActivityPrompt, Text: firstLine(text)})
 	go func() {
 		res, err := s.Agent.Prompt(ctx, text)
 		turns <- turnResult{res: res, err: err}
@@ -431,6 +457,74 @@ func (s *Session) endTurn(t turnResult) {
 	default:
 		s.report("done", "", firstLine(s.reply.String()), "")
 	}
+	end := Activity{Event: ActivityTurnEnd, Text: firstLine(s.reply.String())}
+	if res.Stop != StopFinished {
+		end.Text = oneLine(firstOf(res.Detail, "turn "+res.Stop))
+	}
+	s.activity(end)
+}
+
+// setMeta takes metadata the agent stated and sends what changed.
+func (s *Session) setMeta(tokens map[string]string) {
+	if len(tokens) == 0 {
+		return
+	}
+	if s.meta == nil {
+		s.meta = map[string]string{}
+	}
+	changed := false
+	for k, v := range tokens {
+		if s.meta[k] != v {
+			s.meta[k] = v
+			changed = true
+		}
+	}
+	if changed && s.feed != nil {
+		s.feed.push(s.meta)
+	}
+}
+
+// toolActivity reports a tool call as activity once when it starts and once
+// when it ends, however many updates the protocol sends about it.
+func (s *Session) toolActivity(t Tool) {
+	if t.ID == "" {
+		return
+	}
+	if s.toolPhase == nil {
+		s.toolPhase = map[string]int{}
+	}
+	phase := s.toolPhase[t.ID]
+	tool, target := activityTool(t)
+	switch t.Status {
+	case ToolDone, ToolFailed:
+		if phase >= 2 {
+			return
+		}
+		s.toolPhase[t.ID] = 2
+		ok := t.Status == ToolDone
+		ev := ActivityToolDone
+		if !ok {
+			ev = ActivityToolFailed
+		}
+		s.activity(Activity{Event: ev, Tool: tool, Target: target, OK: &ok})
+	default:
+		if phase >= 1 {
+			return
+		}
+		s.toolPhase[t.ID] = 1
+		s.activity(Activity{Event: ActivityTool, Tool: tool, Target: target})
+	}
+}
+
+// activity reports one activity, when the Reporter takes activity.
+func (s *Session) activity(a Activity) {
+	ar, ok := s.Reporter.(ActivityReporter)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), reportTimeout)
+	defer cancel()
+	_ = ar.ReportActivity(ctx, a)
 }
 
 // firstLine is the first non-empty line of s, cleaned and clipped for a state

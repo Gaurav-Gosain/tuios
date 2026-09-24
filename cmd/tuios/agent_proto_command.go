@@ -147,14 +147,30 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 	return s.Run(ctx)
 }
 
-// paneReporter reports the session's state for the pane it runs in.
+// paneReporter reports the session's state for the pane it runs in, and its
+// metadata and activity.
 type paneReporter struct {
 	session, window, harness string
 	dial                     func() (*session.VerbClient, error)
 
 	mu     sync.Mutex
 	client *session.VerbClient
+	// activity is whether the daemon's set-agent-state takes activity:
+	// unknown until it has been asked, once.
+	activity activitySupport
 }
+
+// activitySupport is what the daemon was found to take.
+type activitySupport int
+
+const (
+	activityUnknown activitySupport = iota
+	activityYes
+	activityNo
+)
+
+// protoMetaSource is the set-agent-meta source a protocol pane writes under.
+const protoMetaSource = "protocol"
 
 func (r *paneReporter) close() {
 	r.mu.Lock()
@@ -190,6 +206,117 @@ func (r *paneReporter) Report(ctx context.Context, state, kind, message, ifState
 		return err
 	}
 	return nil
+}
+
+// call runs one verb on the connection kept for reports, dialled again after
+// a failure. Callers hold r.mu.
+func (r *paneReporter) call(ctx context.Context, verb string, params map[string]any) (json.RawMessage, error) {
+	if r.client == nil {
+		c, err := r.dial()
+		if err != nil {
+			return nil, err
+		}
+		r.client = c
+	}
+	timeout := time.Until(deadlineOr(ctx, 2*time.Second))
+	raw, err := r.client.CallWithTimeout(verb, params, timeout)
+	if err != nil {
+		var verr *session.VerbCallError
+		if !errors.As(err, &verr) {
+			// The connection itself failed: dial again next time.
+			_ = r.client.Close()
+			r.client = nil
+		}
+		return nil, err
+	}
+	return raw, nil
+}
+
+// SetMeta writes the agent's model, context use, cost and plan progress to
+// the pane's metadata, under the protocol source. set-agent-meta is scoped to
+// the caller's own pane.
+func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, err := r.call(ctx, "set-agent-meta", map[string]any{
+		"session": r.session,
+		"window":  r.window,
+		"tokens":  tokens,
+		"source":  protoMetaSource,
+	})
+	return err
+}
+
+// ReportActivity sends one activity with set-agent-state. Its state part is
+// working, only if the pane is working already, so it changes no state. A
+// daemon whose set-agent-state does not list activity is sent nothing: an
+// older daemon would ignore the field and apply the report.
+func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.activity == activityUnknown {
+		raw, err := r.call(ctx, "list-verbs", map[string]any{"verb": "set-agent-state"})
+		var verr *session.VerbCallError
+		if errors.As(err, &verr) {
+			// A daemon that answers but cannot say is taken not to.
+			r.activity = activityNo
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		r.activity = activityNo
+		if listsParam(raw, "set-agent-state", "activity") {
+			r.activity = activityYes
+		}
+	}
+	if r.activity != activityYes {
+		return nil
+	}
+	act := map[string]any{"event": a.Event}
+	for k, v := range map[string]string{"tool": a.Tool, "target": a.Target, "text": a.Text} {
+		if v != "" {
+			act[k] = v
+		}
+	}
+	if a.OK != nil {
+		act["ok"] = *a.OK
+	}
+	_, err := r.call(ctx, "set-agent-state", map[string]any{
+		"session":  r.session,
+		"window":   r.window,
+		"state":    "working",
+		"if_state": "working",
+		"harness":  r.harness,
+		"activity": act,
+	})
+	return err
+}
+
+// listsParam reports whether a list-verbs answer lists param for verb.
+func listsParam(raw json.RawMessage, verb, param string) bool {
+	var res struct {
+		Verbs []struct {
+			Verb   string `json:"verb"`
+			Params []struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		} `json:"verbs"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return false
+	}
+	for _, v := range res.Verbs {
+		if v.Verb != verb {
+			continue
+		}
+		for _, p := range v.Params {
+			if p.Name == param {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Hold calls request-approval on a connection of its own, which is closed

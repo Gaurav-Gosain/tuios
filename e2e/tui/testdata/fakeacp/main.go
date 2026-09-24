@@ -1,7 +1,8 @@
 // Command fakeacp is a scripted ACP agent for the end-to-end tests. It speaks
 // ACP version 1 on stdin and stdout: it opens a session, echoes a prompt back,
 // and for a prompt that mentions "run" asks permission to run a command and
-// says whether it was allowed. Its reply also carries an OSC title sequence,
+// says whether it was allowed. A prompt that mentions "usage" gets a plan and
+// a usage_update, and session/new names the model. Its reply also carries an OSC title sequence,
 // which the pane program must not pass to the pane, and it tries to write to
 // its controlling terminal, which it must not have.
 package main
@@ -86,6 +87,13 @@ func prompt(id json.RawMessage, params json.RawMessage) {
 		text = p.Prompt[0].Text
 	}
 	say("ECHO: " + text + "\x1b]0;pwned\x07\n")
+	if strings.Contains(text, "usage") {
+		update(map[string]any{"sessionUpdate": "plan", "entries": []any{
+			map[string]any{"content": "read", "priority": "high", "status": "completed"},
+			map[string]any{"content": "fix", "priority": "high", "status": "in_progress"},
+		}})
+		update(map[string]any{"sessionUpdate": "usage_update", "used": 84000, "size": 200000, "cost": map[string]any{"amount": 0.42, "currency": "USD"}})
+	}
 	if strings.Contains(text, "run") {
 		update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call-1", "title": "go test ./...", "kind": "execute", "status": "pending", "rawInput": map[string]any{"command": "go test ./..."}})
 		answer := ask()
@@ -118,7 +126,10 @@ func main() {
 		case m.Method == "initialize":
 			respond(m.ID, map[string]any{"protocolVersion": 1, "agentInfo": map[string]any{"name": "fakeacp", "version": "1.0"}, "agentCapabilities": map[string]any{}})
 		case m.Method == "session/new":
-			respond(m.ID, map[string]any{"sessionId": "fake-1"})
+			respond(m.ID, map[string]any{"sessionId": "fake-1", "models": map[string]any{
+				"currentModelId":  "fake/model-1",
+				"availableModels": []any{map[string]any{"modelId": "fake/model-1", "name": "Fake Model"}},
+			}})
 		case m.Method == "session/prompt":
 			go prompt(m.ID, m.Params)
 		case m.Method == "session/cancel":

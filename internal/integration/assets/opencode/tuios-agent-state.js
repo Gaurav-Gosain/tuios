@@ -18,6 +18,12 @@
 // the Inbox only offers a request whose call it can show whole.
 // When the hook prints nothing, which is every other case, nothing is sent and
 // opencode's own prompt stands.
+//
+// The model and the session's cost so far go to the pane's agent metadata
+// through `tuios agent-statusline __TUIOS_HARNESS__`, from the assistant messages
+// opencode updates: each message's modelID, and the sum of their cost. It runs
+// only when the model or the cost to the cent changed, and once more when the
+// session goes idle, so the turn's last cost is not held back.
 
 import { spawn } from "node:child_process";
 
@@ -33,6 +39,11 @@ const children = new Set();
 // The Inbox only offers a request whose call it can show whole.
 const calls = new Map();
 const CALLS_MAX = 256;
+const STATUS_ARGS = ["agent-statusline", "__TUIOS_HARNESS__", "--integration", "__TUIOS_VERSION__"];
+// usage maps a session id to its assistant messages' cost by message id, the
+// model last named, and what was last sent.
+const usage = new Map();
+const USAGE_MAX = 64;
 
 function remember(callID, tool, args) {
   if (!callID || !tool) return;
@@ -51,17 +62,61 @@ function payloadFor(event, sessionID, extra) {
 }
 
 function report(event, sessionID, extra) {
+  run(ARGS, payloadFor(event, sessionID, extra));
+}
+
+// run starts tuios with args and input on its stdin, and does not wait.
+function run(args, input) {
   try {
-    const child = spawn(TUIOS, ARGS, {
+    const child = spawn(TUIOS, args, {
       stdio: ["pipe", "ignore", "ignore"],
       windowsHide: true,
     });
     child.on("error", () => {});
     child.stdin.on("error", () => {});
-    child.stdin.end(payloadFor(event, sessionID, extra));
+    child.stdin.end(input);
   } catch {
     // A report that cannot be sent must never break opencode.
   }
+}
+
+// noteUsage takes an assistant message's model and cost.
+function noteUsage(info) {
+  const sessionID = text(info.sessionID);
+  if (!sessionID || children.has(sessionID)) return;
+  let u = usage.get(sessionID);
+  if (!u) {
+    u = { costs: new Map(), model: "", sent: "" };
+    usage.set(sessionID, u);
+    while (usage.size > USAGE_MAX) {
+      usage.delete(usage.keys().next().value);
+    }
+  }
+  const id = text(info.id);
+  if (id && typeof info.cost === "number" && Number.isFinite(info.cost) && info.cost >= 0) {
+    u.costs.set(id, info.cost);
+  }
+  if (text(info.modelID)) u.model = text(info.modelID);
+  sendUsage(sessionID, false);
+}
+
+// sendUsage runs the status line feed for a session when what it would say
+// changed, or at the end of a turn.
+function sendUsage(sessionID, turnEnd) {
+  const u = usage.get(sessionID);
+  if (!u) return;
+  const payload = { session_id: sessionID };
+  if (u.model) payload.modelID = u.model;
+  if (u.costs.size > 0) {
+    let cost = 0;
+    for (const c of u.costs.values()) cost += c;
+    payload.cost = cost;
+  }
+  const key = (payload.modelID || "") + "|" + (payload.cost === undefined ? "" : payload.cost.toFixed(2));
+  if (!turnEnd && key === u.sent) return;
+  if (key === "|") return;
+  u.sent = key;
+  run(turnEnd ? [...STATUS_ARGS, "--turn-end"] : STATUS_ARGS, JSON.stringify(payload));
 }
 
 // ask runs the hook for a permission request and resolves to the reply it
@@ -172,8 +227,13 @@ export const TuiosAgentState = async (ctx) => {
       const props = event?.properties ?? {};
       const info = props.info;
       if (info?.id && info.parentID) children.add(info.id);
+      if (type === "message.updated") {
+        if (info?.role === "assistant") noteUsage(info);
+        return;
+      }
       const sessionID = text(props.sessionID) || text(info?.id);
       if (sessionID && children.has(sessionID)) return;
+      if (type === "session.idle") sendUsage(sessionID, true);
       switch (type) {
         case "session.created":
         case "session.idle":

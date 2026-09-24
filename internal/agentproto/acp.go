@@ -21,7 +21,9 @@ import (
 //	session/prompt              client to agent, one turn; answers with stopReason
 //	session/cancel              client to agent, notification
 //	session/update              agent to client, notification: message and
-//	                            thought chunks, tool calls and their updates, plans
+//	                            thought chunks, tool calls and their updates, plans,
+//	                            and usage_update (tokens in context, window size,
+//	                            and the session's cost)
 //	session/request_permission  agent to client, request: the options to answer with
 //
 // The client advertises fs.readTextFile, fs.writeTextFile and terminal as
@@ -90,6 +92,10 @@ func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 	}
 	var created struct {
 		SessionID string `json:"sessionId"`
+		// Models is the session's model state, which ACP marks unstable:
+		// read on its own when present, so a shape this client does not
+		// know costs the model and not the session.
+		Models json.RawMessage `json:"models"`
 	}
 	err = a.conn.Call(ctx, "session/new", map[string]any{"cwd": cwd, "mcpServers": []any{}}, &created)
 	if err != nil {
@@ -109,7 +115,29 @@ func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 	a.session = created.SessionID
 	a.mu.Unlock()
 	info.Session = created.SessionID
+	info.Model = acpModel(created.Models)
 	return info, nil
+}
+
+// acpModel is the current model a session/new answer names: its name when
+// the agent lists one, else its id, else "".
+func acpModel(raw json.RawMessage) string {
+	var m struct {
+		CurrentModelID  string `json:"currentModelId"`
+		AvailableModels []struct {
+			ModelID string `json:"modelId"`
+			Name    string `json:"name"`
+		} `json:"availableModels"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil || m.CurrentModelID == "" {
+		return ""
+	}
+	for _, am := range m.AvailableModels {
+		if am.ModelID == m.CurrentModelID && strings.TrimSpace(am.Name) != "" {
+			return am.Name
+		}
+	}
+	return m.CurrentModelID
 }
 
 // Prompt sends session/prompt and waits for its stopReason.
@@ -235,6 +263,34 @@ func (a *ACP) onNotify(method string, params json.RawMessage) {
 				plan.Entries = append(plan.Entries, PlanEntry{Content: e.Content, Status: e.Status})
 			}
 			a.emit(plan)
+		}
+	case "usage_update":
+		// ACP schema 0.11 (UsageUpdate): used and size are tokens, and cost
+		// is an optional {amount, currency}, marked unstable. opencode's ACP
+		// agent sends all three. Each is read on its own, so a field that is
+		// missing or changes shape costs only that field.
+		var u struct {
+			Used json.RawMessage `json:"used"`
+			Size json.RawMessage `json:"size"`
+			Cost json.RawMessage `json:"cost"`
+		}
+		if json.Unmarshal(p.Update, &u) != nil {
+			return
+		}
+		var usage Usage
+		var used, size int64
+		if json.Unmarshal(u.Used, &used) == nil && json.Unmarshal(u.Size, &size) == nil && size > 0 && used >= 0 {
+			usage.ContextUsed, usage.ContextSize = used, size
+		}
+		var cost struct {
+			Amount   *float64 `json:"amount"`
+			Currency string   `json:"currency"`
+		}
+		if json.Unmarshal(u.Cost, &cost) == nil && cost.Amount != nil {
+			usage.Cost, usage.HasCost, usage.Currency = *cost.Amount, true, cost.Currency
+		}
+		if usage.ContextSize > 0 || usage.HasCost {
+			a.emit(usage)
 		}
 	}
 	// user_message_chunk is the agent replaying what was sent, and the mode,

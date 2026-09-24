@@ -271,13 +271,13 @@ func TestOpenCodePluginRoundTrip(t *testing.T) {
 		t.Fatalf("install: %+v %v", res, err)
 	}
 	plugin := readFile(t, tg.Path(env))
-	if !strings.Contains(plugin, `const TUIOS = "/opt/my tuios/tuios";`) || !strings.Contains(plugin, "TUIOS_INTEGRATION_VERSION=2") {
+	if !strings.Contains(plugin, `const TUIOS = "/opt/my tuios/tuios";`) || !strings.Contains(plugin, "TUIOS_INTEGRATION_VERSION=3") {
 		t.Fatalf("plugin was not filled in:\n%s", plugin[:400])
 	}
 	if strings.Contains(plugin, "__TUIOS_") {
 		t.Fatal("a placeholder was left in the plugin")
 	}
-	if st := tg.Status(env, "/opt/my tuios/tuios"); !st.Installed || !st.Current || st.Version != 2 {
+	if st := tg.Status(env, "/opt/my tuios/tuios"); !st.Installed || !st.Current || st.Version != 3 {
 		t.Fatalf("status: %+v", st)
 	}
 	if res, err := tg.Install(env, "/opt/my tuios/tuios"); err != nil || res.Changed {

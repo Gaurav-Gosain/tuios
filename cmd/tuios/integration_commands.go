@@ -85,8 +85,8 @@ beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.`,
 }
 
 func newIntegrationInstallCommand() *cobra.Command {
-	var all, mcp, mcpWrite bool
-	var command string
+	var all, mcp, mcpWrite, statusLine bool
+	var command, then string
 	cmd := &cobra.Command{
 		Use:   "install [harness...]",
 		Short: "Write tuios's hook entries into a harness's configuration",
@@ -96,9 +96,19 @@ With --mcp, also register tuios mcp as an MCP server named tuios, for the
 harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.
 The server is read-only and reaches only the session of the pane the harness
 runs in. --mcp-write registers it with --write, which adds the tools that
-type into panes.`,
+type into panes.
+
+With --statusline, also point Claude Code's status line at "tuios agent-statusline",
+which writes the model, context use and cost to the pane's agent metadata
+for the rail and the Inbox, and prints nothing. It is opt in, and a status
+line of your own is never replaced: install then refuses and prints the
+command that keeps it. --then CMD chains to your command, which is run with
+the same input and whose output is printed unchanged, so your status line
+stays as it was. Uninstall puts your command back.`,
 		Example: `  tuios integration install claude-code
   tuios integration install claude-code --mcp
+  tuios integration install claude-code --statusline
+  tuios integration install claude-code --statusline --then '~/.claude/statusline.sh'
   tuios integration install --all`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -109,6 +119,16 @@ type into panes.`,
 			}
 			if mcpWrite {
 				mcp = true
+			}
+			if then != "" {
+				statusLine = true
+			}
+			if statusLine && !all {
+				for _, t := range targets {
+					if !t.SupportsStatusLine() {
+						return fmt.Errorf("%s has no status line command tuios can feed from. Only Claude Code does", t.Name)
+					}
+				}
 			}
 			if mcp && !all {
 				for _, t := range targets {
@@ -146,6 +166,11 @@ type into panes.`,
 						failed = append(failed, t.ID+" (mcp)")
 					}
 				}
+				if statusLine && t.SupportsStatusLine() && err == nil {
+					if !installStatusLineFor(os.Stdout, os.Stderr, t, env, command, then) {
+						failed = append(failed, t.ID+" (statusline)")
+					}
+				}
 			}
 			if len(failed) > 0 {
 				return fmt.Errorf("install failed for %s", strings.Join(failed, ", "))
@@ -157,7 +182,42 @@ type into panes.`,
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program the hooks run, when tuios is not on the harness's PATH")
 	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, read-only, as an MCP server named tuios")
 	cmd.Flags().BoolVar(&mcpWrite, "mcp-write", false, "Register tuios mcp with --write, which adds the tools that type into panes. Implies --mcp")
+	cmd.Flags().BoolVar(&statusLine, "statusline", false, "Also feed the model, context use and cost to tuios from Claude Code's status line")
+	cmd.Flags().StringVar(&then, "then", "", "Your own status line command, run by the tuios status line with the same input and printed unchanged. Implies --statusline")
 	return cmd
+}
+
+// installStatusLineFor points the harness's status line at the wrapper and
+// says what it did. A status line of the person's own is refused with the
+// command that keeps it.
+func installStatusLineFor(stdout, stderr io.Writer, t *integration.Target, env integration.Env, command, then string) bool {
+	res, err := t.InstallStatusLine(env, command, then)
+	var owned *integration.StatusLineOwnedError
+	switch {
+	case errors.As(err, &owned):
+		fmt.Fprintf(stderr, "%s: status line: %v\n", t.Name, err)
+		if owned.Command != "" {
+			fmt.Fprintf(stderr, "  keep it and feed tuios with:\n    tuios integration install %s --statusline --then %s\n", t.ID, shellQuote(owned.Command))
+		}
+		return false
+	case err != nil:
+		fmt.Fprintf(stderr, "%s: status line: %v\n", t.Name, err)
+		return false
+	case res.Changed:
+		fmt.Fprintf(stdout, "%s: status line installed in %s", t.Name, res.Path)
+		if then != "" {
+			fmt.Fprintf(stdout, ", chained to %s", then)
+		}
+		fmt.Fprintln(stdout)
+	default:
+		fmt.Fprintf(stdout, "%s: status line already installed and current in %s\n", t.Name, res.Path)
+	}
+	return true
+}
+
+// shellQuote quotes s as one POSIX shell word for a command the person copies.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // installMCPFor registers the MCP server with one harness and says what it did.
@@ -207,6 +267,16 @@ func newIntegrationUninstallCommand() *cobra.Command {
 					printOtherPaths(res)
 				default:
 					fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
+				}
+				if t.SupportsStatusLine() {
+					sres, serr := t.UninstallStatusLine(env)
+					switch {
+					case serr != nil:
+						fmt.Fprintf(os.Stderr, "%s: status line: %v\n", t.Name, serr)
+						failed = append(failed, t.ID+" (statusline)")
+					case sres.Changed:
+						fmt.Printf("%s: status line removed from %s\n", t.Name, sres.Path)
+					}
 				}
 				if t.SupportsMCP() {
 					mres, merr := t.UninstallMCP(env)
@@ -300,6 +370,9 @@ func printIntegrationStatus(w io.Writer, statuses []integration.Status, asJSON b
 		if v := mcpVerdict(s); v != "" {
 			fmt.Fprintf(w, "%-12s mcp: %s\n", "", v)
 		}
+		if v := statusLineVerdict(s); v != "" {
+			fmt.Fprintf(w, "%-12s statusline: %s\n", "", v)
+		}
 		for _, n := range s.Notes {
 			fmt.Fprintf(w, "%-12s note: %s\n", "", n)
 		}
@@ -327,4 +400,21 @@ func mcpVerdict(s integration.Status) string {
 		return "a server named tuios is registered that tuios did not write; left alone"
 	}
 	return ""
+}
+
+// statusLineVerdict says whether the status line feed is installed, "" when it
+// is not: it is opt in, so its absence is the ordinary case and says nothing.
+func statusLineVerdict(s integration.Status) string {
+	sl := s.StatusLine
+	if sl == nil || !sl.Installed {
+		return ""
+	}
+	v := fmt.Sprintf("installed, current (v%d)", sl.Version)
+	if !sl.Current {
+		v = "installed, out of date: run tuios integration install " + s.Harness + " --statusline"
+	}
+	if sl.Then != "" {
+		v += ", chained to " + sl.Then
+	}
+	return v
 }
