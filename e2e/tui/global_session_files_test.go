@@ -51,16 +51,20 @@ func TestTheFileSectionListsARemotePanesFiles(t *testing.T) {
 		return containsAll(s, "build", "up")
 	}, "the daemon never reported build up")
 
-	if out, err := tuiosCLIEnv(t, base, env, "new-window", "faraway", "-s", "home",
-		"--host", "build"); err != nil {
-		t.Fatalf("create a window on build: %v\n%s", err, out)
+	created, err := tuiosCLIEnv(t, base, env, "new-window", "faraway", "-s", "home",
+		"--host", "build")
+	if err != nil {
+		t.Fatalf("create a window on build: %v\n%s", err, created)
 	}
 
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return contains(s.Text(), marker)
 	}, uiTimeout); err != nil {
-		t.Fatalf("the file section never listed the far machine's files: %v\n%s", err, term.Snapshot())
+		windows, _ := tuiosCLIEnv(t, base, env, "list-windows", "-s", "home", "--json")
+		dumpLinkLogs(t, base, remote)
+		t.Fatalf("the file section never listed the far machine's files: %v\nnew-window said: %s\nthe daemon lists: %s\n%s",
+			err, created, windows, term.Snapshot())
 	}
 	alive(t, term, "after listing a remote pane's files")
 }
