@@ -147,24 +147,62 @@ func reportVerbError(err error, jsonOutput bool) error {
 	return err
 }
 
-// runSendKeys sends keystrokes to a running TUIOS session over the verb protocol.
-func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string) error {
+// runSendKeys sends keystrokes to a running TUIOS session over the verb
+// protocol, and says where they went: the window the daemon wrote them to, or
+// the attached client. repeat 0 or 1 sends the sequence once.
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
-		return err
+		return reportVerbError(err, jsonOutput)
 	}
 	defer t.Close()
 
-	if _, err := t.client.Call("send-keys", t.params(map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"keys":    keys,
 		"literal": literal,
 		"raw":     raw,
-	})); err != nil {
-		return t.explain("send-keys", err)
 	}
+	// Sent only when asked for, so a daemon from before repeat existed still
+	// takes a call that does not use it.
+	if repeat > 1 {
+		params["repeat"] = repeat
+	}
+	raw2, err := t.client.Call("send-keys", t.params(params))
+	if err != nil {
+		return reportVerbError(t.explain("send-keys", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResultOn(t, raw2, true)
+	}
+	var res struct {
+		SentTo   string `json:"sent_to"`
+		WindowID string `json:"window_id"`
+		Window   string `json:"window"`
+		Keys     int    `json:"keys"`
+	}
+	if err := json.Unmarshal(raw2, &res); err != nil || res.SentTo == "" {
+		// An older daemon answers {"type":"ok"} and nothing else.
+		return nil
+	}
+	fmt.Println(sendKeysSummary(res.SentTo, res.WindowID, res.Window, res.Keys))
 	return nil
+}
+
+// sendKeysSummary is the line send-keys prints: how many keys went where.
+func sendKeysSummary(sentTo, windowID, window string, keys int) string {
+	noun := "keys"
+	if keys == 1 {
+		noun = "key"
+	}
+	if sentTo == "client" {
+		return fmt.Sprintf("sent %d %s to the attached client (the focused window, or the window manager)", keys, noun)
+	}
+	if window == "" {
+		return fmt.Sprintf("sent %d %s to window %s", keys, noun, shortWindowID(windowID))
+	}
+	return fmt.Sprintf("sent %d %s to window %s (%s)", keys, noun, window, shortWindowID(windowID))
 }
 
 // runNewWindow opens a window in a session and reports its id, which is the
@@ -173,7 +211,7 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 // window execs as its process instead of a shell. A non-empty host puts the
 // window's process on another machine; the window is still this session's.
 // Non-empty grants are what the window's process may do through tuios.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, jsonOutput bool) error {
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, jsonOutput, printID bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -210,6 +248,11 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	// The full id and nothing else, for id=$(tuios new-window --print-id).
+	if printID {
+		fmt.Println(res.WindowID)
+		return nil
 	}
 	// The machine is printed only when it is not this one, so the ordinary
 	// line keeps the shape every script that already reads it expects.

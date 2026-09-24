@@ -743,72 +743,71 @@ as it returns. It fails if the daemon has not finished within 10 seconds.`,
 	var sendKeysLiteral bool
 	var sendKeysRaw bool
 	var sendKeysWindow string
+	var sendKeysRepeat int
+	var sendKeysJSON bool
 	sendKeysCmd := &cobra.Command{
 		Use:   "send-keys <keys>",
-		Short: "Send keystrokes to a running TUIOS session",
-		Long: `Send keystrokes to a running TUIOS session.
+		Short: "Send keys (arrows, page keys, ctrl+c) to a window",
+		Long: `Send keys to the program in a window: arrows, page keys, Enter, ctrl+c.
 
-By default, keys are sent to TUIOS itself (for window management, mode switching, etc).
-Use --literal to send keys directly to the focused terminal PTY.
-Use --raw to send each character as a separate key (no splitting on spaces).
-Use --window to target a specific window by name or ID (default: focused window).
+With -w the keys go to that window's terminal, whether or not a client is
+attached and whichever window has the focus. Without -w they go to the attached
+client as if the person pressed them, which drives the window manager or the
+focused window; with no client attached they go to the focused window.
 
-Key format (default mode):
-  - Single keys: "i", "n", "Enter", "Escape", "Space"
-  - Key combos: "ctrl+b", "alt+1", "shift+Enter" (case-insensitive)
-  - Sequences: space or comma separated, e.g. "ctrl+b q" or "ctrl+b,q"
+To type text, use send-text. send-keys splits its argument on spaces and commas,
+so 'echo hello' types "echohello".
 
-Special tokens:
-  - $PREFIX or PREFIX: expands to configured leader key (default: ctrl+b)
+Keys (case-insensitive; the argument is split on spaces and commas):
+  Enter Tab BTab Space Escape Backspace
+  Up Down Left Right Home End PageUp PageDown Insert Delete F1-F12
+  a single character: q, j, /, G
+  ctrl+X, alt+X, shift+X on a character or a key: ctrl+c, alt+b, shift+Up
+  PREFIX: the leader key (only without -w, with a client attached)
 
-Modifiers: ctrl, alt, shift, super, meta
+Other spellings of the same keys work too: up, UP, arrow-up, ArrowUp, KEY_UP,
+<Up>, PgDn, Page_Down, Esc, Return, BSpace, tmux's C-c and M-x, and ^C. An
+escape sequence can be written as \e[A, \x1b[A or \033[A. A word that looks
+like a misspelled key (Dwon, KEY_FOO, F13) is refused with the list of names,
+and nothing is sent.
 
-Special keys: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
-              Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12
+--repeat sends the whole sequence that many times. The command prints where the
+keys went: "sent 5 keys to window docs (d6b97fe4)".
 
-Window targeting (--window):
-  - Window name: matches CustomName first, then Title
-  - Exact window ID: full UUID match
-  - ID prefix: first 8+ characters of the UUID`,
-		Example: `  # Enter terminal mode (press 'i')
-  tuios send-keys i
+Window targeting (-w): the full id, the index list-windows prints, a unique id
+prefix, or the exact window name. A name set with --name or new-window wins
+over a program's title. An ambiguous target is an error that lists the windows
+it matched.`,
+		Example: `  # Scroll the pager in the window named docs
+  tuios send-keys -w docs Down
+  tuios send-keys -w docs Down --repeat 10
+  tuios send-keys -w docs PageDown
+  tuios send-keys -w docs 'Up Up Up'
 
-  # Press Enter
-  tuios send-keys Enter
+  # Interrupt what runs in a window
+  tuios send-keys -w build ctrl+c
 
-  # Trigger prefix key followed by 'q' (quit)
-  tuios send-keys "ctrl+b q"
-  tuios send-keys "$PREFIX q"
+  # Quit a pager, then Enter
+  tuios send-keys -w docs q
+  tuios send-keys -w docs Enter
 
-  # Multiple keys: prefix + new window
-  tuios send-keys "ctrl+b,n"
+  # A key as an escape sequence
+  tuios send-keys -w docs '\e[B'
 
-  # Send Ctrl+C to TUIOS
-  tuios send-keys ctrl+c
-
-  # Send literal text directly to terminal PTY (use --raw to prevent space splitting)
-  tuios send-keys --literal --raw "echo hello"
-
-  # Send text with spaces (each char is a key, spaces included)
-  tuios send-keys --raw "hello world"
-
-  # Send to a specific session
-  tuios send-keys --session mysession Escape
-
-  # Send keys to a specific window by name
-  tuios send-keys --window "Server" --literal --raw "echo hello"
-
-  # Send keys to a window by ID prefix
-  tuios send-keys --window a1b2c3d4 --literal "ls"`,
+  # Keys for the window manager: the leader key and then n, no -w
+  tuios send-keys "PREFIX n"
+  tuios send-keys "ctrl+b,n"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow)
+			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow, sendKeysRepeat, sendKeysJSON)
 		},
 	}
 	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: most recently active)")
-	sendKeysCmd.Flags().BoolVarP(&sendKeysLiteral, "literal", "l", false, "Send keys directly to terminal PTY (bypass TUIOS)")
+	sendKeysCmd.Flags().BoolVarP(&sendKeysLiteral, "literal", "l", false, "Write the argument to the window's terminal unchanged, with no key names")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysRaw, "raw", "r", false, "Treat each character as a separate key (no splitting on space/comma)")
-	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window by name or ID (default: focused window)")
+	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window: id, index, id prefix or name (default: the attached client, else the focused window)")
+	sendKeysCmd.Flags().IntVarP(&sendKeysRepeat, "repeat", "N", 1, "Send the whole sequence this many times (1 to 1000)")
+	sendKeysCmd.Flags().BoolVar(&sendKeysJSON, "json", false, "Output result as JSON")
 	_ = sendKeysCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add completion for send-keys
@@ -1290,6 +1289,7 @@ as typed. End the text with a newline to run it as a command.`,
 	var newWindowHost string
 	var newWindowGrants []string
 	var newWindowJSON bool
+	var newWindowPrintID bool
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
@@ -1306,6 +1306,10 @@ tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
 --no-focus leaves the focus where it is.
+
+The output is the short id and the name, "d6b97fe4  build". Either one is a
+window target for -w. --print-id prints the full id alone, for a script:
+id=$(tuios new-window build --print-id).
 
 --host runs the window's process on another machine from the [hosts] table. The
 window still belongs to this session and is drawn and sized here; only the
@@ -1334,6 +1338,7 @@ fan, respond, admin, or none. Without it the window holds the default of
   tuios new-window tests --workspace 2 --cwd /src/api --no-focus
 
   # Capture the new window's id for scripting
+  id=$(tuios new-window docs --cwd ~/src/docs --no-focus --print-id)
   tuios new-window --json | jq -r .window_id
 
   # Open a window whose shell runs on another machine
@@ -1347,7 +1352,7 @@ fan, respond, admin, or none. Without it the window holds the default of
 				command = args[1:]
 			}
 			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowJSON)
+				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowJSON, newWindowPrintID)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1357,6 +1362,8 @@ fan, respond, admin, or none. Without it the window holds the default of
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
 	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, respond, admin, or none (default: [agents.permissions])")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
+	newWindowCmd.Flags().BoolVar(&newWindowPrintID, "print-id", false, "Print only the new window's full id, for id=$(...)")
+	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
