@@ -498,3 +498,35 @@ func TestACPModelFromSession(t *testing.T) {
 		}
 	}
 }
+
+// TestTurnEndSeesTheWholeReply: the text an agent streamed before its turn
+// returned is all in the done report and the turn_end activity, however many
+// pieces it came in. The turn's end and the events arrive on two channels,
+// and the events already emitted are shown before the turn ends.
+func TestTurnEndSeesTheWholeReply(t *testing.T) {
+	f := startFeedSession(t, "")
+	s, agent, rep := f.s, f.agent, f.rep
+	if _, err := io.WriteString(f.keys, "go\r"); err != nil {
+		t.Fatal(err)
+	}
+	<-agent.prompts
+	if r := rep.next(t); r.state != "working" {
+		t.Fatalf("report %+v", r)
+	}
+	if a := rep.nextActivity(t); a.Event != ActivityPrompt {
+		t.Fatalf("prompt activity %+v", a)
+	}
+	const pieces = 100
+	for range pieces {
+		s.Emit(Text{Text: "a"})
+	}
+	s.Emit(Text{Text: "\nmore"})
+	agent.ends <- TurnResult{Stop: StopFinished}
+	want := strings.Repeat("a", pieces)
+	if r := rep.next(t); r.state != "done" || r.message != want {
+		t.Fatalf("done report %+v, want message of %d a", r, pieces)
+	}
+	if a := rep.nextActivity(t); a.Event != ActivityTurnEnd || a.Text != want {
+		t.Errorf("turn end %+v, want text of %d a", a, pieces)
+	}
+}

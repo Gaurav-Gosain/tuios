@@ -192,6 +192,11 @@ func (s *Session) Run(ctx context.Context) int {
 		case ev := <-s.Events:
 			s.onEvent(ev)
 		case t := <-turns:
+			// The agent's updates for the turn were emitted before its
+			// Prompt call returned, and select picks between ready channels
+			// at random, so show what is already queued first: the reply's
+			// last words belong to the turn that is ending.
+			s.drain()
 			s.endTurn(t)
 		case h := <-s.holds:
 			s.onHold(h)
