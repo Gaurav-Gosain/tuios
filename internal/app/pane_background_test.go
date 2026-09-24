@@ -341,7 +341,7 @@ func TestPaneBackgroundUnderTheThinScrollbar(t *testing.T) {
 // ground is.
 func TestPaneBackgroundFakeCursorUsesTheGround(t *testing.T) {
 	withTheme(t, "catppuccin_mocha")
-	g := resolvePaneGround(config.PaneBackgroundTheme, theme.CurrentThemeID())
+	g := resolveGround(config.PaneBackgroundTheme, theme.CurrentThemeID())
 	var scratch uv.Cell
 	src := &uv.Cell{Content: "x", Width: 1}
 	got := paneGroundCell(&scratch, src, g)
@@ -351,7 +351,7 @@ func TestPaneBackgroundFakeCursorUsesTheGround(t *testing.T) {
 	if !isNilColor(src.Style.Bg) {
 		t.Error("the emulator's own cell was written to")
 	}
-	if paneGroundCell(&scratch, src, paneGround{}) != src {
+	if paneGroundCell(&scratch, src, ground{}) != src {
 		t.Error("with the option off the cursor cell was copied")
 	}
 }
@@ -385,20 +385,20 @@ func TestPaneBackgroundOffAllocatesNothing(t *testing.T) {
 	}
 }
 
-// The option has a row on the Appearance tab, drawn as a colour row so it
+// The option has a row on the Backgrounds tab, drawn as a colour row so it
 // opens the picker, and a value chosen there reaches the frame.
 func TestPaneBackgroundSettingsRow(t *testing.T) {
 	withTheme(t, "")
 	win := paneBgWindow(t, "pbg-row", 2, 2, 40, 10)
-	m := paneBgOS(t, config.PaneBackgroundOff, win)
+	m := paneBgOS(t, "", win)
 	m.UserConfig = config.DefaultConfig()
 
 	var row *settingItem
 	for _, cat := range m.settingsCategories() {
 		for i := range cat.Items {
 			if cat.Items[i].Path == "appearance.pane_background" {
-				if cat.Name != "Appearance" {
-					t.Errorf("the row is on the %s tab, want Appearance", cat.Name)
+				if cat.Name != "Backgrounds" {
+					t.Errorf("the row is on the %s tab, want Backgrounds", cat.Name)
 				}
 				row = &cat.Items[i]
 			}
@@ -410,8 +410,9 @@ func TestPaneBackgroundSettingsRow(t *testing.T) {
 	if row.Control != controlColor || row.activate == nil {
 		t.Errorf("the row is not a colour row that opens the picker: %+v", row)
 	}
-	if got := row.value(m); got != config.PaneBackgroundOff {
-		t.Errorf("the row reads %q on a default config, want off", got)
+	// Unset on a default config, which follows the All surfaces row.
+	if got := row.value(m); got != backgroundFollowsAll {
+		t.Errorf("the row reads %q on a default config, want %q", got, backgroundFollowsAll)
 	}
 
 	_ = m.setColorOption("appearance.pane_background", paneBgHex)

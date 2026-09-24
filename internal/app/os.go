@@ -433,11 +433,11 @@ type OS struct {
 	layerCells     map[string]*cellLayer
 	composeGen     uint64
 	composeScratch []composedLayer
-	// paneGroundCache is the resolved pane background and the setting and
+	// groundCache is each surface's resolved background and the setting and
 	// theme it was resolved from. paneContentRects is each pane layer's
-	// content rectangle on this frame, in screen cells, filled only while a
-	// pane background is on. See pane_background.go.
-	paneGroundCache  paneGroundMemo
+	// content rectangle on this frame, in screen cells, filled only while the
+	// pane or chrome background is on. See background.go.
+	groundCache      [surfaceCount]groundMemo
 	paneContentRects map[string]image.Rectangle
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.

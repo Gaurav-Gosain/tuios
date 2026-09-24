@@ -29,12 +29,19 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// single largest source of allocations (a full-screen cell buffer per frame).
 	// Resize is a no-op when the dimensions are unchanged; Clear resets the cells
 	// in place. Safe because GetCanvas is only called from View on one goroutine.
+	//
+	// The canvas is cleared to the desktop's ground, which is what paints the
+	// desktop background: a cell no layer covers is desktop. See background.go.
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+	desktop := m.surfaceGround(surfaceDesktop)
 	if m.renderCanvas == nil {
 		m.renderCanvas = &frameCanvas{Buffer: *uv.NewBuffer(rw, rh)}
+		if desktop.on() {
+			m.renderCanvas.ClearTo(desktop)
+		}
 	} else {
 		m.renderCanvas.Resize(rw, rh)
-		m.renderCanvas.Clear()
+		m.renderCanvas.ClearTo(desktop)
 	}
 	canvas := m.renderCanvas
 
@@ -74,9 +81,12 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// rest of the layout is drawn at all. See the skip in the loop below.
 	zoomCovers := m.zoomCoversRegion(zoomedWindow)
 
-	// The pane background's rectangles are this frame's, so last frame's go
-	// first. With the option off nothing is recorded and nothing is cleared.
-	paintGround := m.paneGround().on()
+	// The pane content rectangles are this frame's, so last frame's go first.
+	// They tell the compositor which layers are panes, and which part of a
+	// pane's layer is content and which is chrome, so they are recorded while
+	// any background is on and not otherwise.
+	grounds := m.frameGrounds()
+	paintGround := grounds.any()
 	if paintGround {
 		if m.paneContentRects == nil {
 			m.paneContentRects = make(map[string]image.Rectangle, len(m.Windows))
@@ -141,9 +151,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			continue
 		}
 
-		// Where this pane's content sits, for the pane background the
-		// compositor paints under it. Recorded for every pane drawn, whichever
-		// branch below supplies its layer.
+		// Where this pane's content sits, for the pane and chrome backgrounds
+		// the compositor paints under it. Recorded for every pane drawn,
+		// whichever branch below supplies its layer.
 		if paintGround {
 			m.paneContentRects[window.ID] = paneContentRect(window)
 		}
@@ -606,6 +616,11 @@ func (m *OS) safeComposeFrame() (frame string, ok bool) {
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
 func (m *OS) composeFrame() string {
+	// The ground a pane's program is told it is on, kept in step with the one
+	// it is drawn on. First, because every path below draws the panes. See
+	// background.go.
+	m.syncReportColors()
+
 	// The screen saver is the frame, not a layer over one.
 	//
 	// It is built at the render size and drawn at the origin, so it covers
@@ -693,12 +708,15 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.celebration.active() {
 		return nil, false
 	}
-	// The pane background is painted on the parsed cells of a pane's layer,
-	// and the fast path builds no layer. Falling back is what a lone
-	// fullscreen pane pays for a painted ground: the compositor with one
-	// cached layer, which copies rather than parses on a frame where nothing
-	// in the pane changed.
-	if m.paneGround().on() {
+	// The backgrounds are painted on the parsed cells of each layer, and the
+	// fast path builds no layer. Falling back is what a lone fullscreen pane
+	// pays for a painted ground on anything the fast path draws: the pane, its
+	// border and the dock. The compositor then runs with cached layers, which
+	// copy rather than parse on a frame where nothing in them changed. The
+	// desktop and the rail keep the fast path: a pane that fills the region
+	// leaves no desktop showing, and a rail already takes it away.
+	if m.surfaceGround(surfacePane).on() || m.surfaceGround(surfaceChrome).on() ||
+		(m.surfaceGround(surfaceDock).on() && m.Settings.DockbarPosition != "hidden") {
 		return nil, false
 	}
 	if m.panesBorderless() {

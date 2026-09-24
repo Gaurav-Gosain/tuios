@@ -81,18 +81,39 @@ var colorSettings = []colorSetting{
 		effective:  scrollbarTintColor,
 		namedColor: scrollbarTintKeywordColor,
 	},
-	{
-		Path:  "appearance.pane_background",
-		Label: "Pane background",
-		Desc:  "Behind pane content. off: your terminal shows through. theme: the theme's background",
-		Unset: "(off)",
-		apply: func(m *OS, v string) {
-			m.Settings.PaneBackground = v
-			m.MarkAllDirty()
-		},
-		effective:  paneBackgroundColor,
-		namedColor: paneBackgroundKeywordColor,
-	},
+
+	// The backgrounds: the default for every surface, then each surface's own.
+	// See background.go.
+	backgroundSetting("appearance.background", "All surfaces",
+		"Every surface below that is not set on its own. off: your terminal shows through. theme: the theme's background",
+		"(off)",
+		func(s *config.Settings, v string) { s.Background = v },
+		(*config.Settings).AllBackgroundResolved),
+	backgroundSetting("appearance.pane_background", "Pane background",
+		"Behind pane content. A colour a program chose wins",
+		backgroundFollowsAll,
+		func(s *config.Settings, v string) { s.PaneBackground = v },
+		(*config.Settings).PaneBackgroundResolved),
+	backgroundSetting("appearance.desktop_background", "Desktop background",
+		"Behind and between panes: the gaps, the space around floating panes, an empty workspace",
+		backgroundFollowsAll,
+		func(s *config.Settings, v string) { s.DesktopBackground = v },
+		(*config.Settings).DesktopBackgroundResolved),
+	backgroundSetting("appearance.window_chrome_background", "Window chrome background",
+		"Under pane borders and title bars. Their own colours are kept",
+		backgroundFollowsAll,
+		func(s *config.Settings, v string) { s.WindowChromeBackground = v },
+		(*config.Settings).WindowChromeBackgroundResolved),
+	backgroundSetting("appearance.dock_background", "Dock background",
+		"Under the dock. Its pills and indicators keep their own colours",
+		backgroundFollowsAll,
+		func(s *config.Settings, v string) { s.DockBackground = v },
+		(*config.Settings).DockBackgroundResolved),
+	backgroundSetting("appearance.sidebar.background", "Sidebar background",
+		"Under the rail. Its highlights keep their own colours",
+		backgroundFollowsAll,
+		func(s *config.Settings, v string) { s.SidebarBackground = v },
+		(*config.Settings).SidebarBackgroundResolved),
 
 	// [appearance.selection]: the marks a pane paints over its own output.
 	//
@@ -240,20 +261,41 @@ func scrollbarTintKeywordColor(keyword string, ground color.Color) color.Color {
 	}
 }
 
-// paneBackgroundColor is the colour the pane background is painting, for the
-// row's swatch and the picker's seed.
-func paneBackgroundColor(ground color.Color, s *config.Settings) color.Color {
-	if hex, ok := s.PaneBackgroundHex(); ok {
-		return lipgloss.Color(hex)
+// backgroundFollowsAll is what a surface's background row prints when the
+// surface is not set on its own: it follows the All surfaces row.
+const backgroundFollowsAll = "(all surfaces)"
+
+// backgroundSetting is the colour setting for one background option. set
+// writes the live value, and resolved reads what the surface is behaving as
+// after the precedence, which is what the swatch shows: an unset surface shows
+// the colour it is inheriting.
+func backgroundSetting(path, label, desc, unset string,
+	set func(*config.Settings, string), resolved func(*config.Settings) string) colorSetting {
+	return colorSetting{
+		Path:  path,
+		Label: label,
+		Desc:  desc,
+		Unset: unset,
+		apply: func(m *OS, v string) {
+			set(&m.Settings, v)
+			m.backgroundsChanged()
+		},
+		effective: func(ground color.Color, s *config.Settings) color.Color {
+			v := resolved(s)
+			if config.IsHexColor(v) {
+				return lipgloss.Color(v)
+			}
+			return backgroundKeywordColor(v, ground)
+		},
+		namedColor: backgroundKeywordColor,
 	}
-	return paneBackgroundKeywordColor(s.PaneBackgroundResolved(), ground)
 }
 
-// paneBackgroundKeywordColor is the colour one keyword paints. off paints
-// nothing, and the terminal's own background is not a colour tuios can know,
-// so the picker's ground stands in for it; theme with no theme set is off.
-func paneBackgroundKeywordColor(keyword string, ground color.Color) color.Color {
-	if keyword == config.PaneBackgroundTheme && theme.CurrentThemeID() != "" {
+// backgroundKeywordColor is the colour one keyword paints. off paints nothing,
+// and the terminal's own background is not a colour tuios can know, so the
+// picker's ground stands in for it; theme with no theme set is off.
+func backgroundKeywordColor(keyword string, ground color.Color) color.Color {
+	if keyword == config.BackgroundTheme && theme.CurrentThemeID() != "" {
 		return theme.TerminalBg()
 	}
 	return ground

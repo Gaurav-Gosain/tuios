@@ -392,7 +392,7 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 		ThumbY: top + thumbTop, ThumbH: thumbRows,
 	}
 
-	return lipgloss.NewLayer(strings.Join(parts, "\n")).X(x).Y(top).Z(zIndex).ID(window.ID + "-sb")
+	return lipgloss.NewLayer(strings.Join(parts, "\n")).X(x).Y(top).Z(zIndex).ID(window.ID + scrollbarLayerSuffix)
 }
 
 // ScrollbarThumbRow returns the screen row the thumb's first cell sits on at the

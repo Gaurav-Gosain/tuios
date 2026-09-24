@@ -58,8 +58,10 @@ type Settings struct {
 	HostCellW, HostCellH int
 	Scale                int
 	Cursor               bool
-	// PaneBackground is appearance.pane_background as the session holds it:
-	// off, theme, or a #RRGGBB literal. See WithPaneBackground.
+	// PaneBackground is the background the session paints behind pane
+	// content, after the precedence between appearance.pane_background and
+	// appearance.background (config.ResolveBackground): off, theme, or a
+	// #RRGGBB literal. See WithPaneBackground.
 	PaneBackground string
 	// Directory is where a generated filename lands.
 	Directory string

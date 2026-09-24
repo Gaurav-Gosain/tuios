@@ -341,12 +341,28 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
 			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),
-			opt("appearance.pane_background"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
+		}),
+	}
+
+	// The backgrounds painted on cells that have none of their own: the
+	// default for every surface first, then each surface's own, which follows
+	// it until it is set. A tab of their own because six colour rows would
+	// have put the rest of Appearance under a scroll at a desktop height, and
+	// because they read as one control with one precedence rule.
+	backgrounds := settingsCategory{
+		Name: "Backgrounds",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.background"),
+			opt("appearance.pane_background"),
+			opt("appearance.desktop_background"),
+			opt("appearance.window_chrome_background"),
+			opt("appearance.dock_background"),
+			opt("appearance.sidebar.background"),
 		}),
 	}
 
@@ -563,7 +579,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 
 	return []settingsCategory{
-		appearance, sidebar, selection, dock, behavior,
+		appearance, backgrounds, sidebar, selection, dock, behavior,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
 		m.hostsCategory(), tape,
 	}

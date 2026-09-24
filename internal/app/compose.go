@@ -37,6 +37,11 @@ type frameCanvas struct {
 	uv.Buffer
 	renderer frameRenderer
 	blank    uv.Line
+	// ground and groundKey are the desktop row the canvas is cleared to while
+	// the desktop background is on, and the ground it was built for. See
+	// ClearTo.
+	ground    uv.Line
+	groundKey string
 }
 
 // WidthMethod is the method a StyledString uses to cut the string into cells.
@@ -73,10 +78,10 @@ type cellLayer struct {
 	spill []bool
 	blank uv.Line
 	gen   uint64
-	// fillRect and fillKey are the pane background painted into buf, if any,
-	// so a change of either reparses. See pane_background.go.
-	fillRect image.Rectangle
-	fillKey  string
+	// fillRect, fillInner and fillOuter are the backgrounds painted into buf,
+	// if any, so a change of any of them reparses. See background.go.
+	fillRect             image.Rectangle
+	fillInner, fillOuter string
 }
 
 // wideMargin is the room past a layer's right edge that a head cell on the
@@ -98,22 +103,23 @@ func (cl *cellLayer) WidthMethod() uv.WidthMethod {
 // w and h are the layer's own measurements, taken once by lipgloss.NewLayer;
 // the Compositor measured the string again, twice, on every frame.
 //
-// fill is the pane background to paint into the parsed cells, and is part of
-// what the cells are keyed on: a pane whose string did not change but whose
-// ground did (the option was switched, the theme changed, the pane moved under
-// a clip) is parsed again rather than copied with the old paint.
-func (cl *cellLayer) update(content string, w, h int, fill layerFill) {
-	if cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect && cl.fillKey == fill.ground.key {
+// fill is the background to paint into the parsed cells, and is part of what
+// the cells are keyed on: a layer whose string did not change but whose ground
+// did (an option was switched, the theme changed, a pane moved under a clip)
+// is parsed again rather than copied with the old paint.
+func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
+	if cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect &&
+		cl.fillInner == fill.inner.key && cl.fillOuter == fill.outer.key {
 		return
 	}
 	cl.content = content
 	cl.w, cl.h = w, h
-	cl.fillRect, cl.fillKey = fill.rect, fill.ground.key
+	cl.fillRect, cl.fillInner, cl.fillOuter = fill.rect, fill.inner.key, fill.outer.key
 	cl.buf.Resize(cl.w+wideMargin, cl.h)
 	cl.blank = clearLines(cl.buf.Lines, cl.blank)
 	uv.NewStyledString(content).Draw(&cellLayerScreen{cl}, uv.Rect(0, 0, cl.w, cl.h))
-	if fill.ground.on() && !fill.rect.Empty() {
-		paintPaneGround(cl.buf.Lines, fill.rect, fill.ground)
+	if fill.on() {
+		paintLayerFill(cl.buf.Lines, cl.w, cl.h, fill)
 	}
 	cl.spill = slices.Grow(cl.spill[:0], cl.h)[:cl.h]
 	for row, line := range cl.buf.Lines {
@@ -150,6 +156,31 @@ func clearLines(lines []uv.Line, blank uv.Line) uv.Line {
 // is the same result in a fraction of the time.
 func (c *frameCanvas) Clear() {
 	c.blank = clearLines(c.Lines, c.blank)
+}
+
+// ClearTo blanks the canvas onto the desktop's ground: every cell no layer
+// covers is desktop, so the desktop background is the value the canvas starts
+// from rather than a pass after the layers. Off, it is Clear.
+func (c *frameCanvas) ClearTo(g ground) {
+	if !g.on() {
+		c.Clear()
+		return
+	}
+	w := 0
+	for _, l := range c.Lines {
+		w = max(w, len(l))
+	}
+	if c.groundKey != g.key || len(c.ground) < w {
+		c.ground = slices.Grow(c.ground[:0], w)[:w]
+		blank := desktopBlank(g)
+		for i := range c.ground {
+			c.ground[i] = blank
+		}
+		c.groundKey = g.key
+	}
+	for _, l := range c.Lines {
+		copy(l, c.ground[:len(l)])
+	}
 }
 
 // cellLayerScreen is the uv.Screen a layer is parsed onto. It is the layer's
@@ -253,9 +284,10 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 		return layerZ(a.layer) - layerZ(b.layer)
 	})
 
-	// The pane background, resolved once for the frame. Off, it is the zero
-	// ground and no layer below looks anything up.
-	ground := m.paneGround()
+	// The backgrounds, resolved once for the frame. With every one off no
+	// layer below looks anything up. See background.go.
+	grounds := m.frameGrounds()
+	painted := grounds.any()
 
 	area := canvas.Bounds()
 	for _, cl := range ordered {
@@ -263,27 +295,26 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 			continue
 		}
 		if cl.cells != nil {
-			// A pane's layer carries its content rectangle, recorded by
-			// GetCanvas under the pane's id, which is the layer's id. Taken
-			// relative to where the layer landed, so a pane clipped at the
-			// edge of the region paints only the part of it that is drawn.
 			var fill layerFill
-			if ground.on() {
-				if r, ok := m.paneContentRects[cl.layer.GetID()]; ok {
-					fill.rect = r.Sub(cl.bounds.Min).Intersect(image.Rect(0, 0, cl.layer.Width(), cl.layer.Height()))
-					fill.ground = ground
-				}
+			if painted {
+				fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), &grounds)
 			}
 			// Parsed here, in draw order, and not when the layers were
 			// collected: two layers on one frame that share an id share the
 			// cellLayer too, and each has to hold its own cells at the moment
 			// it is drawn. Nothing on the frame today shares an id, and
 			// nothing enforces that either.
-			cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), fill)
+			cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
 			cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
 			continue
 		}
 		uv.NewStyledString(cl.layer.GetContent()).Draw(canvas, cl.bounds)
+		// A layer with no id has no surface of its own, so its transparent
+		// cells are the desktop's. Every layer the frame builds today has an
+		// id; this keeps one added without from punching a hole.
+		if g := grounds[surfaceDesktop]; g.on() {
+			paintGround(canvas.Lines, cl.bounds.Intersect(area), g)
+		}
 	}
 
 	// A cached layer that was not on this frame is dropped. A pane on another

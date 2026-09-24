@@ -144,6 +144,9 @@ type Window struct {
 	PositionDirty bool
 	CachedContent string
 	CachedLayer   *lipgloss.Layer
+	// reportKey names the OSC 10 and 11 answer the emulator was last given.
+	// Written on the UI goroutine only. See SetReportColors.
+	reportKey string
 	// RenderedCols and RenderedRows are the display geometry of the pane body
 	// the renderer produced last: the column count every one of its lines
 	// fills, and its line count. Zero means the renderer cannot vouch for the

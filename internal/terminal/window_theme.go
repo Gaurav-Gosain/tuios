@@ -22,6 +22,23 @@ func applyTheme(t vt.Terminal) {
 	}
 }
 
+// SetReportColors tells the emulator what the pane is really drawn on, so an
+// OSC 10 or OSC 11 query from the program is answered with it. key names the
+// pair, and a pair already given is not given again, which is what lets the
+// renderer ask on every frame: with the pane background off the key is empty
+// and so is the one held here.
+func (w *Window) SetReportColors(fg, bg color.Color, key string) {
+	if w.reportKey == key {
+		return
+	}
+	w.reportKey = key
+	w.ioMu.Lock()
+	if w.Terminal != nil {
+		w.Terminal.SetReportColors(fg, bg)
+	}
+	w.ioMu.Unlock()
+}
+
 // UpdateThemeColors pushes the active theme's palette into the emulator so
 // already-rendered SGR indexed colors resolve to the new theme on the next
 // render. SetThemeColors mutates the emulator's color table, which the PTY
