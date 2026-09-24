@@ -74,8 +74,9 @@ session is used, which is a guess when several are live. Inside a pane, pass
 
 Windows are addressed with `-w`, which takes, in order: the full uuid, the index
 `list-windows` prints (all digits), a unique id prefix, or the exact window
-name. An ambiguous prefix or name is an error, never a guess. The index shifts
-when an earlier window closes, so a script holds the id or the name.
+name (a name you gave, before a program's title). An ambiguous prefix or name
+is an error, never a guess. The index shifts when an earlier window closes, so
+a script holds the id or the name.
 
 A pane running an agent is a window like any other and is addressed the same
 way. `HOST:SESSION` and `HOST:SESSION:WINDOW` reach another machine
@@ -95,20 +96,44 @@ The listing commands take `--json` when you want to parse rather than read.
 blank rows below the cursor. `--lines` counts from the last line with content.
 Leave `--ansi` off when you match text.
 
-## Typing into a pane
+## Drive other windows: open, address, send keys, check
 
-`send-text` writes bytes to the pane with no parsing. A trailing newline is the
-Enter that runs it. `send-keys` is for keys with no character:
+Open a window per job with a name, run the program with `send-text`, wait for
+it to draw, then send keys to it by name and read the screen back:
 
 ```sh
-tuios send-text -s work -w build 'go build ./...
+tuios new-window -s "$TUIOS_SESSION" docs --cwd ~/dev/docs --no-focus
+tuios send-text -s "$TUIOS_SESSION" -w docs 'glow -t README.md
 '
-tuios send-keys -s work -w build ctrl+c
+tuios wait-for window-idle -s "$TUIOS_SESSION" -w docs --idle 1000
+tuios send-keys -s "$TUIOS_SESSION" -w docs Down --repeat 5
+tuios send-keys -s "$TUIOS_SESSION" -w docs PageDown
+tuios capture-pane -s "$TUIOS_SESSION" -w docs
 ```
 
+- **Always pass `-w`.** With `-w`, keys go to that window's program whatever
+  the person has focused. Without it they go to the person's client as if the
+  person pressed them, which is the focused window (often your own) or the
+  window manager.
+- `new-window` prints `3a42ab8f  docs`: the short id and the name. Either one
+  is a `-w` target. `--print-id` prints only the full id, for
+  `id=$(tuios new-window ... --print-id)`. A name you give beats any window's
+  title; two windows with one name are an error that lists both.
+- Key names: `Up` `Down` `Left` `Right` `PageUp` `PageDown` `Home` `End`
+  `Enter` `Escape` `Tab` `Space` `Backspace`, one character (`q`, `/`), and
+  `ctrl+c`. Case does not matter, and `arrow-up`, `KEY_UP` and `PgDn` work
+  too. `--repeat N` sends the whole sequence N times. The full table is in
+  `tuios --skill panes`. A misspelled key is refused and nothing is sent.
+- `send-keys` prints where the keys went (`sent 5 keys to window docs
+  (3a42ab8f)`); `capture-pane` shows what the program did with them. When you
+  know a word the program will draw, `wait-for window-output --pattern WORD`
+  is surer than `window-idle`. Capture a full-screen program without
+  `--lines`: its screen is already bounded, and `--lines` counts up from the
+  last row with content, so it cuts off the top.
+
 **`send-keys` is not for typing text.** It splits its argument on spaces and
-commas and maps each token to a key, so `send-keys 'echo hello'` types
-`echohello` and exits 0.
+commas, so `send-keys 'echo hello'` types `echohello`. Text, and the Enter that
+runs it (a trailing newline), goes through `send-text`.
 
 Text sent to a pane running an agent is read as if a person typed it. To talk to
 an agent use `ask-agent` (below), which waits until the agent is not mid-turn.

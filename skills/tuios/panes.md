@@ -53,10 +53,10 @@ goes and what it starts in, and keep the id if you need it:
 
 ```sh
 tuios new-window -s work tests --workspace 2 --cwd /src/api --no-focus
-id=$(tuios new-window -s work --json | jq -r .window_id)
+id=$(tuios new-window -s work job --print-id)
 ```
 
-`--no-focus` keeps the person where they are. The JSON result says where the
+`--no-focus` keeps the person where they are. `--json` says where the
 pane went. `unplaced: true` means the session is detached and the pane has a
 nominal size until a client places it, so do not compute anything from its
 geometry yet.
@@ -91,7 +91,8 @@ tuios send-text -s work -w build 'go build ./...
 '
 tuios send-keys -s work -w build ctrl+c          # interrupt what is running
 tuios send-keys -s work -w build Escape
-tuios send-keys -s work -w build 'ctrl+b,n'      # a tuios leader chord
+tuios send-keys -s work -w docs Down --repeat 10 # scroll a pager ten lines
+tuios send-keys -s work -w docs 'PageDown PageDown'
 ```
 
 `send-keys` splits its argument on spaces and commas and maps each token to a
@@ -103,10 +104,60 @@ tuios send-text -s work -w build 'echo hello
 '                                                # types "echo hello" and runs it
 ```
 
+With `-w` the keys are written to that window's terminal, attached or not,
+whichever window has the focus, and the command prints `sent N keys to window
+NAME (ID)`. Without `-w` they go to the attached client as the person's keys:
+the focused window, or the window manager when it is in window-management
+mode. With no client attached they go to the focused window.
+
+### Key names
+
+| Key | Name | Other spellings that work |
+| --- | --- | --- |
+| Arrows | `Up` `Down` `Left` `Right` | `up`, `UP`, `arrow-up`, `ArrowUp`, `up-arrow`, `KEY_UP`, `<Up>` |
+| Page keys | `PageUp` `PageDown` | `PgUp`, `PgDn`, `Page_Down`, `NPage`, `PPage`, `KEY_NPAGE` |
+| Line ends | `Home` `End` | `KEY_HOME`, `<End>` |
+| Enter | `Enter` | `Return`, `CR`, `KEY_ENTER` |
+| Escape | `Escape` | `Esc` |
+| Editing | `Tab` `BTab` `Space` `Backspace` `Delete` `Insert` | `shift+Tab`, `BSpace`, `BS`, `Del`, `DC`, `Ins`, `IC` |
+| Function keys | `F1` to `F12` | `f5`, `KEY_F5` |
+| A character | `q` `j` `G` `/` `?` | any single character |
+| With modifiers | `ctrl+c` `alt+b` `shift+Up` `ctrl+Right` | `C-c`, `M-b`, `S-Up`, `^C`, `Ctrl+C` |
+| A raw sequence | `\e[A` | `\x1b[A`, `\033[A`, `^[[A` |
+| The leader key | `PREFIX` | `$PREFIX`; only without `-w`, with a client attached |
+
+Names are case-insensitive. Arrows, `Home` and `End` are sent in the form the
+program asked for: `less` and `vim` turn on application cursor keys and get
+`ESC O A`, a shell gets `ESC [ A`. A word that looks like a key but is not one
+(`Dwon`, `KEY_FOO`, `F13`) fails with `invalid_params`, the names above, and
+the closest one; nothing is sent. A plain lower-case word such as `ls` is still
+typed as its letters.
+
+`--repeat N` (`-N N`) sends the whole sequence N times, up to 1000.
+`ctrl+b` with `-w` is the byte 0x02 for the program in the window, which is
+page up in `less` and `vim`; it is not the leader key there.
+
+### Starting a program and waiting for it to draw
+
+A full-screen program needs a moment before it reads keys. Wait for it rather
+than sleeping:
+
+```sh
+tuios send-text -s work -w docs 'glow -t README.md
+'
+tuios wait-for window-output -s work -w docs --pattern 'Installation' --timeout 10000
+tuios wait-for window-idle -s work -w docs --idle 1000
+```
+
+`window-output` with a word the program will draw is the sure one;
+`window-idle` returns once the pane has been quiet for `--idle` milliseconds,
+which is enough when you do not know what it will show. Then send the keys and
+check the result with `capture-pane`, which shows the program's screen.
+
 A key you send does not move the person's view. Leader chords mean something
-only where a client is attached; on a detached session `ctrl+b,n` reaches the
-shell as the bytes it spells. Do not drive the window manager with its
-keybindings: the verbs below work attached or detached and say what changed.
+only where a client is attached, and only without `-w`. Do not drive the window
+manager with its keybindings: the verbs below work attached or detached and say
+what changed.
 
 ## Waiting instead of polling
 
