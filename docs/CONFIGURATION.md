@@ -194,6 +194,14 @@ an agent row rests (idle, unknown, or done and already seen) before the rail
 folds it into one line, as a duration such as `1h` (the default) or `off`. The
 settings page shows it on its Sidebar tab once an agent has been seen.
 
+The agent row's `$name` tokens in `[appearance.sidebar.agent_row]` can place
+the metadata keys tuios now feeds: `$model`, `$context`, `$cost` and `$plan`.
+They come from Claude Code's status line once `tuios integration install
+claude-code --statusline` is installed, from the opencode and Kilo plugin, and
+from protocol panes, and a key the harness never states draws nothing (see
+[Agent metadata](AGENT_STATE.md#what-feeds-it)). No option is needed to turn
+the feeds on, and there is nothing to configure for them.
+
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:

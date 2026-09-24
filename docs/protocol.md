@@ -1017,6 +1017,24 @@ verbs change:
   resume whose `types` names it gets a `not_retained` gap when one was
   published after `after_seq`. Read the ring with `agent-activity` instead.
 
+**tuios now feeds `set-agent-meta` itself.** No verb changes; what changes is
+who calls two of them, and a client that draws metadata now has some to draw:
+
+- A protocol pane (`tuios agent-proto`, what `start-agent --protocol` runs)
+  calls `set-agent-meta` for its own pane with the source `protocol` and the
+  keys `model`, `context`, `cost` and `plan`, each only when its value
+  changes. It also calls `set-agent-state` with `activity` for each prompt,
+  tool call and finished turn, with `state` `working` and `if_state`
+  `working`, so the call changes no state; it sends these only to a daemon
+  whose `list-verbs` lists `activity` for `set-agent-state`, and sends
+  nothing extra to an older one.
+- `tuios agent-statusline` (Claude Code's status line, opt in, and the
+  opencode and Kilo plugin) calls `set-agent-meta` for its own pane with the
+  source `statusline` and the keys `model`, `context` and `cost`, at most once
+  every 15 seconds per pane while they change, and never with a TTL.
+- The opencode and Kilo plugin is version 3, so `integration status` reads a
+  version 2 install as out of date until it is installed again.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -2566,6 +2584,14 @@ Response:
 ```
 
 `get-agent-state` and each `list-agents` entry carry the same `meta` object.
+
+Keys tuios writes itself, each only when the harness states it: `model`,
+`context` (`42%`), `cost` (`$1.20`, or the amount and an ISO 4217 code for
+another currency) and `plan` (`3/7`). The source says which feed wrote them:
+`statusline` for `tuios agent-statusline` (Claude Code's status line and the
+opencode plugin), `protocol` for a protocol pane. Both write only their own
+pane, and a caller may overwrite or clear them like any other key; they are
+display only (see [Agent metadata](AGENT_STATE.md#what-feeds-it)).
 
 Wire compatibility: the metadata rides the window state as an additive field
 (`agent_meta`). An older client drops it and draws nothing, and an older daemon

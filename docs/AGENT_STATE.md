@@ -1120,6 +1120,33 @@ The Claude Code and Codex hooks feed three keys from what the agent does (see
 nothing and sends nothing to attached clients, and a TTL is renewed only once
 less than half of it is left, so a status line may write on every tick.
 
+#### What feeds it
+
+Three feeds write the keys `model`, `context` (`42%`), `cost` (`$1.20`) and
+`plan` (`3/7`, steps done of the plan's steps). Each writes only what its
+harness states: a field the harness does not send is never written, and its
+token draws nothing.
+
+| Feed | Keys | Source | How it is turned on |
+| ---- | ---- | ------ | ------------------- |
+| Claude Code's status line, through `tuios agent-statusline` | `model`, `context`, `cost` | `statusline` | `tuios integration install claude-code --statusline` (opt in) |
+| The opencode and Kilo plugin, through `tuios agent-statusline` | `model`, `cost` (the sum of the session's assistant messages) | `statusline` | the plugin `integration install opencode` writes |
+| A protocol pane (`start-agent --protocol`) | `model`, `context`, `plan` from Codex; `model`, `context`, `cost`, `plan` from ACP | `protocol` | always |
+
+The status line feed is opt in because Claude Code has one status line slot
+and it may be yours. Install never replaces a status line you wrote: it
+refuses and prints the command that keeps it, `--then` with your command,
+which the wrapper runs with the same stdin and whose output it prints
+unchanged. Uninstall puts your command back. See
+[Harness integrations](#the-status-line-feed).
+
+A feed writes only for its own pane (`set-agent-meta` is limited to the
+caller's own pane, from inside one), and only when a value changes: the status
+line at most once every 15 seconds per pane while values change (a model
+change, context use crossing 80% and the end of an opencode turn go at once),
+and a protocol pane once per change. Nothing polls. The values stay display
+only.
+
 ### What the agent has been doing
 
 With the Claude Code or Codex integration installed, each prompt, tool call,
@@ -1894,6 +1921,40 @@ and mail goes out from it, with nothing for the agent to fill in. Results that
 carry a pane's text or another agent's mail come with a note that it is data,
 not instructions.
 
+### The status line feed
+
+Claude Code runs one status line command, with a JSON payload on stdin each
+time the conversation changes. `--statusline` points it at tuios:
+
+```sh
+tuios integration install claude-code --statusline
+tuios integration install claude-code --statusline --then '~/.claude/statusline.sh'
+```
+
+It writes `statusLine` in the same `settings.json` as the hooks:
+`{"type": "command", "command": "tuios agent-statusline claude-code --integration 1"}`,
+with `--then '<your command>'` at the end when chaining. The wrapper writes
+`model` (from `model.display_name`, else `model.id`), `context` (from
+`context_window.used_percentage`) and `cost` (from `cost.total_cost_usd`) to
+the pane's metadata, and prints nothing of its own, so Claude Code's status
+line is empty unless it chains.
+
+- A status line you wrote is never replaced. Install refuses it and prints
+  `tuios integration install claude-code --statusline --then '<your command>'`.
+  With that `--then`, the entry keeps every key it had (`padding` included)
+  and only its command changes.
+- Installing again without `--then` keeps a chain installed before.
+- Uninstall (or `integration uninstall claude-code`) removes the entry, or puts
+  your command back when it chained.
+- `integration status` reports it (`status_line` in `--json`).
+
+The wrapper finds its pane as `agent-hook` does and calls only
+`set-agent-meta` for it. It reads at most 1 MiB of stdin, gives up on the
+daemon after 300ms, exits 0 whatever goes wrong on the tuios side (with
+`--then`, it exits with your command's status), and reports nothing for a
+status line under a `TUIOS_AGENT` naming another harness. Its throttle state
+is a small file per pane beside the daemon's socket (mode 0600).
+
 ### What each event reports
 
 `tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
@@ -2119,6 +2180,28 @@ protocol itself, not from its screen, and reports it for its own pane with
 
 `start-agent` is ready on that report alone: `unknown` never counts for a
 protocol pane, whatever its harness. `list-agents` shows `protocol` for it.
+
+It also writes the agent's model, context use, cost and plan progress to the
+pane's [metadata](#agent-metadata), source `protocol`, each key once per
+change:
+
+| Key | Codex app-server | ACP |
+| --- | ---------------- | --- |
+| `model` | `thread/start`'s model, then `model/rerouted` | `session/new`'s `models` (the name of `currentModelId`), which ACP marks unstable |
+| `context` | `thread/tokenUsage/updated`: `last.totalTokens` of `modelContextWindow`, when the window is known | `usage_update`: `used` of `size` |
+| `cost` | not sent | `usage_update`: `cost.amount` in `cost.currency` |
+| `plan` | `turn/plan/updated`: completed steps of all steps | `plan`: completed entries of all entries |
+
+The `usage_update` shape is the ACP schema's (release 0.11: `used` and `size`
+in tokens, and an optional `cost` of `{amount, currency}` marked unstable),
+which is what opencode's ACP agent sends. Every field is read on its own, so a
+missing or changed field costs only that key. A Codex pane now shows the
+turn's plan in the transcript, as an ACP pane always has.
+
+Each prompt, tool call (once as it starts, once as it ends) and finished turn
+also goes to the daemon as `set-agent-state` activity, with the state part
+`working` only if the pane is already working, so it changes no state. It is
+sent only to a daemon whose `set-agent-state` lists `activity`.
 
 A permission is shown in the pane with a number key per answer, the agent's own
 words for each. When one line shows the whole request (a command whose input

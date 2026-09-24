@@ -39,6 +39,16 @@ on every tick. `now` and `prompt` are tuios's own keys, filled from your hooks,
 and `set-agent-meta` refuses them. `now` is cleared whenever the pane leaves
 `working` and `needs_input`, however it left.
 
+tuios feeds `model`, `context`, `cost` and `plan` itself where it can: from a
+protocol pane (source `protocol`), from the opencode plugin, and from Claude
+Code's status line once the person opts in (source `statusline`). Leave those
+keys to the feed; write your own keys beside them.
+
+```sh
+tuios integration install claude-code --statusline                        # opt in
+tuios integration install claude-code --statusline --then '~/.claude/sl.sh' # keep your own status line
+```
+
 ## What an agent has been doing
 
 With the Claude Code or Codex hooks installed, tuios keeps the pane's recent

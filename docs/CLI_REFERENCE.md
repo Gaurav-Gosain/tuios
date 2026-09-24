@@ -611,8 +611,61 @@ kind `approval` for a permission, which it also holds for the Inbox with
 reports nothing and works the same. When the agent exits, the pane shows the
 end of its stderr and waits for Enter.
 
+It also writes what the agent says about itself to the pane's agent metadata,
+under the source `protocol`, each key only when its value changes: `model`
+(the model the conversation opened with, from Codex's `thread/start` or ACP's
+`session/new` models, and Codex's `model/rerouted`), `context` (tokens in
+context of the model's window, from Codex's `thread/tokenUsage/updated` or
+ACP's `usage_update`), `cost` (the session's cost from ACP's `usage_update`;
+Codex sends none) and `plan` (steps done of the plan's steps, `3/7`). Every
+field is optional: one the agent does not send is not written. Each prompt,
+tool call and finished turn also goes to the daemon as `set-agent-state`
+activity, when the daemon's `set-agent-state` lists that parameter. A Codex
+pane now shows the turn's plan in the transcript, as an ACP pane does.
+
 ```bash
 tuios agent-proto --protocol acp -- opencode acp
+```
+
+### `tuios agent-statusline`
+
+What Claude Code's status line runs once `tuios integration install
+claude-code --statusline` is installed: read the status line payload on stdin
+and write the model, context use and cost to the pane's agent metadata.
+
+**Usage:**
+```bash
+tuios agent-statusline claude-code|opencode|kilo [--then CMD] [--turn-end] [--explain]
+```
+
+| Payload field | Metadata key |
+| --- | --- |
+| `model.display_name`, else `model.id` (Claude Code); `modelID` (opencode, Kilo) | `model` |
+| `context_window.used_percentage` (Claude Code) | `context`, as `42%` |
+| `cost.total_cost_usd` (Claude Code); `cost` (opencode, Kilo) | `cost`, as `$1.20` |
+
+Every field is optional, and one that is missing, null or of another type is
+not written. The keys go under the source `statusline`, with no TTL: they
+clear when the agent leaves the pane. It prints nothing of its own. `--then`
+runs your own status line command through `sh -c` with the same stdin and
+prints its output unchanged, and the command exits with its status; that is
+how a status line of your own is kept.
+
+The pane is found from `-w`, then `TUIOS_PANE_ID`, then the process's terminal
+and parent processes, as for `agent-hook`; a process in no pane asks the
+daemon again at most once a minute. It calls only `set-agent-meta`, for that
+pane, at most once every 15 seconds while the values change, and not at all
+while they stay the same. A model change, context use crossing 80%, and a
+change passed with `--turn-end` (the opencode plugin passes it when the
+session goes idle) go at once, and unchanged values are sent again after 10
+minutes so a daemon that restarted gets them back. The last values sent are
+kept in `statusline-<session>-<pane>.json` (mode 0600) beside the daemon's
+socket. It reads at most 1 MiB of stdin, gives up on the daemon after 300ms
+(`--timeout`), and exits 0 whatever goes wrong on the tuios side.
+
+```bash
+tuios agent-statusline claude-code --then '~/.claude/statusline.sh'
+echo '{"model":{"display_name":"Opus"},"context_window":{"used_percentage":42}}' | tuios agent-statusline claude-code --explain
 ```
 
 ### `tuios kill-server`
@@ -2447,13 +2500,14 @@ them.
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |
-| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and the MCP server entry it wrote, and nothing else |
-| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, and for the four harnesses with an MCP registration whether `tuios mcp` is registered (`--json`, with `reports` and `mcp`) |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
+| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
+| `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line in the caller's session (`tuios tmux display-message -p '#{pane_id}'`). A tmux session is the tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
 | `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |
