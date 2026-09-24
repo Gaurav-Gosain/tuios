@@ -1131,11 +1131,18 @@ func disableTiling(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// unixSocketPathMax is the length a socket path is kept under. The kernel's
-// own cap is 104 bytes on darwin and 108 on linux, both counting the
-// terminator; this sits under the smaller one with room for the daemon to
-// append its own name.
-const unixSocketPathMax = 96
+// unixSocketPathMax is the longest socket path the suite lets tuios bind. The
+// kernel's own cap is 104 bytes on darwin and 108 on linux, both counting the
+// terminator, so this is the smaller one less the terminator.
+const unixSocketPathMax = 103
+
+// longestRuntimeSocket is the longest socket tuios binds under its runtime
+// directory, relative to it: a tmux shim pane holder's socket, named by a pane
+// number of up to ten digits. The daemon's tuios.sock and its link sockets
+// (tuios.sock.link-human is the longest) are shorter. A runtime directory is
+// measured against this one, since measuring it against tuios.sock alone let
+// a root through whose daemon bound and whose pane holders could not.
+var longestRuntimeSocket = filepath.Join("tuios", "tmux", "p", "2147483647.sock")
 
 // shortRuntimeRoot is where a runtime directory goes when the isolation root
 // is too long to hold one. Per user, so two people on one machine do not share
@@ -1172,7 +1179,7 @@ var redirected sync.Map
 // handed, not the path that path resolves to.
 func xdgDir(base, key string) string {
 	dir := filepath.Join(base, key)
-	if key != "XDG_RUNTIME_DIR" || len(filepath.Join(dir, "tuios", "tuios.sock")) <= unixSocketPathMax {
+	if key != "XDG_RUNTIME_DIR" || len(filepath.Join(dir, longestRuntimeSocket)) <= unixSocketPathMax {
 		mustMkdir(dir)
 		return dir
 	}
