@@ -120,8 +120,11 @@ untracked included), `verify`, and `last_command`, the last command a shell in
 the session finished. An agent's own tool runs are not shell commands, so run
 the check you trust with `fan verify` (`verify-fan`): it opens a window named
 `verify` in each attempt, runs your command with `sh -c` in the worktree, and
-records `passed` or `failed` with the exit status. The window holds no grants.
-It closes on a pass and stays open on a failure so the output can be read.
+records `passed` or `failed` with the exit status. Several words after `--`
+are quoted one by one; one word is a shell line, for `&&` and pipes. The
+window holds no grants. It closes on a pass and stays open on a failure so the
+output can be read, until the next check closes it. The counts run from where
+each attempt left the base, so they hold still when main moves on.
 `fan verify` waits and exits 1 when any failed; `--no-wait` returns at once and
 `fan compare` shows the results. From a pane, `verify-fan` needs the `fan`
 grant and `compare-fan` needs `read`, and both reach only your own fan group.

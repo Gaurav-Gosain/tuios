@@ -514,7 +514,10 @@ its agent and state, the files and lines it changed against the fan's base
 (committed or not, untracked files included, ignored files left out), and its
 last check. The check is the last `fan verify` result, or else the last
 command a shell in the session finished, from its OSC 133 marks. The counts
-run git in every worktree; `--no-changes` skips them. The worktrees are read
+run from where each attempt left the base, so a base that moves on after the
+fan started (a fetch, or one attempt merged into it) does not change them.
+They run git in every worktree, at most 10 seconds each; `--no-changes` skips
+them. The worktrees are read
 through a temporary index, so nothing in them changes.
 
 ```
@@ -526,14 +529,18 @@ Keep one with 'tuios fan keep <session>'. Compare two with 'tuios fan diff A B'.
 ```
 
 `fan verify` runs the command after `--` in every attempt, in a window named
-`verify` in each session, with `sh -c` in the worktree and your `PATH`. The
-command is always yours: tuios never reads one from the repository. The
+`verify` in each session, with `sh -c` in the worktree and your `PATH`. One
+word after `--` is a shell line, so `'make lint && make test'` keeps its `&&`.
+Several words are one command and its arguments: each is quoted for the shell
+as you gave it, so `-- go test -run 'TestA|TestB' ./...` passes the pattern
+as one argument. The command is always yours: tuios never reads one from the repository. The
 window holds no grants, so the check cannot drive tuios. A window whose check
 passed closes; one whose check failed stays open with the output until you
 press enter in it. The command waits for every check, prints one line each,
 and exits 1 when any failed. `--timeout` fails a check that runs longer and
 closes its window. `--no-wait` returns once the checks are started. A check
-still running in an attempt is stopped first.
+still running in an attempt is stopped first, and the window an earlier
+failed check left open is closed.
 
 `fan diff A B` shows what B's files hold that A's do not, committed or not,
 untracked files included. git runs on this machine, as for `worktree diff`,

@@ -306,11 +306,13 @@ func newFanVerifyCommand() *cobra.Command {
 		Long: `Run a command in every attempt of a fan-out, in a window named verify in
 each session, and say which passed.
 
-The command runs with sh -c in each worktree, with your PATH. It is always
+The command runs with sh -c in each worktree, with your PATH. One argument
+after -- is a shell line, so it can hold && and pipes. Several are one
+command and its arguments, each quoted for the shell as you gave it. It is always
 the command you give: tuios never reads one from the repository. The window
 holds no grants, so the check cannot drive tuios. A window whose check passed
 closes; one whose check failed stays open so you can read the output, until
-you press enter in it. A check still running in an attempt is stopped first.
+you press enter in it or the next check starts. A check still running in an attempt is stopped first.
 
 The command waits for every check and exits 1 when any failed. --no-wait
 returns once they are started; 'tuios fan compare' shows how they end.`,
@@ -323,14 +325,47 @@ returns once they are started; 'tuios fan compare' shows how they end.`,
 			if dash != 1 {
 				return errors.New("fan verify takes the session, then -- and the command: tuios fan verify <session> -- go test ./...")
 			}
-			command := strings.Join(args[1:], " ")
-			return runFanVerify(args[0], command, timeout, !noWait, jsonOut)
+			return fanVerifyRun(args[0], fanVerifyCommandLine(args[1:]), timeout, !noWait, jsonOut)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Return once the checks are started")
 	cmd.Flags().DurationVar(&timeout, "timeout", 0, "Count a check that runs longer than this as failed, and close its window (default: no limit)")
 	return cmd
+}
+
+// fanVerifyRun is runFanVerify, replaced in tests.
+var fanVerifyRun = runFanVerify
+
+// fanVerifyCommandLine is the shell line for the words after --. One word is
+// a shell line as it stands, so 'make lint && make test' keeps its &&. Several
+// are argv: each is quoted for the shell where it needs it, so a pattern such
+// as 'TestA|TestB' reaches the command as one argument instead of becoming a
+// pipe. A word with nothing the shell reads specially is left bare, so a plain
+// command reads the same, and still runs under cmd.exe on a Windows host.
+func fanVerifyCommandLine(words []string) string {
+	if len(words) == 1 {
+		return words[0]
+	}
+	quoted := make([]string, len(words))
+	for i, w := range words {
+		quoted[i] = shellWord(w)
+	}
+	return strings.Join(quoted, " ")
+}
+
+// shellWord is w as one POSIX shell word: bare when every byte is one the
+// shell passes through, single-quoted otherwise.
+func shellWord(w string) string {
+	if w == "" {
+		return "''"
+	}
+	for _, r := range w {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@%+,", r)) {
+			return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
+		}
+	}
+	return w
 }
 
 func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutput bool) error {
