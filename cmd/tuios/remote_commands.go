@@ -893,7 +893,7 @@ type optionRow struct {
 // runListOptions lists the settable configuration paths. It is the command that
 // answers "what can I set", so the human form prints the whole contract of each
 // option rather than a bare path a caller would still have to look up.
-func runListOptions(sessionName, section, prefix string, jsonOutput bool) error {
+func runListOptions(sessionName, section, prefix, search string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -907,6 +907,9 @@ func runListOptions(sessionName, section, prefix string, jsonOutput bool) error 
 	})
 	if err != nil {
 		return reportVerbError(explainVerbError("list-options", err), jsonOutput)
+	}
+	if search != "" {
+		return printOptionSearch(os.Stdout, raw, search, jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

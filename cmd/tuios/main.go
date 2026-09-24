@@ -1695,6 +1695,7 @@ only mean something while the panes are tiled.`,
 	var listOptionsSession string
 	var listOptionsSection string
 	var listOptionsJSON bool
+	var listOptionsSearch string
 	listOptionsCmd := &cobra.Command{
 		Use:   "list-options [prefix]",
 		Short: "List every settable configuration option",
@@ -1714,6 +1715,9 @@ the override is shown beside the default.`,
   # Everything under a path
   tuios list-options appearance.sidebar.
 
+  # Search by name, value or description, best match first
+  tuios list-options --search "pane bg"
+
   # Machine-readable, for an agent or a script
   tuios list-options --json | jq -r '.options[].path'`,
 		Args: cobra.MaximumNArgs(1),
@@ -1722,9 +1726,10 @@ the override is shown beside the default.`,
 			if len(args) > 0 {
 				prefix = args[0]
 			}
-			return runListOptions(listOptionsSession, listOptionsSection, prefix, listOptionsJSON)
+			return runListOptions(listOptionsSession, listOptionsSection, prefix, listOptionsSearch, listOptionsJSON)
 		},
 	}
+	listOptionsCmd.Flags().StringVar(&listOptionsSearch, "search", "", "Fuzzy search the paths, values and descriptions, best match first")
 	listOptionsCmd.Flags().StringVarP(&listOptionsSession, "session", "s", "", "Target session (default: most recently active)")
 	listOptionsCmd.Flags().StringVar(&listOptionsSection, "section", "", "Only options in this group, e.g. sidebar or dock")
 	listOptionsCmd.Flags().BoolVar(&listOptionsJSON, "json", false, "Output as JSON")

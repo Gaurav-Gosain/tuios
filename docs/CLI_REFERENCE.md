@@ -2388,6 +2388,7 @@ there.
 | Command | What it does |
 |---------|--------------|
 | `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values |
+| `tuios list-options --search <query>` | The options matching a fuzzy query on path, value or description, best first, as the settings page searches |
 | `tuios get-config <path>` | Read a configuration option from a running session |
 | `tuios list-themes [theme]` | List the themes, and describe one |
 | `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
