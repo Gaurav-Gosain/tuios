@@ -1727,6 +1727,9 @@ A dismiss or a snooze can be undone for 10 seconds with `u` in the Inbox,
 and the dock says so. Mail waiting for another machine is not restored (its
 dismiss discarded the mail), nor is a question put with `ask-human` (its asker
 was told it was dismissed).
+A held approval or plan comes back without its hold, since the dismiss ended
+it and gave the prompt back to the pane: a plan returns as the pane's
+approval, to answer in the pane.
 
 On the rail, with the cursor on an agent row, `u` marks the pane's finished
 turn unread: the row reads as finished again, and its Done row opens in every

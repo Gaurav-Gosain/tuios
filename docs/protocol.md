@@ -1142,7 +1142,10 @@ caller of the older verbs and for a subscriber:
   holds, which changes nothing for it.
 - `dismiss-attention` accepts the id of a snoozed item. A dismiss of
   anything but an `outbox` item or an `ask` can be undone for 10 seconds with
-  `mark-attention` `restore`, which reopens it with its id and `since`.
+  `mark-attention` `restore`, which reopens it with its id and `since`. A
+  held approval or plan comes back without `request_id`, since the dismiss
+  ended its hold, and a plan comes back as kind `approval`, without
+  `plan_sha`, `plan_lines` or `deny_message`.
 - A hold that `request-approval` starts on a pane whose approval the person
   snoozed wakes the approval first, so the Inbox can answer it.
 - The saved queue holds snoozed `finished` and `errored` items with
