@@ -1986,16 +1986,17 @@ Kilo. The reason is cleaned and cut to 500 bytes, only you can send it (it is
 a `reply-approval` with your attach nonce), and it reaches only the hold it
 answers. A reason typed by `send-keys` is never sent.
 
-### Review, triage, replies and safer approvals (being built)
+### Review, triage, replies and safer approvals
 
-The daemon already knows the shape of four pieces of work that are being
-built, so their rules are fixed before any of them does anything:
+The agent review, triage, reply and approval work comes in four pieces, all
+built now:
 
 - **Reviewing a pane's changes** (`review-diff`, `review-note`,
   `send-review`), and comparing the attempts of a fan (`compare-fan`,
   `verify-fan`, `keep-fan`). The review verbs are built, with `tuios review`:
-  see [Reviewing an agent's changes](#reviewing-an-agents-changes). The
-  review overlay in the client is not yet.
+  see [Reviewing an agent's changes](#reviewing-an-agents-changes), and so
+  is the review overlay in the client: see
+  [Reviewing in the client](#reviewing-in-the-client).
 - **Triage in the Inbox** (`mark-attention`): snooze, wake, mark unread and
   undo. A snoozed item closes with the reason `snoozed` and opens again with
   the same id. This one is built: see
@@ -2014,9 +2015,7 @@ built, so their rules are fixed before any of them does anything:
   the pane leaves `needs_input`, and risk rules that mark an approval risky.
   The risk rules are a speed bump, not a sandbox: an obfuscated command can
   avoid a pattern, and the harness's permission system stays the boundary.
-  `get-agent-state` and `list-agents`).
-- **Safer approvals** (`get-approval`, `risk_ack` and `plan_sha`) are built:
-  see [Risk rules](#risk-rules), [Plans](#plans) and
+  This one is built: see [Risk rules](#risk-rules), [Plans](#plans) and
   [Deny with a reason](#deny-with-a-reason).
 
 The activity ring behind `agent-activity` has landed: see
@@ -2852,6 +2851,60 @@ reading of the connection, never a parameter, as for the queue:
 
 The diff is the repository's text and the notes are whoever wrote them, so
 `review-diff` marks its answer `untrusted`.
+
+### Reviewing in the client
+
+`ctrl+b v` reviews the focused pane, and `v` reviews the pane of the Inbox
+item or the rail agent row under the cursor; the palette has it as "Agents:
+Review changes of the focused pane". The key works whether or not an agent has
+been seen, since calling it is an explicit act, and the prefix menu, the help
+overlay and the palette list it once one has. Nothing runs until it is
+pressed: it asks the daemon for `review-diff` once, and the overlay opens when
+the diff arrives. On a pane with no git repository under it the dock says "No
+git repository under this pane" and nothing opens.
+
+The overlay covers the screen: a header with the session, the pane, the counts,
+the base and the number of notes; the changed files on the left; the file
+under the list's cursor on the right, with each note under the line it is on,
+a note on a hunk under the hunk's last line, and notes whose line is gone at
+the top of the file marked `outdated` with the line they quoted. A file that
+is no longer changed but still has notes is listed, so its notes can be read
+and resolved. A file past the diff's limits, or a binary one, shows its
+counts and says why no text is shown. Everything drawn from the repository or
+from a note has its control characters left out. The keys are listed in
+[KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay). The overlay covers the
+dock, so the dock's newest message since it opened (a note refused, notes
+queued, an attempt kept) is shown above its keys as well.
+
+For a pane in a fan, `w` shows the compare view: one row per attempt with its
+agent and state, the files and lines it changed against the fan's base
+(`compare-fan`), and its last check (a `verify-fan` result, else the exit of
+the last command a shell in it finished). `enter` reviews an attempt, `m`
+marks two and `d` diffs them with each other (`review-diff` with `against`,
+where notes are not offered), `V` runs a command you type in every attempt
+(`verify-fan`), and `K` keeps the attempt under the cursor and removes the
+others (`keep-fan`) once `y` answers a question that names each one removed.
+While a check runs, the view reads the rows again every second, without
+counting, until none runs; nothing is read otherwise.
+
+Who acts:
+
+- The overlay reads with this client's own connection, which is not a pane.
+- A note added, edited or resolved here, and the notes `S` sends, carry this
+  client's attach nonce, so the daemon records them as yours and the message
+  says "from the person". A daemon that issued no nonce is refused in the dock
+  rather than written as someone else.
+- A key that did not come from the keyboard (`send-keys`, a tape) may move
+  around the review but never acts as you: a note it typed is not saved, even
+  if the keyboard presses `enter`, and `S`, `x`, `V` and the keep
+  confirmation refuse it.
+- The rest is the daemon's, as for the CLI: `send-review` goes through the
+  delivery queue and never types over a prompt, `verify-fan` opens its windows
+  with no grants, and `keep-fan` leaves an attempt with uncommitted work in
+  place and the dock says which.
+- Reviewing a pane on another machine, or from a client attached to another
+  machine's session, is refused in the dock before anything is asked: attach
+  there and review it there.
 
 ## Environment
 

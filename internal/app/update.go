@@ -1767,6 +1767,30 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxReplied(msg)
 		return m, nil
 
+	case ReviewDiffMsg:
+		m.applyReviewDiff(msg)
+		return m, nil
+
+	case ReviewNotesMsg:
+		m.applyReviewNotes(msg)
+		return m, nil
+
+	case ReviewSentMsg:
+		m.applyReviewSent(msg)
+		return m, nil
+
+	case ReviewCompareMsg:
+		return m, m.applyReviewCompare(msg)
+
+	case ReviewVerifyMsg:
+		return m, m.applyReviewVerify(msg)
+
+	case ReviewKeptMsg:
+		return m, m.applyReviewKept(msg)
+
+	case ReviewTickMsg:
+		return m, m.applyReviewTick(msg)
+
 	case InboxQueueDroppedMsg:
 		m.applyInboxQueueDropped(msg)
 		return m, nil

@@ -36,6 +36,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// The review covers the screen: a click must not land on a pane or
+		// a panel under it.
+		if o.ReviewOpen() {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseClick(msg, o)
 		} else if o.ShowScrollbackBrowser {
@@ -44,6 +49,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		if o.ReviewOpen() {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			// Motion never syncs to the daemon, the same as the browser's.
 			return handleCaptureMouseMotion(msg, o)
@@ -70,6 +78,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
+		if o.ReviewOpen() {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				o.ReviewWheel(-3)
+			case tea.MouseWheelDown:
+				o.ReviewWheel(3)
+			}
+			return o, nil
+		}
 		if o.ScreenshotPreviewOpen() {
 			result, cmd = handleScreenshotPreviewWheel(msg, o)
 		} else if o.ShowScrollbackBrowser {
@@ -87,6 +104,14 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// one line of it.
 		if o.InboxReplyOpen() {
 			o.InboxReplyType(strings.Join(strings.Fields(msg.Content), " "))
+			return o, nil
+		}
+		// The review's line takes a paste as one line; with no line open
+		// the overlay drops it, since nothing under it may receive it.
+		if o.ReviewOpen() {
+			if o.ReviewEditing() {
+				o.ReviewEditorType(strings.Join(strings.Fields(msg.Content), " "))
+			}
 			return o, nil
 		}
 		if o.Mode == app.TerminalMode {
@@ -269,6 +294,13 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// forwarded to the shell underneath.
 	if o.ContextMenuActive() {
 		return handleContextMenuKey(msg, o)
+	}
+
+	// The review overlay covers the screen and owns every key while it is up,
+	// in either mode. It is opened from the Inbox and the rail, so it is
+	// checked ahead of both. See review_input.go.
+	if o.ReviewOpen() {
+		return handleReviewInput(msg, o)
 	}
 
 	// The accent picker and an in-flight rename are both opened from the rail,

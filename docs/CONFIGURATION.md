@@ -143,9 +143,8 @@ a prompt is held, answered and handed back.
 ## Plans, risk rules, the recap and the queue
 
 These tables configure the agent review, triage, reply and approval work,
-which is being built. The daemon reads and checks them now; a table whose work
-has not landed changes nothing yet. Every value has a default, so a file
-without them behaves as the defaults say. Like `[agents.approvals]`, they are
+which is built. Every value has a default, so a file without them behaves as
+the defaults say. Like `[agents.approvals]`, they are
 file-plane config: not in `list-options`, and `set-option` cannot change
 them, so a pane cannot switch a risk rule off through tuios.
 

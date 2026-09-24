@@ -11,9 +11,9 @@ import (
 // TestAgentWorkKeysWaitForAnAgent drives the foundation of the agent review,
 // triage and reply work against a real daemon and client. With no agent in
 // view, the prefix menu offers neither ctrl+b v nor ctrl+b O. Once a pane
-// reports an agent state it offers both. The keys that are bound ahead of
-// their work change nothing: the chords leave the client as it was, and the
-// Inbox's new keys leave the Inbox open on the same item.
+// reports an agent state it offers both. ctrl+b v on a pane with no
+// repository opens nothing, and the Inbox's new keys leave the Inbox open on
+// the same item (its v, on a pane with no repository, opens nothing either).
 //
 // Negative control: with the two lines taken out of IsAgentPrefixKeybinding,
 // the first check fails, because the menu shows them to a person who has
@@ -74,7 +74,8 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	}
 	saveFrame(t, term, "agent-work-menu-agents")
 
-	// v is bound ahead of its work: it runs and changes nothing on screen.
+	// v reviews the focused pane, which has no repository under it: the menu
+	// closes and nothing opens.
 	if err := term.SendKeys("v"); err != nil {
 		t.Fatalf("press v: %v", err)
 	}
@@ -109,17 +110,17 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	alive(t, term, "after the Inbox's new keys")
 }
 
-// TestPendingPrefixKeysReachThePane checks that ctrl+b v, bound ahead of its
-// work, still does what it did before it was bound: in terminal mode the key
-// after the leader is typed into the focused pane. ctrl+b O is built (the walk
-// of unseen finished turns), so with an agent in view it runs: it types
-// nothing, says in the dock that there is nothing to walk, and a second O
-// inside its repeat window runs it again rather than reaching the shell. The
-// shell then echoes what reached it.
+// TestPendingPrefixKeysReachThePane checks what ctrl+b v and ctrl+b O do in
+// terminal mode once an agent is in view. Both are built, so neither types its
+// key into the pane: ctrl+b v reviews the focused pane, and in a pane with no
+// repository under it opens nothing and says so in the dock; ctrl+b O walks
+// unseen finished turns, says there is nothing to walk, and a second O inside
+// its repeat window runs it again rather than reaching the shell. The shell
+// then echoes what reached it.
 //
-// Negative control: with the prefix path dispatching the review stub as if it
-// had run, v is dropped and the echo prints PENDZ; with ctrl+b O answering
-// "not handled", both Os reach the shell and it prints PENDvOOZ.
+// Negative control: with the prefix path treating the review as not handled,
+// v reaches the shell and the echo prints PENDvZ; with ctrl+b O answering
+// "not handled", both Os reach the shell and it prints PENDOOZ.
 func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	term, base := attachClientBase(t)
 	// An agent in view, so the keys are the ones a person with agents has.
@@ -133,12 +134,18 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 		t.Fatalf("type the command: %v", err)
 	}
 	time.Sleep(insertGuard)
-	for _, key := range []string{"v", "O"} {
-		if err := term.SendKeys(tuitest.Ctrl('b'), key); err != nil {
-			t.Fatalf("press ctrl+b %s: %v", key, err)
-		}
-		time.Sleep(insertGuard)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "v"); err != nil {
+		t.Fatalf("press ctrl+b v: %v", err)
 	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "No git repository under this pane")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+b v did not say there is nothing to review: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "O"); err != nil {
+		t.Fatalf("press ctrl+b O: %v", err)
+	}
+	time.Sleep(insertGuard)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "No finished turns you have not seen")
 	}, uiTimeout); err != nil {
@@ -152,7 +159,7 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 		t.Fatalf("finish the command: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Count(s.Text(), "PENDvZ") >= 2
+		return strings.Count(s.Text(), "PENDZ") >= 2
 	}, shellTimeout); err != nil {
 		t.Fatalf("the keys after the leader did not reach the shell as expected: %v\n%s", err, term.Snapshot())
 	}

@@ -309,6 +309,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
+	// The review covers the whole screen, over the Inbox and the rail it may
+	// have been opened from, which are still there when it closes.
+	if content := m.renderReview(); content != "" {
+		layers = append(layers, lipgloss.NewLayer(content).
+			X(0).Y(0).Z(config.ZIndexReview).ID("review"))
+	}
+
 	if m.ShotPreview.Open {
 		content, geo, rows := m.renderScreenshotPreview()
 		layers = m.placeOverlayPanel(layers, overlayKindShot, content, geo, rows)

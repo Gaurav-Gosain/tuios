@@ -753,6 +753,17 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The review overlay on the focused pane's changes. The word
+			// "review" finds it, like "Review changes" in the prefix menu.
+			Name:     "Agents: Review changes of the focused pane",
+			Shortcut: "prefix+v",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				cmd, _ := m.ReviewFocusedPane()
+				return m, cmd
+			},
+		},
+		{
 			// prefix+M had no palette row; "open mailbox" above opens a
 			// different view, every thread rather than mail for you.
 			Name:     "Agents: Inbox, mail for you",

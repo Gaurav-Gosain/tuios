@@ -128,12 +128,14 @@ The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
 do the approval keys: `n`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
 [Deny with a reason](AGENT_STATE.md#deny-with-a-reason)), and the reply keys:
 `r` in the Inbox on a finished or errored item, and `r` and `x` on a rail
-agent row (see [Replying to an agent](AGENT_STATE.md#replying-to-an-agent)).
-The rest are being built: until its work lands, a key does what it did before it
-was bound: nothing in the Inbox, the rail's own binding on an agent row, and
-after `ctrl+b` in terminal mode, the key typed into the focused pane, with no
-repeat window opened. `ctrl+b O` also does that until an agent has been seen,
-so a person who runs none keeps typing `O` into the pane. The prefix menu and
+agent row (see [Replying to an agent](AGENT_STATE.md#replying-to-an-agent)),
+and the review keys: `ctrl+b v`, and `v` in the Inbox and on a rail agent row
+(see [The review overlay](#the-review-overlay) below). `ctrl+b v` works
+whether or not an agent has been seen, since calling it is an explicit act;
+on a pane with no git repository under it, the dock says so and nothing
+opens. `ctrl+b O` does what an unbound key does until an agent has been seen:
+after `ctrl+b` in terminal mode, the key is typed into the focused pane, so a
+person who runs no agents keeps typing `O` into the pane. The prefix menu and
 the help overlay list them only once an agent has been seen, like the rest of
 the Agents section. Attached to a daemon without `mark-attention` (an older
 one, found by asking its `list-verbs` once per attach), the Inbox's `z`, `u`
@@ -182,6 +184,55 @@ line; `enter` queues it, `backspace` deletes, `esc` closes it and sends
 nothing. Attached to a daemon without `queue-prompt` (an older one), the
 first reply says to restart it, and after that `r` does what it did before:
 it says `r` replies to mail in the Inbox, and renames on the rail.
+
+### The review overlay
+
+`ctrl+b v` (or `v` in the Inbox or on a rail agent row) opens the diff of
+the pane's changes over the whole screen, once the daemon has read it: the
+file list on the left, the file under it on the right, and your notes under
+the lines they are on. It owns every key while it is open, in either mode.
+The keys are the overlay's own, not bindings, like the scrollback browser's:
+
+| Keys | What it does |
+| --- | --- |
+| `j` / `k`, arrows | Move by line; with the file list focused, move through the files |
+| `space`, `pgdown`, `ctrl+d` / `pgup`, `ctrl+u` | Move by a page |
+| `g` / `G` | First or last line |
+| `]` / `[` | Next or previous hunk, going on into the next or previous file |
+| `}` / `{` | Next or previous file |
+| `tab` | Focus the file list or the diff |
+| `enter` | In the file list: open that file |
+| `c` | A note on the line under the cursor |
+| `C` | A note on the whole hunk |
+| `e` | Edit the note under the cursor |
+| `x` | Resolve (remove) the note under the cursor |
+| `S` | Send every unsent note to the pane's agent as one message, typed when it is at rest |
+| `u` | Switch between the changes since the base and the uncommitted ones only |
+| `b` | Diff from another base (a line, filled with the current one; empty for the default) |
+| `w` | The compare view, for a pane in a fan |
+| `r` | Read the diff again |
+| `esc`, `q` | Close (from a review opened in the compare view, go back to it) |
+
+In the note line and the other one-line prompts every printable key is text,
+a paste is typed as one line, `enter` saves and `esc` drops.
+
+The compare view lists the attempts of the fan, with what each changed
+against the fan's base and its last check:
+
+| Keys | What it does |
+| --- | --- |
+| `j` / `k` | Move |
+| `enter` | Review that attempt; `esc` comes back |
+| `m` | Mark an attempt; two marks enable `d` |
+| `d` | Diff the two marked attempts with each other |
+| `V` | Run a command in every attempt (a line filled with the last one) |
+| `K` | Keep the attempt under the cursor: a question names what is removed, `y` keeps it and removes the others, any other key keeps everything |
+| `esc`, `q`, `w` | Back to the review |
+
+A key from `send-keys` or a tape may move around the review but never acts as
+you: a note it typed is not saved, and `S`, `x`, `V` and the keep
+confirmation refuse it. See
+[Reviewing an agent's changes](AGENT_STATE.md#reviewing-an-agents-changes).
 
 ## macOS
 

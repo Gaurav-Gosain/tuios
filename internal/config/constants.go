@@ -1308,6 +1308,11 @@ const (
 	// panel brings it above the others.
 	ZIndexOverlayBase = 1100
 
+	// ZIndexReview is the z-index for the review overlay. It covers the whole
+	// screen and is opened from the Inbox and the rail, so it sits above every
+	// floating panel; the context menu and notifications still draw over it.
+	ZIndexReview = 1400
+
 	// ZIndexContextMenu is the z-index for the shift+right-click context menu. It
 	// sits above every floating panel because it is opened on top of whatever is
 	// already on screen and is dismissed by the next click either way, so nothing

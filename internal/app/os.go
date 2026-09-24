@@ -815,6 +815,9 @@ type OS struct {
 	// See tape_review.go.
 	ShowTapeReview bool
 	TapeReview     *TapeReviewState
+	// review is the review overlay: a pane's diff, its notes, and the
+	// compare view of a fan. See review_overlay.go.
+	review reviewState
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle

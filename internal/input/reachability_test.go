@@ -242,12 +242,9 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 // both directions: an action here that starts to run fails it, and moves out
 // of this list into the table above.
 var pendingActions = map[string]string{
-	config.ActionInboxReview:     "review overlay",
 	config.ActionInboxDenyReason: "safer approvals",
 	config.ActionInboxDetailDown: "safer approvals",
 	config.ActionInboxDetailUp:   "safer approvals",
-	config.ActionAgentReview:     "review overlay",
-	config.ActionPrefixReview:    "review overlay",
 	// Built, and handled only once an agent has been seen, so for a person
 	// who runs none the key after the prefix still reaches the pane. These
 	// fixtures have seen none; TestNextFinishedRunsOnceAnAgentIsSeen presses

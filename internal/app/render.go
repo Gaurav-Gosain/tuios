@@ -680,7 +680,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker || m.ShowEffectPicker ||
 		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil ||
-		m.Capture.Active || m.ShotPreview.Open {
+		m.Capture.Active || m.ShotPreview.Open || m.review.open {
 		return nil, false
 	}
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
@@ -987,7 +987,7 @@ func (m *OS) flushGraphicsForView() {
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowHostPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview ||
-		m.ShotPreview.Open
+		m.ShotPreview.Open || m.review.open
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).

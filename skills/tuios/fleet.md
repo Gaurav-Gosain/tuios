@@ -156,6 +156,11 @@ your pane, never from the person, and when the person sends your note it is
 labelled as written by your pane. Review works on this machine's sessions
 only: for a session on another machine, use `tuios worktree pull HOST:SESSION`.
 
+The person reviews the same diff and the same notes in the client (`ctrl+b v`,
+or `v` in the Inbox), and compares a fan's attempts there. Notes they leave or
+send there arrive as "from the person"; the notes you left show under their
+lines, labelled as your pane's.
+
 ## One agent beside you: start-agent
 
 `start-agent` opens a pane with an agent in the session you are in and returns
