@@ -67,10 +67,10 @@ func TestQueuedPaneEntryIsCheckedAgainWhenTyped(t *testing.T) {
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a2, "grants": []string{"read"}}))
 	setAgentState(t, person, "a", a2, "working", "", "")
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	pane := dialVerb(t, sp)
 	result(t, callP(pane, t, "queue-prompt", map[string]any{"window": a2, "text": "echo from-a1"}))
-	d.approvalPeer = nil
+	d.setApprovalPeer(nil)
 
 	// The person takes write away from a1 before the agent rests.
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read"}}))
@@ -84,10 +84,10 @@ func TestQueuedPaneEntryIsCheckedAgainWhenTyped(t *testing.T) {
 	// With its grants intact, the same entry is typed.
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read", "write"}}))
 	setAgentState(t, person, "a", a2, "working", "", "")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	pane2 := dialVerb(t, sp)
 	result(t, callP(pane2, t, "queue-prompt", map[string]any{"window": a2, "text": "echo again-a1"}))
-	d.approvalPeer = nil
+	d.setApprovalPeer(nil)
 	setAgentState(t, person, "a", a2, "idle", "", "")
 	eventually(t, "the entry is typed", 5*time.Second, func() bool { return paneShows(t, d, sess, a2, "again-a1") })
 }
@@ -116,7 +116,7 @@ func TestCancelQueuedOwnership(t *testing.T) {
 
 	byPerson := result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "from the person", "human_nonce": tui.HumanNonce()}))
 	byShell := result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "from a shell"}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
 	byPane := result(t, callP(pane, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "from pane a"}))
 
@@ -136,7 +136,7 @@ func TestCancelQueuedOwnership(t *testing.T) {
 	}
 	// Nor may it name itself as another sender.
 	wantForbidden(t, "a pane queueing as another window", callP(pane, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "from": b}))
-	d.approvalPeer = nil
+	d.setApprovalPeer(nil)
 
 	// A shell may not drop the person's entry, and may drop its own.
 	wantForbidden(t, "a shell dropping the person's entry", callP(c, t, "cancel-queued", map[string]any{"session": "work", "id": byPerson["id"]}))

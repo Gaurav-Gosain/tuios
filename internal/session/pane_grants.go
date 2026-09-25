@@ -398,7 +398,7 @@ func (d *Daemon) hostedPaneOfPeer(cs *connState) string {
 	if d.hostedPeer != nil {
 		return d.hostedPeer(cs)
 	}
-	if d.approvalPeer != nil || cs.peerPID <= 0 || !d.connFromPane(cs) {
+	if d.approvalPeer.Load() != nil || cs.peerPID <= 0 || !d.connFromPane(cs) {
 		return ""
 	}
 	pids := make(map[int]string)
@@ -492,7 +492,7 @@ func (d *Daemon) placePaneWindow(cs *connState) (window, via string) {
 	}
 	fromPane, win := d.peerPane(cs)
 	via = "pid"
-	if win == "" && fromPane && d.approvalPeer == nil && cs.peerPID > 0 {
+	if win == "" && fromPane && d.approvalPeer.Load() == nil && cs.peerPID > 0 {
 		// A process in a pane whose window is not recorded yet names it in
 		// its environment. Only a pane the grant table holds counts, which
 		// is every local pane from before its process started.

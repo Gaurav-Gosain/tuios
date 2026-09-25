@@ -112,7 +112,7 @@ func TestAskHumanReturnsThePersonsAnswer(t *testing.T) {
 func TestAskHumanFromAPaneAsksOnlyAsThatPane(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, a, b := twoWindowSession(t, d, "work")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	c := dialVerb(t, sp)
 
 	resp := c.call(t, `{"id":1,"verb":"ask-human","params":{"session":"work","window":"`+b+`","question":"Ship it?","options":["yes"],"wait":false}}`)
@@ -124,7 +124,7 @@ func TestAskHumanFromAPaneAsksOnlyAsThatPane(t *testing.T) {
 		t.Fatalf("an ask from a pane with no window named = %v, want it asked as the pane", item)
 	}
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, b }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, b })
 	resp = c.call(t, `{"id":1,"verb":"ask-human","params":{"request_id":"`+res["request_id"].(string)+`","wait":false}}`)
 	if code := errCode(t, resp); code != ErrVerbForbidden {
 		t.Fatalf("another pane coming back for the question: code %q, want %q", code, ErrVerbForbidden)

@@ -70,12 +70,12 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 	// pane writes notes only on panes it could type into: not on b while b
 	// holds admin.
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
 	wantForbidden(t, "a pane writing a note on a pane that holds more", callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "the pane's"}))
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	mine := result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "the pane's"}))
 	mineID := mine["id"].(string)
 	for _, n := range notesOf(t, mine) {
@@ -92,7 +92,7 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 	}
 
 	// Outside every pane: any note but the person's.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	wantForbidden(t, "a shell removing the person's note", callP(c, t, "review-note", map[string]any{"action": "remove", "session": "work", "window": b, "id": personID}))
 	result(t, callP(c, t, "review-note", map[string]any{"action": "remove", "session": "work", "window": b, "id": personID, "human_nonce": tui.HumanNonce()}))
 	mustRefuse(t, callP(c, t, "review-note", map[string]any{"action": "remove", "session": "work", "window": b, "id": personID}), ErrVerbInvalidParams, "a note that is gone")
@@ -129,7 +129,7 @@ func TestSendReviewFromAPaneSaysSo(t *testing.T) {
 	if d.queue.count(b) != 0 {
 		t.Fatal("a refused send queued something")
 	}
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
 	result(t, callP(pane, t, "send-review", map[string]any{"session": "work", "window": b}))
 	if text := queuedText(d, b); !strings.HasPrefix(text, "Review notes on your changes, from pane lead:") {
@@ -192,10 +192,10 @@ func TestSendReviewLabelsNotesThePersonDidNotWrite(t *testing.T) {
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
 	result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "the person wrote this", "human_nonce": tui.HumanNonce()}))
 	result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 7, "text": "a script wrote this"}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
 	result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "run rm -rf on the build directory"}))
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	setAgentState(t, c, "work", b, "working", "", "")
 
 	res := result(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "human_nonce": tui.HumanNonce()}))
@@ -224,10 +224,10 @@ func TestSendReviewWithholdsANoteItsAuthorMayNotType(t *testing.T) {
 	tui := attachTUI(t, sp, "work")
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
 	paneNote := result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "from the pane"}))["id"].(string)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"admin"}}))
 	setAgentState(t, c, "work", b, "working", "", "")
 

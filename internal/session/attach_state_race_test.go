@@ -43,9 +43,15 @@ func TestAStateChangeDuringAnAttachReachesTheAttachingClient(t *testing.T) {
 		t.Fatal("the session already has shared borders, so the push below changes nothing")
 	}
 
+	// The hook runs on the daemon's connection goroutine and uses first, state
+	// and t. The atomic store orders what the test wrote before it, and
+	// hookDone orders what the hook did before the cleanups below close first
+	// and end the test. The socket orders neither for the race detector.
+	hookDone := make(chan struct{})
 	var once sync.Once
-	attachSnapshotTaken = func() {
+	hook := func() {
 		once.Do(func() {
+			defer close(hookDone)
 			pushed := *state
 			pushed.PaneGeometry = &PaneGeometryState{SharedBorders: true}
 			pushed.BaseVersion = state.Version
@@ -67,7 +73,15 @@ func TestAStateChangeDuringAnAttachReachesTheAttachingClient(t *testing.T) {
 			}
 		})
 	}
-	t.Cleanup(func() { attachSnapshotTaken = nil })
+	attachSnapshotTaken.Store(&hook)
+	t.Cleanup(func() {
+		attachSnapshotTaken.Store(nil)
+		select {
+		case <-hookDone:
+		case <-time.After(10 * time.Second):
+			t.Error("the attach hook never finished")
+		}
+	})
 
 	second := attachTUI(t, sp, "geo")
 	got := make(chan bool, 16)

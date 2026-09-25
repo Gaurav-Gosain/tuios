@@ -313,7 +313,7 @@ func TestGetApprovalStaysInItsSession(t *testing.T) {
 	pending, _ := requestApproval(t, sp, "b", b1)
 	id := heldItem(t, c, b1)["request_id"].(string)
 	defer func() {
-		d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+		d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 		setAgentState(t, c, "b", b1, "working", "", "")
 		awaitResult(t, pending)
 	}()
@@ -324,7 +324,7 @@ func TestGetApprovalStaysInItsSession(t *testing.T) {
 	mustRefuse(t, callP(c, t, "get-approval", map[string]any{"request_id": id, "session": "a"}), ErrVerbInvalidParams, "a hold named with another session")
 
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	pane := dialVerb(t, sp)
 	mustRefuse(t, callP(pane, t, "get-approval", map[string]any{"request_id": id}), ErrVerbInvalidParams, "a pane reading a hold in another session")
 	wantForbidden(t, "a pane naming another session", callP(pane, t, "get-approval", map[string]any{"request_id": id, "session": "b"}))
@@ -384,7 +384,7 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 	ag := startBlockedAgent(t, d, sp, "grant", "claude-code", "approve")
 	markRisky(t, d, "grant", ag.window, risk.RuleForcePush)
 	setStrict(d, "read", "write", "respond")
-	d.approvalPeer = func(*connState) (bool, string) { return true, ag.other }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, ag.other })
 	c := dialVerb(t, sp)
 	params := map[string]any{"window": ag.window, "action": "approve", "risk_ack": []string{risk.RuleForcePush}}
 

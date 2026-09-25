@@ -58,7 +58,7 @@ func wantForbidden(t *testing.T, what string, resp map[string]any) {
 
 func TestRestrictConnectionOwnScopeReachesOnlyTheCallersSession(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 
 	c := dialVerb(t, sp)
 	res := restrict(t, c, map[string]any{"scope": "own"})
@@ -134,7 +134,7 @@ func TestRestrictConnectionOwnScopeReachesOnlyTheCallersSession(t *testing.T) {
 
 func TestRestrictConnectionReadOnlyRefusesTyping(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	restrict(t, c, map[string]any{"scope": "own", "read_only": true})
 
@@ -158,7 +158,7 @@ func TestRestrictConnectionReadOnlyRefusesTyping(t *testing.T) {
 
 func TestRestrictConnectionNeverWidens(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	restrict(t, c, map[string]any{"scope": "own", "read_only": true})
 	wantForbidden(t, "lifting read_only", callP(c, t, "restrict-connection", map[string]any{"scope": "own"}))
@@ -173,7 +173,7 @@ func TestRestrictConnectionPlacesTheCallerByTokenOnlyWhenTheKernelCannot(t *test
 	d, sp, a1, _, b1 := scopeFixture(t)
 
 	// The kernel places the caller in no pane: a valid token places it.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	c := dialVerb(t, sp)
 	res := restrict(t, c, map[string]any{"pane_id": b1, "pane_token": d.manager.PaneToken(b1)})
 	if res["session"] != "b" || res["via"] != "token" {
@@ -196,7 +196,7 @@ func TestRestrictConnectionPlacesTheCallerByTokenOnlyWhenTheKernelCannot(t *test
 	result(t, callP(none, t, "list-verbs", map[string]any{"verb": "hello"}))
 
 	// The kernel's answer wins over a token for another pane.
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	k := dialVerb(t, sp)
 	wantForbidden(t, "a token for another pane than the kernel's", callP(k, t, "restrict-connection", map[string]any{"pane_id": b1, "pane_token": d.manager.PaneToken(b1)}))
 }
@@ -217,7 +217,7 @@ func TestRestrictConnectionReachesTheFanGroup(t *testing.T) {
 	sibling("c")
 	sibling("e")
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	res := restrict(t, c, nil)
 	if got := res["sessions"].([]any); len(got) != 2 || got[0] != "a" || got[1] != "b" {
@@ -227,7 +227,7 @@ func TestRestrictConnectionReachesTheFanGroup(t *testing.T) {
 	wantForbidden(t, "a writing into c", callP(c, t, "list-windows", map[string]any{"session": "c"}))
 
 	cw := d.manager.GetSession("c").GetState().Windows[0].ID
-	d.approvalPeer = func(*connState) (bool, string) { return true, cw }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, cw })
 	sc := dialVerb(t, sp)
 	res = restrict(t, sc, nil)
 	if got := res["sessions"].([]any); len(got) != 2 || got[0] != "c" || got[1] != "e" {
@@ -251,7 +251,7 @@ func mustSetWorktree(t *testing.T, d *Daemon, session string, info *WorktreeInfo
 
 func TestRestrictedSubscribeCarriesOnlyTheSessionsItReaches(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	restrict(t, c, map[string]any{"read_only": true})
 	wantForbidden(t, "subscribe to b", callP(c, t, "subscribe", map[string]any{"session": "b"}))
@@ -278,7 +278,7 @@ func TestRestrictedSubscribeCarriesOnlyTheSessionsItReaches(t *testing.T) {
 // seq; if the ack gave anything less, the caller could never move past the gap.
 func TestRestrictedResumeFromAnEvictedSeqGivesTheBaseline(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	d.events.mu.Lock()
 	start := d.events.seq
 	d.events.mu.Unlock()
@@ -330,7 +330,7 @@ func TestFanRecordsTheSessionItWasLaunchedFrom(t *testing.T) {
 	fakeClaudeOnPath(t)
 	home := makeSessionWithWindow(t, d, "home")
 	homeWin := home.GetState().Windows[0].ID
-	d.approvalPeer = func(*connState) (bool, string) { return true, homeWin }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, homeWin })
 
 	c := dialVerb(t, sp)
 	res := result(t, c.call(t, `{"id":1,"verb":"fan","params":{"count":1,"agent":"claude","prompt":"Say hi.","repo":"`+repo+`","base":"main","ready_timeout":200}}`))

@@ -199,7 +199,7 @@ func TestFanVerbsReachOnlyTheSiblingsThePaneReaches(t *testing.T) {
 
 	setStrict(d, "read", "fan")
 	window := caller.GetState().Windows[0].ID
-	d.approvalPeer = func(*connState) (bool, string) { return true, window }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, window })
 	pane := dialVerb(t, sp)
 
 	rows := rowsOf(t, result(t, callP(pane, t, "compare-fan", map[string]any{"session": mine[0], "changes": false})))
@@ -267,7 +267,7 @@ func TestCompareFanRefusalNamesOnlyFansThePaneReaches(t *testing.T) {
 
 	setStrict(d, "read", "fan")
 	window := caller.GetState().Windows[0].ID
-	d.approvalPeer = func(*connState) (bool, string) { return true, window }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, window })
 	pane := dialVerb(t, sp)
 
 	for verb, params := range map[string]map[string]any{

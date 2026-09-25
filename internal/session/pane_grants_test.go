@@ -116,7 +116,7 @@ func setStrict(d *Daemon, grants ...string) {
 // given grants, a pane can still do everything it could before grants.
 func TestOpenModeIsTodaysBehaviour(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	result(t, callP(c, t, "list-sessions", nil))
 	result(t, callP(c, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"}))
@@ -133,7 +133,7 @@ func TestOpenModeIsTodaysBehaviour(t *testing.T) {
 func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 
 	resp := callP(c, t, "list-sessions", nil)
@@ -164,7 +164,7 @@ func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 	wantForbidden(t, "respond", callP(c, t, "respond", map[string]any{"window": a2, "action": "approve"}))
 
 	// The person, outside every pane, is untouched.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	plain := dialVerb(t, sp)
 	result(t, callP(plain, t, "list-sessions", nil))
 	result(t, callP(plain, t, "capture-pane", map[string]any{"session": "b", "window": b1}))
@@ -176,7 +176,7 @@ func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 func TestReadOnlyGrantRefusesTypingAndMail(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
 	setStrict(d, "read")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	result(t, callP(c, t, "capture-pane", map[string]any{"window": a2}))
 	wantForbidden(t, "send-text", callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
@@ -197,7 +197,7 @@ func TestReadOnlyGrantRefusesTypingAndMail(t *testing.T) {
 func TestFanGrantReachesTheFanGroup(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
 	mustSetWorktree(t, d, "b", &WorktreeInfo{LaunchedFrom: "a"})
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 
 	setStrict(d, "read", "write")
 	c := dialVerb(t, sp)
@@ -217,7 +217,7 @@ func TestFanGrantReachesTheFanGroup(t *testing.T) {
 
 func TestExplicitGrantsHoldEvenUnderOpen(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	set := result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read"}}))
 	if set["explicit"] != true || set["previous_explicit"] != false {
@@ -238,13 +238,13 @@ func TestExplicitGrantsHoldEvenUnderOpen(t *testing.T) {
 		}
 	}
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	wantForbidden(t, "send-text from a read pane", callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
 	wantForbidden(t, "list-sessions from a read pane", callP(c, t, "list-sessions", nil))
 
 	// Another pane still holds the open default.
-	d.approvalPeer = func(*connState) (bool, string) { return true, a2 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
 	other := dialVerb(t, sp)
 	result(t, callP(other, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"}))
 }
@@ -252,7 +252,7 @@ func TestExplicitGrantsHoldEvenUnderOpen(t *testing.T) {
 func TestAPaneCannotWidenItself(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
 	setStrict(d, "read", "write")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	wantForbidden(t, "widening to admin", callP(c, t, "set-pane-grants", map[string]any{"grants": []string{"admin"}}))
 	wantForbidden(t, "giving itself respond", callP(c, t, "set-pane-grants", map[string]any{"grants": []string{"read", "respond"}}))
@@ -269,7 +269,7 @@ func TestAPaneCannotWidenItself(t *testing.T) {
 
 	// An admin pane may not give respond either.
 	setStrict(d, "admin")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a2 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
 	admin := dialVerb(t, sp)
 	// b is the most recently active session; a pane's call that names none
 	// still means its own.
@@ -281,7 +281,7 @@ func TestAPaneCannotWidenItself(t *testing.T) {
 func TestLaunchGrantsNeverWiden(t *testing.T) {
 	d, _, a1, _, _ := scopeFixture(t)
 	cs := &connState{}
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	setStrict(d, "read", "fan")
 
 	g, verr := d.launchGrants(cs, nil)
@@ -305,7 +305,7 @@ func TestLaunchGrantsNeverWiden(t *testing.T) {
 	}
 
 	// The person gives anything; a link may not give respond.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	if g, verr := d.launchGrants(&connState{}, []string{"respond", "read"}); verr != nil || *g != GrantRespond|GrantRead {
 		t.Errorf("the person giving respond,read = %v, %v", g, verr)
 	}
@@ -316,7 +316,7 @@ func TestLaunchGrantsNeverWiden(t *testing.T) {
 
 func TestNewWindowStartsWithItsGrants(t *testing.T) {
 	d, sp, _, _, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	c := dialVerb(t, sp)
 	res := result(t, callP(c, t, "new-window", map[string]any{"session": "a", "focus": false, "grants": []string{"none"}}))
 	id := res["window_id"].(string)
@@ -332,7 +332,7 @@ func TestNewWindowStartsWithItsGrants(t *testing.T) {
 	if !slices.Equal(w.Grants, []string{"none"}) {
 		t.Errorf("recorded grants = %v, want [none] so an empty set survives JSON and gob", w.Grants)
 	}
-	d.approvalPeer = func(*connState) (bool, string) { return true, id }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, id })
 	p := dialVerb(t, sp)
 	wantForbidden(t, "a pane started with no grants reading", callP(p, t, "list-windows", nil))
 }
@@ -387,7 +387,7 @@ func TestPaneGrantsEnvAndTableFollowTheProcess(t *testing.T) {
 
 func TestPaneGrantsSurviveClientSyncAndRestore(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	c := dialVerb(t, sp)
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read"}}))
 
@@ -430,7 +430,7 @@ func TestPaneGrantsSurviveClientSyncAndRestore(t *testing.T) {
 func TestPaneTokenPlacesAConnectionTheKernelCannot(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d, "read")
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	c := dialVerb(t, sp)
 	wantForbidden(t, "a wrong token", callP(c, t, "pane-grants", map[string]any{"pane_id": a1, "pane_token": "00"}))
 	got := result(t, callP(c, t, "pane-grants", map[string]any{"pane_id": a1, "pane_token": d.manager.PaneToken(a1)}))
@@ -448,7 +448,7 @@ func TestPaneTokenPlacesAConnectionTheKernelCannot(t *testing.T) {
 func TestTheClientPresentsItsPaneWhereTheKernelCannot(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
 	setStrict(d, "read")
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	env := map[string]string{"TUIOS_PANE_ID": a1, "TUIOS_PANE_TOKEN": d.manager.PaneToken(a1)}
 	getenv := func(k string) string { return env[k] }
 
@@ -481,7 +481,7 @@ func TestTheClientPresentsItsPaneWhereTheKernelCannot(t *testing.T) {
 func TestBinaryProtocolNeedsAdmin(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	conn, err := net.DialTimeout("unix", sp, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -511,13 +511,13 @@ func TestBinaryProtocolNeedsAdmin(t *testing.T) {
 func TestStrictStreamCarriesOnlyReadableSessions(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	ack := result(t, callP(c, t, "subscribe", map[string]any{"types": []string{EventAgentState}}))
 	if ack["type"] != EventSubscribed {
 		t.Fatalf("subscribe ack = %v", ack)
 	}
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	plain := dialVerb(t, sp)
 	setAgentState(t, plain, "b", b1, "working", "", "")
 	setAgentState(t, plain, "a", a1, "working", "", "")
@@ -529,7 +529,7 @@ func TestStrictStreamCarriesOnlyReadableSessions(t *testing.T) {
 func TestRespondGrantLetsAPaneAnswer(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d, "read", "write", "respond")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	if !d.paneMayRespond(&connState{}, "a") {
 		t.Error("a pane holding respond may not answer in its own session")
 	}
@@ -560,7 +560,7 @@ func TestRespondGrantLetsAPaneAnswer(t *testing.T) {
 // before.
 func TestAHostedPaneReachesNoSessionHereUnderStrict(t *testing.T) {
 	d, sp, _, _, b1 := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return true, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, "" })
 	d.hostedPeer = func(*connState) string { return "hp-1" }
 	c := dialVerb(t, sp)
 	result(t, callP(c, t, "capture-pane", map[string]any{"session": "b", "window": b1}))
@@ -617,7 +617,7 @@ func TestGrantKindCoversEveryVerb(t *testing.T) {
 func TestCheckGrantsFillsTheOwnSession(t *testing.T) {
 	d, _, a1, _, _ := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	out, verr := d.checkGrants(&connState{}, "list-windows", nil)
 	if verr != nil {
 		t.Fatal(verr)
@@ -635,11 +635,11 @@ func TestCheckGrantsFillsTheOwnSession(t *testing.T) {
 // and widen itself.
 func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read", "write"}}))
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	widen := "tuios set-pane-grants -w " + a1 + " --grants admin\r"
 	resp := callP(c, t, "send-text", map[string]any{"window": a2, "text": widen})
@@ -663,9 +663,9 @@ func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 
 	// A sibling that holds no more than the caller may be typed into. The
 	// person's connection is placed in no pane; c stays placed in a1.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a2, "grants": []string{"read"}}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	result(t, callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
 	result(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"}))
 	// The window was pinned to the id it resolved to.
@@ -685,11 +685,11 @@ func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	setAgentState(t, person, "a", a2, string(AgentStateNeedsInput), "approval", "run rm -rf build?")
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	resp := callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"})
 	wantForbidden(t, "send-keys into a prompt", resp)
@@ -710,14 +710,14 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 	// A pane that has come to a prompt since the call was checked is refused
 	// by the handler's second look.
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	setAgentState(t, person, "a", a2, string(AgentStateIdle), "", "")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	cs := &connState{}
 	if _, verr := d.checkGrants(cs, "send-text", json.RawMessage(`{"window":"`+a2+`","text":"x"}`)); verr != nil {
 		t.Fatal(verr)
 	}
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	setAgentState(t, person, "a", a2, string(AgentStateNeedsInput), "approval", "again?")
 	if verr := d.recheckTyping(cs, "send-text", d.manager.GetSession("a"), a2); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("recheck of a pane now on a prompt = %v, want forbidden", verr)
@@ -736,7 +736,7 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 func TestGetWindowIsARead(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d, "read")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 
 	got := result(t, callP(c, t, "get-window", map[string]any{"window": a2}))
@@ -778,7 +778,7 @@ func TestGetWindowIsARead(t *testing.T) {
 	}
 
 	// The fields are list-windows' entry for the same window.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	rows := result(t, callP(person, t, "list-windows", map[string]any{"session": "a"}))["windows"].([]any)
 	one := result(t, callP(person, t, "get-window", map[string]any{"session": "a", "window": "Second"}))
@@ -821,12 +821,12 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	setStrict(d)
 	// The attached client said hello over the client protocol and is the
 	// person's; the verb connection is the pane a1.
-	d.approvalPeer = func(cs *connState) (bool, string) {
+	d.setApprovalPeer(func(cs *connState) (bool, string) {
 		if cs.hello != nil {
 			return false, ""
 		}
 		return true, a1
-	}
+	})
 	c := dialVerb(t, sp)
 	got := result(t, callP(c, t, "get-window", map[string]any{"window": "Second"}))
 	if got["id"] != a2 || got["cursor_x"] != float64(3) || got["type"] != "window" {
@@ -847,7 +847,7 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	// The person's keys with no window still go through the client. Keys for
 	// a named window go to that window's terminal, whoever sends them, since
 	// the client would hand them to the focused window instead.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "send-keys", map[string]any{"session": "a", "window": a2, "keys": "Enter"}))
 	select {

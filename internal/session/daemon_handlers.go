@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"log"
+	"sync/atomic"
 )
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
@@ -51,9 +52,10 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 }
 
 // attachSnapshotTaken runs in handleAttach between the state snapshot and the
-// reply that carries it. It is nil outside tests, which use it to land a state
-// change in that window on purpose.
-var attachSnapshotTaken func()
+// reply that carries it. It is unset outside tests, which use it to land a
+// state change in that window on purpose. It is atomic because the test sets
+// it while the daemon's connection goroutines read it.
+var attachSnapshotTaken atomic.Pointer[func()]
 
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var payload AttachPayload
@@ -183,8 +185,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// which is harmless, where the other order would miss it.
 	promised := session.canonicalFingerprint()
 	state := session.GetState()
-	if attachSnapshotTaken != nil {
-		attachSnapshotTaken()
+	if hook := attachSnapshotTaken.Load(); hook != nil {
+		(*hook)()
 	}
 	state.Width = effectiveWidth
 	state.Height = effectiveHeight

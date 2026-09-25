@@ -845,11 +845,15 @@ func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
 	return false
 }
 
+// peerPlacer places the process on a connection: outside every pane, or in
+// one, named by its window when that can be told.
+type peerPlacer func(cs *connState) (fromPane bool, window string)
+
 // peerPane says whether the process on cs runs inside a pane of this daemon,
 // and which pane when that can be told. See peerPaneWindow.
 func (d *Daemon) peerPane(cs *connState) (bool, string) {
-	if d.approvalPeer != nil {
-		return d.approvalPeer(cs)
+	if place := d.approvalPeer.Load(); place != nil {
+		return (*place)(cs)
 	}
 	return d.peerPaneWindow(cs)
 }

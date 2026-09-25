@@ -326,17 +326,17 @@ func TestApprovalRefusals(t *testing.T) {
 
 	// A process inside a pane may hold only its own pane's prompt.
 	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	resp := c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?"}}`)
 	if code := errCode(t, resp); code != ErrVerbForbidden {
 		t.Errorf("a request for another pane answered %s", code)
 	}
-	d.approvalPeer = func(*connState) (bool, string) { return true, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, "" })
 	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?"}}`)
 	if code := errCode(t, resp); code != ErrVerbForbidden {
 		t.Errorf("a pane process that could not be placed answered %s", code)
 	}
-	d.approvalPeer = nil
+	d.setApprovalPeer(nil)
 
 	// Over a link, never.
 	raw := json.RawMessage(`{"session":"work","window":"` + b + `","harness":"claude-code"}`)

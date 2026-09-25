@@ -145,9 +145,14 @@ type Daemon struct {
 	activity   *activityStore
 	recapTests atomic.Pointer[[]string]
 	// approvalPeer places the process on a connection in a pane, for
-	// request-approval, restrict-connection and fan's launched_from. Nil uses
-	// peerPaneWindow; a test sets it to stand in for a process table.
-	approvalPeer func(cs *connState) (fromPane bool, window string)
+	// request-approval, restrict-connection and fan's launched_from. Unset
+	// uses peerPaneWindow; a test sets it to stand in for a process table.
+	//
+	// It is atomic because a test swaps it while the daemon runs, and the
+	// connection goroutines read it with nothing else ordering the two: the
+	// reply a test waits on is written with writev, which gives the race
+	// detector no happens-before edge.
+	approvalPeer atomic.Pointer[peerPlacer]
 	// hostedPeer names the hosted pane a caller runs in, for pane grants.
 	// Nil walks the process table (hostedPaneOfPeer); a test sets it.
 	hostedPeer func(cs *connState) string

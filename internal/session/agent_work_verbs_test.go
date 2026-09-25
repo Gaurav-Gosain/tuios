@@ -103,7 +103,7 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	t.Chdir(t.TempDir())
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d)
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 
 	// Its own session: the grant check passes and the handler answers.
@@ -165,11 +165,11 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 // holds more than the caller, and never into a prompt without respond.
 func TestQueuedTypingIsHeldToTheTarget(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read", "write"}}))
 
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 	// a2 is on the open default, so it holds admin.
 	wantForbidden(t, "queue-prompt into an admin sibling", callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "hi"}))
@@ -179,13 +179,13 @@ func TestQueuedTypingIsHeldToTheTarget(t *testing.T) {
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"window": a1, "text": "hi"}), ErrVerbInvalidParams, "queue-prompt into itself")
 
 	// A sibling that holds no more, on a prompt: respond is needed.
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a2, "grants": []string{"read"}}))
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "hi"}), ErrVerbInvalidParams, "queue-prompt into a sibling that holds less")
-	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	setAgentState(t, person, "a", a2, string(AgentStateNeedsInput), "approval", "run rm -rf build?")
-	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	wantForbidden(t, "queue-prompt into a prompt", callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "yes"}))
 }
 

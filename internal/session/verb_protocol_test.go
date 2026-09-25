@@ -38,6 +38,16 @@ func startTestDaemon(t *testing.T) (*Daemon, string) {
 	return d, sp
 }
 
+// setApprovalPeer stands place in for the process table that tells which pane
+// a connection comes from. Nil goes back to the process table.
+func (d *Daemon) setApprovalPeer(place peerPlacer) {
+	if place == nil {
+		d.approvalPeer.Store(nil)
+		return
+	}
+	d.approvalPeer.Store(&place)
+}
+
 // verbConn is a raw JSON line client for the daemon socket.
 type verbConn struct {
 	conn net.Conn
