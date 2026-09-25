@@ -10,6 +10,7 @@
 package harness
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -230,7 +231,11 @@ func priorityOrder(rules []ScreenRule) []int {
 	for i := range order {
 		order[i] = i
 	}
-	slices.SortStableFunc(order, func(a, b int) int { return rules[b].Priority - rules[a].Priority })
+	// cmp.Compare rather than a subtraction: priority is whatever integer a
+	// user wrote, and the difference of two far apart ones overflows, which
+	// sorted a lower priority rule first and made Classify disagree with
+	// Explain (FuzzManifest).
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(rules[b].Priority, rules[a].Priority) })
 	return order
 }
 
