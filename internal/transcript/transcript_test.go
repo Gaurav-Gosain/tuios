@@ -349,3 +349,21 @@ func secretsIn(body string) []string {
 	}
 	return out
 }
+
+func TestIncrementalReadsOnlyConsumeWhatWasAppended(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	write(t, path, assistantLine("tool_use"))
+	r := NewReader(path)
+	if _, ok, err := r.Read(); err != nil || !ok {
+		t.Fatalf("first read: %v ok=%v", err, ok)
+	}
+	// Nothing appended: no answer, and no re-reading of what was already seen.
+	if _, ok, err := r.Read(); err != nil || ok {
+		t.Fatalf("second read: %v ok=%v, want no new answer", err, ok)
+	}
+	appendTo(t, path, assistantLine("end_turn"))
+	obs, ok, err := r.Read()
+	if err != nil || !ok || obs.Turn != TurnDone {
+		t.Fatalf("third read: %v ok=%v turn=%v", err, ok, obs.Turn)
+	}
+}

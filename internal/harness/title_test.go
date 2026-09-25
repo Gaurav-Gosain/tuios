@@ -60,3 +60,33 @@ func TestContainsToken(t *testing.T) {
 		}
 	}
 }
+
+// TestTitleRulesAreOffUntilAManifestAsks. Every manifest that exists was
+// written before this, and none of them should start reading titles because
+// the code to do it arrived.
+func TestTitleRulesAreOffUntilAManifestAsks(t *testing.T) {
+	reg := registryFromTOML(t, `
+schema_version = 1
+id = "quiet"
+[detect]
+comm = ["quiet-agent"]
+[title]
+[[title.rule]]
+state = "working"
+any = ["quiet"]
+`)
+	if _, _, ok := reg.ClassifyTitle("quiet", "quiet is working"); ok {
+		t.Error("a title block that did not say enabled was read anyway")
+	}
+}
+
+// registryFromTOML builds a registry holding one manifest written inline, so a
+// rule shape can be pinned without adding a manifest to the bundled set.
+func registryFromTOML(t *testing.T, body string) *Registry {
+	t.Helper()
+	m, err := parseManifest("inline.toml", []byte(body))
+	if err != nil {
+		t.Fatalf("parse the inline manifest: %v", err)
+	}
+	return &Registry{manifests: []*Manifest{m}}
+}

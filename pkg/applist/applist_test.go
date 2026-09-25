@@ -16,3 +16,11 @@ func TestCommandLineQuotesExecArguments(t *testing.T) {
 		t.Fatalf("CommandLine = %q, want %q", got, want)
 	}
 }
+
+func names(entries []Entry) []string {
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Name
+	}
+	return out
+}

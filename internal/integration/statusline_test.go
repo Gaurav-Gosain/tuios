@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -132,5 +133,40 @@ func TestStatusLineChainRoundTrip(t *testing.T) {
 	}
 	if after := settingsDoc(t, readFile(t, path)); !reflect.DeepEqual(after, before) {
 		t.Errorf("uninstall did not put the status line back:\n got %v\nwant %v", after, before)
+	}
+}
+
+// TestStatusLineRefusesUserSlot never replaces a status line the person
+// wrote, and names their command so it can be chained.
+func TestStatusLineRefusesUserSlot(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, "claude-code")
+	path := tg.Path(env)
+	writeFile(t, path, userStatusLineSettings)
+	_, err := tg.InstallStatusLine(env, "tuios", "")
+	var owned *StatusLineOwnedError
+	if !errors.As(err, &owned) || owned.Command != "~/.claude/statusline.sh" {
+		t.Fatalf("err = %v, want the user's command named", err)
+	}
+	// A different command to chain to is refused too: it would drop theirs.
+	if _, err := tg.InstallStatusLine(env, "tuios", "echo other"); !errors.As(err, &owned) {
+		t.Fatalf("chaining another command: err = %v", err)
+	}
+	if got := readFile(t, path); got != userStatusLineSettings {
+		t.Errorf("file changed:\n%s", got)
+	}
+	st := tg.StatusLineState(env, "tuios")
+	if !st.Foreign || st.Installed || st.Command != "~/.claude/statusline.sh" {
+		t.Errorf("state = %+v", st)
+	}
+	// Uninstall leaves it alone.
+	if res, err := tg.UninstallStatusLine(env); err != nil || res.Changed {
+		t.Errorf("uninstall: %+v %v", res, err)
+	}
+
+	// A status line that is not a command is left alone and named as such.
+	writeFile(t, path, `{"statusLine": "fancy"}`)
+	if _, err := tg.InstallStatusLine(env, "tuios", ""); !errors.As(err, &owned) || owned.Command != "" {
+		t.Errorf("non-command slot: err = %v", err)
 	}
 }

@@ -5,8 +5,11 @@ package agentproto
 import (
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // TestProcessHasNoTerminal: the agent cannot open the pane's terminal, so
@@ -26,5 +29,34 @@ func TestProcessHasNoTerminal(t *testing.T) {
 	out, _ := io.ReadAll(p.Stdout)
 	if got := strings.TrimSpace(string(out)); got != "none" {
 		t.Fatalf("the agent could open /dev/tty (%q)", got)
+	}
+}
+
+// TestProcessStopEndsWhatItStarted: Stop kills the agent's process group, so a
+// command it left running goes with it.
+func TestProcessStopEndsWhatItStarted(t *testing.T) {
+	p, err := StartProcess([]string{"/bin/sh", "-c", "sleep 60 & echo $!; wait"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 32)
+	n, _ := p.Stdout.Read(buf)
+	pid := strings.TrimSpace(string(buf[:n]))
+	p.Stop()
+	deadline := time.Now().Add(5 * time.Second)
+	n, err = strconv.Atoi(pid)
+	if err != nil {
+		t.Fatalf("pid %q: %v", pid, err)
+	}
+	for {
+		// Signal 0 checks the process exists. A killed orphan is reaped
+		// by init, so it stops existing shortly after.
+		if syscall.Kill(n, 0) != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the agent's child %s outlived Stop", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

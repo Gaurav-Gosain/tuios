@@ -147,3 +147,14 @@ func shellCalls(block string) [][]string {
 	endCall()
 	return calls
 }
+
+// skillText returns what `tuios --skill <topic>` prints, failing the test for
+// a topic that does not exist.
+func skillText(t *testing.T, topic string) string {
+	t.Helper()
+	text, err := skills.Lookup(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return text
+}

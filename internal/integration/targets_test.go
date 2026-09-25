@@ -151,3 +151,79 @@ func TestInstallRefusesADanglingSymlink(t *testing.T) {
 		t.Fatal("the dangling symlink was replaced")
 	}
 }
+
+func TestInstallReplacesAnOlderVersion(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	old := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"tuios agent-hook claude-code --integration 0","timeout":5}]}],` +
+		`"Notification":[{"hooks":[{"type":"command","command":"tuios agent-hook claude-code --integration 0"},{"type":"command","command":"notify-send hi"}]}]}}`
+	writeFile(t, tg.Path(env), old)
+
+	st := tg.Status(env, "tuios")
+	if !st.Installed || st.Current || st.Version != 0 {
+		t.Fatalf("status of an old install: %+v", st)
+	}
+	if _, err := tg.Install(env, "tuios"); err != nil {
+		t.Fatal(err)
+	}
+	got := readFile(t, tg.Path(env))
+	if strings.Contains(got, "--integration 0") {
+		t.Fatalf("the old entry survived:\n%s", got)
+	}
+	if !strings.Contains(got, "notify-send hi") {
+		t.Fatalf("the user's hook in a shared group was lost:\n%s", got)
+	}
+	if st := tg.Status(env, "tuios"); !st.Current {
+		t.Fatalf("status after upgrade: %+v", st)
+	}
+	// Pointing at another binary reads as not current.
+	if st := tg.Status(env, "/opt/tuios/bin/tuios"); st.Current {
+		t.Fatalf("an install for another binary read as current: %+v", st)
+	}
+}
+
+func TestInstallRefusesAFileItCannotRead(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	broken := "{ \"theme\": \"dark\", // a comment\n}"
+	writeFile(t, tg.Path(env), broken)
+	if _, err := tg.Install(env, "tuios"); err == nil {
+		t.Fatal("installed into a file it could not parse")
+	}
+	if readFile(t, tg.Path(env)) != broken {
+		t.Fatal("a failed install changed the file")
+	}
+}
+
+func TestOpenCodeLeavesAFileItDidNotWrite(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, OpenCode)
+	writeFile(t, tg.Path(env), "// the user's own file\n")
+	if _, err := tg.Install(env, "tuios"); err == nil {
+		t.Fatal("overwrote a file tuios did not write")
+	}
+	if res, err := tg.Uninstall(env); err != nil || res.Changed {
+		t.Fatalf("uninstall removed a file tuios did not write: %+v %v", res, err)
+	}
+}
+
+// TestBackupKeepsTheFileFromBeforeTuios checks a second write that changes the
+// file does not overwrite the backup of the original.
+func TestBackupKeepsTheFileFromBeforeTuios(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	path := tg.Path(env)
+	writeFile(t, path, userClaudeSettings)
+	if _, err := tg.Install(env, "tuios"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tg.Uninstall(env); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tg.Install(env, "/opt/tuios/bin/tuios"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, path+BackupSuffix); got != userClaudeSettings {
+		t.Fatalf("the backup is no longer the file from before tuios:\n%s", got)
+	}
+}

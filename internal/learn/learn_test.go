@@ -2,19 +2,19 @@ package learn
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/xpty"
-
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
+	"github.com/charmbracelet/x/xpty"
 )
 
 func TestMain(m *testing.M) {
@@ -284,4 +284,36 @@ func TestEventContract(t *testing.T) {
 	tr.m.RunCommand("action", "command_palette")
 	tr.update(nil)
 	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayCommandPalette })
+}
+
+func TestCommandsListMatchesRunCommand(t *testing.T) {
+	src, err := os.ReadFile("commands.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range Commands {
+		if !strings.Contains(string(src), `case "`+name+`"`) {
+			t.Errorf("Commands lists %q but RunCommand has no case for it", name)
+		}
+	}
+	readme, err := os.ReadFile("../../cmd/tuios-wasm/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range Commands {
+		if !strings.Contains(string(readme), "`"+name+"`") {
+			t.Errorf("README does not document the %q command", name)
+		}
+	}
+	for _, typ := range []string{
+		EventReady, EventKey, EventAction, EventMode, EventPrefix, EventWindowOpen, EventWindowClose,
+		EventWindowFocus, EventWindowRename, EventWindowMinimize, EventWindowZoom, EventWorkspace,
+		EventTiling, EventLayout, EventTheme, EventOverlayOpen, EventOverlayClose, EventNotification,
+		EventAgent, EventTapeStart, EventTapeFinish, EventShellStart, EventShellCommand, EventShellCwd,
+		EventWindowMove, EventWindowFloat, EventSetting,
+	} {
+		if !strings.Contains(string(readme), "`"+typ+"`") {
+			t.Errorf("README does not document the %q event", typ)
+		}
+	}
 }

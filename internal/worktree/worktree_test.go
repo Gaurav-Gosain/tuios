@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // Every test here works on a repository testutil.GitRepo made under the test's
@@ -68,5 +70,15 @@ func TestValidBranch(t *testing.T) {
 		if err := ValidBranch(bad); err == nil {
 			t.Errorf("ValidBranch(%q) accepted it", bad)
 		}
+	}
+}
+
+func TestDetectDoesNotCallTheMainCheckoutAWorktree(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	if info, ok := Detect(repo); ok {
+		t.Errorf("Detect on the main checkout = %+v, want no worktree", info)
+	}
+	if info, ok := Detect(t.TempDir()); ok {
+		t.Errorf("Detect on a plain directory = %+v, want no worktree", info)
 	}
 }

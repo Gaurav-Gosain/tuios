@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/sip"
+	"github.com/spf13/cobra"
 )
 
 // certFlags is the TLS half of the command line, set for one test and put back
@@ -109,4 +112,120 @@ func TestResolveTLSFilesCoversTheBindAddress(t *testing.T) {
 			t.Errorf("certificate does not sign for %s (DNS %v, IP %v)", host, cert.DNSNames, cert.IPs)
 		}
 	}
+}
+
+func TestResolveTLSFilesGeneratesOnce(t *testing.T) {
+	dir := t.TempDir()
+	applyCertFlags(t, certFlags{host: "127.0.0.1", autoTLS: true, dir: dir})
+
+	var out bytes.Buffer
+	certFile, keyFile, err := resolveTLSFiles(&out)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	wantCert, wantKey, err := sip.CertPaths(dir)
+	if err != nil {
+		t.Fatalf("cert paths: %v", err)
+	}
+	if certFile != wantCert || keyFile != wantKey {
+		t.Fatalf("served from %s/%s, want %s/%s", certFile, keyFile, wantCert, wantKey)
+	}
+	if _, err := os.Stat(certFile); err != nil {
+		t.Fatalf("certificate was not written: %v", err)
+	}
+	if !strings.Contains(out.String(), sip.SelfSignedWarning) {
+		t.Errorf("first generation never warned about the browser warning:\n%s", out.String())
+	}
+
+	// A second run reuses it, and says nothing: the warning is only news once.
+	before, err := os.ReadFile(certFile)
+	if err != nil {
+		t.Fatalf("read certificate: %v", err)
+	}
+	out.Reset()
+	if _, _, err := resolveTLSFiles(&out); err != nil {
+		t.Fatalf("second resolve: %v", err)
+	}
+	after, err := os.ReadFile(certFile)
+	if err != nil {
+		t.Fatalf("read certificate: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("second run replaced a certificate that was still good")
+	}
+	if out.Len() > 0 {
+		t.Errorf("second run repeated the warning:\n%s", out.String())
+	}
+}
+
+func TestResolveTLSFilesDefersToOwnKeypair(t *testing.T) {
+	dir := t.TempDir()
+	ownCert, ownKey := writeKeypair(t)
+	applyCertFlags(t, certFlags{host: "192.168.1.31", cert: ownCert, key: ownKey, autoTLS: true, dir: dir})
+
+	certFile, keyFile, err := resolveTLSFiles(&bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if certFile != ownCert || keyFile != ownKey {
+		t.Fatalf("served from %s/%s, want the keypair passed with --cert/--key", certFile, keyFile)
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 0 {
+		t.Fatalf("generated a certificate anyway: %v %v", entries, err)
+	}
+}
+
+func TestCertNewRefusesToReplaceWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	applyCertFlags(t, certFlags{host: "localhost", dir: dir})
+
+	if _, err := runCert(t, "cert", "new", "--cert-dir", dir); err != nil {
+		t.Fatalf("cert new: %v", err)
+	}
+	first, err := sip.LoadManagedCert(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	_, err = runCert(t, "cert", "new", "--cert-dir", dir)
+	if err == nil {
+		t.Fatal("replaced an existing certificate without --force")
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error %q never names --force", err)
+	}
+	unchanged, err := sip.LoadManagedCert(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if unchanged.Fingerprint != first.Fingerprint {
+		t.Error("the refused run replaced the certificate anyway")
+	}
+
+	if _, err := runCert(t, "cert", "new", "--cert-dir", dir, "--force"); err != nil {
+		t.Fatalf("cert new --force: %v", err)
+	}
+	replaced, err := sip.LoadManagedCert(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if replaced.Fingerprint == first.Fingerprint {
+		t.Error("--force did not replace the certificate")
+	}
+}
+
+// runCert drives the cert group the way a shell does, so the flag wiring is
+// under test and not just the functions behind it.
+func runCert(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	root := &cobra.Command{Use: "tuios-web", SilenceUsage: true, SilenceErrors: true}
+	registerCertFlags(root)
+	root.AddCommand(newCertCmd())
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), err
 }

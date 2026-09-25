@@ -120,3 +120,78 @@ func TestSetOptionValueRejectsBadInput(t *testing.T) {
 		t.Error("GetOptionValue reported an unknown path as found")
 	}
 }
+
+func TestSetOptionValueRoundTrips(t *testing.T) {
+	cases := []struct {
+		path, set, want string
+	}{
+		{"appearance.hide_window_buttons", "on", "true"},   // bool
+		{"appearance.sidebar.enabled", "false", "false"},   // *bool, and an explicit false
+		{"appearance.scrollback_lines", "500", "500"},      // int
+		{"notifications.agent.settle_seconds", "0", "0"},   // *int, and an explicit zero
+		{"appearance.border_style", "double", "double"},    // string
+		{"appearance.word_characters", "", ""},             // *string, and an explicit empty
+		{"appearance.sidebar.position", "right", "right"},  // nested table
+		{"notifications.agent.states.idle", "yes", "true"}, // twice-nested table
+	}
+
+	for _, tc := range cases {
+		cfg := DefaultConfig()
+		if err := SetOptionValue(cfg, tc.path, tc.set); err != nil {
+			t.Fatalf("set %s=%q: %v", tc.path, tc.set, err)
+		}
+		got, ok := GetOptionValue(cfg, tc.path)
+		if !ok {
+			t.Fatalf("get %s: not found after setting it", tc.path)
+		}
+		if got != tc.want {
+			t.Errorf("set %s=%q, read back %q, want %q", tc.path, tc.set, got, tc.want)
+		}
+	}
+}
+
+// TestOptionDefaultsMatchDefaultConfig pins each entry's Default to what the
+// app actually starts with, so a mistyped default is a failure rather than a
+// wrong answer to a caller asking what a setting is.
+func TestOptionDefaultsMatchDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	for _, opt := range Options() {
+		got, ok := GetOptionValue(cfg, opt.Path)
+		if !ok {
+			t.Errorf("%s: not readable from a default config", opt.Path)
+			continue
+		}
+		if got != opt.Default {
+			t.Errorf("%s: default config holds %q, registry says %q", opt.Path, got, opt.Default)
+		}
+	}
+}
+
+// TestOptionSpecsAreWellFormed checks the parts of an entry that only a human
+// writes, since nothing else reads them closely enough to notice a blank one.
+func TestOptionSpecsAreWellFormed(t *testing.T) {
+	sections := []string{
+		"appearance", "sidebar", "dock", "scrollbar", "selection",
+		"startup", "daemon", "notifications", "tape", "debug",
+		"screenshot", "screensaver", "spotlight",
+	}
+	for _, opt := range optionSpecs {
+		if opt.Description == "" {
+			t.Errorf("%s: no description", opt.Path)
+		}
+		if !slices.Contains(sections, opt.Section) {
+			t.Errorf("%s: section %q is not one of the display groups", opt.Path, opt.Section)
+		}
+		switch opt.Type {
+		case OptionBool, OptionInt, OptionString:
+		default:
+			t.Errorf("%s: type %q is not bool, int or string", opt.Path, opt.Type)
+		}
+		if opt.Type != OptionInt && (opt.Min != 0 || opt.Max != 0) {
+			t.Errorf("%s: a %s option carries a range", opt.Path, opt.Type)
+		}
+		if len(opt.Accepted) > 0 && !slices.Contains(opt.Accepted, opt.Default) && opt.Default != "" {
+			t.Errorf("%s: default %q is outside its own accepted set", opt.Path, opt.Default)
+		}
+	}
+}

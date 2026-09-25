@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -97,5 +98,43 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 	}
 	if !errors.Is(readErr, ErrStreamStalled) {
 		t.Fatalf("ASSERTION: the stalled connection ended with %v, want ErrStreamStalled", readErr)
+	}
+}
+
+func TestAConnectionEndsWhenTheFarSideHasNoDaemon(t *testing.T) {
+	stub := startStubDaemon(t, helloOK("far-1", 0))
+	// Every dial after the first reaches nothing: the far side's daemon has
+	// gone away since the link came up.
+	dials := 0
+	dialer := func(_ context.Context, _ Host) (Transport, error) {
+		hub, remote := duplexPipe(t)
+		go func() {
+			_ = ServeProxy(remote, remote, func() (net.Conn, error) {
+				dials++
+				if dials > 1 {
+					return nil, errors.New("connect: no such file or directory")
+				}
+				return stub.dial()
+			})
+		}()
+		return hub, nil
+	}
+	m := managerFor(t, testOptions(dialer), Host{Name: "build", Addr: "unused"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
+	}
+
+	conn := openTo(t, m, "build")
+	buf := make([]byte, 16)
+	n, err := conn.Read(buf)
+	if n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatalf("ASSERTION: a connection the far side could not serve read %d byte(s) and %v, want a clean end", n, err)
+	}
+	// The link itself is fine: the proxy is there, the daemon behind it is not.
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Errorf("the link is %q after one connection was refused, want up", r.Status)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestAgentStateHookEnvironmentContract runs a real shell so the documented
@@ -68,5 +69,24 @@ func TestAgentStateHookMessageWithShellMetacharacters(t *testing.T) {
 	}
 	if string(data) != nasty {
 		t.Errorf("message = %q, want %q", data, nasty)
+	}
+}
+
+// TestAgentStateHookDoesNotBlockTheCaller pins the property the daemon and the
+// render loop both depend on: Fire returns before the command does.
+func TestAgentStateHookDoesNotBlockTheCaller(t *testing.T) {
+	m := NewManager()
+	m.Register(AfterAgentState, "sleep 30")
+
+	done := make(chan struct{})
+	go func() {
+		m.Fire(AfterAgentState, Context{AgentState: "done"})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Fire blocked on a slow hook")
 	}
 }

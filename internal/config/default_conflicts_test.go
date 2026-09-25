@@ -2,6 +2,7 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +71,51 @@ snap_corner_2 = ["2"]
 `)
 	if got := cfg.Keybindings.Layout["snap_corner_1"]; !slices.Contains(got, "1") {
 		t.Errorf("a config that already knew about the move was migrated again: snap_corner_1 = %v", got)
+	}
+}
+
+// TestDefaultConfigLeavesNoActionUnbound is the other half of the invariant
+// e2e/tui TestStockConfigOpensNoConflicts holds: nothing should be resolved by
+// taking a default action's only key away. Without this, the cheapest way to
+// pass that test would be to unbind one side of every clash.
+//
+// Negative control: resolve the digit clash by emptying select_window_1 instead
+// of moving corner snapping, and this fails.
+func TestDefaultConfigLeavesNoActionUnbound(t *testing.T) {
+	for _, b := range NewKeybindRegistry(DefaultConfig()).Bindings() {
+		if b.Unbound {
+			t.Errorf("the defaults ship %s [%s] with no key", b.Action, b.Section)
+		}
+	}
+}
+
+// TestValidateAgreesWithTheKeybindReport. Two conflict detectors that disagree
+// means the quieter one is misleading, and the quiet one is the one that runs
+// at startup. findConflicts now delegates, so this is a guard against anyone
+// giving it opinions of its own again.
+//
+// Negative control, run and confirmed failing: restore the tilingModeActions
+// and nonTilingModeActions partition in findConflicts and this fails on a
+// config with the old digit clash, which the partition suppresses and the
+// report reports.
+func TestValidateAgreesWithTheKeybindReport(t *testing.T) {
+	cfg := DefaultConfig()
+	// The exact clash that shipped: corner snapping back on the bare digits.
+	cfg.Keybindings.Layout["snap_corner_1"] = []string{"1"}
+
+	report := NewKeybindRegistry(cfg).Collisions()
+	if len(report) == 0 {
+		t.Fatal("the keybind report does not see the clash, so this case proves nothing")
+	}
+
+	warned := false
+	for _, line := range ConfigWarnings(cfg) {
+		if strings.Contains(line, "select_window_1") && strings.Contains(line, "snap_corner_1") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("the keybind report names the clash and config validation stays silent:\n%s",
+			strings.Join(ConfigWarnings(cfg), "\n"))
 	}
 }

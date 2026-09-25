@@ -6,10 +6,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/mcp"
 )
 
 // runMCPChild runs tuios mcp in this process, for a test that started the test
@@ -290,5 +293,84 @@ func TestMCPServerWithoutAPaneReachesNothing(t *testing.T) {
 	res, text = all.tool("tuios_send_agent_message", map[string]any{"session": "any", "text": "hello"})
 	if res["isError"] == true {
 		t.Errorf("mail under --scope all, read-only = %s", text)
+	}
+}
+
+// TestSkillNamesEveryMCPTool holds the skill and the CLI reference to the tools
+// the server built from this binary's verb table offers, so a tool added to
+// the catalog, or one whose verb went away, shows up here.
+func TestSkillNamesEveryMCPTool(t *testing.T) {
+	srv := mcp.New(mcp.Options{Write: true, Verbs: mcpVerbDocs()})
+	names := srv.ToolNames()
+	if len(names) < 15 {
+		t.Fatalf("the server offers %d tools from this verb table, want the whole catalog: %v", len(names), names)
+	}
+	ref, err := os.ReadFile("../../docs/CLI_REFERENCE.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if !strings.Contains(skillText(t, "mcp"), name) {
+			t.Errorf("the skill does not name the MCP tool %s", name)
+		}
+		if !strings.Contains(string(ref), name) {
+			t.Errorf("docs/CLI_REFERENCE.md does not name the MCP tool %s", name)
+		}
+	}
+}
+
+// TestIntegrationInstallMCPRegistersTheServer runs the command a person runs:
+// install --mcp writes the server into Claude Code's user config, status
+// reports it, and uninstall takes it out again with the hooks.
+func TestIntegrationInstallMCPRegistersTheServer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		t.Helper()
+		root := newRootCommand()
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("tuios %s: %v", strings.Join(args, " "), err)
+		}
+	}
+	run("integration", "install", "claude-code", "--mcp-write")
+	data, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Servers map[string]struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if e := doc.Servers["tuios"]; e.Command != "tuios" || strings.Join(e.Args, " ") != "mcp --write --integration 1" {
+		t.Errorf("registered server = %+v", e)
+	}
+	// The registered arguments parse: the hidden --integration flag exists.
+	if err := newMCPCommand().ParseFlags(doc.Servers["tuios"].Args[1:]); err != nil {
+		t.Errorf("tuios mcp does not accept the arguments install registers: %v", err)
+	}
+
+	run("integration", "uninstall", "claude-code")
+	data, _ = os.ReadFile(filepath.Join(home, ".claude.json"))
+	if strings.Contains(string(data), `"tuios"`) {
+		t.Errorf("uninstall left the server: %s", data)
+	}
+
+	// --mcp for a harness without a registration is refused before anything
+	// is written.
+	root := newRootCommand()
+	root.SetArgs([]string{"integration", "install", "amp", "--mcp"})
+	root.SilenceErrors, root.SilenceUsage = true, true
+	if err := root.Execute(); err == nil {
+		t.Error("install amp --mcp did not fail")
 	}
 }
