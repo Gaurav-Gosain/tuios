@@ -68,6 +68,9 @@ type bundleTransfer struct {
 	size    int64
 	touched time.Time
 	gone    chan struct{}
+	// dropping is set, under the store's lock, by the one drop that removes
+	// this transfer. See drop.
+	dropping bool
 }
 
 // put adds a transfer and starts the goroutine that removes it when its
@@ -119,24 +122,33 @@ func (s *bundleStore) get(cs *connState, token string) *bundleTransfer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := s.open[token]
-	if t == nil || t.owner != cs {
+	if t == nil || t.owner != cs || t.dropping {
 		return nil
 	}
 	t.touched = time.Now()
 	return t
 }
 
-// drop removes a transfer and its files.
+// drop removes a transfer's files and then the transfer. The files go
+// first: a transfer is gone once it has left the store, and until then it is
+// only dropping, which get refuses. Deleting it from the store first let a
+// caller see it gone while its files were still on disk.
 func (s *bundleStore) drop(token string) {
 	s.mu.Lock()
 	t := s.open[token]
-	delete(s.open, token)
-	s.mu.Unlock()
-	if t == nil {
+	if t == nil || t.dropping {
+		s.mu.Unlock()
 		return
 	}
+	t.dropping = true
+	s.mu.Unlock()
+
 	close(t.gone)
 	_ = os.RemoveAll(t.dir)
+
+	s.mu.Lock()
+	delete(s.open, token)
+	s.mu.Unlock()
 }
 
 // count is how many transfers are open.

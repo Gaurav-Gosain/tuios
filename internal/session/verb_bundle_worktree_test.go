@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -133,12 +134,16 @@ func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
 		t.Fatal("no transfer is open")
 	}
 	_ = owner.conn.Close()
+	// Polled without a pause, so the files are checked the moment the
+	// transfer leaves the store: that is when a caller can see it gone, and
+	// the files have to be gone by then too. With a pause between polls the
+	// check only failed when the removal happened to be slow.
 	deadline := time.Now().Add(5 * time.Second)
 	for d.bundles.count() != 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the transfer outlived the connection that made it")
 		}
-		time.Sleep(20 * time.Millisecond)
+		runtime.Gosched()
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("the transfer's files are still at %s", dir)
