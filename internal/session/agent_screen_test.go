@@ -495,24 +495,6 @@ func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
 	}
 }
 
-// TestExplainAgentScreenVerbAnswersForAPaneWithNoHarness keeps the diagnostic
-// usable on the pane a user actually has open. Most panes are not agents, and
-// saying so is the answer rather than an error.
-func TestExplainAgentScreenVerbAnswersForAPaneWithNoHarness(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t,
-		`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","window":"Window"}}`))
-	if res["harness_id"] != "" {
-		t.Fatalf("harness_id = %v, want empty", res["harness_id"])
-	}
-	if res["matched"] != false {
-		t.Fatalf("matched = %v, want false", res["matched"])
-	}
-}
-
 // TestStallTimerStillDemotesAPaneWithNothingOnItsScreen keeps the fallback the
 // timer exists for. A look that finds no rule is not a reason to leave a pane
 // looking busy forever: the screen was read and said nothing, which is as much

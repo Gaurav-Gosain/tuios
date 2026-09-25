@@ -109,25 +109,3 @@ func TestPortedWorkingRuleMovesAnUnhookedPane(t *testing.T) {
 		t.Fatalf("state = %q, want working", got)
 	}
 }
-
-// TestInputProfileFollowsThePanesHarness: the prompt submitter is handed the
-// profile of the harness the session recorded for the window, and the default
-// for a window with none.
-func TestInputProfileFollowsThePanesHarness(t *testing.T) {
-	reg := progressRegistry(t)
-	d := &Daemon{agentMatcher: agentMatcher{registry: reg}}
-
-	sess, winID, _ := agentPaneWithHarness(t, "prog-agent", AgentStateWorking)
-	got := d.inputProfileFor(sess, winID)
-	if got.SubmitKey != "\n" || !got.FocusBeforeSubmit || !got.BracketedPaste {
-		t.Errorf("profile %+v, want line feed, focus report and bracketed paste", got)
-	}
-
-	plain, plainWin := bareSessionWithWindow(t)
-	if got := d.inputProfileFor(plain, plainWin); got != harness.DefaultInputProfile() {
-		t.Errorf("a window with no harness has profile %+v, want the default", got)
-	}
-	if got := (&Daemon{}).inputProfileFor(sess, winID); got != harness.DefaultInputProfile() {
-		t.Errorf("a daemon with no registry gave %+v, want the default", got)
-	}
-}

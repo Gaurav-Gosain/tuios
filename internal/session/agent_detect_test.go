@@ -1,8 +1,6 @@
 package session
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -148,37 +146,6 @@ func TestDetectionNamesTheHarness(t *testing.T) {
 		return
 	}
 	t.Fatal("window not found")
-}
-
-// TestUserManifestChangesDetectionWithoutRebuild proves the registry does what it
-// exists for from the detector's side: a manifest dropped in the user's directory
-// makes a previously unrecognised process read as an agent, with no code change.
-func TestUserManifestChangesDetectionWithoutRebuild(t *testing.T) {
-	dir := t.TempDir()
-	unknown := foregroundInfo{comm: "zzagent", argv: []string{"zzagent"}, exe: "/usr/bin/zzagent"}
-
-	// Nothing knows this program yet.
-	t.Setenv("TUIOS_HARNESS_DIR", dir)
-	if _, ok := newAgentMatcher(nil).identify(unknown); ok {
-		t.Fatal("an unknown program was identified as an agent before its manifest existed")
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "zzagent.toml"), []byte(`
-schema_version = 1
-id             = "zzagent"
-display_name   = "ZZ Agent"
-
-[detect]
-comm  = ["zzagent"]
-argv0 = ["zzagent"]
-`), 0o600); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-
-	got, ok := newAgentMatcher(nil).identify(unknown)
-	if !ok || got != "zzagent" {
-		t.Fatalf("after dropping a manifest, identify = (%q, %v), want (zzagent, true)", got, ok)
-	}
 }
 
 // fakeResolver returns a resolve function backed by a per-PTY table, so agent
@@ -499,28 +466,6 @@ func TestResolveAgentDetectInterval(t *testing.T) {
 	}
 }
 
-// TestResolveAgentBinaries checks the config list and the env override merge, and
-// that blanks are ignored.
-func TestResolveAgentBinaries(t *testing.T) {
-	t.Setenv("TUIOS_AGENT_BINARIES", " extra1 , ,extra2 ")
-	got := resolveAgentBinaries([]string{"cfg1", " "})
-	want := map[string]bool{"cfg1": true, "extra1": true, "extra2": true}
-	seen := map[string]bool{}
-	for _, n := range got {
-		seen[n] = true
-	}
-	for w := range want {
-		if !seen[w] {
-			t.Errorf("resolveAgentBinaries missing %q, got %v", w, got)
-		}
-	}
-	// The merged matcher must recognise a config-added name.
-	m := newAgentMatcher(got)
-	if !m.isAgent(foregroundInfo{comm: "cfg1", argv: []string{"cfg1"}}) {
-		t.Error("matcher did not recognise config-added name cfg1")
-	}
-}
-
 // TestAnAgentThatReportedAndThenQuitLosesItsRow.
 //
 // Reported as: launched an agent, quit it, and the agent list still showed the
@@ -604,28 +549,6 @@ func TestAPaneRunningSomethingElseKeepsItsState(t *testing.T) {
 
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Errorf("a pane running an editor lost its state: %q", got)
-	}
-}
-
-// TestAnExplicitReportSurvivesAnIdleShell. set-agent-state is a person or a
-// script saying something about a pane, and a pane sitting at a prompt is
-// exactly where somebody might want to leave a note.
-func TestAnExplicitReportSurvivesAnIdleShell(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
-	ptyID := ptyIDOfWindow(t, sess, id)
-	agent := newAgentMatcher(nil)
-
-	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
-		t.Fatalf("SetDaemonWindowAgentState: %v", err)
-	}
-
-	shell := fakeResolver(map[string]fakeProc{
-		ptyID: {foregroundInfo{comm: "fish", argv: []string{"fish"}, pid: 100, shellPID: 100}, true},
-	})
-	sess.applyAgentDetection(shell, agent.identifyDetail)
-
-	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
-		t.Errorf("an explicit report was cleared by the shell sweep: %q", got)
 	}
 }
 

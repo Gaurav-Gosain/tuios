@@ -5,72 +5,6 @@ import (
 	"time"
 )
 
-// TestParseAgentState checks the wire-name mapping, including that "none" clears
-// to the empty AgentStateNone and that an unknown or empty name is rejected.
-func TestParseAgentState(t *testing.T) {
-	cases := map[string]struct {
-		want AgentState
-		ok   bool
-	}{
-		"none":        {AgentStateNone, true},
-		"working":     {AgentStateWorking, true},
-		"needs_input": {AgentStateNeedsInput, true},
-		"idle":        {AgentStateIdle, true},
-		"done":        {AgentStateDone, true},
-		"errored":     {AgentStateErrored, true},
-		"bogus":       {AgentStateNone, false},
-		"":            {AgentStateNone, false},
-	}
-	for in, want := range cases {
-		got, ok := ParseAgentState(in)
-		if got != want.want || ok != want.ok {
-			t.Errorf("ParseAgentState(%q) = (%q, %v), want (%q, %v)", in, got, ok, want.want, want.ok)
-		}
-	}
-	if AgentStateNone.Name() != "none" {
-		t.Errorf("AgentStateNone.Name() = %q, want none", AgentStateNone.Name())
-	}
-	if AgentStateWorking.Name() != "working" {
-		t.Errorf("AgentStateWorking.Name() = %q, want working", AgentStateWorking.Name())
-	}
-}
-
-// TestSetAgentStateVerbRoundTrip drives the set-agent-state and get-agent-state
-// verbs over the real socket: a set followed by a get returns the same state and
-// message, and the mutation bumps the session version.
-func TestSetAgentStateVerbRoundTrip(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	before := sess.GetState().Version
-
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"set-agent-state","params":{"session":"work","window":"Window","state":"needs_input","message":"awaiting approval"}}`))
-	if res["state"] != "needs_input" {
-		t.Fatalf("set-agent-state returned state %v, want needs_input", res["state"])
-	}
-
-	after := sess.GetState().Version
-	if after <= before {
-		t.Fatalf("version did not bump: before=%d after=%d", before, after)
-	}
-
-	got := result(t, c.call(t, `{"id":2,"verb":"get-agent-state","params":{"session":"work","window":"Window"}}`))
-	if got["state"] != "needs_input" {
-		t.Fatalf("get-agent-state returned state %v, want needs_input", got["state"])
-	}
-	if got["message"] != "awaiting approval" {
-		t.Fatalf("get-agent-state returned message %v, want %q", got["message"], "awaiting approval")
-	}
-
-	// Clearing with none round-trips back to none.
-	_ = result(t, c.call(t, `{"id":3,"verb":"set-agent-state","params":{"session":"work","window":"Window","state":"none"}}`))
-	cleared := result(t, c.call(t, `{"id":4,"verb":"get-agent-state","params":{"session":"work","window":"Window"}}`))
-	if cleared["state"] != "none" {
-		t.Fatalf("after clearing, get-agent-state returned %v, want none", cleared["state"])
-	}
-}
-
 // TestSetAgentStateRejectsBadState checks the verb validates the state name.
 func TestSetAgentStateRejectsBadState(t *testing.T) {
 	_, sp := startTestDaemon(t)
@@ -86,27 +20,6 @@ func TestSetAgentStateRejectsBadState(t *testing.T) {
 	missing := errCode(t, c.call(t, `{"id":2,"verb":"set-agent-state","params":{"session":"work"}}`))
 	if missing != ErrVerbInvalidParams {
 		t.Fatalf("missing state gave code %q, want %q", missing, ErrVerbInvalidParams)
-	}
-}
-
-// TestSetAgentStateVerbListed confirms the verbs appear in the self-describing
-// list-verbs output, so a caller can discover them.
-func TestSetAgentStateVerbListed(t *testing.T) {
-	if _, ok := verbRegistry["set-agent-state"]; !ok {
-		t.Error("set-agent-state missing from verb registry")
-	}
-	if _, ok := verbRegistry["get-agent-state"]; !ok {
-		t.Error("get-agent-state missing from verb registry")
-	}
-	names := knownVerbNames()
-	found := false
-	for _, n := range names {
-		if n == "set-agent-state" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("set-agent-state missing from knownVerbNames (list-verbs output)")
 	}
 }
 

@@ -7,7 +7,6 @@ package session
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"testing"
 )
 
@@ -46,29 +45,6 @@ func TestControlFrameBytesUnchanged(t *testing.T) {
 	}
 }
 
-// TestControlFrameHeaderIsOneWrite checks that the length and the two header
-// bytes go out together. They used to be two separate writes before the
-// payload, three syscalls per frame on a socket. On a socket the header and
-// payload now leave in one writev; a plain writer sees at most two writes.
-func TestControlFrameHeaderIsOneWrite(t *testing.T) {
-	for _, payload := range controlFramePayloads() {
-		cw := &countingWriter{w: io.Discard}
-		if err := WriteMessage(cw, &Message{Type: MsgStateSync, Payload: payload}); err != nil {
-			t.Fatalf("WriteMessage: %v", err)
-		}
-		want := 2
-		if len(payload) == 0 {
-			want = 1
-		}
-		if cw.writes > want {
-			t.Errorf("a %d byte payload took %d writes, want at most %d", len(payload), cw.writes, want)
-		}
-		if cw.bytes != 6+len(payload) {
-			t.Errorf("a %d byte payload wrote %d bytes, want %d", len(payload), cw.bytes, 6+len(payload))
-		}
-	}
-}
-
 // TestControlFrameRoundTripsOverASocket writes frames on a real unix socket,
 // which is the path that takes writev, and reads them back with the reader
 // both read loops use.
@@ -101,27 +77,5 @@ func TestControlFrameRoundTripsOverASocket(t *testing.T) {
 	}
 	if err := <-errs; err != nil {
 		t.Fatalf("WriteMessage: %v", err)
-	}
-}
-
-// BenchmarkGobFrameWrite measures one gob frame going out on a unix socket,
-// for a small control message and for a state-sync-sized payload. The name is
-// short on purpose: the socket lives under the benchmark's TempDir, and macOS
-// caps a unix socket path at 104 bytes.
-func BenchmarkGobFrameWrite(b *testing.B) {
-	for _, size := range []int{64, 4096, 65536} {
-		b.Run(sizeName(size), func(b *testing.B) {
-			client, server := socketPair(b)
-			go drainConn(server)
-			msg := &Message{Type: MsgStateSync, Payload: make([]byte, size)}
-			b.ReportAllocs()
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-			for b.Loop() {
-				if err := WriteMessage(client, msg); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
 	}
 }

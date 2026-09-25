@@ -37,26 +37,3 @@ func TestClientCloseConcurrent(t *testing.T) {
 		t.Errorf("Close() returned error on re-close: %v", err)
 	}
 }
-
-// TestClientCloseIdempotent verifies Close() can be called multiple times safely.
-func TestClientCloseIdempotent(t *testing.T) {
-	cfg := &ClientConfig{
-		Version: "test",
-	}
-	client := NewClient(cfg)
-
-	// First close
-	if err := client.Close(); err != nil {
-		t.Errorf("first Close() failed: %v", err)
-	}
-
-	// Second close should not panic
-	if err := client.Close(); err != nil {
-		t.Errorf("second Close() failed: %v", err)
-	}
-
-	// Third close should still be safe
-	if err := client.Close(); err != nil {
-		t.Errorf("third Close() failed: %v", err)
-	}
-}

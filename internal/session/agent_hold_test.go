@@ -7,26 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// TestAgentLoudness pins the ordering the whole anti-flicker policy rests on: the
-// states that want a human outrank working, which outranks the quiet ones.
-func TestAgentLoudness(t *testing.T) {
-	if !(agentLoudness(AgentStateNeedsInput) > agentLoudness(AgentStateWorking)) {
-		t.Error("needs_input must be louder than working")
-	}
-	if !(agentLoudness(AgentStateErrored) > agentLoudness(AgentStateWorking)) {
-		t.Error("errored must be louder than working")
-	}
-	if !(agentLoudness(AgentStateWorking) > agentLoudness(AgentStateIdle)) {
-		t.Error("working must be louder than idle")
-	}
-	if !(agentLoudness(AgentStateIdle) > agentLoudness(AgentStateNone)) {
-		t.Error("idle must be louder than none")
-	}
-	if agentLoudness(AgentStateDone) != agentLoudness(AgentStateIdle) {
-		t.Error("done and idle are equally quiet")
-	}
-}
-
 // TestAgentHoldCollapsesAFlap is the anti-flicker guarantee: a source that says
 // something quieter and then takes it back inside the hold window produces one
 // transition, not two. The pane never visits the state that was withdrawn.

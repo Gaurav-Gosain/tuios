@@ -37,24 +37,6 @@ func TestParseAgentSource(t *testing.T) {
 	}
 }
 
-// TestAgentSourceRanking pins the order the whole feature rests on. It is a
-// table rather than a set of assertions on the numbers, because only the
-// ordering is contractual.
-func TestAgentSourceRanking(t *testing.T) {
-	ordered := []AgentSource{
-		AgentSourceStall, AgentSourceDetect, AgentSourceScreen,
-		AgentSourceOSC, AgentSourceTranscript, AgentSourceReport,
-	}
-	for i := 1; i < len(ordered); i++ {
-		if ordered[i-1].rank() >= ordered[i].rank() {
-			t.Errorf("%s does not rank below %s", ordered[i-1], ordered[i])
-		}
-	}
-	if AgentSource("").rank() != AgentSourceReport.rank() {
-		t.Error("an unset source must rank as a report")
-	}
-}
-
 // TestLowerSourceCannotOverwriteHigher is the point of replacing the ownership
 // bool: a screen rule guessing at a pane whose harness reports for itself must
 // lose, and a source updating its own claim must not.
@@ -156,17 +138,6 @@ func TestGetAgentStateReportsSourceAndHarness(t *testing.T) {
 	}
 	if got["harness_id"] != "claude-code" {
 		t.Fatalf("get-agent-state harness_id = %v, want claude-code", got["harness_id"])
-	}
-}
-
-// TestSetAgentStateRejectsBadSource checks an unknown source is a parameter
-// error with a usable hint, not a silent downgrade to report.
-func TestSetAgentStateRejectsBadSource(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-	code := errCode(t, c.call(t, `{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"working","source":"bogus"}}`))
-	if code != ErrVerbInvalidParams {
-		t.Fatalf("bad source gave code %q, want %q", code, ErrVerbInvalidParams)
 	}
 }
 

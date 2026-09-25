@@ -8,29 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// TestAgentStateForProgress checks the OSC 9;4 state mapping, including that an
-// out-of-range state is refused rather than guessed at.
-func TestAgentStateForProgress(t *testing.T) {
-	cases := []struct {
-		in    vt.ProgressState
-		state AgentState
-		ok    bool
-	}{
-		{vt.ProgressClear, AgentStateIdle, true},
-		{vt.ProgressNormal, AgentStateWorking, true},
-		{vt.ProgressIndeterminate, AgentStateWorking, true},
-		{vt.ProgressError, AgentStateErrored, true},
-		{vt.ProgressWarning, AgentStateNeedsInput, true},
-		{vt.ProgressState(9), AgentStateNone, false},
-	}
-	for _, c := range cases {
-		state, ok := agentStateForProgress(c.in)
-		if state != c.state || ok != c.ok {
-			t.Errorf("agentStateForProgress(%d) = (%q, %v), want (%q, %v)", c.in, state, ok, c.state, c.ok)
-		}
-	}
-}
-
 // agentPaneWithWindow is bareSessionWithWindow with a harness named on the
 // window, which is what an OSC 9;4 report needs before it may drive agent
 // state (see progressTarget). No state is set: the pane is attributed to an

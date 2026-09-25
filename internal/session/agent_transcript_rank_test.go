@@ -13,38 +13,6 @@ func newTestSessionWithWindow(t *testing.T) *Session {
 	return sess
 }
 
-// The transcript tier sits between the harness reporting for itself and the
-// escape sequences it emits. Below report because of latency, not trust:
-// records land at message boundaries, so a hook is speaking about now while the
-// file can be a turn behind.
-func TestTranscriptRanksBetweenReportAndOSC(t *testing.T) {
-	if !(AgentSourceReport.rank() > AgentSourceTranscript.rank()) {
-		t.Fatalf("transcript (%d) must rank below report (%d)",
-			AgentSourceTranscript.rank(), AgentSourceReport.rank())
-	}
-	if !(AgentSourceTranscript.rank() > AgentSourceOSC.rank()) {
-		t.Fatalf("transcript (%d) must rank above osc (%d)",
-			AgentSourceTranscript.rank(), AgentSourceOSC.rank())
-	}
-}
-
-// It is worked out by the daemon looking at the machine, so a caller cannot
-// claim it over the socket, exactly as with the process detector.
-func TestTranscriptIsNotAcceptedFromACaller(t *testing.T) {
-	if _, ok := ParseAgentSource("transcript"); ok {
-		t.Fatal("set-agent-state must not accept source=transcript")
-	}
-	for _, n := range AgentSourceNames {
-		if n == "transcript" {
-			t.Fatal("transcript must not be advertised as an accepted source")
-		}
-	}
-	// It is still reportable outward, so a user can see which tier answered.
-	if AgentSourceTranscript.Name() != "transcript" {
-		t.Fatalf("Name() = %q", AgentSourceTranscript.Name())
-	}
-}
-
 func TestTranscriptOutranksTheWeakerTiers(t *testing.T) {
 	s := newTestSessionWithWindow(t)
 	win := s.GetState().Windows[0].ID

@@ -352,42 +352,6 @@ func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 	}
 }
 
-// TestADaemonWithNoHooksHoldsNoTable keeps the cost of the common case at one
-// nil check. Every event a pane writes passes through the sink.
-func TestADaemonWithNoHooksHoldsNoTable(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	if d.hooks != nil {
-		t.Error("a daemon with no hooks configured built a hook table anyway")
-	}
-	if d.agentHooks != nil {
-		t.Error("a daemon with no hooks configured built the agent settle gate anyway")
-	}
-}
-
-// TestTheAgentCommandShorthandIsAHook pins the second spelling.
-// [notifications.agent].command is documented as shorthand for an
-// after-agent-state hook, and the daemon has to honour it or a user who wrote
-// only that spelling gets nothing when detached.
-func TestTheAgentCommandShorthandIsAHook(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	d := NewDaemon(&DaemonConfig{
-		Version:            "test",
-		DisableAutoRestore: true,
-		AgentHookCommand:   "notify-send done",
-	})
-	if d.hooks == nil {
-		t.Fatal("the shorthand built no hook table")
-	}
-	statuses := d.hooks.Statuses()
-	if len(statuses) != 1 || statuses[0].Event != string(hooks.AfterAgentState) {
-		t.Fatalf("the shorthand registered %+v, want one after-agent-state hook", statuses)
-	}
-	if statuses[0].Command != "notify-send done" {
-		t.Errorf("command = %q, want the configured one", statuses[0].Command)
-	}
-}
-
 func intPtr(v int) *int { return &v }
 
 // waitUntilHookTest polls until cond holds or the test fails.

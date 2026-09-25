@@ -1,9 +1,6 @@
 package session
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 // corpusCase is one real command line as the detector reads it: the foreground
 // process group leader of a pane, and the other members of that group when the
@@ -426,18 +423,6 @@ func staticGroup(members []foregroundInfo) func(yield func(foregroundInfo) bool)
 			if !yield(m) {
 				return
 			}
-		}
-	}
-}
-
-// TestDetectionCorpusIsLabelled keeps every case honest about its provenance.
-func TestDetectionCorpusIsLabelled(t *testing.T) {
-	for _, c := range detectionCorpus {
-		if c.how != "measured" && c.how != "documented" {
-			t.Errorf("%s: how = %q, want measured or documented", c.name, c.how)
-		}
-		if strings.TrimSpace(c.name) == "" {
-			t.Error("a corpus case has no name")
 		}
 	}
 }

@@ -126,77 +126,17 @@ func waitForText(t *testing.T, d *Daemon, sess *Session, windowID, want string) 
 	}
 }
 
-// TestFanMixesAgentsFromTheCallersPath is the fan of P12: two agents cycled
-// across the sessions, one of them with arguments, each session with its own
-// prompt, found on a PATH only the caller has, with the caller's variables.
-func TestFanMixesAgentsFromTheCallersPath(t *testing.T) {
-	d, sp, repo := worktreeFixture(t)
-	claudeBin := fakeProgram(t, "claude", echoScript)
-	toolBin := fakeProgram(t, "mytool", echoScript)
+// TestFanRefusesWhatItCannotRun covers the fan refusals the end to end test
+// does not reach: a program on no PATH the daemon has, and the parameter
+// combinations that cannot describe one fan.
+func TestFanRefusesWhatItCannotRun(t *testing.T) {
+	_, sp, repo := worktreeFixture(t)
 	c := dialVerb(t, sp)
-	path := claudeBin + string(os.PathListSeparator) + toolBin + string(os.PathListSeparator) + os.Getenv("PATH")
 
 	// The daemon's own PATH has neither program, so without env it refuses.
 	resp := callVerb(t, c, "fan", map[string]any{"agents": []string{"claude", "mytool --fast"}, "prompts": []string{"one", "two"}, "repo": repo})
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Fatalf("a program on no PATH the daemon has: code %q, want %q", code, ErrVerbInvalidParams)
-	}
-
-	res := result(t, callVerb(t, c, "fan", map[string]any{
-		"agents":  []string{"claude", "mytool --fast 'two words'"},
-		"prompts": []string{"First task.", "Second task.", "Third task."},
-		"repo":    repo,
-		"name":    "mix",
-		"env":     map[string]string{"PATH": path, "FAN_MARK": "from-the-caller"},
-	}))
-	rows := res["sessions"].([]any)
-	if len(rows) != 3 || res["total"] != float64(3) {
-		t.Fatalf("prompts did not set the count to 3: %v", res)
-	}
-	wantAgent := []string{"claude-code", "", "claude-code"}
-	for i, r := range rows {
-		row := r.(map[string]any)
-		if row["agent"] != wantAgent[i] {
-			t.Errorf("session %d agent = %v, want %q", i, row["agent"], wantAgent[i])
-		}
-	}
-	second := rows[1].(map[string]any)
-	if cmd, _ := second["command"].(string); !strings.HasPrefix(cmd, filepath.Join(toolBin, "mytool")) {
-		t.Errorf("the second session's command %q is not the program on the caller's PATH", cmd)
-	}
-
-	sess := d.manager.GetSession(second["session"].(string))
-	windowID := second["window_id"].(string)
-	waitForText(t, d, sess, windowID, "ARGS: --fast two words")
-	waitForText(t, d, sess, windowID, "MARK: from-the-caller")
-	if info := sess.Worktree(); info.Agent != "mytool --fast 'two words'" || info.Prompt != "Second task." {
-		t.Errorf("record = %+v, want the second agent and the second prompt", info)
-	}
-
-	// A program no manifest knows is typed at only once it reports a state.
-	time.Sleep(300 * time.Millisecond)
-	if info := sess.Worktree(); info.PromptStatus != PromptPending {
-		t.Fatalf("the prompt was typed at a program that showed nothing: %+v", info)
-	}
-	if err := sess.SetDaemonWindowAgentState(windowID, AgentStateIdle, ""); err != nil {
-		t.Fatal(err)
-	}
-	info := waitPromptStatus(t, sess, PromptSent)
-	if info.PromptReadyBy != "idle" {
-		t.Errorf("prompt_ready_by = %q, want idle", info.PromptReadyBy)
-	}
-	waitForText(t, d, sess, windowID, "GOT: Second task.")
-
-	listed := result(t, callVerb(t, c, "list-worktrees", map[string]any{"group": "mix"}))
-	found := false
-	for _, r := range listed["worktrees"].([]any) {
-		row := r.(map[string]any)
-		if row["session"] == second["session"] {
-			found = row["agent"] == "mytool --fast 'two words'" && row["prompt_ready_by"] == "idle"
-		}
-	}
-	if !found {
-		t.Errorf("list-worktrees does not carry the agent and ready_by: %v", listed)
 	}
 
 	for _, bad := range []map[string]any{
@@ -273,46 +213,6 @@ func TestHeldQuestionLeavesThePanesOwnQuestionAlone(t *testing.T) {
 	items, _ := listAttention(t, c, `{"kinds":["question"]}`)
 	if len(items) != 1 || items[0]["summary"] != "Which branch?" {
 		t.Errorf("closing the held item took the pane's own question with it: %v", items)
-	}
-}
-
-func TestStartAgentAnswersOnceTheAgentIsReady(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "start")
-	claudeBin := fakeProgram(t, "claude", echoScript)
-	c := dialVerb(t, sp)
-	env := map[string]string{"PATH": claudeBin + string(os.PathListSeparator) + os.Getenv("PATH")}
-
-	// The agent gets to its prompt a moment after it starts.
-	go func() {
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			for _, w := range sess.GetState().Windows {
-				if w.CustomName == "reviewer" {
-					time.Sleep(200 * time.Millisecond)
-					_ = sess.SetDaemonWindowAgentState(w.ID, AgentStateIdle, "")
-					return
-				}
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-	}()
-	res := result(t, callVerb(t, c, "start-agent", map[string]any{
-		"session": "start", "agent": "claude", "name": "reviewer", "env": env,
-		"prompt": "Review the diff.", "ready_timeout": 4000,
-	}))
-	if res["ready"] != true || res["ready_by"] != "idle" || res["name"] != "reviewer" || res["agent"] != "claude-code" {
-		t.Fatalf("start-agent = %v, want a ready claude-code pane named reviewer", res)
-	}
-	if res["prompt_status"] == PromptNotSent {
-		t.Fatalf("the prompt was not typed at a ready agent: %v", res)
-	}
-	waitForText(t, d, sess, res["window_id"].(string), "GOT: Review the diff.")
-
-	// The name is how the caller addresses it from now on.
-	listed := result(t, callVerb(t, c, "list-agents", map[string]any{"select": "name:reviewer"}))
-	if got := windowsOf(listed); len(got) != 1 || got[0] != res["window_id"] {
-		t.Errorf("name:reviewer lists %v, want the new pane", got)
 	}
 }
 

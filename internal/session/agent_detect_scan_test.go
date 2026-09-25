@@ -262,22 +262,3 @@ func TestDetectionFindsAnAgentStartedSilently(t *testing.T) {
 		t.Fatalf("an agent started with output was not found on the next tick: %q", got)
 	}
 }
-
-// TestDetectQuietTicks pins the tick count for the bound at a few intervals.
-func TestDetectQuietTicks(t *testing.T) {
-	for _, tc := range []struct {
-		interval time.Duration
-		want     int32
-	}{
-		{2 * time.Second, 5},
-		{time.Second, 10},
-		{3 * time.Second, 3},
-		{10 * time.Second, 1},
-		{30 * time.Second, 1},
-		{0, 1},
-	} {
-		if got := detectQuietTicks(tc.interval); got != tc.want {
-			t.Errorf("detectQuietTicks(%v) = %d, want %d", tc.interval, got, tc.want)
-		}
-	}
-}

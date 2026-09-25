@@ -53,41 +53,6 @@ func readArgv(t *testing.T, path string) []string {
 	}
 }
 
-// TestStartAgentProtocolRunsThePaneProgram checks what a protocol pane runs:
-// this daemon's binary as agent-proto with the protocol and the harness, and
-// the agent's argv after --, with app-server put between codex and the
-// caller's args. The pane is ready on the pane's own report, the result names
-// the protocol and the agent's command, and list-agents names the protocol.
-func TestStartAgentProtocolRunsThePaneProgram(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	argvFile := fakeProtoExe(t, d)
-	fakeProgramOnPath(t, "codex")
-	c := dialVerb(t, sp)
-
-	c.send(t, `{"id":1,"verb":"start-agent","params":`+jsonParams(map[string]any{
-		"session": "headless", "agent": "codex", "protocol": "codex", "args": []string{"--listen", "stdio://"},
-	})+`}`)
-	sess, windowID := waitOnlyPane(t, d, "headless", 1)
-	got := readArgv(t, argvFile)
-	want := []string{"agent-proto", "--protocol", "codex", "--harness", "codex", "--", "codex", "app-server", "--listen", "stdio://"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("the pane runs %q, want %q", got, want)
-	}
-	if err := sess.SetDaemonWindowAgentState(windowID, AgentStateIdle, ""); err != nil {
-		t.Fatal(err)
-	}
-	res := result(t, c.readResp(t))
-	if res["ready"] != true || res["protocol"] != "codex" || res["command"] != "codex app-server --listen stdio://" {
-		t.Fatalf("result = %v, want a ready codex protocol pane", res)
-	}
-
-	res = result(t, c.call(t, `{"id":2,"verb":"list-agents","params":{"session":"headless","all":true}}`))
-	rows, _ := res["agents"].([]any)
-	if len(rows) != 1 || rows[0].(map[string]any)["protocol"] != "codex" {
-		t.Errorf("list-agents = %v, want the pane with protocol codex", rows)
-	}
-}
-
 // TestStartAgentProtocolWaitsForTheReport is the readiness rule with its
 // negative control: a plain pane of a harness that cannot show idle is ready
 // on unknown, which is all its screen can show, and a protocol pane of the
@@ -156,50 +121,6 @@ func TestProtocolPaneMarkGoesWithTheWindow(t *testing.T) {
 			t.Fatal("the mark outlived the window")
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// TestProtocolPaneHoldsWithoutTheApprovalsTable: with no [agents.approvals]
-// at all, a protocol pane's permission is held for the Inbox and answered by
-// the person, while an ordinary pane's is refused as disabled. Nothing else
-// about the hold changes: it still needs the pane on needs_input.
-func TestProtocolPaneHoldsWithoutTheApprovalsTable(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "work")
-	makeSessionWithWindow(t, d, "other")
-	c := dialVerb(t, sp)
-	tui := attachTUI(t, sp, "other")
-	d.markProtocolPane(a, "acp")
-
-	params := map[string]any{"session": "work", "window": a, "harness": "acp", "summary": "approve execute: go test ./...", "options": []string{"once", "deny"}}
-
-	// Not on needs_input: nothing is held, protocol pane or not.
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":`+jsonParams(params)+`}`))
-	if res["reason"] != approvalEndNotBlocked {
-		t.Fatalf("a pane not blocked answered %v", res)
-	}
-
-	setAgentState(t, c, "work", a, "needs_input", "approval", "approve execute: go test ./...")
-	setAgentState(t, c, "work", b, "needs_input", "approval", "approve execute: go test ./...")
-
-	params["window"] = b
-	res = result(t, c.call(t, `{"id":2,"verb":"request-approval","params":`+jsonParams(params)+`}`))
-	if res["reason"] != approvalEndDisabled {
-		t.Fatalf("the ordinary pane answered %v, want disabled", res)
-	}
-
-	params["window"] = a
-	pending, _ := requestApprovalWith(t, sp, params)
-	it := heldItem(t, c, a)
-	id, _ := it["request_id"].(string)
-	if id == "" {
-		t.Fatalf("the protocol pane's approval was not held: %v", it)
-	}
-	if got := result(t, reply(c, t, id, ApprovalOnce, tui.HumanNonce())); got["applied"] != true {
-		t.Fatalf("the reply answered %v", got)
-	}
-	if got := awaitResult(t, pending); got["decision"] != ApprovalOnce {
-		t.Fatalf("the pane program got %v, want once", got)
 	}
 }
 

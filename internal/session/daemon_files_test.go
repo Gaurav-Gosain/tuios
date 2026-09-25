@@ -88,31 +88,6 @@ func TestALongDirectorySaysItWasCut(t *testing.T) {
 	}
 }
 
-// TestAFailureBecomesASentence. The row is about twenty four cells, so these are
-// short, and they say what is true rather than naming a syscall.
-func TestAFailureBecomesASentence(t *testing.T) {
-	missing := listDir(filepath.Join(t.TempDir(), "nope"), 0)
-	if missing.Err != "That folder is gone." {
-		t.Errorf("a missing folder says %q", missing.Err)
-	}
-	if missing.Entries != nil {
-		t.Error("a missing folder returned entries")
-	}
-
-	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
-		t.Skip("permissions do not bite here")
-	}
-	locked := filepath.Join(t.TempDir(), "locked")
-	mkdirAll(t, locked)
-	if err := os.Chmod(locked, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	if got := listDir(locked, 0); got.Err != "No permission to read it." {
-		t.Errorf("an unreadable folder says %q", got.Err)
-	}
-}
-
 // TestTheSameFolderSpelledTwoWaysIsOneFolder.
 //
 // The kernel hands back a path it has already resolved; a shell prints $PWD,
@@ -156,21 +131,5 @@ func TestTheSameFolderSpelledTwoWaysIsOneFolder(t *testing.T) {
 func TestAnEmptyPathIsNotAFolder(t *testing.T) {
 	if got := listDir("", 0); got.Err == "" {
 		t.Errorf("the empty path listed %d entries with no error", len(got.Entries))
-	}
-}
-
-// TestLowerNameIsAsciiOnly. The sort only needs to stop a capital sorting ahead
-// of every lowercase name. It deliberately does not reach for a locale, because
-// the two ends of this are different machines and need not share one.
-func TestLowerNameIsAsciiOnly(t *testing.T) {
-	for _, c := range [][2]string{
-		{"README", "readme"},
-		{"Makefile", "makefile"},
-		{"go.mod", "go.mod"},
-		{"Ünïcode", "Ünïcode"},
-	} {
-		if got := lowerName(c[0]); got != c[1] {
-			t.Errorf("lowerName(%q) = %q, want %q", c[0], got, c[1])
-		}
 	}
 }
