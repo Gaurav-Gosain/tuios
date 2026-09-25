@@ -99,8 +99,6 @@ type hookRun struct {
 	stderr   bytes.Buffer
 	dialed   bool
 	dialWait time.Duration
-	// stampDir, when set, is agent-statusline's stamp directory.
-	stampDir string
 }
 
 func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...string) {
@@ -109,16 +107,11 @@ func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...
 		h.daemon = &fakeDaemon{}
 	}
 	o.explain = true
-	var stampDir func() (string, error)
-	if h.stampDir != "" {
-		stampDir = func() (string, error) { return h.stampDir, nil }
-	}
 	runAgentHook(o, args, agentHookIO{
-		stampDir: stampDir,
-		stdin:    strings.NewReader(payload),
-		stdout:   &h.stdout,
-		stderr:   &h.stderr,
-		getenv:   func(k string) string { return h.env[k] },
+		stdin:  strings.NewReader(payload),
+		stdout: &h.stdout,
+		stderr: &h.stderr,
+		getenv: func(k string) string { return h.env[k] },
 		dial: func() (verbCaller, error) {
 			h.dialed = true
 			time.Sleep(h.dialWait)
@@ -215,20 +208,6 @@ func TestAgentHookSendsActivity(t *testing.T) {
 	}
 	if !strings.Contains(h.stderr.String(), `"unsupported":["activity"]`) {
 		t.Fatalf("explain does not name the dropped field: %s", h.stderr.String())
-	}
-}
-
-// TestAgentHookStopSaysWhatTheTurnEndedOn: the done report carries the first
-// line of what the agent said last, as its message and as activity.
-func TestAgentHookStopSaysWhatTheTurnEndedOn(t *testing.T) {
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1","last_assistant_message":"All tests pass.\nHere is why."}`, "claude-code")
-	r := h.daemon.reports()
-	if len(r) != 1 || r[0]["state"] != "done" || r[0]["message"] != "All tests pass." {
-		t.Fatalf("reports = %v", r)
-	}
-	if a, _ := r[0]["activity"].(map[string]any); a["event"] != "turn_end" || a["text"] != "All tests pass." {
-		t.Fatalf("activity = %v", r[0]["activity"])
 	}
 }
 

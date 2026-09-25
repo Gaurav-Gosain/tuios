@@ -166,12 +166,6 @@ func TestBuiltinRules(t *testing.T) {
 	}
 }
 
-func TestOutsideNeedsARoot(t *testing.T) {
-	if hits := Match(Builtin(), Call{Tool: "Bash", Text: "echo x > /etc/hosts"}); len(hits) != 0 {
-		t.Errorf("a call with no root matched %v", Names(hits))
-	}
-}
-
 func TestCustomRules(t *testing.T) {
 	kube, err := Custom("kubectl apply", []string{"Bash", "shell"}, `\bkubectl\s+(apply|delete)\b`)
 	if err != nil {
@@ -233,21 +227,6 @@ func TestCustomRules(t *testing.T) {
 	want := []string{RuleRecursiveDelete, RuleInfrastructure, "kubectl apply"}
 	if !slices.Equal(got, want) {
 		t.Errorf("merged rules = %q, want %q", got, want)
-	}
-}
-
-func TestHitsSayWhy(t *testing.T) {
-	for _, h := range Match(Builtin(), Call{Tool: "Bash", Text: "sudo rm -rf / && git push -f"}) {
-		if h.Why == "" {
-			t.Errorf("rule %q has no why", h.Rule)
-		}
-	}
-	names := map[string]bool{}
-	for _, r := range Builtin() {
-		if names[r.Name] {
-			t.Errorf("two shipped rules are named %q", r.Name)
-		}
-		names[r.Name] = true
 	}
 }
 

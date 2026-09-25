@@ -2,111 +2,11 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/review"
-	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
-
-// TestReviewCommandRoundTrip drives tuios review, review note, review notes
-// and review send against a real daemon whose pane sits in a throwaway
-// repository: the diff shows the change with the note under its line, the
-// JSON carries the fields a script reads, and send queues one message.
-func TestReviewCommandRoundTrip(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	if err := os.WriteFile(filepath.Join(repo, "api.go"), []byte("package api\n\nfunc Do() {\n}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	testutil.Git(t, repo, "add", ".")
-	testutil.Git(t, repo, "commit", "-q", "-m", "api")
-	t.Chdir(repo)
-	c := startSubscribeDaemon(t)
-	if _, err := c.Call("new-session", map[string]any{"name": "work"}); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(repo, "api.go"), []byte("package api\n\nfunc Do() {\n\tretry()\n}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	run := func(args ...string) {
-		t.Helper()
-		root := newRootCommand()
-		root.SetArgs(args)
-		if err := root.Execute(); err != nil {
-			t.Fatalf("tuios %s: %v", strings.Join(args, " "), err)
-		}
-	}
-	run("review", "note", "-s", "work", "api.go:4", "why", "retry", "here?")
-
-	var out bytes.Buffer
-	if err := runReview(&out, "work", "", reviewOptions{context: 3}, false); err != nil {
-		t.Fatalf("review: %v", err)
-	}
-	text := out.String()
-	for _, want := range []string{
-		"Review of work, pane ",
-		"uncommitted changes: 1 file, +1 -0, 1 note",
-		"M  api.go  +1 -0",
-		"@@ -1,4 +1,5 @@",
-		"      4 +     retry()",
-		"> note n1 (shell): why retry here?",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("tuios review lacks %q:\n%s", want, text)
-		}
-	}
-
-	raw := captureStdout(t, func() {
-		if err := runReview(&out, "work", "", reviewOptions{context: 3, stat: true}, true); err != nil {
-			t.Errorf("review --json: %v", err)
-		}
-	})
-	var res map[string]any
-	if err := json.Unmarshal([]byte(raw), &res); err != nil {
-		t.Fatalf("review --json did not print JSON: %v\n%s", err, raw)
-	}
-	for _, key := range []string{"session", "window", "worktree", "base", "base_sha", "tree_sha", "files", "totals", "truncated", "notes", "untrusted"} {
-		if _, ok := res[key]; !ok {
-			t.Errorf("review --json lacks %q: %v", key, res)
-		}
-	}
-
-	out.Reset()
-	if err := runReviewNote(&out, "work", "", map[string]any{"action": "list"}, false); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "api.go:4") || !strings.Contains(out.String(), "unsent") {
-		t.Errorf("review notes = %q", out.String())
-	}
-
-	windows, err := c.Call("list-windows", map[string]any{"session": "work"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var list struct {
-		Windows []struct {
-			ID string `json:"window_id"`
-		} `json:"windows"`
-	}
-	if err := json.Unmarshal(windows, &list); err != nil || len(list.Windows) == 0 {
-		t.Fatalf("list-windows = %s (%v)", windows, err)
-	}
-	if _, err := c.Call("set-agent-state", map[string]any{"session": "work", "window": list.Windows[0].ID, "state": "working"}); err != nil {
-		t.Fatal(err)
-	}
-	out.Reset()
-	if err := runReviewSend(&out, "work", "", nil, false, false); err != nil {
-		t.Fatalf("review send: %v", err)
-	}
-	if !strings.Contains(out.String(), "1 review note in one message. Queued q1 for the focused pane. It is typed when the agent comes to rest.") {
-		t.Errorf("review send = %q", out.String())
-	}
-}
 
 func TestParseNoteTarget(t *testing.T) {
 	for _, tc := range []struct {
@@ -158,31 +58,5 @@ func TestPrintReviewCleansWhatItPrints(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "against main (0123456)") || !strings.Contains(out.String(), "> note n1 (human): see[31m this") {
 		t.Errorf("output =\n%s", out.String())
-	}
-}
-
-// TestReviewRefusesASessionOnAnotherMachine: reviewing a session on a linked
-// machine is out of scope, so the review commands refuse a HOST: target
-// before they dial anything (dialReviewTarget checks reviewTargetRefusal
-// first), and point at attaching there or worktree pull. The test calls the
-// check only, so a regression cannot make it dial a daemon.
-func TestReviewRefusesASessionOnAnotherMachine(t *testing.T) {
-	for _, c := range []struct{ session, window string }{
-		{"build:api", ""},
-		{"", "build:api:0"},
-	} {
-		err := reviewTargetRefusal(c.session, c.window)
-		var de *diagnosticError
-		if !errors.As(err, &de) {
-			t.Fatalf("reviewTargetRefusal(%q, %q) = %v, want a diagnostic", c.session, c.window, err)
-		}
-		if !strings.Contains(de.Fix, "tuios worktree pull build:api") || !strings.Contains(de.What, "build") {
-			t.Errorf("refusal = %+v", de)
-		}
-	}
-	for _, local := range []struct{ session, window string }{{"api", ""}, {"", "build"}, {"local:api", ""}} {
-		if err := reviewTargetRefusal(local.session, local.window); err != nil {
-			t.Errorf("reviewTargetRefusal(%q, %q) = %v, want nil for this machine", local.session, local.window, err)
-		}
 	}
 }

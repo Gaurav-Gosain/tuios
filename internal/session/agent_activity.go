@@ -288,13 +288,6 @@ func (a *activityStore) forgetSession(sessionID string) {
 	}
 }
 
-// count is how many panes have a ring, for tests.
-func (a *activityStore) count() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return len(a.rings)
-}
-
 // noteSessionEvent adds what a session event says to the ring of a pane that
 // has one: a command its shell finished, or its agent state changing. A closed
 // window's ring is dropped. It runs in the session event sink, with the

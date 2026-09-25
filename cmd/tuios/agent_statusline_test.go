@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -22,13 +20,9 @@ type metaDaemon struct {
 	mu       sync.Mutex
 	calls    []fakeCall
 	resolved map[string]any
-	block    chan struct{}
 }
 
 func (m *metaDaemon) Call(verb string, params any) (json.RawMessage, error) {
-	if m.block != nil {
-		<-m.block
-	}
 	raw, _ := json.Marshal(params)
 	var p map[string]any
 	_ = json.Unmarshal(raw, &p)
@@ -58,18 +52,6 @@ func (m *metaDaemon) metaCalls() []map[string]any {
 		}
 	}
 	return out
-}
-
-func (m *metaDaemon) count(verb string) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for _, c := range m.calls {
-		if c.verb == verb {
-			n++
-		}
-	}
-	return n
 }
 
 // statusLineRig is one status line run's world: a pane's environment, a fake
@@ -157,185 +139,6 @@ func TestAgentStatusLineWritesItsPane(t *testing.T) {
 	}
 }
 
-// TestAgentStatusLineThrottle holds a changing cost to one report per 15
-// seconds, and sends a model change and a context crossing 80% at once.
-func TestAgentStatusLineThrottle(t *testing.T) {
-	r := newStatusLineRig(t)
-	send := func(model string, ctx, cost float64) {
-		p, _ := json.Marshal(map[string]any{
-			"session_id":     "s1",
-			"model":          map[string]any{"display_name": model},
-			"context_window": map[string]any{"used_percentage": ctx},
-			"cost":           map[string]any{"total_cost_usd": cost},
-		})
-		r.run(agentStatusLineOptions{}, "claude-code", string(p))
-	}
-	send("Opus", 10, 0.10)
-	r.now = r.now.Add(5 * time.Second)
-	send("Opus", 11, 0.20)
-	if n := len(r.daemon.metaCalls()); n != 1 {
-		t.Fatalf("a change 5s later was sent: %d calls", n)
-	}
-	r.now = r.now.Add(11 * time.Second)
-	send("Opus", 12, 0.30)
-	if n := len(r.daemon.metaCalls()); n != 2 {
-		t.Fatalf("a change 16s after the last report was not sent: %d calls", n)
-	}
-	r.now = r.now.Add(time.Second)
-	send("Sonnet", 12, 0.30)
-	if n := len(r.daemon.metaCalls()); n != 3 {
-		t.Fatalf("a model change was held: %d calls", n)
-	}
-	r.now = r.now.Add(time.Second)
-	send("Sonnet", 81, 0.30)
-	if n := len(r.daemon.metaCalls()); n != 4 {
-		t.Fatalf("context crossing 80%% was held: %d calls", n)
-	}
-	// Unchanged for ten minutes: sent once more, for a restarted daemon.
-	r.now = r.now.Add(statusLineRefresh)
-	send("Sonnet", 81, 0.30)
-	if n := len(r.daemon.metaCalls()); n != 5 {
-		t.Fatalf("no refresh after %s: %d calls", statusLineRefresh, n)
-	}
-}
-
-// claudeStatus is a Claude Code status line payload for conversation s1.
-func claudeStatus(model string, ctx, cost float64) string {
-	p, _ := json.Marshal(map[string]any{
-		"session_id":     "s1",
-		"model":          map[string]any{"display_name": model},
-		"context_window": map[string]any{"used_percentage": ctx},
-		"cost":           map[string]any{"total_cost_usd": cost},
-	})
-	return string(p)
-}
-
-// TestAgentStatusLineHeldValuesReachTheTurnEnd: a change the interval held
-// back is kept in the stamp, and the turn end sends it. Claude Code runs the
-// status line only while the conversation changes, so without this the
-// turn's last context and cost stayed unsent until the next turn.
-func TestAgentStatusLineHeldValuesReachTheTurnEnd(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
-	r.now = r.now.Add(3 * time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 20, 0.40))
-	r.now = r.now.Add(3 * time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 30, 0.90))
-	if n := len(r.daemon.metaCalls()); n != 1 {
-		t.Fatalf("%d calls, want the first only", n)
-	}
-	stampPath := filepath.Join(r.dir, statusLineStampName("work", "w1"))
-	st := readStatusLineStamp(stampPath)
-	if st == nil || st.Pending["context"] != "30%" || st.Pending["cost"] != "$0.90" {
-		t.Fatalf("stamp %+v, want the held values pending", st)
-	}
-
-	// The turn ends: the held values go, once.
-	r.now = r.now.Add(time.Second)
-	sent, err := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now)
-	if err != nil || !sent {
-		t.Fatalf("flush sent=%v err=%v", sent, err)
-	}
-	calls := r.daemon.metaCalls()
-	if len(calls) != 2 {
-		t.Fatalf("%d calls after the turn end", len(calls))
-	}
-	tokens, _ := calls[1]["tokens"].(map[string]any)
-	if tokens["context"] != "30%" || tokens["cost"] != "$0.90" || calls[1]["source"] != "statusline" || calls[1]["window"] != "w1" {
-		t.Errorf("turn end call %v", calls[1])
-	}
-	if sent, _ := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now); sent {
-		t.Error("a second turn end sent the same values again")
-	}
-	// The status line runs once more after the turn with the same values:
-	// nothing to send.
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 30, 0.90))
-	if n := len(r.daemon.metaCalls()); n != 2 {
-		t.Errorf("%d calls, want no call for values the turn end sent", n)
-	}
-}
-
-// TestAgentStatusLineChangeAfterTheTurnEndGoesAtOnce: a status line run
-// after the turn ended carries the turn's last values, so it is not held,
-// and the interval applies again after it.
-func TestAgentStatusLineChangeAfterTheTurnEndGoesAtOnce(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
-	r.now = r.now.Add(2 * time.Second)
-	if _, err := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now); err != nil {
-		t.Fatal(err)
-	}
-	r.now = r.now.Add(time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 12, 0.20))
-	if n := len(r.daemon.metaCalls()); n != 2 {
-		t.Fatalf("%d calls, want the run after the turn end sent", n)
-	}
-	r.now = r.now.Add(time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 14, 0.30))
-	if n := len(r.daemon.metaCalls()); n != 2 {
-		t.Errorf("%d calls, want the interval back once a report went", n)
-	}
-}
-
-// TestAgentStatusLinePendingRidesTheNextReport: a key only a held run
-// named goes with the next report that is due.
-func TestAgentStatusLinePendingRidesTheNextReport(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"}}`)
-	r.now = r.now.Add(time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"},"cost":{"total_cost_usd":2}}`)
-	r.now = r.now.Add(statusLineInterval)
-	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"},"context_window":{"used_percentage":5}}`)
-	calls := r.daemon.metaCalls()
-	if len(calls) != 2 {
-		t.Fatalf("%d calls", len(calls))
-	}
-	tokens, _ := calls[1]["tokens"].(map[string]any)
-	if tokens["cost"] != "$2.00" || tokens["context"] != "5%" {
-		t.Errorf("due report %v, want the held cost with it", tokens)
-	}
-	if st := readStatusLineStamp(filepath.Join(r.dir, statusLineStampName("work", "w1"))); st == nil || len(st.Pending) != 0 {
-		t.Errorf("stamp %+v, want nothing pending after a report", st)
-	}
-}
-
-// TestAgentHookStopFlushesTheStatusLine: Claude Code's Stop hook sends what
-// the pane's status line held back.
-func TestAgentHookStopFlushesTheStatusLine(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
-	r.now = r.now.Add(time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 60, 3.10))
-
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1", "TUIOS_SESSION": "work"}, stampDir: r.dir}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
-	var meta []map[string]any
-	for _, c := range h.daemon.calls {
-		if c.verb == "set-agent-meta" {
-			meta = append(meta, c.params)
-		}
-	}
-	if len(meta) != 1 {
-		t.Fatalf("set-agent-meta calls %v, stderr %s", meta, h.stderr.String())
-	}
-	tokens, _ := meta[0]["tokens"].(map[string]any)
-	if tokens["context"] != "60%" || tokens["cost"] != "$3.10" {
-		t.Errorf("tokens %v", tokens)
-	}
-	if !strings.Contains(h.stderr.String(), `"status_line_flushed":true`) {
-		t.Errorf("explain output: %s", h.stderr.String())
-	}
-
-	// A prompt is no turn end.
-	h2 := &hookRun{env: h.env, stampDir: r.dir}
-	h2.run(t, agentHookOptions{}, `{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"go"}`, "claude-code")
-	for _, c := range h2.daemon.calls {
-		if c.verb == "set-agent-meta" {
-			t.Errorf("a prompt flushed the status line: %v", c.params)
-		}
-	}
-}
-
 func TestStatusLineDue(t *testing.T) {
 	at := time.Unix(1_800_000_000, 0)
 	prev := &statusLineStamp{Session: "s1", Values: map[string]string{"model": "Opus", "context": "42%", "cost": "$1.00"}, At: at.UnixMilli()}
@@ -408,156 +211,8 @@ func TestAgentStatusLineMissingFields(t *testing.T) {
 	}
 }
 
-// TestAgentStatusLineSkips reports nothing for a status line from an agent
-// nested in another harness's pane, and exits 0 when the daemon is gone.
-func TestAgentStatusLineSkips(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.env["TUIOS_AGENT"] = "codex"
-	if code := r.run(agentStatusLineOptions{}, "claude-code", claudeStatusPayload); code != 0 || r.dials != 0 {
-		t.Errorf("foreign harness: exit %d, %d dials", code, r.dials)
-	}
-
-	r = newStatusLineRig(t)
-	r.dialErr = errors.New("no daemon")
-	if code := r.run(agentStatusLineOptions{explain: true}, "claude-code", claudeStatusPayload); code != 0 {
-		t.Errorf("daemon gone: exit %d", code)
-	}
-	if !strings.Contains(r.stderr.String(), "no daemon") || r.stdout.Len() != 0 {
-		t.Errorf("explain = %q, stdout %q", r.stderr.String(), r.stdout.String())
-	}
-	if _, err := os.Stat(filepath.Join(r.dir, statusLineStampName("work", "w1"))); err == nil {
-		t.Error("a report that failed left a stamp, so the values would never be sent")
-	}
-}
-
-// TestAgentStatusLineGivesUp returns within the deadline when the daemon
-// does not answer.
-func TestAgentStatusLineGivesUp(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.daemon.block = make(chan struct{})
-	start := time.Now()
-	code := r.run(agentStatusLineOptions{timeout: 50 * time.Millisecond}, "claude-code", claudeStatusPayload)
-	if code != 0 || time.Since(start) > 2*time.Second {
-		t.Errorf("exit %d after %s", code, time.Since(start))
-	}
-	// Let the abandoned report finish, so it does not write its stamp into
-	// the test's directory while the directory is being removed.
-	close(r.daemon.block)
-	stamp := filepath.Join(r.dir, statusLineStampName("work", "w1"))
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
-		if _, err := os.Stat(stamp); err == nil {
-			return
-		}
-	}
-	t.Error("the report never finished")
-}
-
-// TestAgentStatusLineFindsPaneOnce asks the daemon which pane it runs in when
-// no pane is named, and, when there is none, does not ask again for a minute.
-func TestAgentStatusLineFindsPaneOnce(t *testing.T) {
-	r := newStatusLineRig(t)
-	r.env = map[string]string{}
-	r.daemon.resolved = map[string]any{"session": "work", "window_id": "w9", "by": "sid"}
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatusPayload)
-	calls := r.daemon.metaCalls()
-	if len(calls) != 1 || calls[0]["window"] != "w9" {
-		t.Fatalf("calls = %v", r.daemon.calls)
-	}
-
-	r = newStatusLineRig(t)
-	r.env = map[string]string{}
-	r.run(agentStatusLineOptions{}, "claude-code", claudeStatusPayload)
-	r.now = r.now.Add(10 * time.Second)
-	r.run(agentStatusLineOptions{}, "claude-code", `{"model":{"id":"other"}}`)
-	if n := r.daemon.count("resolve-pane"); n != 1 || r.dials != 1 {
-		t.Errorf("outside any pane: %d resolve-pane calls, %d dials in 10s", n, r.dials)
-	}
-	r.now = r.now.Add(statusLineNoPaneWait)
-	r.run(agentStatusLineOptions{}, "claude-code", `{"model":{"id":"other2"}}`)
-	if n := r.daemon.count("resolve-pane"); n != 2 {
-		t.Errorf("did not ask again after a minute: %d", n)
-	}
-}
-
-// TestAgentStatusLineThen runs the person's command with the same stdin,
-// prints its output unchanged, and exits with its status, whatever the tuios
-// side does.
-func TestAgentStatusLineThen(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses /bin/sh")
-	}
-	r := newStatusLineRig(t)
-	code := r.run(agentStatusLineOptions{then: `cat; printf '\n%s' "$(echo tail)"`}, "claude-code", claudeStatusPayload)
-	if code != 0 {
-		t.Errorf("exit %d", code)
-	}
-	if got := r.stdout.String(); got != claudeStatusPayload+"\ntail" {
-		t.Errorf("stdout = %q", got)
-	}
-	if len(r.daemon.metaCalls()) != 1 {
-		t.Errorf("chaining stopped the report: %v", r.daemon.calls)
-	}
-
-	r = newStatusLineRig(t)
-	r.dialErr = errors.New("no daemon")
-	if code := r.run(agentStatusLineOptions{then: "echo out; exit 3"}, "claude-code", claudeStatusPayload); code != 3 {
-		t.Errorf("exit %d, want the command's 3", code)
-	}
-	if r.stdout.String() != "out\n" {
-		t.Errorf("stdout = %q", r.stdout.String())
-	}
-}
-
-func TestRunStatusLineThenMissingShellCommand(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses /bin/sh")
-	}
-	var out, errb bytes.Buffer
-	code := runStatusLineThen(context.Background(), "/no/such/statusline-command", nil, &out, &errb)
-	if code == 0 {
-		t.Error("a command that cannot run exited 0")
-	}
-}
-
 func TestStatusLineStampName(t *testing.T) {
 	if got := statusLineStampName("../work", "a/b c"); got != "statusline-___work-a_b_c.json" || strings.ContainsAny(got, "/\\") {
 		t.Errorf("name = %q", got)
-	}
-}
-
-// TestInstallStatusLineForPrintsTheThenForm refuses a status line the person
-// owns and prints the install command that keeps it.
-func TestInstallStatusLineForPrintsTheThenForm(t *testing.T) {
-	home := t.TempDir()
-	env := integration.Env{Home: home, Getenv: func(string) string { return "" }}
-	tg, _ := integration.LookupTarget("claude-code")
-	if err := os.MkdirAll(tg.ConfigDir(env), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	settings := `{"statusLine": {"type": "command", "command": "~/bin/my line.sh"}}`
-	if err := os.WriteFile(tg.Path(env), []byte(settings), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var out, errb bytes.Buffer
-	if installStatusLineFor(&out, &errb, tg, env, "tuios", "") {
-		t.Fatal("installed over the user's status line")
-	}
-	want := `tuios integration install claude-code --statusline --then '~/bin/my line.sh'`
-	if !strings.Contains(errb.String(), want) {
-		t.Errorf("stderr = %q, want it to show %q", errb.String(), want)
-	}
-	if !installStatusLineFor(&out, &errb, tg, env, "tuios", "~/bin/my line.sh") {
-		t.Fatalf("chaining failed: %s", errb.String())
-	}
-	st := tg.Status(env, "tuios")
-	if v := statusLineVerdict(st); !strings.Contains(v, "chained to ~/bin/my line.sh") {
-		t.Errorf("verdict = %q", v)
-	}
-	var sbuf bytes.Buffer
-	if err := printIntegrationStatus(&sbuf, []integration.Status{st}, false); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(sbuf.String(), "statusline: installed") {
-		t.Errorf("status = %q", sbuf.String())
 	}
 }

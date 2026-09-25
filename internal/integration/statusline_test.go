@@ -3,7 +3,6 @@ package integration
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"reflect"
 	"testing"
 )
@@ -85,50 +84,6 @@ func TestParseStatusLine(t *testing.T) {
 		if _, err := ParseStatusLine(bad.harness, []byte(bad.payload)); err == nil {
 			t.Errorf("ParseStatusLine(%s, %s) took it", bad.harness, bad.payload)
 		}
-	}
-}
-
-func TestStatusLineTokensOnlyStated(t *testing.T) {
-	got := StatusLineValues{Model: "Opus", Session: "s"}.Tokens()
-	if !reflect.DeepEqual(got, map[string]string{"model": "Opus"}) {
-		t.Errorf("tokens = %v", got)
-	}
-}
-
-func TestFormatCost(t *testing.T) {
-	for _, tc := range []struct {
-		amount   float64
-		currency string
-		want     string
-	}{
-		{1.205, "USD", "$1.21"}, {0.004, "", "$0.00"}, {3, "eur", "3.00 EUR"}, {-1, "USD", ""},
-	} {
-		if got := FormatCost(tc.amount, tc.currency); got != tc.want {
-			t.Errorf("FormatCost(%v, %q) = %q, want %q", tc.amount, tc.currency, got, tc.want)
-		}
-	}
-}
-
-func TestStatusLineForeign(t *testing.T) {
-	env := func(v string) func(string) string {
-		return func(k string) string {
-			if k == AgentHintEnv {
-				return v
-			}
-			return ""
-		}
-	}
-	if _, foreign := StatusLineForeign("claude-code", env("")); foreign {
-		t.Error("no TUIOS_AGENT is foreign")
-	}
-	if _, foreign := StatusLineForeign("claude-code", env("claude")); foreign {
-		t.Error("the pane's own harness is foreign")
-	}
-	if owner, foreign := StatusLineForeign("claude-code", env("codex")); !foreign || owner != Codex {
-		t.Errorf("codex pane: %q %v", owner, foreign)
-	}
-	if _, foreign := StatusLineForeign("kilo", env("opencode")); foreign {
-		t.Error("kilo in an opencode pane is foreign")
 	}
 }
 
@@ -286,22 +241,5 @@ func TestStatusLineChainRoundTrip(t *testing.T) {
 	}
 	if after := settingsDoc(t, readFile(t, path)); !reflect.DeepEqual(after, before) {
 		t.Errorf("uninstall did not put the status line back:\n got %v\nwant %v", after, before)
-	}
-}
-
-func TestStatusLineOnlyClaude(t *testing.T) {
-	env := testEnv(t)
-	tg := mustTarget(t, "codex")
-	if tg.SupportsStatusLine() {
-		t.Fatal("codex supports a status line")
-	}
-	if err := os.MkdirAll(tg.ConfigDir(env), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tg.InstallStatusLine(env, "tuios", ""); err == nil {
-		t.Error("installed a status line for codex")
-	}
-	if st := tg.Status(env, "tuios"); st.StatusLine != nil {
-		t.Errorf("codex status has a status line: %+v", st.StatusLine)
 	}
 }

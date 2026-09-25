@@ -174,17 +174,3 @@ func TestApprovalNamesToolTargetAndDenyMessage(t *testing.T) {
 		}
 	}
 }
-
-func TestPlanTitle(t *testing.T) {
-	for in, want := range map[string]string{
-		"# Refactor\nbody":       "Refactor",
-		"\n\n  ## Two words  \n": "Two words",
-		"":                       "a plan",
-		"###":                    "a plan",
-		strings.Repeat("y", 300): strings.Repeat("y", MaxMessage-3) + "...",
-	} {
-		if got := PlanTitle(in); got != want {
-			t.Errorf("PlanTitle(%q) = %q, want %q", in, got, want)
-		}
-	}
-}

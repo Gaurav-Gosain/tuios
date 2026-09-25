@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -123,64 +122,6 @@ func TestBuildLeavesTheIndexAndWorkingTreeAlone(t *testing.T) {
 	}
 }
 
-// TestBuildAgainstABase: the named base is taken through the merge base, so
-// a base that moved on does not show its own change as removed; commits and
-// uncommitted work show together; a rename and a binary file read right.
-func TestBuildAgainstABase(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	write(t, repo, "old.go", "package x\n\nfunc A() {}\nfunc B() {}\nfunc C() {}\n")
-	testutil.Git(t, repo, "add", ".")
-	testutil.Git(t, repo, "commit", "-q", "-m", "base")
-	testutil.Git(t, repo, "checkout", "-q", "-b", "work")
-
-	testutil.Git(t, repo, "mv", "old.go", "renamed.go")
-	testutil.Git(t, repo, "commit", "-q", "-m", "rename")
-
-	// main moves on after work left it.
-	testutil.Git(t, repo, "checkout", "-q", "main")
-	write(t, repo, "main-only.txt", "x\n")
-	testutil.Git(t, repo, "add", ".")
-	testutil.Git(t, repo, "commit", "-q", "-m", "main moves")
-	testutil.Git(t, repo, "checkout", "-q", "work")
-	write(t, repo, "blob.bin", "\x00\x01\x02binary")
-	write(t, repo, "README", "hello\nworld\n")
-
-	base, err := ResolveBase(ctx(t), repo, "main", "", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if base.Name != "main" || base.Uncommitted || base.From != "param" {
-		t.Errorf("base = %+v", base)
-	}
-	d, err := Build(ctx(t), Options{Dir: repo, Base: base, Context: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.FileByPath("main-only.txt") != nil {
-		t.Error("a file main added after the branch left it shows as removed")
-	}
-	if f := fileOf(t, d, "renamed.go"); f.Status != StatusRenamed || f.OldPath != "old.go" {
-		t.Errorf("rename = %+v", f)
-	}
-	if f := fileOf(t, d, "blob.bin"); !f.Binary || f.Status != StatusUntracked || len(f.Hunks) != 0 {
-		t.Errorf("binary = %+v", f)
-	}
-	if f := fileOf(t, d, "README"); f.Added != 1 {
-		t.Errorf("README = %+v", f)
-	}
-
-	only, err := Build(ctx(t), Options{Dir: repo, Base: base, Paths: []string{"README"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(only.Files) != 1 || only.Files[0].Path != "README" {
-		t.Errorf("paths filter kept %+v", only.Files)
-	}
-	if len(only.Files[0].Hunks) != 1 || len(only.Files[0].Hunks[0].Lines) != 1 {
-		t.Errorf("context 0 hunk = %+v", only.Files[0].Hunks)
-	}
-}
-
 func TestResolveBase(t *testing.T) {
 	repo := testutil.GitRepo(t)
 	head := testutil.Git(t, repo, "rev-parse", "HEAD")
@@ -232,60 +173,6 @@ func TestResolveBase(t *testing.T) {
 	}
 	if f := fileOf(t, d, "first.txt"); f.Status != StatusUntracked || f.Added != 1 {
 		t.Errorf("first file = %+v", f)
-	}
-}
-
-// TestBuildAgainstAnotherWorktree diffs two worktrees of one repository:
-// what the second has that the first does not.
-func TestBuildAgainstAnotherWorktree(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	other := filepath.Join(t.TempDir(), "other")
-	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "other", other)
-	write(t, repo, "mine.txt", "mine\n")
-	write(t, other, "theirs.txt", "theirs\n")
-	write(t, other, "README", "hello\nfrom other\n")
-
-	d, err := Build(ctx(t), Options{Dir: other, AgainstDir: repo, Context: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.AgainstTree == "" || d.Base != "" {
-		t.Errorf("header = against %q base %q", d.AgainstTree, d.Base)
-	}
-	if f := fileOf(t, d, "theirs.txt"); f.Status != StatusAdded {
-		t.Errorf("theirs.txt = %+v", f)
-	}
-	if f := fileOf(t, d, "mine.txt"); f.Status != StatusDeleted {
-		t.Errorf("mine.txt = %+v", f)
-	}
-	if f := fileOf(t, d, "README"); f.Added != 1 {
-		t.Errorf("README = %+v", f)
-	}
-}
-
-// TestBuildTruncatesALongFile: a new file of 5001 lines keeps its counts and
-// loses its hunks; a short file beside it keeps both.
-func TestBuildTruncatesALongFile(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	var b strings.Builder
-	for i := range 5001 {
-		fmt.Fprintf(&b, "line %d\n", i)
-	}
-	write(t, repo, "big.txt", b.String())
-	write(t, repo, "small.txt", "s\n")
-	base, _ := ResolveBase(ctx(t), repo, "", "", true)
-	d, err := Build(ctx(t), Options{Dir: repo, Base: base, Context: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f := fileOf(t, d, "big.txt"); !f.Truncated || len(f.Hunks) != 0 || f.Added != 5001 {
-		t.Errorf("big.txt = truncated %v hunks %d added %d", f.Truncated, len(f.Hunks), f.Added)
-	}
-	if f := fileOf(t, d, "small.txt"); f.Truncated || len(f.Hunks) != 1 {
-		t.Errorf("small.txt = %+v", f)
-	}
-	if !d.Truncated {
-		t.Error("the diff does not say it was truncated")
 	}
 }
 

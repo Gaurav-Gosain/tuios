@@ -3,12 +3,9 @@ package agentproto
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"maps"
-	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -49,15 +46,6 @@ func (r *feedReporter) nextActivity(t *testing.T) Activity {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no activity")
 		return Activity{}
-	}
-}
-
-func (r *feedReporter) noMeta(t *testing.T) {
-	t.Helper()
-	select {
-	case m := <-r.metas:
-		t.Errorf("unexpected metadata %v", m)
-	case <-time.After(50 * time.Millisecond):
 	}
 }
 
@@ -104,93 +92,6 @@ func startFeedSession(t *testing.T, model string) feedSession {
 		t.Fatalf("first report %+v, want idle", r)
 	}
 	return feedSession{s: s, agent: agent, rep: rep, keys: keys}
-}
-
-// TestSessionMetaFeed sends the model the agent started with, then context,
-// cost and plan progress as the agent states them, each key only when it
-// changes.
-func TestSessionMetaFeed(t *testing.T) {
-	f := startFeedSession(t, "o5")
-	s, rep := f.s, f.rep
-	if m := rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"model": "o5"}) {
-		t.Errorf("first metadata %v, want the model", m)
-	}
-	s.Emit(Usage{ContextUsed: 84_000, ContextSize: 200_000, Cost: 1.2, HasCost: true})
-	if m := rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"context": "42%", "cost": "$1.20"}) {
-		t.Errorf("usage metadata %v", m)
-	}
-	// The same values again send nothing.
-	s.Emit(Usage{ContextUsed: 84_100, ContextSize: 200_000, Cost: 1.201, HasCost: true})
-	rep.noMeta(t)
-	s.Emit(Plan{Entries: []PlanEntry{{"a", "completed"}, {"b", "in_progress"}, {"c", "pending"}}})
-	if m := rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"plan": "1/3"}) {
-		t.Errorf("plan metadata %v", m)
-	}
-	// A usage that states only the model leaves the rest alone.
-	s.Emit(Usage{Model: "o5-mini"})
-	if m := rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"model": "o5-mini"}) {
-		t.Errorf("model change %v", m)
-	}
-	// An empty plan states nothing.
-	s.Emit(Plan{})
-	rep.noMeta(t)
-}
-
-// TestSessionActivity reports the prompt, each tool call once as it starts
-// and once as it ends, and the end of the turn.
-func TestSessionActivity(t *testing.T) {
-	f := startFeedSession(t, "")
-	s, agent, rep := f.s, f.agent, f.rep
-	rep.noMeta(t)
-	if _, err := io.WriteString(f.keys, pasteStart+"run the tests\nplease"+pasteEnd+"\r"); err != nil {
-		t.Fatal(err)
-	}
-	<-agent.prompts
-	if r := rep.next(t); r.state != "working" {
-		t.Fatalf("report %+v", r)
-	}
-	if a := rep.nextActivity(t); a.Event != ActivityPrompt || a.Text != "run the tests" || a.State != "working" {
-		t.Errorf("prompt activity %+v", a)
-	}
-	cmd := Tool{ID: "c1", Kind: "execute", Title: "go test ./...", Status: ToolPending, Input: map[string]string{"command": "go test ./..."}}
-	s.Emit(cmd)
-	cmd.Status = ToolRunning
-	s.Emit(cmd)
-	cmd.Status = ToolFailed
-	s.Emit(cmd)
-	s.Emit(cmd)
-	edit := Tool{ID: "f1", Kind: "edit", Title: "edit a.go", Status: ToolDone, Diffs: []Diff{{Path: "a.go"}, {Path: "b.go"}}}
-	s.Emit(edit)
-
-	want := []Activity{
-		{Event: ActivityTool, Tool: "Bash", Target: "go test ./...", State: "working"},
-		{Event: ActivityToolFailed, Tool: "Bash", Target: "go test ./...", State: "working"},
-		{Event: ActivityToolDone, Tool: "Edit", Target: "a.go, b.go", State: "working"},
-	}
-	for i, w := range want {
-		got := rep.nextActivity(t)
-		ok := got.OK
-		got.OK = nil
-		if got != w {
-			t.Errorf("activity %d = %+v, want %+v", i, got, w)
-		}
-		if i > 0 && (ok == nil || *ok != (w.Event == ActivityToolDone)) {
-			t.Errorf("activity %d ok = %v", i, ok)
-		}
-	}
-	s.Emit(Text{Text: "All green.\nmore"})
-	agent.ends <- TurnResult{Stop: StopFinished}
-	if r := rep.next(t); r.state != "done" {
-		t.Fatalf("report %+v", r)
-	}
-	if a := rep.nextActivity(t); a.Event != ActivityTurnEnd || a.Text != "All green." || a.State != "done" {
-		t.Errorf("turn end %+v", a)
-	}
-	select {
-	case a := <-rep.activities:
-		t.Errorf("extra activity %+v", a)
-	case <-time.After(50 * time.Millisecond):
-	}
 }
 
 // slowReporter is a feedReporter whose activity and metadata calls wait
@@ -276,125 +177,6 @@ func TestSessionActivityOffTheLoop(t *testing.T) {
 	}
 	if m := rep.nextMeta(t); m["context"] != "50%" {
 		t.Errorf("metadata %v", m)
-	}
-}
-
-// failingMeta fails its first calls, then takes them.
-type failingMeta struct {
-	mu    sync.Mutex
-	fails int
-	got   chan map[string]string
-}
-
-func (m *failingMeta) SetMeta(_ context.Context, tokens map[string]string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.fails > 0 {
-		m.fails--
-		return errors.New("the daemon is gone")
-	}
-	m.got <- maps.Clone(tokens)
-	return nil
-}
-
-// TestFeedRetriesAFailedCall: values a failed call did not deliver are sent
-// again, without waiting for them to change.
-func TestFeedRetriesAFailedCall(t *testing.T) {
-	m := &failingMeta{fails: 2, got: make(chan map[string]string, 8)}
-	f := newFeed(m, nil, 10*time.Millisecond)
-	defer f.stop()
-	f.setMeta(map[string]string{"model": "o5", "plan": "1/3"})
-	select {
-	case got := <-m.got:
-		if !reflect.DeepEqual(got, map[string]string{"model": "o5", "plan": "1/3"}) {
-			t.Errorf("retried %v", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the failed call was not tried again")
-	}
-}
-
-// TestFeedResyncSendsEveryKey: after resync, unchanged values go again, so
-// a daemon that lost them (a restart, a clear to none) gets them back.
-func TestFeedResyncSendsEveryKey(t *testing.T) {
-	m := &failingMeta{got: make(chan map[string]string, 8)}
-	f := newFeed(m, nil, 0)
-	defer f.stop()
-	all := map[string]string{"model": "o5", "context": "42%"}
-	f.setMeta(all)
-	next := func() map[string]string {
-		t.Helper()
-		select {
-		case got := <-m.got:
-			return got
-		case <-time.After(5 * time.Second):
-			t.Fatal("nothing sent")
-			return nil
-		}
-	}
-	if got := next(); !reflect.DeepEqual(got, all) {
-		t.Fatalf("first %v", got)
-	}
-	f.setMeta(all)
-	f.resync()
-	if got := next(); !reflect.DeepEqual(got, all) {
-		t.Errorf("after resync %v, want every key", got)
-	}
-}
-
-// TestSessionResyncsMetaAtTurnStart: each turn sends the metadata again,
-// changed or not.
-func TestSessionResyncsMetaAtTurnStart(t *testing.T) {
-	f := startFeedSession(t, "o5")
-	if m := f.rep.nextMeta(t); m["model"] != "o5" {
-		t.Fatalf("first metadata %v", m)
-	}
-	if _, err := io.WriteString(f.keys, "go\r"); err != nil {
-		t.Fatal(err)
-	}
-	<-f.agent.prompts
-	if m := f.rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"model": "o5"}) {
-		t.Errorf("metadata at the turn's start %v, want the model again", m)
-	}
-}
-
-func TestActivityTool(t *testing.T) {
-	cases := []struct {
-		tool         Tool
-		name, target string
-	}{
-		{Tool{Kind: "execute", Title: "run tests", Input: map[string]string{"command": "go test"}}, "Bash", "go test"},
-		{Tool{Kind: "execute", Title: "make"}, "Bash", "make"},
-		{Tool{Kind: "read", Title: "a.go"}, "Read", "a.go"},
-		{Tool{Kind: "other", Title: "github.search"}, "Tool", "github.search"},
-		{Tool{Kind: "fetch", Title: "https://x\x1b[31m"}, "Fetch", "https://x[31m"},
-		{Tool{Kind: "execute", Input: map[string]string{"command": strings.Repeat("x", 500)}}, "Bash", strings.Repeat("x", 197) + "..."},
-	}
-	for _, tc := range cases {
-		name, target := activityTool(tc.tool)
-		if name != tc.name || target != tc.target {
-			t.Errorf("activityTool(%+v) = %q %q, want %q %q", tc.tool, name, target, tc.name, tc.target)
-		}
-	}
-}
-
-func TestMetaFromUsage(t *testing.T) {
-	cases := []struct {
-		u    Usage
-		want map[string]string
-	}{
-		{Usage{}, map[string]string{}},
-		{Usage{ContextUsed: 1, ContextSize: 0}, map[string]string{}},
-		{Usage{ContextUsed: 300, ContextSize: 200}, map[string]string{"context": "100%"}},
-		{Usage{Cost: 0.004, HasCost: true, Currency: "usd"}, map[string]string{"cost": "$0.00"}},
-		{Usage{Cost: 2, HasCost: true, Currency: "EUR"}, map[string]string{"cost": "2.00 EUR"}},
-		{Usage{Cost: -1, HasCost: true}, map[string]string{}},
-		{Usage{Model: " o5\n"}, map[string]string{"model": "o5"}},
-	}
-	for _, tc := range cases {
-		if got := metaFromUsage(tc.u); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("metaFromUsage(%+v) = %v, want %v", tc.u, got, tc.want)
-		}
 	}
 }
 

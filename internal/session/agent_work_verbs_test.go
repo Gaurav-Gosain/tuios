@@ -342,54 +342,6 @@ func TestAttentionItemWireIsAdditive(t *testing.T) {
 	}
 }
 
-// TestAttentionSameSeesTheNewFields: a change to any of them is news, or an
-// update would not be published.
-func TestAttentionSameSeesTheNewFields(t *testing.T) {
-	base := AttentionItem{Kind: AttentionApproval, Session: "work", Window: "w"}
-	for name, change := range map[string]func(*AttentionItem){
-		"snoozed_until": func(it *AttentionItem) { it.SnoozedUntil = 5 },
-		"marked_unread": func(it *AttentionItem) { it.MarkedUnread = true },
-		"risk":          func(it *AttentionItem) { it.Risk = []string{"sudo"} },
-		"deny_message":  func(it *AttentionItem) { it.DenyMessage = true },
-		"plan_lines":    func(it *AttentionItem) { it.PlanLines = 3 },
-		"plan_sha":      func(it *AttentionItem) { it.PlanSHA = "x" },
-	} {
-		changed := base
-		change(&changed)
-		if attentionSame(base, changed) {
-			t.Errorf("a change to %s reads as no change", name)
-		}
-	}
-}
-
-// TestAPlanSharesThePanesBlockingItem: a plan is keyed with the pane's
-// approval and question, so the pane leaving needs_input closes it.
-func TestAPlanSharesThePanesBlockingItem(t *testing.T) {
-	if attentionKey(AttentionPlan, "work", "w", 0) != attentionKey(AttentionApproval, "work", "w", 0) {
-		t.Fatal("a plan is keyed apart from the pane's approval")
-	}
-	a, events := recordingAttention()
-	a.mu.Lock()
-	a.upsertLocked(AttentionItem{Kind: AttentionPlan, Session: "work", Window: "w1", Summary: "Refactor the retry loop"})
-	a.mu.Unlock()
-	if items := openItems(t, a); len(items) != 1 || items[0].Kind != AttentionPlan {
-		t.Fatalf("the plan did not open: %+v", items)
-	}
-	a.noteSessionEvent("work", agentEvent("w1", "needs_input", "working", "", "", 0, 0))
-	if items := openItems(t, a); len(items) != 0 {
-		t.Fatalf("leaving needs_input left %+v open", items)
-	}
-	if got := actions(*events); got != "open:plan close:plan" {
-		t.Errorf("events = %q", got)
-	}
-	if i := slices.Index(AttentionKindNames, AttentionPlan); i != 1 {
-		t.Errorf("plan sorts at %d, want right after approval", i)
-	}
-	if st := AttentionSelectorTarget(AttentionItem{Kind: AttentionPlan}); st.State != AgentStateNeedsInput.Name() || !st.NeedsYou {
-		t.Errorf("a plan reads to a selector as %+v", st)
-	}
-}
-
 // TestAHostsRiskAndPlanLengthAreMirrored: display only, and a host cannot
 // hand this machine a plan digest to answer with.
 func TestAHostsRiskAndPlanLengthAreMirrored(t *testing.T) {

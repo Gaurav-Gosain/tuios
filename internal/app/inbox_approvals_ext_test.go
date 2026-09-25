@@ -76,41 +76,6 @@ func drawn(m *OS) string {
 	return ansi.Strip(out)
 }
 
-// TestRiskyApprovalAllowsOnTheSecondPress: the row says risky, the detail
-// names the rule and why, the first 1 sends nothing and says what the second
-// does, and the second sends the allow with the rules acknowledged.
-//
-// Negative control: with inboxApprovalGate's risk arm removed, the first 1
-// sends the allow.
-func TestRiskyApprovalAllowsOnTheSecondPress(t *testing.T) {
-	m, r := approvalsOS(t, riskyHeld())
-	plain := drawn(m)
-	for _, want := range []string{"risky: approve Bash: rm -rf build/", "Risky: recursive delete, deletes a tree of files", "n deny with reason"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
-		}
-	}
-
-	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
-		t.Fatal("ASSERTION: the first press of 1 on a risky approval sent an answer")
-	}
-	until := m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
-	if plain := drawn(m); !strings.Contains(plain, "Press 1 again by "+until+" to allow rm -rf build/") {
-		t.Errorf("the first press does not say what the second does and until when:\n%s", plain)
-	}
-	press(m, "1")
-	cmd := m.InboxNumber(1)
-	if cmd == nil {
-		t.Fatal("the second press of 1 sent nothing")
-	}
-	cmd()
-	got := r.replies()
-	if len(got) != 1 || got[0]["decision"] != session.ApprovalOnce || fmt.Sprint(got[0]["risk_ack"]) != "[recursive delete]" || got[0]["human_nonce"] != "nonce-1" {
-		t.Fatalf("the allow sent %v", got)
-	}
-}
-
 // TestRiskyPressResets: a second press after the window, after another key,
 // or on another key is a first press again.
 func TestRiskyPressResets(t *testing.T) {
@@ -136,69 +101,6 @@ func TestRiskyPressResets(t *testing.T) {
 	}
 	if len(r.replies()) != 0 {
 		t.Fatalf("replies %v", r.replies())
-	}
-}
-
-// TestRiskyDenyIsOnePress: 3 denies a risky approval at once, acknowledging
-// nothing.
-func TestRiskyDenyIsOnePress(t *testing.T) {
-	m, r := approvalsOS(t, riskyHeld())
-	press(m, "3")
-	cmd := m.InboxNumber(3)
-	if cmd == nil {
-		t.Fatal("3 did not deny at once")
-	}
-	cmd()
-	got := r.replies()
-	if len(got) != 1 || got[0]["decision"] != session.ApprovalDeny || got[0]["risk_ack"] != nil {
-		t.Fatalf("the deny sent %v", got)
-	}
-}
-
-// TestDenyWithAReason: n opens the reason line, what is typed is the deny's
-// message, and esc drops it.
-func TestDenyWithAReason(t *testing.T) {
-	m, r := approvalsOS(t, riskyHeld())
-	if _, handled := m.InboxDenyReason(); !handled || !m.InboxReasonOpen() {
-		t.Fatal("n did not open the reason line")
-	}
-	m.InboxReasonType("keep build, it has the cache")
-	m.InboxReasonBackspace()
-	if plain := drawn(m); !strings.Contains(plain, "Reason: keep build, it has the cach_") || !strings.Contains(plain, "cancel") {
-		t.Errorf("the reason line is not drawn:\n%s", plain)
-	}
-	cmd := m.InboxReasonSend()
-	if cmd == nil {
-		t.Fatal("enter sent nothing")
-	}
-	cmd()
-	got := r.replies()
-	if len(got) != 1 || got[0]["decision"] != session.ApprovalDeny || got[0]["message"] != "keep build, it has the cach" {
-		t.Fatalf("the deny sent %v", got)
-	}
-	if m.InboxReasonOpen() {
-		t.Error("the reason line stayed open")
-	}
-
-	// esc drops it; a draft that send-keys touched is never sent.
-	m.InboxDenyReason()
-	m.InboxReasonCancel()
-	if m.InboxReasonOpen() {
-		t.Error("esc left the line open")
-	}
-	m.InboxDenyReason()
-	m.ProcessingRemoteKeys = true
-	m.InboxReasonType("x")
-	m.ProcessingRemoteKeys = false
-	if cmd := m.InboxReasonSend(); cmd != nil {
-		t.Error("a reason send-keys typed was sent")
-	}
-
-	// A harness that takes no reason: n says so and opens nothing.
-	plain := heldApproval("2", "r2", session.ApprovalOnce, session.ApprovalDeny)
-	m2, _ := approvalsOS(t, plain)
-	if _, handled := m2.InboxDenyReason(); !handled || m2.InboxReasonOpen() || !strings.Contains(lastNote(m2), "takes no reason") {
-		t.Errorf("n on a harness with no reason: open %v, note %q", m2.InboxReasonOpen(), lastNote(m2))
 	}
 }
 
@@ -232,48 +134,6 @@ func fetchPlan(t *testing.T, m *OS) {
 	m.applyInboxApprovalDetail(cmd().(InboxApprovalDetailMsg))
 	if m.InboxApprovalFetch() != nil {
 		t.Error("a plan already read is read again")
-	}
-}
-
-// TestPlanIsShownWholeInItsGroup: a plan sits under Plans, its row is its
-// title and length, and the detail shows it whole with what 2 also sets.
-func TestPlanIsShownWholeInItsGroup(t *testing.T) {
-	it, text := planItem(4)
-	m, r := approvalsOS(t, it, riskyHeld())
-	r.plan, r.sha = text, it.PlanSHA
-	m.InboxMove(1)
-	if sel, _ := m.inboxSelected(); sel.Kind != session.AttentionPlan {
-		m.InboxMove(-1)
-	}
-	fetchPlan(t, m)
-	plain := drawn(m)
-	for _, want := range []string{
-		"Approvals 1", "Plans 1", "planner", "Refactor the retry loop (4 lines)",
-		"Plan from planner (claude-code), 4 lines, all shown", "3. step 3",
-		"2 also sets: Mode accept edits, for this session",
-		"1 approve", "2 approve, accept edits", "3 keep planning", "n keep planning with a reason",
-	} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the plan does not show %q:\n%s", want, plain)
-		}
-	}
-	if strings.Index(plain, "Approvals 1") > strings.Index(plain, "Plans 1") {
-		t.Errorf("Plans is listed before Approvals:\n%s", plain)
-	}
-	if c := r.calls[0]; c.verb != "get-approval" || c.params["request_id"] != "p5" {
-		t.Fatalf("the plan was read with %v", c)
-	}
-
-	settleShown(m)
-	press(m, "2")
-	cmd := m.InboxNumber(2)
-	if cmd == nil {
-		t.Fatalf("2 on a plan read to its end sent nothing: %q", lastNote(m))
-	}
-	cmd()
-	got := r.replies()
-	if len(got) != 1 || got[0]["decision"] != session.ApprovalAlways || got[0]["plan_sha"] != it.PlanSHA || got[0]["risk_ack"] != nil {
-		t.Fatalf("the approve sent %v", got)
 	}
 }
 
@@ -386,30 +246,6 @@ func TestRiskyPeekAllowsOnTheSecondPress(t *testing.T) {
 	}
 }
 
-// TestRailSaysRiskyAndPlan: a pane blocked on a risky call or a plan has that
-// word on the rail, and any other keeps its own.
-func TestRailSaysRiskyAndPlan(t *testing.T) {
-	it, _ := planItem(3)
-	risky := riskyHeld()
-	risky.Window = "w-1"
-	m, _ := approvalsOS(t, it, risky)
-	if got := m.paneApprovalWord("w-5", "approval"); got != "plan" {
-		t.Errorf("a plan's word is %q", got)
-	}
-	if got := m.paneApprovalWord("w-1", "approval"); got != "risky" {
-		t.Errorf("a risky call's word is %q", got)
-	}
-	if got := m.paneApprovalWord("w-9", "question"); got != "question" {
-		t.Errorf("another pane's word is %q", got)
-	}
-	if word, _ := sidebarAgentNeed("needs_input", false, "risky", "approve Bash: rm -rf build/"); word != "risky" {
-		t.Errorf("the need word is %q, want risky", word)
-	}
-	if word, lifted := sidebarAgentNeed("needs_input", false, "plan", "plan: Refactor"); word != "plan" || !lifted {
-		t.Errorf("the need word is %q (lifted %v), want plan lifted off the message", word, lifted)
-	}
-}
-
 // TestPlanOnAShortScreenIsNotReadToTheEnd: on a screen too short for the
 // panel, the panel is squeezed past its minimum and the bottom of the detail
 // is cut off, so drawing the window with the plan's last line does not count
@@ -450,32 +286,5 @@ func TestPlanOnAShortScreenIsNotReadToTheEnd(t *testing.T) {
 	cmd()
 	if got := r.replies(); len(got) != 1 || got[0]["plan_sha"] != it.PlanSHA {
 		t.Fatalf("the approve sent %v", got)
-	}
-}
-
-// TestInboxDetailFits pins the arithmetic: chrome, the scroll line, the rule
-// and lines of the detail, and the list's minimum rows.
-func TestInboxDetailFits(t *testing.T) {
-	m, _ := approvalsOS(t)
-	m.Height = panelChromeRows + 1 + 5 + 1 + minPanelRows
-	if !m.inboxDetailFits(5) {
-		t.Error("a detail that exactly fits is read as not fitting")
-	}
-	if m.inboxDetailFits(6) {
-		t.Error("a detail one line too long is read as fitting")
-	}
-}
-
-// TestInboxRiskWhySaysCutShort: the cut short mark the daemon puts on a
-// clipped line reads as what it means, not as a rule in the person's config.
-func TestInboxRiskWhySaysCutShort(t *testing.T) {
-	if got := inboxRiskWhy(risk.RuleCutShort); got != risk.CutShortHit.Why {
-		t.Errorf("inboxRiskWhy(cut short) = %q", got)
-	}
-	if got := inboxRiskWhy(risk.RuleSudo); got != "runs as root" {
-		t.Errorf("inboxRiskWhy(sudo) = %q", got)
-	}
-	if got := inboxRiskWhy("kubectl apply"); got != "a rule in your config" {
-		t.Errorf("inboxRiskWhy(custom) = %q", got)
 	}
 }

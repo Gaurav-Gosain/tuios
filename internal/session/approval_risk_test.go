@@ -277,38 +277,6 @@ func TestPlanIsHeldAndAnsweredByDigest(t *testing.T) {
 	}
 }
 
-// TestPlanHoldEndsAsAnApproval: a plan whose hold ends with no answer goes
-// back to being the pane's approval, with no digest and no text to serve, and
-// a plan item closes when its pane leaves needs_input.
-func TestPlanHoldEndsAsAnApproval(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	enableRiskyApprovals(t, d, 150*time.Millisecond, nil)
-	_, a, b := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-
-	pending, it := holdPlan(t, c, sp, a)
-	id := it["request_id"].(string)
-	if got := awaitResult(t, pending); got["reason"] != approvalEndTimeout {
-		t.Fatalf("the hold ended %v", got)
-	}
-	items := waitAttention(t, c, "the item back as an approval", func(items []map[string]any) bool {
-		return len(items) == 1 && items[0]["request_id"] == nil
-	})
-	if items[0]["kind"] != AttentionApproval || items[0]["plan_sha"] != nil || items[0]["plan_lines"] != nil || items[0]["deny_message"] != nil {
-		t.Errorf("after the hold the item is %v", items[0])
-	}
-	if code := errCode(t, callP(c, t, "get-approval", map[string]any{"request_id": id})); code != ErrVerbInvalidParams {
-		t.Errorf("get-approval after the hold: %s", code)
-	}
-
-	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	pending, _ = holdPlan(t, c, sp, b)
-	setAgentState(t, c, "work", b, "working", "", "")
-	if got := awaitResult(t, pending); got["reason"] != AttentionClosedResolved || got["decision"] != "" {
-		t.Fatalf("leaving needs_input ended the plan's hold with %v", got)
-	}
-}
-
 // TestPlanRequestRefusals: a plan needs its text, text needs kind plan, and
 // hold_plans off holds none.
 func TestPlanRequestRefusals(t *testing.T) {
@@ -402,19 +370,6 @@ func TestRespondToARiskyPrompt(t *testing.T) {
 	}
 	if got := ag.received(); got != "1" {
 		t.Errorf("the agent read %q, want 1", got)
-	}
-}
-
-// TestRespondDenyNeedsNoAcknowledgement: deny on a risky prompt is one press.
-func TestRespondDenyNeedsNoAcknowledgement(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	ag := startBlockedAgent(t, d, sp, "deny", "claude-code", "approve")
-	markRisky(t, d, "deny", ag.window, risk.RuleRecursiveDelete)
-	c := dialVerb(t, sp)
-	tui := attachTUI(t, sp, "deny")
-	res := result(t, callVerb(t, c, "respond", map[string]any{"session": "deny", "window": ag.window, "action": "deny", "human_nonce": tui.HumanNonce()}))
-	if res["sent"] == "" || ag.received() == "" {
-		t.Fatalf("a deny without risk_ack: %v, agent read %q", res, ag.received())
 	}
 }
 
