@@ -317,3 +317,19 @@ func TestAutoReviewOffModeNothing(t *testing.T) {
 		t.Fatalf("off mode auto-opened the dialog; off means the feature is invisible")
 	}
 }
+
+func TestReviewTrustAndRunPersists(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+
+	m.openTapeReviewForDir(dir)
+	if !m.HandleTapeReviewInput("t") {
+		t.Fatalf("trust-and-run key not consumed")
+	}
+	if !m.ScriptMode {
+		t.Fatalf("ScriptMode = false, want the tape to have started")
+	}
+	if got := checkTape(t, store, dir).Status; got != trust.StatusTrusted {
+		t.Fatalf("trust status = %v after Trust and run, want trusted", got)
+	}
+}

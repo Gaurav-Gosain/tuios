@@ -201,3 +201,30 @@ func TestAbandonedGestureLeavesNoWindowFlagged(t *testing.T) {
 		})
 	}
 }
+
+// TestRestoreWorkspaceLayoutDoesNotForceCustom verifies that restoring a saved
+// layout does not mark the workspace as custom. SaveCurrentLayout runs on every
+// workspace switch, so a saved layout always exists after the first switch;
+// forcing the custom flag here previously suppressed the retile-if-not-custom
+// check permanently, disabling auto-retiling after a single round-trip.
+func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
+	m := &OS{
+		Settings: config.Global,
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders: config.Global.SharedBorders,
+		PaneGap:       config.Global.PaneGap,
+		AutoTiling:    true,
+		WorkspaceLayouts: map[int][]WindowLayout{
+			2: {{WindowID: "nonexistent", X: 0, Y: 0, Width: 10, Height: 10}},
+		},
+		WorkspaceMasterRatio: map[int]float64{},
+		WorkspaceHasCustom:   map[int]bool{},
+	}
+
+	m.RestoreWorkspaceLayout(2)
+
+	if m.WorkspaceHasCustom[2] {
+		t.Error("RestoreWorkspaceLayout must not mark a workspace custom; only MarkLayoutCustom (a real user resize) may")
+	}
+}

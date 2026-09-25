@@ -78,3 +78,16 @@ func TestKittyPassthrough_RemoteClientNeverReadsFiles(t *testing.T) {
 		t.Error("expected a local file-transfer-capable host to read files")
 	}
 }
+
+// TestSixelPassthrough_EnabledForSixelClient checks the sixel side of the same
+// routing: a sixel-capable client enables the passthrough against the routed
+// writer.
+func TestSixelPassthrough_EnabledForSixelClient(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{SixelGraphics: true, TerminalName: "foot"})
+
+	var out bytes.Buffer
+	sp := NewSixelPassthroughWithOptions(SixelPassthroughOptions{Output: &out})
+	if !sp.IsEnabled() {
+		t.Fatal("expected sixel passthrough enabled for a sixel client")
+	}
+}

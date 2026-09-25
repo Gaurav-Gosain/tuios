@@ -43,3 +43,23 @@ func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
 	}
 	return m, wins
 }
+
+// TestALonePaneZoomsWhole pins that a pane with no neighbours takes the screen.
+// There is nothing around it to lift the camera for.
+func TestALonePaneZoomsWhole(t *testing.T) {
+	m, wins := zoomPeekOS(t)
+	m.Settings.ZoomSize = 80
+	m.Settings.ZoomAnimation = false
+	only := wins[0]
+	only.X, only.Y = m.GetLeftMargin(), m.GetTopMargin()
+	only.Width, only.Height = m.GetContentWidth(), m.GetUsableHeight()
+	m.Windows = wins[:1]
+	m.FocusedWindow = 0
+
+	m.ToggleZoom()
+
+	if only.Width != m.GetContentWidth() || only.Height != m.GetUsableHeight() {
+		t.Errorf("the only pane zoomed to %dx%d, want the whole region %dx%d",
+			only.Width, only.Height, m.GetContentWidth(), m.GetUsableHeight())
+	}
+}

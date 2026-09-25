@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -70,5 +71,29 @@ func TestStartupPreferences_SkipsNonEmptySession(t *testing.T) {
 	}
 	if m.AutoTiling {
 		t.Fatal("expected tiling not to be forced onto an existing session")
+	}
+}
+
+// TestStartupPreferences_WiredToFirstResize proves the wiring: the first
+// WindowSizeMsg applies the preferences once, and a second one does not open a
+// second window.
+func TestStartupPreferences_WiredToFirstResize(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Startup.OpenDefaultWindow = true
+	cfg.Startup.Tiled = true
+	m := NewOS(OSOptions{UserConfig: cfg})
+	defer closeWindows(m)
+
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if len(m.Windows) != 1 {
+		t.Fatalf("first WindowSizeMsg should open one window, got %d", len(m.Windows))
+	}
+	if !m.AutoTiling {
+		t.Fatal("first WindowSizeMsg should have enabled tiling")
+	}
+
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if len(m.Windows) != 1 {
+		t.Fatalf("second WindowSizeMsg must not re-run startup; want 1 window, got %d", len(m.Windows))
 	}
 }

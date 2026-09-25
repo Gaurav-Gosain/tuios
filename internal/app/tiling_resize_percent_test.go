@@ -139,3 +139,22 @@ func TestPercentGuardrails(t *testing.T) {
 		t.Errorf("percent resize moved a pane with tiling off: %d", right.Width)
 	}
 }
+
+// TestHeightPercentShrinksBack sizes the bottom pane below its current share,
+// so the divider moves down and the top pane grows again.
+func TestHeightPercentShrinksBack(t *testing.T) {
+	m, top, bottom := twoPanesStacked(t)
+	usable := m.GetUsableHeight()
+
+	m.SetFocusedWindowHeightPercent(60) // move the divider up first
+	afterGrowTop := top.Height
+
+	m.SetFocusedWindowHeightPercent(40) // then move it back down
+	if top.Height <= afterGrowTop {
+		t.Errorf("top pane did not regain rows: %d -> %d", afterGrowTop, top.Height)
+	}
+	if top.Height+bottom.Height != usable {
+		t.Errorf("panes no longer fill the usable height: %d+%d = %d, want %d",
+			top.Height, bottom.Height, top.Height+bottom.Height, usable)
+	}
+}

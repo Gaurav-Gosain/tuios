@@ -357,3 +357,67 @@ func TestDotsClearTheContrastFloorOnEveryGround(t *testing.T) {
 	}
 	_ = theme.Initialize("")
 }
+
+// Moving a window moves its controls with it, with no offset recomputed
+// anywhere.
+func TestWindowButtonRectsFollowTheWindow(t *testing.T) {
+	withButtonStyle(t, config.WindowButtonStyleDots, func() {
+		win := &terminal.Window{ID: "w", X: 4, Y: 3, Width: 40, Height: 8, Workspace: 1}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
+		_, before := drawTopBorder(t, m, win, false)
+
+		win.X += 9
+		win.Y += 2
+		_, after := drawTopBorder(t, m, win, false)
+
+		for i := range before {
+			if after[i].X-before[i].X != 9 || after[i].Y-before[i].Y != 2 {
+				t.Errorf("%v moved by (%d,%d), want (9,2)",
+					after[i].Action, after[i].X-before[i].X, after[i].Y-before[i].Y)
+			}
+		}
+	})
+}
+
+// The dots are unlabelled, so hovering them is what says what they do. All
+// three reveal together, the way macOS does, and the reveal costs no width.
+func TestDotsRevealTheirSymbolsOnHover(t *testing.T) {
+	withButtonStyle(t, config.WindowButtonStyleDots, func() {
+		win := &terminal.Window{ID: "w", X: 2, Y: 1, Width: 40, Height: 8, Workspace: 1}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
+
+		idle, rects := drawTopBorder(t, m, win, false)
+		dot := []rune(m.Settings.GetWindowButtonDot())[0]
+		if strings.Count(string(idle), string(dot)) != 3 {
+			t.Fatalf("idle bar drew %q, want three %c", string(idle), dot)
+		}
+
+		if !m.WindowButtonHoverAt(rects[1].X, rects[1].Y) {
+			t.Fatal("hovering the middle control did not change the hover")
+		}
+		if !win.Dirty {
+			t.Error("the window whose controls gained the hover was not marked for redraw")
+		}
+		hovered, _ := drawTopBorder(t, m, win, false)
+		if len(hovered) != len(idle) {
+			t.Errorf("hover changed the bar from %d cells to %d", len(idle), len(hovered))
+		}
+		if strings.ContainsRune(string(hovered), dot) {
+			t.Errorf("hovered bar still shows a disc: %q", string(hovered))
+		}
+		// The circled forms, so a hovered control stays the same round shape
+		// carrying a mark rather than becoming a filled block.
+		for _, want := range []string{"\u2297", "\u2296", "\u2295"} {
+			if !strings.Contains(string(hovered), want) {
+				t.Errorf("hovered bar %q is missing %q; macOS reveals all three at once", string(hovered), want)
+			}
+		}
+
+		if !m.WindowButtonHoverAt(0, 0) {
+			t.Fatal("moving off the controls did not clear the hover")
+		}
+		if m.WindowButtonHoverActive() {
+			t.Error("the hover survived the pointer leaving")
+		}
+	})
+}

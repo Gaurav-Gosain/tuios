@@ -64,3 +64,23 @@ func TestTheHandoverSlidesBothPanes(t *testing.T) {
 		t.Error("the pane that took the zoom did not slide up")
 	}
 }
+
+// TestTheHandoverCanBeTurnedOff pins the setting, for anyone who would rather
+// the zoom stayed on the pane they put it on.
+func TestTheHandoverCanBeTurnedOff(t *testing.T) {
+	m, wins := zoomPeekOS(t)
+	m.Settings.ZoomAnimation = false
+	m.Settings.ZoomFollowsFocus = false
+	m.AutoTiling = false
+	m.FocusedWindow = 0
+
+	m.ToggleZoom()
+	m.FocusWindow(1)
+
+	if !wins[0].Zoomed {
+		t.Error("the zoom moved with the setting off")
+	}
+	if wins[1].Zoomed {
+		t.Error("the focused pane took the zoom with the setting off")
+	}
+}
