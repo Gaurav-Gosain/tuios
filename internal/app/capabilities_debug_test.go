@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// TestCapabilitiesDebugLeavesTmpAlone is the second half of item 5.
-// TUIOS_DEBUG_CAPS wrote /tmp/tuios_caps.log, one fixed name every user of the
-// machine races for and anyone can read. It belongs under the per-user state
-// directory, like every other file tuios writes.
-func TestCapabilitiesDebugLeavesTmpAlone(t *testing.T) {
+// TestCapabilitiesDebugFileIsPrivate: TUIOS_DEBUG_CAPS wrote
+// /tmp/tuios_caps.log, one fixed name every user of the machine races for and
+// anyone can read. It belongs under the per-user state directory, named per
+// client, and readable by its owner only.
+func TestCapabilitiesDebugFileIsPrivate(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
 
@@ -26,17 +26,8 @@ func TestCapabilitiesDebugLeavesTmpAlone(t *testing.T) {
 	if !strings.Contains(filepath.Base(path), ".") {
 		t.Fatalf("the file name does not separate the clients: %s", path)
 	}
-}
-
-// TestCapabilitiesDebugFileIsPrivate checks the other half of the same problem:
-// the old file was world readable and named what it holds.
-func TestCapabilitiesDebugFileIsPrivate(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
 
 	writeCapabilitiesDebug(&HostCapabilities{TerminalName: "ghostty", CellWidth: 9, CellHeight: 18})
-
-	path := capabilitiesDebugPath()
 	st, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("no capabilities log written: %v", err)
@@ -44,7 +35,6 @@ func TestCapabilitiesDebugFileIsPrivate(t *testing.T) {
 	if perm := st.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("capabilities log mode is %04o, want 0600", perm)
 	}
-
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read: %v", err)

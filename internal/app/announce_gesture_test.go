@@ -40,55 +40,51 @@ func heldPane(t *testing.T, m *OS) (told *[][2]int, wantW, wantH int) {
 	return &got, w, h
 }
 
-// TestAReleaseThatWentMissingStillEndsTheHold is the first backstop: the button
-// is up by the next maintenance tick, however the release went astray.
-func TestAReleaseThatWentMissingStillEndsTheHold(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-	told, wantW, wantH := heldPane(t, m)
-
-	// Ticks drawn while the button is still down leave the hold alone.
-	m.Update(TickerMsg(time.Now()))
-	if len(*told) != 0 {
-		t.Fatalf("a tick during the gesture told the pane %v; the hold is the whole point", *told)
-	}
-
-	// The release is claimed by something else, or never arrives at all.
-	m.pointerDown = false
-	m.Update(TickerMsg(time.Now()))
-
-	if m.announceGestureHeld {
-		t.Error("the hold survived a tick with no button held")
-	}
-	if len(*told) != 1 || (*told)[0] != [2]int{wantW, wantH} {
-		t.Errorf("the pane was told %v, want exactly one %dx%d: a hold that never ends "+
-			"is a pane that never learns its size again", *told, wantW, wantH)
-	}
-}
-
-// TestAPointerGoneSilentStillEndsTheHold is the second backstop, and the only
-// one left for the case the first cannot see: the release is lost outside the
+// TestTheGestureHoldEndsWithoutARelease covers both backstops. A tick during
+// the gesture leaves the hold alone; the tick after the release goes missing
+// ends it and tells the pane its size exactly once.
+//
+// "release lost": the button is up by the next maintenance tick, however the
+// release went astray. "pointer silent": the release is lost outside the
 // surface the events come from, so the press's "a button is down" is never
 // corrected and no further motion arrives to correct it.
-func TestAPointerGoneSilentStillEndsTheHold(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-	told, wantW, wantH := heldPane(t, m)
+func TestTheGestureHoldEndsWithoutARelease(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// during keeps the gesture alive for one tick, lose then ends it
+		// without a release.
+		during, lose func(m *OS)
+	}{
+		{
+			name:   "release lost",
+			during: func(*OS) {},
+			lose:   func(m *OS) { m.pointerDown = false },
+		},
+		{
+			name:   "pointer silent",
+			during: func(m *OS) { m.lastPointerAt = time.Now() },
+			lose:   func(m *OS) { m.lastPointerAt = time.Now().Add(-announceHoldTimeout - time.Second) },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newDeferralOS(t, 120, 40, 2)
+			told, wantW, wantH := heldPane(t, m)
 
-	// The button is still believed down and the pointer reported a moment ago,
-	// which is an ordinary pause in the middle of a drag.
-	m.lastPointerAt = time.Now()
-	m.Update(TickerMsg(time.Now()))
-	if len(*told) != 0 {
-		t.Fatalf("a pause in the middle of a drag told the pane %v, want nothing", *told)
-	}
+			tc.during(m)
+			m.Update(TickerMsg(time.Now()))
+			if len(*told) != 0 {
+				t.Fatalf("a tick during the gesture told the pane %v, want nothing", *told)
+			}
 
-	// Nothing has reported for longer than a gesture can plausibly stall.
-	m.lastPointerAt = time.Now().Add(-announceHoldTimeout - time.Second)
-	m.Update(TickerMsg(time.Now()))
-
-	if m.announceGestureHeld {
-		t.Error("the hold survived a pointer that stopped reporting altogether")
-	}
-	if len(*told) != 1 || (*told)[0] != [2]int{wantW, wantH} {
-		t.Errorf("the pane was told %v, want exactly one %dx%d", *told, wantW, wantH)
+			tc.lose(m)
+			m.Update(TickerMsg(time.Now()))
+			if m.announceGestureHeld {
+				t.Error("the hold survived the gesture")
+			}
+			if len(*told) != 1 || (*told)[0] != [2]int{wantW, wantH} {
+				t.Errorf("the pane was told %v, want exactly one %dx%d: a hold that never ends "+
+					"is a pane that never learns its size again", *told, wantW, wantH)
+			}
+		})
 	}
 }

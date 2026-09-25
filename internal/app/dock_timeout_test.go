@@ -15,9 +15,9 @@ import (
 
 // The component timeout, tested against the thing that actually breaks it.
 //
-// TestDockComponentTimeoutHidesTheCell runs `sleep 30`, one simple command, and
-// a shell execs a lone final command instead of forking it. That case passes
-// with no kill of the process group at all, so on its own it is a false green.
+// A bare `sleep 30` is one simple command, and a shell execs a lone final
+// command instead of forking it. That case passes with no kill of the process
+// group at all, so on its own it is a false green.
 // Every command below forks a child that inherits the stdout pipe, which is the
 // shape reported in issue 141 and the shape almost every real component has.
 
@@ -41,18 +41,28 @@ func awaitDockUpdate(t *testing.T, e *dockEngine, wait time.Duration, why string
 // TestDockComponentTimeoutKillsAForkedChild is issue 141. Each command here
 // leaves a child holding the stdout pipe after the shell is killed, so a read
 // that waits for EOF waits for the child, and the deadline does nothing.
+//
+// The escaped case is the child the group kill cannot reach: setsid moves it
+// into a session of its own, so the signal misses it and it goes on holding
+// the pipe. The wait grace is what ends the read there.
 func TestDockComponentTimeoutKillsAForkedChild(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out the component timeout")
 	}
-	cases := []struct{ name, command string }{
-		{"trailing_command", "sleep 30; true"},
-		{"background_job", "sleep 30 & wait"},
-		{"subshell", "(sleep 30)"},
-		{"pipeline", "sleep 30 | cat"},
+	cases := []struct{ name, command, needs string }{
+		{"trailing_command", "sleep 30; true", ""},
+		{"background_job", "sleep 30 & wait", ""},
+		{"subshell", "(sleep 30)", ""},
+		{"pipeline", "sleep 30 | cat", ""},
+		{"escaped_child", "setsid sleep 20 & wait", "setsid"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.needs != "" {
+				if _, err := exec.LookPath(tc.needs); err != nil {
+					t.Skipf("this machine has no %s", tc.needs)
+				}
+			}
 			engine := newDockEngine([]*dockComponent{{
 				Name: "custom/hang", Command: tc.command, MaxWidth: 24,
 			}})
@@ -107,32 +117,5 @@ func TestDockComponentTimeoutLeavesNoOrphan(t *testing.T) {
 		t.Fatalf("the orphaned child outlived the timeout and wrote %s", marker)
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("could not check for the orphan's marker: %v", err)
-	}
-}
-
-// TestDockComponentTimeoutSurvivesAnEscapedChild covers the child the group kill
-// cannot reach. setsid moves it into a session of its own, so the signal misses
-// it and it goes on holding the pipe. The wait grace is what ends the read.
-func TestDockComponentTimeoutSurvivesAnEscapedChild(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the component timeout")
-	}
-	if _, err := exec.LookPath("setsid"); err != nil {
-		t.Skip("this machine has no setsid, so a child cannot leave the group")
-	}
-	engine := newDockEngine([]*dockComponent{{
-		Name: "custom/escaped", Command: "setsid sleep 20 & wait", MaxWidth: 24,
-	}})
-	t.Cleanup(engine.Stop)
-	start := time.Now()
-	engine.Start()
-
-	u := awaitDockUpdate(t, engine, config.DockCustomTimeout+dockTimeoutSlack,
-		"a child that left the process group held the read open past the deadline")
-	if u.Err == "" {
-		t.Fatalf("a hung component reported success: %+v", u)
-	}
-	if elapsed := time.Since(start); elapsed > config.DockCustomTimeout+dockTimeoutSlack {
-		t.Fatalf("the timeout took %s, want about %s", elapsed, config.DockCustomTimeout)
 	}
 }
