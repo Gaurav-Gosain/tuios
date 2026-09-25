@@ -69,3 +69,11 @@ func TestMergeWillNotSupersedeAGenericLauncher(t *testing.T) {
 		}
 	}
 }
+
+func names(entries []Entry) []string {
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Name
+	}
+	return out
+}

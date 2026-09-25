@@ -15,8 +15,6 @@ import (
 
 func ownedByCurrentUser(_ os.FileInfo) bool { return true }
 
-func isGroupOrWorldWritable(_ os.FileInfo) bool { return false }
-
 func isGroupOrWorldAccessible(_ os.FileInfo) bool { return false }
 
 func hygieneReason(info os.FileInfo) (string, bool) {

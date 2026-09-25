@@ -304,3 +304,22 @@ func writeReply(w io.Writer, err error) {
 	line, _ := json.Marshal(r)
 	_, _ = w.Write(append(line, '\n'))
 }
+
+// paneArgv turns a tmux command into an argv. It returns the argv and the
+// name argv[0] is shown as, which for a login shell is "-name".
+func paneArgv(cmd []string, shell string) (path string, argv []string) {
+	switch len(cmd) {
+	case 0:
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+		base := shell
+		if i := strings.LastIndexByte(base, '/'); i >= 0 {
+			base = base[i+1:]
+		}
+		return shell, []string{"-" + base}
+	case 1:
+		return "/bin/sh", []string{"sh", "-c", cmd[0]}
+	}
+	return cmd[0], cmd
+}
