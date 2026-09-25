@@ -8,7 +8,8 @@ import (
 	"sync"
 
 	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/lexers"
+
+	"github.com/Gaurav-Gosain/tuios/internal/diffview/lexers"
 )
 
 // Limits past which a text is drawn plain rather than tokenised. chroma's
@@ -45,12 +46,13 @@ func lexerFor(path, text string) chroma.Lexer {
 		}
 		return nil
 	}
-	l := lexers.Match(name)
+	reg := lexers.Registry()
+	l := reg.Match(name)
 	if l == nil && filepath.Ext(name) == "" && strings.HasPrefix(text, "#!") {
 		first, _, _ := strings.Cut(text, "\n")
-		l = lexers.Analyse(first)
+		l = reg.Analyse(first)
 	}
-	if l == nil || l == lexers.Fallback {
+	if l == nil {
 		// A name with no extension is cached with its shebang's answer
 		// only when it had one, so a later file of the same name with a
 		// different first line is asked again.
@@ -74,7 +76,15 @@ func lexerFor(path, text string) chroma.Lexer {
 // string coloured on its later lines. A hunk starts wherever the diff does,
 // so a hunk that opens inside a comment is read as code until the comment
 // ends; that is the most a view of part of a file can do.
-func Highlight(path string, lines []string) [][]Span {
+func Highlight(path string, lines []string) (out [][]Span) {
+	// A lexer that hands text to one this build does not carry panics
+	// mid-tokenise. gen_lexers.go refuses to write such a set, and this
+	// keeps a mistake in it to a plain hunk rather than a crash.
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
 	if len(lines) == 0 {
 		return nil
 	}
@@ -97,7 +107,7 @@ func Highlight(path string, lines []string) [][]Span {
 	if err != nil {
 		return nil
 	}
-	out := make([][]Span, len(lines))
+	out = make([][]Span, len(lines))
 	line, off := 0, 0
 	for tok := it(); tok != chroma.EOF; tok = it() {
 		class := classOf(tok.Type)
