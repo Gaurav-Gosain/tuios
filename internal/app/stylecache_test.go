@@ -95,3 +95,29 @@ func BenchmarkStyleNoCacheBaseline(b *testing.B) {
 		buildCellStyle(cell, false)
 	}
 }
+
+// TestStyleCacheKeysOnUnderline checks that the underline style and colour are
+// part of the cache key. Cells that differ only there must not share an entry,
+// or the second would be drawn with the first one's underline.
+func TestStyleCacheKeysOnUnderline(t *testing.T) {
+	cache := NewStyleCache(10)
+
+	plain := &uv.Cell{Style: uv.Style{Fg: lipgloss.Color("15")}}
+	single := &uv.Cell{Style: uv.Style{Fg: lipgloss.Color("15"), Underline: uv.UnderlineSingle}}
+	curly := &uv.Cell{Style: uv.Style{Fg: lipgloss.Color("15"), Underline: uv.UnderlineCurly}}
+	coloured := &uv.Cell{Style: uv.Style{
+		Fg: lipgloss.Color("15"), Underline: uv.UnderlineCurly, UnderlineColor: lipgloss.Color("9"),
+	}}
+
+	prefixes := map[string]bool{}
+	for _, cell := range []*uv.Cell{plain, single, curly, coloured} {
+		_, prefix, _ := cache.GetWithANSI(cell, false)
+		prefixes[prefix] = true
+	}
+	if stats := cache.GetStats(); stats.Size != 4 {
+		t.Errorf("expected 4 cache entries, got %d", stats.Size)
+	}
+	if len(prefixes) != 4 {
+		t.Errorf("expected 4 distinct escapes, got %v", prefixes)
+	}
+}

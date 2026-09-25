@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -61,3 +62,95 @@ func TestPeekNeedsNoTick(t *testing.T) {
 }
 
 var _ = sessiontree.Tree{}
+
+// framePeek reads back off the rendered rail which session the terminals
+// section is showing: the peeked session's name is right-aligned in the
+// section's header, and "" is a rested frame showing the attached session.
+// Every claim below goes through this rather than through the state, because
+// the state was never what the complaint was about.
+func framePeek(t *testing.T, m *OS, tree sessiontree.Tree) string {
+	t.Helper()
+	lines := railPlain(t, m, tree)
+	h := lineOf(lines, " terminals")
+	if h < 0 {
+		t.Fatalf("no terminals header:\n%s", strings.Join(lines, "\n"))
+	}
+	for _, name := range []string{"api", "docs"} {
+		if strings.Contains(lines[h], name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// TestPeekFollowsTheHoveredRow is the table the pair rule failed. Session rows
+// are one cell tall and terminals report motion once per cell entered, so a
+// pointer crossing a row vertically lands exactly one event on it however
+// slowly it moves: the pair the old rule waited for formed only on sideways
+// wobble. The sequences marked below are the ones a user reported as "works for
+// some sessions, not others"; the last two are the same gesture reaching the
+// same row by two paths, which must agree.
+func TestPeekFollowsTheHoveredRow(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.sidebarPanelLinesForTree(tree)
+	main, api, docs := sessionRowY(t, m, "main"), sessionRowY(t, m, "api"), sessionRowY(t, m, "docs")
+	pane := -1 // a y standing for "off the band entirely"
+
+	for _, tc := range []struct {
+		name string
+		ys   []int
+		want string
+	}{
+		{"one event on a row is a peek", []int{api}, "api"},
+		{"a second event on the same row holds it", []int{api, api}, "api"},
+		{"entering sideways from the panes peeks at once", []int{pane, api}, "api"},
+
+		// Failed before: the first row committed and then kept showing while
+		// the pointer moved on, so the header named a session the hover band
+		// was no longer on.
+		{"stepping to the next row moves the preview with it", []int{pane, api, docs}, "docs"},
+		{"a fast sweep ends on the row under the pointer", []int{pane, api, docs, api}, "api"},
+
+		// Failed before: leaving the attached row armed it, so the neighbour
+		// needed a wobble to commit and the section stayed on the attached
+		// session's panes.
+		{"stepping off the attached row peeks the neighbour", []int{main, api}, "api"},
+		{"a sweep from the attached row through every session", []int{main, api, docs}, "docs"},
+
+		{"the attached row is never a peek", []int{api, main}, ""},
+		{"leaving the sessions section snaps back", []int{api, main}, ""},
+		{"leaving the band snaps back", []int{api, pane}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m.sidebarClearPeek()
+			for _, y := range tc.ys {
+				if y == pane {
+					m.SidebarMotion(m.GetRenderWidth()-2, main)
+					continue
+				}
+				m.SidebarMotion(1, y)
+			}
+			if got := framePeek(t, m, tree); got != tc.want {
+				t.Errorf("the terminals section shows %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPeekIgnoresASessionThatIsGone: peek is runtime state and the session list
+// is not, so the render must not trust a stale name.
+func TestPeekIgnoresASessionThatIsGone(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.SidebarPeek = "vanished"
+	lines := railPlain(t, m, tree)
+
+	if lineOf(lines, "no terminals") >= 0 {
+		t.Errorf("a stale peek emptied the terminals section:\n%s", strings.Join(lines, "\n"))
+	}
+	if lineOf(lines, "nvim") < 0 {
+		t.Errorf("a stale peek hid the attached session's panes:\n%s", strings.Join(lines, "\n"))
+	}
+	if shown, peeking := m.sidebarShownSession(tree.Sessions); peeking || shown != "main" {
+		t.Errorf("shown = %q peeking = %v, want main and false", shown, peeking)
+	}
+}

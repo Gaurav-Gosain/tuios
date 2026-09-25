@@ -126,3 +126,178 @@ func TestArmedScreensaverDoesNothingToTheIdleTick(t *testing.T) {
 		t.Error("an idle tick started the saver, which only its own timer may do")
 	}
 }
+
+// TestScreensaverEatsTheKeyThatDismissesIt is the whole reason the intercept
+// sits where it does.
+//
+// Someone comes back to the desk and types. The screen is showing an animation,
+// not their shell, so the first keystroke must take the animation away and go
+// no further. Letting it through means typing into a prompt nobody can see yet,
+// and with bare digits now bound to window selection that first keystroke can
+// move focus as well.
+//
+// Negative control: moving the dismissal below the getInputHandler call, or
+// deleting it, makes the handler run and this fail.
+func TestScreensaverEatsTheKeyThatDismissesIt(t *testing.T) {
+	win := newTestWindow(t, "saver-0001", 40, 10)
+	m := newTestOS(win)
+	m.UserConfig = enabledScreensaverConfig(t, 10)
+	m.screensaver.active = true
+	m.screensaver.frame = "an animation"
+
+	reached := withSpyInputHandler(t)
+
+	_, _ = m.Update(tea.KeyPressMsg{Code: '1', Text: "1"})
+
+	if *reached {
+		t.Error("the key that dismissed the saver reached the pane's input handler")
+	}
+	if m.screensaver.active {
+		t.Error("the saver is still up after a keypress")
+	}
+	if m.screensaver.frame != "" {
+		t.Error("the saver kept its frame after being dismissed")
+	}
+}
+
+// TestScreensaverEatsPointerMotionToo checks the same for the mouse, since a
+// nudged desk is the other way someone announces they are back.
+//
+// Negative control: restricting the intercept to key messages lets the motion
+// through and this fails.
+func TestScreensaverEatsPointerMotionToo(t *testing.T) {
+	win := newTestWindow(t, "saver-0002", 40, 10)
+	m := newTestOS(win)
+	m.UserConfig = enabledScreensaverConfig(t, 10)
+	m.screensaver.active = true
+	m.screensaver.frame = "an animation"
+
+	reached := withSpyInputHandler(t)
+
+	_, _ = m.Update(tea.MouseMotionMsg{})
+
+	if *reached {
+		t.Error("the pointer motion that dismissed the saver reached the input handler")
+	}
+	if m.screensaver.active {
+		t.Error("the saver is still up after pointer motion")
+	}
+}
+
+// TestInputReachesThePaneWhenTheSaverIsDown checks the intercept only eats one
+// event, so ordinary typing is untouched.
+//
+// Negative control: eating input whenever the saver is merely enabled rather
+// than actually showing makes this fail, and makes tuios unusable.
+func TestInputReachesThePaneWhenTheSaverIsDown(t *testing.T) {
+	win := newTestWindow(t, "saver-0003", 40, 10)
+	m := newTestOS(win)
+	m.UserConfig = enabledScreensaverConfig(t, 10)
+
+	reached := withSpyInputHandler(t)
+
+	_, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+
+	if !*reached {
+		t.Error("an ordinary keypress did not reach the pane")
+	}
+}
+
+// TestScreensaverDoesNotArmWhenDisabled checks the off switch reaches the
+// timer, not just the start.
+//
+// Negative control: arming regardless and checking enabled only on fire leaves
+// a timer running in every session that never wanted one.
+func TestScreensaverDoesNotArmWhenDisabled(t *testing.T) {
+	win := newTestWindow(t, "saver-0005", 40, 10)
+	m := newTestOS(win)
+	m.UserConfig = config.DefaultConfig()
+
+	if cmd := m.armScreensaver(); cmd != nil {
+		t.Error("a session with the saver switched off armed a timer")
+	}
+}
+
+// TestScreensaverRearmsWhenTheTimerFiresEarly checks the single-timer design
+// under real use: a timer armed at the first keystroke of a long typing run
+// fires while the session is still busy, and must wait out the remainder
+// rather than starting the saver over someone's hands.
+//
+// Negative control: starting the saver whenever the timer fires makes this
+// report the saver active.
+func TestScreensaverRearmsWhenTheTimerFiresEarly(t *testing.T) {
+	win := newTestWindow(t, "saver-0006", 40, 10)
+	m := newTestOS(win)
+	m.UserConfig = enabledScreensaverConfig(t, 10)
+
+	m.screensaver.armed = true
+	m.screensaver.lastInput = time.Now()
+
+	cmd := m.handleScreensaverArm()
+	if cmd == nil {
+		t.Fatal("an early timer did not re-arm")
+	}
+	if !m.screensaver.armed {
+		t.Error("the saver is not armed after an early fire")
+	}
+	if m.screensaver.active {
+		t.Error("the saver started while the session was still being typed in")
+	}
+}
+
+// TestScreensaverHoldsOffWhileAPaneIsBusy checks the promise that a saver never
+// hides a running build.
+//
+// Negative control: dropping the foreground process check starts the saver over
+// the build and this reports it active.
+func TestScreensaverHoldsOffWhileAPaneIsBusy(t *testing.T) {
+	win := newTestWindow(t, "saver-0007", 40, 10)
+	m := newTestOS(win)
+	cfg := enabledScreensaverConfig(t, 10)
+	m.UserConfig = cfg
+
+	// An agent that is working is the case a pane can report without a real
+	// child process, so it is the one a test can set.
+	win.AgentState = "working"
+	if m.screensaverMayStart(cfg.Screensaver) {
+		t.Error("the saver would have started over a working agent")
+	}
+	win.AgentState = "needs_input"
+	if m.screensaverMayStart(cfg.Screensaver) {
+		t.Error("the saver would have started over an agent waiting on the user")
+	}
+	win.AgentState = "idle"
+	if !m.screensaverMayStart(cfg.Screensaver) {
+		t.Error("the saver refused to start over an idle pane")
+	}
+
+	// And the setting that says to run anyway.
+	win.AgentState = "working"
+	yes := true
+	cfg.Screensaver.WhileBusy = &yes
+	if !m.screensaverMayStart(cfg.Screensaver) {
+		t.Error("while_busy did not override the busy check")
+	}
+}
+
+// TestScreensaverEffectNameFallsBackToRandom checks an unknown effect name in a
+// config file does not stop the saver working.
+//
+// Negative control: returning the configured name unchecked makes Lookup fail
+// and the saver never start, with nothing said about why.
+func TestScreensaverEffectNameFallsBackToRandom(t *testing.T) {
+	cfg := config.ScreensaverConfig{Effect: "not_an_effect"}
+	if got := cfg.EffectName(); got != config.ScreensaverRandomEffect {
+		t.Errorf("an unknown effect resolved to %q, want %q", got, config.ScreensaverRandomEffect)
+	}
+	name, effect, _ := screensaverEffect(config.ScreensaverRandomEffect)
+	if effect == nil {
+		t.Fatal("random resolved to no effect")
+	}
+	if _, ok := config.LookupOption("screensaver.effect"); !ok {
+		t.Fatal("screensaver.effect is not in the option registry")
+	}
+	if name == config.ScreensaverRandomEffect {
+		t.Error("random resolved to itself rather than to a real effect")
+	}
+}

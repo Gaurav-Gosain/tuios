@@ -1,0 +1,38 @@
+package app
+
+import (
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
+
+// withDockWorkspaceTabFormat saves and restores the tab-format global, which
+// is package state shared with every other test in the run.
+func withDockWorkspaceTabFormat(t *testing.T) {
+	t.Helper()
+	prev := config.Global.DockWorkspaceTabFormat
+	t.Cleanup(func() { config.Global.DockWorkspaceTabFormat = prev })
+}
+
+// The dock strip formats each tab's label through appearance.dock_workspace_tab_format.
+// A named workspace shows "{index}: {name}" once configured, which is what the
+// "name and index on every tab" request (issue #80) asked for.
+func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
+	withDockWorkspaceTabFormat(t)
+	config.Global.DockWorkspaceTabFormat = "{index}: {name}"
+
+	m := chipOS(t)
+	tabs := m.buildDockWorkspaceTabs()
+	if len(tabs) < 3 {
+		t.Fatalf("the strip drew %d tabs, want at least three", len(tabs))
+	}
+	want := map[int]string{1: "1: 1", 2: "2: review", 3: "3: 3"}
+	for _, tab := range tabs {
+		if tab.Add {
+			continue // the "+" tab is a control, not a workspace label
+		}
+		if got := want[tab.Workspace]; tab.Label != got {
+			t.Errorf("workspace %d's chip reads %q with the format on, want %q", tab.Workspace, tab.Label, got)
+		}
+	}
+}

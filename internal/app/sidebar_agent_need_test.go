@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // TestAgentMetaFromWireReusesAnUnchangedList: a state sync that moves nothing
@@ -38,5 +39,31 @@ func TestMetaKeyRulesAgreeWithTheRail(t *testing.T) {
 		if daemon := session.ValidAgentMetaKey(k); daemon != rail {
 			t.Errorf("key %q: daemon %v, rail %v", k, daemon, rail)
 		}
+	}
+}
+
+// needOS is sectionsTestOS with only the plain shell left in the attached
+// session, so every agent row on the rail is one the test put there.
+func needOS(t *testing.T) *OS {
+	t.Helper()
+	m, _ := sectionsTestOS(t, 120, 40)
+	m.Windows = m.Windows[:1]
+	return m
+}
+
+// TestAgentRowMetaIsInTheSignature: a statusline tick changes nothing but the
+// metadata, and a cache that cannot see it serves the old figure forever.
+func TestAgentRowMetaIsInTheSignature(t *testing.T) {
+	m := needOS(t)
+	m.Windows = append(m.Windows, &terminal.Window{ID: "w-agent", CustomName: "agent", AgentState: "working"})
+	base := m.sidebarSignature()
+	m.Windows[1].AgentMeta = []sessiontree.MetaToken{{Key: "context", Value: "10%"}}
+	withMeta := m.sidebarSignature()
+	if withMeta == base {
+		t.Fatal("agent metadata is not in the rail signature")
+	}
+	m.Windows[1].AgentMeta = []sessiontree.MetaToken{{Key: "context", Value: "11%"}}
+	if m.sidebarSignature() == withMeta {
+		t.Error("a changed metadata value is not in the rail signature")
 	}
 }

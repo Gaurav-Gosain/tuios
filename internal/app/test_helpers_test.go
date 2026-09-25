@@ -2,6 +2,9 @@ package app
 
 import (
 	"fmt"
+	"image/color"
+	"strconv"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -10,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -327,4 +331,260 @@ func callCounts(told map[string]*toldSize) map[string]int {
 		counts[id] = rec.calls
 	}
 	return counts
+}
+
+// ctxMenuOS builds an OS sized to a screen with one visible window filling the
+// left half, one minimized window, and a registry, which between them can reach
+// every context menu target.
+func ctxMenuOS(t *testing.T, w, h int) *OS {
+	t.Helper()
+	m := newNarrowOS(t, w, h)
+	m.Windows = []*terminal.Window{
+		{ID: "a", CustomName: "editor", X: 0, Y: 0, Width: max(w/2, 10), Height: max(h-2, 4), Workspace: 1},
+		{ID: "b", CustomName: "logs", Width: 20, Height: 10, Workspace: 1, Minimized: true},
+	}
+	m.CurrentWorkspace, m.FocusedWindow = 1, 0
+	return m
+}
+
+// withDim turns the dim on for one test, with a theme so there is a ground to
+// carry toward.
+func withDim(t *testing.T, percent int) {
+	t.Helper()
+	prevDim := config.Global.DimUnfocused
+	prevTheme := theme.CurrentThemeID()
+	config.Global.DimUnfocused = percent
+	_ = theme.Initialize("catppuccin_mocha")
+	t.Cleanup(func() {
+		config.Global.DimUnfocused = prevDim
+		_ = theme.Initialize(prevTheme)
+	})
+}
+
+// dockCrowdedOS is a session with named workspaces and minimized panes, which
+// is the state the bar has to ration: the strip wants the left region, the
+// meters want the right, and the entries are what is left in the middle.
+func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
+	t.Helper()
+	m := &OS{
+		Settings:         config.Global,
+		WorkspaceFocus:   map[int]int{},
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		Width:            width,
+		Height:           30,
+		FocusedWindow:    -1,
+	}
+	names := []string{"editor", "server", "logs", "notes", "build", "review"}
+	m.WorkspaceNames = map[int]string{}
+	for ws := 1; ws <= workspaces; ws++ {
+		win := newTestWindow(t, fmt.Sprintf("ws%d", ws), 40, 12)
+		win.Workspace = ws
+		m.Windows = append(m.Windows, win)
+		// Named workspaces are what make the strip wide enough to be worth
+		// rationing, which is the state the audit captured.
+		m.WorkspaceNames[ws] = names[(ws-1)%len(names)]
+	}
+	for i := range minimized {
+		win := newTestWindow(t, fmt.Sprintf("min%d", i), 40, 12)
+		win.Workspace = 1
+		win.CustomName = fmt.Sprintf("min%d", i)
+		win.Minimized = true
+		win.MinimizeOrder = int64(i + 1)
+		m.Windows = append(m.Windows, win)
+	}
+	return m
+}
+
+// chipOS is a dock with three occupied workspaces, the middle one named.
+func chipOS(t *testing.T) *OS {
+	t.Helper()
+	m := newNarrowOS(t, 140, 30)
+	m.NumWorkspaces = 9
+	m.CurrentWorkspace = 1
+	m.Windows = []*terminal.Window{
+		{ID: "w1", Width: 40, Height: 10, Workspace: 1},
+		{ID: "w2", Width: 40, Height: 10, Workspace: 2},
+		{ID: "w3", Width: 40, Height: 10, Workspace: 3},
+	}
+	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
+	prev := m.Settings.DockWorkspaceTabs
+	m.Settings.DockWorkspaceTabs = true
+	t.Cleanup(func() { m.Settings.DockWorkspaceTabs = prev })
+	return m
+}
+
+// pillOS is a dock w columns wide with one window per listed workspace and the
+// given names applied.
+//
+// ASCII glyphs are on throughout: every icon on the bar is then one cell, so a
+// rune index into the drawn row is a screen column and a test can compare a
+// recorded rectangle against the cells that were actually painted in it.
+func pillOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
+	t.Helper()
+	prevTabs, prevASCII := config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly
+	config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly = true, true
+	t.Cleanup(func() { config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly = prevTabs, prevASCII })
+
+	m := newNarrowOS(t, w, 30)
+	m.NumWorkspaces = 9
+	m.CurrentWorkspace = workspaces[0]
+	m.Windows = make([]*terminal.Window, 0, len(workspaces))
+	for i, ws := range workspaces {
+		m.Windows = append(m.Windows, &terminal.Window{
+			ID: "pill-" + strconv.Itoa(i), Width: 40, Height: 10, Workspace: ws,
+		})
+	}
+	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: names})
+	return m
+}
+
+// dockBarRow renders the dock and returns its bar row as plain text, asserting
+// the row measures one cell per rune so the caller may index it by column.
+func dockBarRow(t *testing.T, m *OS) string {
+	t.Helper()
+	dock, _ := m.renderDockString()
+	rows := strings.Split(stripANSIForTrace(dock), "\n")
+	row := rows[len(rows)-1]
+	if m.Settings.DockbarPosition == "top" {
+		row = rows[0]
+	}
+	if lipgloss.Width(row) != len([]rune(row)) {
+		t.Fatalf("the bar row is %d cells over %d runes, so a column is not a rune here",
+			lipgloss.Width(row), len([]rune(row)))
+	}
+	return row
+}
+
+// renderSettingsHit renders the settings panel and records its hit geometry the
+// way renderOverlays would, so the mouse routing can be exercised in a test.
+func (m *OS) renderSettingsHit() {
+	m.reconcileOverlayZOrder()
+	content, geo, rows := m.renderSettings()
+	_ = content
+	x, y := m.overlayOrigin("settings", geo)
+	m.OverlayHits = []overlayPanelHit{{Kind: "settings", OriginX: x, OriginY: y, Z: m.overlayZ("settings"), Geo: geo, Rows: rows}}
+}
+
+func (m *OS) settingsHit() overlayPanelHit { return m.OverlayHits[0] }
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
+}
+
+// railPlain renders the rail and strips the styling, which is what most of the
+// claims below are about: where a row landed, not how it was painted.
+func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
+	t.Helper()
+	lines, _ := m.sidebarPanelLinesForTree(tree)
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = stripANSIForTrace(l)
+	}
+	return out
+}
+
+// lineOf returns the index of the first rendered line containing want, or -1.
+func lineOf(lines []string, want string) int {
+	for i, l := range lines {
+		if strings.Contains(l, want) {
+			return i
+		}
+	}
+	return -1
+}
+
+func fgParams(c color.Color) string {
+	// Rendered rather than formatted: a palette index leaves as SGR 3x or 9x,
+	// and only a literal colour leaves as 38;2.
+	rendered := lipgloss.NewStyle().Foreground(c).Render("X")
+	return strings.TrimSuffix(strings.TrimPrefix(rendered[:strings.Index(rendered, "X")], "\x1b["), "m")
+}
+
+// newSwitchOS builds a client with panes spread over two workspaces, each pane
+// carrying a recorder for the sizes its PTY is told.
+func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS, map[string]*toldSize) {
+	t.Helper()
+	m := &OS{
+		Settings: config.Global,
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]WindowLayout),
+		WorkspaceHasCustom:   map[int]bool{},
+		WorkspaceMasterRatio: map[int]float64{},
+		Width:                width,
+		Height:               height,
+		AutoTiling:           true,
+		UseBSPLayout:         true,
+		PendingResizes:       make(map[string][2]int),
+	}
+	told := make(map[string]*toldSize)
+	for ws := 1; ws <= 2; ws++ {
+		for i := range perWorkspace[ws] {
+			id := fmt.Sprintf("ws%d-pane-%d", ws, i+1)
+			win, rec := newAnnounceWindow(t, id, 60, 20)
+			win.Workspace = ws
+			told[id] = rec
+			m.Windows = append(m.Windows, win)
+		}
+	}
+	m.FocusedWindow = 0
+	return m, told
+}
+
+// screenText reads the guest's visible grid as text.
+func screenText(w *terminal.Window) string {
+	w.RLockIO()
+	defer w.RUnlockIO()
+	out := ""
+	for y := range w.Terminal.Height() {
+		for x := range w.Terminal.Width() {
+			cell := w.Terminal.CellAt(x, y)
+			if cell == nil || cell.String() == "" {
+				out += " "
+				continue
+			}
+			out += cell.String()
+		}
+		out += "\n"
+	}
+	return out
+}
+
+// zoomPeekOS is four panes in a two by two split, which is the layout that makes
+// the anchoring visible: each pane has a neighbour on exactly two sides.
+func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
+	t.Helper()
+	prev := config.Global
+	t.Cleanup(func() { config.Global = prev })
+
+	var wins []*terminal.Window
+	for i := range 4 {
+		w := newTestWindow(t, string(rune('a'+i))+"0000000000000000000000000000000", 40, 20)
+		w.Workspace = 1
+		wins = append(wins, w)
+	}
+	// Top left, top right, bottom left, bottom right of a 120x40 region.
+	wins[0].X, wins[0].Y, wins[0].Width, wins[0].Height = 0, 0, 60, 20
+	wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height = 60, 0, 60, 20
+	wins[2].X, wins[2].Y, wins[2].Width, wins[2].Height = 0, 20, 60, 20
+	wins[3].X, wins[3].Y, wins[3].Width, wins[3].Height = 60, 20, 60, 20
+
+	m := &OS{
+		Settings:         config.Global,
+		Windows:          wins,
+		FocusedWindow:    0,
+		WorkspaceFocus:   map[int]int{},
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		Width:            120,
+		Height:           40,
+		PendingResizes:   map[string][2]int{},
+	}
+	return m, wins
 }

@@ -161,3 +161,85 @@ func TestAutoReviewOffModeNothing(t *testing.T) {
 		t.Fatalf("off mode auto-opened the dialog; off means the feature is invisible")
 	}
 }
+
+func TestReviewNeverDenies(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	m.openTapeReviewForDir(dir)
+	if !m.HandleTapeReviewInput("n") {
+		t.Fatalf("never key not consumed")
+	}
+	if m.ScriptMode {
+		t.Fatalf("ScriptMode = true, want Never to run nothing")
+	}
+	if got := checkTape(t, store, dir).Status; got != trust.StatusDenied {
+		t.Fatalf("trust status = %v after Never, want denied", got)
+	}
+	if _, active := m.tapeIndicatorStatus(); active {
+		t.Fatalf("indicator still active after Never; a denied path shows nothing")
+	}
+}
+
+func TestReviewNotNowDismisses(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	m.openTapeReviewForDir(dir)
+	if !m.HandleTapeReviewInput("esc") {
+		t.Fatalf("not-now key not consumed")
+	}
+	if m.ShowTapeReview {
+		t.Fatalf("dialog still open after Not now")
+	}
+	if m.ScriptMode {
+		t.Fatalf("ScriptMode = true, want Not now to run nothing")
+	}
+	if got := checkTape(t, store, dir).Status; got != trust.StatusUntrusted {
+		t.Fatalf("trust status = %v after Not now, want still untrusted", got)
+	}
+}
+
+func TestReviewTrustedTapeRunsAndRevokes(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+	res := checkTape(t, store, dir)
+	if err := store.Trust(res.Path, res.Hash); err != nil {
+		t.Fatalf("trust: %v", err)
+	}
+
+	// Run a trusted tape with 'r'.
+	m.openTapeReviewForDir(dir)
+	if m.TapeReview.Status != trust.StatusTrusted {
+		t.Fatalf("status = %v, want trusted", m.TapeReview.Status)
+	}
+	if !m.HandleTapeReviewInput("r") || !m.ScriptMode {
+		t.Fatalf("trusted Run did not start the tape")
+	}
+
+	// Revoke with 'n'.
+	m.ScriptMode = false
+	m.openTapeReviewForDir(dir)
+	if !m.HandleTapeReviewInput("n") {
+		t.Fatalf("revoke key not consumed")
+	}
+	if got := checkTape(t, store, dir).Status; got != trust.StatusUntrusted {
+		t.Fatalf("status = %v after revoke, want untrusted", got)
+	}
+}
+
+func TestReviewTrustAndRunPersists(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+
+	m.openTapeReviewForDir(dir)
+	if !m.HandleTapeReviewInput("t") {
+		t.Fatalf("trust-and-run key not consumed")
+	}
+	if !m.ScriptMode {
+		t.Fatalf("ScriptMode = false, want the tape to have started")
+	}
+	if got := checkTape(t, store, dir).Status; got != trust.StatusTrusted {
+		t.Fatalf("trust status = %v after Trust and run, want trusted", got)
+	}
+}

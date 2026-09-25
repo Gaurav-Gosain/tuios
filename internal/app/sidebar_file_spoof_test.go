@@ -275,3 +275,25 @@ func TestWalkingIntoAFolderDoesNotLaunderASpoofedOne(t *testing.T) {
 		t.Fatal("the file actions came back one folder down")
 	}
 }
+
+// TestAnHonestPaneKeepsItsFileActions is the other half: a local pane whose
+// shell really is where it says keeps everything.
+func TestAnHonestPaneKeepsItsFileActions(t *testing.T) {
+	_, victim, bait := spoofDirs(t)
+	m := spoofPane(t, victim, victim)
+
+	if m.FileViewSpoofed() {
+		t.Fatal("a pane telling the truth was called a liar")
+	}
+	if !m.FileActionsOn() {
+		t.Fatal("a pane telling the truth lost its file actions")
+	}
+	if !cursorToFile(m, "keepme.txt") {
+		t.Fatalf("no row for keepme.txt; the listing drew %v", entryNames(m))
+	}
+	m.SidebarFileDelete(true)
+	runOp(t, m, m.FileConfirmActivate(fileConfirmRowGo))
+	if _, err := os.Lstat(bait); err == nil {
+		t.Fatal("an honest pane could not delete a file")
+	}
+}
