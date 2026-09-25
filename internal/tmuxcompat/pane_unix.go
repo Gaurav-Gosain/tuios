@@ -274,7 +274,7 @@ func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall) {
 			return
 		}
 		go func() {
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 			line, err := bufio.NewReader(io.LimitReader(conn, 1<<20)).ReadBytes('\n')
 			if err != nil {

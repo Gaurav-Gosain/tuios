@@ -178,7 +178,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 			continue
 		}
 		matched = true
-		s.ApplyAgentReport(winID, AgentReport{
+		_, _, _ = s.ApplyAgentReport(winID, AgentReport{ // a refusal is a normal outcome here
 			State:       v.state,
 			Message:     v.message,
 			Kind:        v.kind,
@@ -220,7 +220,9 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		}
 		return true
 	}
-	s.ApplyAgentReport(winID, AgentReport{
+	// A refusal (outranked, unchanged, a claim held) is the normal outcome of
+	// a passive scan, and the scan has nothing to report it to.
+	_, _, _ = s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentStateIdle,
 		Message:     v.message,
 		Source:      v.source,

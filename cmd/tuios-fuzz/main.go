@@ -109,7 +109,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }() // best-effort cleanup of a temp dir
 
 	actions, err := loadReplay(o)
 	if err != nil {

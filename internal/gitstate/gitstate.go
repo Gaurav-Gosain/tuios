@@ -265,7 +265,7 @@ func resolveRef(gitdir, commondir, ref string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := sc.Text()
@@ -290,7 +290,7 @@ func upstreamOf(commondir, branch string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
 
 	want := `[branch "` + branch + `"]`
 	inSection := false

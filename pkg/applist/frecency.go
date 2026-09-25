@@ -193,13 +193,13 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	name := tmp.Name()
-	defer os.Remove(name) // no-op once the rename succeeded
+	defer func() { _ = os.Remove(name) }() // no-op once the rename succeeded
 	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the write already failed; that error is the one to return
 		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the write already failed; that error is the one to return
 		return err
 	}
 	if err := tmp.Close(); err != nil {

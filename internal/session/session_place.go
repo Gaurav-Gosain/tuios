@@ -216,7 +216,7 @@ func readFirstLine(path string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
 	data, err := io.ReadAll(io.LimitReader(f, gitHeadLimit))
 	if err != nil {
 		return ""

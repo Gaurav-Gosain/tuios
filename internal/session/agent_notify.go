@@ -87,7 +87,9 @@ func (s *Session) applyAgentNotify(ptyID string, n paneNotification, reg *harnes
 	if AgentState(state) != AgentStateIdle {
 		s.idle.cancel(winID)
 	}
-	s.ApplyAgentReport(winID, AgentReport{
+	// A refusal (outranked, unchanged, a claim held) is the normal outcome of
+	// a passive scan, and the scan has nothing to report it to.
+	_, _, _ = s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentState(state),
 		Message:     reg.NotifyRuleMessage(hid, rule, text),
 		Kind:        reg.NotifyRuleKind(hid, rule),

@@ -247,7 +247,7 @@ func loadIcon(finder *applist.IconFinder, name string, w, h int) *image.RGBA {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
 	src, _, err := image.Decode(f)
 	if err != nil {
 		return nil

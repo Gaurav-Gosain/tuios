@@ -54,7 +54,7 @@ func RequestRespawn(dir, windowID string, req RespawnRequest) error {
 	if err != nil {
 		return fmt.Errorf("pane %s was not opened through the tmux shim, so it has no holder to respawn it", PaneID(windowID))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 	req.Window = windowID
 	line, err := json.Marshal(req)

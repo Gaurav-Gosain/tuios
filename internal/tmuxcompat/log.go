@@ -102,6 +102,7 @@ func (l *Logger) Record(argv []string, outcome string, detail []string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	// The log is best effort: a failed write or close has nowhere to go.
 	_, _ = f.Write(append(line, '\n'))
+	_ = f.Close()
 }

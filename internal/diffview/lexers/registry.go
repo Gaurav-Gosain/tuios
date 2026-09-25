@@ -62,7 +62,7 @@ func (g gzipFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
 	zr, err := gzip.NewReader(f)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}

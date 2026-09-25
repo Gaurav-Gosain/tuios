@@ -103,7 +103,9 @@ func (t *clipboardTool) Write(text string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	go cmd.Wait() // reap the keeper so it does not linger as a zombie
+	// Reap the keeper so it does not linger as a zombie. Its exit status
+	// says nothing about the copy, which Start already handed over.
+	go func() { _ = cmd.Wait() }()
 	return nil
 }
 

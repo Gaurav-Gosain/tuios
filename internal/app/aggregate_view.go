@@ -100,7 +100,9 @@ func (m *OS) AggregateViewJump(i int) {
 func (m *OS) JumpToAggregateViewItem(item AggregateViewItem) {
 	// Switch workspace if needed
 	if item.Workspace != m.CurrentWorkspace {
-		m.SwitchWorkspace(item.Workspace)
+		if err := m.SwitchWorkspace(item.Workspace); err != nil {
+			return
+		}
 	}
 
 	// Restore if minimized
