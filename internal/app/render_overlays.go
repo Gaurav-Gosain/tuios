@@ -601,14 +601,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		maxKeyLen := 0
 		maxDescLen := 0
 		for _, binding := range bindings {
-			if len(binding.Key) > maxKeyLen {
-				maxKeyLen = len(binding.Key)
-			}
-			if len(binding.Description) > maxDescLen {
-				maxDescLen = len(binding.Description)
-			}
+			// Cells, not bytes: an arrow is three bytes and one cell, and
+			// counting bytes pushed "Focus pane in a direction" out of the
+			// description column and every other row past it.
+			maxKeyLen = max(maxKeyLen, lipgloss.Width(binding.Key))
+			maxDescLen = max(maxDescLen, lipgloss.Width(binding.Description))
 		}
-		contentWidth := max(maxKeyLen+2+maxDescLen, len(title))
+		contentWidth := max(maxKeyLen+2+maxDescLen, lipgloss.Width(title))
 		// The overlay carries two cells of padding on each side and sits two
 		// cells in from the screen edge, so it can ask for at most that much
 		// less than the screen. Descriptions are cut to whatever is left; the
@@ -636,7 +635,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		for _, binding := range bindings {
 			line := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(binding.Key) +
-				overlay.Style(bg).Render(strings.Repeat(" ", maxKeyLen-len(binding.Key)+2)) +
+				overlay.Style(bg).Render(strings.Repeat(" ", max(maxKeyLen-lipgloss.Width(binding.Key), 0)+2)) +
 				overlay.Style(bg).Foreground(pal.FgDim).Render(truncateString(binding.Description, descWidth))
 			styledLines = append(styledLines, padLine(line, contentWidth))
 		}
