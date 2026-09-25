@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
