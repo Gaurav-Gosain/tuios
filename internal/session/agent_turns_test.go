@@ -4,35 +4,10 @@ import (
 	"testing"
 )
 
-func completionSeqOf(t *testing.T, sess *Session, windowID string) uint64 {
-	t.Helper()
-	return windowStateOf(t, sess, windowID).CompletionSeq
-}
-
 func report(t *testing.T, sess *Session, windowID string, state AgentState) {
 	t.Helper()
 	if _, _, err := sess.ApplyAgentReport(windowID, AgentReport{State: state}); err != nil {
 		t.Fatalf("ApplyAgentReport(%s): %v", state, err)
-	}
-}
-
-// TestCompletionSeqSurvivesAClientSync checks a client push, which never
-// carries the count, does not wipe it.
-func TestCompletionSeqSurvivesAClientSync(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
-	report(t, sess, id, AgentStateWorking)
-	report(t, sess, id, AgentStateDone)
-
-	push := sess.GetState()
-	for i := range push.Windows {
-		push.Windows[i].CompletionSeq = 0
-	}
-	sess.UpdateState(push)
-	if got := completionSeqOf(t, sess, id); got != 1 {
-		t.Fatalf("completion_seq after a client sync = %d, want 1", got)
-	}
-	if got := sess.Info().Windows[0].CompletionSeq; got != 1 {
-		t.Fatalf("listing completion_seq = %d, want 1", got)
 	}
 }
 

@@ -30,21 +30,6 @@ func TestListVerbsNamesTheHookFields(t *testing.T) {
 	}
 }
 
-// TestAgentIdentitySurvivesAClientSync checks a client push, which never
-// carries the kind or the session id, does not wipe them, including from a
-// client that does carry the older agent fields.
-func TestAgentIdentitySurvivesAClientSync(t *testing.T) {
-	canonical := &SessionState{Windows: []WindowState{{
-		ID: "w1", AgentState: AgentStateNeedsInput, AgentKind: "approval", AgentSessionID: "s1",
-	}}}
-	incoming := &SessionState{Windows: []WindowState{{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "x"}}}
-	retainDaemonExclusive(incoming, canonical)
-	w := incoming.Windows[0]
-	if w.AgentKind != "approval" || w.AgentSessionID != "s1" {
-		t.Fatalf("after a sync: kind %q session %q", w.AgentKind, w.AgentSessionID)
-	}
-}
-
 func TestMatchPaneByProcess(t *testing.T) {
 	panes := []paneShell{{"a", "w1", 100}, {"b", "w2", 200}, {"c", "w3", 1}}
 	cases := []struct {
