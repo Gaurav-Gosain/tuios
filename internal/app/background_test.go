@@ -389,6 +389,12 @@ func TestBackgroundsAndTheFullscreenFastPath(t *testing.T) {
 // Every background off has to cost nothing per frame beyond the comparisons
 // that find it off: no allocation.
 func TestBackgroundsOffAllocateNothing(t *testing.T) {
+	if raceEnabled {
+		// A colour setting is checked by config.IsHexColor, a regexp match,
+		// and regexp keeps its matchers in a sync.Pool that -race empties at
+		// random. The cached path allocates once a run there and never here.
+		t.Skip("allocation counts are not meaningful under -race")
+	}
 	withTheme(t, "catppuccin_mocha")
 	m := paneBgOS(t, "")
 	if n := testing.AllocsPerRun(100, func() {
