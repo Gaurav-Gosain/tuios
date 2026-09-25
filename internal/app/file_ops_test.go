@@ -1,8 +1,11 @@
 package app
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -208,6 +211,34 @@ func TestRenameEntryRefusesAnExistingDestination(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(dir, "from.txt")); err != nil {
 		t.Errorf("the source went missing after a refused rename: %v", err)
+	}
+}
+
+// TestRenameEntryOnAVanishedTargetSaysSo covers the ordinary race: the listing
+// is a snapshot, and the file it named can be gone by the time the prompt is
+// answered.
+func TestRenameEntryOnAVanishedTargetSaysSo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := renameEntry(dir, "never-existed.txt", "next.txt")
+	if err == nil {
+		t.Fatal("renaming a missing file was allowed")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the error was %v, want a not-exist error", err)
+	}
+	if got := fileOpError(err); !strings.Contains(got, "gone") || !strings.Contains(got, "out of date") {
+		t.Errorf("the message is %q; it must say the file is gone and the list is stale", got)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "next.txt")); err == nil {
+		t.Error("a failed rename created the destination anyway")
+	}
+
+	// And it stays "gone" when the destination name is taken: the source is
+	// what the user pointed at, so the source is what the message is about.
+	mustWrite(t, filepath.Join(dir, "taken.txt"), "taken")
+	_, err = renameEntry(dir, "never-existed.txt", "taken.txt")
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("renaming a missing file onto a taken name reported %v, want a not-exist error", err)
 	}
 }
 

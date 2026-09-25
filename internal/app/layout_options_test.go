@@ -83,3 +83,49 @@ func TestAnUnsaidColumnWidthLeavesThisClientAlone(t *testing.T) {
 		t.Errorf("column width is %d after adopting a state that never mentioned it, want 70", m.ScrollColumnWidth)
 	}
 }
+
+// The row must not report a value the layout is not using. The ratio moves
+// underneath it, which is why it reads the model rather than the config, and
+// why it rounds rather than truncating: 0.5 plus 0.05 is 55%, not 54%.
+func TestMasterRatioRowReadsTheModelRatio(t *testing.T) {
+	m := modeOS(t, LayoutModeMasterStack, false, 0, 2, 160, 40)
+	m.MasterRatio = 0.5
+	m.MasterRatio += 0.05
+	m.TileAllWindows()
+	if got := m.MasterRatioPercent(); got != 55 {
+		t.Errorf("the row reads %d%% with the ratio at %.2f", got, m.MasterRatio)
+	}
+}
+
+// A workspace nobody has tiled yet has no remembered master ratio, and what it
+// falls back to has to be the ratio in force rather than a literal half.
+//
+// NEGATIVE CONTROL: with the fallback back at 0.5, switching to a workspace for
+// the first time takes a 70% split to 50% and leaves it there. The setting
+// reads as ignored, and a ratio the resize keys had moved is thrown away.
+func TestAFreshWorkspaceStartsAtTheConfiguredMasterRatio(t *testing.T) {
+	prev := config.Global.MasterRatioPercent
+	t.Cleanup(func() { config.Global.MasterRatioPercent = prev })
+	config.Global.MasterRatioPercent = 70
+
+	m := modeOS(t, LayoutModeMasterStack, false, 0, 4, 160, 40)
+	m.MasterRatio = 0.7
+	m.Windows[2].Workspace = 2
+	m.Windows[3].Workspace = 2
+	m.TileAllWindows()
+
+	m.SwitchToWorkspace(2)
+	if got := m.MasterRatioPercent(); got != 70 {
+		t.Errorf("the first visit to workspace 2 put the master ratio at %d%%, want the configured 70%%", got)
+	}
+
+	// A workspace that was left at its own ratio keeps it, which is the half of
+	// the behaviour the fallback must not trample.
+	m.MasterRatio = 0.5
+	m.TileAllWindows()
+	m.SwitchToWorkspace(1)
+	m.SwitchToWorkspace(2)
+	if got := m.MasterRatioPercent(); got != 50 {
+		t.Errorf("workspace 2 came back at %d%%, want the 50%% it was left at", got)
+	}
+}

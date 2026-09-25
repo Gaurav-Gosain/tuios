@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -327,4 +328,102 @@ func callCounts(told map[string]*toldSize) map[string]int {
 		counts[id] = rec.calls
 	}
 	return counts
+}
+
+// hostCapture stands in for the terminal on the far end of the render stream.
+type hostCapture struct{ b strings.Builder }
+
+func (h *hostCapture) Write(p []byte) (int, error) { return h.b.Write(p) }
+
+// captureHost points the client's raw host writes at a buffer.
+func captureHost(t *testing.T, m *OS) *hostCapture {
+	t.Helper()
+	h := &hostCapture{}
+	m.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: h})
+	return h
+}
+
+// hostRailText is the rail's rows joined into one block, so an assertion can
+// talk about the order rows appear in as well as their content.
+func hostRailText(t *testing.T, m *OS) string {
+	t.Helper()
+	return strings.Join(railLines(t, m), "\n")
+}
+
+// hostHeader is the text a machine's header row starts with: the fold mark
+// and the name, as the active glyph set draws them.
+func hostHeader(m *OS, name string, collapsed bool) string {
+	mark := m.Settings.GetRailFoldOpenGlyph()
+	if collapsed {
+		mark = m.Settings.GetRailFoldShutGlyph()
+	}
+	return mark + " " + name
+}
+
+// closeWindows tears down the real PTYs spawned by AddWindow so a test does not
+// leak shell processes.
+func closeWindows(m *OS) {
+	for _, w := range m.Windows {
+		w.Close()
+	}
+}
+
+// isUnderlined reports whether any SGR sequence in s sets the underline
+// attribute. The parameters arrive merged with the colours, so the sequence is
+// parsed rather than matched as a literal.
+func isUnderlined(s string) bool {
+	for _, seq := range strings.Split(s, "\x1b[") {
+		end := strings.IndexByte(seq, 'm')
+		if end < 0 {
+			continue
+		}
+		params := strings.Split(seq[:end], ";")
+		for i := 0; i < len(params); i++ {
+			// A colour carries its channels as parameters of its own, and one of
+			// them may well be a 4.
+			if p := params[i]; p == "38" || p == "48" {
+				if i+1 < len(params) && params[i+1] == "5" {
+					i += 2
+					continue
+				}
+				i += 4
+				continue
+			}
+			if params[i] == "4" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sidebarMultiSessionOS builds an OS attached to "main" with agent-flagged
+// windows and the sidebar on, plus a synthetic three-session tree the way a
+// daemon-backed client would see one. The tree order is the daemon's creation
+// order: main, scratch, deploy.
+func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
+	t.Helper()
+	m := newNarrowOS(t, w, h)
+	m.CurrentWorkspace = 1
+	m.SessionName = "main"
+	m.Windows = []*terminal.Window{
+		{ID: "aaaaaaaa1111", CustomName: "claude", Width: 40, Height: 20, Workspace: 1, AgentState: "working"},
+		{ID: "bbbbbbbb2222", CustomName: "tests", Width: 40, Height: 20, Workspace: 1, AgentState: "needs_input"},
+		{ID: "cccccccc3333", CustomName: "logs", Width: 40, Height: 20, Workspace: 1},
+	}
+	m.FocusedWindow = 0
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
+	m.SidebarOrder = nil
+
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "claude", AgentState: "working", Focused: true},
+			{ID: "bbbbbbbb2222", Title: "tests", AgentState: "needs_input"},
+			{ID: "cccccccc3333", Title: "logs"},
+		}},
+		{Name: "scratch", WindowCount: 2},
+		{Name: "deploy", WindowCount: 1},
+	})
+	return m, tree
 }

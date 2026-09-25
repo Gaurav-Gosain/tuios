@@ -80,6 +80,63 @@ func (h *openAnimHarness) createWindow(t *testing.T) []*ui.Animation {
 	return anims
 }
 
+func (h *openAnimHarness) newestWindowAnim(t *testing.T, anims []*ui.Animation) *ui.Animation {
+	t.Helper()
+	newest := h.m.Windows[len(h.m.Windows)-1]
+	for _, a := range anims {
+		if a.Window == newest {
+			return a
+		}
+	}
+	t.Fatalf("no animation armed for the pane that was just created")
+	return nil
+}
+
+// TestOpenAnimationGrowsFromItsOwnTile pins the reported bug: a pane created in
+// tiling mode used to animate in from a half-screen box parked at the middle of
+// the screen, whose top-left corner sits up and to the left of any tile but the
+// middle one, so a new pane read as flying in from the corner and shrinking.
+// It must instead grow outward from inside the tile it is about to fill.
+func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarness(120, 40)
+
+	for i := 1; i <= 4; i++ {
+		anims := h.createWindow(t)
+		anim := h.newestWindowAnim(t, anims)
+
+		if anim.StartX < anim.EndX || anim.StartY < anim.EndY ||
+			anim.StartX+anim.StartWidth > anim.EndX+anim.EndWidth ||
+			anim.StartY+anim.StartHeight > anim.EndY+anim.EndHeight {
+			t.Errorf("pane %d opens from (%d,%d %dx%d), which is not inside its tile (%d,%d %dx%d)",
+				i, anim.StartX, anim.StartY, anim.StartWidth, anim.StartHeight,
+				anim.EndX, anim.EndY, anim.EndWidth, anim.EndHeight)
+		}
+
+		// Centred on the tile, to within the odd cell integer division leaves.
+		startCX := 2*anim.StartX + anim.StartWidth
+		startCY := 2*anim.StartY + anim.StartHeight
+		endCX := 2*anim.EndX + anim.EndWidth
+		endCY := 2*anim.EndY + anim.EndHeight
+		if diff := startCX - endCX; diff > 1 || diff < -1 {
+			t.Errorf("pane %d opens off-centre horizontally: start centre %d, tile centre %d (half-cells)",
+				i, startCX, endCX)
+		}
+		if diff := startCY - endCY; diff > 1 || diff < -1 {
+			t.Errorf("pane %d opens off-centre vertically: start centre %d, tile centre %d (half-cells)",
+				i, startCY, endCY)
+		}
+
+		if anim.StartWidth >= anim.EndWidth && anim.StartHeight >= anim.EndHeight {
+			t.Errorf("pane %d does not grow: start %dx%d, tile %dx%d",
+				i, anim.StartWidth, anim.StartHeight, anim.EndWidth, anim.EndHeight)
+		}
+	}
+}
+
 // TestRepeatCreationSyncLeavesAPlacedPaneAlone is the second half of the bug,
 // and the half that kept it on screen after the start rectangle was already
 // right. The daemon re-broadcasts the creating state after a following mutation,
@@ -135,5 +192,111 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 				a.StartX, a.StartY, a.StartWidth, a.StartHeight,
 				a.EndX, a.EndY, a.EndWidth, a.EndHeight)
 		}
+	}
+}
+
+// TestOpenStartRectFloor covers the tile too small to shrink into: the start box
+// never goes below the size a minimize travels down to, and never exceeds the
+// tile, so a caller comparing the two can tell there is nothing to animate.
+func TestOpenStartRectFloor(t *testing.T) {
+	cases := []struct {
+		name string
+		rect layout.Rect
+	}{
+		{"ordinary tile", layout.Rect{X: 10, Y: 4, W: 60, H: 20}},
+		{"one column short of the floor", layout.Rect{X: 0, Y: 0, W: ui.MinAnimatedWidth - 1, H: 20}},
+		{"at the floor", layout.Rect{X: 3, Y: 3, W: ui.MinAnimatedWidth, H: ui.MinAnimatedHeight}},
+		{"degenerate", layout.Rect{X: 1, Y: 1, W: 0, H: 0}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			x, y, w, h := openStartRect(tc.rect)
+			if w > tc.rect.W || h > tc.rect.H {
+				t.Errorf("start box %dx%d exceeds the tile %dx%d", w, h, tc.rect.W, tc.rect.H)
+			}
+			if w < min(ui.MinAnimatedWidth, tc.rect.W) || h < min(ui.MinAnimatedHeight, tc.rect.H) {
+				t.Errorf("start box %dx%d is below the floor", w, h)
+			}
+			if x < tc.rect.X || y < tc.rect.Y ||
+				x+w > tc.rect.X+tc.rect.W || y+h > tc.rect.Y+tc.rect.H {
+				t.Errorf("start box (%d,%d %dx%d) is not inside the tile %+v", x, y, w, h, tc.rect)
+			}
+		})
+	}
+}
+
+// TestOpenAnimationPlaysUnderMasterStack pins that a new pane grows into its
+// slot under the master-stack layout too.
+//
+// Only the BSP branch armed one. The other tiled branch placed every pane
+// outright, so opening a pane under master-stack was a jump cut while the same
+// pane under BSP bloomed into place.
+func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarnessWithLayout(120, 40, false)
+
+	for i := 1; i <= 3; i++ {
+		anims := h.createWindow(t)
+		anim := h.newestWindowAnim(t, anims)
+
+		if anim.StartX < anim.EndX || anim.StartY < anim.EndY ||
+			anim.StartX+anim.StartWidth > anim.EndX+anim.EndWidth ||
+			anim.StartY+anim.StartHeight > anim.EndY+anim.EndHeight {
+			t.Errorf("pane %d opens from (%d,%d %dx%d), which is not inside its slot (%d,%d %dx%d)",
+				i, anim.StartX, anim.StartY, anim.StartWidth, anim.StartHeight,
+				anim.EndX, anim.EndY, anim.EndWidth, anim.EndHeight)
+		}
+		if anim.StartWidth >= anim.EndWidth && anim.StartHeight >= anim.EndHeight {
+			t.Errorf("pane %d does not grow: start %dx%d, slot %dx%d",
+				i, anim.StartWidth, anim.StartHeight, anim.EndWidth, anim.EndHeight)
+		}
+	}
+}
+
+// TestMasterStackAnimatesThePanesThatMove pins the other half: a retile moves
+// the panes the layout moved and nothing else.
+//
+// The opening pane is not the only one that animates, and never was under BSP.
+// Opening a pane takes room from the panes already there, and those panes go
+// somewhere new: sliding one and cutting the rest is a worse frame than either
+// sliding all of them or cutting all of them. What must not animate is a retile
+// that moved nothing, or the layout would be in motion whenever anything at all
+// happened.
+func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarnessWithLayout(120, 40, false)
+	for i := 1; i <= 3; i++ {
+		anims := h.createWindow(t)
+		if len(anims) == 0 {
+			t.Errorf("creating pane %d armed nothing, so it appeared in one frame", i)
+			continue
+		}
+		// The pane that opened is among them, and so is anything that had to
+		// give it room.
+		newest := h.m.Windows[len(h.m.Windows)-1]
+		var sawNewest bool
+		for _, a := range anims {
+			if a.Window == newest {
+				sawNewest = true
+			}
+		}
+		if !sawNewest {
+			t.Errorf("creating pane %d did not animate the pane that opened", i)
+		}
+	}
+
+	// A retile that moves nothing arms nothing at all.
+	h.m.CompleteAllAnimations()
+	h.m.Animations = nil
+	h.m.TileAllWindows()
+	if len(h.m.Animations) != 0 {
+		t.Errorf("a retile that moved nothing armed %d animations", len(h.m.Animations))
 	}
 }

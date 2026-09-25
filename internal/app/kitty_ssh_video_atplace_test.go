@@ -281,6 +281,29 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	}
 }
 
+// TestRemoteVideoCountsInHasPlacements proves a self-placed video image makes
+// HasPlacements report true, so the render loop keeps running its passes
+// (RefreshAllPlacements, which clears the image when the browser quits, and the
+// overlay hide) even though the image is not in `placements`.
+func TestRemoteVideoCountsInHasPlacements(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
+		t.Fatal("video never placed")
+	}
+	if !kp.HasPlacements() {
+		t.Fatal("HasPlacements is false with a live self-placed video image; the render loop would stop refreshing it")
+	}
+}
+
 // TestOverlayHidesAndRestoresRemoteVideo proves an overlay deletes the video
 // image and drops incoming frames, then the stream re-places it when the overlay
 // closes.

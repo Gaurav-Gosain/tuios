@@ -31,6 +31,74 @@ func filterOS(t *testing.T) *OS {
 	return o
 }
 
+// TestMotionFilterPassesRailHover is the second gate the rail's hover has to
+// clear. The view asks the host for all-motion tracking so hover has events to
+// work with; this whitelist decides which of them reach Update at all, and a
+// motion it drops is a hover that never happens. Terminal mode is pinned
+// alongside window management because that is where hover looked broken.
+func TestMotionFilterPassesRailHover(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		mode Mode
+	}{
+		{"window management", WindowManagementMode},
+		{"terminal", TerminalMode},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			o := filterOS(t)
+			o.Mode = mode.mode
+
+			// Deep inside the rail band, well below the rows, where the footer
+			// controls live.
+			onRail := tea.MouseMotionMsg{X: 3, Y: 35}
+			if FilterMouseMotion(o, onRail) == nil {
+				t.Error("motion over the rail was dropped; nothing downstream can hover")
+			}
+
+			// The pane keeps the CPU guard when nothing out there hovers. Link
+			// hover is the one thing that does, so the guard is now conditional
+			// on it rather than absolute: with appearance.links off, a plain
+			// shell asked for no mouse mode, tuios draws no hover out there, and
+			// that motion is noise exactly as it always was.
+			o.Settings.Links = config.LinksOff
+
+			offRail := tea.MouseMotionMsg{X: 50, Y: 10}
+			if FilterMouseMotion(o, offRail) != nil {
+				t.Error("motion over a plain pane was passed; the guard is what keeps a mouse sweep cheap")
+			}
+		})
+	}
+}
+
+// TestMotionFilterPassesTheBandExitEvent pins the event the rail's hover peek
+// snaps back on. The peek owns no clock: it is cleared by the first motion that
+// resolves off the sessions rows, and when the pointer leaves the band
+// altogether the only motion that can carry that is the one extra event
+// SidebarHoverActive keeps flowing. Drop it here and a preview outlives the
+// pointer that made it, with nothing left to take it down.
+func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
+	o := filterOS(t)
+	o.Mode = TerminalMode
+
+	// Links off, so the rail's own clause is the only thing that can pass this
+	// event and the assertions below are about it and nothing else.
+	o.Settings.Links = config.LinksOff
+
+	// The pointer is in the band and hovering, then steps out over a plain pane.
+	o.SidebarHoverActive = true
+	exit := tea.MouseMotionMsg{X: 50, Y: 10}
+	if FilterMouseMotion(o, exit) == nil {
+		t.Fatal("the band-exit event was dropped; the peek and the hover highlight both outlive the pointer")
+	}
+
+	// And once it has been delivered the guard closes again: the handler clears
+	// HoverActive, so the next event over the same pane is noise once more.
+	o.SidebarHoverActive = false
+	if FilterMouseMotion(o, exit) != nil {
+		t.Error("motion over a plain pane stayed whitelisted after the exit event")
+	}
+}
+
 // TestMotionFilterPassesPaneContentForLinks is the other half of the clause the
 // two tests above now qualify. A link under the pointer is drawn by the pane
 // itself, so unlike every other hover in tuios its target is not a rectangle the
@@ -92,6 +160,70 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	o.LastMouseX, o.LastMouseY = linkX, linkY
 	if FilterMouseMotion(o, tea.MouseMotionMsg{X: linkX, Y: linkY}) != nil {
 		t.Error("a motion that changed no cell was passed")
+	}
+}
+
+// TestMotionFilterPassesACtrlDragGrab. A ctrl-click on pane content arms a grab
+// that becomes a drag once the pointer moves far enough, and only motion can
+// commit it. Nothing is dragging yet, so the drag clause does not cover it, and
+// it used to reach Update only because every motion over content did.
+//
+// Negative control: remove the CtrlDragPending clause and this fails.
+func TestMotionFilterPassesACtrlDragGrab(t *testing.T) {
+	o := filterOS(t)
+	o.Settings.Links = config.LinksOff
+	over := tea.MouseMotionMsg{X: 50, Y: 10, Mod: tea.ModCtrl}
+	if FilterMouseMotion(o, over) != nil {
+		t.Fatal("motion over plain content passed with no grab armed")
+	}
+	o.CtrlDragPending = true
+	if FilterMouseMotion(o, over) == nil {
+		t.Error("motion was dropped with a ctrl-drag grab armed; the drag can never commit")
+	}
+}
+
+// TestMotionFilterFeedsZenMouseMode. The mouse variant of zen mode reveals the
+// borders while the pointer moves and reads the clock of the last motion that
+// reached Update, so it has to see motion, over chrome as much as over a pane.
+//
+// Negative control: remove the zen clause and this fails.
+func TestMotionFilterFeedsZenMouseMode(t *testing.T) {
+	o := filterOS(t)
+	o.Settings.Links = config.LinksOff
+	// A pane's border: chrome no other clause claims.
+	overChrome := tea.MouseMotionMsg{X: 31, Y: 10}
+	if FilterMouseMotion(o, overChrome) != nil {
+		t.Fatal("motion over chrome passed with zen off; the CPU guard is gone")
+	}
+	o.Settings.ZenMode = config.ZenModeMouse
+	if FilterMouseMotion(o, overChrome) == nil {
+		t.Error("motion was dropped under zen = mouse; the borders can never reveal")
+	}
+	o.LastMouseX, o.LastMouseY = overChrome.X, overChrome.Y
+	if FilterMouseMotion(o, overChrome) != nil {
+		t.Error("a motion inside the same cell passed under zen = mouse")
+	}
+}
+
+// TestMotionFilterRecordsThePointerItDrops. A floating pane spawns at the
+// pointer, and the pointer is wherever the host last said it was, not where the
+// last motion that reached Update happened to be. The filter sees every motion,
+// so it is the one place that can keep that current.
+//
+// Negative control: remove the NotePointerSeen call and this fails.
+func TestMotionFilterRecordsThePointerItDrops(t *testing.T) {
+	o := filterOS(t)
+	o.Settings.Links = config.LinksOff
+	o.AutoTiling = false
+	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 70, Y: 12}) != nil {
+		t.Fatal("the motion was not dropped, so this proves nothing")
+	}
+	if x, y := o.PointerSeen(); x != 70 || y != 12 {
+		t.Fatalf("PointerSeen = (%d,%d) after a dropped motion at (70,12)", x, y)
+	}
+	x, y, _, _ := o.NewWindowPlacement()
+	if x != 70 || y != 12 {
+		t.Errorf("a floating pane would spawn at (%d,%d), not at the pointer (70,12)", x, y)
 	}
 }
 

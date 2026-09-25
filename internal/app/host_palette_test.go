@@ -3,7 +3,9 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // A palette index cannot say what colour it is: only the terminal drawing it
@@ -76,5 +78,49 @@ func TestASilentTerminalKeepsTheFallback(t *testing.T) {
 	got := hostPalette(&caps, fallback)
 	if got != fallback {
 		t.Error("a silent terminal replaced the fallback palette")
+	}
+}
+
+// TestTheHostPaletteWinsOverTheGuess pins what the whole probe is for.
+func TestTheHostPaletteWinsOverTheGuess(t *testing.T) {
+	fallback := shot.XTermPalette()
+	navy := fallback.ANSI[4]
+
+	var caps HostCapabilities
+	parseHostPalette(&caps, "\x1b]4;4;rgb:3b3b/7878/ffff\x1b\\")
+	got := hostPalette(&caps, fallback)
+
+	if got.ANSI[4] == navy {
+		t.Error("index 4 is still the xterm navy: the host's answer was ignored")
+	}
+	if want := shot.RGB(0x3b, 0x78, 0xff); got.ANSI[4] != want {
+		t.Errorf("index 4 is %v, want the host's %v", got.ANSI[4], want)
+	}
+	// And the slots the host did not mention keep the fallback rather than
+	// going black.
+	if got.ANSI[2] != fallback.ANSI[2] {
+		t.Errorf("index 2 changed to %v without the host saying anything about it", got.ANSI[2])
+	}
+}
+
+// TestAnUnthemedCaptureAsksTheHost is the wiring, and the bug as the user met
+// it: with no theme every colour in the frame is a palette index, the capture
+// guessed them with the xterm defaults, and the screen saver redrew the screen
+// in colours the terminal had never shown.
+func TestAnUnthemedCaptureAsksTheHost(t *testing.T) {
+	if _, warn := capture.Palette(theme.CurrentThemeID()); warn == "" {
+		t.Skip("a theme is active in this run, so the capture does not have to guess")
+	}
+
+	caps := &HostCapabilities{}
+	parseHostPalette(caps, "\x1b]4;4;rgb:3b3b/7878/ffff\x1b\\")
+	m := &OS{Caps: caps}
+
+	got := m.shotPalette()
+	if want := shot.RGB(0x3b, 0x78, 0xff); got.ANSI[4] != want {
+		t.Errorf("the capture resolved index 4 to %v, want the host's %v", got.ANSI[4], want)
+	}
+	if got.ANSI[4] == shot.XTermPalette().ANSI[4] {
+		t.Error("index 4 is still the xterm navy: the capture never asked the host")
 	}
 }

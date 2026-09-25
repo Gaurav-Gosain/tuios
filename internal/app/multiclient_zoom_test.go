@@ -274,6 +274,102 @@ func TestUnzoomOutsideTilingRestoresTheRectangle(t *testing.T) {
 	}
 }
 
+// focusElsewhere points a client's focus at some pane other than the zoomed one
+// without telling anybody, which is the state every reader that used to ask
+// GetFocusedWindow().Zoomed got wrong.
+//
+// It is not a contrived state. Focus travels in the same broadcast the zoom
+// does and a client applies the two a step apart; a client sitting in its
+// sidebar has no focused pane at all; and a client whose focused id is not in
+// the list it was handed holds -1. Each of those is a frame in which "is the
+// focused pane zoomed" answers no while a pane is zoomed.
+func focusElsewhere(t *testing.T, m *OS, zoomPTY string) {
+	t.Helper()
+	for i, w := range m.Windows {
+		if w.PTYID != zoomPTY {
+			m.FocusedWindow = i
+			m.MarkAllDirty()
+			return
+		}
+	}
+	t.Fatal("there is no other pane to focus")
+}
+
+// TestAPeersZoomIsDrawnWhoeverIsFocused is the render half of the same
+// question. B holds the zoom flag for a pane it is not focused on, which is what
+// a shared zoom looks like for the moment between two broadcasts, and it still
+// has to draw that pane over everything.
+//
+// NEGATIVE CONTROL: measured. Putting render.go back on
+// GetFocusedWindow().Zoomed fails it with B drawing the whole tiled layout
+// (HIDDEN beside ZOOMED) underneath a pane that is covering the box
+// on every other client.
+func TestAPeersZoomIsDrawnWhoeverIsFocused(t *testing.T) {
+	r, p, ex := twoClientsOnOneTiledSession(t)
+	zoomPTY, _ := nameZoomPanes(t, r, ex)
+
+	r.m.FocusedWindow = 0
+	r.m.ToggleZoom()
+	r.m.SyncStateToDaemon()
+	ex.settle(60, 300*time.Millisecond)
+
+	focusElsewhere(t, p.m, zoomPTY)
+	fb := paneFrame(p.m)
+	t.Logf("B's frame while zoomed, focused on the other pane:\n%s", fb)
+	if !strings.Contains(fb, "ZOOMED") {
+		t.Fatalf("B stopped drawing the zoomed pane when its focus moved:\n%s", fb)
+	}
+	if strings.Contains(fb, "HIDDEN") {
+		t.Fatalf("B drew the tiled layout underneath a pane the session has zoomed:\n%s", fb)
+	}
+
+	// The other shape of the same moment: a client with nothing focused at all,
+	// which is what a sidebar has the focus or a focused id that is not in the
+	// list leaves behind.
+	p.m.FocusedWindow = -1
+	p.m.MarkAllDirty()
+	fb = paneFrame(p.m)
+	if !strings.Contains(fb, "ZOOMED") || strings.Contains(fb, "HIDDEN") {
+		t.Fatalf("B with nothing focused stopped drawing the zoom:\n%s", fb)
+	}
+}
+
+// TestNoDividersAcrossAPeersZoom is the same question for the shared borders.
+// The divider grid is drawn from the tiling splits, which are still there
+// behind a zoom, so the overlay has to be told a zoom is up, and it has to be
+// told by the session rather than by this client's focus.
+//
+// NEGATIVE CONTROL: measured. Putting renderSeparatorOverlay back on
+// GetFocusedWindow().Zoomed fails it with a divider column drawn down the middle
+// of the zoomed pane.
+func TestNoDividersAcrossAPeersZoom(t *testing.T) {
+	r, p, ex := clientsOnOneTiledSession(t, 2, true)
+	zoomPTY, _ := nameZoomPanes(t, r, ex)
+
+	// The dividers are there to begin with, or the test asserts nothing.
+	focusElsewhere(t, p.m, zoomPTY)
+	if n := len(p.m.renderSeparatorOverlay()); n == 0 {
+		t.Fatalf("this session draws no dividers, so there is nothing to keep off the zoom")
+	} else {
+		t.Logf("tiled, B draws %d divider layers", n)
+	}
+
+	r.m.FocusedWindow = 0
+	r.m.ToggleZoom()
+	r.m.SyncStateToDaemon()
+	ex.settle(60, 300*time.Millisecond)
+
+	focusElsewhere(t, p.m, zoomPTY)
+	if n := len(p.m.renderSeparatorOverlay()); n != 0 {
+		t.Fatalf("B drew %d divider layers across a pane the session has zoomed", n)
+	}
+	fb := paneFrame(p.m)
+	t.Logf("B's frame while zoomed, shared borders on:\n%s", fb)
+	if strings.Contains(fb, "│") {
+		t.Fatalf("B drew a divider across the zoomed pane:\n%s", fb)
+	}
+}
+
 // TestZoomOfTheOnlyPaneStillTravels is the case where the flag is the entire
 // news. One pane on a workspace already fills the box, so zooming it moves
 // nothing: the rectangle before and the rectangle after are the same numbers,
