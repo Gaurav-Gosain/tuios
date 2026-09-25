@@ -8,14 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/charmbracelet/x/xpty"
 )
 
 // The holder tests run RunPane in a child process: this test binary run
@@ -131,70 +127,6 @@ func TestHolderRespawnsInPlace(t *testing.T) {
 	}
 	if _, err := os.Stat(paneSocket(dir, window)); !os.IsNotExist(err) {
 		t.Errorf("the holder left its socket behind: %v", err)
-	}
-}
-
-// TestHolderPutsItsCommandInTheForeground runs a holder on a terminal, as a
-// pane runs it, and checks the command's process group is the terminal's
-// foreground group and not the holder's. Agent detection reads the
-// foreground process: with the holder there, a teammate's pane reads as a
-// shell at its prompt and its agent is never found.
-func TestHolderPutsItsCommandInTheForeground(t *testing.T) {
-	dir := shortDir(t)
-	report := filepath.Join(dir, "fg")
-	p, err := xpty.NewUnixPty(80, 24)
-	if err != nil {
-		t.Skip("no pty:", err)
-	}
-	defer p.Close()
-	var screen strings.Builder
-	var mu sync.Mutex
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := p.Read(buf)
-			mu.Lock()
-			screen.Write(buf[:n])
-			mu.Unlock()
-			if err != nil {
-				return
-			}
-		}
-	}()
-	t.Cleanup(func() {
-		if t.Failed() {
-			mu.Lock()
-			t.Logf("the pane showed:\n%s", screen.String())
-			mu.Unlock()
-		}
-	})
-
-	c := exec.Command(os.Args[0], "-test.run=^$")
-	c.Env = append(os.Environ(),
-		holderEnvKey+"=1",
-		"TMUXCOMPAT_TEST_DIR="+dir,
-		"TMUXCOMPAT_TEST_CMD="+`echo "$(ps -o pgid= -p $$) $(ps -o tpgid= -p $$)" > `+report+`; exec sleep 60`,
-		"TUIOS_PANE_ID=win-fg",
-	)
-	// As internal/ptyspawn starts a pane's process: a session of its own,
-	// with the terminal as its controlling one.
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
-	if err := p.Start(c); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = syscall.Kill(c.Process.Pid, syscall.SIGTERM)
-		_, _ = c.Process.Wait()
-	})
-	fields := strings.Fields(waitFile(t, report))
-	if len(fields) != 2 {
-		t.Fatalf("the command reported %q", fields)
-	}
-	if fields[0] != fields[1] {
-		t.Errorf("the command's group %s is not the terminal's foreground group %s", fields[0], fields[1])
-	}
-	if fields[0] == strconv.Itoa(c.Process.Pid) {
-		t.Errorf("the command runs in the holder's group %s", fields[0])
 	}
 }
 

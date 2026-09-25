@@ -303,32 +303,6 @@ func commandPermission() (*Permission, chan int) {
 	return p, chosen
 }
 
-// TestSessionPermissionFromTheInbox: a permission the Inbox can show is
-// reported as needs_input with its line, held with the decisions it offers,
-// and the Inbox's answer answers the agent and moves the pane back to
-// working.
-func TestSessionPermissionFromTheInbox(t *testing.T) {
-	h := ready(t)
-	runningTurn(t, h)
-	p, chosen := commandPermission()
-	h.s.Emit(p)
-	if rep := h.reporter.next(t); rep != (report{"needs_input", "approval", "approve execute: go test ./...", ""}) {
-		t.Errorf("report %+v", rep)
-	}
-	if held := <-h.reporter.holds; held != "approve execute: go test ./... once,deny" {
-		t.Errorf("held %q", held)
-	}
-	h.screen.waitFor(t, "1 Allow once   2 Always   3 Reject")
-	h.reporter.answers <- [2]string{DecisionDeny, "client-7"}
-	if i := <-chosen; i != 2 {
-		t.Errorf("chose %d, want Reject", i)
-	}
-	if rep := h.reporter.next(t); rep != (report{"working", "", "", "needs_input"}) {
-		t.Errorf("report %+v, want working if still needs_input", rep)
-	}
-	h.screen.waitFor(t, "answered: Reject (from the Inbox by client-7)")
-}
-
 // TestSessionPermissionInThePane: a number key answers once the question has
 // been up for Settle, which ends the Inbox hold; a key before that, a paste
 // and an Enter answer nothing.

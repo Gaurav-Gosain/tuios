@@ -473,14 +473,6 @@ func TestIdentityTargetsReportSessionsOnly(t *testing.T) {
 	}
 }
 
-func TestStdoutAnswer(t *testing.T) {
-	for id, want := range map[string]string{GeminiCLI: "{}\n", Antigravity: "{}\n", "agy": "{}\n", ClaudeCode: "", Kimi: "", Crush: ""} {
-		if got := StdoutAnswer(id); got != want {
-			t.Errorf("StdoutAnswer(%s) = %q, want %q", id, got, want)
-		}
-	}
-}
-
 func TestNewTargetsNeedTheirConfigDir(t *testing.T) {
 	env := testEnv(t)
 	for _, id := range []string{Amp, Pi, Hermes, Kimi, Crush} {

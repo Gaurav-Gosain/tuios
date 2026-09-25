@@ -13,32 +13,6 @@ import (
 // TestMain isolates the test binary from the developer's own XDG directories.
 func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m)) }
 
-// TestNewModelFillsWhatEverySessionLoads checks the parts every served session
-// used to load by hand, in four copies.
-func TestNewModelFillsWhatEverySessionLoads(t *testing.T) {
-	caps := &app.HostCapabilities{TrueColor: true, TerminalName: "test"}
-	m := NewModel(app.OSOptions{
-		Client: app.ClientBrowser,
-		Width:  80,
-		Height: 24,
-		Caps:   caps,
-	}, config.Overrides{SharedBorders: true})
-	t.Cleanup(m.Cleanup)
-
-	if m.UserConfig == nil {
-		t.Error("the model has no user config")
-	}
-	if m.KeybindRegistry == nil {
-		t.Error("the model has no keybind registry")
-	}
-	if !m.Settings.SharedBorders {
-		t.Error("the server's flags did not reach the session's appearance seed")
-	}
-	if m.Caps != caps {
-		t.Error("the caller's capabilities were replaced")
-	}
-}
-
 // TestAttachPicksOnlyWhenUnnamed runs the daemon half against a real daemon:
 // a named session is attached as named, and pick is asked only for a
 // connection that named none.

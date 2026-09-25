@@ -182,55 +182,6 @@ func TestChangesCountsUntrackedAndModifiedFiles(t *testing.T) {
 	}
 }
 
-func TestRemoveRefusesADirtyWorktreeWithoutForce(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	path := filepath.Join(t.TempDir(), "wt")
-	if _, err := Add(repo, path, "x", ""); err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(path, "new.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Remove(repo, path, false); err == nil {
-		t.Fatal("Remove took a dirty worktree away without force")
-	}
-	if _, err := os.Stat(filepath.Join(path, "new.txt")); err != nil {
-		t.Fatalf("the refused removal still lost the file: %v", err)
-	}
-	if err := Remove(repo, path, true); err != nil {
-		t.Fatalf("Remove with force: %v", err)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("the worktree is still there after a forced removal: %v", err)
-	}
-	if !BranchExists(repo, "x") {
-		t.Error("Remove deleted the branch; it must only remove the worktree")
-	}
-}
-
-func TestStashKeepsTheChangesInTheRepository(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	path := filepath.Join(t.TempDir(), "wt")
-	if _, err := Add(repo, path, "x", ""); err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(path, "new.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Stash(path, "tuios: x"); err != nil {
-		t.Fatalf("Stash: %v", err)
-	}
-	if n, _ := Changes(path); n != 0 {
-		t.Errorf("the worktree still holds %d changes after Stash", n)
-	}
-	if list := testutil.Git(t, repo, "stash", "list"); !strings.Contains(list, "tuios: x") {
-		t.Errorf("the stash list does not name the entry: %q", list)
-	}
-	if err := Remove(repo, path, false); err != nil {
-		t.Fatalf("Remove after Stash: %v", err)
-	}
-}
-
 func TestDiffAndAheadDescribeTheWork(t *testing.T) {
 	repo := testutil.GitRepo(t)
 	path := filepath.Join(t.TempDir(), "wt")

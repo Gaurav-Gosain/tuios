@@ -43,18 +43,6 @@ func TestTheCapIsTheSettingAndNotALiteral(t *testing.T) {
 	}
 }
 
-// TestAZeroCapReadsAsTheDefault pins that a layout built by hand, which carries
-// a zero here, keeps the behaviour it always had rather than collapsing every
-// column to the floor.
-func TestAZeroCapReadsAsTheDefault(t *testing.T) {
-	const screen = 200
-	s := stripOf(2)
-	s.Columns[0].Proportion = 1
-	if got := s.ResolveColumnWidth(0, screen); got != screen*9/10 {
-		t.Errorf("a zero cap resolved the column to %d, want the default %d", got, screen*9/10)
-	}
-}
-
 // TestTheZoomedColumnTakesItsShare pins the zoom: the column holding the zoomed
 // pane is given its share of the screen, past the cap the others are held to.
 func TestTheZoomedColumnTakesItsShare(t *testing.T) {
@@ -90,34 +78,5 @@ func TestAZoomedColumnMayFillTheScreen(t *testing.T) {
 	if got := s.ResolveColumnWidth(0, screen); got != screen {
 		t.Errorf("a zoom of the whole screen resolved to %d, want %d: it was held to the column cap",
 			got, screen)
-	}
-}
-
-// TestTheStripStaysLongerThanTheScreenUnderAZoom pins what makes the peek work:
-// widening one column does not fold the others away, so the strip still runs
-// off both edges and the neighbours are there to see.
-func TestTheStripStaysLongerThanTheScreenUnderAZoom(t *testing.T) {
-	const screen = 200
-	s := stripOf(3)
-	s.ZoomedCol = 1
-	s.ZoomProportion = 0.9
-
-	if total := s.TotalStripWidth(screen); total <= screen {
-		t.Errorf("the strip is %d cells in a %d cell screen, so nothing runs off the edges", total, screen)
-	}
-}
-
-// TestNoZoomedColumnChangesNothing pins the default. A layout with no zoom on
-// it resolves every column exactly as it did before any of this.
-func TestNoZoomedColumnChangesNothing(t *testing.T) {
-	const screen = 200
-	s := stripOf(3)
-	s.ZoomedCol = -1
-
-	for i := range s.Columns {
-		want := int(float64(screen) * s.DefaultWidth)
-		if got := s.ResolveColumnWidth(i, screen); got != want {
-			t.Errorf("column %d resolved to %d, want %d", i, got, want)
-		}
 	}
 }

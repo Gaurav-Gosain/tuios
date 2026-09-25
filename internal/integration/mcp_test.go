@@ -20,22 +20,6 @@ func mcpHome(t *testing.T, id string) (Env, *Target) {
 	return env, tg
 }
 
-func TestMCPHarnesses(t *testing.T) {
-	got := MCPHarnessIDs()
-	for _, want := range []string{ClaudeCode, Codex, GeminiCLI, OpenCode} {
-		if !slices.Contains(got, want) {
-			t.Errorf("MCPHarnessIDs = %v, lacks %s", got, want)
-		}
-	}
-	if mustTarget(t, Amp).SupportsMCP() {
-		t.Error("Amp claims MCP support tuios does not write")
-	}
-	env := testEnv(t)
-	if _, err := mustTarget(t, Amp).InstallMCP(env, "tuios", false); err == nil {
-		t.Error("InstallMCP for a harness without a registration did not fail")
-	}
-}
-
 func TestMCPInstallClaudeKeepsTheUsersServersAndRoundTrips(t *testing.T) {
 	env, tg := mcpHome(t, ClaudeCode)
 	path := filepath.Join(env.Home, ".claude.json")

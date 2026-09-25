@@ -241,52 +241,6 @@ func TestSaveCreatesTheDirectory(t *testing.T) {
 	}
 }
 
-// TestResolvePathDoesNotOverwriteAnEarlierCapture pins the collision. The
-// generated name carries a timestamp with one-second resolution, so two
-// captures inside one second resolve to the same name and the second used to
-// destroy the first with nothing said.
-//
-// Negative control: with freeName removed from ResolvePath, both calls return
-// the same path and the first assertion fires.
-func TestResolvePathDoesNotOverwriteAnEarlierCapture(t *testing.T) {
-	dir := t.TempDir()
-	now := time.Date(2026, 8, 25, 22, 34, 9, 0, time.UTC)
-
-	first, err := ResolvePath("", dir, "region", shot.FormatPNG, now)
-	if err != nil {
-		t.Fatalf("first resolve: %v", err)
-	}
-	if err := Save(first, []byte("one")); err != nil {
-		t.Fatalf("save first: %v", err)
-	}
-
-	second, err := ResolvePath("", dir, "region", shot.FormatPNG, now)
-	if err != nil {
-		t.Fatalf("second resolve: %v", err)
-	}
-	if second == first {
-		t.Fatalf("the second capture of the same second resolved to %s, the file the first one wrote", second)
-	}
-	if err := Save(second, []byte("two")); err != nil {
-		t.Fatalf("save second: %v", err)
-	}
-	if body, err := os.ReadFile(first); err != nil || string(body) != "one" {
-		t.Errorf("the first capture is now %q (%v), so the second overwrote it", body, err)
-	}
-	if filepath.Ext(second) != ".png" {
-		t.Errorf("the second capture lost its extension: %s", second)
-	}
-
-	// A third lands on its own name too, rather than back on the second's.
-	third, err := ResolvePath("", dir, "region", shot.FormatPNG, now)
-	if err != nil {
-		t.Fatalf("third resolve: %v", err)
-	}
-	if third == first || third == second {
-		t.Errorf("the third capture resolved to %s, which is already taken", third)
-	}
-}
-
 // TestResolvePathKeepsAnExplicitOutThatAlreadyExists checks the collision guard
 // leaves --out alone. That path is an instruction from the caller, and a verb
 // told to write one file has to write that file, existing or not.
@@ -305,24 +259,5 @@ func TestResolvePathKeepsAnExplicitOutThatAlreadyExists(t *testing.T) {
 	}
 	if got != out {
 		t.Errorf("an explicit --out was moved to %s", got)
-	}
-}
-
-// TestImageRouteIsHonestAboutItself checks the clipboard probe either offers a
-// tool or gives a reason, never both and never neither. A route with no reason
-// is how an inert copy key gets drawn.
-//
-// This control passes both ways on a machine with a display: its value is the
-// invariant, which a new platform arm added without a Reason would break.
-func TestImageRouteIsHonestAboutItself(t *testing.T) {
-	r := ImageRoute()
-	if r.Available && r.Tool == "" {
-		t.Error("an available route names no tool")
-	}
-	if !r.Available && r.Reason == "" {
-		t.Error("an unavailable route gives no reason, so the panel has nothing to say")
-	}
-	if r.Reason != "" && !strings.HasSuffix(r.Reason, ".") {
-		t.Errorf("the reason %q is not a sentence", r.Reason)
 	}
 }

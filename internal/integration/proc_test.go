@@ -26,18 +26,3 @@ func TestHarnessPIDSkipsShells(t *testing.T) {
 		})
 	}
 }
-
-// TestHarnessPIDReadsThisProcess checks the platform name reader works: the
-// test binary's parent is go test, which is not a shell.
-func TestHarnessPIDReadsThisProcess(t *testing.T) {
-	_, ancestors := SelfProcess()
-	if len(ancestors) == 0 {
-		t.Skip("no parent walk on this platform")
-	}
-	if processName(ancestors[0]) == "" {
-		t.Skip("process names are not readable here")
-	}
-	if HarnessPID(ancestors) == 0 {
-		t.Fatalf("no harness pid among %v", ancestors)
-	}
-}

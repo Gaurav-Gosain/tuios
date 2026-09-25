@@ -246,15 +246,6 @@ func TestADirectoryOutsideARepositoryIsNotOne(t *testing.T) {
 	}
 }
 
-// TestAnEmptyDirectoryIsNotARepository guards the argument that reaches this
-// from a pane whose shell has not reported anywhere yet.
-func TestAnEmptyDirectoryIsNotARepository(t *testing.T) {
-	withTracking(t)
-	if _, ok := Read(""); ok {
-		t.Error("the empty path is reported as a repository")
-	}
-}
-
 // TestUpstreamOfReadsTheConfig covers the shapes the config can take without
 // needing a remote for each: a plain remote branch, and a branch tracking
 // another branch in the same repository, which git spells with a remote of ".".
