@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -159,6 +160,78 @@ func TestFilteringDoesNotDisturbTheCachedList(t *testing.T) {
 
 	if got := launcherNames(m.LauncherItems); !slices.Equal(got, before) {
 		t.Fatalf("the cached list changed from %v to %v", before, got)
+	}
+}
+
+// TestRunProgramExecsTheListedPath pins the run half of the choice: the pane's
+// process is the listed executable itself, argv exec'd with no shell in
+// between. A path with a space is the canary, because it is exactly what a
+// typed command would have had to quote and what a wrong quoting dialect
+// (PowerShell, cmd.exe) silently breaks.
+func TestRunProgramExecsTheListedPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe script is a shebang script")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "odd name")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := runTestOS(t)
+	m.WindowExitChan = make(chan string, 4)
+	defer closeWindows(m)
+	e := applist.Entry{Name: "odd name", Path: path, Dir: dir}
+
+	m.RunProgram(e)
+	if len(m.Windows) != 1 {
+		t.Fatalf("%d windows after a launch, want 1", len(m.Windows))
+	}
+	w := m.Windows[0]
+	if w.Cmd == nil || len(w.Cmd.Args) != 1 || w.Cmd.Args[0] != path {
+		t.Fatalf("pane process argv = %v, want [%s]", w.Cmd.Args, path)
+	}
+	if w.CustomName != e.Name {
+		t.Errorf("CustomName = %q, want the program's name %q", w.CustomName, e.Name)
+	}
+	if m.launchHistory.Boost(e.Name) == 0 {
+		t.Error("running a program did not record it in the launch history")
+	}
+}
+
+// TestTypeProgramSpawnsAShellAndTypesIntoIt is the type half. The pane runs the
+// user's shell rather than the program, so the command is theirs to finish, and
+// the launch is still recorded because choosing it is still choosing it.
+func TestTypeProgramSpawnsAShellAndTypesIntoIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe script is a shebang script")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := runTestOS(t)
+	m.WindowExitChan = make(chan string, 4)
+	m.PTYDataChan = make(chan struct{}, 1)
+	defer closeWindows(m)
+
+	e := applist.Entry{Name: "ffmpeg", Path: path, Dir: dir}
+	m.TypeProgram(e)
+
+	if len(m.Windows) != 1 {
+		t.Fatalf("%d windows after a type-out, want 1", len(m.Windows))
+	}
+	w := m.Windows[0]
+	if w.Cmd != nil && len(w.Cmd.Args) > 0 && w.Cmd.Args[0] == path {
+		t.Fatal("the pane runs the program itself, so there is nothing left to add arguments to")
+	}
+	if w.CustomName != e.Name {
+		t.Errorf("CustomName = %q, want %q", w.CustomName, e.Name)
+	}
+	if m.launchHistory.Boost(e.Name) == 0 {
+		t.Error("typing a program out did not record it in the launch history")
 	}
 }
 
