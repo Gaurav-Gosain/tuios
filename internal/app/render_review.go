@@ -551,14 +551,14 @@ func (m *OS) renderReview() string {
 	return reviewFrame(w, h, "", body, pal.Accent, pal.Surface)
 }
 
-// reviewStatusRule is the rule above the footer, or in its place the dock's
-// newest message since the review opened while it is still up: the overlay
-// covers the dock, and "queued", "kept" or a refusal would otherwise go
-// unread until it closed.
+// reviewStatusRule is the rule above the footer, or in its place the last
+// message the review raised while it is still up: the overlay covers the dock,
+// and "queued", "kept" or a refusal would otherwise go unread until it closed.
+// Messages from anything else stay the dock's. See reviewState.statusID.
 func (m *OS) reviewStatusRule(width int, pal overlay.Palette) string {
-	if n := len(m.Notifications); n > 0 {
-		last := m.Notifications[n-1]
-		if !last.StartTime.Before(m.review.openedAt) && last.Message != "" {
+	for i := len(m.Notifications) - 1; i >= 0 && m.review.statusID != ""; i-- {
+		last := m.Notifications[i]
+		if last.ID == m.review.statusID && !last.StartTime.Before(m.review.openedAt) && last.Message != "" {
 			fg := pal.FgDim
 			switch last.Type {
 			case "error":

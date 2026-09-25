@@ -210,8 +210,7 @@ type reviewState struct {
 	// loadErr is why the diff shown is missing, for a review opened from
 	// the compare view whose diff could not be read.
 	loadErr string
-	// openedAt is when this review was asked for. The overlay covers the
-	// dock, so it shows the dock's newest message from since then itself.
+	// openedAt is when this review was asked for.
 	openedAt time.Time
 	// split asks for the two sides next to each other, where the diff
 	// column is wide enough. It outlives the review, so the next one opens
@@ -225,6 +224,21 @@ type reviewState struct {
 	// drawn. Both are made while drawing, so a closed review costs nothing.
 	look  *reviewLook
 	hunks map[*review.File][]*reviewHunkLook
+	// statusID is the dock message the review itself raised last. The
+	// overlay covers the dock, so it shows that one on its status line. It
+	// shows no other: a pane closing or a client resizing is the dock's news,
+	// and it waits there for the overlay to close like it does under every
+	// other full-screen surface.
+	statusID string
+}
+
+// reviewNotify raises a dock message for the review and has the overlay show
+// it on its status line while it is up. See reviewState.statusID.
+func (m *OS) reviewNotify(message, kind string, duration time.Duration) {
+	m.ShowNotification(message, kind, duration)
+	if k := len(m.Notifications); k > 0 && m.Notifications[k-1].Message == message {
+		m.review.statusID = m.Notifications[k-1].ID
+	}
 }
 
 // clearDiff forgets the diff shown, for a review of another attempt: the
@@ -344,7 +358,7 @@ func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
 	}
 	w := m.GetFocusedWindow()
 	if w == nil {
-		m.ShowNotification("No pane to review", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("No pane to review", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	who := printableTitle(m.railTitleShown(w))
@@ -366,11 +380,11 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 		return nil, false
 	}
 	if it.Host != "" {
-		m.ShowNotification(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to review it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to review it", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if it.Window == "" {
-		m.ShowNotification("That item has no pane to review", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("That item has no pane to review", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	return m.openReview(it.Session, it.Window, inboxWho(it)), true
@@ -385,7 +399,7 @@ func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
 	}
 	_, _, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
-		m.ShowNotification("That pane is on another machine. Attach there to review it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("That pane is on another machine. Attach there to review it", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	who := printableTitle(label)
@@ -401,11 +415,11 @@ func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
 // openReview starts reading a pane's diff. The overlay opens when it arrives.
 func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 	if !m.IsDaemonSession {
-		m.ShowNotification("Review needs the daemon. Start a daemon session with: tuios new", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Review needs the daemon. Start a daemon session with: tuios new", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if m.AttachedHost != "" {
-		m.ShowNotification("This session runs on "+printableTitle(m.AttachedHost)+", and its repository is there. Review it on that machine", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("This session runs on "+printableTitle(m.AttachedHost)+", and its repository is there. Review it on that machine", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	r := &m.review
@@ -500,7 +514,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		} else if r.diff == nil {
 			r.loadErr = text
 		}
-		m.ShowNotification(text, "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify(text, "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	prevPath := ""
@@ -770,13 +784,13 @@ func (m *OS) reviewRowUnderCursor() (reviewRow, bool) {
 func (m *OS) ReviewNote(hunk bool) {
 	r := &m.review
 	if r.query.Against != "" {
-		m.ShowNotification("Notes go on a review against the base. esc goes back to it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Notes go on a review against the base. esc goes back to it", "info", m.Settings.NotificationDuration)
 		return
 	}
 	e := r.currentFile()
 	row, ok := m.reviewRowUnderCursor()
 	if e == nil || e.file == nil || !ok || row.hunk < 0 {
-		m.ShowNotification("Move to a line of the diff to leave a note on it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Move to a line of the diff to leave a note on it", "info", m.Settings.NotificationDuration)
 		return
 	}
 	h := e.file.Hunks[row.hunk]
@@ -789,7 +803,7 @@ func (m *OS) ReviewNote(hunk bool) {
 		}
 	} else {
 		if row.kind != reviewRowLine {
-			m.ShowNotification("Move to a line of the diff to leave a note on it", "info", m.Settings.NotificationDuration)
+			m.reviewNotify("Move to a line of the diff to leave a note on it", "info", m.Settings.NotificationDuration)
 			return
 		}
 		ln := h.Lines[row.line]
@@ -817,7 +831,7 @@ func (m *OS) reviewNoteUnderCursor() (review.Note, bool) {
 func (m *OS) ReviewEditNote() {
 	n, ok := m.reviewNoteUnderCursor()
 	if !ok {
-		m.ShowNotification("Move to a note to edit it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Move to a note to edit it", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.review.editor = &reviewEditor{kind: reviewEditNote, noteID: n.ID, draft: n.Text, path: n.Path, automated: m.ProcessingRemoteKeys, hunkIdx: -1, lineIdx: -1}
@@ -827,11 +841,11 @@ func (m *OS) ReviewEditNote() {
 func (m *OS) ReviewResolveNote() tea.Cmd {
 	n, ok := m.reviewNoteUnderCursor()
 	if !ok {
-		m.ShowNotification("Move to a note to resolve it", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Move to a note to resolve it", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if m.ProcessingRemoteKeys {
-		m.ShowNotification(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
+		m.reviewNotify(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 		return nil
 	}
 	nonce, ok := m.reviewNonce()
@@ -845,7 +859,7 @@ func (m *OS) ReviewResolveNote() tea.Cmd {
 func (m *OS) reviewNonce() (string, bool) {
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
 		return "", false
 	}
 	return nonce, true
@@ -885,7 +899,7 @@ func (m *OS) applyReviewNotes(msg ReviewNotesMsg) {
 		return
 	}
 	if msg.Err != nil {
-		m.ShowNotification("The note was not saved: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify("The note was not saved: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	r.notes = msg.Notes
@@ -898,7 +912,7 @@ func (m *OS) applyReviewNotes(msg ReviewNotesMsg) {
 		r.file = i
 	}
 	if msg.Action == "remove" {
-		m.ShowNotification("Note resolved", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Note resolved", "info", m.Settings.NotificationDuration)
 	}
 }
 
@@ -910,11 +924,11 @@ func (m *OS) ReviewSend() tea.Cmd {
 		return nil
 	}
 	if m.ProcessingRemoteKeys {
-		m.ShowNotification(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
+		m.reviewNotify(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 		return nil
 	}
 	if r.unsentNotes() == 0 {
-		m.ShowNotification("No unsent notes to send. c leaves one on the line under the cursor", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("No unsent notes to send. c leaves one on the line under the cursor", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	nonce, ok := m.reviewNonce()
@@ -953,7 +967,7 @@ func (m *OS) ReviewSend() tea.Cmd {
 func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	r := &m.review
 	if msg.Err != nil {
-		m.ShowNotification("The notes were not sent: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify("The notes were not sent: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	if msg.Gen == r.gen {
@@ -972,7 +986,7 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	if len(msg.Withheld) > 0 {
 		text += ". " + reviewCount(len(msg.Withheld), "note") + " withheld: " + msg.WithheldReason
 	}
-	m.ShowNotification(text, "info", m.Settings.NotificationDuration)
+	m.reviewNotify(text, "info", m.Settings.NotificationDuration)
 }
 
 // reviewCount says n things: "1 note", "2 notes".
@@ -1069,7 +1083,7 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 		}
 		if ed.automated || m.ProcessingRemoteKeys {
 			r.editor = nil
-			m.ShowNotification(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
+			m.reviewNotify(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 			return nil
 		}
 		r.editor = nil
@@ -1080,7 +1094,7 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 	}
 	if ed.automated || m.ProcessingRemoteKeys {
 		r.editor = nil
-		m.ShowNotification("A note that send-keys typed is not saved: "+reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
+		m.reviewNotify("A note that send-keys typed is not saved: "+reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 		return nil
 	}
 	nonce, ok := m.reviewNonce()
@@ -1111,7 +1125,7 @@ func (m *OS) ReviewToggleSplit() {
 	before, had := m.reviewRowUnderCursor()
 	r.split = !r.split
 	if e := r.currentFile(); r.split && e != nil && e.file != nil && len(e.file.Hunks) > 0 && !reviewSplitFits(e.file, width) {
-		m.ShowNotification("Too narrow to show the two sides next to each other. Widen the window, or s again for one column", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Too narrow to show the two sides next to each other. Widen the window, or s again for one column", "info", m.Settings.NotificationDuration)
 	}
 	if !had {
 		return

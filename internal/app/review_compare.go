@@ -38,7 +38,7 @@ import (
 func (m *OS) ReviewCompare() tea.Cmd {
 	r := &m.review
 	if r.fan == nil {
-		m.ShowNotification(r.who+" is not part of a fan, so there are no attempts to compare", "info", m.Settings.NotificationDuration)
+		m.reviewNotify(r.who+" is not part of a fan, so there are no attempts to compare", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if r.compare == nil {
@@ -110,7 +110,7 @@ func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 	}
 	if msg.Err != nil {
 		if msg.Changes {
-			m.ShowNotification("The attempts could not be read: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
+			m.reviewNotify("The attempts could not be read: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		}
 		// A read that failed, a timeout say, leaves the rows as they were.
 		// While they say a check runs, the chain goes on and the next tick
@@ -290,7 +290,7 @@ func (m *OS) ReviewCompareMark() {
 func (m *OS) ReviewCompareDiff() tea.Cmd {
 	c := m.review.compare
 	if c == nil || len(c.marks) != 2 {
-		m.ShowNotification("Mark two attempts with m, then d diffs them", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Mark two attempts with m, then d diffs them", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	a, b := c.marks[0], c.marks[1]
@@ -348,10 +348,10 @@ func (m *OS) reviewVerifyCmd(command string) tea.Cmd {
 func (m *OS) applyReviewVerify(msg ReviewVerifyMsg) tea.Cmd {
 	r := &m.review
 	if msg.Err != nil {
-		m.ShowNotification("The check did not start: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify("The check did not start: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
-	m.ShowNotification("Checking "+reviewCount(len(msg.Sessions), "attempt")+": "+msg.Command, "info", m.Settings.NotificationDuration)
+	m.reviewNotify("Checking "+reviewCount(len(msg.Sessions), "attempt")+": "+msg.Command, "info", m.Settings.NotificationDuration)
 	c := r.compare
 	if msg.Gen != r.gen || c == nil {
 		return nil
@@ -374,7 +374,7 @@ func (m *OS) ReviewCompareKeep() {
 		return
 	}
 	if len(c.rows) < 2 {
-		m.ShowNotification(row.Session+" is the only attempt left", "info", m.Settings.NotificationDuration)
+		m.reviewNotify(row.Session+" is the only attempt left", "info", m.Settings.NotificationDuration)
 		return
 	}
 	c.confirmKeep = row.Session
@@ -405,7 +405,7 @@ func (m *OS) ReviewCompareConfirm(yes bool) tea.Cmd {
 		return nil
 	}
 	if m.ProcessingRemoteKeys {
-		m.ShowNotification(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
+		m.reviewNotify(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 		return nil
 	}
 	call := m.inboxCaller()
@@ -435,7 +435,7 @@ func (m *OS) ReviewCompareConfirm(yes bool) tea.Cmd {
 func (m *OS) applyReviewKept(msg ReviewKeptMsg) tea.Cmd {
 	r := &m.review
 	if msg.Err != nil {
-		m.ShowNotification("Nothing was kept: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify("Nothing was kept: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	var removed, left []string
@@ -455,7 +455,7 @@ func (m *OS) applyReviewKept(msg ReviewKeptMsg) tea.Cmd {
 		text += " Left " + strings.Join(left, "; ") + ". tuios fan keep --stash moves uncommitted work aside."
 		kind = "error"
 	}
-	m.ShowNotification(text, kind, m.Settings.NotificationDuration*2)
+	m.reviewNotify(text, kind, m.Settings.NotificationDuration*2)
 	c := r.compare
 	if msg.Gen != r.gen || c == nil {
 		return nil
