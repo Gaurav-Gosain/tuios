@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -32,111 +33,6 @@ func crashTestOS(t testing.TB) *OS {
 		NumWorkspaces:  9,
 		Width:          120,
 		Height:         40,
-	}
-}
-
-// TestCrashReportLeavesPrivateThingsOut is the privacy rule, asserted rather
-// than described.
-//
-// Pane contents, the working directory, window titles, the session name and the
-// environment can each carry a hostname, a token, a client's name or a path
-// that says who someone works for. None of them helps place a panic in a stack
-// trace, so none of them is in the report. The rule is in crashFacts' comment;
-// this is what stops it from drifting.
-func TestCrashReportLeavesPrivateThingsOut(t *testing.T) {
-	m := crashTestOS(t)
-	m.SessionName = "acme-prod-migration"
-	m.Windows[0].SetTitle("ssh deploy@bastion.acme.internal")
-	m.Windows[0].CustomName = "acme bastion"
-	m.Windows[0].Cwd = "/home/dana/clients/acme/secrets"
-
-	m.NoteCrash("handling an event", "boom", []byte("goroutine 1 [running]:\nmain.main()\n"))
-	report := m.Crash()
-	if report == nil {
-		t.Fatal("no report")
-	}
-
-	// Everything the report can reach a person through: the overlay, the
-	// clipboard, the issue body and the file on disk.
-	surfaces := map[string]string{
-		"overlay":   RenderCrashScreen(report, "", 120, 40),
-		"clipboard": report.Markdown(0),
-		"issue URL": report.IssueURL(),
-		"log file":  readFileOrEmpty(t, report.LogPath),
-	}
-	leaks := []string{
-		"acme-prod-migration",
-		"bastion.acme.internal",
-		"acme bastion",
-		"/home/dana/clients",
-	}
-	for name, text := range surfaces {
-		for _, leak := range leaks {
-			if strings.Contains(text, leak) {
-				t.Errorf("the %s carries %q, which is the user's and not the bug's", name, leak)
-			}
-		}
-	}
-}
-
-func readFileOrEmpty(t *testing.T, path string) string {
-	t.Helper()
-	if path == "" {
-		t.Fatal("the crash log was not written, so it cannot be checked")
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read crash log: %v", err)
-	}
-	return string(b)
-}
-
-// TestIssueURLStaysShortEnoughToOpen pins the length rule.
-//
-// A prefilled issue is a GET, so the report travels in the query string, and
-// something between the desktop's argv limit and GitHub's front end refuses a
-// long one with no message a user can act on. The URL must fit whatever the
-// trace is, by dropping trace lines rather than by giving up on the prefill.
-func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
-	var huge strings.Builder
-	for i := range 4000 {
-		huge.WriteString("github.com/Gaurav-Gosain/tuios/internal/app.(*OS).frame")
-		huge.WriteString("\n\t/home/x/tuios/internal/app/render.go:")
-		huge.WriteString(strings.Repeat("9", 4))
-		huge.WriteString(" +0x1c4\n")
-		_ = i
-	}
-	report := NewCrashReport("drawing the screen", "index out of range [7] with length 3",
-		[]byte(huge.String()), baseFacts("drawing the screen"))
-
-	// The untrimmed body is far over the limit, so an implementation that does
-	// not trim cannot pass by luck.
-	if untrimmed := len(report.Markdown(0)); untrimmed <= issueURLLimit {
-		t.Fatalf("the fixture is too small to test the cap: %d bytes", untrimmed)
-	}
-	got := report.IssueURL()
-	if len(got) > issueURLLimit {
-		t.Fatalf("the issue URL is %d bytes, over the %d limit", len(got), issueURLLimit)
-	}
-	if !strings.HasPrefix(got, "https://github.com/Gaurav-Gosain/tuios/issues/new?") {
-		t.Fatalf("not a new-issue address: %.80s", got)
-	}
-	for _, want := range []string{"title=", "body=", "labels=bug"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("the issue URL has no %s", want)
-		}
-	}
-	// The head of the trace is the part that names the bug, so it is the part
-	// that must survive the trim.
-	if !strings.Contains(got, "index+out+of+range") {
-		t.Error("the issue title lost the panic value")
-	}
-
-	// A short report keeps its whole trace.
-	small := NewCrashReport("handling an event", "boom",
-		[]byte("goroutine 1 [running]:\nmain.main()\n"), baseFacts("handling an event"))
-	if !strings.Contains(small.IssueURL(), "main.main") {
-		t.Error("a short report lost its trace from the issue body")
 	}
 }
 
@@ -208,5 +104,324 @@ func TestRenderPanicPutsTheCrashOverlayOnScreen(t *testing.T) {
 	// long the next tick takes, and on the render path there may not be one.
 	if strings.TrimSpace(frame) == "" {
 		t.Fatal("View returned an empty frame instead of the crash overlay")
+	}
+}
+
+// TestCrashOverlaySurvivesADismissOnABrokenModel pins the dismiss contract.
+//
+// Dismissing a render-path crash lets View try to compose again, and the frame
+// still cannot be drawn, so the overlay must come straight back rather than
+// leave the user with a blank screen or take the program down.
+func TestCrashOverlaySurvivesADismissOnABrokenModel(t *testing.T) {
+	m := crashTestOS(t)
+	m.Windows = append(m.Windows, nil)
+
+	_ = m.View()
+	if !m.CrashActive() {
+		t.Fatal("no crash overlay after the first frame")
+	}
+	m.DismissCrash()
+	if m.CrashActive() {
+		t.Fatal("DismissCrash left the overlay up")
+	}
+
+	frame := m.View().Content
+	if !m.CrashActive() {
+		t.Fatalf("the overlay did not come back for a model that still cannot draw:\n%s", frame)
+	}
+	if !strings.Contains(frame, "tuios hit a bug") {
+		t.Fatalf("the second frame is not the crash overlay:\n%s", frame)
+	}
+}
+
+// TestCrashOverlayKeepsTheFirstReport pins which of a repeating panic's reports
+// is shown.
+//
+// The overlay is armed by one panic and the model keeps running underneath it:
+// ticks still arrive, PTY output still arrives, and any of those handlers can
+// panic again for the same reason the first one did. Keeping the first report
+// matters because it is the one whose facts describe the state that broke; a
+// later one describes the state the overlay itself left behind.
+//
+// Key presses cannot reach a second panic, because the overlay consumes them.
+// Everything else can, which is why this drives it through NoteCrash rather
+// than through a key.
+func TestCrashOverlayKeepsTheFirstReport(t *testing.T) {
+	m := crashTestOS(t)
+
+	m.NoteCrash("handling an event", "the first panic", []byte("goroutine 1:\n"))
+	first := m.Crash()
+	if first == nil {
+		t.Fatal("the first panic did not arm the overlay")
+	}
+
+	for i := range 5 {
+		m.NoteCrash("handling an event", fmt.Sprintf("a later panic %d", i), []byte("goroutine 2:\n"))
+	}
+	if m.Crash() != first {
+		t.Fatalf("a later panic replaced the first report: now %q", m.Crash().Panic)
+	}
+	if !strings.Contains(m.View().Content, "the first panic") {
+		t.Fatal("the frame does not show the first panic")
+	}
+
+	// Dismissing clears the way for a genuinely new one, which is what makes
+	// keeping the first a de-duplication rather than a one-crash-per-session
+	// limit.
+	m.DismissCrash()
+	m.NoteCrash("handling an event", "a new panic after the dismiss", []byte("goroutine 3:\n"))
+	if got := m.Crash(); got == nil || got.Panic != "a new panic after the dismiss" {
+		t.Fatalf("a panic after a dismiss did not arm a fresh overlay: %v", got)
+	}
+}
+
+// TestCrashOverlayOwnsTheKeyboard checks that a key pressed while the overlay is
+// up cannot reach a pane the user cannot see.
+func TestCrashOverlayOwnsTheKeyboard(t *testing.T) {
+	m := crashTestOS(t)
+
+	var reached int
+	SetInputHandler(func(_ tea.Msg, o *OS) (tea.Model, tea.Cmd) {
+		reached++
+		panic("boom")
+	})
+	t.Cleanup(func() { SetInputHandler(nil) })
+
+	m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if reached != 1 || !m.CrashActive() {
+		t.Fatalf("setup: handler ran %d times, overlay %v", reached, m.CrashActive())
+	}
+
+	// n creates a window in window-management mode. With the overlay up it must
+	// do nothing at all.
+	windows := len(m.Windows)
+	m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	if reached != 1 {
+		t.Fatal("a key reached the input handler while the crash overlay was up")
+	}
+	if len(m.Windows) != windows {
+		t.Fatal("a key changed the model while the crash overlay was up")
+	}
+
+	// esc leaves.
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.CrashActive() {
+		t.Fatal("esc did not dismiss the crash overlay")
+	}
+}
+
+// TestCrashReportLeavesPrivateThingsOut is the privacy rule, asserted rather
+// than described.
+//
+// Pane contents, the working directory, window titles, the session name and the
+// environment can each carry a hostname, a token, a client's name or a path
+// that says who someone works for. None of them helps place a panic in a stack
+// trace, so none of them is in the report. The rule is in crashFacts' comment;
+// this is what stops it from drifting.
+func TestCrashReportLeavesPrivateThingsOut(t *testing.T) {
+	m := crashTestOS(t)
+	m.SessionName = "acme-prod-migration"
+	m.Windows[0].SetTitle("ssh deploy@bastion.acme.internal")
+	m.Windows[0].CustomName = "acme bastion"
+	m.Windows[0].Cwd = "/home/dana/clients/acme/secrets"
+
+	m.NoteCrash("handling an event", "boom", []byte("goroutine 1 [running]:\nmain.main()\n"))
+	report := m.Crash()
+	if report == nil {
+		t.Fatal("no report")
+	}
+
+	// Everything the report can reach a person through: the overlay, the
+	// clipboard, the issue body and the file on disk.
+	surfaces := map[string]string{
+		"overlay":   RenderCrashScreen(report, "", 120, 40),
+		"clipboard": report.Markdown(0),
+		"issue URL": report.IssueURL(),
+		"log file":  readFileOrEmpty(t, report.LogPath),
+	}
+	leaks := []string{
+		"acme-prod-migration",
+		"bastion.acme.internal",
+		"acme bastion",
+		"/home/dana/clients",
+	}
+	for name, text := range surfaces {
+		for _, leak := range leaks {
+			if strings.Contains(text, leak) {
+				t.Errorf("the %s carries %q, which is the user's and not the bug's", name, leak)
+			}
+		}
+	}
+}
+
+func readFileOrEmpty(t *testing.T, path string) string {
+	t.Helper()
+	if path == "" {
+		t.Fatal("the crash log was not written, so it cannot be checked")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read crash log: %v", err)
+	}
+	return string(b)
+}
+
+// TestCrashOverlayDrawsOnABrokenModel is the overlay's real operating
+// condition: it is asked to draw after something has already gone wrong.
+//
+// None of these may panic, and none may return an empty frame, because an empty
+// frame is exactly the failure the overlay exists to replace.
+func TestCrashOverlayDrawsOnABrokenModel(t *testing.T) {
+	report := NewCrashReport("handling an event", "boom",
+		[]byte("goroutine 1 [running]:\nmain.main()\n\t/x/y.go:1 +0x1\n"), baseFacts("handling an event"))
+
+	sizes := []struct{ w, h int }{
+		{120, 40}, {80, 24}, {40, 12}, {20, 6}, {8, 3}, {1, 1}, {0, 0}, {-5, -5},
+	}
+	for _, s := range sizes {
+		frame := RenderCrashScreen(report, "", s.w, s.h)
+		if frame == "" {
+			t.Errorf("%dx%d drew nothing", s.w, s.h)
+		}
+	}
+
+	// A report that does not exist. Not reachable through NoteCrash, but the
+	// renderer is public and takes a pointer.
+	if got := RenderCrashScreen(nil, "", 80, 24); !strings.Contains(got, "No report") {
+		t.Errorf("a nil report did not say so:\n%s", got)
+	}
+
+	// A model that is barely a model. crashFacts reads it from inside a
+	// recover, and the answer must be a report with the base facts rather than
+	// a second panic.
+	var zero OS
+	facts := zero.crashFacts("handling an event")
+	if len(facts) == 0 {
+		t.Error("a zero model produced no facts at all")
+	}
+
+	// And no model.
+	var nilOS *OS
+	nilOS.NoteCrash("handling an event", "boom", nil)
+	nilOS.DismissCrash()
+	if nilOS.CrashActive() {
+		t.Error("a nil model reported a crash overlay")
+	}
+	if got := nilOS.RecentActions(); got != nil {
+		t.Errorf("a nil model returned actions: %v", got)
+	}
+}
+
+// TestIssueURLStaysShortEnoughToOpen pins the length rule.
+//
+// A prefilled issue is a GET, so the report travels in the query string, and
+// something between the desktop's argv limit and GitHub's front end refuses a
+// long one with no message a user can act on. The URL must fit whatever the
+// trace is, by dropping trace lines rather than by giving up on the prefill.
+func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
+	var huge strings.Builder
+	for i := range 4000 {
+		huge.WriteString("github.com/Gaurav-Gosain/tuios/internal/app.(*OS).frame")
+		huge.WriteString("\n\t/home/x/tuios/internal/app/render.go:")
+		huge.WriteString(strings.Repeat("9", 4))
+		huge.WriteString(" +0x1c4\n")
+		_ = i
+	}
+	report := NewCrashReport("drawing the screen", "index out of range [7] with length 3",
+		[]byte(huge.String()), baseFacts("drawing the screen"))
+
+	// The untrimmed body is far over the limit, so an implementation that does
+	// not trim cannot pass by luck.
+	if untrimmed := len(report.Markdown(0)); untrimmed <= issueURLLimit {
+		t.Fatalf("the fixture is too small to test the cap: %d bytes", untrimmed)
+	}
+	got := report.IssueURL()
+	if len(got) > issueURLLimit {
+		t.Fatalf("the issue URL is %d bytes, over the %d limit", len(got), issueURLLimit)
+	}
+	if !strings.HasPrefix(got, "https://github.com/Gaurav-Gosain/tuios/issues/new?") {
+		t.Fatalf("not a new-issue address: %.80s", got)
+	}
+	for _, want := range []string{"title=", "body=", "labels=bug"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the issue URL has no %s", want)
+		}
+	}
+	// The head of the trace is the part that names the bug, so it is the part
+	// that must survive the trim.
+	if !strings.Contains(got, "index+out+of+range") {
+		t.Error("the issue title lost the panic value")
+	}
+
+	// A short report keeps its whole trace.
+	small := NewCrashReport("handling an event", "boom",
+		[]byte("goroutine 1 [running]:\nmain.main()\n"), baseFacts("handling an event"))
+	if !strings.Contains(small.IssueURL(), "main.main") {
+		t.Error("a short report lost its trace from the issue body")
+	}
+}
+
+// TestCrashOverlaySaysWhatTheKeyDid pins the overlay's own feedback line.
+//
+// This is not a nicety. A crash caught while drawing the screen is the
+// compositor failing, so the dock is not drawn and ShowNotification has nowhere
+// to appear: without a line on the overlay itself, pressing c copies the report
+// and changes nothing on screen, which reads as a key that does not work.
+func TestCrashOverlaySaysWhatTheKeyDid(t *testing.T) {
+	m := crashTestOS(t)
+	m.Windows = append(m.Windows, nil)
+	_ = m.View() // panics in the compositor, arms the overlay
+
+	if got := m.CrashNotice(); got != "" {
+		t.Fatalf("a fresh overlay already had a notice: %q", got)
+	}
+
+	if cmd := m.CopyCrashReport(); cmd == nil {
+		t.Fatal("c produced no clipboard command")
+	}
+	if !strings.Contains(m.CrashNotice(), "Copied the report") {
+		t.Fatalf("c left no notice: %q", m.CrashNotice())
+	}
+	frame := m.View().Content
+	if !strings.Contains(frame, "Copied the report") {
+		t.Fatalf("the frame does not say the report was copied:\n%s", frame)
+	}
+
+	m.DismissCrash()
+	if m.CrashNotice() != "" {
+		t.Fatalf("the notice outlived the overlay: %q", m.CrashNotice())
+	}
+}
+
+// TestCrashOverlaySaysWhenItLeftDetailsOut pins the cut being visible.
+//
+// A block that silently ends at a different fact on every terminal size reads
+// as a report whose contents depend on the screen, and the one thing a user has
+// to be able to trust here is that c sends the whole of it.
+func TestCrashOverlaySaysWhenItLeftDetailsOut(t *testing.T) {
+	m := crashTestOS(t)
+	m.NoteCrash("handling an event", "boom", []byte("goroutine 1 [running]:\n"))
+	report := m.Crash()
+
+	tall := RenderCrashScreen(report, "", 120, 44)
+	if strings.Contains(tall, "more details") {
+		t.Errorf("a tall screen claimed it left details out:\n%s", tall)
+	}
+	for _, f := range report.Facts {
+		if !strings.Contains(tall, f.Label) {
+			t.Errorf("a tall screen dropped the %q row", f.Label)
+		}
+	}
+
+	short := RenderCrashScreen(report, "", 80, 20)
+	if !strings.Contains(short, "more details") {
+		t.Errorf("a short screen cut the details and did not say so:\n%s", short)
+	}
+	// And it still offers the way out, which is the point of cutting the facts
+	// rather than the footer.
+	for _, want := range []string{"copy report", "open an issue"} {
+		if !strings.Contains(short, want) {
+			t.Errorf("a short screen lost %q from the footer:\n%s", want, short)
+		}
 	}
 }
