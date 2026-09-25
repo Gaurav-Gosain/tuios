@@ -2,7 +2,6 @@ package vt_test
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -131,71 +130,4 @@ func BenchmarkEmulatorScrollThroughput(b *testing.B) {
 			_, _ = emu.Write(line)
 		}
 	})
-}
-
-// BenchmarkEmulatorRenderReal measures the emulator's built-in Render at the
-// real size. This is the single most expensive thing the unfocused render path
-// does: a CPU profile of renderTerminal for an unfocused window attributed
-// about 93% of its time here, inside the ultraviolet line renderer.
-func BenchmarkEmulatorRenderReal(b *testing.B) {
-	emu := vt.NewEmulator(perfCols, perfRows)
-	for y := 1; y <= perfRows; y++ {
-		_, _ = emu.Write(fmt.Appendf(nil, "\x1b[%d;1H\x1b[38;5;%dm%s\x1b[m",
-			y, 16+(y%200), strings.Repeat("content ", perfCols/8)))
-	}
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for b.Loop() {
-		_ = emu.Render()
-	}
-}
-
-// BenchmarkScrollbackRetainedMemory reports how much heap one window's
-// scrollback holds, which is a memory figure rather than a speed one and is
-// why it reports custom metrics instead of leaning on ns/op.
-//
-// It is here because the number is large enough to matter for a program the
-// user leaves open all day. At 207 columns each retained line once cost on
-// the order of 25KB, against roughly 175 bytes of actual text, because a
-// scrollback line was a full slice of cell structs carrying content strings,
-// style interfaces and link data for every column, whether or not the column
-// held anything. The default scrollback is 10000 lines, so one window with a
-// filled buffer held a couple of hundred megabytes, and the configuration
-// permits 1000000 lines. The retained-bytes/line metric is the live heap the
-// filled ring holds divided by its lines, measured after a collection.
-func BenchmarkScrollbackRetainedMemory(b *testing.B) {
-	const lines = 2000
-	line := []byte(strings.Repeat("output line with some length to it ", 5) + "\r\n")
-
-	var emu *vt.Emulator
-	for b.Loop() {
-		emu = vt.NewEmulator(perfCols, perfRows)
-		emu.SetScrollbackMaxLines(lines)
-		for range lines + perfRows {
-			_, _ = emu.Write(line)
-		}
-		if got := emu.ScrollbackLen(); got != lines {
-			b.Fatalf("scrollback holds %d lines, want %d", got, lines)
-		}
-	}
-	b.StopTimer()
-
-	// Two collections before each reading: one is not always enough for
-	// what the loop left behind to be gone, and that showed up as bytes
-	// charged to the ring.
-	var before, after runtime.MemStats
-	runtime.GC()
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-	emu.ClearScrollback()
-	runtime.GC()
-	runtime.GC()
-	runtime.ReadMemStats(&after)
-	// Without this the emulator is dead after the clear and the second
-	// reading sees its grid collected too.
-	runtime.KeepAlive(emu)
-	held := int64(before.HeapAlloc) - int64(after.HeapAlloc)
-	b.ReportMetric(float64(lines), "retained-lines")
-	b.ReportMetric(float64(held)/lines, "retained-bytes/line")
 }

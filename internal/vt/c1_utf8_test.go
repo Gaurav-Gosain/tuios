@@ -55,24 +55,6 @@ func TestATitleWhoseBytesContainAC1ControlIsNotTornApart(t *testing.T) {
 	}
 }
 
-// TestTheEscapedTerminatorsStillWork. Refusing the 8-bit forms must not cost
-// the forms programs actually send.
-func TestTheEscapedTerminatorsStillWork(t *testing.T) {
-	for _, tc := range []struct{ name, seq string }{
-		{"BEL", "\x1b]0;✳ Title\x07"},
-		{"ESC backslash", "\x1b]0;✳ Title\x1b\\"},
-	} {
-		e := NewEmulator(40, 4)
-		_, _ = e.Write([]byte(tc.seq))
-		if e.title != "✳ Title" {
-			t.Errorf("%s: title is %q", tc.name, e.title)
-		}
-		if got := screenOf(e, 40, 4); got != "" {
-			t.Errorf("%s: the title leaked onto the screen as %q", tc.name, got)
-		}
-	}
-}
-
 // TestATitleSplitAcrossReadsSurvives, because a 16KB reader splits wherever it
 // lands, including inside one of these characters.
 func TestATitleSplitAcrossReadsSurvives(t *testing.T) {

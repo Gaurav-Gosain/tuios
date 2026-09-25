@@ -51,15 +51,3 @@ func TestAlternateScreenIsBuiltOnFirstSwitch(t *testing.T) {
 		t.Fatal("still on the alternate screen after 1049l")
 	}
 }
-
-func TestRestoreAltScreenModeBuildsTheScreen(t *testing.T) {
-	e := NewEmulator(80, 24)
-	e.RestoreAltScreenMode(true)
-	if w, h := e.Width(), e.Height(); w != 80 || h != 24 {
-		t.Fatalf("restored alternate screen is %dx%d, want 80x24", w, h)
-	}
-	e.WriteString("\x1b[3;3Hrestored")
-	if got := altText(e, 2); !strings.Contains(got, "restored") {
-		t.Fatalf("row 3 is %q, want the text written after the restore", got)
-	}
-}

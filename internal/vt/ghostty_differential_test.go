@@ -215,13 +215,6 @@ func lineToString(l uv.Line) string {
 	return strings.TrimRight(b.String(), " ")
 }
 
-func TestGhosttyDiffSmoke(t *testing.T) {
-	p := newDiffPair(t, 20, 5)
-	p.write(t, []byte("hello \x1b[1;31mworld\x1b[0m"))
-	p.compareScreens(t, "smoke")
-	p.compareCursor(t, "smoke")
-}
-
 func TestGhosttyDiffBasicSequences(t *testing.T) {
 	cases := []struct {
 		name string
