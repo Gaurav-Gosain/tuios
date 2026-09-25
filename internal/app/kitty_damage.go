@@ -188,11 +188,12 @@ func (kp *KittyPassthrough) forwardAnimation(cmd *vt.KittyCommand, rawData []byt
 		return
 	}
 
+	// Under the host's id, allocated when the guest names an image it never
+	// transmitted here: the guest's own id may be another pane's image on
+	// the host, and an edit of that is an edit of the other pane's picture.
 	out := rawData
 	if cmd.ImageID != 0 {
-		if hostID, ok := kp.imageIDMap[windowID][cmd.ImageID]; ok && hostID != cmd.ImageID {
-			out = rewriteKittyImageID(rawData, hostID)
-		}
+		out = rewriteKittyImageID(rawData, kp.getOrAllocateHostID(windowID, cmd.ImageID))
 	}
 
 	// The edit changes pixels the host holds, and it is the guest that knows
@@ -266,7 +267,7 @@ type directFrame struct {
 // pendingOutput reaches the host in order. A patch is a difference from a
 // specific previous frame, so unlike a whole bitmap it can never be dropped;
 // the async video paths keep sending whole frames for exactly that reason.
-func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []byte, windowID string) bool {
+func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []byte, windowID string, hostID uint32) bool {
 	pending := kp.directFrames[windowID]
 	if pending == nil {
 		// Only a transmission that names an image and declares raw pixel
@@ -279,7 +280,7 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 			kp.directFrames = make(map[string]*directFrame)
 		}
 		pending = &directFrame{
-			imageID:     cmd.ImageID,
+			imageID:     hostID,
 			format:      cmd.Format,
 			compression: cmd.Compression,
 			width:       cmd.Width,
@@ -302,7 +303,8 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 	}
 	delete(kp.directFrames, windowID)
 
-	// A direct frame stream names its own image id, so the next frame arrives
+	// A direct frame stream names its own image id, and the guest's id maps
+	// to one host id for the life of the window, so the next frame arrives
 	// under the same host id and can be compared against this one.
 	switch kp.emitBitmap(windowID, pending.imageID, pending.format,
 		pending.compression, pending.width, pending.height, pending.data, true) {

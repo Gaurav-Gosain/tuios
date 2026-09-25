@@ -78,16 +78,34 @@ func TestAVirtualPlacementIsNotTracked(t *testing.T) {
 
 // TestAVirtualPlacementKeepsTheIDTheImageArrivedUnder is the trap in the
 // middle of this. A transmit-only command, which is what these applications
-// send, is passed through with the guest's own id and never allocates one of
-// tuios's, so a declaration that allocated a fresh id would name an image the
-// host has never been sent.
+// send, is passed through under a host id tuios allocates for the pane, and
+// the declaration has to name that same id, or it names an image the host
+// has never been sent.
 //
-// Negative control: calling getOrAllocateHostID before the virtual branch
-// declared i=1 against an image the host knew as 0x0a0b0c, and this failed.
+// The transmission used to keep the guest's own id, which on the host could
+// be another pane's image (FuzzKittyPassthrough). The declaration followed
+// it, so both have changed together.
 func TestAVirtualPlacementKeepsTheIDTheImageArrivedUnder(t *testing.T) {
 	kp := newTestKittyPassthrough(t)
 	winID := "test-window-id-abcdef12"
 	const guestID uint32 = 0x0a0b0c
+
+	body := "a=t,f=24,s=1,v=1,i=658188;AAAA"
+	transmit, err := vt.ParseKittyCommand([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kp.ForwardCommand(transmit, []byte("\x1b_G"+body+"\x1b\\"), winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
+	hostID, ok := kp.HostImageID(winID, guestID)
+	if !ok || hostID == guestID {
+		t.Fatalf("the transmission was not given a host id of the pane's own (got %d, %v)", hostID, ok)
+	}
+	if out := pendingString(kp); !strings.Contains(out, fmt.Sprintf("i=%d;", hostID)) {
+		t.Errorf("the transmission did not reach the host under its host id %d:\n%q", hostID, out)
+	}
+	kp.mu.Lock()
+	kp.pendingOutput = nil
+	kp.mu.Unlock()
 
 	place := &vt.KittyCommand{
 		Action: vt.KittyActionPlace, ImageID: guestID,
@@ -95,14 +113,8 @@ func TestAVirtualPlacementKeepsTheIDTheImageArrivedUnder(t *testing.T) {
 	}
 	kp.ForwardCommand(place, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
 
-	if out := pendingString(kp); !strings.Contains(out, "i=658188") {
-		t.Errorf("declaration names the wrong image:\n%q", out)
-	}
-	kp.mu.Lock()
-	_, allocated := kp.imageIDMap[winID][guestID]
-	kp.mu.Unlock()
-	if allocated {
-		t.Error("a virtual placement allocated a host id for an image that was passed through under the guest's")
+	if out := pendingString(kp); !strings.Contains(out, fmt.Sprintf("i=%d,", hostID)) {
+		t.Errorf("declaration names the wrong image, want host id %d:\n%q", hostID, out)
 	}
 }
 
@@ -150,10 +162,11 @@ func TestClosingAWindowDeletesItsPlaceholderImages(t *testing.T) {
 	kp.pendingOutput = nil
 	kp.mu.Unlock()
 
+	hostID, _ := kp.HostImageID(winID, 1234)
 	kp.OnWindowClose(winID)
 
 	out := pendingString(kp)
-	if !strings.Contains(out, "a=d,d=I,i=1234") {
+	if !strings.Contains(out, fmt.Sprintf("a=d,d=I,i=%d,", hostID)) {
 		t.Errorf("closing the window did not free the image:\n%q", out)
 	}
 	kp.mu.Lock()
@@ -304,9 +317,10 @@ func TestClearingTheScreenFreesPlaceholderImages(t *testing.T) {
 	kp.pendingOutput = nil
 	kp.mu.Unlock()
 
+	hostID, _ := kp.HostImageID(winID, 777)
 	kp.ClearWindow(winID)
 
-	if out := pendingString(kp); !strings.Contains(out, "a=d,d=I,i=777") {
+	if out := pendingString(kp); !strings.Contains(out, fmt.Sprintf("a=d,d=I,i=%d,", hostID)) {
 		t.Errorf("clearing the screen did not free the image:\n%q", out)
 	}
 }

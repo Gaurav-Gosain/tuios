@@ -265,7 +265,18 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 	if !andPlace && !hasPendingData {
-		if kp.absorbDirectFrame(cmd, rawData, windowID) {
+		// Passed through as the guest wrote it, except for the image id. The
+		// host has one id namespace for every pane, and the ids tuios
+		// allocates start at 1, where guests start too: forwarded as is, a
+		// transmit-only image from one pane landed on another pane's host id
+		// and replaced its picture. The id is translated like every other
+		// path translates it, and the payload stays byte-identical.
+		hostID := uint32(0)
+		if cmd.ImageID != 0 {
+			hostID = kp.getOrAllocateHostID(windowID, cmd.ImageID)
+			rawData = rewriteKittyImageID(rawData, hostID)
+		}
+		if kp.absorbDirectFrame(cmd, rawData, windowID, hostID) {
 			return nil
 		}
 		// Pass through raw (already has framing)
@@ -1293,18 +1304,13 @@ func buildVideoReplace(hostID uint32, st *remoteVideoState) []byte {
 // The id is recorded so the image can be freed when the window goes, which the
 // placement teardown cannot do for an image that has no placement.
 func (kp *KittyPassthrough) forwardVirtualPlace(cmd *vt.KittyCommand, windowID string) {
-	// Whichever id the image actually reached the host under, not a fresh one.
-	// A transmit-only command (a=t, which is what an application using
-	// placeholders sends) is passed through with the guest's own id untouched,
-	// so no host id was ever allocated and the guest's id is the right answer.
-	// Allocating one here would declare a placement against an image the host
-	// has never been sent. A host id exists only when some other path already
-	// re-registered the image, and then it is what the cells are rewritten to
-	// as well.
-	hostID, ok := kp.imageIDMap[windowID][cmd.ImageID]
-	if !ok {
-		hostID = cmd.ImageID
-	}
+	// Whichever id the image reached the host under. A transmit-only command
+	// (a=t, which is what an application using placeholders sends) allocates
+	// its host id when it passes through, so an image the guest sent is
+	// always found here. One it never sent gets a host id of its own that
+	// names nothing yet, rather than the guest's id, which on the host may
+	// be another pane's image.
+	hostID := kp.getOrAllocateHostID(windowID, cmd.ImageID)
 
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_Ga=p,U=1")
