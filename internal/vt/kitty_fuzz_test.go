@@ -61,6 +61,17 @@ func FuzzKittyPayloadDecode(f *testing.F) {
 		}
 		decode("padded base64", base64.StdEncoding.EncodeToString(data), data)
 		decode("unpadded base64", base64.RawStdEncoding.EncodeToString(data), data)
+		// What `base64` prints without -w 0: a line break every 76
+		// characters, or every cut+1 to reach the other residues.
+		padded := base64.StdEncoding.EncodeToString(data)
+		for _, width := range []int{76, int(cut)%13 + 1} {
+			var wrapped strings.Builder
+			for i := 0; i < len(padded); i += width {
+				wrapped.WriteString(padded[i:min(i+width, len(padded))])
+				wrapped.WriteByte('\n')
+			}
+			decode("wrapped padded base64", wrapped.String(), data)
+		}
 		k := int(cut) % (len(data) + 1)
 		decode("two padded chunks joined",
 			base64.StdEncoding.EncodeToString(data[:k])+base64.StdEncoding.EncodeToString(data[k:]), data)

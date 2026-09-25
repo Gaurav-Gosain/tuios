@@ -76,14 +76,25 @@ func DecodeKittyPayload(payload []byte) ([]byte, error) {
 		}
 		group := rest[:end]
 		rest = rest[end:]
-		pad := 0
-		for pad < len(rest) && rest[pad] == '=' {
-			pad++
+		// The padding run, and any line break inside it, which a wrapped
+		// encoding can put between two '='.
+		pad, skip := 0, 0
+		for skip < len(rest) && (rest[skip] == '=' || rest[skip] == '\n' || rest[skip] == '\r') {
+			if rest[skip] == '=' {
+				pad++
+			}
+			skip++
 		}
-		rest = rest[pad:]
+		rest = rest[skip:]
 		// Padding only ever completes a group of four, with one or two '='.
-		// Anything else is not base64.
-		if pad > 0 && (pad > 2 || (len(group)+pad)%4 != 0) {
+		// Anything else is not base64. Line breaks are not counted: the
+		// decoder below skips them, as base64 does everywhere, and a shell
+		// sender piping an image through base64 without -w 0 gets one every
+		// 76 characters. Counted, they made a wrapped payload's padding look
+		// misplaced whenever the breaks were not a multiple of four, and the
+		// image was refused (FuzzKittyPayloadDecode).
+		chars := len(group) - bytes.Count(group, []byte{'\n'}) - bytes.Count(group, []byte{'\r'})
+		if pad > 0 && (pad > 2 || (chars+pad)%4 != 0) {
 			return nil, errKittyPadding
 		}
 		// Decoded in place: out was sized for the whole payload, padding
