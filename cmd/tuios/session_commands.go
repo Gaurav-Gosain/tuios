@@ -353,7 +353,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		p.Send(tea.QuitMsg{})
 	}()
 
+	// See withoutHardTabs: tmux drops the background under a tab.
+	restoreTabs := withoutHardTabs()
 	finalModel, err := p.Run()
+	restoreTabs()
 
 	reason := app.ExitNormal
 	// The client may have switched sessions since it attached, so the name to

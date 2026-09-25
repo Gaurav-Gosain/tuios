@@ -179,7 +179,10 @@ func runLocal() error {
 		p.Send(tea.QuitMsg{})
 	}()
 
+	// See withoutHardTabs: tmux drops the background under a tab.
+	restoreTabs := withoutHardTabs()
 	finalModel, err := p.Run()
+	restoreTabs()
 
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		finalOS.DumpTickStats()
