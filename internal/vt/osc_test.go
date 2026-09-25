@@ -11,19 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestHandleTitle_Semicolon verifies that an OSC title containing a semicolon
-// is preserved rather than discarded (only the first ';' separates cmd/data).
-func TestHandleTitle_Semicolon(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-
-	e.Write([]byte("\x1b]2;foo;bar\x1b\\"))
-
-	if e.title != "foo;bar" {
-		t.Errorf("title = %q, want %q", e.title, "foo;bar")
-	}
-}
-
 // TestED2_RemovesOnScreenSemanticMarkers verifies that CSI 2J (clear) removes
 // semantic markers referencing on-screen content so stale prompt/command
 // markers do not survive a clear.

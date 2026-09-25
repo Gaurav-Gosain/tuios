@@ -8,235 +8,75 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestKittyKeyboardState(t *testing.T) {
-	t.Run("push and pop", func(t *testing.T) {
-		s := newKittyKeyboardState()
-		s.Push(ansi.KittyDisambiguateEscapeCodes)
-		if s.CurrentFlags() != ansi.KittyDisambiguateEscapeCodes {
-			t.Errorf("expected flags=%d after push, got %d", ansi.KittyDisambiguateEscapeCodes, s.CurrentFlags())
-		}
-
-		s.Push(ansi.KittyReportEventTypes | ansi.KittyDisambiguateEscapeCodes)
-		if s.CurrentFlags() != ansi.KittyReportEventTypes|ansi.KittyDisambiguateEscapeCodes {
-			t.Errorf("expected flags=%d after second push, got %d",
-				ansi.KittyReportEventTypes|ansi.KittyDisambiguateEscapeCodes, s.CurrentFlags())
-		}
-
-		s.Pop(1)
-		if s.CurrentFlags() != ansi.KittyDisambiguateEscapeCodes {
-			t.Errorf("expected flags=%d after pop, got %d", ansi.KittyDisambiguateEscapeCodes, s.CurrentFlags())
-		}
-
-		s.Pop(1)
-		if s.CurrentFlags() != 0 {
-			t.Errorf("expected flags=0 after second pop, got %d", s.CurrentFlags())
-		}
-
-		// Can't pop below base
-		s.Pop(5)
-		if s.CurrentFlags() != 0 {
-			t.Errorf("expected flags=0 after over-pop, got %d", s.CurrentFlags())
-		}
-	})
-
-	t.Run("set modes", func(t *testing.T) {
-		s := newKittyKeyboardState()
-		s.Push(ansi.KittyDisambiguateEscapeCodes)
-
-		// Mode 1: set given flags, unset all others
-		s.Set(ansi.KittyReportEventTypes, 1)
-		if s.CurrentFlags() != ansi.KittyReportEventTypes {
-			t.Errorf("mode 1: expected flags=%d, got %d", ansi.KittyReportEventTypes, s.CurrentFlags())
-		}
-
-		// Mode 2: set given flags, keep existing
-		s.Set(ansi.KittyDisambiguateEscapeCodes, 2)
-		expected := ansi.KittyReportEventTypes | ansi.KittyDisambiguateEscapeCodes
-		if s.CurrentFlags() != expected {
-			t.Errorf("mode 2: expected flags=%d, got %d", expected, s.CurrentFlags())
-		}
-
-		// Mode 3: unset given flags, keep existing
-		s.Set(ansi.KittyReportEventTypes, 3)
-		if s.CurrentFlags() != ansi.KittyDisambiguateEscapeCodes {
-			t.Errorf("mode 3: expected flags=%d, got %d", ansi.KittyDisambiguateEscapeCodes, s.CurrentFlags())
-		}
-	})
-}
-
-func TestKittyKeyboardCSIHandlers(t *testing.T) {
-	t.Run("push via CSI > u", func(t *testing.T) {
-		e := NewEmulator(80, 24)
-		defer e.Close()
-
-		// Push flags=1 (disambiguate)
-		e.Write([]byte("\x1b[>1u"))
-		if e.KittyKeyboardFlags() != 1 {
-			t.Errorf("expected flags=1 after push, got %d", e.KittyKeyboardFlags())
-		}
-	})
-
-	t.Run("pop via CSI < u", func(t *testing.T) {
-		e := NewEmulator(80, 24)
-		defer e.Close()
-
-		e.Write([]byte("\x1b[>3u"))  // Push flags=3
-		e.Write([]byte("\x1b[>15u")) // Push flags=15
-		e.Write([]byte("\x1b[<1u"))  // Pop 1
-		if e.KittyKeyboardFlags() != 3 {
-			t.Errorf("expected flags=3 after pop, got %d", e.KittyKeyboardFlags())
-		}
-	})
+// TestKittyKeyboardFlags drives the kitty keyboard flag stack through the
+// sequences a guest sends: push (CSI > u), pop (CSI < u), set in each of its
+// three modes (CSI = u), and a full reset.
+func TestKittyKeyboardFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"push", "\x1b[>1u", 1},
+		{"pop returns to the entry below", "\x1b[>3u\x1b[>15u\x1b[<1u", 3},
+		{"pop two", "\x1b[>1u\x1b[>3u\x1b[<2u", 0},
+		{"pop below the base stops at the base", "\x1b[>1u\x1b[<5u", 0},
+		{"set mode 1 replaces the flags", "\x1b[>1u\x1b[=2;1u", 2},
+		{"set mode 2 adds to the flags", "\x1b[>1u\x1b[=2;2u", 3},
+		{"set mode 3 removes from the flags", "\x1b[>3u\x1b[=2;3u", 1},
+		{"RIS clears the stack", "\x1b[>15u\x1bc", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEmulator(80, 24)
+			defer e.Close()
+			_, _ = e.Write([]byte(tc.in))
+			if got := e.KittyKeyboardFlags(); got != tc.want {
+				t.Errorf("flags = %d, want %d", got, tc.want)
+			}
+		})
+	}
 
 	t.Run("query via CSI ? u", func(t *testing.T) {
 		e := NewEmulator(80, 24)
 		defer e.Close()
+		_, _ = e.Write([]byte("\x1b[>5u"))
 
-		e.Write([]byte("\x1b[>5u")) // Push flags=5
-
-		// Read response in goroutine
 		responseChan := make(chan string, 1)
-		errChan := make(chan error, 1)
 		go func() {
 			buf := make([]byte, 256)
 			n, err := e.Read(buf)
 			if err != nil && err != io.EOF {
-				errChan <- err
+				responseChan <- "read error: " + err.Error()
 				return
 			}
 			responseChan <- string(buf[:n])
 		}()
-
-		e.Write([]byte("\x1b[?u")) // Query
+		_, _ = e.Write([]byte("\x1b[?u"))
 
 		select {
 		case response := <-responseChan:
-			expected := "\x1b[?5u"
-			if response != expected {
-				t.Errorf("expected response %q, got %q", expected, response)
+			if response != "\x1b[?5u" {
+				t.Errorf("response = %q, want %q", response, "\x1b[?5u")
 			}
-		case err := <-errChan:
-			t.Fatalf("Read error: %v", err)
 		case <-time.After(2 * time.Second):
-			t.Fatal("Timeout waiting for response")
-		}
-	})
-
-	t.Run("set via CSI = u", func(t *testing.T) {
-		e := NewEmulator(80, 24)
-		defer e.Close()
-
-		e.Write([]byte("\x1b[>1u"))   // Push flags=1
-		e.Write([]byte("\x1b[=3;2u")) // Set flags=3, mode=2 (OR into existing)
-		if e.KittyKeyboardFlags() != 3 {
-			t.Errorf("expected flags=3 after set mode=2, got %d", e.KittyKeyboardFlags())
-		}
-	})
-
-	t.Run("full reset clears kitty keyboard", func(t *testing.T) {
-		e := NewEmulator(80, 24)
-		defer e.Close()
-
-		e.Write([]byte("\x1b[>15u")) // Push flags
-		e.Write([]byte("\x1bc"))     // Full reset (RIS)
-		if e.KittyKeyboardFlags() != 0 {
-			t.Errorf("expected flags=0 after full reset, got %d", e.KittyKeyboardFlags())
+			t.Fatal("timeout waiting for response")
 		}
 	})
 }
 
+// TestEncodeKeyCSIu pins the CSI u encoding of a key press for each flag set a
+// pane can ask for.
+//
+// The associated-text field is the third CSI u field, sent once a pane sets
+// the report-associated-keys flag. Without it an app that asked for it
+// (terminal-browser escalates to CSI >27u on text focus, awrit pushes CSI >31u)
+// inserts the base key code, so Shift+A types "a" and shifted symbols come out
+// wrong. These are the exact bytes those parsers turn back into the typed
+// character.
+//
+// The modifier weights are shift 1, alt 2, ctrl 4, super 8, plus one.
 func TestEncodeKeyCSIu(t *testing.T) {
-	tests := []struct {
-		name     string
-		key      KeyPressEvent
-		flags    int
-		expected string
-	}{
-		{
-			name:     "regular char without flags",
-			key:      KeyPressEvent{Code: 'a'},
-			flags:    0,
-			expected: "",
-		},
-		{
-			name:     "regular char with disambiguate - no mod",
-			key:      KeyPressEvent{Code: 'a'},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "",
-		},
-		{
-			name:     "regular char with report-all-keys",
-			key:      KeyPressEvent{Code: 'a'},
-			flags:    ansi.KittyReportAllKeysAsEscapeCodes,
-			expected: "\x1b[97u",
-		},
-		{
-			name:     "ctrl+a with disambiguate",
-			key:      KeyPressEvent{Code: 'a', Mod: ModCtrl},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[97;5u",
-		},
-		{
-			name:     "enter with disambiguate",
-			key:      KeyPressEvent{Code: KeyEnter},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[13u",
-		},
-		{
-			name:     "escape with disambiguate",
-			key:      KeyPressEvent{Code: KeyEscape},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[27u",
-		},
-		{
-			name:     "up arrow without modifiers",
-			key:      KeyPressEvent{Code: KeyUp},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[A",
-		},
-		{
-			name:     "shift+up arrow",
-			key:      KeyPressEvent{Code: KeyUp, Mod: ModShift},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[1;2A",
-		},
-		{
-			name:     "ctrl+shift+up arrow",
-			key:      KeyPressEvent{Code: KeyUp, Mod: ModCtrl | ModShift},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[1;6A",
-		},
-		{
-			name:     "F5 without modifiers",
-			key:      KeyPressEvent{Code: KeyF5},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[15~",
-		},
-		{
-			name:     "ctrl+F5",
-			key:      KeyPressEvent{Code: KeyF5, Mod: ModCtrl},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "\x1b[15;5~",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := EncodeKeyCSIu(tt.key, tt.flags)
-			if result != tt.expected {
-				t.Errorf("EncodeKeyCSIu(%v, %d) = %q, want %q", tt.key, tt.flags, result, tt.expected)
-			}
-		})
-	}
-}
-
-// TestEncodeKeyCSIuAssociatedText pins the associated-text field the kitty
-// keyboard protocol requires once a pane sets the report-associated-keys flag.
-// Without the third CSI-u field, an app that asked for it (terminal-browser
-// escalates to CSI >27u on text focus, awrit pushes CSI >31u) inserts the base
-// key code, so Shift+A types "a" and shifted symbols come out wrong. These are
-// the exact bytes those parsers turn back into the typed character.
-func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
+	const disambiguate = ansi.KittyDisambiguateEscapeCodes
 	const all = ansi.KittyAllFlags                    // 31: disambiguate|events|alternate|all-keys|assoc
 	const focus = ansi.KittyDisambiguateEscapeCodes | // 27: what terminal-browser pushes on text focus
 		ansi.KittyReportEventTypes |
@@ -249,88 +89,38 @@ func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
 		flags    int
 		expected string
 	}{
-		{
-			name:     "plain letter carries its text (flags 31)",
-			key:      KeyPressEvent{Code: 'a', Text: "a"},
-			flags:    all,
-			expected: "\x1b[97;1;97u",
-		},
-		{
-			name:     "plain letter carries its text (flags 27)",
-			key:      KeyPressEvent{Code: 'a', Text: "a"},
-			flags:    focus,
-			expected: "\x1b[97;1;97u",
-		},
-		{
-			name:     "shifted letter reports the shifted text, base code",
-			key:      KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift},
-			flags:    all,
-			expected: "\x1b[120;2;88u",
-		},
-		{
-			name:     "shifted symbol reports the shifted text",
-			key:      KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift},
-			flags:    all,
-			expected: "\x1b[59;2;58u",
-		},
-		{
-			name:     "space reports its text",
-			key:      KeyPressEvent{Code: KeySpace, Text: " "},
-			flags:    all,
-			expected: "\x1b[32;1;32u",
-		},
-		{
-			name:     "non-ascii text is reported by code point",
-			key:      KeyPressEvent{Code: 'e', Text: "é"},
-			flags:    all,
-			expected: "\x1b[101;1;233u",
-		},
-		{
-			name:     "enter has no associated text",
-			key:      KeyPressEvent{Code: KeyEnter},
-			flags:    all,
-			expected: "\x1b[13u",
-		},
-		{
-			name:     "backspace has no associated text",
-			key:      KeyPressEvent{Code: KeyBackspace},
-			flags:    all,
-			expected: "\x1b[127u",
-		},
-		{
-			name:     "escape has no associated text",
-			key:      KeyPressEvent{Code: KeyEscape},
-			flags:    all,
-			expected: "\x1b[27u",
-		},
-		{
-			name:     "ctrl+letter has no associated text",
-			key:      KeyPressEvent{Code: 'a', Mod: ModCtrl},
-			flags:    all,
-			expected: "\x1b[97;5u",
-		},
-		{
-			name:     "up arrow is unchanged under all flags",
-			key:      KeyPressEvent{Code: KeyUp},
-			flags:    all,
-			expected: "\x1b[A",
-		},
-		{
-			// A control character delivered as Text (never a real keypress, but
-			// worth pinning) must not become a text field.
-			name:     "control text is dropped",
-			key:      KeyPressEvent{Code: 'm', Text: "\r"},
-			flags:    all,
-			expected: "\x1b[109u",
-		},
-		{
-			// disambiguate-only: the pane never asked for associated text, so a
-			// plain letter still goes as legacy text (empty CSI-u result).
-			name:     "no associated text without the flag",
-			key:      KeyPressEvent{Code: 'a', Text: "a"},
-			flags:    ansi.KittyDisambiguateEscapeCodes,
-			expected: "",
-		},
+		{"regular char without flags", KeyPressEvent{Code: 'a'}, 0, ""},
+		{"regular char with disambiguate, no mod", KeyPressEvent{Code: 'a'}, disambiguate, ""},
+		{"regular char with report-all-keys", KeyPressEvent{Code: 'a'}, ansi.KittyReportAllKeysAsEscapeCodes, "\x1b[97u"},
+		{"ctrl+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModCtrl}, disambiguate, "\x1b[97;5u"},
+		{"alt+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModAlt}, disambiguate, "\x1b[97;3u"},
+		{"super+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModMeta}, disambiguate, "\x1b[97;9u"},
+		{"shift+alt+ctrl+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModShift | ModAlt | ModCtrl}, disambiguate, "\x1b[97;8u"},
+		{"enter with disambiguate", KeyPressEvent{Code: KeyEnter}, disambiguate, "\x1b[13u"},
+		{"escape with disambiguate", KeyPressEvent{Code: KeyEscape}, disambiguate, "\x1b[27u"},
+		{"up arrow without modifiers", KeyPressEvent{Code: KeyUp}, disambiguate, "\x1b[A"},
+		{"shift+up arrow", KeyPressEvent{Code: KeyUp, Mod: ModShift}, disambiguate, "\x1b[1;2A"},
+		{"ctrl+shift+up arrow", KeyPressEvent{Code: KeyUp, Mod: ModCtrl | ModShift}, disambiguate, "\x1b[1;6A"},
+		{"F5 without modifiers", KeyPressEvent{Code: KeyF5}, disambiguate, "\x1b[15~"},
+		{"ctrl+F5", KeyPressEvent{Code: KeyF5, Mod: ModCtrl}, disambiguate, "\x1b[15;5~"},
+
+		{"plain letter carries its text (flags 31)", KeyPressEvent{Code: 'a', Text: "a"}, all, "\x1b[97;1;97u"},
+		{"plain letter carries its text (flags 27)", KeyPressEvent{Code: 'a', Text: "a"}, focus, "\x1b[97;1;97u"},
+		{"shifted letter reports the shifted text, base code", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, all, "\x1b[120;2;88u"},
+		{"shifted symbol reports the shifted text", KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift}, all, "\x1b[59;2;58u"},
+		{"space reports its text", KeyPressEvent{Code: KeySpace, Text: " "}, all, "\x1b[32;1;32u"},
+		{"non-ascii text is reported by code point", KeyPressEvent{Code: 'e', Text: "é"}, all, "\x1b[101;1;233u"},
+		{"enter has no associated text", KeyPressEvent{Code: KeyEnter}, all, "\x1b[13u"},
+		{"backspace has no associated text", KeyPressEvent{Code: KeyBackspace}, all, "\x1b[127u"},
+		{"escape has no associated text", KeyPressEvent{Code: KeyEscape}, all, "\x1b[27u"},
+		{"ctrl+letter has no associated text", KeyPressEvent{Code: 'a', Mod: ModCtrl}, all, "\x1b[97;5u"},
+		{"up arrow is unchanged under all flags", KeyPressEvent{Code: KeyUp}, all, "\x1b[A"},
+		// A control character delivered as Text (never a real keypress, but
+		// worth pinning) must not become a text field.
+		{"control text is dropped", KeyPressEvent{Code: 'm', Text: "\r"}, all, "\x1b[109u"},
+		// disambiguate-only: the pane never asked for associated text, so a
+		// plain letter still goes as legacy text (empty CSI-u result).
+		{"no associated text without the flag", KeyPressEvent{Code: 'a', Text: "a"}, disambiguate, ""},
 	}
 
 	for _, tt := range tests {
@@ -339,30 +129,5 @@ func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
 				t.Errorf("EncodeKeyCSIu(%+v, %d) = %q, want %q", tt.key, tt.flags, got, tt.expected)
 			}
 		})
-	}
-}
-
-// TestKittyModParam pins the kitty protocol modifier weights (shift 1, alt 2,
-// ctrl 4, super 8, plus one). The CSI u tables only exercise shift and ctrl, so
-// this is the only check on alt and super.
-func TestKittyModParam(t *testing.T) {
-	tests := []struct {
-		mod      KeyMod
-		expected int
-	}{
-		{0, 1},
-		{ModShift, 2},
-		{ModAlt, 3},
-		{ModCtrl, 5},
-		{ModMeta, 9},
-		{ModShift | ModCtrl, 6},
-		{ModShift | ModAlt | ModCtrl, 8},
-	}
-
-	for _, tt := range tests {
-		result := kittyModParam(tt.mod)
-		if result != tt.expected {
-			t.Errorf("kittyModParam(%d) = %d, want %d", tt.mod, result, tt.expected)
-		}
 	}
 }

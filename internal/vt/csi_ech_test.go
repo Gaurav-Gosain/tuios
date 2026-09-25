@@ -8,28 +8,30 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// TestEmulator_EraseCharacterHugeCount checks that a hostile ECH count returns
-// promptly instead of walking a billion out-of-bounds cells.
+// TestEmulator_HugeCountsReturnPromptly checks that a hostile repeat count
+// returns promptly instead of looping on the raw parameter.
 //
-// Any program can print ESC[999999999X. The erase runs under the window IO
+// Any program can print ESC[999999999X. The loop runs under the window IO
 // lock, so an unclamped count froze the whole pane rather than just wasting
-// time.
+// time. REP (b) repeated the last character about 2.1 billion times, CHT and
+// CBT (I, Z) stepped that many tab stops, and ECH (X) walked that many cells.
 //
-// The budget is sized from measurement, not guessed. Clamped, the slowest of
-// these inputs costs about 100us; unclamped it costs about 2.3s. A 1s budget
-// therefore sits roughly four orders of magnitude above correct behaviour and
-// less than half of broken behaviour, so it discriminates on a quiet machine
-// and cannot flake on a loaded one. An earlier 5s budget sat above BOTH costs
-// and passed against the unclamped code, which is why it is stated here.
+// The budget is sized from measurement, not guessed. Clamped, the slowest ECH
+// input costs about 100us; unclamped it costs about 2.3s, and REP far more. A
+// 1s budget therefore sits roughly four orders of magnitude above correct
+// behaviour and below broken behaviour. An earlier 5s budget sat above both
+// ECH costs and passed against the unclamped code, which is why it is stated
+// here.
 //
-// Only the two inputs marked below actually exercise the clamp. The other two
-// carry counts at or past the int32 boundary, which the parameter parser
-// discards before the erase runs, so they cost nothing either way and are kept
-// as parser-robustness cases.
-func TestEmulator_EraseCharacterHugeCount(t *testing.T) {
+// The last two ECH inputs carry counts at or past the int32 boundary, which
+// the parameter parser discards before the erase runs, so they cost nothing
+// either way and are kept as parser-robustness cases.
+func TestEmulator_HugeCountsReturnPromptly(t *testing.T) {
 	inputs := []string{
-		"\x1b[999999999X",           // exercises the clamp
-		"\x1b[1;80H\x1b[999999999X", // exercises the clamp
+		"X\x1b[2000000000b",
+		"\x1b[2000000000I\x1b[2000000000Z",
+		"\x1b[999999999X",
+		"\x1b[1;80H\x1b[999999999X",
 		"\x1b[2147483647X",
 		"hello\x1b[1;1H\x1b[4294967295X",
 	}
@@ -48,7 +50,7 @@ func TestEmulator_EraseCharacterHugeCount(t *testing.T) {
 			select {
 			case <-done:
 			case <-time.After(1 * time.Second):
-				t.Fatalf("ECH with an unclamped count did not return within 1s")
+				t.Fatalf("a count that is not clamped did not return within 1s")
 			}
 		})
 	}

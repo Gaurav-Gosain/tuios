@@ -53,142 +53,105 @@ func scanAll(input []byte, chunk int, withholdOSC func(int) bool) *scanRecorder 
 	return r
 }
 
-func TestGhosttyScanForwardsPlainStream(t *testing.T) {
-	in := []byte("hello \x1b[1;32mworld\x1b[0m\r\nnext ▀ line \x1b[38;2;1;2;3mX")
-	r := scanAll(in, len(in), nil)
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-}
-
-func TestGhosttyScanWithholdsKittyAndSixel(t *testing.T) {
-	in := []byte("a\x1b_Gf=100,a=T;QUJD\x1b\\b\x1bP0;1;0q#0;2;0;0;0-\x1b\\c\x1b_other\x1b\\d")
-	r := scanAll(in, len(in), nil)
-	// Kitty APC and sixel are gone; the non-kitty APC survives.
-	want := "abc\x1b_other\x1b\\d"
-	if got := r.forwarded.String(); got != want {
-		t.Fatalf("forwarded = %q, want %q", got, want)
-	}
-	wantEvents := []string{
-		`kitty:"Gf=100,a=T;QUJD"`,
-		`sixel:"0;1;0":"#0;2;0;0;0-"`,
-	}
-	if len(r.events) != 2 || r.events[0] != wantEvents[0] || r.events[1] != wantEvents[1] {
-		t.Fatalf("events = %v, want %v", r.events, wantEvents)
-	}
-}
-
-func TestGhosttyScanOSCForwardAndWithhold(t *testing.T) {
-	in := []byte("x\x1b]0;title\ay\x1b]66;s=2;Big\az")
-	r := scanAll(in, len(in), func(n int) bool { return n == 66 })
-	want := "x\x1b]0;title\ayz"
-	if got := r.forwarded.String(); got != want {
-		t.Fatalf("forwarded = %q, want %q", got, want)
-	}
-}
-
-func TestGhosttyScanOSCSTTerminator(t *testing.T) {
-	in := []byte("x\x1b]133;A\x1b\\y")
-	r := scanAll(in, len(in), nil)
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-	if len(r.events) != 1 || r.events[0] != `osc:133:"133;A"` {
-		t.Fatalf("events = %v", r.events)
-	}
-}
-
-func TestGhosttyScanUTF8WithC1Lookalikes(t *testing.T) {
-	// Cyrillic А is D0 90 (0x90 = 8-bit DCS), Ü is C3 9C (0x9C = 8-bit ST).
-	// Neither may open or close a sequence.
-	in := []byte("А Ü \x1b]0;tÜtle\a done")
-	r := scanAll(in, len(in), nil)
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-}
-
-func TestGhosttyScanDCSPassthrough(t *testing.T) {
-	// DECRQSS: DCS $ q m ST has an intermediate, so it is not sixel and is
-	// forwarded byte for byte.
-	in := []byte("x\x1bP$qm\x1b\\y")
-	r := scanAll(in, len(in), nil)
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-	if len(r.events) != 0 {
-		t.Fatalf("events = %v, want none", r.events)
-	}
-}
-
-func TestGhosttyScanCSIEvents(t *testing.T) {
-	in := []byte("\x1b[?1049h\x1b[3;10r\x1b[>1u\x1b[ q")
-	r := scanAll(in, len(in), nil)
-	want := []string{
-		`csi:?.h:"1049"`,
-		`csi:..r:"3;10"`,
-		`csi:>.u:"1"`,
-		`csi:. q:""`,
-	}
-	if len(r.events) != len(want) {
-		t.Fatalf("events = %v, want %v", r.events, want)
-	}
-	for i := range want {
-		if r.events[i] != want[i] {
-			t.Fatalf("event %d = %q, want %q", i, r.events[i], want[i])
-		}
-	}
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-}
-
-func TestGhosttyScanESCEvents(t *testing.T) {
-	in := []byte("\x1b(0\x1bc\x1b7")
-	r := scanAll(in, len(in), nil)
-	want := []string{`esc:(0`, `esc:.c`, `esc:.7`}
-	if len(r.events) != len(want) {
-		t.Fatalf("events = %v, want %v", r.events, want)
-	}
-	if got := r.forwarded.String(); got != string(in) {
-		t.Fatalf("forwarded = %q, want %q", got, in)
-	}
-}
-
-// TestGhosttyScanChunkingInvariance is the property the whole design leans
-// on: any chunking of the same stream must forward the same bytes and fire
-// the same events.
-func TestGhosttyScanChunkingInvariance(t *testing.T) {
-	in := []byte("plain А Ü text\x1b[1;31mred\x1b[0m\x1b_Gf=32,s=2,v=2,a=T;AAAA\x1b\\tail" +
-		"\x1b]133;B\a\x1bP0q##\x1b\\\x1b]0;tit\x1b\\\x1b(B\x1b[?2026h\x1b[?2026l" +
-		"\x1b]52;c;?\a\x1bP+q544e\x1b\\mid\x1b[38;2;9;9;9mZ")
-	whole := scanAll(in, len(in), func(n int) bool { return n == 52 })
-	for _, chunk := range []int{1, 2, 3, 7, 16} {
-		got := scanAll(in, chunk, func(n int) bool { return n == 52 })
-		if got.forwarded.String() != whole.forwarded.String() {
-			t.Fatalf("chunk=%d forwarded = %q, want %q", chunk, got.forwarded.String(), whole.forwarded.String())
-		}
-		if fmt.Sprint(got.events) != fmt.Sprint(whole.events) {
-			t.Fatalf("chunk=%d events = %v, want %v", chunk, got.events, whole.events)
-		}
-	}
-}
-
-func TestGhosttyScanAbortedOSC(t *testing.T) {
-	// An OSC aborted by a new CSI: the withheld payload disappears, the CSI
-	// still parses.
-	in := []byte("x\x1b]0;half\x1b[2Jy")
-	r := scanAll(in, len(in), nil)
-	if got := r.forwarded.String(); got != "x\x1b[2Jy" {
-		t.Fatalf("forwarded = %q", got)
-	}
-	found := false
-	for _, ev := range r.events {
-		if ev == `csi:..J:"2"` {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("missing CSI event: %v", r.events)
+// TestGhosttyScan holds the scanner to what it forwards to libghostty and the
+// events it fires, and to the property the whole design leans on: any chunking
+// of the same stream forwards the same bytes and fires the same events. OSC 52
+// and OSC 66 are the numbers withheld here.
+func TestGhosttyScan(t *testing.T) {
+	withhold := func(n int) bool { return n == 52 || n == 66 }
+	for _, tc := range []struct {
+		name   string
+		in     string
+		fwd    string   // what is forwarded; "" when only chunking is checked
+		events []string // nil when only chunking is checked
+	}{
+		{
+			name:   "a plain stream is forwarded whole",
+			in:     "hello \x1b[1;32mworld\x1b[0m\r\nnext ▀ line \x1b[38;2;1;2;3mX",
+			fwd:    "hello \x1b[1;32mworld\x1b[0m\r\nnext ▀ line \x1b[38;2;1;2;3mX",
+			events: []string{`csi:..m:"1;32"`, `csi:..m:"0"`, `csi:..m:"38;2;1;2;3"`},
+		},
+		{
+			// Kitty APC and sixel are gone; the non-kitty APC survives.
+			name:   "kitty and sixel are withheld",
+			in:     "a\x1b_Gf=100,a=T;QUJD\x1b\\b\x1bP0;1;0q#0;2;0;0;0-\x1b\\c\x1b_other\x1b\\d",
+			fwd:    "abc\x1b_other\x1b\\d",
+			events: []string{`kitty:"Gf=100,a=T;QUJD"`, `sixel:"0;1;0":"#0;2;0;0;0-"`},
+		},
+		{
+			name:   "an OSC is forwarded or withheld by number",
+			in:     "x\x1b]0;title\ay\x1b]66;s=2;Big\az",
+			fwd:    "x\x1b]0;title\ayz",
+			events: []string{`osc:0:"0;title"`, `osc:66:"66;s=2;Big"`},
+		},
+		{
+			name:   "ST terminates an OSC",
+			in:     "x\x1b]133;A\x1b\\y",
+			fwd:    "x\x1b]133;A\x1b\\y",
+			events: []string{`osc:133:"133;A"`},
+		},
+		{
+			// Cyrillic А is D0 90 (0x90 = 8-bit DCS), Ü is C3 9C (0x9C =
+			// 8-bit ST). Neither may open or close a sequence.
+			name:   "UTF-8 with C1 lookalike bytes",
+			in:     "А Ü \x1b]0;tÜtle\a done",
+			fwd:    "А Ü \x1b]0;tÜtle\a done",
+			events: []string{`osc:0:"0;tÜtle"`},
+		},
+		{
+			// DECRQSS: DCS $ q m ST has an intermediate, so it is not sixel
+			// and is forwarded byte for byte.
+			name:   "a DCS that is not sixel passes through",
+			in:     "x\x1bP$qm\x1b\\y",
+			fwd:    "x\x1bP$qm\x1b\\y",
+			events: []string{},
+		},
+		{
+			name:   "CSI events",
+			in:     "\x1b[?1049h\x1b[3;10r\x1b[>1u\x1b[ q",
+			fwd:    "\x1b[?1049h\x1b[3;10r\x1b[>1u\x1b[ q",
+			events: []string{`csi:?.h:"1049"`, `csi:..r:"3;10"`, `csi:>.u:"1"`, `csi:. q:""`},
+		},
+		{
+			name:   "ESC events",
+			in:     "\x1b(0\x1bc\x1b7",
+			fwd:    "\x1b(0\x1bc\x1b7",
+			events: []string{`esc:(0`, `esc:.c`, `esc:.7`},
+		},
+		{
+			// The withheld payload disappears, and the CSI still parses.
+			name:   "an OSC aborted by a CSI",
+			in:     "x\x1b]0;half\x1b[2Jy",
+			fwd:    "x\x1b[2Jy",
+			events: []string{`csi:..J:"2"`},
+		},
+		{
+			name: "a mixed stream",
+			in: "plain А Ü text\x1b[1;31mred\x1b[0m\x1b_Gf=32,s=2,v=2,a=T;AAAA\x1b\\tail" +
+				"\x1b]133;B\a\x1bP0q##\x1b\\\x1b]0;tit\x1b\\\x1b(B\x1b[?2026h\x1b[?2026l" +
+				"\x1b]52;c;?\a\x1bP+q544e\x1b\\mid\x1b[38;2;9;9;9mZ",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := []byte(tc.in)
+			whole := scanAll(in, len(in), withhold)
+			if tc.events != nil {
+				if got := whole.forwarded.String(); got != tc.fwd {
+					t.Fatalf("forwarded = %q, want %q", got, tc.fwd)
+				}
+				if fmt.Sprint(whole.events) != fmt.Sprint(tc.events) || len(whole.events) != len(tc.events) {
+					t.Fatalf("events = %q, want %q", whole.events, tc.events)
+				}
+			}
+			for _, chunk := range []int{1, 2, 3, 7, 16} {
+				got := scanAll(in, chunk, withhold)
+				if got.forwarded.String() != whole.forwarded.String() {
+					t.Fatalf("chunk=%d forwarded = %q, want %q", chunk, got.forwarded.String(), whole.forwarded.String())
+				}
+				if fmt.Sprint(got.events) != fmt.Sprint(whole.events) {
+					t.Fatalf("chunk=%d events = %v, want %v", chunk, got.events, whole.events)
+				}
+			}
+		})
 	}
 }

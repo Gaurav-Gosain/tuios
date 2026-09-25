@@ -65,48 +65,34 @@ func TestGuestPaletteEntryDoesNotThemeTheRest(t *testing.T) {
 	}
 }
 
-// TestOSC104ResetsGuestPaletteNotTheme pins that a guest resetting the palette
-// gets the user's terminal back, or the user's theme when one is set, and never
-// another guest's idea of red.
-func TestOSC104ResetsGuestPaletteNotTheme(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-
-	e.Write([]byte("\x1b]4;1;#00ff00\x1b\\"))
-	e.Write([]byte("\x1b]104;1\x1b\\"))
-	if got := e.PaletteColor(1); got != ansi.BasicColor(1) {
-		t.Errorf("PaletteColor(1) after OSC 104;1 = %#v, want ansi.BasicColor(1)", got)
-	}
-
-	e.SetThemeColors(color.White, color.Black, color.White, themePalette())
-	e.Write([]byte("\x1b]4;1;#00ff00\x1b\\"))
-	e.Write([]byte("\x1b]104\x1b\\"))
-	if got := e.PaletteColor(1); got != themePalette()[1] {
-		t.Errorf("PaletteColor(1) after bare OSC 104 = %#v, want the theme entry", got)
-	}
-}
-
-// TestRISClearsGuestPalette pins that a full reset leaves no palette state
-// behind for whatever runs in the pane next.
-func TestRISClearsGuestPalette(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-
-	e.Write([]byte("\x1b]4;2;#00ff00\x1b\\"))
-	e.Write([]byte("\x1bc"))
-	if got := e.PaletteColor(2); got != ansi.BasicColor(2) {
-		t.Errorf("PaletteColor(2) after RIS = %#v, want ansi.BasicColor(2)", got)
-	}
-}
-
-// TestOSC4MalformedIndexIgnored pins that a garbled index is dropped instead of
-// being read as slot 0, which would have the guest repaint black by accident.
-func TestOSC4MalformedIndexIgnored(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-
-	e.Write([]byte("\x1b]4;x1;#00ff00\x1b\\"))
-	if got := e.PaletteColor(0); got != ansi.BasicColor(0) {
-		t.Errorf("PaletteColor(0) = %#v after a malformed OSC 4, want ansi.BasicColor(0)", got)
+// TestGuestPaletteResets pins what undoes a guest's OSC 4.
+// OSC 104 gives back the user's terminal, or the user's theme when one is set,
+// and never another guest's idea of red. A full reset leaves no palette state
+// behind for whatever runs in the pane next. A garbled index is dropped rather
+// than read as slot 0, which would have the guest repaint black by accident.
+func TestGuestPaletteResets(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		theme bool
+		in    string
+		slot  int
+		want  color.Color
+	}{
+		{"OSC 104;1 resets the slot", false, "\x1b]4;1;#00ff00\x1b\\\x1b]104;1\x1b\\", 1, ansi.BasicColor(1)},
+		{"a bare OSC 104 gives the theme back", true, "\x1b]4;1;#00ff00\x1b\\\x1b]104\x1b\\", 1, themePalette()[1]},
+		{"RIS clears the guest palette", false, "\x1b]4;2;#00ff00\x1b\\\x1bc", 2, ansi.BasicColor(2)},
+		{"a malformed index is ignored", false, "\x1b]4;x1;#00ff00\x1b\\", 0, ansi.BasicColor(0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEmulator(80, 24)
+			defer e.Close()
+			if tc.theme {
+				e.SetThemeColors(color.White, color.Black, color.White, themePalette())
+			}
+			e.Write([]byte(tc.in))
+			if got := e.PaletteColor(tc.slot); got != tc.want {
+				t.Errorf("PaletteColor(%d) = %#v, want %#v", tc.slot, got, tc.want)
+			}
+		})
 	}
 }

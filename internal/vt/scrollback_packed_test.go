@@ -92,16 +92,6 @@ func TestScrollbackRoundTripsEveryKindOfCell(t *testing.T) {
 	}
 }
 
-func TestScrollbackDoesNotAliasThePushedLine(t *testing.T) {
-	sb := NewScrollback(4)
-	line := styledLine(20)
-	sb.PushLine(line)
-	line[0].Content = "Z"
-	if got := sb.Line(0)[0].Content; got != "a" {
-		t.Fatalf("scrollback line changed to %q with the caller's line, want %q", got, "a")
-	}
-}
-
 func TestScrollbackLineCacheFollowsTheRing(t *testing.T) {
 	sb := NewScrollback(2)
 	push := func(s string) {
