@@ -125,6 +125,39 @@ func TestKeybindRegistry_AccentedLookup(t *testing.T) {
 // Override Tests
 // =============================================================================
 
+func TestApplyOverrides_HideWindowButtons(t *testing.T) {
+	// Save original value
+	originalHide := config.Global.HideWindowButtons
+	defer func() { config.Global.HideWindowButtons = originalHide }()
+
+	// Reset to default
+	config.Global.HideWindowButtons = false
+
+	// CLI flag only
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: true}, &config.Global)
+	if !config.Global.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true from CLI flag")
+	}
+
+	// User config only
+	config.Global.HideWindowButtons = false
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.HideWindowButtons = true
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if !config.Global.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true from user config")
+	}
+
+	// OR of both (CLI false, user config true)
+	config.Global.HideWindowButtons = false
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: false}, &config.Global)
+	if !config.Global.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true (OR of CLI and user config)")
+	}
+}
+
 func TestApplyOverrides_ScrollbackLines(t *testing.T) {
 	// Save original value
 	originalLines := config.Global.ScrollbackLines
@@ -200,6 +233,31 @@ func TestLoadUserConfig_Pure(t *testing.T) {
 	writeConfig(t, "[appearance]\nanimations_enabled = true\n")
 	if config.Global.AnimationsEnabled {
 		t.Error("LoadUserConfig must not mutate appearance globals")
+	}
+}
+
+func TestApplyOverrides_HideClock(t *testing.T) {
+	// Save original value
+	originalHide := config.Global.HideClock
+	defer func() { config.Global.HideClock = originalHide }()
+
+	// Reset to default
+	config.Global.HideClock = false
+
+	// CLI flag
+	config.ApplyOverrides(config.Overrides{HideClock: true}, &config.Global)
+	if !config.Global.HideClock {
+		t.Error("Expected HideClock to be true from CLI flag")
+	}
+
+	// User config OR with CLI
+	config.Global.HideClock = false
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.HideClock = true
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{HideClock: false}, &config.Global)
+	if !config.Global.HideClock {
+		t.Error("Expected HideClock to be true from user config (OR)")
 	}
 }
 

@@ -369,3 +369,24 @@ func TestANonReleaseBuildIsNotToldItIsOutOfDate(t *testing.T) {
 		t.Errorf("an unversioned build downloaded %v", src.fetched)
 	}
 }
+
+// TestUpdateIsRegistered. Cobra registers by value, so a command declared and
+// never added to the root compiles, passes vet, and is absent from the binary.
+// The skill does not name `tuios update`, so TestSkillCommandsResolve does not
+// reach it, and the other update tests call runUpdate directly.
+//
+// Negative control: leave updateCmd out of the AddCommand call and this fails.
+func TestUpdateIsRegistered(t *testing.T) {
+	cmd, _, err := newRootCommand().Find([]string{"update"})
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if cmd.Name() != "update" {
+		t.Fatalf("resolved to %q", cmd.Name())
+	}
+	for _, flag := range []string{"check", "pre"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("--%s is not a flag on `tuios update`", flag)
+		}
+	}
+}
