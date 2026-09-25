@@ -27,6 +27,59 @@ const (
 	holderRows = 40
 )
 
+// watchSessionResize routes the client's session-resize notifications into the
+// OS event channel, which is what cmd/tuios and cmd/tuios-web both do.
+func (r *rig) watchSessionResize() {
+	r.t.Helper()
+	r.client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
+		select {
+		case r.m.ClientEventChan <- ClientEvent{
+			Type:        "resize",
+			Width:       width,
+			Height:      height,
+			ClientCount: clientCount,
+			Reserve:     reserve,
+		}:
+		default:
+			r.t.Errorf("ClientEventChan full, dropped a session resize to %dx%d", width, height)
+		}
+	})
+}
+
+// awaitSessionResize waits for the session's size to change and applies every
+// event it sees on the way through, as the program loop does.
+//
+// It waits for a size change rather than for one message, because this message
+// also carries the chrome reserve the session has settled on: a client saying
+// what it keeps for its own rail moves that without moving the size, and the
+// tests here are about the size.
+func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
+	r.t.Helper()
+	fromW, fromH := r.m.GetRenderWidth(), r.m.GetRenderHeight()
+	deadline := time.After(rigWait)
+	for {
+		select {
+		case ev := <-r.m.ClientEventChan:
+			if ev.Type != "resize" {
+				r.t.Fatalf("waiting for %s: got a %q event", what, ev.Type)
+			}
+			msg := SessionResizeMsg{
+				Width:       ev.Width,
+				Height:      ev.Height,
+				ClientCount: ev.ClientCount,
+				Reserve:     ev.Reserve,
+			}
+			r.m.Update(msg)
+			if msg.Width != fromW || msg.Height != fromH {
+				return msg
+			}
+		case <-deadline:
+			r.t.Fatalf("timed out waiting for %s", what)
+			return SessionResizeMsg{}
+		}
+	}
+}
+
 // tile puts the rig's panes side by side, which is the layout the report is
 // about: the divider is where the stale width shows.
 func (r *rig) tile() {
@@ -38,6 +91,22 @@ func (r *rig) tile() {
 		client, daemon := r.paneSizes()
 		r.t.Fatalf("panes disagree before the test starts:\n client %v\n daemon %v", client, daemon)
 	}
+}
+
+// joinClient attaches another client of the given size and leaves it attached
+// for the rest of the test unless the caller drops it first.
+func joinClient(t *testing.T, name string, width, height int) *session.TUIClient {
+	t.Helper()
+	c := session.NewTUIClient()
+	if err := c.Connect("test", width, height); err != nil {
+		t.Fatalf("second client connect: %v", err)
+	}
+	if _, err := c.AttachSession(name, false, width, height); err != nil {
+		t.Fatalf("second client attach: %v", err)
+	}
+	c.StartReadLoop()
+	t.Cleanup(func() { _ = c.Close() })
+	return c
 }
 
 // paneSizes reports what the client's emulators and the daemon's panes each
@@ -72,6 +141,48 @@ func (r *rig) waitPaneSizesAgree() (client, daemon []string, ok bool) {
 			return client, daemon, false
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession covers the
+// layout that has no retile to fall back on. A floating pane keeps its own
+// geometry, so nothing pulls it back inside an edge that moved in because
+// somebody else attached from a smaller window.
+func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T) {
+	r := newRigSized(t, 2, holderCols, holderRows)
+	r.watchSessionResize()
+	if r.m.AutoTiling {
+		t.Fatalf("the rig came up tiling; this test is about the floating layout")
+	}
+
+	// Put a pane out where the narrow client's edge will cut through it.
+	w := r.win(0)
+	w.X, w.Y = holderCols-40, 2
+	w.Resize(40, 12)
+
+	joinClient(t, r.session, joinerCols, joinerRows)
+	r.awaitSessionResize("the session to shrink around the client already attached")
+
+	// The clamp's own guarantee, the one the host terminal's resize gets: the
+	// pane is no wider than the session, and enough of it is still inside the
+	// content region to be grabbed. Off the right-hand edge entirely is what it
+	// rules out, not hanging over it.
+	rightEdge := r.m.GetLeftMargin() + r.m.GetContentWidth()
+	if w.Width > r.m.GetContentWidth() {
+		t.Fatalf("pane is %d columns wide, past the %d the session now has",
+			w.Width, r.m.GetContentWidth())
+	}
+	if w.X >= rightEdge {
+		t.Fatalf("pane starts at column %d, off the right of the %d the session now has",
+			w.X, rightEdge)
+	}
+	if w.Height > r.m.GetUsableHeight() {
+		t.Fatalf("pane is %d rows tall, past the %d the session now has",
+			w.Height, r.m.GetUsableHeight())
+	}
+	if w.Y >= r.m.GetTopMargin()+r.m.GetUsableHeight() {
+		t.Fatalf("pane starts at row %d, below the %d the session now has",
+			w.Y, r.m.GetTopMargin()+r.m.GetUsableHeight())
 	}
 }
 

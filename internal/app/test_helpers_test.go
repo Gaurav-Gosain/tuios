@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
-	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -389,28 +388,6 @@ func navIndexOfSession(m *OS, id string) int {
 	return -1
 }
 
-// only returns the single context fired for event, failing when the count is
-// anything but one: a hook firing twice for one action is as wrong as not
-// firing, and a resize hook that runs per mouse-motion event is the specific
-// version of that this guards.
-func (r *hookRecorder) only(t *testing.T, m *OS, event hooks.Event) hooks.Context {
-	t.Helper()
-	m.HookManager.Wait()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	var got []hooks.Context
-	for _, c := range r.fired {
-		if c.EventType == event {
-			got = append(got, c)
-		}
-	}
-	if len(got) != 1 {
-		t.Fatalf("%s fired %d times, want 1 (all fired: %v)", event, len(got), r.events())
-	}
-	return got[0]
-}
-
 // railPlain renders the rail and strips the styling, which is what most of the
 // claims below are about: where a row landed, not how it was painted.
 func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
@@ -506,59 +483,6 @@ func searchOS(t *testing.T) *OS {
 	return m
 }
 
-// narrowScreens are the sizes the overlays have to survive: a tall narrow
-// terminal, a short wide one, the narrowest viewport worth supporting, and a
-// normal terminal as a control.
-var narrowScreens = []struct {
-	name string
-	w, h int
-}{
-	{"tall-narrow", 51, 37},
-	{"short-wide", 90, 20},
-	{"very-narrow", 30, 24},
-	{"very-short", 100, 12},
-	{"desktop", 120, 40},
-	// The accent picker's wide layout: the first screen that gets it, one just
-	// over it, and a wide screen too short to keep everything.
-	{"wide-picker-floor", 73, 30},
-	{"wide-picker", 74, 20},
-	{"wide-picker-short", 100, 14},
-}
-
-// assertFitsScreen fails if any line of out is wider than w, the block is
-// taller than h, or any line pads itself with a control character. An overlay
-// wider than the screen has its right-hand side drawn off the edge, where it
-// cannot be read or scrolled to.
-//
-// The control-character half guards a different way of getting the same answer
-// wrong. Every row here is padded to the panel width with literal spaces, and
-// the fitting arithmetic in overlay_fit.go measures those rows to decide what
-// else fits. A tab would break that: it is one byte that lipgloss measures as
-// one cell but a terminal advances to its next tab stop, so the panel's own
-// idea of where a row ends would stop matching the screen's. Carriage returns
-// and the rest are the same failure with a different glyph.
-func assertFitsScreen(t *testing.T, name, out string, w, h int) {
-	t.Helper()
-	if out == "" {
-		return
-	}
-	lines := strings.Split(out, "\n")
-	for i, ln := range lines {
-		if j := strings.IndexAny(ln, "\t\r\v\f"); j >= 0 {
-			t.Errorf("%s: line %d pads with a control character (%q at byte %d): %q",
-				name, i, ln[j], j, ln)
-			return
-		}
-		if lw := lipgloss.Width(ln); lw > w {
-			t.Errorf("%s: line %d is %d cells wide, screen is %d: %q", name, i, lw, w, ln)
-			return
-		}
-	}
-	if len(lines) > h {
-		t.Errorf("%s: %d lines tall, screen is %d", name, len(lines), h)
-	}
-}
-
 func sessionColorTree() sessiontree.Tree {
 	return sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
@@ -574,11 +498,87 @@ func sessionColorTree() sessiontree.Tree {
 	})
 }
 
-// events lists what fired, for failure messages.
-func (r *hookRecorder) events() []hooks.Event {
-	out := make([]hooks.Event, 0, len(r.fired))
-	for _, c := range r.fired {
-		out = append(out, c.EventType)
+// hostRailText is the rail's rows joined into one block, so an assertion can
+// talk about the order rows appear in as well as their content.
+func hostRailText(t *testing.T, m *OS) string {
+	t.Helper()
+	return strings.Join(railLines(t, m), "\n")
+}
+
+// hostHeader is the text a machine's header row starts with: the fold mark
+// and the name, as the active glyph set draws them.
+func hostHeader(m *OS, name string, collapsed bool) string {
+	mark := m.Settings.GetRailFoldOpenGlyph()
+	if collapsed {
+		mark = m.Settings.GetRailFoldShutGlyph()
 	}
-	return out
+	return mark + " " + name
+}
+
+// closeWindows tears down the real PTYs spawned by AddWindow so a test does not
+// leak shell processes.
+func closeWindows(m *OS) {
+	for _, w := range m.Windows {
+		w.Close()
+	}
+}
+
+// isUnderlined reports whether any SGR sequence in s sets the underline
+// attribute. The parameters arrive merged with the colours, so the sequence is
+// parsed rather than matched as a literal.
+func isUnderlined(s string) bool {
+	for _, seq := range strings.Split(s, "\x1b[") {
+		end := strings.IndexByte(seq, 'm')
+		if end < 0 {
+			continue
+		}
+		params := strings.Split(seq[:end], ";")
+		for i := 0; i < len(params); i++ {
+			// A colour carries its channels as parameters of its own, and one of
+			// them may well be a 4.
+			if p := params[i]; p == "38" || p == "48" {
+				if i+1 < len(params) && params[i+1] == "5" {
+					i += 2
+					continue
+				}
+				i += 4
+				continue
+			}
+			if params[i] == "4" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sidebarMultiSessionOS builds an OS attached to "main" with agent-flagged
+// windows and the sidebar on, plus a synthetic three-session tree the way a
+// daemon-backed client would see one. The tree order is the daemon's creation
+// order: main, scratch, deploy.
+func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
+	t.Helper()
+	m := newNarrowOS(t, w, h)
+	m.CurrentWorkspace = 1
+	m.SessionName = "main"
+	m.Windows = []*terminal.Window{
+		{ID: "aaaaaaaa1111", CustomName: "claude", Width: 40, Height: 20, Workspace: 1, AgentState: "working"},
+		{ID: "bbbbbbbb2222", CustomName: "tests", Width: 40, Height: 20, Workspace: 1, AgentState: "needs_input"},
+		{ID: "cccccccc3333", CustomName: "logs", Width: 40, Height: 20, Workspace: 1},
+	}
+	m.FocusedWindow = 0
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
+	m.SidebarOrder = nil
+
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "claude", AgentState: "working", Focused: true},
+			{ID: "bbbbbbbb2222", Title: "tests", AgentState: "needs_input"},
+			{ID: "cccccccc3333", Title: "logs"},
+		}},
+		{Name: "scratch", WindowCount: 2},
+		{Name: "deploy", WindowCount: 1},
+	})
+	return m, tree
 }

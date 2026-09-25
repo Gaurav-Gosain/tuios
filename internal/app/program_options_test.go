@@ -113,6 +113,31 @@ func TestRemoteClientCannotBeSuspended(t *testing.T) {
 	}
 }
 
+// TestMotionFilterFollowsTheBeam gives follow = "mouse" its own clause. The
+// beam reads the pointer off LastMouseX/Y, which only a motion that reached
+// Update sets, and it used to ride the link clause, so it stopped following over
+// chrome and with links off.
+func TestMotionFilterFollowsTheBeam(t *testing.T) {
+	o := filterOS(t)
+	o.UserConfig.Appearance.Links = "off"
+	o.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
+	// A pane's border: chrome, not pane content, so no other clause claims it.
+	// (The dock band has a clause of its own now, for its controls' hover.)
+	overChrome := tea.MouseMotionMsg{X: 31, Y: 10}
+
+	if FilterMouseMotion(o, overChrome) != nil {
+		t.Fatal("motion over chrome passed with the beam off; the CPU guard is gone")
+	}
+	o.SetSpotlight(true)
+	if FilterMouseMotion(o, overChrome) == nil {
+		t.Error("motion over chrome was dropped with follow = mouse; the beam cannot follow")
+	}
+	o.LastMouseX, o.LastMouseY = overChrome.X, overChrome.Y
+	if FilterMouseMotion(o, overChrome) != nil {
+		t.Error("a motion inside the beam's current cell passed; it composes the same frame")
+	}
+}
+
 // sweepOS is a served client with four tiled panes, the shape a pointer sweep
 // meets on a remote desktop.
 func sweepOS(tb testing.TB) *OS {

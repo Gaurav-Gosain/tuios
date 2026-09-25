@@ -27,6 +27,26 @@ func TestLargestClearRectTakesEveryBlocker(t *testing.T) {
 	}
 }
 
+// TestOccludersAboveIgnoresWhatCannotCover keeps an invisible window from
+// taking an image away. A minimized or off-workspace pane keeps its geometry,
+// and reading that as a cover is how an image disappears for no visible reason.
+func TestOccludersAboveIgnoresWhatCannotCover(t *testing.T) {
+	all := map[string]*WindowPositionInfo{
+		"self":   {WindowX: 0, WindowY: 0, Width: 10, Height: 10, Visible: true, WindowZ: 5},
+		"below":  {WindowX: 0, WindowY: 0, Width: 10, Height: 10, Visible: true, WindowZ: 1},
+		"hidden": {WindowX: 0, WindowY: 0, Width: 10, Height: 10, Visible: false, WindowZ: 9},
+		"above":  {WindowX: 3, WindowY: 3, Width: 4, Height: 4, Visible: true, WindowZ: 9},
+		"sameZ":  {WindowX: 0, WindowY: 0, Width: 10, Height: 10, Visible: true, WindowZ: 5},
+	}
+	got := occludersAbove(5, all, "self")
+	if len(got) != 1 {
+		t.Fatalf("got %d occluders, want only the visible higher one: %+v", len(got), got)
+	}
+	if want := (cellRect{3, 3, 4, 4}); got[0] != want {
+		t.Errorf("occluder = %+v, want %+v", got[0], want)
+	}
+}
+
 // occlusionHarness places one image in one window and lets a test drop another
 // window on top of it.
 type occlusionHarness struct {
@@ -74,6 +94,74 @@ func (h *occlusionHarness) refresh() string {
 		h.kp.WriteToHost(out)
 	}
 	return string(out)
+}
+
+// TestAPartlyCoveredImageIsCroppedNotHidden is the behaviour this exists for. A
+// window dragged over part of an image used to take the whole picture away,
+// because the occlusion test was a yes-or-no overlap. Only the covered part
+// should go.
+//
+// Negative control: putting the isOccludedByHigherWindow call back in place of
+// the crop deleted the placement and this failed.
+func TestAPartlyCoveredImageIsCroppedNotHidden(t *testing.T) {
+	h := newOcclusionHarness(t)
+	h.refresh() // settle: the image is placed at full size
+
+	// A window covering the right half of the image, from column 12 rightwards.
+	h.infos["over"] = &WindowPositionInfo{
+		WindowX: 12, WindowY: 0, Width: 40, Height: 30,
+		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
+	}
+	out := h.refresh()
+
+	if !strings.Contains(out, "a=p,i=") {
+		t.Fatalf("the image was not re-placed when a window covered part of it:\n%q", out)
+	}
+	if strings.Contains(out, "a=d,d=i") {
+		t.Errorf("the image was deleted rather than cropped:\n%q", out)
+	}
+	// The visible strip runs from the image's left edge to column 12, which is
+	// 11 cells wide once the window's 1-cell border is accounted for.
+	if !strings.Contains(out, ",c=11") {
+		t.Errorf("the placement was not narrowed to the clear strip:\n%q", out)
+	}
+	// A crop off one side needs a source rectangle, or the host scales the
+	// whole bitmap into the narrower cell box instead of cropping it.
+	if !strings.Contains(out, ",x=") || !strings.Contains(out, ",w=") {
+		t.Errorf("no source rectangle, so the image is squeezed rather than cropped:\n%q", out)
+	}
+}
+
+// TestAFullyCoveredImageIsStillHidden keeps the old behaviour where it was
+// right. Nothing of the picture is clear, so nothing should be drawn over the
+// window that covers it.
+func TestAFullyCoveredImageIsStillHidden(t *testing.T) {
+	h := newOcclusionHarness(t)
+	h.refresh()
+
+	h.infos["over"] = &WindowPositionInfo{
+		WindowX: 0, WindowY: 0, Width: 200, Height: 60,
+		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
+	}
+	out := h.refresh()
+
+	if !strings.Contains(out, "a=d") {
+		t.Errorf("a fully covered image was not hidden, so it draws over the window:\n%q", out)
+	}
+}
+
+// TestAnUncoveredImageIsUnaffected is the control: with nothing on top the
+// placement must be the full image, or the crop is firing when it should not.
+func TestAnUncoveredImageIsUnaffected(t *testing.T) {
+	h := newOcclusionHarness(t)
+	out := h.refresh()
+
+	if strings.Contains(out, "a=d,d=i") {
+		t.Errorf("an image nothing covers was hidden:\n%q", out)
+	}
+	if !strings.Contains(out, ",c=20") {
+		t.Errorf("an image nothing covers was cropped:\n%q", out)
+	}
 }
 
 // TestSubtractRectIsExact pins the decomposition. This is what lets an image
@@ -190,6 +278,37 @@ func TestClearRegionKeepsEveryPiece(t *testing.T) {
 	}
 	if want := img.area() - 3 - 3; area != want {
 		t.Fatalf("pieces cover %d cells, want %d: %+v", area, want, got)
+	}
+}
+
+// TestACornerCoverKeepsBothStrips is the screenshot case. A window over the
+// bottom right of an image used to take the whole top right with it, because
+// one placement shows one rectangle and the larger strip won. The image is now
+// drawn as both pieces of the L.
+//
+// Negative control: routing the refresh back through largestClearRect emitted a
+// single a=p and this failed.
+func TestACornerCoverKeepsBothStrips(t *testing.T) {
+	h := newOcclusionHarness(t)
+	h.refresh()
+
+	// The image sits at (1,1) and is 20x10. Cover its bottom right corner only.
+	h.infos["over"] = &WindowPositionInfo{
+		WindowX: 12, WindowY: 6, Width: 40, Height: 30,
+		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
+	}
+	out := h.refresh()
+
+	if n := strings.Count(out, "a=p,i="); n < 2 {
+		t.Errorf("the image was drawn as %d placement(s), want two for the L:\n%q", n, out)
+	}
+	if strings.Contains(out, "a=d,d=i,i=1,q=2") {
+		t.Errorf("the image was hidden rather than cropped:\n%q", out)
+	}
+	// The two pieces must use different placement ids or the second replaces
+	// the first.
+	if !strings.Contains(out, "p=1") || !strings.Contains(out, "p=2") {
+		t.Errorf("the two pieces did not get distinct placement ids:\n%q", out)
 	}
 }
 

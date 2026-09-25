@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tfx "github.com/Gaurav-Gosain/tuiffects"
@@ -35,6 +36,18 @@ func effectPickerOS(t *testing.T, w, h int) (*OS, *terminal.Window) {
 		}
 	}
 	return m, win
+}
+
+// effectRowIndex is where a name sits in the picker's current list.
+func effectRowIndex(m *OS, name string) int {
+	return slices.Index(m.effectPickerItems(), name)
+}
+
+// pickerBody renders the effect picker and strips its styling.
+func pickerBody(t *testing.T, m *OS) string {
+	t.Helper()
+	content, _, _ := m.renderEffectPicker()
+	return stripANSIForTrace(content)
 }
 
 // TestEffectsWithNoOpeningNeverHideTheScreen is the one claim on this panel
@@ -315,6 +328,105 @@ func TestClosedEffectPickerRunsNothing(t *testing.T) {
 		if l.GetID() == "effectpreview" {
 			t.Error("a preview layer was placed with the picker shut")
 		}
+	}
+}
+
+// TestEffectPreviewStopsOnResize: the capture is the screen at one size, and
+// the screen it was taken from is underneath the picker now, so there is
+// nothing to re-capture. The saver stops for this and so does the preview.
+//
+// Negative control: dropping the size check animates the old capture into the
+// new screen, anchored into a corner, and this fails.
+func TestEffectPreviewStopsOnResize(t *testing.T) {
+	m, _ := effectPickerOS(t, 100, 30)
+	_ = m.OpenEffectPicker()
+	gen := m.effectPreview.gen
+
+	m.Width, m.EffectiveWidth = 80, 80
+	cmd := m.handleEffectPreviewFrame(effectPreviewFrameMsg{gen: gen})
+	if cmd != nil {
+		t.Error("the preview kept animating a capture of a screen that is no longer that size")
+	}
+	if m.effectPreview.frame != "" {
+		t.Error("a stale frame was left on screen after the resize")
+	}
+	if !m.ShowEffectPicker {
+		t.Error("the resize took the picker away as well; the list is still worth using")
+	}
+	if !strings.Contains(pickerBody(t, m), "The screen size changed") {
+		t.Error("the picker says nothing about why the preview stopped")
+	}
+}
+
+// TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc.
+//
+// Negative control: making apply skip setOption, or making cancel write the
+// selection, fails this.
+func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
+	m, _ := effectPickerOS(t, 100, 30)
+	m.ConfigReadOnly = true // nothing here may touch the real config file
+	before := m.screensaverConfig().EffectName()
+
+	_ = m.OpenEffectPicker()
+	idx := effectRowIndex(m, "expand")
+	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+	_ = m.EffectPickerApplySelection()
+
+	if m.ShowEffectPicker {
+		t.Error("Enter did not close the picker")
+	}
+	if got := m.screensaverConfig().EffectName(); got != "expand" {
+		t.Errorf("Enter left the setting on %q, want expand", got)
+	}
+
+	// Esc changes nothing, however far the selection moved.
+	_ = m.OpenEffectPicker()
+	idx = effectRowIndex(m, "matrix")
+	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+	m.CancelEffectPicker()
+	if m.ShowEffectPicker {
+		t.Error("Esc did not close the picker")
+	}
+	if got := m.screensaverConfig().EffectName(); got != "expand" {
+		t.Errorf("Esc left the setting on %q, want the applied expand", got)
+	}
+	if before == "expand" {
+		t.Fatal("setup: the setting already was expand, so neither half of this proves anything")
+	}
+}
+
+// TestEffectPickerFiltersAndRefusesAnEmptyApply: the search is what makes
+// thirty-six reachable, and an apply with nothing under the cursor must not
+// close the panel and strand the query.
+//
+// Negative control: making ApplySelection close on an empty list fails this.
+func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
+	m, _ := effectPickerOS(t, 100, 30)
+	_ = m.OpenEffectPicker()
+
+	_ = m.EffectPickerType("matr")
+	items := m.effectPickerItems()
+	if len(items) == 0 || !slices.Contains(items, "matrix") {
+		t.Fatalf("the query matr found %v, want matrix among them", items)
+	}
+	if len(items) == len(config.ScreensaverEffects) {
+		t.Error("the query filtered nothing out")
+	}
+
+	_ = m.EffectPickerClearQuery()
+	if len(m.effectPickerItems()) != len(config.ScreensaverEffects) {
+		t.Error("clearing the query did not put the whole list back")
+	}
+
+	_ = m.EffectPickerType("zzzznotaneffect")
+	if len(m.effectPickerItems()) != 0 {
+		t.Fatal("setup: the nonsense query still matched something")
+	}
+	if cmd := m.EffectPickerApplySelection(); cmd != nil {
+		t.Error("an apply with nothing selected returned a save command")
+	}
+	if !m.ShowEffectPicker {
+		t.Error("an apply with nothing selected closed the picker and stranded the query")
 	}
 }
 

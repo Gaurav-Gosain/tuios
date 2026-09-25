@@ -76,6 +76,65 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	}
 }
 
+// TestLinkHoverYieldsToAMouseTrackingGuest is the ownership rule.
+//
+// A pane in terminal mode whose program asked for mouse reporting owns the
+// pointer: the click handler forwards to it, so underlining a link there would
+// promise an action tuios is not going to take. The suppression has to be the
+// same three-part test the click path applies, or the two disagree about who
+// owns the same cell.
+//
+// Negative control: with guestOwnsPointer returning false unconditionally, the
+// last assertion fails.
+func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
+	m, win := linkTestOS(t, "go to https://example.org/a now")
+	m.Windows[0].Workspace = 1
+
+	sx, sy := screenOf(win, 8, 0)
+	if !m.LinkHoverAt(sx, sy) {
+		t.Fatal("no link under the pointer before the guest asked for the mouse")
+	}
+
+	// The guest turns on mouse reporting (DECSET 1000) and tuios is in terminal
+	// mode with that pane focused: all three parts of the test hold.
+	win.WriteOutput([]byte("\x1b[?1000h"))
+	m.Mode = TerminalMode
+	if !win.Terminal.HasMouseMode() {
+		t.Fatal("the emulator did not record DECSET 1000")
+	}
+	if m.LinkHoverAt(sx, sy) {
+		t.Error("the pointer picked up a link over a pane whose program is tracking the mouse")
+	}
+
+	// Window management mode is tuios's own, so the pane does not own the
+	// pointer there even with reporting on.
+	m.Mode = WindowManagementMode
+	if !m.LinkHoverAt(sx, sy) {
+		t.Error("window management mode handed the pointer to the guest")
+	}
+}
+
+// TestUnfocusedPaneLeavesTheFastPathToUnderline pins the one line in
+// renderTerminal that a link hover has to reach past. The emulator's own
+// renderer has nowhere to put an underline, so a pane on that path draws no
+// highlight at all.
+//
+// Negative control: with hasLinkRun dropped from the fast-path condition, this
+// fails and the focused-pane test above still passes, which is exactly how the
+// bug would have shipped.
+func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
+	m, win := linkTestOS(t, "go to https://example.org/a now")
+
+	sx, sy := screenOf(win, 8, 0)
+	if !m.LinkHoverAt(sx, sy) {
+		t.Fatal("no link under the pointer")
+	}
+	out := m.renderTerminal(win, false, false)
+	if !isUnderlined(out) {
+		t.Errorf("an unfocused pane served the fast path and drew no underline:\n%q", out)
+	}
+}
+
 // TestLinkHoverFollowsASoftWrap checks that a URL the guest broke across rows
 // resolves whole, from either half.
 //

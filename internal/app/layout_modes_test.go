@@ -2,7 +2,11 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -217,6 +221,166 @@ func TestLayoutModesKeepTheirContract(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// fillGuest paints a pane's whole drawable width with one character of its own,
+// so the composed frame says exactly which cells that guest owns.
+func fillGuest(w *terminal.Window, mark rune) {
+	w.LockIO()
+	_, _ = w.Terminal.Write([]byte(strings.Repeat(string(mark), w.ContentWidth())))
+	w.UnlockIO()
+	w.MarkContentDirty()
+}
+
+// frameRows renders the composed frame and returns it as rows of runes with the
+// styling stripped, which is the frame as a person sees it.
+func frameRows(m *OS) [][]rune {
+	lines := strings.Split(lipgloss.Sprint(m.GetCanvas(true).Render()), "\n")
+	rows := make([][]rune, len(lines))
+	for i, line := range lines {
+		rows[i] = []rune(ansi.Strip(line))
+	}
+	return rows
+}
+
+// isBoxDrawing reports whether a rune is one of the glyphs a border or a
+// divider is drawn with.
+func isBoxDrawing(r rune) bool {
+	return (r >= 0x2500 && r <= 0x257F) || r == '|' || r == '-'
+}
+
+// TestGapBetweenBorderedPanesIsEmptyGround holds appearance.gap to i3's inner
+// gap: ground between the panes. With shared borders off, each pane draws its
+// own box, so the cells between two of them are that pane's border, then the
+// ground, then the other pane's border, and nothing else.
+//
+// The frame has always been right here, on both tilers: View only asks for the
+// separator overlay when the panes are borderless, so nothing ever drew a rule
+// down the middle of a gap. What was wrong was one step further back.
+// separatorSplits asked the tree, and the tree knows the gap but not what the
+// panes look like, so asked directly it handed out a divider for a pane that
+// had its own border. The last case below is the one that catches that; the
+// frame cases are the property it was protecting, stated where a person sees
+// it.
+func TestGapBetweenBorderedPanesIsEmptyGround(t *testing.T) {
+	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack} {
+		for _, gap := range []int{1, 2, 3} {
+			t.Run(fmt.Sprintf("%s/gap=%d", mode, gap), func(t *testing.T) {
+				m := modeOS(t, mode, false, gap, 2, 120, 40)
+				marks := []rune{'A', 'B'}
+				for i, w := range m.Windows {
+					fillGuest(w, marks[i])
+				}
+				rows := frameRows(m)
+
+				left, right := m.Windows[0], m.Windows[1]
+				if left.X > right.X {
+					left, right, marks[0], marks[1] = right, left, marks[1], marks[0]
+				}
+				if left.X+left.Width >= right.X {
+					t.Fatalf("the two panes are not side by side: %d..%d and %d..%d",
+						left.X, left.X+left.Width, right.X, right.X+right.Width)
+				}
+
+				checked := 0
+				for y := max(left.Y, right.Y) + 1; y < min(left.Y+left.Height, right.Y+right.Height)-1; y++ {
+					if y >= len(rows) {
+						break
+					}
+					row := rows[y]
+					// The ground is the cells strictly between the two panes'
+					// own border columns.
+					for x := left.X + left.Width; x < right.X; x++ {
+						if x >= len(row) {
+							break
+						}
+						checked++
+						if isBoxDrawing(row[x]) {
+							t.Fatalf("row %d column %d between the panes reads %q: appearance.gap is ground, not a rule",
+								y, x, string(row[x]))
+						}
+					}
+				}
+				if checked == 0 {
+					t.Fatal("no gap cell was examined, so this proves nothing")
+				}
+
+				// The answer at its source, which is what the frame above
+				// cannot see. A divider stands in for the borders two panes
+				// gave up; panes still drawing their own have nothing to share,
+				// so there is no divider to offer whatever the gap is.
+				if splits := m.separatorSplits(); len(splits) != 0 {
+					t.Fatalf("separatorSplits offered %d dividers for panes that draw their own borders",
+						len(splits))
+				}
+			})
+		}
+	}
+}
+
+// TestScrollingStackHonoursThePaneGap is the same for windows stacked inside
+// one column, which divide its height.
+func TestScrollingStackHonoursThePaneGap(t *testing.T) {
+	m := modeOS(t, LayoutModeScrolling, false, 2, 3, 160, 48)
+	sl := m.GetOrCreateScrollingLayout()
+	// Pull the second and third windows into the first column, which is what
+	// the consume action does.
+	sl.FocusedCol = 0
+	sl.ConsumeWindow()
+	sl.ConsumeWindow()
+	if len(sl.Columns) != 1 || len(sl.Columns[0].WindowIDs) != 3 {
+		t.Fatalf("expected one column of three windows, got %d columns", len(sl.Columns))
+	}
+	m.ScrollingSetPositions()
+	m.CompleteAllAnimations()
+
+	stack := make([]*terminal.Window, len(m.Windows))
+	copy(stack, m.Windows)
+	for i := range stack {
+		for j := i + 1; j < len(stack); j++ {
+			if stack[j].Y < stack[i].Y {
+				stack[i], stack[j] = stack[j], stack[i]
+			}
+		}
+	}
+	for i := 1; i < len(stack); i++ {
+		prev := stack[i-1]
+		if got := stack[i].Y - (prev.Y + prev.Height); got != 2 {
+			t.Errorf("%d rows between stacked window %d and %d, want 2", got, i-1, i)
+		}
+	}
+	// The stack still fills the column: no rows are lost to rounding on top of
+	// the gaps it reserved.
+	first, last := stack[0], stack[len(stack)-1]
+	if got, want := last.Y+last.Height-first.Y, m.GetUsableHeight(); got != want {
+		t.Errorf("the stack covers %d rows of a %d row column", got, want)
+	}
+}
+
+// TestDisablingTilingRemembersTheLayoutMode pins the one path that forgot it.
+// The tiling toggle has always kept the mode, so a scrolling session that
+// toggled tiling off and on came back scrolling; the palette's "Disable Tiling"
+// cleared the scrolling flag, and since the mode travels in session state the
+// session itself forgot, on every client and across a reattach.
+func TestDisablingTilingRemembersTheLayoutMode(t *testing.T) {
+	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling} {
+		t.Run(mode, func(t *testing.T) {
+			m := modeOS(t, mode, false, 0, 3, 120, 40)
+			m.DisableAllTiling()
+			if m.AutoTiling {
+				t.Fatal("tiling must be off")
+			}
+			if got := m.LayoutModeName(); got != mode {
+				t.Errorf("layout mode is %q after disabling tiling, want %q", got, mode)
+			}
+			if got := m.BuildSessionState().LayoutMode; got != mode {
+				t.Errorf("session state carries layout mode %q, want %q", got, mode)
+			}
+			if got := m.LayoutName(); got != LayoutFloating {
+				t.Errorf("the layout in force is %q, want %q", got, LayoutFloating)
+			}
+		})
 	}
 }
 

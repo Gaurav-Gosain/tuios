@@ -1,7 +1,10 @@
 package app
 
 import (
+	"fmt"
+	"image"
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -50,11 +53,114 @@ func paneBgWindow(t *testing.T, id string, x, y, w, h int) *terminal.Window {
 	return win
 }
 
+// cellColors reads a composed cell's background and foreground.
+func cellColors(t *testing.T, c *frameCanvas, x, y int) (bg, fg color.Color) {
+	t.Helper()
+	cell := c.CellAt(x, y)
+	if cell == nil {
+		t.Fatalf("no cell at (%d,%d)", x, y)
+	}
+	return cell.Style.Bg, cell.Style.Fg
+}
+
 func samePaneColor(a, b color.Color) bool {
 	if isNilColor(a) || isNilColor(b) {
 		return isNilColor(a) && isNilColor(b)
 	}
 	return safeColorEquals(a, b)
+}
+
+// Every render path a pane can take reaches the compositor the same way, so
+// every one of them is painted: the focused per-cell path, the unfocused fast
+// path, scrollback, copy mode, a floating pane, a zoomed pane, a borderless
+// tiled pane, and the blank area a short body is padded out with.
+func TestPaneBackgroundCoversEveryRenderPath(t *testing.T) {
+	withTheme(t, "")
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, m *OS, win *terminal.Window)
+		// the cell to read, relative to the pane's content origin
+		dx, dy int
+	}{
+		{name: "focused", dx: 20, dy: 0},
+		{name: "unfocused fast path", setup: func(_ *testing.T, m *OS, _ *terminal.Window) {
+			m.FocusedWindow = -1
+		}, dx: 20, dy: 0},
+		{name: "window management mode", setup: func(_ *testing.T, m *OS, _ *terminal.Window) {
+			m.Mode = WindowManagementMode
+		}, dx: 20, dy: 3},
+		{name: "scrollback", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			for i := range 40 {
+				win.WriteOutput(fmt.Appendf(nil, "\r\nline %d", i))
+			}
+			win.ScrollbackOffset = 3
+			win.MarkContentDirty()
+		}, dx: 25, dy: 1},
+		{name: "copy mode", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			win.EnterCopyMode()
+			win.MarkContentDirty()
+		}, dx: 25, dy: 1},
+		{name: "floating", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			win.IsFloating = true
+		}, dx: 20, dy: 2},
+		{name: "zoomed", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			win.Zoomed = true
+		}, dx: 20, dy: 2},
+		{name: "borderless tiled", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			win.Tiled = true
+		}, dx: 20, dy: 2},
+		{name: "padded past the emulator", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
+			// The rectangle grows and the emulator does not, as it does for
+			// the length of a snap animation: the body is padded out to the
+			// box, and the padding is pane too.
+			win.Width += 12
+			win.MarkPositionDirty()
+		}, dx: 44, dy: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			win := paneBgWindow(t, "pbg-path", 2, 2, 40, 10)
+			m := paneBgOS(t, paneBgHex, win)
+			if tc.setup != nil {
+				tc.setup(t, m, win)
+			}
+			canvas := m.GetCanvas(false)
+			r := paneContentRect(win)
+			x, y := r.Min.X+tc.dx, r.Min.Y+tc.dy
+			if !image.Pt(x, y).In(r) {
+				t.Fatalf("(%d,%d) is outside the content %v", x, y, r)
+			}
+			if bg, _ := cellColors(t, canvas, x, y); !samePaneColor(bg, paneBgRGBA) {
+				t.Errorf("(%d,%d) has bg %v, want %v", x, y, bg, paneBgRGBA)
+			}
+		})
+	}
+}
+
+// A lone fullscreen pane skips the compositor, and keeps skipping it with the
+// option on: the fast path paints the ground into its own frame.
+func TestPaneBackgroundOnTheFullscreenFastPath(t *testing.T) {
+	withTheme(t, "")
+	m := keystrokeOS(t, 1, 80, 24)
+	m.Settings.SidebarEnabled = false
+	m.Settings.DockbarPosition = "hidden"
+	win := m.Windows[0]
+	win.X, win.Y, win.Width, win.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()
+	win.MarkPositionDirty()
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Skip("the fixture does not qualify for the fast path, so this proves nothing")
+	}
+	if frame := m.composeFrame(); strings.Contains(frame, "48;2;18;52;86") {
+		t.Fatal("the fast path painted a ground with the option off")
+	}
+	m.Settings.PaneBackground = paneBgHex
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Error("the fullscreen fast path stands down for a pane background")
+	}
+	win.MarkContentDirty()
+	if frame := m.composeFrame(); !strings.Contains(frame, "48;2;18;52;86") {
+		t.Error("the fast path's frame carries no pane background")
+	}
 }
 
 // The option off has to cost nothing per frame beyond a comparison: no
