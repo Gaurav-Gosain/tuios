@@ -88,67 +88,37 @@ func TestTheCustomLayoutMapSurvivesTheWire(t *testing.T) {
 	})
 }
 
-// TestAPushUnionsTheCustomFlagsItDoesNotKnowAbout is the merge path. A client
-// only ever holds a flag for a workspace it has been told about or arranged
-// itself, so letting a push replace the set would drop every workspace that
-// client never heard of, which is the bug this field exists to stop, one layer
-// further down.
+// TestAPushMergesTheCustomFlags is the merge path in retainDaemonExclusive.
 //
-// NEGATIVE CONTROL: replace the union in retainDaemonExclusive with a plain nil
-// check and workspace 3's flag vanishes from the session.
-func TestAPushUnionsTheCustomFlagsItDoesNotKnowAbout(t *testing.T) {
-	canonical := &SessionState{
-		Name:               "s",
-		CurrentWorkspace:   3,
-		WorkspaceHasCustom: map[int]bool{1: false, 3: true},
-		Version:            1,
-	}
-	incoming := &SessionState{
-		Name:               "s",
-		CurrentWorkspace:   1,
-		WorkspaceHasCustom: map[int]bool{1: true},
-		Version:            1,
-	}
-
-	retainDaemonExclusive(incoming, canonical)
-
-	want := map[int]bool{1: true, 3: true}
-	if !maps.Equal(incoming.WorkspaceHasCustom, want) {
-		t.Errorf("merged to %v, want %v: the pushing client's own flag stands and the workspace "+
-			"it never visited keeps the layout another client arranged", incoming.WorkspaceHasCustom, want)
-	}
-}
-
-// TestAPushCanStillClearACustomFlag is the direction the union must not block. A
-// client that moved a pane off a workspace clears the flag there and says so
-// with a present false, which has to beat the session's true.
+// A client only holds a flag for a workspace it has been told about or arranged
+// itself, so a push that replaced the set would drop every workspace that client
+// never heard of. The union keeps those. A present false is how a client says a
+// workspace stopped being custom, so it beats the session's true. A nil map is an
+// older peer, a client with tiling off, or a client with nothing to say, and none
+// of those is an instruction to forget.
 //
-// NEGATIVE CONTROL: make the union prefer canonical where both hold an entry and
-// workspace 3 stays custom for good.
-func TestAPushCanStillClearACustomFlag(t *testing.T) {
-	canonical := &SessionState{WorkspaceHasCustom: map[int]bool{3: true}}
-	incoming := &SessionState{WorkspaceHasCustom: map[int]bool{3: false}}
+// NEGATIVE CONTROL: replace the union with a plain nil check and the "unknown
+// workspace" and "nothing said" cases fail. Make the union prefer canonical where
+// both hold an entry and the "cleared" case fails.
+func TestAPushMergesTheCustomFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		canonical map[int]bool
+		incoming  map[int]bool
+		want      map[int]bool
+	}{
+		{"unknown workspace kept", map[int]bool{1: false, 3: true}, map[int]bool{1: true}, map[int]bool{1: true, 3: true}},
+		{"cleared by a present false", map[int]bool{3: true}, map[int]bool{3: false}, map[int]bool{3: false}},
+		{"nothing said", map[int]bool{2: true}, nil, map[int]bool{2: true}},
+	} {
+		canonical := &SessionState{Name: "s", WorkspaceHasCustom: tc.canonical, Version: 1}
+		incoming := &SessionState{Name: "s", WorkspaceHasCustom: tc.incoming, Version: 1}
 
-	retainDaemonExclusive(incoming, canonical)
+		retainDaemonExclusive(incoming, canonical)
 
-	if incoming.WorkspaceHasCustom[3] {
-		t.Errorf("workspace 3 is still custom after a client said it is not")
-	}
-}
-
-// TestAPeerThatSaysNothingKeepsTheSessionsCustomFlags: a nil map on the wire is
-// an older peer, or a client with tiling off, or (gob being gob) a client with
-// nothing to say. None of those is an instruction to forget.
-//
-// NEGATIVE CONTROL: drop the union block and the session's flags are gone.
-func TestAPeerThatSaysNothingKeepsTheSessionsCustomFlags(t *testing.T) {
-	canonical := &SessionState{WorkspaceHasCustom: map[int]bool{2: true}}
-	incoming := &SessionState{}
-
-	retainDaemonExclusive(incoming, canonical)
-
-	if !incoming.WorkspaceHasCustom[2] {
-		t.Errorf("workspace 2 lost its custom flag to a push that said nothing")
+		if !maps.Equal(incoming.WorkspaceHasCustom, tc.want) {
+			t.Errorf("%s: merged to %v, want %v", tc.name, incoming.WorkspaceHasCustom, tc.want)
+		}
 	}
 }
 
