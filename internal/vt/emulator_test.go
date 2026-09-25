@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -32,6 +33,22 @@ func TestEmulator_WriteString(t *testing.T) {
 func BenchmarkEmulator_PlainTextWrite(b *testing.B) {
 	emu := vt.NewEmulator(80, 24)
 	data := []byte(strings.Repeat("Hello World ", 100) + "\r\n")
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, _ = emu.Write(data)
+	}
+}
+
+func BenchmarkEmulator_ANSIColorWrite(b *testing.B) {
+	emu := vt.NewEmulator(80, 24)
+	builder := testutil.NewANSIBuilder()
+	data := []byte(builder.
+		FgColor(31).Text("Red").Reset().Text(" ").
+		FgColor(32).Text("Green").Reset().Text(" ").
+		FgColor(34).Text("Blue").Reset().
+		Newline().
+		String())
 
 	b.ResetTimer()
 	for b.Loop() {

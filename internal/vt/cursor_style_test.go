@@ -40,6 +40,17 @@ func TestCursorStyleIsReadableFromTheEmulator(t *testing.T) {
 	}
 }
 
+// TestCursorStyleDefaultsToASteadyBlock pins the shape a pane has before its
+// guest says anything, which is what tuios has always shown.
+func TestCursorStyleDefaultsToASteadyBlock(t *testing.T) {
+	term := New(10, 5)
+	defer func() { _ = term.Close() }()
+	style, steady := term.CursorStyle()
+	if style != CursorBlock || !steady {
+		t.Errorf("a fresh emulator reports style %d steady %v, want block steady", style, steady)
+	}
+}
+
 // TestCursorStyleSurvivesTheAlternateScreen is the vim case: DECSCUSR is a
 // property of the terminal, not of the screen that happened to be active, so
 // entering and leaving the alternate screen must not silently return the pane
@@ -73,6 +84,30 @@ func TestCursorStyleSurvivesTheAlternateScreen(t *testing.T) {
 	if style, steady := term.CursorStyle(); style != CursorUnderline || !steady {
 		t.Errorf("after a shape set inside the alternate screen: style %d steady %v, want underline steady",
 			style, steady)
+	}
+}
+
+// TestRestoreCursorStyleRoundTrips is the reattach path in miniature: the
+// daemon reads the shape off its emulator, it travels on the wire, and the
+// client's fresh emulator is primed with it. A backend that dropped either half
+// would rebuild every pane as a block.
+func TestRestoreCursorStyleRoundTrips(t *testing.T) {
+	for _, tc := range decscusrCases {
+		src := New(10, 5)
+		if _, err := src.Write([]byte(tc.seq)); err != nil {
+			t.Fatalf("write %q: %v", tc.seq, err)
+		}
+		style, steady := src.CursorStyle()
+		_ = src.Close()
+
+		dst := New(10, 5)
+		dst.RestoreCursorStyle(style, steady)
+		gotStyle, gotSteady := dst.CursorStyle()
+		if gotStyle != tc.style || gotSteady != tc.steady {
+			t.Errorf("%q restored as style %d steady %v, want style %d steady %v",
+				tc.seq, gotStyle, gotSteady, tc.style, tc.steady)
+		}
+		_ = dst.Close()
 	}
 }
 
