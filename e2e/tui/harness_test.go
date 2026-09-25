@@ -87,6 +87,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,6 +99,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -157,6 +159,7 @@ func runE2E(m *testing.M) int {
 	// The runtime directories that had to be moved out of the isolation roots
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.
+	sweepShortRuntimeRoots()
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
@@ -1145,10 +1148,41 @@ const unixSocketPathMax = 103
 var longestRuntimeSocket = filepath.Join("tuios", "tmux", "p", "2147483647.sock")
 
 // shortRuntimeRoot is where a runtime directory goes when the isolation root
-// is too long to hold one. Per user, so two people on one machine do not share
-// it, and fixed rather than random so a leftover from a killed run is reused
-// rather than accumulated.
-var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tuios-e2e-%d", os.Getuid()))
+// is too long to hold one. Per user and per test process. It was per user
+// only, and the suite removes it on exit, so a second run on the same machine
+// (one package run beside a full one, say) deleted the sockets of every daemon
+// the first run still had up: the first run's tests then read "the daemon is
+// not running", and its cleanups could not reach those daemons to stop them.
+// sweepShortRuntimeRoots removes the roots of runs that are gone.
+var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tuios-e2e-%d-%d", os.Getuid(), os.Getpid()))
+
+// sweepShortRuntimeRoots removes the short runtime roots of this user's test
+// processes that no longer exist, which a killed run leaves behind. The root
+// of a process still running is left alone.
+func sweepShortRuntimeRoots() {
+	prefix := fmt.Sprintf("tuios-e2e-%d-", os.Getuid())
+	entries, err := os.ReadDir("/tmp")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(strings.TrimPrefix(e.Name(), prefix))
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), prefix) || err != nil || pid == os.Getpid() {
+			continue
+		}
+		if processAlive(pid) {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join("/tmp", e.Name()))
+	}
+}
+
+// processAlive reports whether a process with this pid exists. EPERM means it
+// exists under another user, which counts.
+func processAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
 
 // redirected remembers the isolation roots whose runtime directory has already
 // been moved, so the move and its cleanup happen once per root rather than
