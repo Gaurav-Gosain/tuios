@@ -194,13 +194,6 @@ func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool,
 	}
 }
 
-func makeRounded(content string, color color.Color, s *config.Settings) string {
-	style := lipgloss.NewStyle()
-	render := style.Foreground(color).Render
-	content = render(s.GetWindowPillLeft()) + content + render(s.GetWindowPillRight())
-	return content
-}
-
 // isDefaultTitle checks if the title is the auto-generated default (e.g., "Terminal 8bf1c038").
 func isDefaultTitle(title, windowID string) bool {
 	if len(windowID) < 8 {

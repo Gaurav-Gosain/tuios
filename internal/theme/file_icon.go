@@ -52,12 +52,9 @@ var fileIconMemo struct {
 	next   int
 }
 
-// FileIconInk is the ink a file icon of the given hex burns on the rail's own
-// ground. hex is "#RRGGBB".
-func FileIconInk(hex string) color.Color { return FileIconInkOn(hex, RailGround()) }
-
-// FileIconInkOn is FileIconInk against a ground the caller paints itself, like
-// the band under the pointer.
+// FileIconInkOn is the ink a file icon of the given hex ("#RRGGBB") burns on
+// bg, a ground the caller paints itself, like the rail or the band under the
+// pointer.
 func FileIconInkOn(hex string, bg color.Color) color.Color {
 	r, g, b, a := bg.RGBA()
 	key := [4]uint32{r, g, b, a}

@@ -145,16 +145,11 @@ type detection struct {
 	visited []foregroundInfo
 }
 
-// identify names the harness a pane's foreground process is running, reporting
-// whether it is an agent at all. The manifest registry answers first because it
-// can name what it matched; the built-in and user-configured name list is the
-// fallback and yields an unnamed match.
-func (m agentMatcher) identify(info foregroundInfo) (string, bool) {
-	d, ok := m.identifyDetail(info)
-	return d.harness, ok
-}
-
-// identifyDetail is identify with the evidence that decided it.
+// identifyDetail names the harness a pane's foreground process is running,
+// reporting whether it is an agent at all, with the evidence that decided it.
+// The manifest registry answers first because it can name what it matched;
+// the built-in and user-configured name list is the fallback and yields an
+// unnamed match.
 //
 // The leader is read first. When it is not an agent but stands in for another
 // program (a shell, an interpreter, a launcher such as timeout or npx), the

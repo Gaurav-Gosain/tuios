@@ -23,9 +23,6 @@ type Manager struct {
 	// inheritCwd is appearance.new_window_inherit_cwd, stamped into every
 	// session this manager makes.
 	inheritCwd bool
-	// hostName is the name this machine gives itself, stamped into every
-	// session for TUIOS_HOST. Empty means the operating system's hostname.
-	hostName string
 	// preferredShell is appearance.preferred_shell. Every session this manager
 	// makes reads it at spawn time through PreferredShell, so a config reload
 	// reaches the next pane of a session that already exists. It is atomic so
@@ -104,20 +101,9 @@ func (m *Manager) PreferredShell() string {
 	return ""
 }
 
-// SetHostName sets the name this machine gives itself, for TUIOS_HOST.
-func (m *Manager) SetHostName(name string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.hostName = name
-}
-
-// HostName is the name this machine gives itself: what SetHostName set, else
-// the hostname the operating system reports. Callers hold m.mu or do not
-// care about a concurrent SetHostName, which only tests make.
+// HostName is the name this machine gives itself, for TUIOS_HOST: the
+// hostname the operating system reports, or "" when it reports none.
 func (m *Manager) HostName() string {
-	if m.hostName != "" {
-		return m.hostName
-	}
 	h, err := os.Hostname()
 	if err != nil {
 		return ""
@@ -307,13 +293,6 @@ func (m *Manager) AllSessions() []*Session {
 		out = append(out, s)
 	}
 	return out
-}
-
-// SessionCount returns the number of active sessions.
-func (m *Manager) SessionCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.sessions)
 }
 
 // GetDefaultSession returns the first/default session, creating one if none exist.

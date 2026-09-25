@@ -180,16 +180,6 @@ func (sc *StyleCache) evictHalf() {
 	}
 }
 
-// Clear removes all entries from the cache.
-func (sc *StyleCache) Clear() {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Create new map instead of deleting entries (faster)
-	sc.cache = make(map[uint64]styleEntry, sc.maxSize)
-	sc.evicts.Add(uint64(len(sc.cache)))
-}
-
 // StyleCacheStats holds cache statistics for monitoring and debugging.
 type StyleCacheStats struct {
 	Hits     uint64  // Number of cache hits
@@ -240,16 +230,4 @@ var globalStyleCache = NewStyleCache(1024)
 // This is used by the rendering functions to cache styles across all windows.
 func GetGlobalStyleCache() *StyleCache {
 	return globalStyleCache
-}
-
-// SetGlobalStyleCacheSize updates the maximum size of the global cache.
-// This should be called during initialization, not during active rendering.
-func SetGlobalStyleCacheSize(size int) {
-	globalStyleCache.mu.Lock()
-	defer globalStyleCache.mu.Unlock()
-
-	globalStyleCache.maxSize = size
-	if len(globalStyleCache.cache) > size {
-		globalStyleCache.evictHalf()
-	}
 }

@@ -228,13 +228,6 @@ func (d *Daemon) resolvePTYForTarget(sess *Session, target string) (*PTY, error)
 	return pty, nil
 }
 
-// sendKeysDaemonSide writes a send-keys request straight to the target window's
-// PTY, with no TUI client involved.
-func (d *Daemon) sendKeysDaemonSide(sess *Session, target, keys string, literal, raw bool) error {
-	_, err := d.writeKeysToWindow(sess, target, keys, literal, raw, nil)
-	return err
-}
-
 // writeKeysToWindow writes keys to the terminal of the window target names,
 // or of the focused window when target is empty, and returns the window it
 // wrote to. parsed is the sequence parseSendKeys made of keys, or nil to parse

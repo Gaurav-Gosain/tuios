@@ -15,19 +15,15 @@ var (
 	inProcessDaemonErr  error
 )
 
-// EnsureDaemonRunning ensures the TUIOS daemon is running.
-// If not running, it starts the daemon in-process in a background goroutine.
-// Returns nil if daemon is ready, or an error if it fails to start.
+// EnsureDaemonRunningWith ensures the TUIOS daemon is running. If it is not,
+// it starts the daemon in-process in a background goroutine, and returns nil
+// once the daemon is ready or an error if it fails to start.
 //
 // version is the build of whoever is starting it, which the daemon reports back
 // to every client that connects so the two can tell whether they are the same
 // build. Empty is allowed and means the caller does not know.
-func EnsureDaemonRunning(version string) error {
-	return EnsureDaemonRunningWith(version, nil)
-}
-
-// EnsureDaemonRunningWith is EnsureDaemonRunning for a caller that has the
-// user's [daemon] settings to hand. This package deliberately does not read the
+//
+// The caller passes the user's [daemon] settings. This package deliberately does not read the
 // config file (it would invert the layering, and the daemon outlives every
 // process that could own one), so the settings arrive from whoever starts it:
 // `tuios daemon` fills them in runDaemon, and a server does it here.

@@ -1083,59 +1083,6 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
 }
 
-// sidebarBudget is the shipped three-section split, expressed as the layout it
-// is: sessions a quarter, agents a third, the terminals list the slack.
-//
-// It is the case the design's table was written for and the one the rail draws
-// for anybody who has not touched the layout. It reads the split through
-// sidebarBudgetLines, so it states the table in terms of the general
-// allocator. Nothing calls it now: the unit test that pinned this table was
-// removed, and TestBudgetNeverOverrunsOrInvents checks the allocator's
-// invariants rather than these numbers.
-//
-// # Why the rail now has a fourth section, having refused one
-//
-// This function used to carry a written refusal to add a workspaces section,
-// and three of its four reasons still stand. The fourth did not: it argued that
-// three sections already cost ten lines of chrome before a row of content and
-// that a fourth would take it to thirteen. That was arithmetic about floors
-// nobody had made configurable. Shares and membership are now read off
-// appearance.sidebar.sections, so a user who does not want a fourth section
-// removes it, and a rail too short for what is left gives up lines rather than
-// its region.
-//
-// The other three reasons are why the section that arrived is files and not
-// workspaces. A workspaces section would restate what the terminals section's
-// tags already say; it would be the second per-session list, competing with
-// terminals for the same lines while saying less; and a workspace already has
-// three surfaces that cost no rail lines at all. A listing restates nothing on
-// screen, is not per-session, and has no other surface.
-//
-// aRowH is how many lines one agent row takes, so the agents section is
-// budgeted in lines like every other section while still being counted in rows.
-func sidebarBudget(avail, nS, nT, nA, aRowH int) (sH, tH, aH int) {
-	plans, _ := sidebarLayoutFor(config.SidebarDefaultSections)
-	rows := make([]int, len(plans))
-	rowH := make([]int, len(plans))
-	at := [sidebarSectionCount]int{}
-	for i, p := range plans {
-		rowH[i] = 1
-		if p.Spacer {
-			continue
-		}
-		at[p.Section] = i
-	}
-	rows[at[sidebarSectionSessions]] = nS
-	rows[at[sidebarSectionTerminals]] = nT
-	rows[at[sidebarSectionAgents]] = nA
-	rowH[at[sidebarSectionAgents]] = max(aRowH, 1)
-	// The files section is not part of this question. The default layout names
-	// it, so it has to be given a row count, and zero is the one that leaves the
-	// other three exactly the lines they had before it existed.
-	out := sidebarBudgetLines(avail, plans, rows, rowH)
-	return out[at[sidebarSectionSessions]], out[at[sidebarSectionTerminals]], out[at[sidebarSectionAgents]]
-}
-
 // sidebarWindowSection windows one section's rows onto the lines it was given,
 // returning the first row to draw and how many, plus how many rows are hidden
 // below the fold. A section that does not fit spends its last line on "… +N",

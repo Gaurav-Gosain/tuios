@@ -109,40 +109,6 @@ func (c *Client) ListSessions() ([]SessionInfo, error) {
 	return payload.Sessions, nil
 }
 
-// KillSession terminates a session.
-func (c *Client) KillSession(name string) error {
-	msg, err := NewMessage(MsgKill, &KillPayload{
-		SessionName: name,
-	})
-	if err != nil {
-		return err
-	}
-
-	if err := c.send(msg); err != nil {
-		return err
-	}
-
-	resp, err := c.recv()
-	if err != nil {
-		return err
-	}
-
-	switch resp.Type {
-	case MsgSessionList:
-		return nil // Success
-
-	case MsgError:
-		var errPayload ErrorPayload
-		if err := resp.ParsePayload(&errPayload); err != nil {
-			return fmt.Errorf("kill failed")
-		}
-		return fmt.Errorf("kill failed: %s", errPayload.Message)
-
-	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-}
-
 // CreateDetachedSession asks the daemon to create a headless session (with an
 // initial window) and no attached client. name may be empty to let the daemon
 // generate one. It returns an error if the name is already taken.

@@ -189,6 +189,7 @@ func (s *Server) write(resp *rpcResponse) { s.writeAny(resp) }
 func (s *Server) writeAny(v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
+		s.logf("could not encode a response: %v", err)
 		data = []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"could not encode the response"}}`)
 	}
 	data = append(data, '\n')

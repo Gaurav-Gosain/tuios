@@ -318,8 +318,8 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 // hostedPaneHostName is the name this machine gives itself, taken from the
 // session manager so a hosted pane and a local one agree on it.
 func (d *Daemon) hostedPaneHostName() string {
-	if d.manager != nil && d.manager.hostName != "" {
-		return d.manager.hostName
+	if d.manager != nil {
+		return d.manager.HostName()
 	}
 	name, err := os.Hostname()
 	if err != nil {

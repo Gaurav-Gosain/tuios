@@ -230,15 +230,3 @@ func (m *OS) SettingsSearchJump() {
 	*st = settingsSearchState{}
 	m.SettingsCategory, m.SettingsSelected, m.SettingsScroll = h.cat, h.item, 0
 }
-
-// settingsSelectedHit is the hit under the cursor while the search is open.
-func (m *OS) settingsSelectedHit(cats []settingsCategory) (settingsHit, bool) {
-	if !m.settingsSearch.open {
-		return settingsHit{}, false
-	}
-	_, hits := m.settingsSearchRows(cats)
-	if m.SettingsSelected < 0 || m.SettingsSelected >= len(hits) {
-		return settingsHit{}, false
-	}
-	return hits[m.SettingsSelected], true
-}

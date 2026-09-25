@@ -170,7 +170,6 @@ type Matcher struct {
 	text  []rune
 	ascii bool  // candidate is pure ASCII, so rune index and byte offset agree
 	offs  []int // byte offset of each rune plus a sentinel; empty when ascii
-	class []charClass
 
 	bonus []int32
 	h     []int32

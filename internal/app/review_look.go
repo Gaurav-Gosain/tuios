@@ -185,17 +185,6 @@ func (r *reviewState) reviewHunk(f *review.File, h, line int) *reviewHunkLook {
 	return hl
 }
 
-// highlighted counts the chunks of the hunk that have been tokenised.
-func (hl *reviewHunkLook) highlighted() int {
-	n := 0
-	for _, d := range hl.done {
-		if d {
-			n++
-		}
-	}
-	return n
-}
-
 // highlight tokenises lines from to to of the hunk, each side as one text:
 // the old side's lines with the old path, the new side's with the new.
 func (hl *reviewHunkLook) highlight(f *review.File, from, to int) {

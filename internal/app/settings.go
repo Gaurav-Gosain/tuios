@@ -831,15 +831,6 @@ func (m *OS) spotlightItem() settingItem {
 		})
 }
 
-// daemonLogLevel returns the configured daemon log level, defaulting to "off"
-// when unset or no config is held.
-func (m *OS) daemonLogLevel() string {
-	if m.UserConfig != nil && m.UserConfig.Daemon.LogLevel != "" {
-		return m.UserConfig.Daemon.LogLevel
-	}
-	return "off"
-}
-
 // OpenSettings shows the settings overlay, initializing the theme registry so
 // the theme list is populated.
 //
@@ -931,7 +922,7 @@ func (m *OS) settingsCurrentItems() []settingItem {
 	return items
 }
 
-// SettingsMoveUp/Down move the row selection within the active category.
+// SettingsMoveUp moves the row selection up within the active category.
 func (m *OS) SettingsMoveUp() { m.SettingsMove(-1) }
 
 // SettingsMoveDown moves the row selection down within the active category.
