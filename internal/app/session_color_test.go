@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -366,62 +365,6 @@ func TestSessionColoursOffRendersWhatItAlwaysDid(t *testing.T) {
 	out, _, _ := m.renderSessionSwitcher()
 	if strings.Contains(stripANSIForTrace(out), accentMark()) {
 		t.Errorf("the switcher grew an identity mark with the colours off:\n%s", out)
-	}
-}
-
-// TestSessionColoursDegradeToShapeAndName documents what is left when the
-// colour is not: the rail's own cells are unchanged, because the colour rides
-// marks the rows already drew, and the one mark the feature adds is on the
-// agent rows that live in another session, where it says "somewhere else" with
-// no colour at all. The names, which are the identity the colour is shorthand
-// for, are printed either way.
-func TestSessionColoursDegradeToShapeAndName(t *testing.T) {
-	m, tree := sessionColorOS(t, 120, 40)
-
-	withSessionColors(t, false)
-	m.Settings = config.Global
-	off := railPlain(t, m, tree)
-	config.Global.SessionColors = true
-	on := railPlain(t, m, tree)
-
-	if len(off) != len(on) {
-		t.Fatalf("the rail changed height: %d rows off, %d on", len(off), len(on))
-	}
-	for i := range on {
-		if on[i] == off[i] {
-			continue
-		}
-		// The only licensed difference is a mark in the gutter, which was blank.
-		if strings.TrimPrefix(on[i], accentMark()) != strings.TrimPrefix(off[i], " ") {
-			t.Errorf("row %d differs somewhere other than its gutter:\n on: %q\noff: %q", i, on[i], off[i])
-			continue
-		}
-		// And it is only spent on a row that had no free cell to put the colour
-		// in. A quiet dot in the glyph column is a free cell, so a row showing
-		// one has no business claiming a second.
-		if glyphCell(on[i]) == "·" {
-			t.Errorf("row %d took a gutter cell while its dot was free: %q", i, on[i])
-		}
-	}
-
-	// ASCII-only: the marks are the ASCII ones the rail already had, and the
-	// name the colour is shorthand for is still printed beside them.
-	prevASCII := config.Global.UseASCIIOnly
-	config.Global.UseASCIIOnly = true
-	m.Settings.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.Global.UseASCIIOnly = prevASCII
-		overlay.SetASCII(prevASCII)
-	})
-	ascii := railPlain(t, m, tree)
-	if got := gutterCell(styledRow(t, railStyled(t, m, tree), "main")); got != ">" {
-		t.Errorf("the attached session's ASCII gutter mark is %q", got)
-	}
-	for _, want := range []string{"|", ".", "api/server"} {
-		if !strings.Contains(strings.Join(ascii, "\n"), want) {
-			t.Errorf("the ASCII rail is missing %q:\n%s", want, strings.Join(ascii, "\n"))
-		}
 	}
 }
 

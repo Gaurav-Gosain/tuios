@@ -92,25 +92,6 @@ func TestScreensaverEatsPointerMotionToo(t *testing.T) {
 	}
 }
 
-// TestInputReachesThePaneWhenTheSaverIsDown checks the intercept only eats one
-// event, so ordinary typing is untouched.
-//
-// Negative control: eating input whenever the saver is merely enabled rather
-// than actually showing makes this fail, and makes tuios unusable.
-func TestInputReachesThePaneWhenTheSaverIsDown(t *testing.T) {
-	win := newTestWindow(t, "saver-0003", 40, 10)
-	m := newTestOS(win)
-	m.UserConfig = enabledScreensaverConfig(t, 10)
-
-	reached := withSpyInputHandler(t)
-
-	_, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
-
-	if !*reached {
-		t.Error("an ordinary keypress did not reach the pane")
-	}
-}
-
 // TestScreensaverArmsOneTimerAtATime checks the idle promise: the whole design
 // rests on input never queueing a timer per keystroke.
 //

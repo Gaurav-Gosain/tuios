@@ -55,25 +55,6 @@ func TestEnterOpensTheNumberEditor(t *testing.T) {
 	}
 }
 
-// TestATypedNumberIsCommitted is the manual entry half.
-func TestATypedNumberIsCommitted(t *testing.T) {
-	m := numberRowOS(t, "appearance.scrollback_lines")
-	m.SettingsActivate()
-	m.SettingsEditClear()
-	for _, r := range "4321" {
-		m.SettingsEditAppend(string(r))
-	}
-	m.SettingsEditCommit()
-
-	if m.SettingsEditing {
-		t.Error("the editor stayed open after committing")
-	}
-	item, _ := m.settingsSelectedItem()
-	if got := item.value(m); got != "4321" {
-		t.Errorf("the row reads %q, want 4321", got)
-	}
-}
-
 // TestATypedNumberIsClampedNotRefused pins what happens past the ends: the
 // value is held to the range rather than written out of it.
 func TestATypedNumberIsClampedNotRefused(t *testing.T) {

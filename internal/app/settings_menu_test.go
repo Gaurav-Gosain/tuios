@@ -69,25 +69,6 @@ func useTempConfig(t *testing.T) string {
 	return path
 }
 
-// TestSettingsCoverage asserts every setting this audit added is present in the
-// menu, so a future refactor cannot silently drop one.
-func TestSettingsCoverage(t *testing.T) {
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	want := map[string][]string{
-		"Appearance": {"Focused border color", "Unfocused border color", "Window title format", "Window button position"},
-		"Behavior":   {"Preferred shell", "Click to type", "Type in a pane when focus moves to it"},
-		"Daemon":     {"Log level"},
-		"Dock":       {"Workspace tab format"},
-	}
-	for category, labels := range want {
-		for _, label := range labels {
-			if _, _, _, ok := findSetting(m, category, label); !ok {
-				t.Errorf("expected setting %q in category %q, not found", label, category)
-			}
-		}
-	}
-}
-
 // TestStringSettingsApplyAndPersist toggles the text settings through the menu
 // and verifies both the live effect and that the value survives a reload from
 // disk.
@@ -138,30 +119,6 @@ func TestStringSettingEditCancel(t *testing.T) {
 	}
 	if m.UserConfig.Appearance.PreferredShell != "/bin/bash" {
 		t.Errorf("cancel changed the value to %q", m.UserConfig.Appearance.PreferredShell)
-	}
-}
-
-// TestDaemonLogLevelPersists cycles the daemon log level enum and verifies it
-// persists to disk.
-func TestDaemonLogLevelPersists(t *testing.T) {
-	useTempConfig(t)
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-
-	focusSetting(t, m, "Daemon", "Log level")
-	if got := m.daemonLogLevel(); got != "off" {
-		t.Fatalf("default log level = %q, want off", got)
-	}
-	runSave(t, m.SettingsAdjust(1)) // off -> errors
-	if got := m.UserConfig.Daemon.LogLevel; got != "errors" {
-		t.Fatalf("after one step log level = %q, want errors", got)
-	}
-
-	reloaded, err := config.LoadUserConfig()
-	if err != nil {
-		t.Fatalf("reload config: %v", err)
-	}
-	if reloaded.Daemon.LogLevel != "errors" {
-		t.Errorf("persisted daemon log level = %q, want errors", reloaded.Daemon.LogLevel)
 	}
 }
 

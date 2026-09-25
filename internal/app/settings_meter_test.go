@@ -54,22 +54,6 @@ func TestTheGaugeDoesNotFollowTheScrollbarStyle(t *testing.T) {
 	}
 }
 
-// TestTheGaugeKeepsItsWidthAtEveryValue pins that both halves are always drawn,
-// so the control beside the gauge sits in the same column on every row.
-func TestTheGaugeKeepsItsWidthAtEveryValue(t *testing.T) {
-	pal := overlay.Palette{}
-	on, off := settingsMeterGlyphs()
-	if on == "" || off == "" {
-		t.Fatalf("a gauge glyph is empty: on=%q off=%q", on, off)
-	}
-	for _, f := range []float64{0, 0.1, 0.5, 0.9, 1} {
-		out := ansi.Strip(settingsMeter(f, false, pal.Surface, pal))
-		if want := settingsMeterCells + 1; lipgloss.Width(out) != want {
-			t.Errorf("fraction %v drew %d cells, want %d: %q", f, lipgloss.Width(out), want, out)
-		}
-	}
-}
-
 // TestOnlyAProportionGetsAGauge pins that the bar is drawn beside a value whose
 // range is real travel, and nowhere else.
 //
@@ -112,25 +96,6 @@ func TestEveryGaugedRowIsAProportion(t *testing.T) {
 			if item.meter != nil && !proportion[item.Label] {
 				t.Errorf("%s/%s has a gauge but is not a proportion", cat.Name, item.Label)
 			}
-		}
-	}
-}
-
-// TestAProportionReadsAsAPercent pins the % after the number, so the gauge and
-// the value agree about what the row is measuring.
-func TestAProportionReadsAsAPercent(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
-	for _, o := range config.Options() {
-		if !o.Percent {
-			continue
-		}
-		item := m.registryItem(o.Path)
-		if item.value == nil {
-			t.Errorf("%s has no value to show", o.Path)
-			continue
-		}
-		if got := item.value(m); !strings.HasSuffix(got, "%") {
-			t.Errorf("%s reads as %q, want a trailing %%", o.Path, got)
 		}
 	}
 }

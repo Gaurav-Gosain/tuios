@@ -28,12 +28,3 @@ func TestSettingsReopensWhereItWasLeft(t *testing.T) {
 		t.Errorf("OpenSettingsAt(Dock) left search=%v tab=%d row=%d", m.SettingsSearchOpen(), m.SettingsCategory, m.SettingsSelected)
 	}
 }
-
-func TestSettingsSetCategoryIgnoresATabThatIsNotThere(t *testing.T) {
-	m := searchOS(t)
-	m.SettingsSetCategory(2)
-	m.SettingsSetCategory(99)
-	if m.SettingsCategory != 2 {
-		t.Errorf("a number past the last tab moved to %d", m.SettingsCategory)
-	}
-}

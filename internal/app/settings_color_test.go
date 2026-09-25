@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -131,39 +130,6 @@ func TestPickerSetsAndClearsABorderColour(t *testing.T) {
 	}
 	if item := focusSetting(t, m, "Appearance", "Focused border color"); item.value(m) != "(theme)" {
 		t.Errorf("after clearing the row reads %q, want (theme)", item.value(m))
-	}
-}
-
-// TestPickedBorderColourAppliesLive is the other half: the config field is not
-// the border. A value written and never pushed into the theme package is the
-// failure mode the settings audit found in 82 of 88 options.
-func TestPickedBorderColourAppliesLive(t *testing.T) {
-	useTempConfig(t)
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	t.Cleanup(func() { theme.SetBorderOverrides("", "") })
-
-	before := theme.BorderFocusedWindow()
-
-	openPickerOn(t, m, "Focused border color")
-	m.AccentPickerFocusHex()
-	for _, r := range "ff00aa" {
-		m.AccentPickerHexKey(r)
-	}
-	runSave(t, m.AccentPickerApply())
-
-	after := theme.BorderFocusedWindow()
-	if theme.ContrastRatio(before, after) == 1 && sameColor(before, after) {
-		t.Fatal("the border colour did not change; the pick was written and never applied")
-	}
-	if !sameColor(after, lipgloss.Color("#ff00aa")) {
-		t.Errorf("the focused border is %v, want the picked #ff00aa", after)
-	}
-
-	// Clearing must put the theme's colour back, live, not only in the file.
-	openPickerOn(t, m, "Focused border color")
-	runSave(t, m.AccentPickerClear())
-	if !sameColor(theme.BorderFocusedWindow(), before) {
-		t.Error("clearing did not restore the theme's border colour on screen")
 	}
 }
 

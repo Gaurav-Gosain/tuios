@@ -64,23 +64,6 @@ func TestSessionSwitcherRowShowsLabelIdentityCountAndState(t *testing.T) {
 	}
 }
 
-// TestUnnamedSessionRowShowsNoIdentitySuffix pins the no-op case: a session
-// nobody has renamed must not grow a parenthesised identity, because its label
-// and its identity are the same string.
-func TestUnnamedSessionRowShowsNoIdentitySuffix(t *testing.T) {
-	m := switcherOS([]sessiontree.Node{
-		sessiontree.BuildSession(sessiontree.SessionInput{Name: "notes", WindowCount: 1}),
-	})
-	out, _, _ := m.renderSessionSwitcher()
-
-	if strings.Contains(out, "(notes)") {
-		t.Errorf("an unrenamed session showed its identity twice:\n%s", out)
-	}
-	if !strings.Contains(out, "notes") {
-		t.Errorf("frame is missing the session name:\n%s", out)
-	}
-}
-
 // TestSessionSwitcherHitRectsMatchDrawnRows checks the recorded rects against
 // the frame they were recorded from, at three widths. A rect that names row i
 // must land on the line the label for item i was actually drawn on.

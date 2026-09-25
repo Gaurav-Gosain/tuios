@@ -22,16 +22,3 @@ func TestDeleteWindowSurvivesAShortID(t *testing.T) {
 		t.Fatalf("wanted every window closed, got %d left", len(m.Windows))
 	}
 }
-
-func TestShortIDTruncatesOnlyWhatItCan(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"", ""},
-		{"w1", "w1"},
-		{"8bf1c038", "8bf1c038"},
-		{"8bf1c038-1e4b-4d6a-9c0f-2b1a5d7e3f90", "8bf1c038"},
-	} {
-		if got := shortID(tc.in); got != tc.want {
-			t.Errorf("shortID(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}

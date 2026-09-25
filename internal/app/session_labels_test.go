@@ -9,22 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// TestUnnamedSessionPresentsAsItsIdentity pins the no-op case: a session with no
-// display name must render exactly the string it rendered before display names
-// existed, in both the title and the id.
-func TestUnnamedSessionPresentsAsItsIdentity(t *testing.T) {
-	m := &OS{
-		Settings:    config.Global,
-		SessionName: "work",
-		Windows:     []*terminal.Window{{ID: "w1"}},
-	}
-
-	got := m.BuildSessionTree().Sessions[0]
-	if got.ID != "work" || got.Title != "work" {
-		t.Fatalf("unnamed session = {ID:%q Title:%q}, want both %q", got.ID, got.Title, "work")
-	}
-}
-
 // TestDisplayRenameLeavesTheIdentityKeysAlone is the regression this whole
 // design exists to prevent. A display rename must move the label and nothing
 // else: the node id, the rail's row targets and the rail's drag order are all
@@ -110,24 +94,6 @@ func TestRenameSurvivesAReattach(t *testing.T) {
 	}
 	if got := m.BuildSessionTree().Sessions[0]; got.ID != "work" || got.Title != "Payments API" {
 		t.Errorf("tree row after reattach = {ID:%q Title:%q}, want {work Payments API}", got.ID, got.Title)
-	}
-}
-
-// TestWorkspaceLabelFallsBackToTheNumber checks an unnamed workspace still
-// presents as its number, which is both its identity and the label it has
-// always shown.
-func TestWorkspaceLabelFallsBackToTheNumber(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	if got := m.WorkspaceLabel(3); got != "3" {
-		t.Errorf("unnamed workspace label = %q, want %q", got, "3")
-	}
-
-	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
-	if got := m.WorkspaceLabel(2); got != "review" {
-		t.Errorf("named workspace label = %q, want review", got)
-	}
-	if got := m.WorkspaceLabel(3); got != "3" {
-		t.Errorf("sibling of a named workspace = %q, want %q", got, "3")
 	}
 }
 

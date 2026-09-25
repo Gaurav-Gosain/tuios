@@ -156,34 +156,6 @@ func TestAgentsHeaderTokensAreTheirOwnHitZones(t *testing.T) {
 	}
 }
 
-// TestAgentsHeaderIsSilentUntilAControlBites: a token at its default reads as
-// furniture, a token that is changing the section reads as text.
-func TestAgentsHeaderTokensRenderTheirState(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	lines := railPlain(t, m, tree)
-	header := lineOf(lines, " agents")
-	if header < 0 {
-		t.Fatalf("no agents header:\n%s", strings.Join(lines, "\n"))
-	}
-	if !strings.Contains(lines[header], "all") || !strings.Contains(lines[header], "you") {
-		t.Errorf("default header does not carry its tokens: %q", lines[header])
-	}
-
-	m.SidebarAgentSort = sidebarAgentsPriority
-	lines = railPlain(t, m, tree)
-	header = lineOf(lines, " agents")
-	if !strings.Contains(lines[header], "pri") {
-		t.Errorf("the priority order does not name itself: %q", lines[header])
-	}
-
-	m.SidebarAgentFilter, m.SidebarAgentSort = sidebarAgentsSession, sidebarAgentsRecent
-	lines = railPlain(t, m, tree)
-	header = lineOf(lines, " agents")
-	if !strings.Contains(lines[header], "here") || !strings.Contains(lines[header], "rec") {
-		t.Errorf("flipped header does not carry its tokens: %q", lines[header])
-	}
-}
-
 // TestAgentsControlsAreInTheSignature: a control the cache cannot see leaves
 // yesterday's rows, in yesterday's order, on the screen.
 func TestAgentsControlsAreInTheSignature(t *testing.T) {

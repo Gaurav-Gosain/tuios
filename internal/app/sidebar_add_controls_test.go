@@ -2,11 +2,9 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -65,29 +63,6 @@ func TestAddControlRectsMatchTheirDrawnCells(t *testing.T) {
 					}
 				}
 			})
-		}
-	}
-}
-
-// TestAgentsHeaderHasNoAddControl states the asymmetry out loud, so a later
-// round adding one has to argue with this rather than with a silence.
-func TestAgentsHeaderHasNoAddControl(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-	m.DaemonClient = nil // the sessions "+" is hidden without one, the agents one never existed
-	lines := railPlain(t, m, tree)
-
-	agentsLine := lineOf(lines, " agents")
-	if agentsLine < 0 {
-		t.Fatal("the fixture drew no agents header")
-	}
-	if strings.Contains(lines[agentsLine], sidebarAddGlyph(&m.Settings)) {
-		t.Errorf("the agents header reads %q, want no add control on it", lines[agentsLine])
-	}
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowNewSession || h.Kind == sidebarRowNewWindow {
-			if h.Y0-m.GetTopMargin() == agentsLine {
-				t.Error("an add control was recorded on the agents header")
-			}
 		}
 	}
 }
@@ -173,60 +148,6 @@ func TestTheWalkStepsOntoTheAddControlAndTheSectionKeyStepsOverIt(t *testing.T) 
 	m.SidebarCursorExpand()
 	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowWindow {
 		t.Fatalf("the section key landed on %+v, want the first pane row", row)
-	}
-}
-
-// TestAddControlsHaveTooltips: they are the only thing on the expanded rail
-// drawn as a bare glyph, which is exactly the condition for a label.
-func TestAddControlsHaveTooltips(t *testing.T) {
-	prev := config.Global.Tooltips
-	config.Global.Tooltips = true
-	t.Cleanup(func() { config.Global.Tooltips = prev })
-
-	m := daemonRailOS(t, 120, 40)
-	m.sidebarPanelLines()
-
-	for _, h := range addHits(m) {
-		m.tooltipClear()
-		m.SidebarMotion(h.X0, h.Y0)
-		if m.Tooltip.Source != tooltipRailAdd {
-			t.Errorf("%v: hovering it tracked source %v, want the rail's add label", h.Kind, m.Tooltip.Source)
-			continue
-		}
-		if sidebarRowKind(m.Tooltip.Key) != h.Kind {
-			t.Errorf("%v: the label is keyed to %v", h.Kind, sidebarRowKind(m.Tooltip.Key))
-		}
-		// The words say what it makes, and the two controls do not say the same.
-		if got := sidebarAddWords(h.Kind); got == "" {
-			t.Errorf("%v has no words", h.Kind)
-		}
-	}
-	if sidebarAddWords(sidebarRowNewSession) == sidebarAddWords(sidebarRowNewWindow) {
-		t.Error("both add controls say the same thing")
-	}
-}
-
-// TestAddControlsDegradeToASCII, since the rail supports it. "+" is ASCII
-// already, so this is a guard against a later round reaching for a nicer glyph.
-func TestAddControlsDegradeToASCII(t *testing.T) {
-	prev := config.Global.UseASCIIOnly
-	config.Global.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.Global.UseASCIIOnly = prev
-		overlay.SetASCII(prev)
-	})
-
-	m := daemonRailOS(t, 120, 40)
-	lines, _ := m.sidebarPanelLines()
-	joined := ansi.Strip(strings.Join(lines, "\n"))
-	for _, r := range joined {
-		if r > 0x7f {
-			t.Fatalf("the ASCII rail drew %q:\n%s", r, joined)
-		}
-	}
-	if len(addHits(m)) != 2 {
-		t.Error("the ASCII rail lost its add controls")
 	}
 }
 

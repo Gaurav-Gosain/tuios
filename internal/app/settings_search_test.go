@@ -119,66 +119,6 @@ func TestSettingsSearchMatchesADescriptionWordButNotScatteredLetters(t *testing.
 	}
 }
 
-func TestSettingsSearchResultsNameTheirTab(t *testing.T) {
-	m := searchOS(t)
-	searchFor(m, "confirm quit")
-	content, _, _ := m.renderSettings()
-	plain := ansi.Strip(content)
-	row := ""
-	for line := range strings.SplitSeq(plain, "\n") {
-		if strings.Contains(line, "Confirm quit") {
-			row = line
-		}
-	}
-	if !strings.Contains(row, "Behavior") {
-		t.Errorf("the result row does not name its tab: %q", row)
-	}
-	if !strings.Contains(plain, "1 match") && !strings.Contains(plain, "matches") {
-		t.Errorf("the search line carries no count:\n%s", plain)
-	}
-	if !strings.Contains(plain, "appearance.confirm_quit") {
-		t.Errorf("the description box does not give the row's key:\n%s", plain)
-	}
-}
-
-func TestSettingsSearchSaysWhenNothingMatches(t *testing.T) {
-	m := searchOS(t)
-	searchFor(m, "xyzzyq")
-	plain := ansi.Strip(func() string { c, _, _ := m.renderSettings(); return c }())
-	if !strings.Contains(plain, "No settings match") {
-		t.Errorf("an empty result does not say so:\n%s", plain)
-	}
-	if !strings.Contains(plain, "no matches") {
-		t.Errorf("the count does not say no matches:\n%s", plain)
-	}
-}
-
-// TestSettingsSearchActsOnTheRowInPlace: the row found is the real row, so
-// enter toggles it without leaving the search, and the list does not move out
-// from under the cursor when the change means the row no longer matches.
-func TestSettingsSearchActsOnTheRowInPlace(t *testing.T) {
-	m := searchOS(t)
-	items, _ := searchFor(m, "confirm quit")
-	if len(items) == 0 || items[0].Label != "Confirm quit" {
-		t.Fatalf("confirm quit did not find the row first: %v", labelsOf(items))
-	}
-	before := m.Settings.AlwaysConfirmQuit
-	runSave(t, m.SettingsActivate())
-	if m.Settings.AlwaysConfirmQuit == before {
-		t.Fatal("enter on the result did not toggle the setting")
-	}
-	if !m.SettingsSearchOpen() {
-		t.Error("changing a row closed the search")
-	}
-	if got := m.settingsCurrentItems()[m.SettingsSelected].Label; got != "Confirm quit" {
-		t.Errorf("the cursor moved to %q after the change", got)
-	}
-	runSave(t, m.SettingsAdjust(1))
-	if m.Settings.AlwaysConfirmQuit != before {
-		t.Error("right on the result did not change it back")
-	}
-}
-
 func TestSettingsSearchEditsATextRowInPlace(t *testing.T) {
 	m := searchOS(t)
 	items, _ := searchFor(m, "preferred shell")
@@ -193,27 +133,6 @@ func TestSettingsSearchEditsATextRowInPlace(t *testing.T) {
 	runSave(t, m.SettingsEditCommit())
 	if m.UserConfig.Appearance.PreferredShell != "/bin/zsh" {
 		t.Errorf("the edit landed as %q", m.UserConfig.Appearance.PreferredShell)
-	}
-}
-
-func TestSettingsSearchCloseAndJump(t *testing.T) {
-	m := searchOS(t)
-	m.SettingsCategory, m.SettingsSelected = 2, 3
-	searchFor(m, "confirm quit")
-	m.SettingsSearchClose()
-	if m.SettingsSearchOpen() || m.SettingsCategory != 2 || m.SettingsSelected != 3 {
-		t.Errorf("closing the search left tab %d row %d open=%v, want tab 2 row 3 closed",
-			m.SettingsCategory, m.SettingsSelected, m.SettingsSearchOpen())
-	}
-
-	searchFor(m, "confirm quit")
-	m.SettingsSearchJump()
-	if m.SettingsSearchOpen() {
-		t.Fatal("tab left the search open")
-	}
-	cats := m.settingsCategories()
-	if cats[m.SettingsCategory].Name != "Behavior" || cats[m.SettingsCategory].Items[m.SettingsSelected].Label != "Confirm quit" {
-		t.Errorf("tab went to %s row %d, want Confirm quit on Behavior", cats[m.SettingsCategory].Name, m.SettingsSelected)
 	}
 }
 

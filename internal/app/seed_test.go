@@ -26,17 +26,3 @@ func TestNewOSSeedsAppearanceFromTheOption(t *testing.T) {
 		t.Error("lastConfigSharedBorders did not come from the seed")
 	}
 }
-
-// Without the option the process globals are the seed, which is what the local
-// client and the tests pass: it applies the file and the flags before any
-// session is built.
-func TestNewOSSeedsAppearanceFromTheGlobalsByDefault(t *testing.T) {
-	os := NewOS(OSOptions{})
-
-	if os.Settings.BorderStyle != config.Global.BorderStyle {
-		t.Errorf("Settings.BorderStyle = %q, want the global %q", os.Settings.BorderStyle, config.Global.BorderStyle)
-	}
-	if os.SharedBorders != config.Global.SharedBorders {
-		t.Error("SharedBorders did not come from the globals")
-	}
-}

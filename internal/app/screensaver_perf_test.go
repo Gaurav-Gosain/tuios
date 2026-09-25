@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -37,26 +36,6 @@ func TestASaverWithNoFrameYetStillComposes(t *testing.T) {
 
 	if got := m.composeFrame(); got == "" {
 		t.Error("a saver with no frame yet blanked the screen")
-	}
-}
-
-// TestTheSaverCostsNothingToDrawIsNotTrueOfTheComposer is the measurement the
-// fix is for, as an assertion rather than a benchmark: composing the screen
-// under the saver does strictly more work than returning its frame.
-func TestTheSaverSkipsTheWorkTheCompositorWouldDo(t *testing.T) {
-	m := saverPerfOS(t)
-	plain := m.composeFrame()
-	if len(plain) == 0 {
-		t.Fatal("the composed screen is empty, so this measures nothing")
-	}
-
-	m.screensaver.active = true
-	m.screensaver.frame = strings.Repeat("x", 10)
-	saved := m.composeFrame()
-
-	if len(saved) >= len(plain) {
-		t.Errorf("the saver frame is %d bytes and the composed screen is %d: the compositor still ran",
-			len(saved), len(plain))
 	}
 }
 

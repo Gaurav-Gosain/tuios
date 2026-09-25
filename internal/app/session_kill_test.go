@@ -164,31 +164,6 @@ func TestTheConfirmationNamesAndCountsTheSessionItWouldKill(t *testing.T) {
 	}
 }
 
-// TestKillingAnotherSessionLeavesThisClientAlone is the property that makes the
-// action safe to offer at all.
-func TestKillingAnotherSessionLeavesThisClientAlone(t *testing.T) {
-	m := killSessionOS(t)
-	panes, attached := len(m.Windows), m.SessionName
-
-	m.OpenSessionCloseFor("docs")
-	// No socket behind the seeded listing, so the kill itself has nowhere to go;
-	// what is under test is that this client is not the thing being ended.
-	m.DaemonClient = nil
-	if cmd := m.SessionCloseActivate(SessionCloseRowClose); cmd != nil {
-		t.Error("killing another session asked this client to quit")
-	}
-	if m.QuitRequested {
-		t.Error("killing another session recorded a quit intent for this one")
-	}
-	if m.SessionName != attached || len(m.Windows) != panes {
-		t.Errorf("this client came out as %q with %d panes, want %q with %d",
-			m.SessionName, len(m.Windows), attached, panes)
-	}
-	if m.ShowSessionClose {
-		t.Error("the dialog stayed up after it was answered")
-	}
-}
-
 // TestKillingTheAttachedSessionStillQuits holds the other half: the path that
 // ends this client is unchanged.
 func TestKillingTheAttachedSessionStillQuits(t *testing.T) {

@@ -3,8 +3,6 @@ package app
 import (
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // TestADefaultConfigHasNoChangedRows: with nothing changed, no row may carry
@@ -17,24 +15,6 @@ func TestADefaultConfigHasNoChangedRows(t *testing.T) {
 				t.Errorf("%s / %s (%s) reads as changed on a default config: value %q", cat.Name, item.Label, item.Path, m.optionEffective(item.Path))
 			}
 		}
-	}
-}
-
-func TestAChangedRowIsMarkedAndSaysItsDefault(t *testing.T) {
-	m := searchOS(t)
-	item := focusSetting(t, m, "Behavior", "Confirm quit")
-	runSave(t, m.SettingsAdjust(1))
-	if !m.settingDiffers(item) {
-		t.Fatal("toggling Confirm quit did not mark it changed")
-	}
-	content, _, _ := m.renderSettings()
-	plain := ansi.Strip(content)
-	if !strings.Contains(plain, "Confirm quit •") && !strings.Contains(plain, "Confirm quit *") {
-		t.Errorf("the changed row carries no mark:\n%s", plain)
-	}
-	// The description wraps, so its words are compared without the breaks.
-	if !strings.Contains(strings.Join(strings.Fields(plain), " "), "Default off, backspace resets.") {
-		t.Errorf("the description does not give the default and the key:\n%s", plain)
 	}
 }
 

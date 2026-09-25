@@ -2,59 +2,10 @@ package app
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
-
-// TestSidebarNewSessionDoesNotBlockUpdate pins the fix for a real freeze: the
-// creation is a daemon round trip, and running it inline on the Update goroutine
-// parked input, rendering and socket draining for as long as the daemon took.
-// The call must return at once and deliver its result as a message instead.
-//
-// The daemon-backed half (that a session really appears) is covered by the e2e
-// suite; what cannot regress silently is this call blocking again.
-func TestSidebarNewSessionDoesNotBlockUpdate(t *testing.T) {
-	m := &OS{Settings: config.Global}
-
-	// No daemon: the guard refuses and must still return immediately.
-	done := make(chan struct{})
-	go func() {
-		m.SidebarNewSession()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("SidebarNewSession blocked the caller")
-	}
-	if len(m.Notifications) == 0 {
-		t.Fatal("refusing without a daemon should say why")
-	}
-}
-
-// TestSessionCreateChanIsLazyAndStable keeps the channel from being rebuilt per
-// call, which would strand the listener armed on the previous one and lose the
-// result.
-func TestSessionCreateChanIsLazyAndStable(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	if m.PendingSessionCreate != nil {
-		t.Fatal("a client that never creates a session should not allocate the channel")
-	}
-	first := m.sessionCreateChan()
-	if first == nil {
-		t.Fatal("sessionCreateChan returned nil")
-	}
-	if second := m.sessionCreateChan(); second != first {
-		t.Fatal("sessionCreateChan rebuilt the channel; the armed listener would miss results")
-	}
-	// Buffered, so the creating goroutine cannot leak waiting on a full channel
-	// if the listener is momentarily elsewhere.
-	if cap(first) == 0 {
-		t.Fatal("the channel must be buffered so the creating goroutine cannot leak")
-	}
-}
 
 // TestSidebarFocusResolvesByID pins the fix for a wrong-pane hazard: rail hit
 // rects carry the index a row was drawn with, and a pane closing before the

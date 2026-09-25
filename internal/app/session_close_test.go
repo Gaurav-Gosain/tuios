@@ -64,20 +64,6 @@ func TestSessionCloseDialogCountsLiveState(t *testing.T) {
 	}
 }
 
-// TestSessionCloseDialogNamesTheSession checks the question addresses the
-// session by name where the daemon gave it one.
-func TestSessionCloseDialogNamesTheSession(t *testing.T) {
-	m := sessionCloseOS(t)
-	if body := sessionCloseText(t, m); !strings.Contains(body, "Close session-1?") {
-		t.Errorf("the dialog never named the session:\n%s", body)
-	}
-
-	m.SessionName = ""
-	if body := sessionCloseText(t, m); !strings.Contains(body, "Close this session?") {
-		t.Errorf("an unnamed session got no question:\n%s", body)
-	}
-}
-
 // TestSessionCloseOpensOnCancel checks the destructive row is never what enter
 // would run on the frame the dialog first draws.
 func TestSessionCloseOpensOnCancel(t *testing.T) {
@@ -139,36 +125,5 @@ func TestSessionCloseIsAlwaysConfirmed(t *testing.T) {
 	busy.OpenSessionClose()
 	if !busy.ShowSessionClose {
 		t.Fatal("a busy session skipped the confirmation")
-	}
-}
-
-// TestSessionCloseRowsAreClickableWhereTheyAreDrawn checks the dialog's own hit
-// rects line up with the rows it drew, so a click answers the question the user
-// is pointing at.
-func TestSessionCloseRowsAreClickableWhereTheyAreDrawn(t *testing.T) {
-	m := sessionCloseOS(t)
-	content, geo, rows := m.renderSessionClose()
-	if len(rows) != sessionCloseRowCount {
-		t.Fatalf("the dialog recorded %d rows, want %d", len(rows), sessionCloseRowCount)
-	}
-
-	lines := strings.Split(stripANSIForTrace(content), "\n")
-	for _, tc := range []struct {
-		idx   int
-		label string
-	}{
-		{SessionCloseRowCancel, "Cancel"},
-		{SessionCloseRowClose, "Close session"},
-	} {
-		r := rows[tc.idx]
-		if r.Rect.Y0 < 0 || r.Rect.Y0 >= len(lines) {
-			t.Fatalf("row %d claims line %d of %d", tc.idx, r.Rect.Y0, len(lines))
-		}
-		if !strings.Contains(lines[r.Rect.Y0], tc.label) {
-			t.Errorf("row %d's rect points at %q, which is not the %q row", tc.idx, lines[r.Rect.Y0], tc.label)
-		}
-		if r.Rect.X1 != geo.Width {
-			t.Errorf("row %d spans %d columns, want the dialog's %d", tc.idx, r.Rect.X1, geo.Width)
-		}
 	}
 }

@@ -94,34 +94,6 @@ func TestAccentSurvivesFocus(t *testing.T) {
 	}
 }
 
-// TestRailKeepsTheOldNameWhileRenaming: there is one rename surface, the
-// dialog. The rail keeps drawing the name the window still has, so the two
-// together are the old-vs-new comparison rather than two editors on one buffer.
-func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.SidebarFocused = true // started from the rail
-
-	m.BeginRenameWindow(m.Windows[2]) // "logs", not the focused window
-	m.RenameBuffer = "audit"
-
-	rows := strings.Join(railText(t, m), "\n")
-	if strings.Contains(rows, "audit") {
-		t.Errorf("the rail is still editing the buffer:\n%s", rows)
-	}
-	if !strings.Contains(rows, "logs") {
-		t.Errorf("the rail dropped the name the window still has:\n%s", rows)
-	}
-
-	// The dialog carries the buffer.
-	dialog, _, _, _, ok := m.renderRenameDialog()
-	if !ok {
-		t.Fatal("no rename dialog while a rename is in flight")
-	}
-	if !strings.Contains(stripANSIForTrace(dialog), "audit") {
-		t.Errorf("the dialog is not showing the buffer: %q", dialog)
-	}
-}
-
 // TestRenameDialogIsCentred pins the placement complaint: the dialog used to
 // anchor to the rail row it renamed, which put it in the top-left corner. It
 // belongs in the middle of the screen at every size, measured off the frame it

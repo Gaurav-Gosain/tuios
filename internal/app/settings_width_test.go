@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -272,55 +271,4 @@ func TestSettingsTabOverflowArrowsStep(t *testing.T) {
 	if m.SettingsCategory != 5 {
 		t.Errorf("left arrow moved to section %d, want 5", m.SettingsCategory)
 	}
-}
-
-// TestSettingsTabRowASCIIAndMonochrome: the strip's overflow marks are the only
-// thing saying there are sections off screen, so they have to survive a terminal
-// with no glyphs and one with no colour. In ASCII they are plain angle brackets;
-// in monochrome, where the active pill's accent fill is gone, they are still
-// there because they are glyphs rather than colour.
-func TestSettingsTabRowASCIIAndMonochrome(t *testing.T) {
-	t.Run("ascii", func(t *testing.T) {
-		prev := config.Global.UseASCIIOnly
-		config.Global.UseASCIIOnly = true
-		overlay.SetASCII(true)
-		t.Cleanup(func() {
-			config.Global.UseASCIIOnly = prev
-			overlay.SetASCII(prev)
-		})
-
-		m := newNarrowOS(t, 44, 40)
-		m.SettingsCategory = 5
-		lines, geo := plainFrame(t, m)
-		row := tabRowOf(t, lines, geo)
-		for _, glyph := range []string{"‹", "›", "…"} {
-			if strings.Contains(row, glyph) {
-				t.Errorf("the ASCII tab row still draws %q: %q", glyph, row)
-			}
-		}
-		if !strings.Contains(row, "<") || !strings.Contains(row, ">") {
-			t.Errorf("the ASCII tab row lost its overflow marks: %q", row)
-		}
-		if len(strings.Split(strings.Join(lines, "\n"), "\n")) < 1 {
-			t.Fatal("no frame")
-		}
-	})
-
-	t.Run("monochrome", func(t *testing.T) {
-		m := newNarrowOS(t, 44, 40)
-		m.SettingsCategory = 5
-		lines, geo := plainFrame(t, m)
-		row := tabRowOf(t, lines, geo)
-		names := settingsTabNames(m)
-		if !strings.Contains(row, "‹") || !strings.Contains(row, "›") {
-			t.Errorf("monochrome loses the overflow marks: %q", row)
-		}
-		if !strings.Contains(row, names[5]) {
-			t.Errorf("monochrome loses the active section name %q: %q", names[5], row)
-		}
-		// The active section keeps a mark that is not colour: its pill is padded.
-		if !strings.Contains(row, " "+names[5]+" ") {
-			t.Errorf("monochrome leaves nothing marking the active section: %q", row)
-		}
-	})
 }

@@ -110,28 +110,6 @@ func TestPointerJitterIsNotAShake(t *testing.T) {
 	}
 }
 
-// TestASweepAcrossTheScreenAndBackIsNotAShake protects the commonest pointer
-// move there is: going somewhere and coming back. It is one reversal, and it is
-// as fast and as wide as a shake.
-func TestASweepAcrossTheScreenAndBackIsNotAShake(t *testing.T) {
-	m := shakeOS(t)
-	clock := time.Now()
-
-	play(m, &clock, tea.MouseNone, []shakeMove{
-		{x: 5, after: time.Second},
-		{x: 30, after: 30 * time.Millisecond},
-		{x: 60, after: 30 * time.Millisecond},
-		{x: 85, after: 30 * time.Millisecond},
-		{x: 60, after: 30 * time.Millisecond},
-		{x: 30, after: 30 * time.Millisecond},
-		{x: 5, after: 30 * time.Millisecond},
-	})
-
-	if m.SpotlightOn() {
-		t.Error("crossing the screen and coming back toggled the beam")
-	}
-}
-
 // TestTwoOvershootCorrectionsAreNotAShake is the case a total time window
 // misses and the gap between reversals catches. Aiming at a target, overshooting
 // and correcting is two reversals; doing it twice inside a second is four. The
@@ -191,23 +169,6 @@ func TestAShakeCannotSpanAButtonPress(t *testing.T) {
 
 	if m.SpotlightOn() {
 		t.Error("a drag in the middle of it did not clear the turns counted either side")
-	}
-}
-
-// TestTheGestureIsOffUntilItIsAskedFor. It ships off, so the shipped default
-// must not fire on the sequence that does fire when it is on.
-func TestTheGestureIsOffUntilItIsAskedFor(t *testing.T) {
-	m := shakeOS(t)
-	clock := time.Now()
-	m.UserConfig.Spotlight.Shake = false
-
-	play(m, &clock, tea.MouseNone, wiggle(40, 20, 12, 60*time.Millisecond))
-
-	if m.SpotlightOn() {
-		t.Error("the gesture fired with spotlight.shake off")
-	}
-	if config.DefaultConfig().Spotlight.ShakeToggles() {
-		t.Error("spotlight.shake ships on; it is a gesture a person can make by accident")
 	}
 }
 

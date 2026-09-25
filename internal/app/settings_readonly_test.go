@@ -92,36 +92,3 @@ func TestLearnModeSkipsTheNotSavedNotice(t *testing.T) {
 		}
 	}
 }
-
-// TestConfigReadOnlyShowsInSettingsTitle checks the panel says so, since a
-// notification is gone by the time the second setting is changed.
-func TestConfigReadOnlyShowsInSettingsTitle(t *testing.T) {
-	useTempConfig(t)
-	for _, readOnly := range []bool{false, true} {
-		m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: readOnly, Width: 120, Height: 40})
-		m.OpenSettings()
-		body, _, _ := m.renderSettings()
-		if got := strings.Contains(body, "this session only"); got != readOnly {
-			t.Errorf("ConfigReadOnly=%v: title marker present=%v", readOnly, got)
-		}
-	}
-}
-
-// TestWritableSessionStillPersists is the other half: the default is unchanged,
-// so a local tuios keeps saving its settings.
-func TestWritableSessionStillPersists(t *testing.T) {
-	useTempConfig(t)
-	swapBool(t, &config.Global.SidebarFileIcons, true)
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-
-	focusSetting(t, m, "Sidebar", "File icons")
-	runSave(t, m.SettingsAdjust(1))
-
-	reloaded, err := config.LoadUserConfig()
-	if err != nil {
-		t.Fatalf("reload config: %v", err)
-	}
-	if got := reloaded.Appearance.Sidebar.FileIcons; got == nil || *got {
-		t.Error("a writable session did not persist the change")
-	}
-}

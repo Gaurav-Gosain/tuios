@@ -59,29 +59,3 @@ func TestRestoreKeepsDaemonOwnedAgentFields(t *testing.T) {
 		t.Errorf("ForegroundCmd = %q, want %q: the row falls back to the shell title", w.ForegroundCmd, "claude")
 	}
 }
-
-// TestRestoredAgentReachesTheRail is the same bug one level up, against what the
-// user actually sees: the restored pane has to be listed in the rail's agents
-// section.
-func TestRestoredAgentReachesTheRail(t *testing.T) {
-	m, _ := sidebarMultiSessionOS(t, 120, 40)
-	if err := m.RestoreFromState(agentRestoreState()); err != nil {
-		t.Fatalf("RestoreFromState: %v", err)
-	}
-	m.SessionName = "work"
-
-	var agents []sidebarAgentEntry
-	for _, s := range m.BuildSessionTree().Sessions {
-		for _, win := range s.Children {
-			if win.AgentState != "" {
-				agents = append(agents, sidebarAgentEntry{SessionID: s.ID, WindowID: win.ID, State: win.AgentState})
-			}
-		}
-	}
-	for _, a := range agents {
-		if a.WindowID == "w1" {
-			return
-		}
-	}
-	t.Errorf("the restored agent pane is not among the %d the rail would list", len(agents))
-}

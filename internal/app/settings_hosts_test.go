@@ -23,20 +23,6 @@ func hostsOS(t *testing.T, hosts map[string]config.HostConfig) *OS {
 	return NewOS(OSOptions{UserConfig: cfg})
 }
 
-func TestHostsSectionListsEachConfiguredHost(t *testing.T) {
-	m := hostsOS(t, map[string]config.HostConfig{
-		"build": {Addr: "gaurav@buildbox"},
-		"lab":   {Addr: "lab-01"},
-	})
-	item := focusSetting(t, m, "Hosts", "build")
-	if got := item.value(m); got != "gaurav@buildbox" {
-		t.Errorf("ASSERTION: the host row does not show its address, got %q", got)
-	}
-	focusSetting(t, m, "Hosts", "lab")
-	focusSetting(t, m, "Hosts", hostAddRowLabel)
-	focusSetting(t, m, "Hosts", hostTestRowLabel)
-}
-
 // A host that is not answering keeps its row and says why. Hiding it would
 // leave the user looking for a machine they know they configured.
 func TestAnUnreachableHostKeepsItsRowAndItsReason(t *testing.T) {

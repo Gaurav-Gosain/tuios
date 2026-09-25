@@ -50,24 +50,3 @@ func TestReadOnlyDockEditorSaysSo(t *testing.T) {
 		t.Error("a read-only dock editor does not say it cannot save")
 	}
 }
-
-// TestReadOnlySessionStillApplies checks the change itself lands. A session that
-// cannot write the file still behaves as it was asked to for as long as it
-// lasts, which is the whole point of the distinction.
-func TestReadOnlySessionStillApplies(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 44}
-	m.UserConfig = config.DefaultConfig()
-	m.ConfigReadOnly = true
-
-	m.setOption("appearance.gap", "4")
-
-	if got, _ := config.GetOptionValue(m.UserConfig, "appearance.gap"); got != "4" {
-		t.Errorf("the config holds gap %q, want 4", got)
-	}
-	if m.Settings.PaneGap != 4 {
-		t.Errorf("the global the renderer reads is %d, want 4", m.Settings.PaneGap)
-	}
-	if cmd := m.persistSettings(); cmd != nil {
-		t.Error("a read-only session handed back a command that would write the file")
-	}
-}

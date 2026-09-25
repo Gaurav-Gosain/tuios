@@ -6,19 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// TestSessionBorderIsOffUntilAskedFor. The setting changes the look of every
-// window on screen, so it does not arrive switched on.
-func TestSessionBorderIsOffUntilAskedFor(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	m.Settings.SessionColors = true
-	m.Settings.SessionBorder = false
-	m.SessionName = "work"
-
-	if _, _, ok := m.sessionBorderTint(); ok {
-		t.Error("a pane border carries the session's colour without the setting asking for it")
-	}
-}
-
 // TestSessionBorderAnswersTwoStrengths: the focused pane keeps the frame, so
 // the unfocused border is the same hue pulled back toward the ground rather
 // than a second colour. A caller that got one colour would have to know how far

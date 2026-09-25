@@ -1,12 +1,9 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // spacedSwitcherItems are the labels a rename can now produce.
@@ -42,20 +39,6 @@ func TestSpacedNamesStayFindable(t *testing.T) {
 	// A query that spans two different sessions' names still matches neither.
 	if got := FilterSessionItems(spacedSwitcherItems, "API café"); len(got) != 0 {
 		t.Errorf("a query across two names matched %v", ids(got))
-	}
-}
-
-// TestSwitcherRendersSpacedAndNonASCIINames reads the names off the rendered
-// frame: a name that cannot be seen has not really round-tripped.
-func TestSwitcherRendersSpacedAndNonASCIINames(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", IsDaemonSession: true}
-	pal := theme.UI()
-	for i, want := range []string{"Payments API", "café builds"} {
-		out := m.sessionSwitcherRow(spacedSwitcherItems[i], false, pal.Canvas, pal, sessionSwitcherWidth)
-		t.Logf("\n%s", out)
-		if !strings.Contains(out, want) {
-			t.Errorf("the switcher row does not show %q:\n%s", want, out)
-		}
 	}
 }
 

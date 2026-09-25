@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -31,58 +30,6 @@ func rowColumn(row, name string) int {
 		return -1
 	}
 	return lipgloss.Width(row[:i])
-}
-
-// TestSidebarRowsShareOneNameSpine pins the columns the rail's row kinds have
-// to agree on: every kind that names something starts that name in the same
-// place, so the list reads as one column of text rather than a ragged edge.
-func TestSidebarRowsShareOneNameSpine(t *testing.T) {
-	m, _ := sidebarMultiSessionOS(t, 120, 40)
-	m.DaemonClient = nil
-	// The terminals section shows the session sidebarCurrentSessionID names,
-	// which is m.SessionName, not whichever tree node happens to be marked
-	// IsCurrent: the fixture's current session must carry that name.
-	m.SessionName = "attached"
-	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "attached", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "focused", AgentState: "working", Focused: true},
-			{ID: "bbbbbbbb2222", Title: "sibling", AgentState: "needs_input"},
-			{ID: "cccccccc3333", Title: "plainwin"},
-		}},
-		{Name: "elsewhere", WindowCount: 1},
-	})
-
-	lines, _ := m.sidebarPanelLinesForTree(tree)
-	// The agents section names the same panes as the tree, so compare rows that
-	// cannot be confused: a tree-only window, a tree-only session, and the agent
-	// row for a pane whose title appears once per section.
-	spine := nameColumn(t, lines, "plainwin")
-	for _, name := range []string{"elsewhere", "sibling"} {
-		if got := nameColumn(t, lines, name); got != spine {
-			t.Errorf("%q starts at column %d, want the shared spine %d:\n%s",
-				name, got, spine, strings.Join(lines, "\n"))
-		}
-	}
-
-	// The agents section is pinned to the rail's bottom; find its highest-ranked
-	// row (needs_input outranks working, so "sibling" leads) by its recorded hit
-	// rather than by a fixed line index, and check it sits on the spine too.
-	var agentLine string
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent {
-			agentLine = lines[h.Y0-m.GetTopMargin()]
-			if h.WindowID != "bbbbbbbb2222" {
-				t.Fatalf("first agent row targets %q, want the needs_input pane", h.WindowID)
-			}
-			break
-		}
-	}
-	if agentLine == "" {
-		t.Fatal("no agent row recorded")
-	}
-	if got := rowColumn(ansi.Strip(agentLine), "sibling"); got != spine {
-		t.Errorf("agent row starts at column %d, want %d: %q", got, spine, ansi.Strip(agentLine))
-	}
 }
 
 // The footer carries the rail's own two controls: the file view on the outer

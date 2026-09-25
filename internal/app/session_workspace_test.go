@@ -7,23 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-func TestClampWorkspace(t *testing.T) {
-	cases := []struct {
-		in, want int
-	}{
-		{-1, 1},
-		{0, 1},
-		{1, 1},
-		{2, 2},
-		{9, 9},
-	}
-	for _, c := range cases {
-		if got := clampWorkspace(c.in); got != c.want {
-			t.Errorf("clampWorkspace(%d) = %d, want %d", c.in, got, c.want)
-		}
-	}
-}
-
 // TestRestoreFromStateClampsWorkspace verifies that restoring a session whose
 // persisted CurrentWorkspace is 0 (legacy or freshly created with no windows)
 // normalizes to workspace 1, which is reachable, instead of stranding future

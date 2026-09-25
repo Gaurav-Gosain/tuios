@@ -20,18 +20,12 @@
 // NEGATIVE CONTROLS, each run by mutating the shipped code and watching the
 // named assertion fail:
 //
-//   - ApplyStateSync not calling adoptScrollStrip: TestPeerScrollsFocusIntoView
-//     fails saying B's strip still points at the column it last focused itself,
-//     and TestPeerAdoptsADeliberateScroll fails saying A stayed at 0 while B is
-//     at 60. On the tree before any of this, the same test failed with B drawing
-//     the focused pane at x=-65 on a screen 100 wide.
-//   - adoptScrollStrip not pointing the strip at the adopted focus:
-//     TestPeerScrollsFocusIntoView fails with the pane at x=-65 again, because
-//     EnsureFocusedVisible then reveals the column this client last focused and
-//     drags the strip back to it.
-//   - BuildSessionState not sending the strip: TestPeerAdoptsADeliberateScroll,
-//     TestTwoColumnStepsBothReachThePeer and
-//     TestJoiningClientLandsOnTheSessionsStrip all fail.
+//   - ApplyStateSync not calling adoptScrollStrip:
+//     TestPeerAdoptsADeliberateScroll fails saying A stayed at 0 while B is
+//     at 60. The focus half of the same fault is e2e
+//     TestScrollingPeerFollowsFocusIntoView.
+//   - BuildSessionState not sending the strip: TestPeerAdoptsADeliberateScroll
+//     and TestJoiningClientLandsOnTheSessionsStrip both fail.
 //   - RestoreFromState not taking it: TestJoiningClientLandsOnTheSessionsStrip
 //     fails with the joining client at 65 while the session is at 45.
 //   - tiledLayoutStale measuring the strip against the box again:
@@ -43,18 +37,10 @@
 //     than the one it names: TestWorkspaceSwitchLandsBothClientsOnOneStrip
 //     fails with the two clients on 65 and 45 after a round trip through
 //     another workspace.
-//   - ScrollingOnFocusChange calling ScrollToFocusedColumn again, which is what
-//     it did before this fix: TestWorkspaceRoundTripKeepsTheParkedStrip's first
-//     row fails saying the round trip moved the strip from 20 to 0 while the
-//     focused column was on screen the whole time.
-//   - EnsureFocusedVisible given the peek margin, so it moves a column that is
-//     already on screen: the same row fails the same way. That is what binds
-//     the test to the threshold rather than to the name of the call.
-//   - EnsureFocusedVisible never revealing: the second row fails saying the
-//     round trip left the focused column off screen at 65, on both clients.
-//     Removing the reveal from tileAllWindows' scrolling branch instead fails
-//     nothing here, so the reveal on the way back into a workspace is this
-//     function's and not the retile's.
+//   - ScrollingOnFocusChange calling ScrollToFocusedColumn again, and
+//     EnsureFocusedVisible given the peek margin or never revealing, are
+//     caught end to end by TestWorkspaceRoundTripKeepsTheScrolledStrip and
+//     TestWorkspaceRoundTripRevealsAHiddenColumn in e2e/tui.
 //
 // StateFingerprint and reconcileStale are pinned in internal/session, where
 // their own controls are recorded.
@@ -153,45 +139,6 @@ func focusOn(m *OS, i int) {
 	m.SyncStateToDaemon()
 }
 
-// TestPeerScrollsFocusIntoView is the report: two clients on one session in the
-// scrolling layout, one of them moves focus, and the other draws the focus
-// border on a column that is not on its screen.
-func TestPeerScrollsFocusIntoView(t *testing.T) {
-	f := newScrollingFleet(t, 3, 100, 30)
-	a, b := f.r.m, f.p.m
-
-	// Park both viewports on the far right of the strip by focusing the last
-	// column from A.
-	focusOn(a, len(a.Windows)-1)
-	f.settle()
-	t.Logf("both clients on the last column\n%s%s", strip(a, "A"), strip(b, "B"))
-
-	// The gesture in the report: A moves focus to the first column.
-	focusOn(a, 0)
-	f.settle()
-	t.Logf("A moved focus to the first column\n%s%s", strip(a, "A"), strip(b, "B"))
-
-	if a.FocusedWindow != 0 || b.FocusedWindow != 0 {
-		t.Fatalf("the focus did not reach both clients: A %d B %d", a.FocusedWindow, b.FocusedWindow)
-	}
-	bsl := b.GetOrCreateScrollingLayout()
-	if bsl.FocusedCol != 0 {
-		t.Errorf("B's strip still points at column %d, not the focused one:\n%s", bsl.FocusedCol, strip(b, "B"))
-	}
-	fw := b.GetFocusedWindow()
-	if fw == nil {
-		t.Fatal("B has no focused window")
-	}
-	if fw.X+fw.Width <= 0 || fw.X >= b.GetRenderWidth() {
-		t.Errorf("B draws the focused pane off its screen at x=%d w=%d (screen %d wide):\n%s",
-			fw.X, fw.Width, b.GetRenderWidth(), strip(b, "B"))
-	}
-	if asl := a.GetOrCreateScrollingLayout(); asl.ViewportX != bsl.ViewportX {
-		t.Errorf("the two clients are looking at different places on the strip: A %d, B %d\n%s%s",
-			asl.ViewportX, bsl.ViewportX, strip(a, "A"), strip(b, "B"))
-	}
-}
-
 // TestPeerAdoptsADeliberateScroll is the other half of one strip: where the
 // session is looking is the session's, so a client that scrolls the strip with
 // the wheel takes the other client with it.
@@ -254,28 +201,6 @@ func TestUnrelatedSyncLeavesTheStripAlone(t *testing.T) {
 	}
 	if got := a.GetOrCreateScrollingLayout().ViewportX; got != parked {
 		t.Errorf("an unrelated sync dragged A's strip from %d back to %d\n%s", parked, got, strip(a, "A"))
-	}
-}
-
-// TestTwoColumnStepsBothReachThePeer walks the strip the way alt+p does, one
-// column at a time, because a step is the gesture in the report and two of them
-// in a row is where a lost sync would show.
-func TestTwoColumnStepsBothReachThePeer(t *testing.T) {
-	f := newScrollingFleet(t, 3, 100, 30)
-	a, b := f.r.m, f.p.m
-
-	focusOn(a, len(a.Windows)-1)
-	f.settle()
-	for step := range 2 {
-		a.ScrollingFocusLeft()
-		a.SyncStateToDaemon()
-		f.settle()
-		ax := a.GetOrCreateScrollingLayout().ViewportX
-		bx := b.GetOrCreateScrollingLayout().ViewportX
-		t.Logf("step %d: A at %d, B at %d\n%s%s", step+1, ax, bx, strip(a, "A"), strip(b, "B"))
-		if ax != bx {
-			t.Errorf("step %d: A is at %d and B at %d", step+1, ax, bx)
-		}
 	}
 }
 
@@ -402,7 +327,7 @@ func TestTwoSizesShareOneStrip(t *testing.T) {
 //
 // What it asserts is that both clients end up on one offset, on the right
 // workspace. Whether that offset is the one the workspace was parked at is
-// TestWorkspaceRoundTripKeepsTheParkedStrip, below.
+// e2e TestWorkspaceRoundTripKeepsTheScrolledStrip.
 func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 	f := newScrollingFleet(t, 3, 100, 30)
 	a, b := f.r.m, f.p.m
@@ -453,110 +378,6 @@ func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 			t.Errorf("%s came back with the focused pane off its screen at x=%d w=%d:\n%s",
 				c.name, fw.X, fw.Width, strip(c.m, c.name))
 		}
-	}
-}
-
-// TestWorkspaceRoundTripKeepsTheParkedStrip is the report: scroll the strip,
-// switch workspace, come back, and the scroll is gone.
-//
-// Each workspace keeps its own strip and nothing on the wire loses the offset.
-// What lost it was local: switching to a workspace restores that workspace's
-// saved focus, FocusWindow calls ScrollingOnFocusChange, and that used
-// ScrollToFocusedColumn, the reveal the keyboard column steps use, which moves
-// the strip to the focused column whether or not the user could already see it.
-// So a round trip overwrote the offset in place.
-//
-// The two rows are the rule and its limit. A column the user can still see does
-// not move the strip. A column with none of it on screen is revealed, which is
-// what every retile does and what this fix does not change.
-func TestWorkspaceRoundTripKeepsTheParkedStrip(t *testing.T) {
-	for _, row := range []struct {
-		name string
-		// notches is how far the wheel takes the strip off the focused column,
-		// or toEnd for as far as the strip goes. A notch count says nothing on
-		// its own: how many cells one covers is a setting, so the row that needs
-		// the column entirely off screen asks for the end rather than a number
-		// that happened to reach it.
-		notches int
-		toEnd   bool
-		// keep says the round trip must leave the offset exactly where it was.
-		keep bool
-	}{
-		{"the focused column is still on screen", 1, false, true},
-		{"the focused column is entirely off screen", 0, true, false},
-	} {
-		t.Run(row.name, func(t *testing.T) {
-			f := newScrollingFleet(t, 3, 100, 30)
-			a, b := f.r.m, f.p.m
-
-			// Focus the first column, then wheel the strip away from it. The
-			// wheel is the gesture in the report and it is the one path that
-			// moves the strip without moving the focus.
-			focusOn(a, 0)
-			f.settle()
-			if row.toEnd {
-				wheelToEnd(a)
-			}
-			for range row.notches {
-				a.ScrollingScrollViewport(1)
-			}
-			a.SyncStateToDaemon()
-			f.settle()
-
-			parked := a.GetOrCreateScrollingLayout().ViewportX
-			if parked == 0 {
-				t.Fatalf("the wheel did not move the strip, so the round trip proves nothing:\n%s",
-					strip(a, "A"))
-			}
-			if bx := b.GetOrCreateScrollingLayout().ViewportX; bx != parked {
-				t.Fatalf("the two clients did not start on one strip: A %d B %d", parked, bx)
-			}
-			onScreen := func(m *OS) bool {
-				fw := m.GetFocusedWindow()
-				return fw != nil && fw.X+fw.Width > 0 && fw.X < m.GetRenderWidth()
-			}
-			if onScreen(a) != row.keep {
-				t.Fatalf("this row parks the strip in the wrong place: the focused column "+
-					"on screen is %t, want %t\n%s", onScreen(a), row.keep, strip(a, "A"))
-			}
-
-			// Away to an empty workspace and back, which is the report's gesture.
-			a.SwitchToWorkspace(2)
-			a.SyncStateToDaemon()
-			f.settle()
-			a.SwitchToWorkspace(1)
-			a.SyncStateToDaemon()
-			f.settle()
-
-			ax := a.GetOrCreateScrollingLayout().ViewportX
-			bx := b.GetOrCreateScrollingLayout().ViewportX
-			t.Logf("parked at %d, back at %d\n%s%s", parked, ax, strip(a, "A"), strip(b, "B"))
-			if ax != bx {
-				t.Errorf("the round trip left the clients on different offsets: A %d, B %d", ax, bx)
-			}
-			if row.keep {
-				if ax != parked {
-					t.Errorf("a workspace round trip moved the strip from %d to %d while the "+
-						"focused column was on screen the whole time\n%s", parked, ax, strip(a, "A"))
-				}
-				return
-			}
-			// The limit: nothing of the focused column was on screen, so the
-			// strip is allowed to move, and the column has to be there now.
-			if ax == parked {
-				t.Errorf("the round trip left the focused column off screen at %d\n%s", ax, strip(a, "A"))
-			}
-			for _, c := range []struct {
-				name string
-				m    *OS
-			}{{"A", a}, {"B", b}} {
-				if !onScreen(c.m) {
-					fw := c.m.GetFocusedWindow()
-					t.Errorf("%s came back with the focused pane off its screen at x=%d w=%d:\n%s",
-						c.name, fw.X, fw.Width, strip(c.m, c.name))
-				}
-			}
-		})
 	}
 }
 

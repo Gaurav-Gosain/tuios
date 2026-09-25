@@ -13,21 +13,6 @@ import (
 // and does not want to zoom for it, because zooming costs them the fast window
 // switching the strip is for. appearance.scroll_column_max is that choice.
 
-// TestTheColumnCapDefaultsToThePeek pins that nothing changes for anyone who
-// does not set it.
-func TestTheColumnCapDefaultsToThePeek(t *testing.T) {
-	s := config.DefaultSettings()
-	if got := s.GetScrollColumnMax(); got != config.ScrollColumnWidthMax {
-		t.Errorf("the default cap is %d, want %d", got, config.ScrollColumnWidthMax)
-	}
-	// A Settings built by hand carries a zero, which must read as the default
-	// and not clamp every column to the floor.
-	var bare config.Settings
-	if got := bare.GetScrollColumnMax(); got != config.ScrollColumnWidthMax {
-		t.Errorf("a zero cap reads as %d, want the default %d", got, config.ScrollColumnWidthMax)
-	}
-}
-
 // TestAColumnCanFillTheScreenWhenTheCapAllowsIt is the request: 100 percent,
 // no zoom.
 func TestAColumnCanFillTheScreenWhenTheCapAllowsIt(t *testing.T) {

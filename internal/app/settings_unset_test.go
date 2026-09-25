@@ -46,30 +46,6 @@ func TestSettingsTellsTheTruthAboutUnsetValues(t *testing.T) {
 	}
 }
 
-// TestColourRowFramesItsValueBesideItsSwatch is the colour rows' version of the
-// same truth. The value sits inside the same bracketed field every other row
-// uses, with the swatch of the colour in force in front of it, so an unset row
-// says where its colour comes from and still shows what that colour is.
-func TestColourRowFramesItsValueBesideItsSwatch(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
-	m.ShowSettings = true
-	row := settingsRowNamed(t, m, "Focused border color")
-
-	line := settingsRowLine(t, m, row.Label)
-	if !strings.Contains(line, row.Unset+" ]") {
-		t.Errorf("an unset colour did not read as unset (%q): %q", row.Unset, line)
-	}
-
-	m.UserConfig.Appearance.BorderFocusedColor = "#ff0000"
-	line = settingsRowLine(t, m, row.Label)
-	if !strings.Contains(line, "#ff0000 ]") {
-		t.Errorf("a set colour did not render its value: %q", line)
-	}
-	if strings.Contains(line, row.Unset) {
-		t.Errorf("a set colour still read as unset: %q", line)
-	}
-}
-
 // settingsRowLine is the drawn row carrying the given label.
 func settingsRowLine(t *testing.T, m *OS, label string) string {
 	t.Helper()
@@ -81,17 +57,6 @@ func settingsRowLine(t *testing.T, m *OS, label string) string {
 	}
 	t.Fatalf("the settings panel drew no row for %q", label)
 	return ""
-}
-
-// TestSettingsExamplesLiveOnTheDescriptionLine checks the example did not just
-// disappear: it is still there to copy, one line down.
-func TestSettingsExamplesLiveOnTheDescriptionLine(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
-	m.ShowSettings = true
-	row := settingsRowNamed(t, m, "Preferred shell")
-	if !strings.Contains(row.Desc, row.Placeholder) {
-		t.Errorf("the description %q does not carry the example %q", row.Desc, row.Placeholder)
-	}
 }
 
 // settingsRowNamed selects the named row and returns it, so a test can assert

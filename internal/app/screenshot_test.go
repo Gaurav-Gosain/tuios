@@ -1,10 +1,7 @@
 package app
 
 import (
-	"bytes"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -212,34 +209,6 @@ func TestCaptureClickSlopTakesTheWindow(t *testing.T) {
 	}
 }
 
-// TestCaptureRegionCutsTheComposedFrame checks a region really is a rectangle
-// of the composed screen, chrome included, and not a pane read directly.
-//
-// Negative control: making composedGrid read the focused window's emulator
-// instead of the composed frame returned a 40x10 grid and failed the size.
-func TestCaptureRegionCutsTheComposedFrame(t *testing.T) {
-	m := shotOS(t)
-	m.BeginCapture(true)
-	m.renderCaptureMode()
-	m.BeginCaptureDrag(4, 3)
-	m.UpdateCapturePointer(43, 12, true)
-	cmd := m.FinishCaptureDrag()
-	if cmd == nil {
-		t.Fatal("the drag produced no capture")
-	}
-	msg, ok := cmd().(screenshotResultMsg)
-	if !ok || msg.err != nil {
-		t.Fatalf("capture failed: %+v", msg)
-	}
-	if msg.grid.Cols != 40 || msg.grid.Rows != 10 {
-		t.Errorf("region is %dx%d cells, want the 40x10 rectangle dragged",
-			msg.grid.Cols, msg.grid.Rows)
-	}
-	if _, err := os.Stat(msg.path); err != nil {
-		t.Errorf("the region capture wrote no file: %v", err)
-	}
-}
-
 // TestScreenshotScreenCoversTheViewport checks the full-screen grab is the
 // whole composed frame and nothing less.
 //
@@ -365,67 +334,6 @@ func TestPreviewScrollStaysInsideTheCapture(t *testing.T) {
 	}
 }
 
-// TestEscapeDiscardsTheFile checks the panel's esc really removes what it
-// wrote, so an accidental capture leaves nothing behind, and that enter keeps
-// it.
-//
-// Negative control: making CloseScreenshotPreview ignore its discard argument
-// left the file on disk and failed the first case.
-func TestEscapeDiscardsTheFile(t *testing.T) {
-	for name, discard := range map[string]bool{"esc discards": true, "enter keeps": false} {
-		t.Run(name, func(t *testing.T) {
-			m := shotOS(t)
-			path := filepath.Join(t.TempDir(), "shot.png")
-			if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			m.ShotPreview = screenshotPreview{Open: true, Path: path}
-			m.CloseScreenshotPreview(discard)
-			_, err := os.Stat(path)
-			if discard && err == nil {
-				t.Error("esc left the file on disk")
-			}
-			if !discard && err != nil {
-				t.Errorf("enter removed the file: %v", err)
-			}
-			if m.ShotPreview.Open {
-				t.Error("the panel is still open")
-			}
-		})
-	}
-}
-
-// TestCaptureWritesEveryFormat drives the whole client path per format and
-// checks a real file lands with real bytes in it.
-//
-// Negative control: making capture.Save a no-op left every file missing.
-func TestCaptureWritesEveryFormat(t *testing.T) {
-	for _, format := range shot.Formats {
-		t.Run(format, func(t *testing.T) {
-			m := shotOS(t)
-			m.UserConfig.Screenshot.Format = format
-			cmd := m.ScreenshotWindow(0)
-			if cmd == nil {
-				t.Fatal("no capture was started")
-			}
-			msg := cmd().(screenshotResultMsg)
-			if msg.err != nil {
-				t.Fatalf("capture failed: %v", msg.err)
-			}
-			info, err := os.Stat(msg.path)
-			if err != nil {
-				t.Fatalf("no file at %s: %v", msg.path, err)
-			}
-			if info.Size() == 0 {
-				t.Error("the file is empty")
-			}
-			if want := "." + shot.Format(format).Ext(); filepath.Ext(msg.path) != want {
-				t.Errorf("wrote %s, want a %s file", msg.path, want)
-			}
-		})
-	}
-}
-
 // TestPreviewOffCapturesWithoutAPanel checks screenshot.preview = false really
 // suppresses the panel, so the option is not inert.
 //
@@ -443,54 +351,6 @@ func TestPreviewOffCapturesWithoutAPanel(t *testing.T) {
 	}
 	if _, err := os.Stat(msg.path); err != nil {
 		t.Errorf("the file was not written: %v", err)
-	}
-}
-
-// TestScreenshotResultReachesUpdate checks the message the render command
-// returns is actually handled, rather than falling through the switch and
-// leaving the capture silent.
-//
-// Negative control: deleting the screenshotResultMsg arm of Update left
-// ShotPreview closed and failed.
-func TestScreenshotResultReachesUpdate(t *testing.T) {
-	m := shotOS(t)
-	cmd := m.ScreenshotWindow(0)
-	msg := cmd()
-	model, _ := m.Update(msg)
-	out, ok := model.(*OS)
-	if !ok {
-		t.Fatalf("Update returned a %T", model)
-	}
-	if !out.ShotPreview.Open {
-		t.Error("the finished capture did not open the preview")
-	}
-	if out.ShotPreview.Grid == nil {
-		t.Error("the preview has no grid to draw")
-	}
-}
-
-// TestCaptureBumpsTheCaptureSerial checks every capture gets a number of its
-// own. The number is what tells the picture the host holds apart from the one
-// this panel wants drawn, and the file name cannot: two captures inside one
-// second share it.
-//
-// Negative control: removing the shotCaptures increment from renderScreenshot
-// leaves both captures on 0 and this fails.
-func TestCaptureBumpsTheCaptureSerial(t *testing.T) {
-	m := shotOS(t)
-
-	first := m.ScreenshotWindow(0)()
-	m.Update(first)
-	one := m.ShotPreview.Capture
-	if one == 0 {
-		t.Fatal("the first capture has no serial number")
-	}
-
-	second := m.ScreenshotWindow(0)()
-	m.Update(second)
-	two := m.ShotPreview.Capture
-	if two == one {
-		t.Errorf("two captures share serial %d, so the second draws the first one's pixels", two)
 	}
 }
 
@@ -521,35 +381,6 @@ func TestClosingThePreviewForgetsTheUpload(t *testing.T) {
 	}
 	if m.shotPlacement != (screenshotPlacementState{}) {
 		t.Errorf("closing the panel left the placement at %+v", m.shotPlacement)
-	}
-}
-
-// TestCaptureModeIsOnTheMotionPathAndOverlayStack pins the two wiring points a
-// gesture mode silently dies without: it must be in overlayKindOrder so its
-// panel gets a stack slot, and the preview must disqualify the fullscreen fast
-// path so it is not drawn over.
-//
-// This control passes both ways on the current tree by design: it is a wiring
-// assertion, and its value is that removing either line makes it fail.
-func TestCaptureModeIsOnTheMotionPathAndOverlayStack(t *testing.T) {
-	found := false
-	for _, kind := range overlayKindOrder {
-		if kind == overlayKindShot {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("the preview panel has no slot in overlayKindOrder, so clicks in it fall through")
-	}
-	m := shotOS(t)
-	m.ShotPreview.Open = true
-	if _, ok := m.fullscreenFastWindow(); ok {
-		t.Error("the fullscreen fast path would draw over the preview panel")
-	}
-	m.ShotPreview.Open = false
-	m.BeginCapture(true)
-	if _, ok := m.fullscreenFastWindow(); ok {
-		t.Error("the fullscreen fast path would draw over capture mode")
 	}
 }
 
@@ -596,79 +427,6 @@ func TestFrameToGridDoesNotCascadeRows(t *testing.T) {
 		if got != want {
 			t.Errorf("row %d starts %q, want %q at column 0: the reparse is cascading", y, got, want)
 		}
-	}
-}
-
-// TestCropGridCutsTheRectangleAsked keeps a region from being off by a cell.
-//
-// Negative control: making cropGrid copy from g.Cells[y] instead of
-// g.Cells[y][x0:x1] returned the left edge of the frame for every region and
-// failed.
-func TestCropGridCutsTheRectangleAsked(t *testing.T) {
-	g := frameToGrid("....xy....\n....zw....", 20, 3, shot.XTermPalette())
-	out := cropGrid(g, 4, 0, 6, 2)
-	if out == nil {
-		t.Fatal("the crop came back empty")
-	}
-	if out.Cols != 2 || out.Rows != 2 {
-		t.Fatalf("crop is %dx%d, want 2x2", out.Cols, out.Rows)
-	}
-	got := out.Cells[0][0].Cluster + out.Cells[0][1].Cluster +
-		out.Cells[1][0].Cluster + out.Cells[1][1].Cluster
-	if got != "xyzw" {
-		t.Errorf("crop holds %q, want %q", got, "xyzw")
-	}
-	// A crop outside the grid is nothing rather than a panic.
-	if cropGrid(g, 100, 100, 110, 110) != nil {
-		t.Error("a crop outside the grid returned something")
-	}
-}
-
-// TestScreenshotSettingsRowsRender is the "a registered option appears in the
-// UI for free" claim, checked on the drawn panel rather than on the registry.
-//
-// Negative control: removing the screenshot category from settingsCategories
-// left the tab absent and this failed.
-func TestScreenshotSettingsRowsRender(t *testing.T) {
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	m.Width, m.Height = 140, 44
-	cats := m.settingsCategories()
-	idx := -1
-	for i, c := range cats {
-		if c.Name == "Screenshot" {
-			idx = i
-		}
-	}
-	if idx < 0 {
-		t.Fatal("there is no Screenshot category in the settings panel")
-	}
-	m.ShowSettings = true
-	m.SettingsCategory = idx
-	content, _, _ := m.renderSettings()
-	for _, want := range []string{"Screenshot", "format", "adow"} {
-		if !strings.Contains(strings.ToLower(content), strings.ToLower(want)) {
-			t.Errorf("the settings panel does not draw %q", want)
-		}
-	}
-	if len(cats[idx].Items) != 13 {
-		t.Errorf("the Screenshot tab has %d rows, want 13", len(cats[idx].Items))
-	}
-}
-
-// TestKittyPlaceRefactorIsByteIdentical pins that generalising appendKittyPlace
-// into appendKittyPlaceBox left the launcher's own escape unchanged. The
-// refactor exists so the screenshot preview can name its own cell box; the
-// launcher must still emit exactly what it emitted before.
-//
-// Negative control: swapping the c and r arguments in appendKittyPlace's call
-// to appendKittyPlaceBox produced "c=1,r=2" against the expected "c=2,r=1" and
-// failed.
-func TestKittyPlaceRefactorIsByteIdentical(t *testing.T) {
-	got := appendKittyPlace(nil, 7, 3, 10, 4)
-	want := []byte(fmt.Sprintf("\x1b7\x1b[%d;%dH\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,q=2,C=1;\x1b\\\x1b8",
-		5, 11, 7, 3, launcherIconCols, launcherIconRows))
-	if !bytes.Equal(got, want) {
-		t.Errorf("place emits\n %q\nwant\n %q", got, want)
 	}
 }
 

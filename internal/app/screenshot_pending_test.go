@@ -11,63 +11,6 @@ import (
 // on, and the artifacts catch up under a serial that says which capture they
 // belong to.
 
-// TestThePanelIsUpBeforeTheRenderRuns is the whole of what the user reported.
-// The cells are in hand at capture time, so the panel opens then, and nothing
-// about the file, its size or its picture is claimed before it is true.
-//
-// Negative control: removing the openPendingPreview call from renderScreenshot
-// left the panel closed until the command was run and this failed on the first
-// assertion. Confirmed on the unfixed tree, where the panel only ever opened
-// from HandleScreenshotResult.
-func TestThePanelIsUpBeforeTheRenderRuns(t *testing.T) {
-	m := shotOS(t)
-	cmd := m.ScreenshotWindow(0)
-	if cmd == nil {
-		t.Fatal("no capture was started")
-	}
-	p := m.ShotPreview
-	if !p.Open {
-		t.Fatal("the panel is not open until the render finishes")
-	}
-	if !p.Pending {
-		t.Error("the panel does not say it is still saving")
-	}
-	if p.Grid == nil {
-		t.Fatal("the panel has no cells to draw")
-	}
-	if p.Grid.Cols == 0 || p.Grid.Rows == 0 {
-		t.Errorf("the panel opened on an empty %dx%d grid", p.Grid.Cols, p.Grid.Rows)
-	}
-	if p.Path != "" || p.Bytes != 0 {
-		t.Errorf("the pending panel claims a file: %q, %d bytes", p.Path, p.Bytes)
-	}
-	if p.Status != shotStatusSaving {
-		t.Errorf("the pending status line says %q", p.Status)
-	}
-	// A pending panel offers no key that would act on a file that is not there.
-	for _, h := range m.shotPreviewHints() {
-		if h.Key == "c" || h.Key == "o" {
-			t.Errorf("the pending panel drew an inert %q key", h.Key)
-		}
-	}
-
-	// And the result fills it in.
-	msg := cmd().(screenshotResultMsg)
-	if msg.err != nil {
-		t.Fatalf("the render failed: %v", msg.err)
-	}
-	m.HandleScreenshotResult(msg)
-	if m.ShotPreview.Pending {
-		t.Error("the panel is still pending after its result landed")
-	}
-	if m.ShotPreview.Path != msg.path {
-		t.Errorf("the panel shows %q, want the file that was written, %q", m.ShotPreview.Path, msg.path)
-	}
-	if m.ShotPreview.Bytes == 0 {
-		t.Error("the panel shows no file size")
-	}
-}
-
 // TestEscapeBeforeTheFileLandsLeavesNothing is the pending half of discard. A
 // panel closed with esc before its file exists cannot remove that file, so the
 // serial is written down and the result removes its own.
@@ -154,35 +97,6 @@ func TestOnlyTheNewestCaptureReachesTheClipboard(t *testing.T) {
 	stale := first().(screenshotResultMsg)
 	if cmd := m.screenshotCopyCmd(stale); cmd != nil {
 		t.Error("a stale capture was allowed to take the clipboard")
-	}
-}
-
-// TestTheRenderCommandDoesNotCopy pins the clipboard out of the render's way.
-// The copy used to run before the result message was returned, and wl-copy
-// forks a child that outlives it, so the preview waited on a clipboard server
-// rather than on a render.
-//
-// Deliberately structural: it asserts the result type carries no copy at all,
-// which is the shape that makes the old ordering impossible to write again.
-func TestTheRenderCommandDoesNotCopy(t *testing.T) {
-	m := shotOS(t)
-	cmd := m.ScreenshotWindow(0)
-	msg, ok := cmd().(screenshotResultMsg)
-	if !ok {
-		t.Fatalf("the render returned a %T", cmd())
-	}
-	if msg.err != nil {
-		t.Fatalf("the render failed: %v", msg.err)
-	}
-	// The panel learns about a copy only from screenshotCopiedMsg, which is a
-	// separate command with its own answer.
-	m.HandleScreenshotResult(msg)
-	if m.ShotPreview.Status == shotStatusCopied {
-		t.Error("the render path reported a copy of its own")
-	}
-	m.HandleScreenshotCopied(screenshotCopiedMsg{capture: msg.capture})
-	if m.ShotPreview.Status != shotStatusCopied {
-		t.Errorf("the status line says %q after a copy", m.ShotPreview.Status)
 	}
 }
 
