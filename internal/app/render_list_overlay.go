@@ -112,6 +112,15 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		lines = append(lines, overlay.Style(bg).Render(" "))
 		shown++
 	}
+	// Where the cursor is in the list, under the list it counts. Under the
+	// detail it read as the detail's own count: "4 of 7" under a plan of seven
+	// lines, all shown.
+	if cfg.Count > cfg.MaxVisible {
+		info := fmt.Sprintf("%d of %d", cfg.Selected+1, cfg.Count)
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
+	} else {
+		lines = append(lines, overlay.Style(bg).Render(" "))
+	}
 	if cfg.DetailFor != nil {
 		if detail := cfg.DetailFor(cfg.Width); len(detail) > 0 {
 			lines = append(lines, overlay.Rule(cfg.Width, bg, pal))
@@ -119,12 +128,6 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 				lines = append(lines, overlay.Style(bg).Foreground(pal.Fg).Render(l))
 			}
 		}
-	}
-	if cfg.Count > cfg.MaxVisible {
-		info := fmt.Sprintf("%d of %d", cfg.Selected+1, cfg.Count)
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
-	} else {
-		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
 
 	panel := overlay.Panel{
