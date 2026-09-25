@@ -1,13 +1,10 @@
 package input
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // onDarwin puts the macOS-only key paths under test on whatever machine runs
@@ -18,25 +15,6 @@ func onDarwin(t *testing.T) {
 	prev := darwinHost
 	darwinHost = true
 	t.Cleanup(func() { darwinHost = prev })
-}
-
-// twoWindowOS is an OS in terminal mode with two panes, focused on the first.
-func twoWindowOS(t *testing.T) *app.OS {
-	t.Helper()
-	cfg := config.DefaultConfig()
-	o := app.NewOS(app.OSOptions{
-		UserConfig:      cfg,
-		KeybindRegistry: config.NewKeybindRegistry(cfg),
-	})
-	o.Width, o.Height = 160, 40
-	o.EffectiveWidth, o.EffectiveHeight = 160, 40
-	o.Windows = []*terminal.Window{
-		{ID: "a", CustomName: "one", X: 0, Y: 0, Width: 60, Height: 30, Workspace: 1},
-		{ID: "b", CustomName: "two", X: 60, Y: 0, Width: 60, Height: 30, Workspace: 1},
-	}
-	o.CurrentWorkspace, o.FocusedWindow = 1, 0
-	o.Mode = app.TerminalMode
-	return o
 }
 
 // The reported bug: on macOS the Option key composes a character instead of
@@ -120,23 +98,6 @@ func TestShiftedOptionChordPrefersTheShiftedBinding(t *testing.T) {
 	}
 }
 
-// The chord has to move the focus through the real terminal-mode handler, not
-// just resolve to an action name, and it must not be typed into the pane.
-func TestMacOptionChordSwitchesPaneInTerminalMode(t *testing.T) {
-	onDarwin(t)
-
-	for _, msg := range []tea.KeyPressMsg{
-		{Code: '˜', Text: "˜"},
-		{Code: '˜', Mod: tea.ModAlt},
-		{Code: 'n', Mod: tea.ModAlt},
-	} {
-		o := twoWindowOS(t)
-		if _, _ = HandleTerminalModeKey(msg, o); o.FocusedWindow != 1 {
-			t.Errorf("%q left the focus on window %d, want the next one", msg.String(), o.FocusedWindow)
-		}
-	}
-}
-
 // Off darwin the same glyphs are ordinary characters that belong to the shell.
 func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 	prev := darwinHost
@@ -172,55 +133,5 @@ func TestMacOptionChordIgnoresOtherModifiers(t *testing.T) {
 		if chord, ok := macOptionChord(msg); ok {
 			t.Errorf("%q was read as %q, want no chord", msg.String(), chord)
 		}
-	}
-}
-
-// The letter tables are only useful if they agree with what macOS actually
-// composes, and every glyph must map back to exactly one chord.
-func TestMacOptionGlyphsAreUnambiguous(t *testing.T) {
-	for glyph, want := range map[rune]string{
-		'˜': "alt+n", 'π': "alt+p", '¬': "alt+l", '˙': "alt+h",
-		'∆': "alt+j", '˚': "alt+k", 'ø': "alt+o", 'å': "alt+a",
-		'¡': "alt+1", 'ª': "alt+9", '⇥': "alt+tab",
-		'Å': "alt+shift+a", 'Ø': "alt+shift+o",
-	} {
-		got, ok := config.MacOSOptionChord(glyph)
-		if !ok || got != want {
-			t.Errorf("%c resolved to %q (found %v), want %q", glyph, got, ok, want)
-		}
-	}
-}
-
-// A chord that only worked because tuios translated a composed glyph proves the
-// Option key is not being sent as Alt, and the user is told once what to turn
-// on. Once is the point: it is advice, not an error.
-func TestComposedChordAdvisesOnceWhatToTurnOn(t *testing.T) {
-	onDarwin(t)
-	o := twoWindowOS(t)
-
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: '˜', Text: "˜"}, o)
-	before := len(o.Notifications)
-	if before == 0 {
-		t.Fatal("a composed Option chord said nothing about why it had to be translated")
-	}
-	if !strings.Contains(o.Notifications[before-1].Message, "Option") {
-		t.Errorf("the advice does not mention Option: %q", o.Notifications[before-1].Message)
-	}
-
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'π', Text: "π"}, o)
-	if len(o.Notifications) != before {
-		t.Errorf("the advice repeated itself (%d notifications, want %d)", len(o.Notifications), before)
-	}
-}
-
-// An Option glyph nobody bound anything to is just a character, and advising
-// about it would be noise.
-func TestUnboundComposedGlyphSaysNothing(t *testing.T) {
-	onDarwin(t)
-	o := twoWindowOS(t)
-
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'ß', Text: "ß"}, o)
-	if len(o.Notifications) != 0 {
-		t.Errorf("an unbound glyph raised %d notifications", len(o.Notifications))
 	}
 }

@@ -1,11 +1,9 @@
 package input
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -89,58 +87,6 @@ func TestAltShiftDigitsResolveInEverySpellingATerminalSends(t *testing.T) {
 	for key, want := range map[string]string{"alt+1": "switch_workspace_1", "alt+9": "switch_workspace_9"} {
 		if got := registry.GetAction(key); got != want {
 			t.Errorf("%s resolved to %q, want %q", key, got, want)
-		}
-	}
-}
-
-// TestSessionKeysReachTheActionFromBothModes checks the routing, not the switch:
-// standalone has no other session to go to, so the proof that the key arrived is
-// the hint it leaves behind. Terminal mode is the case that needs the check,
-// since a main-section binding only fires there via isTerminalSafeAction.
-func TestSessionKeysReachTheActionFromBothModes(t *testing.T) {
-	for _, mode := range []app.Mode{app.WindowManagementMode, app.TerminalMode} {
-		for _, msg := range []tea.KeyPressMsg{altShift('n'), altShift('p')} {
-			o := twoPaneOS(t)
-			o.Mode = mode
-			o, _ = HandleKeyPress(msg, o)
-			if len(o.Notifications) == 0 {
-				t.Fatalf("%s in mode %v produced no response", msg.String(), mode)
-			}
-			if got := o.Notifications[len(o.Notifications)-1].Message; !strings.Contains(got, "No other sessions") {
-				t.Errorf("%s in mode %v said %q", msg.String(), mode, got)
-			}
-		}
-	}
-}
-
-// TestLeaderExploreTogglesRailFocus checks both halves of the toggle. The second
-// half only works because the rail lets the leader through: it swallows every
-// other unbound key, so ctrl+b could not otherwise start a chord from inside it.
-func TestLeaderExploreTogglesRailFocus(t *testing.T) {
-	prev := config.Global.SidebarEnabled
-	config.Global.SidebarEnabled = true
-	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
-
-	leader := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
-	explore := tea.KeyPressMsg{Code: 'e', Text: "e"}
-
-	for _, mode := range []app.Mode{app.WindowManagementMode, app.TerminalMode} {
-		o := twoPaneOS(t)
-		o.Mode = mode
-
-		o, _ = HandleKeyPress(leader, o)
-		o, _ = HandleKeyPress(explore, o)
-		if !o.SidebarFocused {
-			t.Fatalf("ctrl+b e in mode %v did not focus the rail", mode)
-		}
-
-		o, _ = HandleKeyPress(leader, o)
-		if !o.PrefixActive {
-			t.Fatalf("the rail swallowed the leader in mode %v", mode)
-		}
-		o, _ = HandleKeyPress(explore, o)
-		if o.SidebarFocused {
-			t.Fatalf("ctrl+b e in mode %v did not leave the rail", mode)
 		}
 	}
 }

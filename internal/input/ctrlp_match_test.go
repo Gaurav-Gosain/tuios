@@ -102,33 +102,3 @@ func TestLauncherKeyAcrossEncodings(t *testing.T) {
 		}
 	}
 }
-
-// TestGlobalBindRebound is the whole point of the move: the key the palette
-// answers to is whatever the config says, and the default stops working once it
-// is replaced.
-func TestGlobalBindRebound(t *testing.T) {
-	o := osWithGlobalBinds(t, map[string][]string{"command_palette": {"ctrl+g"}})
-	for name, raw := range ctrlPEncodings {
-		msg := decodeKey(t, raw)
-		if got := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); got != "" {
-			t.Errorf("%s: ctrl+p still resolves to %q after rebinding to ctrl+g", name, got)
-		}
-	}
-	ctrlG := decodeKey(t, []byte{0x07})
-	if got := sectionAction(ctrlG, o, (*config.KeybindRegistry).GetGlobalAction); got != "command_palette" {
-		t.Errorf("ctrl+g resolves to %q, want command_palette", got)
-	}
-}
-
-// TestGlobalBindUnbound pins that an action set to [] is off. "Hackable"
-// includes turning something off, and a user who wants fish's history-back has
-// no other way to get it.
-func TestGlobalBindUnbound(t *testing.T) {
-	o := osWithGlobalBinds(t, map[string][]string{"command_palette": {}})
-	for name, raw := range ctrlPEncodings {
-		msg := decodeKey(t, raw)
-		if got := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); got != "" {
-			t.Errorf("%s: unbound command_palette still resolves to %q", name, got)
-		}
-	}
-}

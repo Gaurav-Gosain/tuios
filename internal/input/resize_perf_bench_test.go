@@ -113,3 +113,13 @@ func motionAt(x, y int) tea.MouseMotionMsg {
 		Button: uv.MouseButton(tea.MouseLeft),
 	})
 }
+
+// sharedGap is the column the layout keeps between panes for the divider, on
+// the same terms app.OS.separatorGap does. benchResizeOS drives the layout
+// directly, so it answers the question the app would answer for it.
+func sharedGap() int {
+	if config.Global.SharedBorders {
+		return 1
+	}
+	return 0
+}
