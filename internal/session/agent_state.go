@@ -329,7 +329,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.prior = agentPriorClaim{source: claim.source, state: prev, harness: w.AgentHarness}
 		}
 		w.AgentState = r.State
-		w.AgentMessage = r.Message
+		w.AgentMessage = ClampDisplayText(r.Message)
 		w.AgentKind = agentKindOf(r)
 		w.AgentHarness = next.harness
 		w.AgentStateAt = time.Now().UnixNano()

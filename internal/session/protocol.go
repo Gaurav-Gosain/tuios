@@ -656,7 +656,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		}
 		return nil, fmt.Errorf("failed to read message length: %w", err)
 	}
-	return readMessageBody(r, totalLen)
+	return readMessageBody(r, totalLen, nil)
 }
 
 // ReadMessageBuffered reads a framed message from r, a *bufio.Reader over
@@ -672,6 +672,14 @@ func ReadMessage(r io.Reader) (*Message, error) {
 // and the client wraps its connection so a frame is one read rather than
 // three; neither may read conn directly once the reader holds bytes.
 func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, error) {
+	return readMessageBufferedLimit(conn, r, boundaryTimeout, bodyTimeout, nil)
+}
+
+// readMessageBufferedLimit is ReadMessageBuffered with a frame limit per
+// message type. A frame over its type's limit is skipped unread and reported
+// as a *FrameTooLargeError, after which the stream is still in step. A nil
+// limit allows every type the 16 MB any frame may have.
+func readMessageBufferedLimit(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration, limit func(MessageType) uint32) (*Message, error) {
 	setBoundaryDeadline(conn, boundaryTimeout)
 
 	var totalLen uint32
@@ -688,7 +696,7 @@ func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeou
 		_ = conn.SetReadDeadline(time.Time{})
 	}
 
-	return readMessageBody(r, totalLen)
+	return readMessageBody(r, totalLen, limit)
 }
 
 // setBoundaryDeadline arms the deadline for the wait between frames, or
@@ -708,10 +716,12 @@ func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 }
 
 // readMessageBody reads the header and payload after the length prefix has
-// already been consumed from r.
-func readMessageBody(r io.Reader, totalLen uint32) (*Message, error) {
-	// Sanity check length (max 16MB)
-	if totalLen > 16*1024*1024 {
+// already been consumed from r. limit, when not nil, is the largest frame
+// accepted for each message type; see readMessageBufferedLimit.
+func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint32) (*Message, error) {
+	// Sanity check length (max 16MB). A frame past this is not skipped: a
+	// length that large is more likely a stream out of step than a frame.
+	if totalLen > maxFrameBytes {
 		return nil, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
 	}
 
@@ -729,6 +739,18 @@ func readMessageBody(r io.Reader, totalLen uint32) (*Message, error) {
 
 	// Read payload
 	payloadLen := totalLen - 2
+
+	// A frame over its own type's limit is skipped before any of it is
+	// decoded, which is the point of the limit: see wire_bounds.go.
+	if limit != nil {
+		if typeMax := limit(msgType); totalLen > typeMax {
+			if _, err := io.CopyN(io.Discard, r, int64(payloadLen)); err != nil {
+				return nil, fmt.Errorf("failed to skip oversized message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
+			}
+			return nil, &FrameTooLargeError{Type: msgType, Size: totalLen, Limit: typeMax}
+		}
+	}
+
 	var payload []byte
 	if payloadLen > 0 {
 		payload = make([]byte, payloadLen)

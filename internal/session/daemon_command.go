@@ -2,6 +2,8 @@ package session
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -173,11 +175,22 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid command result payload: %w", err)
 	}
 
+	// Data is map[string]any and can nest to any depth. Everything below
+	// walks it by recursion: the JSON reply of a verb, the gob encode that
+	// forwards it. A result no real command makes is turned into a failure,
+	// so the requester hears why instead of waiting out its timeout, and the
+	// sender is told too. See wire_bounds.go.
+	if err := checkResultData(payload.Data); err != nil {
+		LogError("Refused command result %s from %s: %v", payload.RequestID, cs.clientID, err)
+		_ = d.sendError(cs, ErrCodeInvalidMessage, "command result refused: "+err.Error())
+		payload.Success, payload.Data = false, nil
+		payload.Message = "the client's result was refused: " + err.Error()
+	}
+
 	if payload.Success {
-		LogBasic("Command %s succeeded: %s (data keys: %d)", payload.RequestID, payload.Message, len(payload.Data))
-		for k, v := range payload.Data {
-			LogBasic("  Data[%s] = %v", k, v)
-		}
+		// The keys only. Printing the values with %v walked them by recursion
+		// and put whatever a client sent into the daemon log.
+		LogBasic("Command %s succeeded: %s (data keys: %v)", payload.RequestID, payload.Message, slices.Sorted(maps.Keys(payload.Data)))
 	} else {
 		LogBasic("Command %s failed: %s", payload.RequestID, payload.Message)
 	}

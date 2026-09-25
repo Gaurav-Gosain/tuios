@@ -59,9 +59,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		}
 
 		state.Windows[i] = session.WindowState{
-			ID:           w.ID,
-			Title:        w.Title(),
-			CustomName:   w.CustomName,
+			ID: w.ID,
+			// Display text is clamped the way the daemon clamps it, so the
+			// two agree and a long title cannot push the session past the
+			// daemon's limit on a state update.
+			Title:        session.ClampDisplayText(w.Title()),
+			CustomName:   session.ClampDisplayText(w.CustomName),
 			X:            x,
 			Y:            y,
 			Width:        width,

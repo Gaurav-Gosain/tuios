@@ -1619,7 +1619,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	live := s.liveTitles()
 	for i := range state.Windows {
 		if t := live[state.Windows[i].PTYID]; t != "" {
-			state.Windows[i].Title = t
+			state.Windows[i].Title = ClampDisplayText(t)
 		}
 	}
 

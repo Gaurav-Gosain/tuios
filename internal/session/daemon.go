@@ -1412,10 +1412,19 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 		// arrives or the connection is closed, and both drop and shutdown
 		// close it. The body gets a deadline so a large payload cannot be cut
 		// mid-frame and desync framing.
-		msg, err := ReadMessageBuffered(conn, br, 0, 30*time.Second)
+		msg, err := readMessageBufferedLimit(conn, br, 0, 30*time.Second, daemonFrameLimit)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
+			}
+			// A frame over its type's limit was skipped unread, so the stream
+			// is still in step: tell the sender and go on serving it. See
+			// wire_bounds.go.
+			var tooLarge *FrameTooLargeError
+			if errors.As(err, &tooLarge) {
+				LogError("Refused a message from %s: %v", clientID, err)
+				_ = d.sendError(cs, ErrCodeInvalidMessage, "refused: "+err.Error())
+				continue
 			}
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {

@@ -697,7 +697,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		// process was read for the agent check either way. Counted apart from
 		// the agent states: a pane starting or leaving a command has to reach
 		// the clients, but it is not a state change.
-		if cmd := foregroundCommand(info, running, shell); cmd != w.ForegroundCmd {
+		if cmd := ClampDisplayText(foregroundCommand(info, running, shell)); cmd != w.ForegroundCmd {
 			if write {
 				w.ForegroundCmd = cmd
 			}

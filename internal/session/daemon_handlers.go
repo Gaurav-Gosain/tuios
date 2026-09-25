@@ -585,6 +585,14 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if err := msg.ParsePayload(&state); err != nil {
 		return fmt.Errorf("invalid state payload: %w", err)
 	}
+	// Before anything that walks the layout trees by recursion (the merge,
+	// the fingerprint, the save, the rebroadcast) sees them. See
+	// wire_bounds.go.
+	if err := validateSessionState(&state); err != nil {
+		LogError("Refused a state update from %s: %v", cs.clientID, err)
+		return d.sendError(cs, ErrCodeInvalidMessage, "state update refused: "+err.Error())
+	}
+	clampPushedText(&state)
 
 	// A client running inside a pane is an agent's view, not the person's,
 	// so its focus does not mark a finished turn seen. See human_origin.go.

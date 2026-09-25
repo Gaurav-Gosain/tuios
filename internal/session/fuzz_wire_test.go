@@ -31,9 +31,10 @@ import (
 //     different value, so what a relaying daemon forwards is not what it was
 //     sent.
 //
-// Not covered here, and reported rather than fuzzed: a SerializedBSPNode tree
-// nested a few million deep decodes by recursion and overflows the goroutine
-// stack, which is a fatal error the fuzzer cannot survive to report.
+// Not covered here: a SerializedBSPNode tree nested a few million deep decodes
+// by recursion and overflows the goroutine stack, which is a fatal error the
+// fuzzer cannot survive to report. The daemon never decodes one: see
+// wire_bounds.go and TestDaemonBoundsWhatClientsSend.
 
 // wirePayloads are the bodies the daemon and its clients decode, one
 // constructor each. The first byte of a fuzz input picks one.

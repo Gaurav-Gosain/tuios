@@ -465,7 +465,7 @@ func (s *Session) RenameDaemonWindow(target, name string) error {
 		if err != nil {
 			return err
 		}
-		state.Windows[idx].CustomName = name
+		state.Windows[idx].CustomName = ClampDisplayText(name)
 		return nil
 	})
 }

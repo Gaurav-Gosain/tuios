@@ -360,6 +360,9 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.humanNonce.Store(&payload.HumanNonce)
+		if err := validateSessionState(payload.State); err != nil {
+			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
+		}
 		c.NoteSession(payload.SessionName)
 		c.noteSessionLayout(payload.Generation, payload.Reserve)
 		return payload.State, nil
@@ -545,6 +548,9 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.humanNonce.Store(&payload.HumanNonce)
+		if err := validateSessionState(payload.State); err != nil {
+			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
+		}
 		c.NoteSession(payload.SessionName)
 		return payload.State, nil
 
@@ -885,6 +891,22 @@ func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, me
 	if err != nil {
 		return err
 	}
+	// The daemon would skip a result this large unread and the caller would
+	// wait out its timeout, so say what happened instead. See wire_bounds.go.
+	if len(msg.Payload) > maxCommandResultBytes {
+		tooLarge := &FrameTooLargeError{Type: MsgCommandResult, Size: uint32(len(msg.Payload)) + 2, Limit: uint32(maxCommandResultBytes) + 2}
+		msg, err = NewMessage(MsgCommandResult, &CommandResultPayload{
+			RequestID: requestID,
+			Message:   "the result was not sent: " + tooLarge.Error(),
+		})
+		if err != nil {
+			return err
+		}
+		if err := c.send(msg); err != nil {
+			return err
+		}
+		return tooLarge
+	}
 	return c.send(msg)
 }
 
@@ -955,6 +977,12 @@ func (c *TUIClient) UpdateState(state *SessionState) error {
 	msg, err := NewMessage(MsgUpdateState, state)
 	if err != nil {
 		return err
+	}
+	// The daemon skips a state this large unread. Saying so here puts the
+	// reason in this client's log, where the sync that failed is. See
+	// wire_bounds.go.
+	if len(msg.Payload) > maxStateUpdateBytes {
+		return &FrameTooLargeError{Type: MsgUpdateState, Size: uint32(len(msg.Payload)) + 2, Limit: uint32(maxStateUpdateBytes) + 2}
 	}
 	return c.send(msg)
 }
@@ -1229,6 +1257,15 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		// Do NOT close c.done here; it must stay open for subsequent switches.
 		debugLog("[CLIENT] Received MsgDetached (no-op in handleMessage)")
 
+	case MsgError:
+		// An error no request is waiting on, such as the refusal of a state
+		// push (see wire_bounds.go). Pushes are not answered, so this log is
+		// where the refusal shows.
+		var payload ErrorPayload
+		if err := msg.ParsePayload(&payload); err == nil {
+			debugLog("[CLIENT] daemon error %d: %s", payload.Code, payload.Message)
+		}
+
 	case MsgRemoteCommand:
 		// Remote command from CLI routed through daemon
 		var payload RemoteCommandPayload
@@ -1269,6 +1306,11 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		var payload StateSyncPayload
 		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[MULTICLIENT] Failed to parse state sync: %v", err)
+			return
+		}
+		// Before the app walks the trees by recursion. See wire_bounds.go.
+		if err := validateSessionState(payload.State); err != nil {
+			debugLog("[MULTICLIENT] Refused state sync: %v", err)
 			return
 		}
 
