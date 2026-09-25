@@ -93,6 +93,33 @@ func TestReportedReproStillFails(t *testing.T) {
 	}
 }
 
+// A target whose replays differ must not be reported as a clean repro. The
+// target below breaks its rule on the first replay only, the way a timing bug
+// or state kept across Reset does, so every shrink candidate passes and the
+// final replay of the minimal script passes too. Without the check the report
+// named the rule over a script that did nothing when anyone ran it.
+func TestNonReproducingFailureIsSaidSo(t *testing.T) {
+	trigger := Action{Kind: ZoomPane}
+	replays := 0
+	tgt := func() (Target, error) {
+		replays++
+		if replays == 1 {
+			return &needleTarget{trigger: trigger}, nil
+		}
+		return &needleTarget{trigger: Action{Kind: Tick, A: -1}}, nil
+	}
+	res, err := Run(tgt, Config{Seed: 3, Actions: []Action{{Kind: Tick}, trigger}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Failed || !res.Flaky {
+		t.Fatalf("Failed=%v Flaky=%v, want both", res.Failed, res.Flaky)
+	}
+	if !strings.Contains(res.Repro(), "NOT REPRODUCIBLE") {
+		t.Errorf("the repro does not say it may not reproduce:\n%s", res.Repro())
+	}
+}
+
 // A run that shrinks into a different bug must not be reported under the first
 // one's name, or the maintainer reads a repro for one rule and debugs another.
 func TestShrinkHoldsTheRuleFixed(t *testing.T) {

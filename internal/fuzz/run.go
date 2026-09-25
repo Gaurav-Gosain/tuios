@@ -124,6 +124,10 @@ type Result struct {
 	Actions  []Action
 	Executed int
 	Replays  int
+	// Flaky is set when the minimal sequence did not break the rule again on
+	// its final replay. The target is not deterministic, and the script may
+	// not reproduce.
+	Flaky bool
 }
 
 // Repro is the pasteable reproduction: the seed to re-run, and the minimal
@@ -134,6 +138,9 @@ func (r Result) Repro() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "seed %d, %d actions, broke at step %d\n", r.Seed, len(r.Actions), r.Step)
+	if r.Flaky {
+		b.WriteString("  NOT REPRODUCIBLE: the minimal script passed on its final replay, so the target's replays differ\n")
+	}
 	for _, v := range r.Violations {
 		fmt.Fprintf(&b, "  %s\n", v)
 	}
@@ -257,8 +264,15 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			return false
 		}
 		res.Actions = shrink(res.Actions, still, obs, cfg.MinWidth, cfg.MinHeight)
+		// Every candidate the shrinker kept broke the rule when it was tried,
+		// so a minimal script that does not break it now is a target whose
+		// replays differ: timing, a goroutine, state kept across Reset. That
+		// was reported under the original violation with a script that passed
+		// when anyone ran it. It is said so instead.
 		if s, svs, serr := replay(res.Actions, false); serr == nil && s >= 0 {
 			res.Step, res.Violations = s, svs
+		} else {
+			res.Flaky = true
 		}
 	}
 
