@@ -84,7 +84,7 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	}
 	// The answer keys are said in text on the row, and again in the hints.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "[1/3] approve Bash: go test", "allow", "deny", "answer in pane")
+		return screenHas(s, "Approvals 1", "approve Bash: go test", "allow", "deny", "answer in pane")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never offered to answer the held approval: %v\n%s", err, term.Snapshot())
 	}

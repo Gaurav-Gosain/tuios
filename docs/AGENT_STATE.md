@@ -1717,9 +1717,9 @@ What happens on a prompt:
    always did.
 2. With the harness enabled, and the call one the Inbox can show whole (see
    below), the hook then calls `request-approval` and waits. The Approvals row
-   gets the keys that answer it in text, such as
-   `[1/3] approve Bash: go test ./...`, and the hint line says what each key
-   does. With the cursor on it, the whole line is shown under the list, and
+   shows the request, such as `approve Bash: go test ./...`, and with the
+   cursor on it the hint line names each key that answers it and what it
+   does, such as `1 allow  3 deny`. The whole line is shown under the list, and
    for `2` the exact rules always adds, such as
    `Bash(go test:*) in .claude/settings.local.json`.
 3. You press `1` (allow once), `2` (always allow, offered only with the rules

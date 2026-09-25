@@ -97,7 +97,7 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "[1/3] risky: approve Bash: rm -r", "Risky: recursive delete", "n deny with reason")
+		return screenHas(s, "Approvals 1", "risky: approve Bash: rm -r", "Risky: recursive delete", "n deny with reason")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never marked the approval risky: %v\n%s", err, term.Snapshot())
 	}

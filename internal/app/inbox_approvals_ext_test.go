@@ -85,7 +85,7 @@ func drawn(m *OS) string {
 func TestRiskyApprovalAllowsOnTheSecondPress(t *testing.T) {
 	m, r := approvalsOS(t, riskyHeld())
 	plain := drawn(m)
-	for _, want := range []string{"[1/2/3] risky: approve Bash: rm -rf build/", "Risky: recursive delete, deletes a tree of files", "n deny with reason"} {
+	for _, want := range []string{"risky: approve Bash: rm -rf build/", "Risky: recursive delete, deletes a tree of files", "n deny with reason"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
 		}

@@ -352,9 +352,11 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		// A plan is its title and length; its keys are in the footer once
 		// it is under the cursor.
 		summary = inboxPlanRowText(it)
-	} else if keys := inboxAnswerKeys(it); keys != "" {
-		// Said in text, so a held approval reads as answerable here without
-		// colour: the keys that answer it, in front of what it asks.
+	} else if keys := inboxAnswerKeys(it); keys != "" && it.Kind == session.AttentionAsk {
+		// A question's row says the range of its choices, which are its own
+		// and not the Inbox's. An approval's keys are the footer's: once it
+		// is under the cursor the footer names each one with what it does,
+		// and the row saying "[1/3]" beside "1 allow 3 deny" said it twice.
 		summary = "[" + keys + "] " + summary
 	}
 	if it.HeldID != 0 {
