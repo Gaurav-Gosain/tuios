@@ -1086,11 +1086,12 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 // sidebarBudget is the shipped three-section split, expressed as the layout it
 // is: sessions a quarter, agents a third, the terminals list the slack.
 //
-// It stays because it is the case the design's table was written for and the
-// one the rail draws for anybody who has not touched the layout. Reading it
-// through sidebarBudgetLines is what keeps the general allocator honest: if the
-// generalisation ever stops reproducing this split, TestRailSectionBudget says
-// so rather than the rail quietly laying itself out differently.
+// It is the case the design's table was written for and the one the rail draws
+// for anybody who has not touched the layout. It reads the split through
+// sidebarBudgetLines, so it states the table in terms of the general
+// allocator. Nothing calls it now: the unit test that pinned this table was
+// removed, and TestBudgetNeverOverrunsOrInvents checks the allocator's
+// invariants rather than these numbers.
 //
 // # Why the rail now has a fourth section, having refused one
 //

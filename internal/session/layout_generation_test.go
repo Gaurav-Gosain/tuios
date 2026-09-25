@@ -23,9 +23,11 @@ import (
 // NEGATIVE CONTROL: measured. Without the generation (dropping the check in
 // noteSessionLayout), the two clients end up holding different reserves within
 // a few rounds, one of them stuck on a value the session has moved past. It is
-// the same fault that showed up in internal/app as
-// TestFocusSwitchResizesNothing failing about once in fifty, with the two
-// clients laying panes out in boxes 21 columns apart.
+// the same fault that showed up in internal/app as a focus-switch test failing
+// about once in fifty, with the two clients laying panes out in boxes 21
+// columns apart. That test is gone; the internal/app convergence harness
+// (TestMultiClientConvergence) and e2e TestSessionHoldsOneSizeForTwoClients
+// now cover two clients agreeing on the box.
 func TestClientsConvergeOnOneLayoutUnderConcurrentAnnouncements(t *testing.T) {
 	d, _ := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "racing")

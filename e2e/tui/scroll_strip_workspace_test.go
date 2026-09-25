@@ -215,10 +215,11 @@ func TestWorkspaceRoundTripRevealsAHiddenColumn(t *testing.T) {
 //     rather than the passage of time.
 //   - The reveal moved out of the retile and into GetOrCreateScrollingLayout,
 //     where a strip is built for the first time. Taking it out of there
-//     instead fails internal/app.TestJoiningClientLandsOnTheSessionsStrip and
-//     TestWorkspaceSwitchLandsBothClientsOnOneStrip, both saying the strip is
-//     at home with the focused column off screen. That is the pair that keeps
-//     a client from starting up scrolled away from the pane it is typing into.
+//     instead fails internal/app.TestWorkspaceSwitchLandsBothClientsOnOneStrip,
+//     saying the strip is at home with the focused column off screen. That is
+//     the test that keeps a client from starting up scrolled away from the
+//     pane it is typing into. (It was measured together with a joining-client
+//     unit test that has since been removed.)
 
 // parkStripPastFocus scrolls the strip until the focused column is entirely off
 // screen, and returns the frame it settled on.

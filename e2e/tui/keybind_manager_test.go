@@ -34,7 +34,7 @@ func openKeybindManager(t *testing.T, term *tuitest.Terminal) {
 // had never fired in a default install. Reading that as a feature of the panel
 // is how it survived: the test passed because the defaults were broken, and
 // fixing them would have failed the test. The defaults now resolve every key to
-// one action, guarded by TestDefaultConfigHasNoConflicts, and this case brings
+// one action, guarded by TestStockConfigOpensNoConflicts, and this case brings
 // its own clash.
 func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	base := t.TempDir()
@@ -97,10 +97,10 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 // TestStockConfigOpensNoConflicts is the maintainer's report, on screen: he
 // opened this tab on a config he had never edited and found four.
 //
-// The unit invariant (TestDefaultConfigHasNoConflicts) checks the same thing
-// against the registry. This checks it against the pixels, because the panel is
-// where the claim is made and a report that disagreed with its own analysis
-// would pass the unit test and still be wrong here.
+// It replaces a unit test that checked the same thing against the registry.
+// This checks it against the pixels, because the panel is where the claim is
+// made and a report that disagreed with its own analysis would pass a registry
+// check and still be wrong here.
 func TestStockConfigOpensNoConflicts(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)

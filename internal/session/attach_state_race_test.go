@@ -14,10 +14,11 @@ import (
 // the reply is the only way the change can reach it, and the reply was built
 // before the change.
 //
-// This is TestFocusSwitchMovesNoPTY/shared_borders_disagree failing in CI: the
-// first client pushed its pane geometry as the second attached, and the second
-// kept its own geometry for good, so the two ran the same PTYs at different
-// sizes.
+// This was an internal/app focus-switch test (the shared_borders_disagree case)
+// failing in CI: the first client pushed its pane geometry as the second
+// attached, and the second kept its own geometry for good, so the two ran the
+// same PTYs at different sizes. e2e TestGeometryConfigDisagreementDoesNotMovePanes
+// now covers the two clients with disagreeing geometry settings.
 //
 // NEGATIVE CONTROL: without the state check after the reply in handleAttach
 // the change never reaches the attaching client.

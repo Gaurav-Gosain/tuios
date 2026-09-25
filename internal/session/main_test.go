@@ -53,9 +53,9 @@ func pinResurrectionDir(dir string) {
 // pinShell makes the daemon spawn a POSIX shell rather than the developer's
 // login shell. A window is a real process, so tests that drive one were
 // running whatever $SHELL named, with that shell's startup files and startup
-// cost: TestWaitForWindowExit passes under a shell that reaches its prompt
-// quickly and times out under one that does not, which makes it a test of the
-// machine rather than of the daemon.
+// cost. A test that waits on a window's shell passes under a shell that reaches
+// its prompt quickly and times out under one that does not, which makes it a
+// test of the machine rather than of the daemon.
 func pinShell(string) {
 	if err := os.Setenv("SHELL", "/bin/sh"); err != nil {
 		panic(err)

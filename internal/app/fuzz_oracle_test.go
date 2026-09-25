@@ -227,7 +227,8 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// Generalised from TestWorkspaceSwitchSendsNoSpuriousWinch: not just a
+// Generalised from a unit test that checked a workspace switch alone (now
+// removed; e2e workspace_switch_replay covers the switch): not just a
 // workspace switch, but any action at all. A pane whose drawable size did not
 // move must not have been told anything, because every announcement is a
 // SIGWINCH and a full-screen program redraws on each one.

@@ -96,11 +96,15 @@ func waitPaneBox(t *testing.T, term *tuitest.Terminal, want, what string) {
 // a pair of resizes per push, one of them narrowing, which is what damages
 // scrollback under a reflowing emulator.
 //
-// The tests that fail on the unfixed tree therefore count resizes rather than
-// read frames: TestFocusSwitchResizesNothing and TestTwoClientsAgreeOnEveryPaneSize
-// in internal/app. What this one is for is the property those cannot see: that
-// what the two people are looking at is the same layout. It would catch a
-// change that settled the resizes by letting the two frames drift apart.
+// The tests that failed on the unfixed tree therefore counted resizes rather
+// than read frames. They were internal/app unit tests and have been removed;
+// TestSessionHoldsOneSizeForTwoClients and
+// TestGeometryConfigDisagreementDoesNotMovePanes here, and the convergence
+// harness in internal/app (TestMultiClientConvergence), now cover two clients
+// agreeing on pane sizes. What this one is for is the property a resize count
+// cannot see: that what the two people are looking at is the same layout. It
+// would catch a change that settled the resizes by letting the two frames
+// drift apart.
 func TestOneClientsRailDoesNotMoveAnotherClientsPanes(t *testing.T) {
 	railed, base := twoClientSession(t, "chrome", bigCols, bigRows)
 	newWindow(t, railed)

@@ -569,7 +569,10 @@ that fails a named assertion (`TestMotionFilterPassesPaneContentForLinks`,
 `TestMotionFilterPassesACtrlDragGrab`, `TestMotionFilterFeedsZenMouseMode`,
 `TestMotionFilterRecordsThePointerItDrops`, `TestMotionFilterPassesTheDockBand`,
 `TestProgramOptionsReachTheProgram`,
-`TestKeysTypedRightAfterEnteringTerminalModeReachThePTY`).
+`TestKeysTypedRightAfterEnteringTerminalModeReachThePTY`). Two of those tests
+were later removed: `TestPointerSweepOverTheDockPassesOnlyItsTargets` makes the
+dock band claim now, and nothing replaces the reflection check on the program
+options.
 
 ## 2026-09 daemon and wire pass
 
@@ -1109,8 +1112,9 @@ again per cell, from the same `colorprofile.Detect` on the same stdout. On a
 headless server it stripped every colour, which is why `internal/server` and
 `tuios-web` pinned `lipgloss.Writer.Profile` to truecolor. Both pins are gone:
 the only other `lipgloss.Writer` users are `lipgloss.Sprintf` calls over plain
-text, which no profile changes. `TestComposeFrameKeepsPaneColour` holds a
-composed frame to its pane's colour.
+text, which no profile changes. `TestComposeFrameKeepsPaneColour` held a
+composed frame to its pane's colour; it was later removed, and e2e
+`TestListingStyleFidelityAgainstBarePTY` checks colour on the real binary.
 
 With colour in test frames, `TestEffectsWithNoOpeningNeverHideTheScreen`
 failed for `highlight` (98 of 142 glyphs readable at 40x12). The 44 missing
@@ -1784,11 +1788,13 @@ rounds of 20 runs:
 End to end, `list-sessions --json` against a running daemon measured 9.38 ms
 CPU before and 9.18 ms after (six alternating rounds of 40 runs, p=0.18): the
 gain is about 2% of a command and below what this machine resolves. It is kept
-because the init numbers are exact and the change adds no state. `TestDialVerbExplainsAMissingDaemonLikeTheProbe` holds the
-new dial to the old probe's message and status for an absent daemon and a stale
-socket, `TestLogBufferAllocatesOnFirstAdd` the lazy buffer, and
-`TestExtractPathsUsesBothPatterns` and `TestParseBlocksByPromptPatterns` the
-five patterns, which had no test and would otherwise fail only on first use.
+because the init numbers are exact and the change adds no state. Four unit
+tests were added with it and later removed:
+`TestDialVerbExplainsAMissingDaemonLikeTheProbe` (the new dial against the old
+probe's message and status for an absent daemon and a stale socket),
+`TestLogBufferAllocatesOnFirstAdd` (the lazy buffer), and
+`TestExtractPathsUsesBothPatterns` and `TestParseBlocksByPromptPatterns` (the
+five patterns, which would otherwise fail only on first use).
 
 ### Measured and deliberately not changed
 

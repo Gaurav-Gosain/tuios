@@ -227,9 +227,10 @@ func (m *OS) optionEffective(path string) string {
 			// Registry Default is what DefaultConfig writes, which for a few
 			// enums is empty meaning "the built-in". The built-in is the value
 			// the option accepts first, which is the order the registry lists
-			// them in and what TestEnumDefaultIsTheFirstAccepted pins. Without
-			// this the window title row drew an empty cycler for a title that
-			// was plainly being drawn along the bottom.
+			// them in. No test pins that order now, so an enum whose built-in
+			// is not listed first has to set Default. Without this the window
+			// title row drew an empty cycler for a title that was plainly
+			// being drawn along the bottom.
 			return o.Accepted[0]
 		}
 	case config.OptionInt:

@@ -25,14 +25,17 @@
 //     at 60. The focus half of the same fault is e2e
 //     TestScrollingPeerFollowsFocusIntoView.
 //   - BuildSessionState not sending the strip: TestPeerAdoptsADeliberateScroll
-//     and TestJoiningClientLandsOnTheSessionsStrip both fail.
-//   - RestoreFromState not taking it: TestJoiningClientLandsOnTheSessionsStrip
-//     fails with the joining client at 65 while the session is at 45.
-//   - tiledLayoutStale measuring the strip against the box again:
-//     TestUnrelatedSyncLeavesTheStripAlone fails, both clients dragged from 65
-//     back to 0 by a sync that only renamed a pane.
-//   - scrollingLayoutStale never answering true: TestScrolledStripIsNotStale
-//     fails on a pane seven cells from where the strip puts it.
+//     fails.
+//
+// Three controls recorded here named unit tests that were removed in favour
+// of e2e coverage (scroll_strip_workspace_test.go and
+// scroll_peer_focus_test.go). They have not been rerun against those e2e
+// tests, so read them as the faults to check for, not as measured results:
+// RestoreFromState not taking the strip (a joining client lands at 65 while
+// the session is at 45), tiledLayoutStale measuring the strip against the box
+// again (a sync that only renamed a pane drags both clients back to 0), and
+// scrollingLayoutStale never answering true (a pane left seven cells from
+// where the strip puts it).
 //   - adoptScrollStrip run against the workspace the sync arrived from rather
 //     than the one it names: TestWorkspaceSwitchLandsBothClientsOnOneStrip
 //     fails with the two clients on 65 and 45 after a round trip through

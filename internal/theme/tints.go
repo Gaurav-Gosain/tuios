@@ -6,10 +6,11 @@ import tint "github.com/lrstanley/bubbletint/v2"
 // than taken from bubbletint's DefaultTints, whose 342 pointer-heavy literals
 // cost about 200 KB of binary. gen_tints.go writes the table and says how.
 //
-// Ways this can differ from bubbletint's registry, and what covers each:
-//   - A table older than the bubbletint in go.mod. tints_test.go compares
-//     every tint field for field with DefaultTints.
-//   - A colour slot read back into the wrong field. The same test.
+// Ways this can differ from bubbletint's registry, and what guards each:
+//   - A table older than the bubbletint in go.mod. Rerun gen_tints.go after
+//     bumping bubbletint; no test compares the table with DefaultTints now.
+//   - A colour slot read back into the wrong field. Nothing checks this
+//     either since that comparison test was removed.
 //   - An unset slot (SelectionBg and Cursor in most themes) coming back as
 //     black. Unset slots are stored as a zero marker and left nil.
 //   - Registration order and the starting tint. NewRegistry is called with

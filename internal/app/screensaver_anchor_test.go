@@ -21,10 +21,10 @@ import (
 // passing.
 //
 // Negative control: put AnchorNW back in screensaverBuild and
-// TestSaverDoesNotMoveAScreenWithEmptyTopRows reports offset row -3. Drop the
-// screensaverFit call and TestSaverKeepsTheTopLeftOnATallerCanvas reports
-// offset row +4, TestSaverKeepsTheTopLeftOnAShorterCanvas offset row -4. All
-// three compile and all three fail on the number.
+// TestSaverDoesNotMoveAScreenWithEmptyTopRows reports offset row -3. Dropping
+// the screensaverFit call is not caught here: both tests in this file still
+// pass without it, because their capture is as tall as the canvas. The tests
+// that caught it used a taller and a shorter canvas and were removed.
 
 // The effect these tests run. highlight is the one effect that never moves a
 // character and never hides one, so its first frame is the captured screen and

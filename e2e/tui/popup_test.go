@@ -240,9 +240,9 @@ func TestPopupRunsAPickerAndTheSelectionLands(t *testing.T) {
 // That is exactly what a peer does to a float it has not been told about.
 //
 // The second client is started narrower than the first on purpose. The session
-// settles to the smaller of the two, so both end up rendering the same box here;
-// the client-by-client arithmetic that box comes out of is measured directly in
-// TestPopupBoxFollowsTheClientNotThePeer.
+// settles to the smaller of the two, so both end up rendering the same box here.
+// The client-by-client arithmetic that box comes out of is not measured on its
+// own any more; the unit test that did so was removed.
 func TestPopupIsSharedBetweenClients(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\n")

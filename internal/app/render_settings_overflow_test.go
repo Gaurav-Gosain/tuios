@@ -12,7 +12,7 @@ import (
 // (description, value field, or control) rendering wider than the panel's
 // own declared geometry. Every line the panel emits must be exactly
 // geo.Width cells, matching the invariant overlay.Panel already upholds for
-// its own generic rows (see overlay.TestPanelGeometry).
+// its own generic rows.
 func TestSettingsPanelLinesMatchGeometryWidth(t *testing.T) {
 	cases := []struct {
 		name    string
