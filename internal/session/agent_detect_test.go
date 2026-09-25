@@ -466,6 +466,28 @@ func TestResolveAgentDetectInterval(t *testing.T) {
 	}
 }
 
+// TestResolveAgentBinaries checks the config list and the env override merge, and
+// that blanks are ignored.
+func TestResolveAgentBinaries(t *testing.T) {
+	t.Setenv("TUIOS_AGENT_BINARIES", " extra1 , ,extra2 ")
+	got := resolveAgentBinaries([]string{"cfg1", " "})
+	want := map[string]bool{"cfg1": true, "extra1": true, "extra2": true}
+	seen := map[string]bool{}
+	for _, n := range got {
+		seen[n] = true
+	}
+	for w := range want {
+		if !seen[w] {
+			t.Errorf("resolveAgentBinaries missing %q, got %v", w, got)
+		}
+	}
+	// The merged matcher must recognise a config-added name.
+	m := newAgentMatcher(got)
+	if !m.isAgent(foregroundInfo{comm: "cfg1", argv: []string{"cfg1"}}) {
+		t.Error("matcher did not recognise config-added name cfg1")
+	}
+}
+
 // TestAnAgentThatReportedAndThenQuitLosesItsRow.
 //
 // Reported as: launched an agent, quit it, and the agent list still showed the

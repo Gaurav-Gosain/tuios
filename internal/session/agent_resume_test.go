@@ -186,6 +186,39 @@ func mustList(t *testing.T, c *verbConn) []map[string]any {
 	return items
 }
 
+// TestRestoreAsksToResumeInTheInbox is the default mode: a resume item per
+// resumable pane, naming the exact command, and nothing typed.
+func TestRestoreAsksToResumeInTheInbox(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	if _, err := d.restoreSession(savedAgentSession("ask")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	items := waitAttention(t, c, "the restore's offer", hasKind(AttentionResume, "win-agent"))
+	if len(items) != 1 {
+		t.Fatalf("the Inbox holds %v, want one resume item: the aider, remote and plain panes have nothing to resume", items)
+	}
+	it := items[0]
+	if it["summary"] != "echo resumed-5f1c-9a3d" || it["harness"] != "echoer" || it["session"] != "ask" {
+		t.Errorf("the resume item is %v", it)
+	}
+	// Ask types nothing.
+	time.Sleep(300 * time.Millisecond)
+	if text := capturePane(t, c, "ask", "win-agent"); strings.Contains(text, "resumed-") {
+		t.Errorf("ask mode typed the command:\n%s", text)
+	}
+
+	// y in the Inbox is resume-agent: it types the command and the item goes.
+	res := result(t, c.call(t, `{"id":1,"verb":"resume-agent","params":{"session":"ask","window":"win-agent"}}`))
+	if res["command"] != "echo resumed-5f1c-9a3d" || res["typed"] != true || res["agent_session_id"] != "5f1c-9a3d" {
+		t.Errorf("resume-agent answered %v", res)
+	}
+	waitPaneHolds(t, c, "ask", "win-agent", "resumed-5f1c-9a3d")
+	waitAttention(t, c, "resumed", isEmpty)
+}
+
 // TestRestoreResumesAutomatically is auto: the command is typed into the
 // restored shell with no item opened.
 func TestRestoreResumesAutomatically(t *testing.T) {
@@ -407,4 +440,13 @@ func TestConversationHarnessIsRecorded(t *testing.T) {
 	}
 	sess.UpdateState(push)
 	check("after a client sync")
+}
+
+// TestResolveResumeMode: anything but auto and off asks.
+func TestResolveResumeMode(t *testing.T) {
+	for in, want := range map[string]string{"": resumeModeAsk, "ask": resumeModeAsk, "AUTO": resumeModeAuto, " off ": resumeModeOff, "yes": resumeModeAsk} {
+		if got := resolveResumeMode(in); got != want {
+			t.Errorf("resolveResumeMode(%q) = %q, want %q", in, got, want)
+		}
+	}
 }
