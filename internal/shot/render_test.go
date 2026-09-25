@@ -12,14 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// testGrid builds a small grid with one styled word on it.
-func testGrid() *Grid {
-	g := NewGrid(12, 3, RGB(0xcd, 0xd6, 0xf4), RGB(0x1e, 0x1e, 0x2e))
-	put(g, 0, 0, "hello", func(c *Cell) { c.FG = RGB(0xa6, 0xe3, 0xa1) })
-	put(g, 0, 1, "│─╭╯", nil)
-	return g
-}
-
 func put(g *Grid, x, y int, s string, mod func(*Cell)) {
 	for _, r := range s {
 		if x >= g.Cols {

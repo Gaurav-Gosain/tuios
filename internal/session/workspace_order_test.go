@@ -71,21 +71,3 @@ func TestAClientSyncDoesNotFlattenTheOrder(t *testing.T) {
 		t.Errorf("a sync that omitted the order left %v, want the canonical [3 1 2]", incoming.WorkspaceOrder)
 	}
 }
-
-// numbers reads a JSON array of workspace numbers back as ints.
-func numbers(t *testing.T, v any) []int {
-	t.Helper()
-	raw, ok := v.([]any)
-	if !ok {
-		t.Fatalf("workspace order has the wrong shape: %v", v)
-	}
-	out := make([]int, 0, len(raw))
-	for _, n := range raw {
-		f, ok := n.(float64)
-		if !ok {
-			t.Fatalf("workspace order holds a non-number: %v", n)
-		}
-		out = append(out, int(f))
-	}
-	return out
-}

@@ -1,7 +1,6 @@
 package shot
 
 import (
-	"image"
 	"testing"
 )
 
@@ -29,18 +28,4 @@ func TestAutoControlsAreTheLights(t *testing.T) {
 			t.Errorf("controls %q resolved to %v, want %v", spelling, f.Controls, want)
 		}
 	}
-}
-
-// pixelName names a pixel when it is one of the three control colours, exactly.
-func pixelName(img *image.RGBA, x, y int) string {
-	c := img.RGBAAt(x, y)
-	switch {
-	case c.R == 0xff && c.G == 0x5f && c.B == 0x57:
-		return "red"
-	case c.R == 0xfe && c.G == 0xbc && c.B == 0x2e:
-		return "amber"
-	case c.R == 0x28 && c.G == 0xc8 && c.B == 0x40:
-		return "green"
-	}
-	return ""
 }

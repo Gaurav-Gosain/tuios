@@ -43,17 +43,6 @@ func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// sessionHits returns the recorded session-row hits in display order.
-func sessionHits(m *OS) []sidebarRowHit {
-	var hits []sidebarRowHit
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowSession {
-			hits = append(hits, h)
-		}
-	}
-	return hits
-}
-
 // TestSidebarSessionOrderPreserved checks the display order is the tree's
 // order with the current session marked in place, and that adding a session
 // appends instead of reshuffling the rows already on screen.

@@ -195,31 +195,6 @@ func pickerBody(t *testing.T, m *OS) string {
 	return stripANSIForTrace(content)
 }
 
-// pickerRowColumn is the last word on one effect's row, which is the opening
-// column when the row has one. It fails the test when the row is not on screen,
-// so a caller cannot pass by asking about a row that scrolled away.
-func pickerRowColumn(t *testing.T, m *OS, name string) string {
-	t.Helper()
-	content, _, rows := m.renderEffectPicker()
-	lines := strings.Split(stripANSIForTrace(content), "\n")
-	items := m.effectPickerItems()
-	for _, r := range rows {
-		if items[r.Idx] != name || r.Rect.Y0 < 0 || r.Rect.Y0 >= len(lines) {
-			continue
-		}
-		fields := strings.Fields(lines[r.Rect.Y0])
-		if len(fields) == 0 {
-			t.Fatalf("%s's row is blank", name)
-		}
-		if last := fields[len(fields)-1]; last != name {
-			return last
-		}
-		return ""
-	}
-	t.Fatalf("%s is not on screen, so its row cannot be read", name)
-	return ""
-}
-
 // TestEffectsWithNoOpeningNeverHideTheScreen is the one claim on this panel
 // that is not a band, so it is the one that has to be structural.
 //

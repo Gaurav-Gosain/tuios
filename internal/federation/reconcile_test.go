@@ -37,9 +37,6 @@ func waitForStatus(t *testing.T, m *Manager, host string, want Status) HostRepor
 	return last
 }
 
-// hostNames is the names a manager currently holds.
-func hostNames(m *Manager) []string { return m.Table().Names() }
-
 func TestSetTableRedialsAChangedAddress(t *testing.T) {
 	stub := startStubDaemon(t, helloOK("1.2.3", 0))
 	m := managerFor(t, testOptions(proxyDialer(t, stub)), Host{Name: "build", Addr: "old"})

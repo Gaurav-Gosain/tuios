@@ -169,14 +169,3 @@ func TestAnimation_InterpolatesDuringProgress(t *testing.T) {
 		t.Errorf("Expected Y around 50 at 50%% progress, got %d", w.Y)
 	}
 }
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-func absFloat(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
-}

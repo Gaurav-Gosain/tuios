@@ -25,38 +25,12 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
-
-// benchBox builds a rendered pane box of a realistic size and style density:
-// a border, and rows carrying colour changes the way a real frame does, so the
-// width scan has escape sequences to step over rather than plain ASCII.
-func benchBox(cols, rows int) string {
-	var b strings.Builder
-	b.Grow(cols * rows * 8)
-	b.WriteString("╭" + strings.Repeat("─", cols-2) + "╮\n")
-	for y := range rows - 2 {
-		b.WriteString("│")
-		// Three style runs per row is typical of a shell prompt plus output.
-		seg := (cols - 2) / 3
-		for i := range 3 {
-			fmt.Fprintf(&b, "\x1b[38;5;%dm", 8+(y+i)%200)
-			n := seg
-			if i == 2 {
-				n = (cols - 2) - 2*seg
-			}
-			b.WriteString(strings.Repeat("x", n))
-		}
-		b.WriteString("\x1b[m│\n")
-	}
-	b.WriteString("╰" + strings.Repeat("─", cols-2) + "╯")
-	return b.String()
-}
 
 // TestBorderBoxInnerWidthIsKnown is what licenses addToBorder to be told its
 // width instead of measuring one. It builds the border box exactly as

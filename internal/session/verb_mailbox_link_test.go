@@ -284,12 +284,3 @@ func TestAnAskFromAnotherMachineIsRecordedWithItsOrigin(t *testing.T) {
 		t.Errorf("ASSERTION: the ask record does not say it came from another machine: %v", msgs[0])
 	}
 }
-
-func contains(list []string, want string) bool {
-	for _, s := range list {
-		if s == want {
-			return true
-		}
-	}
-	return false
-}

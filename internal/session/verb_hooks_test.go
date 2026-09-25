@@ -195,10 +195,3 @@ func TestListHooksOnADaemonWithNoHooksIsEmptyRatherThanAnError(t *testing.T) {
 		t.Error("a daemon with no hooks still has to say which events exist")
 	}
 }
-
-// newHookTableForTest builds a one-command hook table.
-func newHookTableForTest() *hooks.Manager {
-	m := hooks.NewManager()
-	m.Register(hooks.AfterNewWindow, "true")
-	return m
-}

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 func multiSessionClient() *session.TUIClient {
@@ -54,13 +53,4 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 			}
 		})
 	}
-}
-
-func hasSession(sessions []sessiontree.Node, id string) bool {
-	for _, s := range sessions {
-		if s.ID == id {
-			return true
-		}
-	}
-	return false
 }

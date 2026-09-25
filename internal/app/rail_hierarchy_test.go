@@ -123,43 +123,6 @@ func TestACountColumnOfOnesIsNotDrawn(t *testing.T) {
 	}
 }
 
-// sgrHasBold reports whether any SGR sequence in s turns bold on.
-//
-// It parses the parameter list rather than searching for "\x1b[1m", because
-// lipgloss folds attributes and colour into one sequence: bold arrives as the
-// "1" in "\x1b[1;38;2;r;g;bm", and a search for the standalone form silently
-// matches nothing and passes. It skips the arguments of 38, 48 and 58 so that
-// "\x1b[38;5;1m", which is colour index 1, is not read as bold.
-func sgrHasBold(s string) bool {
-	for i := 0; i+1 < len(s); i++ {
-		if s[i] != 0x1b || s[i+1] != '[' {
-			continue
-		}
-		j := i + 2
-		for j < len(s) && (s[j] == ';' || (s[j] >= '0' && s[j] <= '9')) {
-			j++
-		}
-		if j >= len(s) || s[j] != 'm' {
-			continue
-		}
-		parts := strings.Split(s[i+2:j], ";")
-		for k := 0; k < len(parts); k++ {
-			switch parts[k] {
-			case "38", "48", "58":
-				if k+1 < len(parts) && parts[k+1] == "5" {
-					k += 2
-				} else if k+1 < len(parts) && parts[k+1] == "2" {
-					k += 4
-				}
-			case "1":
-				return true
-			}
-		}
-		i = j
-	}
-	return false
-}
-
 // hostHeadingNode is the machine heading in the host rail fixture.
 func hostHeadingNode(t *testing.T, m *OS) sessiontree.Node {
 	t.Helper()

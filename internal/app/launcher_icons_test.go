@@ -5,37 +5,11 @@ package app
 import (
 	"image"
 	"image/color"
-	"image/png"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 )
-
-// solidPNG writes a size by size image of one colour, half of it transparent,
-// so a scale can be checked for keeping both.
-func solidPNG(t *testing.T, path string, size int, c color.RGBA) {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	for y := range size {
-		for x := range size {
-			if x < size/2 {
-				img.Set(x, y, c)
-				continue
-			}
-			img.Set(x, y, color.RGBA{})
-		}
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // TestFitSquareKeepsAlpha is the reason the scale does not composite against a
 // colour: the row under an icon changes colour when it is selected, so the

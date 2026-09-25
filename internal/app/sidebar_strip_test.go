@@ -31,24 +31,6 @@ func stripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// quietStripOS is the state the strip is in nearly all the time: three sessions,
-// nothing blocked, nothing finished unread. It is the resting frame the redesign
-// is judged on, so it gets its own fixture.
-func quietStripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
-	t.Helper()
-	m, _ := sectionsTestOS(t, w, h)
-	m.SidebarCollapsed = true
-	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true},
-			{ID: "bbbbbbbb2222", Title: "build", AgentState: "working"},
-		}},
-		{Name: "api", Windows: []sessiontree.WindowInput{{ID: "dddddddd4444", Title: "server"}}},
-		{Name: "docs"},
-	})
-	return m, tree
-}
-
 // manySessionsOS is a collapsed rail carrying more sessions than a short screen
 // has lines to draw them on.
 func manySessionsOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {

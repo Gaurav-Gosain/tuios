@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // These tests cover the path the [startup] settings are actually used on: a
@@ -213,15 +212,6 @@ func (r *startupRig) daemonState() *session.SessionState {
 	return r.seen
 }
 
-// boot delivers the first WindowSizeMsg, which is what applies the [startup]
-// settings, and then keeps applying whatever the daemon broadcasts until cond
-// holds or the wait runs out. Applying the broadcasts is the point: the daemon's
-// echo of AutoTiling is what used to turn the tiling back off.
-func (r *startupRig) boot(cond func() bool) {
-	r.t.Helper()
-	r.bootFor(cond, startupWait)
-}
-
 // bootFor is boot with the wait chosen, for the cases whose condition is that
 // nothing happens: those cannot wait for a signal, so they wait out the window
 // in which the settings would have been applied. Applying them is synchronous
@@ -261,21 +251,6 @@ func startupConfig(tiled bool, layoutMode string) *config.UserConfig {
 	cfg.Startup.Layout = layoutMode
 	cfg.Startup.OpenDefaultWindow = true
 	return cfg
-}
-
-// paneTarget is where the layout has put a pane.
-//
-// Scrolling mode slides a pane to its column even with animations off, because
-// a viewport that jumps is disorienting, so the pane's own X and Y are still the
-// old ones until the animation has ticked. Its endpoint is what the layout
-// decided, and that is the thing under test here rather than the easing.
-func paneTarget(m *OS, w *terminal.Window) (x, y, width, height int) {
-	for _, a := range m.Animations {
-		if a.Window == w && !a.Complete {
-			return a.EndX, a.EndY, a.EndWidth, a.EndHeight
-		}
-	}
-	return w.X, w.Y, w.Width, w.Height
 }
 
 // TestStartupLeavesAnArrangedSessionAlone is the other half, and the reason the

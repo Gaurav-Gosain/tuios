@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -86,16 +85,6 @@ func hostHit(t *testing.T, m *OS, host string) sidebarRowHit {
 	}
 	t.Fatalf("no header row recorded for host %q; hits: %+v", host, m.SidebarHits)
 	return sidebarRowHit{}
-}
-
-// railColumnOf is the screen column needle starts on in a rail line, in cells
-// rather than bytes: the marks in front of a name are multi-byte runes.
-func railColumnOf(line, needle string) int {
-	at := strings.Index(line, needle)
-	if at < 0 {
-		return -1
-	}
-	return lipgloss.Width(line[:at])
 }
 
 // TestSidebarShowsAnUnreachableHost is section 7 on screen: the machine stays

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 )
 
 // statusLog records what OnStatus reported, per host.
@@ -27,21 +26,6 @@ func (s *statusLog) of(host string) []Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]Status(nil), s.seen[host]...)
-}
-
-// waitStatus blocks until host has reported want at least once.
-func (s *statusLog) waitStatus(t *testing.T, host string, want Status) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, st := range s.of(host) {
-			if st == want {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("host %s never reported %s through OnStatus, saw %v", host, want, s.of(host))
 }
 
 // TestOnStatusReportsAChangeOnce is the other half: a host that fails the same

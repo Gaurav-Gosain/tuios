@@ -64,17 +64,6 @@ func tallTerminalsOS(t *testing.T, n int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// terminalRowOnScreen reports whether the terminals section drew a row for the
-// pane.
-func terminalRowOnScreen(m *OS, id string) bool {
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowWindow && h.WindowID == id {
-			return true
-		}
-	}
-	return false
-}
-
 // TestAWheelBetweenFramesOutranksTheReveal: a focus change and a wheel in the
 // same gap between frames is the reader saying where to look, and the reveal
 // stands down.

@@ -37,9 +37,3 @@ func TestWorkspaceRenameChordOpensTheEditor(t *testing.T) {
 		t.Errorf("rename buffer = %q, want the typed name", o.RenameBuffer)
 	}
 }
-
-// runContextMenuActionForTest is the input layer's own menu dispatch.
-func runContextMenuActionForTest(t *testing.T, action string, o *app.OS) (*app.OS, tea.Cmd) {
-	t.Helper()
-	return runContextMenuAction(action, o)
-}

@@ -71,16 +71,6 @@ func styledRow(t *testing.T, lines []string, want string) string {
 	return ""
 }
 
-// glyphCell is the second content column of a rail row, which is the glyph the
-// gutter sits beside, stripped of styling.
-func glyphCell(row string) string {
-	plain := []rune(stripANSIForTrace(row))
-	if len(plain) < 2 {
-		return ""
-	}
-	return string(plain[1])
-}
-
 // withSessionColors pins the config key for one test and puts it back.
 func withSessionColors(t *testing.T, on bool) {
 	t.Helper()

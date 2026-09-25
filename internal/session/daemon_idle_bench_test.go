@@ -20,34 +20,8 @@ package session
 // expensive part; keep the counts to the ones that answer the question.
 
 import (
-	"fmt"
 	"testing"
 )
-
-// benchSession builds a session holding n real daemon windows, which is what
-// the monitor walks.
-func benchSession(tb testing.TB, n int) (*Session, []string) {
-	tb.Helper()
-	tb.Cleanup(useResurrectionDir(tb.TempDir()))
-	sess, err := NewSession("idle-bench", &SessionConfig{}, 80, 24)
-	if err != nil {
-		tb.Fatalf("NewSession: %v", err)
-	}
-	tb.Cleanup(sess.Stop)
-
-	ptyIDs := make([]string, 0, n)
-	for i := range n {
-		if _, err := sess.AddDaemonWindow(fmt.Sprintf("w%d", i), nil); err != nil {
-			tb.Fatalf("AddDaemonWindow: %v", err)
-		}
-	}
-	for _, w := range sess.GetState().Windows {
-		if w.PTYID != "" {
-			ptyIDs = append(ptyIDs, w.PTYID)
-		}
-	}
-	return sess, ptyIDs
-}
 
 // TestAgentDetectSweepIsIdempotentWhenIdle is the invariant the benchmark above
 // is measuring against, and the one worth defending: a second sweep over an

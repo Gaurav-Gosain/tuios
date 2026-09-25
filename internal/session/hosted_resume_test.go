@@ -64,32 +64,6 @@ func (f *droppableFederation) drop() {
 	f.conns = nil
 }
 
-func (f *droppableFederation) up() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.down = false
-}
-
-// waitHostedDetached blocks until the far pane has noticed its connection went.
-func waitHostedDetached(t *testing.T, d *Daemon, id string) {
-	t.Helper()
-	deadline := time.Now().Add(paneBudget)
-	for time.Now().Before(deadline) {
-		hp := d.lookupHostedPane(id)
-		if hp == nil {
-			t.Fatalf("ASSERTION: the far machine ended pane %s when its link dropped", id)
-		}
-		hp.connMu.Lock()
-		detached := hp.conn == nil
-		hp.connMu.Unlock()
-		if detached {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("the far machine never noticed the link to pane %s dropped", id)
-}
-
 // TestAPaneNotReattachedWithinItsGraceEnds: the far machine keeps the process
 // for its own hosted_grace and not a second longer.
 func TestAPaneNotReattachedWithinItsGraceEnds(t *testing.T) {

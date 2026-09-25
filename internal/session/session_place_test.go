@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // A session's place is what the rail labels an unnamed session with. These
@@ -168,23 +167,5 @@ func TestListingsDisagreeWhenAShellMoves(t *testing.T) {
 	}
 	if !listingsAgree(was, []SessionInfo{{Name: "session-0", Dir: "repo", Branch: "main"}}) {
 		t.Error("an unchanged place must read as the same listing")
-	}
-}
-
-// waitPlace polls the listing until the focused pane's place reads as wanted.
-// The branch is read on its own goroutine, so a listing taken right after the
-// cd can be one read behind.
-func waitPlace(t *testing.T, sess *Session, dir, branch string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		info := sess.Info()
-		if info.Dir == dir && info.Branch == branch {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("listing place = %q %q, want %q %q", info.Dir, info.Branch, dir, branch)
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }

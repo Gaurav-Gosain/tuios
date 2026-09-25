@@ -82,17 +82,3 @@ func TestABrokenConfigFileLeavesTheHostsAlone(t *testing.T) {
 		t.Errorf("ASSERTION: a config file with an error changed the hosts, got %q", got)
 	}
 }
-
-func waitForHosts(t *testing.T, d *Daemon, want, why string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	var got string
-	for time.Now().Before(deadline) {
-		got = strings.Join(hostNamesFromVerb(t, d), ",")
-		if got == want {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: %s. The listing says %q, wanted %q", why, got, want)
-}

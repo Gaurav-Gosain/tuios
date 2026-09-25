@@ -158,7 +158,3 @@ func TestConfigReloadPutsTheBeamWhereTheFileSaysIt(t *testing.T) {
 		t.Error("a file that turned the beam off left it on")
 	}
 }
-
-type errBrokenConfig struct{}
-
-func (errBrokenConfig) Error() string { return "[appearance] theme: unbalanced quote" }

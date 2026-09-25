@@ -9,19 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// nameColumn is where a row's own text starts, measured from the rail's first
-// content column.
-func nameColumn(t *testing.T, lines []string, name string) int {
-	t.Helper()
-	for _, l := range lines {
-		if c := rowColumn(ansi.Strip(l), name); c >= 0 {
-			return c
-		}
-	}
-	t.Fatalf("no rail row carries %q:\n%s", name, strings.Join(lines, "\n"))
-	return -1
-}
-
 // rowColumn is the display column name starts at in an already-stripped row, or
 // -1. Glyphs are multi-byte, so the byte offset is not the column.
 func rowColumn(row, name string) int {

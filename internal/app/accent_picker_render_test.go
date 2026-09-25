@@ -223,12 +223,6 @@ func TestAccentPickerKeyboardReachesEveryControl(t *testing.T) {
 	}
 }
 
-// colorDistance is the squared channel distance between two colours.
-func colorDistance(a, b color.RGBA) int {
-	dr, dg, db := int(a.R)-int(b.R), int(a.G)-int(b.G), int(a.B)-int(b.B)
-	return dr*dr + dg*dg + db*db
-}
-
 // The picker previews the colour under its cursor on the rail row it targets,
 // driven purely by signature keys: no tick, and no rebuild on anything but the
 // keystrokes that move the cursor.

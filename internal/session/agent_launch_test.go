@@ -111,21 +111,6 @@ func fakeProgram(t *testing.T, name, script string) string {
 // echoScript prints its arguments and a variable, then echoes what it reads.
 const echoScript = "echo \"ARGS: $*\"\necho \"MARK: $FAN_MARK\"\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
 
-func waitForText(t *testing.T, d *Daemon, sess *Session, windowID, want string) {
-	t.Helper()
-	pty, err := d.resolvePTYForTarget(sess, windowID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(pty.CaptureContent(true, false), want) {
-		if time.Now().After(deadline) {
-			t.Fatalf("the pane never printed %q:\n%s", want, pty.CaptureContent(true, false))
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-}
-
 // TestFanRefusesWhatItCannotRun covers the fan refusals the end to end test
 // does not reach: a program on no PATH the daemon has, and the parameter
 // combinations that cannot describe one fan.

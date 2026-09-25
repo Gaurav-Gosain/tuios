@@ -139,11 +139,6 @@ func TestViewportPassesAppCellsThrough(t *testing.T) {
 	}
 }
 
-func fgOf(c color.Color) string {
-	r, g, b, _ := c.RGBA()
-	return "38;2;" + strconv.Itoa(int(r>>8)) + ";" + strconv.Itoa(int(g>>8)) + ";" + strconv.Itoa(int(b>>8))
-}
-
 // The tape is a ring of actions and nothing else. Its cell count is the number
 // of actions it has room for, and its glyphs replay the classes in order, so a
 // reader counting cells is counting real work.
@@ -272,11 +267,6 @@ func TestCardFiguresComeFromTheResult(t *testing.T) {
 	if strings.Contains(text, "run held") {
 		t.Error("a falsified run showed the passing verdict")
 	}
-}
-
-func firstLines(s string, n int) string {
-	lines := strings.Split(s, "\n")
-	return strings.Join(lines[:min(n, len(lines))], "\n")
 }
 
 // The tape glyph for an action has to mean something, which it only does if

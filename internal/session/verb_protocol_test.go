@@ -122,15 +122,6 @@ func makeSessionWithWindow(t *testing.T, d *Daemon, name string) *Session {
 	return sess
 }
 
-func containsMarker(s string) bool {
-	for i := 0; i+len("tuios-marker") <= len(s); i++ {
-		if s[i:i+len("tuios-marker")] == "tuios-marker" {
-			return true
-		}
-	}
-	return false
-}
-
 func TestVerbErrorCases(t *testing.T) {
 	_, sp := startTestDaemon(t)
 	c := dialVerb(t, sp)

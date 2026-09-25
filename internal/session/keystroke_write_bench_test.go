@@ -68,26 +68,6 @@ func socketPair(tb testing.TB) (client, server net.Conn) {
 	return client, server
 }
 
-// drainConn reads and discards until the connection closes, so the writer never
-// blocks on a full socket buffer.
-func drainConn(c net.Conn) {
-	buf := make([]byte, 64*1024)
-	for {
-		if _, err := c.Read(buf); err != nil {
-			return
-		}
-	}
-}
-
-func sizeName(n int) string {
-	switch {
-	case n >= 1024:
-		return "batch-" + itoaBench(n/1024) + "KiB"
-	default:
-		return "batch-" + itoaBench(n) + "B"
-	}
-}
-
 func itoaBench(n int) string {
 	if n == 0 {
 		return "0"

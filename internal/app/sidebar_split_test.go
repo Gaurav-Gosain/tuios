@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -13,18 +12,6 @@ func dividerHit(m *OS) (sidebarRowHit, bool) {
 		}
 	}
 	return sidebarRowHit{}, false
-}
-
-// agentsHeaderRow is the rail-relative line the agents header was drawn on.
-func agentsHeaderRow(t *testing.T, lines []string) int {
-	t.Helper()
-	for i, ln := range lines {
-		if strings.Contains(stripANSIForTrace(ln), "agents") {
-			return i
-		}
-	}
-	t.Fatal("no agents header drawn")
-	return -1
 }
 
 // TestDividerKeysStepTheSplit: with the cursor on the divider, widen and

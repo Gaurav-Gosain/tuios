@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -172,21 +171,6 @@ func TestPruneHoldsOffWhileTheListingIsIncomplete(t *testing.T) {
 			}
 		})
 	}
-}
-
-// benchSignatureOS is a rail-sized model whose unread map carries n entries for
-// windows that no longer exist.
-func benchSignatureOS(stale int) *OS {
-	wins := make([]*terminal.Window, 0, 6)
-	for i := range 6 {
-		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
-	}
-	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
-	m.SidebarAgentSeen = make(map[string]bool, stale)
-	for i := range stale {
-		m.SidebarAgentSeen["window-"+strconv.Itoa(i)] = true
-	}
-	return m
 }
 
 // TestPruneRefusesAnotherDaemonsState is the guard on the one configuration

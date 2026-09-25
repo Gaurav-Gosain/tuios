@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -327,32 +326,4 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 	if got := m.sectionLayout(); strings.Contains(got, "files") {
 		t.Errorf("the rectangle for the files row left it on the rail: %q", got)
 	}
-}
-
-// editorKey runs one key through the editor the way the input layer does. It is
-// a copy of handleSectionEditorInput's switch, kept here because the input
-// package holds the real one and importing it from a test in app would be a
-// cycle. TestSectionEditorInputRoutesTheKeys is what keeps the two in step.
-func editorKey(m *OS, key string) tea.Cmd {
-	switch key {
-	case "enter", "space":
-		return m.SectionEditorToggle()
-	case "up", "ctrl+p", "k":
-		m.SectionEditorMove(-1)
-	case "down", "ctrl+n", "j":
-		m.SectionEditorMove(1)
-	case "shift+up", "K":
-		return m.SectionEditorShift(-1)
-	case "shift+down", "J":
-		return m.SectionEditorShift(1)
-	case "left", "h":
-		return m.SectionEditorShare(-1)
-	case "right", "l":
-		return m.SectionEditorShare(1)
-	case "r":
-		return m.SectionEditorReset()
-	case "u":
-		return m.SectionEditorRevert()
-	}
-	return nil
 }

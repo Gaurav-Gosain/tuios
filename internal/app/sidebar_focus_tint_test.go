@@ -4,30 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
-
-// attachedTree is sessionColorTree with the attachment moved, which is the one
-// thing the focus gutter is supposed to follow.
-func attachedTree(attached string) sessiontree.Tree {
-	in := []sessiontree.SessionInput{
-		{Name: "main", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Workspace: 1},
-		}},
-		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", Workspace: 1},
-		}},
-	}
-	for i := range in {
-		if in[i].Name != attached {
-			continue
-		}
-		in[i].Attached, in[i].IsCurrent = true, true
-		in[i].Windows[0].Focused = true
-	}
-	return sessiontree.Build(in)
-}
 
 // TestFocusedPaneGutterIsItsSessionsColour is the coherence the rail was missing:
 // the attached session's row and the focused pane's row two lines below it wear

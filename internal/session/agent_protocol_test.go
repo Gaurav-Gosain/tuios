@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 )
@@ -36,21 +35,6 @@ func fakeProgramOnPath(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-// readArgv waits for the fake pane program to have written its argv.
-func readArgv(t *testing.T, path string) []string {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)
-	for {
-		if data, err := os.ReadFile(path); err == nil && len(data) > 0 && strings.HasSuffix(string(data), "\n") {
-			return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the pane program never ran")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 }
 
 // TestStartAgentProtocolWaitsForTheReport is the readiness rule with its

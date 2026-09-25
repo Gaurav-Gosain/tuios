@@ -29,19 +29,6 @@ func countDaemonResizes(m *app.OS) *atomic.Int64 {
 	return &n
 }
 
-// feedOutput writes a line of fresh output into every window's emulator, the
-// way a build log or a tailing process would while the user drags a divider.
-func feedOutput(m *app.OS, seq int) {
-	for _, win := range m.Windows {
-		if win.Terminal == nil {
-			continue
-		}
-		win.LockIO()
-		_, _ = win.Terminal.Write(fmt.Appendf(nil, "output line %d\r\n", seq))
-		win.UnlockIO()
-	}
-}
-
 // TestSharedBorderDragTracksPointerAndDoesNotAnimate pins the other half of the
 // same bug, the half no timing measurement can see.
 //

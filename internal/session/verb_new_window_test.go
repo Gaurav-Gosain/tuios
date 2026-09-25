@@ -1,32 +1,8 @@
 package session
 
 import (
-	"net"
 	"testing"
 )
-
-// collectStateSyncs drains the pushes the daemon sends a fake TUI so a test can
-// assert the client was told about a mutation rather than left to discover it on
-// its next sync.
-func collectStateSyncs(clientSide net.Conn) <-chan *SessionState {
-	pushed := make(chan *SessionState, 8)
-	go func() {
-		for {
-			msg, err := ReadMessage(clientSide)
-			if err != nil {
-				return
-			}
-			if msg.Type != MsgStateSync {
-				continue
-			}
-			var p StateSyncPayload
-			if err := msg.ParsePayload(&p); err == nil {
-				pushed <- p.State
-			}
-		}
-	}()
-	return pushed
-}
 
 // TestClientSyncClearsUnplaced covers the other half of the handshake. A client
 // answers the placement question by pushing geometry, and its snapshots never set

@@ -6,22 +6,6 @@ import (
 	"time"
 )
 
-// waitPaneText waits for text on a pane's screen.
-func waitPaneText(t *testing.T, d *Daemon, sess *Session, windowID, text string) {
-	t.Helper()
-	pty, err := d.resolvePTYForTarget(sess, windowID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(pty.CaptureContent(true, false), text) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%q never appeared on the pane:\n%s", text, pty.CaptureContent(true, false))
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
-
 // waitOnlyPane waits for the session name to exist with n windows, and
 // returns the session and its newest window. start-agent holds its reply
 // until the agent is ready, so a test finds the pane from the daemon's side

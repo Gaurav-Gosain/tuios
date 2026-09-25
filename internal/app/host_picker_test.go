@@ -221,10 +221,6 @@ func TestTurningTheGlobalSessionOffRemovesTheGroup(t *testing.T) {
 	}
 }
 
-type errFake struct{}
-
-func (errFake) Error() string { return "the link went away" }
-
 // TestEveryWayOfMakingAWindowInAGlobalSessionAsksWhichMachine.
 //
 // The picker was wired into the key, the rail's "+" and the palette, and the

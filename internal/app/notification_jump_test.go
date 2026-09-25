@@ -160,17 +160,6 @@ func TestNotificationKeyboardTwinWalksTheQueue(t *testing.T) {
 // because lipgloss folds underline in with the colours in one sequence.
 var sgrPattern = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 
-func hasUnderlineSGR(s string) bool {
-	for _, seq := range sgrPattern.FindAllStringSubmatch(s, -1) {
-		for _, p := range strings.Split(seq[1], ";") {
-			if p == "4" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // TestAgentStateChangeNotifiesWithATarget checks the wiring at the source: an
 // unattended pane changing state posts a message that points back at it, and a
 // pane the user is already watching says nothing.

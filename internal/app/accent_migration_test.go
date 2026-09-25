@@ -168,10 +168,3 @@ func railStyledFrame(t *testing.T, m *OS) []string {
 
 // theme8 is the bright-black ANSI slot, which is what accent index 0 means.
 func theme8() color.Color { return accentColor(0) }
-
-// mustRenderPicker renders the picker and returns the frame.
-func mustRenderPicker(t *testing.T, m *OS) string {
-	t.Helper()
-	content, _, _ := m.renderAccentPicker()
-	return content
-}

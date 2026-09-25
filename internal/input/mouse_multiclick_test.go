@@ -130,19 +130,3 @@ func TestAFourthClickLeavesTheClipboardAlone(t *testing.T) {
 		t.Errorf("four clicks produced %d clipboard writes, want none: %v", n, notificationMessages(o))
 	}
 }
-
-// itoa keeps the assertions above readable without pulling strconv into every
-// message.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}

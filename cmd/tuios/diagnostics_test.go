@@ -8,33 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// requireLines asserts the three obligations every user-facing failure message
-// carries: it says what failed, it names a likely cause, and it gives a command
-// to run. The whole point of the diagnostic layer is that no message may skip
-// one of these, so this is applied to every case rather than spot-checked.
-func requireLines(t *testing.T, context string, err error, wantFragments ...string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("%s: expected an error", context)
-	}
-	msg := err.Error()
-
-	if !strings.Contains(msg, "Most likely cause:") {
-		t.Errorf("%s: message names no likely cause:\n%s", context, msg)
-	}
-	if !strings.Contains(msg, "Fix:") {
-		t.Errorf("%s: message names no fix:\n%s", context, msg)
-	}
-	if !strings.Contains(msg, "tuios ") {
-		t.Errorf("%s: fix does not name a tuios command:\n%s", context, msg)
-	}
-	for _, want := range wantFragments {
-		if !strings.Contains(msg, want) {
-			t.Errorf("%s: message missing %q:\n%s", context, want, msg)
-		}
-	}
-}
-
 // TestNoDaemonMessageNeverMisnamesTheFix pins the bug this message was reported
 // for: with sessions saved on disk it told the user to run 'tuios new', which
 // makes a new session instead of bringing back the ones they had.

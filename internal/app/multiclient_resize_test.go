@@ -216,21 +216,6 @@ func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T)
 	}
 }
 
-// paneSpan reports the rightmost and bottommost column and row the tiled panes
-// reach. A settled tiled layout fills the box tiling partitions, so a span
-// short of that box is a layout computed for some other screen.
-func (r *rig) paneSpan() (right, bottom int) {
-	r.t.Helper()
-	for _, w := range r.m.Windows {
-		if w.Workspace != r.m.CurrentWorkspace || w.Minimized || w.IsFloating {
-			continue
-		}
-		right = max(right, w.X+w.Width)
-		bottom = max(bottom, w.Y+w.Height)
-	}
-	return right, bottom
-}
-
 // TestSettledSizeIsTheSameFromBothAttachOrders pins convergence. The session
 // size is the minimum over the attached clients, and a minimum does not depend
 // on the order the clients arrived in.
