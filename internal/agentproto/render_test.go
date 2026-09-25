@@ -81,6 +81,53 @@ func assertOnlyOwnSGR(t *testing.T, s string) {
 	}
 }
 
+// TestToolLinesSayTheirState: a tool call is shown when it starts and when it
+// ends, with its state as a word, and not on updates in between.
+func TestToolLinesSayTheirState(t *testing.T) {
+	r := newRenderer()
+	var lines []string
+	for _, st := range []string{ToolPending, ToolRunning, ToolRunning, ToolDone} {
+		if s := ansi.Strip(r.event(Tool{ID: "t", Title: "go test", Kind: "execute", Status: st})); s != "" {
+			lines = append(lines, strings.TrimSpace(s))
+		}
+	}
+	want := []string{"[running] execute: go test", "[done] execute: go test"}
+	if strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("tool lines = %q, want %q", lines, want)
+	}
+	failed := ansi.Strip(newRenderer().event(Tool{ID: "t", Title: "x", Status: ToolFailed, Text: "exit code 1"}))
+	if !strings.Contains(failed, "[failed] x") || !strings.Contains(failed, "exit code 1") {
+		t.Errorf("a failed call reads %q", failed)
+	}
+}
+
+// TestStreamingAndLineStarts: a reply streams on one line, and whatever comes
+// next starts on a line of its own.
+func TestStreamingAndLineStarts(t *testing.T) {
+	r := newRenderer()
+	got := r.event(Text{Text: "Hel"}) + r.event(Text{Text: "lo"}) + r.event(Notice{Text: "n"})
+	if ansi.Strip(got) != "Hello\nnote: n\n" {
+		t.Errorf("got %q", ansi.Strip(got))
+	}
+	r = newRenderer()
+	got = r.event(Text{Text: "think", Thought: true}) + r.event(Text{Text: "reply"})
+	if ansi.Strip(got) != "think\nreply" {
+		t.Errorf("thought then reply = %q", ansi.Strip(got))
+	}
+}
+
+func TestPlanShownWhenItChanges(t *testing.T) {
+	r := newRenderer()
+	p := Plan{Entries: []PlanEntry{{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"}, {Content: "c", Status: "pending"}}}
+	first := ansi.Strip(r.event(p))
+	if first != "plan\n  [x] a\n  [>] b\n  [ ] c\n" {
+		t.Errorf("plan = %q", first)
+	}
+	if again := r.event(p); again != "" {
+		t.Errorf("an unchanged plan was shown again: %q", again)
+	}
+}
+
 // TestInboxLine is the rule for what the Inbox may answer.
 func TestInboxLine(t *testing.T) {
 	once := []Option{{Label: "Allow", Decision: DecisionOnce}, {Label: "Deny", Decision: DecisionDeny}}
