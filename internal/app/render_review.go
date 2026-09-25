@@ -454,8 +454,10 @@ func reviewPlace(f *review.File, n review.Note) (hunk, line int) {
 // rows of w-2 cells, on bg. A title goes into the top edge.
 func reviewFrame(w, h int, title string, body []string, border, bg color.Color) string {
 	tl, tr, bl, br, hz, vt := "╭", "╮", "╰", "╯", "─", "│"
+	lj, rj := "├", "┤"
 	if overlay.UseASCII() {
 		tl, tr, bl, br, hz, vt = "+", "+", "+", "+", "-", "|"
+		lj, rj = "+", "+"
 	}
 	edge := lipgloss.NewStyle().Foreground(border).Background(bg)
 	inner := w - 2
@@ -475,7 +477,13 @@ func reviewFrame(w, h int, title string, body []string, border, bg color.Color) 
 		if i < len(body) {
 			row = body[i]
 		}
-		lines = append(lines, edge.Render(vt)+row+edge.Render(vt))
+		// A rule across the whole frame meets the sides, rather than stopping
+		// half a cell short of them on each end.
+		l, r := vt, vt
+		if inner > 0 && ansi.Strip(row) == strings.Repeat(hz, inner) {
+			l, r = lj, rj
+		}
+		lines = append(lines, edge.Render(l)+row+edge.Render(r))
 	}
 	lines = append(lines, edge.Render(bl+strings.Repeat(hz, inner)+br))
 	return strings.Join(lines, "\n")
