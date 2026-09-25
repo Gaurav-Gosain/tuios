@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 // celebrateTestOS is a one pane screen with some text on it, so a burst has
@@ -140,7 +138,7 @@ func TestCelebrationTakesTheFastPathAway(t *testing.T) {
 	if _, ok := m.fullscreenFastWindow(); !ok {
 		t.Fatal("the geometry is not on the fast path, so this proves nothing")
 	}
-	var _ tea.Cmd = m.Celebrate(CelebrateOptions{})
+	var _ = m.Celebrate(CelebrateOptions{})
 	if _, ok := m.fullscreenFastWindow(); ok {
 		t.Error("the fast path stayed eligible during a burst, so it would not be drawn")
 	}

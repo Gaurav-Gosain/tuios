@@ -217,7 +217,7 @@ func (r *CrashReport) Markdown(stackLines int) string {
 	b.WriteString(r.Panic)
 	b.WriteString("\n```\n\n### Details\n\n")
 	b.WriteString("| | |\n|---|---|\n")
-	b.WriteString(fmt.Sprintf("| Time | %s |\n", r.When.Format(time.RFC3339)))
+	fmt.Fprintf(&b, "| Time | %s |\n", r.When.Format(time.RFC3339))
 	for _, f := range r.Facts {
 		b.WriteString("| " + f.Label + " | " + f.Value + " |\n")
 	}
@@ -228,7 +228,7 @@ func (r *CrashReport) Markdown(stackLines int) string {
 		b.WriteString("\n")
 	}
 	if trimmed > 0 {
-		b.WriteString(fmt.Sprintf("... %d more lines\n", trimmed))
+		fmt.Fprintf(&b, "... %d more lines\n", trimmed)
 	}
 	b.WriteString("```\n")
 	if trimmed > 0 && r.LogPath != "" {
@@ -328,12 +328,12 @@ func WriteCrashLog(report *CrashReport) string {
 
 	var b strings.Builder
 	b.WriteString("tuios crash report\n==================\n\n")
-	b.WriteString(fmt.Sprintf("Time:    %s\n", report.When.Format(time.RFC3339)))
+	fmt.Fprintf(&b, "Time:    %s\n", report.When.Format(time.RFC3339))
 	for _, f := range report.Facts {
-		b.WriteString(fmt.Sprintf("%-9s%s\n", f.Label+":", f.Value))
+		fmt.Fprintf(&b, "%-9s%s\n", f.Label+":", f.Value)
 	}
-	b.WriteString(fmt.Sprintf("\nPanic:   %v\n\n", report.Panic))
-	b.WriteString(fmt.Sprintf("Stack trace:\n%s\n", report.Stack))
+	fmt.Fprintf(&b, "\nPanic:   %v\n\n", report.Panic)
+	fmt.Fprintf(&b, "Stack trace:\n%s\n", report.Stack)
 	b.WriteString("\n---\nReport this at:\n")
 	b.WriteString("https://github.com/" + release.Repo + "/issues/new\n")
 

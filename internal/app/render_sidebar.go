@@ -1374,7 +1374,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		if at >= 0 {
 			tallRowH = tall
 			if grown := sidebarBudgetLines(avail, plans, planRows, tall); grown[at] >= nA*sidebarAgentRowTall {
-				budget, agentRowH = grown, sidebarAgentRowTall
+				budget = grown
 				rowH[sidebarSectionAgents] = sidebarAgentRowTall
 			}
 		}

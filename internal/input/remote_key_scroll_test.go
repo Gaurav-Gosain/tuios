@@ -38,7 +38,7 @@ func scrolledPane(t *testing.T, explicit bool) (*terminal.Window, *capturePty) {
 	em := vt.NewEmulator(80, 24)
 	t.Cleanup(func() { _ = em.Close() })
 	for i := range 60 {
-		_, _ = em.Write([]byte(fmt.Sprintf("line %d\r\n", i)))
+		_, _ = fmt.Fprintf(em, "line %d\r\n", i)
 	}
 	pty := &capturePty{}
 	win := &terminal.Window{ID: "scrolled-0001", Terminal: em, Pty: pty, Width: 82, Height: 26}

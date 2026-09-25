@@ -72,7 +72,7 @@ func assertScrolledUp(t *testing.T, e *Emulator, before [][]uv.Cell, top, bottom
 func fillScreen(e *Emulator, w, h int) {
 	for y := 1; y <= h; y++ {
 		row := fmt.Sprintf("row%02d-", y) + strings.Repeat("x", max(w-8, 1))
-		e.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[38;5;%dm%s\x1b[m", y, 20+y, row[:min(len(row), w)]))
+		fmt.Fprintf(e, "\x1b[%d;1H\x1b[38;5;%dm%s\x1b[m", y, 20+y, row[:min(len(row), w)])
 	}
 }
 
@@ -89,7 +89,7 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
 		before := snapshotCells(e)
-		e.WriteString(fmt.Sprintf("\x1b[%d;1H\n", h))
+		fmt.Fprintf(e, "\x1b[%d;1H\n", h)
 		assertScrolledUp(t, e, before, 0, h-1, 1)
 	})
 
@@ -97,7 +97,7 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
 		before := snapshotCells(e)
-		e.WriteString(fmt.Sprintf("\x1b[%d;1H\x1bD", h))
+		fmt.Fprintf(e, "\x1b[%d;1H\x1bD", h)
 		assertScrolledUp(t, e, before, 0, h-1, 1)
 	})
 
@@ -121,7 +121,7 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
 		before := snapshotCells(e)
-		e.WriteString(fmt.Sprintf("\x1b[%dS", h))
+		fmt.Fprintf(e, "\x1b[%dS", h)
 		assertScrolledUp(t, e, before, 0, h-1, h)
 	})
 
@@ -129,7 +129,7 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
 		before := snapshotCells(e)
-		e.WriteString(fmt.Sprintf("\x1b[%dS", h+5))
+		fmt.Fprintf(e, "\x1b[%dS", h+5)
 		assertScrolledUp(t, e, before, 0, h-1, h)
 	})
 
@@ -180,7 +180,7 @@ func TestScrollUpFillsScrollback(t *testing.T) {
 	// Print more rows than fit, so the early ones scroll off the top.
 	const printed = 20
 	for i := range printed {
-		e.WriteString(fmt.Sprintf("line-%02d\r\n", i))
+		fmt.Fprintf(e, "line-%02d\r\n", i)
 	}
 
 	wantScrollback := printed + 1 - h
@@ -252,7 +252,7 @@ func TestAltScreenRetainsNothing(t *testing.T) {
 
 	e := NewEmulator(w, h)
 	for i := range 40 {
-		e.WriteString(fmt.Sprintf("main-%02d\r\n", i))
+		fmt.Fprintf(e, "main-%02d\r\n", i)
 	}
 	mainLines := e.ScrollbackLen()
 	if mainLines == 0 {
@@ -311,7 +311,7 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 	// Enough lines that the ring wraps several times over.
 	const printed = 200
 	for i := range printed {
-		e.WriteString(fmt.Sprintf("line-%03d\r\n", i))
+		fmt.Fprintf(e, "line-%03d\r\n", i)
 	}
 
 	if got := e.ScrollbackLen(); got != ring {
@@ -332,7 +332,7 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 	// the ring could still reach would take this text with it.
 	e.WriteString("\x1b[H\x1b[2J")
 	for y := range h {
-		e.WriteString(fmt.Sprintf("\x1b[%d;1H%s", y+1, strings.Repeat("Z", w)))
+		fmt.Fprintf(e, "\x1b[%d;1H%s", y+1, strings.Repeat("Z", w))
 	}
 	for i := range ring {
 		want := fmt.Sprintf("line-%03d", firstRetained+i)
@@ -362,9 +362,9 @@ func TestScrollRegionStillRetainsLines(t *testing.T) {
 
 	// A region covering all but the last row: top-anchored, so it retains, but
 	// not the whole buffer, so it cannot rotate.
-	e.WriteString(fmt.Sprintf("\x1b[1;%dr", h-1))
+	fmt.Fprintf(e, "\x1b[1;%dr", h-1)
 	for i := range 12 {
-		e.WriteString(fmt.Sprintf("\x1b[%d;1Hkeep-%02d", min(i+1, h-1), i))
+		fmt.Fprintf(e, "\x1b[%d;1Hkeep-%02d", min(i+1, h-1), i)
 		if i >= h-2 {
 			e.WriteString("\x1b[S")
 		}

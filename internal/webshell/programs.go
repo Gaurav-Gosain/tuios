@@ -49,7 +49,7 @@ func cmdNeofetch(t *TTY, _ []string) int {
 	}
 	var sw strings.Builder
 	for c := range 8 {
-		sw.WriteString(fmt.Sprintf("\x1b[4%dm   ", c))
+		fmt.Fprintf(&sw, "\x1b[4%dm   ", c)
 	}
 	t.Print(sw.String() + reset + "\r\n")
 	return 0
@@ -155,10 +155,10 @@ func cmdTop(t *TTY, _ []string) int {
 			} else if p.cpu > 8 {
 				colour = yellow
 			}
-			b.WriteString(fmt.Sprintf("%5d guest   %s%5.1f%s %5.1f  %s\x1b[K\r\n", p.pid, colour, p.cpu, reset, p.mem, p.name))
+			fmt.Fprintf(&b, "%5d guest   %s%5.1f%s %5.1f  %s\x1b[K\r\n", p.pid, colour, p.cpu, reset, p.mem, p.name)
 		}
 		b.WriteString("\x1b[J")
-		b.WriteString(fmt.Sprintf("\x1b[%d;1H%s q to quit %s", rows, "\x1b[7m", reset))
+		fmt.Fprintf(&b, "\x1b[%d;1H%s q to quit %s", rows, "\x1b[7m", reset)
 		return b.String()
 	}, 500*time.Millisecond, false)
 }
@@ -206,15 +206,15 @@ func cmdRain(t *TTY, _ []string) int {
 				g := glyphs[rand.IntN(len(glyphs))]
 				switch {
 				case k == 0:
-					b.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[1;97m%c", y+1, x+1, g))
+					fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[1;97m%c", y+1, x+1, g)
 				case k < 4:
-					b.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[0;92m%c", y+1, x+1, g))
+					fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[0;92m%c", y+1, x+1, g)
 				default:
-					b.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[0;32m%c", y+1, x+1, g))
+					fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[0;32m%c", y+1, x+1, g)
 				}
 			}
 			if y := head - 8; y >= 0 && y < rows {
-				b.WriteString(fmt.Sprintf("\x1b[%d;%dH  ", y+1, x+1))
+				fmt.Fprintf(&b, "\x1b[%d;%dH  ", y+1, x+1)
 			}
 			drops[x] += speeds[x]
 			if head-8 > rows {

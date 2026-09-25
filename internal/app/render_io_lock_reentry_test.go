@@ -3,8 +3,6 @@ package app
 import (
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // TestRenderTerminalDoesNotReenterIOLock is the regression test for the freeze
@@ -133,5 +131,5 @@ func TestGetRealCursorStillLocksForItsOwnCallers(t *testing.T) {
 	close(stop)
 	<-done
 
-	var _ *terminal.Window = win
+	var _ = win
 }
