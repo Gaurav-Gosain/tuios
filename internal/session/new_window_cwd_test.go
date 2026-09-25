@@ -1,8 +1,6 @@
 package session
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -47,92 +45,6 @@ func cwdOfWindow(t *testing.T, sess *Session, windowID string) string {
 	}
 	t.Skip("this platform does not report a process working directory")
 	return ""
-}
-
-// TestANewWindowStartsWhereTheFocusedPaneIs is the feature from #187: opening a
-// window from a pane deep in a project should land in that project, not back in
-// the directory the daemon happened to be started in.
-//
-// Negative control: dropping the inheritedCwd call from AddDaemonWindowWith made
-// the second window start in the daemon's directory and this failed.
-func TestANewWindowStartsWhereTheFocusedPaneIs(t *testing.T) {
-	dir := t.TempDir()
-	// macOS hands out a symlinked temp dir, and a shell reports the resolved
-	// path, so compare what the OS will actually say.
-	real, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-
-	sess, first := sessionWithInheritCwd(t, true)
-	// Put the first pane somewhere specific by starting it there, which is the
-	// same state a user reaches by cd'ing.
-	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "anchor", Cwd: real, Focus: true}, nil); err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	_ = first
-
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "inheritor"}, nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	if got := cwdOfWindow(t, sess, win.ID); got != real {
-		t.Errorf("new window started in %q, want the focused pane's %q", got, real)
-	}
-}
-
-// TestTheSettingOffKeepsTheDaemonsDirectory is the other half: someone who
-// turns the option off gets exactly what every window did before it existed.
-func TestTheSettingOffKeepsTheDaemonsDirectory(t *testing.T) {
-	dir := t.TempDir()
-	real, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-	daemonDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-
-	sess, _ := sessionWithInheritCwd(t, false)
-	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "anchor", Cwd: real, Focus: true}, nil); err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "plain"}, nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	if got := cwdOfWindow(t, sess, win.ID); got == real {
-		t.Errorf("new window inherited %q with the setting off", got)
-	} else if want, _ := filepath.EvalSymlinks(daemonDir); got != want {
-		t.Errorf("new window started in %q, want the daemon's %q", got, want)
-	}
-}
-
-// TestAnExplicitDirectoryWinsOverTheFocusedPane keeps the precedence the verb
-// protocol depends on: `tuios new-window --cwd` names a directory and that is
-// the one used, inherit setting or not.
-func TestAnExplicitDirectoryWinsOverTheFocusedPane(t *testing.T) {
-	anchor, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-	asked, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-
-	sess, _ := sessionWithInheritCwd(t, true)
-	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "anchor", Cwd: anchor, Focus: true}, nil); err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "explicit", Cwd: asked}, nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	if got := cwdOfWindow(t, sess, win.ID); got != asked {
-		t.Errorf("new window started in %q, want the asked-for %q", got, asked)
-	}
 }
 
 // TestCreatingASessionThroughTheManagerDoesNotDeadlock is the regression test

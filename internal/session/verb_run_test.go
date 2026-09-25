@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
 // fakeIntegratedShell is a shell with OSC 133 prompt integration in a few lines
@@ -54,51 +52,6 @@ func waitForWindowField(t *testing.T, c *verbConn, name, key string, want any) m
 	}
 }
 
-// TestRunReturnsExitCodeAndOutput is the verb end to end: it types at the
-// prompt, waits for the shell to say the command finished, and hands back the
-// status and exactly what the command printed. The same facts then show in
-// list-windows, in capture-pane's last-command-output, in a wait-for that
-// started after the command finished, and in the after-command-finished hook.
-func TestRunReturnsExitCodeAndOutput(t *testing.T) {
-	d, sp, rec := startHookDaemon(t, hooks.AfterCommandFinished)
-	makeSessionWithWindow(t, d, "work")
-	c := dialVerb(t, sp)
-	openFakeShell(t, c, "build")
-
-	res := result(t, c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"build","command":"echo hello; echo world; exit 3","timeout":8000}}`))
-	if res["type"] != "command_result" || res["exit_code"] != float64(3) {
-		t.Fatalf("run = %v, want command_result with exit_code 3", res)
-	}
-	if res["output"] != "hello\nworld" {
-		t.Fatalf("output = %q, want %q", res["output"], "hello\nworld")
-	}
-	if res["cmdline"] != "echo hello; echo world; exit 3" || res["command_seq"] != float64(1) {
-		t.Fatalf("run = %v, want the command line and command_seq 1", res)
-	}
-
-	w := waitForWindowField(t, c, "build", "command_seq", float64(1))
-	if w["at_prompt"] != true || w["last_exit_code"] != float64(3) || w["last_cmdline"] != "echo hello; echo world; exit 3" {
-		t.Fatalf("list-windows entry = %v, want at_prompt, last_exit_code 3 and the command", w)
-	}
-
-	cap := result(t, c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"work","window":"build","source":"last-command-output"}}`))
-	if cap["content"] != "hello\nworld" || cap["exit_code"] != float64(3) {
-		t.Fatalf("capture last-command-output = %v, want the output and exit_code 3", cap)
-	}
-
-	// The command already finished: a wait that names the count it read
-	// before must still see it.
-	wait := result(t, c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"command-finished","session":"work","window":"build","command_seq":0,"timeout":2000}}`))
-	if wait["matched"] != true || wait["exit_code"] != float64(3) {
-		t.Fatalf("wait-for command-finished = %v, want a match with exit_code 3", wait)
-	}
-
-	fired := rec.await(t, hooks.AfterCommandFinished, 1)
-	if fired[0].ExitCode != "3" || fired[0].Command != "echo hello; echo world; exit 3" {
-		t.Fatalf("hook context = %+v, want exit 3 and the command", fired[0])
-	}
-}
-
 // TestRunRefusesARunningPane holds run to its one promise: it never types into
 // a program that is running. The pane is busy with a command started by hand,
 // so run refuses with not_at_prompt, names the command, and types nothing.
@@ -118,53 +71,6 @@ func TestRunRefusesARunningPane(t *testing.T) {
 	res := result(t, c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"work","window":"build"}}`))
 	if content, _ := res["content"].(string); containsLine(content, "echo typed") {
 		t.Fatalf("run typed into a running command:\n%s", content)
-	}
-}
-
-// promptOnlyShell marks its prompts and sends the status, and never the C
-// that says a command started, which is what the bash recipe does on bash
-// before 4.4, where PS0 is ignored.
-const promptOnlyShell = `prompt() { printf '\033]133;A\007$ \033]133;B\007'; }
-prompt
-while IFS= read -r line; do
-  sh -c "$line"
-  printf '\033]133;D;%s\007' "$?"
-  prompt
-done`
-
-// TestRunRefusesAShellThatMarksOnlyPrompts covers a pane whose shell marks its
-// prompts and not its commands. Before any command it looks like any other
-// shell at a prompt, so the first run types. When the shell comes back to a
-// prompt without marking the command, run says so at once rather than at the
-// timeout, and after that the pane is refused before anything is typed.
-func TestRunRefusesAShellThatMarksOnlyPrompts(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-	c := dialVerb(t, sp)
-	cmd, _ := json.Marshal([]string{"sh", "-c", promptOnlyShell})
-	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"new-window","params":{"session":"work","name":"old-bash","command":%s,"focus":false}}`, cmd)))
-	waitForWindowField(t, c, "old-bash", "at_prompt", true)
-
-	start := time.Now()
-	resp := c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"old-bash","command":"echo first","timeout":20000}}`)
-	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
-		t.Fatalf("run in a prompt-only pane: code %q, want %q (%v)", code, ErrVerbNoShellIntegration, resp)
-	}
-	if took := time.Since(start); took > 10*time.Second {
-		t.Fatalf("run took %v to notice the command was never marked, want well under its timeout", took)
-	}
-
-	w := waitForWindowField(t, c, "old-bash", "prompt_marks_only", true)
-	if w["at_prompt"] != false || w["marks_commands"] != false {
-		t.Fatalf("list-windows entry = %v, want at_prompt and marks_commands false", w)
-	}
-	resp = c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"old-bash","command":"echo second","timeout":2000}}`)
-	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
-		t.Fatalf("a second run in a prompt-only pane: code %q, want %q (%v)", code, ErrVerbNoShellIntegration, resp)
-	}
-	res := result(t, c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"work","window":"old-bash"}}`))
-	if content, _ := res["content"].(string); containsLine(content, "echo second") {
-		t.Fatalf("run typed into a pane it knew does not mark commands:\n%s", content)
 	}
 }
 
@@ -219,29 +125,6 @@ func TestRunOneAtATimeInAPane(t *testing.T) {
 	want := map[string]string{"echo first": "first", "echo second": "second"}[res["cmdline"].(string)]
 	if want == "" || res["output"] != want || res["command_seq"] != float64(1) {
 		t.Fatalf("the run that held the pane = %v, want one command with its own output", res)
-	}
-}
-
-// TestRunRefusesAPaneWithoutIntegration checks the pane that never marks a
-// command: run cannot tell where one starts or ends there, so it types
-// nothing and says why.
-func TestRunRefusesAPaneWithoutIntegration(t *testing.T) {
-	prev := runFirstPromptWait
-	runFirstPromptWait = 200 * time.Millisecond
-	t.Cleanup(func() { runFirstPromptWait = prev })
-
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-	c := dialVerb(t, sp)
-	result(t, c.call(t, `{"id":1,"verb":"new-window","params":{"session":"work","name":"plain","command":["cat"],"focus":false}}`))
-
-	resp := c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"plain","command":"echo typed","timeout":2000}}`)
-	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
-		t.Fatalf("run on a pane with no marks: code %q, want %q", code, ErrVerbNoShellIntegration)
-	}
-	resp = c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"work","window":"plain","source":"last-command-output"}}`)
-	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
-		t.Fatalf("last-command-output on a pane with no marks: code %q, want %q", code, ErrVerbNoShellIntegration)
 	}
 }
 

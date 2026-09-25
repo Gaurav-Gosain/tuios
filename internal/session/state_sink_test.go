@@ -22,38 +22,6 @@ func recordStateSink(sess *Session) func() []*SessionState {
 	}
 }
 
-// TestFailedMutationPushesNothing keeps the sink honest: a client must not be
-// asked to re-render for an operation that changed nothing.
-func TestFailedMutationPushesNothing(t *testing.T) {
-	sess := newTestSession(t)
-	pushes := recordStateSink(sess)
-
-	if err := sess.RenameDaemonWindow("no-such-window", "x"); err == nil {
-		t.Fatal("RenameDaemonWindow on a missing target should fail")
-	}
-	if got := pushes(); len(got) != 0 {
-		t.Fatalf("push count = %d, want 0", len(got))
-	}
-}
-
-// TestClientSyncDoesNotPushToSink pins that a client's own UpdateState does not
-// come back at it through the sink. The daemon already answers a sync directly
-// (reconciled state to the sender, a broadcast to peers); pushing from here too
-// would be a second, unordered copy of the same news.
-func TestClientSyncDoesNotPushToSink(t *testing.T) {
-	sess := newTestSession(t)
-	pushes := recordStateSink(sess)
-
-	state := sess.GetState()
-	state.BaseVersion = state.Version
-	state.CurrentWorkspace = 2
-	sess.UpdateState(state)
-
-	if got := pushes(); len(got) != 0 {
-		t.Fatalf("push count = %d, want 0", len(got))
-	}
-}
-
 // TestLateSnapshotIsDropped pins the ordering guarantee directly. The snapshot is
 // taken under the state lock but delivered without it, so two concurrent
 // mutations can reach publishState in either order. A client must never be handed

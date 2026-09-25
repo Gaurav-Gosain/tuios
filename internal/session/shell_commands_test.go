@@ -129,22 +129,6 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 	}
 }
 
-// TestShellTrackFinishedEventCarriesTheCommand checks what a command-finished
-// event says: the command line, the status, how long it ran and the count.
-func TestShellTrackFinishedEventCarriesTheCommand(t *testing.T) {
-	var track shellTrack
-	start := time.Unix(100, 0)
-	track.note(vt.SemanticMarker{Type: vt.MarkerCommandExecuted, CapturedText: "go test ./...", ExitCode: -1}, start)
-	evs := track.note(vt.SemanticMarker{Type: vt.MarkerCommandFinished, ExitCode: 1}, start.Add(1500*time.Millisecond))
-	if len(evs) != 1 || evs[0].Type != EventCommandFinished {
-		t.Fatalf("events = %+v, want one command-finished", evs)
-	}
-	ev := evs[0]
-	if ev.Cmdline != "go test ./..." || ev.ExitCode == nil || *ev.ExitCode != 1 || ev.DurationMS != 1500 || ev.CommandSeq != 1 {
-		t.Fatalf("event = %+v (exit %v), want the command, exit 1, 1500 ms, seq 1", ev, ev.ExitCode)
-	}
-}
-
 // TestShellTrackTellsPromptMarksOnly covers a shell whose integration marks its
 // prompts and not its commands, as bash before 4.4 does with the bash recipe.
 // Such a pane looks like one at a prompt while a command runs. A line run

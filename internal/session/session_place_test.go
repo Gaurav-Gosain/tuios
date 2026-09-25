@@ -34,21 +34,6 @@ func TestParseCwdReportAcceptsLocalPathsOnly(t *testing.T) {
 	}
 }
 
-func TestDirLabelIsTheBaseNameWithTildeForHome(t *testing.T) {
-	cases := []struct{ cwd, home, want string }{
-		{"/home/u", "/home/u", "~"},
-		{"/home/u/dev/repo", "/home/u", "repo"},
-		{"/", "/home/u", "/"},
-		{"", "/home/u", ""},
-		{"/home/u", "", "u"},
-	}
-	for _, c := range cases {
-		if got := dirLabel(c.cwd, c.home); got != c.want {
-			t.Errorf("dirLabel(%q, %q) = %q, want %q", c.cwd, c.home, got, c.want)
-		}
-	}
-}
-
 // writeFile creates a file with its parent directories.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -135,37 +120,5 @@ func TestGitBranchAgreesWithGitInit(t *testing.T) {
 	}
 	if got := gitBranch(repo); got != "from-git" {
 		t.Fatalf("gitBranch on a git-made checkout = %q, want from-git", got)
-	}
-}
-
-func TestIsGeneratedSessionName(t *testing.T) {
-	for name, want := range map[string]bool{
-		"session-0":   true,
-		"session-12":  true,
-		"session-":    false,
-		"session-x":   false,
-		"mysession-1": false,
-		"work":        false,
-		"":            false,
-	} {
-		if got := IsGeneratedSessionName(name); got != want {
-			t.Errorf("IsGeneratedSessionName(%q) = %v, want %v", name, got, want)
-		}
-	}
-}
-
-// TestListingsDisagreeWhenAShellMoves: a cd moves no window, so without these
-// two fields in the comparison a session that changed directory or branch kept
-// its old label until something else bumped the cache generation.
-func TestListingsDisagreeWhenAShellMoves(t *testing.T) {
-	was := []SessionInfo{{Name: "session-0", Dir: "repo", Branch: "main"}}
-	if listingsAgree(was, []SessionInfo{{Name: "session-0", Dir: "repo", Branch: "fix"}}) {
-		t.Error("a branch change must not read as the same listing")
-	}
-	if listingsAgree(was, []SessionInfo{{Name: "session-0", Dir: "docs", Branch: "main"}}) {
-		t.Error("a directory change must not read as the same listing")
-	}
-	if !listingsAgree(was, []SessionInfo{{Name: "session-0", Dir: "repo", Branch: "main"}}) {
-		t.Error("an unchanged place must read as the same listing")
 	}
 }

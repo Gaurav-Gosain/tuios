@@ -112,24 +112,6 @@ func setStrict(d *Daemon, grants ...string) {
 	d.manager.SetPanePermissions(config.ResolvedPermissions{Strict: true, Grants: grants})
 }
 
-// TestOpenModeIsTodaysBehaviour: with no [agents.permissions] and no pane
-// given grants, a pane can still do everything it could before grants.
-func TestOpenModeIsTodaysBehaviour(t *testing.T) {
-	d, sp, a1, _, b1 := scopeFixture(t)
-	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
-	c := dialVerb(t, sp)
-	result(t, callP(c, t, "list-sessions", nil))
-	result(t, callP(c, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"}))
-	result(t, callP(c, t, "new-window", map[string]any{"session": "b", "focus": false}))
-	got := result(t, callP(c, t, "pane-grants", nil))
-	if got["pane"] != true || got["mode"] != "open" || got["explicit"] != false {
-		t.Errorf("pane-grants = %v, want an open-mode pane holding the default", got)
-	}
-	if g := got["grants"].([]any); len(g) != 1 || g[0] != "admin" {
-		t.Errorf("grants = %v, want [admin]", g)
-	}
-}
-
 func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d)

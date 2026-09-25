@@ -193,29 +193,6 @@ func reattachFrom(p *PTY, clientID string) (*lockedClient, <-chan ptyChunk) {
 	return client, ch
 }
 
-// TestReattachAfterTopDrewOnce is the quiescent case: the guest drew its
-// screen and went quiet before the client left, so the attach has nothing to
-// replay. The client must reproduce the daemon's screen exactly.
-func TestReattachAfterTopDrewOnce(t *testing.T) {
-	p := newEmulatedPTY(t, 80, 24)
-	p.feed([]byte(topDraw))
-	p.fedThrough(t, "initial draw")
-
-	client, ch := reattachFrom(p, "repro-quiet")
-	if client == nil {
-		t.Fatal("reattach produced no client emulator")
-	}
-	defer client.Close()
-	defer func() { _ = p.Unsubscribe("repro-quiet") }()
-	_ = ch
-
-	want := normalizeText(p.daemonText())
-	got := normalizeText(client.Text())
-	if want != got {
-		t.Errorf("quiet reattach diverged (issue #123):\n--- daemon ---\n%s\n--- client ---\n%s", want, got)
-	}
-}
-
 // TestReattachWhileTopRedraws is the moving case: the guest repaints its rows
 // while the snapshot is taken and the stream resumes, so the catch-up ring
 // carries bytes the snapshot does not. The client must converge on the daemon

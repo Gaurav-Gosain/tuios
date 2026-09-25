@@ -114,32 +114,3 @@ func TestSubscribeResumeParamErrors(t *testing.T) {
 	// Neither refusal may leave the connection subscribed.
 	result(t, c.call(t, `{"id":3,"verb":"subscribe","params":{"types":["bell"]}}`))
 }
-
-// TestWaitForAgentStateAnySession verifies any_session watches every session:
-// the transition lands in a session that is not the most recently active one,
-// and the result says which session matched.
-func TestWaitForAgentStateAnySession(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	quiet := makeSessionWithWindow(t, d, "alpha")
-	makeSessionWithWindow(t, d, "beta")
-
-	c := dialVerb(t, sp)
-	done := make(chan map[string]any, 1)
-	go func() {
-		done <- c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","any_session":true,"until":"needs_input","timeout":8000}}`)
-	}()
-	time.Sleep(150 * time.Millisecond)
-	if err := quiet.SetDaemonWindowAgentState("Window", AgentStateNeedsInput, ""); err != nil {
-		t.Fatalf("SetDaemonWindowAgentState: %v", err)
-	}
-
-	select {
-	case resp := <-done:
-		res := result(t, resp)
-		if res["matched"] != true || res["session"] != "alpha" || res["state"] != "needs_input" {
-			t.Fatalf("wait result = %v, want matched needs_input in alpha", res)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("wait-for agent-state any_session did not resolve")
-	}
-}

@@ -119,6 +119,9 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 		"tree added":       func(s *SessionState) { s.WorkspaceTrees[3] = &SerializedBSPTree{} },
 		"option value":     func(s *SessionState) { s.Options["a"] = "2" },
 		"option added":     func(s *SessionState) { s.Options["f"] = "6" },
+		// The painted ground a client reports for its panes. A push that
+		// changes only this is otherwise never sent.
+		"pane report bg": func(s *SessionState) { s.PaneReportBg = "#123456" },
 	}
 
 	for what, mutate := range cases {

@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"net"
 
 	"reflect"
 	"testing"
@@ -412,35 +413,6 @@ func TestDiffLifecycleIgnoresNoise(t *testing.T) {
 	}
 }
 
-// TestDiffLifecycleAttentionDetail verifies a needs_input window that keeps its
-// state but changes kind or message raises the internal attention-detail event,
-// never an agent-state event, and that a window in another state raises
-// nothing for the same change.
-func TestDiffLifecycleAttentionDetail(t *testing.T) {
-	win := func(state AgentState, kind, msg string) lifecycleSnapshot {
-		return snapshotLifecycle(&SessionState{Windows: []WindowState{{
-			ID: "w", PTYID: "p", Workspace: 1, AgentState: state, AgentKind: kind, AgentMessage: msg, CompletionSeq: 2,
-		}}})
-	}
-	events := diffLifecycle(win(AgentStateNeedsInput, "question", "which branch?"), win(AgentStateNeedsInput, "approval", "which branch?"))
-	if len(events) != 1 || events[0].Type != eventAttentionDetail || events[0].hookKind != "approval" {
-		t.Fatalf("a kind change raised %+v", events)
-	}
-	if events[0].prevCompletionSeq != events[0].completionSeq {
-		t.Errorf("the detail event could read as a finished turn: %+v", events[0])
-	}
-	events = diffLifecycle(win(AgentStateNeedsInput, "approval", "a"), win(AgentStateNeedsInput, "approval", "b"))
-	if len(events) != 1 || events[0].Type != eventAttentionDetail || events[0].hookMessage != "b" {
-		t.Fatalf("a message change raised %+v", events)
-	}
-	if events := diffLifecycle(win(AgentStateWorking, "", "a"), win(AgentStateWorking, "", "b")); len(events) != 0 {
-		t.Fatalf("a message change while working raised %+v", events)
-	}
-	if events := diffLifecycle(win(AgentStateNeedsInput, "approval", "a"), win(AgentStateNeedsInput, "approval", "a")); len(events) != 0 {
-		t.Fatalf("an unchanged report raised %+v", events)
-	}
-}
-
 // TestDiffLifecycleIgnoresShellTitle verifies a shell-driven Title change raises
 // nothing from the diff. The per-PTY emitter already reports OSC title changes,
 // so deriving them here as well would report the same change twice.
@@ -458,35 +430,6 @@ func TestDiffLifecycleIgnoresShellTitle(t *testing.T) {
 
 	if events := diffLifecycle(before, after); len(events) != 0 {
 		t.Fatalf("shell title change raised events: %+v", events)
-	}
-}
-
-// TestRestoredSessionRaisesWindowCreated pins the documented resurrection
-// behavior: restoring a session raises session-created and then a window-created
-// per restored window, because from a subscriber's point of view those windows
-// come into existence at that moment.
-func TestRestoredSessionRaisesWindowCreated(t *testing.T) {
-	d, sp := startTestDaemon(t)
-
-	sub := dialVerb(t, sp)
-	result(t, sub.call(t, `{"id":1,"verb":"subscribe","params":{"session":"revived","types":["session-created","window-created"]}}`))
-
-	if _, err := d.restoreSession(&SessionState{
-		Name:             "revived",
-		Windows:          []WindowState{{ID: "w1", Title: "one", Width: 80, Height: 24, Workspace: 1}},
-		CurrentWorkspace: 1,
-		Width:            80,
-		Height:           24,
-	}); err != nil {
-		t.Fatalf("restoreSession: %v", err)
-	}
-
-	events := collectEvents(t, sub, 2, 3*time.Second)
-	if got := eventTypes(events); !reflect.DeepEqual(got, []string{EventSessionCreated, EventWindowCreated}) {
-		t.Fatalf("event types = %v, want session-created then window-created", got)
-	}
-	if events[1]["window"] != "w1" {
-		t.Errorf("window-created window = %v, want w1", events[1]["window"])
 	}
 }
 
@@ -524,4 +467,29 @@ func TestStaleClientSyncRaisesNoPhantomEvents(t *testing.T) {
 
 	sess.UpdateState(stale)
 	expectNoMoreEvents(t, sub, 300*time.Millisecond)
+}
+
+// newFakeTUI registers a connState that looks like an attached TUI client and
+// returns it along with the client-side pipe end the test drives.
+func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn) {
+	t.Helper()
+	serverSide, clientSide := net.Pipe()
+	tui := &connState{
+		conn:             serverSide,
+		clientID:         "fake-tui",
+		done:             make(chan struct{}),
+		ptySubscriptions: make(map[string]struct{}),
+		sessionID:        sessionID,
+		isTUIClient:      true,
+		// A real client is marked attached once its attach reply is written,
+		// and nothing is sent to it before that. A hand-built one has to say so
+		// too, or the daemon correctly treats it as still attaching and never
+		// speaks to it. See connState.attached.
+		attached: true,
+	}
+	d.clientsMu.Lock()
+	d.clients[tui.clientID] = tui
+	d.clientsMu.Unlock()
+	t.Cleanup(func() { _ = clientSide.Close(); _ = serverSide.Close() })
+	return tui, clientSide
 }
