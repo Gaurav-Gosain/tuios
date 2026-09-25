@@ -2645,6 +2645,8 @@ func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overl
 	note := plan.Note
 	if sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou {
 		note = sidebarNoteKeepAsk(note, avail)
+	} else {
+		note = sidebarNoteKeepNow(note, avail)
 	}
 	text := m.sidebarAgentNoteText(note, quiet, avail, pal)
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+text, cw, rowBg)
@@ -2654,6 +2656,17 @@ func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overl
 // keeps before the tokens between the need word and the message give way.
 const sidebarNoteAskFloor = 12
 
+// sidebarAgentNameFloor is the fewest cells of an agent's name a figure on its
+// row may leave it. A name is read by its start, and eight cells is the start of
+// every generated name ("Terminal") and the whole of most chosen ones.
+const sidebarAgentNameFloor = 8
+
+// sidebarAgentNameKeep is the cells a row owes a name: all of a short one, and
+// sidebarAgentNameFloor of a long one plus the cell its ellipsis takes.
+func sidebarAgentNameKeep(name string) int {
+	return min(lipgloss.Width(name), sidebarAgentNameFloor+1)
+}
+
 // sidebarNoteKeepAsk is the note line of a row that needs you, cut so the
 // message keeps room. On every other row the message is the first thing to go,
 // because which agent a row is stays true at any width. On a row that needs
@@ -2661,7 +2674,22 @@ const sidebarNoteAskFloor = 12
 // the row at all, so the harness and metadata between the need word and the
 // message go first, nearest the message first.
 func sidebarNoteKeepAsk(tokens []sidebarAgentToken, avail int) []sidebarAgentToken {
-	if len(tokens) < 2 || tokens[len(tokens)-1].Name != "message" {
+	return sidebarNoteKeepLast(tokens, avail, "message", func(tk sidebarAgentToken) bool { return tk.Name != "need" })
+}
+
+// sidebarNoteKeepNow is the note line of a working row, cut so what the agent
+// is doing now keeps room. On a narrow rail "claude · B…" named the harness
+// and cut the tool to a letter; the tool is the line's news, so the harness
+// gives way to it. A context warning stays: running out of room is news too.
+func sidebarNoteKeepNow(tokens []sidebarAgentToken, avail int) []sidebarAgentToken {
+	return sidebarNoteKeepLast(tokens, avail, "now", func(tk sidebarAgentToken) bool { return tk.Name == "harness" })
+}
+
+// sidebarNoteKeepLast drops the tokens in front of the last one that droppable
+// allows, nearest it first, until the last one, named last, keeps
+// sidebarNoteAskFloor cells or all of itself.
+func sidebarNoteKeepLast(tokens []sidebarAgentToken, avail int, last string, droppable func(sidebarAgentToken) bool) []sidebarAgentToken {
+	if len(tokens) < 2 || tokens[len(tokens)-1].Name != last {
 		return tokens
 	}
 	sepW := lipgloss.Width(sidebarAgentSep())
@@ -2674,10 +2702,10 @@ func sidebarNoteKeepAsk(tokens []sidebarAgentToken, avail int) []sidebarAgentTok
 		if avail-headW >= min(lipgloss.Width(last.Text), sidebarNoteAskFloor) {
 			return tokens
 		}
-		// The token nearest the message that is not the need word.
+		// The droppable token nearest the last one.
 		drop := -1
 		for i := len(tokens) - 2; i >= 0; i-- {
-			if tokens[i].Name != "need" {
+			if droppable(tokens[i]) {
 				drop = i
 				break
 			}
@@ -2768,8 +2796,24 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	label, labelW := plan.Right.Text, lipgloss.Width(plan.Right.Text)
 	// Messages waiting to be typed to the agent take the elapsed time's
 	// place. See inbox_reply.go.
-	if queued := m.sidebarAgentQueuedFigure(e); queued != "" {
-		label, labelW = queued, lipgloss.Width(queued)
+	//
+	// The name is what the row is, so the figure gives way to it: on a narrow
+	// rail "1 queued" left "a…" of an agent called agent. It shortens to "1q"
+	// and then goes, rather than cut the name below a readable length.
+	//
+	// The prefix in front of the name is counted as it stands, since it only
+	// gives way once the name is down to two cells.
+	if e.Queued > 0 {
+		prefixW := 0
+		for _, tk := range plan.Prefix {
+			prefixW += lipgloss.Width(tk.Text) + 1
+		}
+		for _, queued := range m.sidebarAgentQueuedFigures(e) {
+			if sidebarNameAvail(cw, lipgloss.Width(queued))-prefixW >= sidebarAgentNameKeep(name) {
+				label, labelW = queued, lipgloss.Width(queued)
+				break
+			}
+		}
 	}
 	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
 	// thing about an agent that nothing on its screen shows.

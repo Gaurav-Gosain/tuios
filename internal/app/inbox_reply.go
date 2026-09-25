@@ -562,3 +562,14 @@ func (m *OS) sidebarAgentQueuedFigure(e sidebarAgentEntry) string {
 	}
 	return strconv.Itoa(e.Queued) + " queued"
 }
+
+// sidebarAgentQueuedFigures are the forms the queued figure takes on a row,
+// longest first: the words, then the count and a q. Empty when the row shows
+// no figure.
+func (m *OS) sidebarAgentQueuedFigures(e sidebarAgentEntry) []string {
+	full := m.sidebarAgentQueuedFigure(e)
+	if full == "" {
+		return nil
+	}
+	return []string{full, strconv.Itoa(e.Queued) + "q"}
+}
