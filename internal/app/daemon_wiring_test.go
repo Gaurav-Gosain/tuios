@@ -6,7 +6,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -86,5 +89,27 @@ func TestQueueClientEventKeepsTheNewest(t *testing.T) {
 	got := []int{(<-o.ClientEventChan).Width, (<-o.ClientEventChan).Width}
 	if fmt.Sprint(got) != "[2 3]" {
 		t.Errorf("queue holds widths %v, want [2 3]: the newest event was the one dropped", got)
+	}
+}
+
+// TestRestoreAttachedSessionFiresTheAttachHook: the attach hook fires from the
+// one attach sequence, so it fires for every client. The SSH and web copies
+// of the sequence never fired it.
+func TestRestoreAttachedSessionFiresTheAttachHook(t *testing.T) {
+	cfg := config.DefaultConfig()
+	o := NewOS(OSOptions{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg), IsDaemonSession: true})
+	fired := make(chan string, 1)
+	o.HookManager.SetRunner(func(command string, _ hooks.Context) { fired <- command })
+	o.HookManager.Register(hooks.AfterAttach, "note-attach")
+
+	o.RestoreAttachedSession(nil)
+
+	select {
+	case cmd := <-fired:
+		if cmd != "note-attach" {
+			t.Errorf("fired %q, want the after-attach command", cmd)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the attach sequence fired no after-attach hook")
 	}
 }
