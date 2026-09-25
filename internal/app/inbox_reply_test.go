@@ -87,21 +87,34 @@ func runMsg(t *testing.T, m *OS, cmd tea.Cmd) {
 	m.Update(cmd())
 }
 
-// TestReplyRefusedOnAPromptPane: a pane waiting on a prompt is answered, not
-// replied to.
-func TestReplyRefusedOnAPromptPane(t *testing.T) {
-	m, q := replyOS(t)
-	m.Windows[1].AgentState = "needs_input"
-	m.Windows[1].CustomName = "api"
-	cmd, handled := m.SidebarAgentReply("here", "w-2")
-	if !handled || cmd != nil || m.InboxReplyOpen() || m.ShowInbox {
-		t.Fatalf("r on a prompt pane: handled %v, editor %v, inbox %v", handled, m.InboxReplyOpen(), m.ShowInbox)
-	}
-	if n := lastNotice(m); n.Message != "api is waiting on a prompt. Answer it first (space to peek)." {
-		t.Errorf("the dock said %q", n.Message)
-	}
-	if len(q.calls) != 0 {
-		t.Errorf("a refused reply called %v", q.calls)
+// TestReplyRefusedOnAPaneWaitingOnYou: a pane waiting on a prompt is
+// answered, not replied to. A pane with an ask-human question open reads as
+// waiting on you on the rail, so r refuses it the same way, whatever the agent
+// state the pane reported.
+func TestReplyRefusedOnAPaneWaitingOnYou(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		state string
+		items []session.AttentionItem
+	}{
+		{"prompt", "needs_input", nil},
+		{"ask-human question", "working", []session.AttentionItem{askItem("1", "here", "w-2", "yes", "no")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, q := replyOS(t, tc.items...)
+			m.Windows[1].AgentState = tc.state
+			m.Windows[1].CustomName = "api"
+			cmd, handled := m.SidebarAgentReply("here", "w-2")
+			if !handled || cmd != nil || m.InboxReplyOpen() || m.ShowInbox {
+				t.Fatalf("r: handled %v, editor %v, inbox %v", handled, m.InboxReplyOpen(), m.ShowInbox)
+			}
+			if n := lastNotice(m); n.Message != "api is waiting on a prompt. Answer it first (space to peek)." {
+				t.Errorf("the dock said %q", n.Message)
+			}
+			if len(q.calls) != 0 {
+				t.Errorf("a refused reply called %v", q.calls)
+			}
+		})
 	}
 }
 
@@ -151,25 +164,6 @@ func TestReplyOnAnOlderDaemon(t *testing.T) {
 		if h.Label == "reply" {
 			t.Error("the footer offers reply on a daemon with no queue")
 		}
-	}
-}
-
-// TestReplyRefusedOnAnAskingPane: a pane with an ask-human question open
-// reads as waiting on you on the rail, so r refuses it as it refuses a pane
-// on a prompt, whatever the agent state the pane reported.
-func TestReplyRefusedOnAnAskingPane(t *testing.T) {
-	m, q := replyOS(t, askItem("1", "here", "w-2", "yes", "no"))
-	m.Windows[1].AgentState = "working"
-	m.Windows[1].CustomName = "api"
-	cmd, handled := m.SidebarAgentReply("here", "w-2")
-	if !handled || cmd != nil || m.InboxReplyOpen() {
-		t.Fatalf("r on an asking pane: handled %v, editor %v", handled, m.InboxReplyOpen())
-	}
-	if n := lastNotice(m); !strings.Contains(n.Message, "waiting on a prompt") {
-		t.Errorf("the dock said %q", n.Message)
-	}
-	if len(q.calls) != 0 {
-		t.Errorf("a refused reply called %v", q.calls)
 	}
 }
 

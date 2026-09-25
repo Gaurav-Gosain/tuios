@@ -66,6 +66,9 @@ func TestParseKeyToMessage(t *testing.T) {
 		// Modifier with special key
 		{"ctrl+enter", "ctrl+Enter", "ctrl+enter", tea.ModCtrl},
 		{"alt+tab", "alt+Tab", "alt+tab", tea.ModAlt},
+		// A modified space keeps its modifier: Text must stay empty so
+		// String() does not drop Ctrl.
+		{"ctrl+space", "ctrl+space", "ctrl+space", tea.ModCtrl},
 	}
 
 	for _, tt := range tests {
@@ -119,22 +122,6 @@ func TestParseKeysToMessages(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// TestParseKeyToMessageSpaceModifier verifies a modified space keeps its
-// modifier: Text must stay empty so String() does not drop Ctrl/Alt.
-func TestParseKeyToMessageSpaceModifier(t *testing.T) {
-	m := &OS{Settings: config.Global}
-
-	msg := m.parseKeyToMessage("ctrl+space")
-
-	if msg.Mod != tea.ModCtrl {
-		t.Errorf("parseKeyToMessage(\"ctrl+space\").Mod = %v, want %v", msg.Mod, tea.ModCtrl)
-	}
-
-	if msg.Text != "" {
-		t.Errorf("parseKeyToMessage(\"ctrl+space\").Text = %q, want empty string", msg.Text)
 	}
 }
 
