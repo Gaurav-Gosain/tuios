@@ -98,11 +98,32 @@ import (
 // having to know which pane it is looking at.
 var witnessRe = regexp.MustCompile(`MK([0-9a-f]{6})-([0-9]+)`)
 
-// altWitnessRe matches the single line a pane paints on the alternate screen.
-// It is deliberately a different shape: the alternate screen has no scrollback
-// and shares none of its content with the main one, so a rule about it must not
-// be satisfiable by a main-screen line.
-var altWitnessRe = regexp.MustCompile(`ALT([0-9a-f]{6})`)
+// altMarkerIn reports whether grid holds the single line paneAltCmd paints on
+// the alternate screen for the pane tagged tag. It is deliberately a different
+// shape from a witness line: the alternate screen has no scrollback and shares
+// none of its content with the main one, so a rule about it must not be
+// satisfiable by a main-screen line. The main screen never holds the letters
+// either, because the command that paints them is echoed as octal escapes.
+//
+// A marker cut short on the right still counts. The alternate screen does not
+// reflow, so a pane that was ever narrower than the marker keeps only the
+// columns that fitted, and "ALT2736" is that pane's marker, not another's.
+func altMarkerIn(grid []string, tag string) bool {
+	full := "ALT" + tag
+	for _, line := range grid {
+		line = strings.TrimRight(line, " ")
+		if line != "" && strings.HasPrefix(full, line) {
+			return true
+		}
+	}
+	return false
+}
+
+// mainEchoRe matches what the main screen of a pane driven by this suite always
+// shows: the shell's echo of a command send-text typed, whose payload is spelled
+// in three-digit octal escapes (see paneEmitCmd). The alternate screen cannot
+// hold it, since everything written there is the decoded bytes.
+var mainEchoRe = regexp.MustCompile(`\\[0-7]{3}|printf '`)
 
 // witness is one witness line and the row it was found on.
 type witness struct {

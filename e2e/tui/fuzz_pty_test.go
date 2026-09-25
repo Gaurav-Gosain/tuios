@@ -633,6 +633,9 @@ func (p *ptyTarget) checkStructure() []fuzz.Violation {
 	deadline := time.Now().Add(structureSettle)
 	var wantWS, gotWS, wantWins, gotWins int
 	for {
+		// Re-read every round: a session change the action did not announce
+		// can land while this waits, and see followSession for why it matters.
+		p.followSession()
 		s := p.term.Screen()
 		gotWins, gotWS = countWindows(s), dockWorkspace(s)
 		info, err := daemonInfo(p.base, p.current)
@@ -668,7 +671,9 @@ func (p *ptyTarget) checkStructure() []fuzz.Violation {
 	}
 	return one("daemon-window-count",
 		"the dock still counts %d windows on workspace %d after %s and the daemon "+
-			"lists %d, following %s", gotWins, wantWS, structureSettle, wantWins, p.last)
+			"lists %d for session %q (attached: %v), following %s; the client shows:\n%s",
+		gotWins, wantWS, structureSettle, wantWins, p.current, attachedSessions(p.base),
+		p.last, p.term.Snapshot())
 }
 
 // checkPanes asks the daemon what each pane holds.
@@ -704,10 +709,25 @@ func (p *ptyTarget) checkAlt(w daemonWindow, grid []string) []fuzz.Violation {
 		return nil
 	}
 	joined := strings.Join(grid, "\n")
-	if !altWitnessRe.MatchString(joined) {
-		return one("altscreen-retained",
-			"pane %s was on the alternate screen and its marker is gone after %s",
-			w.tag(), p.last)
+	if !altMarkerIn(grid, w.tag()) {
+		// The marker is not the whole witness. The alternate screen does not
+		// reflow: a pane squeezed narrower than the marker loses its tail for
+		// good, and a pane squeezed shorter than the rows above the cursor
+		// loses the marker's row, both as xterm and ghostty do. That is a
+		// pane still on the alternate screen that can no longer prove it.
+		// What proves the opposite is the main screen showing through, and
+		// the main screen always holds the echo of the command that left it:
+		// send-text typed that printf, octal escapes and all, just before the
+		// switch. An empty or prompt-only grid is neither, so the expectation
+		// is retired rather than reported.
+		if mainEchoRe.MatchString(joined) {
+			return one("altscreen-retained",
+				"pane %s was on the alternate screen and after %s the daemon's grid "+
+					"shows the main screen instead (%dx%d):\n%s",
+				w.tag(), p.last, w.Width, w.Height, joined)
+		}
+		delete(p.alt, w.ID)
+		return nil
 	}
 	if _, _, any := seqRange(grid, w.tag()); any {
 		return one("altscreen-retained",
@@ -889,6 +909,7 @@ func one(rule, format string, args ...any) []fuzz.Violation {
 }
 
 func (p *ptyTarget) refresh() error {
+	p.followSession()
 	wl, err := daemonWindows(p.base, p.current)
 	if err != nil {
 		return err
@@ -976,6 +997,29 @@ func attachedSession(base, current string) string {
 			return current
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// followSession points the target at the session the client is really showing.
+//
+// SwitchSession is not the only way the client changes session. Clicks on the
+// sidebar and chords that open the session panels can create a session or move
+// the client to one, and nothing in the action says so. A target still pointed
+// at the old session then compares the client's dock against a session the
+// client is not on. That is how seed 2 reported daemon-window-count: the client
+// was on a new session-0 and its dock said 1:1, while the target counted the
+// two panes of fuzz-b, which it had followed there with a SwitchSession.
+//
+// Only an unambiguous answer is taken. With the client detached there is no
+// session to follow, and while a switch or a second client is in flight two
+// sessions can claim a client at once; the target keeps what it had until one
+// of them lets go.
+func (p *ptyTarget) followSession() {
+	if p.term == nil {
+		return
+	}
+	if names := attachedSessions(p.base); len(names) == 1 && names[0] != p.current {
+		p.current = names[0]
 	}
 }
 
