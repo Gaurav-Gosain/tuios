@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 )
 
@@ -357,7 +357,7 @@ func printStashList(w io.Writer, raw json.RawMessage) error {
 			}
 		})
 
-	fmt.Fprintln(w, t.Render())
+	lipgloss.Fprintln(w, t.Render())
 	fmt.Fprintf(w, "\n%d file(s), %s of %s, in %s\n",
 		res.Total, stashBytes(res.Bytes), stashBytes(res.MaxBytes), res.Dir)
 	if res.Evicted > 0 {

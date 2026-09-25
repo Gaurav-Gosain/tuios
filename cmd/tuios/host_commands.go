@@ -3,15 +3,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 	"net"
 	"os"
 	"strconv"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	"golang.org/x/term"
 )
 
@@ -124,7 +125,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 				return base
 			}
 		})
-	fmt.Fprintln(w, t.Render())
+	lipgloss.Fprintln(w, t.Render())
 	fmt.Fprintf(w, "\n%d host(s). Attach a session on a host with 'tuios attach --host NAME SESSION'.\n", res.Total)
 
 	// The reason a host is not usable is the only thing the table cannot say in
@@ -186,7 +187,7 @@ func printConfigProblems(w io.Writer, problems []string) {
 	}
 }
 
-func hostStatusColor(status string) lipgloss.Color {
+func hostStatusColor(status string) color.Color {
 	switch federation.Status(status) {
 	case federation.StatusUp:
 		return lipgloss.Color("2")
@@ -402,7 +403,7 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 				}
 				return base
 			})
-		fmt.Println(t.Render())
+		lipgloss.Println(t.Render())
 		fmt.Println()
 	}
 	fmt.Printf("%d agent pane(s). A pane on another host is read only in this release.\n", total)

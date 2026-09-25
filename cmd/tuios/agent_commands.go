@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
-
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -212,7 +211,7 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 			}
 		})
 
-	fmt.Fprintln(w, t.Render())
+	lipgloss.Fprintln(w, t.Render())
 	// With --all the rows are windows rather than agents, and calling them agent
 	// panes is exactly the confusion --all exists to clear up.
 	noun := "agent pane(s)"
