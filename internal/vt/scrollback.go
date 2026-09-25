@@ -145,7 +145,7 @@ const (
 	colorNil      = 0
 	colorBasic    = 1
 	colorIndexed  = 2
-	colorTrue     = 3 // ansi.TrueColor, 24-bit RGB
+	colorTrue     = 3 // ansi.RGBColor, 24-bit RGB
 	colorRGB      = 4 // color.RGBA with alpha 255, 24-bit RGB
 	colorInterned = 5
 )
@@ -447,8 +447,8 @@ func (sb *Scrollback) packColor(c color.Color) uint32 {
 		return colorBasic | uint32(v)<<colorTagBits
 	case ansi.IndexedColor:
 		return colorIndexed | uint32(v)<<colorTagBits
-	case ansi.TrueColor:
-		return colorTrue | (uint32(v)&0xffffff)<<colorTagBits
+	case ansi.RGBColor:
+		return colorTrue | (uint32(v.R)<<16|uint32(v.G)<<8|uint32(v.B))<<colorTagBits
 	case color.RGBA:
 		if v.A == 0xff {
 			return colorRGB | (uint32(v.R)<<16|uint32(v.G)<<8|uint32(v.B))<<colorTagBits
@@ -486,7 +486,7 @@ func (sb *Scrollback) unpackColor(v uint32) color.Color {
 	case colorIndexed:
 		return ansi.IndexedColor(payload)
 	case colorTrue:
-		return ansi.TrueColor(payload)
+		return ansi.RGBColor{R: uint8(payload >> 16), G: uint8(payload >> 8), B: uint8(payload)}
 	case colorRGB:
 		return color.RGBA{R: uint8(payload >> 16), G: uint8(payload >> 8), B: uint8(payload), A: 0xff}
 	case colorInterned:

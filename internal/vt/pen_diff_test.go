@@ -31,7 +31,7 @@ func TestPenDiffMatchesStyleDiff(t *testing.T) {
 			r, g, b, _ := ansi.IndexedColor(rng.Intn(256)).RGBA()
 			return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
 		}
-		return ansi.TrueColor(rng.Intn(1 << 24))
+		return ansi.RGBColor{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256))}
 	}
 	style := func() uv.Style {
 		return uv.Style{Fg: col(), Bg: col(), UnderlineColor: col(), Attrs: uint8(rng.Intn(256)), Underline: uv.Underline(rng.Intn(6))}

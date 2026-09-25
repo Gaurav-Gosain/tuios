@@ -88,7 +88,7 @@ func TestHandleSgrMatchesReadStyle(t *testing.T) {
 		t.Skip("a fresh emulator has theme colours")
 	}
 	for range 100000 {
-		start := uv.Style{Fg: ansi.BasicColor(3), Bg: ansi.TrueColor(0x102030), Attrs: uint8(rng.IntN(256))}
+		start := uv.Style{Fg: ansi.BasicColor(3), Bg: ansi.RGBColor{R: 0x10, G: 0x20, B: 0x30}, Attrs: uint8(rng.IntN(256))}
 		params := randomSgrParams(rng)
 		if rng.IntN(2) == 0 {
 			// The exact shape the shortcut takes, so it runs often.

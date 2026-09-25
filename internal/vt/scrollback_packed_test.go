@@ -56,7 +56,7 @@ func styledLine(width int) uv.Line {
 	line[4] = uv.Cell{Content: "🇬🇧", Width: 2}
 	line[5] = uv.Cell{Content: "", Width: 0}
 	line[6] = uv.Cell{Content: "b", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(3), Bg: ansi.IndexedColor(200)}}
-	line[7] = uv.Cell{Content: "c", Width: 1, Style: uv.Style{Fg: ansi.TrueColor(0x123456), UnderlineColor: color.RGBA{R: 1, G: 2, B: 3, A: 255}, Underline: uv.UnderlineCurly, Attrs: uv.AttrBold | uv.AttrItalic}}
+	line[7] = uv.Cell{Content: "c", Width: 1, Style: uv.Style{Fg: ansi.RGBColor{R: 0x12, G: 0x34, B: 0x56}, UnderlineColor: color.RGBA{R: 1, G: 2, B: 3, A: 255}, Underline: uv.UnderlineCurly, Attrs: uv.AttrBold | uv.AttrItalic}}
 	line[8] = uv.Cell{Content: "d", Width: 1, Style: uv.Style{Bg: color.RGBA{R: 9, G: 8, B: 7, A: 128}}}
 	line[9] = uv.Cell{Content: "e", Width: 1, Style: uv.Style{Fg: oddColor{7}}}
 	line[10] = uv.Cell{Content: "f", Width: 1, Link: uv.Link{URL: "https://example.test", Params: "id=1"}}
@@ -182,7 +182,7 @@ func (sb *Scrollback) blankWideRunesCutByTheEdgeReference(newWidth int) {
 // colours whose uvarints contain the sbCell byte.
 func TestBlankWideRunesCutByTheEdgeSkipsOnlyNarrowLines(t *testing.T) {
 	rng := rand.New(rand.NewSource(7))
-	colors := []color.Color{nil, ansi.BasicColor(3), ansi.IndexedColor(0xFD), ansi.TrueColor(0xFDFDFD), oddColor{0xFD}}
+	colors := []color.Color{nil, ansi.BasicColor(3), ansi.IndexedColor(0xFD), ansi.RGBColor{R: 0xfd, G: 0xfd, B: 0xfd}, oddColor{0xFD}}
 	contents := []string{"a", "é", "漢", "🇬🇧", "", "e\u0301", "─", " "}
 	for round := range 200 {
 		const ring = 30
@@ -263,7 +263,7 @@ func TestPackedScrollbackHoldsALineForItsContent(t *testing.T) {
 // right cells whatever the neighbours are.
 func TestScrollbackRoundTripsRandomLines(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
-	colors := []color.Color{nil, ansi.BasicColor(1), ansi.IndexedColor(99), ansi.TrueColor(0xabcdef),
+	colors := []color.Color{nil, ansi.BasicColor(1), ansi.IndexedColor(99), ansi.RGBColor{R: 0xab, G: 0xcd, B: 0xef},
 		color.RGBA{R: 1, G: 2, B: 3, A: 255}, color.RGBA{R: 4, G: 5, B: 6, A: 7}, oddColor{3}, oddColor{200}}
 	links := []uv.Link{{}, {URL: "https://a.test"}, {URL: "https://b.test", Params: "id=2"}}
 	contents := []string{" ", "a", "Z", "é", "漢", "🇬🇧", "é", "�", "\x00", "\xff", "", "ab"}
@@ -359,7 +359,7 @@ func (sb *Scrollback) encodeLineReference(buf []byte, cells uv.Line, width int) 
 // runs with styled, linked, wide and non-ASCII cells in every order.
 func TestEncodeLinePlainShortcutWritesTheSameBytes(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
-	styles := []uv.Style{{}, {Fg: ansi.BasicColor(1)}, {Bg: ansi.TrueColor(0x123456)},
+	styles := []uv.Style{{}, {Fg: ansi.BasicColor(1)}, {Bg: ansi.RGBColor{R: 0x12, G: 0x34, B: 0x56}},
 		{Attrs: 1}, {Underline: 1}, {UnderlineColor: ansi.IndexedColor(7)}}
 	links := []uv.Link{{}, {URL: "https://a.test"}, {Params: "id=1"}}
 	contents := []string{"a", "b", " ", "~", "\x00", "\x7f", "é", "漢", "", "ab", "\xff"}

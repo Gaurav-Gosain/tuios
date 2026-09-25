@@ -23,7 +23,7 @@ func randomStyle(rng *rand.Rand) uv.Style {
 		case 3:
 			return color.RGBA{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256)), A: 255}
 		case 4:
-			return ansi.TrueColor(rng.Uint32() & 0xffffff)
+			return ansi.RGBColor{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256))}
 		default:
 			return ansi.Red
 		}
@@ -133,9 +133,9 @@ func TestFrameRenderMatchesUltraviolet(t *testing.T) {
 	// that compared the structs alone would emit one.
 	same := uv.Line{
 		{Content: "a", Width: 1, Style: uv.Style{Fg: color.RGBA{R: 255, A: 255}}},
-		{Content: "b", Width: 1, Style: uv.Style{Fg: ansi.TrueColor(0xff0000)}},
+		{Content: "b", Width: 1, Style: uv.Style{Fg: ansi.RGBColor{R: 0xff, G: 0x00, B: 0x00}}},
 		{Content: "c", Width: 1, Style: uv.Style{Bg: ansi.IndexedColor(9), Fg: color.RGBA{R: 255, A: 255}}},
-		{Content: "d", Width: 1, Style: uv.Style{Bg: ansi.IndexedColor(9), Fg: ansi.TrueColor(0xff0000)}},
+		{Content: "d", Width: 1, Style: uv.Style{Bg: ansi.IndexedColor(9), Fg: ansi.RGBColor{R: 0xff, G: 0x00, B: 0x00}}},
 	}
 	want := uv.TrimSpace(uv.Lines{same}.Render())
 	if got := r.render([]uv.Line{same}); got != want {

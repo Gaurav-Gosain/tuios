@@ -91,7 +91,7 @@ func TestScrollbackTextMatchesLineStringOnTerminalOutput(t *testing.T) {
 		"\x1b[38;2;10;20;30mtruecolor\x1b[0m\r\n",
 		"a\x1b[5Cgap\r\n",
 		"wide at the edge 漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字\r\n",
-		"zero​width\r\n",
+		"zero\u200bwidth\r\n",
 		"\x1b[2mdim\x1b[0m\x1b[9mstrike\x1b[0m\r\n",
 	}
 	for _, width := range []int{10, 40, 80} {
@@ -273,7 +273,7 @@ func TestScrollbackTextFollowsTheRing(t *testing.T) {
 // cannot read whole, so the text path has to stop at the same place.
 func TestScrollbackTextOfRandomLines(t *testing.T) {
 	rng := rand.New(rand.NewSource(7))
-	colors := []color.Color{nil, nil, nil, ansi.BasicColor(1), ansi.IndexedColor(99), ansi.TrueColor(0xabcdef),
+	colors := []color.Color{nil, nil, nil, ansi.BasicColor(1), ansi.IndexedColor(99), ansi.RGBColor{R: 0xab, G: 0xcd, B: 0xef},
 		color.RGBA{R: 1, G: 2, B: 3, A: 255}, color.RGBA{R: 4, G: 5, B: 6, A: 7}, oddColor{3}, oddColor{0}}
 	links := []uv.Link{{}, {}, {URL: "https://a.test"}, {URL: "https://b.test", Params: "id=2"}}
 	contents := []string{" ", " ", " ", "a", "Z", "é", "漢", "🇬🇧", "é", "�", "\x00", "\xff", "", "ab"}

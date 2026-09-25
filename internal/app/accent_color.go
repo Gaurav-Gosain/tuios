@@ -218,7 +218,7 @@ func accentShown(c color.RGBA) color.Color {
 // about the substitution rather than left to notice it.
 func accentFallbackLabel(c color.RGBA) string {
 	switch v := accentShown(c).(type) {
-	case ansi.ExtendedColor:
+	case ansi.IndexedColor:
 		return "256:" + strconv.Itoa(int(v))
 	case ansi.BasicColor:
 		return "ansi:" + strconv.Itoa(int(v))

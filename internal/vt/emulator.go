@@ -499,8 +499,8 @@ func penColorEqual(a, b color.Color) bool {
 		if bv, ok := b.(ansi.IndexedColor); ok && av == bv {
 			return true
 		}
-	case ansi.TrueColor:
-		if bv, ok := b.(ansi.TrueColor); ok && av == bv {
+	case ansi.RGBColor:
+		if bv, ok := b.(ansi.RGBColor); ok && av == bv {
 			return true
 		}
 	case color.RGBA:
