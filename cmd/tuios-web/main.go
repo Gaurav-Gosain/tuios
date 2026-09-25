@@ -363,9 +363,6 @@ func pinGuestTerminalEnv() {
 // createTUIOSProgram builds the program for one web session.
 func createTUIOSProgram(sess sip.Session) *tea.Program {
 	model := createTUIOSHandler(sess)
-	if model == nil {
-		return nil
-	}
 	// running closes when the program's loop reaches the model. See
 	// programStart for why the teardown goroutine below has to wait for it.
 	running := make(chan struct{})
@@ -374,9 +371,7 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// Tear down after the program has fully stopped, the way the SSH server
 	// does. Closing on the session context instead ran Cleanup while the last
 	// frames were still going out.
-	if o, ok := model.(*app.OS); ok {
-		go cleanupAfterProgram(program, running, o.Cleanup)
-	}
+	go cleanupAfterProgram(program, running, model.Cleanup)
 	return program
 }
 
@@ -563,7 +558,7 @@ func checkTransportSecurity(w io.Writer) error {
 // so APC sequences emitted by child processes (chafa -f kitty, kitten
 // icat, etc.) flow through the same pipe as bubbletea's text output and
 // get rendered by the browser's image addon.
-func createTUIOSHandler(sess sip.Session) tea.Model {
+func createTUIOSHandler(sess sip.Session) *app.OS {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
 	touch := sessionIsTouch(sess.Context())

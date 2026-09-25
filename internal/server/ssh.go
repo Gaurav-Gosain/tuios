@@ -278,10 +278,6 @@ func tuiosSessionMiddleware() wish.Middleware {
 
 			out := &serialWriter{w: sess}
 			model := buildSessionModel(sess, out)
-			if model == nil {
-				next(sess)
-				return
-			}
 
 			// MakeOptions wires input/output/env for the session. The shared
 			// list goes after it, because both carry a WithFilter and the
@@ -323,9 +319,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 			// Cleanup is idempotent. Running it here (not on Context().Done())
 			// keeps it off the renderer's back while frames are still going
 			// out.
-			if o, ok := model.(*app.OS); ok {
-				o.Cleanup()
-			}
+			model.Cleanup()
 			next(sess)
 		}
 	}
@@ -334,7 +328,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 // buildSessionModel creates a TUIOS instance for an SSH session. graphicsOut
 // is the serialized session writer that kitty/sixel APC sequences are routed
 // through; it must be the same writer the bubbletea program renders to.
-func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) tea.Model {
+func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) *app.OS {
 	pty, _, _ := sshSession.Pty()
 
 	cfg := sshServerConfig

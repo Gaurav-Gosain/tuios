@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/sip"
-	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
 // fakeSipSession is the part of a browser connection the model builder reads.
@@ -41,8 +40,8 @@ func TestEphemeralWebSessionGetsTheBrowsersCell(t *testing.T) {
 
 	// 15x24 cells, a size no fallback uses.
 	sess := &fakeSipSession{pty: sip.Pty{Width: 80, Height: 24, WidthPx: 1200, HeightPx: 576}, slave: slave}
-	model, ok := createTUIOSHandler(sess).(*app.OS)
-	if !ok || model == nil {
+	model := createTUIOSHandler(sess)
+	if model == nil {
 		t.Fatal("the handler built no *app.OS")
 	}
 	t.Cleanup(model.Cleanup)

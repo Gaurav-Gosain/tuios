@@ -430,13 +430,14 @@ func renderTitleBadge(windowName, agentState string, width int, color color.Colo
 func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {
 	var te ansi.Style
 
+	// lipgloss reports an unset color as NoColor, never as nil.
 	fg := s.GetForeground()
 	bg := s.GetBackground()
 
-	if _, ok := fg.(lipgloss.NoColor); !ok && fg != nil {
+	if _, ok := fg.(lipgloss.NoColor); !ok {
 		te = te.ForegroundColor(ansi.Color(fg))
 	}
-	if _, ok := bg.(lipgloss.NoColor); !ok && bg != nil {
+	if _, ok := bg.(lipgloss.NoColor); !ok {
 		te = te.BackgroundColor(ansi.Color(bg))
 	}
 
@@ -449,10 +450,9 @@ func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {
 	if ul := s.GetUnderlineStyle(); ul != lipgloss.UnderlineNone {
 		te = te.UnderlineStyle(ul)
 	}
-	if uc := s.GetUnderlineColor(); uc != nil {
-		if _, ok := uc.(lipgloss.NoColor); !ok {
-			te = te.UnderlineColor(ansi.Color(uc))
-		}
+	uc := s.GetUnderlineColor()
+	if _, ok := uc.(lipgloss.NoColor); !ok {
+		te = te.UnderlineColor(ansi.Color(uc))
 	}
 	if s.GetStrikethrough() {
 		te = te.Strikethrough(true)
