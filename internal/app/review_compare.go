@@ -590,7 +590,7 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	body := make([]string, 0, h-2)
 	body = append(body, reviewPaint([]reviewSeg{{pal.FgMute,
 		"    " + left("session", sessW) + " " + left("agent", agentW) + left("state", stateW) +
-			right("files", filesW) + "  " + left("+/-", diffW) + left("check", checkW) + right("age", ageW), false}}, inner, nil))
+			right("files", filesW) + "  " + left("+/-", diffW) + left("check", checkW) + right("age", ageW), false}}, inner, pal.Surface))
 	listH := h - 2 - 4
 	start := 0
 	if c.cursor >= listH {
@@ -598,7 +598,7 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	}
 	for i := start; i < len(c.rows) && i-start < listH; i++ {
 		row := c.rows[i]
-		var bg color.Color
+		bg := pal.Surface
 		cur, mark := " ", " "
 		if i == c.cursor {
 			bg, cur = pal.RowSel, overlay.SigilMark()
@@ -633,15 +633,15 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 		}, inner, bg))
 	}
 	for len(body) < h-2-3 {
-		body = append(body, strings.Repeat(" ", inner))
+		body = append(body, reviewSpaces(inner, pal.Surface))
 	}
-	question := strings.Repeat(" ", inner)
+	question := reviewSpaces(inner, pal.Surface)
 	if c.confirmKeep != "" {
 		others := c.reviewKeepOthers(c.confirmKeep)
 		question = reviewPaint([]reviewSeg{{pal.Warning, " Keep " + reviewText(c.confirmKeep) + " and remove " + reviewText(strings.Join(others, ", ")) +
-			"? Their worktrees and sessions go; branches stay.", true}}, inner, nil)
+			"? Their worktrees and sessions go; branches stay.", true}}, inner, pal.Surface)
 	} else if len(c.marks) > 0 {
-		question = reviewPaint([]reviewSeg{{pal.FgDim, " Marked: " + reviewText(strings.Join(c.marks, ", ")), false}}, inner, nil)
+		question = reviewPaint([]reviewSeg{{pal.FgDim, " Marked: " + reviewText(strings.Join(c.marks, ", ")), false}}, inner, pal.Surface)
 	}
 	body = append(body, question)
 	body = append(body, m.reviewStatusRule(inner, pal))
@@ -661,5 +661,5 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 		footer = reviewHints(hints, inner, pal)
 	}
 	body = append(body, footer)
-	return reviewFrame(w, h, title, body, pal.Accent)
+	return reviewFrame(w, h, title, body, pal.Accent, pal.Surface)
 }

@@ -193,7 +193,10 @@ it says `r` replies to mail in the Inbox, and renames on the rail.
 `ctrl+b v` (or `v` in the Inbox or on a rail agent row) opens the diff of
 the pane's changes over the whole screen, once the daemon has read it: the
 file list on the left, the file under it on the right, and your notes under
-the lines they are on. It owns every key while it is open, in either mode.
+the lines they are on. The code is coloured by its file type in the
+active theme's colours, added and removed lines sit on green and red grounds,
+and the words that changed in a changed line are marked. It owns every key
+while it is open, in either mode.
 The keys are the overlay's own, not bindings, like the scrollback browser's:
 
 | Keys | What it does |
@@ -203,6 +206,8 @@ The keys are the overlay's own, not bindings, like the scrollback browser's:
 | `g` / `G` | First or last line |
 | `]` / `[` | Next or previous hunk, going on into the next or previous file |
 | `}` / `{` | Next or previous file |
+| `s` | One column, or the old and new sides next to each other where the diff column is wide enough (about 120 columns of screen) |
+| `h` / `l`, `left` / `right` | Scroll the code sideways |
 | `tab` | Focus the file list or the diff |
 | `enter` | In the file list: open that file |
 | `c` | A note on the line under the cursor |

@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Reviewing what an agent changed: the full-screen diff of a pane's worktree
@@ -212,6 +213,18 @@ type reviewState struct {
 	// openedAt is when this review was asked for. The overlay covers the
 	// dock, so it shows the dock's newest message from since then itself.
 	openedAt time.Time
+	// split asks for the two sides next to each other, where the diff
+	// column is wide enough. It outlives the review, so the next one opens
+	// the way the last was left.
+	split bool
+	// xOff is how far the code is scrolled sideways, in cells, and xPath
+	// the file it was scrolled in: another file starts at the left edge.
+	xOff  int
+	xPath string
+	// look is the overlay's colours, and hunks what it keeps of each hunk
+	// drawn. Both are made while drawing, so a closed review costs nothing.
+	look  *reviewLook
+	hunks map[*review.File][]*reviewHunkLook
 }
 
 // clearDiff forgets the diff shown, for a review of another attempt: the
@@ -219,6 +232,7 @@ type reviewState struct {
 // under the next one's name.
 func (r *reviewState) clearDiff() {
 	r.diff, r.notes, r.files, r.editor, r.loadErr = nil, nil, nil, nil, ""
+	r.hunks, r.xOff = nil, 0
 	r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, false
 }
 
@@ -398,14 +412,14 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 	if r.pending {
 		return nil
 	}
-	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now()}
+	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
 	r.query = reviewQuery{Session: sessionName, Window: windowID}
 	return m.reviewLoadCmd(r.query, true)
 }
 
 // CloseReview closes the overlay and forgets what it read.
 func (m *OS) CloseReview() {
-	m.review = reviewState{gen: m.review.gen + 1}
+	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split}
 }
 
 // reviewLoadCmd reads a diff, and with probeFan also whether the pane is in a
@@ -482,7 +496,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 			m.Inbox.noReview = true
 		}
 		if first {
-			m.review = reviewState{gen: r.gen}
+			m.review = reviewState{gen: r.gen, split: r.split}
 		} else if r.diff == nil {
 			r.loadErr = text
 		}
@@ -498,6 +512,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	samePlace := prevPath != ""
 	r.pending, r.open, r.loadErr = false, true, ""
 	r.diff = msg.Diff
+	r.hunks = nil
 	r.notes = msg.Diff.Notes
 	r.query = msg.Query
 	if r.query.Window == "" {
@@ -1084,4 +1099,63 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 		params["quote"] = ed.quote
 	}
 	return m.reviewNoteCmd("add", params)
+}
+
+// ReviewToggleSplit switches the diff between one column and the two sides
+// next to each other. The cursor stays on the line it was on. On a column
+// too narrow for two sides the choice is kept for when it is wide enough,
+// and the dock says so.
+func (m *OS) ReviewToggleSplit() {
+	r := &m.review
+	width := m.reviewRowsWidth()
+	before, had := m.reviewRowUnderCursor()
+	r.split = !r.split
+	if e := r.currentFile(); r.split && e != nil && e.file != nil && len(e.file.Hunks) > 0 && !reviewSplitFits(e.file, width) {
+		m.ShowNotification("Too narrow to show the two sides next to each other. Widen the window, or s again for one column", "info", m.Settings.NotificationDuration)
+	}
+	if !had {
+		return
+	}
+	rows := m.reviewRows(width)
+	for i, row := range rows {
+		if row.kind != before.kind || row.hunk != before.hunk {
+			continue
+		}
+		switch row.kind {
+		case reviewRowLine:
+			if row.line != before.line && row.other != before.line && (before.other < 0 || row.line != before.other) {
+				continue
+			}
+		case reviewRowNote:
+			if row.note != before.note || row.first != before.first {
+				continue
+			}
+		}
+		r.cursor = i
+		return
+	}
+	r.cursor = min(r.cursor, max(len(rows)-1, 0))
+}
+
+// reviewScrollStep is how far one sideways key scrolls the code.
+const reviewScrollStep = 8
+
+// ReviewScrollX scrolls the code sideways by dir steps, left for dir < 0,
+// no further than the longest line of the file needs.
+func (m *OS) ReviewScrollX(dir int) {
+	r := &m.review
+	e := r.currentFile()
+	if e == nil || e.file == nil {
+		return
+	}
+	if e.path != r.xPath {
+		r.xPath, r.xOff = e.path, 0
+	}
+	widest := 0
+	for h := range e.file.Hunks {
+		for _, text := range r.reviewHunk(e.file, h, -1).text {
+			widest = max(widest, ansi.StringWidth(text))
+		}
+	}
+	r.xOff = min(max(r.xOff+dir*reviewScrollStep, 0), max(widest-reviewScrollStep, 0))
 }

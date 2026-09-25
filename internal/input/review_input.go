@@ -19,6 +19,8 @@ import (
 //	c, C             a note on the line, or on the whole hunk
 //	e, x             edit or resolve the note under the cursor
 //	S                send the unsent notes to the pane's agent
+//	s                one column, or the two sides next to each other
+//	h l, left right  scroll the code sideways
 //	u                since the base, or the uncommitted changes only
 //	b                change the base
 //	w                the compare view, for a pane in a fan
@@ -107,6 +109,12 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ReviewResolveNote()
 	case "S":
 		return o, o.ReviewSend()
+	case "s":
+		o.ReviewToggleSplit()
+	case "h", "left":
+		o.ReviewScrollX(-1)
+	case "l", "right":
+		o.ReviewScrollX(1)
 	case "u":
 		return o, o.ReviewToggleUncommitted()
 	case "b":
