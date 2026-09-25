@@ -21,10 +21,10 @@ import (
 // passing.
 //
 // Negative control: put AnchorNW back in screensaverBuild and
-// TestSaverDoesNotMoveAScreenWithEmptyTopRows reports offset row -3. Dropping
-// the screensaverFit call is not caught here: both tests in this file still
-// pass without it, because their capture is as tall as the canvas. The tests
-// that caught it used a taller and a shorter canvas and were removed.
+// TestSaverDoesNotMoveAScreenWithEmptyTopRows reports offset row -3. Drop the
+// screensaverFit call and TestSaverKeepsTheTopLeftOnATallerCanvas reports
+// offset row +4, TestSaverKeepsTheTopLeftOnAShorterCanvas offset row -4. All
+// three compile and all three fail on the number.
 
 // The effect these tests run. highlight is the one effect that never moves a
 // character and never hides one, so its first frame is the captured screen and
@@ -213,6 +213,44 @@ func TestSaverDoesNotMoveAScreenWithEmptyTopRows(t *testing.T) {
 		t.Fatalf("this screen needs empty top rows to test anything, and it has %d", empty)
 	}
 	requireNoOffset(t, capture, cols, rows)
+}
+
+// TestSaverDoesNotMoveAScreenThatStartsAtTheTop is the other half. A screen
+// whose first row is already full has nothing for an anchor to take up, so it
+// passed before the fix and must go on passing after it.
+func TestSaverDoesNotMoveAScreenThatStartsAtTheTop(t *testing.T) {
+	const cols, rows = 100, 30
+	m := anchorTestOS(t, "anchor-0002", cols, rows, 0, 0)
+	capture := anchorTestCapture(t, m, cols, rows)
+	if empty := anchorLeadingEmptyRows(capture); empty != 0 {
+		t.Fatalf("this screen was meant to start at row 0, and it starts at row %d", empty)
+	}
+	requireNoOffset(t, capture, cols, rows)
+}
+
+// TestSaverKeepsTheTopLeftOnATallerCanvas covers the case the anchor was
+// originally chosen for.
+//
+// A canvas bigger than the capture has to put the screen in one corner, and it
+// belongs in the top left one it was drawn from. The engine reads a capture
+// from the bottom up, so on its own it would rest the screen on the floor;
+// screensaverFit is what holds it against the ceiling instead. The capture here
+// also has empty top rows, so nothing passes this by lifting the screen.
+func TestSaverKeepsTheTopLeftOnATallerCanvas(t *testing.T) {
+	const cols, rows = 100, 30
+	m := anchorTestOS(t, "anchor-0003", cols, rows, 4, 3)
+	capture := anchorTestCapture(t, m, cols, rows)
+	requireNoOffset(t, capture, cols+6, rows+4)
+}
+
+// TestSaverKeepsTheTopLeftOnAShorterCanvas is the same argument downwards. A
+// canvas too small to hold the capture has to lose rows, and it loses them off
+// the bottom, because the top left is the corner the screen was drawn from.
+func TestSaverKeepsTheTopLeftOnAShorterCanvas(t *testing.T) {
+	const cols, rows = 100, 30
+	m := anchorTestOS(t, "anchor-0004", cols, rows, 4, 3)
+	capture := anchorTestCapture(t, m, cols, rows)
+	requireNoOffset(t, capture, cols, rows-4)
 }
 
 // TestEffectPreviewDoesNotMoveTheScreen holds the picker to the same rule.
