@@ -182,19 +182,29 @@ func FuzzKittyPassthrough(f *testing.F) {
 		})
 		wins := []string{"pane-a-0000000000000000", "pane-b-1111111111111111"}
 
-		// owned is every host id the pane holds, before or after a step: a
-		// delete removes the mapping of the image it names.
-		ownedBy := func(win string, into map[uint64]bool) {
+		// owner is the pane each host id was allocated for. An id is the
+		// pane's when tuios allocated it during one of that pane's steps, or
+		// when it sits in the pane's id map. The map alone is not enough: a
+		// transmission under the auto-assign id 0 gets a fresh host id that
+		// is never mapped, and a delete removes the mapping it names.
+		owner := map[uint64]string{}
+		claim := func(win string, from uint32) {
 			kp.mu.Lock()
 			defer kp.mu.Unlock()
+			for id := from; id != kp.nextHostID; id++ {
+				owner[uint64(id)] = win
+			}
 			for _, h := range kp.imageIDMap[win] {
-				into[uint64(h)] = true
+				if _, taken := owner[uint64(h)]; !taken {
+					owner[uint64(h)] = win
+				}
 			}
 		}
 		for n, st := range steps {
 			win := wins[st.win]
-			owned := map[uint64]bool{}
-			ownedBy(win, owned)
+			kp.mu.Lock()
+			firstNew := kp.nextHostID
+			kp.mu.Unlock()
 			cmd, err := vt.ParseKittyCommand([]byte(st.body))
 			if err != nil || cmd == nil {
 				t.Fatalf("step %d: the harness built an unparseable command %q", n, st.body)
@@ -205,7 +215,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 				func(b []byte) { replies = append(replies, append([]byte(nil), b...)) })
 
 			out := append(kp.FlushPending(), host.take()...)
-			ownedBy(win, owned)
+			claim(win, firstNew)
 			apcs, bad := hostTokens(out)
 			if bad != "" {
 				t.Fatalf("step %d (%s %q): host got %s", n, win[:6], st.body, bad)
@@ -219,9 +229,9 @@ func FuzzKittyPassthrough(f *testing.F) {
 				if hostID == 0 {
 					continue
 				}
-				if !owned[hostID] {
-					t.Fatalf("step %d: %s sent %q and the host got image id %d, which tuios never allocated to that pane:\n%q",
-						n, win[:6], st.body, hostID, body)
+				if got := owner[hostID]; got != win {
+					t.Fatalf("step %d: %s sent %q and the host got image id %d, which tuios never allocated to that pane (owner %q):\n%q",
+						n, win[:6], st.body, hostID, got, body)
 				}
 			}
 			for _, r := range replies {
