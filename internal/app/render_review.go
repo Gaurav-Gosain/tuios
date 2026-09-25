@@ -718,6 +718,12 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 	if r.cursor >= len(rows) {
 		r.cursor = max(len(rows)-1, 0)
 	}
+	r.cursor = reviewNoteStart(rows, r.cursor)
+	// A note wrapped onto several rows is selected whole.
+	selNote := -1
+	if r.cursor < len(rows) && rows[r.cursor].kind == reviewRowNote {
+		selNote = rows[r.cursor].note
+	}
 	focus := r.cursor
 	if r.editor != nil && r.editor.kind == reviewEditNote {
 		for i, row := range rows {
@@ -771,7 +777,8 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 			out[i] = reviewSpaces(width, pal.Surface)
 			continue
 		}
-		out[i] = d.row(rows[idx], idx == r.cursor && !r.listFocus)
+		sel := idx == r.cursor || (selNote >= 0 && rows[idx].kind == reviewRowNote && rows[idx].note == selNote)
+		out[i] = d.row(rows[idx], sel && !r.listFocus)
 	}
 	return out
 }
@@ -790,7 +797,7 @@ type reviewDraw struct {
 func (d reviewDraw) row(row reviewRow, cursor bool) string {
 	pal, dv := d.look.pal, d.look.dv
 	mark := " "
-	if cursor {
+	if cursor && (row.kind != reviewRowNote || row.first) {
 		mark = overlay.SigilMark()
 	}
 	// markCell is the first cell, which holds the cursor's mark on the

@@ -672,7 +672,37 @@ func (m *OS) ReviewMove(delta int) {
 	if len(rows) == 0 {
 		return
 	}
-	r.cursor = min(max(r.cursor+delta, 0), len(rows)-1)
+	r.cursor = reviewStep(rows, r.cursor, delta)
+}
+
+// reviewStep is the row delta steps from cur. A note wrapped onto several
+// rows is one step, and the cursor sits on its first row.
+func reviewStep(rows []reviewRow, cur, delta int) int {
+	cur = reviewNoteStart(rows, min(max(cur, 0), len(rows)-1))
+	step := 1
+	if delta < 0 {
+		step, delta = -1, -delta
+	}
+	for ; delta > 0; delta-- {
+		next := cur + step
+		for next >= 0 && next < len(rows) && rows[next].kind == reviewRowNote && !rows[next].first {
+			next += step
+		}
+		if next < 0 || next >= len(rows) {
+			break
+		}
+		cur = next
+	}
+	return cur
+}
+
+// reviewNoteStart is the first row of the note row i is part of, or i when
+// it is not a note's later row.
+func reviewNoteStart(rows []reviewRow, i int) int {
+	for i > 0 && i < len(rows) && rows[i].kind == reviewRowNote && !rows[i].first {
+		i--
+	}
+	return i
 }
 
 // ReviewPage moves the diff cursor by a page, down for dir > 0.
@@ -1125,7 +1155,7 @@ func (m *OS) ReviewToggleSplit() {
 	before, had := m.reviewRowUnderCursor()
 	r.split = !r.split
 	if e := r.currentFile(); r.split && e != nil && e.file != nil && len(e.file.Hunks) > 0 && !reviewSplitFits(e.file, width) {
-		m.reviewNotify("Too narrow to show the two sides next to each other. Widen the window, or s again for one column", "info", m.Settings.NotificationDuration)
+		m.reviewNotify("Too narrow for two columns. Widen the window, or s for one column", "info", m.Settings.NotificationDuration)
 	}
 	if !had {
 		return

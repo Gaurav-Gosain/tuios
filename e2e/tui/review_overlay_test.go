@@ -329,3 +329,78 @@ func TestFanSurvivesADaemonRestart(t *testing.T) {
 	saveArtifact(t, term, dir, "compare-after-restart")
 	t.Logf("artifacts in %s", dir)
 }
+
+// TestReviewWrappedNoteIsOneStop: a note too long for the diff column wraps
+// onto several rows, and the cursor takes it as one row. j lands on its first
+// row and the mark is drawn there; the next j goes to the line after the note
+// rather than onto its second row, and k comes back to its first row. The
+// frames are saved under artifactDir.
+//
+// How this could pass wrongly, written down first: the note might fit on one
+// row at this width, so the test checks that its last word is on a later row
+// than its first; a note on the last row gives j nowhere to go, so it sits on
+// line 1 with line 2 after it; and a mark elsewhere on screen would be
+// counted, so the mark is asserted on exactly one row.
+//
+// Negative control: with ReviewMove stepping one row at a time, j from the
+// note's first row stays inside the note and the wait for line 2 times out.
+func TestReviewWrappedNoteIsOneStop(t *testing.T) {
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "wn")
+	dir := artifactDir(t)
+	if out, err := tuiosCLI(t, base, "review", "note", "-s", session, "README:1",
+		"firstword of a long note that wraps onto more rows than one in this narrow column so the cursor takes it whole lastword"); err != nil {
+		t.Fatalf("review note: %v: %s", err, out)
+	}
+
+	term := attachIn(t, base, session, startOpts{cols: 80, rows: 24})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "M README", "firstword", "lastword", "retry three times", "esc close")
+
+	lines := func() []string { return strings.Split(term.Snapshot(), "\n") }
+	rowOf := func(word string) int {
+		for i, l := range lines() {
+			if strings.Contains(l, word) {
+				return i
+			}
+		}
+		return -1
+	}
+	markRow := func() int {
+		t.Helper()
+		row := -1
+		for i, l := range lines() {
+			if strings.Contains(l, "›") {
+				if row >= 0 {
+					t.Fatalf("the mark is on more than one row\n%s", term.Snapshot())
+				}
+				row = i
+			}
+		}
+		return row
+	}
+	if first, last := rowOf("firstword"), rowOf("lastword"); last <= first {
+		t.Fatalf("the note did not wrap: first word on row %d, last on row %d\n%s", first, last, term.Snapshot())
+	}
+	waitMark := func(what string, want func() int) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for markRow() != want() {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: mark on row %d, want row %d\n%s", what, markRow(), want(), term.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// The hunk header, the context line, then the note on it.
+	sendKeys(t, term, "j", "j")
+	waitMark("j onto the note", func() int { return rowOf("firstword") })
+	saveArtifact(t, term, dir, "note-selected")
+	sendKeys(t, term, "j")
+	waitMark("j past the note", func() int { return rowOf("retry three times") })
+	sendKeys(t, term, "k")
+	waitMark("k back onto the note", func() int { return rowOf("firstword") })
+	saveArtifact(t, term, dir, "note-selected-again")
+	t.Logf("frames in %s", dir)
+}
