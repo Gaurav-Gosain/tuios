@@ -32,24 +32,28 @@ func railAgentRow(m *OS, lines []string, windowID string) string {
 // TestSidebarAgentPrefixYieldsInOrder pins the ladder a narrowing row walks
 // down. The session goes before the agent because the gutter already marks a
 // pane that is somewhere else, and the whole prefix goes before a cell of the
-// pane name does.
+// pane name does. The E2E test TestNarrowRailKeepsTheAgentNameBeforeItsHarness
+// covers the harness half on screen; the session half is only reached on a
+// pane from another session, which that test does not draw.
 func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 	m := &OS{Settings: config.Global}
 	tokens := []sidebarAgentToken{
 		{Name: "session", Text: "api"},
 		{Name: "harness", Text: sidebarHarnessLabel("claude-code")},
 	}
+	const nameW = 6 // "deploy"
 	for _, tc := range []struct {
 		avail int
 		want  string
 	}{
-		{19, "api/claude/"}, // both fit, with room to spare
-		{13, "api/claude/"}, // both fit exactly: 11 cells and the 2 the name is owed
-		{12, "claude/"},     // the session yields first
-		{8, ""},             // and the agent yields before the name
+		{19, "api/claude/"}, // both fit beside the whole name, with room to spare
+		{17, "api/claude/"}, // both fit exactly: 11 cells and the 6 of the name
+		{16, "claude/"},     // the session yields first
+		{13, "claude/"},     // the agent fits exactly beside the whole name
+		{12, ""},            // and yields before a cell of the name goes
 		{1, ""},
 	} {
-		run, w := m.sidebarAgentPrefixRun(tokens, lipgloss.NewStyle(), tc.avail, theme.UI())
+		run, w := m.sidebarAgentPrefixRun(tokens, lipgloss.NewStyle(), tc.avail, nameW, theme.UI())
 		if got := ansi.Strip(run); got != tc.want {
 			t.Errorf("prefix at avail=%d = %q, want %q", tc.avail, got, tc.want)
 		}

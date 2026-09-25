@@ -431,17 +431,19 @@ func (m *OS) sidebarAgentRun(tokens []sidebarAgentToken, sep string, baseFor fun
 
 // sidebarAgentPrefixRun is the prefix in front of the name: the tokens joined
 // with "/" and a trailing "/", giving way from the front, whole tokens at a
-// time, before a cell of the name goes. The session goes first because the
+// time, before a cell of the name goes. nameW is the width of the whole name,
+// and a prefix is drawn only when it and the whole name fit in avail together.
+// The name is what a person scans the rail for, so on a narrow rail it reads
+// "deploy-api" rather than "claude/depl...". The session goes first because the
 // row's gutter already carries a tint for a pane that is somewhere else, while
 // nothing else on the row says which agent it is.
-func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, base lipgloss.Style, avail int, pal overlay.Palette) (string, int) {
+func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, base lipgloss.Style, avail, nameW int, pal overlay.Palette) (string, int) {
 	for len(tokens) > 0 {
 		w := 0
 		for _, tk := range tokens {
 			w += lipgloss.Width(tk.Text) + 1
 		}
-		// Two cells beyond the prefix, so the name it fronts keeps something.
-		if w+2 <= avail {
+		if w+nameW <= avail {
 			var b strings.Builder
 			for _, tk := range tokens {
 				b.WriteString(m.sidebarTokenStyle(base, tk, pal).Render(tk.Text))

@@ -2801,15 +2801,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// rail "1 queued" left "a…" of an agent called agent. It shortens to "1q"
 	// and then goes, rather than cut the name below a readable length.
 	//
-	// The prefix in front of the name is counted as it stands, since it only
-	// gives way once the name is down to two cells.
+	// The prefix in front of the name is not counted: it gives way before any
+	// of the name does, so it never stands between the name and its keep.
 	if e.Queued > 0 {
-		prefixW := 0
-		for _, tk := range plan.Prefix {
-			prefixW += lipgloss.Width(tk.Text) + 1
-		}
 		for _, queued := range m.sidebarAgentQueuedFigures(e) {
-			if sidebarNameAvail(cw, lipgloss.Width(queued))-prefixW >= sidebarAgentNameKeep(name) {
+			if sidebarNameAvail(cw, lipgloss.Width(queued)) >= sidebarAgentNameKeep(name) {
 				label, labelW = queued, lipgloss.Width(queued)
 				break
 			}
@@ -2839,7 +2835,10 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// The tokens after the name give way before the prefix does, and the
 	// prefix before a cell of the name: the name is the answer, the rest is
 	// context, and the state token is the one thing after the name that
-	// carries its own colour.
+	// carries its own colour. So the prefix is sized against the whole name
+	// first, and the tokens after it get what is left.
+	nameW := lipgloss.Width(name)
+	shown, shownW := m.sidebarAgentPrefixRun(plan.Prefix, quiet, avail, nameW, pal)
 	after, afterW := "", 0
 	if len(plan.After) > 0 {
 		baseFor := func(tk sidebarAgentToken) lipgloss.Style {
@@ -2849,13 +2848,12 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 			return quiet
 		}
 		after, afterW = m.sidebarAgentRun(plan.After, sidebarAgentSep(), baseFor, quiet,
-			max(avail-lipgloss.Width(name)-lipgloss.Width(sidebarAgentSep()), 0), pal)
+			max(avail-shownW-nameW-lipgloss.Width(sidebarAgentSep()), 0), pal)
 		if after != "" {
 			after = quiet.Render(sidebarAgentSep()) + after
 			afterW += lipgloss.Width(sidebarAgentSep())
 		}
 	}
-	shown, shownW := m.sidebarAgentPrefixRun(plan.Prefix, quiet, avail-afterW, pal)
 	right := ""
 	if label != "" {
 		right = m.sidebarTokenStyle(sidebarStyle(rowBg, timeFg), plan.Right, pal).Render(label)
