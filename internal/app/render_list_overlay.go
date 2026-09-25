@@ -44,6 +44,9 @@ type listOverlay struct {
 	// with a bare " " measures the same but paints nothing, so those cells are
 	// written with the pen reset and the desktop shows through the panel there.
 	RenderRow func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string
+	// Position, when set, is where the cursor is for the readout, counted in
+	// what a person counts: the Inbox's items, not its group headings.
+	Position func() (n, of int)
 }
 
 // listOverlayLayout returns the fitted inner width and visible row count for a
@@ -116,7 +119,11 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	// detail it read as the detail's own count: "4 of 7" under a plan of seven
 	// lines, all shown.
 	if cfg.Count > cfg.MaxVisible {
-		info := fmt.Sprintf("%d of %d", cfg.Selected+1, cfg.Count)
+		n, of := cfg.Selected+1, cfg.Count
+		if cfg.Position != nil {
+			n, of = cfg.Position()
+		}
+		info := fmt.Sprintf("%d of %d", n, of)
 		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
 	} else {
 		lines = append(lines, overlay.Style(bg).Render(" "))

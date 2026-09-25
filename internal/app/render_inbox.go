@@ -128,6 +128,19 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
+		Position: func() (int, int) {
+			n, of := 0, 0
+			for i, r := range rows {
+				if r.item == nil {
+					continue
+				}
+				of++
+				if i <= st.Selected {
+					n = of
+				}
+			}
+			return n, of
+		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			r := rows[i]
 			if r.item == nil {
