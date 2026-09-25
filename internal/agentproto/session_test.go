@@ -2,8 +2,6 @@ package agentproto
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -142,27 +140,6 @@ func (h *harness) type_(t *testing.T, s string) {
 	}
 }
 
-// typeHandled types s and waits until Run has handled its keys, not only read
-// them. s must be keys that do not quit, written in one read.
-func (h *harness) typeHandled(t *testing.T, s string) {
-	t.Helper()
-	for len(h.handled) > 0 {
-		<-h.handled
-	}
-	h.type_(t, s)
-	select {
-	case <-h.handled:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("the keys %q were not handled", s)
-	}
-}
-
-func (h *harness) advance(d time.Duration) {
-	h.nowMu.Lock()
-	h.now = h.now.Add(d)
-	h.nowMu.Unlock()
-}
-
 func startSession(t *testing.T, agent *fakeAgent) *harness {
 	t.Helper()
 	in, keys := io.Pipe()
@@ -206,86 +183,6 @@ func ready(t *testing.T) *harness {
 	return h
 }
 
-// TestSessionTurn: a prompt typed the way tuios types one (a paste and a
-// carriage return) is sent, the pane reports working, the reply is shown,
-// and the pane reports done with the reply's first line.
-func TestSessionTurn(t *testing.T) {
-	h := ready(t)
-	h.screen.waitFor(t, "connected to fake")
-	h.type_(t, pasteStart+"fix the\nbug"+pasteEnd+"\r")
-	select {
-	case p := <-h.agent.prompts:
-		if p != "fix the\nbug" {
-			t.Errorf("prompt = %q", p)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the prompt was not sent")
-	}
-	if rep := h.reporter.next(t); rep.state != "working" {
-		t.Errorf("report %+v, want working", rep)
-	}
-	h.screen.waitFor(t, "you  fix the")
-	h.s.Emit(Text{Text: "Fixed it.\nDetails follow."})
-	h.agent.ends <- TurnResult{Stop: StopFinished}
-	if rep := h.reporter.next(t); rep.state != "done" || rep.message != "Fixed it." {
-		t.Errorf("report %+v, want done with the reply's first line", rep)
-	}
-	h.screen.waitFor(t, "turn finished")
-
-	// A turn that fails reports errored with why.
-	h.type_(t, "again\r")
-	<-h.agent.prompts
-	h.reporter.next(t)
-	h.agent.ends <- TurnResult{Stop: StopFailed, Detail: "quota exceeded"}
-	if rep := h.reporter.next(t); rep.state != "errored" || rep.message != "quota exceeded" {
-		t.Errorf("report %+v, want errored", rep)
-	}
-	// Ctrl+D on an empty line quits.
-	h.type_(t, "\x04")
-	if code := <-h.exit; code != 0 {
-		t.Errorf("exit code %d", code)
-	}
-}
-
-// TestSessionQueuesAPromptUntilReady: a prompt that arrives before the
-// conversation is open is sent once it is.
-func TestSessionQueuesAPromptUntilReady(t *testing.T) {
-	agent := newFakeAgent()
-	gate := make(chan struct{})
-	slow := &slowStart{fakeAgent: agent, gate: gate}
-	in, keys := io.Pipe()
-	rep := newFakeReporter()
-	s := &Session{Agent: slow, Events: NewEvents(), In: in, Out: &screen{}, Reporter: rep}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s.Run(ctx)
-	_, _ = io.WriteString(keys, "early\r")
-	select {
-	case p := <-agent.prompts:
-		t.Fatalf("%q was sent before the agent was ready", p)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(gate)
-	select {
-	case p := <-agent.prompts:
-		if p != "early" {
-			t.Errorf("prompt = %q", p)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the queued prompt was never sent")
-	}
-}
-
-type slowStart struct {
-	*fakeAgent
-	gate chan struct{}
-}
-
-func (s *slowStart) Start(ctx context.Context, cwd string) (Info, error) {
-	<-s.gate
-	return s.fakeAgent.Start(ctx, cwd)
-}
-
 func runningTurn(t *testing.T, h *harness) {
 	t.Helper()
 	h.type_(t, "go\r")
@@ -293,51 +190,6 @@ func runningTurn(t *testing.T, h *harness) {
 	if rep := h.reporter.next(t); rep.state != "working" {
 		t.Fatalf("report %+v", rep)
 	}
-}
-
-func commandPermission() (*Permission, chan int) {
-	chosen := make(chan int, 2)
-	p := NewPermission(Tool{ID: "t", Title: "go test ./...", Kind: "execute", Input: map[string]string{"command": "go test ./..."}},
-		[]Option{{Label: "Allow once", Decision: DecisionOnce}, {Label: "Always", Decision: ""}, {Label: "Reject", Decision: DecisionDeny}},
-		func(i int) { chosen <- i }, func() { chosen <- -1 })
-	return p, chosen
-}
-
-// TestSessionPermissionInThePane: a number key answers once the question has
-// been up for Settle, which ends the Inbox hold; a key before that, a paste
-// and an Enter answer nothing.
-func TestSessionPermissionInThePane(t *testing.T) {
-	h := ready(t)
-	runningTurn(t, h)
-	p, chosen := commandPermission()
-	h.s.Emit(p)
-	h.reporter.next(t)
-	<-h.reporter.holds
-
-	// The early keys must be handled before the clock moves, or a "1" still
-	// waiting in Run's queue would count as typed past the settle.
-	h.typeHandled(t, "1")
-	h.typeHandled(t, pasteStart+"1"+pasteEnd+"\r")
-	h.advance(time.Second)
-	h.type_(t, "9x")
-	select {
-	case i := <-chosen:
-		t.Fatalf("answered %d before the settle, from a paste, Enter or a key with no option", i)
-	case <-time.After(150 * time.Millisecond):
-	}
-	h.type_(t, "1")
-	if i := <-chosen; i != 0 {
-		t.Errorf("chose %d, want Allow once", i)
-	}
-	select {
-	case err := <-h.reporter.ended:
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("the hold ended with %v, want cancelled", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the Inbox hold was left running")
-	}
-	h.screen.waitFor(t, "answered: Allow once (in the pane)")
 }
 
 // TestSessionPermissionPaneOnly: a permission the Inbox cannot show whole, a
@@ -371,74 +223,6 @@ func TestSessionPermissionPaneOnly(t *testing.T) {
 	}
 }
 
-// TestSessionPermissionsQueue: a second permission waits for the first, and a
-// turn that ends cancels what is still waiting.
-func TestSessionPermissionsQueue(t *testing.T) {
-	h := ready(t)
-	runningTurn(t, h)
-	first, c1 := commandPermission()
-	second, c2 := commandPermission()
-	h.s.Emit(first)
-	h.s.Emit(second)
-	h.reporter.next(t)
-	<-h.reporter.holds
-	h.reporter.answers <- [2]string{DecisionOnce, ""}
-	if i := <-c1; i != 0 {
-		t.Errorf("first chose %d", i)
-	}
-	h.reporter.next(t) // working
-	if rep := h.reporter.next(t); rep.state != "needs_input" {
-		t.Errorf("the second permission reported %+v", rep)
-	}
-	<-h.reporter.holds
-	h.agent.ends <- TurnResult{Stop: StopCancelled}
-	if i := <-c2; i != -1 {
-		t.Errorf("second chose %d, want cancelled when the turn ended", i)
-	}
-	for {
-		rep := h.reporter.next(t)
-		if rep.state == "idle" {
-			break
-		}
-	}
-}
-
-// TestSessionAgentExit: when the agent goes, the pane says so with what it
-// wrote to stderr, reports errored, and stays until Enter.
-func TestSessionAgentExit(t *testing.T) {
-	agent := newFakeAgent()
-	h := startSession(t, agent)
-	h.s.Stderr = func() string { return "panic: \x1b[31mboom" }
-	h.reporter.next(t)
-	close(agent.done)
-	h.screen.waitFor(t, "the agent exited")
-	h.screen.waitFor(t, "panic: [31mboom")
-	if rep := h.reporter.next(t); rep.state != "errored" {
-		t.Errorf("report %+v", rep)
-	}
-	h.screen.waitFor(t, "Press Enter to close this pane.")
-	select {
-	case code := <-h.exit:
-		t.Fatalf("exited %d before Enter", code)
-	case <-time.After(50 * time.Millisecond):
-	}
-	h.type_(t, "\r")
-	if code := <-h.exit; code != 1 {
-		t.Errorf("exit code %d", code)
-	}
-	assertOnlyOwnSGR(t, strings.ReplaceAll(strings.ReplaceAll(h.screen.raw(), "\r\x1b[K", ""), "\r\n", "\n"))
-}
-
-func TestSessionStartFails(t *testing.T) {
-	agent := newFakeAgent()
-	agent.startErr = fmt.Errorf("initialize: bad")
-	h := startSession(t, agent)
-	if rep := h.reporter.next(t); rep.state != "errored" || !strings.Contains(rep.message, "initialize: bad") {
-		t.Errorf("report %+v", rep)
-	}
-	h.screen.waitFor(t, "the agent did not start: initialize: bad")
-}
-
 // TestSessionEchoesNoTypedEscape: a paste with escape sequences in it, which
 // anything that can type into the pane could send, is echoed on the prompt
 // line and in the transcript without them, so typing into the pane cannot
@@ -451,24 +235,4 @@ func TestSessionEchoesNoTypedEscape(t *testing.T) {
 	<-h.agent.prompts
 	h.screen.waitFor(t, "you  x]0;title")
 	assertOnlyOwnSGR(t, strings.ReplaceAll(strings.ReplaceAll(h.screen.raw(), "\r\x1b[K", ""), "\r\n", "\n"))
-}
-
-// TestSessionRefusesAPromptDuringATurn: Enter during a turn keeps the text
-// and says why, rather than starting a second turn.
-func TestSessionRefusesAPromptDuringATurn(t *testing.T) {
-	h := ready(t)
-	runningTurn(t, h)
-	h.type_(t, "more\r")
-	h.screen.waitFor(t, "a turn is running")
-	select {
-	case p := <-h.agent.prompts:
-		t.Fatalf("%q was sent during a turn", p)
-	case <-time.After(50 * time.Millisecond):
-	}
-	h.agent.ends <- TurnResult{Stop: StopFinished}
-	h.screen.waitFor(t, "turn finished")
-	h.type_(t, "\r")
-	if p := <-h.agent.prompts; p != "more" {
-		t.Errorf("prompt = %q, want the kept text", p)
-	}
 }

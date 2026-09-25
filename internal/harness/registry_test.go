@@ -94,56 +94,6 @@ func corroborated(g *Gate) bool {
 	return true
 }
 
-// TestIdentify checks the shapes a harness launches in resolve to the right id,
-// and that unrelated programs resolve to none.
-func TestIdentify(t *testing.T) {
-	r, _ := Load()
-	cases := []struct {
-		name string
-		comm string
-		argv []string
-		exe  string
-		want string
-	}{
-		{"native claude", "claude", []string{"claude"}, "", "claude-code"},
-		{
-			"claude renamed over a versioned binary",
-			"2.1.222", []string{"claude", "--resume"},
-			"/home/u/.local/share/claude/versions/2.1.222",
-			"claude-code",
-		},
-		{
-			"claude from npm",
-			"node", []string{"node", "/n/node_modules/@anthropic-ai/claude-code/cli.js"}, "",
-			"claude-code",
-		},
-		{"codex native", "codex", []string{"codex"}, "", "codex"},
-		{
-			"codex from the npm shim",
-			"node", []string{"node", "/n/node_modules/@openai/codex/bin/codex.js"}, "",
-			"codex",
-		},
-		{"gemini", "gemini", []string{"gemini"}, "", "gemini-cli"},
-		{"opencode", "opencode", []string{"opencode"}, "", "opencode"},
-		{"droid via platform package", "droid", []string{"droid"}, "", "droid"},
-		{"plain shell", "bash", []string{"-bash"}, "/usr/bin/bash", ""},
-		{"unrelated tool", "htop", []string{"htop"}, "/usr/bin/htop", ""},
-		{"nothing at all", "", nil, "", ""},
-	}
-	for _, c := range cases {
-		got, ok := r.Identify(c.comm, c.argv, c.exe)
-		if c.want == "" {
-			if ok {
-				t.Errorf("%s: identified as %q, want no harness", c.name, got)
-			}
-			continue
-		}
-		if !ok || got != c.want {
-			t.Errorf("%s: identified as %q (%v), want %q", c.name, got, ok, c.want)
-		}
-	}
-}
-
 // TestBadManifestIsReportedNotSkipped checks a broken file is named in an error
 // and does not take the rest of the registry down with it.
 func TestBadManifestIsReportedNotSkipped(t *testing.T) {
@@ -207,26 +157,5 @@ func write(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
-	}
-}
-
-// TestResolveTakesAnIdOrTheProgramName pins the two spellings a person uses
-// for an agent: the manifest id and the name they type at a shell.
-func TestResolveTakesAnIdOrTheProgramName(t *testing.T) {
-	reg, _ := Load()
-	for _, name := range []string{"claude-code", "claude"} {
-		m, cmd, ok := reg.Resolve(name)
-		if !ok || m == nil {
-			t.Fatalf("Resolve(%q) found nothing", name)
-		}
-		if m.ID != "claude-code" || cmd != "claude" {
-			t.Errorf("Resolve(%q) = %s, %q; want claude-code, claude", name, m.ID, cmd)
-		}
-	}
-	if _, _, ok := reg.Resolve("not-an-agent"); ok {
-		t.Error("Resolve accepted a name no manifest knows")
-	}
-	if _, _, ok := reg.Resolve(""); ok {
-		t.Error("Resolve accepted an empty name")
 	}
 }

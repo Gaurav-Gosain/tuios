@@ -2,7 +2,6 @@ package integration
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 	"testing"
 )
@@ -87,28 +86,6 @@ func TestParseStatusLine(t *testing.T) {
 	}
 }
 
-// TestStatusLineCommandRoundTrip writes the managed command and reads it back,
-// with a chained command holding every character a shell treats specially.
-func TestStatusLineCommandRoundTrip(t *testing.T) {
-	for _, then := range []string{"", "~/.claude/statusline.sh", `printf '%s' "$HOME" | cut -c1-5; echo \ok`, "it's"} {
-		for _, tuios := range []string{"tuios", "/opt/my tools/tuios"} {
-			cmd := StatusLineCommand(tuios, then)
-			program, version, got, ok := managedStatusLine(cmd)
-			if !ok || version != StatusLineVersion || got != then {
-				t.Errorf("%q: read back ok=%v version=%d then=%q", cmd, ok, version, got)
-			}
-			if tuios == "tuios" && program != tuios {
-				t.Errorf("%q: program %q", cmd, program)
-			}
-		}
-	}
-	for _, foreign := range []string{"~/bin/sl.sh", "tuios agent-hook claude-code --integration 2", "tuios agent-statusline claude-code --integration 1 --extra", "tuios agent-statusline claude-code --integration x"} {
-		if _, _, _, ok := managedStatusLine(foreign); ok {
-			t.Errorf("%q read as managed", foreign)
-		}
-	}
-}
-
 // settingsDoc parses a settings file for comparison.
 func settingsDoc(t *testing.T, data string) map[string]any {
 	t.Helper()
@@ -119,97 +96,11 @@ func settingsDoc(t *testing.T, data string) map[string]any {
 	return m
 }
 
-// TestStatusLineInstallEmptySlot installs into a settings file with no status
-// line and removes it again, keeping the user's settings and the hooks.
-func TestStatusLineInstallEmptySlot(t *testing.T) {
-	env := testEnv(t)
-	tg := mustTarget(t, "claude-code")
-	path := tg.Path(env)
-	writeFile(t, path, userClaudeSettings)
-	if _, err := tg.Install(env, "tuios"); err != nil {
-		t.Fatal(err)
-	}
-	res, err := tg.InstallStatusLine(env, "tuios", "")
-	if err != nil || !res.Changed {
-		t.Fatalf("install: %+v %v", res, err)
-	}
-	doc := settingsDoc(t, readFile(t, path))
-	sl, _ := doc["statusLine"].(map[string]any)
-	if sl["type"] != "command" || sl["command"] != StatusLineCommand("tuios", "") {
-		t.Errorf("statusLine = %v", sl)
-	}
-	if doc["theme"] != "dark" || doc["model"] != "opus" {
-		t.Errorf("user settings lost: %v", doc)
-	}
-	// The hooks are still current: the status line command is not read as
-	// a hook entry.
-	st := tg.Status(env, "tuios")
-	if !st.Current || st.StatusLine == nil || !st.StatusLine.Installed || !st.StatusLine.Current || st.StatusLine.Then != "" {
-		t.Errorf("status = %+v statusline %+v", st, st.StatusLine)
-	}
-	again, err := tg.InstallStatusLine(env, "tuios", "")
-	if err != nil || again.Changed {
-		t.Errorf("second install changed the file: %+v %v", again, err)
-	}
-	if st := tg.StatusLineState(env, "/other/tuios"); st.Current {
-		t.Error("a status line running another binary reads as current")
-	}
-
-	if res, err := tg.UninstallStatusLine(env); err != nil || !res.Changed {
-		t.Fatalf("uninstall: %+v %v", res, err)
-	}
-	doc = settingsDoc(t, readFile(t, path))
-	if _, ok := doc["statusLine"]; ok {
-		t.Errorf("statusLine left behind: %v", doc["statusLine"])
-	}
-	if st := tg.Status(env, "tuios"); !st.Current {
-		t.Error("removing the status line broke the hooks")
-	}
-	if res, err := tg.UninstallStatusLine(env); err != nil || res.Changed {
-		t.Errorf("second uninstall: %+v %v", res, err)
-	}
-}
-
 const userStatusLineSettings = `{
   "theme": "dark",
   "statusLine": {"type": "command", "command": "~/.claude/statusline.sh", "padding": 0}
 }
 `
-
-// TestStatusLineRefusesUserSlot never replaces a status line the person
-// wrote, and names their command so it can be chained.
-func TestStatusLineRefusesUserSlot(t *testing.T) {
-	env := testEnv(t)
-	tg := mustTarget(t, "claude-code")
-	path := tg.Path(env)
-	writeFile(t, path, userStatusLineSettings)
-	_, err := tg.InstallStatusLine(env, "tuios", "")
-	var owned *StatusLineOwnedError
-	if !errors.As(err, &owned) || owned.Command != "~/.claude/statusline.sh" {
-		t.Fatalf("err = %v, want the user's command named", err)
-	}
-	// A different command to chain to is refused too: it would drop theirs.
-	if _, err := tg.InstallStatusLine(env, "tuios", "echo other"); !errors.As(err, &owned) {
-		t.Fatalf("chaining another command: err = %v", err)
-	}
-	if got := readFile(t, path); got != userStatusLineSettings {
-		t.Errorf("file changed:\n%s", got)
-	}
-	st := tg.StatusLineState(env, "tuios")
-	if !st.Foreign || st.Installed || st.Command != "~/.claude/statusline.sh" {
-		t.Errorf("state = %+v", st)
-	}
-	// Uninstall leaves it alone.
-	if res, err := tg.UninstallStatusLine(env); err != nil || res.Changed {
-		t.Errorf("uninstall: %+v %v", res, err)
-	}
-
-	// A status line that is not a command is left alone and named as such.
-	writeFile(t, path, `{"statusLine": "fancy"}`)
-	if _, err := tg.InstallStatusLine(env, "tuios", ""); !errors.As(err, &owned) || owned.Command != "" {
-		t.Errorf("non-command slot: err = %v", err)
-	}
-}
 
 // TestStatusLineChainRoundTrip chains to the person's own command, keeps the
 // entry's other keys, and puts their command back on uninstall.

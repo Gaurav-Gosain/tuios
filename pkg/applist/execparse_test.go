@@ -39,6 +39,14 @@ func TestExecTokenizing(t *testing.T) {
 			}
 		})
 	}
+
+	// Refused: an unterminated quote, and an Exec with no program to run,
+	// whether it is blank or only a removed field code.
+	for _, in := range []string{`app "unclosed`, `%f`, ``} {
+		if got, err := parseExec(in, "/p/x.desktop", "n", ""); err == nil {
+			t.Errorf("parseExec(%q) = %q, want an error", in, got)
+		}
+	}
 }
 
 func TestExecFieldCodes(t *testing.T) {
@@ -91,20 +99,5 @@ func TestExecIsNotAShell(t *testing.T) {
 		if a == "sh" || a == "/bin/sh" || a == "bash" {
 			t.Fatalf("a shell appeared in argv: %q", argv)
 		}
-	}
-}
-
-func TestExecUnterminatedQuote(t *testing.T) {
-	if _, err := parseExec(`app "unclosed`, "/p/x.desktop", "n", ""); err == nil {
-		t.Fatal("expected an error for an unterminated quote")
-	}
-}
-
-func TestExecOnlyFieldCodes(t *testing.T) {
-	if _, err := parseExec(`%f`, "/p/x.desktop", "n", ""); err == nil {
-		t.Fatal("an Exec that is only a removed field code has no program to run")
-	}
-	if _, err := parseExec(``, "/p/x.desktop", "n", ""); err == nil {
-		t.Fatal("a blank Exec has no program to run")
 	}
 }

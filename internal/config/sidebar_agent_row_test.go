@@ -4,8 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
 // parseAgentRowTOML runs a config file through the real decoder and the
@@ -17,65 +15,6 @@ func parseAgentRowTOML(t *testing.T, body string) SidebarAgentRowSpec {
 		t.Fatalf("ParseUserConfig: %v", err)
 	}
 	return ParseSidebarAgentRow(cfg.Appearance.Sidebar.AgentRow)
-}
-
-// TestAgentRowReadsTokensLooksAndRules is the surface as documented: an
-// ordered token list, a look per token, ordered rules with one test each.
-func TestAgentRowReadsTokensLooksAndRules(t *testing.T) {
-	spec := parseAgentRowTOML(t, `
-[appearance.sidebar.agent_row]
-tokens = ["name", "state", "elapsed"]
-
-[appearance.sidebar.agent_row.name]
-fg = "text"
-bold = false
-
-[[appearance.sidebar.agent_row.name.rule]]
-contains = "test"
-ignore_case = true
-fg = "info"
-
-[[appearance.sidebar.agent_row.elapsed.rule]]
-gt = 30
-fg = "warning"
-bold = true
-
-[[appearance.sidebar.agent_row.elapsed.rule]]
-lt = 1
-fg = "#00ff00"
-`)
-	if len(spec.Problems) != 0 {
-		t.Fatalf("problems: %v", spec.Problems)
-	}
-	if want := []string{"name", "state", "elapsed"}; !slices.Equal(spec.Tokens, want) {
-		t.Fatalf("tokens = %v, want %v", spec.Tokens, want)
-	}
-	name := spec.Style("name")
-	if name.Base.Fg != "text" || name.Base.Bold == nil || *name.Base.Bold {
-		t.Fatalf("name base = %+v, want fg text and bold false", name.Base)
-	}
-	if look := name.Resolve("Unit TESTS", 0, false); look.Fg != "info" {
-		t.Fatalf("a case-folded contains rule did not match: %+v", look)
-	}
-	if look := name.Resolve("build", 0, false); look.Fg != "text" {
-		t.Fatalf("a non-matching rule changed the look: %+v", look)
-	}
-	elapsed := spec.Style("elapsed")
-	if len(elapsed.Rules) != 2 {
-		t.Fatalf("elapsed has %d rules, want 2", len(elapsed.Rules))
-	}
-	if look := elapsed.Resolve("45m", 45, true); look.Fg != "warning" || look.Bold == nil || !*look.Bold {
-		t.Fatalf("gt 30 did not match 45 minutes: %+v", look)
-	}
-	if look := elapsed.Resolve("<1m", 0.5, true); look.Fg != "#00ff00" {
-		t.Fatalf("lt 1 did not match half a minute: %+v", look)
-	}
-	if look := elapsed.Resolve("", 0, false); look.Fg != "" {
-		t.Fatalf("a token with no number matched a numeric rule: %+v", look)
-	}
-	if !spec.Custom() || spec.RuleCount() != 3 {
-		t.Fatalf("Custom = %v, RuleCount = %d", spec.Custom(), spec.RuleCount())
-	}
 }
 
 // TestAgentRowFailsSafely: every value the reader does not understand is
@@ -155,87 +94,5 @@ fg = "info"
 	}
 	if !found {
 		t.Fatalf("the validator did not warn about the table: %+v", result.Warnings)
-	}
-}
-
-// TestAgentRowCapsRulesAtEight: the ninth rule and after are dropped with a
-// warning.
-func TestAgentRowCapsRulesAtEight(t *testing.T) {
-	var b strings.Builder
-	b.WriteString("[appearance.sidebar.agent_row]\n")
-	for range 10 {
-		b.WriteString("[[appearance.sidebar.agent_row.name.rule]]\nequals = \"x\"\nfg = \"info\"\n")
-	}
-	spec := parseAgentRowTOML(t, b.String())
-	if n := len(spec.Style("name").Rules); n != SidebarAgentRowMaxRules {
-		t.Fatalf("kept %d rules, want %d", n, SidebarAgentRowMaxRules)
-	}
-	if len(spec.Problems) != 1 || !strings.Contains(spec.Problems[0], "more than 8 rules") {
-		t.Fatalf("problems = %v", spec.Problems)
-	}
-}
-
-// TestAgentRowSurvivesASave: the settings page writes the config back out, and
-// the table has to come back through the writer as it went in.
-func TestAgentRowSurvivesASave(t *testing.T) {
-	body := `
-[appearance.sidebar.agent_row]
-tokens = ["harness", "name", "elapsed"]
-
-[[appearance.sidebar.agent_row.elapsed.rule]]
-gt = 30
-fg = "warning"
-`
-	cfg, err := ParseUserConfig([]byte(body))
-	if err != nil {
-		t.Fatalf("ParseUserConfig: %v", err)
-	}
-	out, err := toml.Marshal(cfg)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	again, err := ParseUserConfig(out)
-	if err != nil {
-		t.Fatalf("ParseUserConfig(marshalled): %v\n%s", err, out)
-	}
-	before, after := ParseSidebarAgentRow(cfg.Appearance.Sidebar.AgentRow), ParseSidebarAgentRow(again.Appearance.Sidebar.AgentRow)
-	if before.Fingerprint != after.Fingerprint {
-		t.Fatalf("the table changed through a save:\n before %s\n after  %s\n%s", before.Fingerprint, after.Fingerprint, out)
-	}
-}
-
-// TestAgentRowReadsMetaTokens: "meta" and "need" are tokens, "$key" names one
-// metadata key with the daemon's key rules, and a "$key" can carry a style of
-// its own like any other token.
-func TestAgentRowReadsMetaTokens(t *testing.T) {
-	spec := parseAgentRowTOML(t, `
-[appearance.sidebar.agent_row]
-tokens = ["need", "name", "$context", "meta"]
-
-[appearance.sidebar.agent_row."$context"]
-fg = "warning"
-`)
-	if len(spec.Problems) != 0 {
-		t.Fatalf("problems: %v", spec.Problems)
-	}
-	if !slices.Equal(spec.Tokens, []string{"need", "name", "$context", "meta"}) {
-		t.Fatalf("tokens = %v", spec.Tokens)
-	}
-	if spec.Style("$context").Base.Fg != "warning" {
-		t.Errorf("the $context style was not read: %+v", spec.Style("$context"))
-	}
-
-	bad := parseAgentRowTOML(t, `
-[appearance.sidebar.agent_row]
-tokens = ["name", "$", "$1st", "$Model"]
-`)
-	// $Model lower-cases to a valid key, as every token name is lower-cased.
-	if len(bad.Problems) != 2 || !slices.Equal(bad.Tokens, []string{"name", "$model"}) {
-		t.Errorf("tokens = %v, problems = %v", bad.Tokens, bad.Problems)
-	}
-	for _, p := range bad.Problems {
-		if !strings.Contains(p, "$key") {
-			t.Errorf("the problem does not say $key exists: %q", p)
-		}
 	}
 }

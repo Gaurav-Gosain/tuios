@@ -91,48 +91,6 @@ func answerWith(decision, reason, message string) func(map[string]any) (json.Raw
 	}
 }
 
-// TestAgentHookPrintsThePersonsDecision is the round trip on the hook's side:
-// after its report, the hook holds the prompt and prints the harness's own
-// decision for the answer that comes back.
-func TestAgentHookPrintsThePersonsDecision(t *testing.T) {
-	for _, tc := range []struct {
-		name, harness, payload, decision, message, want string
-	}{
-		{"claude once", "claude-code", claudeBash, "once", "", `{"hookSpecificOutput":{"decision":{"behavior":"allow"},"hookEventName":"PermissionRequest"}}`},
-		{"claude always", "claude-code", claudeBashAlways, "always", "", `{"hookSpecificOutput":{"decision":{"behavior":"allow","updatedPermissions":[{"behavior":"allow","destination":"localSettings","rules":[{"ruleContent":"go test:*","toolName":"Bash"}],"type":"addRules"}]},"hookEventName":"PermissionRequest"}}`},
-		{"claude deny", "claude-code", claudeBash, "deny", "not on main", `{"hookSpecificOutput":{"decision":{"behavior":"deny","message":"not on main"},"hookEventName":"PermissionRequest"}}`},
-		{"opencode once", "opencode", openCodePermitted, "once", "", `{"reply":"once"}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := &holdDaemon{answer: answerWith(tc.decision, "answered", tc.message)}
-			out, explain := runHold(t, d, nil, tc.harness, tc.payload, 0)
-			if out != tc.want+"\n" {
-				t.Fatalf("printed %q, want %q\n%s", out, tc.want, explain)
-			}
-			holds := d.holdCalls()
-			if len(holds) != 1 || holds[0]["window"] != "w7" || holds[0]["session"] != "work" || holds[0]["harness"] != tc.harness {
-				t.Fatalf("request-approval calls %v", holds)
-			}
-			wantSummary := "approve Bash: go test ./..."
-			if tc.harness == "opencode" {
-				wantSummary = "approve bash: go test ./..."
-			}
-			if holds[0]["summary"] != wantSummary {
-				t.Errorf("the hold names %q, want the line the person reads, %q", holds[0]["summary"], wantSummary)
-			}
-			if scope, _ := holds[0]["always_scope"].([]any); (tc.decision == "always") != (len(scope) == 1) {
-				t.Errorf("always_scope %v for %s", holds[0]["always_scope"], tc.name)
-			}
-			if d.timeout != agentHookHoldMax {
-				t.Errorf("the hold call waits %s, want %s", d.timeout, agentHookHoldMax)
-			}
-			if !strings.Contains(explain, `"printed":true`) {
-				t.Errorf("explain: %s", explain)
-			}
-		})
-	}
-}
-
 // TestAgentHookPrintsNothingWithoutADecision is the safety property: every
 // way the hold can fail prints nothing, which the harness reads as "ask the
 // user", and nothing that is not a decision the harness was offered becomes

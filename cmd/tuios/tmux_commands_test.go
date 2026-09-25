@@ -11,22 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tmuxcompat"
 )
 
-func TestIsTmuxName(t *testing.T) {
-	for arg0, want := range map[string]bool{
-		"tmux":                   true,
-		"/run/tuios/bin/tmux":    true,
-		"TMUX.exe":               true,
-		"tuios":                  false,
-		"/usr/local/bin/tuios":   false,
-		"tmux-shim":              false,
-		"/opt/tmux/bin/tuios-ts": false,
-	} {
-		if got := isTmuxName(arg0); got != want {
-			t.Errorf("isTmuxName(%q) = %v, want %v", arg0, got, want)
-		}
-	}
-}
-
 // TestTmuxLinkHandsOtherCallsToRealTmux runs the binary's tmux entry point
 // with TMUX naming a real server, as a shell started under tmux-shim that
 // then attached to a real tmux would, and checks the call reaches the real

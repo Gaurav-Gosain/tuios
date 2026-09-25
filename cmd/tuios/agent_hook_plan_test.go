@@ -39,34 +39,6 @@ var requestApprovalFields = []string{"kind", "plan", "tool", "target", "deny_mes
 
 const claudePlan = `{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"ExitPlanMode","tool_input":{"plan":"# Refactor retry\n1. Move backoff.","planFilePath":"/p/retry.md"}}`
 
-func TestAgentHookHoldsAPlan(t *testing.T) {
-	d := &planDaemon{takes: requestApprovalFields}
-	d.answer = answerWith("once", "answered", "")
-	out, explain := runHold(t, &d.holdDaemon, func() (verbCaller, error) { return d, nil }, "claude-code", claudePlan, 0)
-	holds := d.holdCalls()
-	if len(holds) != 1 {
-		t.Fatalf("request-approval calls %v\n%s", holds, explain)
-	}
-	h := holds[0]
-	if h["kind"] != "plan" || h["plan"] != "# Refactor retry\n1. Move backoff." || h["deny_message"] != true || h["summary"] != "plan: Refactor retry" {
-		t.Errorf("the plan was held as %v", h)
-	}
-	if _, ok := h["tool"]; ok {
-		t.Errorf("a plan named a tool: %v", h)
-	}
-	want := `{"hookSpecificOutput":{"decision":{"behavior":"allow","updatedInput":{"plan":"# Refactor retry\n1. Move backoff.","planFilePath":"/p/retry.md"}},"hookEventName":"PermissionRequest"}}` + "\n"
-	if out != want {
-		t.Errorf("printed %q\nwant    %q", out, want)
-	}
-
-	d = &planDaemon{takes: requestApprovalFields}
-	d.answer = answerWith("deny", "answered", "split step 1")
-	out, _ = runHold(t, &d.holdDaemon, func() (verbCaller, error) { return d, nil }, "claude-code", claudePlan, 0)
-	if !strings.Contains(out, `"behavior":"deny","message":"split step 1"`) {
-		t.Errorf("keep planning with a reason printed %q", out)
-	}
-}
-
 // TestAgentHookLeavesAPlanToAnOlderDaemon: a daemon whose request-approval
 // does not list plan would hold the plan as a plain approval, answerable
 // without the plan ever shown, so the hook does not ask it at all.

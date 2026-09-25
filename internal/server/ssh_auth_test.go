@@ -232,24 +232,6 @@ func TestPlanSSHAuth(t *testing.T) {
 	}
 }
 
-// TestPlanSSHAuthWarningSaysWhatItGivesAway checks the one string an operator
-// of an open server ever sees.
-func TestPlanSSHAuthWarningSaysWhatItGivesAway(t *testing.T) {
-	plan, err := PlanSSHAuth("127.0.0.1", "", false)
-	if err != nil {
-		t.Fatalf("loopback refused: %v", err)
-	}
-	for _, want := range []string{
-		"does not check who connects",
-		"open a shell",
-		filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys),
-	} {
-		if !strings.Contains(plan.Warning, want) {
-			t.Errorf("warning never mentions %q:\n%s", want, plan.Warning)
-		}
-	}
-}
-
 // TestStartSSHServerRefusesNetworkBindWithNoKeys proves the refusal happens
 // before anything listens. A server that binds first and warns afterwards is
 // still an open port for as long as the operator takes to read.

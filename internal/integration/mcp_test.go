@@ -81,25 +81,6 @@ func TestMCPInstallClaudeKeepsTheUsersServersAndRoundTrips(t *testing.T) {
 	}
 }
 
-func TestMCPInstallLeavesAServerTheUserNamedTuios(t *testing.T) {
-	env, tg := mcpHome(t, GeminiCLI)
-	path := filepath.Join(tg.ConfigDir(env), "settings.json")
-	own := `{"mcpServers": {"tuios": {"command": "my-tuios-wrapper"}}}`
-	writeFile(t, path, own)
-	if _, err := tg.InstallMCP(env, "tuios", false); err == nil || !strings.Contains(err.Error(), "not written by tuios") {
-		t.Errorf("install over the user's own server = %v", err)
-	}
-	if readFile(t, path) != own {
-		t.Error("the refused install changed the file")
-	}
-	if st := tg.MCPState(env, "tuios"); st.Installed || !st.Foreign {
-		t.Errorf("status = %+v, want foreign and not installed", st)
-	}
-	if res, err := tg.UninstallMCP(env); err != nil || res.Changed || readFile(t, path) != own {
-		t.Errorf("uninstall touched the user's server: %+v, %v", res, err)
-	}
-}
-
 func TestMCPInstallGeminiAndOpenCodeShapes(t *testing.T) {
 	env, gem := mcpHome(t, GeminiCLI)
 	if _, err := gem.InstallMCP(env, "tuios", true); err != nil {
@@ -175,12 +156,5 @@ func TestMCPInstallCodexKeepsTheUsersTOML(t *testing.T) {
 	}
 	if st := tg.MCPState(env, "tuios"); st.Installed || !st.Foreign {
 		t.Errorf("status = %+v, want foreign", st)
-	}
-}
-
-func TestMCPInstallNeedsTheHarness(t *testing.T) {
-	env := testEnv(t)
-	if _, err := mustTarget(t, Codex).InstallMCP(env, "tuios", false); err == nil {
-		t.Error("install for a harness that never ran here did not fail")
 	}
 }

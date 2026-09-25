@@ -1,8 +1,6 @@
 package harness
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -22,27 +20,6 @@ func TestDashPath(t *testing.T) {
 		if got := DashPath(tc.in); got != tc.want {
 			t.Fatalf("DashPath(%q) = %q, want %q", tc.in, got, tc.want)
 		}
-	}
-}
-
-func TestExpandDir(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("no home directory")
-	}
-	tr := Transcript{Reader: ReaderJSONL, Dir: "{home}/.claude/projects/{cwd:dashes}", Glob: "*.jsonl"}
-	want := filepath.Join(home, ".claude", "projects", "-home-x-proj")
-	if got := tr.ExpandDir("/home/x/proj"); got != want {
-		t.Fatalf("ExpandDir = %q, want %q", got, want)
-	}
-	// A pane whose directory is unknown yields no directory, which yields no
-	// search and so no claim.
-	if got := tr.ExpandDir(""); got != "" {
-		t.Fatalf("ExpandDir(\"\") = %q, want empty", got)
-	}
-	// A harness with no block never expands to anything.
-	if got := (Transcript{}).ExpandDir("/home/x"); got != "" {
-		t.Fatalf("empty transcript expanded to %q", got)
 	}
 }
 

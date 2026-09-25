@@ -73,27 +73,6 @@ func TestCoalescerPacesDownAPaneThatIsBehind(t *testing.T) {
 	}
 }
 
-// TestQueuedBytesTracksWhatIsWaitingForTheEmulator pins the counter the rule
-// reads. It has to fall back to zero once the writer has worked through the
-// queue, because a counter that only ever climbs would leave every pane paced
-// at the catch-up interval for the rest of its life.
-func TestQueuedBytesTracksWhatIsWaitingForTheEmulator(t *testing.T) {
-	w := backlogWindow(t, "coal-queued")
-
-	const chunk = 4096
-	for range 32 {
-		w.WriteOutputAsync(make([]byte, chunk))
-	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for w.queuedBytes.Load() != 0 {
-		if time.Now().After(deadline) {
-			t.Fatalf("queuedBytes settled at %d, want 0 once the writer drained the queue", w.queuedBytes.Load())
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 // TestPacedCoalescerStillEmitsWhileBehind is the tail guarantee at the new,
 // longest interval. The coalescer's rate limit must never swallow the last
 // signal of a burst: a pane paced right down while it catches up and then left

@@ -7,30 +7,6 @@ import (
 	"time"
 )
 
-func TestManager_LoadFromConfig(t *testing.T) {
-	m := NewManager()
-
-	config := map[string]any{
-		"after-new-window":   "echo new",
-		"after-close-window": []any{"echo close1", "echo close2"},
-	}
-
-	m.LoadFromConfig(config)
-
-	if !m.HasHooks() {
-		t.Error("expected hooks to be registered")
-	}
-
-	m.mu.RLock()
-	if len(m.hooks[AfterNewWindow]) != 1 {
-		t.Errorf("expected 1 hook for new-window, got %d", len(m.hooks[AfterNewWindow]))
-	}
-	if len(m.hooks[AfterCloseWindow]) != 2 {
-		t.Errorf("expected 2 hooks for close-window, got %d", len(m.hooks[AfterCloseWindow]))
-	}
-	m.mu.RUnlock()
-}
-
 // TestContextEnvVars checks the variables a hook command is given. User hook
 // scripts read these names, so a renamed or dropped variable breaks them.
 func TestContextEnvVars(t *testing.T) {

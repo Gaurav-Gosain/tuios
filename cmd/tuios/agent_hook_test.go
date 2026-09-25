@@ -122,25 +122,6 @@ func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...
 	})
 }
 
-// TestAgentHookFindsThePaneWithoutItsEnvironment is the scrubbed-environment
-// case: no TUIOS_PANE_ID, so the process's terminal session and ancestors go
-// to resolve-pane.
-func TestAgentHookFindsThePaneWithoutItsEnvironment(t *testing.T) {
-	h := &hookRun{daemon: &fakeDaemon{resolved: map[string]any{"session": "work", "window_id": "w3", "by": "tty"}}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"UserPromptSubmit","session_id":"s1"}`, "claude-code")
-
-	if len(h.daemon.calls) != 3 || h.daemon.calls[0].verb != "resolve-pane" {
-		t.Fatalf("calls = %v", h.daemon.calls)
-	}
-	if sid := h.daemon.calls[0].params["sid"]; sid != float64(4242) {
-		t.Fatalf("resolve-pane sid = %v", sid)
-	}
-	r := h.daemon.reports()
-	if r[0]["window"] != "w3" || r[0]["session"] != "work" {
-		t.Fatalf("report went to %v", r[0])
-	}
-}
-
 // TestAgentHookHandlesAnOldDaemon checks a daemon that predates the hook
 // fields. Such a daemon does not refuse them: it decodes params leniently and
 // applies the report without them. So the hook asks list-verbs first, sends

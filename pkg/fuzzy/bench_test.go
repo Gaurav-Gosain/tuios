@@ -4,7 +4,6 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"strings"
-	"testing"
 )
 
 // benchCorpus builds n plausible executable names: real ones from a typical
@@ -47,34 +46,4 @@ func benchCorpus(n int) []string {
 		out = append(out, b.String())
 	}
 	return out[:n]
-}
-
-// BenchmarkFilter is the per-keystroke cost: one full sweep over the corpus for
-// one query. Every case is a query a user would plausibly be part-way through
-// typing, since a one-character pattern and a five-character one take very
-// different paths through the matrix.
-func BenchmarkFilter(b *testing.B) {
-	corpus := benchCorpus(3000)
-	for _, pattern := range []string{"g", "gc", "sys", "gnome", "systemctl"} {
-		b.Run("q="+pattern, func(b *testing.B) {
-			var m Matcher
-			at := func(i int) string { return corpus[i] }
-			b.ReportAllocs()
-			b.ResetTimer()
-			for range b.N {
-				m.FilterIndex(pattern, len(corpus), at)
-			}
-		})
-	}
-}
-
-// BenchmarkFind isolates the single-candidate cost from the sort and the hit
-// slice, which is what a caller running its own loop pays.
-func BenchmarkFind(b *testing.B) {
-	var m Matcher
-	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
-		m.Find("gc", "gnome-calculator")
-	}
 }

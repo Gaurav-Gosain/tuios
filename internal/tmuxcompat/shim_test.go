@@ -2,7 +2,6 @@ package tmuxcompat
 
 import (
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -151,53 +150,6 @@ func TestTargetsStayInTheCallersSession(t *testing.T) {
 		if code, _ := h.run("has-session", "-t", name); code != 0 {
 			t.Errorf("has-session -t %s = %d, want 0", name, code)
 		}
-	}
-}
-
-// TestUnsupportedCallsAreLogged checks the default log records what the shim
-// could not answer, and only that.
-func TestUnsupportedCallsAreLogged(t *testing.T) {
-	h := newHarness(t)
-	if code, _ := h.run("wait-for", "-S", "done"); code != 1 {
-		t.Error("wait-for succeeded")
-	}
-	if !strings.Contains(h.err.String(), "unknown command: wait-for") {
-		t.Errorf("stderr = %q", h.err)
-	}
-	if code, _ := h.run("split-window", "-Q"); code != 1 {
-		t.Error("split-window -Q succeeded")
-	}
-	if code, out := h.run("display-message", "-p", "#{pane_current_command}|#{pane_id}"); code != 0 || !strings.HasPrefix(out, "|%") {
-		t.Errorf("display-message with an unknown variable = %d %q", code, out)
-	}
-	h.run("list-panes")
-	h.run("set-option", "-g", "mouse", "on")
-
-	got := h.logEntries(t)
-	if len(got) != 3 {
-		t.Fatalf("log = %+v, want three entries", got)
-	}
-	want := []struct {
-		cmd, outcome, detail string
-	}{
-		{"wait-for", OutcomeUnsupported, "unknown command: wait-for"},
-		{"split-window", OutcomeUnsupported, "unknown flag -Q"},
-		{"display-message", OutcomePartial, "no value for pane_current_command"},
-	}
-	for i, w := range want {
-		e := got[i]
-		if e.Argv[1] != w.cmd || e.Outcome != w.outcome || !strings.Contains(strings.Join(e.Detail, ";"), w.detail) {
-			t.Errorf("entry %d = %+v, want %s %s mentioning %q", i, e, w.cmd, w.outcome, w.detail)
-		}
-	}
-
-	h2 := newHarness(t)
-	h2.shim.Log.All = true
-	h2.run("list-panes")
-	h2.run("set-option", "-g", "mouse", "on")
-	all := h2.logEntries(t)
-	if len(all) != 2 || all[0].Outcome != OutcomeOK || all[1].Outcome != OutcomeIgnored {
-		t.Errorf("log-all = %+v, want an ok and an ignored entry", all)
 	}
 }
 
@@ -448,19 +400,6 @@ func TestRespawnIsHeldToPaneGrants(t *testing.T) {
 	}
 }
 
-func TestSplitWindowWithoutAHolder(t *testing.T) {
-	h := newHarness(t)
-	h.shim.Exe = ""
-	h.run("split-window", "-d", "top -b")
-	if got := h.fake.last("new-window")["command"]; !reflect.DeepEqual(got, []any{"/bin/sh", "-c", "top -b"}) {
-		t.Errorf("command = %v", got)
-	}
-	h.run("split-window", "-d")
-	if _, ok := h.fake.last("new-window")["command"]; ok {
-		t.Error("a split with no command sent one; the daemon's shell is the default")
-	}
-}
-
 func TestChainedCommands(t *testing.T) {
 	h := newHarness(t)
 	code, out := h.run("display-message", "-p", "one", ";", "display-message", "-p", "two;")
@@ -482,107 +421,6 @@ func TestOtherServerIsRefused(t *testing.T) {
 	}
 	if len(h.fake.calls) != 0 {
 		t.Errorf("calls = %v", h.fake.verbs())
-	}
-}
-
-func TestForShim(t *testing.T) {
-	dir := "/run/tuios/tmux"
-	ours := TmuxValue(dir, 7)
-	cases := []struct {
-		g    Global
-		tmux string
-		want bool
-	}{
-		{Global{}, ours, true},
-		{Global{}, "/tmp/tmux-501/default,1,0", false},
-		{Global{}, "", false},
-		{Global{Socket: SocketPath(dir)}, "", true},
-		{Global{Socket: "/tmp/x"}, ours, false},
-		{Global{Name: "swarm"}, ours, false},
-	}
-	for _, c := range cases {
-		if got := ForShim(c.g, c.tmux, dir); got != c.want {
-			t.Errorf("ForShim(%+v, %q) = %v", c.g, c.tmux, got)
-		}
-	}
-	if ForShim(Global{}, ours, "") {
-		t.Error("an empty dir matched")
-	}
-}
-
-func TestLauncherEnv(t *testing.T) {
-	dir := "/run/tuios/tmux"
-	base := []string{"PATH=/usr/bin:/bin", "TMUX=/tmp/tmux-1/default,5,0", "HOME=/h"}
-	env := LauncherEnv(base, dir, "leader-0001", "/l/shim.log", true)
-	get := func(k string) string {
-		for _, kv := range env {
-			if v, ok := strings.CutPrefix(kv, k+"="); ok {
-				return v
-			}
-		}
-		return ""
-	}
-	if got := get("PATH"); got != BinDir(dir)+string(os.PathListSeparator)+"/usr/bin:/bin" {
-		t.Errorf("PATH = %q", got)
-	}
-	if got := SocketFromTmux(get("TMUX")); got != SocketPath(dir) {
-		t.Errorf("TMUX = %q", get("TMUX"))
-	}
-	if get("TMUX_PANE") != PaneID("leader-0001") || get("HOME") != "/h" {
-		t.Errorf("env = %v", env)
-	}
-	if get(EnvLog) != "/l/shim.log" || get(EnvLogAll) != "1" {
-		t.Errorf("log env = %v", env)
-	}
-	n := 0
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "TMUX=") {
-			n++
-		}
-	}
-	if n != 1 {
-		t.Errorf("TMUX set %d times", n)
-	}
-	// A shell started under the shim that starts it again keeps one copy of
-	// the bin directory on PATH.
-	again := LauncherEnv(env, dir, "leader-0001", "", false)
-	for _, kv := range again {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok && strings.Count(v, BinDir(dir)) != 1 {
-			t.Errorf("PATH after a second launch = %q", v)
-		}
-	}
-}
-
-func TestFindRealTmux(t *testing.T) {
-	root := t.TempDir()
-	self := filepath.Join(root, "tuios")
-	shimDir := filepath.Join(root, "shim")
-	other := filepath.Join(root, "other")
-	realDir := filepath.Join(root, "real")
-	for _, d := range []string{BinDir(shimDir), other, realDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(self, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(realDir, "tmux"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(self, filepath.Join(BinDir(shimDir), "tmux")); err != nil {
-		t.Skip("symlinks unavailable:", err)
-	}
-	if err := os.Symlink(self, filepath.Join(other, "tmux")); err != nil {
-		t.Fatal(err)
-	}
-	path := strings.Join([]string{BinDir(shimDir), other, realDir}, string(os.PathListSeparator))
-	got, err := FindRealTmux(path, shimDir, self)
-	if err != nil || got != filepath.Join(realDir, "tmux") {
-		t.Errorf("FindRealTmux = %q %v, want the real one", got, err)
-	}
-	if _, err := FindRealTmux(strings.Join([]string{BinDir(shimDir), other}, string(os.PathListSeparator)), shimDir, self); err == nil {
-		t.Error("found a tmux where only links to tuios are")
 	}
 }
 

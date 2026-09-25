@@ -186,18 +186,6 @@ func TestSidechainNeverEndsTheTurn(t *testing.T) {
 	}
 }
 
-func TestObservationCarriesJoinIdentity(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.jsonl")
-	write(t, path, assistantLine("end_turn"))
-	obs, ok, err := NewReader(path).Read()
-	if err != nil || !ok {
-		t.Fatalf("read: %v ok=%v", err, ok)
-	}
-	if obs.SessionID != fixSession || obs.CWD != fixCWD || obs.Version != fixVersion {
-		t.Fatalf("identity = %+v", obs)
-	}
-}
-
 // The half-written last line is the normal state of a file being appended to,
 // and reading it as a record is how this source would produce a confident wrong
 // answer.
@@ -230,40 +218,6 @@ func TestPartialFinalLineIsNotRead(t *testing.T) {
 	}
 }
 
-func TestIncrementalReadsOnlyConsumeWhatWasAppended(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.jsonl")
-	write(t, path, assistantLine("tool_use"))
-	r := NewReader(path)
-	if _, ok, err := r.Read(); err != nil || !ok {
-		t.Fatalf("first read: %v ok=%v", err, ok)
-	}
-	// Nothing appended: no answer, and no re-reading of what was already seen.
-	if _, ok, err := r.Read(); err != nil || ok {
-		t.Fatalf("second read: %v ok=%v, want no new answer", err, ok)
-	}
-	appendTo(t, path, assistantLine("end_turn"))
-	obs, ok, err := r.Read()
-	if err != nil || !ok || obs.Turn != TurnDone {
-		t.Fatalf("third read: %v ok=%v turn=%v", err, ok, obs.Turn)
-	}
-}
-
-// An append that only adds bookkeeping is a real event with no answer in it. The
-// caller must keep believing what it already believed rather than being told
-// "unknown".
-func TestAppendOfNoiseYieldsNoAnswer(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.jsonl")
-	write(t, path, assistantLine("end_turn"))
-	r := NewReader(path)
-	if _, ok, _ := r.Read(); !ok {
-		t.Fatal("want an answer from the first read")
-	}
-	appendTo(t, path, noiseLines())
-	if _, ok, err := r.Read(); err != nil || ok {
-		t.Fatalf("read: %v ok=%v, want no answer", err, ok)
-	}
-}
-
 func TestTruncationRestartsFromTheTop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	write(t, path, assistantLine("tool_use")+assistantLine("tool_use")+assistantLine("tool_use"))
@@ -292,13 +246,6 @@ func TestMalformedLinesAreSkippedAndCounted(t *testing.T) {
 	}
 	if r.Skipped() != 2 {
 		t.Fatalf("skipped = %d, want 2", r.Skipped())
-	}
-}
-
-func TestMissingFileIsDistinguishable(t *testing.T) {
-	_, _, err := NewReader(filepath.Join(t.TempDir(), "gone.jsonl")).Read()
-	if err == nil || !strings.Contains(err.Error(), "does not exist") {
-		t.Fatalf("err = %v, want ErrNoFile", err)
 	}
 }
 

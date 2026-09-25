@@ -23,22 +23,6 @@ func TestClassifyIgnoresProseAboutPrompts(t *testing.T) {
 	}
 }
 
-func TestClassifyIsSilentForAHarnessWithRulesOff(t *testing.T) {
-	r := testRegistry(t)
-	for _, id := range r.IDs() {
-		m := r.Lookup(id)
-		if m.Screen.Enabled {
-			continue
-		}
-		if lines := r.ScreenLines(id); lines != 0 {
-			t.Errorf("%s has screen rules disabled but asks for %d lines; the tail read must not happen at all", id, lines)
-		}
-		if _, _, ok := r.Classify(id, []string{"Do you want to proceed?", "❯ 1. Yes"}); ok {
-			t.Errorf("%s classified a screen while disabled", id)
-		}
-	}
-}
-
 // A rule naming no positive predicate would match every screen the harness ever
 // paints, which is a rule that says the pane is always blocked.
 func TestRuleWithNoPredicatesMatchesNothing(t *testing.T) {

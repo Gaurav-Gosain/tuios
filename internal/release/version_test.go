@@ -44,40 +44,37 @@ func TestNewer(t *testing.T) {
 	}
 }
 
-// TestParseVersionFillsMissingComponents, since "v1" and "v1.0" are both tags a
-// human writes.
+// TestParseVersion fills the components a human leaves off ("v1" and "v1.0"
+// are both tags people write) and refuses four components or anything
+// non-numeric, rather than reading a prefix and ignoring the rest.
 //
-// Negative control: require exactly three components and the short rows fail.
-func TestParseVersionFillsMissingComponents(t *testing.T) {
+// Negative control: require exactly three components and the short rows fail;
+// drop the length check or ignore Atoi's error and the refused rows parse, and
+// a "dev+sha" build starts being compared against real tags.
+func TestParseVersion(t *testing.T) {
 	for _, tc := range []struct {
 		in                  string
+		ok                  bool
 		major, minor, patch int
 	}{
-		{"v1", 1, 0, 0},
-		{"v1.2", 1, 2, 0},
-		{"v1.2.3", 1, 2, 3},
+		{"v1", true, 1, 0, 0},
+		{"v1.2", true, 1, 2, 0},
+		{"v1.2.3", true, 1, 2, 3},
+		{"1.2.3.4", false, 0, 0, 0},
+		{"v1.x.3", false, 0, 0, 0},
+		{"dev", false, 0, 0, 0},
+		{"dev+abc", false, 0, 0, 0},
+		{"v-1.0.0", false, 0, 0, 0},
+		{"..", false, 0, 0, 0},
+		{"v", false, 0, 0, 0},
 	} {
 		got, ok := ParseVersion(tc.in)
-		if !ok {
-			t.Errorf("ParseVersion(%q) failed", tc.in)
+		if ok != tc.ok {
+			t.Errorf("ParseVersion(%q) ok = %v, want %v (%+v)", tc.in, ok, tc.ok, got)
 			continue
 		}
-		if got.Major != tc.major || got.Minor != tc.minor || got.Patch != tc.patch {
+		if ok && (got.Major != tc.major || got.Minor != tc.minor || got.Patch != tc.patch) {
 			t.Errorf("ParseVersion(%q) = %+v, want %d.%d.%d", tc.in, got, tc.major, tc.minor, tc.patch)
-		}
-	}
-}
-
-// TestParseVersionRefusesFourComponents and anything non-numeric, rather than
-// reading a prefix and ignoring the rest.
-//
-// Negative control: drop the length check or ignore Atoi's error and these
-// parse as versions, and a "dev+sha" build starts being compared against real
-// tags.
-func TestParseVersionRefusesNonsense(t *testing.T) {
-	for _, in := range []string{"1.2.3.4", "v1.x.3", "dev", "dev+abc", "v-1.0.0", "..", "v"} {
-		if got, ok := ParseVersion(in); ok {
-			t.Errorf("ParseVersion(%q) = %+v, want it refused", in, got)
 		}
 	}
 }

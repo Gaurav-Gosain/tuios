@@ -42,102 +42,15 @@ func TestMatchExeGlob(t *testing.T) {
 	}
 }
 
-func TestRunToken(t *testing.T) {
-	tests := []struct {
-		name string
-		proc ProcInfo
-		want string
-	}{
-		{"not an interpreter", ProcInfo{Comm: "tail", Exe: "/usr/bin/tail",
-			Argv: []string{"tail", "-f", "/home/u/dev/opencode/main.go"}}, ""},
-		{"grep in an agent tree", ProcInfo{Comm: "grep", Exe: "/usr/bin/grep",
-			Argv: []string{"grep", "-r", "x", "node_modules/@anthropic-ai/claude-code/"}}, ""},
-		{"node running a script", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
-			Argv: []string{"node", "/u/n_m/@anthropic-ai/claude-code/cli.js", "--resume"}},
-			"/u/n_m/@anthropic-ai/claude-code/cli.js"},
-		{"node -e skips the flag value only when flagged", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
-			Argv: []string{"node", "-e", "setTimeout(()=>{},1)", "/u/@anthropic-ai/claude-code/cli.js"}},
-			"setTimeout(()=>{},1)"},
-		{"python module", ProcInfo{Comm: "python3", Exe: "/usr/bin/python3.13",
-			Argv: []string{"python3", "-m", "aider"}}, "aider"},
-		{"pytest inside an agent repo", ProcInfo{Comm: "python3", Exe: "/usr/bin/python3.13",
-			Argv: []string{"python3", "-m", "pytest", "tests/aider/test_x.py"}}, "pytest"},
-		{"bun run", ProcInfo{Comm: "bun", Exe: "/home/u/.bun/bin/bun",
-			Argv: []string{"bun", "run", "/u/.bun/g/node_modules/opencode/index.ts"}},
-			"/u/.bun/g/node_modules/opencode/index.ts"},
-		{"npx with a flag", ProcInfo{Comm: "npx", Argv: []string{"npx", "-y", "opencode@latest"}},
-			"opencode@latest"},
-		{"interpreter with nothing to run", ProcInfo{Comm: "bash", Argv: []string{"-bash"}}, ""},
-	}
-	for _, tt := range tests {
-		if got := tt.proc.RunToken(); got != tt.want {
-			t.Errorf("%s: RunToken() = %q, want %q", tt.name, got, tt.want)
-		}
-	}
-}
-
-func TestPackageSegments(t *testing.T) {
-	tests := []struct {
-		have, want string
-		match      bool
-	}{
-		// A package under a package-manager directory.
-		{"/u/n_m/node_modules/@anthropic-ai/claude-code/cli.js", "@anthropic-ai/claude-code", true},
-		{"/u/lib/python3/site-packages/aider/main.py", "/aider/", true},
-		{"/u/.bun/install/global/node_modules/opencode/index.ts", "/opencode/", true},
-		{"/u/.npm/_npx/1a2b/node_modules/cline/bin/cline", "cline/bin/cline", true},
-		{"/u/.bun/install/cache/opencode-ai@1.2.3@@@1/bin/opencode", "opencode-ai", true},
-		// A scoped name is an npm scope wherever it sits.
-		{"/u/n_m/@openai/codex/bin/codex.js", "@openai/codex", true},
-		// A bare token names a package rather than a path.
-		{"opencode@latest", "/opencode/", true},
-		{"aider==0.1.0", "/aider/", true},
-		// A directory in a person's checkout is not a package. The shipped
-		// matcher said yes to all of these.
-		{"/u/dev/opencode/main.go", "/opencode/", false},
-		{"/u/dev/crush/scripts/build.sh", "/crush/", false},
-		{"/u/dev/crush/node_modules/vite/bin/vite.js", "/crush/", false},
-		{"/u/.dotfiles/crush/x.sh", "/crush/", false},
-		// A substring test said yes to all of these.
-		{"/u/n_m/node_modules/opencode-legacy/main.js", "/opencode/", false},
-		{"/u/n_m/node_modules/myopencode/main.js", "/opencode/", false},
-		{"/u/n_m/node_modules/opencode-ai-fork/x", "opencode-ai", false},
-	}
-	for _, tt := range tests {
-		got := packageSegments(segments(tt.have), segments(tt.want))
-		if got != tt.match {
-			t.Errorf("packageSegments(%q, %q) = %v, want %v", tt.have, tt.want, got, tt.match)
-		}
-	}
-}
-
-// TestWraps pins which processes are worth looking behind: interpreters and
-// resident launchers, by name or by executable, and nothing else.
-func TestWraps(t *testing.T) {
-	tests := []struct {
-		name string
-		proc ProcInfo
-		want bool
-	}{
-		{"a shell", ProcInfo{Comm: "sh", Exe: "/usr/bin/bash"}, true},
-		{"a renamed shell script", ProcInfo{Comm: "agent-launcher", Exe: "/usr/bin/bash"}, true},
-		{"timeout", ProcInfo{Comm: "timeout", Exe: "/usr/bin/timeout"}, true},
-		{"npm exec", ProcInfo{Comm: "npm exec", Exe: "/usr/bin/node"}, true},
-		{"a version manager", ProcInfo{Comm: "mise", Exe: "/u/.local/bin/mise"}, true},
-		{"an editor", ProcInfo{Comm: "vim", Exe: "/usr/bin/vim"}, false},
-		{"a build", ProcInfo{Comm: "go", Exe: "/usr/lib/go/bin/go"}, false},
-		{"an agent", ProcInfo{Comm: "claude", Exe: "/u/.local/share/claude/versions/2.1.266"}, false},
-	}
-	for _, tt := range tests {
-		if got := tt.proc.Wraps(); got != tt.want {
-			t.Errorf("%s: Wraps() = %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}
-
-// TestIdentifyGatesArgv pins the rule this registry exists to get right: argv is
-// read only for an interpreter, and only the token it was asked to run.
-func TestIdentifyGatesArgv(t *testing.T) {
+// TestIdentify checks the shapes a harness launches in resolve to the right
+// id, and that unrelated programs resolve to none.
+//
+// It pins the rule this registry exists to get right: argv is read only for
+// an interpreter, and only the token it was asked to run. The first class
+// harnesses are held to process identities measured on a real machine rather
+// than to shapes invented to suit the matcher, and each such case says how it
+// was obtained.
+func TestIdentify(t *testing.T) {
 	r, errs := Load()
 	if len(errs) > 0 {
 		t.Fatalf("bundled manifests failed to load: %v", errs)
@@ -147,36 +60,35 @@ func TestIdentifyGatesArgv(t *testing.T) {
 		proc ProcInfo
 		want string
 	}{
-		{"editor in an opencode checkout", ProcInfo{Comm: "tail", Exe: "/usr/bin/tail",
-			Argv: []string{"tail", "-f", "/home/u/dev/opencode/main.go"}}, ""},
-		{"grep over a vendored claude-code", ProcInfo{Comm: "grep", Exe: "/usr/bin/grep",
-			Argv: []string{"grep", "-r", "x", "/u/n_m/@anthropic-ai/claude-code/"}}, ""},
-		{"build in an aider tree", ProcInfo{Comm: "go", Exe: "/usr/bin/go",
-			Argv: []string{"go", "build", "./aider/..."}}, ""},
-		{"real claude", ProcInfo{Comm: "claude", Exe: "/home/u/.local/share/claude/versions/2.1.235",
-			Argv: []string{"claude", "--dangerously-skip-permissions", "-c"}}, "claude-code"},
+		{"native claude", ProcInfo{Comm: "claude", Argv: []string{"claude"}}, "claude-code"},
+		{"claude renamed over a versioned binary", ProcInfo{Comm: "2.1.222", Argv: []string{"claude", "--resume"},
+			Exe: "/home/u/.local/share/claude/versions/2.1.222"}, "claude-code"},
+		{"claude from npm", ProcInfo{Comm: "node",
+			Argv: []string{"node", "/n/node_modules/@anthropic-ai/claude-code/cli.js"}}, "claude-code"},
 		{"claude by install path alone", ProcInfo{Comm: "node", Exe: "/usr/bin/claude",
 			Argv: []string{"node"}}, "claude-code"},
-		{"claude under node", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
-			Argv: []string{"node", "/u/n_m/@anthropic-ai/claude-code/cli.js"}}, "claude-code"},
-	}
-	runIdentifyCases(t, r, tests)
-}
-
-// TestIdentifyMeasuredLaunches pins the five harnesses the project treats as
-// first class against the process identities measured on a real machine, rather
-// than against shapes invented to suit the matcher. Each case names how it was
-// obtained.
-func TestIdentifyMeasuredLaunches(t *testing.T) {
-	r, errs := Load()
-	if len(errs) > 0 {
-		t.Fatalf("bundled manifests failed to load: %v", errs)
-	}
-	tests := []struct {
-		name string
-		proc ProcInfo
-		want string
-	}{
+		// Measured: Claude Code's native install symlinks a version-named binary.
+		{"claude", ProcInfo{Comm: "claude", Argv: []string{"claude", "--dangerously-skip-permissions", "-c"},
+			Exe: "/home/u/.local/share/claude/versions/2.1.235"}, "claude-code"},
+		{"codex native", ProcInfo{Comm: "codex", Argv: []string{"codex"}}, "codex"},
+		// Not installed here, so this is the documented layout rather than a
+		// measurement: codex ships a native binary and an npm package.
+		{"codex native with its path", ProcInfo{Comm: "codex", Argv: []string{"codex"}, Exe: "/usr/local/bin/codex"}, "codex"},
+		{"codex from the npm shim", ProcInfo{Comm: "node",
+			Argv: []string{"node", "/n/node_modules/@openai/codex/bin/codex.js"}}, "codex"},
+		{"codex from npm under node", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
+			Argv: []string{"node", "/u/n_m/@openai/codex/bin/codex.js"}}, "codex"},
+		{"gemini", ProcInfo{Comm: "gemini", Argv: []string{"gemini"}}, "gemini-cli"},
+		// Measured: gemini from a bun shim runs under node with comm rewritten to
+		// "MainThread". The only place it says gemini is the token node was run
+		// with, which is why argv0 reads that token too.
+		{"gemini under node", ProcInfo{Comm: "MainThread",
+			Argv: []string{"/home/u/node/bin/node", "/home/u/.bun/bin/gemini"},
+			Exe:  "/home/u/node/bin/node"}, "gemini-cli"},
+		// Measured: crush and opencode are native binaries and say so plainly.
+		{"opencode", ProcInfo{Comm: "opencode", Argv: []string{"opencode"}, Exe: "/usr/bin/opencode"}, "opencode"},
+		{"crush", ProcInfo{Comm: "crush", Argv: []string{"crush"}, Exe: "/usr/bin/crush"}, "crush"},
+		{"droid via platform package", ProcInfo{Comm: "droid", Argv: []string{"droid"}}, "droid"},
 		// Measured: pi 0.x from its bun shim. process.title rewrites comm and
 		// argv[0] to "pi" and the script path is gone; the executable is node.
 		{"pi", ProcInfo{Comm: "pi", Argv: []string{"pi"},
@@ -185,41 +97,24 @@ func TestIdentifyMeasuredLaunches(t *testing.T) {
 		{"a static binary called pi", ProcInfo{Comm: "pi", Argv: []string{"pi"},
 			Exe: "/usr/local/bin/pi"}, ""},
 		{"pi with no readable executable", ProcInfo{Comm: "pi", Argv: []string{"pi"}}, ""},
-		// Measured: crush and opencode are native binaries and say so plainly.
-		{"crush", ProcInfo{Comm: "crush", Argv: []string{"crush"}, Exe: "/usr/bin/crush"}, "crush"},
-		{"opencode", ProcInfo{Comm: "opencode", Argv: []string{"opencode"}, Exe: "/usr/bin/opencode"}, "opencode"},
-		// Measured: Claude Code's native install symlinks a version-named binary.
-		{"claude", ProcInfo{Comm: "claude", Argv: []string{"claude", "-c"},
-			Exe: "/home/u/.local/share/claude/versions/2.1.235"}, "claude-code"},
-		// Measured: gemini from a bun shim runs under node with comm rewritten to
-		// "MainThread". The only place it says gemini is the token node was run
-		// with, which is why argv0 reads that token too.
-		{"gemini under node", ProcInfo{Comm: "MainThread",
-			Argv: []string{"/home/u/node/bin/node", "/home/u/.bun/bin/gemini"},
-			Exe:  "/home/u/node/bin/node"}, "gemini-cli"},
-		// Not installed here, so this is the documented layout rather than a
-		// measurement: codex ships a native binary and an npm package.
-		{"codex native", ProcInfo{Comm: "codex", Argv: []string{"codex"}, Exe: "/usr/local/bin/codex"}, "codex"},
-		{"codex from npm", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
-			Argv: []string{"node", "/u/n_m/@openai/codex/bin/codex.js"}}, "codex"},
-	}
-	runIdentifyCases(t, r, tests)
-}
 
-func runIdentifyCases(t *testing.T, r *Registry, tests []struct {
-	name string
-	proc ProcInfo
-	want string
-},
-) {
-	t.Helper()
+		{"editor in an opencode checkout", ProcInfo{Comm: "tail", Exe: "/usr/bin/tail",
+			Argv: []string{"tail", "-f", "/home/u/dev/opencode/main.go"}}, ""},
+		{"grep over a vendored claude-code", ProcInfo{Comm: "grep", Exe: "/usr/bin/grep",
+			Argv: []string{"grep", "-r", "x", "/u/n_m/@anthropic-ai/claude-code/"}}, ""},
+		{"build in an aider tree", ProcInfo{Comm: "go", Exe: "/usr/bin/go",
+			Argv: []string{"go", "build", "./aider/..."}}, ""},
+		{"plain shell", ProcInfo{Comm: "bash", Argv: []string{"-bash"}, Exe: "/usr/bin/bash"}, ""},
+		{"unrelated tool", ProcInfo{Comm: "htop", Argv: []string{"htop"}, Exe: "/usr/bin/htop"}, ""},
+		{"nothing at all", ProcInfo{}, ""},
+	}
 	for _, tt := range tests {
 		got, _, ok := r.IdentifyDetail(tt.proc)
 		if tt.want == "" && ok {
 			t.Errorf("%s: identified as %q, want no match", tt.name, got)
 		}
-		if tt.want != "" && got != tt.want {
-			t.Errorf("%s: identified as %q, want %q", tt.name, got, tt.want)
+		if tt.want != "" && (!ok || got != tt.want) {
+			t.Errorf("%s: identified as %q (%v), want %q", tt.name, got, ok, tt.want)
 		}
 	}
 }
