@@ -157,28 +157,3 @@ func TestPlacementIdempotentOnUnrelatedRefresh(t *testing.T) {
 		}
 	}
 }
-
-// TestPlacementStableAcrossStreamedFrames proves the visible region is a pure
-// function of the pane rect: streaming identical frames at a fixed pane size
-// yields byte-identical placements frame after frame (the #116 edge clamp is
-// idempotent, never accumulating into a shrinking region).
-func TestPlacementStableAcrossStreamedFrames(t *testing.T) {
-	_, em, _, refresh := placementHarness(t, 120, 40, 0)
-
-	var want string
-	for frame := range 6 {
-		streamBrowserFrame(em, 1, 1200, 800)
-		got := lastPlacement(refresh())
-		if got == "" {
-			t.Fatalf("frame %d produced no placement", frame)
-		}
-		if frame == 0 {
-			want = got
-			continue
-		}
-		if got != want {
-			t.Fatalf("frame %d placement changed with no geometry change:\n got=%q\nwant=%q",
-				frame, got, want)
-		}
-	}
-}

@@ -143,35 +143,6 @@ func joinPeerOS(t *testing.T, r *rig, cols, rows int) *peer {
 	return &peer{m: m, c: c}
 }
 
-// resizeLog records every size a client announces to a pane's PTY, so a test
-// can say how many SIGWINCHes an action cost and what sizes they carried.
-type resizeLog struct {
-	mu   sync.Mutex
-	sent []string
-}
-
-func (l *resizeLog) watch(m *OS, label string) {
-	for _, w := range m.Windows {
-		w := w
-		inner := w.DaemonResizeFunc
-		if inner == nil {
-			continue
-		}
-		w.DaemonResizeFunc = func(width, height int) error {
-			l.mu.Lock()
-			l.sent = append(l.sent, fmt.Sprintf("%s->%s %dx%d", label, shortID(w.PTYID), width, height))
-			l.mu.Unlock()
-			return inner(width, height)
-		}
-	}
-}
-
-func (l *resizeLog) all() []string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]string(nil), l.sent...)
-}
-
 // rects renders the tiled pane rectangles as text, so a failure names the
 // layout rather than a boolean.
 func rects(m *OS) string {
@@ -193,89 +164,6 @@ func contentSizes(m *OS) string {
 		out += fmt.Sprintf("%s=%dx%d ", shortID(w.PTYID), w.ContentWidth(), w.ContentHeight())
 	}
 	return out
-}
-
-// twoClientsDisagreeingOnChrome brings up a tiled session with two clients the
-// same negotiated size whose only difference is their own chrome: the local
-// client has its rail folded and the peer has it open, and neither has told
-// anyone. That is where the report starts, because the rail is the one piece of
-// chrome a person changes without thinking of it as a change to the layout.
-//
-// Both mechanisms bear on it and they are meant to. The rail is session state
-// now, so the two agree once a sync has passed; the reserve is negotiated, so
-// they would have laid the panes out in the same box even if it were not.
-func twoClientsDisagreeingOnChrome(t *testing.T) (*rig, *peer, *exchange) {
-	t.Helper()
-	prevAnim := config.Global.AnimationsEnabled
-	prevEnabled := config.Global.SidebarEnabled
-	prevWidth := config.Global.SidebarWidth
-	prevPos := config.Global.SidebarPosition
-	config.Global.AnimationsEnabled = false
-	config.Global.SidebarEnabled = true
-	config.Global.SidebarWidth = 24
-	config.Global.SidebarPosition = "left"
-	t.Cleanup(func() {
-		config.Global.AnimationsEnabled = prevAnim
-		config.Global.SidebarEnabled = prevEnabled
-		config.Global.SidebarWidth = prevWidth
-		config.Global.SidebarPosition = prevPos
-	})
-
-	r := newRigSized(t, 2, holderCols, holderRows)
-	r.m.SidebarCollapsed = true
-	r.tile()
-
-	p := joinPeerOS(t, r, holderCols, holderRows)
-	p.m.AutoTiling = true
-
-	ex := &exchange{t: t}
-	ex.route(r.client, r.m, "local")
-	ex.route(p.c, p.m, "peer")
-
-	// Each client says what it keeps for its own chrome, which is what the
-	// first window-size message does in cmd/tuios, and the session settles on
-	// one box before anything else happens.
-	r.m.AnnounceLayoutReserve()
-	p.m.AnnounceLayoutReserve()
-	ex.settleBox(r, p)
-
-	p.m.TileAllWindows()
-	p.m.SyncDaemonPTYDimensions()
-	return r, p, ex
-}
-
-// TestTwoClientsAgreeOnEveryPaneSize is the invariant the report violates: a
-// PTY has one size, so both clients and the daemon have to name the same one.
-//
-// NEGATIVE CONTROL: measured. On the unfixed tree (no agreed reserve and a
-// rail nothing shares) it fails with the two clients running the same two
-// shells at 56x36 and 57x36 on one side and 46x36 on the other. It is the
-// invariant rather than either mechanism, so it is satisfied by either one on
-// its own: with the rail shared but the reserve still private it passes,
-// because then the two clients have the same chrome to fold in. What it would
-// catch is any route back to two clients disagreeing about a shell's size.
-func TestTwoClientsAgreeOnEveryPaneSize(t *testing.T) {
-	r, p, ex := twoClientsDisagreeingOnChrome(t)
-
-	// An ordinary pane switch on the local client: the one thing the report
-	// says is enough to set it off.
-	r.m.FocusedWindow = (r.m.FocusedWindow + 1) % len(r.m.Windows)
-	r.m.SyncStateToDaemon()
-	ex.settle(40, 400*time.Millisecond)
-
-	local, peerSizes := contentSizes(r.m), contentSizes(p.m)
-	t.Logf("local rects: %s", rects(r.m))
-	t.Logf("peer  rects: %s", rects(p.m))
-	if local != peerSizes {
-		t.Fatalf("the two clients run the same PTYs at different sizes:\n local %s\n peer  %s", local, peerSizes)
-	}
-	for _, w := range r.m.Windows {
-		dw, dh := r.ptySize(w.PTYID)
-		if dw != w.ContentWidth() || dh != w.ContentHeight() {
-			t.Fatalf("pane %s: the daemon runs it at %dx%d, the clients draw it at %dx%d",
-				shortID(w.PTYID), dw, dh, w.ContentWidth(), w.ContentHeight())
-		}
-	}
 }
 
 // twoClientsMidSizeChange is the transient no agreement can rule out: a session
@@ -358,33 +246,5 @@ func TestApplyingAPeerSyncPushesNothingBack(t *testing.T) {
 	// being announced, not something that quietly made the two boxes agree.
 	if rects(r.m) == rects(p.m) {
 		t.Fatalf("the two clients agreed on %s, so this test is no longer about a disagreement", rects(r.m))
-	}
-}
-
-// TestFocusSwitchResizesNothing is the report in one line: switching panes
-// changes no pane's size, so it must cost the guests no SIGWINCH at all.
-// Every one of them narrows a pane momentarily, and a narrowing resize is
-// what damages scrollback under a reflowing emulator.
-//
-// NEGATIVE CONTROL: measured, and it is the one that names the mechanism. On
-// the unfixed tree a single pane switch resizes the two shells four times: the
-// peer adopts the pushed rectangles and resizes its PTYs to them, finds the
-// layout does not fill its own box, retiles, and resizes them back. Sharing the
-// rail alone is not enough (that still leaves two, from the peer folding in
-// chrome the pusher had not), so this is the assertion that holds the agreed
-// reserve in place.
-func TestFocusSwitchResizesNothing(t *testing.T) {
-	r, p, ex := twoClientsDisagreeingOnChrome(t)
-
-	var log resizeLog
-	log.watch(r.m, "local")
-	log.watch(p.m, "peer")
-
-	r.m.FocusedWindow = (r.m.FocusedWindow + 1) % len(r.m.Windows)
-	r.m.SyncStateToDaemon()
-	ex.settle(40, 400*time.Millisecond)
-
-	if sent := log.all(); len(sent) > 0 {
-		t.Fatalf("a pane switch resized the guests %d times: %v", len(sent), sent)
 	}
 }

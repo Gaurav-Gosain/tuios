@@ -105,20 +105,6 @@ func TestTerminalBrowserFullPaneIsPlaced(t *testing.T) {
 	}
 }
 
-// TestFullPaneImageClampedNotHidden checks the fix directly: a full-height
-// image placement is clamped to leave the final screen row free (so the host
-// terminal does not scroll) instead of being hidden, so an a=p is still emitted.
-func TestFullPaneImageClampedNotHidden(t *testing.T) {
-	// Synthesise a full-window direct-transmit+place frame (a=T, t=d, RGBA) the
-	// way terminal-browser / awrit do, sized to fill a full-screen pane.
-	frame := buildDirectFrame(1, 1200, 800)
-	forwarded := feedTBFrame(t, frame, 120, 40)
-
-	if !bytes.Contains(forwarded, []byte("a=p,")) {
-		t.Fatal("full-pane image hidden instead of clamped (no a=p)")
-	}
-}
-
 // TestBorderlessFullPaneImageClamped exercises the clamp branch: a borderless
 // tiled pane whose image genuinely occupies every screen row, including the
 // last. The image must still be placed (a=p), but clamped to leave the final

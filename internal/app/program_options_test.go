@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"go/ast"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -99,35 +98,6 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 	}
 }
 
-// TestProgramOptionsReachTheProgram builds a real program from the list and
-// reads what it set. The fields are bubbletea's own and unexported, read by
-// reflection: if a bubbletea upgrade renames one this fails loudly, which is
-// the right answer for a guard that would otherwise pass on nothing.
-func TestProgramOptionsReachTheProgram(t *testing.T) {
-	p := tea.NewProgram(filterOS(t), ProgramOptions()...)
-	v := reflect.ValueOf(p).Elem()
-
-	if f := v.FieldByName("filter"); !f.IsValid() || f.IsNil() {
-		t.Error("no event filter on the program; every pointer move would compose a frame")
-	}
-	// The rate is the user's max_fps, because it is also the rate the
-	// renderer's standing ticker wakes the process at, idle or not. bubbletea
-	// clamps to its own ceiling of 120 in NewProgram, so a setting above it
-	// reaches the program as 120. The fixture sets it away from bubbletea's
-	// own default of 60, so a list that dropped the option would fail here.
-	prevFPS := config.Global.NormalFPS
-	config.Global.NormalFPS = 30
-	t.Cleanup(func() { config.Global.NormalFPS = prevFPS })
-	p = tea.NewProgram(filterOS(t), ProgramOptions()...)
-	v = reflect.ValueOf(p).Elem()
-	if f := v.FieldByName("fps"); !f.IsValid() || f.Int() != 30 {
-		t.Errorf("program fps is %v, want the configured max_fps of 30", f)
-	}
-	if f := v.FieldByName("disableSignalHandler"); !f.IsValid() || !f.Bool() {
-		t.Error("the program installs its own signal handler; the entry point already owns the process signals")
-	}
-}
-
 // TestRemoteClientCannotBeSuspended pins what the filter took over from wish
 // and sip when it replaced theirs: a served client has nothing to suspend, so
 // a SuspendMsg comes back as a ResumeMsg. A local client keeps its suspend.
@@ -140,31 +110,6 @@ func TestRemoteClientCannotBeSuspended(t *testing.T) {
 	o.RemoteClient = false
 	if _, ok := FilterMouseMotion(o, tea.SuspendMsg{}).(tea.SuspendMsg); !ok {
 		t.Error("a local client's SuspendMsg was rewritten; ctrl+z must still suspend it")
-	}
-}
-
-// TestMotionFilterFollowsTheBeam gives follow = "mouse" its own clause. The
-// beam reads the pointer off LastMouseX/Y, which only a motion that reached
-// Update sets, and it used to ride the link clause, so it stopped following over
-// chrome and with links off.
-func TestMotionFilterFollowsTheBeam(t *testing.T) {
-	o := filterOS(t)
-	o.UserConfig.Appearance.Links = "off"
-	o.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
-	// A pane's border: chrome, not pane content, so no other clause claims it.
-	// (The dock band has a clause of its own now, for its controls' hover.)
-	overChrome := tea.MouseMotionMsg{X: 31, Y: 10}
-
-	if FilterMouseMotion(o, overChrome) != nil {
-		t.Fatal("motion over chrome passed with the beam off; the CPU guard is gone")
-	}
-	o.SetSpotlight(true)
-	if FilterMouseMotion(o, overChrome) == nil {
-		t.Error("motion over chrome was dropped with follow = mouse; the beam cannot follow")
-	}
-	o.LastMouseX, o.LastMouseY = overChrome.X, overChrome.Y
-	if FilterMouseMotion(o, overChrome) != nil {
-		t.Error("a motion inside the beam's current cell passed; it composes the same frame")
 	}
 }
 

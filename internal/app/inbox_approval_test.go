@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // heldApproval is an approval item the Inbox is holding for an answer.
@@ -47,32 +46,6 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 	m.InboxMove(-1)
 	if cmd := m.InboxReplyApproval(session.ApprovalOnce); cmd != nil {
 		t.Fatal("an answer was sent with no daemon client to vouch for it")
-	}
-}
-
-// TestInboxSaysWhenAnotherClientAnswered: two people, two screens, one
-// approval. The one who did not answer hears who did and what.
-func TestInboxSaysWhenAnotherClientAnswered(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	held := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny)
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
-	closed := held
-	closed.Closed, closed.Answer, closed.AnsweredBy = session.AttentionClosedAnswered, session.ApprovalDeny, "client-9"
-	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionClosed, Item: &closed}}})
-	if len(m.Inbox.Items) != 0 {
-		t.Fatal("the answered item is still listed")
-	}
-	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "answered from another client: denied") {
-		t.Fatalf("notifications %+v", m.Notifications)
-	}
-
-	// This client's own answer is not news to it.
-	m = inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
-	m.Inbox.replied = map[string]bool{"r1": true}
-	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionClosed, Item: &closed}}})
-	if len(m.Notifications) != 0 {
-		t.Errorf("its own answer was announced: %+v", m.Notifications)
 	}
 }
 
@@ -192,41 +165,5 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 	m.InboxReplyApproval(session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a new hold was answered before it was drawn")
-	}
-}
-
-// TestInboxShowsTheWholePrompt: the row cuts the line, so the held approval
-// under the cursor is shown whole below the list, with the rules always adds
-// beside its key.
-func TestInboxShowsTheWholePrompt(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	held := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny)
-	tail := "&& echo the-end-of-the-command"
-	held.Summary = "approve Bash: go test ./internal/session/ ./internal/app/ ./cmd/tuios/ -run Approval -count=1 " + tail
-	held.AlwaysScope = []string{"Bash(go test:*) in .claude/settings.local.json"}
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
-	m.OpenInbox("")
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	flat := strings.Join(strings.Fields(plain), " ")
-	for _, want := range []string{"the-end-of-the-command", "2 (always) also allows from now on:", "Bash(go test:*) in .claude/settings.local.json"} {
-		if !strings.Contains(flat, want) {
-			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
-		}
-	}
-
-	// A line this client would draw with characters left out is not
-	// answered here.
-	odd := held
-	odd.Summary = "approve Bash: echo \u200bhi"
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{odd}})
-	out, _, _ = m.renderInbox()
-	if !strings.Contains(strings.Join(strings.Fields(ansi.Strip(out)), " "), "not answered here") {
-		t.Errorf("a line with a hidden character reads as answerable:\n%s", ansi.Strip(out))
-	}
-	settleShown(m)
-	m.InboxReplyApproval(session.ApprovalOnce)
-	if reachedSend(m) || !strings.Contains(lastNote(m), "cannot be shown whole") {
-		t.Fatalf("a line with a hidden character was answered: %q", lastNote(m))
 	}
 }

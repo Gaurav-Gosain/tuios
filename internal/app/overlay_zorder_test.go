@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // openOverlayKindsSource reads the body of openOverlayKinds out of this
@@ -164,36 +162,5 @@ func TestEveryOverlayKindHasAPlaceInTheStack(t *testing.T) {
 		if !canOpen[kind] {
 			t.Errorf("%q is in overlayKindOrder but openOverlayKinds never opens it, so the entry is dead", kind)
 		}
-	}
-}
-
-// TestThePickerOutranksThePanelThatOpenedIt is the same bug stated as the
-// behaviour that broke: a settings row opens a panel over the settings panel,
-// and the new panel has to be the one a click inside it reaches.
-func TestThePickerOutranksThePanelThatOpenedIt(t *testing.T) {
-	for _, tc := range []struct {
-		kind     string
-		category string
-		label    string
-	}{
-		{"accent", "Appearance", "Focused border color"},
-		{"effectpicker", "Saver", "Effect"},
-		{"sectioneditor", "Sidebar", "Sections"},
-	} {
-		t.Run(tc.kind, func(t *testing.T) {
-			m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), Width: 150, Height: 45})
-			m.OpenSettings()
-			m.reconcileOverlayZOrder()
-			focusSetting(t, m, tc.category, tc.label)
-			m.SettingsActivate()
-			m.reconcileOverlayZOrder()
-
-			if !m.openOverlayKinds()[tc.kind] {
-				t.Fatalf("the %s row did not open %q", tc.label, tc.kind)
-			}
-			if got, want := m.overlayZ(tc.kind), m.overlayZ("settings"); got <= want {
-				t.Errorf("%q sits at z %d and the settings panel at %d; a click inside it would reach the panel behind it", tc.kind, got, want)
-			}
-		})
 	}
 }

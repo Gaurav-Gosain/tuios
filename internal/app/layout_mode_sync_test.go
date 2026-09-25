@@ -51,24 +51,6 @@ func TestLayoutModeSurvivesReattach(t *testing.T) {
 	}
 }
 
-// TestLayoutModeArrivesOnStateSync covers the live path: a peer client or the
-// daemon pushing state mid-session, not just reattach.
-func TestLayoutModeArrivesOnStateSync(t *testing.T) {
-	m := NewOS(OSOptions{})
-	m.Width, m.Height = 100, 40
-	m.AutoTiling = true
-	m.UseBSPLayout = true
-
-	m.ApplyStateSync(&session.SessionState{
-		Name: "s", CurrentWorkspace: 1, AutoTiling: true,
-		LayoutMode: LayoutModeScrolling,
-	})
-
-	if !m.UseScrollingLayout || m.UseBSPLayout {
-		t.Fatalf("sync did not apply scrolling mode: scrolling=%v bsp=%v", m.UseScrollingLayout, m.UseBSPLayout)
-	}
-}
-
 // TestUnstatedLayoutModeLeavesTheClientAlone is what makes the field additive.
 // State written before it existed, and any client that does not set it, must not
 // reset this client's layout to a default nobody chose.

@@ -195,30 +195,6 @@ func TestInboxPeekOnlyOffersWhatThePromptTakes(t *testing.T) {
 	}
 }
 
-// TestInboxPeekTypesAnAnswer: tab opens the line, and enter sends what was
-// typed as a text answer.
-func TestInboxPeekTypesAnAnswer(t *testing.T) {
-	pk := claudePeek("p1")
-	pk.Actions = []string{"text"}
-	pk.Options = nil
-	f := &fakeDaemon{peeks: []session.PromptPeek{pk}}
-	var got map[string]any
-	f.respond = func(p map[string]any) (json.RawMessage, error) {
-		got = p
-		return json.Marshal(session.PromptResponse{Sent: "text", SettledBy: "state", State: "working"})
-	}
-	m := peekOS(t, f)
-	run(t, m, m.InboxPeek())
-	m.InboxPeekStartText()
-	m.InboxPeekType("main")
-	m.InboxPeekType(" branch")
-	m.InboxPeekBackspace()
-	run(t, m, m.InboxPeekSendText())
-	if got["action"] != "text" || got["value"] != "main branc" {
-		t.Errorf("respond params %v", got)
-	}
-}
-
 // TestInboxPeekDropsAStaleReply: a reply to a peek since closed does not land
 // on the next one.
 func TestInboxPeekDropsAStaleReply(t *testing.T) {

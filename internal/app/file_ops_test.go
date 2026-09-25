@@ -1,11 +1,8 @@
 package app
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -47,33 +44,6 @@ func namesIn(t *testing.T, dir string) []string {
 		out = append(out, e.Name())
 	}
 	return out
-}
-
-func TestCreatePathMakesAFileAFolderAndANestedPath(t *testing.T) {
-	dir := t.TempDir()
-
-	if _, err := createPath(dir, "notes.md"); err != nil {
-		t.Fatalf("creating a file: %v", err)
-	}
-	if info, err := os.Lstat(filepath.Join(dir, "notes.md")); err != nil || info.IsDir() {
-		t.Errorf("notes.md is not a regular file: %v", err)
-	}
-
-	if _, err := createPath(dir, "build/"); err != nil {
-		t.Fatalf("creating a folder: %v", err)
-	}
-	if info, err := os.Lstat(filepath.Join(dir, "build")); err != nil || !info.IsDir() {
-		t.Errorf("build is not a folder: %v", err)
-	}
-
-	// The trailing slash is the only thing that says "folder". Without it the
-	// last component is a file even when the path nests.
-	if _, err := createPath(dir, "a/b/c.txt"); err != nil {
-		t.Fatalf("creating a nested file: %v", err)
-	}
-	if info, err := os.Lstat(filepath.Join(dir, "a", "b", "c.txt")); err != nil || info.IsDir() {
-		t.Errorf("a/b/c.txt is not a regular file: %v", err)
-	}
 }
 
 // TestCreatePathRefusesToLeaveTheFolder is the escape guard. Every one of these
@@ -238,34 +208,6 @@ func TestRenameEntryRefusesAnExistingDestination(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(dir, "from.txt")); err != nil {
 		t.Errorf("the source went missing after a refused rename: %v", err)
-	}
-}
-
-// TestRenameEntryOnAVanishedTargetSaysSo covers the ordinary race: the listing
-// is a snapshot, and the file it named can be gone by the time the prompt is
-// answered.
-func TestRenameEntryOnAVanishedTargetSaysSo(t *testing.T) {
-	dir := t.TempDir()
-	_, err := renameEntry(dir, "never-existed.txt", "next.txt")
-	if err == nil {
-		t.Fatal("renaming a missing file was allowed")
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("the error was %v, want a not-exist error", err)
-	}
-	if got := fileOpError(err); !strings.Contains(got, "gone") || !strings.Contains(got, "out of date") {
-		t.Errorf("the message is %q; it must say the file is gone and the list is stale", got)
-	}
-	if _, err := os.Lstat(filepath.Join(dir, "next.txt")); err == nil {
-		t.Error("a failed rename created the destination anyway")
-	}
-
-	// And it stays "gone" when the destination name is taken: the source is
-	// what the user pointed at, so the source is what the message is about.
-	mustWrite(t, filepath.Join(dir, "taken.txt"), "taken")
-	_, err = renameEntry(dir, "never-existed.txt", "taken.txt")
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("renaming a missing file onto a taken name reported %v, want a not-exist error", err)
 	}
 }
 

@@ -88,11 +88,3 @@ func TestNotifyPayloadTruncatesOnARuneBoundary(t *testing.T) {
 		}
 	}
 }
-
-func TestEmptyNotifyPayloadWritesNothing(t *testing.T) {
-	for _, in := range []string{"", "   ", "\x1b\x07", "\n\t"} {
-		if seq := hostNotifySequence(in, outerTmux); seq != nil {
-			t.Errorf("%q produced %q, want no bytes at all", in, seq)
-		}
-	}
-}

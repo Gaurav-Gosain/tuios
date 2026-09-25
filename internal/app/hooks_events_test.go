@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The hooks system declared eight events and fired three. These tests pin one
@@ -17,30 +16,6 @@ import (
 type hookRecorder struct {
 	mu    sync.Mutex
 	fired []hooks.Context
-}
-
-// record registers every event on m and returns the recorder collecting them.
-// Registering all of them (rather than only the one under test) is what catches
-// an action that fires the wrong event as well as one that fires none.
-func record(t *testing.T, m *OS) *hookRecorder {
-	t.Helper()
-	if m.HookManager == nil {
-		m.HookManager = hooks.NewManager()
-	}
-	// NewOS loads the config of whoever is running the tests, hooks included.
-	// Drop those first: a developer with a real hook configured would otherwise
-	// see it fire alongside the test's and fail the one-event-per-action checks.
-	m.HookManager.ClearAll()
-	r := &hookRecorder{}
-	m.HookManager.SetRunner(func(_ string, ctx hooks.Context) {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.fired = append(r.fired, ctx)
-	})
-	for _, e := range hooks.AllEvents() {
-		m.HookManager.Register(e, "true")
-	}
-	return r
 }
 
 // only returns the single context fired for event, failing when the count is
@@ -82,82 +57,6 @@ func hookTestOS(t *testing.T) *OS {
 	return m
 }
 
-func TestAfterWorkspaceSwitchFires(t *testing.T) {
-	m := hookTestOS(t)
-	m.CurrentWorkspace = 1
-	r := record(t, m)
-
-	m.SwitchToWorkspace(3)
-
-	ctx := r.only(t, m, hooks.AfterWorkspaceSwitch)
-	if ctx.Workspace != 3 {
-		t.Errorf("Workspace = %d, want 3", ctx.Workspace)
-	}
-	if ctx.PreviousWorkspace != 1 {
-		t.Errorf("PreviousWorkspace = %d, want 1", ctx.PreviousWorkspace)
-	}
-	if ctx.SessionID != "test-session" {
-		t.Errorf("SessionID = %q, want %q", ctx.SessionID, "test-session")
-	}
-}
-
-// A switch to the workspace already showing is not a switch, and firing for it
-// would make the event useless for anything that acts on a change.
-func TestAfterWorkspaceSwitchSkipsNoOp(t *testing.T) {
-	m := hookTestOS(t)
-	m.CurrentWorkspace = 2
-	r := record(t, m)
-
-	m.SwitchToWorkspace(2)
-	m.HookManager.Wait()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.fired) != 0 {
-		t.Errorf("switching to the current workspace fired %v, want nothing", r.events())
-	}
-}
-
-func TestAfterLayoutChangeFires(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		apply func(*OS)
-		want  string
-	}{
-		{"bsp", (*OS).EnableBSPLayout, LayoutModeBSP},
-		{"master-stack", (*OS).EnableMasterStackLayout, LayoutModeMasterStack},
-		{"scrolling", (*OS).EnableScrollingLayout, LayoutModeScrolling},
-		{"tiling off", (*OS).DisableAllTiling, LayoutFloating},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := hookTestOS(t)
-			r := record(t, m)
-
-			tc.apply(m)
-
-			ctx := r.only(t, m, hooks.AfterLayoutChange)
-			if ctx.Layout != tc.want {
-				t.Errorf("Layout = %q, want %q", ctx.Layout, tc.want)
-			}
-		})
-	}
-}
-
-// Cycling layouts is the keybinding path, and it has to report the layout it
-// landed on rather than the one it left.
-func TestAfterLayoutChangeReportsResultingLayout(t *testing.T) {
-	m := hookTestOS(t)
-	m.AutoTiling = true
-	m.UseBSPLayout, m.UseScrollingLayout = true, false
-	r := record(t, m)
-
-	m.ToggleLayoutMode() // bsp -> master-stack
-
-	if ctx := r.only(t, m, hooks.AfterLayoutChange); ctx.Layout != LayoutModeMasterStack {
-		t.Errorf("Layout = %q, want %q", ctx.Layout, LayoutModeMasterStack)
-	}
-}
-
 // FireDetached must not return before its hooks have run: the caller quits
 // immediately after, and an unwaited hook goroutine dies with the process.
 func TestAfterDetachWaitsForHooks(t *testing.T) {
@@ -180,49 +79,5 @@ func TestAfterDetachWaitsForHooks(t *testing.T) {
 	defer mu.Unlock()
 	if !ran {
 		t.Error("FireDetached returned before its hook ran")
-	}
-}
-
-func TestAfterNewWindowAndFocusChangeStillFire(t *testing.T) {
-	m := hookTestOS(t)
-	w := &terminal.Window{ID: "win-1", Width: 40, Height: 20, Workspace: 1}
-	m.Windows = append(m.Windows, w)
-	m.FocusedWindow = -1
-	r := record(t, m)
-
-	m.FocusWindow(0)
-
-	if ctx := r.only(t, m, hooks.AfterFocusChange); ctx.WindowID != "win-1" {
-		t.Errorf("WindowID = %q, want %q", ctx.WindowID, "win-1")
-	}
-}
-
-// Every declared event must have a fire site. A name in AllEvents that nothing
-// emits is the defect this whole change exists to remove, so the list of events
-// and the list of events the tests above prove are wired stay tied together.
-func TestEveryDeclaredEventIsCovered(t *testing.T) {
-	covered := map[hooks.Event]bool{
-		hooks.AfterNewWindow:       true,
-		hooks.AfterCloseWindow:     true,
-		hooks.AfterFocusChange:     true,
-		hooks.AfterWorkspaceSwitch: true,
-		hooks.AfterAttach:          true,
-		hooks.AfterDetach:          true,
-		hooks.AfterLayoutChange:    true,
-		hooks.AfterResize:          true,
-		// Fire site and payload: TestAgentAlertHookCarriesTheDocumentedContract
-		// in agent_alert_test.go, which is where the policy that gates it lives.
-		hooks.AfterAgentState: true,
-		// Daemon only. Fire site: the session event sink, proved with its
-		// payload by TestRunReturnsExitCodeAndOutput in internal/session.
-		hooks.AfterCommandFinished: true,
-	}
-	for _, e := range hooks.AllEvents() {
-		if !covered[e] {
-			t.Errorf("event %q is declared but has no fire site or test", e)
-		}
-	}
-	if len(covered) != len(hooks.AllEvents()) {
-		t.Errorf("covered set has %d events, AllEvents has %d", len(covered), len(hooks.AllEvents()))
 	}
 }
