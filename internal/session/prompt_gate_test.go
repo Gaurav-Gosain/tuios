@@ -110,3 +110,43 @@ func TestPromptGateEvidence(t *testing.T) {
 		t.Errorf("a working event after Enter did not count: taken %q", g.taken)
 	}
 }
+
+// TestAskFailsWithPromptStalledOnASilentPane covers the herdr stall check: a
+// pane that takes the question and shows nothing used to be answered with an
+// empty reply as if the agent had nothing to say. Now the ask fails with
+// prompt_stalled, says the text was typed, and points at capture-pane.
+func TestAskFailsWithPromptStalledOnASilentPane(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "stall")
+	c := dialVerb(t, sp)
+	silenceWindow(t, d, sess, b)
+
+	start := time.Now()
+	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"stall","window":"`+b+`","from":"`+a+`","text":"are you there","settle":300,"stall_timeout":800,"timeout":15000}}`)
+	if code := errCode(t, resp); code != ErrVerbPromptStalled {
+		t.Fatalf("code = %q, want %q: %v", code, ErrVerbPromptStalled, resp)
+	}
+	if waited := time.Since(start); waited < 800*time.Millisecond {
+		t.Errorf("the ask stalled after %v, before the stall window ended", waited)
+	}
+	e := errorOf(t, resp)
+	if msg, _ := e["message"].(string); !strings.Contains(msg, "Enter was sent") {
+		t.Errorf("the message does not say the prompt was typed: %q", msg)
+	}
+	if hint, _ := e["hint"].(map[string]any); hint == nil || hint["verb"] != "capture-pane" {
+		t.Errorf("the hint does not point at capture-pane: %v", e["hint"])
+	}
+
+	// The question was typed, so the record of the ask is kept.
+	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"stall"}}`))
+	msgs, _ := read["messages"].([]any)
+	found := false
+	for _, m := range msgs {
+		if mm := m.(map[string]any); mm["kind"] == agentMsgAsk && mm["subject"] == "are you there" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a stalled ask left no record: %v", msgs)
+	}
+}

@@ -269,6 +269,36 @@ func TestDialForLinkDoesNotFallBackToTheMainSocketOfANewDaemon(t *testing.T) {
 	}
 }
 
+// TestAHubIsHeldToThePolicyTheFarMachineHasForIt runs the whole path: the
+// hub names itself on every stream, the far proxy passes the name on, and the
+// far daemon holds the hub's calls to [hosts.NAME].
+func TestAHubIsHeldToThePolicyTheFarMachineHasForIt(t *testing.T) {
+	host, _ := os.Hostname()
+	self := linkSelfName(host)
+	if self == "" {
+		t.Skip("this machine's host name cannot be a peer name")
+	}
+	hub, far := startHubAndPolicyFar(t, "")
+	far.daemon.SetLinkPolicies(map[string]config.HostConfig{
+		self: {Allow: []string{"list"}},
+	})
+	makeSessionWithWindow(t, far.daemon, "far")
+	waitForHostUp(t, hub, "build")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := hub.federation.Call(ctx, "build", "list-sessions", nil); err != nil {
+		t.Fatalf("a list from the hub was refused: %v", err)
+	}
+	_, err := hub.federation.Call(ctx, "build", "new-session", map[string]any{"name": "x"})
+	if err == nil || !strings.Contains(err.Error(), "forbidden") {
+		t.Fatalf("ASSERTION: new-session from a hub the far machine lets only list: %v", err)
+	}
+	if far.daemon.manager.GetSession("x") != nil {
+		t.Fatal("the refused call made a session")
+	}
+}
+
 // startHubAndPolicyFar is startHubAndLinkedFar with the far proxy running
 // DialForLink, as tuios stdio-proxy does, pinned to pinned when it is set.
 func startHubAndPolicyFar(t *testing.T, pinned string) (*Daemon, *farSide) {
