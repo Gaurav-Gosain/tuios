@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -37,5 +38,235 @@ func TestHintsAreOmittedWhenEmpty(t *testing.T) {
 	}
 	if got, want := string(data), `{"code":"internal","message":"boom"}`; got != want {
 		t.Errorf("envelope = %s, want %s", got, want)
+	}
+}
+
+// hintOf extracts the hint object from an error envelope, failing when there is
+// none. Every degraded state covered here is expected to name its remedy.
+func hintOf(t *testing.T, e map[string]any) map[string]any {
+	t.Helper()
+	h, ok := e["hint"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a hint on this error, got: %v", e)
+	}
+	return h
+}
+
+// hintStrings reads a string-list field off a hint.
+func hintStrings(t *testing.T, hint map[string]any, field string) []string {
+	t.Helper()
+	raw, ok := hint[field].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		s, ok := v.(string)
+		if !ok {
+			t.Fatalf("hint field %q holds a non-string entry: %v", field, v)
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// TestVerbErrorHints is the table of degraded states an agent can hit, and what
+// each one must tell it. Every row asserts the stable code plus the specific
+// hint fields that make the failure self-explaining: the parameter at fault, the
+// values it accepts, the closest name to what was asked for, what does exist,
+// and the verb or CLI command that resolves it.
+func TestVerbErrorHints(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+
+	sess := makeSessionWithWindow(t, d, "work")
+	if _, err := d.manager.CreateSession("scratch", &SessionConfig{}, 80, 24); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	sess.SetOption("appearance.border_style", "rounded")
+
+	// An empty session exercises the no-windows state without disturbing "work".
+	if _, err := d.manager.CreateSession("empty", &SessionConfig{}, 80, 24); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  string
+
+		wantCode string
+		// wantMessage are substrings the human message must contain.
+		wantMessage []string
+		// wantHint are exact string fields the hint must carry.
+		wantHint map[string]string
+		// wantAccepted and wantAvailable are membership checks on list fields.
+		wantAccepted  []string
+		wantAvailable []string
+	}{
+		{
+			name:     "a request with no verb is told the envelope shape",
+			req:      `{"id":1,"params":{}}`,
+			wantCode: ErrVerbInvalidRequest,
+			wantHint: map[string]string{"param": "verb", "verb": "list-verbs"},
+		},
+		{
+			name:        "unknown window lists the addressable windows",
+			req:         `{"id":1,"verb":"send-text","params":{"session":"work","window":"nope","text":"hi"}}`,
+			wantCode:    ErrVerbWindowNotFound,
+			wantMessage: []string{"nope"},
+			wantHint: map[string]string{
+				"param":   "window",
+				"verb":    "list-windows",
+				"command": "tuios list-windows --json",
+			},
+		},
+		{
+			name:     "a session with no windows is told how to make one",
+			req:      `{"id":1,"verb":"capture-pane","params":{"session":"empty"}}`,
+			wantCode: ErrVerbNoWindows,
+			wantHint: map[string]string{
+				"verb":    "new-window",
+				"command": "tuios run-command NewWindow",
+			},
+		},
+		{
+			name:        "a missing required parameter is named",
+			req:         `{"id":1,"verb":"send-keys","params":{"session":"work"}}`,
+			wantCode:    ErrVerbInvalidParams,
+			wantMessage: []string{"keys is required"},
+			wantHint:    map[string]string{"param": "keys"},
+		},
+		{
+			name:        "an out-of-range parameter is named",
+			req:         `{"id":1,"verb":"resize","params":{"session":"work","width":0,"height":10}}`,
+			wantCode:    ErrVerbInvalidParams,
+			wantMessage: []string{"positive"},
+			wantHint:    map[string]string{"param": "width"},
+		},
+		{
+			name:     "a parameter with a closed value set lists the values",
+			req:      `{"id":1,"verb":"wait-for","params":{"condition":"window-outpt","session":"work"}}`,
+			wantCode: ErrVerbInvalidParams,
+			wantHint: map[string]string{
+				"param":        "condition",
+				"did_you_mean": "window-output",
+			},
+			wantAccepted: waitConditions,
+		},
+		{
+			name:     "an unknown capture source lists the sources that exist",
+			req:      `{"id":1,"verb":"capture-pane","params":{"session":"work","source":"visable"}}`,
+			wantCode: ErrVerbInvalidParams,
+			wantHint: map[string]string{
+				"param":        "source",
+				"did_you_mean": "visible",
+			},
+			wantAccepted: captureSources,
+		},
+		{
+			name:        "the retired capture source says why it went away",
+			req:         `{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent-unwrapped"}}`,
+			wantCode:    ErrVerbInvalidParams,
+			wantMessage: []string{"recent-unwrapped"},
+			wantHint: map[string]string{
+				"param": "source",
+				// did_you_mean here proves the retired-value branch ran: the
+				// edit distance from "recent-unwrapped" to "recent" is far
+				// outside closestMatch's tolerance, so the generic path could
+				// never suggest it.
+				"did_you_mean": "recent",
+				"detail":       retiredCaptureSources["recent-unwrapped"],
+			},
+			wantAccepted: captureSources,
+		},
+		{
+			name:     "a wrongly typed parameter points at the schema",
+			req:      `{"id":1,"verb":"resize","params":{"width":"wide"}}`,
+			wantCode: ErrVerbInvalidParams,
+			wantHint: map[string]string{"verb": "list-verbs"},
+		},
+		{
+			name:        "kill-session refuses to guess and lists the candidates",
+			req:         `{"id":1,"verb":"kill-session","params":{}}`,
+			wantCode:    ErrVerbInvalidParams,
+			wantMessage: []string{"session is required"},
+			wantHint: map[string]string{
+				"param":   "session",
+				"command": "tuios ls",
+			},
+			wantAvailable: []string{"work", "scratch", "empty"},
+		},
+		{
+			// get-option answers an option that exists but was never set on this
+			// session with its default, so only a key that names no option at all
+			// is an error now, and the remedy for that is to go and look at what
+			// does exist.
+			name:        "a misspelled option says what the options are",
+			req:         `{"id":1,"verb":"get-option","params":{"session":"work","key":"appearance.border_styl"}}`,
+			wantCode:    ErrVerbOptionNotFound,
+			wantMessage: []string{"appearance.border_styl"},
+			wantHint: map[string]string{
+				"param":        "key",
+				"verb":         "list-options",
+				"did_you_mean": "appearance.border_style",
+			},
+			wantAvailable: []string{"appearance.border_style"},
+		},
+		{
+			name:        "a wait that times out says how to see what happened",
+			req:         `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"never-appears-xyz","timeout":150}}`,
+			wantCode:    ErrVerbTimeout,
+			wantMessage: []string{"never-appears-xyz"},
+			wantHint: map[string]string{
+				"param": "pattern",
+				"verb":  "capture-pane",
+			},
+		},
+		{
+			name:     "unsubscribing without a stream points at subscribe",
+			req:      `{"id":1,"verb":"unsubscribe"}`,
+			wantCode: ErrVerbInvalidRequest,
+			wantHint: map[string]string{"verb": "subscribe"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// A fresh connection per row: some rows leave connection state
+			// (subscriptions) behind, and rows must not influence each other.
+			c := dialVerb(t, socketPath)
+			resp := c.call(t, tc.req)
+			e := errorOf(t, resp)
+
+			if code, _ := e["code"].(string); code != tc.wantCode {
+				t.Fatalf("code = %v, want %v (full error: %v)", e["code"], tc.wantCode, e)
+			}
+
+			message, _ := e["message"].(string)
+			if message == "" {
+				t.Error("error carries no human message")
+			}
+			for _, want := range tc.wantMessage {
+				if !strings.Contains(message, want) {
+					t.Errorf("message %q does not contain %q", message, want)
+				}
+			}
+
+			hint := hintOf(t, e)
+			for field, want := range tc.wantHint {
+				if got, _ := hint[field].(string); got != want {
+					t.Errorf("hint[%s] = %q, want %q (full hint: %v)", field, got, want, hint)
+				}
+			}
+			for _, want := range tc.wantAccepted {
+				if !slices.Contains(hintStrings(t, hint, "accepted"), want) {
+					t.Errorf("hint accepted list missing %q: %v", want, hint["accepted"])
+				}
+			}
+			for _, want := range tc.wantAvailable {
+				if !slices.Contains(hintStrings(t, hint, "available"), want) {
+					t.Errorf("hint available list missing %q: %v", want, hint["available"])
+				}
+			}
+		})
 	}
 }

@@ -505,3 +505,130 @@ func TestStashSweepClearsAnUncleanPredecessor(t *testing.T) {
 		t.Errorf("a previous daemon's stashed file survived the next daemon's start (%v)", err)
 	}
 }
+
+// TestStashDedupsIdenticalBytes checks that two puts of the same content share
+// one file, and that a put of different bytes does not.
+func TestStashDedupsIdenticalBytes(t *testing.T) {
+	s, base := newStore(t)
+	a := filepath.Join(base, "a.txt")
+	b := filepath.Join(base, "b.txt")
+	c := filepath.Join(base, "c.txt")
+	writeBytes(t, a, 4096, 7)
+	writeBytes(t, b, 4096, 7) // same bytes, different name
+	writeBytes(t, c, 4096, 9) // different bytes
+
+	first, err := s.put("sess-1", a, nil)
+	if err != nil {
+		t.Fatalf("put a: %v", err)
+	}
+	second, err := s.put("sess-1", b, nil)
+	if err != nil {
+		t.Fatalf("put b: %v", err)
+	}
+	if !second.Deduped {
+		t.Error("the same bytes under a second name were stored again")
+	}
+	if second.Entry.Path != first.Entry.Path {
+		t.Errorf("dedup gave path %s, want %s", second.Entry.Path, first.Entry.Path)
+	}
+	if second.Entries != 1 {
+		t.Errorf("the store holds %d entries after two puts of one file", second.Entries)
+	}
+	if second.Bytes != 4096 {
+		t.Errorf("the store counts %d bytes, want 4096", second.Bytes)
+	}
+
+	third, err := s.put("sess-1", c, nil)
+	if err != nil {
+		t.Fatalf("put c: %v", err)
+	}
+	if third.Deduped {
+		t.Error("different bytes were treated as a duplicate")
+	}
+	if third.Entries != 2 || third.Bytes != 8192 {
+		t.Errorf("after a distinct put the store holds %d entries and %d bytes, want 2 and 8192", third.Entries, third.Bytes)
+	}
+}
+
+// TestStashPutVerbRefusals pins the codes and hints an agent meets on the paths
+// it gets wrong, since the error is the only teacher a one-shot caller has.
+func TestStashPutVerbRefusals(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "refusing")
+	c := dialVerb(t, sp)
+	base := t.TempDir()
+
+	dir := filepath.Join(base, "adir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	big := filepath.Join(base, "big.bin")
+	writeBytes(t, big, stashMaxFileBytes+1, 71)
+
+	cases := []struct {
+		name string
+		path string
+		says string
+	}{
+		{"relative", "notes.txt", "absolute"},
+		{"missing", filepath.Join(base, "nope.txt"), "no such file"},
+		{"directory", dir, "directory"},
+		{"too big", big, "cap"},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := c.call(t, fmt.Sprintf(`{"id":%d,"verb":"stash-put","params":{"session":"refusing","path":%s}}`, i+10, quote(tc.path)))
+			if code := errCode(t, resp); code != ErrVerbInvalidParams {
+				t.Fatalf("code = %q, want %q", code, ErrVerbInvalidParams)
+			}
+			e := resp["error"].(map[string]any)
+			msg, _ := e["message"].(string)
+			if !strings.Contains(msg, tc.says) {
+				t.Errorf("message %q does not say %q", msg, tc.says)
+			}
+			hint, ok := e["hint"].(map[string]any)
+			if !ok || hint["param"] != "path" {
+				t.Errorf("the refusal carried no hint naming path: %v", e["hint"])
+			}
+			if detail, _ := hint["detail"].(string); strings.TrimSpace(detail) == "" {
+				t.Error("the hint says nothing about what to do next")
+			}
+		})
+	}
+}
+
+// TestStashedFileThatVanishesReadsAsMissing covers the case the stash is meant
+// to prevent but cannot promise against a caller with rm: a stored file removed
+// out from under the store still reads back honestly rather than as a path that
+// works.
+func TestStashedFileThatVanishesReadsAsMissing(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "vanishing")
+	win := sess.GetState().Windows[0].ID
+	c := dialVerb(t, sp)
+
+	src := filepath.Join(t.TempDir(), "a.txt")
+	writeBytes(t, src, 64, 81)
+	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"vanishing","path":`+quote(src)+`}}`))
+	stored := put["path"].(string)
+
+	send := `{"id":2,"verb":"send-agent-message","params":{"session":"vanishing","to":` + quote(win) +
+		`,"text":"look at this","attachments":[` + quote(stored) + `]}}`
+	result(t, c.call(t, send))
+
+	if err := os.Remove(stored); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	read := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"vanishing","to":`+quote(win)+`}}`))
+	att := read["messages"].([]any)[0].(map[string]any)["attachments"].([]any)[0].(map[string]any)
+	if att["missing"] != true {
+		t.Errorf("an attachment whose file is gone does not read as missing: %v", att)
+	}
+
+	list := result(t, c.call(t, `{"id":4,"verb":"stash-list","params":{"session":"vanishing"}}`))
+	entry := list["entries"].([]any)[0].(map[string]any)
+	if entry["missing"] != true {
+		t.Errorf("stash-list does not report a stored file that is gone: %v", entry)
+	}
+}

@@ -79,3 +79,21 @@ func TestConcurrentMutationsPushInVersionOrder(t *testing.T) {
 		t.Errorf("last push version = %d, want the final state version %d", last.Version, sess.GetState().Version)
 	}
 }
+
+// TestClientSyncDoesNotPushToSink pins that a client's own UpdateState does not
+// come back at it through the sink. The daemon already answers a sync directly
+// (reconciled state to the sender, a broadcast to peers); pushing from here too
+// would be a second, unordered copy of the same news.
+func TestClientSyncDoesNotPushToSink(t *testing.T) {
+	sess := newTestSession(t)
+	pushes := recordStateSink(sess)
+
+	state := sess.GetState()
+	state.BaseVersion = state.Version
+	state.CurrentWorkspace = 2
+	sess.UpdateState(state)
+
+	if got := pushes(); len(got) != 0 {
+		t.Fatalf("push count = %d, want 0", len(got))
+	}
+}

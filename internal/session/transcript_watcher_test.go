@@ -1,8 +1,11 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -98,5 +101,60 @@ func TestABurstOfEventsCollapsesIntoOneRead(t *testing.T) {
 	s.transcripts.mu.Unlock()
 	if stillArmed {
 		t.Fatal("the debounce did not disarm when it fired")
+	}
+}
+
+// The real watcher, against the real kernel. The fake one in
+// agent_transcript_test.go covers the join logic; this covers the assumption the
+// whole no-polling design rests on, which is that a directory watch reports a
+// write to a file inside it and names the file.
+func TestWatcherReportsAWriteToAFileInAWatchedDirectory(t *testing.T) {
+	w, err := NewTranscriptWatcher()
+	if err != nil {
+		t.Skipf("no filesystem notification here: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.jsonl")
+	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var fired atomic.Int64
+	if err := w.Watch(path, func() { fired.Add(1) }); err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	appendLine(t, path, "{}\n")
+	waitFor(t, "the watcher to report the append", func() bool { return fired.Load() > 0 })
+}
+
+func TestWatchAfterCloseIsRefusedRatherThanPanicking(t *testing.T) {
+	w, err := NewTranscriptWatcher()
+	if err != nil {
+		t.Skipf("no filesystem notification here: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Watch(filepath.Join(t.TempDir(), "a.jsonl"), func() {}); err == nil {
+		t.Fatal("a closed watcher accepted a watch")
+	}
+	// Idempotent, because the daemon's shutdown path may run twice.
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w.Unwatch("anything")
+}
+
+// A daemon that could not get a watcher is a working daemon.
+func TestANilWatcherDegradesRatherThanCrashing(t *testing.T) {
+	var w *TranscriptWatcher
+	if err := w.Watch("/x", func() {}); err == nil {
+		t.Fatal("a nil watcher accepted a watch")
+	}
+	w.Unwatch("/x")
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -38,3 +38,20 @@ func TestSubscribeReceivesAgentStateEvent(t *testing.T) {
 		t.Fatalf("event after repeat = %v, want agent-state idle", ev)
 	}
 }
+
+// TestWaitForAgentStateAlreadyTrue verifies a pane already sitting in the
+// wanted state resolves the wait immediately: the prompt most worth alerting on
+// is the one painted before anyone started waiting.
+func TestWaitForAgentStateAlreadyTrue(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	if err := sess.SetDaemonWindowAgentState("Window", AgentStateNeedsInput, ""); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+
+	c := dialVerb(t, sp)
+	res := result(t, c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","session":"work","until":"needs_input","timeout":8000}}`))
+	if res["matched"] != true || res["state"] != "needs_input" {
+		t.Fatalf("wait result = %v, want matched needs_input", res)
+	}
+}
