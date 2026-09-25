@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,8 +89,7 @@ func remoteSessionsListed(t *testing.T, remoteBase string) string {
 // for the session, which is what the old ssh-in-a-pane path leaves behind.
 func noNestedClient(t *testing.T, session string) {
 	t.Helper()
-	out, _ := exec.Command("pgrep", "-af", tuiosBin).CombinedOutput()
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range commandLinesContaining(t, tuiosBin) {
 		if strings.Contains(line, " attach "+session) && !strings.Contains(line, "--host") {
 			t.Fatalf("ASSERTION: a nested client is running for %s: %s", session, line)
 		}

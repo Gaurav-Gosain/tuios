@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -109,15 +108,15 @@ func TestAttachOnAHostWithSSHRunsTheFarTuios(t *testing.T) {
 
 	// The proof that ssh ran the far tuios: a plain 'tuios attach' process
 	// for the session, which the link path never starts.
-	out, _ := exec.Command("pgrep", "-af", tuiosBin).CombinedOutput()
+	lines := commandLinesContaining(t, tuiosBin)
 	nested := false
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range lines {
 		if strings.Contains(line, " attach nested-target") && !strings.Contains(line, "--host") {
 			nested = true
 		}
 	}
 	if !nested {
-		t.Fatalf("ASSERTION: --ssh did not run the far tuios; no nested client for nested-target:\n%s", out)
+		t.Fatalf("ASSERTION: --ssh did not run the far tuios; no nested client for nested-target:\n%s", strings.Join(lines, "\n"))
 	}
 	alive(t, term, "after opening a session over ssh")
 }

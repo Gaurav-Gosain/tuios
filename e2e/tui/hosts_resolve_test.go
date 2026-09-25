@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,15 +175,15 @@ func TestAttachOnAHostWithSSHFindsTuiosOutsideThePath(t *testing.T) {
 
 	// The proof that the probe ran the tuios it found: a plain attach process
 	// whose program is the far install, not this test's binary by name.
-	out, _ := exec.Command("pgrep", "-af", "attach ssh-far-target").CombinedOutput()
+	lines := commandLinesContaining(t, "attach ssh-far-target")
 	found := false
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range lines {
 		if strings.Contains(line, installed+" attach ssh-far-target") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("ASSERTION: --ssh did not run the tuios found at %s:\n%s", installed, out)
+		t.Fatalf("ASSERTION: --ssh did not run the tuios found at %s:\n%s", installed, strings.Join(lines, "\n"))
 	}
 	alive(t, term, "after opening a session over ssh with a found tuios")
 }

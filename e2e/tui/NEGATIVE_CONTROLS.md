@@ -137,6 +137,9 @@ a working negative control look like a broken one for half an hour.
 | A drag on a machine header draws its draft order and throws it away on release, so the rail snaps back | n/a, injected, cuts the wiring | drop `m.SidebarHostOrder = d.Order` from the host branch of `SidebarRelease` in `internal/app/sidebar_mouse.go` | `TestDraggingAMachineHeaderReordersTheRail` ("the drag did not put offline above build") | **caught** |
 | The reconnect tests read "@ local" to mean "this client is on build". The machine groups removed that row, so the three assertions were re-spelled as the rail's focus mark | n/a, see verdict | the two tests are each other's halves in one helper, which is rule 1 above: `TestALinkThatDropsIsDialedAgainAndThePaneComesBack` passes only while `home` is **not** marked current, and `TestAHostThatNeverComesBackGivesUpAndSaysWhy` passes only when it **is** | `TestAHostSessionStaysAttached` also fails on a mark that never moves, which `order-hoists-attached` and `fold-is-a-noop` above both demonstrate | **not weakened** |
 | The review cursor stepped onto each wrapped row of a note, and only the row under it was drawn selected | n/a, injected, cuts the wiring | `ReviewMove` in `internal/app/review_overlay.go` sets `r.cursor = min(max(r.cursor+delta, 0), len(rows)-1)` instead of calling `reviewStep` | `TestReviewWrappedNoteIsOneStop` ("j past the note: mark on row 5, want row 9") | **caught** |
+| `attach --host NAME --ssh` with no `--command` sends a bare `tuios`, so a host whose tuios is only in `~/.local/bin` says "not found" | n/a, injected, cuts the call site | `OpenArgs` in `internal/federation/open.go` sends `h.Command` (or `tuios` when it is empty) with the arguments instead of `h.remoteCommand(false, ...)`, so the probe never runs | `TestAttachOnAHostWithSSHFindsTuiosOutsideThePath` ("the far tuios in ~/.local/bin never drew the session over --ssh: child exited (code 1)"); `TestAttachOnAHostWithSSHRunsTheFarTuios` passes, correctly, since its host has a configured command | **caught** (macOS) |
+| `attach --ssh` is ignored and the session is attached over the link, so the far tuios never runs | n/a, injected, cuts the wiring | `runAttachOnHost(..., attachSSH)` in `cmd/tuios/main.go` passes `false` | `TestAttachOnAHostWithSSHRunsTheFarTuios` ("no nested client for nested-target"), `TestAttachOnAHostWithSSHFindsTuiosOutsideThePath` ("--ssh did not run the tuios found at .../far-home/.local/bin/tuios") | **caught** (macOS), and only since the process list is read with `ps`, see below |
+| A link attach runs ssh and a nested far client instead | n/a, injected, cuts the wiring | the same call passes `true` | `TestAttachOnAHostIsDrawnByThisClient` ("a nested client is running for far-shell: .../tuios attach far-shell"). With the old `pgrep -af` helper on macOS, `noNestedClient` stayed silent and the test failed 10 seconds later on an unrelated wait for the rail | **caught** (macOS), see below |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
@@ -243,6 +246,28 @@ it is set tuios stops polling every pane. Sending this test's click press-only
 against a *correct* binary reproduces the same 20s timeout, which is the
 measurement that the old shape was not a smaller version of a real gesture but a
 state no user can reach.
+
+## The ssh fallback tests failed on every Mac, and the cause was pgrep
+
+`TestAttachOnAHostWithSSHFindsTuiosOutsideThePath` and
+`TestAttachOnAHostWithSSHRunsTheFarTuios` passed on linux CI and failed on
+every macOS run with "--ssh did not run the tuios found at ...". The product
+was working: both tests had already seen the far tuios draw the session, and
+failed only on the check after it, which proves which program drew it.
+
+That check ran `pgrep -af PATTERN` and searched the output for a command line.
+On linux (procps) `-a` means "print the full command line". On macOS and the
+BSDs `-a` means "include the ancestors of each match", and pgrep prints bare
+pids unless it is also given `-l`. So on a Mac the output held numbers and
+nothing else, the positive assertions in those two tests could never pass, and
+the negative assertion in `noNestedClient` (`host_attach_test.go`) could never
+fail. The last one is the worse half: `TestAttachOnAHostIsDrawnByThisClient`
+guards against a nested client and, on a Mac, would have let one through.
+
+The three call sites now use `commandLinesContaining` in `harness_test.go`,
+which reads `ps -A -ww -o args=`. That prints every process's untruncated
+command line on both systems. The three rows above were run on macOS against
+the fixed helper; each also passes on the unmodified build.
 
 ## What this harness structurally cannot observe
 

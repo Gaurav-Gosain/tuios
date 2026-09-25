@@ -1184,6 +1184,31 @@ func processAlive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
+// commandLinesContaining returns the full command line of every running
+// process whose command line contains needle.
+//
+// It reads ps rather than pgrep. `pgrep -af` prints command lines on linux,
+// where -a means "list the full command line", but on macOS and the BSDs -a
+// means "include the ancestors of each match" and the output is bare pids. A
+// test that searched pgrep's output for a command line therefore found nothing
+// on a Mac, whatever was running, so a positive assertion failed every time and
+// a negative one could never fail. `ps -A -ww -o args=` prints the same thing
+// on both: every process, untruncated, one command line per row.
+func commandLinesContaining(t *testing.T, needle string) []string {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-ww", "-o", "args=").Output()
+	if err != nil {
+		t.Fatalf("list processes: %v", err)
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, needle) {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	return lines
+}
+
 // redirected remembers the isolation roots whose runtime directory has already
 // been moved, so the move and its cleanup happen once per root rather than
 // once per lookup.
