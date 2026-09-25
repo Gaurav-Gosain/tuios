@@ -1,10 +1,15 @@
 package session
 
 import (
+	"encoding/base64"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
@@ -50,5 +55,96 @@ func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("the transfer's files are still at %s", dir)
+	}
+}
+
+// readWholeBundle reads a transfer to its end and returns the first reply and
+// the bytes.
+func readWholeBundle(t *testing.T, c *verbConn, session string, full bool) (map[string]any, []byte) {
+	t.Helper()
+	first := result(t, c.call(t, `{"id":1,"verb":"bundle-worktree","params":`+jsonParams(map[string]any{"session": session, "full": full})+`}`))
+	var data []byte
+	reply := first
+	for i := 0; ; i++ {
+		chunk, err := base64.StdEncoding.DecodeString(reply["content"].(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = append(data, chunk...)
+		if reply["done"] == true {
+			break
+		}
+		if i > 1000 {
+			t.Fatal("the transfer never ended")
+		}
+		reply = result(t, c.call(t, `{"id":2,"verb":"bundle-worktree","params":`+jsonParams(map[string]any{
+			"token": first["token"], "offset": reply["next"],
+		})+`}`))
+	}
+	return first, data
+}
+
+func TestBundleWorktreeRelease(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	newWorktreeCall(t, c, repo, "feat/rel", map[string]any{"base": "main"})
+	old := bundleChunkBytes
+	bundleChunkBytes = 16
+	t.Cleanup(func() { bundleChunkBytes = old })
+	first := result(t, c.call(t, `{"id":1,"verb":"bundle-worktree","params":{"session":"repo-feat-rel","full":true}}`))
+	res := result(t, c.call(t, `{"id":2,"verb":"bundle-worktree","params":`+jsonParams(map[string]any{"token": first["token"], "release": true})+`}`))
+	if res["released"] != true || d.bundles.count() != 0 {
+		t.Errorf("release = %v with %d open, want the transfer gone", res, d.bundles.count())
+	}
+}
+
+// TestBundleWorktreeCarriesTheBranchTheAgentSwitchedTo covers an agent that
+// makes its own branch inside a managed worktree. The session still records
+// the branch it was made on, and the transfer must carry the one HEAD is on.
+func TestBundleWorktreeCarriesTheBranchTheAgentSwitchedTo(t *testing.T) {
+	_, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	created := newWorktreeCall(t, c, repo, "feat/made", map[string]any{"base": "main"})
+	path := created["path"].(string)
+	testutil.Git(t, path, "checkout", "-q", "-b", "feat/agent-own")
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("on the agent's branch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "commit", "-q", "-am", "agent work")
+	head, _ := worktree.HeadCommit(path)
+
+	first, data := readWholeBundle(t, c, "repo-feat-made", false)
+	if first["branch"] != "feat/agent-own" || first["head"] != head {
+		t.Fatalf("first reply names branch %v at %v, want feat/agent-own at %s", first["branch"], first["head"], head)
+	}
+
+	// What a pull does with it: the named branch is in the bundle and ends
+	// at the reported head.
+	nb := int(first["bundle_bytes"].(float64))
+	bundle := filepath.Join(t.TempDir(), "b")
+	if err := os.WriteFile(bundle, data[:nb], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receiver := filepath.Join(t.TempDir(), "receiver")
+	testutil.Git(t, filepath.Dir(receiver), "clone", "-q", repo, receiver)
+	if err := worktree.FetchBundle(receiver, bundle, first["branch"].(string), "pulled"); err != nil {
+		t.Fatalf("fetch the bundle: %v", err)
+	}
+	if got, _ := worktree.BranchCommit(receiver, "pulled"); got != head {
+		t.Errorf("the bundled branch ends at %s, want the reported head %s", got, head)
+	}
+}
+
+func TestBundleWorktreeRefusesADetachedHeadTheSessionDoesNotKnowAbout(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	created := newWorktreeCall(t, c, repo, "feat/detach", map[string]any{"base": "main"})
+	testutil.Git(t, created["path"].(string), "checkout", "-q", "--detach")
+	resp := c.call(t, `{"id":1,"verb":"bundle-worktree","params":{"session":"repo-feat-detach"}}`)
+	if code := errCode(t, resp); code != ErrVerbNotWorktree {
+		t.Errorf("a detached HEAD: code = %q, want %q", code, ErrVerbNotWorktree)
+	}
+	if n := d.bundles.count(); n != 0 {
+		t.Errorf("%d transfers open after a refusal", n)
 	}
 }

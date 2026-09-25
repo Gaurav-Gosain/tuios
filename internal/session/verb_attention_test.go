@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // setAgentState reports a state for a window over the verb socket.
@@ -154,4 +156,91 @@ func TestInboxDismissIsForThePerson(t *testing.T) {
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("a second dismiss answered %s", code)
 	}
+}
+
+// TestInboxSurvivesADaemonRestart restarts a real daemon over the same state
+// directory: the finished turn nobody looked at is still waiting, and the
+// approval, whose prompt died with its process, is not.
+func TestInboxSurvivesADaemonRestart(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
+	t.Cleanup(useResurrectionDir(t.TempDir()))
+
+	start := func() (*Daemon, *verbConn) {
+		d := NewDaemon(&DaemonConfig{Version: "test"})
+		if err := d.Start(); err != nil {
+			t.Fatalf("daemon Start: %v", err)
+		}
+		sp, err := GetSocketPath()
+		if err != nil {
+			t.Fatalf("GetSocketPath: %v", err)
+		}
+		return d, dialVerb(t, sp)
+	}
+
+	d, c := start()
+	_, a, b := twoWindowSession(t, d, "work")
+	setAgentState(t, c, "work", a, "working", "", "")
+	setAgentState(t, c, "work", a, "done", "", "all green")
+	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
+	sendJSON(t, c, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "before the restart"})
+	before := waitAttention(t, c, "three items", func(items []map[string]any) bool { return len(items) == 3 })
+	var finishedID string
+	for _, it := range before {
+		if it["kind"] == AttentionFinished {
+			finishedID = it["id"].(string)
+		}
+	}
+	_ = c.conn.Close()
+	d.Stop()
+
+	d2, c2 := start()
+	t.Cleanup(d2.Stop)
+	items, _ := listAttention(t, c2, "")
+	if len(items) != 1 || items[0]["kind"] != AttentionFinished || items[0]["window"] != a || items[0]["id"] != finishedID {
+		t.Fatalf("after a restart the Inbox holds %v, want only the finished item %s", items, finishedID)
+	}
+
+	// The message ring started over, so the first new thread may take the id
+	// the saved mail item had. It opens a fresh item rather than adding to a
+	// stale one.
+	sendJSON(t, c2, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "after the restart"})
+	items = waitAttention(t, c2, "new mail", hasKind(AttentionMail, a))
+	for _, it := range items {
+		if it["kind"] == AttentionMail && (it["count"] != float64(1) || it["summary"] != "after the restart") {
+			t.Errorf("the mail item after a restart is %v, want a fresh item with count 1", it)
+		}
+	}
+}
+
+// TestInboxFollowsANewKindOrMessage holds the case where the state stays
+// needs_input and a later report says more: the screen tier's question becomes
+// the hook's approval, and a new message replaces the summary.
+func TestInboxFollowsANewKindOrMessage(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	w := sess.GetState().Windows[0].ID
+	c := dialVerb(t, sp)
+
+	setAgentState(t, c, "work", w, "needs_input", "question", "which branch?")
+	first := waitAttention(t, c, "the question", hasKind(AttentionQuestion, w))
+	id := first[0]["id"]
+
+	setAgentState(t, c, "work", w, "needs_input", "approval", "approve Bash: rm -rf build")
+	items := waitAttention(t, c, "the kind change", func(items []map[string]any) bool {
+		return len(items) == 1 && items[0]["kind"] == AttentionApproval && items[0]["summary"] == "approve Bash: rm -rf build"
+	})
+	if items[0]["id"] != id || items[0]["since"] != first[0]["since"] {
+		t.Errorf("the kind change replaced the item: before %v, after %v", first[0], items[0])
+	}
+
+	setAgentState(t, c, "work", w, "needs_input", "approval", "approve Edit: main.go")
+	waitAttention(t, c, "the message change", func(items []map[string]any) bool {
+		return len(items) == 1 && items[0]["kind"] == AttentionApproval && items[0]["summary"] == "approve Edit: main.go" && items[0]["id"] == id
+	})
+
+	setAgentState(t, c, "work", w, "errored", "", "rate limited")
+	setAgentState(t, c, "work", w, "errored", "", "quota exceeded")
+	waitAttention(t, c, "the errored message change", func(items []map[string]any) bool {
+		return len(items) == 1 && items[0]["kind"] == AttentionErrored && items[0]["summary"] == "quota exceeded"
+	})
 }

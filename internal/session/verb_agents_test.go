@@ -305,3 +305,135 @@ func TestAgentKindSurvivesAClientSync(t *testing.T) {
 		t.Errorf("AgentKind = %q after a client sync, want approval", got)
 	}
 }
+
+// TestBlockedByFollowsTheRuleKind covers blocked_by in list-agents and
+// get-agent-state: the kind a report carries while the pane is on
+// needs_input, and nothing once it has moved on.
+func TestBlockedByFollowsTheRuleKind(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, _, b := twoWindowSession(t, d, "kind")
+	c := dialVerb(t, sp)
+
+	read := func() (map[string]any, map[string]any) {
+		t.Helper()
+		row := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"kind"}}`))["agents"].([]any)[0].(map[string]any)
+		st := result(t, c.call(t, `{"id":2,"verb":"get-agent-state","params":{"session":"kind","window":"`+b+`"}}`))
+		return row, st
+	}
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateNeedsInput, Message: "pick one", Kind: "question", Source: AgentSourceScreen}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	row, st := read()
+	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
+		if got["blocked_by"] != "question" || got["ready"] != false {
+			t.Errorf("%s: blocked_by = %v ready = %v, want question and false", name, got["blocked_by"], got["ready"])
+		}
+	}
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	row, st = read()
+	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
+		if got["blocked_by"] != "" || got["ready"] != true {
+			t.Errorf("%s: blocked_by = %v ready = %v after idle, want empty and true", name, got["blocked_by"], got["ready"])
+		}
+	}
+}
+
+// TestAskReachesARestingAgent drives the whole composition against a plain
+// shell, which is the pane that reports nothing: the settle timer is the only
+// signal, and the reply is what the pane printed after the question.
+func TestAskReachesARestingAgent(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, b := twoWindowSession(t, d, "ask")
+	c := dialVerb(t, sp)
+
+	res := result(t, c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"ask","window":"`+b+`","from":"`+a+`","text":"echo tuios_ask_reply","settle":700,"timeout":15000}}`))
+	if res["untrusted"] != true {
+		t.Error("a reply did not report itself as untrusted")
+	}
+	if res["settled_by"] != "idle" {
+		t.Errorf("settled_by = %v, want idle for a pane that reports no state", res["settled_by"])
+	}
+	if reply, _ := res["reply"].(string); !strings.Contains(reply, "tuios_ask_reply") {
+		t.Errorf("reply did not carry what the pane printed: %q", reply)
+	}
+}
+
+// TestTailLinesReturnsOnlyWhatCameAfter pins the delta the reply is built from.
+func TestTailLinesReturnsOnlyWhatCameAfter(t *testing.T) {
+	content := "one\ntwo\nthree\nfour"
+	got, truncated := tailLines(content, 2, 10)
+	if got != "three\nfour" {
+		t.Errorf("tail = %q, want the lines after the baseline", got)
+	}
+	if truncated {
+		t.Error("nothing was cut but truncated was set")
+	}
+	got, truncated = tailLines(content, 0, 2)
+	if got != "three\nfour" || !truncated {
+		t.Errorf("capped tail = %q truncated=%v", got, truncated)
+	}
+	// A baseline past the end of the content is the pane having been cleared,
+	// and must not panic or return the whole screen.
+	if got, _ = tailLines(content, 99, 10); got != "" {
+		t.Errorf("tail past the end = %q, want empty", got)
+	}
+}
+
+// TestFirstReadIsMarkedNew covers what ReadAt cannot say on the call that sets
+// it. A marking read stamps every message it returns, so without this a reader
+// could not tell the message that just arrived from the twenty it had already
+// seen, and the per-message flag disagreed with the unread count in the footer.
+func TestFirstReadIsMarkedNew(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, b := twoWindowSession(t, d, "wasunread")
+	c := dialVerb(t, sp)
+
+	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"wasunread","to":"`+b+`","from":"`+a+`","text":"first"}}`)
+
+	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
+	m := read["messages"].([]any)[0].(map[string]any)
+	if m["was_unread"] != true {
+		t.Errorf("the first read did not mark the message new: %v", m)
+	}
+	if m["read_at"] == nil {
+		t.Error("the first read did not also stamp read_at")
+	}
+
+	read = result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
+	m = read["messages"].([]any)[0].(map[string]any)
+	if m["was_unread"] == true {
+		t.Errorf("a second read still called the message new: %v", m)
+	}
+}
+
+// TestUnclaimedPaneReportsNoSource pins the absence. An unset claim reads back
+// as "report" because that is the default a caller naming no source gets, so
+// listing it verbatim said a pane sitting at a shell prompt had reported itself.
+func TestUnclaimedPaneReportsNoSource(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "nosource")
+	c := dialVerb(t, sp)
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+
+	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"nosource","all":true}}`))
+	for _, raw := range res["agents"].([]any) {
+		row := raw.(map[string]any)
+		switch row["window_id"] {
+		case a:
+			if row["source"] != "" {
+				t.Errorf("a pane nothing claimed reported source %v", row["source"])
+			}
+		case b:
+			if row["source"] != "report" {
+				t.Errorf("a reporting pane lost its source: %v", row["source"])
+			}
+		}
+	}
+}

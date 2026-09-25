@@ -1,6 +1,10 @@
 package session
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -32,5 +36,38 @@ func TestSessionNameWithAPathSeparatorIsRejectedAtCreation(t *testing.T) {
 				t.Errorf("the rejected session %q was registered anyway", name)
 			}
 		})
+	}
+}
+
+// TestFinalSaveErrorIsSurfacedRatherThanDiscarded drives a session's last save
+// against a state directory it cannot write. That save used to be
+// `_ = SaveSessionForResurrection(...)`, so a session that failed to persist
+// looked exactly like one that had, right up until it did not come back.
+func TestFinalSaveErrorIsSurfacedRatherThanDiscarded(t *testing.T) {
+	// A regular file where the state directory should be: MkdirAll under it
+	// fails, so every save fails.
+	blocked := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocked, []byte("x"), 0600); err != nil {
+		t.Fatalf("seeding the unwritable state dir: %v", err)
+	}
+	defer useResurrectionDir(blocked)()
+
+	if err := SaveSessionForResurrection(&SessionState{Name: "doomed"}); err == nil {
+		t.Fatal("precondition: the save into an unwritable directory was expected to fail")
+	}
+
+	var buf bytes.Buffer
+	SetDebugOutput(&buf)
+	SetDebugLevel(DebugErrors)
+	t.Cleanup(func() { SetDebugLevel(DebugOff) })
+
+	sess, err := NewSession("doomed", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	sess.Stop()
+
+	if !strings.Contains(buf.String(), "doomed") {
+		t.Errorf("a session that could not be saved said nothing about it; log was:\n%s", buf.String())
 	}
 }

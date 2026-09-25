@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseSendKeysSpellings(t *testing.T) {
@@ -137,5 +138,63 @@ func TestSendKeysCanonicalForTheClient(t *testing.T) {
 	escape, _ := parseSendKeys(`\e[A`, 1)
 	if _, err := sendKeysCanonical(escape); err == nil {
 		t.Error("an escape sequence was handed to the client")
+	}
+}
+
+// TestWindowNameBeatsTitle checks a name given to a window is found even when
+// another window's program has put the same word in its title, and that two
+// windows with one name are an error that lists both.
+func TestWindowNameBeatsTitle(t *testing.T) {
+	windows := []WindowState{
+		{ID: "aaaaaaaa-1", Title: "docs"},
+		{ID: "bbbbbbbb-2", CustomName: "docs", Title: "zsh"},
+	}
+	idx, err := findWindowStateIndex(windows, "docs")
+	if err != nil || idx != 1 {
+		t.Fatalf("docs resolved to %d, %v; want the named window, 1", idx, err)
+	}
+	windows = append(windows, WindowState{ID: "cccccccc-3", CustomName: "docs"})
+	_, err = findWindowStateIndex(windows, "docs")
+	if err == nil || !strings.Contains(err.Error(), "bbbbbbbb") || !strings.Contains(err.Error(), "cccccccc") {
+		t.Fatalf("two windows named docs: got %v, want an error listing both", err)
+	}
+}
+
+// TestNewWindowWaitsForTheClientToPlaceIt checks the wait new-window makes
+// with a client attached: it returns once the client has placed the window,
+// and gives up, reporting it unplaced, when no client ever does. A program
+// started before the client sized the pane got a resize while it drew, and
+// glow's pager drew a blank screen for good.
+func TestNewWindowWaitsForTheClientToPlaceIt(t *testing.T) {
+	d, sess := newTestDaemonSession(t)
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Name: "docs"}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !win.Unplaced {
+		t.Fatal("a window the daemon made is not marked unplaced")
+	}
+	if d.awaitPlacement(sess, win.ID, win.PTYID, 100*time.Millisecond) {
+		t.Error("awaitPlacement reported a window nobody placed as placed")
+	}
+
+	// A client places it a moment later, as an attached one does.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		_ = sess.mutateState(func(state *SessionState) error {
+			for i := range state.Windows {
+				if state.Windows[i].ID == win.ID {
+					state.Windows[i].Unplaced = false
+				}
+			}
+			return nil
+		})
+	}()
+	start := time.Now()
+	if !d.awaitPlacement(sess, win.ID, win.PTYID, 2*time.Second) {
+		t.Fatal("awaitPlacement never saw the window placed")
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("awaitPlacement took %v after the window was placed", took)
 	}
 }

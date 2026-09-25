@@ -65,3 +65,17 @@ func TestSubscribeRejectsSecondSubscription(t *testing.T) {
 		t.Fatalf("second subscribe error = %q, want %q", code, ErrVerbInvalidRequest)
 	}
 }
+
+// TestWaitForSessionExistsAlreadyTrue verifies the wait returns immediately when
+// the session already exists.
+func TestWaitForSessionExistsAlreadyTrue(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+
+	c := dialVerb(t, sp)
+	resp := c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"session-exists","session":"work","timeout":8000}}`)
+	res := result(t, resp)
+	if res["matched"] != true {
+		t.Fatalf("wait result not matched: %v", res)
+	}
+}

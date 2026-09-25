@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // selectFixture is two sessions with agents of two harnesses in them: api has
@@ -195,5 +196,65 @@ func TestAskBySelectorRefusesABlockedPaneAndAsksTheRest(t *testing.T) {
 		default:
 			t.Errorf("a row for a pane that was not selected: %v", row)
 		}
+	}
+}
+
+// TestWaitForSelectEveryWaitsForTheWholeSet: with every, one pane at rest is not
+// enough; the wait ends when the last matched pane gets there.
+func TestWaitForSelectEveryWaitsForTheWholeSet(t *testing.T) {
+	f := newSelectFixture(t)
+	if _, _, err := f.api.ApplyAgentReport(f.apiClaude, AgentReport{State: AgentStateWorking, Harness: "codex"}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan map[string]any, 1)
+	go func() {
+		done <- f.c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","select":"group:fan/retry","until":"idle,done","every":true,"timeout":4000}}`)
+	}()
+	select {
+	case resp := <-done:
+		t.Fatalf("the wait ended with one pane still working: %v", resp)
+	case <-time.After(400 * time.Millisecond):
+	}
+	if _, _, err := f.api.ApplyAgentReport(f.apiClaude, AgentReport{State: AgentStateDone, Harness: "codex"}); err != nil {
+		t.Fatal(err)
+	}
+	res := result(t, <-done)
+	if res["every"] != true || res["total"] != float64(2) {
+		t.Errorf("every wait: %v, want both panes of the group", res)
+	}
+
+	// Without every, the first pane at rest is enough.
+	res = result(t, f.c.call(t, `{"id":2,"verb":"wait-for","params":{"condition":"agent-state","select":"harness:codex session:web","until":"idle","timeout":1000}}`))
+	if res["window"] != f.webCodex {
+		t.Errorf("any wait matched %v, want web's codex pane", res["window"])
+	}
+	if code := errCode(t, f.c.call(t, `{"id":3,"verb":"wait-for","params":{"condition":"agent-state","select":"harness:codex","session":"web","until":"idle"}}`)); code != ErrVerbInvalidParams {
+		t.Errorf("select with session: code %q, want %q", code, ErrVerbInvalidParams)
+	}
+	if code := errCode(t, f.c.call(t, `{"id":4,"verb":"wait-for","params":{"condition":"agent-state","every":true,"until":"idle"}}`)); code != ErrVerbInvalidParams {
+		t.Errorf("every without select: code %q, want %q", code, ErrVerbInvalidParams)
+	}
+}
+
+// TestHostAgentsSelectReadsTheEntryHost: the host term matches the machine an
+// entry came from, and the rows of every host are narrowed alike.
+func TestHostAgentsSelectReadsTheEntryHost(t *testing.T) {
+	entries := []hostAgentsEntry{
+		{Host: "local", Agents: []remoteAgentRow{{Session: "a", WindowID: "1", State: "idle", HarnessID: "codex"}}},
+		{Host: "build", Agents: []remoteAgentRow{
+			{Session: "b", WindowID: "2", State: "idle", HarnessID: "codex"},
+			{Session: "c", WindowID: "3", State: "needs_input", HarnessID: "claude-code"},
+		}},
+	}
+	sel, err := ParseSelector("host:build harness:codex", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	filterHostAgents(entries, sel)
+	if len(entries[0].Agents) != 0 {
+		t.Errorf("host:build kept a local row: %v", entries[0].Agents)
+	}
+	if len(entries[1].Agents) != 1 || entries[1].Agents[0].WindowID != "2" || entries[1].Session != "b" {
+		t.Errorf("host:build harness:codex kept %v (session %q), want build's codex row in b", entries[1].Agents, entries[1].Session)
 	}
 }
