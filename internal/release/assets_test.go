@@ -18,13 +18,19 @@ import (
 // the archive names a release publishes, and if this test and goreleaser
 // disagree the download 404s.
 //
+// An empty want is a refusal. arm is refused because the archive name carries
+// the ARM version and a running binary cannot read the GOARM it was built
+// with, so either answer would be a guess between two real asset names, one
+// of which is the wrong binary for this CPU.
+//
 // Negative control: drop the amd64 rewrite, or keep the leading v on the
-// version, and rows here fail.
+// version, or return "arm" from archName, and rows here fail.
 func TestAssetName(t *testing.T) {
 	cases := []struct {
 		binary, version, goos, goarch string
 		want                          string
 	}{
+		{"tuios", "v0.7.0", "linux", "arm", ""},
 		{"tuios", "v0.7.0", "linux", "amd64", "tuios_0.7.0_Linux_x86_64.tar.gz"},
 		{"tuios", "0.7.0", "linux", "amd64", "tuios_0.7.0_Linux_x86_64.tar.gz"},
 		{"tuios", "v0.7.0", "darwin", "arm64", "tuios_0.7.0_Darwin_arm64.tar.gz"},
@@ -36,6 +42,12 @@ func TestAssetName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		got, err := AssetName(tc.binary, tc.version, tc.goos, tc.goarch)
+		if tc.want == "" {
+			if err == nil {
+				t.Errorf("AssetName(%q, %q, %q, %q) picked %q, want a refusal", tc.binary, tc.version, tc.goos, tc.goarch, got)
+			}
+			continue
+		}
 		if err != nil {
 			t.Errorf("AssetName(%q, %q, %q, %q): %v", tc.binary, tc.version, tc.goos, tc.goarch, err)
 			continue
@@ -44,18 +56,6 @@ func TestAssetName(t *testing.T) {
 			t.Errorf("AssetName(%q, %q, %q, %q) = %q, want %q",
 				tc.binary, tc.version, tc.goos, tc.goarch, got, tc.want)
 		}
-	}
-}
-
-// TestAssetNameRefusesArm. The archive name carries the ARM version and a
-// running binary cannot read the GOARM it was built with, so either answer
-// would be a guess between two real asset names, one of which is the wrong
-// binary for this CPU.
-//
-// Negative control: return "arm" from archName and this fails.
-func TestAssetNameRefusesArm(t *testing.T) {
-	if got, err := AssetName("tuios", "v0.7.0", "linux", "arm"); err == nil {
-		t.Errorf("AssetName picked %q for arm; it cannot know armv6 from armv7", got)
 	}
 }
 
@@ -80,14 +80,10 @@ func TestParseChecksums(t *testing.T) {
 	if sums["tuios_0.7.0_Linux_x86_64.tar.gz"] != strings.Repeat("1", 64) {
 		t.Errorf("wrong digest for the tuios archive: %q", sums["tuios_0.7.0_Linux_x86_64.tar.gz"])
 	}
-}
 
-// TestParseChecksumsRefusesAnEmptyList. A file with nothing readable in it must
-// not parse as "no digests, so nothing to check".
-//
-// Negative control: return the empty map with no error and this fails, and the
-// installer would then treat every archive as unverifiable-but-fine.
-func TestParseChecksumsRefusesAnEmptyList(t *testing.T) {
+	// A file with nothing readable in it must not parse as "no digests, so
+	// nothing to check". Negative control: return the empty map with no error
+	// and the installer treats every archive as unverifiable-but-fine.
 	if _, err := ParseChecksums(strings.NewReader("not a checksum file\n")); err == nil {
 		t.Error("a file with no digests parsed as a checksum list")
 	}
@@ -145,39 +141,26 @@ func tarGz(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// TestBinaryFromArchive finds the binary among the archive's other files.
+// TestBinaryFromArchive finds the binary among the archive's other files, and
+// by its base name only. A tar entry can name any path it likes,
+// "../../../etc/cron.d/x" included. This reads bytes and never writes to a
+// path the archive chose, so the name is only ever used to find the file.
 //
 // Negative control: match on the whole entry name rather than its base and the
 // nested case fails.
 func TestBinaryFromArchive(t *testing.T) {
-	archive := tarGz(t, map[string]string{
-		"README.md": "readme",
-		"LICENSE":   "license",
-		"tuios":     "ELF binary",
-	})
-	got, err := BinaryFromArchive(bytes.NewReader(archive), "tuios")
-	if err != nil {
-		t.Fatalf("BinaryFromArchive: %v", err)
-	}
-	if string(got) != "ELF binary" {
-		t.Errorf("read %q", got)
-	}
-}
-
-// TestBinaryFromArchiveIgnoresTheEntryPath. A tar entry can name any path it
-// likes, "../../../etc/cron.d/x" included. This reads bytes and never writes to
-// a path the archive chose, so the name is only ever used to find the file.
-//
-// Negative control: use hdr.Name as a path anywhere and this stops being a
-// meaningful claim.
-func TestBinaryFromArchiveIgnoresTheEntryPath(t *testing.T) {
-	archive := tarGz(t, map[string]string{"../../../etc/tuios": "ELF binary"})
-	got, err := BinaryFromArchive(bytes.NewReader(archive), "tuios")
-	if err != nil {
-		t.Fatalf("BinaryFromArchive: %v", err)
-	}
-	if string(got) != "ELF binary" {
-		t.Errorf("read %q", got)
+	for name, entries := range map[string]map[string]string{
+		"among other files":          {"README.md": "readme", "LICENSE": "license", "tuios": "ELF binary"},
+		"under a hostile entry path": {"../../../etc/tuios": "ELF binary"},
+	} {
+		got, err := BinaryFromArchive(bytes.NewReader(tarGz(t, entries)), "tuios")
+		if err != nil {
+			t.Errorf("%s: BinaryFromArchive: %v", name, err)
+			continue
+		}
+		if string(got) != "ELF binary" {
+			t.Errorf("%s: read %q", name, got)
+		}
 	}
 }
 

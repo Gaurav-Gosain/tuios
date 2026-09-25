@@ -16,59 +16,41 @@ func names(source string) []string {
 	return out
 }
 
-// TestSpacerMayBeListedMoreThanOnce is the one rule the spacer needed that the
-// grammar did not already have.
+// TestParseSidebarSections holds the layout grammar to what it has to keep and
+// what it has to drop.
 //
-// Every other name is dropped the second time it appears, because a rail cannot
-// draw one list in two places. A spacer names a place rather than a list, so
-// two of them are two gaps and both have to survive the parse. Without this the
-// layout could not say "sessions, gap, terminals, gap, files" at all, which is
-// the layout that decided the spacer had to be an ordered-list entry rather
-// than a boolean per section.
-//
-// Negative control, confirmed red: put the spacer back inside the seen check in
-// ParseSidebarSections. This fails with 4 entries and one spacer.
-func TestSpacerMayBeListedMoreThanOnce(t *testing.T) {
-	got := names("sessions,spacer,terminals,spacer,files")
-	want := []string{"sessions", "spacer", "terminals", "spacer", "files"}
-	if !slices.Equal(got, want) {
-		t.Errorf("layout = %v, want %v", got, want)
-	}
-
-	// And with shares on them, since ":10" twice over is the spelling that
-	// would have been ambiguous to a parser keyed by name.
-	got = names("spacer:10,sessions,spacer:20")
-	want = []string{"spacer:10", "sessions", "spacer:20"}
-	if !slices.Equal(got, want) {
-		t.Errorf("layout with shares = %v, want %v", got, want)
-	}
-}
-
-// TestSectionsStillDropARepeatedSection is the other half: the spacer is the
-// exception, and it did not become the rule.
-//
-// Negative control, confirmed red: skip the seen check for every name rather
-// than for the spacer alone. This fails with sessions listed twice.
-func TestSectionsStillDropARepeatedSection(t *testing.T) {
-	if got := names("sessions,terminals,sessions:40"); !slices.Equal(got, []string{"sessions", "terminals"}) {
-		t.Errorf("layout = %v, want the second sessions dropped", got)
-	}
-}
-
-// TestLayoutOfNothingButSpacersFallsBack keeps a rail that draws something.
-//
-// A layout with no section in it parses fine and lays out to a column of blank
-// lines, which is a state nobody meant to ask for and cannot be got out of from
-// inside the rail. The fallback used to count entries; it counts sections now,
-// because a spacer is an entry that is not a section.
-//
-// Negative control, confirmed red: count len(out) instead of sections in the
-// fallback. This fails with a two-entry layout of spacers.
-func TestLayoutOfNothingButSpacersFallsBack(t *testing.T) {
-	got := names("spacer,spacer:10")
-	want := names(SidebarDefaultSections)
-	if !slices.Equal(got, want) {
-		t.Errorf("a layout of only spacers parsed as %v, want the shipped %v", got, want)
+//   - A spacer may be listed more than once. Every other name is dropped the
+//     second time it appears, because a rail cannot draw one list in two
+//     places. A spacer names a place rather than a list, so two of them are two
+//     gaps and both have to survive, shares included, since ":10" twice over is
+//     the spelling a parser keyed by name would get wrong. Negative control:
+//     put the spacer back inside the seen check in ParseSidebarSections.
+//   - A repeated section is still dropped: the spacer is the exception, and it
+//     did not become the rule. Negative control: skip the seen check for every
+//     name.
+//   - A layout of nothing but spacers falls back to the shipped one, since it
+//     would lay out to a column of blank lines nobody can get out of from
+//     inside the rail. Negative control: count len(out) instead of sections in
+//     the fallback.
+//   - A layout a config already carries parses back unchanged: the grammar did
+//     not change under it, only what it may additionally hold.
+func TestParseSidebarSections(t *testing.T) {
+	for _, tc := range []struct {
+		source string
+		want   []string
+	}{
+		{"sessions,spacer,terminals,spacer,files", []string{"sessions", "spacer", "terminals", "spacer", "files"}},
+		{"spacer:10,sessions,spacer:20", []string{"spacer:10", "sessions", "spacer:20"}},
+		{"sessions,terminals,sessions:40", []string{"sessions", "terminals"}},
+		{"spacer,spacer:10", names(SidebarDefaultSections)},
+		{SidebarDefaultSections, strings.Split(SidebarDefaultSections, ",")},
+		{"terminals,sessions", []string{"terminals", "sessions"}},
+		{"files:60,sessions:20,terminals,agents:20", []string{"files:60", "sessions:20", "terminals", "agents:20"}},
+		{"agents:50,files:50,sessions,terminals", []string{"agents:50", "files:50", "sessions", "terminals"}},
+	} {
+		if got := names(tc.source); !slices.Equal(got, tc.want) {
+			t.Errorf("layout %q parsed as %v, want %v", tc.source, got, tc.want)
+		}
 	}
 }
 
@@ -92,21 +74,5 @@ func TestSectionProblemsSaySpacerIsFine(t *testing.T) {
 	got = SidebarSectionProblems("sessions,spacers")
 	if len(got) != 1 || !strings.Contains(got[0], "spacer") {
 		t.Errorf("problems = %v, want one complaint naming the spacer", got)
-	}
-}
-
-// TestOldLayoutStringStillParses is the compatibility claim this branch owes
-// anybody whose config already carries a layout: the grammar did not change
-// under them, only what it may additionally hold.
-func TestOldLayoutStringStillParses(t *testing.T) {
-	for _, source := range []string{
-		SidebarDefaultSections,
-		"terminals,sessions",
-		"files:60,sessions:20,terminals,agents:20",
-		"agents:50,files:50,sessions,terminals",
-	} {
-		if got := strings.Join(names(source), ","); got != source {
-			t.Errorf("layout %q parsed back as %q", source, got)
-		}
 	}
 }

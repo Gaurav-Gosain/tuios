@@ -1,57 +1,44 @@
 package hooks
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
-// A hook used to run with its output discarded and its error dropped, so a
-// command that was never found looked exactly like one that worked. These pin
-// the three facts that make the difference visible, and the bound that keeps a
-// noisy hook from costing whatever it decides to write.
+// A hook's stderr is kept so a failure can be read, and these pin the bound
+// that keeps a noisy hook from costing whatever it decides to write.
 
 // wantStderrCap is the bound, written out rather than read from
 // stderrTailLimit. A test that asserts against the constant it is guarding
 // passes whatever the constant is changed to, which is not a guard.
 const wantStderrCap = 1024
 
-// TestStderrIsKeptOnlyUpToTheLimit is the bound. A hook is a user command and
-// may write without limit; keeping all of it would let a hook grow the process
-// that runs it.
-func TestStderrIsKeptOnlyUpToTheLimit(t *testing.T) {
-	tail := &tailBuffer{limit: stderrTailLimit}
+// TestStderrTailIsBounded is the bound. A hook is a user command and may write
+// without limit; keeping all of it would let a hook grow the process that runs
+// it. The output arrives in chunks the way a pipe delivers it, or in one piece,
+// which is the branch a chunked write never takes. Either way the tail is kept.
+func TestStderrTailIsBounded(t *testing.T) {
 	if stderrTailLimit != wantStderrCap {
 		t.Fatalf("stderrTailLimit is %d, want %d: the cap is the point of this file",
 			stderrTailLimit, wantStderrCap)
 	}
-	// One megabyte, in chunks, the way a pipe delivers it.
-	chunk := strings.Repeat("A", 4096)
-	for range 256 {
-		_, _ = tail.Write([]byte(chunk))
-	}
-	_, _ = tail.Write([]byte("THE-END"))
-
-	got := tail.String()
-	if len(got) > wantStderrCap {
-		t.Fatalf("kept %d bytes of stderr, want at most %d", len(got), wantStderrCap)
-	}
-	if !strings.HasSuffix(got, "THE-END") {
-		t.Errorf("kept the wrong end of the output: %q", got[max(0, len(got)-32):])
-	}
-}
-
-// TestASingleOversizeWriteIsAlsoBounded covers the write that arrives in one
-// piece rather than in chunks, which is the branch a chunked test never takes.
-func TestASingleOversizeWriteIsAlsoBounded(t *testing.T) {
-	tail := &tailBuffer{limit: stderrTailLimit}
-	_, _ = tail.Write([]byte(strings.Repeat("B", 100000) + "TAIL"))
-
-	got := tail.String()
-	if len(got) > wantStderrCap {
-		t.Fatalf("kept %d bytes of stderr, want at most %d", len(got), wantStderrCap)
-	}
-	if !strings.HasSuffix(got, "TAIL") {
-		t.Errorf("kept the wrong end of the output: %q", got[max(0, len(got)-32):])
+	chunk := []byte(strings.Repeat("A", 4096))
+	for name, writes := range map[string][][]byte{
+		"one megabyte in chunks": append(slices.Repeat([][]byte{chunk}, 256), []byte("THE-END")),
+		"one oversize write":     {[]byte(strings.Repeat("B", 100000) + "THE-END")},
+	} {
+		tail := &tailBuffer{limit: stderrTailLimit}
+		for _, w := range writes {
+			_, _ = tail.Write(w)
+		}
+		got := tail.String()
+		if len(got) > wantStderrCap {
+			t.Errorf("%s: kept %d bytes of stderr, want at most %d", name, len(got), wantStderrCap)
+		}
+		if !strings.HasSuffix(got, "THE-END") {
+			t.Errorf("%s: kept the wrong end of the output: %q", name, got[max(0, len(got)-32):])
+		}
 	}
 }
 

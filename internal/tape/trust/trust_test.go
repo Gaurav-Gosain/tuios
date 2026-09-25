@@ -159,48 +159,33 @@ func TestDeniedByPathSurvivesEdit(t *testing.T) {
 	}
 }
 
-// TestHygieneWorldWritableIneligible: a world-writable tape can never be
-// offered for trust (threat T5).
-func TestHygieneWorldWritableIneligible(t *testing.T) {
+// TestHygieneWritableIneligible: a world-writable or group-writable tape can
+// never be offered for trust (threat T5).
+func TestHygieneWritableIneligible(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permission bits are not meaningful on Windows")
 	}
-	s := newStore(t)
-	dir := t.TempDir()
-	tape := writeTape(t, dir, "Type \"echo hi\" Enter\n")
-	if err := os.Chmod(tape, 0o666); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
+	for name, mode := range map[string]os.FileMode{"world-writable": 0o666, "group-writable": 0o620} {
+		s := newStore(t)
+		tape := writeTape(t, t.TempDir(), "Type \"echo hi\" Enter\n")
+		if err := os.Chmod(tape, mode); err != nil {
+			t.Fatalf("chmod: %v", err)
+		}
 
-	res, _ := s.Check(tape)
-	if res.Status != StatusIneligible {
-		t.Fatalf("status = %v, want ineligible", res.Status)
-	}
-	if res.Reason == "" {
-		t.Fatal("expected a reason for an ineligible tape")
-	}
+		res, _ := s.Check(tape)
+		if res.Status != StatusIneligible {
+			t.Fatalf("%s: status = %v, want ineligible", name, res.Status)
+		}
+		if res.Reason == "" {
+			t.Fatalf("%s: expected a reason for an ineligible tape", name)
+		}
 
-	// Even an explicit Trust on that path must not make it trusted while the
-	// file stays world-writable: eligibility is re-checked on every Check.
-	_ = s.Trust(res.Path, hashOf("Type \"echo hi\" Enter\n"))
-	if r, _ := s.Check(tape); r.Status != StatusIneligible {
-		t.Fatalf("world-writable tape after Trust = %v, want ineligible", r.Status)
-	}
-}
-
-// TestHygieneGroupWritableIneligible mirrors the above for the group-writable
-// bit, which is also disqualifying.
-func TestHygieneGroupWritableIneligible(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX permission bits are not meaningful on Windows")
-	}
-	s := newStore(t)
-	tape := writeTape(t, t.TempDir(), "Type \"echo hi\" Enter\n")
-	if err := os.Chmod(tape, 0o620); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
-	if r, _ := s.Check(tape); r.Status != StatusIneligible {
-		t.Fatalf("group-writable status = %v, want ineligible", r.Status)
+		// Even an explicit Trust on that path must not make it trusted while
+		// the file stays writable: eligibility is re-checked on every Check.
+		_ = s.Trust(res.Path, hashOf("Type \"echo hi\" Enter\n"))
+		if r, _ := s.Check(tape); r.Status != StatusIneligible {
+			t.Fatalf("%s tape after Trust = %v, want ineligible", name, r.Status)
+		}
 	}
 }
 

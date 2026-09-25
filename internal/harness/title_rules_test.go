@@ -19,6 +19,13 @@ var titleCases = []titleCase{
 	{"codex", "Action Required - codex", "needs_input"},
 	{"codex", "⠋ codex", "working"},
 	{"codex", "codex", "none"},
+	// The phrase Codex actually writes, and the strings a careless rule would
+	// also take.
+	{"codex", "Codex - Action Required", "needs_input"},
+	{"codex", "action required: approve the patch?", "needs_input"},
+	{"codex", "~/src/api — Action Required", "needs_input"},
+	{"codex", "~/src/codex-playground", "none"},
+	{"codex", "vim action_required.md", "none"},
 
 	// Gemini CLI pads its title to 80 columns and appends the folder.
 	{"gemini-cli", "✋  Action Required (tuios)                                                      ", "needs_input"},

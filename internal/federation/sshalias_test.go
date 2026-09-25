@@ -36,32 +36,15 @@ Host "quoted-name"
 Include ~/.ssh/config.d/*
 `
 
+// TestSSHAliasesAreTheHostNames reads the exact list, so it also proves the
+// patterns ("*", "*.internal") are not offered as addresses and that the
+// values under a Host block (a machine, a user, a key file) are never read:
+// any keyword but Host reaching the list fails it.
 func TestSSHAliasesAreTheHostNames(t *testing.T) {
 	got := SSHConfigAliases(strings.NewReader(sshConfigFixture))
 	want := []string{"buildbox", "equals-form", "lab-01", "lab-02", "quoted-name"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ASSERTION: the aliases read from the ssh config are %v, wanted %v", got, want)
-	}
-}
-
-func TestSSHAliasesDropPatterns(t *testing.T) {
-	got := strings.Join(SSHConfigAliases(strings.NewReader(sshConfigFixture)), ",")
-	for _, pattern := range []string{"*", "*.internal"} {
-		if strings.Contains(got, pattern) {
-			t.Errorf("ASSERTION: the pattern %q was offered as an address, got %s", pattern, got)
-		}
-	}
-}
-
-// The values under a Host block name a machine, a user and a key file. None of
-// them is read, and the test that proves it is the one that would fail if a
-// future change started reading any keyword but Host.
-func TestSSHAliasesReadNothingButHostNames(t *testing.T) {
-	got := strings.Join(SSHConfigAliases(strings.NewReader(sshConfigFixture)), " ")
-	for _, secret := range []string{"10.0.0.4", "gaurav", "id_ed25519", "bastion", "30"} {
-		if strings.Contains(got, secret) {
-			t.Errorf("ASSERTION: a value that is not a Host name reached the list: %q in %q", secret, got)
-		}
 	}
 }
 
