@@ -341,3 +341,28 @@ func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
 		})
 	}
 }
+
+// TestKittyModParam pins the kitty protocol modifier weights (shift 1, alt 2,
+// ctrl 4, super 8, plus one). The CSI u tables only exercise shift and ctrl, so
+// this is the only check on alt and super.
+func TestKittyModParam(t *testing.T) {
+	tests := []struct {
+		mod      KeyMod
+		expected int
+	}{
+		{0, 1},
+		{ModShift, 2},
+		{ModAlt, 3},
+		{ModCtrl, 5},
+		{ModMeta, 9},
+		{ModShift | ModCtrl, 6},
+		{ModShift | ModAlt | ModCtrl, 8},
+	}
+
+	for _, tt := range tests {
+		result := kittyModParam(tt.mod)
+		if result != tt.expected {
+			t.Errorf("kittyModParam(%d) = %d, want %d", tt.mod, result, tt.expected)
+		}
+	}
+}
