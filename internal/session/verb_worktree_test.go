@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -55,20 +54,6 @@ func fakeClaudeOnPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-// waitPromptStatus polls a session's record until the prompt reaches status.
-func waitPromptStatus(t *testing.T, sess *Session, status string) *WorktreeInfo {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if info := sess.Worktree(); info != nil && info.PromptStatus == status {
-			return info
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("the prompt never reached %q: %+v", status, sess.Worktree())
-	return nil
 }
 
 // TestClientSyncCannotClearTheWorktreeRecord pins the record as daemon-owned: a

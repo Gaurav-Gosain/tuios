@@ -1,11 +1,5 @@
 package app
 
-import (
-	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-)
-
 // These tests pin the pane size invariant: the width and height the guest is
 // told (the PTY winsize, captured from DaemonResizeFunc and mirrored by
 // AnnouncedSize) must equal the emulator's own grid and the drawable box the
@@ -19,18 +13,6 @@ import (
 type toldSize struct {
 	w, h  int
 	calls int
-}
-
-func newAnnounceWindow(t testing.TB, id string, w, h int) (*terminal.Window, *toldSize) {
-	t.Helper()
-	win := newTestWindow(t, id, w, h)
-	told := &toldSize{}
-	win.DaemonResizeFunc = func(rw, rh int) error {
-		told.w, told.h = rw, rh
-		told.calls++
-		return nil
-	}
-	return win, told
 }
 
 // setSharedBorders flips the setting the way the settings panel and the command

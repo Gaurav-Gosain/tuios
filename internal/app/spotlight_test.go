@@ -44,10 +44,6 @@ func spotlightTestCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 // can call apply without an OS around it.
 func newSpotlightTestState() *spotlightState { return &spotlightState{} }
 
-func cellStyleAt(canvas *lipgloss.Canvas, x, y int) uv.Style {
-	return canvas.CellAt(x, y).Style
-}
-
 // spotlightRestore puts every cell back to the style spotlightTestCanvas gave
 // it, so the pass can be measured over the same input again.
 //
@@ -165,19 +161,6 @@ func spotlightRestoreMixed(canvas *lipgloss.Canvas, inks []color.Color) {
 			cell.Style.Fg, cell.Style.Bg, cell.Style.Attrs = inks[(x/8+y)%len(inks)], nil, 0
 		}
 	}
-}
-
-// spotlightBrightness is how much light a colour carries, as the mean of its
-// three channels over 255. It is not a luminance and does not need to be: the
-// tests below compare one colour with a scaled copy of itself, so any monotonic
-// reading of the channels answers them.
-func spotlightBrightness(t *testing.T, c color.Color) float64 {
-	t.Helper()
-	if isNilColor(c) {
-		t.Fatal("no colour to measure")
-	}
-	r, g, b, _ := c.RGBA()
-	return float64(r>>8+g>>8+b>>8) / (3 * 255)
 }
 
 // mouseBeamOS is a client with the beam on and following the pointer.

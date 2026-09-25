@@ -94,59 +94,6 @@ func openTestPane(t *testing.T, fed paneFederation, spec hostedPaneSpec) *remote
 	return p
 }
 
-// paneReader drains a pane from the moment it is opened and keeps everything
-// it saw.
-//
-// One reader for the pane's whole life, rather than one per wait, is the point.
-// A reader started per wait either stops mid-chunk and loses the rest or, when
-// its wait times out, goes on running and takes the bytes the next wait is
-// looking for. The second is a test that fails somewhere other than where it
-// broke, which is the worst kind, and it is what happened here under a loaded
-// machine before this existed.
-type paneReader struct {
-	mu   sync.Mutex
-	seen strings.Builder
-	done chan struct{}
-}
-
-func drainPane(p *remotePane) *paneReader {
-	r := &paneReader{done: make(chan struct{})}
-	go func() {
-		defer close(r.done)
-		buf := make([]byte, 4096)
-		for {
-			n, err := p.Read(buf)
-			if n > 0 {
-				r.mu.Lock()
-				r.seen.Write(buf[:n])
-				r.mu.Unlock()
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	return r
-}
-
-// waitGone blocks until the far daemon has let go of the pane.
-//
-// Closing a pane is not synchronous and cannot be: the notice is the stream
-// ending, the far side hears it on its own goroutine, and only then does it
-// kill the process and drop the registration. A test that asserts immediately
-// after a close is racing that, which is a property of the design rather than
-// of the test.
-func waitGone(t *testing.T, d *Daemon, id string, budget time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(budget)
-	for d.lookupHostedPane(id) != nil {
-		if time.Now().After(deadline) {
-			t.Fatalf("the far machine still holds pane %s after %v", id, budget)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 // TestTheFirstBytesOfTheProcessAreNotLost.
 //
 // The reply line and the process's first output can arrive in one read. The

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -29,19 +28,6 @@ func alertOS(t *testing.T, agent config.AgentAlertsConfig) *OS {
 		m.Windows = append(m.Windows, w)
 	}
 	return m
-}
-
-// hostCapture stands in for the terminal on the far end of the render stream.
-type hostCapture struct{ b strings.Builder }
-
-func (h *hostCapture) Write(p []byte) (int, error) { return h.b.Write(p) }
-
-// captureHost points the client's raw host writes at a buffer.
-func captureHost(t *testing.T, m *OS) *hostCapture {
-	t.Helper()
-	h := &hostCapture{}
-	m.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: h})
-	return h
 }
 
 func zeroSettle() config.AgentAlertsConfig {

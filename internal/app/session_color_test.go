@@ -3,56 +3,7 @@ package app
 import (
 	"image/color"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
-
-// sessionColorOS is a rail attached to "main" beside two sessions that carry
-// panes of their own, which is the only shape the colours exist for: more than
-// one session on screen at once.
-func sessionColorOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
-	t.Helper()
-	m := newNarrowOS(t, w, h)
-	m.CurrentWorkspace = 1
-	m.SessionName = "main"
-	m.Windows = []*terminal.Window{
-		{ID: "aaaaaaaa1111", CustomName: "nvim", Width: 40, Height: 20, Workspace: 1},
-		{ID: "bbbbbbbb2222", CustomName: "refactor", Width: 40, Height: 20, Workspace: 1, AgentState: "working"},
-	}
-	m.FocusedWindow = 0
-	m.DaemonClient = &session.TUIClient{}
-	m.IsDaemonSession = true
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.Settings = config.Global
-	m.SidebarOrder = nil
-	return m, sessionColorTree()
-}
-
-func sessionColorTree() sessiontree.Tree {
-	return sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "working", Workspace: 1},
-		}},
-		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", AgentState: "working", Workspace: 1},
-		}},
-		{Name: "docs", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "ffffffff6666", Title: "site", AgentState: "idle", Workspace: 1},
-		}},
-	})
-}
-
-// withSessionColors pins the config key for one test and puts it back.
-func withSessionColors(t *testing.T, on bool) {
-	t.Helper()
-	prev := config.Global.SessionColors
-	config.Global.SessionColors = on
-	t.Cleanup(func() { config.Global.SessionColors = prev })
-}
 
 // TestSessionAccentVocabulary pins what a session accent may be written as. The
 // daemon records the string verbatim and has never read it, so anything already
