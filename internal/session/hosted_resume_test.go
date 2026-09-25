@@ -207,38 +207,3 @@ func TestReplayIsWhatWasMissedOrTheWholeRing(t *testing.T) {
 		}
 	}
 }
-
-// paneReader drains a pane from the moment it is opened and keeps everything
-// it saw.
-//
-// One reader for the pane's whole life, rather than one per wait, is the point.
-// A reader started per wait either stops mid-chunk and loses the rest or, when
-// its wait times out, goes on running and takes the bytes the next wait is
-// looking for. The second is a test that fails somewhere other than where it
-// broke, which is the worst kind, and it is what happened here under a loaded
-// machine before this existed.
-type paneReader struct {
-	mu   sync.Mutex
-	seen strings.Builder
-	done chan struct{}
-}
-
-func drainPane(p *remotePane) *paneReader {
-	r := &paneReader{done: make(chan struct{})}
-	go func() {
-		defer close(r.done)
-		buf := make([]byte, 4096)
-		for {
-			n, err := p.Read(buf)
-			if n > 0 {
-				r.mu.Lock()
-				r.seen.Write(buf[:n])
-				r.mu.Unlock()
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	return r
-}

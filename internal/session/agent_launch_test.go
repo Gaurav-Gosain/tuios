@@ -234,17 +234,3 @@ func envValue(env []string, key string) string {
 	}
 	return ""
 }
-
-// waitPromptStatus polls a session's record until the prompt reaches status.
-func waitPromptStatus(t *testing.T, sess *Session, status string) *WorktreeInfo {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if info := sess.Worktree(); info != nil && info.PromptStatus == status {
-			return info
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("the prompt never reached %q: %+v", status, sess.Worktree())
-	return nil
-}
