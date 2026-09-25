@@ -376,6 +376,3 @@ func TestCopyTreeKeepsASymlinkALink(t *testing.T) {
 		t.Error("the copy is not a symlink; a link was followed instead of copied")
 	}
 }
-
-// mkdirAllForTest is os.MkdirAll under a name the test files share.
-func mkdirAllForTest(path string) error { return os.MkdirAll(path, 0o755) }

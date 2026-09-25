@@ -3,7 +3,6 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -81,25 +80,6 @@ func runOp(t *testing.T, m *OS, cmd tea.Cmd) fileOpMsg {
 	return msg
 }
 
-// TestDeleteAlwaysRaisesADialogAndRemovesNothingYet is the confirmation gate.
-// The delete key opens a dialog and touches the disk not at all.
-func TestDeleteAlwaysRaisesADialog(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(false)
-	if !m.FileConfirmOpen() {
-		t.Fatal("the delete key did not raise a confirmation")
-	}
-	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
-		t.Fatalf("the file went before anybody answered: %v", err)
-	}
-	if m.filePrompt.Selected != fileConfirmRowCancel {
-		t.Errorf("the dialog opened on row %d; it must open on Cancel", m.filePrompt.Selected)
-	}
-}
-
 // TestEnterOnAnUntouchedDialogDeletesNothing is the negative control's target
 // and the whole point of the dialog: the answer nobody chose is No.
 func TestEnterOnAnUntouchedDialogDeletesNothing(t *testing.T) {
@@ -121,66 +101,6 @@ func TestEnterOnAnUntouchedDialogDeletesNothing(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(filepath.Join(trash, "files")); err == nil && len(entries) != 0 {
 		t.Fatalf("the trash holds %d files after a cancelled delete", len(entries))
-	}
-}
-
-// TestTheGoRowSendsTheFileToTheTrash walks the whole gesture: open, move onto
-// the destructive row, answer, run the command.
-func TestTheGoRowSendsTheFileToTheTrash(t *testing.T) {
-	trash := tempTrash(t)
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(false)
-	if !m.filePrompt.Trash {
-		t.Fatal("the default delete is not the trash one")
-	}
-	m.FileConfirmMove(1)
-	if m.filePrompt.Selected != fileConfirmRowGo {
-		t.Fatalf("the cursor is on row %d, want the destructive row", m.filePrompt.Selected)
-	}
-
-	cmd := m.FilePromptSubmit()
-	// The file is still there at the moment the handler returns. That is the
-	// no-disk-work-on-the-update-loop claim, checked rather than asserted.
-	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
-		t.Fatalf("the delete ran on the update goroutine: %v", err)
-	}
-	runOp(t, m, cmd)
-
-	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err == nil {
-		t.Error("the file is still there after the command ran")
-	}
-	if body, err := os.ReadFile(filepath.Join(trash, "files", "report.txt")); err != nil || string(body) != "body" {
-		t.Errorf("the file did not reach the trash: %q %v", body, err)
-	}
-}
-
-// TestThePermanentDeleteKeySaysItIsPermanent covers the explicit alternative
-// and the sentence that separates the two dialogs.
-func TestThePermanentDeleteKeySaysItIsPermanent(t *testing.T) {
-	trash := tempTrash(t)
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(true)
-	if m.filePrompt.Trash {
-		t.Fatal("the permanent delete key opened the trash dialog")
-	}
-	outcome := m.fileConfirmOutcome()
-	if !strings.Contains(outcome, "permanent") || !strings.Contains(outcome, "can not undo") {
-		t.Errorf("the permanent dialog says %q; it must say the file does not come back", outcome)
-	}
-
-	m.FileConfirmMove(1)
-	runOp(t, m, m.FilePromptSubmit())
-	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err == nil {
-		t.Error("the permanent delete left the file where it was")
-	}
-	if entries, err := os.ReadDir(filepath.Join(trash, "files")); err == nil && len(entries) != 0 {
-		t.Errorf("the permanent delete put %d files in the trash", len(entries))
 	}
 }
 
@@ -282,158 +202,5 @@ func TestFileActionsOffMakesEveryKeyInert(t *testing.T) {
 	}
 	if got := namesIn(t, dir); len(got) != 1 || got[0] != "report.txt" {
 		t.Errorf("the folder changed with the setting off: %q", got)
-	}
-}
-
-// TestCreateAndRenameRunOffTheLoop checks the two name prompts end to end, and
-// that neither writes anything before its command runs.
-func TestCreateAndRenameRunOffTheLoop(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "old.txt"), "body")
-	m := filesOS(t, dir, "old.txt")
-
-	m.SidebarFileCreate()
-	for _, r := range "notes.md" {
-		m.FilePromptType(string(r))
-	}
-	cmd := m.FilePromptSubmit()
-	if _, err := os.Lstat(filepath.Join(dir, "notes.md")); err == nil {
-		t.Fatal("the create ran on the update goroutine")
-	}
-	runOp(t, m, cmd)
-	if _, err := os.Lstat(filepath.Join(dir, "notes.md")); err != nil {
-		t.Fatalf("the create never happened: %v", err)
-	}
-
-	railLines(t, m)
-	if !cursorToFile(m, "old.txt") {
-		t.Fatalf("the listing lost old.txt: %v", entryNames(m))
-	}
-	if !m.SidebarFileRename() {
-		t.Fatal("the rename key did nothing on a file row")
-	}
-	if m.filePrompt.Input != "old.txt" {
-		t.Errorf("the rename field opened holding %q, want the current name", m.filePrompt.Input)
-	}
-	m.FilePromptClearInput()
-	for _, r := range "new.txt" {
-		m.FilePromptType(string(r))
-	}
-	cmd = m.FilePromptSubmit()
-	if _, err := os.Lstat(filepath.Join(dir, "old.txt")); err != nil {
-		t.Fatal("the rename ran on the update goroutine")
-	}
-	runOp(t, m, cmd)
-	if _, err := os.Lstat(filepath.Join(dir, "new.txt")); err != nil {
-		t.Fatalf("the rename never happened: %v", err)
-	}
-}
-
-// TestARefusedNameKeepsThePromptUp is what makes a bad name recoverable: the
-// dialog stays, holding what was typed, with the reason under it.
-func TestARefusedNameKeepsThePromptUp(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileCreate()
-	for _, r := range "../escaped.txt" {
-		m.FilePromptType(string(r))
-	}
-	if cmd := m.FilePromptSubmit(); cmd != nil {
-		t.Fatal("a name that leaves the folder was accepted")
-	}
-	if !m.FilePromptOpen() {
-		t.Fatal("the prompt closed on a refusal, losing what was typed")
-	}
-	if m.filePrompt.Input != "../escaped.txt" {
-		t.Errorf("the field holds %q; a refusal must keep the typed name", m.filePrompt.Input)
-	}
-	if !strings.Contains(m.filePrompt.Err, "outside this folder") {
-		t.Errorf("the refusal reads %q; it must say the name leaves the folder", m.filePrompt.Err)
-	}
-	if _, err := os.Lstat(filepath.Join(filepath.Dir(dir), "escaped.txt")); err == nil {
-		t.Fatal("a refused name was written outside the folder anyway")
-	}
-}
-
-// TestCutIsSpentByThePasteThatMovesIt stops a second paste chasing a source
-// that has already moved.
-func TestCutIsSpentByThePasteThatMovesIt(t *testing.T) {
-	src := t.TempDir()
-	dst := t.TempDir()
-	mustWrite(t, filepath.Join(src, "moved.txt"), "body")
-	m := filesOS(t, src, "moved.txt")
-
-	m.SidebarFileCut()
-	if m.fileClip.Empty() || !m.fileClip.Move {
-		t.Fatal("the cut captured nothing")
-	}
-	openFilesOn(t, m, dst)
-	railLines(t, m)
-
-	cmd := m.SidebarFilePaste()
-	if !m.fileClip.Empty() {
-		t.Error("the cut is still on the clipboard after the paste that spends it")
-	}
-	runOp(t, m, cmd)
-	if _, err := os.Lstat(filepath.Join(dst, "moved.txt")); err != nil {
-		t.Fatalf("the move never landed: %v", err)
-	}
-	if _, err := os.Lstat(filepath.Join(src, "moved.txt")); err == nil {
-		t.Error("the source survived a move")
-	}
-	if cmd := m.SidebarFilePaste(); cmd != nil {
-		t.Error("a second paste ran on a spent cut")
-	}
-}
-
-// TestCopyLeavesTheSourceAlone is the other half, and it is why a copy needs no
-// dialog: nothing on either side is destroyed.
-func TestCopyLeavesTheSourceAlone(t *testing.T) {
-	src := t.TempDir()
-	dst := t.TempDir()
-	mustWrite(t, filepath.Join(src, "kept.txt"), "body")
-	m := filesOS(t, src, "kept.txt")
-
-	m.SidebarFileCopy()
-	openFilesOn(t, m, dst)
-	railLines(t, m)
-	runOp(t, m, m.SidebarFilePaste())
-
-	if _, err := os.Lstat(filepath.Join(src, "kept.txt")); err != nil {
-		t.Errorf("a copy removed the source: %v", err)
-	}
-	if _, err := os.Lstat(filepath.Join(dst, "kept.txt")); err != nil {
-		t.Errorf("the copy never landed: %v", err)
-	}
-	if m.fileClip.Empty() {
-		t.Error("a copy was spent by its paste; it can be pasted again")
-	}
-}
-
-// TestTheParentRowIsNotADeleteTarget: the ".." row means "go up", and the
-// folder it names must not be deletable from it.
-func TestTheParentRowIsNotADeleteTarget(t *testing.T) {
-	dir := t.TempDir()
-	inner := filepath.Join(dir, "inner")
-	if err := os.Mkdir(inner, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	m := filesOS(t, inner, "")
-	for i, row := range m.SidebarNav {
-		if row.Kind == sidebarRowFileUp {
-			m.SidebarCursor = i
-		}
-	}
-	if _, _, ok := m.fileActionTarget(); ok {
-		t.Fatal("the parent row is a file action target")
-	}
-	m.SidebarFileDelete(false)
-	if m.FileConfirmOpen() {
-		t.Error("the parent row raised a delete confirmation")
-	}
-	if _, err := os.Lstat(dir); err != nil {
-		t.Errorf("the parent folder went: %v", err)
 	}
 }

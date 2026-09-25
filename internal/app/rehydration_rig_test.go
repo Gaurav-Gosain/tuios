@@ -334,15 +334,6 @@ func (r *rig) feedPTY(ptyID, command, want string) {
 	r.waitDaemonShows(ptyID, want)
 }
 
-// feed writes a shell command to a pane and waits for want to appear in the
-// daemon's own copy of the screen, so the pane is settled on the authoritative
-// side before anything is compared.
-func (r *rig) feed(w *terminal.Window, command, want string) {
-	r.t.Helper()
-	r.typeAtPrompt(w.PTYID, command)
-	r.waitDaemonShows(w.PTYID, want)
-}
-
 // typeAtPrompt waits for the shell to be sitting at an empty prompt and then
 // types command at it.
 //

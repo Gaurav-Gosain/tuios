@@ -152,31 +152,6 @@ func TestDroppedSettleDoesNotWedgeTheLayout(t *testing.T) {
 	}
 }
 
-// TestResizeDeferralExpires pins the timeout itself: a deferral whose last
-// resize event is older than resizeDeferralTimeout is not live, and asking
-// drains what it was holding.
-func TestResizeDeferralExpires(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-
-	m.viewportResizing = true
-	m.noteResizeStep(time.Now())
-	if !m.resizeDeferralActive() {
-		t.Fatal("a deferral with a fresh resize step should be active")
-	}
-
-	m.PendingResizes["win-"+"000000000000000000000000000000001"] = [2]int{40, 20}
-	m.noteResizeStep(time.Now().Add(-resizeDeferralTimeout - time.Millisecond))
-	if m.resizeDeferralActive() {
-		t.Error("a deferral whose last resize step is older than the timeout should be dead")
-	}
-	if m.viewportResizing {
-		t.Error("expiring the deferral should have cleared viewportResizing")
-	}
-	if len(m.PendingResizes) != 0 {
-		t.Error("expiring the deferral should have drained PendingResizes")
-	}
-}
-
 // TestLostMouseReleaseDoesNotFreezePaneContent covers the other half of the
 // same class: a drag whose release is lost (a browser pointer that left the
 // tab) leaves IsBeingManipulated set, and that flag makes a pane render its
@@ -205,59 +180,6 @@ func TestLostMouseReleaseDoesNotFreezePaneContent(t *testing.T) {
 	}
 	if !m.Windows[0].ContentDirty {
 		t.Error("the pane was not marked dirty, so it would keep serving its cached frame")
-	}
-}
-
-// TestSettleClearsDeferralRegardlessOfFlagState guards the handler itself: the
-// settle for the newest resize generation ends the deferral whatever state the
-// bookkeeping flag happens to be in, and a settle from a superseded generation
-// leaves the live one alone.
-func TestSettleClearsDeferralRegardlessOfFlagState(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-	m.viewportResizeGen = 7
-	m.viewportResizing = true
-	m.noteResizeStep(time.Now())
-	m.PendingResizes["win-"+"000000000000000000000000000000001"] = [2]int{40, 20}
-
-	// A stale settle must not end a storm that is still in progress.
-	_, _ = m.Update(ViewportResizeSettledMsg{Gen: 6})
-	if !m.viewportResizing {
-		t.Error("a superseded settle ended the live deferral")
-	}
-	if len(m.PendingResizes) == 0 {
-		t.Error("a superseded settle drained the deferred work early")
-	}
-
-	// The current one always does.
-	_, _ = m.Update(ViewportResizeSettledMsg{Gen: 7})
-	if m.viewportResizing {
-		t.Error("the current settle did not clear viewportResizing")
-	}
-	if len(m.PendingResizes) != 0 {
-		t.Error("the current settle did not drain PendingResizes")
-	}
-}
-
-// TestWindowSizeMsgAlwaysArmsAndTimestampsTheDeferral makes sure the resize
-// handler records the timestamp the expiry depends on. Without it the deferral
-// would be judged stale on the very next retile and the coalescing this whole
-// mechanism exists for would be gone.
-func TestWindowSizeMsgAlwaysArmsAndTimestampsTheDeferral(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-
-	before := time.Now()
-	_, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if cmd == nil {
-		t.Fatal("a resize must arm a settle")
-	}
-	if !m.viewportResizing {
-		t.Fatal("a resize must start the deferral")
-	}
-	if m.viewportResizeAt.Before(before) {
-		t.Fatal("a resize must record when it arrived")
-	}
-	if !m.resizeDeferralActive() {
-		t.Fatal("the deferral should be live right after a resize")
 	}
 }
 

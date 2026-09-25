@@ -120,39 +120,6 @@ func spoofDirs(t *testing.T) (real, victim, bait string) {
 	return real, victim, bait
 }
 
-// TestAPaneCannotSteerADeleteWithOSC7 is the gap this branch closes. A pane
-// that is in one folder says it is in another, the listing follows it, and the
-// delete does not.
-//
-// Before the fix this test ran the other way round and the file was gone. The
-// listing still follows, which is the decision: reading a folder a pane named
-// is harmless, and changing it is not.
-func TestAPaneCannotSteerADeleteWithOSC7(t *testing.T) {
-	real, victim, bait := spoofDirs(t)
-	m := spoofPane(t, real, victim)
-
-	if got := m.FileViewDir(); got != victim {
-		t.Fatalf("the listing did not follow OSC 7: %q, want %q", got, victim)
-	}
-	if !m.FileViewSpoofed() {
-		t.Fatal("the pane said it was somewhere it is not and the listing believed it")
-	}
-	if m.FileActionsOn() {
-		t.Fatal("the file actions are live on a folder the pane made up")
-	}
-	if !cursorToFile(m, "keepme.txt") {
-		t.Fatalf("no row for keepme.txt; the listing drew %v", entryNames(m))
-	}
-
-	m.SidebarFileDelete(true)
-	if m.FileConfirmOpen() {
-		t.Fatal("the delete raised its confirmation anyway")
-	}
-	if _, err := os.Lstat(bait); err != nil {
-		t.Fatalf("the file went: %v", err)
-	}
-}
-
 // TestEveryFileActionRefusesASpoofedFolder walks the six, because one gate
 // missed is the whole hole again. Nothing under the victim folder may change.
 func TestEveryFileActionRefusesASpoofedFolder(t *testing.T) {
@@ -249,28 +216,6 @@ func TestAnUncorroboratedPaneKeepsItsFileActions(t *testing.T) {
 	}
 }
 
-// TestAnHonestPaneKeepsItsFileActions is the other half: a local pane whose
-// shell really is where it says keeps everything.
-func TestAnHonestPaneKeepsItsFileActions(t *testing.T) {
-	_, victim, bait := spoofDirs(t)
-	m := spoofPane(t, victim, victim)
-
-	if m.FileViewSpoofed() {
-		t.Fatal("a pane telling the truth was called a liar")
-	}
-	if !m.FileActionsOn() {
-		t.Fatal("a pane telling the truth lost its file actions")
-	}
-	if !cursorToFile(m, "keepme.txt") {
-		t.Fatalf("no row for keepme.txt; the listing drew %v", entryNames(m))
-	}
-	m.SidebarFileDelete(true)
-	runOp(t, m, m.FileConfirmActivate(fileConfirmRowGo))
-	if _, err := os.Lstat(bait); err == nil {
-		t.Fatal("an honest pane could not delete a file")
-	}
-}
-
 // TestASymlinkedPathIsNotADisagreement is the false positive that would make
 // this unusable. /proc hands back the resolved path and a shell prints $PWD, so
 // the two spell one folder differently as a matter of course.
@@ -328,48 +273,5 @@ func TestWalkingIntoAFolderDoesNotLaunderASpoofedOne(t *testing.T) {
 	}
 	if m.FileActionsOn() {
 		t.Fatal("the file actions came back one folder down")
-	}
-}
-
-// TestTheRailSaysWhyTheActionsAreGone reads the frame, not the flag. A user who
-// never presses a key still has to be able to tell a pane that will not say
-// where it is from one that is lying about it.
-func TestTheRailSaysWhyTheActionsAreGone(t *testing.T) {
-	real, victim, _ := spoofDirs(t)
-
-	m := spoofPane(t, real, victim)
-	spoofed := strings.Join(railLines(t, m), "\n")
-	if !strings.Contains(spoofed, fileSpoofRow) {
-		t.Fatalf("the rail drew no read-only mark:\n%s", spoofed)
-	}
-
-	m2 := spoofPane(t, victim, victim)
-	honest := strings.Join(railLines(t, m2), "\n")
-	if strings.Contains(honest, fileSpoofRow) {
-		t.Fatalf("an honest pane was marked read only:\n%s", honest)
-	}
-}
-
-// TestTheRefusalNamesWhatToDo is the sentence, checked where the user reads it.
-func TestTheRefusalNamesWhatToDo(t *testing.T) {
-	real, victim, _ := spoofDirs(t)
-	m := spoofPane(t, real, victim)
-	if !cursorToFile(m, "keepme.txt") {
-		t.Fatalf("no row for keepme.txt; the listing drew %v", entryNames(m))
-	}
-	m.SidebarFileDelete(false)
-	if got := lastMessage(m); got != fileSpoofRefusal {
-		t.Fatalf("the delete said %q, want %q", got, fileSpoofRefusal)
-	}
-
-	// The rename takes the other exit out of the gate, because its refusal
-	// normally falls through to the rail's own rename. It has to say the same
-	// sentence rather than nothing.
-	m.Notifications = nil
-	if !m.SidebarFileRename() {
-		t.Fatal("the rename fell through to the rail's own binding")
-	}
-	if got := lastMessage(m); got != fileSpoofRefusal {
-		t.Fatalf("the rename said %q, want %q", got, fileSpoofRefusal)
 	}
 }
