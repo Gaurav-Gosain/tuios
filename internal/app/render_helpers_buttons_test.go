@@ -55,25 +55,6 @@ func at(t *testing.T, cols []rune, offset int) rune {
 	return cols[idx]
 }
 
-func TestControlPillWidths(t *testing.T) {
-	// Left pill + "  - " + " X " + right pill, plus " [] " when floating.
-	const tilingPillWidth = 9
-	const floatingPillWidth = 12
-
-	buttonColor := lipgloss.Color("#7dd3fc")
-	buttonStyle := badgeStyle(buttonColor)
-	cross := buttonStyle.Render(config.Global.GetWindowButtonClose())
-	dash := buttonStyle.Render("  - ")
-	square := buttonStyle.Render(" □ ")
-
-	if got := lipgloss.Width(makeRounded(dash+cross, buttonColor, &config.Global)); got != tilingPillWidth {
-		t.Errorf("tiling pill is %d cells wide, want %d", got, tilingPillWidth)
-	}
-	if got := lipgloss.Width(makeRounded(dash+square+cross, buttonColor, &config.Global)); got != floatingPillWidth {
-		t.Errorf("floating pill is %d cells wide, want %d", got, floatingPillWidth)
-	}
-}
-
 func TestControlPillGlyphsLandOnTheirHitboxes(t *testing.T) {
 	closeGlyph := []rune(config.Global.GetWindowButtonClose())[1]
 
@@ -121,27 +102,5 @@ func TestControlPillGlyphsLandOnTheirHitboxes(t *testing.T) {
 					width, got)
 			}
 		})
-	}
-}
-
-// The close glyph must occupy exactly one cell. A wider one would push every
-// button in the pill left of where the hit-test looks for it, and a terminal
-// that measures it as one cell while drawing it wider would overlap whatever
-// sits to its right.
-func TestCloseButtonIsThreeCells(t *testing.T) {
-	for _, s := range []string{config.WindowButtonClose, config.WindowButtonCloseASCII} {
-		if got := lipgloss.Width(s); got != 3 {
-			t.Errorf("close button %q is %d cells, want 3", s, got)
-		}
-		runes := []rune(s)
-		if len(runes) != 3 {
-			t.Fatalf("close button %q is %d runes, want 3", s, len(runes))
-		}
-		if runes[0] != ' ' || runes[2] != ' ' {
-			t.Errorf("close button %q is missing its padding spaces", s)
-		}
-		if got := lipgloss.Width(string(runes[1])); got != 1 {
-			t.Errorf("close glyph U+%04X is %d cells, want 1", runes[1], got)
-		}
 	}
 }

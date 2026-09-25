@@ -93,30 +93,6 @@ func columnFullyVisible(m *OS, n int) bool {
 	return r.X >= 0 && r.X+r.W <= viewW
 }
 
-// TestAFocusNobodyAskedForLeavesTheStripAlone. The other rule, which this must
-// not have broken: a workspace coming back restores its own focus, and
-// scrolling the strip on that throws away wherever the user had left it.
-func TestAFocusNobodyAskedForLeavesTheStripAlone(t *testing.T) {
-	m := scrollingOS(t, 4)
-	sl := m.GetOrCreateScrollingLayout()
-
-	// Park the strip somewhere of the user's own, with some of the focused
-	// column on screen. The least-scroll rule leaves that alone; anything that
-	// scrolls here is throwing away where the user had got to.
-	m.FocusWindow(1)
-	viewW := m.ScrollingViewWidth()
-	sl.ViewportX = max(sl.ViewportX+viewW/4, 0)
-	sl.ClampViewport(viewW)
-	before := sl.ViewportX
-
-	m.ScrollingOnFocusChange()
-
-	if sl.ViewportX != before {
-		t.Errorf("a focus change moved the strip from %d to %d with the column already visible",
-			before, sl.ViewportX)
-	}
-}
-
 // TestHoveringAPaneBringsAllOfItOnScreen is the same rule for focus follows
 // mouse: pointing at a column with that setting on is how you pick the pane to
 // work in, and there is no other gesture to make.

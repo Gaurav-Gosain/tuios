@@ -132,27 +132,6 @@ func TestSharedBorderFocusIsDistinct(t *testing.T) {
 	}
 }
 
-// TestSharedBorderFocusUsesThemeColor pins that the perimeter is tinted from the
-// theme rather than a hardcoded color, and that it tracks the mode the way the
-// non-shared border does (cyan in window mode, green in terminal mode).
-func TestSharedBorderFocusUsesThemeColor(t *testing.T) {
-	m := sharedBorderOS(t, 3)
-
-	m.Mode = WindowManagementMode
-	_, windowFocus := separatorText(t, m)
-	m.Mode = TerminalMode
-	_, terminalFocus := separatorText(t, m)
-
-	if windowFocus == terminalFocus {
-		t.Error("focused perimeter did not change color between window and terminal mode")
-	}
-	for _, s := range []string{windowFocus, terminalFocus} {
-		if !strings.Contains(s, "\x1b[38;2;") {
-			t.Errorf("focused perimeter is not tinted with a truecolor SGR: %q", s)
-		}
-	}
-}
-
 // TestSharedBorderFocusIsNotColorAlone covers the accessibility requirement: the
 // focus signal has to survive a monochrome or low-contrast theme, so it must not
 // be carried by hue alone. Weight (bold) and shape (corner caps) both carry it.

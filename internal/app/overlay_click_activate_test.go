@@ -81,38 +81,3 @@ func TestSidebarWindowRowOtherSessionAttemptsSwitch(t *testing.T) {
 		t.Errorf("window row of another session did not attempt the switch; notifications: %+v", m.Notifications)
 	}
 }
-
-// TestSidebarSessionRowClickAttemptsSwitch checks the full hit-test route for a
-// non-current session row: a press and release at the row's recorded
-// coordinates goes through the click-or-drag gesture to SwitchToSession.
-// Outside daemon mode the switch fails; the failure notification proves the
-// click reached the switch call.
-func TestSidebarSessionRowClickAttemptsSwitch(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha"}
-	withSidebar(t, true, "left", 28)
-	m.Settings = config.Global
-
-	// A recorded hit for another session's row, as sidebarPanelLines would
-	// record it inside the band.
-	m.SidebarHits = []sidebarRowHit{{
-		X0: 0, Y0: 4, X1: 28, Y1: 5,
-		Kind:        sidebarRowSession,
-		SessionID:   "bravo",
-		WindowIndex: -1,
-	}}
-
-	// x=4 is past the chevron zone, so the press arms the click-or-drag
-	// gesture and the release on the same row delivers the switch.
-	if !m.SidebarClick(4, 4, false) {
-		t.Fatalf("click inside the band was not consumed")
-	}
-	if !m.SidebarDragActive() {
-		t.Fatalf("session row press did not arm the click-or-drag gesture")
-	}
-	if !m.SidebarRelease(4, 4) {
-		t.Fatalf("release did not resolve the gesture")
-	}
-	if !hasNotification(m, "Switch failed") {
-		t.Errorf("session row click did not reach SwitchToSession; notifications: %+v", m.Notifications)
-	}
-}

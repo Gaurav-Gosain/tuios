@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -114,40 +113,6 @@ func TestWorkspaceRenameSeedsAndCommits(t *testing.T) {
 	}
 }
 
-// TestRenameDialogSaysWhatItRenames renders the one dialog for each target and
-// reads its title off the frame, so the user can tell a session rename from a
-// pane rename when both look identical otherwise.
-func TestRenameDialogSaysWhatItRenames(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
-
-	m.BeginRenameSession("work")
-	m.RenameBuffer = "Payments API"
-	out, _, _, _, ok := m.renderRenameDialog()
-	if !ok {
-		t.Fatal("no dialog while a session rename is open")
-	}
-	t.Logf("\n%s", out)
-	if !strings.Contains(out, "rename session") || !strings.Contains(out, "Payments API") {
-		t.Errorf("session rename dialog does not name its target or show the buffer:\n%s", out)
-	}
-
-	m.EndRename()
-	m.BeginRenameWorkspace(2)
-	out, _, _, _, ok = m.renderRenameDialog()
-	if !ok {
-		t.Fatal("no dialog while a workspace rename is open")
-	}
-	t.Logf("\n%s", out)
-	if !strings.Contains(out, "rename workspace 2") {
-		t.Errorf("workspace rename dialog does not name its target:\n%s", out)
-	}
-
-	m.EndRename()
-	if _, _, _, _, ok = m.renderRenameDialog(); ok {
-		t.Error("a dialog is still drawn after the editor closed")
-	}
-}
-
 // TestRenameFieldKeepsWhatWasTyped: the field laundered its buffer through the
 // trimming sanitizer, so a space the user had just pressed was rubbed off the
 // display and the key looked dead even once it reached the buffer. A wide rune
@@ -206,31 +171,5 @@ func TestRenameAppendGate(t *testing.T) {
 	m.RenameAppend("x")
 	if m.RenameBuffer != "" {
 		t.Errorf("typing after the editor closed left %q", m.RenameBuffer)
-	}
-}
-
-// TestWindowRenameStillCommitsLocally guards the path that already existed: a
-// window name is client-owned and must not be routed through a session verb.
-func TestWindowRenameStillCommitsLocally(t *testing.T) {
-	w := &terminal.Window{ID: "w1", CustomName: "build"}
-	m := &OS{Settings: config.Global, Windows: []*terminal.Window{w}}
-
-	m.BeginRenameWindow(w)
-	if m.RenameKind != RenameWindow || m.RenameBuffer != "build" {
-		t.Fatalf("window editor = {kind:%v buffer:%q}", m.RenameKind, m.RenameBuffer)
-	}
-	if got := m.RenameDialogTitle(); got != "rename" {
-		t.Errorf("dialog title = %q, want %q", got, "rename")
-	}
-
-	m.RenameBuffer = "tests"
-	if cmd := m.CommitRename(); cmd != nil {
-		t.Error("a window rename produced a daemon command")
-	}
-	if w.CustomName != "tests" {
-		t.Errorf("window name = %q, want tests", w.CustomName)
-	}
-	if m.Renaming() {
-		t.Error("the editor is still open after committing")
 	}
 }

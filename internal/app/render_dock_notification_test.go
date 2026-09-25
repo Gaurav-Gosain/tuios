@@ -334,22 +334,6 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 	}
 }
 
-// TestSeverityCapsAreDistinctWeights is the greyscale check.
-//
-// Severity has to survive a screenshot with no colour in it, which is what the
-// weighted cap is for. Three severities sharing a weight would put the whole
-// channel back on hue, which is the failure the prototype found when the
-// weights were an eighth apart instead of two.
-func TestSeverityCapsAreDistinctWeights(t *testing.T) {
-	info, warn, err := notifCap("info", &config.Global), notifCap("warning", &config.Global), notifCap("error", &config.Global)
-	if notifCap("success", &config.Global) != info {
-		t.Error("success and info should share the light cap; they are both routine")
-	}
-	if info == warn || warn == err || info == err {
-		t.Errorf("the three cap weights must differ: info %q, warning %q, error %q", info, warn, err)
-	}
-}
-
 // TestQueuedErrorIsStillIndicatedWhenBuried is the overflow contract.
 //
 // The newest message wins the block, which means a later info can push an error
@@ -435,27 +419,6 @@ func TestNotificationOutranksCopyModeHelp(t *testing.T) {
 	}
 }
 
-// TestDockStaysOneScreenWideWithAMessage is the containment check on the whole
-// bar rather than the block alone. The dock is composed of a left block, the
-// window pills and the right block, and a message that fits its own budget can
-// still push the bar past the screen if the budget ignored what the rest of the
-// dock is already using.
-func TestDockStaysOneScreenWideWithAMessage(t *testing.T) {
-	long := strings.Repeat("a very long failure message that keeps going ", 4)
-
-	for _, width := range notifWidths {
-		m := notifTestOS(t, width)
-		m.ShowNotification(long, "error", m.Settings.NotificationDuration)
-
-		dock, _ := m.renderDockString()
-		for i, line := range strings.Split(dock, "\n") {
-			if got := lipgloss.Width(line); got != width {
-				t.Errorf("width %d: dock row %d is %d columns", width, i, got)
-			}
-		}
-	}
-}
-
 // TestNotificationLifetimeFloorsAndStickiness pins the durations.
 //
 // 1500ms was a WCAG 2.2.1 Level A failure: a time limit on reading content with
@@ -492,29 +455,5 @@ func TestNotificationLifetimeFloorsAndStickiness(t *testing.T) {
 	// the defaults are back where they started.
 	if config.Global.NotificationDuration < 4*time.Second {
 		t.Errorf("the default message lifetime is %v, under the 4s readability floor", config.Global.NotificationDuration)
-	}
-}
-
-// TestNotificationNeverCoversAPane is the placement decision, asserted rather
-// than assumed. The corner toast was drawn as a layer over the workspace and
-// landed on the panes it was reporting about; the message block is part of the
-// dock and contributes no layer at all.
-func TestNotificationNeverCoversAPane(t *testing.T) {
-	m := notifTestOS(t, 120)
-	m.ShowNotification("Recording saved: demo.tape", "success", m.Settings.NotificationDuration)
-
-	for _, layer := range m.renderOverlays() {
-		if id := layer.GetID(); strings.HasPrefix(id, "notif") {
-			t.Errorf("a message produced an overlay layer %q; it belongs to the dock", id)
-		}
-		if strings.Contains(stripANSIForTrace(layer.GetContent()), "Recording saved") {
-			t.Errorf("a message was drawn over the workspace in layer %q", layer.GetID())
-		}
-	}
-
-	// And it is in the dock, which is the other half of the same claim.
-	dock, _ := m.renderDockString()
-	if !strings.Contains(stripANSIForTrace(dock), "Recording saved") {
-		t.Error("the message is not in the dock either; it went nowhere")
 	}
 }

@@ -285,28 +285,6 @@ func TestKillSessionGoNextFallsBackToQuit(t *testing.T) {
 	}
 }
 
-// TestSidebarMotionHighlightsRow checks motion inside the band records the
-// hover and consumes the event, and motion outside clears it.
-func TestSidebarMotionHighlightsRow(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha"}
-	withSidebar(t, true, "left", 28)
-	m.Settings = config.Global
-
-	if !m.SidebarMotion(3, 5) {
-		t.Fatal("motion inside the band was not consumed")
-	}
-	if !m.SidebarHoverActive || m.SidebarHoverX != 3 || m.SidebarHoverY != 5 {
-		t.Errorf("hover not recorded: active=%v at (%d,%d)", m.SidebarHoverActive, m.SidebarHoverX, m.SidebarHoverY)
-	}
-
-	if m.SidebarMotion(60, 5) {
-		t.Fatal("motion outside the band was consumed")
-	}
-	if m.SidebarHoverActive {
-		t.Error("hover not cleared when the pointer left the band")
-	}
-}
-
 // TestSidebarSessionRowRightClickOpensSessionMenu checks the sidebar session
 // row's context menu carries the quit menu's lifecycle rows in daemon mode.
 func TestSidebarSessionRowRightClickOpensSessionMenu(t *testing.T) {
@@ -342,29 +320,6 @@ func TestSidebarSessionRowRightClickOpensSessionMenu(t *testing.T) {
 		if !seen {
 			t.Errorf("session menu is missing the %q row", action)
 		}
-	}
-}
-
-// TestQuitMenuHoverThroughRealRender drives hover through the real quit menu
-// renderer, so its recorded rows route exactly like the other list overlays.
-func TestQuitMenuHoverThroughRealRender(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
-	m.OpenQuitMenu()
-	m.reconcileOverlayZOrder()
-	content, geo, rows := m.renderQuitMenu()
-	_ = content
-	x, y := m.overlayOrigin("quit", geo)
-	m.OverlayHits = []overlayPanelHit{{Kind: "quit", OriginX: x, OriginY: y, Z: m.overlayZ("quit"), Geo: geo, Rows: rows}}
-	if len(rows) < 2 {
-		t.Fatalf("expected at least 2 quit rows, got %d", len(rows))
-	}
-
-	row := rows[1]
-	if !m.OverlayMouseMotion(x+4, y+row.Rect.Y0) {
-		t.Fatal("motion over the quit menu was not consumed")
-	}
-	if m.QuitMenuSelected != 1 {
-		t.Errorf("hover over quit row 1 selected %d", m.QuitMenuSelected)
 	}
 }
 

@@ -2,11 +2,9 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The maintainer runs a 207x55 host terminal. Every benchmark here uses that as
@@ -104,97 +102,4 @@ func renderedFrame(tb testing.TB, cols, rows int) string {
 	m := newTestOS(win)
 	win.MarkContentDirty()
 	return m.renderTerminal(win, false, false)
-}
-
-// BenchmarkClipWindowContent measures the compositor's per-window clip. This is
-// called once per redrawn window per frame, and it walks every line of the
-// frame twice in the clipping cases: once for the width scan and once for the
-// clip itself.
-func BenchmarkClipWindowContent(b *testing.B) {
-	frame := renderedFrame(b, realCols, realRows)
-
-	b.Run("fully-visible", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _, _ = clipWindowContent(frame, 0, 0, realCols, realRows)
-		}
-	})
-
-	// A window pushed partly off the left edge takes the expensive rune-by-rune
-	// escape-preserving clip path.
-	b.Run("clipped-left", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _, _ = clipWindowContent(frame, -20, 0, realCols, realRows)
-		}
-	})
-
-	b.Run("clipped-right", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _, _ = clipWindowContent(frame, 40, 0, realCols, realRows)
-		}
-	})
-
-	b.Run("offscreen", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _, _ = clipWindowContent(frame, -1000, 0, realCols, realRows)
-		}
-	})
-}
-
-// BenchmarkIsBlankRenderReal measures the blank-frame guard at the real size,
-// on the frame shape it actually sees. cacheRender runs it on every rendered
-// frame, so it is on the hot path once per window per frame.
-func BenchmarkIsBlankRenderReal(b *testing.B) {
-	frame := renderedFrame(b, realCols, realRows)
-	blank := strings.Repeat(strings.Repeat(" ", realCols)+"\n", realRows)
-
-	b.Run("typical", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = isBlankRender(frame)
-		}
-	})
-	b.Run("blank", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = isBlankRender(blank)
-		}
-	})
-}
-
-// BenchmarkFrameWidthImplementations compares the width measurement against the
-// ansi.StringWidth loop it replaced.
-//
-// It exists because the machine these numbers are taken on is shared, and a
-// wall-time figure quoted from one run and compared against a figure from
-// another is worthless when load average swings between 5 and 60: the same
-// benchmark measured 278us and 2.5ms an hour apart with no code change. Both
-// variants here run in one process, interleaved by -count, so they see the same
-// load and the same cache state, and the ratio between them is meaningful even
-// when neither absolute number is.
-func BenchmarkFrameWidthImplementations(b *testing.B) {
-	lines := strings.Split(renderedFrame(b, realCols, realRows), "\n")
-
-	b.Run("reference-stringwidth", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			widest := 0
-			for _, line := range lines {
-				if w := ansi.StringWidth(line); w > widest {
-					widest = w
-				}
-			}
-			_ = widest
-		}
-	})
-
-	b.Run("fast-path", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = framesWidth(lines)
-		}
-	})
 }

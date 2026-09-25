@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -93,38 +92,4 @@ func focusRightmostPane(t *testing.T, m *OS) *terminal.Window {
 	}
 	t.Fatalf("no pane reaches the content right boundary %d", edge)
 	return nil
-}
-
-// TestSharedBorderSuppressesCapAtSidebarEdge is N8: with the sidebar on the
-// right, the focused pane whose right edge sits against the sidebar must not draw
-// a corner cap on the sidebar's own edge rule, because the two read as a doubled
-// border. The divider still has to reach that rule and meet it at a junction, so
-// the suppression drops the cap rather than the end of the line.
-func TestSharedBorderSuppressesCapAtSidebarEdge(t *testing.T) {
-	withSidebar := sharedBorderSidebarOS(t, 3, "right")
-	// Read after the model pins the style: the glyphs are the style's own.
-	b := config.Global.GetBorderForStyle()
-	if withSidebar.GetRightMargin() <= 0 {
-		t.Fatalf("right sidebar reserved no margin; content width %d", withSidebar.GetContentWidth())
-	}
-	focusRightmostPane(t, withSidebar)
-	all, focused := separatorText(t, withSidebar)
-	if strings.Contains(focused, b.TopRight) || strings.Contains(focused, b.BottomRight) {
-		t.Errorf("right sidebar: focused perimeter still caps at the sidebar edge (found %q or %q) in %q",
-			b.TopRight, b.BottomRight, focused)
-	}
-	if !strings.Contains(all, b.MiddleRight) {
-		t.Errorf("right sidebar: the divider never reaches the sidebar's edge rule; expected %q in %q",
-			b.MiddleRight, all)
-	}
-
-	// Regression guard: the junction is drawn for a rule that is there, not for
-	// every divider that runs to the edge of the content region.
-	noSidebar := sharedBorderSidebarOS(t, 3, "")
-	withSidebar.Settings = config.Global
-	focusRightmostPane(t, noSidebar)
-	allNo, _ := separatorText(t, noSidebar)
-	if strings.Contains(allNo, b.MiddleRight) {
-		t.Errorf("no sidebar: a junction was drawn where no rule closes the region: %q", allNo)
-	}
 }

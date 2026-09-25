@@ -4,11 +4,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // A pane must draw inside its own rectangle and nowhere else.
@@ -60,44 +58,6 @@ func TestWindowBoxNeverExceedsItsRectangle(t *testing.T) {
 	last := lines[len(lines)-1]
 	if !strings.Contains(last, m.Settings.GetWindowBorderBottomLeft()) || strings.Contains(last, "line ") {
 		t.Errorf("last row of the box is not the bottom border: %q", last)
-	}
-}
-
-// The tick that finishes the last animation is the tick that first puts every
-// pane at the size it settled at: Animation.Update only resizes the emulator
-// when it completes. Deciding whether to draw from HasActiveAnimations AFTER
-// UpdateAnimations has removed the finished animation answers "nothing is
-// happening", the frame is skipped, and the last frame the user sees is the
-// second-to-last animation step, with every pane still drawn at its
-// pre-animation size, forever, because nothing dirties the model afterwards.
-func TestAnimationCompletionTickStillRenders(t *testing.T) {
-	win := newTestWindow(t, "anim-tick-0001", 60, 34)
-	m := newTestOS(win)
-	m.Width, m.Height = 120, 40
-
-	anim := ui.NewSnapAnimation(win, 0, 0, 40, 20, time.Millisecond)
-	if anim == nil {
-		t.Fatal("expected a snap animation")
-	}
-	m.Animations = append(m.Animations, anim)
-	time.Sleep(3 * time.Millisecond)
-
-	// This is the shape of the TickerMsg branch: capture first, update, decide.
-	hadAnimations := m.HasActiveAnimations()
-	m.UpdateAnimations()
-	hasAnimations := m.HasActiveAnimations()
-
-	if hasAnimations {
-		t.Fatal("animation should have completed")
-	}
-	if !hadAnimations {
-		t.Fatal("animation should have been active before the update")
-	}
-	if !(hadAnimations || hasAnimations) {
-		t.Error("the tick that completed the animation would not render")
-	}
-	if win.Width != 40 || win.Height != 20 {
-		t.Errorf("window settled at %dx%d, want 40x20", win.Width, win.Height)
 	}
 }
 

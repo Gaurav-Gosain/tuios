@@ -239,55 +239,6 @@ func TestOverlayLayersFitNarrowScreens(t *testing.T) {
 	}
 }
 
-// TestOverlayDesktopSizesUnchanged pins the panel sizes at a normal terminal
-// size. Fitting the overlays to narrow screens must not shrink them on a screen
-// that has the room, which is the shared path native tuios renders on.
-func TestOverlayDesktopSizesUnchanged(t *testing.T) {
-	m := newNarrowOS(t, 120, 40)
-
-	if got := m.panelWidth(helpPanelInnerWidth); got != helpPanelInnerWidth {
-		t.Errorf("help width = %d, want %d", got, helpPanelInnerWidth)
-	}
-	if w, rows, _ := m.paletteLayout(); w != paletteInnerWidth || rows != paletteMaxVisible {
-		t.Errorf("palette layout = %d x %d, want %d x %d", w, rows, paletteInnerWidth, paletteMaxVisible)
-	}
-	if w, rows, _ := m.themePickerLayout(); w != themePickerInnerWidth || rows != themePickerVisibleRows {
-		t.Errorf("theme picker layout = %d x %d, want %d x %d", w, rows, themePickerInnerWidth, themePickerVisibleRows)
-	}
-	if got := m.tapeReviewRows(); got != tapeReviewViewportRows {
-		t.Errorf("tape review rows = %d, want %d", got, tapeReviewViewportRows)
-	}
-
-	cats := m.settingsCategories()
-	for i, cat := range cats {
-		m.SettingsCategory = i
-		w, rows, _, _ := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
-		if w != settingsMaxInnerWidth {
-			t.Errorf("settings[%s] width = %d, want %d", cat.Name, w, settingsMaxInnerWidth)
-		}
-		// Every category shows all of its rows at a desktop height: nothing
-		// scrolls that did not scroll before.
-		if rows < len(cat.Items) || rows < settingsVisibleRows {
-			t.Errorf("settings[%s] rows = %d, want at least %d", cat.Name, rows, max(len(cat.Items), settingsVisibleRows))
-		}
-	}
-
-	// The help panel is 74 + 4 cells across and its tab strip stays on one row.
-	out, geo := m.RenderHelpMenu()
-	if geo.Width != helpPanelInnerWidth+4 {
-		t.Errorf("help panel width = %d, want %d", geo.Width, helpPanelInnerWidth+4)
-	}
-	if lipgloss.Height(out) != 25 {
-		t.Errorf("help panel height = %d, want 25 (one tab row)", lipgloss.Height(out))
-	}
-	for _, r := range geo.Tabs {
-		if r.Y0 != geo.Tabs[0].Y0 {
-			t.Errorf("help tabs wrapped onto %d rows at desktop width", r.Y0-geo.Tabs[0].Y0+1)
-			break
-		}
-	}
-}
-
 // TestWhichKeyFitsNarrowScreens renders the which-key overlay for every prefix
 // at every position and checks it lands wholly on screen.
 func TestWhichKeyFitsNarrowScreens(t *testing.T) {

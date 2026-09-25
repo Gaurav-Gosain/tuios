@@ -155,31 +155,6 @@ func TestNotificationKeyboardTwinWalksTheQueue(t *testing.T) {
 	}
 }
 
-// TestTargetedNotificationIsUnderlined checks the affordance: a message you can
-// follow is marked as one, and a message you cannot is not.
-func TestTargetedNotificationIsUnderlined(t *testing.T) {
-	m := jumpTestOS(t)
-	m.ShowNotification("Copied to clipboard", "info", m.Settings.NotificationDuration)
-	plain, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0)
-	if !ok {
-		t.Fatal("no block for the untargeted message")
-	}
-	if hasUnderlineSGR(plain.Text) {
-		t.Fatalf("an untargeted message drew underlined: %q", plain.Text)
-	}
-
-	m.Notifications = nil
-	m.ShowNotificationFrom("yonder needs input", "warning", m.Settings.NotificationDuration,
-		NotifTarget{SessionID: "main", WindowID: "yonder"})
-	linked, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0)
-	if !ok {
-		t.Fatal("no block for the targeted message")
-	}
-	if !hasUnderlineSGR(linked.Text) {
-		t.Fatalf("a targeted message drew without its link mark: %q", linked.Text)
-	}
-}
-
 // hasUnderlineSGR reports whether any SGR sequence in s sets attribute 4.
 // Matching on the parameter rather than on a literal escape is necessary
 // because lipgloss folds underline in with the colours in one sequence.

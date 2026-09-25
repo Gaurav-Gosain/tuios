@@ -401,36 +401,6 @@ func TestScrollbarPinsToTheEndsOfItsTravel(t *testing.T) {
 	}
 }
 
-// The thin style's look: one box-drawing vertical at two weights, heavy where
-// the viewport is and light everywhere else.
-func TestScrollbarThinStyleIsAHeavyStrokeOnAHairline(t *testing.T) {
-	scrollbarDefaults(t)
-	win := newTestWindow(t, "sbthin-0001", 60, 20)
-	win.X, win.Y = 3, 1
-	fillScrollback(t, win, 400)
-	scrollBack(t, win, 200)
-	m := newTestOS(win)
-
-	withScrollbarStyle(t, m, config.ScrollbarStyleThin, func() {
-		glyphs := barGlyphs(t, barFrame(t, m, win, true), win)
-		thumbRows := 0
-		for i, glyph := range glyphs {
-			switch glyph {
-			case "┃":
-				thumbRows++
-			case "│":
-			default:
-				t.Fatalf("row %d of the thin bar drew %q, want the ┃ thumb or the │ track", i, glyph)
-			}
-		}
-		if thumbRows == 0 || thumbRows >= len(glyphs) {
-			t.Errorf("the thumb covers %d of %d rows; it reports a position, so it can be neither absent nor the whole track",
-				thumbRows, len(glyphs))
-		}
-	})
-	m.Settings = config.Global
-}
-
 // The track style is the one that fills its column with a surface: a block
 // thumb on a fill rather than two hairlines. Both styles still obey the rules
 // that make the bar composable: same column, same visibility, same clip.

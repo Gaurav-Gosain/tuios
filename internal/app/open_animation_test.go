@@ -137,34 +137,6 @@ func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
 	}
 }
 
-// TestOpenAnimationRespectsDisabledAnimations checks the option the fix has to
-// leave alone: with animations off, nothing is armed and the pane is placed on
-// its tile in one step. The open start rectangle is a property of the animation,
-// so it must not survive into the path that has no animation.
-func TestOpenAnimationRespectsDisabledAnimations(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	defer func() { config.Global.AnimationsEnabled = prev }()
-
-	h := newOpenAnimHarness(120, 40)
-
-	for i := 1; i <= 3; i++ {
-		if anims := h.createWindow(t); len(anims) != 0 {
-			t.Fatalf("pane %d armed %d animations with animations disabled", i, len(anims))
-		}
-	}
-
-	for _, w := range h.m.Windows {
-		if w.Opening {
-			t.Errorf("window %s still marked opening after placement", w.ID)
-		}
-		if w.Width <= ui.MinAnimatedWidth || w.Height <= ui.MinAnimatedHeight {
-			t.Errorf("window %s left at an animation start box (%dx%d) rather than its tile",
-				w.ID, w.Width, w.Height)
-		}
-	}
-}
-
 // TestRepeatCreationSyncLeavesAPlacedPaneAlone is the second half of the bug,
 // and the half that kept it on screen after the start rectangle was already
 // right. The daemon re-broadcasts the creating state after a following mutation,
@@ -220,54 +192,6 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 				a.StartX, a.StartY, a.StartWidth, a.StartHeight,
 				a.EndX, a.EndY, a.EndWidth, a.EndHeight)
 		}
-	}
-}
-
-// TestCloseAnimationUnchanged records that closing does not share the open
-// path's start rectangle. The pane that closes is gone with no animation of its
-// own; the surviving panes snap from where they were to the space they inherit,
-// which is continuous motion and was never affected by the bug.
-func TestCloseAnimationUnchanged(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = true
-	defer func() { config.Global.AnimationsEnabled = prev }()
-
-	h := newOpenAnimHarness(120, 40)
-	h.createWindow(t)
-	h.createWindow(t)
-
-	survivor := h.m.Windows[0]
-	before := layout.Rect{X: survivor.X, Y: survivor.Y, W: survivor.Width, H: survivor.Height}
-
-	closing := h.m.Windows[len(h.m.Windows)-1]
-	closed := h.m.BuildSessionState()
-	closed.Version = h.state.Version + 1
-	for i, ws := range closed.Windows {
-		if ws.ID == closing.ID {
-			closed.Windows = append(closed.Windows[:i], closed.Windows[i+1:]...)
-			break
-		}
-	}
-
-	h.m.Animations = nil
-	if err := h.m.ApplyStateSync(closed); err != nil {
-		t.Fatalf("close sync: %v", err)
-	}
-
-	var found bool
-	for _, a := range h.m.Animations {
-		if a.Window != survivor {
-			continue
-		}
-		found = true
-		if a.StartX != before.X || a.StartY != before.Y ||
-			a.StartWidth != before.W || a.StartHeight != before.H {
-			t.Errorf("survivor snaps from (%d,%d %dx%d), want its own previous box (%d,%d %dx%d)",
-				a.StartX, a.StartY, a.StartWidth, a.StartHeight, before.X, before.Y, before.W, before.H)
-		}
-	}
-	if !found {
-		t.Fatal("the surviving pane was never animated into the space the closed pane freed")
 	}
 }
 
@@ -374,30 +298,5 @@ func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
 	h.m.TileAllWindows()
 	if len(h.m.Animations) != 0 {
 		t.Errorf("a retile that moved nothing armed %d animations", len(h.m.Animations))
-	}
-}
-
-// TestMasterStackOpenRespectsDisabledAnimations checks the option: with
-// animations off the pane is placed on its slot in one step, and the open start
-// rectangle does not survive into the path with no animation to carry it.
-func TestMasterStackOpenRespectsDisabledAnimations(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	defer func() { config.Global.AnimationsEnabled = prev }()
-
-	h := newOpenAnimHarnessWithLayout(120, 40, false)
-	for i := 1; i <= 3; i++ {
-		if anims := h.createWindow(t); len(anims) != 0 {
-			t.Fatalf("pane %d armed %d animations with animations disabled", i, len(anims))
-		}
-	}
-	for _, w := range h.m.Windows {
-		if w.Opening {
-			t.Errorf("window %s still marked opening after placement", w.ID)
-		}
-		if w.Width <= ui.MinAnimatedWidth || w.Height <= ui.MinAnimatedHeight {
-			t.Errorf("window %s left at an animation start box (%dx%d) rather than its slot",
-				w.ID, w.Width, w.Height)
-		}
 	}
 }

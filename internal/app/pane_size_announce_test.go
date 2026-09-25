@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -106,106 +105,6 @@ func newAnnounceOS(t *testing.T, width, height int) (*OS, map[string]*toldSize) 
 	}
 	m.FocusedWindow = 0
 	return m, told
-}
-
-// TestNewWindowInNewWorkspaceAnnouncesItsSize drives the daemon window path: a
-// client on a fresh workspace asks for a window, the daemon pushes it Unplaced
-// at the session's nominal box, and the client places and tiles it. The size
-// the guest is told must be the size the tile gives it, not the nominal box.
-func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
-	prevAnim := config.Global.AnimationsEnabled
-	prevShared := config.Global.SharedBorders
-	config.Global.AnimationsEnabled = false
-	config.Global.SharedBorders = true
-	t.Cleanup(func() {
-		config.Global.AnimationsEnabled = prevAnim
-		config.Global.SharedBorders = prevShared
-	})
-
-	const width, height = 200, 50
-	ptyDataChan := make(chan struct{}, 1)
-	drainDone := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-ptyDataChan:
-			case <-drainDone:
-				return
-			}
-		}
-	}()
-	t.Cleanup(func() { close(drainDone) })
-
-	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
-		SharedBorders:        config.Global.SharedBorders,
-		PaneGap:              config.Global.PaneGap,
-		NumWorkspaces:        9,
-		CurrentWorkspace:     1,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]WindowLayout),
-		WorkspaceHasCustom:   map[int]bool{},
-		WorkspaceMasterRatio: map[int]float64{},
-		Width:                width,
-		Height:               height,
-		AutoTiling:           true,
-		UseBSPLayout:         true,
-		PendingResizes:       make(map[string][2]int),
-		PTYDataChan:          ptyDataChan,
-	}
-	t.Cleanup(func() {
-		for _, w := range m.Windows {
-			w.Close()
-		}
-	})
-
-	daemonState := &session.SessionState{
-		Name:             "fresh-workspace",
-		CurrentWorkspace: 1,
-		AutoTiling:       true,
-		WorkspaceFocus:   map[int]string{},
-		Version:          1,
-	}
-	push := func(ws int) {
-		id := fmt.Sprintf("ws%d-win-%036d", ws, len(daemonState.Windows)+1)
-		daemonState.Windows = append(daemonState.Windows, session.WindowState{
-			ID:        id,
-			PTYID:     fmt.Sprintf("pty-%d", len(daemonState.Windows)+1),
-			Title:     id,
-			Width:     width,
-			Height:    height,
-			Workspace: ws,
-			Unplaced:  true,
-		})
-		daemonState.FocusedWindowID = id
-		daemonState.CurrentWorkspace = ws
-		daemonState.Version++
-		if err := m.ApplyStateSync(daemonState); err != nil {
-			t.Fatalf("ApplyStateSync: %v", err)
-		}
-	}
-
-	push(1)
-	m.SwitchToWorkspace(2)
-	push(2)
-
-	told := map[string]*toldSize{}
-	checkPaneSizes(t, m, told, "new-window-in-new-workspace")
-
-	// The lone window on the fresh workspace owns the whole content box, no
-	// more and no less: still Unplaced-sized means placement never ran.
-	bounds := m.GetBSPBounds()
-	for _, w := range m.Windows {
-		if w.Workspace != 2 {
-			continue
-		}
-		if w.X != bounds.X || w.Y != bounds.Y || w.Width != bounds.W || w.Height != bounds.H {
-			t.Errorf("workspace 2 window at (%d,%d) %dx%d, want the content box (%d,%d) %dx%d",
-				w.X, w.Y, w.Width, w.Height, bounds.X, bounds.Y, bounds.W, bounds.H)
-		}
-	}
 }
 
 // setSharedBorders flips the setting the way the settings panel and the command

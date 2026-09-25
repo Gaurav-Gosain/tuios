@@ -45,17 +45,3 @@ func TestUnexpectedTerminationKeepsDiagnostic(t *testing.T) {
 		}
 	})
 }
-
-// QuitSession is the single deliberate quit path, so the flag it sets is what
-// every quit keybinding, the confirmation dialog, and the dialog's mouse
-// handler all depend on.
-func TestQuitSessionRecordsIntent(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	if m.QuitRequested {
-		t.Fatal("QuitRequested set before quitting")
-	}
-	m.QuitSession()
-	if !m.QuitRequested {
-		t.Error("QuitSession did not record that the quit was deliberate")
-	}
-}

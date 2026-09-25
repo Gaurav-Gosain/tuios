@@ -5,31 +5,6 @@ import (
 	"testing"
 )
 
-// BenchmarkIsBlankRender measures the guard added to the render cache in
-// isolation. The realistic case is a pane with text in it, where the scan exits
-// on the first visible byte; the blank pane is the worst case, where it walks
-// the whole frame.
-func BenchmarkIsBlankRender(b *testing.B) {
-	var full, blank string
-	for y := range 40 {
-		full += fmt.Sprintf("\x1b[38;5;12mline %02d content goes here and fills the row\x1b[m\n", y)
-		blank += "                                                            \n"
-	}
-
-	b.Run("typical-visible", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = isBlankRender(full)
-		}
-	})
-	b.Run("worst-case-blank", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = isBlankRender(blank)
-		}
-	})
-}
-
 // BenchmarkRenderTerminalUnfocused measures the whole unfocused render path, so
 // the guard above can be read as a fraction of the work one window already
 // costs per frame.

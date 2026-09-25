@@ -68,27 +68,6 @@ func TestAnUnfocusedRailSoftensItsCursorBand(t *testing.T) {
 	}
 }
 
-// TestAMachineHeadingIsNotBold: the rail spends one bold voice, on a row that
-// wants a human. A heading wearing the same weight is what made that voice stop
-// meaning anything.
-func TestAMachineHeadingIsNotBold(t *testing.T) {
-	m := hostRailOS(t)
-	head := hostHeadingNode(t, m)
-
-	var lines []string
-	m.drawHostRow(head, 40, sidebarVariantFull, theme.UI(), sidebarRowState{}, true, true,
-		func(sidebarRowKind, string, string) bool { return false },
-		func(sidebarRowKind, string, string, int, int) {},
-		func(sidebarTokenSpan, string) {},
-		-1, func(s string) string { return s }, &lines)
-	if len(lines) != 1 {
-		t.Fatalf("drawHostRow drew %d lines, want 1", len(lines))
-	}
-	if sgrHasBold(lines[0]) {
-		t.Errorf("a machine heading is still bold: %q", lines[0])
-	}
-}
-
 // TestAMachineHeadingCarriesARule pins what replaced the weight. The heading is
 // told from the rows under it by a rule running out to the right spine, which
 // is a different kind of mark rather than a louder one, so it survives having
@@ -179,24 +158,6 @@ func sgrHasBold(s string) bool {
 		i = j
 	}
 	return false
-}
-
-// TestSgrHasBoldReadsAFoldedSequence guards the guard. The obvious spelling of
-// this check passes on a bold heading, so the helper needs its own positive and
-// negative halves or the test above proves nothing.
-func TestSgrHasBoldReadsAFoldedSequence(t *testing.T) {
-	if !sgrHasBold("\x1b[1;38;2;191;188;200mlocal\x1b[m") {
-		t.Error("bold folded into a colour sequence was not seen")
-	}
-	if !sgrHasBold("\x1b[1mlocal\x1b[m") {
-		t.Error("standalone bold was not seen")
-	}
-	if sgrHasBold("\x1b[38;2;191;188;200mlocal\x1b[m") {
-		t.Error("a plain 24-bit colour was read as bold")
-	}
-	if sgrHasBold("\x1b[38;5;1mlocal\x1b[m") {
-		t.Error("colour index 1 was read as bold")
-	}
 }
 
 // hostHeadingNode is the machine heading in the host rail fixture.

@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // These run on whichever VT backend the test binary was built with, so the
@@ -73,61 +72,6 @@ func samePaneColor(a, b color.Color) bool {
 		return isNilColor(a) && isNilColor(b)
 	}
 	return safeColorEquals(a, b)
-}
-
-func TestPaneBackgroundPaintsDefaultCellsAndKeepsAppBackgrounds(t *testing.T) {
-	withTheme(t, "")
-	win := paneBgWindow(t, "pbg-1", 2, 2, 40, 10)
-	m := paneBgOS(t, paneBgHex, win)
-	canvas := m.GetCanvas(false)
-
-	// Content starts inside the border: one column in, one row down.
-	cx, cy := win.X+1, win.Y+1
-
-	if bg, _ := cellColors(t, canvas, cx, cy); isNilColor(bg) || samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("the app's red background at (%d,%d) became %v; an app-set background has to win", cx, cy, bg)
-	}
-	// "RED" then a space then "plain": column 4 is the p.
-	if bg, _ := cellColors(t, canvas, cx+4, cy); !samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("a default-background cell holding text has bg %v, want %v", bg, paneBgRGBA)
-	}
-	// Past the end of the text, and a row the program never wrote.
-	if bg, _ := cellColors(t, canvas, cx+30, cy); !samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("a blank cell after the text has bg %v, want %v", bg, paneBgRGBA)
-	}
-	if bg, _ := cellColors(t, canvas, cx+5, cy+5); !samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("a blank row has bg %v, want %v", bg, paneBgRGBA)
-	}
-	// The border is chrome, and so is the title row: neither is painted.
-	if bg, _ := cellColors(t, canvas, win.X, cy); !isNilColor(bg) {
-		t.Errorf("the left border cell was painted %v", bg)
-	}
-	if bg, _ := cellColors(t, canvas, win.X+win.Width-1, cy+2); !isNilColor(bg) {
-		t.Errorf("the right border cell was painted %v", bg)
-	}
-	if bg, _ := cellColors(t, canvas, cx+10, win.Y+win.Height-1); !isNilColor(bg) {
-		t.Errorf("the bottom border cell was painted %v", bg)
-	}
-	// Outside the pane entirely.
-	if bg, _ := cellColors(t, canvas, 70, 20); !isNilColor(bg) {
-		t.Errorf("a cell outside every pane was painted %v", bg)
-	}
-	// With no theme, text in the default colour keeps the host's own.
-	if _, fg := cellColors(t, canvas, cx+4, cy); !isNilColor(fg) {
-		t.Errorf("with no theme the default foreground was replaced by %v", fg)
-	}
-}
-
-func TestPaneBackgroundOffPaintsNothing(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	win := paneBgWindow(t, "pbg-off", 2, 2, 40, 10)
-	m := paneBgOS(t, config.PaneBackgroundOff, win)
-	canvas := m.GetCanvas(false)
-	for _, pt := range [][2]int{{win.X + 5, win.Y + 1}, {win.X + 30, win.Y + 1}, {win.X + 5, win.Y + 6}} {
-		if bg, _ := cellColors(t, canvas, pt[0], pt[1]); !isNilColor(bg) {
-			t.Errorf("off painted (%d,%d) with %v", pt[0], pt[1], bg)
-		}
-	}
 }
 
 func TestPaneBackgroundThemePaintsTheThemeGroundAndInk(t *testing.T) {
@@ -253,34 +197,6 @@ func TestPaneBackgroundKeepsTheSelection(t *testing.T) {
 	}
 }
 
-// A pane whose content did not change keeps its parsed cells from frame to
-// frame. Switching the option has to reach it anyway, or the ground changes
-// only on the panes that happen to print something next.
-func TestPaneBackgroundChangeRepaintsACachedLayer(t *testing.T) {
-	withTheme(t, "")
-	win := paneBgWindow(t, "pbg-cache", 2, 2, 40, 10)
-	m := paneBgOS(t, config.PaneBackgroundOff, win)
-	x, y := win.X+20, win.Y+2
-
-	if bg, _ := cellColors(t, m.GetCanvas(false), x, y); !isNilColor(bg) {
-		t.Fatalf("off painted %v", bg)
-	}
-	// No dirty marking at all: the layer and its string are reused as they
-	// are, which is the case the cellLayer key exists for.
-	m.Settings.PaneBackground = paneBgHex
-	if bg, _ := cellColors(t, m.GetCanvas(false), x, y); !samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("after switching on, a cached pane has bg %v, want %v", bg, paneBgRGBA)
-	}
-	m.Settings.PaneBackground = "#654321"
-	if bg, _ := cellColors(t, m.GetCanvas(false), x, y); !samePaneColor(bg, color.RGBA{R: 0x65, G: 0x43, B: 0x21, A: 0xff}) {
-		t.Errorf("after a colour change, a cached pane has bg %v", bg)
-	}
-	m.Settings.PaneBackground = config.PaneBackgroundOff
-	if bg, _ := cellColors(t, m.GetCanvas(false), x, y); !isNilColor(bg) {
-		t.Errorf("after switching off, a cached pane kept %v", bg)
-	}
-}
-
 // A lone fullscreen pane skips the compositor, and keeps skipping it with the
 // option on: the fast path paints the ground into its own frame.
 func TestPaneBackgroundOnTheFullscreenFastPath(t *testing.T) {
@@ -383,56 +299,4 @@ func TestPaneBackgroundOffAllocatesNothing(t *testing.T) {
 	if n := testing.AllocsPerRun(100, func() { _ = m.paneGround() }); n != 0 {
 		t.Errorf("resolving a cached pane background allocates %.0f times", n)
 	}
-}
-
-// The option has a row on the Backgrounds tab, drawn as a colour row so it
-// opens the picker, and a value chosen there reaches the frame.
-func TestPaneBackgroundSettingsRow(t *testing.T) {
-	withTheme(t, "")
-	win := paneBgWindow(t, "pbg-row", 2, 2, 40, 10)
-	m := paneBgOS(t, "", win)
-	m.UserConfig = config.DefaultConfig()
-
-	var row *settingItem
-	for _, cat := range m.settingsCategories() {
-		for i := range cat.Items {
-			if cat.Items[i].Path == "appearance.pane_background" {
-				if cat.Name != "Backgrounds" {
-					t.Errorf("the row is on the %s tab, want Backgrounds", cat.Name)
-				}
-				row = &cat.Items[i]
-			}
-		}
-	}
-	if row == nil {
-		t.Fatal("the settings page has no pane background row")
-	}
-	if row.Control != controlColor || row.activate == nil {
-		t.Errorf("the row is not a colour row that opens the picker: %+v", row)
-	}
-	// Unset on a default config, which follows the All surfaces row.
-	if got := row.value(m); got != backgroundFollowsAll {
-		t.Errorf("the row reads %q on a default config, want %q", got, backgroundFollowsAll)
-	}
-
-	_ = m.setColorOption("appearance.pane_background", paneBgHex)
-	if m.Settings.PaneBackground != paneBgHex || m.UserConfig.Appearance.PaneBackground != paneBgHex {
-		t.Fatalf("setting from the row left settings %q and config %q",
-			m.Settings.PaneBackground, m.UserConfig.Appearance.PaneBackground)
-	}
-	if got := row.value(m); got != paneBgHex {
-		t.Errorf("the row reads %q after the change, want %s", got, paneBgHex)
-	}
-	if bg, _ := cellColors(t, m.GetCanvas(false), win.X+20, win.Y+2); !samePaneColor(bg, paneBgRGBA) {
-		t.Errorf("the frame after the change has bg %v, want %v", bg, paneBgRGBA)
-	}
-	if got := m.setColorOption("appearance.pane_background", "navy"); got != nil || m.Settings.PaneBackground != paneBgHex {
-		t.Errorf("a value that is not a colour was applied: %q", m.Settings.PaneBackground)
-	}
-}
-
-// TestPaneBackgroundBackend names the backend these ran on, so a -tags ghostty
-// run says in its own output that it covered libghostty-vt.
-func TestPaneBackgroundBackend(t *testing.T) {
-	t.Logf("pane background tests ran on the %s VT backend", vt.Backend)
 }

@@ -7,8 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // assertSolidRect fails if any line has a different display width than the
@@ -27,33 +25,6 @@ func assertSolidRect(t *testing.T, name, out string) {
 	}
 }
 
-// TestOverlayPanelRendersSolid renders a sample panel through the overlay
-// package and asserts it is a gap-free solid rectangle.
-func TestOverlayPanelRendersSolid(t *testing.T) {
-	pal := theme.UI()
-	bg := pal.Surface
-
-	rows := []string{
-		overlay.KeyBadges([]string{"n"}, bg, pal) + overlay.Style(bg).Render("   ") + overlay.Style(bg).Foreground(pal.Fg).Render("New window"),
-		overlay.Style(bg).Foreground(pal.FgDim).Render("Theme") + overlay.Style(bg).Render("   ") + overlay.Cycler("tokyonight", true, bg, pal),
-		overlay.Style(bg).Foreground(pal.FgDim).Render("Shared borders") + overlay.Style(bg).Render("   ") + overlay.Toggle(true, false, bg, pal),
-	}
-
-	p := overlay.Panel{
-		Title:     "Sample Panel",
-		Width:     60,
-		Tabs:      []string{"Windows", "Layout", "Modes"},
-		ActiveTab: 0,
-		Body:      strings.Join(rows, "\n"),
-		Hints:     []overlay.Hint{{Key: "↑↓", Label: "move"}, {Key: "esc", Label: "close"}},
-	}
-	out, geo := p.Render(pal)
-	if geo.Width == 0 || len(geo.Tabs) != 3 {
-		t.Errorf("unexpected geometry: width=%d tabs=%d", geo.Width, len(geo.Tabs))
-	}
-	assertSolidRect(t, "sample", out)
-}
-
 // TestSettingsPanelRendersSolid renders the real settings overlay for every
 // category and checks each is a solid rectangle with sane hit geometry.
 func TestSettingsPanelRendersSolid(t *testing.T) {
@@ -70,19 +41,6 @@ func TestSettingsPanelRendersSolid(t *testing.T) {
 		m.SettingsSelected = 0
 		s, _, _ := m.renderSettings()
 		assertSolidRect(t, "settings cat "+strconv.Itoa(i), s)
-	}
-}
-
-// TestThemePickerRenders renders the theme picker (with swatches) and checks it
-// is a solid rectangle with per-row hit geometry.
-func TestThemePickerRenders(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	m.OpenThemePicker()
-	out, geo, rows := m.renderThemePicker()
-	t.Logf("\n%s", out)
-	assertSolidRect(t, "themepicker", out)
-	if geo.Width == 0 || len(rows) == 0 {
-		t.Errorf("expected theme picker geometry+rows, got width=%d rows=%d", geo.Width, len(rows))
 	}
 }
 

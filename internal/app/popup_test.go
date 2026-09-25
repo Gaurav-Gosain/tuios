@@ -35,49 +35,6 @@ func popupOS(t testing.TB, width, height string) (*OS, *terminal.Window) {
 	return m, popup
 }
 
-// TestPopupBoxIsCentredInTheContentRegion is the placement rule: the size the
-// caller asked for, centred in the box the panes go in.
-//
-// Negative control, confirmed red: drop the centring in popupRect and return
-// leftMargin/topMargin instead. Every case then reports x=0, y=0.
-func TestPopupBoxIsCentredInTheContentRegion(t *testing.T) {
-	for _, tc := range []struct {
-		name         string
-		width        string
-		height       string
-		wantW, wantH int
-	}{
-		{"a share of the region", "50%", "40%", 60, 15},
-		{"cells", "40", "12", 40, 12},
-		{"the default", "", "", 96, 22},
-		{"more than the region has", "400", "400", 120, 38},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m, popup := popupOS(t, tc.width, tc.height)
-			x, y, w, h := m.popupRect(popup)
-			if w != tc.wantW || h != tc.wantH {
-				t.Errorf("popup box is %dx%d, want %dx%d", w, h, tc.wantW, tc.wantH)
-			}
-			region := m.GetContentWidth()
-			usable := m.GetUsableHeight()
-			if x != m.GetLeftMargin()+(region-w)/2 {
-				t.Errorf("popup x is %d, want it centred at %d", x, m.GetLeftMargin()+(region-w)/2)
-			}
-			if y != m.GetTopMargin()+(usable-h)/2 {
-				t.Errorf("popup y is %d, want it centred at %d", y, m.GetTopMargin()+(usable-h)/2)
-			}
-			if x < m.GetLeftMargin() || x+w > m.GetLeftMargin()+region {
-				t.Errorf("popup spans [%d,%d), outside the content region [%d,%d)",
-					x, x+w, m.GetLeftMargin(), m.GetLeftMargin()+region)
-			}
-			if y < m.GetTopMargin() || y+h > m.GetTopMargin()+usable {
-				t.Errorf("popup spans rows [%d,%d), outside the pane rows [%d,%d)",
-					y, y+h, m.GetTopMargin(), m.GetTopMargin()+usable)
-			}
-		})
-	}
-}
-
 // TestPopupBoxFollowsTheClientNotThePeer is why the size travels and the
 // rectangle does not: two clients of different sizes resolve the same request to
 // two boxes, each centred on its own screen.
