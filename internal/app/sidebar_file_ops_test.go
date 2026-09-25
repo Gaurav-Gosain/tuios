@@ -204,3 +204,60 @@ func TestFileActionsOffMakesEveryKeyInert(t *testing.T) {
 		t.Errorf("the folder changed with the setting off: %q", got)
 	}
 }
+
+// TestCutIsSpentByThePasteThatMovesIt stops a second paste chasing a source
+// that has already moved.
+func TestCutIsSpentByThePasteThatMovesIt(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	mustWrite(t, filepath.Join(src, "moved.txt"), "body")
+	m := filesOS(t, src, "moved.txt")
+
+	m.SidebarFileCut()
+	if m.fileClip.Empty() || !m.fileClip.Move {
+		t.Fatal("the cut captured nothing")
+	}
+	openFilesOn(t, m, dst)
+	railLines(t, m)
+
+	cmd := m.SidebarFilePaste()
+	if !m.fileClip.Empty() {
+		t.Error("the cut is still on the clipboard after the paste that spends it")
+	}
+	runOp(t, m, cmd)
+	if _, err := os.Lstat(filepath.Join(dst, "moved.txt")); err != nil {
+		t.Fatalf("the move never landed: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(src, "moved.txt")); err == nil {
+		t.Error("the source survived a move")
+	}
+	if cmd := m.SidebarFilePaste(); cmd != nil {
+		t.Error("a second paste ran on a spent cut")
+	}
+}
+
+// TestTheParentRowIsNotADeleteTarget: the ".." row means "go up", and the
+// folder it names must not be deletable from it.
+func TestTheParentRowIsNotADeleteTarget(t *testing.T) {
+	dir := t.TempDir()
+	inner := filepath.Join(dir, "inner")
+	if err := os.Mkdir(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := filesOS(t, inner, "")
+	for i, row := range m.SidebarNav {
+		if row.Kind == sidebarRowFileUp {
+			m.SidebarCursor = i
+		}
+	}
+	if _, _, ok := m.fileActionTarget(); ok {
+		t.Fatal("the parent row is a file action target")
+	}
+	m.SidebarFileDelete(false)
+	if m.FileConfirmOpen() {
+		t.Error("the parent row raised a delete confirmation")
+	}
+	if _, err := os.Lstat(dir); err != nil {
+		t.Errorf("the parent folder went: %v", err)
+	}
+}

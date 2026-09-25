@@ -39,3 +39,16 @@ func saverPerfOS(t *testing.T) *OS {
 	m.Width, m.Height = 100, 30
 	return m
 }
+
+// TestASaverWithNoFrameYetStillComposes pins the one case that has to fall
+// through: the saver is on but has not produced a frame, and returning an empty
+// string there would blank the screen.
+func TestASaverWithNoFrameYetStillComposes(t *testing.T) {
+	m := saverPerfOS(t)
+	m.screensaver.active = true
+	m.screensaver.frame = ""
+
+	if got := m.composeFrame(); got == "" {
+		t.Error("a saver with no frame yet blanked the screen")
+	}
+}

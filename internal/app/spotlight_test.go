@@ -1,7 +1,9 @@
 package app
 
 import (
+	"encoding/json"
 	"image/color"
+	"strings"
 	"testing"
 	"time"
 
@@ -312,5 +314,247 @@ func BenchmarkSpotlightFrame(b *testing.B) {
 				_ = m.composeFrame()
 			}
 		})
+	}
+}
+
+func cellStyleAt(canvas *lipgloss.Canvas, x, y int) uv.Style {
+	return canvas.CellAt(x, y).Style
+}
+
+// TestSpotlightDoesNotSplitStyleRuns states the same property in the unit that
+// matters, which is bytes on the wire. A pass that dimmed only the glyphs would
+// double the escape sequences in the rendered frame.
+func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
+	// Both screens: a themed one, where every cell is scaled, and a themeless
+	// one, where the pass writes a colour to some cells and SGR 2 to others. A
+	// mixed screen must not defeat the run cache: the cells that share a
+	// source colour and a level still come out of it as one style.
+	for _, themeID := range []string{"catppuccin_mocha", ""} {
+		name := themeID
+		if name == "" {
+			name = "no theme"
+		}
+		t.Run(name, func(t *testing.T) {
+			withTheme(t, themeID)
+			canvas := spotlightMixedCanvas(t, 80, 24)
+			plainSGR := strings.Count(canvas.Render(), "\x1b[")
+
+			newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
+			dimmedSGR := strings.Count(canvas.Render(), "\x1b[")
+
+			// A row that crosses the beam pays a handful of style changes for
+			// the two rim crossings and nothing else, because the levels inside
+			// a row change only where the rim passes. Splitting at every blank
+			// instead costs one per word: on this fixture that is 712 sequences
+			// against 208.
+			if limit := plainSGR + 8*canvas.Height(); dimmedSGR > limit {
+				t.Errorf("the pass produced %d escape sequences against %d before it (limit %d); "+
+					"the style runs were split", dimmedSGR, plainSGR, limit)
+			}
+		})
+	}
+}
+
+// TestSpotlightLeavesWideGlyphPlaceholdersAlone. A cell of width two is stored
+// with a zero cell after it, which the renderer skips. Writing a style to that
+// placeholder makes it render as a cell of its own, which puts a phantom column
+// after every wide character on the screen.
+func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
+	// Both branches, because only one of them can get this wrong. The blend
+	// path skips a placeholder anyway, since a zero cell carries no colour to
+	// carry anywhere; the faint path writes an attribute without asking about
+	// colour, so the guard is what stops it there.
+	for _, themeID := range []string{"catppuccin_mocha", ""} {
+		name := "themed"
+		if themeID == "" {
+			name = "faint"
+		}
+		t.Run(name, func(t *testing.T) {
+			withTheme(t, themeID)
+			canvas := lipgloss.NewCanvas(20, 3)
+			wide := uv.Cell{
+				Content: "世",
+				Width:   2,
+				Style:   uv.Style{Fg: color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}},
+			}
+			canvas.SetCell(10, 1, &wide)
+
+			newSpotlightTestState().apply(canvas, 0, 0, 2, 60, true)
+
+			if placeholder := canvas.CellAt(11, 1); !placeholder.IsZero() {
+				t.Errorf("the placeholder after a wide glyph was written to: %+v", *placeholder)
+			}
+		})
+	}
+}
+
+// spotlightBrightness is how much light a colour carries, as the mean of its
+// three channels over 255. It is not a luminance and does not need to be: the
+// tests below compare one colour with a scaled copy of itself, so any monotonic
+// reading of the channels answers them.
+func spotlightBrightness(t *testing.T, c color.Color) float64 {
+	t.Helper()
+	if isNilColor(c) {
+		t.Fatal("no colour to measure")
+	}
+	r, g, b, _ := c.RGBA()
+	return float64(r>>8+g>>8+b>>8) / (3 * 255)
+}
+
+// TestSpotlightDimsALightThemeDownwards is the half a dark theme cannot show.
+//
+// Carrying a colour toward the theme's ground does not merely fail on a light
+// theme, it runs backwards: the ground is bright there, so at dim 95 the text
+// went from (76,79,105) to (230,232,238) and the screen washed out rather than
+// going quiet. Both inks have to end up carrying less light than they started
+// with, on every theme.
+func TestSpotlightDimsALightThemeDownwards(t *testing.T) {
+	withTheme(t, "catppuccin_latte")
+	canvas := lipgloss.NewCanvas(80, 24)
+	canvas.SetCell(2, 2, &uv.Cell{Content: "x", Width: 1})
+
+	newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false)
+
+	style := cellStyleAt(canvas, 2, 2)
+	if got, want := spotlightBrightness(t, style.Fg), spotlightBrightness(t, theme.TerminalFg()); got >= want {
+		t.Errorf("the foreground outside the beam went from %.2f to %.2f; the beam brightened it", want, got)
+	}
+	if got, want := spotlightBrightness(t, style.Bg), spotlightBrightness(t, theme.TerminalBg()); got >= want {
+		t.Errorf("the background outside the beam went from %.2f to %.2f; the beam brightened it", want, got)
+	}
+}
+
+// TestSpotlightDisqualifiesTheFullscreenFastPath. A lone fullscreen pane skips
+// the compositor, and there is then no canvas for the pass to run over. The
+// keycast overlay disqualifies the fast path for the same reason.
+func TestSpotlightDisqualifiesTheFullscreenFastPath(t *testing.T) {
+	win := newTestWindow(t, "spotlight-fast", 80, 24)
+	m := newTestOS(win)
+	m.Width, m.Height = 80, 26
+	win.X, win.Y = 0, m.GetTopMargin()
+	win.Width, win.Height = m.GetRenderWidth(), m.GetUsableHeight()
+
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Fatal("the geometry is not on the fast path, so this proves nothing")
+	}
+	m.spotlight.on = true
+	if _, ok := m.fullscreenFastWindow(); ok {
+		t.Error("the fast path stayed eligible with the spotlight on, so the beam would not be drawn")
+	}
+}
+
+// TestSpotlightYieldsToTheScreensaver. The saver owns the whole screen while it
+// runs, so the two must never draw in one frame.
+func TestSpotlightYieldsToTheScreensaver(t *testing.T) {
+	withTheme(t, "catppuccin_mocha")
+	win := newTestWindow(t, "spotlight-saver", 60, 12)
+	win.WriteOutput([]byte("\x1b[38;2;200;200;200;48;2;40;40;60mhello world\x1b[0m\r\n"))
+	win.MarkContentDirty()
+	m := newTestOS(win)
+	m.Width, m.Height = 90, 30
+	m.spotlight.on = true
+
+	m.screensaver.active = true
+	quiet := m.composeFrame()
+	m.MarkAllDirty()
+	m.screensaver.active = false
+	m.spotlight = spotlightState{on: true}
+	lit := m.composeFrame()
+
+	if quiet == lit {
+		t.Error("the frame was the same with the saver running and with it off; the pass did not yield")
+	}
+}
+
+// TestSpotlightStandsAMouseBeamOnTheCursor. The beam follows the mouse by
+// default, and a pointer that has not moved since the client started has never
+// reported a position. The cursor stands in until it does.
+//
+// The stand-in has to be recomputed every frame, not latched. The first frame
+// is composed before the client knows its size, so a latched one would put the
+// beam in the top left corner and leave it there for the whole session on any
+// client nobody touches with a mouse. A real frame is what found that.
+//
+// It is a stand-in and not a mix: the first pointer move latches the anchor and
+// nothing reads the cursor after that.
+func TestSpotlightStandsAMouseBeamOnTheCursor(t *testing.T) {
+	win := newTestWindow(t, "spotlight-seed", 60, 12)
+	m := newTestOS(win)
+	m.Width, m.Height = 90, 30
+	m.Mode = TerminalMode
+	win.Tiled = true
+	m.UserConfig = config.DefaultConfig()
+	m.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
+
+	cursor := m.getRealCursor()
+	if cursor == nil {
+		t.Fatal("the fixture has no cursor, so it cannot show what the seed is")
+	}
+	x, y := m.spotlightAnchor()
+	if x != cursor.X || y != cursor.Y {
+		t.Errorf("a mouse beam with no pointer position started at (%d,%d), want the cursor (%d,%d)",
+			x, y, cursor.X, cursor.Y)
+	}
+
+	// The stand-in is recomputed rather than latched. A position nothing else
+	// would produce is written over it, so a latched beam is caught by the
+	// number rather than by the fact that it did not change.
+	const staleX, staleY = 71, 23
+	if staleX == cursor.X && staleY == cursor.Y {
+		t.Fatal("the stale position is the cursor, so this cannot tell the two apart")
+	}
+	m.spotlight.x, m.spotlight.y = staleX, staleY
+	if x, y = m.spotlightAnchor(); x != cursor.X || y != cursor.Y {
+		t.Errorf("the beam held (%d,%d) rather than standing on the cursor (%d,%d); "+
+			"the stand-in was latched on the first frame", x, y, cursor.X, cursor.Y)
+	}
+
+	// And the pointer takes it from there.
+	m.LastMouseX, m.LastMouseY = 11, 4
+	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
+		t.Errorf("the beam sat at (%d,%d) after the pointer moved to (11,4)", x, y)
+	}
+	// The pointer owns it now, so the cursor is never read again.
+	m.spotlight.x, m.spotlight.y = 11, 4
+	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
+		t.Errorf("the beam moved to (%d,%d) with the pointer still at (11,4)", x, y)
+	}
+}
+
+// TestSpotlightIsNotSessionState. The beam is what this client's screen looks
+// like, not what the workspace holds, so nothing about it may reach the state a
+// peer reads.
+func TestSpotlightIsNotSessionState(t *testing.T) {
+	win := newTestWindow(t, "spotlight-local", 40, 8)
+	m := newTestOS(win)
+	m.Width, m.Height = 60, 20
+
+	off, err := json.Marshal(m.BuildSessionState())
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+	m.spotlight.on = true
+	on, err := json.Marshal(m.BuildSessionState())
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+	if string(off) != string(on) {
+		t.Error("turning the spotlight on changed the session state a peer reads")
+	}
+}
+
+// TestSpotlightPendingMotionWakesTheTick is the other half of the throttle. The
+// beam has no tick of its own, so the skipped position is flushed by the one
+// term the maintenance tick carries for it, and that term must be false the
+// rest of the time, or every idle client pays a wake-up for a setting it is not
+// using. BenchmarkIdleTick is what that costs.
+func TestSpotlightPendingMotionWakesTheTick(t *testing.T) {
+	m := mouseBeamOS(t)
+	if m.tickNeedsWork() {
+		t.Fatal("an idle client with the beam on already wants work; the idle diet is broken")
+	}
+	m.spotlightMotionPending = true
+	if !m.tickNeedsWork() {
+		t.Error("a skipped beam move does not wake the tick, so it would never be drawn")
 	}
 }

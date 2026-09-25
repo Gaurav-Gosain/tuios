@@ -413,3 +413,57 @@ func TestProbeReviewDiff(t *testing.T) {
 		t.Errorf("unknown_verb read as supported=%v known=%v", s, k)
 	}
 }
+
+// TestReviewCompareRefreshOnlyWhileShown: the rows are not read while the
+// review of one attempt, or the review the view was opened from, is shown
+// instead, and the reads start again when the view comes back.
+func TestReviewCompareRefreshOnlyWhileShown(t *testing.T) {
+	m, f := reviewOS(t)
+	f.fan = runningFan()
+	openReviewed(t, m)
+	msg, _ := openCompare(t, m)
+	m.applyReviewCompare(msg)
+
+	// enter reviews an attempt: the tick of the running chain reads nothing.
+	runMsg(t, m, m.ReviewCompareOpen())
+	if m.ReviewCompareShown() {
+		t.Fatal("enter left the compare view up")
+	}
+	before := f.count("compare-fan")
+	if m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: m.review.compare.tickGen}) != nil {
+		t.Error("the rows were read with the review of an attempt on screen")
+	}
+	if m.reviewTickIfRunning() != nil {
+		t.Error("a tick was scheduled with the compare view hidden")
+	}
+
+	// esc comes back: the rows are read at once, under a new chain.
+	gen := m.review.compare.tickGen
+	back := m.ReviewClose()
+	if !m.ReviewCompareShown() {
+		t.Fatal("esc did not come back to the compare view")
+	}
+	if back == nil {
+		t.Fatal("coming back to the view with a check running read nothing")
+	}
+	if m.review.compare.tickGen == gen {
+		t.Error("coming back did not start a new chain")
+	}
+	if m.applyReviewCompare(back().(ReviewCompareMsg)) == nil {
+		t.Error("the read on coming back did not keep the refresh going")
+	}
+	if f.count("compare-fan") != before+1 {
+		t.Errorf("coming back read the rows %d times, want 1", f.count("compare-fan")-before)
+	}
+
+	// esc again goes to the review the view was opened from: no more reads.
+	if cmd := m.ReviewCompareBack(); cmd != nil {
+		m.Update(cmd())
+	}
+	if m.ReviewCompareShown() {
+		t.Fatal("esc did not leave the compare view")
+	}
+	if m.applyReviewTick(ReviewTickMsg{Gen: m.review.gen, TickGen: m.review.compare.tickGen}) != nil {
+		t.Error("the rows were read with the review the view was opened from on screen")
+	}
+}

@@ -98,3 +98,46 @@ func TestLocalCwdPathParsing(t *testing.T) {
 		}
 	}
 }
+
+// TestDetectionIgnoresBackgroundWindow: only the focused window triggers
+// detection; a background window changing directory is ignored.
+func TestDetectionIgnoresBackgroundWindow(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	notifBefore := len(m.Notifications)
+	if cmd := m.onCwdChange(CwdChangedMsg{WindowID: "not-focused", Cwd: dir}); cmd != nil {
+		t.Fatal("a background window must not schedule detection")
+	}
+	if len(m.Notifications) != notifBefore {
+		t.Fatal("a background window produced a notification")
+	}
+	if _, ok := m.tapeIndicatorStatus(); ok {
+		t.Fatal("a background window produced an indicator")
+	}
+}
+
+// TestDetectionDeniedTapeIsSilent: a denied path produces no banner and no
+// indicator.
+func TestDetectionDeniedTapeIsSilent(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	res, err := store.Check(filepath.Join(dir, trust.TapeFileName))
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if err := store.Deny(res.Path); err != nil {
+		t.Fatalf("Deny: %v", err)
+	}
+
+	notifBefore := len(m.Notifications)
+	drive(t, m, "focused", dir)
+
+	if len(m.Notifications) != notifBefore {
+		t.Fatal("a denied tape produced a notification")
+	}
+	if _, ok := m.tapeIndicatorStatus(); ok {
+		t.Fatal("a denied tape produced an indicator")
+	}
+}

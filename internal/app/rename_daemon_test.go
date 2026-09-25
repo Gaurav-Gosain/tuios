@@ -1,9 +1,11 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
@@ -111,5 +113,36 @@ func TestRenameAppendGate(t *testing.T) {
 	m.RenameAppend("x")
 	if m.RenameBuffer != "" {
 		t.Errorf("typing after the editor closed left %q", m.RenameBuffer)
+	}
+}
+
+// TestRenameFieldKeepsWhatWasTyped: the field laundered its buffer through the
+// trimming sanitizer, so a space the user had just pressed was rubbed off the
+// display and the key looked dead even once it reached the buffer. A wide rune
+// costs two cells, and the frame has to stay square around it.
+func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
+	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
+	m.BeginRenameSession("work")
+
+	m.RenameBuffer = "build "
+	out, _, _, _, ok := m.renderRenameDialog()
+	if !ok {
+		t.Fatal("no dialog while a rename is open")
+	}
+	t.Logf("\n%s", out)
+	if !strings.Contains(out, "build ") {
+		t.Errorf("the trailing space is missing from the field:\n%s", out)
+	}
+
+	m.RenameBuffer = "日本語 café"
+	out, geo, _, _, _ := m.renderRenameDialog()
+	t.Logf("\n%s", out)
+	if !strings.Contains(out, "日本語 café") {
+		t.Errorf("a non-ASCII name does not reach the field:\n%s", out)
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w != geo.Width {
+			t.Errorf("row %d is %d cells wide, want %d: a wide rune knocked the frame out of square\n%s", i, w, geo.Width, out)
+		}
 	}
 }

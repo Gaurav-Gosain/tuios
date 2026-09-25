@@ -91,3 +91,37 @@ func TestAListingInFlightIsNotAskedForTwice(t *testing.T) {
 		t.Error("a read already in flight was asked for a second time")
 	}
 }
+
+// TestAnEmptyDirectoryDoesNotWipeOne: a sync that omits the field must not take
+// away a directory the pane did announce.
+func TestAnEmptyDirectoryDoesNotWipeOne(t *testing.T) {
+	w := &terminal.Window{Cwd: "/src/tuios"}
+	adoptWindowCwd(w, "")
+	if w.Cwd != "/src/tuios" {
+		t.Errorf("a sync with no directory wiped one: got %q", w.Cwd)
+	}
+	adoptWindowCwd(nil, "/anything") // must not panic
+}
+
+// TestAFailedListingIsTriedAgain.
+//
+// Want is set when a read is asked for, not when one succeeds, so a listing
+// that failed left Want pointing at the directory it could not read and the
+// sync answered "already asked for that" forever. The section then stayed
+// empty until something else moved the focus, which is why switching sessions
+// away and back appeared to fix it. Reported against a session just created on
+// another machine, where the first read lands before the daemon has been asked
+// for the pane's directory.
+//
+// Negative control: without the Err check in FilesSyncCmd the retry never
+// happens and this fails.
+func TestAFailedListingIsTriedAgain(t *testing.T) {
+	m := &OS{}
+	m.filesView.Want = "/home/ubuntu"
+	m.filesView.Err = "That folder is gone."
+	m.filesView.ErrAt = time.Now().Add(-2 * fileRetryInterval)
+
+	if !filesShouldRetry(m.filesView, "/home/ubuntu") {
+		t.Error("a listing that failed a while ago is not tried again")
+	}
+}

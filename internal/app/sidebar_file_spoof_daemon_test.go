@@ -228,3 +228,25 @@ func TestAFreshDaemonPaneAdoptsItsShellPid(t *testing.T) {
 		t.Fatalf("the file went: %v", err)
 	}
 }
+
+// TestAnHonestDaemonPaneKeepsItsFileActions is the other half. The pid the
+// daemon sends must not cost a truthful pane anything.
+func TestAnHonestDaemonPaneKeepsItsFileActions(t *testing.T) {
+	_, victim, bait := spoofDirs(t)
+	m := daemonSpoofPane(t, victim, standInShell(t, victim))
+
+	if m.FileViewSpoofed() {
+		t.Fatal("a pane telling the truth was called a liar")
+	}
+	if !m.FileActionsOn() {
+		t.Fatal("a pane telling the truth lost its file actions")
+	}
+	if !cursorToFile(m, "keepme.txt") {
+		t.Fatalf("no row for keepme.txt; the listing drew %v", entryNames(m))
+	}
+	m.SidebarFileDelete(true)
+	runOp(t, m, m.FileConfirmActivate(fileConfirmRowGo))
+	if _, err := os.Lstat(bait); err == nil {
+		t.Fatal("an honest daemon pane could not delete a file")
+	}
+}

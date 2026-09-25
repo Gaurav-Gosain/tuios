@@ -3,12 +3,14 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // fileViewTree builds a directory with a known shape: two folders and three
@@ -240,5 +242,171 @@ func TestALargeDirectoryIsBounded(t *testing.T) {
 	}
 	if got := len(m.filesView.Entries); got != len(wantFileOrder) {
 		t.Errorf("read %d names from the small tree, want %d", got, len(wantFileOrder))
+	}
+}
+
+// TestFileViewUpStopsAtTheRoot: the parent of "/" is "/", so walking up there
+// must not reload forever or blank the view.
+func TestFileViewUpStopsAtTheRoot(t *testing.T) {
+	m := &OS{Settings: config.Global}
+	m.loadFileViewNow(t, string(filepath.Separator))
+	gen := m.filesView.Gen
+	m.FileViewUp()
+	if m.filesView.Gen != gen {
+		t.Error("going up from the root re-read the directory")
+	}
+	if m.FileViewDir() != string(filepath.Separator) {
+		t.Errorf("the view left the root: %q", m.FileViewDir())
+	}
+}
+
+// TestPaneBusyReasonLetsALocalIdleShellThrough runs the guard against a real
+// PTY with only its shell in it.
+//
+// A local pane's ForegroundCommand names whatever owns the terminal, and at a
+// prompt that is the shell itself. Read as "something is running", it refused
+// every local pane at its prompt: on Linux always, and on macOS once the name
+// could be read there too.
+func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no process group to read on windows")
+	}
+	// A shell with no rc files and a prompt this test can recognise. The pane
+	// is only idle once the shell is at that prompt: a shell that is still
+	// starting can have its rc files' programs in the foreground.
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("ENV", "")
+	const prompt = "IDLE-PROMPT$"
+	t.Setenv("PS1", prompt+" ")
+	exit := make(chan string, 1)
+	win, err := terminal.NewWindow("idle-shell-01", "Test", 0, 0, 80, 24, 0, exit, nil, config.DefaultScrollbackLines)
+	if err != nil {
+		t.Skipf("no PTY: %v", err)
+	}
+	defer win.Close()
+	if win.Pty == nil || win.ShellPgid <= 0 {
+		t.Skip("no PTY or shell process group")
+	}
+	if win.ForegroundCommand() == "" {
+		t.Skip("this platform cannot name the foreground process, so the case does not arise")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(screenText(win), prompt) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(screenText(win), prompt) {
+		t.Fatalf("the shell never printed its prompt:\n%s", screenText(win))
+	}
+	if why, ok := paneBusyReason(win); !ok {
+		t.Errorf("a pane at its shell prompt was refused: %s", why)
+	}
+
+	// And a program run from that prompt is still refused, by name. The shell
+	// hands the terminal to its child before the child has run exec, and for
+	// that moment the foreground group is a copy of the shell still under the
+	// shell's name, so the wait is for sleep itself rather than for any
+	// foreground process.
+	if err := win.SendInput([]byte("sleep 30\r")); err != nil {
+		t.Fatalf("type into the pane: %v", err)
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for !(win.HasForegroundProcess() && win.ForegroundCommand() == "sleep") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !win.HasForegroundProcess() || win.ForegroundCommand() != "sleep" {
+		t.Skip("sleep never became the foreground process")
+	}
+	why, ok := paneBusyReason(win)
+	if ok {
+		t.Fatal("a pane running sleep passed the guard")
+	}
+	if !strings.Contains(why, "sleep") {
+		t.Errorf("the refusal does not name the program: %q", why)
+	}
+}
+
+// runSync drives the one comparison Update makes after every message: does the
+// files section still agree with the focused pane's directory. It runs the
+// command it produces and applies the reply, which is what the loop does one
+// message later.
+func (m *OS) runSync(t *testing.T) bool {
+	t.Helper()
+	cmd := m.FilesSyncCmd()
+	if cmd == nil {
+		return false
+	}
+	msg, ok := cmd().(fileListMsg)
+	if !ok {
+		t.Fatalf("the sync read answered with %T, not a listing", msg)
+	}
+	m.HandleFileList(msg)
+	return true
+}
+
+// TestFilesSectionDoesNotDragTheUserBack is the other half of the rule above,
+// and the half that is easy to get wrong: once the user has steered the listing
+// somewhere of their own, a cd in the terminal must leave it there. The listing
+// is then answering a question they asked and the pane's directory is not.
+//
+// Negative controls, both confirmed red: drop the Pinned clause from
+// filesWantDir, and the cd drags the listing back to the pane's directory; drop
+// the Origin comparison beside it, and the listing stays pinned after the focus
+// has moved to a pane the user never steered.
+func TestFilesSectionDoesNotDragTheUserBack(t *testing.T) {
+	root := fileViewTree(t)
+	sub := filepath.Join(root, "apple")
+	elsewhere := filepath.Join(root, "Zeta")
+
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.filesView.Show = 1
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
+	m.runSync(t)
+
+	// The user walks the listing into Zeta. The pane is still in root.
+	if cmd := m.requestFileList(elsewhere, m.filesView.Origin, true); cmd != nil {
+		m.HandleFileList(cmd().(fileListMsg))
+	}
+
+	// The pane now cds to apple. The listing must stay where the user put it.
+	m.onCwdChange(CwdChangedMsg{WindowID: m.Windows[0].ID, Cwd: "file://" + sub})
+	if m.runSync(t) {
+		t.Error("a cd in the pane moved a listing the user had steered")
+	}
+	if got := m.FileViewDir(); got != elsewhere {
+		t.Errorf("a cd in the pane dragged the listing to %q; it should have stayed at %q", got, elsewhere)
+	}
+	if m.Windows[0].Cwd != sub {
+		t.Errorf("the pane's own cwd was not recorded: %q", m.Windows[0].Cwd)
+	}
+
+	// The pin is about one pane. Focusing another drops it, because the listing
+	// is then about a pane the user has steered nothing in.
+	m.Windows[1].Cwd = root
+	m.FocusedWindow = 1
+	if !m.runSync(t) {
+		t.Fatal("the pin outlived the pane it was made in")
+	}
+	if got := m.FileViewDir(); got != root {
+		t.Errorf("after the focus moved the section is at %q, want %q", got, root)
+	}
+}
+
+// TestCwdIsRecordedWithTapeAutorunOff. The cwd handler's own gates are the tape
+// detector's and they are narrow on purpose; folding the recording into them is
+// how the file view would have come out empty for anyone with autorun off.
+//
+// Negative control: move recordWindowCwd below the tapeAutorunEnabled gate in
+// onCwdChange and this fails.
+func TestCwdIsRecordedWithTapeAutorunOff(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tape.Autorun = config.TapeAutorunOff
+
+	win := &terminal.Window{ID: "aaaaaaaa1111"}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, UserConfig: cfg}
+	m.onCwdChange(CwdChangedMsg{WindowID: win.ID, Cwd: "file:///tmp"})
+
+	if win.Cwd != "/tmp" {
+		t.Errorf("with tape autorun off the pane's cwd was not recorded: %q", win.Cwd)
 	}
 }

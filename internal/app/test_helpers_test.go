@@ -3,12 +3,12 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -332,35 +332,6 @@ func callCounts(told map[string]*toldSize) map[string]int {
 	return counts
 }
 
-// sessionColorOS is a rail attached to "main" beside two sessions that carry
-// panes of their own, which is the only shape the colours exist for: more than
-// one session on screen at once.
-func sessionColorOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
-	t.Helper()
-	m := newNarrowOS(t, w, h)
-	m.CurrentWorkspace = 1
-	m.SessionName = "main"
-	m.Windows = []*terminal.Window{
-		{ID: "aaaaaaaa1111", CustomName: "nvim", Width: 40, Height: 20, Workspace: 1},
-		{ID: "bbbbbbbb2222", CustomName: "refactor", Width: 40, Height: 20, Workspace: 1, AgentState: "working"},
-	}
-	m.FocusedWindow = 0
-	m.DaemonClient = &session.TUIClient{}
-	m.IsDaemonSession = true
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.Settings = config.Global
-	m.SidebarOrder = nil
-	return m, sessionColorTree()
-}
-
-// withSessionColors pins the config key for one test and puts it back.
-func withSessionColors(t *testing.T, on bool) {
-	t.Helper()
-	prev := config.Global.SessionColors
-	config.Global.SessionColors = on
-	t.Cleanup(func() { config.Global.SessionColors = prev })
-}
-
 // navIndexOfWindow returns the nav index of a window row, or -1.
 func navIndexOfWindow(m *OS, id string) int {
 	for i, r := range m.SidebarNav {
@@ -371,13 +342,6 @@ func navIndexOfWindow(m *OS, id string) int {
 	return -1
 }
 
-// fgSeq is the escape sequence a foreground color renders as, so a row can be
-// checked for the color it was actually drawn in rather than for a color name.
-func fgSeq(c color.Color) string {
-	rendered := lipgloss.NewStyle().Foreground(c).Render("x")
-	return rendered[:strings.Index(rendered, "x")]
-}
-
 // navIndexOfSession returns the nav index of a session row, or -1.
 func navIndexOfSession(m *OS, id string) int {
 	for i, r := range m.SidebarNav {
@@ -386,141 +350,6 @@ func navIndexOfSession(m *OS, id string) int {
 		}
 	}
 	return -1
-}
-
-// railPlain renders the rail and strips the styling, which is what most of the
-// claims below are about: where a row landed, not how it was painted.
-func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
-	t.Helper()
-	lines, _ := m.sidebarPanelLinesForTree(tree)
-	out := make([]string, len(lines))
-	for i, l := range lines {
-		out[i] = stripANSIForTrace(l)
-	}
-	return out
-}
-
-// lineOf returns the index of the first rendered line containing want, or -1.
-func lineOf(lines []string, want string) int {
-	for i, l := range lines {
-		if strings.Contains(l, want) {
-			return i
-		}
-	}
-	return -1
-}
-
-// railAgentRow returns the rendered lines of the agents-section row for a
-// window, joined, or "" when the rail drew none. A row is one line or two, and
-// which one a fact landed on is the layout's business rather than these tests'.
-func railAgentRow(m *OS, lines []string, windowID string) string {
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent && h.WindowID == windowID {
-			top := h.Y0 - m.GetTopMargin()
-			return strings.Join(lines[top:min(h.Y1-m.GetTopMargin(), len(lines))], "\n")
-		}
-	}
-	return ""
-}
-
-// notifTestOS is an OS wide enough to draw a dock, with nothing else on it.
-func notifTestOS(t testing.TB, width int) *OS {
-	t.Helper()
-	win := newTestWindow(t, "notif-render-0001", 60, 20)
-	win.Workspace = 1
-	m := newTestOS(win)
-	m.Width, m.Height = width, 40
-	m.CurrentWorkspace = 1
-	return m
-}
-
-// hostAgentOS is a client with one machine besides this one, whose sessions
-// are in the states the argument is about.
-func hostAgentOS(t *testing.T, status federation.Status, states ...string) *OS {
-	t.Helper()
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.SessionName = "home"
-
-	sessions := make([]FederationSession, 0, len(states))
-	for i, st := range states {
-		sessions = append(sessions, FederationSession{
-			Name:        string(rune('a'+i)) + "-session",
-			WindowCount: 1,
-			AgentState:  st,
-		})
-	}
-	m.applyFederationSnapshot(FederationHostsMsg{
-		Configured: 1,
-		Snapshot: FederationSnapshot{Hosts: []FederationHost{
-			{
-				Name:     federation.LocalHostName,
-				Status:   string(federation.StatusUp),
-				Sessions: []FederationSession{{Name: "home", WindowCount: 1}},
-			},
-			{Name: "build", Status: string(status), Sessions: sessions},
-		}},
-	})
-	return m
-}
-
-// remoteNode is the tree node for one of build's session rows.
-func remoteNode(t *testing.T, m *OS, name string) sessiontree.Node {
-	t.Helper()
-	for _, n := range m.hostGroupNodes() {
-		if n.Kind == sessiontree.KindSession && strings.Contains(n.ID, name) {
-			return n
-		}
-	}
-	t.Fatalf("no row for %q among the machine's sessions", name)
-	return sessiontree.Node{}
-}
-
-func searchOS(t *testing.T) *OS {
-	t.Helper()
-	useTempConfig(t)
-	m := &OS{Settings: config.Global, Width: 120, Height: 44, UserConfig: config.DefaultConfig()}
-	m.OpenSettings()
-	return m
-}
-
-func sessionColorTree() sessiontree.Tree {
-	return sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "working", Workspace: 1},
-		}},
-		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", AgentState: "working", Workspace: 1},
-		}},
-		{Name: "docs", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "ffffffff6666", Title: "site", AgentState: "idle", Workspace: 1},
-		}},
-	})
-}
-
-// hostRailText is the rail's rows joined into one block, so an assertion can
-// talk about the order rows appear in as well as their content.
-func hostRailText(t *testing.T, m *OS) string {
-	t.Helper()
-	return strings.Join(railLines(t, m), "\n")
-}
-
-// hostHeader is the text a machine's header row starts with: the fold mark
-// and the name, as the active glyph set draws them.
-func hostHeader(m *OS, name string, collapsed bool) string {
-	mark := m.Settings.GetRailFoldOpenGlyph()
-	if collapsed {
-		mark = m.Settings.GetRailFoldShutGlyph()
-	}
-	return mark + " " + name
-}
-
-// closeWindows tears down the real PTYs spawned by AddWindow so a test does not
-// leak shell processes.
-func closeWindows(m *OS) {
-	for _, w := range m.Windows {
-		w.Close()
-	}
 }
 
 // isUnderlined reports whether any SGR sequence in s sets the underline
@@ -552,33 +381,135 @@ func isUnderlined(s string) bool {
 	return false
 }
 
-// sidebarMultiSessionOS builds an OS attached to "main" with agent-flagged
-// windows and the sidebar on, plus a synthetic three-session tree the way a
-// daemon-backed client would see one. The tree order is the daemon's creation
-// order: main, scratch, deploy.
-func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
+// renderSettingsHit renders the settings panel and records its hit geometry the
+// way renderOverlays would, so the mouse routing can be exercised in a test.
+func (m *OS) renderSettingsHit() {
+	m.reconcileOverlayZOrder()
+	content, geo, rows := m.renderSettings()
+	_ = content
+	x, y := m.overlayOrigin("settings", geo)
+	m.OverlayHits = []overlayPanelHit{{Kind: "settings", OriginX: x, OriginY: y, Z: m.overlayZ("settings"), Geo: geo, Rows: rows}}
+}
+
+func (m *OS) settingsHit() overlayPanelHit { return m.OverlayHits[0] }
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
+}
+
+// railPlain renders the rail and strips the styling, which is what most of the
+// claims below are about: where a row landed, not how it was painted.
+func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
 	t.Helper()
-	m := newNarrowOS(t, w, h)
-	m.CurrentWorkspace = 1
-	m.SessionName = "main"
-	m.Windows = []*terminal.Window{
-		{ID: "aaaaaaaa1111", CustomName: "claude", Width: 40, Height: 20, Workspace: 1, AgentState: "working"},
-		{ID: "bbbbbbbb2222", CustomName: "tests", Width: 40, Height: 20, Workspace: 1, AgentState: "needs_input"},
-		{ID: "cccccccc3333", CustomName: "logs", Width: 40, Height: 20, Workspace: 1},
+	lines, _ := m.sidebarPanelLinesForTree(tree)
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = stripANSIForTrace(l)
+	}
+	return out
+}
+
+// lineOf returns the index of the first rendered line containing want, or -1.
+func lineOf(lines []string, want string) int {
+	for i, l := range lines {
+		if strings.Contains(l, want) {
+			return i
+		}
+	}
+	return -1
+}
+
+func fgParams(c color.Color) string {
+	// Rendered rather than formatted: a palette index leaves as SGR 3x or 9x,
+	// and only a literal colour leaves as 38;2.
+	rendered := lipgloss.NewStyle().Foreground(c).Render("X")
+	return strings.TrimSuffix(strings.TrimPrefix(rendered[:strings.Index(rendered, "X")], "\x1b["), "m")
+}
+
+// newSwitchOS builds a client with panes spread over two workspaces, each pane
+// carrying a recorder for the sizes its PTY is told.
+func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS, map[string]*toldSize) {
+	t.Helper()
+	m := &OS{
+		Settings: config.Global,
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]WindowLayout),
+		WorkspaceHasCustom:   map[int]bool{},
+		WorkspaceMasterRatio: map[int]float64{},
+		Width:                width,
+		Height:               height,
+		AutoTiling:           true,
+		UseBSPLayout:         true,
+		PendingResizes:       make(map[string][2]int),
+	}
+	told := make(map[string]*toldSize)
+	for ws := 1; ws <= 2; ws++ {
+		for i := range perWorkspace[ws] {
+			id := fmt.Sprintf("ws%d-pane-%d", ws, i+1)
+			win, rec := newAnnounceWindow(t, id, 60, 20)
+			win.Workspace = ws
+			told[id] = rec
+			m.Windows = append(m.Windows, win)
+		}
 	}
 	m.FocusedWindow = 0
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.Settings = config.Global
-	m.SidebarOrder = nil
+	return m, told
+}
 
-	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "claude", AgentState: "working", Focused: true},
-			{ID: "bbbbbbbb2222", Title: "tests", AgentState: "needs_input"},
-			{ID: "cccccccc3333", Title: "logs"},
-		}},
-		{Name: "scratch", WindowCount: 2},
-		{Name: "deploy", WindowCount: 1},
-	})
-	return m, tree
+// screenText reads the guest's visible grid as text.
+func screenText(w *terminal.Window) string {
+	w.RLockIO()
+	defer w.RUnlockIO()
+	out := ""
+	for y := range w.Terminal.Height() {
+		for x := range w.Terminal.Width() {
+			cell := w.Terminal.CellAt(x, y)
+			if cell == nil || cell.String() == "" {
+				out += " "
+				continue
+			}
+			out += cell.String()
+		}
+		out += "\n"
+	}
+	return out
+}
+
+// zoomPeekOS is four panes in a two by two split, which is the layout that makes
+// the anchoring visible: each pane has a neighbour on exactly two sides.
+func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
+	t.Helper()
+	prev := config.Global
+	t.Cleanup(func() { config.Global = prev })
+
+	var wins []*terminal.Window
+	for i := range 4 {
+		w := newTestWindow(t, string(rune('a'+i))+"0000000000000000000000000000000", 40, 20)
+		w.Workspace = 1
+		wins = append(wins, w)
+	}
+	// Top left, top right, bottom left, bottom right of a 120x40 region.
+	wins[0].X, wins[0].Y, wins[0].Width, wins[0].Height = 0, 0, 60, 20
+	wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height = 60, 0, 60, 20
+	wins[2].X, wins[2].Y, wins[2].Width, wins[2].Height = 0, 20, 60, 20
+	wins[3].X, wins[3].Y, wins[3].Width, wins[3].Height = 60, 20, 60, 20
+
+	m := &OS{
+		Settings:         config.Global,
+		Windows:          wins,
+		FocusedWindow:    0,
+		WorkspaceFocus:   map[int]int{},
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		Width:            120,
+		Height:           40,
+		PendingResizes:   map[string][2]int{},
+	}
+	return m, wins
 }
