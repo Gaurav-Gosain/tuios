@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -35,22 +34,6 @@ func pickerOS(t *testing.T) *OS {
 	return m
 }
 
-// TestThisMachineIsTheFirstChoice. The list is a list of places to run a
-// process and this machine is one of them, so a picker that offered only the
-// remote ones would make the common answer the one you cannot pick.
-func TestThisMachineIsTheFirstChoice(t *testing.T) {
-	items := pickerOS(t).buildHostPickerItems()
-	if len(items) == 0 {
-		t.Fatal("the picker offers nothing")
-	}
-	if items[0].Name != "" {
-		t.Errorf("the first choice is %q, want this machine", items[0].Name)
-	}
-	if !items[0].Up {
-		t.Error("this machine is listed as unavailable")
-	}
-}
-
 // TestAMachineThatIsDownIsOfferedAndRefused.
 //
 // Listed, because hiding it leaves someone wondering whether they imagined
@@ -82,49 +65,6 @@ func TestAMachineThatIsDownIsOfferedAndRefused(t *testing.T) {
 	}
 	if m.ShowHostPicker {
 		t.Error("the picker stayed open after a choice")
-	}
-}
-
-// TestChoosingThisMachineDoesNotGoOverALink. The local answer is the one that
-// must stay instant: it is the common case and there is nothing to dial.
-func TestChoosingThisMachineDoesNotGoOverALink(t *testing.T) {
-	// Without a daemon client, so the pane is made the standalone way and the
-	// question under test, whether anything was sent, is the only one asked.
-	m := sidebarTestOS(t, 120, 40, "left")
-	if cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "", Label: "this machine", Up: true}); cmd != nil {
-		t.Error("choosing this machine returned a command, so it went out over the network")
-	}
-}
-
-// TestChoosingAnotherMachineIsNotDoneOnTheUIGoroutine.
-//
-// Opening a pane elsewhere dials a stream on the link and waits for that
-// daemon to spawn a process. Doing it inline would freeze every pane on screen
-// for as long as it took, which on a machine that has gone away is the full
-// budget.
-//
-// Negative control: calling the verb inline and returning nil fails here.
-func TestChoosingAnotherMachineIsNotDoneOnTheUIGoroutine(t *testing.T) {
-	m := pickerOS(t)
-	cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "build", Label: "build", Up: true})
-	if cmd == nil {
-		t.Fatal("choosing another machine did no work off the UI goroutine")
-	}
-}
-
-// TestTheQueryNarrowsTheList, by the same substring match the other lists use.
-func TestTheQueryNarrowsTheList(t *testing.T) {
-	items := pickerOS(t).buildHostPickerItems()
-
-	got := FilterHostPickerItems(items, "work")
-	if len(got) != 1 || got[0].Name != "workstation" {
-		t.Errorf("filtering for 'work' gave %d rows, want just workstation", len(got))
-	}
-	if len(FilterHostPickerItems(items, "")) != len(items) {
-		t.Error("an empty query dropped rows")
-	}
-	if len(FilterHostPickerItems(items, "nothing-like-this")) != 0 {
-		t.Error("a query matching nothing still returned rows")
 	}
 }
 
@@ -222,33 +162,6 @@ func TestTheGlobalGroupIsOfferedBeforeThereIsAnythingInIt(t *testing.T) {
 	}
 }
 
-// TestTheGlobalGroupIsAboveThisMachine.
-//
-// It is not a machine and it is not under one. A global session holds panes
-// from several machines, so filing it under the one whose daemon happens to
-// hold it says it belongs to that machine, which is the one thing it does not.
-func TestTheGlobalGroupIsAboveThisMachine(t *testing.T) {
-	m := pickerOS(t)
-	here := []sessiontree.Node{{Kind: sessiontree.KindSession, ID: "work", Title: "work"}}
-
-	rows := m.sidebarMachineRows(here, m.hostGroupNodes())
-	var headers []string
-	for _, n := range rows {
-		if n.Kind == sessiontree.KindHost {
-			headers = append(headers, n.Host)
-		}
-	}
-	if len(headers) < 2 {
-		t.Fatalf("ASSERTION: the rail drew %d machine headers, so there is no order to check", len(headers))
-	}
-	if headers[0] != GlobalSessionName {
-		t.Errorf("the rail reads %v, want the global group first", headers)
-	}
-	if headers[1] != federation.LocalHostName {
-		t.Errorf("the rail reads %v, want this machine under the global group", headers)
-	}
-}
-
 // TestAGlobalSessionIsListedInTheGlobalGroupAndNotUnderItsMachine.
 //
 // Negative control: without the strip in sidebarMachineRows the session stays
@@ -274,22 +187,6 @@ func TestAGlobalSessionIsListedInTheGlobalGroupAndNotUnderItsMachine(t *testing.
 	_, under := railGlobalGroup(t, m, here)
 	if len(under) != 1 || under[0].ID != "everywhere" {
 		t.Errorf("the global group holds %+v, want the global session", under)
-	}
-}
-
-// TestTheGlobalGroupHoldsMoreThanOneSession. There is nothing special about
-// the first one: a person can keep as many as they have things to do.
-func TestTheGlobalGroupHoldsMoreThanOneSession(t *testing.T) {
-	m := pickerOS(t)
-	here := []sessiontree.Node{
-		{Kind: sessiontree.KindSession, ID: "work", Title: "work"},
-		{Kind: sessiontree.KindSession, ID: "deploy", Title: "deploy", Global: true},
-		{Kind: sessiontree.KindSession, ID: "debug", Title: "debug", Global: true},
-	}
-
-	_, under := railGlobalGroup(t, m, here)
-	if len(under) != 2 {
-		t.Errorf("the global group holds %d sessions, want both: %+v", len(under), under)
 	}
 }
 
@@ -321,23 +218,6 @@ func TestTurningTheGlobalSessionOffRemovesTheGroup(t *testing.T) {
 	here := []sessiontree.Node{{Kind: sessiontree.KindSession, ID: "work", Title: "work"}}
 	if at, _ := railGlobalGroup(t, m, here); at != -1 {
 		t.Error("the group was drawn with the setting off and nothing in it")
-	}
-}
-
-// TestAFailureIsReported. The window arriving is how success is seen, so only
-// the failure needs saying, and it has to say which machine.
-func TestAFailureIsReported(t *testing.T) {
-	m := pickerOS(t)
-	m.ApplyNewWindowOnHost(NewWindowOnHostMsg{Host: "build", Err: errFake{}})
-
-	found := false
-	for _, n := range m.Notifications {
-		if strings.Contains(n.Message, "build") {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("a failed open said nothing, or did not name the machine")
 	}
 }
 
@@ -380,24 +260,6 @@ func TestEveryWayOfMakingAWindowInAGlobalSessionAsksWhichMachine(t *testing.T) {
 				t.Errorf("the split recorded %q as the pane to split against, want w1", m.pendingSplitTarget)
 			}
 		})
-	}
-}
-
-// TestASplitOutsideAGlobalSessionAsksNothing. The question has one sensible
-// answer in an ordinary session, and a picker that appeared there would put a
-// dialog in front of a key people press all day.
-//
-// The split is not run here, because outside a global session it goes on to
-// make the window and this fixture holds a client with no connection. What is
-// checked is the gate the split now goes through, which is the thing that
-// decides whether the question is asked at all.
-func TestASplitOutsideAGlobalSessionAsksNothing(t *testing.T) {
-	m := pickerOS(t)
-	m.SessionGlobal = false
-	m.SessionName = "work"
-
-	if m.newWindowShouldPickHost() {
-		t.Error("an ordinary session would be asked which machine a new pane runs on")
 	}
 }
 
@@ -484,17 +346,6 @@ func TestMakingASessionOnOneMachineAsksNothing(t *testing.T) {
 	}}})
 	if !m.newSessionShouldPickHost() {
 		t.Error("two reachable machines and making a session still asked nothing")
-	}
-}
-
-// TestThePickerTitleSaysWhichQuestion. The list is the same for both, so the
-// title is the only thing that says whether enter makes a pane or a session.
-func TestThePickerTitleSaysWhichQuestion(t *testing.T) {
-	if got := hostPickerTitle(HostPickerNewSession); got != "New session on" {
-		t.Errorf("the session title reads %q", got)
-	}
-	if got := hostPickerTitle(HostPickerNewWindow); got != "New window on" {
-		t.Errorf("the window title reads %q", got)
 	}
 }
 

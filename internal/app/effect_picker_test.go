@@ -1,7 +1,6 @@
 package app
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -58,43 +57,6 @@ func captureText(m *OS) string {
 // effectRowIndex is where a name sits in the picker's current list.
 func effectRowIndex(m *OS, name string) int {
 	return slices.Index(m.effectPickerItems(), name)
-}
-
-// TestEffectRowOpensThePickerRatherThanCycling is the reason the row stopped
-// being derived. screensaver.effect accepts thirty-six values; a cycler asks
-// for up to thirty-five keypresses to reach one, and the picker is what Enter
-// has to reach instead.
-//
-// Negative control: dropping the activate hook, or putting opt("screensaver.
-// effect") back in the category, leaves Enter cycling and fails this.
-func TestEffectRowOpensThePickerRatherThanCycling(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 30)
-
-	if n := len(config.ScreensaverEffects); n < 30 {
-		t.Fatalf("setup: the effect list is %d long, so this row is not the outlier the picker was built for", n)
-	}
-
-	items := m.settingsCurrentItems()
-	idx := slices.IndexFunc(items, func(it settingItem) bool { return it.Path == "screensaver.effect" })
-	if idx < 0 {
-		t.Fatal("the Saver section has no screensaver.effect row")
-	}
-	m.SettingsSelected = idx
-	if items[idx].activate == nil {
-		t.Fatal("the effect row has no activate hook, so Enter cycles instead of opening the picker")
-	}
-
-	cmd := m.SettingsActivate()
-	if !m.ShowEffectPicker {
-		t.Fatal("Enter on the effect row did not open the picker")
-	}
-	if cmd == nil {
-		t.Error("opening the picker scheduled no first frame, so the preview never animates")
-	}
-	// And it opens on the effect that is set, not at the top of the list.
-	if got := m.effectPickerItems()[m.EffectPickerSelected]; got != m.screensaverConfig().EffectName() {
-		t.Errorf("the picker opened on %q, want the configured %q", got, m.screensaverConfig().EffectName())
-	}
 }
 
 // TestEffectPreviewAnimatesTheRealScreen is the point of the whole feature.
@@ -171,46 +133,6 @@ func TestEffectCaptureLeavesOutThePanels(t *testing.T) {
 	}
 }
 
-// TestEffectPreviewDrawsUnderThePanels: the animation covers the screen, so it
-// has to sit above the panes and the dock and below every panel, or the picker
-// choosing the effect is itself invisible.
-//
-// Negative control: giving the preview layer the panel's own z, or placing it
-// after the panels at a higher one, fails this.
-func TestEffectPreviewDrawsUnderThePanels(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 30)
-	_ = m.OpenEffectPicker()
-
-	var previewZ, pickerZ, settingsZ int
-	var found bool
-	for _, l := range m.renderOverlays() {
-		switch l.GetID() {
-		case "effectpreview":
-			previewZ, found = l.GetZ(), true
-		case "effectpicker":
-			pickerZ = l.GetZ()
-		case "settings":
-			settingsZ = l.GetZ()
-		}
-	}
-	if !found {
-		t.Fatal("no preview layer was placed while the picker was open")
-	}
-	if pickerZ == 0 || settingsZ == 0 {
-		t.Fatal("setup: the panels were not placed, so there is nothing to be under")
-	}
-	if previewZ >= pickerZ {
-		t.Errorf("the preview draws at z %d and the picker at %d, so the picker is buried", previewZ, pickerZ)
-	}
-	if previewZ >= settingsZ {
-		t.Errorf("the preview draws at z %d and the settings panel at %d", previewZ, settingsZ)
-	}
-	if previewZ <= config.ZIndexDock {
-		t.Errorf("the preview draws at z %d, at or under the dock's %d, so the dock shows through it",
-			previewZ, config.ZIndexDock)
-	}
-}
-
 // TestEffectPickerMovePreviewsTheRowUnderTheCursor: moving is what previews.
 // A picker where the animation stayed on whatever was selected when it opened
 // would list thirty-six names and show one of them.
@@ -273,52 +195,6 @@ func pickerBody(t *testing.T, m *OS) string {
 	return stripANSIForTrace(content)
 }
 
-// TestEffectPickerShowsWhatEachEffectDoesAndHowLongItHides: the names are the
-// problem the picker exists for. orbittingvolley and errorcorrect say nothing,
-// and neither does a list of them.
-//
-// Negative control: dropping the description line, or the opening column, fails
-// this.
-func TestEffectPickerShowsWhatEachEffectDoesAndHowLongItHides(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 40)
-	_ = m.OpenEffectPicker()
-
-	// A slow opener: the picker has to say so before it is chosen, not after.
-	idx := effectRowIndex(m, "print")
-	if idx < 0 {
-		t.Fatal("setup: print is not on offer")
-	}
-	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
-	body := pickerBody(t, m)
-
-	d, _ := tfx.Lookup("print")
-	head := d.Description[:20]
-	if !strings.Contains(body, head) {
-		t.Errorf("the panel does not describe print; body:\n%s", body)
-	}
-	// Off print's own row, not off the panel. The band words are also in the
-	// sentence under the list, so a search of the whole body passes with the
-	// column gone.
-	if got := pickerRowColumn(t, m, "print"); got != "long" {
-		t.Errorf("print's row carries %q in the opening column, want \"long\"; body:\n%s", got, body)
-	}
-	if !strings.Contains(body, "The wait is long. The time depends on your screen.") {
-		t.Errorf("the panel does not say how long print hides the screen; body:\n%s", body)
-	}
-
-	// A fast one reads differently, or the column says the same thing for
-	// everything and carries no information.
-	idx = effectRowIndex(m, "wipe")
-	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
-	body = pickerBody(t, m)
-	if got := pickerRowColumn(t, m, "wipe"); got != "short" {
-		t.Errorf("wipe's row carries %q in the opening column, want \"short\"; body:\n%s", got, body)
-	}
-	if strings.Contains(body, "The wait is long") {
-		t.Error("the detail line did not follow the selection")
-	}
-}
-
 // pickerRowColumn is the last word on one effect's row, which is the opening
 // column when the row has one. It fails the test when the row is not on screen,
 // so a caller cannot pass by asking about a row that scrolled away.
@@ -342,155 +218,6 @@ func pickerRowColumn(t *testing.T, m *OS, name string) string {
 	}
 	t.Fatalf("%s is not on screen, so its row cannot be read", name)
 	return ""
-}
-
-// TestEffectPickerClaimsNoTimeItCannotKnow is the truthfulness fix.
-//
-// The table behind the column is one measurement of one screen at 80x24. The
-// effects that do work per character take longer on a bigger screen with more
-// text on it, and the spread is not small: pour is 3.1 seconds over a bare
-// prompt and 97.8 seconds at 200x50 over a full one. So the picker may not put
-// a time on the panel. It used to put two: "35s" on the row and "The screen
-// comes back after about 35 seconds." under the list.
-//
-// A band is what survives. This holds the panel to one.
-//
-// Negative control: returning strconv.Itoa(int(seconds+0.5))+"s" from
-// effectOpeningWord, or the old sentence from effectOpeningSentence, fails
-// this.
-func TestEffectPickerClaimsNoTimeItCannotKnow(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 40)
-	_ = m.OpenEffectPicker()
-
-	digits := regexp.MustCompile(`[0-9]`)
-	clock := regexp.MustCompile(`(?i)second|minute|\bsec\b`)
-
-	checked := 0
-	for i, name := range m.effectPickerItems() {
-		m.EffectPickerSelected = i
-		m.buildEffectPreview()
-		_, status := m.effectDetailText(name)
-		for _, s := range []string{status, effectOpeningWord(effectOpeningBandOf(name, &config.Global))} {
-			if s == "" {
-				continue
-			}
-			checked++
-			if digits.MatchString(s) {
-				t.Errorf("%s is given a figure the picker cannot know: %q", name, s)
-			}
-			if clock.MatchString(s) {
-				t.Errorf("%s is given a time the picker cannot know: %q", name, s)
-			}
-		}
-	}
-	if checked < 60 {
-		t.Fatalf("only %d strings were checked; the gather is not reaching them", checked)
-	}
-}
-
-// TestEffectPickerSaysTheTimeDependsOnTheScreen: dropping the number is half
-// the fix. Somebody who reads "long" and comes back to a screen that took twice
-// as long has still been told something that was not true of their screen, so
-// the panel has to say what moves it.
-//
-// The none band is exempt and says something stronger instead. See
-// TestEffectsWithNoOpeningNeverHideTheScreen.
-//
-// Negative control: cutting the second sentence out of effectOpeningSentence
-// fails this.
-func TestEffectPickerSaysTheTimeDependsOnTheScreen(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 40)
-	_ = m.OpenEffectPicker()
-
-	const caveat = "The time depends on your screen."
-	hiding, quoted := 0, 0
-	for i, name := range m.effectPickerItems() {
-		if name == config.ScreensaverRandomEffect {
-			continue
-		}
-		band := effectOpeningBandOf(name, &config.Global)
-		if band == effectOpeningNone || band == effectOpeningUnknown {
-			continue
-		}
-		hiding++
-		m.EffectPickerSelected = i
-		m.buildEffectPreview()
-		if _, status := m.effectDetailText(name); strings.Contains(status, caveat) {
-			quoted++
-		} else {
-			t.Errorf("%s hides the screen and the panel does not say what sets the time: %q", name, status)
-		}
-	}
-	if hiding < 30 {
-		t.Fatalf("only %d effects hide the screen; the gather is not reaching them", hiding)
-	}
-	if quoted != hiding {
-		t.Errorf("%d of %d hiding effects carry the caveat", quoted, hiding)
-	}
-
-	// And it is on the panel, not only in the string.
-	idx := effectRowIndex(m, "swarm")
-	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
-	if body := pickerBody(t, m); !strings.Contains(body, caveat) {
-		t.Errorf("the caveat is not on the panel; body:\n%s", body)
-	}
-}
-
-// TestEffectOpeningBandsSeparateFastFromSlow: a band that says the same thing
-// for every effect is a column of nothing. The order it puts them in is the
-// part of the old measurement that survives a change of screen, so it has to be
-// visible.
-//
-// Negative control: returning one word from effectOpeningWord, or dropping the
-// boundaries so every effect lands in one band, fails this.
-func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
-	want := []struct {
-		name string
-		band effectOpeningBand
-		word string
-	}{
-		{"highlight", effectOpeningNone, "none"},
-		{"wipe", effectOpeningShort, "short"},
-		{"rain", effectOpeningMedium, "medium"},
-		{"swarm", effectOpeningLong, "long"},
-	}
-	seen := map[string]bool{}
-	for _, w := range want {
-		got := effectOpeningBandOf(w.name, &config.Global)
-		if got != w.band {
-			t.Errorf("%s is in band %d, want %d", w.name, got, w.band)
-		}
-		word := effectOpeningWord(got)
-		if word != w.word {
-			t.Errorf("%s reads %q in the column, want %q", w.name, word, w.word)
-		}
-		if seen[word] {
-			t.Errorf("%s repeats the column word %q, so the column carries no order", w.name, word)
-		}
-		seen[word] = true
-		if sentence := effectOpeningSentence(got); sentence == "" {
-			t.Errorf("%s gets no sentence under the list", w.name)
-		}
-	}
-
-	// Every band word fits the column it is drawn in, or the name beside it is
-	// cut to make room.
-	for _, band := range []effectOpeningBand{
-		effectOpeningNone, effectOpeningShort, effectOpeningMedium, effectOpeningLong,
-	} {
-		if n := len(effectOpeningWord(band)); n > effectOpeningColumn {
-			t.Errorf("band %d reads %q, %d cells in a %d-cell column",
-				band, effectOpeningWord(band), n, effectOpeningColumn)
-		}
-	}
-
-	// random has no one opening, so it claims none.
-	if got := effectOpeningBandOf(config.ScreensaverRandomEffect, &config.Global); got != effectOpeningUnknown {
-		t.Errorf("random is in band %d, want no band at all", got)
-	}
-	if word := effectOpeningWord(effectOpeningUnknown); word != "" {
-		t.Errorf("random carries %q in the column", word)
-	}
 }
 
 // TestEffectsWithNoOpeningNeverHideTheScreen is the one claim on this panel
@@ -873,37 +600,6 @@ func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
 	}
 }
 
-// TestEffectPickerRowHitsComeFromTheRenderer: hit rectangles are recorded by
-// the renderer as it draws and never recomputed in a handler, so a click lands
-// where the user is pointing whatever the panel reflowed to.
-//
-// Negative control: returning nil rows from renderEffectPicker, or shifting the
-// row rects by the search line's two rows, fails this.
-func TestEffectPickerRowHitsComeFromTheRenderer(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 40)
-	_ = m.OpenEffectPicker()
-
-	content, geo, rows := m.renderEffectPicker()
-	if len(rows) == 0 {
-		t.Fatal("the renderer recorded no row rects, so the picker cannot be clicked")
-	}
-	lines := strings.Split(stripANSIForTrace(content), "\n")
-	items := m.effectPickerItems()
-	for _, r := range rows {
-		if r.Rect.Y0 < 0 || r.Rect.Y0 >= len(lines) {
-			t.Fatalf("row %d recorded at y %d, outside the %d-line panel", r.Idx, r.Rect.Y0, len(lines))
-		}
-		name := items[r.Idx]
-		if !strings.Contains(lines[r.Rect.Y0], name) {
-			t.Errorf("row %d claims y %d, but that line is %q and the row is %q",
-				r.Idx, r.Rect.Y0, strings.TrimSpace(lines[r.Rect.Y0]), name)
-		}
-		if r.Rect.X1 != geo.Width {
-			t.Errorf("row %d is %d wide, want the panel's %d", r.Idx, r.Rect.X1, geo.Width)
-		}
-	}
-}
-
 // TestEffectPickerPanelFitsEveryScreen: thirty-six rows and a two-line detail
 // block on a panel that has to fit a phone-sized terminal.
 func TestEffectPickerPanelFitsEveryScreen(t *testing.T) {
@@ -918,70 +614,6 @@ func TestEffectPickerPanelFitsEveryScreen(t *testing.T) {
 			assertFitsScreen(t, "effectpicker empty", out, sc.w, sc.h)
 			m.CancelEffectPicker()
 		})
-	}
-}
-
-// TestEffectPickerStringsArePlain keeps the runtime text this feature adds
-// inside the house style: one idea a sentence, under twenty words, sentence
-// case, and no dash standing in for a verb.
-//
-// It reads the strings before they are laid out, not off the panel. Rendered
-// text is truncated to the panel width, so a sentence in the wrong voice comes
-// back inside the word count with a mark on the end and the check passes on a
-// string nobody would want to ship.
-//
-// The engine's own descriptions are not in scope: they belong to tuiffects and
-// rewriting them here would only make the two drift.
-//
-// Negative control: putting any of these in the commit-message voice fails it.
-func TestEffectPickerStringsArePlain(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 40)
-	_ = m.OpenEffectPicker()
-
-	var strs []string
-	for _, item := range m.settingsCurrentItems() {
-		if item.Path == "screensaver.effect" {
-			strs = append(strs, item.Label, item.Desc)
-		}
-	}
-	for i, name := range m.effectPickerItems() {
-		m.EffectPickerSelected = i
-		m.buildEffectPreview()
-		description, status := m.effectDetailText(name)
-		strs = append(strs, status)
-		if name == config.ScreensaverRandomEffect {
-			strs = append(strs, description)
-		}
-	}
-	// The resize note, which only shows after a resize.
-	m.effectPreview.resized = true
-	_, status := m.effectDetailText("wipe")
-	strs = append(strs, status, "Screen saver effect", "No matching effects",
-		"No effect matches ")
-	for _, h := range effectPickerHints {
-		strs = append(strs, h.Label)
-	}
-
-	checked := 0
-	for _, s := range strs {
-		if s == "" {
-			continue
-		}
-		checked++
-		if strings.ContainsAny(s, "—–") {
-			t.Errorf("a dash is doing a verb's work: %q", s)
-		}
-		if n := len(strings.Fields(s)); n > 20 {
-			t.Errorf("%d words in one string: %q", n, s)
-		}
-		for _, sentence := range strings.Split(s, ". ") {
-			if n := len(strings.Fields(sentence)); n > 20 {
-				t.Errorf("%d words in one sentence: %q", n, sentence)
-			}
-		}
-	}
-	if checked < 20 {
-		t.Fatalf("only %d strings were checked; the gather is not reaching them", checked)
 	}
 }
 

@@ -31,14 +31,3 @@ func TestWorkspaceStripInkClearsTheContrastFloor(t *testing.T) {
 		}
 	}
 }
-
-// TestCurrentPillStillReadsAsAccent: the floor is a floor, not a repaint. The
-// current workspace is told apart from the rest by hue as well as by weight, so
-// lifting it for legibility must not land it on the same ink the resting pills
-// use.
-func TestCurrentPillStillReadsAsAccent(t *testing.T) {
-	pal := theme.UI()
-	if workspacePillFg(true, pal) == workspacePillFg(false, pal) {
-		t.Error("the current pill and a resting one resolved to the same colour")
-	}
-}

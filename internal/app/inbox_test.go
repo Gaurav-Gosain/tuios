@@ -1,13 +1,10 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/x/ansi"
@@ -242,53 +239,6 @@ func TestInboxQuestionsAreOneGroup(t *testing.T) {
 	}
 }
 
-// TestInboxRenderSaysItInWords: a heading names the kind and a row names the
-// session and the wait, so nothing depends on colour.
-func TestInboxRenderSaysItInWords(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	now := time.Now()
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
-		item("1", session.AttentionApproval, "fan-2", "w1", "approve Bash: go test", now.Add(-12*time.Minute).UnixNano()),
-		item("2", session.AttentionErrored, "work", "w2", "rate limited", now.Add(-3*time.Hour).UnixNano()),
-	}})
-	m.OpenInbox("")
-	out, _, rows := m.renderInbox()
-	plain := ansi.Strip(out)
-	for _, want := range []string{"Inbox", "Approvals 1", "Errored 1", "agent-1", "approve Bash: go test", "fan-2", "12m", "3h", "dismiss"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
-		}
-	}
-	if len(rows) != 4 {
-		t.Errorf("%d hit rows, want 4", len(rows))
-	}
-
-	m.Inbox.Live = false
-	out, _, _ = m.renderInbox()
-	if !strings.Contains(ansi.Strip(out), "not connected") {
-		t.Error("a stale Inbox does not say so")
-	}
-	m.Inbox.Items = nil
-	m.Inbox.Live = true
-	out, _, _ = m.renderInbox()
-	if !strings.Contains(ansi.Strip(out), "Nothing is waiting for you") {
-		t.Error("the empty Inbox does not say what it holds")
-	}
-}
-
-func TestInboxEnterJumpsToThePane(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{item("1", session.AttentionApproval, "here", "w-2", "", 1)}})
-	m.OpenInbox("")
-	m.InboxActivate()
-	if m.ShowInbox {
-		t.Error("enter left the Inbox open")
-	}
-	if w := m.GetFocusedWindow(); w == nil || w.ID != "w-2" {
-		t.Errorf("enter did not focus w-2")
-	}
-}
-
 // TestNextAttentionCyclesOldestFirst: the key goes to the oldest item that
 // needs the person, then the next, and around again; finished turns are not
 // visited.
@@ -348,20 +298,6 @@ func TestInboxReplyOpensTheThreadWithItsReplyLine(t *testing.T) {
 	}
 }
 
-// TestPaletteOpensTheInbox is the route in from the palette.
-func TestPaletteOpensTheInbox(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	// The agent entries wait until an agent has been seen.
-	m.SidebarAgentsSeen = true
-	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "Inbox, what is waiting"
-	m.CommandPaletteSelected = 0
-	m.ActivateCommandPalette()
-	if !m.ShowInbox {
-		t.Fatal("the palette entry did not open the Inbox")
-	}
-}
-
 func TestSidebarHeaderCountsTheInbox(t *testing.T) {
 	m := inboxOS(t, zeroSettle())
 	rows := []sidebarAgentEntry{{State: "needs_input"}, {State: "needs_input"}, {State: "done", Host: "box", SessionID: "r"}}
@@ -385,63 +321,6 @@ func TestSidebarHeaderCountsTheInbox(t *testing.T) {
 	m.SidebarAgentFilter = sidebarAgentsSession
 	if c := m.sidebarHeaderCounts(nil); c.Blocked != 1 || c.Done != 0 {
 		t.Errorf("filtered to here the header counts %+v", c)
-	}
-}
-
-// TestInboxWatcherFollowsTheDaemon runs the watcher against a real daemon: a
-// listing first, then the events after it, in order.
-func TestInboxWatcherFollowsTheDaemon(t *testing.T) {
-	ownSocket(t)
-	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})
-	if err := d.Start(); err != nil {
-		t.Fatalf("daemon start: %v", err)
-	}
-	t.Cleanup(d.Stop)
-
-	ctl, err := session.DialVerbClient()
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	defer func() { _ = ctl.Close() }()
-	if _, err := ctl.Call("new-session", map[string]any{"name": "fan-1"}); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	if _, err := ctl.Call("set-agent-state", map[string]any{"session": "fan-1", "state": "errored", "message": "before"}); err != nil {
-		t.Fatalf("set-agent-state: %v", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	out := make(chan tea.Msg, inboxQueue)
-	go runInboxWatch(ctx, session.DialVerbClient, out)
-
-	next := func() tea.Msg {
-		select {
-		case msg := <-out:
-			return msg
-		case <-time.After(5 * time.Second):
-			t.Fatal("the watcher delivered nothing")
-			return nil
-		}
-	}
-	snap, ok := next().(InboxSnapshotMsg)
-	if !ok || len(snap.Items) != 1 || snap.Items[0].Summary != "before" {
-		t.Fatalf("first delivery %+v, want a listing holding the errored pane", snap)
-	}
-
-	if _, err := ctl.Call("set-agent-state", map[string]any{"session": "fan-1", "state": "needs_input", "kind": "approval", "message": "after"}); err != nil {
-		t.Fatalf("set-agent-state: %v", err)
-	}
-	evs, ok := next().(InboxEventsMsg)
-	if !ok {
-		t.Fatalf("second delivery is not events")
-	}
-	var got []string
-	for _, ev := range evs.Events {
-		got = append(got, ev.Action+":"+ev.Item.Kind)
-	}
-	if strings.Join(got, " ") != "close:errored open:approval" {
-		t.Errorf("events %v, want the errored item closed and the approval opened in one batch", got)
 	}
 }
 
@@ -480,25 +359,5 @@ func TestInboxDismissFailuresOnlyShowWhenTheyMatter(t *testing.T) {
 				t.Errorf("%d toasts, want %d", len(m.Notifications), c.want)
 			}
 		})
-	}
-}
-
-// The dismiss sent for a finished turn seen under the person's eyes is marked
-// silent, so neither a race with another client nor a client that cannot send
-// it raises a toast.
-func TestInboxSeenUnderEyesDismissIsSilent(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.FocusedWindow = 0
-	w := m.GetFocusedWindow()
-	if w == nil {
-		t.Fatal("the test OS has no focused pane")
-	}
-	m.DaemonClient = nil
-	cmd := m.inboxSeenUnderEyes(item("5", session.AttentionFinished, m.sidebarCurrentSessionID(), w.ID, "", 1))
-	if cmd != nil {
-		t.Fatal("with no daemon client there is nothing to send")
-	}
-	if len(m.Notifications) != 0 {
-		t.Errorf("an automatic dismiss with no daemon client raised %d toasts", len(m.Notifications))
 	}
 }

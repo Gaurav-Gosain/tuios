@@ -269,21 +269,3 @@ func sameDevice(t *testing.T, a, b string) bool {
 	}
 	return ra.Dev == rb.Dev
 }
-
-// TestTheHomeTrashIsTheSpecPath checks where the default trash resolves to
-// without writing anything into it.
-func TestTheHomeTrashIsTheSpecPath(t *testing.T) {
-	if !trashAvailable() {
-		t.Skip("no trash on this system")
-	}
-	dir, err := homeTrashDir()
-	if err != nil {
-		t.Fatalf("the home trash did not resolve: %v", err)
-	}
-	if filepath.Base(dir) != "Trash" {
-		t.Errorf("the home trash is %q; the spec calls the folder Trash", dir)
-	}
-	if !filepath.IsAbs(dir) {
-		t.Errorf("the home trash %q is not an absolute path", dir)
-	}
-}

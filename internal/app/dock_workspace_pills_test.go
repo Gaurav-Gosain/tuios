@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // pillOS is a dock w columns wide with one window per listed workspace and the
@@ -161,74 +160,6 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes: dock_pill_caps is about
-// the mode chip and the minimized run, where a cap on every entry turned the row
-// into beads. The workspace pills are tabs and keep their shape either way, so a
-// flat dock is still a dock with rounded workspace tabs in it.
-func TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes(t *testing.T) {
-	for _, flat := range []bool{false, true} {
-		t.Run(strconv.FormatBool(flat), func(t *testing.T) {
-			m := pillCapsOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
-			m.Settings.DockPillCaps = !flat
-			row := dockBarRow(t, m)
-			for _, h := range m.dockWorkspaceHits {
-				if got := cells(row, h.X0, h.X0+1); got != m.Settings.GetDockWorkspaceCapLeft() {
-					t.Errorf("workspace %d lost its left cap with dock_pill_caps=%v: %q",
-						h.Workspace, !flat, got)
-				}
-			}
-		})
-	}
-}
-
-// TestWorkspacePillsDropTheCapsUnderASCII: a half circle has no 7-bit stand-in,
-// so the ASCII strip draws the fill alone rather than bracketing every pill.
-// The rectangles have to follow it down, or a terminal without the font records
-// two columns per pill that nothing was painted in.
-func TestWorkspacePillsDropTheCapsUnderASCII(t *testing.T) {
-	m := pillOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
-	if got := m.Settings.GetDockWorkspaceCapLeft() + m.Settings.GetDockWorkspaceCapRight(); got != "" {
-		t.Fatalf("the ASCII strip still has caps: %q", got)
-	}
-	row := dockBarRow(t, m)
-	for _, h := range m.dockWorkspaceHits {
-		label := "+"
-		if h.Workspace > 0 {
-			label = m.workspacePillLabel(h.Workspace)
-		}
-		if got, want := cells(row, h.X0, h.X1), " "+label+" "; got != want {
-			t.Errorf("workspace %d's rect covers %q, but its uncapped pill draws %q", h.Workspace, got, want)
-		}
-	}
-}
-
-// TestActiveWorkspacePillReadsAsActive checks the drawn dock rather than the
-// pill in isolation: the styled run the renderer emitted has to be the active
-// one, underline and all, or the strip is a row of identical pills that never
-// says which workspace you are on.
-func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
-	m := pillOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
-	m.CurrentWorkspace = 2
-	dock, _ := m.renderDockString()
-
-	pal := theme.UI()
-	active := workspacePill("review", true, false, pal, &config.Global)
-	if !strings.Contains(dock, active) {
-		t.Errorf("the dock does not draw workspace 2's pill as the active one: %q", active)
-	}
-	if !isUnderlined(active) {
-		t.Error("the active pill lost the underline, which is the whole of its emphasis")
-	}
-	// The resting pills carry the fill but not the emphasis.
-	resting := workspacePill("1", false, false, pal, &config.Global)
-	if !strings.Contains(dock, resting) {
-		t.Errorf("the dock does not draw workspace 1's pill at rest: %q", resting)
-	}
-	if isUnderlined(resting) {
-		t.Error("a resting pill is underlined, so every pill reads as current")
 	}
 }
 

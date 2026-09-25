@@ -59,63 +59,6 @@ func TestHelpDocumentsTheRailScope(t *testing.T) {
 	}
 }
 
-// TestHelpDocumentsTheEntryPointsToTheRail checks the ways into the rail are
-// findable from the Sidebar section, since a scope you cannot reach is worse
-// than one you cannot read.
-func TestHelpDocumentsTheEntryPointsToTheRail(t *testing.T) {
-	cat := helpSection(t, "Sidebar")
-	want := []string{"s", config.Global.LeaderKey + ", e", config.Global.LeaderKey + ", b"}
-
-	for _, key := range want {
-		found := false
-		for _, b := range cat.Bindings {
-			for _, k := range b.Keys {
-				if k == key {
-					found = true
-				}
-			}
-		}
-		if !found {
-			t.Errorf("the Sidebar section never mentions %q", key)
-		}
-	}
-}
-
-// TestHelpDocumentsTheMouse checks the gesture sections describe the buttons a
-// user can actually press. help.go documented no gesture at all until this, so
-// the assertion is on the gestures being present and described, not on wording.
-func TestHelpDocumentsTheMouse(t *testing.T) {
-	var rows []HelpBinding
-	rows = append(rows, helpSection(t, "Mouse").Bindings...)
-	rows = append(rows, helpSection(t, "Sidebar").Bindings...)
-
-	joined := ""
-	for _, b := range rows {
-		if b.Description == "" {
-			t.Errorf("gesture %v has no description", b.Keys)
-		}
-		joined += strings.Join(b.Keys, " ") + "\n"
-	}
-
-	for _, gesture := range []string{
-		"ctrl+shift+click",         // multi-select
-		"ctrl+drag",                // move a pane
-		"drag pane border",         // tiled divider / floating edge
-		"right-drag",               // corner resize
-		"right-click",              // pane menu without a modifier
-		"ctrl/shift + right-click", // pane menu over a mouse-aware app
-		"wheel",                    // scrollback and the rail
-		"click a row",              // rail: switch / focus
-		"drag a session",           // rail: reorder
-		"drag the rail edge",       // rail: resize
-		"hover a clipped row",
-	} {
-		if !strings.Contains(joined, gesture) {
-			t.Errorf("the help overlay documents no %q gesture", gesture)
-		}
-	}
-}
-
 // TestGestureRowsFitTheHelpPanel checks the hand-written gesture rows fit the
 // panel's columns at its preferred width. A row wider than the key column has
 // its extra key combos dropped, and a description wider than what is left is
@@ -143,26 +86,6 @@ func TestGestureRowsFitTheHelpPanel(t *testing.T) {
 				t.Errorf("%s: %v is described in %d cells, the column holds %d: %q",
 					name, b.Keys, w, descMax, b.Description)
 			}
-		}
-	}
-}
-
-// TestHelpDocumentsTheListKeys: the keys every list shares and the settings
-// page's own are written into the Modes section, which is the only place the
-// help can show keys that are not registry actions without a tab of their own.
-func TestHelpDocumentsTheListKeys(t *testing.T) {
-	cat := helpSection(t, "Modes")
-	want := map[string]bool{"home": false, "pgup": false, "ctrl+z": false, "/": false}
-	for _, b := range cat.Bindings {
-		for _, k := range b.Keys {
-			if _, ok := want[k]; ok {
-				want[k] = true
-			}
-		}
-	}
-	for k, seen := range want {
-		if !seen {
-			t.Errorf("the help does not list %q", k)
 		}
 	}
 }

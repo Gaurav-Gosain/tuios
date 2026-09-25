@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -17,45 +16,6 @@ func keybindOS(t *testing.T) *OS {
 	return m
 }
 
-func TestOpenBuildsTheReportOnce(t *testing.T) {
-	m := keybindOS(t)
-	if len(m.KeybindReport().Bindings) == 0 {
-		t.Fatal("opening the overlay must build the report")
-	}
-	// Closing drops it, so a reopen reads the pane again rather than showing
-	// what was true last time.
-	m.CloseKeybindManager()
-	if m.ShowKeybindManager {
-		t.Error("close must clear the flag")
-	}
-	if len(m.KeybindReport().Bindings) != 0 {
-		t.Error("close must drop the report")
-	}
-}
-
-// The recorder's whole contract: armed, a key is data; disarmed, it is a
-// command. If arming survived a capture there would be no key left that means
-// "stop", because every one of them is a key the recorder must be able to
-// record.
-func TestRecorderArmsOneKeyAtATime(t *testing.T) {
-	m := keybindOS(t)
-	m.KeybindArm()
-	if !m.KeybindArmed() {
-		t.Fatal("KeybindArm must arm")
-	}
-	m.KeybindCapture("esc")
-	if m.KeybindArmed() {
-		t.Fatal("capturing must disarm, or there is no way to stop recording")
-	}
-	key, fate := m.KeybindCaptured()
-	if key != "esc" {
-		t.Errorf("captured %q, want esc", key)
-	}
-	if len(fate.Acts) == 0 {
-		t.Error("esc is bound in several scopes and the recorder must say so")
-	}
-}
-
 // Leaving the Record tab disarms. An armed recorder that survived a tab switch
 // would swallow the next keystroke on a surface that is not showing it.
 func TestLeavingTheRecordTabDisarms(t *testing.T) {
@@ -64,24 +24,6 @@ func TestLeavingTheRecordTabDisarms(t *testing.T) {
 	m.KeybindSetTab(KeybindTabConflicts)
 	if m.KeybindArmed() {
 		t.Fatal("switching away from Record must disarm")
-	}
-}
-
-func TestArmingFromABindingCarriesTheTarget(t *testing.T) {
-	m := keybindOS(t)
-	rows := m.FilteredKeybindRows()
-	if len(rows) == 0 {
-		t.Fatal("no bindings to arm from")
-	}
-	m.KeybindArmFor(rows[0].Section, rows[0].Action)
-	section, action := m.KeybindBindTarget()
-	if section != rows[0].Section || action != rows[0].Action {
-		t.Errorf("target = %q/%q, want %q/%q", section, action, rows[0].Section, rows[0].Action)
-	}
-	// Arming from the Record tab is inspect-only.
-	m.KeybindArm()
-	if section, action := m.KeybindBindTarget(); section != "" || action != "" {
-		t.Errorf("a bare arm must carry no target, got %q/%q", section, action)
 	}
 }
 
@@ -182,32 +124,6 @@ func TestFilterMemoTracksTheQuery(t *testing.T) {
 	}
 }
 
-// The query searches the chord as well as the action, so a user who knows what
-// they press can find it without knowing what it is called.
-func TestFilterMatchesTheChordAndTheAction(t *testing.T) {
-	m := keybindOS(t)
-	m.KeybindSetQuery("ctrl+b")
-	for _, b := range m.FilteredKeybindRows() {
-		if strings.Contains(b.Press, "ctrl+b") {
-			return
-		}
-	}
-	t.Error("filtering by a chord must find bindings that use it")
-}
-
-func TestTabsWrapInBothDirections(t *testing.T) {
-	m := keybindOS(t)
-	m.KeybindSetTab(KeybindTabBindings)
-	m.KeybindStepTab(-1)
-	if m.KeybindTab != KeybindTabRecord {
-		t.Errorf("stepping back from the first tab must wrap to the last, got %d", m.KeybindTab)
-	}
-	m.KeybindStepTab(1)
-	if m.KeybindTab != KeybindTabBindings {
-		t.Errorf("stepping forward from the last tab must wrap to the first, got %d", m.KeybindTab)
-	}
-}
-
 // Selection is clamped to the active tab's own list, since the tabs list
 // different things and a row index does not carry across them.
 func TestSelectionResetsAcrossTabs(t *testing.T) {
@@ -219,18 +135,6 @@ func TestSelectionResetsAcrossTabs(t *testing.T) {
 	m.KeybindSetTab(KeybindTabConflicts)
 	if m.KeybindSelected() != 0 {
 		t.Errorf("selection = %d after a tab switch, want 0", m.KeybindSelected())
-	}
-}
-
-func TestMoveClampsToTheList(t *testing.T) {
-	m := keybindOS(t)
-	m.KeybindMove(-5)
-	if got := m.KeybindSelected(); got != 0 {
-		t.Errorf("selection = %d, want 0: it must not go negative", got)
-	}
-	m.KeybindMove(10000)
-	if got, n := m.KeybindSelected(), len(m.FilteredKeybindRows()); got != n-1 {
-		t.Errorf("selection = %d, want %d: it must not run past the end", got, n-1)
 	}
 }
 

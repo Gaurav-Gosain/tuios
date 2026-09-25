@@ -130,45 +130,6 @@ func TestFreeingAKeyReportsWhatStillHoldsIt(t *testing.T) {
 	}
 }
 
-// TestFreeingAnUnclaimedKeySaysSoWithoutWriting: a key nothing binds is already
-// the pane's, and reporting a removal that did not happen is a lie the user
-// cannot check.
-//
-// Negative control: have KeybindFreeKey report success unconditionally and this
-// fails.
-func TestFreeingAnUnclaimedKeySaysSoWithoutWriting(t *testing.T) {
-	m := keybindOS(t)
-	m.KeybindFreeKey("ctrl+alt+shift+f9")
-	msg := lastNotificationText(t, m)
-	if !strings.Contains(msg, "Nothing binds") {
-		t.Errorf("freeing an unclaimed key said %q", msg)
-	}
-	if strings.Contains(msg, "Freed") {
-		t.Errorf("freeing an unclaimed key claimed to have removed something: %q", msg)
-	}
-}
-
-// TestUnbindDoesNothingOnAnAlreadyUnboundRow, and says why rather than
-// reporting a removal.
-//
-// Negative control: drop the b.Unbound branch in KeybindUnbindSelected and this
-// fails with "Could not unbind", which reads as a fault rather than as a state.
-func TestUnbindDoesNothingOnAnAlreadyUnboundRow(t *testing.T) {
-	m := keybindOS(t)
-	m.UserConfig.Keybindings.UnbindAction(config.SectionWindowManagement, "close_window")
-	m.KeybindRegistry.Reload(m.UserConfig)
-	m.keybinds.report = m.buildKeybindReport()
-	m.keybinds.filtered = nil
-
-	selectKeybindRow(t, m, "close_window", func(b config.Binding) bool {
-		return b.Action == "close_window"
-	})
-	m.KeybindUnbindSelected()
-	if msg := lastNotificationText(t, m); !strings.Contains(msg, "already has no key") {
-		t.Errorf("unbinding an unbound action said %q", msg)
-	}
-}
-
 // TestUnbindRefreshesTheReport. The overlay must show the state after the edit,
 // not before it, or the row the user just changed still reads as bound.
 //

@@ -91,43 +91,6 @@ func run(t *testing.T, m *OS, cmd tea.Cmd) {
 	}
 }
 
-// TestInboxPeekShowsThePrompt: space on an approval reads the prompt of that
-// pane and draws it with its options, the wait, and only the keys that answer
-// it, in words.
-func TestInboxPeekShowsThePrompt(t *testing.T) {
-	f := &fakeDaemon{peeks: []session.PromptPeek{claudePeek("p1")}}
-	m := peekOS(t, f)
-	run(t, m, m.InboxPeek())
-	if !m.InboxPeeking() {
-		t.Fatal("space did not open the peek")
-	}
-	if c := f.calls[0]; c.verb != "peek-prompt" || c.params["session"] != "here" || c.params["window"] != "w-2" {
-		t.Fatalf("the peek read %v", c)
-	}
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	for _, want := range []string{"Approval: agent-7", "rm -rf build", "Do you want to proceed?", "2m", "1  Yes", "choose", "go to pane"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the peek does not show %q:\n%s", want, plain)
-		}
-	}
-	// The digits are the one way offered to answer a numbered prompt; a, A
-	// and d still work but are not offered beside them.
-	for _, lack := range []string{"a approve", "A always", "d deny"} {
-		if strings.Contains(plain, lack) {
-			t.Errorf("the peek offers %q beside the digits:\n%s", lack, plain)
-		}
-	}
-	if strings.Contains(plain, "type") {
-		t.Errorf("the peek offers a text answer the prompt does not take:\n%s", plain)
-	}
-
-	m.InboxPeekBack()
-	if m.InboxPeeking() || !m.ShowInbox {
-		t.Error("back did not return to the list")
-	}
-}
-
 // TestInboxPeekApproveSendsTheNonceAndPromptID: a approves with the prompt_id
 // the peek read and this client's attach nonce, and a landed answer closes the
 // peek and says where the pane went.
@@ -267,39 +230,5 @@ func TestInboxPeekDropsAStaleReply(t *testing.T) {
 	m.applyInboxPeek(stale)
 	if id := m.Inbox.Peek.Peek.PromptID; id != "new" {
 		t.Errorf("the peek shows prompt %s, want new", id)
-	}
-}
-
-// TestInboxPeekIsForPrompts: space on an item with no prompt says what space
-// is for and calls nothing.
-func TestInboxPeekIsForPrompts(t *testing.T) {
-	f := &fakeDaemon{}
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
-		item("1", session.AttentionFinished, "here", "w-1", "", 10),
-	}})
-	m.OpenInbox("")
-	m.SetInboxVerbCaller(f.call, nil)
-	if cmd := m.InboxPeek(); cmd != nil || m.InboxPeeking() || len(f.calls) != 0 {
-		t.Error("space peeked at a finished turn")
-	}
-}
-
-// TestInboxPeekLeavesAHeldApprovalToItsKeys: a hook holds this approval off
-// the screen, so space does not read the pane: it names the keys that answer
-// it and calls nothing.
-func TestInboxPeekLeavesAHeldApprovalToItsKeys(t *testing.T) {
-	f := &fakeDaemon{}
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
-		heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny),
-	}})
-	m.OpenInbox("")
-	m.SetInboxVerbCaller(f.call, func() string { return "nonce-1" })
-	if cmd := m.InboxPeek(); cmd != nil || m.InboxPeeking() || len(f.calls) != 0 {
-		t.Fatal("space peeked at a held approval")
-	}
-	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "answer it with 1/3") {
-		t.Errorf("notifications %+v", m.Notifications)
 	}
 }

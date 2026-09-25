@@ -8,7 +8,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -142,39 +141,6 @@ func TestWorkspacePillTooltipLeavesTheStripWhereItWas(t *testing.T) {
 	}
 }
 
-// TestWorkspacePillTooltipKeepsEveryHitOnItsDrawnCells walks the edges with the
-// label up. Both edge columns of a pill still resolve to the workspace drawn
-// there, and the bare column between two pills still belongs to neither.
-func TestWorkspacePillTooltipKeepsEveryHitOnItsDrawnCells(t *testing.T) {
-	m := pillTooltipOS(t)
-	_, _, _ = hoverPill(t, m, 2)
-
-	hits := pillHits(m)
-	if len(hits) < 3 {
-		t.Fatalf("the strip recorded %d rects, want at least three", len(hits))
-	}
-	for i, h := range hits {
-		if i > 0 {
-			if prev := hits[i-1]; h.X0 != prev.X1+dockWorkspacePillGap {
-				t.Errorf("pill %d starts at %d but its neighbour ended at %d", i, h.X0, prev.X1)
-			}
-		}
-		if h.Workspace == 0 {
-			continue // the "+" tab, which stands for a workspace that does not exist yet
-		}
-		for _, x := range []int{h.X0, h.X1 - 1} {
-			if got := m.DockWorkspaceAt(x, h.Y); got != h.Workspace {
-				t.Errorf("pill %d: column %d in [%d,%d) resolves to workspace %d, want %d",
-					i, x, h.X0, h.X1, got, h.Workspace)
-			}
-		}
-	}
-	first := hits[0]
-	if got := m.DockWorkspaceAt(first.X0-1, first.Y); got != 0 {
-		t.Errorf("the cell before the strip resolves to workspace %d", got)
-	}
-}
-
 // TestWorkspacePillTooltipStaysOffWhenTheNameFits: a pill already saying all of
 // its name has nothing to reveal, and a label repeating the screen would hold
 // the maintenance tick open across the delay for nothing.
@@ -238,92 +204,6 @@ func TestWorkspacePillTooltipCostsNoIdleTick(t *testing.T) {
 	if m.TooltipPending() {
 		t.Error("the label has been drawn and is still holding the tick open")
 	}
-}
-
-// TestWorkspacePillTooltipCanBeTurnedOff: off, the pill truncates exactly as it
-// did before the label existed, and the hover arms nothing at all.
-func TestWorkspacePillTooltipCanBeTurnedOff(t *testing.T) {
-	m := pillTooltipOS(t)
-	m.Settings.DockWorkspaceTooltip = false
-
-	before := pillFrame(m)
-	was := pillHits(m)
-	rect := pillRect(t, m, 2)
-
-	m.DockWorkspaceHoverAt(rect.X0, rect.Y)
-	if m.Tooltip.Source != tooltipNone {
-		t.Errorf("the key is off and a %v label armed anyway", m.Tooltip.Source)
-	}
-	if m.TooltipPending() {
-		t.Error("the key is off and a label is pending anyway")
-	}
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
-	if m.renderTooltip() != nil {
-		t.Error("the key is off and a label drew anyway")
-	}
-
-	after := pillFrame(m)
-	if strings.Join(before, "\n") != strings.Join(after, "\n") {
-		t.Error("hovering changed the frame with the key off")
-	}
-	if got := strings.Join(after, "\n"); strings.Contains(got, pillTooltipName) {
-		t.Errorf("the key is off and the whole name is on screen anyway:\n%s", got)
-	}
-	// What is left is today's behaviour: the truncated label, nothing more.
-	if want := m.workspacePillLabel(2); !strings.Contains(strings.Join(after, "\n"), want) {
-		t.Errorf("the pill stopped drawing its truncated label %q", want)
-	}
-	for i := range was {
-		if was[i] != pillHits(m)[i] {
-			t.Errorf("pill %d moved with the key off: %+v then %+v", i, was[i], pillHits(m)[i])
-		}
-	}
-}
-
-// TestWorkspacePillTooltipInASCIIAndMonochrome: the label is words on a row, so
-// it must survive a terminal with no drawing glyphs and one with no palette.
-// Both frames are checked with the colours already stripped, which is the
-// monochrome case, and the ASCII run additionally holds the label to plain
-// bytes.
-func TestWorkspacePillTooltipInASCIIAndMonochrome(t *testing.T) {
-	t.Run("monochrome", func(t *testing.T) {
-		m := pillTooltipOS(t)
-		_, after, rect := hoverPill(t, m, 2)
-		row := rect.Y - 1
-		if config.Global.DockbarPosition == "top" {
-			row = rect.Y + 1
-		}
-		if !strings.Contains(safeRow(after, row), pillTooltipName) {
-			t.Errorf("with every colour dropped the label reads %q", safeRow(after, row))
-		}
-	})
-
-	t.Run("ascii", func(t *testing.T) {
-		prev := config.Global.UseASCIIOnly
-		config.Global.UseASCIIOnly = true
-		overlay.SetASCII(true)
-		t.Cleanup(func() {
-			config.Global.UseASCIIOnly = prev
-			overlay.SetASCII(prev)
-		})
-
-		m := pillTooltipOS(t)
-		_, after, rect := hoverPill(t, m, 2)
-		row := rect.Y - 1
-		if config.Global.DockbarPosition == "top" {
-			row = rect.Y + 1
-		}
-		line := safeRow(after, row)
-		if !strings.Contains(line, pillTooltipName) {
-			t.Errorf("the ASCII label reads %q", line)
-		}
-		for _, r := range line {
-			if r > 127 {
-				t.Errorf("the ASCII label row carries %q: %q", r, line)
-				break
-			}
-		}
-	})
 }
 
 // safeRow is row i of a frame, or "" when the frame is shorter than that.

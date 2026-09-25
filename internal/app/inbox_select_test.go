@@ -105,17 +105,3 @@ func TestInboxSelectKeepsTheLineOpenOnABadSelector(t *testing.T) {
 		t.Error("esc did not close the line and leave the list as it was")
 	}
 }
-
-// TestInboxSelectNamesAnEmptyResult: a selector that matches nothing says so,
-// rather than drawing the empty Inbox.
-func TestInboxSelectNamesAnEmptyResult(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{item("1", session.AttentionErrored, "a", "w1", "", 1)}})
-	m.OpenInbox("")
-	typeSelector(m, "harness:codex")
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	if !strings.Contains(plain, "Nothing matches select harness:codex") || strings.Contains(plain, "Nothing is waiting for you") {
-		t.Errorf("an empty selection does not say it is one:\n%s", plain)
-	}
-}

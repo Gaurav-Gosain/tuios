@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -9,37 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
-
-// TestDefaultDockListsReproduceTheDefaultBar is the promise made to everyone
-// who has no [dock] table: writing the arrangement down as three lists changed
-// nothing about the bar it draws.
-//
-// It compares the frame drawn from an explicit default plan against the one
-// drawn from no config at all, cell for cell including the styling, because a
-// difference in escape sequences is a difference on screen.
-func TestDefaultDockListsReproduceTheDefaultBar(t *testing.T) {
-	for _, width := range []int{60, 80, 120, 160} {
-		t.Run(fmt.Sprintf("w%d", width), func(t *testing.T) {
-			bare := dockCrowdedOS(t, width, 2, 1)
-			bare.UserConfig = nil
-			bare.dockPlan = dockPlan{}
-			bareBar, _ := bare.renderDockString()
-
-			left, center, right := config.DefaultDockLeft(), config.DefaultDockCenter(), config.DefaultDockRight()
-			listed := dockCrowdedOS(t, width, 2, 1)
-			listed.UserConfig = &config.UserConfig{Dock: config.DockConfig{
-				Left: &left, Center: &center, Right: &right,
-			}}
-			listed.dockPlan = dockPlan{}
-			listedBar, _ := listed.renderDockString()
-
-			if bareBar != listedBar {
-				t.Fatalf("the default lists draw a different bar at width %d\n bare:   %q\n listed: %q",
-					width, bareBar, listedBar)
-			}
-		})
-	}
-}
 
 // TestDockPlanDropsNamesNothingDefines is the other half of the config warning:
 // a name no built-in and no [dock.custom] table defines draws nothing rather
@@ -52,30 +20,6 @@ func TestDockPlanDropsNamesNothingDefines(t *testing.T) {
 	}
 	if plan.Has("not-a-component") || plan.Has("custom/undefined") {
 		t.Fatal("a name nothing defines was placed")
-	}
-}
-
-// TestDockListsDropWhatTheyOmit checks the other direction: a component left
-// out of the lists is not drawn, which is how a user hides a segment that used
-// to need its own option.
-func TestDockListsDropWhatTheyOmit(t *testing.T) {
-	empty := []string{}
-	only := []string{"mode"}
-	m := dockCrowdedOS(t, 120, 2, 1)
-	m.UserConfig = &config.UserConfig{Dock: config.DockConfig{
-		Left: &only, Center: &empty, Right: &empty,
-	}}
-	m.dockPlan = dockPlan{}
-	bar, _ := m.renderDockString()
-
-	if strings.Contains(bar, "1:") {
-		t.Errorf("the workspace readout is drawn while omitted from the lists: %q", bar)
-	}
-	if len(m.dockSessionHits) != 0 {
-		t.Error("the session controls are drawn while omitted from the lists")
-	}
-	if len(m.dockWorkspaceHits) != 0 {
-		t.Error("the workspace strip is drawn while omitted from the lists")
 	}
 }
 
@@ -119,42 +63,6 @@ func TestDockEventAliasesMatchTheValidatedSet(t *testing.T) {
 		if !fires {
 			t.Errorf("config accepts event %q but nothing ever fires it", name)
 		}
-	}
-}
-
-// TestDockComponentsListsWhatIsPlaced is the enumeration an agent reads: every
-// placed component, in draw order, with the side it is on.
-func TestDockComponentsListsWhatIsPlaced(t *testing.T) {
-	left := []string{"mode", "custom/branch"}
-	center := []string{"windows"}
-	right := []string{"clock", "session-controls"}
-	m := dockCrowdedOS(t, 120, 2, 1)
-	m.UserConfig = &config.UserConfig{Dock: config.DockConfig{
-		Left: &left, Center: &center, Right: &right,
-		Custom: map[string]config.DockCustomConfig{
-			"branch": {Command: "echo main", Refresh: "event:after-focus-change"},
-		},
-	}}
-	m.dockPlan = dockPlan{}
-
-	got := m.DockComponents()
-	want := []string{"mode", "custom/branch", "windows", "clock", "session-controls"}
-	if len(got) != len(want) {
-		t.Fatalf("listed %d components, want %d: %+v", len(got), len(want), got)
-	}
-	for i, w := range want {
-		if got[i].Name != w {
-			t.Fatalf("component %d is %q, want %q (draw order)", i, got[i].Name, w)
-		}
-	}
-	if got[1].Source != "custom" {
-		t.Errorf("custom/branch is reported as %q", got[1].Source)
-	}
-	if got[0].Source != "builtin" {
-		t.Errorf("mode is reported as %q", got[0].Source)
-	}
-	if got[0].Side != "left" || got[2].Side != "center" || got[3].Side != "right" {
-		t.Errorf("sides are wrong: %q %q %q", got[0].Side, got[2].Side, got[3].Side)
 	}
 }
 

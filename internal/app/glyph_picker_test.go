@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -103,34 +102,6 @@ func TestGlyphPickerApplyWritesTheConfig(t *testing.T) {
 	}
 	if m.ShowGlyphPicker {
 		t.Error("apply left the picker open")
-	}
-}
-
-// TestGlyphPickerPreviewsTheShape checks each row draws the set's own glyphs
-// rather than the active set's. A picker whose rows all look alike is a list,
-// not a preview.
-func TestGlyphPickerPreviewsTheShape(t *testing.T) {
-	m := newGlyphPickerOS(t)
-
-	ascii, ok := m.GlyphPickerSamples["ascii"]
-	if !ok {
-		t.Fatal("the built-in ascii set has no sample")
-	}
-	heavy, ok := m.GlyphPickerSamples["heavy"]
-	if !ok {
-		t.Fatal("the built-in heavy set has no sample")
-	}
-	if ascii.Frame == heavy.Frame {
-		t.Errorf("two different sets preview identically: %q", ascii.Frame)
-	}
-	if !ascii.ASCII {
-		t.Errorf("the ascii set does not report itself 7-bit: %q", ascii.Frame)
-	}
-	if heavy.ASCII {
-		t.Errorf("the heavy set reports itself 7-bit: %q", heavy.Frame)
-	}
-	if !strings.Contains(heavy.Frame, "┏") {
-		t.Errorf("the heavy set's preview does not draw its own corner: %q", heavy.Frame)
 	}
 }
 

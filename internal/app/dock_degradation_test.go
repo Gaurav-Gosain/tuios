@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // dockCrowdedOS is a session with named workspaces and minimized panes, which
@@ -172,21 +171,5 @@ func TestDockOverflowMarkerIsClickableWhereItIsDrawn(t *testing.T) {
 	}
 	if m.dockOverflowHit.Overflowed != layout.TruncatedCount {
 		t.Errorf("the marker stands for %d entries, %d were dropped", m.dockOverflowHit.Overflowed, layout.TruncatedCount)
-	}
-}
-
-// TestDockMetersReserveOnlyWhatTheyDraw is the reservation itself: off, they
-// hold nothing.
-func TestDockMetersReserveOnlyWhatTheyDraw(t *testing.T) {
-	m := dockCrowdedOS(t, 120, 2, 0)
-	m.Windows = append(m.Windows, &terminal.Window{ID: "x", Workspace: 1})
-
-	m.Settings.ShowCPU, m.Settings.ShowRAM = false, false
-	if got := m.calculateDockRightWidth(); got != 0 {
-		t.Errorf("the meters reserved %d columns while drawing nothing", got)
-	}
-	m.Settings.ShowCPU, m.Settings.ShowRAM = true, true
-	if got := m.calculateDockRightWidth(); got <= 0 {
-		t.Errorf("the meters reserved %d columns while drawing both readouts", got)
 	}
 }

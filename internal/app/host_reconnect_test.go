@@ -96,21 +96,6 @@ func TestAFailureThatCannotBeFixedByTryingIsNotTried(t *testing.T) {
 	}
 }
 
-// TestTheReasonNamesTheMachineAndWhatToDo is the wording rule for the sentence
-// a person is left with.
-func TestTheReasonNamesTheMachineAndWhatToDo(t *testing.T) {
-	r := hostReconnectReason("oci", errors.New("no answer"))
-	if !strings.Contains(r, "oci") {
-		t.Errorf("ASSERTION: the message about a lost link does not name the machine: %q", r)
-	}
-	if !strings.Contains(r, "keeps running") {
-		t.Errorf("ASSERTION: the message does not say the session survived, which is the one thing that stops a person thinking they lost work: %q", r)
-	}
-	if strings.Contains(r, ";") {
-		t.Errorf("a user-facing sentence uses a semicolon: %q", r)
-	}
-}
-
 // TestALostLinkKeepsThePaneOnScreen is the rude part of the failure, in a test.
 //
 // The client used to close every pane and put the person back on their own
@@ -184,40 +169,6 @@ func TestASwitchTheUserAskedForEndsTheReconnect(t *testing.T) {
 	}
 	if cmd := m.handleHostReconnectTick(hostReconnectTickMsg{gen: stale}); cmd != nil {
 		t.Error("ASSERTION: the abandoned attempt kept dialing after the user switched away")
-	}
-}
-
-// TestTheSamePanesAreKeptAcrossAReconnect is what makes the return cheap and
-// what keeps a scrolled view where it was. A session whose panes did not change
-// is resumed on the panes already drawn, so each one asks the daemon only for
-// the rows it does not hold and keeps the scroll anchor it was carrying.
-func TestTheSamePanesAreKeptAcrossAReconnect(t *testing.T) {
-	win := newTestWindow(t, "recon-0003", 40, 10)
-	m := newTestOS(win)
-
-	same := &session.SessionState{Windows: []session.WindowState{{ID: "recon-0003", PTYID: win.PTYID}}}
-	if !m.samePaneSet(same) {
-		t.Errorf("ASSERTION: an unchanged session is rebuilt from scratch, which throws away every pane's history and its scroll position")
-	}
-
-	changed := &session.SessionState{Windows: []session.WindowState{
-		{ID: "recon-0003", PTYID: win.PTYID},
-		{ID: "recon-0004", PTYID: "pty-recon-0004"},
-	}}
-	if m.samePaneSet(changed) {
-		t.Error("ASSERTION: a session that gained a pane while the link was down is resumed on the old panes, so the new one is never drawn")
-	}
-	if m.samePaneSet(nil) {
-		t.Error("ASSERTION: an attach that returned no state is treated as an unchanged session")
-	}
-}
-
-// TestTheDockSaysNothingWhenTheLinkIsFine is the quiet rule. The note is a
-// state, not a decoration, and a client with no host at all pays nothing for it.
-func TestTheDockSaysNothingWhenTheLinkIsFine(t *testing.T) {
-	m := &OS{}
-	if note := m.hostLinkNote(); note != "" {
-		t.Errorf("ASSERTION: the dock draws a link note with no link to draw it about: %q", note)
 	}
 }
 

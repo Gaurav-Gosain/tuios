@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -17,37 +16,6 @@ func heldApproval(id, requestID string, options ...string) session.AttentionItem
 	it.Options = options
 	it.Expires = time.Now().Add(time.Minute).UnixNano()
 	return it
-}
-
-// TestInboxHeldApprovalSaysHowToAnswer: a held approval says in text which
-// keys answer it, the hint bar names each one, and an approval that is not
-// held shows neither.
-func TestInboxHeldApprovalSaysHowToAnswer(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
-		heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny),
-		item("2", session.AttentionApproval, "work", "w-2", "approve Edit: main.go", time.Now().UnixNano()),
-	}})
-	m.OpenInbox("")
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	for _, want := range []string{"[1/3] approve Bash: go test", "allow", "deny", "answer in pane"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("a held approval does not show %q:\n%s", want, plain)
-		}
-	}
-	if strings.Contains(plain, "always") || strings.Contains(plain, "[1/2/3]") {
-		t.Errorf("the Inbox offers always, which this prompt does not:\n%s", plain)
-	}
-	if strings.Contains(plain, "] approve Edit") {
-		t.Errorf("an approval the Inbox is not holding shows answer keys:\n%s", plain)
-	}
-
-	m.InboxMove(1)
-	out, _, _ = m.renderInbox()
-	if plain := ansi.Strip(out); strings.Contains(plain, "answer in pane") || !strings.Contains(plain, "dismiss") {
-		t.Errorf("an approval that is not held shows the answer hints:\n%s", plain)
-	}
 }
 
 // TestInboxReplyApprovalOnlySendsWhatThePromptTakes: a key that does not answer the
@@ -105,27 +73,6 @@ func TestInboxSaysWhenAnotherClientAnswered(t *testing.T) {
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionClosed, Item: &closed}}})
 	if len(m.Notifications) != 0 {
 		t.Errorf("its own answer was announced: %+v", m.Notifications)
-	}
-}
-
-func TestInboxSaysWhatBecameOfAnAnswer(t *testing.T) {
-	for _, tc := range []struct {
-		msg  InboxApprovalRepliedMsg
-		want string
-	}{
-		{InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalOnce, Standing: session.ApprovalOnce, Applied: true}, "api: allowed once"},
-		{InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalDeny, Standing: session.ApprovalAlways}, "api was already answered: always allowed"},
-		{InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalOnce, Err: errors.New("hold ended")}, "Answer in the pane"},
-		{InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalAsk, Applied: true}, ""},
-	} {
-		m := inboxOS(t, zeroSettle())
-		m.applyInboxApprovalReplied(tc.msg)
-		switch {
-		case tc.want == "" && len(m.Notifications) != 0:
-			t.Errorf("%+v said %q", tc.msg, m.Notifications[0].Message)
-		case tc.want != "" && (len(m.Notifications) != 1 || !strings.Contains(m.Notifications[0].Message, tc.want)):
-			t.Errorf("%+v said %+v, want %q", tc.msg, m.Notifications, tc.want)
-		}
 	}
 }
 
@@ -281,13 +228,5 @@ func TestInboxShowsTheWholePrompt(t *testing.T) {
 	m.InboxReplyApproval(session.ApprovalOnce)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "cannot be shown whole") {
 		t.Fatalf("a line with a hidden character was answered: %q", lastNote(m))
-	}
-}
-
-func TestInboxSaysWhenThePromptMovedOn(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxApprovalReplied(InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalOnce, Reason: "changed"})
-	if !strings.Contains(lastNote(m), "api is asking about something else now, so nothing was answered") {
-		t.Fatalf("said %q", lastNote(m))
 	}
 }

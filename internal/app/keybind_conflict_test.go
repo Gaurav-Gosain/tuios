@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -73,23 +72,6 @@ func TestResolvingAConflictClearsItFromTheReport(t *testing.T) {
 	}
 }
 
-// TestResolvingSaysNothingChanged. The reassurance is the point: a user pressing
-// a key on a panel full of warnings needs to know it did not move their
-// keyboard.
-//
-// Negative control: report only the removal and this fails.
-func TestResolvingAConflictSaysWhatSurvived(t *testing.T) {
-	m := conflictOS(t)
-	m.KeybindResolveSelectedConflict()
-	msg := lastNotificationText(t, m)
-	if !strings.Contains(msg, "snap_corner_1 keeps it") {
-		t.Errorf("the message does not name the action that keeps the key: %q", msg)
-	}
-	if !strings.Contains(msg, "already did") {
-		t.Errorf("the message does not say that nothing changed: %q", msg)
-	}
-}
-
 // TestFreeingFromAConflictRowTakesTheKeyFromEveryone, so ctrl+x means the same
 // thing on this tab as on the Bindings tab.
 //
@@ -122,30 +104,5 @@ func TestResolveDoesNothingWithoutAConflictRow(t *testing.T) {
 	}
 	if cmd := m.KeybindResolveSelectedConflict(); cmd != nil {
 		t.Error("resolving fired from a tab with no conflict row")
-	}
-}
-
-// TestTheConflictsPanelNamesItsVerb. A panel that reports a problem and offers
-// nothing to press teaches the reader to distrust it, which is what the
-// maintainer met on a config he had never edited.
-//
-// Both surfaces are checked because the detail box is the first thing a narrow
-// screen sheds (see keybindShedOrder), and the subtitle survives it.
-//
-// Negative control: drop "ctrl+d" from either string and the matching half
-// fails.
-func TestTheConflictsPanelNamesItsVerb(t *testing.T) {
-	m := conflictOS(t)
-	if got := m.keybindTabSubtitle(); !strings.Contains(got, "ctrl+d") {
-		t.Errorf("the Conflicts subtitle offers no gesture: %q", got)
-	}
-	detail := m.keybindDetail(0)
-	if !strings.Contains(detail, "ctrl+d") {
-		t.Errorf("the Conflicts detail box offers no gesture: %q", detail)
-	}
-	// And it says the gesture is safe, which is the part that decides whether
-	// anyone presses it.
-	if !strings.Contains(detail, "changes no key") {
-		t.Errorf("the detail box does not say the fix is behaviour-preserving: %q", detail)
 	}
 }

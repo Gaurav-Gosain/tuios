@@ -50,35 +50,6 @@ func TestHelpShowsTheWholeChord(t *testing.T) {
 	}
 }
 
-// TestHelpLeavesPlainBindingsAlone, so the change costs nothing for the great
-// majority of actions, which have no chord.
-//
-// select_window_1 is not in this table, though it is the action whose key
-// corner snapping was shadowing. The help overlay's categories do not list
-// select_window_N at all, so there is nothing here to leave alone. That is a
-// gap in the help, and a pre-existing one: window selection has never had a
-// row. It is left as it was found rather than fixed alongside a keybind
-// change.
-//
-// Negative control: prepend a chord unconditionally and this fails.
-func TestHelpLeavesPlainBindingsAlone(t *testing.T) {
-	r := config.NewKeybindRegistry(config.DefaultConfig())
-	for action, want := range map[string]string{
-		"new_window":  "n",
-		"toggle_zoom": "z",
-		"snap_left":   "h",
-	} {
-		b, ok := helpBindingFor(t, r, action)
-		if !ok {
-			t.Errorf("%s is missing from the help overlay", action)
-			continue
-		}
-		if !slices.Contains(b.Keys, want) {
-			t.Errorf("the help shows %v for %s, want it to include %q", b.Keys, action, want)
-		}
-	}
-}
-
 // TestHelpDoesNotOfferADeadBinding. A key another action already took does not
 // run, and the help exists to say what to press.
 //

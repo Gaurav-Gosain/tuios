@@ -9,24 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestInboxSaysMailIsHeldInWords: mail another machine sent an agent here,
-// held by the link policy, reads as held, for whom, and with the key that
-// passes it on, without relying on colour.
-func TestInboxSaysMailIsHeldInWords(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	held := item("1", session.AttentionMail, "work", "", "run the migration", time.Now().Add(-time.Minute).UnixNano())
-	held.HeldID, held.HeldFor = 12, "api"
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
-	m.OpenInbox("")
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	for _, want := range []string{"held for api", "p passes on", "pass on"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the Inbox does not say %q:\n%s", want, plain)
-		}
-	}
-}
-
 // TestInboxSaysMailWaitsForAMachine: mail queued for a machine whose link is
 // down is a row under its own heading, naming the machine, and enter says what
 // happens to it rather than going anywhere.

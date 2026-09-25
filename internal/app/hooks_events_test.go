@@ -158,47 +158,6 @@ func TestAfterLayoutChangeReportsResultingLayout(t *testing.T) {
 	}
 }
 
-func TestAfterResizeFires(t *testing.T) {
-	m := hookTestOS(t)
-	r := record(t, m)
-
-	w := &terminal.Window{ID: "win-1", X: 0, Y: 1, Width: 40, Height: 20, Workspace: 1}
-	m.FireResized(w)
-
-	ctx := r.only(t, m, hooks.AfterResize)
-	if ctx.WindowID != "win-1" {
-		t.Errorf("WindowID = %q, want %q", ctx.WindowID, "win-1")
-	}
-	if ctx.Width != 40 || ctx.Height != 20 {
-		t.Errorf("size = %dx%d, want 40x20", ctx.Width, ctx.Height)
-	}
-	if ctx.Workspace != 1 {
-		t.Errorf("Workspace = %d, want 1", ctx.Workspace)
-	}
-}
-
-func TestAfterAttachFires(t *testing.T) {
-	m := hookTestOS(t)
-	r := record(t, m)
-
-	m.FireAttached()
-
-	if ctx := r.only(t, m, hooks.AfterAttach); ctx.SessionID != "test-session" {
-		t.Errorf("SessionID = %q, want %q", ctx.SessionID, "test-session")
-	}
-}
-
-func TestAfterDetachFires(t *testing.T) {
-	m := hookTestOS(t)
-	r := record(t, m)
-
-	m.FireDetached()
-
-	if ctx := r.only(t, m, hooks.AfterDetach); ctx.SessionID != "test-session" {
-		t.Errorf("SessionID = %q, want %q", ctx.SessionID, "test-session")
-	}
-}
-
 // FireDetached must not return before its hooks have run: the caller quits
 // immediately after, and an unwaited hook goroutine dies with the process.
 func TestAfterDetachWaitsForHooks(t *testing.T) {

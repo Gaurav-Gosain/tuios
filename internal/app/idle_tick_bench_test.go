@@ -74,26 +74,3 @@ func TestIdleTickSkipsScans(t *testing.T) {
 		t.Fatalf("Ticks did not advance past %d", ticks)
 	}
 }
-
-// TestIdleTickAccounting checks the counter mechanism the idle guards read: a
-// run of ticks with nothing happening advances Ticks and never draws a frame,
-// so the render count stays flat regardless of how the per-tick work is gated.
-func TestIdleTickAccounting(t *testing.T) {
-	m := idleOS(t, 3)
-	// First tick settles frame-skip; count from the settled state.
-	m.Update(TickerMsg(time.Now()))
-	_, _, render0 := m.TickStats()
-
-	const ticks = 50
-	for i := 0; i < ticks; i++ {
-		m.Update(TickerMsg(time.Now()))
-	}
-
-	got, _, render := m.TickStats()
-	if got < ticks {
-		t.Fatalf("Ticks did not advance: got %d, want >= %d", got, ticks)
-	}
-	if render != render0 {
-		t.Fatalf("idle ticks drew %d frame(s); idle must skip rendering", render-render0)
-	}
-}

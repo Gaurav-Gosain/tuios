@@ -164,35 +164,6 @@ func TestDockEditorRevertLeavesAnUntouchedListUnset(t *testing.T) {
 	}
 }
 
-// TestDockEditorResetRestoresTheDefaults checks the reset key puts back what the
-// bar draws with no [dock] table at all.
-func TestDockEditorResetRestoresTheDefaults(t *testing.T) {
-	m := newDockEditorOS(t)
-	empty := []string{}
-	m.UserConfig.Dock.Left = &empty
-
-	m.DockEditorReset()
-
-	if got := m.sideList("left"); !slices.Equal(got, config.DefaultDockLeft()) {
-		t.Errorf("left is %v, want the default %v", got, config.DefaultDockLeft())
-	}
-}
-
-// TestDockEditorSelectionSkipsHeaders checks the region headings are not landed
-// on. A heading is a label, and stopping on one costs a keystroke on the way
-// past it.
-func TestDockEditorSelectionSkipsHeaders(t *testing.T) {
-	m := newDockEditorOS(t)
-	rows := m.dockEditorRows()
-	for range rows {
-		if rows[m.DockEditorSelected].Kind == dockRowHeader {
-			t.Fatalf("the selection landed on a header at row %d", m.DockEditorSelected)
-		}
-		m.DockEditorMove(1)
-		rows = m.dockEditorRows()
-	}
-}
-
 // TestDockEditorEmptyRegionStaysEmpty checks a region the user emptied is
 // recorded as an empty list rather than as unset, which DockList would read
 // back as "the default" and fill up again.

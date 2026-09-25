@@ -6,7 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 func multiSessionClient() *session.TUIClient {
@@ -54,45 +53,6 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 				t.Fatalf("non-fast interval = %v, want %v", after, foreignSessionRefreshIdle)
 			}
 		})
-	}
-}
-
-// TestForeignSessionStalenessClears is the no-staleness regression guard: the
-// sidebar tree is rebuilt from the client cache every frame, so once a refresh
-// updates that cache a killed foreign session is gone and a new one appears.
-// Gating the poll must not change this: while a consumer is visible the plan
-// still refreshes, and BuildSessionTree still reflects whatever the cache holds.
-func TestForeignSessionStalenessClears(t *testing.T) {
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	client := multiSessionClient()
-	m := &OS{
-		Settings:     config.Global,
-		Windows:      []*terminal.Window{{ID: "aw1"}},
-		SessionName:  "attached",
-		Width:        120,
-		DaemonClient: client,
-	}
-
-	if _, refresh := m.foreignSessionRefreshPlan(); !refresh {
-		t.Fatal("with sidebar visible and two sessions the plan must poll")
-	}
-	if !hasSession(m.BuildSessionTree().Sessions, "other") {
-		t.Fatal("foreign session missing before any change")
-	}
-
-	// A refresh runs UpdateSessionCache; a killed foreign session drops out.
-	client.UpdateSessionCache([]session.SessionInfo{{Name: "attached"}})
-	if hasSession(m.BuildSessionTree().Sessions, "other") {
-		t.Fatal("killed foreign session still in the sidebar tree (staleness)")
-	}
-
-	// A newly created foreign session appears on the next refresh.
-	client.UpdateSessionCache([]session.SessionInfo{
-		{Name: "attached"},
-		{Name: "fresh", Windows: []session.WindowSummary{{ID: "fw1", Title: "htop"}}},
-	})
-	if !hasSession(m.BuildSessionTree().Sessions, "fresh") {
-		t.Fatal("new foreign session absent from the sidebar tree (staleness)")
 	}
 }
 

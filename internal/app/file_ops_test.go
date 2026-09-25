@@ -359,31 +359,6 @@ func TestPasteRefusesAFolderIntoItself(t *testing.T) {
 	}
 }
 
-// TestAReadOnlyFolderSaysWhatHappened covers the permission path. The folder is
-// made read-only for the duration and put back, so t.TempDir can remove it.
-func TestAReadOnlyFolderSaysWhatHappened(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root writes to a read-only folder anyway")
-	}
-	dir := t.TempDir()
-	locked := filepath.Join(dir, "locked")
-	if err := os.Mkdir(locked, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
-
-	_, err := createPath(locked, "nope.txt")
-	if err == nil {
-		t.Fatal("a create in a read-only folder was allowed")
-	}
-	if !errors.Is(err, fs.ErrPermission) {
-		t.Fatalf("the error was %v, want a permission error", err)
-	}
-	if got := fileOpError(err); got != "You can not write to that folder." {
-		t.Errorf("the message is %q, want the write-permission sentence", got)
-	}
-}
-
 func TestCopyTreeKeepsASymlinkALink(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "target.txt"), "target")

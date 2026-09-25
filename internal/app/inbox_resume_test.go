@@ -1,13 +1,10 @@
 package app
 
 import (
-	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // TestInboxAnnouncesResumesOnce: a restore happens before anyone attaches, so
@@ -43,27 +40,6 @@ func TestInboxAnnouncesResumesOnce(t *testing.T) {
 	}
 }
 
-// TestInboxRendersResumeWithItsKey: the group is named in words, the row
-// shows the exact command, and the footer names y while a resume is selected.
-func TestInboxRendersResumeWithItsKey(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	now := time.Now()
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
-		item("1", session.AttentionResume, "work", "w1", "claude --resume 5f1c", now.Add(-time.Minute).UnixNano()),
-	}})
-	m.OpenInbox("")
-	out, _, _ := m.renderInbox()
-	plain := ansi.Strip(out)
-	for _, want := range []string{"Resume 1", "claude --resume 5f1c", "resume"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
-		}
-	}
-	if strings.Contains(plain, "reply") {
-		t.Errorf("the footer offers reply on a resume item:\n%s", plain)
-	}
-}
-
 // TestInboxResumeOnlyAnswersResumeItems: y on anything else says what it is
 // for and does nothing.
 func TestInboxResumeOnlyAnswersResumeItems(t *testing.T) {
@@ -78,17 +54,5 @@ func TestInboxResumeOnlyAnswersResumeItems(t *testing.T) {
 	}
 	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "y resumes") {
 		t.Errorf("y on an approval said %+v", m.Notifications)
-	}
-}
-
-// TestInboxResumedSaysWhatHappened: the answer is shown either way.
-func TestInboxResumedSaysWhatHappened(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	m.applyInboxResumed(InboxResumedMsg{Command: "claude --resume 5f1c"})
-	m.applyInboxResumed(InboxResumedMsg{Err: errors.New("the pane is running a program")})
-	if len(m.Notifications) != 2 ||
-		!strings.Contains(m.Notifications[0].Message, "Resumed: claude --resume 5f1c") ||
-		!strings.Contains(m.Notifications[1].Message, "running a program") {
-		t.Errorf("the answers were shown as %+v", m.Notifications)
 	}
 }

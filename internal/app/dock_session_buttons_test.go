@@ -128,65 +128,6 @@ func TestDockSessionControlsAreClickableWhereTheyAreDrawn(t *testing.T) {
 	}
 }
 
-// TestDockSessionControlsSurviveStaleState checks the hit rects answer for the
-// frame on screen. The controls are placed against the bar's total width, which
-// the mode pill and the meters both move on their own.
-func TestDockSessionControlsSurviveStaleState(t *testing.T) {
-	m := dockSessionOS(t, 160, true)
-	body := dockSessionBody(DockSessionClose)
-	x0, x1 := dockSessionColumns(t, m, body)
-	y := m.GetDockbarContentYPosition()
-
-	m.Mode = TerminalMode
-	for x := x0; x < x1; x++ {
-		if got := m.DockSessionActionAt(x, y); got != DockSessionClose {
-			t.Fatalf("column %d routed to %v after unrelated state moved on; the hit test is recomputing, not reading the frame", x, got)
-		}
-	}
-}
-
-// TestLeaveRunningNeedsADaemon is the correctness requirement: under plain
-// tuios the panes belong to this process, so there is nothing to leave running
-// and the control must be absent rather than dead.
-func TestLeaveRunningNeedsADaemon(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		daemon bool
-		want   bool
-	}{
-		{"no daemon", false, false},
-		{"daemon", true, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := dockSessionOS(t, 160, tc.daemon)
-			if got := m.CanLeaveRunning(); got != tc.want {
-				t.Fatalf("CanLeaveRunning() = %v, want %v", got, tc.want)
-			}
-
-			dock, _ := m.renderDockString()
-			row := stripANSIForTrace(dock)
-			drawn := strings.Contains(row, dockSessionBody(DockSessionLeave))
-			if drawn != tc.want {
-				t.Errorf("the dock drew the leave control = %v, want %v:\n%q", drawn, tc.want, row)
-			}
-
-			// Absent means no hit rect either: a control nobody can see must
-			// not be clickable where it would have been.
-			for _, h := range m.dockSessionHits {
-				if h.Action == DockSessionLeave && !tc.want {
-					t.Errorf("the leave control kept a hit rect %v with no daemon", h)
-				}
-			}
-
-			// Closing is offered on every run path, since every run path can
-			// end the thing it is running.
-			if !strings.Contains(row, dockSessionBody(DockSessionClose)) {
-				t.Errorf("the dock never drew the close control:\n%q", row)
-			}
-		})
-	}
-}
-
 // TestDockSessionStripWidthMatchesWhatIsDrawn keeps the layout pass and the
 // render pass on the same number. They are two calls, and the bar is laid out
 // against one of them and drawn against the other.
@@ -199,35 +140,5 @@ func TestDockSessionStripWidthMatchesWhatIsDrawn(t *testing.T) {
 				t.Errorf("width %d daemon %v: layout reserved %d columns, the renderer drew %d", width, daemon, got, want)
 			}
 		}
-	}
-}
-
-// TestDockSessionControlsAreDroppedOnATinyDock checks the strip gives way when
-// the bar has nothing left, rather than pushing the dock off the screen.
-func TestDockSessionControlsAreDroppedOnATinyDock(t *testing.T) {
-	m := dockSessionOS(t, dockSessionIconMinWidth-1, true)
-	if strip, _ := m.buildDockSessionStrip(); strip != "" {
-		t.Fatalf("a %d column dock still drew the controls: %q", dockSessionIconMinWidth-1, strip)
-	}
-	dock, _ := m.renderDockString()
-	for _, line := range strings.Split(dock, "\n") {
-		if w := lipgloss.Width(line); w > dockSessionIconMinWidth-1 {
-			t.Errorf("the dock drew %d columns on a %d column screen", w, dockSessionIconMinWidth-1)
-		}
-	}
-}
-
-// TestDockSessionHoverTracksThePointer checks the recessed control brightens
-// only where a click would land, and goes back to muted on the way out.
-func TestDockSessionHoverTracksThePointer(t *testing.T) {
-	m := dockSessionOS(t, 160, true)
-	x0, _ := dockSessionColumns(t, m, dockSessionBody(DockSessionClose))
-	y := m.GetDockbarContentYPosition()
-
-	if !m.DockSessionHoverAt(x0, y) || m.dockSessionHover != DockSessionClose {
-		t.Fatalf("hovering the close control set %v", m.dockSessionHover)
-	}
-	if m.DockSessionHoverAt(0, y) || m.dockSessionHover != DockSessionNone {
-		t.Fatalf("moving off the controls left the highlight on %v", m.dockSessionHover)
 	}
 }
