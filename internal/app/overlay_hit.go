@@ -4,6 +4,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"slices"
 )
 
 // overlayRowHit is a single interactive body row of an overlay panel, in
@@ -207,10 +208,49 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	off := m.overlayOffset(kind)
 	x := (rw-geo.Width)/2 + off[0]
-	y := (rh-geo.Height)/2 + off[1]
+	y := m.overlayAnchorY(kind, geo.Height, rh) + off[1]
 	x = max(min(x, rw-geo.Width), 0)
 	y = max(min(y, rh-geo.Height), 0)
 	return x, y
+}
+
+// overlayAnchor is the top row a panel was centred at when it opened, and the
+// screen height that was measured against.
+type overlayAnchor struct {
+	y, screenH int
+}
+
+// overlayAnchorY is the top row for a panel of height h: centred when it
+// opens, and kept there for as long as it stays open.
+//
+// A panel's height follows what it shows. The Inbox grows a line when a risky
+// approval is armed and shrinks when a snooze picker takes its detail, and
+// centred afresh every frame it jumped up and down the screen under the
+// cursor at each of those, a row or three at a time. Held at its first top it
+// grows and shrinks at the bottom edge instead, which is where a reader is not
+// looking. overlayOrigin still clamps it on screen, so a panel that outgrows
+// the room below moves up only as far as it has to. A new screen height
+// centres it again.
+func (m *OS) overlayAnchorY(kind string, h, screenH int) int {
+	if a, ok := m.overlayAnchors[kind]; ok && a.screenH == screenH {
+		return a.y
+	}
+	y := (screenH - h) / 2
+	if m.overlayAnchors == nil {
+		m.overlayAnchors = make(map[string]overlayAnchor)
+	}
+	m.overlayAnchors[kind] = overlayAnchor{y: y, screenH: screenH}
+	return y
+}
+
+// forgetClosedOverlayAnchors drops the anchor of every panel not drawn this
+// frame, so a panel opened again is centred again.
+func (m *OS) forgetClosedOverlayAnchors() {
+	for kind := range m.overlayAnchors {
+		if !slices.ContainsFunc(m.OverlayHits, func(h overlayPanelHit) bool { return h.Kind == kind }) {
+			delete(m.overlayAnchors, kind)
+		}
+	}
 }
 
 // placeOverlayPanel positions a content-sized overlay panel as a layer

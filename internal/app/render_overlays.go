@@ -783,6 +783,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// have been opened on top of, and so its recorded bounds are from the frame
 	// the user is actually looking at.
 	layers = m.placeContextMenu(layers)
+	m.forgetClosedOverlayAnchors()
 
 	return layers
 }

@@ -1052,6 +1052,10 @@ type OS struct {
 	// panel rendered in the current frame, back to front, so the mouse handlers
 	// can route clicks to the topmost panel under the cursor.
 	OverlayOffsets map[string][2]int
+	// overlayAnchors holds the centred top row each open panel was first drawn
+	// at, so a panel whose height changes while it is open stays put rather
+	// than jumping. See overlayOrigin.
+	overlayAnchors map[string]overlayAnchor
 	OverlayHits    []overlayPanelHit
 	OverlayDrag    overlayDragState
 	// OverlayZOrder is the stacking order of the currently-open draggable
