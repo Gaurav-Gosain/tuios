@@ -43,57 +43,6 @@ func decStr(n int) string {
 	return string(d[i:])
 }
 
-// TestThePlaceholderIDIsRewrittenToTheHostID covers the one thing a
-// multiplexer has to do to this protocol. The cells name the image by the id
-// the guest chose; the host knows it by the id tuios allocated, and a cell
-// naming an id the host never heard of draws nothing.
-//
-// Negative control: removing the translate call from handleGraphemeWithin left
-// the foreground at the guest's id and this failed.
-func TestThePlaceholderIDIsRewrittenToTheHostID(t *testing.T) {
-	const guestID, hostID = 0x0a0b0c, 0x010203
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	term.SetKittyImageIDTranslator(func(g uint32) (uint32, bool) {
-		if g == guestID {
-			return hostID, true
-		}
-		return 0, false
-	})
-	if _, err := term.Write([]byte(placeholderRow(guestID, 0, 2))); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	cell := term.CellAt(0, 0)
-	if cell == nil {
-		t.Fatal("no cell")
-	}
-	got, ok := kittyPlaceholderID(cell.Content, cell.Style.Fg)
-	if !ok {
-		t.Fatalf("the cell names no image, fg = %v", cell.Style.Fg)
-	}
-	if got != hostID {
-		t.Errorf("cell names image %#x, want the host's %#x", got, hostID)
-	}
-}
-
-// TestAnUntranslatedPlaceholderKeepsTheGuestID is the other half. An image the
-// host was sent under the guest's own id, which is what a transmit-only
-// command does, must keep that id.
-func TestAnUntranslatedPlaceholderKeepsTheGuestID(t *testing.T) {
-	const guestID = 0x0a0b0c
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	term.SetKittyImageIDTranslator(func(uint32) (uint32, bool) { return 0, false })
-	if _, err := term.Write([]byte(placeholderRow(guestID, 0, 2))); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	cell := term.CellAt(0, 0)
-	got, ok := kittyPlaceholderID(cell.Content, cell.Style.Fg)
-	if !ok || got != guestID {
-		t.Errorf("cell names %#x (ok=%v), want the guest's %#x", got, ok, guestID)
-	}
-}
-
 // TestPlaceholderCellsSurviveRendering checks the cells come back out. The
 // emulator's own Render is the fast path an unfocused pane takes, and an image
 // that only worked on the focused pane would be a strange bug to chase.
@@ -110,36 +59,6 @@ func TestPlaceholderCellsSurviveRendering(t *testing.T) {
 	}
 	if !strings.Contains(out, "38;2;10;11;12") {
 		t.Errorf("Render() lost the foreground that names the image:\n%q", out)
-	}
-}
-
-// TestTheIDIsReadFromTheColourAndTheThirdMark pins the encoding: the low 24
-// bits are the foreground, and an id too wide for a colour carries its top
-// byte in a third combining mark.
-func TestTheIDIsReadFromTheColourAndTheThirdMark(t *testing.T) {
-	fg := color.RGBA{R: 0x0a, G: 0x0b, B: 0x0c, A: 0xff}
-
-	got, ok := kittyPlaceholderID(string(kitty.Placeholder), fg)
-	if !ok || got != 0x0a0b0c {
-		t.Errorf("colour alone gave %#x (ok=%v), want 0x0a0b0c", got, ok)
-	}
-
-	wide := string(kitty.Placeholder) + string(kitty.Diacritic(1)) + string(kitty.Diacritic(2)) + string(kitty.Diacritic(7))
-	got, ok = kittyPlaceholderID(wide, fg)
-	if !ok || got != 0x070a0b0c {
-		t.Errorf("third mark gave %#x (ok=%v), want 0x070a0b0c", got, ok)
-	}
-}
-
-// TestACellWithNoColourNamesNoImage keeps the guard that stops tuios guessing.
-// A placeholder drawn in the default foreground says nothing about which image
-// it belongs to, and picking one would put somebody else's picture on screen.
-func TestACellWithNoColourNamesNoImage(t *testing.T) {
-	if _, ok := kittyPlaceholderID(string(kitty.Placeholder), nil); ok {
-		t.Error("a cell with no foreground claimed to name an image")
-	}
-	if _, ok := kittyPlaceholderID(string(kitty.Placeholder), color.RGBA{}); ok {
-		t.Error("a fully transparent foreground claimed to name an image")
 	}
 }
 
@@ -185,6 +104,75 @@ func TestPlaceholdersAreDroppedByDefault(t *testing.T) {
 	}
 }
 
+// TestThePlaceholderIDFollowsTheTranslator covers the one thing a multiplexer
+// has to do to this protocol. The cells name the image by the id the guest
+// chose; the host knows it by the id tuios allocated, and a cell naming an id
+// the host never heard of draws nothing. An image the host was sent under the
+// guest's own id, which is what a transmit-only command does, keeps that id.
+//
+// Negative control: removing the translate call from handleGraphemeWithin left
+// the foreground at the guest's id and the translated case failed.
+func TestThePlaceholderIDFollowsTheTranslator(t *testing.T) {
+	const guestID, hostID = 0x0a0b0c, 0x010203
+	for _, tc := range []struct {
+		name      string
+		translate func(uint32) (uint32, bool)
+		want      uint32
+	}{
+		{"a known id is rewritten to the host's", func(g uint32) (uint32, bool) {
+			if g == guestID {
+				return hostID, true
+			}
+			return 0, false
+		}, hostID},
+		{"an untranslated id stays the guest's", func(uint32) (uint32, bool) { return 0, false }, guestID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term := New(20, 4)
+			term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
+			term.SetKittyImageIDTranslator(tc.translate)
+			if _, err := term.Write([]byte(placeholderRow(guestID, 0, 2))); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			cell := term.CellAt(0, 0)
+			if cell == nil {
+				t.Fatal("no cell")
+			}
+			got, ok := kittyPlaceholderID(cell.Content, cell.Style.Fg)
+			if !ok || got != tc.want {
+				t.Errorf("cell names %#x (ok=%v), want %#x", got, ok, tc.want)
+			}
+		})
+	}
+}
+
+// TestKittyPlaceholderID pins the encoding: the low 24 bits are the
+// foreground, and an id too wide for a colour carries its top byte in a third
+// combining mark. A placeholder drawn in the default or a transparent
+// foreground says nothing about which image it belongs to, and guessing would
+// put somebody else's picture on screen.
+func TestKittyPlaceholderID(t *testing.T) {
+	fg := color.RGBA{R: 0x0a, G: 0x0b, B: 0x0c, A: 0xff}
+	base := string(kitty.Placeholder)
+	for _, tc := range []struct {
+		name    string
+		content string
+		fg      color.Color
+		want    uint32
+		ok      bool
+	}{
+		{"the colour alone", base, fg, 0x0a0b0c, true},
+		{"the third mark is the top byte", base + string(kitty.Diacritic(1)) + string(kitty.Diacritic(2)) + string(kitty.Diacritic(7)), fg, 0x070a0b0c, true},
+		{"no foreground names no image", base, nil, 0, false},
+		{"a transparent foreground names no image", base, color.RGBA{}, 0, false},
+	} {
+		got, ok := kittyPlaceholderID(tc.content, tc.fg)
+		if ok != tc.ok || (ok && got != tc.want) {
+			t.Errorf("%s: got %#x (ok=%v), want %#x (ok=%v)", tc.name, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
 // TestEveryPlaceholderCellStandsOnItsOwn is the fix for the case kitty's
 // specification says the protocol does not handle: "this will not work for
 // horizontal scrolling and overlapping images".
@@ -194,68 +182,59 @@ func TestPlaceholdersAreDroppedByDefault(t *testing.T) {
 // rows away all the time, by clipping a pane at the screen edge or by drawing
 // a window over the left half of an image, and the survivors then have nothing
 // to inherit from. Filling the marks in here, while the row is whole, means any
-// cell can be clipped away without taking the rest of its row with it.
+// cell can be clipped away without taking the rest of its row with it. The
+// inference must not run on past the end of a row into the next one, or out of
+// one image into the one beside it: the colours tell them apart.
 //
-// Negative control: removing the kittyPlaceholderSelfDescribing call from
-// handleGraphemeWithin left every cell after the first with no marks and this
-// failed.
+// Negative controls: removing the kittyPlaceholderSelfDescribing call from
+// handleGraphemeWithin left every cell after the first with no marks, and
+// putting back the early return on U+10EEEE in handlePrint left every cell
+// blank. This fails on both.
 func TestEveryPlaceholderCellStandsOnItsOwn(t *testing.T) {
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	if _, err := term.Write([]byte(placeholderRow(0x0a0b0c, 2, 5))); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	for x := range 5 {
-		cell := term.CellAt(x, 0)
-		if cell == nil {
-			t.Fatalf("cell %d is missing", x)
-		}
-		row, col, hasRow, hasCol := kittyPlaceholderRowCol(cell.Content)
-		if !hasRow || !hasCol {
-			t.Errorf("cell %d states row=%v col=%v, want both so it can be clipped alone", x, hasRow, hasCol)
-			continue
-		}
-		if row != 2 || col != x {
-			t.Errorf("cell %d says (row %d, col %d), want (2, %d)", x, row, col, x)
-		}
-	}
-}
-
-// TestASecondRowRestartsItsColumns checks the inference does not run on past
-// the end of a row into the next one.
-func TestASecondRowRestartsItsColumns(t *testing.T) {
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	seq := placeholderRow(0x0a0b0c, 0, 3) + "\r\n" + placeholderRow(0x0a0b0c, 1, 3)
-	if _, err := term.Write([]byte(seq)); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	for y := range 2 {
-		for x := range 3 {
-			cell := term.CellAt(x, y)
-			row, col, hasRow, hasCol := kittyPlaceholderRowCol(cell.Content)
-			if !hasRow || !hasCol || row != y || col != x {
-				t.Errorf("cell (%d,%d) says (row %d, col %d, stated %v/%v), want (%d, %d)",
-					x, y, row, col, hasRow, hasCol, y, x)
+	type rc struct{ row, col int }
+	for _, tc := range []struct {
+		name string
+		seq  string
+		want [][]rc // per screen row, the (row, col) each cell states
+	}{
+		{
+			name: "one row",
+			seq:  placeholderRow(0x0a0b0c, 2, 5),
+			want: [][]rc{{{2, 0}, {2, 1}, {2, 2}, {2, 3}, {2, 4}}},
+		},
+		{
+			name: "a second row restarts its columns",
+			seq:  placeholderRow(0x0a0b0c, 0, 3) + "\r\n" + placeholderRow(0x0a0b0c, 1, 3),
+			want: [][]rc{{{0, 0}, {0, 1}, {0, 2}}, {{1, 0}, {1, 1}, {1, 2}}},
+		},
+		{
+			name: "two images side by side do not bleed",
+			seq:  placeholderRow(0x0a0b0c, 0, 3) + placeholderRow(0x040506, 0, 3),
+			want: [][]rc{{{0, 0}, {0, 1}, {0, 2}, {0, 0}, {0, 1}, {0, 2}}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term := New(20, 4)
+			term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
+			if _, err := term.Write([]byte(tc.seq)); err != nil {
+				t.Fatalf("write: %v", err)
 			}
-		}
-	}
-}
-
-// TestTwoImagesSideBySideDoNotBleed keeps the inference from walking out of one
-// image into the next. The colours are what tell them apart.
-func TestTwoImagesSideBySideDoNotBleed(t *testing.T) {
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	seq := placeholderRow(0x0a0b0c, 0, 3) + placeholderRow(0x040506, 0, 3)
-	if _, err := term.Write([]byte(seq)); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	// The second image starts its own columns at zero rather than continuing
-	// the first image's run.
-	cell := term.CellAt(3, 0)
-	row, col, _, _ := kittyPlaceholderRowCol(cell.Content)
-	if row != 0 || col != 0 {
-		t.Errorf("the second image's first cell says (row %d, col %d), want (0, 0)", row, col)
+			for y, cells := range tc.want {
+				for x, want := range cells {
+					cell := term.CellAt(x, y)
+					if cell == nil {
+						t.Fatalf("cell (%d,%d) is missing", x, y)
+					}
+					if cell.Width != 1 {
+						t.Errorf("cell (%d,%d) width = %d, want 1", x, y, cell.Width)
+					}
+					row, col, hasRow, hasCol := kittyPlaceholderRowCol(cell.Content)
+					if !hasRow || !hasCol || row != want.row || col != want.col {
+						t.Errorf("cell (%d,%d) says (row %d, col %d, stated %v/%v), want (%d, %d)",
+							x, y, row, col, hasRow, hasCol, want.row, want.col)
+					}
+				}
+			}
+		})
 	}
 }
