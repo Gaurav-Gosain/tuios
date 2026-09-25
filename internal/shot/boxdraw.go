@@ -37,6 +37,11 @@ func IsProcedural(r rune) bool {
 		return true
 	case r >= 0xE0B0 && r <= 0xE0B7:
 		return true
+	case r == 0x21B5:
+		// The Enter key in tuios's own key hints. Go Mono, the embedded
+		// fallback, has no glyph for it, nor do common coding fonts, so a
+		// capture of an Inbox would otherwise show a box where the key is.
+		return true
 	}
 	return false
 }
@@ -69,6 +74,8 @@ func proceduralPaths(r rune, w, h float64) ([]gpath, bool) {
 		b.braille(r)
 	case r >= 0xE0B0 && r <= 0xE0B7:
 		b.powerline(r)
+	case r == 0x21B5:
+		b.returnArrow()
 	}
 	return b.paths, true
 }
@@ -608,6 +615,19 @@ func (b *glyphBuilder) powerline(r rune) {
 	case 0xE0B7: // left half-ellipse stroke
 		b.halfEllipse(-1, true)
 	}
+}
+
+// returnArrow draws U+21B5, a downward stem on the right that turns left
+// into an arrowhead, sized like a lowercase letter so it sits on the text's
+// line.
+func (b *glyphBuilder) returnArrow() {
+	w, h := b.w, b.h
+	t := max(h/12, 1)
+	x, top, y := w*0.74, h*0.3, h*0.62
+	b.vseg(x, top, y, t)
+	b.hseg(y, w*0.34, x, t)
+	head := h * 0.16
+	b.poly([2]float64{w * 0.1, y}, [2]float64{w * 0.4, y - head}, [2]float64{w * 0.4, y + head})
 }
 
 // diagonalT is diagonal with an explicit thickness.
