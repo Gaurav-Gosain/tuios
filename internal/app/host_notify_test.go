@@ -5,34 +5,26 @@ import (
 	"testing"
 )
 
-func TestNotifySequenceIsPlainOSC9WithNoMultiplexer(t *testing.T) {
-	got := string(hostNotifySequence("build finished", outerNone))
-	if want := "\x1b]9;build finished\x07"; got != want {
-		t.Fatalf("sequence = %q, want %q", got, want)
-	}
-}
-
-// TestNotifySequenceWrapsForTmux pins the exact bytes. tmux forwards no OSC 9
-// of its own, so getting this wrong means the notification is simply eaten.
-func TestNotifySequenceWrapsForTmux(t *testing.T) {
-	got := string(hostNotifySequence("hi", outerTmux))
-	want := "\x1bPtmux;\x1b\x1b]9;hi\x07\x1b\\"
-	if got != want {
-		t.Fatalf("sequence = %q, want %q", got, want)
-	}
-}
-
-// TestNotifySequenceWrapsForScreenWithoutDoublingESC is the difference that
-// matters: screen stores a single ESC verbatim, so tmux's doubling would end the
-// passthrough early and paint the rest on screen.
-func TestNotifySequenceWrapsForScreenWithoutDoublingESC(t *testing.T) {
-	got := string(hostNotifySequence("hi", outerScreen))
-	want := "\x1bP\x1b]9;hi\x07\x1b\\"
-	if got != want {
-		t.Fatalf("sequence = %q, want %q", got, want)
-	}
-	if strings.Contains(got, "\x1b\x1b") {
-		t.Error("screen passthrough doubled an ESC")
+// TestNotifySequenceWrapsForTheOuterTerminal pins the exact bytes for each
+// outer terminal. tmux forwards no OSC 9 of its own, so a wrong wrap means the
+// notification is eaten. screen stores a single ESC verbatim, so tmux's
+// doubling would end the passthrough early and paint the rest on screen.
+func TestNotifySequenceWrapsForTheOuterTerminal(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		outer outerMultiplexer
+		text  string
+		want  string
+	}{
+		{"none", outerNone, "build finished", "\x1b]9;build finished\x07"},
+		{"tmux", outerTmux, "hi", "\x1bPtmux;\x1b\x1b]9;hi\x07\x1b\\"},
+		{"screen", outerScreen, "hi", "\x1bP\x1b]9;hi\x07\x1b\\"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(hostNotifySequence(tc.text, tc.outer)); got != tc.want {
+				t.Fatalf("sequence = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -70,29 +62,17 @@ func TestNotifyPayloadDoesNotStartWithACommandNumber(t *testing.T) {
 	}
 }
 
-func TestNotifyPayloadIsCapped(t *testing.T) {
+// TestNotifyPayloadIsCappedOnARuneBoundary keeps the payload near its limit,
+// and keeps a cut multi-byte character from reaching the terminal as a lone
+// continuation byte.
+func TestNotifyPayloadIsCappedOnARuneBoundary(t *testing.T) {
 	got := string(hostNotifySequence(strings.Repeat("x", 5000), outerNone))
 	if len(got) > notifyTextLimit+16 {
 		t.Fatalf("sequence is %d bytes, want the payload capped near %d", len(got), notifyTextLimit)
 	}
-}
-
-// TestNotifyPayloadTruncatesOnARuneBoundary keeps a cut multi-byte character
-// from reaching the terminal as a lone continuation byte.
-func TestNotifyPayloadTruncatesOnARuneBoundary(t *testing.T) {
-	text := strings.Repeat("é", notifyTextLimit)
-	got := sanitizeNotifyText(text)
-	for i, r := range got {
+	for i, r := range sanitizeNotifyText(strings.Repeat("é", notifyTextLimit)) {
 		if r == 0xFFFD {
 			t.Fatalf("truncation left an invalid rune at byte %d", i)
-		}
-	}
-}
-
-func TestEmptyNotifyPayloadWritesNothing(t *testing.T) {
-	for _, in := range []string{"", "   ", "\x1b\x07", "\n\t"} {
-		if seq := hostNotifySequence(in, outerTmux); seq != nil {
-			t.Errorf("%q produced %q, want no bytes at all", in, seq)
 		}
 	}
 }

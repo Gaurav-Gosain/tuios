@@ -12,36 +12,23 @@ import (
 // has to tell its own quit apart from a session killed from somewhere else.
 // Getting that wrong made a deliberate ctrl+b q print an error telling the user
 // their session had been terminated unexpectedly.
-
-func TestDeliberateQuitExitsNormally(t *testing.T) {
-	tests := []struct {
-		name string
-		msg  any
+func TestExitReasonTellsAQuitFromAKill(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		quitRequested bool
+		msg           any
+		want          ExitReason
 	}{
-		{"session ended announcement", SessionEndedMsg{SessionName: "s", Reason: "killed"}},
-		{"daemon disconnect announcement", DaemonDisconnectedMsg{}},
-	}
-	for _, tc := range tests {
+		{"quit, then session ended", true, SessionEndedMsg{SessionName: "s", Reason: "killed"}, ExitNormal},
+		{"quit, then daemon disconnect", true, DaemonDisconnectedMsg{}, ExitNormal},
+		{"session killed elsewhere", false, SessionEndedMsg{SessionName: "s", Reason: "killed"}, ExitSessionKilled},
+		{"daemon lost", false, DaemonDisconnectedMsg{}, ExitDaemonLost},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &OS{Settings: config.Global, QuitRequested: true}
-			if _, _ = m.Update(tc.msg); m.ExitReason != ExitNormal {
-				t.Errorf("after a deliberate quit, ExitReason = %v, want ExitNormal", m.ExitReason)
+			m := &OS{Settings: config.Global, QuitRequested: tc.quitRequested}
+			if _, _ = m.Update(tc.msg); m.ExitReason != tc.want {
+				t.Errorf("ExitReason = %v, want %v", m.ExitReason, tc.want)
 			}
 		})
 	}
-}
-
-func TestUnexpectedTerminationKeepsDiagnostic(t *testing.T) {
-	t.Run("session killed elsewhere", func(t *testing.T) {
-		m := &OS{Settings: config.Global}
-		if _, _ = m.Update(SessionEndedMsg{SessionName: "s", Reason: "killed"}); m.ExitReason != ExitSessionKilled {
-			t.Errorf("ExitReason = %v, want ExitSessionKilled", m.ExitReason)
-		}
-	})
-	t.Run("daemon lost", func(t *testing.T) {
-		m := &OS{Settings: config.Global}
-		if _, _ = m.Update(DaemonDisconnectedMsg{}); m.ExitReason != ExitDaemonLost {
-			t.Errorf("ExitReason = %v, want ExitDaemonLost", m.ExitReason)
-		}
-	})
 }

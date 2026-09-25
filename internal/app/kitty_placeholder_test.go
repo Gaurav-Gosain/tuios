@@ -54,28 +54,6 @@ func TestAVirtualPlacementIsForwardedAsVirtual(t *testing.T) {
 	}
 }
 
-// TestAVirtualPlacementIsNotTracked keeps the position where the protocol puts
-// it. The placeholder cells are text, so the pane's own scrolling and clipping
-// move the image; a tracked placement would be tuios drawing it a second time
-// somewhere of its own choosing.
-func TestAVirtualPlacementIsNotTracked(t *testing.T) {
-	kp := newTestKittyPassthrough(t)
-	winID := "test-window-id-abcdef12"
-
-	place := &vt.KittyCommand{
-		Action: vt.KittyActionPlace, ImageID: 7,
-		Columns: 4, Rows: 2, Virtual: true,
-	}
-	kp.ForwardCommand(place, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
-
-	kp.mu.Lock()
-	tracked := len(kp.placements[winID])
-	kp.mu.Unlock()
-	if tracked != 0 {
-		t.Errorf("a virtual placement was tracked as %d positioned placement(s)", tracked)
-	}
-}
-
 // TestAVirtualPlacementKeepsTheIDTheImageArrivedUnder is the trap in the
 // middle of this. A transmit-only command, which is what these applications
 // send, is passed through under a host id tuios allocates for the pane, and

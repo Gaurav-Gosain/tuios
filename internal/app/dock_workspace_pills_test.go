@@ -66,31 +66,3 @@ func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *O
 	return m
 }
 
-// isUnderlined reports whether any SGR sequence in s sets the underline
-// attribute. The parameters arrive merged with the colours, so the sequence is
-// parsed rather than matched as a literal.
-func isUnderlined(s string) bool {
-	for _, seq := range strings.Split(s, "\x1b[") {
-		end := strings.IndexByte(seq, 'm')
-		if end < 0 {
-			continue
-		}
-		params := strings.Split(seq[:end], ";")
-		for i := 0; i < len(params); i++ {
-			// A colour carries its channels as parameters of its own, and one of
-			// them may well be a 4.
-			if p := params[i]; p == "38" || p == "48" {
-				if i+1 < len(params) && params[i+1] == "5" {
-					i += 2
-					continue
-				}
-				i += 4
-				continue
-			}
-			if params[i] == "4" {
-				return true
-			}
-		}
-	}
-	return false
-}

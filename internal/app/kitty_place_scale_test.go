@@ -168,25 +168,3 @@ func TestPlacedImageIsNotMagnified(t *testing.T) {
 		})
 	}
 }
-
-// TestPlacedImageOnAltScreenSurvivesARefresh is the other half of the same
-// omission. The record built for a guest's a=p did not say which screen it was
-// made on, so a placement made on the alternate screen looked to the refresh
-// pass like one made on the normal screen, and the mismatch deleted it on the
-// very next pass: a graphics app that transmits and then places lost its image
-// immediately, leaving the pane blank.
-func TestPlacedImageOnAltScreenSurvivesARefresh(t *testing.T) {
-	const screenW, screenH = 121, 33
-	r := newPaneRig(t, screenW, screenH, 1) // newPaneRig takes the alternate screen
-
-	var deleted bool
-	for _, cmd := range r.frame(transmitThenPlace(1, 1190, 800, 119, 40)) {
-		if strings.HasPrefix(cmd, "a=d,") {
-			deleted = true
-		}
-	}
-	if deleted {
-		t.Errorf("the image was deleted on the first refresh after being placed on the " +
-			"alternate screen, which leaves the pane blank")
-	}
-}

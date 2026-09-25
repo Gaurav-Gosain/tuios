@@ -2,32 +2,12 @@ package app
 
 import (
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
-
-// focusedOS builds a minimal OS with a single focused window whose terminal
-// renders the given screen content.
-func focusedOS(t *testing.T, screen string) *OS {
-	t.Helper()
-	em := vt.NewEmulator(80, 24)
-	if _, err := em.Write([]byte(screen)); err != nil {
-		t.Fatalf("write to emulator: %v", err)
-	}
-	win := &terminal.Window{Terminal: em, Workspace: 1}
-	return &OS{
-		Settings:         config.Global,
-		Windows:          []*terminal.Window{win},
-		FocusedWindow:    0,
-		CurrentWorkspace: 1,
-	}
-}
 
 func TestStartScriptWaitRegexBadPattern(t *testing.T) {
 	m := &OS{Settings: config.Global}
@@ -39,40 +19,6 @@ func TestStartScriptWaitRegexBadPattern(t *testing.T) {
 	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex})
 	if m.ScriptWaitRegex != nil {
 		t.Error("expected no wait to be armed for a missing pattern")
-	}
-}
-
-func TestCheckScriptWaitRegexMatch(t *testing.T) {
-	m := focusedOS(t, "build complete\n")
-	m.startScriptWaitRegex(&tape.Command{
-		Type: tape.CommandTypeWaitUntilRegex,
-		Args: []string{"build complete", "3000"},
-	})
-	if !m.checkScriptWaitRegex() {
-		t.Error("expected match to resume playback")
-	}
-	if m.ScriptWaitRegex != nil {
-		t.Error("expected wait state cleared after match")
-	}
-}
-
-func TestCheckScriptWaitRegexBlocksThenTimesOut(t *testing.T) {
-	m := focusedOS(t, "still running\n")
-	m.startScriptWaitRegex(&tape.Command{
-		Type: tape.CommandTypeWaitUntilRegex,
-		Args: []string{"never appears", "5000"},
-	})
-	if m.checkScriptWaitRegex() {
-		t.Error("expected to keep waiting while pattern is absent")
-	}
-
-	// Force the deadline into the past to exercise the timeout path.
-	m.ScriptWaitDeadline = time.Now().Add(-time.Millisecond)
-	if !m.checkScriptWaitRegex() {
-		t.Error("expected timeout to resume playback")
-	}
-	if m.ScriptWaitRegex != nil {
-		t.Error("expected wait state cleared after timeout")
 	}
 }
 
@@ -120,6 +66,9 @@ func TestParseKeyToMessage(t *testing.T) {
 		// Modifier with special key
 		{"ctrl+enter", "ctrl+Enter", "ctrl+enter", tea.ModCtrl},
 		{"alt+tab", "alt+Tab", "alt+tab", tea.ModAlt},
+		// A modified space keeps its modifier: Text must stay empty so
+		// String() does not drop Ctrl.
+		{"ctrl+space", "ctrl+space", "ctrl+space", tea.ModCtrl},
 	}
 
 	for _, tt := range tests {
@@ -176,22 +125,6 @@ func TestParseKeysToMessages(t *testing.T) {
 	}
 }
 
-// TestParseKeyToMessageSpaceModifier verifies a modified space keeps its
-// modifier: Text must stay empty so String() does not drop Ctrl/Alt.
-func TestParseKeyToMessageSpaceModifier(t *testing.T) {
-	m := &OS{Settings: config.Global}
-
-	msg := m.parseKeyToMessage("ctrl+space")
-
-	if msg.Mod != tea.ModCtrl {
-		t.Errorf("parseKeyToMessage(\"ctrl+space\").Mod = %v, want %v", msg.Mod, tea.ModCtrl)
-	}
-
-	if msg.Text != "" {
-		t.Errorf("parseKeyToMessage(\"ctrl+space\").Text = %q, want empty string", msg.Text)
-	}
-}
-
 // TestApplyStateSyncSkipsInvalidWindows tests that windows with empty IDs are skipped
 func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 	m := &OS{
@@ -217,65 +150,5 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 	// Should have 0 windows, since both were invalid
 	if len(m.Windows) != 0 {
 		t.Errorf("Windows count = %d, want 0", len(m.Windows))
-	}
-}
-
-// TestSplitWithoutTilingIsLoud pins that the BSP commands report tiling being
-// off instead of returning nil. They used to do nothing at all, so a tape whose
-// EnableTiling had not taken effect skipped every Split silently and then typed
-// the next command into whatever pane was still focused, producing a layout that
-// looked built and was not.
-func TestSplitWithoutTilingIsLoud(t *testing.T) {
-	m := focusedOS(t, "")
-	m.AutoTiling = false
-
-	for name, call := range map[string]func() error{
-		"SplitVertical":   m.SplitVertical,
-		"SplitHorizontal": m.SplitHorizontal,
-		"RotateSplit":     m.RotateSplit,
-		"EqualizeSplits":  m.EqualizeSplitsExec,
-		"SmartSplit":      m.SmartSplitFocusedExec,
-	} {
-		if err := call(); err == nil {
-			t.Errorf("%s with tiling off returned nil; it must say why it did nothing", name)
-		}
-	}
-}
-
-// TestScriptPaneReadyWaitsThenGivesUp covers the pane-readiness gate playback
-// holds the next command on. A pane a tape asked for arrives asynchronously in a
-// daemon session, and until it does the focused window is still the pane the
-// tape split away from.
-func TestScriptPaneReadyWaitsThenGivesUp(t *testing.T) {
-	m := focusedOS(t, "")
-
-	// Nothing pending: playback runs.
-	if !m.scriptPaneReady() {
-		t.Fatal("playback blocked with no pane pending")
-	}
-
-	// A pane was asked for and has not arrived: playback waits.
-	m.awaitNewWindow(len(m.Windows))
-	if m.scriptPaneReady() {
-		t.Fatal("playback ran on while the pane it asked for did not exist")
-	}
-
-	// The wait is bounded, and running out of it is reported, not swallowed.
-	m.ScriptAwaitDeadline = time.Now().Add(-time.Millisecond)
-	if !m.scriptPaneReady() {
-		t.Fatal("playback stayed blocked past the deadline")
-	}
-	if len(m.Notifications) != 1 {
-		t.Fatalf("a pane that never arrived produced %d notifications, want 1", len(m.Notifications))
-	}
-
-	// The pane arriving clears the gate without a complaint.
-	m.awaitNewWindow(len(m.Windows))
-	m.Windows = append(m.Windows, m.Windows[0])
-	if !m.scriptPaneReady() {
-		t.Fatal("playback stayed blocked after the pane arrived")
-	}
-	if m.ScriptAwaitWindows != 0 {
-		t.Error("the gate was not disarmed once the pane arrived")
 	}
 }

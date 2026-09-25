@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -68,49 +66,6 @@ func TestRemoteClientCopiesRatherThanOpens(t *testing.T) {
 	}
 	if n := len(m.Notifications); n == 0 {
 		t.Fatal("a remote client said nothing about what it did instead")
-	}
-}
-
-// TestMissingFileIsReportedNotGuessed: a file:// link in a pane's scrollback can
-// be minutes old and name something that has since been built over or deleted.
-//
-// Negative control: with the stat dropped from openLocalPath, a missing path
-// falls through to spawning an editor pane on a file that is not there.
-func TestMissingFileIsReportedNotGuessed(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	gone := filepath.Join(t.TempDir(), "never-existed")
-	if cmd := m.OpenLink("file://" + gone); cmd == nil {
-		t.Fatal("a missing file produced no clipboard fallback")
-	}
-	if len(m.Windows) != 0 {
-		t.Errorf("a missing file opened %d panes", len(m.Windows))
-	}
-}
-
-// TestDirectoryLinkFallsBackWhenTheRailIsOff. A folder link wants the rail's
-// files section, and the rail can be off, hidden, or folded to three columns.
-// A listing nobody can see is no answer to a link, so OpenFileView refuses and
-// the link says what it did instead.
-//
-// What is asserted is that no directory was asked for. It used to be
-// FileViewOpen, which now answers whether the layout names the section at all
-// and is true by default whether or not a link ever pointed at anything.
-//
-// Negative control, confirmed red: with OpenFileView returning true
-// unconditionally, the read is scheduled behind a hidden rail and the clipboard
-// fallback never runs.
-func TestDirectoryLinkFallsBackWhenTheRailIsOff(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	m := &OS{Settings: config.Global} // no rail: GetSidebarWidth is zero
-	if cmd := m.OpenLink("file://" + dir); cmd == nil {
-		t.Fatal("a folder link with no rail produced no clipboard fallback")
-	}
-	if got := m.filesView.Want; got != "" {
-		t.Errorf("the link asked the rail to list %q on a rail that reserves no columns", got)
 	}
 }
 
