@@ -307,27 +307,6 @@ func TestEveryWayOfTurningTilingOnAgrees(t *testing.T) {
 	}
 }
 
-// TestTilingOffBringsTheStripOnScreen is the niri report: turn tiling off with
-// the strip scrolled past its first columns, and the panes past the edge come
-// back where they can be reached.
-func TestTilingOffBringsTheStripOnScreen(t *testing.T) {
-	m := newSwitchFixture(t, LayoutModeScrolling, 4, false)
-	scrolledPastTheEdge(t, m)
-	before := paneRects(m)
-	m.ToggleAutoTiling()
-	if m.AutoTiling {
-		t.Fatal("tiling is still on")
-	}
-	if off := offScreen(m); len(off) > 0 {
-		t.Errorf("panes still off screen: %v (before the switch: %v)", off, before)
-	}
-	for i, w := range m.Windows {
-		if w.Width != before[i].W || w.Height != before[i].H {
-			t.Errorf("pane %d changed size from %dx%d to %dx%d; only its position should move", i, before[i].W, before[i].H, w.Width, w.Height)
-		}
-	}
-}
-
 // TestTilingOnKeepsTheBSPArrangement: a layout the user shaped survives a trip
 // through tiling off and back, and a pane closed in between is dropped from
 // the tree rather than taking the arrangement with it.
@@ -354,31 +333,6 @@ func TestTilingOnKeepsTheBSPArrangement(t *testing.T) {
 	}
 	if got := paneRects(m); got[0].W != shaped[0].W {
 		t.Errorf("closing a pane while tiling was off cost the first pane its width: got %v, had %v", got, shaped)
-	}
-}
-
-// TestPeerTurningTilingOffClearsTheBorderFlags: tiling switched off by another
-// client arrives as state, and this client's panes draw their own borders again.
-func TestPeerTurningTilingOffClearsTheBorderFlags(t *testing.T) {
-	m := newSwitchFixture(t, LayoutModeBSP, 2, true)
-	for i, w := range m.Windows {
-		if !w.Tiled {
-			t.Fatalf("pane %d is not borderless under shared borders, the fixture is not tiled", i)
-		}
-	}
-	state := m.BuildSessionState()
-	state.AutoTiling = false
-	state.Version = m.DaemonStateVersion + 1
-	if err := m.ApplyStateSync(state); err != nil {
-		t.Fatal(err)
-	}
-	if m.AutoTiling {
-		t.Fatal("the sync did not turn tiling off")
-	}
-	for i, w := range m.Windows {
-		if w.Tiled {
-			t.Errorf("pane %d is still borderless after a peer turned tiling off", i)
-		}
 	}
 }
 

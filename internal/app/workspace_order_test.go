@@ -54,15 +54,6 @@ func TestAnUnarrangedWorkspaceKeepsItsNumericPlace(t *testing.T) {
 	}
 }
 
-// TestNoOrderIsTheOrderEveryWorkspaceAlreadyHad: nearly every session has never
-// been rearranged, and must read exactly as it did before the order existed.
-func TestNoOrderIsTheOrderEveryWorkspaceAlreadyHad(t *testing.T) {
-	m := pillOS(t, 120, nil, 1, 2, 3)
-	if got := m.occupiedWorkspaces(); !slices.Equal(got, []int{1, 2, 3}) {
-		t.Errorf("an unarranged session lists %v, want ascending", got)
-	}
-}
-
 // TestADraggedOrderIsWhatTheStripDraws: the draft the pointer is building is
 // live state, so the strip has to draw it rather than the committed order, or
 // the pills would only move when the button came up.

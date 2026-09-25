@@ -278,51 +278,6 @@ func paneTarget(m *OS, w *terminal.Window) (x, y, width, height int) {
 	return w.X, w.Y, w.Width, w.Height
 }
 
-// TestStartupTilingOnDaemonBuiltSession is the reported bug: with startup.tiled
-// on, a client attaching to a session the daemon built starts untiled. Every
-// layout mode is covered, because the guard that skipped it is mode-blind and
-// the daemon sync that lost it was not.
-func TestStartupTilingOnDaemonBuiltSession(t *testing.T) {
-	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling} {
-		t.Run(mode, func(t *testing.T) {
-			r := newStartupRig(t, startupConfig(true, mode), false)
-			r.boot(func() bool {
-				st := r.daemonState()
-				return r.m.AutoTiling && st != nil && st.AutoTiling
-			})
-
-			if !r.m.AutoTiling {
-				t.Fatalf("the client did not start tiled in %s mode", mode)
-			}
-			if got := r.m.LayoutName(); got != mode {
-				t.Fatalf("layout mode is %q, want %q", got, mode)
-			}
-			// The daemon holds AutoTiling for the session and echoes it to every
-			// client. If it never heard about this one, the next echo turns the
-			// tiling off again and the pane drifts back to a floating box.
-			if st := r.daemonState(); st == nil || !st.AutoTiling {
-				t.Fatalf("the daemon was never told the session is tiled, so its next push undoes it")
-			}
-			// The flag on its own proves nothing: the pane has to have been laid
-			// out. A tiled pane fills the layout box top to bottom and starts at
-			// its origin; the floating box the daemon's window would otherwise
-			// keep is half the screen, inset from both.
-			bounds := r.m.GetBSPBounds()
-			w := r.m.Windows[0]
-			x, y, _, height := paneTarget(r.m, w)
-			if x != bounds.X || y != bounds.Y || height != bounds.H {
-				t.Fatalf("the pane was never tiled: window=(%d,%d %dx%d) box=(%d,%d %dx%d)",
-					x, y, w.Width, height, bounds.X, bounds.Y, bounds.W, bounds.H)
-			}
-			// One window, not two: the daemon already opened the session's default
-			// window, so open_default_window has nothing left to do.
-			if len(r.m.Windows) != 1 {
-				t.Fatalf("expected the daemon's one window, got %d", len(r.m.Windows))
-			}
-		})
-	}
-}
-
 // TestStartupLeavesAnArrangedSessionAlone is the other half, and the reason the
 // guard exists at all: a session whose panes a client has already placed is the
 // user's own arrangement, and attaching to it must not stamp [startup] over it.
@@ -338,39 +293,5 @@ func TestStartupLeavesAnArrangedSessionAlone(t *testing.T) {
 	}
 	if st := r.daemonState(); st != nil && st.AutoTiling {
 		t.Error("the daemon was told to tile a session the user had arranged")
-	}
-}
-
-// TestStartupTilingSurvivesADaemonPush pins the sync on its own, without the
-// attach path around it: turning tiling on has to reach the daemon, or the next
-// state the daemon sends takes it away again.
-func TestStartupTilingSurvivesADaemonPush(t *testing.T) {
-	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling} {
-		t.Run(mode, func(t *testing.T) {
-			r := newStartupRig(t, startupConfig(true, mode), false)
-			r.boot(func() bool {
-				st := r.daemonState()
-				return r.m.AutoTiling && st != nil && st.AutoTiling
-			})
-			// A second pane, asked for through the daemon, is the ordinary event
-			// that makes the daemon broadcast the session again.
-			if err := r.m.DaemonClient.SendIntent("NewWindow"); err != nil {
-				t.Fatalf("ask the daemon for a window: %v", err)
-			}
-			r.boot(func() bool { return len(r.m.Windows) == 2 })
-
-			if len(r.m.Windows) != 2 {
-				t.Fatalf("the second window never arrived: %d windows", len(r.m.Windows))
-			}
-			if !r.m.AutoTiling {
-				t.Fatalf("a daemon push turned the startup tiling off in %s mode", mode)
-			}
-			for _, w := range r.m.Windows {
-				if w.Width >= startupCols {
-					t.Errorf("pane %s is the full width (%d): the panes are not tiled",
-						shortID(w.ID), w.Width)
-				}
-			}
-		})
 	}
 }

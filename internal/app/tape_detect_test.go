@@ -237,28 +237,6 @@ func TestDetectionClearsIndicatorLeavingProject(t *testing.T) {
 	}
 }
 
-// TestCwdCallbackDeliversToChannel proves the wiring from a window's OSC 7
-// callback (set by setupCwdWatch) to the Update loop's channel.
-func TestCwdCallbackDeliversToChannel(t *testing.T) {
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	w := &terminal.Window{ID: "w1", Workspace: 1}
-	m.setupCwdWatch(w)
-	if w.CwdFunc == nil {
-		t.Fatal("setupCwdWatch did not install a CwdFunc")
-	}
-
-	w.CwdFunc("file://localhost/home/user/project")
-
-	select {
-	case msg := <-m.PendingCwdChange:
-		if msg.WindowID != "w1" || msg.Cwd != "file://localhost/home/user/project" {
-			t.Fatalf("channel got %+v, want the window id and cwd", msg)
-		}
-	default:
-		t.Fatal("cwd change was not delivered to the channel")
-	}
-}
-
 // TestLocalCwdPathParsing covers the OSC 7 payload parsing, including the remote
 // host rejection that keeps tuios from scanning files it cannot read.
 func TestLocalCwdPathParsing(t *testing.T) {

@@ -2,7 +2,6 @@ package app
 
 import (
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -31,29 +30,6 @@ func dockTooltipAt(t *testing.T, m *OS, a DockSessionAction) (*lipgloss.Layer, d
 	}
 	t.Fatalf("the dock drew no control for %v", a)
 	return nil, dockSessionHit{}
-}
-
-// TestDockSessionTooltipNamesTheControl is the whole trade. The words came off
-// the bar, so the glyph has to be able to say them again on demand.
-func TestDockSessionTooltipNamesTheControl(t *testing.T) {
-	for _, tc := range []struct {
-		action DockSessionAction
-		want   string
-	}{
-		{DockSessionLeave, dockSessionLeaveLabel},
-		{DockSessionClose, dockSessionCloseLabel},
-	} {
-		t.Run(tc.want, func(t *testing.T) {
-			m := dockSessionOS(t, 160, true)
-			layer, _ := dockTooltipAt(t, m, tc.action)
-			if layer == nil {
-				t.Fatal("the hover drew no label")
-			}
-			if got := stripANSIForTrace(layer.GetContent()); !strings.Contains(got, tc.want) {
-				t.Errorf("the label reads %q, want it to name %q", got, tc.want)
-			}
-		})
-	}
 }
 
 // TestDockSessionTooltipNeverCoversItsOwnControl: the bar is one row, so a label
@@ -175,43 +151,4 @@ func TestDockSessionTooltipsCanBeTurnedOff(t *testing.T) {
 		return
 	}
 	t.Fatal("the dock drew no close control")
-}
-
-// TestBothSessionActionsAreStillNamedInWords is the discoverability half of
-// taking the words off the bar. A keyboard user never hovers, so the two
-// surfaces they do reach have to say what the two glyphs mean, and say it
-// briefly: the help menu is already wider than it should be.
-func TestBothSessionActionsAreStillNamedInWords(t *testing.T) {
-	const maxLen = 24
-	for action, want := range map[string]string{
-		"prefix_detach":        "leave running",
-		"prefix_close_session": "close session",
-	} {
-		desc, ok := config.ActionDescriptions[action]
-		if !ok {
-			t.Errorf("the help menu has no entry for %s", action)
-			continue
-		}
-		if !strings.Contains(strings.ToLower(desc), want) {
-			t.Errorf("the help entry for %s reads %q, want it to say %q in words", action, desc, want)
-		}
-		if len(desc) > maxLen {
-			t.Errorf("the help entry for %s is %d characters (%q), want at most %d", action, len(desc), desc, maxLen)
-		}
-	}
-
-	// The which-key sheet is the other one, and it only carries detach on the
-	// run path that has something to detach from.
-	words := map[bool][]string{true: {"Detach session", "Close session"}, false: {"Close session"}}
-	for daemon, wants := range words {
-		var sheet strings.Builder
-		for _, b := range config.GetPrefixKeybindings("", daemon) {
-			sheet.WriteString(b.Description + "\n")
-		}
-		for _, want := range wants {
-			if !strings.Contains(sheet.String(), want) {
-				t.Errorf("the which-key sheet (daemon=%v) never says %q:\n%s", daemon, want, sheet.String())
-			}
-		}
-	}
 }

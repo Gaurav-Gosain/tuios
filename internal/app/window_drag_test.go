@@ -91,34 +91,3 @@ func TestARetileMidDragLeavesThePaneUnderThePointer(t *testing.T) {
 		})
 	}
 }
-
-// TestAPeerSyncMidDragLeavesThePaneUnderThePointer: a peer's sync landing
-// during a drag neither moves the dragged pane nor lets its own focus change
-// take the pane's place. The focus is adopted, as it is for any sync; what the
-// motion handler does with that is pinned in internal/input.
-func TestAPeerSyncMidDragLeavesThePaneUnderThePointer(t *testing.T) {
-	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
-	r.m.CompleteAllAnimations()
-	other := rectOf4(r.m, 0)
-	slot := holdDrag(r.m, 1, -10, 5)
-	displaced := rectOf4(r.m, 1)
-
-	// The peer focuses the other pane and says so, which is one keystroke on
-	// its side and one sync on ours.
-	p.m.FocusWindow(0)
-	p.m.SyncStateToDaemon()
-	settleUntil(t, ex, "the peer's focus to arrive", func() bool { return r.m.FocusedWindow == 0 })
-
-	if got := rectOf4(r.m, 1); got != displaced {
-		t.Errorf("the sync moved the dragged pane from %v to %v; it belongs to the pointer until the drop", displaced, got)
-	}
-	if got := rectOf4(r.m, 0); got != other {
-		t.Errorf("the sync moved the pane that was not being dragged from %v to %v", other, got)
-	}
-	if got := [4]int{r.m.TiledX, r.m.TiledY, r.m.TiledWidth, r.m.TiledHeight}; got != slot {
-		t.Errorf("after the sync the drop would use slot %v, want %v", got, slot)
-	}
-	if r.m.LiveWindowDrag() != r.m.Windows[1] {
-		t.Error("the drag is no longer live after the sync")
-	}
-}

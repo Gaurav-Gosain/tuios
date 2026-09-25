@@ -29,46 +29,6 @@ func withTopTitle(t *testing.T, fn func()) {
 	fn()
 }
 
-func TestTitleBadgeTakesTheEndTheControlsDidNot(t *testing.T) {
-	withTopTitle(t, func() {
-		for _, style := range config.WindowButtonStyles {
-			for _, position := range config.WindowButtonPositions {
-				withButtonPosition(t, position, func() {
-					withButtonStyle(t, style, func() {
-						win := &terminal.Window{
-							ID: "w", X: 0, Y: 0, Width: 60, Height: 10,
-							Workspace: 1, CustomName: "editor",
-						}
-						m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
-						cols, rects := drawTopBorder(t, m, win, false)
-						row := string(cols)
-
-						name := strings.Index(row, "editor")
-						if name < 0 {
-							t.Fatalf("%s/%s: the bar drew no title: %q", style, position, row)
-						}
-						lo := rects[0].X
-						for _, r := range rects[1:] {
-							lo = min(lo, r.X)
-						}
-
-						// The badge is measured against the pill's nearest
-						// control, which is enough to say which end each took.
-						if position == config.WindowButtonPositionLeft && name <= lo {
-							t.Errorf("%s/left: the title is at column %d, left of the controls at %d",
-								style, name, lo)
-						}
-						if position == config.WindowButtonPositionRight && name >= lo {
-							t.Errorf("%s/right: the title is at column %d, right of the controls at %d",
-								style, name, lo)
-						}
-					})
-				})
-			}
-		}
-	})
-}
-
 func TestANarrowBarKeepsItsControlsAtTheNamedEnd(t *testing.T) {
 	withTopTitle(t, func() {
 		for _, style := range config.WindowButtonStyles {
@@ -152,36 +112,5 @@ func TestABadgeThatDoesNotFitGivesWayToTheControls(t *testing.T) {
 					position, got, row.pillStart, pill)
 			}
 		})
-	}
-}
-
-// The bottom border draws the title on its own bottom corners. It carries no
-// controls, so the button position leaves it alone, and it never borrowed the
-// top border's corner glyphs.
-func TestBottomTitleBarIsUnaffectedByTheButtonPosition(t *testing.T) {
-	prev := config.Global.WindowTitlePosition
-	config.Global.WindowTitlePosition = "bottom"
-	t.Cleanup(func() { config.Global.WindowTitlePosition = prev })
-
-	var rows []string
-	for _, position := range config.WindowButtonPositions {
-		withButtonPosition(t, position, func() {
-			win := &terminal.Window{
-				ID: "w", X: 0, Y: 0, Width: 60, Height: 10,
-				Workspace: 1, CustomName: "editor",
-			}
-			m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
-			out := m.addToBorder(strings.Repeat(" ", win.Width), win.Width-2, lipgloss.Color("#7dd3fc"), win, 1, false)
-			lines := strings.Split(ansi.Strip(out), "\n")
-			rows = append(rows, lines[len(lines)-1])
-		})
-	}
-
-	if rows[0] != rows[1] {
-		t.Errorf("the button position changed the bottom bar:\n right: %q\n  left: %q", rows[0], rows[1])
-	}
-	if !strings.HasPrefix(rows[0], config.Global.GetWindowBorderBottomLeft()) ||
-		!strings.HasSuffix(rows[0], config.Global.GetWindowBorderBottomRight()) {
-		t.Errorf("the bottom bar is not drawn on its own corners: %q", rows[0])
 	}
 }

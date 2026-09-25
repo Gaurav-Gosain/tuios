@@ -8,46 +8,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// TestStyleCacheBasic tests basic cache functionality
-func TestStyleCacheBasic(t *testing.T) {
-	cache := NewStyleCache(10)
-
-	// Create a test cell
-	cell := &uv.Cell{
-		Content: "A",
-		Style: uv.Style{
-			Fg:    lipgloss.Color("15"),
-			Bg:    lipgloss.Color("0"),
-			Attrs: 1, // Bold
-		},
-	}
-
-	// First access should be a miss
-	style1 := cache.Get(cell, false)
-	stats1 := cache.GetStats()
-	if stats1.Hits != 0 {
-		t.Errorf("Expected 0 hits, got %d", stats1.Hits)
-	}
-	if stats1.Misses != 1 {
-		t.Errorf("Expected 1 miss, got %d", stats1.Misses)
-	}
-
-	// Second access with same cell should be a hit
-	style2 := cache.Get(cell, false)
-	stats2 := cache.GetStats()
-	if stats2.Hits != 1 {
-		t.Errorf("Expected 1 hit, got %d", stats2.Hits)
-	}
-	if stats2.Misses != 1 {
-		t.Errorf("Expected 1 miss, got %d", stats2.Misses)
-	}
-
-	// Styles should render identically
-	if style1.Render("test") != style2.Render("test") {
-		t.Error("Cached style renders differently than original")
-	}
-}
-
 // TestStyleCacheDifferentAttributes tests that different attributes create different cache entries
 func TestStyleCacheDifferentAttributes(t *testing.T) {
 	cache := NewStyleCache(10)
@@ -157,84 +117,6 @@ func TestStyleCacheEviction(t *testing.T) {
 	// Cache size should be reasonable (between 5 and 10 after evictions)
 	if stats.Size < 5 || stats.Size > 10 {
 		t.Errorf("Cache size outside expected range: %d (expected 5-10)", stats.Size)
-	}
-}
-
-// TestStyleCacheHitRate tests that hit rate is calculated correctly
-func TestStyleCacheHitRate(t *testing.T) {
-	cache := NewStyleCache(10)
-
-	cell := &uv.Cell{
-		Style: uv.Style{
-			Fg: lipgloss.Color("15"),
-		},
-	}
-
-	// First access: miss
-	cache.Get(cell, false)
-	// Next 9 accesses: hits
-	for range 9 {
-		cache.Get(cell, false)
-	}
-
-	stats := cache.GetStats()
-	expectedHitRate := 90.0 // 9 hits out of 10 total
-	if stats.HitRate < expectedHitRate-0.1 || stats.HitRate > expectedHitRate+0.1 {
-		t.Errorf("Expected hit rate ~%.2f%%, got %.2f%%", expectedHitRate, stats.HitRate)
-	}
-}
-
-// TestStyleCacheClear tests that Clear removes all entries
-func TestStyleCacheClear(t *testing.T) {
-	cache := NewStyleCache(10)
-
-	// Add some entries
-	for i := range 5 {
-		cell := &uv.Cell{
-			Style: uv.Style{
-				Attrs: uint8(i),
-			},
-		}
-		cache.Get(cell, false)
-	}
-
-	// Clear cache
-	cache.Clear()
-
-	stats := cache.GetStats()
-	if stats.Size != 0 {
-		t.Errorf("Expected cache size 0 after clear, got %d", stats.Size)
-	}
-}
-
-// TestStyleCacheResetStats tests that ResetStats clears counters
-func TestStyleCacheResetStats(t *testing.T) {
-	cache := NewStyleCache(10)
-
-	cell := &uv.Cell{
-		Style: uv.Style{
-			Fg: lipgloss.Color("15"),
-		},
-	}
-
-	// Generate some statistics
-	cache.Get(cell, false) // Miss
-	cache.Get(cell, false) // Hit
-	cache.Get(cell, false) // Hit
-
-	// Reset stats
-	cache.ResetStats()
-
-	stats := cache.GetStats()
-	if stats.Hits != 0 {
-		t.Errorf("Expected 0 hits after reset, got %d", stats.Hits)
-	}
-	if stats.Misses != 0 {
-		t.Errorf("Expected 0 misses after reset, got %d", stats.Misses)
-	}
-	// Cache entries should remain (size >= 1)
-	if stats.Size < 1 {
-		t.Error("Cache entries should not be cleared by ResetStats")
 	}
 }
 

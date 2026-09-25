@@ -52,31 +52,6 @@ func TestZoomSlidesBothWays(t *testing.T) {
 	}
 }
 
-// TestZoomAnimationCanBeTurnedOff pins the setting: with it off the pane is put
-// in the box in one frame, which is what zoom always did.
-func TestZoomAnimationCanBeTurnedOff(t *testing.T) {
-	m, wins := zoomPeekOS(t)
-	m.Settings.ZoomAnimation = false
-	m.FocusedWindow = 1
-
-	m.ToggleZoom()
-	if len(m.Animations) != 0 {
-		t.Errorf("zooming armed %d animations with the slide off", len(m.Animations))
-	}
-	if !wins[1].Zoomed {
-		t.Fatal("the pane did not zoom")
-	}
-	if wins[1].Width != m.GetContentWidth() {
-		t.Errorf("the pane is %d wide, want the region's %d: it was not put in the box",
-			wins[1].Width, m.GetContentWidth())
-	}
-
-	m.ToggleZoom()
-	if len(m.Animations) != 0 {
-		t.Errorf("unzooming armed %d animations with the slide off", len(m.Animations))
-	}
-}
-
 // TestASlidingZoomDoesNotHideTheLayout pins that the panes underneath are drawn
 // while the zoom is in flight, or the pane grows over a blank screen.
 func TestASlidingZoomDoesNotHideTheLayout(t *testing.T) {

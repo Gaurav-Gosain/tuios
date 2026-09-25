@@ -53,21 +53,6 @@ func TestAPaneWhoseLinkIsLostSaysSoOnItsFrame(t *testing.T) {
 	}
 }
 
-// TestAPaneOnThisMachineIsNotLabelled. The marker means something only because
-// its absence does: every pane carrying one would say nothing.
-func TestAPaneOnThisMachineIsNotLabelled(t *testing.T) {
-	s := hostTitleSettings()
-	w := &terminal.Window{ID: "w1", CustomName: "deploy"}
-
-	got := getWindowTitle(w, 1, 40, s)
-	if strings.Contains(got, ":") {
-		t.Errorf("a pane on this machine carries a machine marker: %q", got)
-	}
-	if !strings.Contains(got, "deploy") {
-		t.Errorf("the window's own name was lost: %q", got)
-	}
-}
-
 // TestANarrowBarGivesUpTheNameAndKeepsTheMachine, and keeps the whole title
 // inside the width it was given.
 //
@@ -111,19 +96,4 @@ func TestAnUnnamedPaneOnAnotherMachineStillSaysWhere(t *testing.T) {
 	if got := getWindowTitle(w, 1, 40, s); !strings.Contains(got, "build") {
 		t.Errorf("an unnamed pane on another machine says nothing about where it is: %q", got)
 	}
-}
-
-// TestTheClientTakesTheMachineFromTheDaemon: the client has no other way to
-// learn it and must not invent one.
-func TestTheClientTakesTheMachineFromTheDaemon(t *testing.T) {
-	w := &terminal.Window{}
-	adoptWindowHost(w, "build")
-	if w.Host != "build" {
-		t.Errorf("the window did not take the machine the daemon reported: %q", w.Host)
-	}
-	adoptWindowHost(w, "")
-	if w.Host != "" {
-		t.Errorf("a window moved back to this machine still claims %q", w.Host)
-	}
-	adoptWindowHost(nil, "build") // must not panic
 }

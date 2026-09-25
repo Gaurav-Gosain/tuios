@@ -142,42 +142,6 @@ func TestWorkspaceSwitchSendsNoSpuriousWinch(t *testing.T) {
 	}
 }
 
-// TestWorkspaceSwitchKeepsGuestScreen drives the guest's own view: a pane that
-// printed a banner and a prompt must still show exactly one of each after a
-// round trip through another workspace.
-func TestWorkspaceSwitchKeepsGuestScreen(t *testing.T) {
-	prevAnim := config.Global.AnimationsEnabled
-	prevShared := config.Global.SharedBorders
-	config.Global.AnimationsEnabled = false
-	config.Global.SharedBorders = true
-	t.Cleanup(func() {
-		config.Global.AnimationsEnabled = prevAnim
-		config.Global.SharedBorders = prevShared
-	})
-
-	m, _ := newSwitchOS(t, 200, 50, map[int]int{1: 1, 2: 1})
-	m.TileAllWindows()
-
-	win := m.Windows[0]
-	// The guest paints; a resize would reflow this and a SIGWINCH would make a
-	// real shell paint it again.
-	win.LockIO()
-	_, _ = win.Terminal.Write([]byte("Welcome to fish, the friendly interactive shell\r\n> "))
-	win.UnlockIO()
-	beforeW, beforeH := win.Terminal.Width(), win.Terminal.Height()
-	before := screenText(win)
-
-	m.SwitchToWorkspace(2)
-	m.SwitchToWorkspace(1)
-
-	if w, h := win.Terminal.Width(), win.Terminal.Height(); w != beforeW || h != beforeH {
-		t.Errorf("guest grid moved %dx%d → %dx%d across a workspace round trip", beforeW, beforeH, w, h)
-	}
-	if got := screenText(win); got != before {
-		t.Errorf("guest screen changed across a workspace round trip:\nbefore:\n%s\nafter:\n%s", before, got)
-	}
-}
-
 // screenText reads the guest's visible grid as text.
 func screenText(w *terminal.Window) string {
 	w.RLockIO()

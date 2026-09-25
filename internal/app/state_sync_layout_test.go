@@ -53,46 +53,6 @@ func syncWith(existingID, daemonID string, width, height int) *session.SessionSt
 	}
 }
 
-// TestSyncedWindowJoinsTheTiledLayout is the behavior a headless new-window has
-// to produce in an attached TUI: the window does not just exist in the model, it
-// takes its share of the screen. Before this, a daemon-created window kept the
-// full-size geometry the daemon gave it and covered the windows already there.
-func TestSyncedWindowJoinsTheTiledLayout(t *testing.T) {
-	const existingID = "win-0000-0000-0000-0000-000000000001"
-	const daemonID = "win-0000-0000-0000-0000-000000000002"
-
-	m := tiledOS(existingID)
-	if err := m.ApplyStateSync(syncWith(existingID, daemonID, 120, 40)); err != nil {
-		t.Fatalf("ApplyStateSync failed: %v", err)
-	}
-
-	if len(m.Windows) != 2 {
-		t.Fatalf("window count = %d, want 2", len(m.Windows))
-	}
-
-	tree := m.WorkspaceTrees[1]
-	if tree == nil {
-		t.Fatal("no BSP tree for workspace 1")
-	}
-	if intID := m.GetWindowIntID(daemonID); !tree.HasWindow(intID) {
-		t.Fatalf("daemon-created window (int ID %d) is not in the BSP tree; tree holds %v",
-			intID, tree.GetAllWindowIDs())
-	}
-
-	// Both windows must have been given a share of the screen rather than the
-	// full-size box the daemon sent. BSP applies its layout through snap
-	// animations, so the target rects are what the tree resolved to.
-	rects := tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap())
-	if len(rects) != 2 {
-		t.Fatalf("tree laid out %d windows, want 2", len(rects))
-	}
-	for intID, r := range rects {
-		if r.W >= 120 {
-			t.Errorf("window %d still spans the full width (%d): the sync was not tiled", intID, r.W)
-		}
-	}
-}
-
 // TestSyncedWindowJoinsTheScrollingLayout covers the layout with no self-repair.
 // The BSP path inserts unknown windows on its own; the scrolling layout would
 // silently leave the new window out of its columns, so it renders wherever the

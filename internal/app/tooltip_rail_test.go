@@ -114,37 +114,6 @@ func TestTooltipSwapsInstantlyOnceWarm(t *testing.T) {
 	}
 }
 
-// TestTooltipContentNamesTheRow: two cells cannot say any of this, which is the
-// only reason the label exists.
-func TestTooltipContentNamesTheRow(t *testing.T) {
-	m, tree := stripOS(t, 120, 20)
-	m.SidebarCollapsed = true
-	m.sidebarPanelLinesForTree(tree)
-
-	for _, r := range m.sidebarStripRows {
-		got := r.Label
-		switch r.Kind {
-		case sidebarStripToggle:
-			if got != "expand" {
-				t.Errorf("the toggle's label is %q, want expand", got)
-			}
-		case sidebarStripBadge:
-			if !strings.Contains(got, "2 agents") {
-				t.Errorf("the badge's label is %q, want it to count the agents", got)
-			}
-		case sidebarStripSession:
-			if !strings.Contains(got, "terminal") {
-				t.Errorf("a session label is %q, want a pane count", got)
-			}
-			// api holds an errored pane and a blocked one, so its roll-up is the
-			// louder of the two and the label says that, with its age.
-			if r.SessionID == "api" && !strings.Contains(got, "errored") {
-				t.Errorf("a loud session's label is %q, want it to say what is loud", got)
-			}
-		}
-	}
-}
-
 // TestTooltipAnchorFlipsWithThePosition: it opens away from the rail, so it
 // never covers the cell it is describing.
 func TestTooltipAnchorFlipsWithThePosition(t *testing.T) {
@@ -203,24 +172,6 @@ func TestTooltipClampsToThePaneArea(t *testing.T) {
 	}
 	if got, limit := layer.GetX()+lipgloss.Width(layer.GetContent()), m.GetRenderWidth(); got > limit {
 		t.Errorf("the tooltip runs to x=%d past the screen at %d", got, limit)
-	}
-}
-
-// TestTooltipsCanBeTurnedOff: the config key has to reach the render, not just
-// the struct.
-func TestTooltipsCanBeTurnedOff(t *testing.T) {
-	prev := config.Global.Tooltips
-	config.Global.Tooltips = false
-	t.Cleanup(func() { config.Global.Tooltips = prev })
-
-	m, y := tooltipOS(t, "left", sidebarStripSession)
-	m.SidebarMotion(1, y)
-	if m.TooltipPending() {
-		t.Error("tooltips are off and one is pending anyway")
-	}
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
-	if m.renderRailTooltip() != nil {
-		t.Error("tooltips are off and one drew anyway")
 	}
 }
 

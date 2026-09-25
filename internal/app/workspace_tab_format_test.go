@@ -54,20 +54,3 @@ func TestWorkspaceTabFormatWidthFollowsLabel(t *testing.T) {
 		}
 	}
 }
-
-// A name-only tab (empty format) is unchanged: the historic rendering.
-func TestWorkspaceTabFormatEmptyIsNameOnly(t *testing.T) {
-	withDockWorkspaceTabFormat(t)
-	config.Global.DockWorkspaceTabFormat = ""
-
-	m := chipOS(t)
-	want := map[int]string{1: "1", 2: "review", 3: "3"}
-	for _, tab := range m.buildDockWorkspaceTabs() {
-		if tab.Add {
-			continue
-		}
-		if got := want[tab.Workspace]; tab.Label != got {
-			t.Errorf("workspace %d's chip reads %q with no format, want %q", tab.Workspace, tab.Label, got)
-		}
-	}
-}

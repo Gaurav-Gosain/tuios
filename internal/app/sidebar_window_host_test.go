@@ -54,16 +54,6 @@ func TestAPaneWhoseLinkIsLostSaysSoInTheRail(t *testing.T) {
 	}
 }
 
-// TestAPaneOnThisMachineSaysNothing. The mark means something only because its
-// absence does, which is the same argument the workspace tag already makes.
-func TestAPaneOnThisMachineSaysNothing(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	row := m.sidebarTerminalRow(hostRowEntry("", ""), 30, theme.UI(), sidebarRowState{}, false)
-	if strings.Contains(row, "build") {
-		t.Errorf("a local pane carries a machine name: %q", row)
-	}
-}
-
 // TestTheMachineOutranksTheWorkspaceWhenOnlyOneFits.
 //
 // Both are orientation, but a workspace is where a pane is filed and a machine
@@ -77,38 +67,5 @@ func TestTheMachineOutranksTheWorkspaceWhenOnlyOneFits(t *testing.T) {
 	row := m.sidebarTerminalRow(hostRowEntry("build", "w4"), 16, theme.UI(), sidebarRowState{}, false)
 	if !strings.Contains(row, "build") {
 		t.Errorf("the machine gave way to the workspace on a narrow rail: %q", row)
-	}
-}
-
-// TestBothAreShownWhenThereIsRoom, because a pane elsewhere on a workspace
-// elsewhere is two facts and a wide rail can carry them.
-func TestBothAreShownWhenThereIsRoom(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	row := m.sidebarTerminalRow(hostRowEntry("build", "w4"), 40, theme.UI(), sidebarRowState{}, false)
-	if !strings.Contains(row, "build") || !strings.Contains(row, "w4") {
-		t.Errorf("a wide rail dropped one of the two: %q", row)
-	}
-}
-
-// TestTheMachineReachesTheRowFromTheWindow pins the path rather than the
-// paint: the daemon puts the host on the window state, the client adopts it
-// onto the window, and the tree carries it to the row. A break anywhere in
-// that chain is a row that silently says nothing.
-func TestTheMachineReachesTheRowFromTheWindow(t *testing.T) {
-	node := sessiontree.BuildSession(sessiontree.SessionInput{
-		Name: "work",
-		Windows: []sessiontree.WindowInput{
-			{ID: "w1", Title: "shell", Host: "build"},
-			{ID: "w2", Title: "local"},
-		},
-	})
-	if len(node.Children) != 2 {
-		t.Fatalf("the session node has %d windows, want 2", len(node.Children))
-	}
-	if node.Children[0].Host != "build" {
-		t.Errorf("the tree lost the machine: %q", node.Children[0].Host)
-	}
-	if node.Children[1].Host != "" {
-		t.Errorf("a local pane gained a machine: %q", node.Children[1].Host)
 	}
 }

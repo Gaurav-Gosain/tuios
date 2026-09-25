@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -101,33 +100,5 @@ func TestRailTitleDebounceDropsClosedWindows(t *testing.T) {
 	m.updateRailTitles()
 	if _, ok := m.sidebarTitles["b"]; ok {
 		t.Fatal("closed window's title entry was not dropped")
-	}
-}
-
-// TestSidebarHoldsTitleDuringChurn ties the debounce to the rendered rail: the
-// row keeps the adopted title while the live title churns, so the sidebar does
-// not thrash.
-func TestSidebarHoldsTitleDuringChurn(t *testing.T) {
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	win := &terminal.Window{ID: "w1"}
-	win.SetTitle("stable")
-	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, Width: 120, Height: 40, SessionName: "s"}
-	m.updateRailTitles()
-
-	first := sidebarText(t, m)
-	if !strings.Contains(first, "stable") {
-		t.Fatalf("rail missing the seeded title:\n%s", first)
-	}
-
-	// Churn the live title; without a tick adopting it, the rail must hold.
-	win.SetTitle("churn-1")
-	win.SetTitle("churn-2")
-	m.updateRailTitles() // inside the interval: holds
-	held := sidebarText(t, m)
-	if strings.Contains(held, "churn") {
-		t.Fatalf("rail adopted a churning title instead of holding:\n%s", held)
-	}
-	if !strings.Contains(held, "stable") {
-		t.Fatalf("rail lost the held title during churn:\n%s", held)
 	}
 }

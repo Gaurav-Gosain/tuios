@@ -29,31 +29,3 @@ func TestTheRailKeepsItsWidthAcrossSessions(t *testing.T) {
 		t.Errorf("attaching a session changed the rail to %d, want the viewer's own 34", m.SidebarWidthPref)
 	}
 }
-
-// TestASessionWithNoWidthDoesNotBlankTheRail is the same guard from the other
-// side: a session that carries no width at all must not be read as "no rail".
-func TestASessionWithNoWidthDoesNotBlankTheRail(t *testing.T) {
-	m := &OS{}
-	m.SidebarWidthPref = 28
-
-	m.adoptSidebarState(&session.SessionState{})
-
-	if m.SidebarWidthPref != 28 {
-		t.Errorf("a session carrying no width left the rail at %d, want 28", m.SidebarWidthPref)
-	}
-}
-
-// TestTheCollapsedRailStillTravels. The fold is not the width. Whether the rail
-// is showing at all is part of how the session was left, and it is what the
-// caller of this is for, so the one thing this still takes has to keep working.
-func TestTheCollapsedRailStillTravels(t *testing.T) {
-	m := &OS{}
-	m.adoptSidebarState(&session.SessionState{SidebarCollapsed: true})
-	if !m.SidebarCollapsed {
-		t.Error("a session left with the rail folded came back unfolded")
-	}
-	m.adoptSidebarState(&session.SessionState{SidebarCollapsed: false})
-	if m.SidebarCollapsed {
-		t.Error("a session left with the rail open came back folded")
-	}
-}

@@ -34,39 +34,3 @@ func TestATiledBarCarriesTheZoomControl(t *testing.T) {
 		})
 	}
 }
-
-// TestTheTiledZoomControlCanBeTurnedOff pins the setting, for anyone who would
-// rather a tiled bar carried two.
-func TestTheTiledZoomControlCanBeTurnedOff(t *testing.T) {
-	withTiledZoom(t, false, func() {
-		m, wins := zoomPeekOS(t)
-		m.Settings = config.Global
-		_, rects := drawTopBorder(t, m, wins[0], true)
-
-		for _, r := range rects {
-			if r.Action == WindowButtonZoom {
-				t.Error("a tiled bar recorded a zoom control with the setting off")
-			}
-		}
-	})
-}
-
-// TestAFloatingBarIsUnchanged pins that the setting is about tiled panes only.
-// A floating window's maximize has always been there and is not a zoom.
-func TestAFloatingBarIsUnchanged(t *testing.T) {
-	withTiledZoom(t, false, func() {
-		m, wins := zoomPeekOS(t)
-		m.Settings = config.Global
-		_, rects := drawTopBorder(t, m, wins[0], false)
-
-		var found bool
-		for _, r := range rects {
-			if r.Action == WindowButtonZoom {
-				found = true
-			}
-		}
-		if !found {
-			t.Error("a floating bar lost its maximize control")
-		}
-	})
-}

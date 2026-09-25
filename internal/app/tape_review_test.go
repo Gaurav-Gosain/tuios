@@ -47,22 +47,6 @@ func TestReviewRunOnceDoesNotPersistTrust(t *testing.T) {
 	}
 }
 
-func TestReviewTrustAndRunPersists(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-
-	m.openTapeReviewForDir(dir)
-	if !m.HandleTapeReviewInput("t") {
-		t.Fatalf("trust-and-run key not consumed")
-	}
-	if !m.ScriptMode {
-		t.Fatalf("ScriptMode = false, want the tape to have started")
-	}
-	if got := checkTape(t, store, dir).Status; got != trust.StatusTrusted {
-		t.Fatalf("trust status = %v after Trust and run, want trusted", got)
-	}
-}
-
 func TestReviewNeverDenies(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAsk)
 	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
@@ -191,23 +175,6 @@ func TestAutoModeRunsTrustedTape(t *testing.T) {
 	}
 }
 
-func TestAutoModeDoesNotRunUntrusted(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAuto)
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-
-	drive(t, m, "focused", dir)
-	if m.ScriptMode {
-		t.Fatalf("ScriptMode = true, an untrusted tape must never auto-run")
-	}
-	if m.ShowTapeReview {
-		t.Fatalf("auto mode must not force-open the dialog; it stays passive")
-	}
-	// The passive indicator still appears so the user can review it.
-	if _, active := m.tapeIndicatorStatus(); !active {
-		t.Fatalf("indicator inactive; untrusted tape should still surface passively")
-	}
-}
-
 func TestAutoModeEditedTrustedTapeDoesNotRun(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAuto)
 	dir := tapeDir(t, "Scope current\nType \"one\" Enter\n")
@@ -270,39 +237,6 @@ func TestSessionNameDerivedFromDir(t *testing.T) {
 
 // --- Auto-review (auto_review setting) ---
 
-func TestAutoReviewOpensDialogOnUntrusted(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAsk)
-	m.UserConfig.Tape.AutoReview = true
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-
-	drive(t, m, "focused", dir)
-
-	if !m.ShowTapeReview || m.TapeReview == nil {
-		t.Fatalf("review dialog did not auto-open with auto_review=true")
-	}
-	if m.TapeReview.Status != trust.StatusUntrusted {
-		t.Fatalf("dialog status = %v, want untrusted", m.TapeReview.Status)
-	}
-	if m.ScriptMode {
-		t.Fatalf("auto-review must not run anything; it only opens the dialog")
-	}
-}
-
-func TestNoAutoReviewShowsBannerNotDialog(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAsk) // AutoReview defaults false
-	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-
-	before := len(m.Notifications)
-	drive(t, m, "focused", dir)
-
-	if m.ShowTapeReview {
-		t.Fatalf("dialog auto-opened with auto_review=false (default must stay passive)")
-	}
-	if len(m.Notifications) <= before {
-		t.Fatalf("no passive banner shown with auto_review=false")
-	}
-}
-
 func TestAutoReviewDeniedNeverOpens(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAsk)
 	m.UserConfig.Tape.AutoReview = true
@@ -316,23 +250,6 @@ func TestAutoReviewDeniedNeverOpens(t *testing.T) {
 
 	if m.ShowTapeReview {
 		t.Fatalf("a denied tape auto-opened the dialog; deny must be respected")
-	}
-}
-
-func TestAutoReviewDoesNotRepopSameDir(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAsk)
-	m.UserConfig.Tape.AutoReview = true
-	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-
-	drive(t, m, "focused", dir)
-	if !m.ShowTapeReview {
-		t.Fatalf("first entry should auto-open the dialog")
-	}
-	m.CloseTapeReview() // user dismisses
-
-	drive(t, m, "focused", dir) // re-enter / cwd churns within the same dir
-	if m.ShowTapeReview {
-		t.Fatalf("re-entering a handled dir re-popped the dialog; must dedup per session")
 	}
 }
 

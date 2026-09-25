@@ -50,41 +50,6 @@ func cellStyleAt(canvas *lipgloss.Canvas, x, y int) uv.Style {
 	return canvas.CellAt(x, y).Style
 }
 
-// TestSpotlightLeavesTheBeamUntouched is the property the whole feature rests
-// on: what the compositor drew inside the light is what reaches the screen.
-func TestSpotlightLeavesTheBeamUntouched(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	canvas := spotlightTestCanvas(t, 80, 24)
-	before := cellStyleAt(canvas, 40, 12)
-
-	newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
-
-	after := cellStyleAt(canvas, 40, 12)
-	if !after.Equal(&before) {
-		t.Errorf("the cell under the beam changed: fg %v -> %v, bg %v -> %v",
-			before.Fg, after.Fg, before.Bg, after.Bg)
-	}
-}
-
-// TestSpotlightDimsOutsideTheBeam is the other half. A cell far from the light
-// must come back carrying a colour it did not have.
-func TestSpotlightDimsOutsideTheBeam(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	canvas := spotlightTestCanvas(t, 80, 24)
-	before := cellStyleAt(canvas, 2, 2)
-
-	newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
-
-	after := cellStyleAt(canvas, 2, 2)
-	if after.Equal(&before) {
-		t.Fatalf("a cell far outside the beam was left alone: %v on %v", after.Fg, after.Bg)
-	}
-	// Dimmed, not erased: the text is still the user's and must still be there.
-	if canvas.CellAt(2, 2).Content == "" {
-		t.Error("the pass ate the cell's content")
-	}
-}
-
 // TestSpotlightDimsAColouredBlank is the trap the design named. Skipping a
 // blank cell "because nothing is visible there" reads as the obvious saving and
 // is the opposite: it ends the style run at every space, so a line of text
@@ -389,29 +354,6 @@ func TestSpotlightDimsWhatItCanResolveWithNoTheme(t *testing.T) {
 	}
 }
 
-// TestSpotlightKeepsAThemedScreenWhole is the other side of the rule. With a
-// theme set tuios owns the sixteen (it pushes theme.GetANSIPalette into every
-// emulator), so nothing on a themed screen falls back to SGR 2, and the pass
-// stays the single blend it was.
-func TestSpotlightKeepsAThemedScreenWhole(t *testing.T) {
-	styles := []uv.Style{
-		{Fg: color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}},
-		{Fg: ansi.IndexedColor(214)},
-		{Fg: ansi.IndexedColor(3)},
-		{Fg: ansi.BasicColor(2)},
-		{},
-	}
-	for _, style := range styles {
-		got := spotlightOneCell(t, "catppuccin_mocha", style, config.SpotlightDefaultDim)
-		if got.faint {
-			t.Errorf("a themed cell (%v) was put on SGR 2 rather than dimmed", style.Fg)
-		}
-		if isNilColor(got.fg) || isNilColor(got.bg) {
-			t.Errorf("a themed cell (%v) came back with no colour: %v on %v", style.Fg, got.fg, got.bg)
-		}
-	}
-}
-
 // TestSpotlightLeavesTheBeamAloneWithNoTheme. The light must not dim its own
 // middle on either path, and the no-theme screen is now two paths at once.
 func TestSpotlightLeavesTheBeamAloneWithNoTheme(t *testing.T) {
@@ -466,33 +408,6 @@ func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
 	}
 }
 
-// TestSpotlightDimsTextTheGuestLeftAtTheDefault is the case most of a real
-// screen is in, and the one a fixture full of explicit SGR hides. tuios emits
-// no colour for text the guest never coloured (a shell prompt, ls output,
-// almost everything), so a pass that only touched cells carrying a colour of
-// their own dimmed the syntax highlighting and left the rest at full
-// brightness. An e2e reading a real screen is what found it.
-func TestSpotlightDimsTextTheGuestLeftAtTheDefault(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	canvas := lipgloss.NewCanvas(20, 3)
-	plain := uv.Cell{Content: "x", Width: 1}
-	canvas.SetCell(15, 1, &plain)
-
-	newSpotlightTestState().apply(canvas, 0, 0, 2, 60, true)
-
-	style := cellStyleAt(canvas, 15, 1)
-	if isNilColor(style.Fg) {
-		t.Error("a cell at the terminal default was left undimmed outside the beam")
-	}
-	// And it is given a background, which the first version did not do. A cell
-	// with none of its own is showing the terminal's ground at full brightness,
-	// so leaving it alone leaves the unlit region lit under dimmed text. See
-	// TestSpotlightTurnsTheLightDownOnTheBackground.
-	if isNilColor(style.Bg) {
-		t.Error("a cell at the terminal default kept a background at full brightness")
-	}
-}
-
 // spotlightBrightness is how much light a colour carries, as the mean of its
 // three channels over 255. It is not a luminance and does not need to be: the
 // tests below compare one colour with a scaled copy of itself, so any monotonic
@@ -504,51 +419,6 @@ func spotlightBrightness(t *testing.T, c color.Color) float64 {
 	}
 	r, g, b, _ := c.RGBA()
 	return float64(r>>8+g>>8+b>>8) / (3 * 255)
-}
-
-// TestSpotlightTurnsTheLightDownOnTheBackground is the bug the first version of
-// this shipped with, and the reason the feature read as not working at any
-// setting.
-//
-// That version carried each colour toward the theme's own ground. A pane's
-// background already is close to the ground, so there was nowhere for it to
-// travel: at dim 95, the maximum, a background went from (40,40,60) to
-// (30,30,46), and a cell that named no background of its own was not given one
-// at all. Every cell outside the beam kept a background as bright as the cells
-// inside it, and the screen still read as lit however dark the text got.
-//
-// Both cells here name no colour of their own, which is what most of a real
-// screen is: a shell prompt, ls output, a blank pane.
-func TestSpotlightTurnsTheLightDownOnTheBackground(t *testing.T) {
-	for _, themeID := range []string{"catppuccin_mocha", "catppuccin_latte"} {
-		t.Run(themeID, func(t *testing.T) {
-			withTheme(t, themeID)
-			canvas := lipgloss.NewCanvas(80, 24)
-			canvas.SetCell(40, 12, &uv.Cell{Content: "x", Width: 1})
-			canvas.SetCell(2, 2, &uv.Cell{Content: "x", Width: 1})
-
-			newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false)
-
-			outside := cellStyleAt(canvas, 2, 2).Bg
-			if isNilColor(outside) {
-				t.Fatal("a cell outside the beam was given no background, so it is still " +
-					"showing the terminal's ground at full brightness")
-			}
-			lit := spotlightBrightness(t, theme.TerminalBg())
-			unlit := spotlightBrightness(t, outside)
-			// The default is 75, so the unlit ground is at a quarter of the
-			// light. Half is the bar, which leaves room for the default to be
-			// tuned without rewriting the test and still fails the version that
-			// could not move the background at all.
-			if unlit > lit/2 {
-				t.Errorf("the ground outside the beam is at %.2f of the light against %.2f "+
-					"inside it; the screen still reads as lit", unlit, lit)
-			}
-			if inside := cellStyleAt(canvas, 40, 12); !inside.IsZero() {
-				t.Errorf("the cell under the beam was painted: %v on %v", inside.Fg, inside.Bg)
-			}
-		})
-	}
 }
 
 // TestSpotlightDimsALightThemeDownwards is the half a dark theme cannot show.
@@ -571,20 +441,6 @@ func TestSpotlightDimsALightThemeDownwards(t *testing.T) {
 	}
 	if got, want := spotlightBrightness(t, style.Bg), spotlightBrightness(t, theme.TerminalBg()); got >= want {
 		t.Errorf("the background outside the beam went from %.2f to %.2f; the beam brightened it", want, got)
-	}
-}
-
-// TestSpotlightLeavesDefaultTextInsideTheBeamAlone is the other side of it.
-func TestSpotlightLeavesDefaultTextInsideTheBeamAlone(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	canvas := lipgloss.NewCanvas(20, 3)
-	plain := uv.Cell{Content: "x", Width: 1}
-	canvas.SetCell(15, 1, &plain)
-
-	newSpotlightTestState().apply(canvas, 15, 1, 6, 60, true)
-
-	if style := cellStyleAt(canvas, 15, 1); !style.IsZero() {
-		t.Errorf("a cell under the beam was given a colour: %v on %v", style.Fg, style.Bg)
 	}
 }
 

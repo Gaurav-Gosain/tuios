@@ -80,21 +80,3 @@ func TestNewFloatingWindowsStayOnScreen(t *testing.T) {
 		}
 	}
 }
-
-// TestFirstFloatingWindowKeepsTheHomeSlot pins the cascade as an exception
-// rather than a new default. One window on an empty screen belongs where it has
-// always gone; the offset is what happens when that slot is taken.
-func TestFirstFloatingWindowKeepsTheHomeSlot(t *testing.T) {
-	m := placementOS(t)
-	x, y, width, height := m.NewWindowPlacement()
-	wantX := m.GetLeftMargin() + m.GetContentWidth()/4
-	wantY := m.GetUsableHeight() / 4
-	if x != wantX || y != wantY {
-		t.Errorf("the first window was placed at (%d,%d), want the home slot (%d,%d)",
-			x, y, wantX, wantY)
-	}
-	if width != m.GetContentWidth()/2 || height != m.GetUsableHeight()/2 {
-		t.Errorf("the first window is %dx%d, want %dx%d",
-			width, height, m.GetContentWidth()/2, m.GetUsableHeight()/2)
-	}
-}

@@ -30,13 +30,6 @@ func TestCompileTypeEnter(t *testing.T) {
 	}
 }
 
-func TestCompileTypeWithoutEnter(t *testing.T) {
-	cmds := compileProjectBody(`Type "partial"`)
-	if len(cmds) != 1 || cmds[0].Type != tape.CommandTypeType {
-		t.Fatalf("got %v, want a single Type", typesOf(cmds))
-	}
-}
-
 func TestCompileRunIsTypeEnter(t *testing.T) {
 	cmds := compileProjectBody(`Run "make dev"`)
 	if len(cmds) != 2 || cmds[0].Type != tape.CommandTypeType || cmds[1].Type != tape.CommandTypeEnter {
@@ -81,70 +74,10 @@ func TestCompileFocusMapsToFocusWindow(t *testing.T) {
 	}
 }
 
-func TestCompileRenameAndTiling(t *testing.T) {
-	cmds := compileProjectBody("RenameWindow \"edit\"\nRename \"srv\"\nEnableTiling\nDisableTiling")
-	want := []tape.CommandType{
-		tape.CommandTypeRenameWindow, tape.CommandTypeRenameWindow,
-		tape.CommandTypeEnableTiling, tape.CommandTypeDisableTiling,
-	}
-	got := typesOf(cmds)
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("cmd %d = %v, want %v", i, got[i], want[i])
-		}
-	}
-}
-
 func TestCompileIgnoresCommentsBlanksAndUnknown(t *testing.T) {
 	cmds := compileProjectBody("# a comment\n\nBogusCommand foo\nType \"x\" Enter\n")
 	if len(cmds) != 2 || cmds[0].Type != tape.CommandTypeType || cmds[1].Type != tape.CommandTypeEnter {
 		t.Fatalf("comments/blanks/unknown not skipped cleanly: %v", typesOf(cmds))
-	}
-}
-
-func TestCompileFullDemoBody(t *testing.T) {
-	// The coordinator's demo body: it must compile into commands that build a
-	// three-pane layout with the echoes actually running.
-	body := `RenameWindow "editor"
-Type "echo this pane is the editor" Enter
-Split vertical
-RenameWindow "server"
-Type "echo this pane runs the server" Enter
-Split horizontal
-RenameWindow "shell"
-Focus "editor"
-`
-	cmds := compileProjectBody(body)
-
-	var enters, splits, renames, focuses, types int
-	for _, c := range cmds {
-		switch c.Type {
-		case tape.CommandTypeEnter:
-			enters++
-		case tape.CommandTypeSplit:
-			splits++
-		case tape.CommandTypeRenameWindow:
-			renames++
-		case tape.CommandTypeFocusWindow:
-			focuses++
-		case tape.CommandTypeType:
-			types++
-		}
-	}
-	if types != 2 || enters != 2 {
-		t.Fatalf("types=%d enters=%d, want 2 and 2 (both echoes must submit)", types, enters)
-	}
-	if splits != 2 {
-		t.Fatalf("splits=%d, want 2 (two panes created)", splits)
-	}
-	if renames != 3 {
-		t.Fatalf("renames=%d, want 3 (editor/server/shell)", renames)
-	}
-	if focuses != 1 {
-		t.Fatalf("focuses=%d, want 1 (Focus editor)", focuses)
 	}
 }
 

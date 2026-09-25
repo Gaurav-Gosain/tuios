@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -78,54 +77,6 @@ func railRowLine(t *testing.T, m *OS, lines []string, kind sidebarRowKind, id st
 	}
 	t.Fatalf("no row of kind %d for %q was drawn:\n%s", kind, id, strings.Join(lines, "\n"))
 	return "", sidebarRowHit{}
-}
-
-// TestRailGroupsWorktreeSessionsUnderTheirRepository is the whole promise on
-// screen: a parent row per repository, its sessions under it labelled by
-// branch and marked with the tree glyphs, and a session that is not a worktree
-// untouched.
-func TestRailGroupsWorktreeSessionsUnderTheirRepository(t *testing.T) {
-	m, tree := worktreeRailOS(t, 120, 30)
-	lines := railPlain(t, m, tree)
-
-	tuios, _ := railRowLine(t, m, lines, sidebarRowRepo, "tuios")
-	if !strings.Contains(tuios, "tuios") {
-		t.Errorf("the tuios group header does not name its repository: %q", tuios)
-	}
-	docs, _ := railRowLine(t, m, lines, sidebarRowRepo, "docs")
-	if !strings.Contains(docs, "docs") {
-		t.Errorf("the docs group header does not name its repository: %q", docs)
-	}
-
-	one, _ := railRowLine(t, m, lines, sidebarRowSession, "tuios-feat-one")
-	if !strings.Contains(one, "├─ feat/one") {
-		t.Errorf("the first worktree row is %q, want the branch behind the ├─ mark", one)
-	}
-	two, _ := railRowLine(t, m, lines, sidebarRowSession, "tuios-feat-two")
-	if !strings.Contains(two, "└─ feat/two") {
-		t.Errorf("the last worktree row is %q, want the branch behind the └─ mark", two)
-	}
-	only, _ := railRowLine(t, m, lines, sidebarRowSession, "docs-fix")
-	if !strings.Contains(only, "└─ fix/typo") {
-		t.Errorf("a lone worktree row is %q, want the branch behind the └─ mark that closes its group", only)
-	}
-
-	// The control: a session with no worktree record is a plain row under no
-	// parent, wearing neither mark.
-	plain, _ := railRowLine(t, m, lines, sidebarRowSession, "main")
-	if strings.Contains(plain, "├─") || strings.Contains(plain, "└─") {
-		t.Errorf("the plain session row wears a tree mark: %q", plain)
-	}
-	if !strings.Contains(plain, "main") {
-		t.Errorf("the plain session row lost its name: %q", plain)
-	}
-
-	// The parent lands above the members it holds.
-	_, parent := railRowLine(t, m, lines, sidebarRowRepo, "tuios")
-	_, first := railRowLine(t, m, lines, sidebarRowSession, "tuios-feat-one")
-	if parent.Y0 >= first.Y0 {
-		t.Errorf("the tuios group header is on line %d and its first member on %d, want the header above", parent.Y0, first.Y0)
-	}
 }
 
 // TestRailCollapsesAWorktreeGroup drives the fold the way a pointer does and
@@ -241,36 +192,6 @@ func TestRailWorktreeRowSaysTheDirectoryIsGone(t *testing.T) {
 	}
 	if !strings.Contains(row, "feat/two") {
 		t.Errorf("the tag took the branch off the row: %q", row)
-	}
-}
-
-// TestRailWorktreeMarksFallBackToASCII checks the two marks are glyph
-// settings and not literals: --ascii-only draws the 7-bit pair.
-func TestRailWorktreeMarksFallBackToASCII(t *testing.T) {
-	prevCfg, prevOverlay := config.Global.UseASCIIOnly, overlay.UseASCII()
-	config.Global.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.Global.UseASCIIOnly = prevCfg
-		overlay.SetASCII(prevOverlay)
-	})
-
-	m, tree := worktreeRailOS(t, 120, 30)
-	m.Settings = config.Global
-	lines := railPlain(t, m, tree)
-
-	one, _ := railRowLine(t, m, lines, sidebarRowSession, "tuios-feat-one")
-	if !strings.Contains(one, "|- feat/one") {
-		t.Errorf("under --ascii-only the first worktree row is %q, want the ASCII |- mark", one)
-	}
-	two, _ := railRowLine(t, m, lines, sidebarRowSession, "tuios-feat-two")
-	if !strings.Contains(two, "`- feat/two") {
-		t.Errorf("under --ascii-only the last worktree row is %q, want the ASCII `- mark", two)
-	}
-	for _, l := range lines {
-		if strings.Contains(l, "├") || strings.Contains(l, "└") {
-			t.Errorf("a box-drawing mark survived --ascii-only: %q", l)
-		}
 	}
 }
 

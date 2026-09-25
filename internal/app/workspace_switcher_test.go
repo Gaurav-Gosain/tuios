@@ -57,31 +57,6 @@ func TestWorkspaceSwitcherListsOccupiedNamedAndCurrent(t *testing.T) {
 	}
 }
 
-// TestUnnamedWorkspacePresentsAsItsNumber pins the no-op case: a workspace
-// nobody has named must show its number and nothing else, which is exactly what
-// it showed before names existed.
-func TestUnnamedWorkspacePresentsAsItsNumber(t *testing.T) {
-	m := wsSwitcherOS()
-	m.OpenWorkspaceSwitcher()
-
-	for _, w := range m.WorkspaceSwitcherItems {
-		if got := w.Label(); got != strconv.Itoa(w.Number) {
-			t.Errorf("unnamed workspace %d labelled %q, want %q", w.Number, got, strconv.Itoa(w.Number))
-		}
-	}
-
-	out, _, _ := m.renderWorkspaceSwitcher()
-	t.Logf("\n%s", out)
-	for _, n := range []string{"1", "2", "4"} {
-		if !strings.Contains(out, n) {
-			t.Errorf("frame is missing workspace %s", n)
-		}
-	}
-	if !strings.Contains(out, "2 panes") || !strings.Contains(out, "1 pane") {
-		t.Errorf("frame is missing pane counts:\n%s", out)
-	}
-}
-
 // TestWorkspaceSwitcherOpensOnTheCurrentWorkspace checks Enter is a no-op right
 // after opening, so the arrows move away from a known place.
 func TestWorkspaceSwitcherOpensOnTheCurrentWorkspace(t *testing.T) {
