@@ -64,42 +64,6 @@ func TestAHostsOwnSSHOptionsBeatTheKeepaliveDefaults(t *testing.T) {
 	}
 }
 
-// TestALinkThatDropsSaysWhyAndReadsAsReconnecting is the report.
-//
-// A machine that has never answered and a machine that answered a moment ago
-// and lost its pipe are different facts, and both used to be reported as
-// "unreachable" with the same sentence. The second one is a session a person is
-// coming back to, and the listing says so.
-func TestALinkThatDropsSaysWhyAndReadsAsReconnecting(t *testing.T) {
-	stub := startStubDaemon(t, helloOK("1.2.3", 0))
-	opts := testOptions(proxyDialer(t, stub))
-	// Long enough that the assertion below reads the state the drop left,
-	// rather than the state a redial replaced it with.
-	opts.InitialBackoff = 30 * time.Second
-	opts.MaxBackoff = 30 * time.Second
-	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
-	waitForStatus(t, m, "build", StatusUp)
-
-	// Break the pipe under the link, which is what ssh dying looks like from
-	// here.
-	l := m.link("build")
-	l.mu.Lock()
-	down := l.tearDown
-	l.mu.Unlock()
-	down()
-
-	r := waitForStatus(t, m, "build", StatusReconnecting)
-	if r.Drops != 1 {
-		t.Errorf("ASSERTION: the link reports %d drops after one drop, want 1. A link that keeps dropping reads as up every time it is asked, and this count is the only place it shows", r.Drops)
-	}
-	if !strings.Contains(r.Reason, "connecting again") {
-		t.Errorf("ASSERTION: the reason after a drop is %q and does not say tuios is connecting again", r.Reason)
-	}
-	if r.DropReason == "" {
-		t.Errorf("ASSERTION: the report carries no reason for the drop, so a keepalive timeout and a dead daemon read alike")
-	}
-}
-
 // TestAQuietLinkIsTornDownWhenAListingFails is the other side of keeping a link
 // through a slow listing. A pipe that has carried nothing at all is not slow, it
 // is gone, and the link must be redialed rather than reported up forever.

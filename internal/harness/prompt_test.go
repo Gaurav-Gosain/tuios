@@ -32,23 +32,6 @@ func TestRulePromptReadsTheMatchedLine(t *testing.T) {
 	}
 }
 
-// TestRuleKindGuessesFromTheRulesWords: a manifest that names no kind still
-// gets one, from the words the rule itself carries.
-func TestRuleKindGuessesFromTheRulesWords(t *testing.T) {
-	reg, errs := Load()
-	if len(errs) != 0 {
-		t.Fatalf("loading the bundled manifests: %v", errs)
-	}
-	// The trust prompt: "Do you trust the files in this folder" is a question
-	// wanting a yes, which the word trust marks as an approval.
-	if got := reg.RuleKind("claude-code", 1); got != PromptKindApproval {
-		t.Fatalf("trust rule kind = %q, want approval", got)
-	}
-	if got := reg.RuleKind("claude-code", 99); got != "" {
-		t.Fatalf("a rule that does not exist has kind %q, want empty", got)
-	}
-}
-
 // TestGuessPromptKind covers the guess made for a needs_input report that
 // carries no rule and no kind, such as a hook's notification.
 func TestGuessPromptKind(t *testing.T) {

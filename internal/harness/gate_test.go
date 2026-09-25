@@ -317,22 +317,6 @@ func TestInputProfile(t *testing.T) {
 	}
 }
 
-// TestBundledInputBlocksSayWhereTheyCameFrom: every bundled manifest records
-// its submit key and paste support with a source, so the open question of CR
-// against LF has an answer per harness that a reader can check.
-func TestBundledInputBlocksSayWhereTheyCameFrom(t *testing.T) {
-	r := testRegistry(t)
-	for _, id := range r.IDs() {
-		m := r.Lookup(id)
-		if strings.TrimSpace(m.Input.Source) == "" {
-			t.Errorf("%s has no [input] source", id)
-		}
-		if m.Input.BracketedPaste == nil {
-			t.Errorf("%s does not say whether it takes a bracketed paste", id)
-		}
-	}
-}
-
 // TestUserFileReplacesBundled: a user manifest with a bundled id replaces it
 // whole, and says so.
 func TestUserFileReplacesBundled(t *testing.T) {

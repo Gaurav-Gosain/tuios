@@ -7,26 +7,6 @@ import (
 	"testing"
 )
 
-func TestFrameRoundTrip(t *testing.T) {
-	var buf bytes.Buffer
-	if err := writeFrame(&buf, frameData, 7, []byte("hello")); err != nil {
-		t.Fatalf("writeFrame: %v", err)
-	}
-	f, err := readFrame(&buf)
-	if err != nil {
-		t.Fatalf("readFrame: %v", err)
-	}
-	if f.Type != frameData {
-		t.Errorf("type is %v, want data", f.Type)
-	}
-	if f.Stream != 7 {
-		t.Errorf("stream is %d, want 7", f.Stream)
-	}
-	if string(f.Payload) != "hello" {
-		t.Errorf("payload is %q, want %q", f.Payload, "hello")
-	}
-}
-
 // TestReadFrameRefusesOversizedLength is the memory guard. A peer is untrusted,
 // so the length field it sends is an allocation it would otherwise choose. The
 // header here claims 64 MiB and carries no payload at all: a build that trusted

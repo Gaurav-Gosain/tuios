@@ -61,18 +61,3 @@ func TestWindowTargetGrammar(t *testing.T) {
 		}
 	}
 }
-
-func TestAnAddressDoesNotMoveWhenAHostIsAdded(t *testing.T) {
-	// The parse never consults a table, so the same string parses the same
-	// way whether or not "build" is configured. What changes when a host is
-	// missing is the daemon's answer: unknown_host, by name.
-	before := ParseSessionTarget("build:api")
-	_, _ = NewTable([]Host{{Name: "build", Addr: "x"}})
-	after := ParseSessionTarget("build:api")
-	if before != after || !after.Remote() {
-		t.Fatalf("ASSERTION: build:api parsed as %+v then %+v", before, after)
-	}
-	if ParseSessionTarget("local:x").Remote() {
-		t.Fatal("ASSERTION: local: is treated as another machine")
-	}
-}

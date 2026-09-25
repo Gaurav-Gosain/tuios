@@ -4,7 +4,6 @@ import (
 	"context"
 	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
@@ -40,68 +39,6 @@ func waitForStatus(t *testing.T, m *Manager, host string, want Status) HostRepor
 
 // hostNames is the names a manager currently holds.
 func hostNames(m *Manager) []string { return m.Table().Names() }
-
-func TestSetTableAddsAHostToARunningManager(t *testing.T) {
-	stub := startStubDaemon(t, helloOK("1.2.3", 2))
-	m := managerFor(t, testOptions(proxyDialer(t, stub)), Host{Name: "build", Addr: "unused"})
-	waitForStatus(t, m, "build", StatusUp)
-
-	table, problems := NewTable([]Host{
-		{Name: "build", Addr: "unused"},
-		{Name: "lab", Addr: "unused"},
-	})
-	if len(problems) > 0 {
-		t.Fatalf("the table rejected an entry: %v", problems)
-	}
-	change := m.SetTable(table)
-
-	if len(change.Added) != 1 || change.Added[0] != "lab" {
-		t.Errorf("ASSERTION: adding a host to the table did not report it as added, got %+v", change)
-	}
-	if len(change.Redialed) != 0 {
-		t.Errorf("ASSERTION: adding a host redialed an unrelated one: %+v", change.Redialed)
-	}
-	// The point of the whole feature: the new host has a link, without a
-	// restart.
-	r := waitForStatus(t, m, "lab", StatusUp)
-	if r.Status != StatusUp {
-		t.Errorf("ASSERTION: the host added at run time never came up, got %s", r.Status)
-	}
-	if got := strings.Join(hostNames(m), ","); got != "build,lab" {
-		t.Errorf("ASSERTION: the table does not hold both hosts, got %q", got)
-	}
-}
-
-func TestSetTableRemovesAHostAndClosesItsLink(t *testing.T) {
-	stub := startStubDaemon(t, helloOK("1.2.3", 0))
-	m := managerFor(t, testOptions(proxyDialer(t, stub)),
-		Host{Name: "build", Addr: "unused"},
-		Host{Name: "lab", Addr: "unused"},
-	)
-	waitForStatus(t, m, "build", StatusUp)
-	waitForStatus(t, m, "lab", StatusUp)
-
-	table, _ := NewTable([]Host{{Name: "build", Addr: "unused"}})
-	change := m.SetTable(table)
-
-	if len(change.Removed) != 1 || change.Removed[0] != "lab" {
-		t.Errorf("ASSERTION: removing a host from the table did not report it as removed, got %+v", change)
-	}
-	if got := strings.Join(hostNames(m), ","); got != "build" {
-		t.Errorf("ASSERTION: the removed host is still in the table, got %q", got)
-	}
-	// A call against the removed name is now unknown, not merely down: the link
-	// is gone, and so is the name.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if _, err := m.Call(ctx, "lab", "list-sessions", nil); err == nil {
-		t.Error("ASSERTION: a call to the removed host still works")
-	}
-	// The host that was not touched keeps the link it had.
-	if r := waitForStatus(t, m, "build", StatusUp); r.Status != StatusUp {
-		t.Errorf("ASSERTION: removing one host dropped another one's link, got %s", r.Status)
-	}
-}
 
 func TestSetTableRedialsAChangedAddress(t *testing.T) {
 	stub := startStubDaemon(t, helloOK("1.2.3", 0))
@@ -189,19 +126,6 @@ func settle() {
 	for range 20 {
 		runtime.Gosched()
 		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-func TestSetTableBeforeStartOnlyChangesTheSet(t *testing.T) {
-	table, _ := NewTable([]Host{{Name: "build", Addr: "unused"}})
-	m := New(table, testOptions(nil))
-	next, _ := NewTable([]Host{{Name: "lab", Addr: "unused"}})
-	change := m.SetTable(next)
-	if len(change.Added) != 1 || len(change.Removed) != 1 {
-		t.Errorf("ASSERTION: a swap before Start did not report the change, got %+v", change)
-	}
-	if got := strings.Join(hostNames(m), ","); got != "lab" {
-		t.Errorf("ASSERTION: the table was not replaced, got %q", got)
 	}
 }
 

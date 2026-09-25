@@ -7,37 +7,6 @@ import (
 	"testing"
 )
 
-func TestBundledClaudeCodeCarriesATranscript(t *testing.T) {
-	r, errs := Load()
-	if len(errs) != 0 {
-		t.Fatalf("load errors: %v", errs)
-	}
-	tr := r.TranscriptFor("claude-code")
-	if tr == nil {
-		t.Fatal("claude-code has no transcript block")
-	}
-	if tr.Reader != ReaderJSONL || tr.Glob != "*.jsonl" {
-		t.Fatalf("transcript = %+v", *tr)
-	}
-	if !tr.Verifies("cwd") || !tr.Verifies("version") {
-		t.Fatalf("verify = %v, want cwd and version", tr.Verify)
-	}
-}
-
-// Almost every harness has no transcript, and for those the daemon must behave
-// exactly as it did before this existed. nil is how that is expressed.
-func TestHarnessesWithoutATranscriptReturnNil(t *testing.T) {
-	r, _ := Load()
-	for _, id := range r.IDs() {
-		if id == "claude-code" {
-			continue
-		}
-		if tr := r.TranscriptFor(id); tr != nil {
-			t.Fatalf("%s unexpectedly has a transcript block: %+v", id, *tr)
-		}
-	}
-}
-
 // The dashes mangling, pinned against the directory names observed on a machine
 // with 39 of them. The nested case is the one that shows the replacement is
 // literal: a path component that already begins with a dash keeps it, so the

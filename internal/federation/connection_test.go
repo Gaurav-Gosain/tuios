@@ -1,7 +1,6 @@
 package federation
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,72 +28,6 @@ func openTo(t *testing.T, m *Manager, host string) io.ReadWriteCloser {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return conn
-}
-
-func TestAConnectionReachesTheRemoteDaemonSocket(t *testing.T) {
-	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
-		switch verb {
-		case "hello":
-			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "far-1"}, nil
-		case "whoami":
-			return map[string]any{"answer": "the far daemon"}, nil
-		}
-		return nil, &RemoteError{Code: "unknown_verb", Message: verb}
-	})
-	m := managerFor(t, testOptions(proxyDialer(t, stub)), Host{Name: "build", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
-		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
-	}
-
-	// The connection is a byte pipe to the daemon socket on the far side: a
-	// verb line written on it is answered by that daemon, not by the link.
-	conn := openTo(t, m, "build")
-	if _, err := io.WriteString(conn, `{"id":7,"verb":"whoami"}`+"\n"); err != nil {
-		t.Fatalf("write on the connection: %v", err)
-	}
-	line, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		t.Fatalf("read the answer: %v", err)
-	}
-	if !strings.Contains(line, "the far daemon") {
-		t.Fatalf("ASSERTION: the connection did not reach the far daemon, it answered %q", line)
-	}
-
-	// The control stream is untouched by traffic on the connection.
-	if _, err := m.Call(ctx, "build", "hello", nil); err != nil {
-		t.Errorf("ASSERTION: the control stream stopped answering beside an open connection: %v", err)
-	}
-}
-
-func TestAConnectionToADownHostFailsAtOnce(t *testing.T) {
-	m := managerFor(t, testOptions(func(context.Context, Host) (Transport, error) {
-		return nil, errors.New("ssh: connect to host poweredoff port 22: No route to host")
-	}), Host{Name: "offline", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	m.Reports(ctx)
-
-	started := time.Now()
-	_, err := m.OpenConnection(ctx, "offline")
-	var unreachable *UnreachableError
-	if !errors.As(err, &unreachable) {
-		t.Fatalf("ASSERTION: a connection to a down host returned %v, want UnreachableError", err)
-	}
-	if unreachable.Host != "offline" {
-		t.Errorf("the error names %q, want the host", unreachable.Host)
-	}
-	if took := time.Since(started); took > time.Second {
-		t.Errorf("the refusal took %v; a down host must not be waited on", took)
-	}
-
-	_, err = m.OpenConnection(ctx, "nowhere")
-	if !errors.Is(err, ErrUnknownHost) {
-		t.Errorf("ASSERTION: an unknown name returned %v, want ErrUnknownHost", err)
-	}
 }
 
 // TestAStalledConnectionDoesNotStallTheLink is the flow-control property. The

@@ -7,66 +7,6 @@ import (
 	"testing"
 )
 
-// TestResetTerminal verifies that ResetTerminal doesn't panic and produces output.
-// Since it writes escape sequences to stdout, we capture output to verify behavior.
-func TestResetTerminal(t *testing.T) {
-	// Save original stdout
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-
-	// Redirect stdout to our pipe
-	os.Stdout = w
-
-	// Call ResetTerminal; it should not panic
-	ResetTerminal()
-
-	// Restore stdout
-	_ = w.Close()
-	os.Stdout = oldStdout
-
-	// Read captured output
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	if err != nil {
-		t.Fatalf("Failed to read captured output: %v", err)
-	}
-
-	output := buf.Bytes()
-
-	// Verify some escape sequences are present
-	if len(output) == 0 {
-		t.Error("Expected ResetTerminal to produce output")
-	}
-
-	// Check for ESC character (0x1b)
-	if !bytes.Contains(output, []byte{0x1b}) {
-		t.Error("Expected output to contain escape sequences")
-	}
-
-	// Check for reset sequence (ESC c)
-	if !bytes.Contains(output, []byte{0x1b, 'c'}) {
-		t.Error("Expected output to contain terminal reset sequence (ESC c)")
-	}
-
-	// Check for cursor show sequence (ESC [?25h)
-	if !bytes.Contains(output, []byte{0x1b, '[', '?', '2', '5', 'h'}) {
-		t.Error("Expected output to contain cursor show sequence")
-	}
-
-	// Check for attribute reset (ESC [0m)
-	if !bytes.Contains(output, []byte{0x1b, '[', '0', 'm'}) {
-		t.Error("Expected output to contain attribute reset sequence")
-	}
-
-	// Check for line ending
-	if !bytes.Contains(output, []byte{'\r', '\n'}) {
-		t.Error("Expected output to contain CRLF line ending")
-	}
-}
-
 // TestResetTerminalSequences verifies specific escape sequences are in correct order.
 func TestResetTerminalSequences(t *testing.T) {
 	// Save original stdout

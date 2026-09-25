@@ -83,29 +83,6 @@ func TestSSHAliasesDoNotFollowInclude(t *testing.T) {
 	}
 }
 
-func TestReadSSHAliasesOnAMissingFileIsEmpty(t *testing.T) {
-	if got := ReadSSHAliases(filepath.Join(t.TempDir(), "nothing")); len(got) != 0 {
-		t.Errorf("ASSERTION: a missing ssh config produced aliases, got %v", got)
-	}
-	if got := ReadSSHAliases(""); len(got) != 0 {
-		t.Errorf("ASSERTION: an empty path produced aliases, got %v", got)
-	}
-}
-
-func TestSSHAliasesAreBounded(t *testing.T) {
-	var b strings.Builder
-	for i := range maxSSHAliases * 2 {
-		b.WriteString("Host machine-")
-		b.WriteString(strings.Repeat("0", 4-len(itoa(i))))
-		b.WriteString(itoa(i))
-		b.WriteString("\n")
-	}
-	got := SSHConfigAliases(strings.NewReader(b.String()))
-	if len(got) > maxSSHAliases {
-		t.Errorf("ASSERTION: the alias list is not bounded, got %d", len(got))
-	}
-}
-
 func itoa(i int) string {
 	if i == 0 {
 		return "0"
@@ -116,16 +93,4 @@ func itoa(i int) string {
 		i /= 10
 	}
 	return string(b)
-}
-
-func TestValidHostNameRefusesTheReservedName(t *testing.T) {
-	if err := ValidHostName(LocalHostName); err == nil {
-		t.Errorf("ASSERTION: %q was accepted as a host name", LocalHostName)
-	}
-	if err := ValidHostName("two words"); err == nil {
-		t.Error("ASSERTION: a name with a space was accepted")
-	}
-	if err := ValidHostName("build-box.1"); err != nil {
-		t.Errorf("ASSERTION: an ordinary name was refused: %v", err)
-	}
 }

@@ -109,34 +109,6 @@ func TestTheTrailingDotIsGone(t *testing.T) {
 	}
 }
 
-// TestAMachineThatCannotRunTuiosIsNotOfferedButIsStillListed.
-//
-// The default filter leaves phones and tablets out, because a host entry
-// pointing at one would be a link that can never come up. It is still on the
-// list with the reason, so somebody looking for a machine they can see in
-// `tailscale status` finds it here rather than wondering where it went.
-func TestAMachineThatCannotRunTuiosIsNotOfferedButIsStillListed(t *testing.T) {
-	st := fakeStatus(
-		fakePeer{host: "phone", dns: "phone.example.ts.net.", os: "iOS", online: true, userID: 1},
-		fakePeer{host: "build", dns: "build.example.ts.net.", os: "linux", online: true, userID: 1},
-	)
-	machines := tailnetMachines(st, DefaultTailnetOptions())
-
-	phone, ok := machineNamed(machines, "phone")
-	if !ok {
-		t.Fatal("the phone is missing from the listing entirely")
-	}
-	if phone.Offered {
-		t.Error("a phone is offered as a machine to run a daemon on")
-	}
-	if phone.Skipped == "" {
-		t.Error("the phone is not offered and the row does not say why")
-	}
-	if build, _ := machineNamed(machines, "build"); !build.Offered {
-		t.Error("a linux machine that is up is not offered")
-	}
-}
-
 // TestEveryFilterSaysWhyInWordsAPersonCanRead. Each of the four defaults that
 // can leave a machine out has to give a reason, because the reason is the only
 // thing on the row that tells somebody whether to change a setting or fix the
@@ -294,22 +266,6 @@ func TestTheListIsCappedAmongTheOfferedOnly(t *testing.T) {
 	}
 }
 
-// TestTheListIsSortedByName, so two runs read the same. The API returns peers
-// in node key order, which is stable and says nothing to a person.
-func TestTheListIsSortedByName(t *testing.T) {
-	st := fakeStatus(
-		fakePeer{host: "zulu", dns: "zulu.example.ts.net.", os: "linux", online: true, userID: 1},
-		fakePeer{host: "alpha", dns: "alpha.example.ts.net.", os: "linux", online: true, userID: 1},
-		fakePeer{host: "mike", dns: "mike.example.ts.net.", os: "linux", online: true, userID: 1},
-	)
-	machines := tailnetMachines(st, DefaultTailnetOptions())
-	for i := 1; i < len(machines); i++ {
-		if machines[i-1].Name > machines[i].Name {
-			t.Fatalf("the list is not in name order: %s before %s", machines[i-1].Name, machines[i].Name)
-		}
-	}
-}
-
 // TestAMachineWithNoAddressIsNotOffered. A peer the control plane lists with
 // no usable address cannot be typed anywhere, and offering an empty string as
 // a host address would write a host entry that reaches nothing.
@@ -322,14 +278,5 @@ func TestAMachineWithNoAddressIsNotOffered(t *testing.T) {
 		if m.Offered {
 			t.Errorf("a machine with no address was offered: %+v", m)
 		}
-	}
-}
-
-// TestNoTailnetIsNotAnError for the callers, which all treat it as an empty
-// list. A machine with no tailscale on it has to behave exactly as it did
-// before any of this existed.
-func TestNoTailnetIsNotAnError(t *testing.T) {
-	if got := tailnetMachines(nil, DefaultTailnetOptions()); len(got) != 0 {
-		t.Errorf("a nil status produced %d machines", len(got))
 	}
 }

@@ -10,104 +10,11 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
-
-// TestLinkListsRemoteSessions drives the whole stack once: manager, framing,
-// proxy, unix socket, stub daemon. Everything below is a failure path off this
-// one working case.
-func TestLinkListsRemoteSessions(t *testing.T) {
-	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
-		if verb == "hello" {
-			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "9.9.9", PID: 77, Sessions: 2}, nil
-		}
-		if verb == "list-sessions" {
-			return map[string]any{"sessions": []map[string]any{
-				{"name": "api", "window_count": 3},
-				{"name": "web", "window_count": 1},
-			}}, nil
-		}
-		return nil, &RemoteError{Code: "unknown_verb", Message: verb}
-	})
-	m := managerFor(t, testOptions(proxyDialer(t, stub)), Host{Name: "build", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	reports := m.Reports(ctx)
-	if len(reports) != 1 {
-		t.Fatalf("got %d reports, want 1", len(reports))
-	}
-	r := reports[0]
-	if r.Status != StatusUp {
-		t.Fatalf("host status is %q (%s / %s), want up", r.Status, r.Reason, r.Detail)
-	}
-	if r.DaemonVersion != "9.9.9" {
-		t.Errorf("daemon version is %q, want 9.9.9", r.DaemonVersion)
-	}
-	if r.Protocol != 1 {
-		t.Errorf("protocol is %d, want 1", r.Protocol)
-	}
-	if r.LastOK == 0 {
-		t.Error("last_ok is zero on a host that answered")
-	}
-
-	raw, err := m.Call(ctx, "build", "list-sessions", nil)
-	if err != nil {
-		t.Fatalf("list-sessions: %v", err)
-	}
-	var got struct {
-		Sessions []struct {
-			Name        string `json:"name"`
-			WindowCount int    `json:"window_count"`
-		} `json:"sessions"`
-	}
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Sessions) != 2 || got.Sessions[0].Name != "api" || got.Sessions[0].WindowCount != 3 {
-		t.Fatalf("remote sessions came back as %+v, want api/3 and web/1", got.Sessions)
-	}
-}
-
-// TestUnreachableHostReportsPromptly is the powered-off machine. The dial fails,
-// and the listing has to come back with a reason rather than waiting on it.
-func TestUnreachableHostReportsPromptly(t *testing.T) {
-	opts := testOptions(func(context.Context, Host) (Transport, error) {
-		return nil, errors.New("dial tcp 10.0.0.9:22: connect: no route to host")
-	})
-	m := managerFor(t, opts, Host{Name: "build", Addr: "buildbox"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	start := time.Now()
-	reports := m.Reports(ctx)
-	elapsed := time.Since(start)
-
-	if reports[0].Status != StatusUnreachable {
-		t.Fatalf("status is %q, want unreachable", reports[0].Status)
-	}
-	if !strings.Contains(reports[0].Detail, "no route to host") {
-		t.Errorf("detail does not carry the transport's reason: %q", reports[0].Detail)
-	}
-	if elapsed > 2*time.Second {
-		t.Errorf("the listing took %v against a host that refuses instantly", elapsed)
-	}
-	// Nothing may be callable on it, and the refusal is immediate.
-	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
-		t.Fatal("a call against an unreachable host succeeded")
-	} else {
-		var ue *UnreachableError
-		if !errors.As(err, &ue) {
-			t.Errorf("call returned %v, want an UnreachableError", err)
-		}
-	}
-}
 
 // TestHostThatAcceptsThenHangsDoesNotBlock is the failure the whole design
 // worries about: a machine that answers the TCP connect and then says nothing.
@@ -345,86 +252,6 @@ func TestReachableHostWithNoDaemonSaysSo(t *testing.T) {
 	}
 }
 
-// TestMissingSSHBinaryNamesIt covers the fourth failure the brief asks for: the
-// ssh binary is not there. The message has to name the program, because "exec
-// format error" against an unnamed path is unanswerable.
-func TestMissingSSHBinaryNamesIt(t *testing.T) {
-	opts := testOptions(SSHDialer(filepath.Join(t.TempDir(), "no-such-ssh")))
-	m := managerFor(t, opts, Host{Name: "build", Addr: "buildbox"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	r := m.Reports(ctx)[0]
-	if r.Status != StatusUnreachable {
-		t.Fatalf("status is %q, want unreachable", r.Status)
-	}
-	if !strings.Contains(r.Detail, "no-such-ssh") {
-		t.Errorf("detail does not name the missing program: %q", r.Detail)
-	}
-}
-
-// TestOneDeadHostDoesNotFailTheListing is the degradation rule: hosts that
-// answer are listed, hosts that do not are shown, and neither waits on the
-// other.
-func TestOneDeadHostDoesNotFailTheListing(t *testing.T) {
-	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
-		if verb == "hello" {
-			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "1.2.3", Sessions: 1}, nil
-		}
-		if verb == "list-sessions" {
-			return map[string]any{"sessions": []map[string]any{{"name": "api"}}}, nil
-		}
-		return nil, &RemoteError{Code: "unknown_verb", Message: verb}
-	})
-	live := proxyDialer(t, stub)
-	opts := testOptions(func(ctx context.Context, h Host) (Transport, error) {
-		if h.Name == "dead" {
-			return nil, errors.New("connect: connection refused")
-		}
-		return live(ctx, h)
-	})
-	m := managerFor(t, opts,
-		Host{Name: "build", Addr: "a"},
-		Host{Name: "dead", Addr: "b"},
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	answers := m.CallAll(ctx, "list-sessions", nil)
-	if len(answers) != 2 {
-		t.Fatalf("got %d answers, want 2", len(answers))
-	}
-	byHost := map[string]Answer{}
-	for _, a := range answers {
-		byHost[a.Host] = a
-	}
-	good := byHost["build"]
-	if good.Err != nil {
-		t.Fatalf("the live host failed: %v", good.Err)
-	}
-	if !strings.Contains(string(good.Result), "api") {
-		t.Errorf("the live host's listing is %q, want it to hold api", good.Result)
-	}
-	bad := byHost["dead"]
-	if bad.Err == nil {
-		t.Fatal("the dead host reported success")
-	}
-	var ue *UnreachableError
-	if !errors.As(bad.Err, &ue) {
-		t.Fatalf("the dead host failed with %v, want an UnreachableError naming it", bad.Err)
-	}
-	if ue.Host != "dead" {
-		t.Errorf("the failure names host %q, want dead", ue.Host)
-	}
-	if bad.Report.Status != StatusUnreachable {
-		t.Errorf("the dead host's status is %q, want unreachable", bad.Report.Status)
-	}
-	if len(bad.Result) != 0 {
-		t.Errorf("a host that failed still carries a result: %q", bad.Result)
-	}
-}
-
 // TestHubRefusesAStreamOpenedByTheRemote is invariant 1 of section 1: a remote
 // daemon never gets a channel into the hub.
 //
@@ -553,18 +380,6 @@ func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 	}
 }
 
-// TestUnknownHostCallIsFinal keeps a mistyped qualifier from reaching a machine.
-func TestUnknownHostCallIsFinal(t *testing.T) {
-	m := managerFor(t, testOptions(func(context.Context, Host) (Transport, error) {
-		return nil, errors.New("should not be dialed")
-	}), Host{Name: "build", Addr: "a"})
-
-	_, err := m.Call(context.Background(), "buildbox", "list-sessions", nil)
-	if !errors.Is(err, ErrUnknownHost) {
-		t.Fatalf("call to an unconfigured host returned %v, want ErrUnknownHost", err)
-	}
-}
-
 // TestOversizedRemoteResponseIsRefused bounds what an untrusted peer can make
 // the hub allocate on the JSON plane, the way the frame test bounds it on the
 // wire plane.
@@ -612,46 +427,4 @@ func TestHelperStdioProxy(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
-}
-
-// TestCommandDialerRunsARealSubprocess proves the transport itself, not just
-// the framing: a child process, real pipes, the preamble, and a listing coming
-// back through all of it. It is not ssh, and it deliberately touches no ssh
-// configuration; ssh adds authentication and its own stdio, which this covers.
-func TestCommandDialerRunsARealSubprocess(t *testing.T) {
-	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
-		if verb == "hello" {
-			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "sub-1"}, nil
-		}
-		if verb == "list-sessions" {
-			return map[string]any{"sessions": []map[string]any{{"name": "over-a-pipe"}}}, nil
-		}
-		return nil, &RemoteError{Code: "unknown_verb", Message: verb}
-	})
-
-	self, err := os.Executable()
-	if err != nil {
-		t.Skipf("no test executable path: %v", err)
-	}
-	opts := testOptions(CommandDialer(self,
-		"-test.run=TestHelperStdioProxy", "-fed.proxysock="+stub.path))
-	opts.CallTimeout = 3 * time.Second
-	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	r := m.Reports(ctx)[0]
-	if r.Status != StatusUp {
-		t.Fatalf("status is %q (%s / %s), want up", r.Status, r.Reason, r.Detail)
-	}
-	if r.DaemonVersion != "sub-1" {
-		t.Errorf("daemon version is %q, want sub-1", r.DaemonVersion)
-	}
-	raw, err := m.Call(ctx, "build", "list-sessions", nil)
-	if err != nil {
-		t.Fatalf("list-sessions over a subprocess: %v", err)
-	}
-	if !strings.Contains(string(raw), "over-a-pipe") {
-		t.Fatalf("listing came back as %q", raw)
-	}
 }

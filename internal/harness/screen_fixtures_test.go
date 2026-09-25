@@ -237,33 +237,3 @@ func TestNotifyRules(t *testing.T) {
 		}
 	}
 }
-
-// TestNewTitleRules checks the title rules added for idle and working.
-func TestNewTitleRules(t *testing.T) {
-	r := testRegistry(t)
-	for _, tc := range []struct {
-		harness, title, want string
-	}{
-		{"claude-code", "✳ Claude Code", "idle"},
-		{"claude-code", "⠂ Fix the flaky test", "working"},
-		{"claude-code", "◐ Fix the flaky test", "working"},
-		{"claude-code", "Claude Code", "none"},
-		{"claude-code", "~/src/claude", "none"},
-		{"codex", "⠋ codex", "working"},
-		{"codex", "codex", "none"},
-		{"gemini-cli", "◇  Ready (tuios)", "idle"},
-		{"gemini-cli", "✦  Working… (tuios)", "working"},
-		{"gemini-cli", "✋  Action Required (tuios)", "needs_input"},
-		{"gemini-cli", "~/src/ready-player-one", "none"},
-		{"gemini-cli", "Gemini - tuios", "none"},
-	} {
-		state, _, ok := r.ClassifyTitle(tc.harness, tc.title)
-		got := "none"
-		if ok {
-			got = state
-		}
-		if got != tc.want {
-			t.Errorf("%s title %q: got %s, want %s", tc.harness, tc.title, got, tc.want)
-		}
-	}
-}

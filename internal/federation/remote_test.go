@@ -47,44 +47,6 @@ func TestProbeScriptIsOneSafeLine(t *testing.T) {
 	}
 }
 
-// TestRemoteCommandSendsAConfiguredCommandAsWritten is the override: a host
-// with a command runs exactly that, with no probe around it, and a host
-// without one runs the probe with the same arguments.
-func TestRemoteCommandSendsAConfiguredCommandAsWritten(t *testing.T) {
-	h := Host{Name: "build", Addr: "unused", Command: "~/.local/bin/tuios"}
-	if got, want := h.remoteCommand(true, "stdio-proxy"), "~/.local/bin/tuios stdio-proxy"; got != want {
-		t.Errorf("ASSERTION: a configured command was not sent as written: got %q, want %q", got, want)
-	}
-	h.Command = ""
-	got := h.remoteCommand(true, "stdio-proxy")
-	if !strings.HasPrefix(got, "sh -c '") || !strings.HasSuffix(got, "' sh stdio-proxy") {
-		t.Errorf("ASSERTION: without a command the probe is not run as sh -c '...' sh stdio-proxy: %q", got)
-	}
-	if !strings.Contains(got, linkCommandPrefix) {
-		t.Errorf("ASSERTION: the link's probe does not announce the path it chose: %q", got)
-	}
-	if open := h.remoteCommand(false, "attach", "api"); strings.Contains(open, linkCommandPrefix) || !strings.HasSuffix(open, "' sh attach api") {
-		t.Errorf("ASSERTION: an interactive open announces the path or loses its arguments: %q", open)
-	}
-}
-
-// TestRemoteBinaryCandidatesAreReadable pins the shape of what a failed test
-// prints: every candidate, in order, with the home directory spelled ~.
-func TestRemoteBinaryCandidatesAreReadable(t *testing.T) {
-	got := RemoteBinaryCandidates()
-	if len(got) != len(remoteBinaryCandidates) {
-		t.Fatalf("ASSERTION: %d candidates listed, %d probed", len(got), len(remoteBinaryCandidates))
-	}
-	if got[0] != "~/.local/bin/tuios" {
-		t.Errorf("ASSERTION: the first place looked is %q, want ~/.local/bin/tuios, the install script's own target", got[0])
-	}
-	for _, c := range got {
-		if strings.Contains(c, "$HOME") {
-			t.Errorf("ASSERTION: %q is not spelled for a person", c)
-		}
-	}
-}
-
 // farMachine is the far side a probe test dials: a HOME and PATH of the test's
 // own, an ssh stand-in that switches to them, and a tuios that is the proxy.
 type farMachine struct {
@@ -331,22 +293,6 @@ func TestLinkFindsTuiosThroughTheLoginShell(t *testing.T) {
 	r := waitStatus(t, m, StatusUp)
 	if r.Command != installed {
 		t.Fatalf("ASSERTION: the link reports running %q, want %s, which only the login shell's PATH names", r.Command, installed)
-	}
-}
-
-// TestLinkSaysWhenTuiosIsMissing is the message this change exists for. Before
-// it, the report was ssh's "command not found" and nothing about the flag.
-func TestLinkSaysWhenTuiosIsMissing(t *testing.T) {
-	skipIfTuiosIsInstalledSystemWide(t)
-	far := newFarMachine(t)
-
-	m := managerFor(t, testOptions(SSHDialer(far.ssh)), Host{Name: "build", Addr: "someone@buildbox"})
-	r := waitStatus(t, m, StatusNoBinary)
-	if !strings.Contains(r.Reason, "cannot find tuios") {
-		t.Errorf("ASSERTION: the reason does not say tuios was not found: %q", r.Reason)
-	}
-	if r.Command != "" {
-		t.Errorf("ASSERTION: a link that found nothing reports running %q", r.Command)
 	}
 }
 

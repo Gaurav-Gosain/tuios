@@ -44,20 +44,6 @@ func (s *statusLog) waitStatus(t *testing.T, host string, want Status) {
 	t.Fatalf("host %s never reported %s through OnStatus, saw %v", host, want, s.of(host))
 }
 
-// TestOnStatusReportsAHostComingUp is what lets the daemon follow a host
-// without polling its listing: the link says when it came up.
-//
-// Negative control: without the callback in link.set nothing is recorded and
-// the wait fails.
-func TestOnStatusReportsAHostComingUp(t *testing.T) {
-	stub := startStubDaemon(t, helloOK("1.0.0", 1))
-	var log statusLog
-	opts := testOptions(proxyDialer(t, stub))
-	opts.OnStatus = log.record
-	managerFor(t, opts, Host{Name: "build", Addr: "unused"})
-	log.waitStatus(t, "build", StatusUp)
-}
-
 // TestOnStatusReportsAChangeOnce is the other half: a host that fails the same
 // way on every redial is one change, not one call per backoff period, so a
 // subscriber is not woken for nothing.

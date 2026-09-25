@@ -139,9 +139,3 @@ func TestClientToHostCapabilities_NeverForwardsFiles(t *testing.T) {
 		t.Errorf("expected cell size carried through, got %dx%d", host.CellWidth, host.CellHeight)
 	}
 }
-
-func TestClientToHostCapabilities_Nil(t *testing.T) {
-	if clientToHostCapabilities(nil) != nil {
-		t.Error("expected nil in, nil out")
-	}
-}

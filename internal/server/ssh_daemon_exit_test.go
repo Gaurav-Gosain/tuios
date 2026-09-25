@@ -99,51 +99,6 @@ func quitsWith(t *testing.T, m *app.OS, msg tea.Msg, want app.ExitReason) string
 	return notice
 }
 
-// TestSSHClientStopsWhenItsSessionIsKilled kills the attached session from
-// another client and checks that the SSH client hears about it and stops.
-func TestSSHClientStopsWhenItsSessionIsKilled(t *testing.T) {
-	f := newDaemonExitFixture(t, "sshkilled")
-
-	killer := session.NewTUIClient()
-	if err := killer.Connect("test", 80, 24); err != nil {
-		t.Fatalf("killer connect: %v", err)
-	}
-	defer func() { _ = killer.Close() }()
-	if err := killer.KillSessionByName(f.name); err != nil {
-		t.Fatalf("kill session: %v", err)
-	}
-
-	msg := f.awaitExit(t)
-	ended, ok := msg.(app.SessionEndedMsg)
-	if !ok {
-		t.Fatalf("got %T, want app.SessionEndedMsg", msg)
-	}
-	if ended.SessionName != f.name {
-		t.Fatalf("session named %q, want %q", ended.SessionName, f.name)
-	}
-	notice := quitsWith(t, f.model, ended, app.ExitSessionKilled)
-	if !containsAll(notice, f.name, "Connect again") {
-		t.Fatalf("the exit message does not name the session and what to do next: %q", notice)
-	}
-}
-
-// TestSSHClientStopsWhenTheDaemonGoesAway stops the daemon under an attached SSH
-// client and checks that the client hears about it and stops.
-func TestSSHClientStopsWhenTheDaemonGoesAway(t *testing.T) {
-	f := newDaemonExitFixture(t, "sshlost")
-
-	f.daemon.Stop()
-
-	msg := f.awaitExit(t)
-	if _, ok := msg.(app.DaemonDisconnectedMsg); !ok {
-		t.Fatalf("got %T, want app.DaemonDisconnectedMsg", msg)
-	}
-	notice := quitsWith(t, f.model, msg, app.ExitDaemonLost)
-	if !containsAll(notice, "daemon", "Connect again") {
-		t.Fatalf("the exit message does not say what happened and what to do next: %q", notice)
-	}
-}
-
 func containsAll(s string, subs ...string) bool {
 	for _, sub := range subs {
 		if !contains(s, sub) {

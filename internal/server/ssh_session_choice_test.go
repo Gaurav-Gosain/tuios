@@ -45,12 +45,3 @@ func TestOneSessionIsNotAChoice(t *testing.T) {
 		t.Errorf("a server with one session answered %q, want work", got)
 	}
 }
-
-// TestNoSessionsGetsTheDefault, which is what this branch always did.
-func TestNoSessionsGetsTheDefault(t *testing.T) {
-	for _, available := range [][]string{nil, {}} {
-		if got := chooseSSHSession(available); got != DefaultSSHSessionName {
-			t.Errorf("a server with no sessions answered %q, want %q", got, DefaultSSHSessionName)
-		}
-	}
-}

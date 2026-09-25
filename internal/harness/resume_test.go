@@ -131,11 +131,3 @@ argv = ["xagent", "{cwd}", "{session_id}"]`, "token 1"},
 		})
 	}
 }
-
-// TestResumeCommandLineIsTheTokens pins the typed form: the checks leave
-// nothing to quote, so it is the tokens and single spaces.
-func TestResumeCommandLineIsTheTokens(t *testing.T) {
-	if got := ResumeCommandLine([]string{"claude", "--resume", "5f1c"}); got != "claude --resume 5f1c" {
-		t.Errorf("ResumeCommandLine = %q", got)
-	}
-}

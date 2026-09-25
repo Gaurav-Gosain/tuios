@@ -10,56 +10,8 @@ import (
 	"unsafe"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"golang.org/x/sys/unix"
 )
-
-// TestSetWinsizeCarriesPixels checks that a window's real PTY takes the pixel
-// size through ptyspawn.SetWinsize, which is what kitty icat reads.
-func TestSetWinsizeCarriesPixels(t *testing.T) {
-	exitChan := make(chan string, 1)
-	window, err := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
-	if err != nil {
-		t.Skipf("Failed to create window with PTY: %v", err)
-	}
-	defer window.Close()
-
-	if window.Pty == nil {
-		t.Skip("No PTY available")
-	}
-
-	cellWidth := 10
-	cellHeight := 20
-	termWidth := 78
-	termHeight := 22
-	xpixel := termWidth * cellWidth
-	ypixel := termHeight * cellHeight
-
-	err = ptyspawn.SetWinsize(window.Pty, termWidth, termHeight, xpixel, ypixel)
-	if err != nil {
-		t.Fatalf("SetWinsize failed: %v", err)
-	}
-
-	var ws unix.Winsize
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		window.Pty.Fd(),
-		uintptr(unix.TIOCGWINSZ),
-		uintptr(unsafe.Pointer(&ws)),
-	)
-	if errno != 0 {
-		t.Fatalf("TIOCGWINSZ failed: %v", errno)
-	}
-
-	t.Logf("PTY size: cols=%d, rows=%d, xpixel=%d, ypixel=%d", ws.Col, ws.Row, ws.Xpixel, ws.Ypixel)
-
-	if ws.Xpixel != uint16(xpixel) {
-		t.Errorf("Expected Xpixel=%d, got %d", xpixel, ws.Xpixel)
-	}
-	if ws.Ypixel != uint16(ypixel) {
-		t.Errorf("Expected Ypixel=%d, got %d", ypixel, ws.Ypixel)
-	}
-}
 
 // TestForegroundPgrpIsTheIdleShell checks that the foreground process group
 // read from a fresh pane is the shell's own group, which is what

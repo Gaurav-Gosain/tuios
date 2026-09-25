@@ -18,16 +18,14 @@ import (
 // and once under -tags ghostty, and the two agree:
 //
 //   - RecordScrollAnchor returning at the top, so nothing is ever anchored:
-//     TestAnchorHoldsUnderNewOutput fails saying the scroll was recorded as
-//     line 0 with anchored=false, TestAnchorHoldsWhenHistoryIsMergedNotPrinted
-//     fails saying the history grew by 300 lines and the offset stayed at 20,
+//     TestAnchorHoldsWhenHistoryIsMergedNotPrinted fails saying the history grew by 300 lines and the offset stayed at 20,
 //     TestAClearedHistoryPutsThePaneBackOnLiveOutput fails with an offset of 20
 //     against an empty history, and
 //     TestOutputBetweenTheTwoHalvesIsNotMistakenForAScroll fails saying the
 //     view drifted from line 59 to line 109.
 //   - ApplyScrollAnchor returning at the top, so nothing derives an offset:
-//     the same four fail. The first one's message is the report itself, "the
-//     view slid from line 59 to line 99 under 40 lines of new output".
+//     the same three fail. The plain case, new output under a scrolled pane,
+//     is held end to end by e2e/tui/scroll_anchor_test.go.
 //   - The clamp's lower end (max(..., 0)) removed:
 //     TestAClearedHistoryPutsThePaneBackOnLiveOutput fails with an offset of
 //     -59, which the render path would read as a row before the start of the
@@ -80,36 +78,6 @@ func scrollBackTo(w *Window, offset int) {
 	w.CopyMode.ScrollOffset = offset
 	w.ScrollbackOffset = offset
 	w.RecordScrollAnchor()
-}
-
-// TestAnchorHoldsUnderNewOutput is the report: a pane scrolled back must stay
-// on the line the user stopped at while the guest keeps printing.
-func TestAnchorHoldsUnderNewOutput(t *testing.T) {
-	w := anchorWindow(t, "anchor-output")
-	printLines(t, w, "OLD", 100)
-
-	before := w.ScrollbackLen()
-	scrollBackTo(w, 20)
-	line, ok := w.ScrollAnchorLine()
-	if !ok || line != before-20 {
-		t.Fatalf("the scroll was recorded as line %d (anchored=%v), want %d", line, ok, before-20)
-	}
-
-	printLines(t, w, "NEW", 40)
-	w.ApplyScrollAnchor()
-
-	if got := w.ScrollbackLen(); got != before+40 {
-		t.Fatalf("the history is %d lines long, want %d; this test is not exercising a "+
-			"growing history", got, before+40)
-	}
-	if got := w.ScrollbackLen() - w.ScrollbackOffset; got != before-20 {
-		t.Fatalf("the view slid from line %d to line %d under 40 lines of new output; a "+
-			"scrolled pane must stay on the line the user stopped at", before-20, got)
-	}
-	if w.CopyMode.ScrollOffset != w.ScrollbackOffset {
-		t.Fatalf("copy mode is at offset %d and the render path at %d; the two must agree",
-			w.CopyMode.ScrollOffset, w.ScrollbackOffset)
-	}
 }
 
 // TestAnchorHoldsWhenHistoryIsMergedNotPrinted is the control on the shape of

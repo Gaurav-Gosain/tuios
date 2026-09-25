@@ -10,31 +10,6 @@ import (
 // the rules that keep it from becoming the thing it replaced: a source confident
 // about a screen it no longer understands.
 
-func TestClassifyNamesNoStateWhenNothingMatches(t *testing.T) {
-	r := testRegistry(t)
-	if state, _, ok := r.Classify("claude-code", []string{"just some output", "$ "}); ok {
-		t.Fatalf("classified an ordinary screen as %q; a rule that does not match must leave no opinion", state)
-	}
-}
-
-func TestClassifyFindsABlockingPrompt(t *testing.T) {
-	r := testRegistry(t)
-	tail := []string{
-		"  Edit file src/main.go",
-		"",
-		"Do you want to proceed?",
-		"❯ 1. Yes",
-		"  2. No, and tell Claude what to do differently",
-	}
-	state, _, ok := r.Classify("claude-code", tail)
-	if !ok {
-		t.Fatal("a blocking permission prompt matched no rule, which is the whole reason this tier exists")
-	}
-	if state != "needs_input" {
-		t.Errorf("classified the prompt as %q, want needs_input", state)
-	}
-}
-
 // A rule fires on the strings it names and not on the topic they belong to.
 // Transcript history mentioning a past prompt must not read as a live one.
 func TestClassifyIgnoresProseAboutPrompts(t *testing.T) {

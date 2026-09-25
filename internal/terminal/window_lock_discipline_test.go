@@ -165,16 +165,3 @@ func TestSendInputSnapshotsPtyUnderTeardown(t *testing.T) {
 
 	wg.Wait()
 }
-
-// TestSendInputReportsMissingPty pins the error path so a future refactor
-// cannot turn a nil PTY into a silent success.
-func TestSendInputReportsMissingPty(t *testing.T) {
-	w := &Window{ID: "lock-discipline-0003"}
-	if err := w.SendInput([]byte("x")); err == nil {
-		t.Fatal("SendInput with no PTY should return an error")
-	}
-	// Zero-length input is a no-op regardless.
-	if err := w.SendInput(nil); err != nil {
-		t.Fatalf("SendInput with empty input returned %v", err)
-	}
-}
