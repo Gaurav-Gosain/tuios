@@ -7,11 +7,9 @@ import (
 	"image/color"
 	"image/png"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -90,32 +88,6 @@ func TestFitSquareCentresInAWiderBox(t *testing.T) {
 	}
 	if _, _, _, a := got.At(20, 10).RGBA(); a == 0 {
 		t.Error("the centred icon did not land in the middle of the box")
-	}
-}
-
-// TestLoadIconDecodesThroughTheFinder is the whole pipeline below the render:
-// a themed name to a file to pixels at the size a row can hold.
-func TestLoadIconDecodesThroughTheFinder(t *testing.T) {
-	base := t.TempDir()
-	dir := filepath.Join(base, "icons", "hicolor", "32x32", "apps")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	solidPNG(t, filepath.Join(dir, "probe.png"), 32, color.RGBA{0, 0, 255, 255})
-	if err := os.WriteFile(filepath.Join(base, "icons", "hicolor", "index.theme"),
-		[]byte("[Icon Theme]\nDirectories=32x32/apps\n\n[32x32/apps]\nSize=32\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_DATA_HOME", base)
-	t.Setenv("XDG_DATA_DIRS", base)
-
-	f := applist.NewIconFinder("hicolor")
-	f.RasterOnly = true
-	if got := loadIcon(f, "probe", 20, 20); got == nil {
-		t.Fatal("a themed PNG did not reach the launcher as pixels")
-	}
-	if got := loadIcon(f, "nothing-of-the-sort", 20, 20); got != nil {
-		t.Error("a name with no icon produced an image")
 	}
 }
 

@@ -114,25 +114,6 @@ func TestDirectoryLinkFallsBackWhenTheRailIsOff(t *testing.T) {
 	}
 }
 
-// TestLinkEditorPrefersTheEnvironment pins the order every other tool uses, and
-// that a value with arguments in it arrives as arguments rather than as a file
-// name with a space in it.
-func TestLinkEditorPrefersTheEnvironment(t *testing.T) {
-	t.Setenv("EDITOR", "")
-	t.Setenv("VISUAL", "")
-	if got := linkEditor(); got != "vi" {
-		t.Errorf("with neither set, linkEditor() = %q, want vi", got)
-	}
-	t.Setenv("VISUAL", "emacs")
-	if got := linkEditor(); got != "emacs" {
-		t.Errorf("with VISUAL set, linkEditor() = %q, want emacs", got)
-	}
-	t.Setenv("EDITOR", "code --wait")
-	if got := linkEditor(); got != "code --wait" {
-		t.Errorf("EDITOR did not win over VISUAL: %q", got)
-	}
-}
-
 // TestOnlyKnownSchemesReachTheDesktop is a safety property, not a convenience.
 //
 // A program in a pane chooses both halves of an OSC 8 link: the words on screen

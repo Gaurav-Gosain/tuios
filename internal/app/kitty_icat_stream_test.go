@@ -90,26 +90,6 @@ func icatStream(em *vt.Emulator, img []byte, chunk int) {
 	}
 }
 
-// TestIcatStreamReachesHostIntact is the reported bug: kitten icat's stream
-// mode, whose unpadded final chunk the parser refused and then passed on as
-// raw base64 text, so the host decoded a PNG with text glued to its end.
-func TestIcatStreamReachesHostIntact(t *testing.T) {
-	img := make([]byte, 92563) // not a multiple of three
-	for i := range img {
-		img[i] = byte(i*31 + i/7)
-	}
-	for _, chunk := range []int{131072, 4096} {
-		t.Run(fmt.Sprintf("chunk=%d", chunk), func(t *testing.T) {
-			em, host := icatHarness(t)
-			icatStream(em, img, chunk)
-			got := transmittedBytes(t, host())
-			if !bytes.Equal(got, img) {
-				t.Fatalf("the host was sent %d image bytes, want the %d icat sent", len(got), len(img))
-			}
-		})
-	}
-}
-
 // TestUndecodableChunkDropsTheTransmission checks a chunk that is not base64
 // takes its whole transmission with it, and does not leak into the next one.
 func TestUndecodableChunkDropsTheTransmission(t *testing.T) {

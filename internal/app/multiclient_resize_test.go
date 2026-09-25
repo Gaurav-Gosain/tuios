@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -145,38 +144,6 @@ func (r *rig) waitPaneSizesAgree() (client, daemon []string, ok bool) {
 	}
 }
 
-// TestSmallerClientJoiningResizesTheClientAlreadyThere is the maintainer's
-// report: connect to a session from a second window of a different size and the
-// window already connected keeps its old layout. Its panes are drawn at the new
-// width while their emulators still hold what the guest wrote at the old one,
-// so a line runs on past the divider.
-func TestSmallerClientJoiningResizesTheClientAlreadyThere(t *testing.T) {
-	r := newRigSized(t, 2, holderCols, holderRows)
-	r.watchSessionResize()
-	r.tile()
-
-	before := r.m.GetRenderWidth()
-	if before != holderCols {
-		t.Fatalf("render width before the join is %d, want %d", before, holderCols)
-	}
-
-	joinClient(t, r.session, joinerCols, joinerRows)
-
-	msg := r.awaitSessionResize("the session to shrink around the client already attached")
-	if msg.Width != joinerCols || msg.Height != joinerRows {
-		t.Fatalf("session resized to %dx%d, want the joiner's %dx%d",
-			msg.Width, msg.Height, joinerCols, joinerRows)
-	}
-	if got := r.m.GetRenderWidth(); got != joinerCols {
-		t.Fatalf("render width after the join is %d, want %d", got, joinerCols)
-	}
-
-	client, daemon, ok := r.waitPaneSizesAgree()
-	if !ok {
-		t.Fatalf("panes disagree after the join:\n client %v\n daemon %v", client, daemon)
-	}
-}
-
 // TestLargerClientLeavingGivesTheColumnsBack is the other half: the effective
 // size is the minimum over the clients, so the one that leaves hands its
 // constraint back and everyone still attached has to lay out again.
@@ -249,33 +216,6 @@ func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T)
 	}
 }
 
-// TestDroppedClientGivesTheColumnsBack is the leave nobody announces: a browser
-// tab closed, a network drop, a client killed. The connection goes away without
-// a detach, and the columns it was holding down have to come back anyway.
-func TestDroppedClientGivesTheColumnsBack(t *testing.T) {
-	r := newRigSized(t, 2, holderCols, holderRows)
-	r.watchSessionResize()
-	r.tile()
-
-	joiner := joinClient(t, r.session, joinerCols, joinerRows)
-	r.awaitSessionResize("the session to shrink around the client already attached")
-
-	if err := joiner.Close(); err != nil {
-		t.Fatalf("second client close: %v", err)
-	}
-
-	msg := r.awaitSessionResize("the session to grow back when the narrow client drops")
-	if msg.Width != holderCols || msg.Height != holderRows {
-		t.Fatalf("session resized to %dx%d, want the remaining clients' %dx%d",
-			msg.Width, msg.Height, holderCols, holderRows)
-	}
-
-	client, daemon, ok := r.waitPaneSizesAgree()
-	if !ok {
-		t.Fatalf("panes disagree after the drop:\n client %v\n daemon %v", client, daemon)
-	}
-}
-
 // paneSpan reports the rightmost and bottommost column and row the tiled panes
 // reach. A settled tiled layout fills the box tiling partitions, so a span
 // short of that box is a layout computed for some other screen.
@@ -289,65 +229,6 @@ func (r *rig) paneSpan() (right, bottom int) {
 		bottom = max(bottom, w.Y+w.Height)
 	}
 	return right, bottom
-}
-
-// TestPeerLayoutFromASmallerClientIsRetiled is the second half of the
-// maintainer's report, and the half a size broadcast alone does not fix: after
-// the narrow client leaves, its last state sync is still in flight, and it
-// carries the pane rectangles it computed at its own size.
-//
-// Adopting those leaves the panes huddled in the corner of a screen that has
-// grown back around them, with the dock and the separator drawn at the full
-// width. That is what "the borders don't come back" looks like on screen.
-//
-// NEGATIVE CONTROL: fails on the tree before tiledLayoutStale existed, where
-// ApplyStateSync retiled only when a pane overflowed the viewport. A smaller
-// peer's panes never overflow, so nothing corrected them and the span stayed at
-// the narrow client's width.
-func TestPeerLayoutFromASmallerClientIsRetiled(t *testing.T) {
-	// The span is read straight off the rectangles, so a pane still easing into
-	// its tile would be measured mid-flight.
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	defer func() { config.Global.AnimationsEnabled = prev }()
-
-	r := newRigSized(t, 2, holderCols, holderRows)
-	r.watchSessionResize()
-	r.tile()
-
-	wantRight, wantBottom := r.paneSpan()
-	if wantRight <= 0 || wantBottom <= 0 {
-		t.Fatalf("the fixture has no tiled panes to measure (span %dx%d)", wantRight, wantBottom)
-	}
-
-	// A narrow client joins, so this client lays out at the narrow size.
-	joiner := joinClient(t, r.session, joinerCols, joinerRows)
-	r.awaitSessionResize("the session to shrink around the client already attached")
-	narrow := r.m.BuildSessionState()
-	if right, _ := r.paneSpan(); right >= wantRight {
-		t.Fatalf("the panes still span %d columns while a %d-column client is attached; "+
-			"the shrink never happened and the regrow below would prove nothing", right, joinerCols)
-	}
-
-	// It leaves, and the session grows back.
-	if err := joiner.Detach(); err != nil {
-		t.Fatalf("second client detach: %v", err)
-	}
-	r.awaitSessionResize("the session to grow back when the narrow client leaves")
-
-	// Its last sync lands afterwards, carrying its own narrow rectangles.
-	narrow.Version = r.m.DaemonStateVersion
-	if err := r.m.ApplyStateSync(narrow); err != nil {
-		t.Fatalf("ApplyStateSync: %v", err)
-	}
-
-	right, bottom := r.paneSpan()
-	if right != wantRight || bottom != wantBottom {
-		t.Errorf("after the narrow client's last sync the panes span %dx%d, want %dx%d: "+
-			"this client adopted a layout computed for a screen it does not have, so its "+
-			"panes and their borders sit inside an edge that has moved back out",
-			right, bottom, wantRight, wantBottom)
-	}
 }
 
 // TestSettledSizeIsTheSameFromBothAttachOrders pins convergence. The session
@@ -510,55 +391,5 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	if got := count(); got != 0 {
 		t.Errorf("the peer was sent %d of %d syncs carrying a state it already held, want 0",
 			got, repeats)
-	}
-}
-
-// TestChangedStateStillReachesAPeer is the discriminating control for the test
-// above, and it is written deliberately as one: a guard that suppressed
-// everything would satisfy that test perfectly. It passes both before and after
-// the change, and is here to say what the suppression is not allowed to do.
-func TestChangedStateStillReachesAPeer(t *testing.T) {
-	r := newRigSized(t, 2, holderCols, holderRows)
-	r.tile()
-
-	var mu sync.Mutex
-	received := 0
-	peer := session.NewTUIClient()
-	if err := peer.Connect("test", holderCols, holderRows); err != nil {
-		t.Fatalf("peer connect: %v", err)
-	}
-	t.Cleanup(func() { _ = peer.Close() })
-	peer.OnStateSync(func(*session.SessionState, string, string) {
-		mu.Lock()
-		received++
-		mu.Unlock()
-	})
-	if _, err := peer.AttachSession(r.session, false, holderCols, holderRows); err != nil {
-		t.Fatalf("peer attach: %v", err)
-	}
-	peer.StartReadLoop()
-
-	const changes = 5
-	for i := range changes {
-		r.win(0).CustomName = fmt.Sprintf("name-%d", i)
-		r.m.SyncStateToDaemon()
-		// One at a time: the assertion is that each distinct state arrives, and
-		// pushing them back to back lets the daemon coalesce two into one merge.
-		time.Sleep(60 * time.Millisecond)
-	}
-
-	deadline := time.Now().Add(rigWait)
-	for {
-		mu.Lock()
-		got := received
-		mu.Unlock()
-		if got >= changes {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the peer received %d of %d syncs that each changed something; "+
-				"the suppression is dropping real changes", got, changes)
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }

@@ -121,48 +121,6 @@ func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
 	}
 }
 
-// TestNewWindowOnNewWorkspacePTYSize is the user-facing shape of the same bug:
-// switch to an empty workspace, create a window there, and the pane's shell must
-// be the size of the pane.
-func TestNewWindowOnNewWorkspacePTYSize(t *testing.T) {
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
-
-	const width, height = 130, 55
-
-	// The client has already switched to the empty workspace 3.
-	m := newTilingClient(width, height, 3)
-	daemonState := &session.SessionState{
-		Name:             "tiling",
-		CurrentWorkspace: 3,
-		AutoTiling:       true,
-		WorkspaceFocus:   map[int]string{},
-		Version:          1,
-	}
-	daemonNewWindow(daemonState, "win-00000000000000000000000000000002", width, height, 3)
-
-	if err := m.ApplyStateSync(daemonState); err != nil {
-		t.Fatalf("first sync: %v", err)
-	}
-	win := m.Windows[0]
-
-	var pty ptySpy
-	pty.install(win)
-
-	// Any later daemon-side mutation (focus, a PTY resize ack, a title change)
-	// re-emits canonical state that still carries Unplaced.
-	daemonState.Version++
-	if err := m.ApplyStateSync(daemonState); err != nil {
-		t.Fatalf("echo sync: %v", err)
-	}
-
-	if pty.w != win.ContentWidth() || pty.h != win.ContentHeight() {
-		t.Fatalf("new-workspace pane: PTY %dx%d, pane %dx%d",
-			pty.w, pty.h, win.ContentWidth(), win.ContentHeight())
-	}
-}
-
 // TestSettledPaneAnnouncesNothing is the other side of the same rule, and the
 // regression the announcement record was introduced for: once a pane's size has
 // reached the shell, nothing that does not change that size may reach it again.

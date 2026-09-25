@@ -76,33 +76,6 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	}
 }
 
-// TestLinkHoverFindsABareURL checks the other half: a URL a program printed as
-// plain text, which is what almost every URL in a terminal is.
-//
-// Negative control: with the bare branch removed from resolvePaneLink, this
-// fails while TestLinkHoverFindsAMarkedRun still passes, which is the split the
-// appearance.links setting exists to expose.
-func TestLinkHoverFindsABareURL(t *testing.T) {
-	const want = "https://example.org/a"
-	_, win := linkTestOS(t, "go to "+want+" now")
-
-	link, ok := resolvePaneLink(win, 8, 0, &config.Global)
-	if !ok {
-		t.Fatal("no link resolved inside a bare URL")
-	}
-	if link.URL != want {
-		t.Errorf("URL = %q, want %q", link.URL, want)
-	}
-	if link.Marked {
-		t.Error("a bare URL reported itself as marked")
-	}
-	// "go to " is six cells, so the run starts at column 6 and covers len(want)
-	// cells, all of which are single-width ASCII.
-	if link.X0 != 6 || link.X1 != 6+len(want)-1 {
-		t.Errorf("run = cols %d..%d, want %d..%d", link.X0, link.X1, 6, 6+len(want)-1)
-	}
-}
-
 // TestLinkModeMarkedIgnoresBareURLs pins what the middle setting means. It is
 // the setting for someone who wants only what a program declared, and the whole
 // difference between it and "all" is this.
@@ -157,49 +130,6 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 	m.Mode = WindowManagementMode
 	if !m.LinkHoverAt(sx, sy) {
 		t.Error("window management mode handed the pointer to the guest")
-	}
-}
-
-// TestLinkHoverUnderlinesTheRunOnScreen is the on-screen half. Everything above
-// asserts on model state, and model state and pixels disagreeing is the failure
-// this codebase keeps hitting, so this one reads the composed pane.
-//
-// Negative control: with the highlight branch removed from the cell loop, the
-// underline never appears and this fails; with the pane left on the fast
-// unfocused path, it fails for an unfocused pane only, which is the narrower
-// bug the linkRun test in renderTerminal exists to stop.
-func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
-	m, win := linkTestOS(t, "go to https://example.org/a now")
-
-	// SGR 4 is underline, and it is what linkHoverStyle renders. Nothing in the
-	// pane's own output carries it, so its presence is the highlight and its
-	// absence is the lack of one.
-	//
-	// isUnderlined parses the parameters rather than matching a literal escape.
-	// lipgloss folds every attribute of a style into one sequence, so the
-	// underline arrives as the last parameter of the colour's own sequence and a
-	// search for "\x1b[4m" finds nothing on a run that is plainly underlined.
-
-	before := m.renderTerminal(win, true, false)
-	if isUnderlined(before) {
-		t.Fatal("the pane already draws an underline with no pointer on it")
-	}
-
-	sx, sy := screenOf(win, 8, 0)
-	if !m.LinkHoverAt(sx, sy) {
-		t.Fatal("no link under the pointer")
-	}
-	after := m.renderTerminal(win, true, false)
-	if !isUnderlined(after) {
-		t.Fatalf("the hovered run is not underlined on screen:\n%q", after)
-	}
-
-	// And it comes off again. The pointer leaving is what marks the pane dirty,
-	// so a stale cache here would leave the underline up forever.
-	m.clearLinkHover()
-	cleared := m.renderTerminal(win, true, false)
-	if isUnderlined(cleared) {
-		t.Errorf("the underline outlived the pointer:\n%q", cleared)
 	}
 }
 

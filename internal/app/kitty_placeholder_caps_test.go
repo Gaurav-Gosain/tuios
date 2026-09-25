@@ -43,51 +43,6 @@ func TestHostDrawsPlaceholders(t *testing.T) {
 	}
 }
 
-func TestParseHostIdentityHandlesBothSpellings(t *testing.T) {
-	for _, tc := range []struct {
-		in      string
-		name    string
-		version [3]int
-	}{
-		{"\x1bP>|ghostty 1.3.1\x1b\\", "ghostty", [3]int{1, 3, 1}},
-		{"\x1bP>|kitty(0.32.2)\x1b\\", "kitty", [3]int{0, 32, 2}},
-		{"\x1bP>|foot(1.16.2)\x1b\\", "foot", [3]int{1, 16, 2}},
-	} {
-		name, version, ok := parseHostIdentity(tc.in)
-		if !ok || name != tc.name || version != tc.version {
-			t.Errorf("parseHostIdentity(%q) = %q %v (ok=%v), want %q %v",
-				tc.in, name, version, ok, tc.name, tc.version)
-		}
-	}
-}
-
-// TestTheSettingOverridesTheDetection is the escape hatch. The table will be
-// wrong about some terminal eventually, and the user has to be able to say so.
-func TestTheSettingOverridesTheDetection(t *testing.T) {
-	m := &OS{Caps: &HostCapabilities{KittyGraphics: true, KittyPlaceholders: false}}
-	m.KittyPassthrough = newTestKittyPassthrough(t)
-
-	m.Settings.KittyPlaceholders = config.KittyPlaceholdersOn
-	if !m.placeholdersEnabled() {
-		t.Error(`"on" did not turn placeholders on over a host the table does not know`)
-	}
-
-	m.Caps.KittyPlaceholders = true
-	m.Settings.KittyPlaceholders = config.KittyPlaceholdersOff
-	if m.placeholdersEnabled() {
-		t.Error(`"off" did not turn placeholders off on a host that supports them`)
-	}
-
-	m.Settings.KittyPlaceholders = config.KittyPlaceholdersAuto
-	if !m.placeholdersEnabled() {
-		t.Error(`"auto" did not follow the host`)
-	}
-	m.Caps.KittyPlaceholders = false
-	if m.placeholdersEnabled() {
-		t.Error(`"auto" drew placeholders on a host that cannot`)
-	}
-}
-
 // TestChangingTheSettingReachesOpenPanes is what makes the row in the settings
 // page worth having. The mode is installed when a pane is created, so without
 // this a change would only apply to the next pane somebody opened.

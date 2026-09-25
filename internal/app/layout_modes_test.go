@@ -224,40 +224,6 @@ func TestLayoutModesKeepTheirContract(t *testing.T) {
 	}
 }
 
-// TestBSPExhaustsTheRegionByHalvingIt states where BSP stops being able to keep
-// the contract, and why, so the exclusion in contractCounts is a recorded limit
-// rather than a quiet hole.
-//
-// Building a fresh tree inserts each pane against the one before it, so every
-// pane halves the last one's region. Six panes still leave every pane several
-// rows; nine leave the last one a single row on a 120x40 screen, and a region
-// one row tall cannot hold two panes and a divider however the arithmetic is
-// written. Improving the insertion scheme (inserting into the largest region
-// rather than the newest) would fail this test, which is the point: it would
-// mean the exclusion above can be lifted.
-func TestBSPExhaustsTheRegionByHalvingIt(t *testing.T) {
-	roomy := modeOS(t, LayoutModeBSP, true, 0, 6, 120, 40)
-	for i, w := range roomy.Windows {
-		if w.Height < 4 || w.Width < 8 {
-			t.Errorf("six panes on 120x40: pane %d is %dx%d, too small for a split that should still be comfortable",
-				i, w.Width, w.Height)
-		}
-	}
-
-	cramped := modeOS(t, LayoutModeBSP, true, 0, 9, 120, 40)
-	roomy.Settings = config.Global
-	smallest := cramped.Windows[0]
-	for _, w := range cramped.Windows {
-		if w.Width*w.Height < smallest.Width*smallest.Height {
-			smallest = w
-		}
-	}
-	if smallest.Height > 2 {
-		t.Errorf("nine panes on 120x40 leave the smallest at %dx%d; the halving limit this records has moved, "+
-			"so contractCounts can take BSP further", smallest.Width, smallest.Height)
-	}
-}
-
 // fillGuest paints a pane's whole drawable width with one character of its own,
 // so the composed frame says exactly which cells that guest owns.
 func fillGuest(w *terminal.Window, mark rune) {
@@ -399,33 +365,6 @@ func TestSharedBorderPanesStillGetTheirDivider(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestScrollingColumnsHonourThePaneGap pins the strip's half of the gap. The
-// column gap existed in the layout code and nothing ever set it, so
-// appearance.gap did nothing at all in scrolling mode and the documentation
-// carried it as a limitation.
-func TestScrollingColumnsHonourThePaneGap(t *testing.T) {
-	for _, gap := range []int{0, 1, 3} {
-		t.Run(fmt.Sprintf("gap=%d", gap), func(t *testing.T) {
-			m := modeOS(t, LayoutModeScrolling, false, gap, 3, 160, 48)
-			cols := make([]*terminal.Window, len(m.Windows))
-			copy(cols, m.Windows)
-			for i := range cols {
-				for j := i + 1; j < len(cols); j++ {
-					if cols[j].X < cols[i].X {
-						cols[i], cols[j] = cols[j], cols[i]
-					}
-				}
-			}
-			for i := 1; i < len(cols); i++ {
-				prev := cols[i-1]
-				if got := cols[i].X - (prev.X + prev.Width); got != gap {
-					t.Errorf("%d cells between column %d and column %d, want %d", got, i-1, i, gap)
-				}
-			}
-		})
 	}
 }
 

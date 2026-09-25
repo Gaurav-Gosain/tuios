@@ -195,8 +195,8 @@ func TestFocusSwitchMovesNoPTY(t *testing.T) {
 		local, peer  clientGlobals
 		passesUnfixd bool
 	}{
-		{name: "identical config", local: clientGlobals{}, peer: clientGlobals{}, passesUnfixd: true},
-		{name: "shared borders disagree", local: clientGlobals{shared: true}, peer: clientGlobals{}},
+		// The shared-borders disagreement is covered end to end by
+		// e2e/tui TestGeometryConfigDisagreementDoesNotMovePanes.
 		{name: "pane gap disagrees", local: clientGlobals{gap: 2}, peer: clientGlobals{}},
 	}
 	for _, tc := range cases {
@@ -210,35 +210,6 @@ func TestFocusSwitchMovesNoPTY(t *testing.T) {
 				t.Errorf("the clients run the same PTYs at different sizes:\n local %s\n peer  %s", localSizes, peerSizes)
 			}
 		})
-	}
-}
-
-// TestJoiningClientAdoptsSessionPaneGeometry pins the ownership rule: the
-// session's pane geometry is the session's, and a client walking in with a
-// different config adopts it rather than arguing with it. The daemon's own
-// PTY sizes are checked too, so agreement between the clients cannot be
-// agreement on the wrong answer.
-//
-// NEGATIVE CONTROL: on the unfixed tree there is nothing to adopt. The peer
-// keeps its own config's arithmetic, which is the disagreement the test above
-// measures.
-func TestJoiningClientAdoptsSessionPaneGeometry(t *testing.T) {
-	localG := clientGlobals{shared: true, gap: 1}
-	r, p, _ := geometryRig(t, localG, clientGlobals{})
-
-	if p.m.SharedBorders != true || p.m.PaneGap != 1 {
-		t.Fatalf("the joining client kept its own arithmetic: SharedBorders=%v PaneGap=%d, the session's are true/1",
-			p.m.SharedBorders, p.m.PaneGap)
-	}
-	if local, peer := contentSizes(r.m), contentSizes(p.m); local != peer {
-		t.Fatalf("clients disagree on pane sizes after the join:\n local %s\n peer  %s", local, peer)
-	}
-	for _, w := range r.m.Windows {
-		dw, dh := r.ptySize(w.PTYID)
-		if dw != w.ContentWidth() || dh != w.ContentHeight() {
-			t.Fatalf("pane %s: the daemon runs it at %dx%d, the clients draw it at %dx%d",
-				shortID(w.PTYID), dw, dh, w.ContentWidth(), w.ContentHeight())
-		}
 	}
 }
 

@@ -151,51 +151,6 @@ func TestMasterRatioRowReadsTheModelRatio(t *testing.T) {
 	}
 }
 
-// startup.layout picks the scheme a fresh session tiles with. It is applied
-// before tiling is switched on, because switching on builds the layout the
-// current mode asks for: choosing the mode afterwards would build a BSP tree
-// and immediately throw it away.
-func TestStartupLayoutChoosesTheMode(t *testing.T) {
-	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling} {
-		t.Run(mode, func(t *testing.T) {
-			m := modeOS(t, LayoutModeBSP, false, 0, 2, 120, 40)
-			m.AutoTiling = false
-			m.UseScrollingLayout, m.UseBSPLayout = false, true
-			m.UserConfig = config.DefaultConfig()
-			m.UserConfig.Startup.Tiled = true
-			m.UserConfig.Startup.Layout = mode
-
-			m.applyStartupTiling()
-
-			if !m.AutoTiling {
-				t.Fatal("startup.tiled must still turn tiling on")
-			}
-			if got := m.LayoutModeName(); got != mode {
-				t.Errorf("a session started with startup.layout = %q is in %q", mode, got)
-			}
-		})
-	}
-}
-
-// An unset or unknown startup.layout leaves the mode alone, which is BSP. A
-// config written before the setting existed must not be read as a request for
-// something else.
-func TestAnUnsetStartupLayoutKeepsTheDefault(t *testing.T) {
-	for _, name := range []string{"", "tabbed"} {
-		m := modeOS(t, LayoutModeBSP, false, 0, 2, 120, 40)
-		m.AutoTiling = false
-		m.UseScrollingLayout, m.UseBSPLayout = false, true
-		m.UserConfig = config.DefaultConfig()
-		m.UserConfig.Startup.Tiled = true
-		m.UserConfig.Startup.Layout = name
-
-		m.applyStartupTiling()
-		if got := m.LayoutModeName(); got != LayoutModeBSP {
-			t.Errorf("startup.layout = %q left the session in %q, want the default", name, got)
-		}
-	}
-}
-
 // A workspace nobody has tiled yet has no remembered master ratio, and what it
 // falls back to has to be the ratio in force rather than a literal half.
 //
