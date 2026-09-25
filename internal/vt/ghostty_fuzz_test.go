@@ -62,6 +62,20 @@ func FuzzGhosttyTerminalWrite(f *testing.F) {
 				_ = term.GetModes()
 			}
 		}
+		// What the Go side reads back across the boundary has to describe a
+		// screen the Go side can index: a cursor or a cell past the edge is
+		// an out-of-range read in every caller that trusts it.
+		w, h := term.Width(), term.Height()
+		if p := term.CursorPosition(); p.X < 0 || p.Y < 0 || p.X >= w || p.Y >= h {
+			t.Fatalf("the cursor is at %d,%d on a %dx%d screen", p.X, p.Y, w, h)
+		}
+		for y := range h {
+			for x := range w {
+				if c := term.CellAt(x, y); c != nil && (c.Width < 0 || c.Width > 2 || x+c.Width > w) {
+					t.Fatalf("cell (%d,%d) holds %q claiming %d columns on a %d-column row", x, y, c.Content, c.Width, w)
+				}
+			}
+		}
 		_ = term.String()
 		_ = term.TailText(3)
 	})

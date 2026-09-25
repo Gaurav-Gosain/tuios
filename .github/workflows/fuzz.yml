@@ -52,15 +52,15 @@ jobs:
           - pkg: internal/app
             targets: >-
               FuzzModel FuzzClipWindowContent FuzzClipWindowContentNoPanicOnEscapes
-              FuzzLineWidthMatchesReference
+              FuzzLineWidthMatchesReference FuzzKittyPassthrough
           - pkg: internal/session
             targets: >-
               FuzzVerbDispatch FuzzClosestMatch FuzzReadMessageFraming
               FuzzWirePayloadDecode FuzzSelector
           - pkg: internal/config
-            targets: FuzzNormalizeKey FuzzExpandKeys FuzzLoadConfigPipeline
+            targets: FuzzNormalizeKey FuzzExpandKeys FuzzLoadConfigPipeline FuzzConfigSaveRoundTrip
           - pkg: internal/tape
-            targets: FuzzTapeParse FuzzTapeTokenize
+            targets: FuzzTapeParse FuzzTapeTokenize FuzzTapeRecordRoundTrip
           - pkg: internal/harness
             targets: FuzzClassifyAgreesWithExplain FuzzManifest FuzzManifestRules
 
@@ -113,8 +113,13 @@ jobs:
           path: ${{ matrix.pkg }}/testdata/fuzz/
           if-no-files-found: ignore
 
+  # The cgo boundary of the libghostty-vt backend. The two differential
+  # targets are not run: they skip unless TUIOS_DIFF_FUZZ is set, and with it
+  # set they report the divergences already pinned in
+  # ghostty_differential_fuzz_test.go on almost every input, which would make
+  # this job red every night for known reasons.
   ghostty:
-    name: fuzz internal/vt (ghostty differential)
+    name: fuzz internal/vt (ghostty cgo boundary)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -154,7 +159,7 @@ jobs:
       - name: Fuzz
         run: |
           failed=""
-          for target in FuzzGhosttyDifferentialScript FuzzGhosttyDifferentialSplit FuzzGhosttyTerminalWrite; do
+          for target in FuzzGhosttyTerminalWrite; do
             echo "::group::$target"
             if ! PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
               go test -tags ghostty ./internal/vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
