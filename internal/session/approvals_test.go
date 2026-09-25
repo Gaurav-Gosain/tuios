@@ -320,6 +320,52 @@ func TestApprovalRefusals(t *testing.T) {
 	}
 }
 
+// TestApprovalOnlyOffersWhatTheHarnessCanDo keeps a reply to what the hook
+// said the harness can take.
+func TestApprovalOnlyOffersWhatTheHarnessCanDo(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableApprovals(t, d, 30*time.Second)
+	_, a, _ := twoWindowSession(t, d, "work")
+	makeSessionWithWindow(t, d, "other")
+	c := dialVerb(t, sp)
+	tui := attachTUI(t, sp, "other")
+
+	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
+	pending, _ := requestApproval(t, sp, "work", a)
+	id := heldItem(t, c, a)["request_id"].(string)
+	if code := errCode(t, reply(c, t, id, ApprovalAlways, tui.HumanNonce())); code != ErrVerbInvalidParams {
+		t.Fatalf("always, which was not offered, answered %s", code)
+	}
+	// By pane rather than by request id.
+	res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":{"session":"work","window":%q,"decision":"deny","message":"not on main","human_nonce":%q}}`, a, tui.HumanNonce())))
+	if res["decision"] != ApprovalDeny {
+		t.Fatalf("a reply by pane answered %v", res)
+	}
+	got := awaitResult(t, pending)
+	if got["decision"] != ApprovalDeny || got["message"] != "not on main" {
+		t.Errorf("the hook got %v", got)
+	}
+}
+
+// TestApprovalNotHeldForAPaneThePersonIsLookingAt: a held prompt shows nothing
+// in the pane, so a pane an attached client has in front of it is not held.
+func TestApprovalNotHeldForAPaneThePersonIsLookingAt(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableApprovals(t, d, 30*time.Second)
+	sess, a, _ := twoWindowSession(t, d, "work")
+	st := sess.GetState()
+	st.FocusedWindowID = a
+	sess.UpdateState(st)
+	c := dialVerb(t, sp)
+	attachTUI(t, sp, "work")
+
+	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
+	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
+	if res["reason"] != approvalEndViewed || res["decision"] != "" {
+		t.Errorf("a focused pane answered %v", res)
+	}
+}
+
 // replyShown is reply with the summary the decision was made from.
 func replyShown(c *verbConn, t *testing.T, requestID, decision, nonce, shown string) map[string]any {
 	t.Helper()

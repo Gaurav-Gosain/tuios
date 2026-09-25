@@ -1,17 +1,197 @@
 package session
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// Helpers for the tests that watch the daemon's hook table fire.
+// Hooks used to be wired entirely into the client, so a session running
+// detached under the daemon fired none of them: a window could be created, be
+// closed, or finish an agent turn with nobody attached and no command ran.
+// These pin the fix at the level the fix works at, which is the daemon's own
+// event sink.
 
-func intPtr(v int) *int { return &v }
+// hookRecorder collects the firings a daemon's hook table produces, without
+// spawning a shell per event.
+type hookRecorder struct {
+	mu    sync.Mutex
+	fired []hooks.Context
+}
+
+func (r *hookRecorder) add(_ string, ctx hooks.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fired = append(r.fired, ctx)
+}
+
+// of returns the firings for one event, in order.
+func (r *hookRecorder) of(event hooks.Event) []hooks.Context {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]hooks.Context, 0, len(r.fired))
+	for _, ctx := range r.fired {
+		if ctx.EventType == event {
+			out = append(out, ctx)
+		}
+	}
+	return out
+}
+
+// await waits for want firings of an event and returns them. It fails rather
+// than returning short, so a caller never asserts against a half-arrived slice.
+func (r *hookRecorder) await(t *testing.T, event hooks.Event, want int) []hooks.Context {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got := r.of(event)
+		if len(got) >= want {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s fired %d times in 5s, want %d", event, len(got), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// settle gives any further firing a chance to arrive before a count is trusted.
+// It is only used where the assertion is that nothing more happens.
+func (r *hookRecorder) settle() { time.Sleep(300 * time.Millisecond) }
+
+// startHookDaemon starts a daemon whose hook table holds one command per named
+// event and reports the firings instead of running a shell.
+func startHookDaemon(t *testing.T, events ...hooks.Event) (*Daemon, string, *hookRecorder) {
+	t.Helper()
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
+	t.Cleanup(useResurrectionDir(t.TempDir()))
+
+	table := make(map[string]any, len(events))
+	for _, e := range events {
+		table[string(e)] = "true"
+	}
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true, Hooks: table})
+	if d.hooks == nil {
+		t.Fatal("the daemon loaded no hook table from its config")
+	}
+	rec := &hookRecorder{}
+	d.hooks.SetRunner(rec.add)
+
+	if err := d.Start(); err != nil {
+		t.Fatalf("daemon Start: %v", err)
+	}
+	t.Cleanup(d.Stop)
+
+	sp, err := GetSocketPath()
+	if err != nil {
+		t.Fatalf("GetSocketPath: %v", err)
+	}
+	return d, sp, rec
+}
+
+// TestADetachedSessionFiresTheNewWindowHook is the gap itself. Nothing is
+// attached, nothing is drawing, and the command still has to run: the detached
+// session is the one a program is watching instead of a person.
+func TestADetachedSessionFiresTheNewWindowHook(t *testing.T) {
+	d, sp, rec := startHookDaemon(t, hooks.AfterNewWindow)
+	// The session's own first window already fires the hook, which is itself the
+	// point. Let it land so the assertion is about the window this test creates.
+	makeSessionWithWindow(t, d, "detached")
+	rec.await(t, hooks.AfterNewWindow, 1)
+	c := dialVerb(t, sp)
+
+	created := result(t, c.call(t, `{"verb":"new-window","params":{"session":"detached","name":"build"}}`))
+	windowID, _ := created["window_id"].(string)
+
+	fired := rec.await(t, hooks.AfterNewWindow, 2)
+	got := fired[len(fired)-1]
+	if got.WindowID != windowID {
+		t.Errorf("hook window id = %q, want the created window %q", got.WindowID, windowID)
+	}
+	if got.WindowName != "build" {
+		t.Errorf("hook window name = %q, want build", got.WindowName)
+	}
+	if got.SessionID != "detached" {
+		t.Errorf("hook session = %q, want detached", got.SessionID)
+	}
+	if got.Workspace != 1 {
+		t.Errorf("hook workspace = %d, want 1", got.Workspace)
+	}
+}
+
+// TestADetachedSessionFiresTheCloseWindowHook is the event the brief names: a
+// pane goes away and the hook has to fire with no client attached. It also pins
+// the name, which is the one field that cannot be looked up afterwards because
+// the window is already gone.
+func TestADetachedSessionFiresTheCloseWindowHook(t *testing.T) {
+	d, sp, rec := startHookDaemon(t, hooks.AfterCloseWindow)
+	makeSessionWithWindow(t, d, "detached")
+	c := dialVerb(t, sp)
+
+	created := result(t, c.call(t, `{"verb":"new-window","params":{"session":"detached","name":"doomed"}}`))
+	windowID := created["window_id"].(string)
+	rec.settle()
+
+	result(t, c.call(t, `{"verb":"close-window","params":{"session":"detached","window":"doomed"}}`))
+
+	fired := rec.await(t, hooks.AfterCloseWindow, 1)
+	got := fired[0]
+	if got.WindowID != windowID {
+		t.Errorf("hook window id = %q, want the closed window %q", got.WindowID, windowID)
+	}
+	if got.WindowName != "doomed" {
+		t.Errorf("hook window name = %q, want the name the window had", got.WindowName)
+	}
+}
+
+// TestAWorkspaceSwitchHookNamesTheWorkspaceItLeft covers the one field the
+// daemon cannot read back from state: the workspace is already gone by the time
+// the event is read, so the diff has to carry it.
+func TestAWorkspaceSwitchHookNamesTheWorkspaceItLeft(t *testing.T) {
+	d, sp, rec := startHookDaemon(t, hooks.AfterWorkspaceSwitch)
+	makeSessionWithWindow(t, d, "spaces")
+	c := dialVerb(t, sp)
+
+	result(t, c.call(t, `{"verb":"select-workspace","params":{"session":"spaces","workspace":3}}`))
+
+	got := rec.await(t, hooks.AfterWorkspaceSwitch, 1)[0]
+	if got.Workspace != 3 {
+		t.Errorf("hook workspace = %d, want 3", got.Workspace)
+	}
+	if got.PreviousWorkspace != 1 {
+		t.Errorf("hook previous workspace = %d, want the 1 it left", got.PreviousWorkspace)
+	}
+}
+
+// TestAFocusChangeFiresInADetachedSession keeps focus on the daemon's side of
+// the line: the focused window is session state, not one client's idea of it.
+func TestAFocusChangeFiresInADetachedSession(t *testing.T) {
+	d, sp, rec := startHookDaemon(t, hooks.AfterFocusChange)
+	makeSessionWithWindow(t, d, "focus")
+	c := dialVerb(t, sp)
+
+	first := result(t, c.call(t, `{"verb":"new-window","params":{"session":"focus","name":"one"}}`))["window_id"].(string)
+	result(t, c.call(t, `{"verb":"new-window","params":{"session":"focus","name":"two"}}`))
+	rec.settle()
+
+	result(t, c.call(t, `{"verb":"focus-window","params":{"session":"focus","window":"one"}}`))
+
+	rec.await(t, hooks.AfterFocusChange, 1)
+	rec.settle()
+	fired := rec.of(hooks.AfterFocusChange)
+	last := fired[len(fired)-1]
+	if last.WindowID != first {
+		t.Errorf("hook window id = %q, want the newly focused %q", last.WindowID, first)
+	}
+	if last.WindowName != "one" {
+		t.Errorf("hook window name = %q, want one", last.WindowName)
+	}
+}
 
 // TestASessionSideHookFiresOncePerEventNotOncePerClient is the multi-client
 // rule. Three clients are attached to the same session, they all hear about the
@@ -94,42 +274,85 @@ func TestASessionSideHookFiresOncePerEventNotOncePerClient(t *testing.T) {
 	}
 }
 
-// startHookDaemon starts a daemon whose hook table holds one command per named
-// event and reports the firings instead of running a shell.
-func startHookDaemon(t *testing.T, events ...hooks.Event) (*Daemon, string, *hookRecorder) {
-	t.Helper()
+// TestTheAgentStateHookObeysTheAlertPolicy keeps the meaning of the event: it
+// is the only one gated by config rather than by the raw fact, and moving it to
+// the daemon must not quietly turn a muted state back on.
+func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
-	table := make(map[string]any, len(events))
-	for _, e := range events {
-		table[string(e)] = "true"
-	}
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true, Hooks: table})
-	if d.hooks == nil {
-		t.Fatal("the daemon loaded no hook table from its config")
-	}
+	off := false
+	d := NewDaemon(&DaemonConfig{
+		Version:            "test",
+		DisableAutoRestore: true,
+		Hooks:              map[string]any{string(hooks.AfterAgentState): "true"},
+		// No settle window, so the assertion is about the policy and not about a
+		// timer. suppress_focused off, because the pane under test is the
+		// focused one and this is not the test for that rule.
+		AgentAlerts: &config.AgentAlertsConfig{
+			SettleSeconds:   intPtr(0),
+			SuppressFocused: &off,
+		},
+	})
 	rec := &hookRecorder{}
 	d.hooks.SetRunner(rec.add)
-
 	if err := d.Start(); err != nil {
 		t.Fatalf("daemon Start: %v", err)
 	}
 	t.Cleanup(d.Stop)
-
 	sp, err := GetSocketPath()
 	if err != nil {
 		t.Fatalf("GetSocketPath: %v", err)
 	}
-	return d, sp, rec
+	makeSessionWithWindow(t, d, "agents")
+	c := dialVerb(t, sp)
+
+	// working is muted by default, so it must not reach the command.
+	result(t, c.call(t, `{"verb":"set-agent-state","params":{"session":"agents","state":"working"}}`))
+	rec.settle()
+	if got := rec.of(hooks.AfterAgentState); len(got) != 0 {
+		t.Fatalf("a muted state fired the hook %d times: %+v", len(got), got)
+	}
+
+	// done alerts by default, so it must.
+	result(t, c.call(t, `{"verb":"set-agent-state","params":{"session":"agents","state":"done","harness":"claude-code"}}`))
+	got := rec.await(t, hooks.AfterAgentState, 1)[0]
+	if got.AgentState != "done" {
+		t.Errorf("hook agent state = %q, want done", got.AgentState)
+	}
+	if got.PrevAgentState != "working" {
+		t.Errorf("hook previous agent state = %q, want the working it came from", got.PrevAgentState)
+	}
+	if got.AgentHarness != "claude-code" {
+		t.Errorf("hook harness = %q, want claude-code", got.AgentHarness)
+	}
 }
 
-// hookRecorder collects the firings a daemon's hook table produces, without
-// spawning a shell per event.
-type hookRecorder struct {
-	mu    sync.Mutex
-	fired []hooks.Context
+// TestTheClientOnlyEventsAreNotFiredByTheDaemon names the line. Attach, detach,
+// resize and layout describe one client's terminal, so the daemon must not
+// claim them; firing them here would mean three attaches for three clients and
+// a command running on the wrong machine.
+func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
+	clientOnly := []hooks.Event{
+		hooks.AfterAttach, hooks.AfterDetach, hooks.AfterResize, hooks.AfterLayoutChange,
+	}
+	sessionSide := SessionSideHookEvents()
+	for _, e := range clientOnly {
+		if slices.Contains(sessionSide, e) {
+			t.Errorf("%s is fired by the daemon, but it describes one client's terminal", e)
+		}
+	}
+	// And the split is exhaustive: every event belongs to exactly one side.
+	for _, e := range hooks.AllEvents() {
+		inSession := slices.Contains(sessionSide, e)
+		inClient := slices.Contains(clientOnly, e)
+		if inSession == inClient {
+			t.Errorf("%s is on %s side", e, map[bool]string{true: "both", false: "neither"}[inSession])
+		}
+	}
 }
+
+func intPtr(v int) *int { return &v }
 
 // waitUntilHookTest polls until cond holds or the test fails.
 func waitUntilHookTest(t *testing.T, what string, cond func() bool) {
@@ -146,42 +369,45 @@ func waitUntilHookTest(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func (r *hookRecorder) add(_ string, ctx hooks.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.fired = append(r.fired, ctx)
-}
-
-// of returns the firings for one event, in order.
-func (r *hookRecorder) of(event hooks.Event) []hooks.Context {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]hooks.Context, 0, len(r.fired))
-	for _, ctx := range r.fired {
-		if ctx.EventType == event {
-			out = append(out, ctx)
-		}
+// TestApplyUserHooksCarriesBothSpellings covers the helper every DaemonConfig
+// builder calls. There are three builders and missing one is silent: an
+// attached client leaves the session-side events to the daemon, so a daemon
+// started without hooks stops running those commands rather than running them
+// twice.
+func TestApplyUserHooksCarriesBothSpellings(t *testing.T) {
+	uc := &config.UserConfig{
+		Hooks: config.HooksConfig{"after-new-window": "echo hi"},
 	}
-	return out
-}
+	uc.Notifications.Agent.Command = "notify-send done"
 
-// await waits for want firings of an event and returns them. It fails rather
-// than returning short, so a caller never asserts against a half-arrived slice.
-func (r *hookRecorder) await(t *testing.T, event hooks.Event, want int) []hooks.Context {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		got := r.of(event)
-		if len(got) >= want {
-			return got
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s fired %d times in 5s, want %d", event, len(got), want)
-		}
-		time.Sleep(10 * time.Millisecond)
+	cfg := &DaemonConfig{}
+	cfg.ApplyUserHooks(uc)
+
+	if cfg.Hooks["after-new-window"] != "echo hi" {
+		t.Errorf("the [hooks] table did not reach the daemon config: %v", cfg.Hooks)
+	}
+	if cfg.AgentHookCommand != "notify-send done" {
+		t.Errorf("agent command = %q, want the configured one", cfg.AgentHookCommand)
+	}
+	if cfg.AgentAlerts == nil {
+		t.Error("the alert policy did not reach the daemon config, so the gate falls back to defaults")
+	}
+
+	// And a daemon built from it really holds both.
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true,
+		Hooks: cfg.Hooks, AgentAlerts: cfg.AgentAlerts, AgentHookCommand: cfg.AgentHookCommand})
+	if d.hooks == nil {
+		t.Fatal("the daemon built no hook table from the applied config")
+	}
+	if got := len(d.hooks.Statuses()); got != 2 {
+		t.Errorf("the daemon holds %d hooks, want the table entry and the shorthand", got)
+	}
+
+	// A nil user config is a caller that could not read the file, not a panic.
+	var empty DaemonConfig
+	empty.ApplyUserHooks(nil)
+	if empty.Hooks != nil {
+		t.Error("a nil user config produced a hook table")
 	}
 }
-
-// settle gives any further firing a chance to arrive before a count is trusted.
-// It is only used where the assertion is that nothing more happens.
-func (r *hookRecorder) settle() { time.Sleep(300 * time.Millisecond) }

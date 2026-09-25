@@ -109,3 +109,106 @@ func TestDetectionSkipsAWindowRepointedDuringTheRead(t *testing.T) {
 		t.Fatalf("a reading of the old PTY set %q on the window, want none", got)
 	}
 }
+
+// detectTicker drives scanAgentDetection tick by tick with the daemon's
+// backoff, against one fake PTY per window, and counts the reads per PTY.
+type detectTicker struct {
+	sess   *Session
+	ptys   map[string]*PTY
+	reads  map[string]int
+	table  map[string]fakeProc
+	now    int64
+	quiet  int32
+	ident  func(foregroundInfo) (detection, bool)
+	period time.Duration
+}
+
+func newDetectTicker(sess *Session) *detectTicker {
+	return &detectTicker{
+		sess:   sess,
+		ptys:   map[string]*PTY{},
+		reads:  map[string]int{},
+		table:  map[string]fakeProc{},
+		now:    time.Now().UnixNano(),
+		quiet:  detectQuietTicks(defaultAgentDetectInterval),
+		ident:  newAgentMatcher(nil).identifyDetail,
+		period: defaultAgentDetectInterval,
+	}
+}
+
+func (d *detectTicker) pty(ptyID string) *PTY {
+	p := d.ptys[ptyID]
+	if p == nil {
+		p = &PTY{}
+		d.ptys[ptyID] = p
+	}
+	return p
+}
+
+// output records output on a pane at the current time.
+func (d *detectTicker) output(ptyID string) {
+	d.pty(ptyID).lastOutput.Store(d.now + 1)
+}
+
+func (d *detectTicker) tick() {
+	d.now += int64(d.period)
+	now := d.now
+	resolve := func(p string) (foregroundInfo, bool) {
+		d.reads[p]++
+		return fakeResolver(d.table)(p)
+	}
+	due := func(p string) bool { return d.pty(p).detectScanDue(now, d.quiet) }
+	d.sess.scanAgentDetection(resolve, d.ident, due)
+}
+
+// TestDetectionFindsAnAgentStartedSilently pins the bound the backoff keeps.
+// An agent started in a quiet pane with no output at all, which is the one
+// case output cannot flag, is still found within agentDetectQuietBound: five
+// ticks at the default two-second interval, so ten seconds. With output, which
+// is the ordinary case since typing the command echoes it, it is found on the
+// next tick as before.
+func TestDetectionFindsAnAgentStartedSilently(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	d := newDetectTicker(sess)
+	d.table[ptyID] = shellAt(100)
+
+	// Settle into the backoff: read, then quiet.
+	for range 2 * d.quiet {
+		d.tick()
+	}
+	// Start the agent right after a read, which is the worst case.
+	for d.pty(ptyID).detectSkips.Load() != 0 {
+		d.tick()
+	}
+	d.table[ptyID] = agentIn(100)
+	ticks := 0
+	for agentStateOf(t, sess, id) != AgentStateWorking {
+		ticks++
+		if ticks > int(d.quiet) {
+			t.Fatalf("a silently started agent was not found in %d ticks", ticks-1)
+		}
+		d.tick()
+	}
+	if bound := time.Duration(ticks) * d.period; bound > agentDetectQuietBound {
+		t.Fatalf("a silently started agent took %v to find, bound is %v", bound, agentDetectQuietBound)
+	}
+
+	// With output it is the next tick.
+	sess2, id2 := bareSessionWithWindow(t)
+	ptyID2 := ptyIDOfWindow(t, sess2, id2)
+	d2 := newDetectTicker(sess2)
+	d2.table[ptyID2] = shellAt(100)
+	for range 2 * d2.quiet {
+		d2.tick()
+	}
+	for d2.pty(ptyID2).detectSkips.Load() != 0 {
+		d2.tick()
+	}
+	d2.table[ptyID2] = agentIn(100)
+	d2.output(ptyID2)
+	d2.tick()
+	if got := agentStateOf(t, sess2, id2); got != AgentStateWorking {
+		t.Fatalf("an agent started with output was not found on the next tick: %q", got)
+	}
+}
