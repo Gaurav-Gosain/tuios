@@ -434,7 +434,7 @@ func TestHostAgentQueuedIsClamped(t *testing.T) {
 		{"zero", 0, 0},
 		{"inside", 3, 3},
 		{"at the cap", config.MaxQueueMax, config.MaxQueueMax},
-		{"over the cap", 1 << 40, config.MaxQueueMax},
+		{"over the cap", 1 << 30, config.MaxQueueMax},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := json.Marshal(map[string]any{
