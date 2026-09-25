@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"strings"
 	"testing"
 	"time"
@@ -324,7 +325,7 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 			if cap := notifCap(sev, &m.Settings); !strings.Contains(plain, cap) {
 				t.Errorf("width %d, %s: truncation took the severity cap: %q", width, sev, plain)
 			}
-			if !strings.Contains(plain, "...") {
+			if !strings.Contains(plain, overlay.Ellipsis()) {
 				t.Errorf("width %d, %s: a cut message should say it was cut: %q", width, sev, plain)
 			}
 			if strings.Contains(plain, long) {

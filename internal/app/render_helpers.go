@@ -278,15 +278,11 @@ func windowTitleText(window *terminal.Window, markState string, position int, ma
 	maxNameLen := max(maxWidth-6, 0)
 	nameWidth := ansi.StringWidth(windowName)
 	if nameWidth > maxNameLen {
-		if maxNameLen > 3 {
-			// Truncate by runes to handle unicode properly
-			runes := []rune(windowName)
-			truncated := string(runes)
-			for ansi.StringWidth(truncated) > maxNameLen-3 && len(runes) > 0 {
-				runes = runes[:len(runes)-1]
-				truncated = string(runes)
-			}
-			windowName = truncated + "..."
+		// The one ellipsis every other surface cuts with, "…" or "..." in ASCII
+		// mode. Three dots on a title pill spent two cells of a name that had
+		// few to spare: "de..." where "deplo…" fits.
+		if maxNameLen > ansi.StringWidth(overlay.Ellipsis()) {
+			windowName = overlay.Truncate(windowName, maxNameLen)
 		} else {
 			return indicator
 		}

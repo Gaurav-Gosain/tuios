@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"strings"
 	"time"
 
@@ -360,12 +361,15 @@ func notifFit(message string, room int) string {
 	if lipgloss.Width(message) <= room {
 		return message
 	}
-	// Below four columns there is no room for an ellipsis and a character of
-	// message both, so the ellipsis alone says the message was cut.
-	if room < 4 {
-		return truncateToWidth("...", room)
+	// The shared ellipsis, "…" or "..." in ASCII mode. Below its width and a
+	// character of message there is room for neither, so the ellipsis alone
+	// says the message was cut.
+	ell := overlay.Ellipsis()
+	ellW := lipgloss.Width(ell)
+	if room <= ellW {
+		return truncateToWidth(ell, room)
 	}
-	return strings.TrimRight(truncateToWidth(message, room-3), " ") + "..."
+	return strings.TrimRight(truncateToWidth(message, room-ellW), " ") + ell
 }
 
 // notifBurnRule lights the dock's hairline across the message's span and
