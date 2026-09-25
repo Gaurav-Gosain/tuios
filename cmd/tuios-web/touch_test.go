@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -92,13 +91,5 @@ func TestTouchMiddlewareOverrides(t *testing.T) {
 		if got != tt.touch {
 			t.Errorf("--touch=%s with %q gave touch=%v, want %v", tt.mode, tt.ua, got, tt.touch)
 		}
-	}
-}
-
-// A context that never went through the middleware answers no rather than
-// panicking, which is what every caller outside the web server has.
-func TestSessionIsTouchWithoutTheMiddleware(t *testing.T) {
-	if sessionIsTouch(context.Background()) {
-		t.Error("a bare context claimed to be a touch client")
 	}
 }

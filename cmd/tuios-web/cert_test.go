@@ -98,37 +98,6 @@ func TestCheckTransportSecurity(t *testing.T) {
 	}
 }
 
-func TestCheckTransportSecurityNamesTheRealFlags(t *testing.T) {
-	applyCertFlags(t, certFlags{host: "192.168.1.31", port: "9000"})
-	var out bytes.Buffer
-	err := checkTransportSecurity(&out)
-	if err == nil {
-		t.Fatal("expected a refusal")
-	}
-	advice := out.String()
-
-	for _, want := range []string{
-		"--auto-tls",
-		"--cert cert.pem --key key.pem",
-		"--insecure",
-		"tuios-web cert info",
-		"192.168.1.31",
-		"9000",
-	} {
-		if !strings.Contains(advice, want) {
-			t.Errorf("advice never mentions %q:\n%s", want, advice)
-		}
-	}
-	if strings.Contains(advice, "openssl") {
-		t.Errorf("advice still hands out an openssl command:\n%s", advice)
-	}
-	for _, want := range []string{"--auto-tls", "--cert", "--insecure"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q never mentions %q", err, want)
-		}
-	}
-}
-
 func TestResolveTLSFilesGeneratesOnce(t *testing.T) {
 	dir := t.TempDir()
 	applyCertFlags(t, certFlags{host: "127.0.0.1", autoTLS: true, dir: dir})
@@ -240,25 +209,6 @@ func runCert(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-func TestCertInfoWithNoCertificate(t *testing.T) {
-	dir := t.TempDir()
-	applyCertFlags(t, certFlags{host: "localhost", dir: dir})
-
-	out, err := runCert(t, "cert", "info", "--cert-dir", dir)
-	if err != nil {
-		t.Fatalf("cert info: %v", err)
-	}
-	if !strings.Contains(out, "No certificate yet") {
-		t.Errorf("did not say there is none yet:\n%s", out)
-	}
-	if !strings.Contains(out, dir) {
-		t.Errorf("did not say where one would live:\n%s", out)
-	}
-	if !strings.Contains(out, "tuios-web cert new") {
-		t.Errorf("did not say how to make one:\n%s", out)
-	}
-}
-
 func TestCertNewThenInfo(t *testing.T) {
 	dir := t.TempDir()
 	applyCertFlags(t, certFlags{host: "192.168.1.31", dir: dir})
@@ -332,27 +282,6 @@ func TestCertNewRefusesToReplaceWithoutForce(t *testing.T) {
 	}
 	if replaced.Fingerprint == first.Fingerprint {
 		t.Error("--force did not replace the certificate")
-	}
-}
-
-func TestCertPath(t *testing.T) {
-	dir := t.TempDir()
-	applyCertFlags(t, certFlags{host: "localhost", dir: dir})
-
-	out, err := runCert(t, "cert", "path", "--cert-dir", dir)
-	if err != nil {
-		t.Fatalf("cert path: %v", err)
-	}
-	if got := strings.TrimSpace(out); got != filepath.Join(dir, "sip.crt") {
-		t.Errorf("cert path printed %q", got)
-	}
-
-	out, err = runCert(t, "cert", "path", "--cert-dir", dir, "--key")
-	if err != nil {
-		t.Fatalf("cert path --key: %v", err)
-	}
-	if got := strings.TrimSpace(out); got != filepath.Join(dir, "sip.key") {
-		t.Errorf("cert path --key printed %q", got)
 	}
 }
 

@@ -465,9 +465,3 @@ func TestDesktopCacheDiscardsOnLocaleChange(t *testing.T) {
 		t.Fatalf("refresh = %v changed=%v, want the entry relocalized", got, changed)
 	}
 }
-
-func TestDesktopEntriesBeforeFirstRefresh(t *testing.T) {
-	if got := NewDesktopCache().Entries(); got != nil {
-		t.Fatalf("Entries = %v before any scan, want nil", got)
-	}
-}

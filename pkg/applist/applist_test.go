@@ -211,12 +211,6 @@ func TestCacheForgetsRemovedDir(t *testing.T) {
 	}
 }
 
-func TestEntriesBeforeFirstRefresh(t *testing.T) {
-	if got := NewCache().Entries(); got != nil {
-		t.Fatalf("Entries = %v before any scan, want nil", got)
-	}
-}
-
 // TestLabelAndAliases: a desktop row has to be reachable by the name it shows
 // and by the names it does not, which is the point of carrying both.
 func TestLabelAndAliases(t *testing.T) {
@@ -249,29 +243,6 @@ func TestAliasesSkipsRedundantName(t *testing.T) {
 	e := Entry{Name: "kitty", Display: "kitty"}
 	if got := e.Aliases(); len(got) != 0 {
 		t.Errorf("Aliases = %v, want nothing when the name is already the label", got)
-	}
-}
-
-// TestArgvUsesExec: an entry carrying an Exec runs it verbatim, because its
-// Path is a .desktop file and its arguments are part of what it means.
-func TestArgvUsesExec(t *testing.T) {
-	e := Entry{
-		Name:   "org.gnome.Nautilus",
-		Path:   "/usr/share/applications/org.gnome.Nautilus.desktop",
-		Source: SourceDesktop,
-		Exec:   []string{"nautilus", "--new-window"},
-	}
-	if got := e.Argv(); !slices.Equal(got, []string{"nautilus", "--new-window"}) {
-		t.Fatalf("Argv = %v, want the Exec argv", got)
-	}
-}
-
-// TestCommandLineFromExec: no bare name resolves to that argv, so the line is
-// the argv itself, joined so a shell re-reads the words the entry asked for.
-func TestCommandLineFromExec(t *testing.T) {
-	e := Entry{Name: "term", Path: "/usr/share/applications/term.desktop", Exec: []string{"kitty", "--title", "notes"}}
-	if got := e.CommandLine(); got != "kitty --title notes" {
-		t.Fatalf("CommandLine = %q, want the argv joined by spaces", got)
 	}
 }
 

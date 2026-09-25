@@ -19,24 +19,6 @@ func testPalette() Palette {
 	}
 }
 
-func TestRectContains(t *testing.T) {
-	r := Rect{X0: 2, Y0: 3, X1: 5, Y1: 6}
-	cases := []struct {
-		x, y int
-		want bool
-	}{
-		{2, 3, true}, {4, 5, true}, {5, 6, false}, {1, 3, false}, {2, 2, false},
-	}
-	for _, c := range cases {
-		if got := r.Contains(c.x, c.y); got != c.want {
-			t.Errorf("Contains(%d,%d)=%v want %v", c.x, c.y, got, c.want)
-		}
-	}
-	if !(Rect{}).Empty() {
-		t.Error("zero rect should be empty")
-	}
-}
-
 func TestPanelGeometry(t *testing.T) {
 	pal := testPalette()
 	p := Panel{

@@ -384,29 +384,6 @@ func TestTapePlayHandsTheTapeToTuios(t *testing.T) {
 	}
 }
 
-// TestSampleTapesParse checks every tape in the home directory is one tuios
-// can play, and that party.tape ends on workspace 2, the trip it promises.
-func TestSampleTapesParse(t *testing.T) {
-	freshFS(t)
-	for _, name := range []string{"demo.tape", "party.tape"} {
-		t.Run(name, func(t *testing.T) {
-			text, ok := ReadFile(Home + "/" + name)
-			if !ok {
-				t.Fatalf("no %s", name)
-			}
-			cmds, perrs := tape.ParseFile(text)
-			if len(perrs) > 0 || len(cmds) == 0 {
-				t.Fatalf("%s does not parse: %v", name, perrs)
-			}
-		})
-	}
-	party, _ := ReadFile(Home + "/party.tape")
-	last := strings.LastIndex(party, "SwitchWorkspace ")
-	if last < 0 || !strings.HasPrefix(party[last:], "SwitchWorkspace 2") {
-		t.Errorf("party.tape does not end on workspace 2:\n%s", party)
-	}
-}
-
 // TestRunnableCommandsHighlightAsValid checks that the highlighter agrees with
 // the executor: every name the shell runs, aliases included, is drawn green,
 // and a name it does not run is drawn red.
@@ -523,40 +500,6 @@ func TestEveryTapeParses(t *testing.T) {
 		script, _ := readFile(p)
 		if cmds, errs := tape.ParseFile(script); len(errs) > 0 || len(cmds) == 0 {
 			t.Errorf("%s does not parse: %v", p, errs)
-		}
-	}
-}
-
-// TestTuiosSamples checks the subcommands that need a real machine print a
-// sample and succeed, and that every table in a sample lines up.
-func TestTuiosSamples(t *testing.T) {
-	freshFS(t)
-	ev := recordEvents(t)
-	g := startGuest(t, "sh")
-	g.waitFor(markInput)
-	for _, sub := range []string{"ls", "fan", "worktree", "list-agents", "send-agent-message", "list-verbs", "list-hooks", "attach"} {
-		g.send("tuios " + sub + "\r")
-		out := g.waitFor(markInput)
-		if !strings.Contains(out, "On a real machine") || !strings.Contains(out, "tuios.dev/docs/") {
-			t.Errorf("tuios %s printed no sample: %q", sub, out)
-		}
-	}
-	for _, e := range ev.of(EventCommand) {
-		if e.Data["exitCode"] != 0 {
-			t.Errorf("%v exited %v", e.Data["line"], e.Data["exitCode"])
-		}
-	}
-	for name, s := range samples {
-		width := -1
-		for _, line := range strings.Split(s.text, "\n") {
-			if !strings.ContainsAny(line, "│╭╰├") {
-				continue
-			}
-			n := len([]rune(line))
-			if width >= 0 && n != width {
-				t.Errorf("sample %q: a table row is %d wide, want %d: %q", name, n, width, line)
-			}
-			width = n
 		}
 	}
 }

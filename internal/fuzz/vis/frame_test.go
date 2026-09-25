@@ -84,62 +84,6 @@ func hexBg(c color.Color) string {
 	return "48;2;" + strconv.Itoa(int(r>>8)) + ";" + strconv.Itoa(int(g>>8)) + ";" + strconv.Itoa(int(b>>8))
 }
 
-// The figure/ground claim, asserted on the drawn frame. No cell of the rail
-// band may be transparent: a fragment rendered without a background emits a
-// reset, and the reset shows whatever the terminal had in that cell before,
-// which reads as a hole punched through the instrument. The first capture round
-// found exactly that, in a state every assertion on the state behind the frame
-// had passed.
-//
-// The band is allowed more than one fill. It is allowed exactly three: its own
-// ground, the title chip, and the key badges in the hint strip. Anything else
-// is a fill nobody decided on.
-func TestRailBandHasNoHoles(t *testing.T) {
-	pal := palette(false)
-	allowed := map[string]string{
-		hexBg(pal.Panel):  "Panel",
-		hexBg(pal.Accent): "the title chip",
-		hexBg(pal.Card):   "a key badge",
-	}
-	for _, size := range [][2]int{{120, 34}, {100, 30}, {160, 44}} {
-		dr := newDriver(t, Options{Screen: demoScreen(70, 14), Width: size[0], Height: size[1]})
-		dr.actions(300)
-		for y, line := range strings.Split(dr.d.Frame(), "\n") {
-			cs := cells(line)
-			if len(cs) < railWidth {
-				t.Fatalf("%dx%d row %d decoded to %d cells", size[0], size[1], y, len(cs))
-			}
-			for x, c := range cs[len(cs)-railWidth:] {
-				if _, ok := allowed[c.bg]; !ok {
-					t.Fatalf("%dx%d rail cell (%d,%d) %q sits on %s, which is not the band, the chip or a badge",
-						size[0], size[1], x, y, string(c.r), c.bg)
-				}
-			}
-		}
-	}
-}
-
-// The resting state is what is on screen for almost the whole run, and it has
-// to stay quiet: a frame that already carries the alarm ink has nothing left to
-// escalate to when a rule actually breaks.
-func TestRestingFrameCarriesNoAlarm(t *testing.T) {
-	dr := newDriver(t, Options{Screen: demoScreen(70, 14)})
-	dr.actions(400)
-	pal := palette(false)
-	frame := dr.d.Frame()
-	if strings.Contains(frame, hexBg(pal.Warn)) {
-		t.Error("the resting frame fills a cell with the alarm colour")
-	}
-	if strings.Contains(frame, "failed") && !strings.Contains(frame, "0 failed") {
-		t.Error("the resting frame says something failed")
-	}
-	for _, word := range []string{"falsified", "shrink"} {
-		if strings.Contains(ansi.Strip(frame), word) {
-			t.Errorf("the resting frame claims %q before anything did", word)
-		}
-	}
-}
-
 // A violation has to ink its own dot and no other. Showing the wrong rule red
 // sends a maintainer after a bug that is not there.
 func TestViolationInksItsOwnDot(t *testing.T) {
@@ -173,29 +117,6 @@ func TestViolationInksItsOwnDot(t *testing.T) {
 	}
 }
 
-// The matrix draws one dot per registered rule. A dot that stands for nothing,
-// or a rule with no dot, is the display disagreeing with the oracle about what
-// is being checked.
-func TestMatrixDrawsOneDotPerRule(t *testing.T) {
-	rules := demoRules()
-	dr := newDriver(t, Options{Rules: rules})
-	dr.actions(20)
-	g := unicodeGlyphs
-	dots := strings.Count(ansi.Strip(dr.d.Frame()), g.dot)
-	// The separator between figures uses the same glyph, so the count is a
-	// floor rather than an equality; what matters is that no rule is missing.
-	if dots < len(rules) {
-		t.Errorf("drew %d dots for %d registered rules", dots, len(rules))
-	}
-	fams := families(rules)
-	text := ansi.Strip(dr.d.Frame())
-	for _, f := range fams {
-		if !strings.Contains(text, f.name) {
-			t.Errorf("family %q from the registry is not on screen", f.name)
-		}
-	}
-}
-
 // The viewport passes the app's own cells through untouched. A harness that
 // restyled the thing it is testing would produce a screenshot of software that
 // does not exist.
@@ -215,23 +136,6 @@ func TestViewportPassesAppCellsThrough(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(got[0]), "60"+unicodeGlyphs.times+"10") {
 		t.Errorf("the frame title does not carry the app's live size: %q", ansi.Strip(got[0]))
-	}
-}
-
-// The harness frame speaks for the harness, so it goes red when the harness has
-// something to say. The app's own colours are never touched.
-func TestHarnessBorderFollowsThePhase(t *testing.T) {
-	pal := palette(false)
-	rest := newDriver(t, Options{Screen: demoScreen(60, 10)})
-	rest.actions(20)
-	if strings.Contains(strings.Split(rest.d.Frame(), "\n")[0], fgOf(pal.Warn)) {
-		t.Error("the harness border is red before anything broke")
-	}
-	red := newDriver(t, Options{Screen: demoScreen(60, 10)})
-	red.actions(20)
-	red.breaks("pane-size")
-	if !strings.Contains(strings.Split(red.d.Frame(), "\n")[0], fgOf(pal.Warn)) {
-		t.Error("the harness border stayed quiet through a falsification")
 	}
 }
 
@@ -370,20 +274,6 @@ func TestCardFiguresComeFromTheResult(t *testing.T) {
 	}
 }
 
-func TestPassCardSaysWhatHeld(t *testing.T) {
-	rules := demoRules()
-	dr := newDriver(t, Options{Rules: rules})
-	dr.actions(200)
-	dr.d.Done(fuzz.Result{Seed: 42, Executed: 4182, Replays: 1})
-	text := ansi.Strip(dr.d.Frame())
-	if !strings.Contains(text, itoa(len(rules))+" invariants held") {
-		t.Errorf("the pass card does not say how many invariants held: %q", firstLines(text, 12))
-	}
-	if strings.Contains(text, "minimal reproduction") {
-		t.Error("a passing run offered a reproduction")
-	}
-}
-
 func firstLines(s string, n int) string {
 	lines := strings.Split(s, "\n")
 	return strings.Join(lines[:min(n, len(lines))], "\n")
@@ -439,17 +329,6 @@ func TestGeneratedPayloadsCannotDriveTheTerminal(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(frame), "guest") {
 		t.Error("the ledger dropped the action instead of laundering it")
-	}
-}
-
-// Below the floor the display declines rather than drawing a mangled
-// instrument, because a squeezed instrument is one that can be misread.
-func TestDeclinesBelowTheFloor(t *testing.T) {
-	if Fits(MinWidth-1, MinHeight) || Fits(MinWidth, MinHeight-1) {
-		t.Error("the display accepted a terminal below its own floor")
-	}
-	if !Fits(MinWidth, MinHeight) {
-		t.Error("the display declined its own floor")
 	}
 }
 

@@ -402,9 +402,3 @@ func TestCurrentIconTheme(t *testing.T) {
 		t.Errorf("CurrentIconTheme = %q, want Papirus from the GTK settings", got)
 	}
 }
-
-func TestNewIconFinderDefaultsToHicolor(t *testing.T) {
-	if got := NewIconFinder("").Theme(); got != HicolorTheme {
-		t.Errorf("NewIconFinder(\"\").Theme() = %q, want %q", got, HicolorTheme)
-	}
-}

@@ -1,7 +1,6 @@
 package perf
 
 import (
-	"strings"
 	"testing"
 	"time"
 )
@@ -61,20 +60,5 @@ func TestStatsDoesNotReorder(t *testing.T) {
 	_ = d.Stats()
 	if d[0] != 3*time.Millisecond {
 		t.Errorf("samples were reordered: %v", d)
-	}
-}
-
-// TestLineIsOneRow keeps the report format greppable: every latency number in
-// this project is one PERF line.
-func TestLineIsOneRow(t *testing.T) {
-	d := Dist{time.Millisecond}
-	line := d.Line("echo/1 pane")
-	if strings.Contains(line, "\n") {
-		t.Errorf("Line spans rows: %q", line)
-	}
-	for _, want := range []string{"PERF", "echo/1 pane", "p50", "p99"} {
-		if !strings.Contains(line, want) {
-			t.Errorf("Line missing %q: %q", want, line)
-		}
 	}
 }

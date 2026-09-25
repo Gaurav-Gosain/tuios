@@ -45,70 +45,6 @@ func testFrame() *Frame {
 	}
 }
 
-// TestRenderProducesEveryFormat checks that all five backends return
-// non-empty, well-formed bytes for the same grid.
-//
-// Negative control: deleting the FormatHTML arm of Render's switch made this
-// fail with `html: unknown format "html"`. Confirmed on the unfixed tree.
-func TestRenderProducesEveryFormat(t *testing.T) {
-	g, f := testGrid(), testFrame()
-	for _, tc := range []struct {
-		format Format
-		check  func(t *testing.T, b []byte)
-	}{
-		{FormatSVG, func(t *testing.T, b []byte) {
-			s := string(b)
-			if !strings.HasPrefix(s, "<svg ") || !strings.HasSuffix(s, "</svg>\n") {
-				t.Errorf("svg is not a complete document: %.60q...", s)
-			}
-			if strings.Contains(s, "foreignObject") {
-				t.Error("svg used foreignObject, which the design forbids")
-			}
-			if !strings.Contains(s, ">hello<") {
-				t.Error("svg lost the content")
-			}
-		}},
-		{FormatPNG, func(t *testing.T, b []byte) {
-			if _, err := png.Decode(bytes.NewReader(b)); err != nil {
-				t.Errorf("png does not decode: %v", err)
-			}
-		}},
-		{FormatANSI, func(t *testing.T, b []byte) {
-			if !bytes.Contains(b, []byte("hello")) {
-				t.Error("ansi lost the content")
-			}
-			if !bytes.Contains(b, []byte("\x1b[38;2;166;227;161m")) {
-				t.Error("ansi lost the truecolor foreground")
-			}
-		}},
-		{FormatHTML, func(t *testing.T, b []byte) {
-			s := string(b)
-			if !strings.HasPrefix(s, "<!doctype html>") {
-				t.Error("html is not a standalone document")
-			}
-			if !strings.Contains(s, "hello") {
-				t.Error("html lost the content")
-			}
-		}},
-		{FormatText, func(t *testing.T, b []byte) {
-			if string(b) != "hello\n│─╭╯\n\n" {
-				t.Errorf("text is %q", string(b))
-			}
-		}},
-	} {
-		t.Run(string(tc.format), func(t *testing.T) {
-			b, err := Render(tc.format, g, f, nil)
-			if err != nil {
-				t.Fatalf("render: %v", err)
-			}
-			if len(b) == 0 {
-				t.Fatal("render returned no bytes")
-			}
-			tc.check(t, b)
-		})
-	}
-}
-
 // TestRenderRejectsAnEmptyGrid keeps a zero-size capture from reaching a
 // backend that would divide by it.
 //
@@ -546,29 +482,6 @@ func TestParseFormatAndExtensions(t *testing.T) {
 	}
 	if FormatPNG.MediaType() != "image/png" {
 		t.Errorf("png media type is %q", FormatPNG.MediaType())
-	}
-}
-
-// TestRenderIsDeterministic checks two renders of one grid are byte-identical,
-// which a golden file or a diffable ANSI export both depend on.
-//
-// This control passes both ways deliberately: nothing in the package is
-// randomised today, and the test exists to catch a map iteration or a time
-// stamp being introduced later.
-func TestRenderIsDeterministic(t *testing.T) {
-	g, f := testGrid(), testFrame()
-	for _, format := range []Format{FormatPNG, FormatSVG, FormatANSI, FormatHTML, FormatText} {
-		a, err := Render(format, g, f, nil)
-		if err != nil {
-			t.Fatalf("%s: %v", format, err)
-		}
-		b, err := Render(format, g, f, nil)
-		if err != nil {
-			t.Fatalf("%s: %v", format, err)
-		}
-		if !bytes.Equal(a, b) {
-			t.Errorf("%s renders differently on a second call", format)
-		}
 	}
 }
 

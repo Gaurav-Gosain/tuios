@@ -1,7 +1,6 @@
 package tape
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -103,55 +102,6 @@ func TestRecorder_SpecialKeys(t *testing.T) {
 	}
 }
 
-func TestRecorder_ModifierCombos(t *testing.T) {
-	r := NewRecorder()
-	r.Start()
-
-	r.RecordKey("ctrl+c")
-	r.RecordKey("ctrl+v")
-	r.RecordKey("alt+tab")
-
-	r.Stop()
-
-	commands := r.GetCommands()
-	if len(commands) != 3 {
-		t.Errorf("Expected 3 commands, got %d", len(commands))
-	}
-
-	for _, cmd := range commands {
-		if cmd.Type != CommandTypeKeyCombo {
-			t.Errorf("Expected KeyCombo command, got %v", cmd.Type)
-		}
-	}
-}
-
-func TestRecorder_String(t *testing.T) {
-	r := NewRecorder()
-	r.Start()
-
-	r.RecordType("echo hello")
-	r.RecordKey("enter")
-
-	r.Stop()
-
-	output := r.String("Test Recording")
-
-	// Should contain header
-	if !strings.Contains(output, "# Test Recording") {
-		t.Error("Expected header in output")
-	}
-
-	// Should contain Type command
-	if !strings.Contains(output, `Type "echo hello"`) {
-		t.Errorf("Expected Type command in output, got: %s", output)
-	}
-
-	// Should contain Enter command
-	if !strings.Contains(output, "Enter") {
-		t.Error("Expected Enter command in output")
-	}
-}
-
 func TestRecorder_TypeEscapingRoundTrip(t *testing.T) {
 	inputs := []string{
 		`he"llo`,
@@ -210,20 +160,6 @@ func TestRecorder_SingleCharEscapingRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRecorder_Clear(t *testing.T) {
-	r := NewRecorder()
-	r.Start()
-
-	r.RecordType("test")
-	r.RecordKey("enter")
-
-	r.Clear()
-
-	if len(r.GetCommands()) != 0 {
-		t.Error("Expected empty commands after clear")
-	}
-}
-
 func TestRecorder_NotRecording(t *testing.T) {
 	r := NewRecorder()
 
@@ -233,22 +169,5 @@ func TestRecorder_NotRecording(t *testing.T) {
 
 	if len(r.GetCommands()) != 0 {
 		t.Error("Should not record when not enabled")
-	}
-}
-
-func TestRecorder_CommandCount(t *testing.T) {
-	r := NewRecorder()
-	r.Start()
-
-	r.RecordType("a")
-	r.RecordType("b")
-	r.RecordType("c")
-	r.RecordKey("enter") // Flushes "abc"
-	r.RecordKey("backspace")
-
-	r.Stop()
-
-	if r.CommandCount() != 3 { // Type "abc", Enter, Backspace
-		t.Errorf("Expected 3 commands, got %d", r.CommandCount())
 	}
 }

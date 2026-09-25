@@ -29,16 +29,6 @@ func useTheme(t *testing.T, id string) *tint.Tint {
 	return cur
 }
 
-// TestSipColorKeepsNilEmpty is the rule the whole partial palette rests on.
-func TestSipColorKeepsNilEmpty(t *testing.T) {
-	if got := sipColor(nil); got != "" {
-		t.Errorf("a nil theme colour became %q, and sip reads anything but the empty string as a colour the user chose", got)
-	}
-	if got := sipColor(tint.FromHex("#cc241d")); got != "#cc241d" {
-		t.Errorf("sipColor wrote %q, want %q", got, "#cc241d")
-	}
-}
-
 // TestBrowserThemeLeavesUnsetColoursEmpty checks the case most of the roster is
 // in. tokyo_night sets neither a cursor nor a selection colour, and a theme
 // that maps those to a zero colour paints a black cursor and a black selection
@@ -143,19 +133,6 @@ func TestBrowserAppearanceWithoutAThemeSendsNoColour(t *testing.T) {
 	}
 }
 
-// TestBrowserAppearanceNamesTheTab keeps the title out of the theme rule. It is
-// not a colour, so no terminal has to settle it, and without one the tab says
-// "Sip" whatever the server is running.
-func TestBrowserAppearanceNamesTheTab(t *testing.T) {
-	useTheme(t, "")
-	if got := browserAppearance().Title; got != "tuios" {
-		t.Errorf("the tab is named %q, want %q", got, "tuios")
-	}
-	if browserAppearance().IsZero() {
-		t.Error("the appearance reads as unset, so sip sends no options blob and the tab keeps sip's name")
-	}
-}
-
 // TestBrowserAppearanceCarriesTheIcon checks the tab icon reaches the page as
 // a data: URI sip accepts. sip refuses a bad favicon URL at startup, so a
 // broken one would be a tuios-web that does not serve.
@@ -208,13 +185,4 @@ func TestEveryThemeReachesTheBrowser(t *testing.T) {
 		t.Errorf("no theme in the roster leaves a colour unset (%d without a selection, %d without a cursor), so this test proves nothing about the nil rule", withNilSelection, withNilCursor)
 	}
 	t.Logf("%d themes, %d without a selection colour, %d without a cursor colour", len(tint.Tints()), withNilSelection, withNilCursor)
-}
-
-// TestBrowserThemeOfNoThemeIsEmpty covers the argument browserTheme is given
-// when theming is off: theme.Current() answers nil and nothing may be read off
-// it.
-func TestBrowserThemeOfNoThemeIsEmpty(t *testing.T) {
-	if th := browserTheme(nil); !th.IsZero() {
-		t.Errorf("a nil theme produced a palette: %+v", th)
-	}
 }

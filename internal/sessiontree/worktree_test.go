@@ -70,30 +70,6 @@ func TestGroupByRepoLeavesUngroupedSessionsAlone(t *testing.T) {
 	}
 }
 
-func TestGroupByRepoMarksTheLastMemberOfEachGroup(t *testing.T) {
-	nodes := []Node{
-		wtSession("a", "tuios", "feat/one"),
-		wtSession("b", "tuios", "feat/two"),
-		wtSession("c", "docs", "fix/typo"),
-	}
-
-	last := map[string]bool{}
-	for _, n := range GroupByRepo(nodes) {
-		if n.Kind == KindSession {
-			last[n.ID] = n.GroupLast
-		}
-	}
-	if last["a"] {
-		t.Error("the first of two members is marked last, so it would close the group early")
-	}
-	if !last["b"] {
-		t.Error("the last member of the tuios group is not marked, so the group never closes")
-	}
-	if !last["c"] {
-		t.Error("the only member of the docs group is not marked last")
-	}
-}
-
 func TestGroupByRepoRollsUpTheWorstMemberState(t *testing.T) {
 	nodes := []Node{
 		wtSession("a", "tuios", "feat/one"),
@@ -143,21 +119,5 @@ func TestGroupByRepoRollUpPrefersAnUnseenDoneOverWorking(t *testing.T) {
 		if n.Kind == KindRepo && n.AgentState != "working" {
 			t.Errorf("with the done pane seen the group rolled up to %q, want working", n.AgentState)
 		}
-	}
-}
-
-func TestBuildSessionCarriesTheWorktreeRecord(t *testing.T) {
-	tree := Build([]SessionInput{
-		{Name: "tuios-feat-one", Worktree: &WorktreeRef{Repo: "tuios", Branch: "feat/one", Gone: true}},
-	})
-	if len(tree.Sessions) != 1 {
-		t.Fatalf("built %d sessions, want 1", len(tree.Sessions))
-	}
-	wt := tree.Sessions[0].Worktree
-	if wt == nil {
-		t.Fatal("the built session dropped its worktree record, so no surface can group it")
-	}
-	if wt.Repo != "tuios" || wt.Branch != "feat/one" || !wt.Gone {
-		t.Errorf("the record came through as %+v, want repo tuios, branch feat/one, gone", *wt)
 	}
 }

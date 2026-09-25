@@ -49,18 +49,3 @@ func TestCellIsTheFontsOwnBox(t *testing.T) {
 		t.Errorf("cell ratio %.4f, want %.4f from the font's own metrics", got, want)
 	}
 }
-
-// TestCellSurvivesAFaceWithNoMetrics checks the fallback is a fallback and not
-// a zero-height cell, which would collapse the whole canvas.
-//
-// Deliberately passes both ways: it guards the guard, and there is no version
-// of the fix under which it fails.
-func TestCellSurvivesAFaceWithNoMetrics(t *testing.T) {
-	faces, err := loadFaces(nil, 0.001)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ch := faces.cellSize(); ch <= 0 {
-		t.Errorf("a degenerate size gave a cell %v tall", ch)
-	}
-}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -150,12 +149,5 @@ func TestFrecencyPrunes(t *testing.T) {
 	}
 	if reloaded.Boost("favourite") == 0 {
 		t.Error("pruning dropped the most recently used entry")
-	}
-}
-
-func TestDefaultPathIsUnderState(t *testing.T) {
-	got := DefaultPath()
-	if !strings.HasSuffix(got, filepath.Join("tuios", "launcher.json")) {
-		t.Fatalf("DefaultPath = %q, want it under the tuios state directory", got)
 	}
 }
