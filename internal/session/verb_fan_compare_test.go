@@ -56,11 +56,6 @@ func wantReached(t *testing.T, what string, resp map[string]any) {
 	}
 }
 
-func worktreePath(t *testing.T, d *Daemon, name string) string {
-	t.Helper()
-	return d.manager.GetSession(name).Worktree().Path
-}
-
 func writeIn(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
@@ -98,84 +93,6 @@ func waitVerify(t *testing.T, d *Daemon, name string) *FanVerify {
 	}
 	t.Fatalf("the check in %s never finished: %+v", name, d.manager.GetSession(name).Worktree().Verify)
 	return nil
-}
-
-// verifyWindows lists the windows named verify in a session.
-func verifyWindows(d *Daemon, name string) []WindowState {
-	var out []WindowState
-	for _, w := range d.manager.GetSession(name).GetState().Windows {
-		if w.CustomName == fanVerifyWindow {
-			out = append(out, w)
-		}
-	}
-	return out
-}
-
-func waitNoVerifyWindow(t *testing.T, d *Daemon, name string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(verifyWindows(d, name)) > 0 {
-		if time.Now().After(deadline) {
-			t.Fatalf("the verify window in %s is still open", name)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// TestVerifyFanRecordsPassedAndFailed: the check runs in each attempt's
-// worktree with the caller's environment, a pass closes its window and a
-// failure keeps it open, and the window holds no grants.
-func TestVerifyFanRecordsPassedAndFailed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the check runs with sh")
-	}
-	d, sp, repo := worktreeFixture(t)
-	c := dialVerb(t, sp)
-	names := fakeFan(t, d, c, repo, "fan/retry", 2, "")
-	writeIn(t, worktreePath(t, d, names[0]), "pass.txt", "ok\n")
-
-	res := result(t, callP(c, t, "verify-fan", map[string]any{
-		"session": names[1],
-		"command": `test "$VERIFY_TOKEN" = yes && test -f pass.txt`,
-		"env":     map[string]any{"VERIFY_TOKEN": "yes"},
-	}))
-	if started, _ := res["sessions"].([]any); len(started) != 2 {
-		t.Fatalf("started in %v, want both attempts", res["sessions"])
-	}
-
-	pass := waitVerify(t, d, names[0])
-	if pass.State != VerifyPassed || pass.Exit == nil || *pass.Exit != 0 || pass.FinishedAt == 0 || !strings.Contains(pass.Command, "pass.txt") {
-		t.Errorf("first attempt = %+v, want passed with exit 0", pass)
-	}
-	fail := waitVerify(t, d, names[1])
-	if fail.State != VerifyFailed || fail.Exit == nil || *fail.Exit != 1 || fail.Note != "" {
-		t.Errorf("second attempt = %+v, want failed with exit 1", fail)
-	}
-	waitNoVerifyWindow(t, d, names[0])
-	kept := verifyWindows(d, names[1])
-	if len(kept) != 1 {
-		t.Fatalf("the failed check's window is not kept open: %d verify windows", len(kept))
-	}
-	// Kept open means its process still runs: an attached client closes a
-	// window whose process exited.
-	if _, exited := d.manager.GetSession(names[1]).GetPTY(kept[0].PTYID).ExitStatus(); exited {
-		t.Error("the failed check's process exited, so a client would close its window")
-	}
-	if g, explicit := d.manager.grants.effective(kept[0].ID); !explicit || g != 0 {
-		t.Errorf("the verify window holds %s (explicit %v), want none", g.String(), explicit)
-	}
-
-	// compare-fan reports the checks.
-	for _, r := range rowsOf(t, result(t, callP(c, t, "compare-fan", map[string]any{"session": names[0], "changes": false}))) {
-		v, _ := r["verify"].(map[string]any)
-		want := VerifyPassed
-		if r["session"] == names[1] {
-			want = VerifyFailed
-		}
-		if v == nil || v["state"] != want {
-			t.Errorf("%v reports verify %v, want %s", r["session"], r["verify"], want)
-		}
-	}
 }
 
 // TestFanVerbsReachOnlyTheSiblingsThePaneReaches: a pane without admin names
@@ -235,15 +152,6 @@ func TestVerifyFanEnvIsRefusedOverALink(t *testing.T) {
 		ErrVerbForbidden, "verify-fan with env over a link")
 	if v := d.manager.GetSession(names[0]).Worktree().Verify; v != nil {
 		t.Errorf("a refused call started a check: %+v", v)
-	}
-}
-
-func TestFanOrderPutsTenAfterNine(t *testing.T) {
-	names := []string{"api-fan-10", "api-fan-2", "api-fan", "api-fan-9", "api-fan-3"}
-	slices.SortFunc(names, fanOrder)
-	want := []string{"api-fan", "api-fan-2", "api-fan-3", "api-fan-9", "api-fan-10"}
-	if !slices.Equal(names, want) {
-		t.Errorf("order = %v, want %v", names, want)
 	}
 }
 

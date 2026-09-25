@@ -38,13 +38,40 @@ func mustPalette(t *testing.T, hex []string) [16]color.Color {
 	return pal
 }
 
-func TestResolveSGRBrightBackground(t *testing.T) {
+// TestResolveSGR resolves palette colours against a themed palette and leaves
+// everything that is not a palette colour as it was. The cases that have
+// broken before: a bright background, the 256-colour spelling of a low index,
+// a sub-parameter such as "4:3" that was once flattened into a reset, and
+// malformed colour fields that must not be guessed into another attribute.
+func TestResolveSGR(t *testing.T) {
 	pal := mochaPalette()
-	// 107 = bright white = palette index 15 = #a6adc8.
-	got := ResolveSGR("\x1b[107m", pal)
-	want := "\x1b[48;2;166;173;200m"
-	if got != want {
-		t.Fatalf("ResolveSGR(107) = %q, want %q", got, want)
+	for _, tc := range []struct {
+		name, in, want string
+	}{
+		// 107 = bright white = palette index 15 = #a6adc8.
+		{"bright background", "\x1b[107m", "\x1b[48;2;166;173;200m"},
+		{"256 low index uses the palette", "\x1b[38;5;1m", "\x1b[38;2;243;139;168m"},
+		{"sub-parameters preserved", "\x1b[1;4:3;31mMIX\x1b[0m", "\x1b[1;4:3;38;2;243;139;168mMIX\x1b[0m"},
+		{"indexed colour cut short", "\x1b[38;5;m", "\x1b[38;5;m"},
+		{"sub-parameter where an index belongs", "\x1b[38;5;:9m", "\x1b[38;5;:9m"},
+		{"colon introducer", "\x1b[38:2:196m", "\x1b[38:2:196m"},
+		{"truecolour left alone", "\x1b[38;2;1;2;3m", "\x1b[38;2;1;2;3m"},
+		{"two colours", "\x1b[31;44m", "\x1b[38;2;243;139;168;48;2;137;180;250m"},
+		{"bare reset", "\x1b[m", "\x1b[m"},
+		{"zero reset", "\x1b[0m", "\x1b[0m"},
+		{"empty fields", "\x1b[;m", "\x1b[;m"},
+		{"plain text", "plain text", "plain text"},
+		{"empty", "", ""},
+		{"erase display", "\x1b[2J", "\x1b[2J"},
+		{"cursor position", "\x1b[1;1H", "\x1b[1;1H"},
+		{"private mode", "\x1b[?25l", "\x1b[?25l"},
+		{"mixed content",
+			"line \x1b[31mred\x1b[0m and \x1b[1;44mblue bold\x1b[m done",
+			"line \x1b[38;2;243;139;168mred\x1b[0m and \x1b[1;48;2;137;180;250mblue bold\x1b[m done"},
+	} {
+		if got := ResolveSGR(tc.in, pal); got != tc.want {
+			t.Errorf("%s: ResolveSGR(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
 	}
 }
 
@@ -63,16 +90,6 @@ func TestResolveSGRBrightForegroundUsesBrightSlot(t *testing.T) {
 	want := "\x1b[38;2;255;0;0m" // pal[9] = #ff0000, not pal[1] = #222222
 	if got != want {
 		t.Fatalf("ResolveSGR(91) = %q, want %q (bright slot, not normal slot)", got, want)
-	}
-}
-
-func TestResolveSGR256LowIndexUsesPalette(t *testing.T) {
-	pal := mochaPalette()
-	// 38;5;1 is the 256-colour spelling of index 1; the theme palette owns it.
-	got := ResolveSGR("\x1b[38;5;1m", pal)
-	want := "\x1b[38;2;243;139;168m"
-	if got != want {
-		t.Fatalf("ResolveSGR(38;5;1) = %q, want %q", got, want)
 	}
 }
 
@@ -111,81 +128,6 @@ func TestResolveSGR256EveryIndex(t *testing.T) {
 		if got := ResolveSGR(in, pal); got != want {
 			t.Errorf("ResolveSGR(38;5;%d) = %q, want %q", i, got, want)
 		}
-	}
-}
-
-// TestResolveSGRSubparametersPreserved pins the fix for fields SGR reads as a
-// single parameter with variants: "4:3" (curly underline) must survive
-// verbatim while its neighbours still resolve. Flattening it to 0 once turned
-// the sequence into a reset that killed bold and underline.
-func TestResolveSGRSubparametersPreserved(t *testing.T) {
-	pal := mochaPalette()
-	got := ResolveSGR("\x1b[1;4:3;31mMIX\x1b[0m", pal)
-	want := "\x1b[1;4:3;38;2;243;139;168mMIX\x1b[0m"
-	if got != want {
-		t.Fatalf("ResolveSGR(sub-params) = %q, want %q", got, want)
-	}
-}
-
-// TestResolveSGRMalformedFieldsPreserved checks fields that cannot be colour
-// parameters are handed back untouched rather than guessed into some other
-// attribute: an indexed colour cut short before its index, a sub-parameter
-// where an index belongs, and the colon spelling of the introducer itself.
-func TestResolveSGRMalformedFieldsPreserved(t *testing.T) {
-	pal := mochaPalette()
-	for _, in := range []string{
-		"\x1b[38;5;m",
-		"\x1b[38;5;:9m",
-		"\x1b[38:2:196m",
-	} {
-		if got := ResolveSGR(in, pal); got != in {
-			t.Fatalf("ResolveSGR(%q) = %q, want unchanged %q", in, got, in)
-		}
-	}
-}
-
-func TestResolveSGRTrueColourLeftAlone(t *testing.T) {
-	pal := mochaPalette()
-	in := "\x1b[38;2;1;2;3m"
-	if got := ResolveSGR(in, pal); got != in {
-		t.Fatalf("ResolveSGR(truecolour) = %q, want unchanged %q", got, in)
-	}
-}
-
-func TestResolveSGRMultipleColours(t *testing.T) {
-	pal := mochaPalette()
-	got := ResolveSGR("\x1b[31;44m", pal)
-	want := "\x1b[38;2;243;139;168;48;2;137;180;250m"
-	if got != want {
-		t.Fatalf("ResolveSGR(31;44) = %q, want %q", got, want)
-	}
-}
-
-func TestResolveSGRResetAndEmpty(t *testing.T) {
-	pal := mochaPalette()
-	for _, in := range []string{"\x1b[m", "\x1b[0m", "\x1b[;m", "plain text", ""} {
-		if got := ResolveSGR(in, pal); got != in {
-			t.Fatalf("ResolveSGR(%q) = %q, want unchanged %q", in, got, in)
-		}
-	}
-}
-
-func TestResolveSGRNonSGRCSIIntact(t *testing.T) {
-	pal := mochaPalette()
-	for _, in := range []string{"\x1b[2J", "\x1b[1;1H", "\x1b[?25l"} {
-		if got := ResolveSGR(in, pal); got != in {
-			t.Fatalf("ResolveSGR(%q) = %q, want unchanged %q", in, got, in)
-		}
-	}
-}
-
-func TestResolveSGRMixedContent(t *testing.T) {
-	pal := mochaPalette()
-	in := "line \x1b[31mred\x1b[0m and \x1b[1;44mblue bold\x1b[m done"
-	got := ResolveSGR(in, pal)
-	want := "line \x1b[38;2;243;139;168mred\x1b[0m and \x1b[1;48;2;137;180;250mblue bold\x1b[m done"
-	if got != want {
-		t.Fatalf("ResolveSGR(mixed) = %q, want %q", got, want)
 	}
 }
 

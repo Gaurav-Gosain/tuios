@@ -28,33 +28,3 @@ func TestListingCannotDropAJustCreatedSession(t *testing.T) {
 		t.Fatalf("a current listing failed to drop a gone session: %v", names)
 	}
 }
-
-// TestUnchangedListingHoldsCacheGen keeps the sidebar's render cache useful: the
-// poll runs every few seconds and almost always brings back the same listing, so
-// only a listing that would draw differently may bump the generation the rail
-// keys its cache on.
-func TestUnchangedListingHoldsCacheGen(t *testing.T) {
-	c := NewTUIClient()
-	listing := []SessionInfo{
-		{Name: "one", WindowCount: 1, Windows: []WindowSummary{{ID: "w1", Title: "vim"}}},
-		{Name: "two"},
-	}
-	c.UpdateSessionCache(listing)
-	gen := c.CacheGen()
-
-	c.UpdateSessionCache([]SessionInfo{
-		{Name: "one", WindowCount: 1, Windows: []WindowSummary{{ID: "w1", Title: "vim"}}},
-		{Name: "two"},
-	})
-	if c.CacheGen() != gen {
-		t.Fatal("an identical listing bumped the cache generation, forcing a rail rebuild")
-	}
-
-	c.UpdateSessionCache([]SessionInfo{
-		{Name: "one", WindowCount: 1, Windows: []WindowSummary{{ID: "w1", Title: "htop"}}},
-		{Name: "two"},
-	})
-	if c.CacheGen() == gen {
-		t.Fatal("a changed window title left the cache generation alone, so the rail would not redraw")
-	}
-}

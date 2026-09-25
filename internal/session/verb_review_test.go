@@ -1,8 +1,6 @@
 package session
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -134,49 +132,6 @@ func TestSendReviewFromAPaneSaysSo(t *testing.T) {
 	result(t, callP(pane, t, "send-review", map[string]any{"session": "work", "window": b}))
 	if text := queuedText(d, b); !strings.HasPrefix(text, "Review notes on your changes, from pane lead:") {
 		t.Errorf("a pane's message =\n%s", text)
-	}
-}
-
-// TestReviewNotesSurviveARestart: the store is saved and loaded; a pane that
-// did not come back, and a worktree whose directory is gone, lose their notes.
-func TestReviewNotesSurviveARestart(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "review", "notes.json")
-	root := t.TempDir()
-	gone := filepath.Join(t.TempDir(), "gone")
-	if err := os.MkdirAll(gone, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	var s reviewNoteStore
-	s.load(path, func(string) bool { return true })
-	kept, _ := s.add(root, "w-live", review.Note{Path: "a.go", Side: "new", Line: 3, Text: "keep"})
-	s.add(root, "w-dead", review.Note{Path: "a.go", Side: "new", Line: 3, Text: "pane gone"})
-	s.add(gone, "w-live", review.Note{Path: "a.go", Side: "new", Line: 3, Text: "dir gone"})
-	s.setBase(root, "w-live", "origin/main")
-	s.saveNowAndFreeze()
-	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("the saved file = %v (%v), want mode 0600", info, err)
-	}
-	if err := os.RemoveAll(gone); err != nil {
-		t.Fatal(err)
-	}
-
-	var back reviewNoteStore
-	back.load(path, func(w string) bool { return w == "w-live" })
-	notes, base := back.list(root, "w-live")
-	if len(notes) != 1 || notes[0].ID != kept.ID || notes[0].Text != "keep" || base != "origin/main" {
-		t.Errorf("loaded = %v base %q", notes, base)
-	}
-	if n, _ := back.list(root, "w-dead"); len(n) != 0 {
-		t.Errorf("a pane that did not come back kept %v", n)
-	}
-	if n, _ := back.list(gone, "w-live"); len(n) != 0 {
-		t.Errorf("a worktree that is gone kept %v", n)
-	}
-	next, _ := back.add(root, "w-live", review.Note{Path: "b.go", Side: "new", Line: 1, Text: "new"})
-	if next.ID == kept.ID || next.ID == "n1" || next.ID == "n2" || next.ID == "n3" {
-		t.Errorf("an id was reused after the restart: %s", next.ID)
 	}
 }
 

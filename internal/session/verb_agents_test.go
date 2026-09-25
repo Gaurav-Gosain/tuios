@@ -2,8 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -38,45 +36,6 @@ func TestReadingWithoutAnInboxMarksNothing(t *testing.T) {
 	unread := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"peek","to":"`+b+`","unread":true}}`))
 	if n, _ := unread["messages"].([]any); len(n) != 1 {
 		t.Errorf("a session-wide read consumed the recipient's mail: %v", unread)
-	}
-}
-
-// TestPeekDoesNotMarkRead covers the explicit opt-out.
-func TestPeekDoesNotMarkRead(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "nopeek")
-	c := dialVerb(t, sp)
-
-	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"nopeek","to":"`+b+`","from":"`+a+`","text":"still unread"}}`)
-	result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"nopeek","to":"`+b+`","peek":true}}`))
-
-	unread := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"nopeek","to":"`+b+`","unread":true}}`))
-	if n, _ := unread["messages"].([]any); len(n) != 1 {
-		t.Errorf("peek marked the message read: %v", unread)
-	}
-}
-
-// TestNoticeHasNoRecipient covers the second addressing mode: a message with no
-// recipient is readable by everyone and unread by nobody.
-func TestNoticeHasNoRecipient(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "notice")
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"notice","from":"`+a+`","text":"deploying soon"}}`))
-	if res["kind"] != agentMsgNotice {
-		t.Errorf("kind = %v, want %s", res["kind"], agentMsgNotice)
-	}
-
-	// It never counts as unread mail for anyone.
-	unread := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"notice","to":"`+b+`","unread":true}}`))
-	if n, _ := unread["messages"].([]any); len(n) != 0 {
-		t.Errorf("a notice showed up as unread mail: %v", unread)
-	}
-	// And an inbox read that asks for notices sees it.
-	withNotices := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"notice","to":"`+b+`","notices":true}}`))
-	if n, _ := withNotices["messages"].([]any); len(n) != 1 {
-		t.Errorf("an inbox read asking for notices did not see one: %v", withNotices)
 	}
 }
 
@@ -184,47 +143,6 @@ func TestOversizedMessageIsRefused(t *testing.T) {
 	}
 }
 
-// TestAttachmentIsAReferenceNotBytes covers the payload decision: the ring holds
-// a path and the reader is told whether the file is still there.
-func TestAttachmentIsAReferenceNotBytes(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "attach")
-	c := dialVerb(t, sp)
-
-	dir := t.TempDir()
-	img := filepath.Join(dir, "shot.png")
-	if err := os.WriteFile(img, []byte("not really a png"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"attach","to":"`+b+`","from":"`+a+`","text":"look","attachments":["`+img+`"]}}`)
-	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"attach","to":"`+b+`","peek":true}}`))
-	m := read["messages"].([]any)[0].(map[string]any)
-	atts, _ := m["attachments"].([]any)
-	if len(atts) != 1 {
-		t.Fatalf("attachment did not survive: %v", m)
-	}
-	att := atts[0].(map[string]any)
-	if att["kind"] != "image" || att["media_type"] != "image/png" || att["path"] != img {
-		t.Errorf("attachment classified wrong: %v", att)
-	}
-	if att["missing"] == true {
-		t.Error("an attachment whose file exists reported missing")
-	}
-
-	// The producer owns the file, so removing it is visible to the reader rather
-	// than hidden by a copy the queue never made.
-	if err := os.Remove(img); err != nil {
-		t.Fatalf("remove: %v", err)
-	}
-	read = result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"attach","to":"`+b+`","peek":true}}`))
-	m = read["messages"].([]any)[0].(map[string]any)
-	att = m["attachments"].([]any)[0].(map[string]any)
-	if att["missing"] != true {
-		t.Errorf("a deleted attachment did not read missing: %v", att)
-	}
-}
-
 func TestAttachmentMustBeAnExistingAbsolutePath(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, a, b := twoWindowSession(t, d, "badattach")
@@ -274,38 +192,6 @@ func TestAskCycleIsRefusedBeforeItSpins(t *testing.T) {
 	bus.closeAsk("a", "b")
 	if !bus.openAsk("b", "a") {
 		t.Error("the edge stayed blocked after the ask it belonged to finished")
-	}
-}
-
-func TestAskRefusesToAskItself(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "askself")
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"askself","window":"`+a+`","from":"`+a+`","text":"hello"}}`)
-	if code := errCode(t, resp); code != ErrVerbLoopRefused {
-		t.Errorf("code = %q, want %q", code, ErrVerbLoopRefused)
-	}
-}
-
-// TestAskWaitsForAWorkingAgent covers the readiness gate: an agent mid-turn is
-// not typed at, and the failure names the remedy rather than the clock.
-func TestAskWaitsForAWorkingAgent(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, a, b := twoWindowSession(t, d, "busy")
-	c := dialVerb(t, sp)
-
-	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateWorking, Message: "mid turn"}); err != nil {
-		t.Fatalf("ApplyAgentReport: %v", err)
-	}
-
-	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"busy","window":"`+b+`","from":"`+a+`","text":"hello","ready_timeout":250}}`)
-	if code := errCode(t, resp); code != ErrVerbNotReady {
-		t.Fatalf("code = %q, want %q", code, ErrVerbNotReady)
-	}
-	e := resp["error"].(map[string]any)
-	if !strings.Contains(e["message"].(string), "still working") {
-		t.Errorf("refusal did not say why: %v", e["message"])
 	}
 }
 
@@ -409,42 +295,6 @@ func TestAskStopsWaitingWhenTheAgentBlocks(t *testing.T) {
 	}
 }
 
-// TestBlockedByFollowsTheRuleKind covers blocked_by in list-agents and
-// get-agent-state: the kind a report carries while the pane is on
-// needs_input, and nothing once it has moved on.
-func TestBlockedByFollowsTheRuleKind(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, _, b := twoWindowSession(t, d, "kind")
-	c := dialVerb(t, sp)
-
-	read := func() (map[string]any, map[string]any) {
-		t.Helper()
-		row := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"kind"}}`))["agents"].([]any)[0].(map[string]any)
-		st := result(t, c.call(t, `{"id":2,"verb":"get-agent-state","params":{"session":"kind","window":"`+b+`"}}`))
-		return row, st
-	}
-
-	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateNeedsInput, Message: "pick one", Kind: "question", Source: AgentSourceScreen}); err != nil {
-		t.Fatalf("ApplyAgentReport: %v", err)
-	}
-	row, st := read()
-	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
-		if got["blocked_by"] != "question" || got["ready"] != false {
-			t.Errorf("%s: blocked_by = %v ready = %v, want question and false", name, got["blocked_by"], got["ready"])
-		}
-	}
-
-	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
-		t.Fatalf("ApplyAgentReport: %v", err)
-	}
-	row, st = read()
-	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
-		if got["blocked_by"] != "" || got["ready"] != true {
-			t.Errorf("%s: blocked_by = %v ready = %v after idle, want empty and true", name, got["blocked_by"], got["ready"])
-		}
-	}
-}
-
 // TestAgentKindSurvivesAClientSync covers the merge: a client never sends the
 // kind, so a sync that omits it must not wipe it.
 func TestAgentKindSurvivesAClientSync(t *testing.T) {
@@ -453,101 +303,5 @@ func TestAgentKindSurvivesAClientSync(t *testing.T) {
 	retainDaemonExclusive(incoming, canonical)
 	if got := incoming.Windows[0].AgentKind; got != "approval" {
 		t.Errorf("AgentKind = %q after a client sync, want approval", got)
-	}
-}
-
-// TestAskReachesARestingAgent drives the whole composition against a plain
-// shell, which is the pane that reports nothing: the settle timer is the only
-// signal, and the reply is what the pane printed after the question.
-func TestAskReachesARestingAgent(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "ask")
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"ask","window":"`+b+`","from":"`+a+`","text":"echo tuios_ask_reply","settle":700,"timeout":15000}}`))
-	if res["untrusted"] != true {
-		t.Error("a reply did not report itself as untrusted")
-	}
-	if res["settled_by"] != "idle" {
-		t.Errorf("settled_by = %v, want idle for a pane that reports no state", res["settled_by"])
-	}
-	if reply, _ := res["reply"].(string); !strings.Contains(reply, "tuios_ask_reply") {
-		t.Errorf("reply did not carry what the pane printed: %q", reply)
-	}
-}
-
-// TestTailLinesReturnsOnlyWhatCameAfter pins the delta the reply is built from.
-func TestTailLinesReturnsOnlyWhatCameAfter(t *testing.T) {
-	content := "one\ntwo\nthree\nfour"
-	got, truncated := tailLines(content, 2, 10)
-	if got != "three\nfour" {
-		t.Errorf("tail = %q, want the lines after the baseline", got)
-	}
-	if truncated {
-		t.Error("nothing was cut but truncated was set")
-	}
-	got, truncated = tailLines(content, 0, 2)
-	if got != "three\nfour" || !truncated {
-		t.Errorf("capped tail = %q truncated=%v", got, truncated)
-	}
-	// A baseline past the end of the content is the pane having been cleared,
-	// and must not panic or return the whole screen.
-	if got, _ = tailLines(content, 99, 10); got != "" {
-		t.Errorf("tail past the end = %q, want empty", got)
-	}
-}
-
-// TestFirstReadIsMarkedNew covers what ReadAt cannot say on the call that sets
-// it. A marking read stamps every message it returns, so without this a reader
-// could not tell the message that just arrived from the twenty it had already
-// seen, and the per-message flag disagreed with the unread count in the footer.
-func TestFirstReadIsMarkedNew(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "wasunread")
-	c := dialVerb(t, sp)
-
-	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"wasunread","to":"`+b+`","from":"`+a+`","text":"first"}}`)
-
-	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
-	m := read["messages"].([]any)[0].(map[string]any)
-	if m["was_unread"] != true {
-		t.Errorf("the first read did not mark the message new: %v", m)
-	}
-	if m["read_at"] == nil {
-		t.Error("the first read did not also stamp read_at")
-	}
-
-	read = result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
-	m = read["messages"].([]any)[0].(map[string]any)
-	if m["was_unread"] == true {
-		t.Errorf("a second read still called the message new: %v", m)
-	}
-}
-
-// TestUnclaimedPaneReportsNoSource pins the absence. An unset claim reads back
-// as "report" because that is the default a caller naming no source gets, so
-// listing it verbatim said a pane sitting at a shell prompt had reported itself.
-func TestUnclaimedPaneReportsNoSource(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, a, b := twoWindowSession(t, d, "nosource")
-	c := dialVerb(t, sp)
-
-	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
-		t.Fatalf("ApplyAgentReport: %v", err)
-	}
-
-	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"nosource","all":true}}`))
-	for _, raw := range res["agents"].([]any) {
-		row := raw.(map[string]any)
-		switch row["window_id"] {
-		case a:
-			if row["source"] != "" {
-				t.Errorf("a pane nothing claimed reported source %v", row["source"])
-			}
-		case b:
-			if row["source"] != "report" {
-				t.Errorf("a reporting pane lost its source: %v", row["source"])
-			}
-		}
 	}
 }

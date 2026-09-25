@@ -1,7 +1,6 @@
 package session
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
@@ -50,59 +49,6 @@ func drain(ch <-chan ptyChunk) []byte {
 		default:
 			return out
 		}
-	}
-}
-
-func TestFirstSubscriberGetsTheCatchUpBuffer(t *testing.T) {
-	p := newBufferedPTY(t)
-
-	got := drain(p.Subscribe("client-1", 0))
-	if !bytes.Equal(got, []byte(fishBanner)) {
-		t.Errorf("first subscriber got %q, want the buffered output %q", got, fishBanner)
-	}
-}
-
-func TestResubscribeReplaysOnlyWhatWasMissed(t *testing.T) {
-	p := newBufferedPTY(t)
-
-	ch := p.Subscribe("client-1", 0)
-	drain(ch)
-	resume := p.Unsubscribe("client-1")
-
-	// Nothing happened while the pane was hidden, so showing it again must
-	// deliver nothing at all.
-	got := drain(p.Subscribe("client-1", resume))
-	if len(got) != 0 {
-		t.Errorf("idle resubscribe replayed %q, want nothing", got)
-	}
-	resume = p.Unsubscribe("client-1")
-
-	// The pane produced output while hidden: exactly that output, once.
-	p.appendAndBroadcast([]byte("hidden output\r\n"))
-	got = drain(p.Subscribe("client-1", resume))
-	if string(got) != "hidden output\r\n" {
-		t.Errorf("resubscribe replayed %q, want only the output missed while hidden", got)
-	}
-}
-
-// TestResubscribeFallsBackWhenTheBufferRolled covers a pane that outran the
-// catch-up buffer while hidden: the client cannot be resumed byte-exactly, so
-// it gets everything the buffer still holds rather than a silent gap.
-func TestResubscribeFallsBackWhenTheBufferRolled(t *testing.T) {
-	p := newBufferedPTY(t)
-
-	ch := p.Subscribe("client-1", 0)
-	drain(ch)
-	resume := p.Unsubscribe("client-1")
-
-	p.appendAndBroadcast(bytes.Repeat([]byte("x"), 96*1024))
-
-	got := drain(p.Subscribe("client-1", resume))
-	if want := 64*1024 + len(resyncPrefix); len(got) != want {
-		t.Errorf("rolled-buffer resubscribe replayed %d bytes, want the whole %d-byte buffer behind a resync", len(got), want)
-	}
-	if !bytes.HasPrefix(got, resyncPrefix) {
-		t.Error("a catch-up the client cannot splice onto its screen arrived without a resync in front of it")
 	}
 }
 

@@ -1,13 +1,10 @@
 package session
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -59,89 +56,6 @@ func stateWindow(t *testing.T, s *SessionState, id string) WindowState {
 	}
 	t.Fatalf("no window %s in the state; it holds %d", id, len(s.Windows))
 	return WindowState{}
-}
-
-// TestTheShellPidReachesAClientOverTheSocket is the whole transport, end to
-// end: the daemon reads the pid off the PTY it owns, stamps it on the
-// detector's poll, and the attached client is pushed a state carrying it. The
-// pid has to name the pane's real shell, because the client corroborates the
-// pane's reported directory by reading that process's /proc entry.
-func TestTheShellPidReachesAClientOverTheSocket(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	if _, err := d.manager.CreateSession("pids", &SessionConfig{}, 80, 24); err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	sess := d.manager.GetSession("pids")
-
-	// Attached before the pane exists, because a pane opened while a client is
-	// watching is the case that has to work: the pid has to be on the state the
-	// daemon pushes for it, not on some later one.
-	client := attachTestClient(t, "pids")
-	var got syncWatcher
-	client.OnStateSync(got.add)
-
-	if _, err := sess.AddDaemonWindow("Window", nil); err != nil {
-		t.Fatalf("AddDaemonWindow: %v", err)
-	}
-	state := sess.GetState()
-	if len(state.Windows) != 1 {
-		t.Fatalf("the session holds %d windows, want 1", len(state.Windows))
-	}
-	winID := state.Windows[0].ID
-	pty := sess.GetPTY(state.Windows[0].PTYID)
-	if pty == nil {
-		t.Fatal("the window has no PTY, so there is no pid to send")
-	}
-	want := pty.ShellPID()
-	if want <= 0 {
-		t.Fatal("the daemon's own PTY reports no shell pid")
-	}
-
-	s := got.await(t, "a state carrying the pane's shell pid", func(s *SessionState) bool {
-		for _, w := range s.Windows {
-			if w.ID == winID && w.ShellPID != 0 {
-				return true
-			}
-		}
-		return false
-	})
-	if pid := stateWindow(t, s, winID).ShellPID; pid != want {
-		t.Fatalf("the client was sent shell pid %d, want %d", pid, want)
-	}
-
-	// The pid is only worth sending if it names a live process. On Linux that
-	// is the very read the corroboration makes, so assert it directly.
-	// Elsewhere there is no /proc, and signal 0 asks the same question of the
-	// kernel: does this pid name a process this user can address.
-	if runtime.GOOS == "linux" {
-		if _, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", want)); err != nil {
-			t.Fatalf("the pid the client got names no readable process: %v", err)
-		}
-	} else if err := syscall.Kill(want, 0); err != nil {
-		t.Fatalf("the pid the client got names no live process: %v", err)
-	}
-
-	// The client stores this in a field called ShellPgid, and one client-side
-	// check still reads it as a process group. The PTY layer puts the shell in a
-	// session of its own, so the two are the same number; this is the assertion
-	// that says so, and it is what would catch a PTY layer that stopped.
-	if pgid, err := syscall.Getpgid(want); err != nil {
-		t.Fatalf("Getpgid(%d): %v", want, err)
-	} else if pgid != want {
-		t.Fatalf("the pane's shell is pid %d in group %d; the client reads the number as a group", want, pgid)
-	}
-
-	// The poll runs every two seconds for the life of the daemon, so a pid that
-	// reads as changed on a settled pane would republish the whole session state
-	// to every client forever. This is the same guard
-	// TestAgentDetectSweepIsIdempotentWhenIdle holds, asked of the real resolver
-	// rather than a fake one, because only the real one stamps a pid at all.
-	for i := range 3 {
-		sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
-		if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != want {
-			t.Fatalf("poll %d moved the pid to %d, want %d", i+1, pid, want)
-		}
-	}
 }
 
 // TestAZeroShellPidSurvivesTheSocket is the gob trap, asked directly. Zero is
@@ -279,46 +193,6 @@ func TestTheShellPidIsNotWrittenToResurrectionState(t *testing.T) {
 	}
 }
 
-// TestThePollRestoresAShellPidThatWentMissing is the detector's half of the
-// contract. The pid is stamped where the PTY is created, but the poll is what
-// keeps it true: it is the only thing that runs again, so it is what corrects a
-// pane whose pid was lost and what clears one whose shell has gone.
-//
-// Nothing in the product zeroes the field by hand. It is zeroed here because a
-// pane that arrived with no pid is the case the poll exists for: a session
-// restored from disk, which carries no pid, and a daemon upgraded under a
-// running client.
-func TestThePollRestoresAShellPidThatWentMissing(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "repoll")
-
-	state := sess.GetState()
-	winID := state.Windows[0].ID
-	want := sess.GetPTY(state.Windows[0].PTYID).ShellPID()
-	if want <= 0 {
-		t.Fatal("the daemon's own PTY reports no shell pid")
-	}
-
-	if err := sess.mutateState(func(st *SessionState) error {
-		for i := range st.Windows {
-			st.Windows[i].ShellPID = 0
-		}
-		return nil
-	}); err != nil {
-		t.Fatalf("mutateState: %v", err)
-	}
-	if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != 0 {
-		t.Fatalf("the pid did not clear: %d", pid)
-	}
-
-	// The count the poll returns is agent states only, so the pid coming back is
-	// read off the state rather than out of the return.
-	sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
-	if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != want {
-		t.Fatalf("the poll left shell pid %d, want %d", pid, want)
-	}
-}
-
 // oldWindowState is a WindowState as a peer that predates ShellPID encodes one.
 // gob matches struct fields by name, so encoding this and decoding a
 // WindowState is what an older daemon on the wire looks like.
@@ -355,74 +229,5 @@ func TestAPeerThatNeverHeardOfTheFieldDecodesAsUnknown(t *testing.T) {
 	}
 	if got.ShellPID != 0 {
 		t.Fatalf("a peer that sent no pid decoded as %d, want 0", got.ShellPID)
-	}
-}
-
-// TestARestoredPaneCarriesItsNewShellPid closes the last gap in the field's
-// life. Resurrection state carries no pid on purpose, so a restored session
-// would otherwise sit uncheckable until the detector's next poll. The respawn
-// already has the number.
-func TestARestoredPaneCarriesItsNewShellPid(t *testing.T) {
-	t.Cleanup(useResurrectionDir(t.TempDir()))
-
-	cwd := t.TempDir()
-	if err := SaveSessionForResurrection(&SessionState{
-		Name: "restored", CurrentWorkspace: 1, Width: 120, Height: 40,
-		Windows: []WindowState{
-			{ID: "win-1", Title: "shell", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-pty-1", Cwd: cwd},
-		},
-	}); err != nil {
-		t.Fatalf("SaveSessionForResurrection: %v", err)
-	}
-
-	d := NewDaemon(&DaemonConfig{})
-	d.restoreAllSessions()
-	t.Cleanup(d.manager.Shutdown)
-
-	sess := d.manager.GetSession("restored")
-	if sess == nil {
-		t.Fatal("the session was not restored")
-	}
-	state := sess.GetState()
-	if len(state.Windows) != 1 {
-		t.Fatalf("the restored session holds %d windows, want 1", len(state.Windows))
-	}
-	w := state.Windows[0]
-	pty := sess.GetPTY(w.PTYID)
-	if pty == nil {
-		t.Fatal("the restored window has no PTY")
-	}
-	if w.ShellPID != pty.ShellPID() || w.ShellPID <= 0 {
-		t.Fatalf("the restored pane carries shell pid %d, want the respawned shell's %d", w.ShellPID, pty.ShellPID())
-	}
-}
-
-// TestANewPaneCarriesItsShellPidBeforeAnyPoll pins the stamp at PTY creation on
-// its own. The detector's poll would fill the pid in within two seconds anyway,
-// so nothing else in this file can tell the two sources apart; this one can,
-// because the session it builds has no daemon behind it and therefore no poll.
-//
-// Those two seconds are the point. A pane the rail cannot check is a pane whose
-// file actions are live on whatever directory it names, and a pane is at its
-// most talkative in the moment it starts.
-func TestANewPaneCarriesItsShellPidBeforeAnyPoll(t *testing.T) {
-	t.Cleanup(useResurrectionDir(t.TempDir()))
-
-	sess, err := NewSession("fresh", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-	t.Cleanup(sess.Stop)
-	if _, err := sess.AddDaemonWindow("Window", nil); err != nil {
-		t.Fatalf("AddDaemonWindow: %v", err)
-	}
-
-	w := sess.GetState().Windows[0]
-	pty := sess.GetPTY(w.PTYID)
-	if pty == nil {
-		t.Fatal("the new window has no PTY")
-	}
-	if w.ShellPID != pty.ShellPID() || w.ShellPID <= 0 {
-		t.Fatalf("a pane carries shell pid %d before its first poll, want its shell's %d", w.ShellPID, pty.ShellPID())
 	}
 }

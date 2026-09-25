@@ -134,3 +134,11 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 		t.Fatalf("waiters did not each get their own response: %v", got)
 	}
 }
+
+// newTestTUIClient builds a TUIClient wired to one end of an in-memory pipe so
+// the read loop can be exercised without a real daemon.
+func newTestTUIClient(conn net.Conn) *TUIClient {
+	c := NewTUIClient()
+	c.conn = conn
+	return c
+}

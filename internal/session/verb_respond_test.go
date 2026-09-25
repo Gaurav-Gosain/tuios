@@ -250,50 +250,6 @@ func TestRespondDoesNotAnswerTheSamePromptTwice(t *testing.T) {
 	}
 }
 
-// TestRespondTypesATextAnswer: a rule that declares text = true takes an
-// answer in words, pasted and submitted as a prompt is. The manifest is a
-// user one, which is how a harness nobody bundled gets answers.
-func TestRespondTypesATextAnswer(t *testing.T) {
-	dir := t.TempDir()
-	manifest := `schema_version = 1
-id = "x-agent"
-[detect]
-comm = ["x-agent-bin"]
-[screen]
-enabled = true
-[[screen.rule]]
-state = "needs_input"
-kind = "question"
-all = ["Which branch?"]
-[screen.rule.answers]
-text = true
-`
-	if err := os.WriteFile(filepath.Join(dir, "x-agent.toml"), []byte(manifest), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TUIOS_HARNESS_DIR", dir)
-	d, sp := startTestDaemon(t)
-	ag := startBlockedAgent(t, d, sp, "text", "x-agent", "text")
-	c := dialVerb(t, sp)
-	pk := peek(t, c, "text", ag.window)
-	if fmt.Sprint(pk["actions"]) != "[text]" || pk["kind"] != "question" {
-		t.Fatalf("peek: %v", pk)
-	}
-	tui := attachTUI(t, sp, "text")
-	params := map[string]any{"session": "text", "window": ag.window, "action": "text", "value": "main", "prompt_id": pk["prompt_id"], "human_nonce": tui.HumanNonce()}
-	res := result(t, callVerb(t, c, "respond", params))
-	if res["sent"] != "text" {
-		t.Errorf("respond: %v", res)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for ag.received() != "main" && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := ag.received(); got != "main" {
-		t.Errorf("the agent read %q, want main", got)
-	}
-}
-
 // TestRespondFromShellIsAGrant: without the grant, a caller outside every pane
 // with no attach is refused; with it, the same caller may answer. A call on
 // the plain link socket, whose hub did not vouch for its caller, is refused

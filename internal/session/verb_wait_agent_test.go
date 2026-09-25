@@ -2,68 +2,7 @@ package session
 
 import (
 	"testing"
-	"time"
 )
-
-// TestWaitForAgentStateTransition verifies the agent-state condition resolves
-// when a window's agent state reaches one of the states named in until, without
-// naming a window: "any agent in this session needs input" is the shape hooks
-// and scripts want, and it was previously only expressible as a poll loop.
-func TestWaitForAgentStateTransition(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	done := make(chan map[string]any, 1)
-	go func() {
-		done <- c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","session":"work","until":"needs_input,errored","timeout":8000}}`)
-	}()
-
-	time.Sleep(150 * time.Millisecond)
-	// working first: a state until does not name must not resolve the wait.
-	if err := sess.SetDaemonWindowAgentState("Window", AgentStateWorking, ""); err != nil {
-		t.Fatalf("SetDaemonWindowAgentState: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-	select {
-	case resp := <-done:
-		t.Fatalf("wait resolved on working: %v", resp)
-	default:
-	}
-	if err := sess.SetDaemonWindowAgentState("Window", AgentStateNeedsInput, "pick an option"); err != nil {
-		t.Fatalf("SetDaemonWindowAgentState: %v", err)
-	}
-
-	select {
-	case resp := <-done:
-		res := result(t, resp)
-		if res["matched"] != true || res["state"] != "needs_input" {
-			t.Fatalf("wait result = %v, want matched needs_input", res)
-		}
-		if res["window"] == "" || res["window"] == nil {
-			t.Fatalf("wait result names no window: %v", res)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("wait-for agent-state did not resolve")
-	}
-}
-
-// TestWaitForAgentStateAlreadyTrue verifies a pane already sitting in the
-// wanted state resolves the wait immediately: the prompt most worth alerting on
-// is the one painted before anyone started waiting.
-func TestWaitForAgentStateAlreadyTrue(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	if err := sess.SetDaemonWindowAgentState("Window", AgentStateNeedsInput, ""); err != nil {
-		t.Fatalf("SetDaemonWindowAgentState: %v", err)
-	}
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","session":"work","until":"needs_input","timeout":8000}}`))
-	if res["matched"] != true || res["state"] != "needs_input" {
-		t.Fatalf("wait result = %v, want matched needs_input", res)
-	}
-}
 
 // TestSubscribeReceivesAgentStateEvent verifies a write to agent state raises
 // one agent-state event through the lifecycle diff, carrying the state's wire

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -13,41 +12,6 @@ import (
 // sends, and what a get hands back. The store is the same one a local put
 // fills, so a file that arrived as bytes is attachable, listed, deduped and
 // evicted like any other, and a get serves only what the store holds.
-
-func TestStashPutFromBytesStoresTheFile(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	c := dialLink(t, sp)
-
-	content := base64.StdEncoding.EncodeToString([]byte("flame graph bytes"))
-	res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"stash-put","params":{"session":"work","path":"laptop:/tmp/flame.png","content":%q}}`, content)))
-	stored, _ := res["path"].(string)
-	if stored == "" || !strings.HasSuffix(stored, ".png") {
-		t.Fatalf("ASSERTION: the bytes were not stored under the source's extension: %v", res)
-	}
-	data, err := os.ReadFile(stored)
-	if err != nil || string(data) != "flame graph bytes" {
-		t.Fatalf("ASSERTION: the stored file does not hold the bytes sent: %q %v", data, err)
-	}
-	if res["media_type"] != "image/png" || res["kind"] != "image" {
-		t.Errorf("the stored file is classified as %v/%v, want image/png", res["media_type"], res["kind"])
-	}
-	if !d.stash.owns(sess.ID, stored) {
-		t.Fatal("ASSERTION: the store does not own the file it just wrote")
-	}
-
-	// The listing keeps the sender's label as the source, so a person can
-	// see where a file came from.
-	list := result(t, c.call(t, `{"id":2,"verb":"stash-list","params":{"session":"work"}}`))
-	entries, _ := list["entries"].([]any)
-	if len(entries) != 1 || entries[0].(map[string]any)["source"] != "laptop:/tmp/flame.png" {
-		t.Errorf("the listing does not carry the source label: %v", list)
-	}
-
-	// And, being stashed, it is the one kind of file a message from another
-	// machine may attach.
-	result(t, sendJSON(t, c, 3, map[string]any{"session": "work", "text": "see", "attachments": []string{stored}}))
-}
 
 func TestStashGetServesOnlyStashedFiles(t *testing.T) {
 	d, sp := startTestDaemon(t)

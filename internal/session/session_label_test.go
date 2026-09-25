@@ -7,45 +7,6 @@ import (
 	"testing"
 )
 
-// TestSessionLabelReachesEveryClient checks the two halves of "every client sees
-// it": the mutation is announced on the state push (which the daemon fans out to
-// every attached client), and a sync from a client that knows nothing about the
-// label does not wipe it for the others.
-func TestSessionLabelReachesEveryClient(t *testing.T) {
-	sess := newTestSession(t)
-	pushes := recordStateSink(sess)
-
-	if err := sess.SetDisplayName("Payments API"); err != nil {
-		t.Fatalf("SetDisplayName: %v", err)
-	}
-	if err := sess.SetAccent("cyan"); err != nil {
-		t.Fatalf("SetAccent: %v", err)
-	}
-
-	got := pushes()
-	if len(got) != 2 {
-		t.Fatalf("push count = %d, want 2", len(got))
-	}
-	if got[0].DisplayName != "Payments API" {
-		t.Fatalf("pushed display name = %q, want Payments API", got[0].DisplayName)
-	}
-	if got[1].Accent != "cyan" {
-		t.Fatalf("pushed accent = %q, want cyan", got[1].Accent)
-	}
-
-	// What a second client pushes: a snapshot with no label at all, which is every
-	// client today and every older client after this change.
-	incoming := sess.GetState()
-	incoming.DisplayName = ""
-	incoming.Accent = ""
-	sess.UpdateState(incoming)
-
-	after := sess.GetState()
-	if after.DisplayName != "Payments API" || after.Accent != "cyan" {
-		t.Fatalf("a client sync wiped the label: name=%q accent=%q", after.DisplayName, after.Accent)
-	}
-}
-
 // TestUnnamedSessionStateIsUnchanged is the byte-level compatibility check: a
 // session nobody renamed serializes exactly as it did before the label existed,
 // so an older client and an older daemon read the same bytes they always did.

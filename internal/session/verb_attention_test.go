@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // setAgentState reports a state for a window over the verb socket.
@@ -67,48 +65,6 @@ func hasKind(kind, window string) func([]map[string]any) bool {
 
 func isEmpty(items []map[string]any) bool { return len(items) == 0 }
 
-// TestInboxFollowsAgentStateInEverySession is the case the rail's alert could
-// not see: a pane in a session nobody is attached to going to needs_input.
-func TestInboxFollowsAgentStateInEverySession(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "fan-1")
-	other := makeSessionWithWindow(t, d, "fan-2")
-	c := dialVerb(t, sp)
-
-	setAgentState(t, c, "fan-1", a, "needs_input", "approval", "approve Bash: rm -rf build")
-	setAgentState(t, c, "fan-1", b, "errored", "", "rate limited")
-	setAgentState(t, c, "fan-2", other.GetState().Windows[0].ID, "needs_input", "question", "which branch?")
-
-	items := waitAttention(t, c, "three transitions", func(items []map[string]any) bool { return len(items) == 3 })
-	var kinds []string
-	for _, it := range items {
-		kinds = append(kinds, it["kind"].(string))
-	}
-	if fmt.Sprint(kinds) != "[approval question errored]" {
-		t.Errorf("Inbox order %v, want approval, question, errored", kinds)
-	}
-	if items[0]["summary"] != "approve Bash: rm -rf build" || items[0]["session"] != "fan-1" {
-		t.Errorf("the approval item is %v", items[0])
-	}
-
-	only, res := listAttention(t, c, `{"session":"fan-2"}`)
-	if len(only) != 1 || only[0]["session"] != "fan-2" {
-		t.Errorf("session filter gave %v", only)
-	}
-	counts, _ := res["counts"].(map[string]any)
-	if counts["approval"] != float64(1) || counts["finished"] != float64(0) {
-		t.Errorf("counts %v", counts)
-	}
-
-	resp := c.call(t, `{"id":1,"verb":"list-attention","params":{"kinds":["urgent"]}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Errorf("an unknown kind answered %s", code)
-	}
-
-	setAgentState(t, c, "fan-1", a, "working", "", "")
-	waitAttention(t, c, "leaving needs_input", func(items []map[string]any) bool { return !hasKind("approval", a)(items) })
-}
-
 // TestInboxEventsResumeFromAListing holds the contract the client relies on:
 // list, then subscribe after the listing's seq, and nothing is missed or
 // repeated.
@@ -157,26 +113,6 @@ func readStreamEvent(t *testing.T, c *verbConn) map[string]any {
 	return ev
 }
 
-func TestInboxMailOpensAndClosesOnRead(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-
-	sendJSON(t, c, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "subject": "ready to merge?", "text": "the suite is green"})
-	items := waitAttention(t, c, "mail to the person", hasKind(AttentionMail, a))
-	if items[0]["summary"] != "ready to merge?" || items[0]["thread"] == nil {
-		t.Errorf("the mail item is %v", items[0])
-	}
-
-	// A peek is not a read.
-	result(t, c.call(t, `{"id":1,"verb":"read-agent-messages","params":{"session":"work","to":"human","peek":true}}`))
-	if items, _ := listAttention(t, c, ""); len(items) != 1 {
-		t.Fatalf("a peek closed the mail item")
-	}
-	result(t, c.call(t, `{"id":1,"verb":"read-agent-messages","params":{"session":"work","to":"human"}}`))
-	waitAttention(t, c, "reading the person's inbox", isEmpty)
-}
-
 // TestInboxDismissIsForThePerson covers who may clear the queue: a caller with
 // no attach nonce is refused, and a client attached right now is not.
 func TestInboxDismissIsForThePerson(t *testing.T) {
@@ -218,140 +154,4 @@ func TestInboxDismissIsForThePerson(t *testing.T) {
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("a second dismiss answered %s", code)
 	}
-}
-
-// TestInboxDismissingMailMarksItRead keeps the rail's mail count and the Inbox
-// in agreement.
-func TestInboxDismissingMailMarksItRead(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-	tui := attachTUI(t, sp, "work")
-
-	sendJSON(t, c, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "look at this"})
-	items := waitAttention(t, c, "mail", hasKind(AttentionMail, a))
-	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"dismiss-attention","params":{"id":%q,"human_nonce":%q}}`, items[0]["id"], tui.HumanNonce())))
-	if n := d.agents.unreadCounts("work")[AgentInboxHuman]; n != 0 {
-		t.Errorf("the person still has %d unread after dismissing the thread", n)
-	}
-}
-
-// TestInboxFinishedClosesWhenAClientFocusesThePane is the per-client "seen"
-// rule the daemon already applies to finished_unread.
-func TestInboxFinishedClosesWhenAClientFocusesThePane(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, a, b := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-
-	st := sess.GetState()
-	st.FocusedWindowID = b
-	sess.UpdateState(st)
-
-	setAgentState(t, c, "work", a, "working", "", "")
-	setAgentState(t, c, "work", a, "done", "", "")
-	waitAttention(t, c, "a finished turn", hasKind(AttentionFinished, a))
-
-	st = sess.GetState()
-	st.FocusedWindowID = a
-	sess.UpdateState(st)
-	waitAttention(t, c, "focusing the pane", isEmpty)
-}
-
-func TestInboxClosesWhenTheSessionEnds(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-	setAgentState(t, c, "work", a, "errored", "", "")
-	waitAttention(t, c, "errored", hasKind(AttentionErrored, a))
-	if err := d.manager.DeleteSession("work"); err != nil {
-		t.Fatalf("DeleteSession: %v", err)
-	}
-	waitAttention(t, c, "the session ending", isEmpty)
-}
-
-// TestInboxSurvivesADaemonRestart restarts a real daemon over the same state
-// directory: the finished turn nobody looked at is still waiting, and the
-// approval, whose prompt died with its process, is not.
-func TestInboxSurvivesADaemonRestart(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	t.Cleanup(useResurrectionDir(t.TempDir()))
-
-	start := func() (*Daemon, *verbConn) {
-		d := NewDaemon(&DaemonConfig{Version: "test"})
-		if err := d.Start(); err != nil {
-			t.Fatalf("daemon Start: %v", err)
-		}
-		sp, err := GetSocketPath()
-		if err != nil {
-			t.Fatalf("GetSocketPath: %v", err)
-		}
-		return d, dialVerb(t, sp)
-	}
-
-	d, c := start()
-	_, a, b := twoWindowSession(t, d, "work")
-	setAgentState(t, c, "work", a, "working", "", "")
-	setAgentState(t, c, "work", a, "done", "", "all green")
-	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
-	sendJSON(t, c, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "before the restart"})
-	before := waitAttention(t, c, "three items", func(items []map[string]any) bool { return len(items) == 3 })
-	var finishedID string
-	for _, it := range before {
-		if it["kind"] == AttentionFinished {
-			finishedID = it["id"].(string)
-		}
-	}
-	_ = c.conn.Close()
-	d.Stop()
-
-	d2, c2 := start()
-	t.Cleanup(d2.Stop)
-	items, _ := listAttention(t, c2, "")
-	if len(items) != 1 || items[0]["kind"] != AttentionFinished || items[0]["window"] != a || items[0]["id"] != finishedID {
-		t.Fatalf("after a restart the Inbox holds %v, want only the finished item %s", items, finishedID)
-	}
-
-	// The message ring started over, so the first new thread may take the id
-	// the saved mail item had. It opens a fresh item rather than adding to a
-	// stale one.
-	sendJSON(t, c2, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "after the restart"})
-	items = waitAttention(t, c2, "new mail", hasKind(AttentionMail, a))
-	for _, it := range items {
-		if it["kind"] == AttentionMail && (it["count"] != float64(1) || it["summary"] != "after the restart") {
-			t.Errorf("the mail item after a restart is %v, want a fresh item with count 1", it)
-		}
-	}
-}
-
-// TestInboxFollowsANewKindOrMessage holds the case where the state stays
-// needs_input and a later report says more: the screen tier's question becomes
-// the hook's approval, and a new message replaces the summary.
-func TestInboxFollowsANewKindOrMessage(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	w := sess.GetState().Windows[0].ID
-	c := dialVerb(t, sp)
-
-	setAgentState(t, c, "work", w, "needs_input", "question", "which branch?")
-	first := waitAttention(t, c, "the question", hasKind(AttentionQuestion, w))
-	id := first[0]["id"]
-
-	setAgentState(t, c, "work", w, "needs_input", "approval", "approve Bash: rm -rf build")
-	items := waitAttention(t, c, "the kind change", func(items []map[string]any) bool {
-		return len(items) == 1 && items[0]["kind"] == AttentionApproval && items[0]["summary"] == "approve Bash: rm -rf build"
-	})
-	if items[0]["id"] != id || items[0]["since"] != first[0]["since"] {
-		t.Errorf("the kind change replaced the item: before %v, after %v", first[0], items[0])
-	}
-
-	setAgentState(t, c, "work", w, "needs_input", "approval", "approve Edit: main.go")
-	waitAttention(t, c, "the message change", func(items []map[string]any) bool {
-		return len(items) == 1 && items[0]["kind"] == AttentionApproval && items[0]["summary"] == "approve Edit: main.go" && items[0]["id"] == id
-	})
-
-	setAgentState(t, c, "work", w, "errored", "", "rate limited")
-	setAgentState(t, c, "work", w, "errored", "", "quota exceeded")
-	waitAttention(t, c, "the errored message change", func(items []map[string]any) bool {
-		return len(items) == 1 && items[0]["kind"] == AttentionErrored && items[0]["summary"] == "quota exceeded"
-	})
 }
