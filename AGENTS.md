@@ -333,6 +333,40 @@ go test ./internal/vt/ -run TestVTGen
 go test ./internal/vt/ -run XXX -fuzz FuzzEmulatorScript -fuzztime 10m
 ```
 
+### Fuzzing
+
+Every `Fuzz*` target's seeds, and every file under a package's
+`testdata/fuzz/`, run in the ordinary suite. The mutator runs only when asked,
+and nightly in `.github/workflows/fuzz.yml`, which keeps each package's corpus
+in the Actions cache and uploads the failing input when a target finds
+something. `go test -list 'Fuzz' ./...` lists the targets. Besides the
+emulator ones above:
+
+- `internal/app`: `FuzzModel` drives the whole window manager through the
+  `internal/fuzz` action alphabet; the clip and line-width targets check the
+  compositor against `ansi.StringWidth`.
+- `internal/session`: the frame reader, the gob payloads (decode, bound,
+  round trip), the JSON verb dispatcher, and selectors.
+- `internal/harness`: `Classify` against `Explain` over the bundled
+  manifests and over fuzzed ones.
+- `internal/config` and `internal/tape`: key normalisation, the config
+  pipeline, and the tape lexer and parser.
+- `internal/vt`: the kitty payload decoder and command parser, and with
+  `-tags ghostty` the differential against libghostty-vt.
+
+Turn a finding into a regression the suite can keep:
+
+- A vtgen target prints the reduced script as JSON. Save it under
+  `internal/vt/testdata/vtgen-repros/` with a `why`. Do not keep the input
+  bytes instead: they decode through the generator, and the next change to
+  vtgen turns them into a different script that passes.
+- `FuzzModel` and the other `internal/fuzz` runs print a `--- script ---`
+  block. Save it under `internal/app/testdata/fuzz-repros/`.
+- Any other target: keep the file `go test` wrote under `testdata/fuzz/`.
+
+A repro printed with `NOT REPRODUCIBLE` came from a target whose replays
+differ; fix the target before trusting the script.
+
 ### Differential Testing Against tmux
 
 An independent implementation catches what a hand-written expectation cannot,

@@ -1,0 +1,176 @@
+name: Fuzz
+
+# The coverage-guided campaigns. Every Fuzz target's seeds already run in the
+# ordinary suite (go-test.yml), which proves the seeds pass and nothing more:
+# the mutator never runs there. This runs the mutator, nightly, for a few
+# minutes a target, and keeps each package's corpus in the Actions cache so
+# the next night starts where this one stopped instead of from the seeds.
+#
+# A finding fails the job, which is what surfaces it: a failed scheduled run
+# mails whoever last changed the schedule. The failing input is uploaded as an
+# artifact under the path go test wrote it to, so dropping it into the tree
+# reproduces it with a plain go test run.
+
+on:
+  schedule:
+    # 04:41 UTC daily, clear of the 03:17 race build.
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "How long each target runs (a go test -fuzztime value)"
+        required: false
+        default: "4m"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FUZZTIME: ${{ github.event.inputs.fuzztime || '4m' }}
+
+jobs:
+  fuzz:
+    name: fuzz ${{ matrix.pkg }}
+    runs-on: ubuntu-latest
+    # The longest package runs nine targets. At the default four minutes that
+    # is 36 minutes of fuzzing plus the build and the minimisation of a
+    # finding, which go test does inside the target's own time.
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: internal/vt
+            targets: >-
+              FuzzEmulatorScript FuzzEmulatorSplitWrites FuzzEmulatorSplitEquivalence
+              FuzzEmulatorRenderRoundTrip FuzzEmulatorWrite FuzzEmulatorWriteChunked
+              FuzzEmulatorResize FuzzKittyPayloadDecode FuzzKittyCommand
+          - pkg: internal/app
+            targets: >-
+              FuzzModel FuzzClipWindowContent FuzzClipWindowContentNoPanicOnEscapes
+              FuzzLineWidthMatchesReference
+          - pkg: internal/session
+            targets: >-
+              FuzzVerbDispatch FuzzClosestMatch FuzzReadMessageFraming
+              FuzzWirePayloadDecode FuzzSelector
+          - pkg: internal/config
+            targets: FuzzNormalizeKey FuzzExpandKeys FuzzLoadConfigPipeline
+          - pkg: internal/tape
+            targets: FuzzTapeParse FuzzTapeTokenize
+          - pkg: internal/harness
+            targets: FuzzClassifyAgreesWithExplain FuzzManifest FuzzManifestRules
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/fuzz.yml
+
+      - name: Locate the fuzz cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+
+      # A new key every run, restored from the newest earlier one, so the
+      # corpus grows night over night. An entry is a few megabytes.
+      - name: Restore the corpus
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: fuzz-corpus-${{ matrix.pkg }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.pkg }}-
+
+      - name: Fuzz
+        env:
+          PKG: ${{ matrix.pkg }}
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          failed=""
+          for target in $TARGETS; do
+            echo "::group::$target"
+            if ! go test "./$PKG/" -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
+              failed="$failed $target"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::fuzz findings in $PKG:$failed"
+            exit 1
+          fi
+
+      - name: Upload the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-findings-${{ strategy.job-index }}
+          path: ${{ matrix.pkg }}/testdata/fuzz/
+          if-no-files-found: ignore
+
+  ghostty:
+    name: fuzz internal/vt (ghostty differential)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/ghostty-vt.yml
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+
+      - name: Cache libghostty-vt
+        uses: actions/cache@v6
+        with:
+          path: .ghostty-vt
+          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
+
+      - name: Build libghostty-vt
+        run: ./scripts/ghostty-lib.sh
+
+      - name: Locate the fuzz cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the corpus
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: fuzz-corpus-ghostty-${{ github.run_id }}
+          restore-keys: fuzz-corpus-ghostty-
+
+      - name: Fuzz
+        run: |
+          failed=""
+          for target in FuzzGhosttyDifferentialScript FuzzGhosttyDifferentialSplit FuzzGhosttyTerminalWrite; do
+            echo "::group::$target"
+            if ! PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
+              go test -tags ghostty ./internal/vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
+              failed="$failed $target"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::fuzz findings in the ghostty build:$failed"
+            exit 1
+          fi
+
+      - name: Upload the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-findings-ghostty
+          path: internal/vt/testdata/fuzz/
+          if-no-files-found: ignore
