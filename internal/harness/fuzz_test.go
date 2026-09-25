@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // Fuzzing the screen tier: the classifier the daemon acts on, and the
@@ -138,6 +140,69 @@ func FuzzClassifyAgreesWithExplain(f *testing.F) {
 		for _, id := range r.IDs() {
 			agreeOn(t, r, id, tail)
 		}
+	})
+}
+
+// fuzzRegions are the screen regions a rule may read, with one past the limit.
+var fuzzRegions = []string{"", "tail", "prompt_box", "above_prompt_box",
+	"last_non_empty_above_prompt_box", "after_last_horizontal_rule",
+	"bottom_non_empty_lines(1)", "bottom_non_empty_lines(3)", "bottom_non_empty_lines(0)"}
+
+// FuzzManifestRules builds a manifest from fuzzed rule parts rather than from
+// TOML text. FuzzManifest mutates bytes, and almost every mutation of a
+// manifest is a TOML error or a manifest that fails its own checks, so it
+// rarely gets a rule to the classifier. Here every input is a well-formed file
+// and the mutator spends its budget on priorities, strings, patterns and
+// regions, which is where the two paths could part.
+func FuzzManifestRules(f *testing.F) {
+	f.Add(int64(9223372036854775807), int64(-2), uint8(1), uint8(0), uint8(0), uint8(2), false,
+		"a", "", "", "b", "a b")
+	f.Add(int64(0), int64(0), uint8(0), uint8(0), uint8(2), uint8(2), true,
+		"Esc", "x", "^> ", "ESC", "│ > \n╰─╯\nesc to interrupt")
+	f.Add(int64(-5), int64(5), uint8(2), uint8(1), uint8(6), uint8(3), false,
+		"é", "É", "(a|b)+$", "", "É\né")
+
+	states := []string{"working", "needs_input", "idle"}
+	f.Fuzz(func(t *testing.T, pri1, pri2 int64, st1, st2, reg1, reg2 uint8, fold bool,
+		all1, not1, re1, any2, screen string) {
+		rule := func(state string, pri int64, region string, gate map[string]any) map[string]any {
+			r := map[string]any{"state": state, "priority": pri, "region": region}
+			for k, v := range gate {
+				r[k] = v
+			}
+			return r
+		}
+		list := func(s string) []string {
+			if s == "" {
+				return nil
+			}
+			return strings.Split(s, "\n")
+		}
+		doc := map[string]any{
+			"schema_version": SchemaVersion,
+			"id":             "fuzzagent",
+			"detect":         map[string]any{"comm": []string{"fuzzagent"}},
+			"screen": map[string]any{
+				"enabled":   true,
+				"fold_case": fold,
+				"rule": []map[string]any{
+					rule(states[int(st1)%len(states)], pri1, fuzzRegions[int(reg1)%len(fuzzRegions)],
+						map[string]any{"all": list(all1), "not": list(not1), "regex": list(re1)}),
+					rule(states[int(st2)%len(states)], pri2, fuzzRegions[int(reg2)%len(fuzzRegions)],
+						map[string]any{"any": list(any2)}),
+				},
+			},
+		}
+		data, err := toml.Marshal(doc)
+		if err != nil {
+			return
+		}
+		m, err := parseManifest("fuzz.toml", data)
+		if err != nil {
+			return
+		}
+		r := &Registry{manifests: []*Manifest{m}}
+		agreeOn(t, r, m.ID, fuzzTail(screen))
 	})
 }
 
