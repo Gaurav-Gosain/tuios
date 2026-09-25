@@ -116,7 +116,11 @@ func FuzzModel(f *testing.F) {
 	} {
 		f.Add(s)
 	}
-	dir := f.TempDir()
+	// fuzzScratch rather than a bare TempDir: a recovered panic writes a crash
+	// report under XDG_STATE_HOME, and a campaign that finds one keeps finding
+	// it, so without the redirect every worker wrote reports into the
+	// developer's own state directory.
+	dir := fuzzScratch(f)
 	f.Fuzz(func(t *testing.T, in []byte) {
 		// The corpus entry decides the run; the seed is carried only so a
 		// finding can be re-run through the seeded loop as well.
@@ -172,7 +176,7 @@ func TestFuzzScript(t *testing.T) {
 // directory off the developer's real state home. A recovered panic writes a
 // report, and a long sweep that finds one repeatedly would otherwise leave
 // thousands of files in ~/.local/state.
-func fuzzScratch(t *testing.T) string {
+func fuzzScratch(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
 	// The reload is what makes the redirect take. CrashLogDir reads
