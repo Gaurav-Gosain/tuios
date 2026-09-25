@@ -1,0 +1,48 @@
+{
+  "why": "render round trip: a wide rune cut at a left/right margin seam lost the cell a shift had just placed on the seam (fixed in c5a2b056; was corpus entry FuzzEmulatorRenderRoundTrip/7bad1e04393e15ae, reduced)",
+  "split_seed": 0,
+  "script": [
+    {
+      "Kind": "resize",
+      "Bytes": "",
+      "Desc": "resize to 80x10",
+      "Cols": 80,
+      "Rows": 10
+    },
+    {
+      "Kind": "margin",
+      "Bytes": "\u001b[?69h\u001b[49;67s\u001b[8",
+      "Desc": "enable DECLRMM, then DECSLRM left and right margins 49 and 67, then DECSTBM top and bottom margins omitted and 87, then DECRC restore cursor (a parameter dropped)",
+      "Cols": 0,
+      "Rows": 0
+    },
+    {
+      "Kind": "csi",
+      "Bytes": "\u001b[4294967295:83\u0018@",
+      "Desc": "CSI aborted by CAN, then @",
+      "Cols": 0,
+      "Rows": 0
+    },
+    {
+      "Kind": "text",
+      "Bytes": "❤️",
+      "Desc": "a base with an emoji presentation selector",
+      "Cols": 0,
+      "Rows": 0
+    },
+    {
+      "Kind": "csi",
+      "Bytes": "\u001b[63b",
+      "Desc": "REP repeat last character (params 63;84;;7) (a parameter dropped) (a parameter dropped) (a parameter dropped)",
+      "Cols": 0,
+      "Rows": 0
+    },
+    {
+      "Kind": "csi",
+      "Bytes": "\u001b[S",
+      "Desc": "SU scroll up (params ;2147483647) (a parameter dropped)",
+      "Cols": 0,
+      "Rows": 0
+    }
+  ]
+}

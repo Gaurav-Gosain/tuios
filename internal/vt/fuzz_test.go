@@ -1,7 +1,6 @@
 package vt_test
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -218,6 +217,11 @@ func FuzzEmulatorWrite(f *testing.F) {
 		if pos.Y < 0 || pos.Y >= height {
 			t.Fatalf("cursor Y out of bounds: %d not in [0,%d)", pos.Y, height)
 		}
+		// The scroll region and the cell widths, which the generated-input
+		// targets check and raw bytes reach by other paths.
+		if bad := invariants(emu); bad != "" {
+			t.Fatalf("after %d bytes: %s", len(data), bad)
+		}
 
 		// Rendering the screen must succeed and must stay proportional to the
 		// screen size, not to the length of the input.
@@ -283,6 +287,14 @@ func FuzzEmulatorWriteChunked(f *testing.F) {
 			t.Fatalf("chunk size %d changed the rendered screen:\nwhole: %q\nsplit: %q",
 				size, a, b)
 		}
+		// String is text only, so a chunk boundary that dropped a colour or
+		// an attribute passed. The cells carry both.
+		if d := compareGrids(whole, split, "whole", "split"); d != "" {
+			t.Fatalf("chunk size %d changed the screen: %s", size, d)
+		}
+		if a, b := whole.CursorPosition(), split.CursorPosition(); a != b {
+			t.Fatalf("chunk size %d moved the cursor: whole=%v split=%v", size, a, b)
+		}
 	})
 }
 
@@ -327,8 +339,19 @@ func FuzzEmulatorResize(f *testing.F) {
 			t.Fatalf("cursor (%d,%d) outside %dx%d screen after resize",
 				pos.X, pos.Y, width, height)
 		}
-		if _ = emu.String(); false {
-			_ = io.Discard
+		// This used to read `if _ = emu.String(); false { ... }`, which renders
+		// the screen and asserts nothing. The resize path is where a cell left
+		// wider than the row, a scroll region sized for the old screen, or a
+		// render taller than the new height shows up, so those are checked.
+		if bad := invariants(emu); bad != "" {
+			t.Fatalf("after a resize to %dx%d: %s", width, height, bad)
+		}
+		out := emu.String()
+		if !utf8.ValidString(out) {
+			t.Fatalf("rendered invalid UTF-8 after a resize to %dx%d", width, height)
+		}
+		if lines := strings.Count(out, "\n") + 1; lines > height {
+			t.Fatalf("rendered %d lines for a %d-row screen after a resize", lines, height)
 		}
 	})
 }

@@ -116,6 +116,45 @@ func replaySplit(s vtgen.Script, seed uint64) (broken string) {
 	return ""
 }
 
+// invariantSig strips what moves as the shrinker cuts (the step number, the
+// step's description, every number in the message) from an invariant failure,
+// so a reduction is held to the same broken invariant rather than to any
+// failure at all. Without it a script carrying two bugs reduced to whichever
+// survived the cuts, and printed that under the report of the other.
+func invariantSig(broken string) string {
+	if i := strings.Index(broken, "): "); i >= 0 {
+		broken = broken[i+3:]
+	}
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return '#'
+		}
+		return r
+	}, broken)
+}
+
+// shrinkInvariant reduces a script to the smallest that breaks the same
+// invariant.
+func shrinkInvariant(s vtgen.Script, broken string, run func(vtgen.Script) string) vtgen.Script {
+	want := invariantSig(broken)
+	return vtgen.Shrink(s, func(c vtgen.Script) bool {
+		b := run(c)
+		return b != "" && invariantSig(b) == want
+	})
+}
+
+// splitSeed picks where a fuzz input's bytes are cut. It hashes the whole
+// input rather than taking its length, so the mutator moves the cuts with any
+// byte it changes instead of only with the input's length.
+func splitSeed(data []byte) uint64 {
+	h := uint64(14695981039346656037)
+	for _, c := range data {
+		h ^= uint64(c)
+		h *= 1099511628211
+	}
+	return h
+}
+
 // FuzzEmulatorSplitWrites is the same generator arriving in pieces.
 //
 // FuzzEmulatorScript writes one step at a time, so every sequence reaches the
@@ -136,13 +175,11 @@ func FuzzEmulatorSplitWrites(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		g := vtgen.FromBytes(data)
 		script := g.Script(120)
-		seed := uint64(len(data)) * 1099511628211
+		seed := splitSeed(data)
 		if broken := replaySplit(script, seed); broken != "" {
-			small := vtgen.Shrink(script, func(s vtgen.Script) bool {
-				return replaySplit(s, seed) != ""
-			})
-			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s",
-				broken, len(script), len(small), small)
+			small := shrinkInvariant(script, broken, func(s vtgen.Script) string { return replaySplit(s, seed) })
+			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s\n%s",
+				broken, len(script), len(small), small, pinnable(small, seed, broken))
 		}
 	})
 }
@@ -164,9 +201,9 @@ func FuzzEmulatorScript(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		script := vtgen.FromBytes(data).Script(120)
 		if broken := replay(script); broken != "" {
-			small := vtgen.Shrink(script, func(s vtgen.Script) bool { return replay(s) != "" })
-			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s",
-				broken, len(script), len(small), small)
+			small := shrinkInvariant(script, broken, replay)
+			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s\n%s",
+				broken, len(script), len(small), small, pinnable(small, 0, broken))
 		}
 	})
 }
@@ -184,9 +221,7 @@ func TestVTGen_Sweep(t *testing.T) {
 	for seed := range uint64(seeds) {
 		script := vtgen.New(seed).Script(steps)
 		if broken := replaySplit(script, seed); broken != "" {
-			small := vtgen.Shrink(script, func(s vtgen.Script) bool {
-				return replaySplit(s, seed) != ""
-			})
+			small := shrinkInvariant(script, broken, func(s vtgen.Script) string { return replaySplit(s, seed) })
 			t.Errorf("seed %d, split into reader-sized writes: %s\n\nreduced from %d steps to %d:\n%s",
 				seed, broken, len(script), len(small), small)
 			if t.Failed() {
@@ -194,7 +229,7 @@ func TestVTGen_Sweep(t *testing.T) {
 			}
 		}
 		if broken := replay(script); broken != "" {
-			small := vtgen.Shrink(script, func(s vtgen.Script) bool { return replay(s) != "" })
+			small := shrinkInvariant(script, broken, replay)
 			t.Errorf("seed %d: %s\n\nreduced from %d steps to %d:\n%s",
 				seed, broken, len(script), len(small), small)
 			if t.Failed() {
@@ -244,6 +279,22 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 		"eight-bit controls":    false,
 		"variation selector":    false,
 		"a lone combining mark": false,
+
+		// Keyboard, cursor style, reports, shell integration, text sizing,
+		// real kitty transmissions and placements, and sixel rasters.
+		"kitty keyboard":          false,
+		"modifyOtherKeys":         false,
+		"DECSCUSR":                false,
+		"DECRQM":                  false,
+		"OSC 133":                 false,
+		"OSC 66":                  false,
+		"palette reset":           false,
+		"kitty transmit sized":    false,
+		"kitty chunked":           false,
+		"kitty placement":         false,
+		"kitty delete":            false,
+		"kitty placeholder cells": false,
+		"sixel raster":            false,
 	}
 
 	for seed := range uint64(60) {
@@ -285,6 +336,19 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 			mark("eight-bit controls", strings.Contains(d, "eight-bit controls"))
 			mark("variation selector", strings.Contains(d, "presentation selector"))
 			mark("a lone combining mark", strings.Contains(d, "combining mark with nothing to attach to"))
+			mark("kitty keyboard", strings.Contains(d, "kitty keyboard"))
+			mark("modifyOtherKeys", strings.Contains(d, "modifyOtherKeys"))
+			mark("DECSCUSR", strings.Contains(d, "DECSCUSR"))
+			mark("DECRQM", strings.Contains(d, "DECRQM"))
+			mark("OSC 133", strings.Contains(d, "OSC 133"))
+			mark("OSC 66", strings.Contains(d, "OSC 66"))
+			mark("palette reset", strings.Contains(d, "OSC 104") || strings.Contains(d, "reset a dynamic colour"))
+			mark("kitty transmit sized", strings.Contains(d, "whole"))
+			mark("kitty chunked", strings.Contains(d, "chunked in"))
+			mark("kitty placement", strings.Contains(d, "placement of image"))
+			mark("kitty delete", strings.Contains(d, "kitty graphics delete by"))
+			mark("kitty placeholder cells", strings.Contains(b, "\U0010EEEE"))
+			mark("sixel raster", strings.Contains(d, "raster attributes"))
 		}
 	}
 

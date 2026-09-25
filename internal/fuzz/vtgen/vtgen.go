@@ -26,8 +26,8 @@ import (
 // of what it is meant to be.
 type Seq struct {
 	// Kind groups steps for the shrinker and for reading. One of "text",
-	// "cc", "esc", "csi", "sgr", "mode", "osc", "dcs", "apc", "margin",
-	// "erase", "tabs", "resize".
+	// "cc", "esc", "csi", "sgr", "mode", "osc", "dcs", "apc", "kbd",
+	// "margin", "erase", "tabs", "resize".
 	Kind string
 
 	// Bytes is what gets written to the emulator. Empty for a resize.
@@ -203,7 +203,8 @@ var kindWeights = []struct {
 	{"esc", 35},
 	{"osc", 40},
 	{"dcs", 22},
-	{"apc", 12},
+	{"apc", 18},
+	{"kbd", 22},
 	{"margin", 35},
 	{"erase", 30},
 	{"tabs", 20},
@@ -290,6 +291,8 @@ func (g *Gen) of(kind string) Seq {
 		return g.dcs()
 	case "apc":
 		return g.apc()
+	case "kbd":
+		return g.kbd()
 	case "margin":
 		return g.margin()
 	case "erase":
@@ -668,6 +671,12 @@ func (g *Gen) osc() Seq {
 }
 
 func (g *Gen) oscBody() (string, string) {
+	// One draw in three goes to the families the first table below does not
+	// reach: shell integration, text sizing, the colour resets and the
+	// pointer shape.
+	if g.u(3) == 0 {
+		return g.oscMore()
+	}
 	switch g.u(16) {
 	case 0:
 		return "0;" + g.pick(titles), "OSC 0 set icon name and title"
@@ -704,6 +713,38 @@ func (g *Gen) oscBody() (string, string) {
 	}
 }
 
+// oscMore draws the OSC families added after the first table: OSC 133 shell
+// integration, which the scrollback browser and the agent state read; OSC 66
+// text sizing, which changes how many cells a run takes; the colour resets;
+// OSC 22 pointer shape; and OSC 1337 SetUserVar.
+func (g *Gen) oscMore() (string, string) {
+	switch g.u(10) {
+	case 0:
+		mark := g.pick([]string{"A", "B", "C", "D", "D;0", "D;1", "D;" + g.param(), "P;k=i", "A;aid=1;cl=m", "E"})
+		return "133;" + mark, "OSC 133 shell integration mark " + mark
+	case 1:
+		return "133;" + g.pick([]string{"", ";", "Z", "D;notanumber"}), "OSC 133 with a mark nothing defines"
+	case 2:
+		meta := g.pick([]string{"s=2", "s=3", "w=2", "s=2:w=3", "n=1:d=2", "s=0", "s=99999", "v=1:h=2", ""})
+		return "66;" + meta + ";" + g.pick(titles), "OSC 66 text sizing " + shown(meta)
+	case 3:
+		return "104", "OSC 104 reset the whole palette"
+	case 4:
+		return "104;" + g.param() + ";" + g.param(), "OSC 104 reset palette entries"
+	case 5:
+		n := g.pick([]string{"110", "111", "112", "117", "119"})
+		return n, "OSC " + n + " reset a dynamic colour"
+	case 6:
+		return "4;" + g.param() + ";rgb:" + g.pick([]string{"ff/00/00", "f/0/0", "ffff/0000/0000", "zz/zz/zz", ""}), "OSC 4 set a palette entry"
+	case 7:
+		return "12;" + g.pick([]string{"red", "#00ff00", "rgb:00/00/ff", "?", "nonsense"}), "OSC 12 cursor colour"
+	case 8:
+		return "22;" + g.pick([]string{"text", "pointer", "default", "", "x"}), "OSC 22 pointer shape"
+	default:
+		return "1337;SetUserVar=" + g.pick([]string{"a=aGVsbG8=", "=", "b", "c=!!"}), "OSC 1337 set a user variable"
+	}
+}
+
 var titles = []string{
 	"t",
 	"a title",
@@ -729,6 +770,9 @@ func (g *Gen) dcs() Seq {
 	// is easy to get backwards: screen takes the inner sequence as-is, tmux
 	// requires every inner ESC to be doubled. A terminal that treats them the
 	// same corrupts one of them.
+	if g.u(4) == 0 {
+		return g.sixel()
+	}
 	inner := g.pick(passthroughInner)
 	switch g.u(8) {
 	case 0:
@@ -782,6 +826,40 @@ func (g *Gen) dcs() Seq {
 	}
 }
 
+// sixel draws a sixel image with the parts a real encoder writes: raster
+// attributes declaring a size, colour registers in both colour spaces,
+// repeats, graphics carriage returns and new lines.
+func (g *Gen) sixel() Seq {
+	var b strings.Builder
+	b.WriteString("\x1bP" + g.pick([]string{"", "0;1;0", "9", "2"}) + "q")
+	b.WriteString("\"1;1;" + g.param() + ";" + g.param())
+	for range 1 + g.u(3) {
+		reg := strconv.Itoa(g.u(300))
+		switch g.u(3) {
+		case 0:
+			b.WriteString("#" + reg + ";2;" + g.param() + ";" + g.param() + ";" + g.param())
+		case 1:
+			b.WriteString("#" + reg + ";1;" + g.param() + ";50;100")
+		default:
+			b.WriteString("#" + reg)
+		}
+		for range 1 + g.u(6) {
+			switch g.u(4) {
+			case 0:
+				b.WriteString("!" + g.param() + g.pick([]string{"~", "?", "@", "N"}))
+			case 1:
+				b.WriteString("$")
+			case 2:
+				b.WriteString("-")
+			default:
+				b.WriteString(strings.Repeat(g.pick([]string{"~", "?", "@", "N", "_"}), 1+g.u(12)))
+			}
+		}
+	}
+	b.WriteString("\x1b\\")
+	return Seq{Kind: "dcs", Bytes: b.String(), Desc: "sixel image with raster attributes"}
+}
+
 var passthroughInner = []string{
 	"\x1b]0;inner\x07",
 	"\x1b[31m",
@@ -791,6 +869,14 @@ var passthroughInner = []string{
 }
 
 func (g *Gen) apc() Seq {
+	// Half the draws go to the kitty graphics shapes a real sender produces:
+	// a transmission whose payload is exactly the size it declares, sent
+	// whole or in chunks, a placement of an image transmitted earlier, the
+	// delete specifiers, and the Unicode placeholder cells a virtual
+	// placement is drawn with. The other half are the malformed shapes below.
+	if g.u(2) == 0 {
+		return g.kitty()
+	}
 	switch g.u(4) {
 	case 0:
 		return Seq{
@@ -816,6 +902,148 @@ func (g *Gen) apc() Seq {
 			Bytes: "\x1b_" + strings.Repeat("Z", 1+g.u(200)),
 			Desc:  "an APC string that never ends",
 		}
+	}
+}
+
+// kittyB64 is standard base64 of n bytes of a fixed pattern, padded or not.
+// The generator carries no encoder of its own: the pattern repeats every three
+// bytes, so its encoding repeats every four characters, and only the tail
+// needs spelling out.
+func kittyB64(n int, pad bool) string {
+	var b strings.Builder
+	b.WriteString(strings.Repeat("AQID", n/3)) // 0x01 0x02 0x03
+	switch n % 3 {
+	case 1:
+		b.WriteString("AQ")
+		if pad {
+			b.WriteString("==")
+		}
+	case 2:
+		b.WriteString("AQI")
+		if pad {
+			b.WriteString("=")
+		}
+	}
+	return b.String()
+}
+
+// kittyPlaceholderMarks are the first few row and column diacritics of kitty's
+// Unicode placeholder table, enough to name small grids.
+var kittyPlaceholderMarks = []string{"̅", "̍", "̎", "̐", "̒", "̽"}
+
+// kitty draws one kitty graphics step from the shapes real senders produce.
+func (g *Gen) kitty() Seq {
+	var c compose
+	id := strconv.Itoa(1 + g.u(4))
+	w, h := 1+g.u(8), 1+g.u(8)
+	switch g.u(8) {
+	case 0, 1:
+		// One whole transmission, sized to what it declares.
+		f, bpp := "24", 3
+		if g.u(2) == 0 {
+			f, bpp = "32", 4
+		}
+		action := g.pick([]string{"t", "T"})
+		c.add("\x1b_Ga="+action+",f="+f+",s="+strconv.Itoa(w)+",v="+strconv.Itoa(h)+",i="+id+",q="+g.pick([]string{"0", "1", "2"})+
+			";"+kittyB64(w*h*bpp, g.u(2) == 0)+"\x1b\\", "kitty graphics, transmit image "+id+" whole")
+	case 2:
+		// The same, in chunks: every chunk but the last is a multiple of
+		// four characters and carries m=1.
+		payload := kittyB64(w*h*3, false)
+		first := true
+		for len(payload) > 0 {
+			n := min(len(payload), 4*(1+g.u(4)))
+			if n < len(payload) {
+				n -= n % 4
+				if n == 0 {
+					n = min(4, len(payload))
+				}
+			}
+			chunk := payload[:n]
+			payload = payload[n:]
+			more := "1"
+			if len(payload) == 0 {
+				more = "0"
+			}
+			ctrl := "m=" + more
+			if first {
+				ctrl = "a=T,f=24,s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ",i=" + id + "," + ctrl
+				first = false
+			}
+			c.add("\x1b_G"+ctrl+";"+chunk+"\x1b\\", "chunk")
+		}
+		c.names = []string{"kitty graphics, transmit image " + id + " chunked in " + strconv.Itoa(len(c.bytes))}
+	case 3:
+		c.add("\x1b_Ga=p,i="+id+",c="+g.param()+",r="+g.param()+",z="+g.pick([]string{"0", "-1", "-1073741825", "5"})+
+			",C="+g.pick([]string{"0", "1"})+"\x1b\\", "kitty graphics placement of image "+id)
+	case 4:
+		d := g.pick([]string{"a", "A", "i", "I", "p", "P", "c", "C", "x", "y", "z", "n", "N", "q", "Q", "?"})
+		c.add("\x1b_Ga=d,d="+d+",i="+id+",x="+g.param()+",y="+g.param()+"\x1b\\", "kitty graphics delete by "+d)
+	case 5:
+		c.add("\x1b_Ga=q,i="+id+",s=1,v=1,f=24;"+kittyB64(3, true)+"\x1b\\", "kitty graphics query")
+	case 6:
+		// A virtual placement and the placeholder cells that show it: the
+		// image id rides in the foreground colour and each cell names its
+		// row and column with diacritics.
+		c.add("\x1b_Ga=p,U=1,i="+id+",c=2,r=2\x1b\\", "kitty graphics virtual placement")
+		c.add("\x1b[38;5;"+id+"m", "SGR image id "+id+" in the foreground")
+		cells := 1 + g.u(4)
+		var run strings.Builder
+		for i := range cells {
+			run.WriteString("\U0010EEEE")
+			switch g.u(3) {
+			case 0:
+			case 1:
+				run.WriteString(kittyPlaceholderMarks[0] + kittyPlaceholderMarks[i%len(kittyPlaceholderMarks)])
+			default:
+				run.WriteString(g.pick(kittyPlaceholderMarks))
+			}
+		}
+		c.add(run.String(), "kitty unicode placeholder cells")
+		c.add("\x1b[39m", "SGR default foreground")
+	default:
+		// File and shared-memory media name a path the emulator must not
+		// read. None of these exist.
+		t := g.pick([]string{"f", "t", "s"})
+		c.add("\x1b_Ga=T,t="+t+",f=100,i="+id+";"+g.pick([]string{"L25vbmV4aXN0ZW50", "L3RtcC90dWlvcy1mdXp6LW5vbmU=", ""})+"\x1b\\",
+			"kitty graphics transmit from medium "+t)
+	}
+	return c.seq("apc")
+}
+
+// kbd draws the sequences that change how keys, the cursor and reports behave:
+// the kitty keyboard stack, modifyOtherKeys, the cursor style, and the mode
+// and version reports. They carry state a resize or a screen switch has to
+// keep, and each report writes into the response pipe.
+func (g *Gen) kbd() Seq {
+	switch g.u(10) {
+	case 0:
+		p := g.pick([]string{"1", "3", "31", "0", "", g.param()})
+		return Seq{Kind: "kbd", Bytes: "\x1b[>" + p + "u", Desc: "kitty keyboard push flags " + shown(p)}
+	case 1:
+		p := g.pick([]string{"", "1", "2", "99", g.param()})
+		return Seq{Kind: "kbd", Bytes: "\x1b[<" + p + "u", Desc: "kitty keyboard pop " + shown(p)}
+	case 2:
+		p := g.param() + ";" + g.pick([]string{"1", "2", "3", "0", "4"})
+		return Seq{Kind: "kbd", Bytes: "\x1b[=" + p + "u", Desc: "kitty keyboard set flags " + shown(p)}
+	case 3:
+		return Seq{Kind: "kbd", Bytes: "\x1b[?u", Desc: "kitty keyboard query"}
+	case 4:
+		p := g.pick([]string{"4;1", "4;2", "4;0", "4", "1;1", g.params(2)})
+		return Seq{Kind: "kbd", Bytes: "\x1b[>" + p + "m", Desc: "XTMODKEYS modifyOtherKeys " + shown(p)}
+	case 5:
+		p := g.pick([]string{"0", "1", "2", "3", "4", "5", "6", "7", "", g.param()})
+		return Seq{Kind: "kbd", Bytes: "\x1b[" + p + " q", Desc: "DECSCUSR cursor style " + shown(p)}
+	case 6:
+		p := g.pick([]string{"1", "25", "1049", "2004", "2026", "2027", "9999", g.param()})
+		return Seq{Kind: "kbd", Bytes: "\x1b[?" + p + "$p", Desc: "DECRQM request private mode " + shown(p)}
+	case 7:
+		p := g.pick([]string{"4", "20", "12", g.param()})
+		return Seq{Kind: "kbd", Bytes: "\x1b[" + p + "$p", Desc: "DECRQM request ANSI mode " + shown(p)}
+	case 8:
+		return Seq{Kind: "kbd", Bytes: "\x1b[>" + g.pick([]string{"", "0", "1"}) + "q", Desc: "XTVERSION report the terminal version"}
+	default:
+		return Seq{Kind: "kbd", Bytes: "\x1b[" + g.pick([]string{"s", "u"}), Desc: "SCOSC or SCORC save or restore the cursor"}
 	}
 }
 

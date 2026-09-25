@@ -149,7 +149,6 @@ func splitEquivalence(s vtgen.Script, seed uint64) (broken string) {
 	if wp, sp := whole.CursorPosition(), split.CursorPosition(); wp != sp {
 		return fmt.Sprintf("the same bytes split at different boundaries left the cursor elsewhere: whole=%v split=%v", wp, sp)
 	}
-	_ = writes
 	return ""
 }
 
@@ -240,12 +239,12 @@ func FuzzEmulatorSplitEquivalence(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		script := vtgen.FromBytes(data).Script(120)
-		seed := uint64(len(data))*1099511628211 + 7
+		seed := splitSeed(data)
 		if broken := splitEquivalence(script, seed); broken != "" {
 			replay := func(s vtgen.Script) string { return splitEquivalence(s, seed) }
 			small := shrinkSame(script, brokenSig(broken), replay)
-			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s",
-				broken, len(script), len(small), small)
+			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s\n%s",
+				broken, len(script), len(small), small, pinnable(small, seed, broken))
 		}
 	})
 }
@@ -266,8 +265,8 @@ func FuzzEmulatorRenderRoundTrip(f *testing.F) {
 		script := vtgen.FromBytes(data).Script(120)
 		if broken := renderRoundTrip(script); broken != "" {
 			small := shrinkSame(script, brokenSig(broken), renderRoundTrip)
-			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s",
-				broken, len(script), len(small), small)
+			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s\n%s",
+				broken, len(script), len(small), small, pinnable(small, 0, broken))
 		}
 	})
 }
