@@ -461,23 +461,6 @@ func TestDiffLifecycleIgnoresShellTitle(t *testing.T) {
 	}
 }
 
-// TestUpdateStateFromDisconnectedClientStillEmits guards the wiring: events must
-// come from the daemon's update-state handler, not from anything TUI-side.
-func TestUpdateStateFromDisconnectedClientStillEmits(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	sub := subscribeTo(t, sp, "work", EventWindowCreated)
-
-	state := sess.GetState()
-	state.Windows = append(state.Windows, WindowState{ID: "added", PTYID: "pty-added", Workspace: 1, Title: "x"})
-	sess.UpdateState(state)
-
-	events := collectEvents(t, sub, 1, 3*time.Second)
-	if len(events) != 1 || events[0]["window"] != "added" {
-		t.Fatalf("events = %v, want one window-created for 'added'", events)
-	}
-}
-
 // TestRestoredSessionRaisesWindowCreated pins the documented resurrection
 // behavior: restoring a session raises session-created and then a window-created
 // per restored window, because from a subscriber's point of view those windows

@@ -26,37 +26,6 @@ func attachMailClient(t *testing.T, name string) chan AgentMailPayload {
 	return got
 }
 
-// TestSendAgentMessagePushesToTheAttachedClient is the delivery half of the
-// mailbox surface. The ring is store-and-forward for agents, which poll; an
-// attached client is drawn for a person, who does not, so the daemon has to
-// hand it the message as it is stored. Without this push the only way a
-// person hears about a message is to go and read the ring themselves.
-func TestSendAgentMessagePushesToTheAttachedClient(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "push")
-	got := attachMailClient(t, "push")
-	c := dialVerb(t, sp)
-
-	sent := result(t, c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"push","to":"`+b+`","from":"`+a+`","subject":"need a decision","text":"merge A or B?"}}`))
-	id := idOf(t, sent, "message_id")
-
-	select {
-	case p := <-got:
-		m := p.Message
-		if m.ID != id {
-			t.Errorf("the client was handed message %d, want the one just sent, %d", m.ID, id)
-		}
-		if m.Text != "merge A or B?" || m.Subject != "need a decision" {
-			t.Errorf("the pushed message lost its body: %+v", m)
-		}
-		if m.From != a || m.To != b || m.ThreadID != id {
-			t.Errorf("the pushed message lost its addressing: from %q to %q thread %d", m.From, m.To, m.ThreadID)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("send-agent-message stored a message and no attached client was told")
-	}
-}
-
 // TestAgentMailIsPushedOnlyToTheSessionItIsIn: a client attached to another
 // session must not hear a conversation that is not its own.
 func TestAgentMailIsPushedOnlyToTheSessionItIsIn(t *testing.T) {

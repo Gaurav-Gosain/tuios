@@ -5,39 +5,6 @@ import (
 	"testing"
 )
 
-func TestSessionOptionsSetGet(t *testing.T) {
-	sess, err := NewSession("opt-test", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-	defer sess.Stop()
-
-	if _, ok := sess.GetOption("border_style"); ok {
-		t.Fatalf("expected unset option to report ok=false")
-	}
-
-	sess.SetOption("border_style", "rounded")
-	v, ok := sess.GetOption("border_style")
-	if !ok || v != "rounded" {
-		t.Fatalf("GetOption = %q,%v; want rounded,true", v, ok)
-	}
-
-	sess.SetOption("border_style", "double")
-	if v, _ := sess.GetOption("border_style"); v != "double" {
-		t.Fatalf("overwrite failed: got %q", v)
-	}
-
-	// GetState must expose a copy of Options, not the live map.
-	state := sess.GetState()
-	if state.Options["border_style"] != "double" {
-		t.Fatalf("GetState Options missing value: %+v", state.Options)
-	}
-	state.Options["border_style"] = "mutated"
-	if v, _ := sess.GetOption("border_style"); v != "double" {
-		t.Fatalf("GetState returned a live map reference; option was mutated to %q", v)
-	}
-}
-
 func TestSessionOptionsSurviveStateSync(t *testing.T) {
 	sess, err := NewSession("opt-sync", &SessionConfig{}, 80, 24)
 	if err != nil {

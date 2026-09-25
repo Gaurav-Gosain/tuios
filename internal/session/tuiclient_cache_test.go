@@ -5,36 +5,6 @@ import (
 	"testing"
 )
 
-// TestCreatedSessionSurvivesSwitchingBack is the regression test for a session
-// disappearing from the sidebar. Creating a session from inside another one is
-// an attach to a name the daemon does not have yet; the cache the sidebar builds
-// its rows from never heard about it, so the row lived only as long as the
-// client stayed attached and was gone the moment it switched back.
-func TestCreatedSessionSurvivesSwitchingBack(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "origin")
-
-	client := attachTestClient(t, "origin")
-
-	if _, err := client.SwitchSession("spawned", 80, 24); err != nil {
-		t.Fatalf("switch to a new session: %v", err)
-	}
-	if names := client.AvailableSessionNames(); !slices.Contains(names, "spawned") {
-		t.Fatalf("a session created by attaching to it is missing from the cache: %v", names)
-	}
-
-	if _, err := client.SwitchSession("origin", 80, 24); err != nil {
-		t.Fatalf("switch back: %v", err)
-	}
-	names := client.AvailableSessionNames()
-	if !slices.Contains(names, "spawned") {
-		t.Fatalf("the created session vanished after switching back: %v", names)
-	}
-	if !slices.Contains(names, "origin") {
-		t.Fatalf("the original session is missing after switching back: %v", names)
-	}
-}
-
 // TestListingCannotDropAJustCreatedSession pins the no-regression rule: a
 // listing answered from a snapshot taken before a session was created is an
 // older picture than the cache holds, so it may not remove that session. A

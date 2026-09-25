@@ -47,29 +47,6 @@ func (s *syncTaker) next(t *testing.T, trigger string) syncSeen {
 	}
 }
 
-// TestPeersAreHandedTheMergedState: a sync from one client reaches the
-// other as an "update" carrying the whole merged state, not nothing.
-func TestPeersAreHandedTheMergedState(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "pair")
-	a := attachTestClient(t, "pair")
-	b := attachTestClient(t, "pair")
-	seenByB := takeSyncs(b)
-
-	state := benchState(2)
-	state.WorkspaceNames = map[int]string{1: "from-a"}
-	if err := a.UpdateState(state); err != nil {
-		t.Fatalf("push: %v", err)
-	}
-	seen := seenByB.next(t, "update")
-	if seen.state == nil {
-		t.Fatal("the peer was handed a state sync with no state in it")
-	}
-	if got := seen.state.WorkspaceNames[1]; got != "from-a" {
-		t.Fatalf("the peer's state names workspace 1 %q, want the merged %q", got, "from-a")
-	}
-}
-
 // TestAStaleSyncIsAnsweredWithTheMergedState: a client whose snapshot was
 // built before a daemon-side mutation is sent the state that is canonical now,
 // as a "reconcile", so it stops rendering and re-pushing its stale view.

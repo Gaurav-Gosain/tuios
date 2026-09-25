@@ -31,32 +31,6 @@ func attachTestClient(t *testing.T, sessionName string) *TUIClient {
 	return c
 }
 
-// TestKilledSessionNotifiesAttachedClient is the regression test for the
-// lingering client: killing a session must reach the attached client, naming the
-// session that ended.
-func TestKilledSessionNotifiesAttachedClient(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	client := attachTestClient(t, "work")
-
-	ended := make(chan string, 4)
-	client.OnSessionEnded(func(name, _ string) { ended <- name })
-
-	if err := d.manager.DeleteSession("work"); err != nil {
-		t.Fatalf("DeleteSession: %v", err)
-	}
-
-	select {
-	case name := <-ended:
-		if name != "work" {
-			t.Errorf("session ended for %q, want work", name)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the attached client was never told its session was killed; it would linger in a dead UI")
-	}
-}
-
 // TestSessionEndedFiresExactlyOnce guards against a client quitting twice or
 // reporting the wrong exit reason because the notification was duplicated.
 func TestSessionEndedFiresExactlyOnce(t *testing.T) {

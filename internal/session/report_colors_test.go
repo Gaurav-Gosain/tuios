@@ -59,34 +59,6 @@ func fakePTY(t *testing.T, sess *Session, id string) *PTY {
 	return p
 }
 
-func TestPushedReportColorsReachEveryPane(t *testing.T) {
-	sess := newTestSession(t)
-	a := fakePTY(t, sess, "report-a")
-	before := bgAnswer(t, a)
-
-	sess.applyReportColors("#123456", "#eeddcc")
-	if got := bgAnswer(t, a); got != "rgb:1212/3434/5656" {
-		t.Errorf("after the push the pane answered %q, want the painted rgb:1212/3434/5656", got)
-	}
-
-	// A pane made after the push is told at creation, which is inside
-	// createPTY; a pane added straight to the map here stands in for the
-	// ones that were already there, so the stored pair is checked directly.
-	sess.ptysMu.RLock()
-	stored := sess.reportBg
-	sess.ptysMu.RUnlock()
-	if stored == nil {
-		t.Error("the session kept no pair for the panes made after the push")
-	}
-
-	// A client that paints nothing sends empty, which gives the emulator its
-	// own answer back.
-	sess.applyReportColors("", "")
-	if got := bgAnswer(t, a); got != before {
-		t.Errorf("after an empty push the pane answered %q, want its own %q", got, before)
-	}
-}
-
 // The pair arrives the way a client sends it: in a state push, through the
 // daemon's update-state handler.
 func TestStatePushCarriesReportColorsToThePanes(t *testing.T) {

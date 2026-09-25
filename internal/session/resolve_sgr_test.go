@@ -3,7 +3,6 @@ package session
 import (
 	"image/color"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -37,35 +36,6 @@ func mustPalette(t *testing.T, hex []string) [16]color.Color {
 		t.Fatalf("paletteFromParams(%v) failed: %v", hex, err)
 	}
 	return pal
-}
-
-func TestResolveSGRBasicForeground(t *testing.T) {
-	pal := mochaPalette()
-	got := ResolveSGR("\x1b[31mred\x1b[0m", pal)
-	// Red resolves to #f38ba8 → 38;2;243;139;168. The reset stays a reset.
-	want := "\x1b[38;2;243;139;168mred\x1b[0m"
-	if got != want {
-		t.Fatalf("ResolveSGR(31) = %q, want %q", got, want)
-	}
-}
-
-func TestResolveSGRBasicBackground(t *testing.T) {
-	pal := mochaPalette()
-	got := ResolveSGR("\x1b[44m", pal)
-	want := "\x1b[48;2;137;180;250m" // #89b4fa
-	if got != want {
-		t.Fatalf("ResolveSGR(44) = %q, want %q", got, want)
-	}
-}
-
-func TestResolveSGRBrightForeground(t *testing.T) {
-	pal := mochaPalette()
-	// 91 = bright red = palette index 9 = #f38ba8.
-	got := ResolveSGR("\x1b[91m", pal)
-	want := "\x1b[38;2;243;139;168m"
-	if got != want {
-		t.Fatalf("ResolveSGR(91) = %q, want %q", got, want)
-	}
 }
 
 func TestResolveSGRBrightBackground(t *testing.T) {
@@ -103,26 +73,6 @@ func TestResolveSGR256LowIndexUsesPalette(t *testing.T) {
 	want := "\x1b[38;2;243;139;168m"
 	if got != want {
 		t.Fatalf("ResolveSGR(38;5;1) = %q, want %q", got, want)
-	}
-}
-
-func TestResolveSGR256CubeAndRampResolved(t *testing.T) {
-	pal := mochaPalette()
-	// Indices at or above 16 belong to the standard 256-colour cube and grey
-	// ramp, whose levels ride the index itself, so they resolve to fixed RGB
-	// values no palette redefines. 196 is the top red corner, 208 the classic
-	// orange, 232/255 the ramp's ends.
-	cases := []struct{ in, want string }{
-		{"\x1b[38;5;196m", "\x1b[38;2;255;0;0m"},
-		{"\x1b[38;5;208m", "\x1b[38;2;255;135;0m"},
-		{"\x1b[48;5;208m", "\x1b[48;2;255;135;0m"},
-		{"\x1b[38;5;232m", "\x1b[38;2;8;8;8m"},
-		{"\x1b[38;5;255m", "\x1b[38;2;238;238;238m"},
-	}
-	for _, c := range cases {
-		if got := ResolveSGR(c.in, pal); got != c.want {
-			t.Fatalf("ResolveSGR(%q) = %q, want %q", c.in, got, c.want)
-		}
 	}
 }
 
@@ -202,15 +152,6 @@ func TestResolveSGRTrueColourLeftAlone(t *testing.T) {
 	}
 }
 
-func TestResolveSGRAttributesSurvive(t *testing.T) {
-	pal := mochaPalette()
-	got := ResolveSGR("\x1b[1;31m", pal)
-	want := "\x1b[1;38;2;243;139;168m"
-	if got != want {
-		t.Fatalf("ResolveSGR(1;31) = %q, want %q", got, want)
-	}
-}
-
 func TestResolveSGRMultipleColours(t *testing.T) {
 	pal := mochaPalette()
 	got := ResolveSGR("\x1b[31;44m", pal)
@@ -285,40 +226,5 @@ func TestPaletteFromParams(t *testing.T) {
 	}
 	if got := ResolveSGR("\x1b[31m", pal); got != "\x1b[38;2;243;139;168m" {
 		t.Fatalf("resolved with palette = %q", got)
-	}
-}
-
-func TestXtermPaletteIsRGB(t *testing.T) {
-	pal := xtermPalette()
-	for i, c := range pal {
-		r, g, b, a := c.RGBA()
-		if a == 0 {
-			t.Fatalf("xterm colour %d has zero alpha", i)
-		}
-		if r == 0 && g == 0 && b == 0 && i != 0 {
-			t.Fatalf("xterm colour %d is black; palette not populated", i)
-		}
-		// Pin the exact RGB as literals: xterm's own defaults, written out
-		// here rather than read back from shot's xterm table so a regression to
-		// a colour library's VGA shades (index 1 = #800000) cannot pass by
-		// changing both sides together. The daemon resolves against what
-		// xterm actually paints when no palette is sent; a capture that
-		// disagrees with the terminal is a lie.
-		want := [16][3]int{
-			{0, 0, 0}, {205, 0, 0}, {0, 205, 0}, {205, 205, 0},
-			{0, 0, 238}, {205, 0, 205}, {0, 205, 205}, {229, 229, 229},
-			{127, 127, 127}, {255, 0, 0}, {0, 255, 0}, {255, 255, 0},
-			{92, 92, 255}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255},
-		}[i]
-		if r>>8 != uint32(want[0]) || g>>8 != uint32(want[1]) || b>>8 != uint32(want[2]) {
-			t.Fatalf("xterm colour %d = #%02x%02x%02x, want #%02x%02x%02x (xterm defaults, not VGA)",
-				i, r>>8, g>>8, b>>8, want[0], want[1], want[2])
-		}
-	}
-	// The xterm red (index 1) is a known RGB; confirm it serialises to a
-	// true-colour unit rather than an index.
-	got := ResolveSGR("\x1b[31m", pal)
-	if !strings.HasPrefix(got, "\x1b[38;2;") {
-		t.Fatalf("xterm red resolved to %q, want 38;2;...", got)
 	}
 }

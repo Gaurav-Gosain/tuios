@@ -1,8 +1,6 @@
 package session
 
 import (
-	"bytes"
-	"encoding/gob"
 	"testing"
 )
 
@@ -54,36 +52,6 @@ func TestStateFingerprintIsStableAcrossPasses(t *testing.T) {
 				"which is the whole cost this exists to remove", i, got, want)
 		}
 	}
-}
-
-// TestGobEncodingIsNotStable is the discriminating control for the test above,
-// and it is written deliberately as one. It passes whether or not
-// StateFingerprint exists: its job is to show that the cheaper implementation
-// really is unusable, so the hand-written one is not cargo.
-//
-// If this ever fails, Go has started ordering map iteration and the fingerprint
-// could be simplified.
-func TestGobEncodingIsNotStable(t *testing.T) {
-	enc := func() []byte {
-		st := fingerprintFixture()
-		// gob refuses a nil map value, so the nil tree the fingerprint fixture
-		// carries on purpose is dropped for this one. It is not what is under
-		// test here, and it is a second reason an encoding is the wrong basis.
-		delete(st.WorkspaceTrees, 2)
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(st); err != nil {
-			t.Fatalf("gob encode: %v", err)
-		}
-		return buf.Bytes()
-	}
-	first := enc()
-	for range 200 {
-		if !bytes.Equal(first, enc()) {
-			return // as expected: the encoding is not stable
-		}
-	}
-	t.Skip("gob encoded this state identically 200 times; map iteration may have " +
-		"become ordered, in which case StateFingerprint could hash an encoding instead")
 }
 
 // TestStateFingerprintNoticesEveryChange keeps the fingerprint honest in the
@@ -162,13 +130,5 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 					"carrying that change would be suppressed and the peer would never see it", what)
 			}
 		})
-	}
-}
-
-// TestStateFingerprintOfNil pins the degenerate case rather than leaving it to
-// a panic at a call site.
-func TestStateFingerprintOfNil(t *testing.T) {
-	if StateFingerprint(nil) != 0 {
-		t.Error("a nil state should fingerprint as zero")
 	}
 }

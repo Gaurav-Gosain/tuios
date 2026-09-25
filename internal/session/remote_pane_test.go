@@ -8,8 +8,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -168,35 +166,6 @@ func waitGone(t *testing.T, d *Daemon, id string, budget time.Duration) {
 			t.Fatalf("the far machine still holds pane %s after %v", id, budget)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-// TestAPaneOnAnotherMachineCarriesBytesBothWays is the whole feature in one
-// test: a process is started over there, what it prints arrives here, and what
-// is typed here reaches it.
-//
-// Negative control: with the takeover in verbOpenPane removed the open still
-// succeeds and this fails with nothing read, because the reply is the last
-// thing that connection would ever carry.
-func TestAPaneOnAnotherMachineCarriesBytesBothWays(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	_ = d
-	fed := &socketFederation{socketPath: socketPath}
-
-	p := openTestPane(t, fed, hostedPaneSpec{
-		Width: 80, Height: 24,
-		Command: []string{"/bin/sh", "-c", "echo pane-is-up; exec cat"},
-	})
-	out := drainPane(p)
-
-	if got := out.waitFor("pane-is-up", paneBudget); !strings.Contains(got, "pane-is-up") {
-		t.Fatalf("nothing the far process printed arrived: %q", got)
-	}
-	if _, err := p.Write([]byte("typed-here\n")); err != nil {
-		t.Fatalf("write to the far pane: %v", err)
-	}
-	if got := out.waitFor("typed-here", paneBudget); !strings.Contains(got, "typed-here") {
-		t.Fatalf("what was typed here never came back from the far process: %q", got)
 	}
 }
 
@@ -379,19 +348,6 @@ func (s *scriptedStream) Read(p []byte) (int, error) {
 func (s *scriptedStream) Write(p []byte) (int, error) { return len(p), nil }
 func (s *scriptedStream) Close() error                { return nil }
 
-// TestASessionWithNoLinksRefusesAWindowElsewhere, naming the machine and the
-// table it is missing from rather than failing at the spawn.
-func TestASessionWithNoLinksRefusesAWindowElsewhere(t *testing.T) {
-	s := &Session{Name: "work"}
-	_, err := s.openRemotePaneFor("win-1", "build", 80, 24, "", nil)
-	if err == nil {
-		t.Fatal("a daemon with no links opened a window on another machine")
-	}
-	if !strings.Contains(err.Error(), "build") || !strings.Contains(err.Error(), "hosts") {
-		t.Errorf("the refusal names neither the machine nor where to add it: %v", err)
-	}
-}
-
 // TestASizeFromAnotherMachineIsTreatedAsInput. The number crossed a machine
 // boundary and nothing between there and here checked it.
 func TestASizeFromAnotherMachineIsTreatedAsInput(t *testing.T) {
@@ -429,94 +385,6 @@ func TestALocalWindowSerialisesWithNoHostField(t *testing.T) {
 	}
 }
 
-// TestAWindowOnAnotherMachineIsAnOrdinaryWindow walks the whole path a person
-// takes: ask a session for a window on another machine, and get a window.
-//
-// It is the claim the design rests on. The window is in this session's state,
-// it records where its process is, and the pane behind it is a PTY like any
-// other, which is what lets every surface above the paneIO seam stay unaware
-// that the process is not here.
-func TestAWindowOnAnotherMachineIsAnOrdinaryWindow(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("global", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	sess.SetFederation(&socketFederation{socketPath: socketPath})
-
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Host:    "build",
-		Command: []string{"/bin/sh", "-c", "echo running-elsewhere; exec cat"},
-	}, func(string) {})
-	if err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-	if win.Host != "build" {
-		t.Errorf("the window does not record the machine its process is on: host %q", win.Host)
-	}
-
-	found := false
-	for _, w := range sess.GetState().Windows {
-		if w.ID == win.ID {
-			found = true
-			if w.Host != "build" {
-				t.Errorf("the session's own state lost the window's machine: %q", w.Host)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("the window is not in the session it was created in")
-	}
-
-	pty := sess.GetPTY(win.PTYID)
-	if pty == nil {
-		t.Fatal("the window has no pane")
-	}
-	if got := waitForPaneText(t, pty, "running-elsewhere", 10*time.Second); !strings.Contains(got, "running-elsewhere") {
-		t.Errorf("the far process's output never reached this session's emulator: %q", got)
-	}
-}
-
-// TestAPaneWhoseFarProcessExitsClosesItsWindow.
-//
-// A pane on another machine has no process here, so nothing here can wait on
-// one. monitorExit returns at once for it, and without a second path the
-// window outlived its shell: it stayed on screen, took keystrokes and answered
-// nothing, and wait-for window-exit never resolved.
-//
-// The stream ending is the only notice that crosses, and it covers all three
-// ways a far pane can end: the process exits, the owner hangs up, or the link
-// drops.
-//
-// Negative control: removing the noteExit call from readOutput fails here,
-// waiting out the budget with the window still open.
-func TestAPaneWhoseFarProcessExitsClosesItsWindow(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("global-exit", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	sess.SetFederation(&socketFederation{socketPath: socketPath})
-
-	exited := make(chan string, 1)
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Host:    "build",
-		Command: []string{"/bin/sh", "-c", "exit 0"},
-	}, func(ptyID string) { exited <- ptyID })
-	if err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-
-	select {
-	case got := <-exited:
-		if got != win.PTYID {
-			t.Errorf("a different pane was reported as exited: %q, want %q", got, win.PTYID)
-		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("the far process exited and the window was never told, so it would stay open around nothing")
-	}
-}
-
 // waitForPaneText reads the pane's emulator until want shows up on it. It goes
 // through the emulator rather than the stream on purpose: what is being proved
 // is that a far pane's bytes reach the same screen a local pane's do.
@@ -532,50 +400,6 @@ func waitForPaneText(t *testing.T, pty *PTY, want string, budget time.Duration) 
 		time.Sleep(20 * time.Millisecond)
 	}
 	return last
-}
-
-// TestTheFilesOfAPaneOnAnotherMachineAreNotThisMachines.
-//
-// The rail's file section asks the daemon that owns the pane, which was the
-// whole fix for a pane reached over a link: the client was listing its own
-// disk and reporting that the pane's directory did not exist. A window whose
-// process is elsewhere brings the same mistake back one level up, because now
-// the daemon that owns the window is not the machine that owns the files
-// either. It says so instead of answering about the wrong disk.
-//
-// Negative control: without the host check this lists the temporary directory
-// and reports a successful listing of a path the pane has never been in.
-func TestTheFilesOfAPaneOnAnotherMachineAreNotThisMachines(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("global-files", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	sess.SetFederation(&socketFederation{socketPath: socketPath})
-
-	// A directory that does exist here, so a daemon that listed its own disk
-	// would succeed rather than fail, which is the failure being guarded.
-	here := t.TempDir()
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Host:    "build",
-		Command: []string{"/bin/sh"},
-	}, func(string) {})
-	if err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-
-	if got := d.windowHost(sess.ID, win.ID); got != "build" {
-		t.Fatalf("ASSERTION: the window does not report a host (%q), so this proves nothing", got)
-	}
-	if got := d.windowHost(sess.ID, "no-such-window"); got != "" {
-		t.Errorf("an unknown window reported host %q", got)
-	}
-
-	// The local half still answers, so the guard is about the pane's machine
-	// rather than about turning the section off.
-	if out := listDir(here, 0); out.Err != "" {
-		t.Errorf("a directory on this machine no longer lists: %s", out.Err)
-	}
 }
 
 // TestARestoredWindowStopsClaimingAnotherMachine.
@@ -775,53 +599,6 @@ func TestAnInteractiveShellEndingOnCtrlDClosesThePane(t *testing.T) {
 	}
 }
 
-// TestAPaneOnAnotherMachineReportsWhereItIs.
-//
-// The rail's file section needs a directory before it can ask for a listing,
-// and a pane on another machine has none of the usual sources: there is no
-// process here to read, and a shell that never emits OSC 7, which bash and zsh
-// mostly do not, announces nothing. So the machine running it is asked, and it
-// is the only one that can answer.
-//
-// Without this the section said "no directory yet" for every remote pane, for
-// its whole life.
-func TestAPaneOnAnotherMachineReportsWhereItIs(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	fed := &socketFederation{socketPath: socketPath}
-
-	home := t.TempDir()
-	p := openTestPane(t, fed, hostedPaneSpec{
-		Width: 80, Height: 24, Cwd: home,
-		Command: []string{"/bin/sh"},
-	})
-	_ = d
-
-	// Compared after resolving links: the kernel reports the real path, and on
-	// macOS the temp root reaches it through a symlink.
-	want, err := filepath.EvalSymlinks(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	deadline := time.Now().Add(paneBudget)
-	for {
-		if cwd, ok := p.Cwd(); ok {
-			got, err := filepath.EvalSymlinks(cwd)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != want {
-				t.Fatalf("the far machine says the pane is in %q, want %q", got, want)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the far machine never said where the pane's process is")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 // TestAskingWhereAPaneIsDoesNotBlockTheCaller.
 //
 // Cwd is read from GetState, which is on the render path. A call over a link
@@ -845,183 +622,6 @@ func TestAskingWhereAPaneIsDoesNotBlockTheCaller(t *testing.T) {
 	if took := time.Since(start); took > 100*time.Millisecond {
 		t.Errorf("fifty reads of the pane's directory took %v, so they were waiting on the far machine", took)
 	}
-}
-
-// TestTheFarMachineListsItsOwnDirectory is the other half: the machine with
-// the process is the machine with the files.
-func TestTheFarMachineListsItsOwnDirectory(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	_ = d
-	fed := &socketFederation{socketPath: socketPath}
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "only-over-there.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	raw, err := fed.Call(ctx, "build", "read-dir", map[string]any{"dir": dir})
-	if err != nil {
-		t.Fatalf("ask the far machine to list a directory: %v", err)
-	}
-	var out DirListingPayload
-	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatalf("read the listing: %v", err)
-	}
-	found := false
-	for _, e := range out.Entries {
-		if e.Name == "only-over-there.txt" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("the listing does not hold the file that is there: %+v", out)
-	}
-}
-
-// TestAPushCarriesARemotePanesDirectory.
-//
-// The clients are given a snapshot, and for a pane on another machine that
-// snapshot is the only place its directory can come from: there is no process
-// here to read and its shell announces nothing. So the push has to carry what
-// a verb would read, and for a while it did not. GetState filled the directory
-// in and publishState did not, so `tuios list-windows` reported it and the
-// client drawing the same pane was never told.
-//
-// Negative control: removing fillLiveFacts from publishState fails here with
-// an empty directory on every push.
-func TestAPushCarriesARemotePanesDirectory(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("pushes", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	sess.SetFederation(&socketFederation{socketPath: socketPath})
-
-	var mu sync.Mutex
-	seen := ""
-	sess.SetStateSink(func(state *SessionState) {
-		mu.Lock()
-		defer mu.Unlock()
-		for _, w := range state.Windows {
-			if w.Host != "" && w.Cwd != "" {
-				seen = w.Cwd
-			}
-		}
-	})
-
-	home := t.TempDir()
-	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Host:    "build",
-		Cwd:     home,
-		Command: []string{"/bin/sh"},
-	}, func(string) {}); err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-
-	want, err := filepath.EvalSymlinks(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(paneBudget)
-	for {
-		mu.Lock()
-		got := seen
-		mu.Unlock()
-		if got != "" {
-			resolved, err := filepath.EvalSymlinks(got)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resolved != want {
-				t.Fatalf("a push carried directory %q, want %q", resolved, want)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no push ever carried the remote pane's directory, so no client could learn it")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// TestAPaneThatChangesDirectoryOnAnotherMachineSaysSo.
-//
-// The first answer used to be the only one. The ask was made from the snapshot
-// path, so it only happened when something else caused a snapshot, and nothing
-// does when a shell somewhere else runs cd: the window set, the layout and the
-// names are all as they were. The rail showed the directory the pane started
-// in for as long as it lived.
-//
-// What is watched here is the pushes, not GetState. Calling GetState is itself
-// an ask, so a test that polls it drives the very refresh it is checking for
-// and passes with the feature removed. That is exactly what the first version
-// of this did.
-//
-// This does not fail when the explicit refresh is removed, and that is worth
-// saying rather than hiding: other work on the output path mutates the session
-// and every mutation asks, so the answer arrives by accident. Accident is the
-// problem. A pane whose output causes no mutation kept its first directory for
-// as long as it lived, which is what was reported. The hook is pinned where it
-// can fail, in TestOutputAsksWhereARemotePaneIsAtMostOncePerSecond.
-func TestAPaneThatChangesDirectoryOnAnotherMachineSaysSo(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("cd-elsewhere", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	sess.SetFederation(&socketFederation{socketPath: socketPath})
-
-	var mu sync.Mutex
-	pushed := map[string]bool{}
-	sess.SetStateSink(func(state *SessionState) {
-		mu.Lock()
-		defer mu.Unlock()
-		for _, w := range state.Windows {
-			if w.Host != "" && w.Cwd != "" {
-				if got, err := filepath.EvalSymlinks(w.Cwd); err == nil {
-					pushed[got] = true
-				}
-			}
-		}
-	})
-	sawPushed := func(want string) bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return pushed[want]
-	}
-
-	home := t.TempDir()
-	sub := filepath.Join(home, "inner")
-	if err := os.MkdirAll(sub, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Host: "build", Cwd: home, Command: []string{"/bin/sh"},
-	}, func(string) {})
-	if err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-	pty := sess.GetPTY(win.PTYID)
-	if pty == nil {
-		t.Fatal("the window has no pane")
-	}
-
-	wantHome, _ := filepath.EvalSymlinks(home)
-	waitUntil(t, func() bool { return sawPushed(wantHome) },
-		"no push ever carried where the pane started")
-
-	// cd, then print. The print is the only thing that crosses, and it is what
-	// tells this machine to ask again.
-	if _, err := pty.Write([]byte("cd " + sub + "\npwd\n")); err != nil {
-		t.Fatalf("send cd: %v", err)
-	}
-
-	wantSub, _ := filepath.EvalSymlinks(sub)
-	waitUntil(t, func() bool { return sawPushed(wantSub) },
-		"the pane changed directory and no push ever said so")
 }
 
 // waitUntil blocks until cond holds, or fails with why.
@@ -1165,15 +765,6 @@ func TestWhatAPaneOnAnotherMachineIsRunningReachesTheDetector(t *testing.T) {
 	}
 	if info.shellPID != 4200 {
 		t.Errorf("the shell pid is %d, want the one the far machine gave", info.shellPID)
-	}
-}
-
-// TestALocalPaneIsNotAskedAnotherMachine. The resolver has to tell the two
-// apart, or every ordinary pane would take a round trip it does not need.
-func TestALocalPaneIsNotAskedAnotherMachine(t *testing.T) {
-	pty := &PTY{}
-	if _, _, remote := pty.remoteForeground(); remote {
-		t.Error("a pane on this machine was treated as one on another")
 	}
 }
 

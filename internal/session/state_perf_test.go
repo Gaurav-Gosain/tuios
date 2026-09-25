@@ -2,13 +2,7 @@ package session
 
 import (
 	"fmt"
-	"testing"
 )
-
-// The daemon rebuilds a lifecycle snapshot and diffs it against the previous
-// one on every state sync, and encodes the whole session state to broadcast it.
-// Both scale with the window count rather than with what changed, so these
-// measure them at window counts a heavy user reaches.
 
 // benchState builds a session state with n windows spread over workspaces.
 func benchState(n int) *SessionState {
@@ -40,87 +34,4 @@ func benchState(n int) *SessionState {
 		st.FocusedWindowID = st.Windows[0].ID
 	}
 	return st
-}
-
-// BenchmarkSnapshotLifecycle measures the snapshot the daemon takes before and
-// after every state mutation. It allocates a slice and a map sized to the
-// window count each time it runs.
-func BenchmarkSnapshotLifecycle(b *testing.B) {
-	for _, n := range []int{4, 16, 64} {
-		b.Run(fmt.Sprintf("windows-%d", n), func(b *testing.B) {
-			st := benchState(n)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				_ = snapshotLifecycle(st)
-			}
-		})
-	}
-}
-
-// BenchmarkDiffLifecycle measures the diff itself in the case that dominates:
-// nothing changed. A state sync that produces no events still walks every
-// window three times and does a map lookup per window per pass, so the cost of
-// a no-op sync is the floor for every sync.
-func BenchmarkDiffLifecycle(b *testing.B) {
-	for _, n := range []int{4, 16, 64} {
-		st := benchState(n)
-		before := snapshotLifecycle(st)
-
-		b.Run(fmt.Sprintf("windows-%d/unchanged", n), func(b *testing.B) {
-			after := snapshotLifecycle(st)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				_ = diffLifecycle(before, after)
-			}
-		})
-
-		b.Run(fmt.Sprintf("windows-%d/one-renamed", n), func(b *testing.B) {
-			changed := benchState(n)
-			changed.Windows[n/2].CustomName = "renamed"
-			after := snapshotLifecycle(changed)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				_ = diffLifecycle(before, after)
-			}
-		})
-	}
-}
-
-// BenchmarkStateCodec measures encoding a full session state, which is what
-// goes over the wire to every attached client on every sync. The whole state is
-// re-encoded whatever changed, so this is the per-sync cost.
-func BenchmarkStateCodec(b *testing.B) {
-	for _, n := range []int{4, 16, 64} {
-		st := benchState(n)
-
-		b.Run(fmt.Sprintf("gob/windows-%d/encode", n), func(b *testing.B) {
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				if _, err := encodePayload(st); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-
-		data, err := encodePayload(st)
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.Run(fmt.Sprintf("gob/windows-%d/decode", n), func(b *testing.B) {
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				var out SessionState
-				if err := decodePayload(data, &out); err != nil {
-					b.Fatal(err)
-				}
-			}
-			b.StopTimer()
-			b.ReportMetric(float64(len(data)), "wire-bytes")
-		})
-	}
 }

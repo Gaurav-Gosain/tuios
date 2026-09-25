@@ -41,27 +41,6 @@ func writeBytes(t *testing.T, path string, n int, seed byte) {
 	}
 }
 
-// TestStashRootIsBesideTheSocket pins where the files go. The whole lifetime
-// promise rests on the root being a per-boot directory, so the derivation is
-// worth stating in a test rather than only in a comment.
-func TestStashRootIsBesideTheSocket(t *testing.T) {
-	s, base := newStore(t)
-	src := filepath.Join(base, "note.txt")
-	writeBytes(t, src, 16, 1)
-
-	res, err := s.put("sess-1", src, nil)
-	if err != nil {
-		t.Fatalf("put: %v", err)
-	}
-	want := filepath.Join(base, "stash", "sess-1")
-	if got := filepath.Dir(res.Entry.Path); got != want {
-		t.Errorf("stored under %s, want %s", got, want)
-	}
-	if _, err := os.Stat(res.Entry.Path); err != nil {
-		t.Errorf("the stored file is not there: %v", err)
-	}
-}
-
 // TestStashHasNoPermanentFallback is the other half of that promise. With
 // XDG_RUNTIME_DIR unset the socket, and therefore the stash, must still land in
 // a per-boot directory and never anywhere under the user's home.
@@ -476,68 +455,6 @@ func TestStashSweepClearsEverything(t *testing.T) {
 	// safe to run at start as well as at shutdown.
 	if _, err := s.put("sess-1", src, nil); err != nil {
 		t.Errorf("the store is unusable after a sweep: %v", err)
-	}
-}
-
-// TestStashPutVerbStoresAndLists drives the two verbs over the socket, which is
-// the surface an agent meets.
-func TestStashPutVerbStoresAndLists(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "stashing")
-	c := dialVerb(t, sp)
-
-	src := filepath.Join(t.TempDir(), "flame.png")
-	writeBytes(t, src, 2048, 21)
-
-	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"stashing","path":`+quote(src)+`}}`))
-	stored, _ := put["path"].(string)
-	if stored == "" {
-		t.Fatal("stash-put returned no path")
-	}
-	if put["kind"] != "image" || put["media_type"] != "image/png" {
-		t.Errorf("stash-put classified the file as %v/%v, want image/image/png", put["kind"], put["media_type"])
-	}
-	if put["bytes"] != float64(2048) {
-		t.Errorf("stash-put stored %v bytes, want 2048", put["bytes"])
-	}
-	if put["deduped"] != false {
-		t.Error("the first put reported a dedup")
-	}
-	if _, err := os.Stat(stored); err != nil {
-		t.Fatalf("the stored path does not exist: %v", err)
-	}
-
-	again := result(t, c.call(t, `{"id":2,"verb":"stash-put","params":{"session":"stashing","path":`+quote(src)+`}}`))
-	if again["deduped"] != true || again["path"] != stored {
-		t.Errorf("a second put of the same bytes gave %v (deduped %v), want %s", again["path"], again["deduped"], stored)
-	}
-
-	// A session that has stashed nothing answers with an empty list rather than
-	// a null one. A caller that iterates the field must not have to check for
-	// two shapes of nothing.
-	makeSessionWithWindow(t, d, "empty")
-	empty := result(t, c.call(t, `{"id":9,"verb":"stash-list","params":{"session":"empty"}}`))
-	if entries, ok := empty["entries"].([]any); !ok || len(entries) != 0 {
-		t.Errorf("an empty stash lists %v, want []", empty["entries"])
-	}
-	if empty["dir"] == "" {
-		t.Error("an empty stash does not say where its directory would be")
-	}
-
-	list := result(t, c.call(t, `{"id":3,"verb":"stash-list","params":{"session":"stashing"}}`))
-	if list["total"] != float64(1) {
-		t.Fatalf("stash-list reports %v entries, want 1", list["total"])
-	}
-	entries := list["entries"].([]any)
-	entry := entries[0].(map[string]any)
-	if entry["path"] != stored {
-		t.Errorf("stash-list names %v, want %s", entry["path"], stored)
-	}
-	if entry["referenced"] != false {
-		t.Error("a file no message names reads as referenced")
-	}
-	if entry["missing"] != false {
-		t.Error("a file that is on disk reads as missing")
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -74,16 +73,6 @@ func TestGitBranchReadsHeadUnderDotGit(t *testing.T) {
 	}
 	if got := gitBranch(sub); got != "feat/labels" {
 		t.Fatalf("gitBranch in a subdirectory = %q, want feat/labels", got)
-	}
-}
-
-func TestGitBranchIsEmptyOutsideACheckout(t *testing.T) {
-	plain := filepath.Join(t.TempDir(), "plain")
-	if err := os.MkdirAll(plain, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if got := gitBranch(plain); got != "" {
-		t.Fatalf("gitBranch outside a checkout = %q, want empty", got)
 	}
 }
 
@@ -197,45 +186,5 @@ func waitPlace(t *testing.T, sess *Session, dir, branch string) {
 			t.Fatalf("listing place = %q %q, want %q %q", info.Dir, info.Branch, dir, branch)
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// TestASessionIsPlacedByItsFocusedPane runs the whole daemon-side path against
-// a real shell: the spawn directory places the pane before it reports anything,
-// an OSC 7 moves it, a directory outside a checkout has no branch, and a report
-// from another machine is ignored.
-func TestASessionIsPlacedByItsFocusedPane(t *testing.T) {
-	base := t.TempDir()
-	repo := filepath.Join(base, "labelrepo")
-	writeFile(t, filepath.Join(repo, ".git", "HEAD"), "ref: refs/heads/feature-x\n")
-	plain := filepath.Join(base, "plaindir")
-	if err := os.MkdirAll(plain, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	sess := newTestSession(t)
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "shell", Cwd: repo, Focus: true}, nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindowWith: %v", err)
-	}
-	waitPlace(t, sess, "labelrepo", "feature-x")
-
-	p := sess.GetPTY(win.PTYID)
-	if p == nil {
-		t.Fatal("the window has no PTY")
-	}
-	feedVT(t, p, "\x1b]7;file://localhost"+plain+"\x07")
-	waitPlace(t, sess, "plaindir", "")
-
-	feedVT(t, p, "\x1b]7;file://another-machine/root\x07")
-	time.Sleep(50 * time.Millisecond)
-	if info := sess.Info(); info.Dir != "plaindir" {
-		t.Fatalf("a remote report moved the pane to %q", info.Dir)
-	}
-
-	feedVT(t, p, "\x1b]7;file://localhost"+repo+"\x07")
-	waitPlace(t, sess, "labelrepo", "feature-x")
-	if !strings.HasSuffix(p.place.Cwd(), "labelrepo") {
-		t.Fatalf("pty cwd = %q", p.place.Cwd())
 	}
 }

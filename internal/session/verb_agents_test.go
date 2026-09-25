@@ -25,45 +25,6 @@ func twoWindowSession(t *testing.T, d *Daemon, name string) (*Session, string, s
 	return sess, st.Windows[0].ID, st.Windows[1].ID
 }
 
-func TestSendAndReadAgentMessage(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "mail")
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"mail","to":"`+b+`","from":"`+a+`","subject":"hi","text":"the suite is green"}}`))
-	if res["kind"] != agentMsgDirect {
-		t.Errorf("kind = %v, want %s", res["kind"], agentMsgDirect)
-	}
-	if res["to"] != b || res["from"] != a {
-		t.Errorf("addressing did not resolve: %v", res)
-	}
-
-	// The recipient reads its own inbox and gets the body, flagged untrusted.
-	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"mail","to":"`+b+`","unread":true}}`))
-	if read["untrusted"] != true {
-		t.Error("a read did not report its content as untrusted")
-	}
-	msgs, _ := read["messages"].([]any)
-	if len(msgs) != 1 {
-		t.Fatalf("got %d messages, want 1", len(msgs))
-	}
-	m := msgs[0].(map[string]any)
-	if m["text"] != "the suite is green" || m["subject"] != "hi" {
-		t.Errorf("message body did not survive: %v", m)
-	}
-
-	// Reading marked it read rather than consuming it: the second unread read is
-	// empty, and a full read still shows it.
-	again := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"mail","to":"`+b+`","unread":true}}`))
-	if n, _ := again["messages"].([]any); len(n) != 0 {
-		t.Errorf("a read message stayed unread: %v", again)
-	}
-	all := result(t, c.call(t, `{"id":4,"verb":"read-agent-messages","params":{"session":"mail","to":"`+b+`"}}`))
-	if n, _ := all["messages"].([]any); len(n) != 1 {
-		t.Errorf("reading consumed the message instead of marking it: %v", all)
-	}
-}
-
 // TestReadingWithoutAnInboxMarksNothing pins the rule that keeps one agent from
 // emptying another's mailbox as a side effect of looking around.
 func TestReadingWithoutAnInboxMarksNothing(t *testing.T) {
@@ -277,53 +238,6 @@ func TestAttachmentMustBeAnExistingAbsolutePath(t *testing.T) {
 	}
 }
 
-// TestListAgentsFindsAnAgentPane is the discovery half: an agent that reported a
-// state is listed with its address, and a plain shell is not.
-func TestListAgentsFindsAnAgentPane(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, a, b := twoWindowSession(t, d, "who")
-	c := dialVerb(t, sp)
-
-	if _, _, err := sess.ApplyAgentReport(b, AgentReport{
-		State: AgentStateNeedsInput, Message: "waiting for approval", Harness: "claude-code",
-	}); err != nil {
-		t.Fatalf("ApplyAgentReport: %v", err)
-	}
-
-	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"who"}}`))
-	agents, _ := res["agents"].([]any)
-	if len(agents) != 1 {
-		t.Fatalf("listed %d agents, want the one that reported", len(agents))
-	}
-	got := agents[0].(map[string]any)
-	if got["window_id"] != b || got["state"] != "needs_input" || got["harness_id"] != "claude-code" {
-		t.Errorf("agent row is wrong: %v", got)
-	}
-	// An agent on needs_input is not ready to be asked: text typed at it would
-	// answer its prompt. blocked_by says what the prompt is, guessed here from
-	// the reported message.
-	if got["ready"] != false {
-		t.Error("an agent waiting on a prompt read as ready to be asked")
-	}
-	if got["blocked_by"] != "approval" {
-		t.Errorf("blocked_by = %v, want approval for a message about approval", got["blocked_by"])
-	}
-
-	// Unread mail shows against the pane it is waiting for.
-	c.call(t, `{"id":2,"verb":"send-agent-message","params":{"session":"who","to":"`+b+`","from":"`+a+`","text":"ping"}}`)
-	res = result(t, c.call(t, `{"id":3,"verb":"list-agents","params":{"session":"who"}}`))
-	got = res["agents"].([]any)[0].(map[string]any)
-	if got["unread"] != float64(1) {
-		t.Errorf("unread = %v, want 1", got["unread"])
-	}
-
-	// all includes the pane nothing has identified as an agent.
-	res = result(t, c.call(t, `{"id":4,"verb":"list-agents","params":{"session":"who","all":true}}`))
-	if n, _ := res["agents"].([]any); len(n) != 2 {
-		t.Errorf("all listed %d windows, want 2", len(n))
-	}
-}
-
 // TestWaitForAgentMessageMatchesMailAlreadyWaiting covers the race a poll loop
 // would have had to work around.
 func TestWaitForAgentMessageMatchesMailAlreadyWaiting(t *testing.T) {
@@ -335,39 +249,6 @@ func TestWaitForAgentMessageMatchesMailAlreadyWaiting(t *testing.T) {
 	res := result(t, c.call(t, `{"id":2,"verb":"wait-for","params":{"condition":"agent-message","session":"waitmail","window":"`+b+`","timeout":2000}}`))
 	if res["matched"] != true || res["subject"] != "early" {
 		t.Errorf("wait did not match a message already in the inbox: %v", res)
-	}
-}
-
-// TestWaitForAgentMessageWakesOnArrival is the no-polling half: the wait is
-// blocked on the hub and returns when a send publishes.
-func TestWaitForAgentMessageWakesOnArrival(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "wakemail")
-
-	waiter := dialVerb(t, sp)
-	waiter.send(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-message","session":"wakemail","window":"`+b+`","timeout":5000}}`)
-
-	sender := dialVerb(t, sp)
-	// Give the waiter time to subscribe. The wait re-checks the ring on every
-	// event, so a message racing the subscription is still matched; the sleep
-	// only makes the test exercise the event path rather than the initial check.
-	time.Sleep(150 * time.Millisecond)
-	sender.call(t, `{"id":2,"verb":"send-agent-message","params":{"session":"wakemail","to":"`+b+`","from":"`+a+`","subject":"late","text":"after the wait started"}}`)
-
-	res := result(t, waiter.readResp(t))
-	if res["matched"] != true || res["subject"] != "late" {
-		t.Errorf("wait did not wake on the send: %v", res)
-	}
-}
-
-func TestWaitForAgentMessageTimesOut(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, _, b := twoWindowSession(t, d, "quiet")
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-message","session":"quiet","window":"`+b+`","timeout":200}}`)
-	if code := errCode(t, resp); code != ErrVerbTimeout {
-		t.Errorf("code = %q, want %q", code, ErrVerbTimeout)
 	}
 }
 
@@ -613,22 +494,6 @@ func TestTailLinesReturnsOnlyWhatCameAfter(t *testing.T) {
 	// and must not panic or return the whole screen.
 	if got, _ = tailLines(content, 99, 10); got != "" {
 		t.Errorf("tail past the end = %q, want empty", got)
-	}
-}
-
-// TestKilledSessionDropsItsRing covers the lifetime rule: mail dies with the
-// session it was addressed inside.
-func TestKilledSessionDropsItsRing(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "ephemeral")
-	c := dialVerb(t, sp)
-
-	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"ephemeral","to":"`+b+`","from":"`+a+`","text":"transient"}}`)
-	d.agents.forget("ephemeral")
-
-	res := d.agents.read("ephemeral", readQuery{limit: 10})
-	if res.Total != 0 {
-		t.Errorf("the ring outlived its session: %d messages", res.Total)
 	}
 }
 

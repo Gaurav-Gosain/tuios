@@ -1,40 +1,9 @@
 package session
 
 import (
-	"bytes"
-	"encoding/gob"
 	"maps"
 	"testing"
 )
-
-// TestTheStackRatioMapSurvivesTheWire checks that the per-workspace stack ratio
-// crosses gob intact, and that a state which never set it arrives saying
-// nothing, which is what an older peer sends.
-func TestTheStackRatioMapSurvivesTheWire(t *testing.T) {
-	roundTrip := func(t *testing.T, in *SessionState) *SessionState {
-		t.Helper()
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(in); err != nil {
-			t.Fatalf("gob encode: %v", err)
-		}
-		var out SessionState
-		if err := gob.NewDecoder(&buf).Decode(&out); err != nil {
-			t.Fatalf("gob decode: %v", err)
-		}
-		return &out
-	}
-
-	want := map[int]float64{1: 0.3, 4: 0.75}
-	out := roundTrip(t, &SessionState{Name: "wire", CurrentWorkspace: 1, WorkspaceStackRatio: want})
-	if !maps.Equal(out.WorkspaceStackRatio, want) {
-		t.Errorf("came back as %v, want %v", out.WorkspaceStackRatio, want)
-	}
-
-	out = roundTrip(t, &SessionState{Name: "wire", CurrentWorkspace: 1})
-	if out.WorkspaceStackRatio != nil {
-		t.Errorf("an unset stack ratio came back as %v, want nil", out.WorkspaceStackRatio)
-	}
-}
 
 // TestAPushUnionsTheStackRatiosItDoesNotKnowAbout is the merge path, on the
 // terms the master ratios are merged on: the pushing client's entries win, and

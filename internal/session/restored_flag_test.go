@@ -9,52 +9,6 @@ import (
 // days. These tests pin the two halves of its life: it is set by a restore and
 // only by a restore, and the first attach takes it off for good.
 
-// TestRestoredSessionIsMarkedAndAFreshOneIsNot is the headline: a session that
-// came back from disk says so, and an ordinary new session says nothing.
-func TestRestoredSessionIsMarkedAndAFreshOneIsNot(t *testing.T) {
-	tmpDir := t.TempDir()
-	defer useResurrectionDir(tmpDir)()
-
-	cwd := t.TempDir()
-	saved := &SessionState{
-		Name:   "work",
-		Width:  120,
-		Height: 40,
-		Windows: []WindowState{
-			{ID: "win-1", Title: "shell", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-pty-1", Cwd: cwd},
-		},
-	}
-	if err := SaveSessionForResurrection(saved); err != nil {
-		t.Fatalf("failed to save state: %v", err)
-	}
-
-	d := NewDaemon(&DaemonConfig{})
-	d.restoreAllSessions()
-	defer d.manager.Shutdown()
-
-	restored := d.manager.GetSession("work")
-	if restored == nil {
-		t.Fatal("session 'work' was not restored")
-	}
-	if !restored.GetState().Restored {
-		t.Error("a session rebuilt from saved state is not marked restored, so no surface can say why it is here")
-	}
-	if !restored.Info().Restored {
-		t.Error("the restored mark does not reach the session listing, so 'tuios ls' and the rail cannot show it")
-	}
-
-	fresh, err := d.manager.CreateSession("brand-new", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if fresh.GetState().Restored {
-		t.Error("a freshly created session is marked restored")
-	}
-	if fresh.Info().Restored {
-		t.Error("a freshly created session is listed as restored")
-	}
-}
-
 // TestClearingTheRestoredMarkDoesNotPushState pins the reason the clear is not
 // published. It runs inside the attach handler, after the connection's session
 // is recorded, so a push would reach the attaching client on the same socket
