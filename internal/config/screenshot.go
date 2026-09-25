@@ -144,9 +144,9 @@ func (s ScreenshotConfig) ResolveDirectory() string {
 	if dir == "" {
 		dir = ScreenshotDefaultDirectory
 	}
-	if strings.HasPrefix(dir, "~") {
+	if after, ok := strings.CutPrefix(dir, "~"); ok {
 		if home, err := os.UserHomeDir(); err == nil {
-			dir = filepath.Join(home, strings.TrimPrefix(dir, "~"))
+			dir = filepath.Join(home, after)
 		}
 	}
 	if abs, err := filepath.Abs(dir); err == nil {

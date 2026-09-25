@@ -67,10 +67,7 @@ func SSHDialer(sshBinary string) Dialer {
 
 // linkArgs is the argv SSHDialer runs, split out so a test can read it.
 func linkArgs(h Host) []string {
-	secs := int(h.connectTimeout().Seconds())
-	if secs < 1 {
-		secs = 1
-	}
+	secs := max(int(h.connectTimeout().Seconds()), 1)
 	args := []string{
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=" + strconv.Itoa(secs),

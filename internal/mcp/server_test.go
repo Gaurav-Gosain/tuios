@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -587,9 +588,7 @@ func TestEventsResumeFromTheBaselineWhenTheReplayIsFiltered(t *testing.T) {
 			}
 			c := startServer(t, Options{Dial: f.dial})
 			args := map[string]any{"wait_ms": 100}
-			for k, v := range tc.args {
-				args[k] = v
-			}
+			maps.Copy(args, tc.args)
 			var body map[string]any
 			if err := json.Unmarshal([]byte(lastText(c.toolCall(1, "tuios_events", args))), &body); err != nil {
 				t.Fatal(err)

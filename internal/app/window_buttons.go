@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -179,7 +180,7 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 		pieces = windowPillPieces(col, isTiling, &m.Settings)
 	}
 
-	var pill string
+	var pill strings.Builder
 	var hits []WindowButtonRect
 	offset := 0
 	for _, p := range pieces {
@@ -187,10 +188,10 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 		if p.action != WindowButtonNone {
 			hits = append(hits, WindowButtonRect{Action: p.action, X: offset, W: w})
 		}
-		pill += p.text
+		pill.WriteString(p.text)
 		offset += w
 	}
-	return pill, hits
+	return pill.String(), hits
 }
 
 // windowPillPieces is the original filled pill: black glyphs on the border

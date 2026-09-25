@@ -282,8 +282,7 @@ func executeHook(cmdStr string, ctx Context) hookResult {
 	res := hookResult{duration: time.Since(start), stderr: tail.String()}
 	if err != nil {
 		res.err = err
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
 			res.exitCode = exit.ExitCode()
 			// The error text for an exit status says only "exit status 3",
 			// which the exit code already says. Drop it so the message is the

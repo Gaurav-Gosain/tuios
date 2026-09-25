@@ -59,8 +59,8 @@ func NormalizeRemote(raw string) string {
 		p = strings.TrimSuffix(p, ".git")
 		return strings.TrimRight(p, "/")
 	}
-	if strings.HasPrefix(s, "file://") {
-		return "file:" + filepath.Clean(trim(strings.TrimPrefix(s, "file://")))
+	if after, ok := strings.CutPrefix(s, "file://"); ok {
+		return "file:" + filepath.Clean(trim(after))
 	}
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)

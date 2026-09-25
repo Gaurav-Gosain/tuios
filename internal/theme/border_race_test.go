@@ -27,24 +27,20 @@ func TestTheBorderOverridesSurviveConcurrentSessions(t *testing.T) {
 	// Two connections arriving together, each applying its own appearance,
 	// while a renderer asks what the border colour is.
 	for i := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if i%2 == 0 {
 				SetBorderOverrides("#89b4fa", "#45475a")
 			} else {
 				SetBorderOverrides("", "")
 			}
-		}()
+		})
 	}
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = BorderFocusedWindow()
 			_ = BorderUnfocused()
 			_ = BorderFocusedTerminal()
-		}()
+		})
 	}
 	wg.Wait()
 }

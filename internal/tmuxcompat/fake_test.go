@@ -269,7 +269,7 @@ func (h *harness) logEntries(t *testing.T) []LogEntry {
 		t.Fatal(err)
 	}
 	var out []LogEntry
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		if line == "" {
 			continue
 		}

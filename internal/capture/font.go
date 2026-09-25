@@ -81,7 +81,7 @@ func FontByPostScriptName(name string) (FontFace, bool) {
 // carries. A CSS stack is tried entry by entry, and the generic categories at
 // the end of one are skipped rather than handed to fontconfig.
 func FontByFamily(stack string) (FontFace, bool) {
-	for _, name := range strings.Split(stack, ",") {
+	for name := range strings.SplitSeq(stack, ",") {
 		name = strings.TrimSpace(strings.Trim(strings.TrimSpace(name), `"'`))
 		if name == "" || genericFamilies[strings.ToLower(name)] {
 			continue
@@ -93,7 +93,7 @@ func FontByFamily(stack string) (FontFace, bool) {
 			return fcMatch(name+":", "%{file}|%{family}", func(echo string) bool {
 				// fontconfig reports every family alias a face answers to, comma
 				// separated, and a match on any of them is a match.
-				for _, alias := range strings.Split(echo, ",") {
+				for alias := range strings.SplitSeq(echo, ",") {
 					if equalFontName(alias, name) {
 						return true
 					}
@@ -117,7 +117,7 @@ func FontByFamily(stack string) (FontFace, bool) {
 // family's weights in one file, so Menlo's bold is face 1 of the same .ttc the
 // regular came from, and comparing paths alone threw it away.
 func BoldFontByFamily(stack string, regular FontFace) (FontFace, bool) {
-	for _, name := range strings.Split(stack, ",") {
+	for name := range strings.SplitSeq(stack, ",") {
 		name = strings.TrimSpace(strings.Trim(strings.TrimSpace(name), `"'`))
 		if name == "" || genericFamilies[strings.ToLower(name)] {
 			continue
@@ -127,7 +127,7 @@ func BoldFontByFamily(stack string, regular FontFace) (FontFace, bool) {
 				return face, true
 			}
 			return fcMatch(name+":bold", "%{file}|%{family}", func(echo string) bool {
-				for _, alias := range strings.Split(echo, ",") {
+				for alias := range strings.SplitSeq(echo, ",") {
 					if equalFontName(alias, name) {
 						return true
 					}

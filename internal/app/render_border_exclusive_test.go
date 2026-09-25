@@ -72,7 +72,7 @@ func frameGrid(t *testing.T, m *OS) [][]rune {
 	t.Helper()
 	plain := stripANSIForTrace(fmt.Sprint(m.GetCanvas(false).Render()))
 	var g [][]rune
-	for _, line := range strings.Split(plain, "\n") {
+	for line := range strings.SplitSeq(plain, "\n") {
 		g = append(g, []rune(line))
 	}
 	return g

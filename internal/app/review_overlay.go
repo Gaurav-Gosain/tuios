@@ -547,8 +547,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 // reviewErrorText says what went wrong with a review call, in the words the
 // person needs.
 func reviewErrorText(err error) string {
-	var callErr *session.VerbCallError
-	if errors.As(err, &callErr) {
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
 		switch callErr.Code {
 		case session.ErrVerbUnknownVerb:
 			return "This daemon cannot review changes. Restart it with a newer tuios: tuios kill-server"

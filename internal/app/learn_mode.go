@@ -1,6 +1,8 @@
 package app
 
 import (
+	"maps"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -72,9 +74,7 @@ var learnUnavailable = map[string]string{
 // tell a key that did nothing from one that is off in the demo.
 func LearnUnavailableActions() map[string]string {
 	out := make(map[string]string, len(learnUnavailable))
-	for k, v := range learnUnavailable {
-		out[k] = v
-	}
+	maps.Copy(out, learnUnavailable)
 	return out
 }
 

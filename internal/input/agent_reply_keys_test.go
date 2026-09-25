@@ -2,6 +2,7 @@ package input
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -114,10 +115,8 @@ func TestAgentRowUUndoesTheDrop(t *testing.T) {
 	if q.count("queue-prompt") != 2 || q.lastText() != "hi" {
 		t.Fatalf("u after the drop sent %v, want the text queued again", q.verbs)
 	}
-	for _, a := range o.RecentActions() {
-		if a == config.ActionAgentUnread {
-			return
-		}
+	if slices.Contains(o.RecentActions(), config.ActionAgentUnread) {
+		return
 	}
 	t.Error("u was not dispatched as the agent row's action")
 }

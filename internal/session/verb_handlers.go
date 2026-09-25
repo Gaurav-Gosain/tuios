@@ -69,8 +69,7 @@ func mapResolveErr(err error, sess *Session) *verbError {
 
 	// A command that genuinely needs a renderer is its own class: the caller has
 	// to attach a client, not fix a parameter.
-	var needsClient errNeedsClient
-	if errors.As(err, &needsClient) {
+	if _, ok := errors.AsType[errNeedsClient](err); ok {
 		hint := &VerbHint{
 			Command: "tuios attach",
 			Detail:  "This command changes what is drawn on screen, so it only runs with a client attached. Attach to the session, then retry.",
@@ -695,8 +694,7 @@ func sendKeysParseError(err error, sess *Session, target string) *verbError {
 		Command:  "tuios send-keys --help",
 		Detail:   "A key is one of the names listed, a single character, or either of those after ctrl+, alt+ or shift+. Keys are split on spaces and commas; text to type goes through send-text.",
 	}
-	var unknown errUnknownKey
-	if errors.As(err, &unknown) {
+	if unknown, ok := errors.AsType[errUnknownKey](err); ok {
 		hint.DidYouMean = unknown.didYouMean
 	}
 	return hintedVerbError(ErrVerbInvalidParams, msg, hint)

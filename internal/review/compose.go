@@ -109,7 +109,7 @@ func Compose(m Message) string {
 			}
 			b.WriteString(")\n")
 		}
-		for _, line := range strings.Split(CleanText(n.Text), "\n") {
+		for line := range strings.SplitSeq(CleanText(n.Text), "\n") {
 			b.WriteString("   ")
 			b.WriteString(line)
 			b.WriteByte('\n')

@@ -140,8 +140,7 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 		return &hs, nil
 	}
 
-	var callErr *VerbCallError
-	if errors.As(err, &callErr) {
+	if callErr, ok := errors.AsType[*VerbCallError](err); ok {
 		switch callErr.Code {
 		case ErrVerbUnknownVerb:
 			// A JSON daemon from before the handshake verb. Usable as-is.

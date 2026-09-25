@@ -88,7 +88,7 @@ func ParseChecksums(r io.Reader) (Checksums, error) {
 		return nil, fmt.Errorf("failed to read %s: %w", ChecksumFile, err)
 	}
 	out := Checksums{}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) != 2 || len(fields[0]) != sha256.Size*2 {
 			continue

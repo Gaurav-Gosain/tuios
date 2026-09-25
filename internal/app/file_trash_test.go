@@ -97,7 +97,7 @@ func TestTrashEncodesAnAwkwardName(t *testing.T) {
 // trashDecode reverses trashInfoPath for one info file's Path line.
 func trashDecode(t *testing.T, info string) string {
 	t.Helper()
-	for _, line := range strings.Split(info, "\n") {
+	for line := range strings.SplitSeq(info, "\n") {
 		raw, ok := strings.CutPrefix(line, "Path=")
 		if !ok {
 			continue

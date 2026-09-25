@@ -70,7 +70,7 @@ func TestThePlacementBuildersAllPinTheCursor(t *testing.T) {
 		"kitty_passthrough_forward.go",
 	} {
 		src := readSourceFile(t, path)
-		for _, line := range strings.Split(src, "\n") {
+		for line := range strings.SplitSeq(src, "\n") {
 			if !strings.Contains(line, `"a=p`) && !strings.Contains(line, `\x1b_Ga=p`) {
 				continue
 			}

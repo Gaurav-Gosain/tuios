@@ -214,7 +214,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		if mm.Kind == "ask" && body == "" {
 			body = "(the pane printed nothing)"
 		}
-		for _, raw := range strings.Split(body, "\n") {
+		for raw := range strings.SplitSeq(body, "\n") {
 			for _, l := range wrapPlain(printableTitle(raw), width-2) {
 				lines = append(lines, dim.Render("  "+l))
 			}

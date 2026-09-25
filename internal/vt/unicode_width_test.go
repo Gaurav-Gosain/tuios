@@ -59,8 +59,8 @@ func loadEastAsianWidth(t *testing.T) []eawRange {
 		codes := strings.TrimSpace(fields[0])
 		class := strings.TrimSpace(fields[1])
 		lo, hi := codes, codes
-		if i := strings.Index(codes, ".."); i >= 0 {
-			lo, hi = codes[:i], codes[i+2:]
+		if before, after, ok := strings.Cut(codes, ".."); ok {
+			lo, hi = before, after
 		}
 		l, err := strconv.ParseUint(lo, 16, 32)
 		if err != nil {
@@ -247,10 +247,7 @@ func cellsConsumed(t *testing.T, s string) int {
 			x++
 			continue
 		}
-		step := c.Width
-		if step < 1 {
-			step = 1
-		}
+		step := max(c.Width, 1)
 		if c.Content != "" && c.Content != " " {
 			total += c.Width
 		}

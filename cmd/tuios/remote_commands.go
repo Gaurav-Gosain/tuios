@@ -1825,7 +1825,7 @@ func printRuleReports(w io.Writer, reports []harness.RuleReport, decided int, de
 		if r.NoRegion {
 			fmt.Fprintf(w, "     region %s is not on the screen\n", orNone(r.Region))
 		} else if r.Text != "" {
-			for _, line := range strings.Split(r.Text, "\n") {
+			for line := range strings.SplitSeq(r.Text, "\n") {
 				fmt.Fprintf(w, "     | %s\n", line)
 			}
 		}

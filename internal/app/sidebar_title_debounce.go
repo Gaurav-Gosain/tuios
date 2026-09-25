@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -97,13 +98,7 @@ func (m *OS) unwatchedTitles() map[string]string {
 		return w != nil && w.DaemonMode && w.CustomName == "" &&
 			w.PTYID != "" && !m.SubscribedPTYs[w.PTYID]
 	}
-	any := false
-	for _, w := range m.Windows {
-		if unwatched(w) {
-			any = true
-			break
-		}
-	}
+	any := slices.ContainsFunc(m.Windows, unwatched)
 	if !any {
 		return nil
 	}

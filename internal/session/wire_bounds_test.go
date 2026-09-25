@@ -206,7 +206,7 @@ func runBoundsScenario(t *testing.T) {
 // bspChain is a tree depth levels deep, every split hanging off one side.
 func bspChain(depth int, left bool) *SerializedBSPNode {
 	n := &SerializedBSPNode{WindowID: 1}
-	for i := 0; i < depth; i++ {
+	for i := range depth {
 		leaf := &SerializedBSPNode{WindowID: i + 2}
 		if left {
 			n = &SerializedBSPNode{SplitType: 1, SplitRatio: 0.5, Left: n, Right: leaf}
@@ -383,7 +383,7 @@ func largeRealisticState(workspaces, panes int) *SessionState {
 	id := 0
 	for ws := 1; ws <= workspaces; ws++ {
 		var root *SerializedBSPNode
-		for p := 0; p < panes; p++ {
+		for p := range panes {
 			id++
 			w := WindowState{
 				ID: uuid(id), PTYID: uuid(id + 1<<20), Title: text, CustomName: text,

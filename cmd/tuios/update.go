@@ -361,8 +361,7 @@ func readAsset(ctx context.Context, src release.Source, asset release.Asset) ([]
 // explainChecksumError turns a failed verification into a message that says
 // what it means. A mismatch is not a hiccup to retry past.
 func explainChecksumError(err error, rel release.Release) error {
-	var mismatch *release.ChecksumMismatch
-	if errors.As(err, &mismatch) {
+	if mismatch, ok := errors.AsType[*release.ChecksumMismatch](err); ok {
 		return &diagnosticError{
 			What:  "The downloaded archive is not the one the release published.",
 			Cause: "Its checksum does not match. The download was corrupted, or something between here and GitHub changed it.",
@@ -385,8 +384,7 @@ func explainChecksumError(err error, rel release.Release) error {
 
 // explainLookupError turns a network or API failure into an instruction.
 func explainLookupError(err error, prerelease bool) error {
-	var limit *release.RateLimitError
-	if errors.As(err, &limit) {
+	if limit, ok := errors.AsType[*release.RateLimitError](err); ok {
 		e := &diagnosticError{
 			What:  "GitHub is rate limiting this address.",
 			Cause: "Sixty release lookups an hour are allowed without a token, shared by everyone on this address.",
@@ -408,8 +406,7 @@ func explainLookupError(err error, prerelease bool) error {
 			Fix:   "see https://github.com/" + release.Repo + "/releases",
 		}
 	}
-	var httpErr *release.HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*release.HTTPError](err); ok {
 		return &diagnosticError{
 			What:  "GitHub refused the release lookup.",
 			Cause: httpErr.Error(),

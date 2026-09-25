@@ -229,8 +229,7 @@ func dialVerb() (*session.VerbClient, error) {
 // through untouched; anything else is a socket problem, re-diagnosed so the user
 // is told which one.
 func explainDialError(err error) error {
-	var mismatch *session.ProtocolMismatchError
-	if errors.As(err, &mismatch) {
+	if mismatch, ok := errors.AsType[*session.ProtocolMismatchError](err); ok {
 		return mismatch
 	}
 

@@ -18,7 +18,7 @@ func TestSetConfigHelpExamplesAreAccepted(t *testing.T) {
 	}
 
 	checked := 0
-	for _, line := range strings.Split(cmd.Long+"\n"+cmd.Example, "\n") {
+	for line := range strings.SplitSeq(cmd.Long+"\n"+cmd.Example, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) != 4 || fields[0] != "tuios" || fields[1] != "set-config" {
 			continue

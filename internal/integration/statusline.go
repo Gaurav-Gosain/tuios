@@ -435,8 +435,7 @@ func (t *Target) writeStatusLine(env Env, res *Result, tuios, then string, insta
 	}
 	out, err := editStatusLine(path, have, tuios, then, install)
 	if err != nil {
-		var owned *StatusLineOwnedError
-		if errors.As(err, &owned) {
+		if _, ok := errors.AsType[*StatusLineOwnedError](err); ok {
 			return *res, err
 		}
 		return *res, fmt.Errorf("%s: %w. It was left unchanged", path, err)

@@ -211,11 +211,11 @@ func brokenSig(broken string) string {
 	if broken == "" {
 		return ""
 	}
-	if i := strings.Index(broken, "cell ("); i >= 0 {
-		return broken[:i] + "cell"
+	if before, _, ok := strings.Cut(broken, "cell ("); ok {
+		return before + "cell"
 	}
-	if i := strings.IndexByte(broken, ':'); i >= 0 {
-		return broken[:i]
+	if before, _, ok := strings.Cut(broken, ":"); ok {
+		return before
 	}
 	return broken
 }

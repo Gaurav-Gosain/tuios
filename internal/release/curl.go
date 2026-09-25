@@ -95,8 +95,7 @@ func curlGet(ctx context.Context, url, accept, token string) (*response, error) 
 			return nil, ctxErr
 		}
 		code := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			code = exitErr.ExitCode()
 		}
 		return nil, &TransportError{URL: url, Code: code, Msg: strings.TrimSpace(stderr.String())}

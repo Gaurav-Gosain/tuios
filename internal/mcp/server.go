@@ -375,8 +375,7 @@ func (e *CallError) Error() string { return e.Message + " (" + e.Code + ")" }
 // errorResult turns a failed call into a tool result, keeping the daemon's
 // code and hint, which name the remedy.
 func errorResult(err error) map[string]any {
-	var ce *CallError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*CallError](err); ok {
 		detail := map[string]any{"code": ce.Code}
 		if ce.Hint != nil {
 			detail["hint"] = ce.Hint

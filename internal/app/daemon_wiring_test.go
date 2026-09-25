@@ -18,7 +18,7 @@ import (
 // PTY id first and are registered per window elsewhere.
 func daemonClientHandlers(t *testing.T) []string {
 	t.Helper()
-	typ := reflect.TypeOf(&session.TUIClient{})
+	typ := reflect.TypeFor[*session.TUIClient]()
 	var names []string
 	for i := range typ.NumMethod() {
 		m := typ.Method(i)

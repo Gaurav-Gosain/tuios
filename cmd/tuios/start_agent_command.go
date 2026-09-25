@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -189,9 +190,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		return reportVerbError(err, jsonOutput)
 	}
 	params := t.params(map[string]any{"agent": o.agent})
-	for k, v := range place {
-		params[k] = v
-	}
+	maps.Copy(params, place)
 	// A daemon older than protocol refuses the parameter by name, so an old
 	// daemon never starts the agent in its TUI when a protocol was asked for.
 	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol} {

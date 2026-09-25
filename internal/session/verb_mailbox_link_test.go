@@ -179,7 +179,7 @@ func TestWhatAnotherMachineCanQueueIsBounded(t *testing.T) {
 
 	// Each send names a fresh sender, so the per-sender rate cap never
 	// fires and the queue cap is the only bound in play.
-	for i := 0; i < agentLinkMaxQueued; i++ {
+	for i := range agentLinkMaxQueued {
 		link := dialLink(t, sp)
 		result(t, sendJSON(t, link, i+1, map[string]any{"session": "work", "to": "human", "from": fmt.Sprintf("s%d", i), "text": "hi"}))
 	}
@@ -200,7 +200,7 @@ func TestWhatAnotherMachineCanQueueIsBounded(t *testing.T) {
 	result(t, sendJSON(t, link, 103, map[string]any{"session": "work", "to": "human", "from": "one-more", "text": "hi"}))
 
 	// Notices from a link are bounded on their own.
-	for i := 0; i < agentLinkMaxQueued; i++ {
+	for i := range agentLinkMaxQueued {
 		c := dialLink(t, sp)
 		result(t, sendJSON(t, c, 200+i, map[string]any{"session": "work", "from": fmt.Sprintf("n%d", i), "text": "notice"}))
 	}

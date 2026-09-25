@@ -161,7 +161,7 @@ func tilingDoors(t *testing.T) []tilingDoor {
 		{"ToggleAutoTiling", func(m *OS) { m.ToggleAutoTiling() }},
 		{"DisableAllTiling", func(m *OS) { m.DisableAllTiling() }},
 	}
-	osType := reflect.TypeOf(&OS{})
+	osType := reflect.TypeFor[*OS]()
 	tapeDoors := 0
 	for i := range osType.NumMethod() {
 		method := osType.Method(i)

@@ -126,8 +126,7 @@ func (t *verbTarget) explain(verb string, err error) error {
 		return fmt.Errorf("tuios on %s is too old for %s. Upgrade tuios on %s", t.host, verb, t.host)
 	}
 	explained := explainVerbError(verb, err)
-	var d *diagnosticError
-	if errors.As(explained, &d) {
+	if d, ok := errors.AsType[*diagnosticError](explained); ok {
 		d.What = "On " + t.host + ": " + d.What
 		return d
 	}

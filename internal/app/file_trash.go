@@ -161,7 +161,7 @@ func trashOne(filesDir, infoDir, path string, now time.Time) error {
 func claimTrashName(infoDir, base string) (string, *os.File, error) {
 	ext := filepath.Ext(base)
 	stem := base[:len(base)-len(ext)]
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		name := base
 		if i > 0 {
 			name = fmt.Sprintf("%s.%d%s", stem, i, ext)

@@ -73,8 +73,7 @@ type HostHandshakeError struct {
 }
 
 func (e *HostHandshakeError) Error() string {
-	var mismatch *ProtocolMismatchError
-	if errors.As(e.Err, &mismatch) {
+	if _, ok := errors.AsType[*ProtocolMismatchError](e.Err); ok {
 		return fmt.Sprintf("tuios on %s speaks a different attach protocol. Upgrade tuios on %s or on this machine. %v",
 			e.Host, e.Host, e.Err)
 	}

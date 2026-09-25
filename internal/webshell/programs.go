@@ -48,7 +48,7 @@ func cmdNeofetch(t *TTY, _ []string) int {
 		t.Print(dim + "(widen the window to see the logo)" + reset + "\r\n")
 	}
 	var sw strings.Builder
-	for c := 0; c < 8; c++ {
+	for c := range 8 {
 		sw.WriteString(fmt.Sprintf("\x1b[4%dm   ", c))
 	}
 	t.Print(sw.String() + reset + "\r\n")
@@ -56,8 +56,8 @@ func cmdNeofetch(t *TTY, _ []string) int {
 }
 
 func cmdColors(t *TTY, _ []string) int {
-	for row := 0; row < 2; row++ {
-		for c := 0; c < 8; c++ {
+	for row := range 2 {
+		for c := range 8 {
 			bg := 40 + c
 			if row == 1 {
 				bg = 100 + c
@@ -66,7 +66,7 @@ func cmdColors(t *TTY, _ []string) int {
 		}
 		t.Print(reset + "\r\n")
 	}
-	for i := 0; i < 36; i++ {
+	for i := range 36 {
 		t.Printf("\x1b[48;5;%dm  ", 16+i*6)
 	}
 	t.Print(reset + "\r\n")
@@ -198,7 +198,7 @@ func cmdRain(t *TTY, _ []string) int {
 		var b strings.Builder
 		for x := 0; x < cols; x += 2 {
 			head := int(drops[x])
-			for k := 0; k < 8; k++ {
+			for k := range 8 {
 				y := head - k
 				if y < 0 || y >= rows {
 					continue

@@ -132,7 +132,7 @@ func WorkingNumstat(ctx context.Context, path, base string) (Numstat, error) {
 // added and removed counts first, "-" for both on a binary file.
 func ParseNumstat(out string) Numstat {
 	var n Numstat
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 3)
 		if len(fields) < 3 {
 			continue
@@ -206,7 +206,7 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 		return 0, err
 	}
 	n := 0
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.TrimSpace(line) != "" {
 			n++
 		}

@@ -131,8 +131,7 @@ type mcpConn struct{ c *session.VerbClient }
 
 func (m mcpConn) Call(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	raw, err := m.c.CallWithTimeout(verb, params, timeout)
-	var ce *session.VerbCallError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*session.VerbCallError](err); ok {
 		var hint any
 		if ce.Hint != nil {
 			hint = ce.Hint

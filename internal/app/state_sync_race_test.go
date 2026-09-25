@@ -77,9 +77,7 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	// scrolling, which is what mutates the buffer under the resize.
 	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -88,7 +86,7 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 					win.WriteOutputAsync(payload)
 				}
 			}
-		}()
+		})
 	}
 
 	// The UI goroutine: apply syncs whose geometry alternates, so every sync
@@ -192,9 +190,7 @@ func TestRestoreTerminalContentRacesOutput(t *testing.T) {
 
 	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -203,7 +199,7 @@ func TestRestoreTerminalContentRacesOutput(t *testing.T) {
 					win.WriteOutputAsync(payload)
 				}
 			}
-		}()
+		})
 	}
 
 	for i := range 200 {
@@ -269,9 +265,7 @@ func TestPlaceUnplacedWindowsRacesOutput(t *testing.T) {
 
 	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -280,7 +274,7 @@ func TestPlaceUnplacedWindowsRacesOutput(t *testing.T) {
 					win.WriteOutputAsync(payload)
 				}
 			}
-		}()
+		})
 	}
 
 	// The daemon re-broadcasts the creation state until this client's placing

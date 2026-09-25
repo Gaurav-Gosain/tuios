@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -951,12 +952,7 @@ func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 	if states == nil {
 		return true // a bare "@": anything running an agent
 	}
-	for _, s := range states {
-		if item.AgentState == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(states, item.AgentState)
 }
 
 // FilterCommandPalette filters command palette items by a query string, best

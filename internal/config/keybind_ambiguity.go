@@ -1,5 +1,7 @@
 package config
 
+import "slices"
+
 import "strings"
 
 // Ambiguity is a pair of key names that a terminal sends as the same byte, so
@@ -57,10 +59,8 @@ var Ambiguities = []Ambiguity{
 func AmbiguityFor(key string) (Ambiguity, bool) {
 	key = strings.ToLower(strings.TrimSpace(key))
 	for _, a := range Ambiguities {
-		for _, k := range a.Keys {
-			if k == key {
-				return a, true
-			}
+		if slices.Contains(a.Keys, key) {
+			return a, true
 		}
 	}
 	return Ambiguity{}, false

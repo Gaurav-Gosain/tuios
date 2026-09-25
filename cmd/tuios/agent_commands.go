@@ -301,8 +301,7 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 // its link is down, rather than because the name is wrong or the far machine
 // refused.
 func hostUnreachable(err error) bool {
-	var connect *session.HostConnectError
-	if errors.As(err, &connect) {
+	if connect, ok := errors.AsType[*session.HostConnectError](err); ok {
 		return connect.Code == session.ErrVerbHostUnreachable
 	}
 	var call *session.VerbCallError

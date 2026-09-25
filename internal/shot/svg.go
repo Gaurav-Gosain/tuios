@@ -99,8 +99,8 @@ func writeSVGDefs(b *strings.Builder, g *Grid, f *Frame, l layout, family string
 // face registers under the name the stack asks for.
 func svgPrimaryFamily(stack string) string {
 	name := stack
-	if i := strings.IndexByte(stack, ','); i >= 0 {
-		name = stack[:i]
+	if before, _, ok := strings.Cut(stack, ","); ok {
+		name = before
 	}
 	return strings.Trim(strings.TrimSpace(name), `"'`)
 }

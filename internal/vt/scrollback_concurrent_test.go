@@ -14,19 +14,17 @@ import (
 // With cacheMu it runs clean under -race.
 func TestScrollbackConcurrentLine(t *testing.T) {
 	sb := NewScrollback(10000)
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		sb.PushBlankLine(80)
 	}
 
 	var wg sync.WaitGroup
-	for g := 0; g < 8; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 8 {
+		wg.Go(func() {
 			for i := 0; i < sb.Len(); i++ {
 				_ = sb.Line(i)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

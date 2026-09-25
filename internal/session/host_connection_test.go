@@ -252,7 +252,7 @@ func hostCommandFenceNames() string {
 }
 
 func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {
-	for _, name := range strings.Split(hostCommandFenceNames(), ",") {
+	for name := range strings.SplitSeq(hostCommandFenceNames(), ",") {
 		if hostCommandAllowed(&RemoteCommandPayload{CommandType: "tape_command", TapeCommand: name}) {
 			t.Errorf("ASSERTION: %s is allowed through a host and the fence says it is refused", name)
 		}

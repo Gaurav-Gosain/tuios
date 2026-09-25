@@ -172,12 +172,10 @@ func freeSessionName(taken []string) string {
 
 // hostAttachRefusal turns an attach error into the sentence the rail shows.
 func hostAttachRefusal(host string, err error) string {
-	var hostErr *session.HostConnectError
-	if errors.As(err, &hostErr) {
+	if hostErr, ok := errors.AsType[*session.HostConnectError](err); ok {
 		return hostErr.Message
 	}
-	var shake *session.HostHandshakeError
-	if errors.As(err, &shake) {
+	if shake, ok := errors.AsType[*session.HostHandshakeError](err); ok {
 		return shake.Error() + " Run 'tuios attach --host " + host + " NAME --ssh' to open it over ssh instead."
 	}
 	return err.Error()

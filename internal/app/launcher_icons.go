@@ -9,6 +9,7 @@ import (
 	_ "image/gif"  // decoded so a theme shipping one is not a blank row
 	_ "image/jpeg" // same
 	"image/png"
+	"maps"
 	"os"
 	"sync"
 
@@ -228,9 +229,7 @@ func (m *OS) applyLauncherIcons(msg launcherIconsMsg) {
 	st := m.launcherIconState()
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	for k, img := range msg.pixels {
-		st.pixels[k] = img
-	}
+	maps.Copy(st.pixels, msg.pixels)
 }
 
 // loadIcon resolves, decodes and scales one icon, returning nil when any step

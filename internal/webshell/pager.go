@@ -255,7 +255,7 @@ func (v *viewer) draw() {
 	var b strings.Builder
 	b.WriteString("\x1b[H")
 	lang := path.Ext(v.name)
-	for r := 0; r < body; r++ {
+	for r := range body {
 		i := v.top + r
 		b.WriteString("\x1b[K")
 		if i < len(v.lines) {

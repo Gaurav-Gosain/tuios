@@ -352,7 +352,7 @@ func DesktopDirs() []string {
 	if home != "" {
 		out = append(out, filepath.Join(home, "applications"))
 	}
-	for _, d := range strings.Split(dirs, ":") {
+	for d := range strings.SplitSeq(dirs, ":") {
 		if d == "" {
 			continue
 		}
@@ -374,7 +374,7 @@ func currentDesktops() []string {
 		return nil
 	}
 	var out []string
-	for _, s := range strings.Split(v, ":") {
+	for s := range strings.SplitSeq(v, ":") {
 		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
 		}

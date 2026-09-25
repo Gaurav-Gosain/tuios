@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -78,11 +80,8 @@ func (m *OS) workspaceDisplayOrder(ws []int) []int {
 	}
 	out := make([]int, 0, len(ws))
 	for _, n := range order {
-		for _, have := range ws {
-			if have == n {
-				out = append(out, n)
-				break
-			}
+		if slices.Contains(ws, n) {
+			out = append(out, n)
 		}
 	}
 	// Whatever the order did not mention keeps its numeric place after the rest.
@@ -95,12 +94,7 @@ func (m *OS) workspaceDisplayOrder(ws []int) []int {
 }
 
 func containsInt(xs []int, x int) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, x)
 }
 
 // BeginDockWorkspaceDrag arms the gesture on the pill at (x, y), reporting

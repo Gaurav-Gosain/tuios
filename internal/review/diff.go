@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -230,7 +231,7 @@ func markUntracked(ctx context.Context, dir string, files []File, spec []string)
 		return
 	}
 	untracked := map[string]bool{}
-	for _, p := range strings.Split(out, "\x00") {
+	for p := range strings.SplitSeq(out, "\x00") {
 		if p != "" {
 			untracked[p] = true
 		}
@@ -352,10 +353,8 @@ func ValidPath(path string) error {
 	case filepath.IsAbs(path) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\"):
 		return fmt.Errorf("%q is absolute; name it relative to the repository root", path)
 	}
-	for _, part := range strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if part == ".." {
-			return fmt.Errorf("%q leaves the repository", path)
-		}
+	if slices.Contains(strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }), "..") {
+		return fmt.Errorf("%q leaves the repository", path)
 	}
 	return nil
 }

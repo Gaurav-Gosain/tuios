@@ -70,10 +70,7 @@ func RenderCrashScreen(report *CrashReport, notice string, width, height int) st
 
 // crashPanel builds the panel itself, sized to the screen it has to fit in.
 func crashPanel(report *CrashReport, notice string, width, height int, pal overlay.Palette) string {
-	inner := overlay.FitWidth(crashPanelWidth, width)
-	if inner < overlay.MinPanelWidth {
-		inner = overlay.MinPanelWidth
-	}
+	inner := max(overlay.FitWidth(crashPanelWidth, width), overlay.MinPanelWidth)
 
 	// The panel's own furniture: a top pad, the title chip, a blank, a bottom
 	// pad, and, because there are hints, a blank plus a rule plus the strip.
@@ -186,7 +183,7 @@ func crashBody(report *CrashReport, notice string, width, rows int, pal overlay.
 		add(overlay.Style(bg).Render(" "))
 		add(overlay.Rule(width, bg, pal))
 		trace, dropped := clipStack(report.Stack, rows-len(lines)-1)
-		for _, t := range strings.Split(trace, "\n") {
+		for t := range strings.SplitSeq(trace, "\n") {
 			add(mute.Render(overlay.Truncate(strings.ReplaceAll(t, "\t", "  "), width)))
 		}
 		if dropped > 0 {

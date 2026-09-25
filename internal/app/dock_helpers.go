@@ -413,7 +413,7 @@ func scrollToShow(pills []dockWorkspaceTab, active, first, inner int) int {
 // run reaches the final pill. Scrolling past it would open dead columns at the
 // right-hand end.
 func lastScrollOffset(pills []dockWorkspaceTab, inner int) int {
-	for i := 0; i < len(pills); i++ {
+	for i := range pills {
 		if pillsSpan(pills, i, len(pills)) <= inner {
 			return i
 		}

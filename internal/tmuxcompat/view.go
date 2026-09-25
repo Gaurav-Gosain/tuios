@@ -195,10 +195,8 @@ func (v *view) workspaceOf(ref string) (int, error) {
 	ref = strings.TrimPrefix(ref, "=")
 	num := strings.TrimPrefix(ref, "@")
 	if n, err := strconv.Atoi(num); err == nil {
-		for _, ws := range v.workspace {
-			if ws == n {
-				return n, nil
-			}
+		if slices.Contains(v.workspace, n) {
+			return n, nil
 		}
 		if _, ok := v.wsCount[n]; ok {
 			return n, nil
@@ -217,8 +215,8 @@ func (v *view) workspaceOf(ref string) (int, error) {
 // is false when the target has no ":", and hasPane when it has no ".".
 func splitTarget(t string) (sess, win, pn string, hasSess, hasPane bool) {
 	rest := t
-	if i := strings.IndexByte(t, ':'); i >= 0 {
-		sess, rest, hasSess = t[:i], t[i+1:], true
+	if before, after, ok := strings.Cut(t, ":"); ok {
+		sess, rest, hasSess = before, after, true
 	}
 	if i := strings.LastIndexByte(rest, '.'); i >= 0 {
 		win, pn, hasPane = rest[:i], rest[i+1:], true

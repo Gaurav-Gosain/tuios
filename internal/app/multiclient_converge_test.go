@@ -969,7 +969,7 @@ func (f *fleet) step() string {
 // run plays one whole sequence, converging after every action.
 func (f *fleet) run(steps int) {
 	f.t.Helper()
-	for i := 0; i < steps; i++ {
+	for range steps {
 		what := f.step()
 		if what == "" {
 			continue

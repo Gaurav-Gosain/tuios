@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -191,7 +192,7 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 	// verb reports border_style alongside so the caller can tell whether the
 	// two are currently the same thing.
 	b := s.glyphSetBorder()
-	for role, glyph := range map[string]string{
+	maps.Copy(out, map[string]string{
 		"border.top": b.Top, "border.bottom": b.Bottom,
 		"border.left": b.Left, "border.right": b.Right,
 		"border.top_left": b.TopLeft, "border.top_right": b.TopRight,
@@ -199,9 +200,7 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 		"border.middle": b.Middle, "border.middle_top": b.MiddleTop,
 		"border.middle_bottom": b.MiddleBottom,
 		"border.middle_left":   b.MiddleLeft, "border.middle_right": b.MiddleRight,
-	} {
-		out[role] = glyph
-	}
+	})
 	return out
 }
 

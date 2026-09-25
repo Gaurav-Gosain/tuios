@@ -102,11 +102,11 @@ func ParseHunkHeader(header string) (oldStart, oldLines, newStart, newLines int,
 	if !ok {
 		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
 	}
-	end := strings.Index(rest, " @@")
-	if end < 0 {
+	before, _, ok0 := strings.Cut(rest, " @@")
+	if !ok0 {
 		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
 	}
-	oldPart, newPart, ok := strings.Cut(rest[:end], " +")
+	oldPart, newPart, ok := strings.Cut(before, " +")
 	if !ok {
 		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
 	}

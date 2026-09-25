@@ -43,7 +43,7 @@ func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode st
 		Version:          1,
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		id := fmt.Sprintf("win-%036d", i+1)
 		daemonState.Windows = append(daemonState.Windows, session.WindowState{
 			ID:        id,

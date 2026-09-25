@@ -97,7 +97,8 @@ func writeHTMLRow(b *strings.Builder, g *Grid, y int) {
 		}
 		// Merge forward while the style holds.
 		start := c
-		text := displayCluster(c)
+		var text strings.Builder
+		text.WriteString(displayCluster(c))
 		for x+1 < g.Cols {
 			n := g.Cells[y][x+1]
 			if n.Width == 0 {
@@ -107,10 +108,10 @@ func writeHTMLRow(b *strings.Builder, g *Grid, y int) {
 			if !n.SameStyle(start) {
 				break
 			}
-			text += displayCluster(n)
+			text.WriteString(displayCluster(n))
 			x++
 		}
-		writeHTMLSpan(b, g, start, text)
+		writeHTMLSpan(b, g, start, text.String())
 	}
 }
 

@@ -351,20 +351,21 @@ func (m *OS) accentHueLine(p accentLayoutPlan, y int, pal overlay.Palette) strin
 	cells := p.HueCells
 	held := accentHueCell(s.Hue, cells)
 
-	line := accentFocusMark(s.Focus == accentFocusHue, bg, pal)
+	var line strings.Builder
+	line.WriteString(accentFocusMark(s.Focus == accentFocusHue, bg, pal))
 	for i := range cells {
 		c := hslToRGB(accentHueAt(i, cells), 1, 0.5)
 		if i == held {
-			line += accentCursorSwatch(c, 1)
+			line.WriteString(accentCursorSwatch(c, 1))
 		} else {
-			line += accentSwatch(c, 1)
+			line.WriteString(accentSwatch(c, 1))
 		}
 		m.accentHits = append(m.accentHits, accentHit{
 			Rect: overlay.Rect{X0: 1 + i, Y0: y, X1: 2 + i, Y1: y + 1},
 			Kind: accentHitHue, Col: i,
 		})
 	}
-	return overlay.Fill(line, p.ColInner, bg)
+	return overlay.Fill(line.String(), p.ColInner, bg)
 }
 
 // accentGridLines renders the shades grid: saturation across, lightness down,
@@ -374,13 +375,14 @@ func (m *OS) accentGridLines(p accentLayoutPlan, y int, pal overlay.Palette) []s
 	s := &m.AccentPicker
 	out := make([]string, 0, p.GridRows)
 	for row := range p.GridRows {
-		line := accentFocusMark(row == 0 && s.Focus == accentFocusGrid, bg, pal)
+		var line strings.Builder
+		line.WriteString(accentFocusMark(row == 0 && s.Focus == accentFocusGrid, bg, pal))
 		for col := range p.GridCols {
 			c := accentCellColor(s.Hue, col, row, p.GridCols, p.GridRows)
 			if col == s.Col && row == s.Row {
-				line += accentCursorSwatch(c, p.CellWidth)
+				line.WriteString(accentCursorSwatch(c, p.CellWidth))
 			} else {
-				line += accentSwatch(c, p.CellWidth)
+				line.WriteString(accentSwatch(c, p.CellWidth))
 			}
 			x := 1 + col*p.CellWidth
 			m.accentHits = append(m.accentHits, accentHit{
@@ -388,7 +390,7 @@ func (m *OS) accentGridLines(p accentLayoutPlan, y int, pal overlay.Palette) []s
 				Kind: accentHitGrid, Col: col, Row: row,
 			})
 		}
-		out = append(out, overlay.Fill(line, p.ColInner, bg))
+		out = append(out, overlay.Fill(line.String(), p.ColInner, bg))
 	}
 	return out
 }
@@ -398,7 +400,7 @@ func (m *OS) accentGridLines(p accentLayoutPlan, y int, pal overlay.Palette) []s
 // control and one blank row is what says so.
 func (m *OS) accentSliderLines(width, y int, pal overlay.Palette) []string {
 	out := make([]string, 0, accentSliderRows)
-	for ch := accentChannel(0); ch < accentChanCount; ch++ {
+	for ch := range accentChanCount {
 		if ch == accentChanS {
 			out = append(out, overlay.Fill("", width, pal.Canvas))
 		}

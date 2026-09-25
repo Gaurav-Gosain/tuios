@@ -51,7 +51,7 @@ func TestSymbolClusterExtendsAcrossWrites(t *testing.T) {
 		split := NewEmulator(10, 2)
 		split.WriteString(tc.first)
 		split.WriteString(tc.second)
-		for x := 0; x < 10; x++ {
+		for x := range 10 {
 			w, s := whole.CellAt(x, 0), split.CellAt(x, 0)
 			if (w == nil) != (s == nil) || (w != nil && (w.Content != s.Content || w.Width != s.Width)) {
 				t.Errorf("%q + %q: cell %d is %+v split, %+v whole", tc.first, tc.second, x, s, w)

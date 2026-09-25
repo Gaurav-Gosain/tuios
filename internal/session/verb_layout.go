@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -286,9 +287,7 @@ func (d *Daemon) verbSetWindow(_ *connState, params json.RawMessage) (any, *verb
 		return nil, mapResolveErr(err, sess)
 	}
 	out := map[string]any{"type": "window_set"}
-	for k, v := range windowStateToData(state, idx) {
-		out[k] = v
-	}
+	maps.Copy(out, windowStateToData(state, idx))
 	return out, nil
 }
 
@@ -543,9 +542,7 @@ func (d *Daemon) verbRunCommand(_ *connState, params json.RawMessage) (any, *ver
 			return nil, mapResolveErr(err, sess)
 		}
 		out := map[string]any{"type": "command_result", "command": p.Command, "routed": false}
-		for k, v := range data {
-			out[k] = v
-		}
+		maps.Copy(out, data)
 		return out, nil
 	}
 

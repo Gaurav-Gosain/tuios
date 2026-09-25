@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -137,10 +139,8 @@ func (m *OS) QuitMenuMove(delta int) {
 // or -1. Used by the accelerator keys, which address rows by what they do.
 func (m *OS) QuitMenuIndexOfKind(kinds ...QuitMenuKind) int {
 	for i, item := range m.QuitMenuItems {
-		for _, k := range kinds {
-			if item.Kind == k {
-				return i
-			}
+		if slices.Contains(kinds, item.Kind) {
+			return i
 		}
 	}
 	return -1

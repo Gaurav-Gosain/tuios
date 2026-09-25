@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func loadGraphemeBreakTest(t *testing.T) []uaxCase {
 			clusters []string
 			current  strings.Builder
 		)
-		for _, tok := range strings.Fields(line) {
+		for tok := range strings.FieldsSeq(line) {
 			switch tok {
 			case "÷":
 				if current.Len() > 0 {
@@ -149,10 +150,7 @@ func cellGroups(emu *vt.Emulator, y int) []string {
 			x++
 			continue
 		}
-		step := c.Width
-		if step < 1 {
-			step = 1
-		}
+		step := max(c.Width, 1)
 		// Filtered the same way visible filters the expectation, so the two
 		// sides are comparable. A cluster that got split still shows up, as a
 		// head whose content is short of what it should be.
@@ -187,10 +185,8 @@ func knownSplit(input string) bool {
 		if next < 0x20 || next >= 0x7f {
 			continue
 		}
-		for _, p := range prepend {
-			if rs[i] == p {
-				return true
-			}
+		if slices.Contains(prepend, rs[i]) {
+			return true
 		}
 	}
 	return false

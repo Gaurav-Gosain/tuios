@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -33,9 +34,7 @@ const riskyLine = "approve Bash: rm -rf build/"
 func replyWith(c *verbConn, t *testing.T, requestID, decision, nonce string, extra map[string]any) map[string]any {
 	t.Helper()
 	params := map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce}
-	for k, v := range extra {
-		params[k] = v
-	}
+	maps.Copy(params, extra)
 	return callP(c, t, "reply-approval", params)
 }
 
@@ -287,9 +286,7 @@ func TestPlanRequestRefusals(t *testing.T) {
 	setAgentState(t, c, "work", a, "needs_input", "approval", "plan: x")
 	base := func(extra map[string]any) map[string]any {
 		p := map[string]any{"session": "work", "window": a, "harness": "claude", "summary": "plan: x"}
-		for k, v := range extra {
-			p[k] = v
-		}
+		maps.Copy(p, extra)
 		return p
 	}
 	mustRefuse(t, callP(c, t, "request-approval", base(map[string]any{"kind": "plan"})), ErrVerbInvalidParams, "a plan with no text")

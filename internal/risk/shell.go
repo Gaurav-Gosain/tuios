@@ -187,12 +187,7 @@ func commandLine(c command) (string, bool) {
 var shellNames = []string{"sh", "bash", "zsh", "dash", "ksh", "fish"}
 
 func isShellName(name string) bool {
-	for _, s := range shellNames {
-		if name == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(shellNames, name)
 }
 
 // wrappers are programs that run the command after them. The flags of sudo

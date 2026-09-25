@@ -257,10 +257,8 @@ func provesShape(g gate) bool {
 	if len(g.Regex)+len(g.LineRegex) > 0 {
 		return true
 	}
-	for _, sub := range g.All {
-		if provesShape(sub) {
-			return true
-		}
+	if slices.ContainsFunc(g.All, provesShape) {
+		return true
 	}
 	if len(g.Any) == 0 {
 		return false

@@ -1,6 +1,7 @@
 package learn
 
 import (
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -268,8 +269,6 @@ func LauncherApps() []applist.Entry {
 // explain a key that did something other than the step wanted.
 func Actions() map[string]string {
 	out := make(map[string]string, len(config.ActionDescriptions))
-	for k, v := range config.ActionDescriptions {
-		out[k] = v
-	}
+	maps.Copy(out, config.ActionDescriptions)
 	return out
 }

@@ -21,7 +21,7 @@ func transcriptGoroutines() int {
 	buf := make([]byte, 1<<20)
 	n := runtime.Stack(buf, true)
 	count := 0
-	for _, g := range strings.Split(string(buf[:n]), "\n\n") {
+	for g := range strings.SplitSeq(string(buf[:n]), "\n\n") {
 		if strings.Contains(g, "agent_transcript.go") {
 			count++
 		}

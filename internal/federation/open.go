@@ -73,10 +73,7 @@ func QuoteRemoteArg(arg string) (string, error) {
 // finds the binary (see remote.go). The remote arguments are quoted by
 // QuoteRemoteArg.
 func (h Host) OpenArgs(remote ...string) ([]string, error) {
-	secs := int(h.connectTimeout().Seconds())
-	if secs < 1 {
-		secs = 1
-	}
+	secs := max(int(h.connectTimeout().Seconds()), 1)
 	args := []string{
 		"-t",
 		"-o", "ConnectTimeout=" + strconv.Itoa(secs),

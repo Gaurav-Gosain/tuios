@@ -21,10 +21,10 @@ func synthDoomFire(cols, rows, frames int) []byte {
 	var b strings.Builder
 	rng := rand.New(rand.NewSource(42))
 	pal := [][3]int{{7, 7, 7}, {31, 7, 7}, {103, 31, 7}, {175, 63, 7}, {223, 95, 7}, {255, 143, 7}, {255, 191, 7}, {255, 255, 255}}
-	for f := 0; f < frames; f++ {
+	for range frames {
 		b.WriteString("\x1b[H")
-		for y := 0; y < rows; y++ {
-			for x := 0; x < cols; x++ {
+		for y := range rows {
+			for range cols {
 				t := pal[rng.Intn(len(pal))]
 				bo := pal[rng.Intn(len(pal))]
 				fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀", t[0], t[1], t[2], bo[0], bo[1], bo[2])
@@ -39,7 +39,7 @@ func synthDoomFire(cols, rows, frames int) []byte {
 
 func synthScroll(lines int) []byte {
 	var b strings.Builder
-	for i := 0; i < lines; i++ {
+	for i := range lines {
 		fmt.Fprintf(&b, "%09d INFO request handled path=/api/v1/items/%d status=200 dur=%dms bytes=%d\r\n", i, i, i%90, 1000+i%9000)
 	}
 	return []byte(b.String())
@@ -52,8 +52,8 @@ func synthTUI(cols, rows, frames int) []byte {
 	for y := 1; y <= rows; y++ {
 		fmt.Fprintf(&b, "\x1b[%d;1H\x1b[38;5;250mline %3d  %s", y, y, strings.Repeat("lorem ipsum dolor ", 4))
 	}
-	for f := 0; f < frames; f++ {
-		for k := 0; k < 6; k++ {
+	for f := range frames {
+		for range 6 {
 			fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[1;38;5;%dmupdated %d\x1b[0m", 1+rng.Intn(rows), 1+rng.Intn(cols/2), 30+rng.Intn(200), f)
 		}
 		fmt.Fprintf(&b, "\x1b[%d;1H\x1b[7m frame %5d \x1b[0m", rows, f)
@@ -79,8 +79,8 @@ func benchBackendStream(b *testing.B, cols, rows int, data []byte, readEvery int
 			since += end - off
 			if readEvery > 0 && since >= readEvery {
 				since = 0
-				for y := 0; y < rows; y++ {
-					for x := 0; x < cols; x++ {
+				for y := range rows {
+					for x := range cols {
 						_ = term.CellAt(x, y)
 					}
 				}

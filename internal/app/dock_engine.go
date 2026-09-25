@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -407,13 +408,7 @@ func (e *dockEngine) NotifyEvent(eventType string) {
 		if c.stopped || c.Refresh.Kind != config.DockRefreshEvent {
 			continue
 		}
-		matched := false
-		for _, want := range c.Refresh.Events {
-			if want == eventType {
-				matched = true
-				break
-			}
-		}
+		matched := slices.Contains(c.Refresh.Events, eventType)
 		if !matched {
 			continue
 		}

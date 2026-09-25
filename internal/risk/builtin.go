@@ -224,12 +224,7 @@ func disk(c command, _ Call) bool {
 			}
 		}
 	}
-	for _, w := range c.writes {
-		if diskDevice.MatchString(w) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(c.writes, diskDevice.MatchString)
 }
 
 func widePermissions(c command, call Call) bool {

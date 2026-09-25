@@ -77,7 +77,7 @@ func (d *Daemon) paneOrigin(pid int) (bool, string) {
 	}
 	// The comparison comes before the stop at init, because in a container
 	// the daemon can be pid 1 itself, and then every orphan is its child too.
-	for depth := 0; depth < paneOriginMaxDepth; depth++ {
+	for range paneOriginMaxDepth {
 		if ppid == self {
 			return true, paneOriginAncestor
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"time"
 	"unicode"
@@ -99,9 +100,7 @@ func addShellFacts(sess *Session, data map[string]any) {
 		if pty == nil {
 			continue
 		}
-		for k, v := range shellFactsData(pty.ShellFacts()) {
-			w[k] = v
-		}
+		maps.Copy(w, shellFactsData(pty.ShellFacts()))
 	}
 }
 

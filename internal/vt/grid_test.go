@@ -120,7 +120,7 @@ func gridsAgree(t *testing.T, g *grid, b *uv.Buffer, what string) {
 }
 
 func TestGridMatchesUVBufferUnderRandomOperations(t *testing.T) {
-	for seed := int64(0); seed < 40; seed++ {
+	for seed := range int64(40) {
 		rng := rand.New(rand.NewSource(seed))
 		w, h := 1+rng.Intn(12), 1+rng.Intn(8)
 		g := newGrid(w, h)
@@ -153,7 +153,7 @@ func TestGridFillAreaMatchesUVBuffer(t *testing.T) {
 			return randomGridCell(rng)
 		}
 	}
-	for seed := int64(0); seed < 400; seed++ {
+	for seed := range int64(400) {
 		rng := rand.New(rand.NewSource(seed))
 		w, h := 1+rng.Intn(14), 1+rng.Intn(4)
 		g := newGrid(w, h)

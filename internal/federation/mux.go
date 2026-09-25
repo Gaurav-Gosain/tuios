@@ -323,11 +323,9 @@ func (m *mux) handleOpen(id uint32, payload []byte) {
 	s.open = decodeStreamOpen(payload)
 	m.streams[id] = s
 	m.mu.Unlock()
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
+	m.wg.Go(func() {
 		m.accept(s)
-	}()
+	})
 }
 
 func (m *mux) handleData(id uint32, payload []byte) {

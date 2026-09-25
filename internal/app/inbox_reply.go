@@ -310,8 +310,7 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 // drop of it can be undone.
 func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	if msg.Err != nil {
-		var callErr *session.VerbCallError
-		if errors.As(msg.Err, &callErr) {
+		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok {
 			switch callErr.Code {
 			case session.ErrVerbUnknownVerb:
 				m.Inbox.reply.noQueue = true

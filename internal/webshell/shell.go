@@ -538,7 +538,7 @@ func (s *shell) enter() bool {
 		s.history = append(s.history, line)
 	}
 	s.t.Print(markOutput)
-	for _, part := range strings.Split(line, "&&") {
+	for part := range strings.SplitSeq(line, "&&") {
 		if s.run(strings.TrimSpace(part)) {
 			s.t.Print(markDone(s.status))
 			return true

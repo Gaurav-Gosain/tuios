@@ -503,8 +503,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		rollback.Recovery = errors.New("the client held no named session to return to")
 		return nil, rollback
 	}
-	var refused *attachRefused
-	if !errors.As(err, &refused) {
+	if _, ok := errors.AsType[*attachRefused](err); !ok {
 		// The daemon did not answer, so a second round trip would only spend
 		// another timeout waiting for an answer that is not coming.
 		rollback.Recovery = errors.New("the daemon is not answering, so no return was attempted")

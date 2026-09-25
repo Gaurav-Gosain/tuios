@@ -3,6 +3,8 @@ package webshell
 import (
 	"fmt"
 	"hash/fnv"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -139,10 +141,8 @@ func cmdGit(s *shell, args []string) int {
 
 func hasFlag(args []string, names ...string) bool {
 	for _, a := range args {
-		for _, n := range names {
-			if a == n {
-				return true
-			}
+		if slices.Contains(names, a) {
+			return true
 		}
 	}
 	return false
@@ -243,9 +243,7 @@ func gitDiff(t *TTY, staged bool) int {
 	fsMu.RLock()
 	work := repoFiles()
 	head := make(map[string]string, len(repo.head))
-	for p, c := range repo.head {
-		head[p] = c
-	}
+	maps.Copy(head, repo.head)
 	fsMu.RUnlock()
 	for _, c := range gitChanges() {
 		if c.staged != staged || (!staged && c.status == "new file") {

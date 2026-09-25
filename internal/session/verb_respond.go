@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -291,12 +292,7 @@ type PromptPeek struct {
 
 // Offers reports whether the peek lists action among the answers.
 func (p *PromptPeek) Offers(action string) bool {
-	for _, a := range p.Actions {
-		if a == action {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Actions, action)
 }
 
 // PromptResponse is the respond result as a client decodes it.
@@ -548,10 +544,5 @@ func (d *Daemon) waitPromptAnswered(sess *Session, windowID, answered string, wa
 
 // isAnswerAction reports whether a is one of the answer actions.
 func isAnswerAction(a string) bool {
-	for _, x := range harness.AnswerActions {
-		if a == x {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(harness.AnswerActions, a)
 }

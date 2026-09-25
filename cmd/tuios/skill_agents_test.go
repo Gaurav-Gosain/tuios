@@ -78,11 +78,11 @@ func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 // that sentence, and nothing from any other list in the document.
 func warnedUnrestorable(skill string) []string {
 	const marker = "options are in that state today:"
-	i := strings.Index(skill, marker)
-	if i < 0 {
+	_, after, ok := strings.Cut(skill, marker)
+	if !ok {
 		return nil
 	}
-	rest := skill[i+len(marker):]
+	rest := after
 	// The enumeration is one sentence, so it ends at the first full stop that
 	// closes a name.
 	if end := strings.Index(rest, "`. "); end >= 0 {

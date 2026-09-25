@@ -233,12 +233,10 @@ func (m *Manager) startLink(h Host) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	s := &supervised{link: newLink(h, m.opts), stop: cancel, done: make(chan struct{})}
 	m.links[h.Name] = s
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
+	m.wg.Go(func() {
 		defer close(s.done)
 		s.link.supervise(ctx)
-	}()
+	})
 }
 
 // TableChange is what SetTable did, so a caller can log or report it.
@@ -489,9 +487,7 @@ func (m *Manager) CallAll(ctx context.Context, verb string, params any) []Answer
 	out := make([]Answer, len(names))
 	var wg sync.WaitGroup
 	for i, name := range names {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			a := Answer{Host: name}
 			if l := m.link(name); l != nil {
 				select {
@@ -509,7 +505,7 @@ func (m *Manager) CallAll(ctx context.Context, verb string, params any) []Answer
 			}
 			a.Result, a.Err = m.Call(ctx, name, verb, params)
 			out[i] = a
-		}()
+		})
 	}
 	wg.Wait()
 	return out

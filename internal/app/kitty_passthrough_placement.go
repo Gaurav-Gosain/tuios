@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"runtime"
+	"slices"
 )
 
 // rectsOverlap checks if two rectangles overlap
@@ -629,12 +630,7 @@ func (kp *KittyPassthrough) SetChromeOccluders(rects []cellRect) {
 
 // overlapsChrome reports whether a rectangle touches any chrome occluder.
 func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
-	for _, c := range kp.chromeOccluders {
-		if r.overlaps(c) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(kp.chromeOccluders, r.overlaps)
 }
 
 // HideAllPlacements hides all visible image placements. Used during resize

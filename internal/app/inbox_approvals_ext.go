@@ -372,7 +372,7 @@ func (m *OS) inboxPlanWindow() int {
 // inboxPlanLines is the plan's text wrapped to width, each line as drawn.
 func inboxPlanLines(text string, width int) []string {
 	var out []string
-	for _, l := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
 		l = strings.ReplaceAll(l, "\t", "    ")
 		out = append(out, wrapPlain(printableRunes(l), width)...)
 	}

@@ -298,7 +298,7 @@ func sameColor(got, want color.Color) bool {
 // failure. Without it a row of spaces and an empty row print identically.
 func boxed(s string) string {
 	var b strings.Builder
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		b.WriteByte('|')
 		b.WriteString(line)
 		b.WriteString("|\n")

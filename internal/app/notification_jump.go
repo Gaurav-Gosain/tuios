@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -119,12 +120,7 @@ func (m *OS) sessionCached(name string) bool {
 	if m.DaemonClient == nil {
 		return false
 	}
-	for _, n := range m.DaemonClient.AvailableSessionNames() {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.DaemonClient.AvailableSessionNames(), name)
 }
 
 // NotificationClick routes a press inside the message block: its right-hand end

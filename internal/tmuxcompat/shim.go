@@ -329,8 +329,7 @@ func (s *Shim) runOne(name string, args []string) (string, []string, error) {
 	}
 	if h, ok := commands[name]; ok {
 		o, d, err := h(s, name, args)
-		var uf errUnknownFlag
-		if errors.As(err, &uf) {
+		if _, ok := errors.AsType[errUnknownFlag](err); ok {
 			return OutcomeUnsupported, d, err
 		}
 		return o, d, err
@@ -362,8 +361,7 @@ func (e logAs) Unwrap() error { return e.err }
 
 // logText is err as the log records it.
 func logText(err error) string {
-	var la logAs
-	if errors.As(err, &la) {
+	if la, ok := errors.AsType[logAs](err); ok {
 		return la.log
 	}
 	return err.Error()
@@ -844,8 +842,8 @@ func (s *Shim) hasSession(name string, args []string) (string, []string, error) 
 	}
 	tv, _ := p.Value('t')
 	sess := tv
-	if i := strings.IndexByte(tv, ':'); i >= 0 {
-		sess = tv[:i]
+	if before, _, ok := strings.Cut(tv, ":"); ok {
+		sess = before
 	}
 	if sess == "" || strings.TrimPrefix(sess, "=") == s.Session || sess == "$0" {
 		return OutcomeOK, nil, nil

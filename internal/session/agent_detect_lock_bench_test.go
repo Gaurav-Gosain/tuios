@@ -59,9 +59,7 @@ func BenchmarkAgentDetectScanLockWait(b *testing.B) {
 			var wg sync.WaitGroup
 			var maxWait, sumWait time.Duration
 			var waits int
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for {
 					select {
 					case <-stop:
@@ -79,7 +77,7 @@ func BenchmarkAgentDetectScanLockWait(b *testing.B) {
 					}
 					time.Sleep(50 * time.Microsecond)
 				}
-			}()
+			})
 
 			// Scans are spaced apart, as the real two-second tick spaces them.
 			// Run back to back, a scan could take the lock again before the

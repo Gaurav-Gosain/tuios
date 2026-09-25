@@ -722,10 +722,7 @@ func (m *OS) screenshotPreviewNote(msg screenshotResultMsg) string {
 	if msg.frame == nil || msg.frame.Mode == shot.FrameNone {
 		return ""
 	}
-	scale := msg.frame.Scale
-	if scale < 1 {
-		scale = 1
-	}
+	scale := max(msg.frame.Scale, 1)
 	if msg.format != shot.FormatPNG {
 		return "The frame shows in the saved file."
 	}

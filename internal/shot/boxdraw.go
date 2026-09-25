@@ -261,7 +261,7 @@ func (b *glyphBuilder) dashes(n int, vertical bool, weight uint8) {
 	}
 	seg := span / float64(n)
 	gap := seg * 0.3
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a0 := float64(i)*seg + gap/2
 		a1 := float64(i+1)*seg - gap/2
 		if vertical {
@@ -572,7 +572,7 @@ func (b *glyphBuilder) braille(r rune) {
 		y := b.h * (1 + 2*float64(row)) / 8
 		return x, y
 	}
-	for bit := 0; bit < 8; bit++ {
+	for bit := range 8 {
 		if bits&(1<<bit) == 0 {
 			continue
 		}

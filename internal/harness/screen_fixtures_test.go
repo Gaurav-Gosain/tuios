@@ -63,7 +63,7 @@ func parseScreenFixture(t *testing.T, name, chunk string) screenFixture {
 		t.Fatalf("%s: no --- line between header and screen", name)
 	}
 	fx := screenFixture{file: name, screen: strings.Split(body, "\n")}
-	for _, line := range strings.Split(head, "\n") {
+	for line := range strings.SplitSeq(head, "\n") {
 		key, val, _ := strings.Cut(strings.TrimPrefix(line, "# "), ":")
 		switch key {
 		case "harness":

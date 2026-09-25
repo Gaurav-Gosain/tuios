@@ -217,11 +217,9 @@ func (f *hostFleet) reconcile(names, reset []string) {
 		ctx, cancel := context.WithCancel(f.ctx)
 		h := &fleetHost{name: name, cancel: cancel, wake: make(chan struct{}, 1)}
 		f.hosts[name] = h
-		f.wg.Add(1)
-		go func() {
-			defer f.wg.Done()
+		f.wg.Go(func() {
 			f.run(ctx, h)
-		}()
+		})
 	}
 	f.mu.Unlock()
 	for _, name := range dropped {

@@ -672,7 +672,7 @@ func parseUntilStates(until string) (map[string]bool, *verbError) {
 		return nil, invalidParam("until", "until is required for the agent-state condition")
 	}
 	states := map[string]bool{}
-	for _, part := range strings.Split(until, ",") {
+	for part := range strings.SplitSeq(until, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

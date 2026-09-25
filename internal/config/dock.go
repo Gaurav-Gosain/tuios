@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -55,12 +56,7 @@ func DockBuiltinComponents() []string {
 
 // IsDockBuiltin reports whether name is one of the dock's built-in components.
 func IsDockBuiltin(name string) bool {
-	for _, b := range dockBuiltins {
-		if b == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(dockBuiltins, name)
 }
 
 // dockFixedSides names the built-ins that are drawn on one side whatever list
@@ -244,12 +240,7 @@ func DockEventTypes() []string {
 
 // IsDockEventType reports whether name is an event a component may watch.
 func IsDockEventType(name string) bool {
-	for _, e := range dockEventTypes {
-		if e == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(dockEventTypes, name)
 }
 
 // DockRefresh is a parsed refresh contract.
@@ -273,7 +264,7 @@ func ParseDockRefresh(s string) (DockRefresh, error) {
 		return DockRefresh{Kind: DockRefreshPush}, nil
 	case strings.HasPrefix(s, "event:"):
 		var events []string
-		for _, e := range strings.Split(strings.TrimPrefix(s, "event:"), ",") {
+		for e := range strings.SplitSeq(strings.TrimPrefix(s, "event:"), ",") {
 			if e = strings.TrimSpace(e); e != "" {
 				events = append(events, e)
 			}

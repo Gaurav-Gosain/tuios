@@ -97,7 +97,7 @@ func TestRateCapRefusesAFlood(t *testing.T) {
 // reports the count, rather than growing or losing messages quietly.
 func TestRingEvictsAndSaysSo(t *testing.T) {
 	bus := newAgentBus()
-	for i := 0; i < agentMailboxMaxMessages+5; i++ {
+	for range agentMailboxMaxMessages + 5 {
 		bus.send("s", AgentMessage{Kind: agentMsgNotice, Text: "x"})
 	}
 	res := bus.read("s", readQuery{limit: 1000})

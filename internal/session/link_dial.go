@@ -59,8 +59,7 @@ func DialForLink(socketPath string, open federation.StreamOpen, pinnedPeer strin
 	if err == nil {
 		return conn, nil
 	}
-	var refused *linkHandshakeError
-	if errors.As(err, &refused) {
+	if _, ok := errors.AsType[*linkHandshakeError](err); ok {
 		return nil, err
 	}
 	if daemonHoldsLinkPolicy(socketPath) {

@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -128,9 +129,7 @@ func TestSendBySelectorRefusesMixedAddressing(t *testing.T) {
 		{"host": "build"},
 	} {
 		params := map[string]any{"select": "harness:codex", "text": "x"}
-		for k, v := range extra {
-			params[k] = v
-		}
+		maps.Copy(params, extra)
 		if code := errCode(t, callVerb(t, f.c, "send-agent-message", params)); code != ErrVerbInvalidParams {
 			t.Errorf("select with %v: code %q, want %q", extra, code, ErrVerbInvalidParams)
 		}

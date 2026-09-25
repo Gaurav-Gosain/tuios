@@ -137,7 +137,7 @@ func winByPTY(m *OS, ptyID string) *terminal.Window {
 func paneFrame(m *OS) string {
 	left, width := m.GetLeftMargin(), m.GetContentWidth()
 	var b strings.Builder
-	for _, row := range strings.Split(frame(m), "\n") {
+	for row := range strings.SplitSeq(frame(m), "\n") {
 		r := []rune(row)
 		if len(r) <= left {
 			b.WriteString("\n")

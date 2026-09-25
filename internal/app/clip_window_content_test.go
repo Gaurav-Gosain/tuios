@@ -109,7 +109,7 @@ func TestClipWindowContent(t *testing.T) {
 func TestClipMeasuresWidestLine(t *testing.T) {
 	content := "short\n" + strings.Repeat("x", 100)
 	out, _, _ := clipWindowContent(content, 0, 0, 40, 24)
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		// Measure display width, not bytes: truncation appends a reset sequence.
 		if w := ansi.StringWidth(line); w > 40 {
 			t.Errorf("line overruns the 40 column viewport: %d columns", w)

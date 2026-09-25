@@ -80,7 +80,7 @@ func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS 
 func frameCells(t *testing.T, m *OS) [][]rune {
 	t.Helper()
 	var g [][]rune
-	for _, line := range strings.Split(lipgloss.Sprint(m.GetCanvas(true).Render()), "\n") {
+	for line := range strings.SplitSeq(lipgloss.Sprint(m.GetCanvas(true).Render()), "\n") {
 		g = append(g, []rune(ansi.Strip(line)))
 	}
 	return g

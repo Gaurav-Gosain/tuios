@@ -399,7 +399,7 @@ func tapeRunSummary(h tape.ProjectHeader, dir string) string {
 // shortTapePath abbreviates a home-rooted path with ~ for the dialog header.
 func shortTapePath(path string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if rel := strings.TrimPrefix(path, home); rel != path {
+		if rel, ok := strings.CutPrefix(path, home); ok {
 			return "~" + rel
 		}
 	}

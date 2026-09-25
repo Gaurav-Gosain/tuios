@@ -156,8 +156,7 @@ func TestClientRefusesTheRealV070Numbering(t *testing.T) {
 		_ = c.Close()
 		t.Fatalf("the client accepted a v0.7.0 daemon's reply as a welcome")
 	}
-	var mismatch *ProtocolMismatchError
-	if !errors.As(err, &mismatch) {
+	if _, ok := errors.AsType[*ProtocolMismatchError](err); !ok {
 		t.Fatalf("expected a *ProtocolMismatchError, got %T: %v", err, err)
 	}
 	for _, want := range []string{"0.8.0", "tuios kill-server"} {

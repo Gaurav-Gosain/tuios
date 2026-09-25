@@ -71,10 +71,7 @@ func scrollWindow(scroll, selected, count, visible int) int {
 	if count <= visible {
 		return 0
 	}
-	scroll = clampInt(scroll, 0, count-visible)
-	if selected < scroll {
-		scroll = selected
-	}
+	scroll = min(selected, clampInt(scroll, 0, count-visible))
 	if selected >= scroll+visible {
 		scroll = selected - visible + 1
 	}

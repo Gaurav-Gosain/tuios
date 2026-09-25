@@ -30,11 +30,9 @@ func TestConcurrentResizesLeaveTheEmulatorAtTheRecordedSize(t *testing.T) {
 	for round := range 2000 {
 		var wg sync.WaitGroup
 		for _, size := range sizes {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_ = pty.Resize(size[0], size[1])
-			}()
+			})
 		}
 		wg.Wait()
 

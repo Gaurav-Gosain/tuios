@@ -2,6 +2,7 @@ package harness
 
 import (
 	"io/fs"
+	"maps"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -167,9 +168,7 @@ func FuzzManifestRules(f *testing.F) {
 		all1, not1, re1, any2, screen string) {
 		rule := func(state string, pri int64, region string, gate map[string]any) map[string]any {
 			r := map[string]any{"state": state, "priority": pri, "region": region}
-			for k, v := range gate {
-				r[k] = v
-			}
+			maps.Copy(r, gate)
 			return r
 		}
 		list := func(s string) []string {

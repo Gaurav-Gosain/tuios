@@ -32,7 +32,7 @@ var optionWalkSkips = map[string]string{
 // UserConfig without an entry fails here rather than being silently unreachable
 // from the control protocol.
 func TestOptionRegistryCoversEveryScalarField(t *testing.T) {
-	fields := walkScalarPaths(t, reflect.TypeOf(UserConfig{}), "")
+	fields := walkScalarPaths(t, reflect.TypeFor[UserConfig](), "")
 
 	for _, path := range fields {
 		if _, ok := LookupOption(path); !ok {

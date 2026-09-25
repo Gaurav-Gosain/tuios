@@ -431,8 +431,7 @@ func awaitChildExit(tr Transport) (exited bool, code int) {
 	deadline := time.Now().Add(exitGrace)
 	for {
 		if exited, err := er.Exited(); exited {
-			var ee *exec.ExitError
-			if errors.As(err, &ee) {
+			if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 				return true, ee.ExitCode()
 			}
 			return true, 0

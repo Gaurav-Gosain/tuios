@@ -3,6 +3,7 @@ package agentproto
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 )
@@ -173,9 +174,7 @@ func TestCodexApprovals(t *testing.T) {
 		{"kind": "writeStdin"},
 	} {
 		params := map[string]any{"threadId": "th-1", "turnId": "tu-1", "itemId": "c2", "command": "curl example.com"}
-		for k, v := range extra {
-			params[k] = v
-		}
+		maps.Copy(params, extra)
 		p.send(map[string]any{"id": 10 + i, "method": "item/commandExecution/requestApproval", "params": params})
 		perm := ev.permission(t)
 		if line := InboxLine(perm); line != "" {

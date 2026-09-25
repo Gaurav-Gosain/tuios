@@ -1181,7 +1181,7 @@ func resolveOptionField(cfg *UserConfig, path string) (reflect.Value, bool) {
 		return reflect.Value{}, false
 	}
 	value := reflect.ValueOf(cfg).Elem()
-	for _, segment := range strings.Split(path, ".") {
+	for segment := range strings.SplitSeq(path, ".") {
 		if value.Kind() != reflect.Struct {
 			return reflect.Value{}, false
 		}

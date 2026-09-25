@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -240,15 +241,15 @@ func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sideb
 // and you do not, and one ink for both would make a row that needs a pull look
 // like a row that needs a push.
 func gitDivergenceToken(text string, rowBg color.Color, pal overlay.Palette) string {
-	out := ""
+	var out strings.Builder
 	for _, part := range splitDivergence(text) {
 		ink := pal.Success
 		if part.behind {
 			ink = pal.Warn
 		}
-		out += sidebarStyle(rowBg, ink).Render(part.text)
+		out.WriteString(sidebarStyle(rowBg, ink).Render(part.text))
 	}
-	return out
+	return out.String()
 }
 
 type divergencePart struct {
@@ -262,7 +263,7 @@ func splitDivergence(text string) []divergencePart {
 	runes := []rune(text)
 	parts := make([]divergencePart, 0, 2)
 	start, behind := 0, false
-	for i := 0; i < len(runes); i++ {
+	for i := range runes {
 		if runes[i] != '↑' && runes[i] != '↓' {
 			continue
 		}

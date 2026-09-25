@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,17 +146,13 @@ func TestPeekAndRespondAnswerAClaudeApproval(t *testing.T) {
 	tui := attachTUI(t, sp, "resp")
 	params["human_nonce"] = tui.HumanNonce()
 	stale := map[string]any{}
-	for k, v := range params {
-		stale[k] = v
-	}
+	maps.Copy(stale, params)
 	stale["prompt_id"] = "0000000000000000"
 	if code := errCode(t, callVerb(t, c, "respond", stale)); code != ErrVerbPromptChanged {
 		t.Fatalf("respond with a stale prompt_id: %s, want %s", code, ErrVerbPromptChanged)
 	}
 	bad := map[string]any{}
-	for k, v := range params {
-		bad[k] = v
-	}
+	maps.Copy(bad, params)
 	bad["action"], bad["value"] = "choose", "7"
 	if code := errCode(t, callVerb(t, c, "respond", bad)); code != ErrVerbInvalidParams {
 		t.Fatalf("respond choosing an option that is not there: %s, want %s", code, ErrVerbInvalidParams)
@@ -201,9 +198,7 @@ func TestRespondFirstAnswerWins(t *testing.T) {
 	var wg sync.WaitGroup
 	codes := make([]string, 2)
 	for i, action := range []string{"approve", "deny"} {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			conn := dialVerb(t, sp)
 			resp := callVerb(t, conn, "respond", map[string]any{
 				"session": "race", "window": ag.window, "action": action,
@@ -214,7 +209,7 @@ func TestRespondFirstAnswerWins(t *testing.T) {
 			} else {
 				codes[i] = "ok"
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if !(codes[0] == "ok" && codes[1] == ErrVerbPromptChanged) && !(codes[1] == "ok" && codes[0] == ErrVerbPromptChanged) {

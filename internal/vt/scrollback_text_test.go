@@ -262,7 +262,7 @@ func TestScrollbackTextFollowsTheRing(t *testing.T) {
 			t.Fatalf("after push %d: %d lines, want %d", n, lines, min(n+1, ring))
 		}
 	}
-	if first := strings.SplitN(ringByText(sb), "\n", 2)[0]; first != "33" {
+	if first, _, _ := strings.Cut(ringByText(sb), "\n"); first != "33" {
 		t.Fatalf("oldest line after wrapping is %q, want %q", first, "33")
 	}
 }

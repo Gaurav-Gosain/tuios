@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"maps"
 	"sort"
 	"sync"
 
@@ -136,9 +137,7 @@ var describeMu sync.Mutex
 func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	set := theme.ResolveGlyphSet(id)
 	named := map[string]string{}
-	for role, glyph := range glyphSetNamedRoles(set) {
-		named[role] = glyph
-	}
+	maps.Copy(named, glyphSetNamedRoles(set))
 
 	// The settings the glyphs are resolved against are built here and thrown
 	// away, so nothing in the process ever sees them. This used to be a

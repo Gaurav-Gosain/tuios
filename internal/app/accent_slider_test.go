@@ -60,7 +60,7 @@ func TestAccentSliderPrintsWhatItHolds(t *testing.T) {
 	m := accentTestOS(t, 120, 30)
 	m.OpenAccentPicker("aaaaaaaa1111")
 
-	for ch := accentChannel(0); ch < accentChanCount; ch++ {
+	for ch := range accentChanCount {
 		for v := 0; v <= ch.max(); v++ {
 			m.AccentPickerSetSlider(ch, v)
 			rows := readSliders(t, m)
@@ -253,7 +253,7 @@ func TestAccentSliderHitsMatchTheDrawnTrack(t *testing.T) {
 		if len(rows) != int(accentChanCount) {
 			t.Fatalf("w=%d: %d sliders drawn, want %d", w, len(rows), accentChanCount)
 		}
-		for ch := accentChannel(0); ch < accentChanCount; ch++ {
+		for ch := range accentChanCount {
 			r := rows[int(ch)].hit.Rect
 			if ok, _ := m.accentPickerPress(r.X0, r.Y0); !ok {
 				t.Fatalf("w=%d: a press on %s's left edge was not routed", w, ch.label())
@@ -332,7 +332,7 @@ func TestAccentSliderKeysStepAndJump(t *testing.T) {
 	m := accentTestOS(t, 120, 30)
 	m.OpenAccentPicker("aaaaaaaa1111")
 
-	for ch := accentChannel(0); ch < accentChanCount; ch++ {
+	for ch := range accentChanCount {
 		mid := ch.max() / 2
 		m.AccentPicker.Focus = ch.focus()
 		m.AccentPickerSetSlider(ch, mid)

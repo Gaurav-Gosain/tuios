@@ -14,13 +14,11 @@ func TestClientIDsAreUnique(t *testing.T) {
 	ids := make([]string, n)
 	var wg sync.WaitGroup
 	for w := range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := w; i < n; i += 4 {
 				ids[i] = newClientID()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	seen := make(map[string]bool, n)

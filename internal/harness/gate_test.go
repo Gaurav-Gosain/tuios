@@ -102,7 +102,7 @@ func TestNestedGateLoadErrors(t *testing.T) {
 func TestPredicateBudget(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("[screen]\nenabled = true\n")
-	for i := 0; i < maxPredicates/10+1; i++ {
+	for range maxPredicates/10 + 1 {
 		b.WriteString("[[screen.rule]]\nstate = \"working\"\nany = [")
 		for j := range 11 {
 			if j > 0 {

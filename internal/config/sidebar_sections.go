@@ -40,7 +40,7 @@ func ParseSidebarSections(source string) []SidebarSectionShare {
 	out := make([]SidebarSectionShare, 0, len(SidebarSectionNames)+1)
 	seen := make([]string, 0, len(SidebarSectionNames))
 	sections := 0
-	for _, field := range strings.Split(source, ",") {
+	for field := range strings.SplitSeq(source, ",") {
 		name, share, _ := strings.Cut(strings.TrimSpace(field), ":")
 		name = strings.ToLower(strings.TrimSpace(name))
 		if name != SidebarSectionSpacer {
@@ -75,7 +75,7 @@ func SidebarSectionProblems(source string) []string {
 	var problems []string
 	var seen []string
 	sections := 0
-	for _, field := range strings.Split(source, ",") {
+	for field := range strings.SplitSeq(source, ",") {
 		field = strings.TrimSpace(field)
 		if field == "" {
 			continue

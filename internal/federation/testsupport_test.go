@@ -43,22 +43,18 @@ func startStubDaemon(t *testing.T, handle func(verb string, params json.RawMessa
 		t.Fatalf("listen: %v", err)
 	}
 	d := &stubDaemon{path: path, ln: ln}
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	d.wg.Go(func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			d.wg.Add(1)
-			go func() {
-				defer d.wg.Done()
+			d.wg.Go(func() {
 				defer func() { _ = conn.Close() }()
 				serveStub(conn, handle)
-			}()
+			})
 		}
-	}()
+	})
 	t.Cleanup(func() {
 		_ = ln.Close()
 		d.wg.Wait()

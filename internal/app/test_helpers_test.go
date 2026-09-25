@@ -356,12 +356,12 @@ func navIndexOfSession(m *OS, id string) int {
 // attribute. The parameters arrive merged with the colours, so the sequence is
 // parsed rather than matched as a literal.
 func isUnderlined(s string) bool {
-	for _, seq := range strings.Split(s, "\x1b[") {
-		end := strings.IndexByte(seq, 'm')
-		if end < 0 {
+	for seq := range strings.SplitSeq(s, "\x1b[") {
+		before, _, ok := strings.Cut(seq, "m")
+		if !ok {
 			continue
 		}
-		params := strings.Split(seq[:end], ";")
+		params := strings.Split(before, ";")
 		for i := 0; i < len(params); i++ {
 			// A colour carries its channels as parameters of its own, and one of
 			// them may well be a 4.

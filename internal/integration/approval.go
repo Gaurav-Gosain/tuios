@@ -420,7 +420,7 @@ func claudeAcceptEdits(raw any) bool {
 // PlanTitle is the line a plan is known by: its first line that is not blank,
 // without heading marks, clipped to a message.
 func PlanTitle(plan string) string {
-	for _, line := range strings.Split(plan, "\n") {
+	for line := range strings.SplitSeq(plan, "\n") {
 		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
 		if line != "" {
 			return Clip(line)

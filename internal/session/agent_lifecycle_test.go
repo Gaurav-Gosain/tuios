@@ -126,7 +126,7 @@ func TestDetectorDoesNotDropAnAgentOnOneMissedRead(t *testing.T) {
 		t.Fatalf("return: misses = %d, want 0", misses)
 	}
 	// The editor stays for the full limit: the agent is gone for good.
-	for i := 0; i < agentDetectMissLimit-1; i++ {
+	for range agentDetectMissLimit - 1 {
 		sess.applyAgentDetection(editor, agent.identifyDetail)
 	}
 	if got := agentStateOf(t, sess, winID); got != AgentStateWorking {

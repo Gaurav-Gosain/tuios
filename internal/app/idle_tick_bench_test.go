@@ -14,7 +14,7 @@ import (
 func idleOS(t testing.TB, n int) *OS {
 	t.Helper()
 	wins := make([]*terminal.Window, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wins = append(wins, newTestWindow(t, "idle-"+string(rune('a'+i)), 80, 24))
 	}
 	return &OS{

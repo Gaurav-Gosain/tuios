@@ -54,9 +54,7 @@ func TestTwoListingsAtOnceDoNotReadEachOthersAnswers(t *testing.T) {
 	var wg sync.WaitGroup
 	bad := make(chan string, callers*rounds)
 	for c := range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for r := range rounds {
 				mark := "c" + string(rune('a'+c)) + "r" + string(rune('0'+r))
 				raw, err := m.Call(ctx, "build", "echo", map[string]any{"mark": mark})
@@ -72,7 +70,7 @@ func TestTwoListingsAtOnceDoNotReadEachOthersAnswers(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(bad)

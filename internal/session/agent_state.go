@@ -371,8 +371,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	if errors.Is(err, errAgentLookUnchanged) {
 		return effective, false, "", nil
 	}
-	var refused errAgentReportRefused
-	if errors.As(err, &refused) {
+	if refused, ok := errors.AsType[errAgentReportRefused](err); ok {
 		return effective, false, string(refused), nil
 	}
 	if err != nil {

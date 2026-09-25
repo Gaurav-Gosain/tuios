@@ -503,10 +503,7 @@ func splitPatchRects(rects []damageRect, bpp int) []damageRect {
 	for _, r := range rects {
 		for x := 0; x < r.w; x += maxW {
 			w := min(maxW, r.w-x)
-			rows := maxPatchPayload / (w * bpp)
-			if rows < 1 {
-				rows = 1
-			}
+			rows := max(maxPatchPayload/(w*bpp), 1)
 			for y := 0; y < r.h; y += rows {
 				out = append(out, damageRect{
 					x: r.x + x, y: r.y + y, w: w, h: min(rows, r.h-y),

@@ -91,8 +91,7 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 // hostConnectionError turns a link failure into the error a caller reads,
 // naming the machine and what to do about it.
 func hostConnectionError(host string, err error) *verbError {
-	var refused *federation.RefusedError
-	if errors.As(err, &refused) {
+	if refused, ok := errors.AsType[*federation.RefusedError](err); ok {
 		return hintedVerbError(ErrVerbHostRefused, refused.Error(), &VerbHint{
 			Param:  "host",
 			Detail: "The host is up. Close a connection to it, then try again.",

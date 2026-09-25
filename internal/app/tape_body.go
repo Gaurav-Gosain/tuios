@@ -45,7 +45,7 @@ func compileProjectBody(body string) []tape.Command {
 	var cmds []tape.Command
 	settle := tape.Command{Type: tape.CommandTypeSleep, Delay: tapeStructuralSettle}
 
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		toks := tokenizeTapeLine(line)
 		if len(toks) == 0 {
 			continue

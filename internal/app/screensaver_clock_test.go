@@ -54,7 +54,7 @@ func TestSaverClockRunsAtTheRateThePaintingDoes(t *testing.T) {
 			t.Fatal("the effect would not build over the capture")
 		}
 		start := engine.Clock.Elapsed()
-		for i := 0; i < rate; i++ {
+		for range rate {
 			engine.Update()
 		}
 		if moved := engine.Clock.Elapsed() - start; moved < 0.999 || moved > 1.001 {

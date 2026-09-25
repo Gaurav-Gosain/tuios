@@ -240,8 +240,7 @@ func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[str
 	timeout := time.Until(deadlineOr(ctx, 2*time.Second))
 	raw, err := r.feedClient.CallWithTimeout(verb, params, timeout)
 	if err != nil {
-		var verr *session.VerbCallError
-		if !errors.As(err, &verr) {
+		if _, ok := errors.AsType[*session.VerbCallError](err); !ok {
 			// The connection itself failed: dial again next time.
 			_ = r.feedClient.Close()
 			r.feedClient = nil
@@ -278,8 +277,7 @@ func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity
 	defer r.feedMu.Unlock()
 	if r.activity == activityUnknown {
 		raw, err := r.feedCall(ctx, "list-verbs", map[string]any{"verb": "set-agent-state"})
-		var verr *session.VerbCallError
-		if errors.As(err, &verr) {
+		if _, ok := errors.AsType[*session.VerbCallError](err); ok {
 			// A daemon that answers but cannot say is taken not to.
 			r.activity = activityNo
 			return nil

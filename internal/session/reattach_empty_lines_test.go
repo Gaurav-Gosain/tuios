@@ -204,7 +204,7 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 
 	// The guest keeps repainting: a few redraws land before the snapshot, and
 	// a few more while the client is being rebuilt.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.feed([]byte(topRepaint(1000 + i*10)))
 		time.Sleep(2 * time.Millisecond)
 	}
@@ -217,7 +217,7 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 	defer func() { _ = p.Unsubscribe("repro-moving") }()
 
 	// More repaints after the resume, then let everything settle.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		p.feed([]byte(topRepaint(2000 + i*10)))
 		time.Sleep(2 * time.Millisecond)
 	}

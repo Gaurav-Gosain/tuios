@@ -76,7 +76,7 @@ func cmdAgent(s *shell, args []string, _ string) int {
 
 	t.report("working", "Thinking", "")
 	start := time.Now()
-	for i := 0; i < 28; i++ {
+	for i := range 28 {
 		secs := int(time.Since(start).Seconds())
 		t.Print("\r\x1b[K" + agentOrange + agentSpinner[i%len(agentSpinner)] + reset + " " +
 			agentOrange + "Thinking…" + reset + agentGrey + " (" + strconv.Itoa(secs) + "s · esc to interrupt)" + reset)

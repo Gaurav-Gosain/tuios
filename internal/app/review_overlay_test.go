@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -38,9 +39,7 @@ func (f *reviewFake) call(verb string, params map[string]any, _ time.Duration) (
 			return nil, f.diffErr
 		}
 		out := map[string]any{}
-		for k, v := range f.diff {
-			out[k] = v
-		}
+		maps.Copy(out, f.diff)
 		out["notes"] = f.notes
 		if a, ok := params["against"].(string); ok {
 			out["against"] = a

@@ -837,12 +837,7 @@ func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
 		cs.mu.Unlock()
 	}
 	d.clientsMu.RUnlock()
-	for _, cs := range attached {
-		if d.mayActAsHuman(cs) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(attached, d.mayActAsHuman)
 }
 
 // peerPlacer places the process on a connection: outside every pane, or in

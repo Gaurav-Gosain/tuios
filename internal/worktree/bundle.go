@@ -126,7 +126,7 @@ func WorkingPatch(path, dest string) (int, error) {
 		return 0, err
 	}
 	count := 0
-	for _, line := range strings.Split(names, "\n") {
+	for line := range strings.SplitSeq(names, "\n") {
 		if strings.TrimSpace(line) != "" {
 			count++
 		}

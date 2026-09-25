@@ -132,7 +132,7 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 	// Simulate ~10 browser frames. ForwardCommand runs on the VT callback
 	// goroutine in production; the render path (RefreshAllPlacements +
 	// FlushPending + WriteToHost) runs in View().
-	for frame := 0; frame < 10; frame++ {
+	for range 10 {
 		kp.ForwardCommand(cmd, raw, winID,
 			0, 0, 181, 40, 1, 1, 0, 0, 0, false,
 			func(resp []byte) {})

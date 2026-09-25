@@ -153,8 +153,7 @@ func TestEventHubResumeAheadIsRefused(t *testing.T) {
 	h := newEventHub()
 	publishBells(h, 3)
 	_, _, err := h.subscribeFrom(eventFilter{}, 16, &resumePoint{afterSeq: 4, bootID: h.bootID})
-	var ahead errResumeAhead
-	if !errors.As(err, &ahead) {
+	if _, ok := errors.AsType[errResumeAhead](err); !ok {
 		t.Fatalf("err = %v, want errResumeAhead", err)
 	}
 	if len(h.subs) != 0 {

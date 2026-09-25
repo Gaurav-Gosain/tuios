@@ -211,8 +211,7 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	} else {
 		base, err := review.ResolveBase(ctx, repo.root, p.Base, repo.recorded, p.Uncommitted)
 		if err != nil {
-			var refErr *review.RefError
-			if errors.As(err, &refErr) {
+			if _, ok := errors.AsType[*review.RefError](err); ok {
 				return nil, hintedVerbError(ErrVerbInvalidParams, "base "+echoName(p.Base)+" is not a commit in "+repo.root, &VerbHint{
 					Param:  "base",
 					Detail: "Nothing was read. Name a branch, a tag or a commit of the repository, or leave base out for the worktree's own base.",

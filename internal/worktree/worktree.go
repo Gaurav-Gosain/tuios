@@ -208,7 +208,7 @@ func Changes(path string) (int, error) {
 		return 0, err
 	}
 	n := 0
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.TrimSpace(line) != "" {
 			n++
 		}
@@ -270,7 +270,7 @@ func Diff(path string, stat bool) (string, error) {
 			b.WriteString("\n")
 		}
 		b.WriteString("untracked:\n")
-		for _, f := range strings.Split(u, "\n") {
+		for f := range strings.SplitSeq(u, "\n") {
 			b.WriteString("  " + f + "\n")
 		}
 	}

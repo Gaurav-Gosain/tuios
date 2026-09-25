@@ -82,14 +82,8 @@ func FuzzClipWindowContent(f *testing.F) {
 		// The caller is the compositor, which always has a real viewport and
 		// coordinates within an int16's worth of the screen. Fuzzing outside
 		// that would only test Go's arithmetic.
-		vw = vw%512 + 1
-		if vw < 1 {
-			vw = 1
-		}
-		vh = vh%512 + 1
-		if vh < 1 {
-			vh = 1
-		}
+		vw = max(vw%512+1, 1)
+		vh = max(vh%512+1, 1)
 		x = clampFuzzCoord(x)
 		y = clampFuzzCoord(y)
 		if len(content) > 1<<16 {
@@ -167,7 +161,7 @@ func FuzzClipWindowContent(f *testing.F) {
 // compositor allocates for a layer.
 func maxLineWidth(s string) int {
 	w := 0
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if lw := ansi.StringWidth(line); lw > w {
 			w = lw
 		}
@@ -203,10 +197,7 @@ func FuzzClipWindowContentNoPanicOnEscapes(f *testing.F) {
 			content = content[:1<<16]
 		}
 		// A negative x forces the left-clip path.
-		shift = shift%1024 + 1
-		if shift < 1 {
-			shift = 1
-		}
+		shift = max(shift%1024+1, 1)
 
 		const vw, vh = 80, 24
 		got, finalX, finalY := clipWindowContent(content, -shift, 0, vw, vh)

@@ -443,7 +443,7 @@ func lastATParams(t *testing.T, s string) map[string]int {
 		rest = rest[:j]
 	}
 	out := map[string]int{}
-	for _, kv := range strings.Split(rest, ",") {
+	for kv := range strings.SplitSeq(rest, ",") {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
 			continue

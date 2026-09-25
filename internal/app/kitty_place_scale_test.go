@@ -72,7 +72,7 @@ func transmitThenPlace(imageID uint32, pixelW, pixelH, cols, rows int) []byte {
 
 // placementRegion is the source region and cell box of a placement command.
 func placementRegion(cmd string) (srcW, srcH, cols, rows int) {
-	for _, part := range strings.Split(cmd, ",") {
+	for part := range strings.SplitSeq(cmd, ",") {
 		var k string
 		var v int
 		if n, _ := fmt.Sscanf(part, "%1s=%d", &k, &v); n != 2 {

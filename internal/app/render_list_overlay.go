@@ -203,7 +203,7 @@ func wrapPlain(s string, width int) []string {
 			line = ""
 		}
 	}
-	for _, word := range strings.Fields(s) {
+	for word := range strings.FieldsSeq(s) {
 		// A word longer than the line (a path, say) is broken across lines
 		// rather than dropped.
 		for lipgloss.Width(word) > width {

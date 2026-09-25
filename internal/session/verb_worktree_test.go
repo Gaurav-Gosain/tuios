@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,9 +37,7 @@ func jsonParams(v map[string]any) string {
 func newWorktreeCall(t *testing.T, c *verbConn, repo, branch string, extra map[string]any) map[string]any {
 	t.Helper()
 	params := map[string]any{"repo": repo, "branch": branch}
-	for k, v := range extra {
-		params[k] = v
-	}
+	maps.Copy(params, extra)
 	return result(t, c.call(t, `{"id":1,"verb":"new-worktree","params":`+jsonParams(params)+`}`))
 }
 

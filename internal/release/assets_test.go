@@ -105,9 +105,8 @@ func TestVerify(t *testing.T) {
 		t.Errorf("the published archive did not verify: %v", err)
 	}
 
-	var mismatch *ChecksumMismatch
 	err := sums.Verify("tuios_0.7.0_Linux_x86_64.tar.gz", []byte("something else"))
-	if !errors.As(err, &mismatch) {
+	if _, ok := errors.AsType[*ChecksumMismatch](err); !ok {
 		t.Errorf("altered bytes gave %v, want a mismatch", err)
 	}
 

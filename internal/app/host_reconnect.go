@@ -359,13 +359,11 @@ func hostReconnectFinal(err error) bool {
 	if session.AttachRefused(err) {
 		return true
 	}
-	var shake *session.HostHandshakeError
-	if errors.As(err, &shake) {
+	if shake, ok := errors.AsType[*session.HostHandshakeError](err); ok {
 		var mismatch *session.ProtocolMismatchError
 		return errors.As(shake.Err, &mismatch)
 	}
-	var connErr *session.HostConnectError
-	if errors.As(err, &connErr) {
+	if connErr, ok := errors.AsType[*session.HostConnectError](err); ok {
 		switch connErr.Code {
 		case session.ErrVerbUnknownHost, session.ErrVerbProtocolMismatch, session.ErrVerbUnknownVerb:
 			return true
@@ -381,15 +379,12 @@ func hostReconnectReason(host string, err error) string {
 	if session.AttachRefused(err) {
 		return fmt.Sprintf("The session is gone on %s. Open another one there.", host)
 	}
-	var shake *session.HostHandshakeError
-	if errors.As(err, &shake) {
-		var mismatch *session.ProtocolMismatchError
-		if errors.As(shake.Err, &mismatch) {
+	if shake, ok := errors.AsType[*session.HostHandshakeError](err); ok {
+		if _, ok := errors.AsType[*session.ProtocolMismatchError](shake.Err); ok {
 			return fmt.Sprintf("The tuios on %s cannot serve this client. Upgrade tuios on one machine.", host)
 		}
 	}
-	var connErr *session.HostConnectError
-	if errors.As(err, &connErr) {
+	if connErr, ok := errors.AsType[*session.HostConnectError](err); ok {
 		switch connErr.Code {
 		case session.ErrVerbUnknownHost:
 			return fmt.Sprintf("The host %s is not configured. Add it with 'tuios hosts add'.", host)

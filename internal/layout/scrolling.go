@@ -398,10 +398,8 @@ func (s *ScrollingLayout) ScrollToFocusedColumn(screenWidth int) {
 // the answer to a different one.
 func (s *ScrollingLayout) ColumnContaining(windowID int) int {
 	for i, col := range s.Columns {
-		for _, id := range col.WindowIDs {
-			if id == windowID {
-				return i
-			}
+		if slices.Contains(col.WindowIDs, windowID) {
+			return i
 		}
 	}
 	return -1

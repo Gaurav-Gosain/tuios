@@ -685,11 +685,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if d.ctx.Err() != nil {
 			return
 		}
-		d.wg.Add(1)
-		go func() {
-			defer d.wg.Done()
+		d.wg.Go(func() {
 			d.serveHostedCalls(s, windowID, p)
-		}()
+		})
 	})
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
@@ -1425,8 +1423,7 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 			// A frame over its type's limit was skipped unread, so the stream
 			// is still in step: tell the sender and go on serving it. See
 			// wire_bounds.go.
-			var tooLarge *FrameTooLargeError
-			if errors.As(err, &tooLarge) {
+			if _, ok := errors.AsType[*FrameTooLargeError](err); ok {
 				LogError("Refused a message from %s: %v", clientID, err)
 				_ = d.sendError(cs, ErrCodeInvalidMessage, "refused: "+err.Error())
 				continue

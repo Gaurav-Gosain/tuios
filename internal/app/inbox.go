@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -1401,9 +1402,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 		// hold is on another one.
 		"summary": it.Summary,
 	}
-	for k, v := range inboxReplyExtras(it, decision) {
-		params[k] = v
-	}
+	maps.Copy(params, inboxReplyExtras(it, decision))
 	if message != "" && decision == session.ApprovalDeny {
 		params["message"] = message
 	}

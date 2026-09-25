@@ -485,18 +485,19 @@ func (m *OS) keybindDetail(selected int) string {
 			" already has " + b.Key + " in this scope. Pressing it runs that instead. " +
 			"ctrl+d takes the dead binding off " + b.Action + "."
 	}
-	detail := b.Desc + ". Bound in [" + b.Section + "]. ctrl+d unbinds it; ctrl+x takes " +
-		b.Key + " off every action."
+	var detail strings.Builder
+	detail.WriteString(b.Desc + ". Bound in [" + b.Section + "]. ctrl+d unbinds it; ctrl+x takes " +
+		b.Key + " off every action.")
 	for _, s := range rep.Swallowed {
 		if strings.EqualFold(s.Key, b.Key) {
-			detail += " Terminal mode takes this key, so the program in the pane never sees it."
+			detail.WriteString(" Terminal mode takes this key, so the program in the pane never sees it.")
 			break
 		}
 	}
 	if v := config.AmbiguityVerdict(b.Key, rep.Pane.HostDisambiguates); v != "" {
-		detail += " " + v
+		detail.WriteString(" " + v)
 	}
-	return detail
+	return detail.String()
 }
 
 // scopeShortName is the scope label for a row's right edge.

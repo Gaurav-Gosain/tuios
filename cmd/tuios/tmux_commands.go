@@ -81,8 +81,7 @@ func runAsTmux(args []string) int {
 	c := exec.Command(real, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			return ee.ExitCode()
 		}
 		fmt.Fprintln(os.Stderr, err)

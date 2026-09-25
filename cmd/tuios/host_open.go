@@ -146,8 +146,7 @@ func runAttachOnHost(host, name string, create, hold, ssh bool) error {
 // daemon is too old or not running; the host, which is down; or neither,
 // because the name is not configured.
 func explainHostConnectError(host string, err error) error {
-	var connect *session.HostConnectError
-	if errors.As(err, &connect) {
+	if connect, ok := errors.AsType[*session.HostConnectError](err); ok {
 		fix := "run 'tuios hosts' to see the link, and 'tuios attach --host " + host + " NAME --ssh' to use ssh directly"
 		switch connect.Code {
 		case session.ErrVerbUnknownHost:
@@ -164,8 +163,7 @@ func explainHostConnectError(host string, err error) error {
 			Err:   err,
 		}
 	}
-	var shake *session.HostHandshakeError
-	if errors.As(err, &shake) {
+	if shake, ok := errors.AsType[*session.HostHandshakeError](err); ok {
 		return &diagnosticError{
 			What:  shake.Error(),
 			Cause: "the link to " + host + " is up and its tuios cannot serve this client.",

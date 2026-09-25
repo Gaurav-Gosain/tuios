@@ -1509,8 +1509,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	state, err := m.DaemonClient.SwitchSession(targetSession, savedWidth, savedHeight)
 	if err != nil {
 		m.LogError("[SWITCH] %v", err)
-		var rollback *session.SwitchRollback
-		if errors.As(err, &rollback) {
+		if rollback, ok := errors.AsType[*session.SwitchRollback](err); ok {
 			if rollback.State != nil {
 				// The daemon took the detach and refused the attach, and the
 				// client is back where it started. Detaching dropped every

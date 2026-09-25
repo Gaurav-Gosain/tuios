@@ -129,10 +129,7 @@ func Scroll(scroll, selected, n, visible int) int {
 	if visible <= 0 || n <= visible {
 		return 0
 	}
-	scroll = min(max(scroll, 0), n-visible)
-	if selected < scroll {
-		scroll = selected
-	}
+	scroll = min(selected, min(max(scroll, 0), n-visible))
 	if selected >= scroll+visible {
 		scroll = selected - visible + 1
 	}

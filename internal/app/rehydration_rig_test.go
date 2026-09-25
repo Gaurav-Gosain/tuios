@@ -375,7 +375,7 @@ func childProcesses() string {
 	}
 	self := strconv.Itoa(os.Getpid())
 	var b strings.Builder
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if f := strings.Fields(line); len(f) > 1 && f[1] == self {
 			b.WriteString(line)
 			b.WriteByte('\n')

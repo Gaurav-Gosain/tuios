@@ -267,7 +267,7 @@ func processReadSyscalls() (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if v, ok := strings.CutPrefix(line, "syscr: "); ok {
 			var n int64
 			for _, c := range strings.TrimSpace(v) {

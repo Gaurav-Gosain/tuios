@@ -38,6 +38,8 @@ package integration
 // Every one of them drops a subagent's event (agent_id set) and an event with
 // no session id.
 
+import "slices"
+
 // identityEvents lists, per harness, the events that name the conversation.
 var identityEvents = map[string][]string{
 	Copilot:     {"SessionStart", "sessionStart"},
@@ -73,13 +75,7 @@ func translateIdentity(id string, in Input, p fields) Decision {
 	if event == "" {
 		return skip(id, event, "the payload names no event")
 	}
-	known := false
-	for _, e := range events {
-		if e == event {
-			known = true
-			break
-		}
-	}
+	known := slices.Contains(events, event)
 	if !known {
 		return skip(id, event, "event not mapped")
 	}

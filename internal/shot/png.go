@@ -715,24 +715,24 @@ func boxBlurAlpha(m *image.Alpha, radius int) {
 	tmp := make([]uint8, w*h)
 	window := 2*radius + 1
 	// Horizontal.
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := m.Pix[y*m.Stride : y*m.Stride+w]
 		sum := 0
 		for x := -radius; x <= radius; x++ {
 			sum += int(row[clampInt(x, w)])
 		}
-		for x := 0; x < w; x++ {
+		for x := range w {
 			tmp[y*w+x] = uint8(sum / window)
 			sum += int(row[clampInt(x+radius+1, w)]) - int(row[clampInt(x-radius, w)])
 		}
 	}
 	// Vertical.
-	for x := 0; x < w; x++ {
+	for x := range w {
 		sum := 0
 		for y := -radius; y <= radius; y++ {
 			sum += int(tmp[clampInt(y, h)*w+x])
 		}
-		for y := 0; y < h; y++ {
+		for y := range h {
 			m.Pix[y*m.Stride+x] = uint8(sum / window)
 			sum += int(tmp[clampInt(y+radius+1, h)*w+x]) - int(tmp[clampInt(y-radius, h)*w+x])
 		}
