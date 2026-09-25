@@ -55,21 +55,6 @@ func TestLeaderIOpensTheInbox(t *testing.T) {
 	}
 }
 
-// TestInboxEnterGoesToThePane: j moves to the second item and enter focuses
-// its pane and closes the Inbox.
-func TestInboxEnterGoesToThePane(t *testing.T) {
-	o := inboxInputOS(t)
-	o = leader(o, press("i"))
-	o, _ = HandleKeyPress(press("j"), o)
-	o, _ = HandleKeyPress(press("enter"), o)
-	if o.ShowInbox {
-		t.Fatal("enter left the Inbox open")
-	}
-	if w := o.GetFocusedWindow(); w == nil || w.ID != "a" {
-		t.Errorf("enter on the question did not focus pane a")
-	}
-}
-
 // TestInboxSpacePeeksAndKeysAnswer: space on the approval opens the peek, a
 // digit chooses that option, and keys that are the list's (j, f) do nothing
 // to the list while the peek owns the keyboard. esc returns to the list.

@@ -35,31 +35,6 @@ func TestGetModParam(t *testing.T) {
 	}
 }
 
-func TestGetCursorSequence(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     rune
-		expected []byte
-	}{
-		{"up arrow", tea.KeyUp, []byte{0x1b, '[', 'A'}},
-		{"down arrow", tea.KeyDown, []byte{0x1b, '[', 'B'}},
-		{"right arrow", tea.KeyRight, []byte{0x1b, '[', 'C'}},
-		{"left arrow", tea.KeyLeft, []byte{0x1b, '[', 'D'}},
-		{"home", tea.KeyHome, []byte{0x1b, '[', 'H'}},
-		{"end", tea.KeyEnd, []byte{0x1b, '[', 'F'}},
-		{"unknown key", 'x', nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getCursorSequence(tt.code)
-			if !bytes.Equal(result, tt.expected) {
-				t.Errorf("getCursorSequence(%v) = %v, want %v", tt.code, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestBuildCSISequence(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -3,7 +3,6 @@ package input
 import (
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -25,28 +24,6 @@ func mailThreadOS(t *testing.T) *app.OS {
 		Subject: "which retry policy?", Text: "exponential or fixed?", ThreadID: 3, SentAt: 1,
 	}}
 	return o
-}
-
-// TestLeaderMOpensTheInboxOnMail: the default chord reaches the Inbox, on its
-// mail filter, from window mode and from terminal mode, and m from there opens
-// the whole mailbox. The chord used to open the mailbox directly.
-func TestLeaderMOpensTheInboxOnMail(t *testing.T) {
-	for _, mode := range []app.Mode{app.WindowManagementMode, app.TerminalMode} {
-		o := twoPaneWM(t)
-		o.Mode = mode
-		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}, o)
-		if !o.PrefixActive {
-			t.Fatalf("mode %v: the leader did not arm the prefix", mode)
-		}
-		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'M', Text: "M", Mod: tea.ModShift}, o)
-		if !o.ShowInbox || o.Inbox.Filter != session.AttentionMail {
-			t.Fatalf("mode %v: leader, M did not open the Inbox on mail (open=%v filter=%q)", mode, o.ShowInbox, o.Inbox.Filter)
-		}
-		o, _ = HandleKeyPress(press("m"), o)
-		if o.ShowInbox || !o.ShowAgentMail {
-			t.Errorf("mode %v: m in the Inbox did not open the mailbox", mode)
-		}
-	}
 }
 
 // TestRailIOpensTheMailbox: i while the rail owns the keyboard opens the

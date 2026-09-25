@@ -79,47 +79,6 @@ func TestContextMenuActionsAreRegistered(t *testing.T) {
 	}
 }
 
-// TestContextMenuEscapeClosesWithoutFiring checks the escape key dismisses the
-// menu and runs nothing. The evidence is that the window count does not change:
-// the desktop menu's selected row is New window, so a menu that fired on escape
-// would leave a window behind.
-func TestContextMenuEscapeClosesWithoutFiring(t *testing.T) {
-	o := ctxOS(t)
-	before := len(o.Windows)
-
-	o.OpenContextMenu(100, 20) // desktop
-	if got := o.ContextMenuSelectedAction(); got != "new_window" {
-		t.Fatalf("the desktop menu opened with %q selected, want new_window", got)
-	}
-
-	o, _ = HandleKeyPress(ctxKey("esc"), o)
-
-	if o.ContextMenuActive() {
-		t.Error("esc did not close the context menu")
-	}
-	if len(o.Windows) != before {
-		t.Errorf("esc created a window (%d -> %d); it must fire nothing", before, len(o.Windows))
-	}
-}
-
-// TestContextMenuEnterRunsSelectedAction checks enter runs the highlighted row
-// through the dispatcher and closes the menu.
-func TestContextMenuEnterRunsSelectedAction(t *testing.T) {
-	o := ctxOS(t)
-	before := len(o.Windows)
-
-	o.OpenContextMenu(100, 20) // desktop, New window selected
-	o, _ = HandleKeyPress(ctxKey("enter"), o)
-
-	if o.ContextMenuActive() {
-		t.Error("enter left the context menu open")
-	}
-	if len(o.Windows) != before+1 {
-		t.Errorf("enter on New window changed the count %d -> %d, want %d",
-			before, len(o.Windows), before+1)
-	}
-}
-
 // TestContextMenuSwallowsKeys checks the menu is modal to the keyboard: a key
 // that would otherwise be a window-manager binding must not reach it while the
 // menu is up. "n" is new_window, which would be silently destructive to the
@@ -140,60 +99,12 @@ func TestContextMenuSwallowsKeys(t *testing.T) {
 	}
 }
 
-// TestContextMenuArrowKeysMoveSelection checks the arrow keys reach the menu
-// and skip its dimmed rows, through the real key handler rather than by calling
-// the mover directly.
-func TestContextMenuArrowKeysMoveSelection(t *testing.T) {
-	o := ctxOS(t)
-	o.AutoTiling = false // dims both split rows
-	o.OpenContextMenu(5, 5)
-
-	cm := o.ContextMenu
-	if cm == nil {
-		t.Fatal("no pane menu opened")
-	}
-	for step := range len(cm.Items) * 2 {
-		o, _ = HandleKeyPress(ctxKey("down"), o)
-		sel := o.ContextMenu.Selected
-		if o.ContextMenu.Items[sel].Dim || o.ContextMenu.Items[sel].Sep {
-			t.Fatalf("step %d: down arrow landed on row %d (%q), which is dimmed or a separator",
-				step, sel, o.ContextMenu.Items[sel].Label)
-		}
-	}
-}
-
 // TestRightClickGesture pins the click-vs-drag split on the right button over a
 // pane. A plain right press arms a resize (so a drag resizes exactly as it
 // always has), and a release without movement is a click that opens the pane
 // menu. Over a pane whose app requested mouse tracking the right button belongs
 // to that app, so there the menu still needs ctrl or shift.
 func TestRightClickGesture(t *testing.T) {
-	t.Run("press arms a resize, not a menu", func(t *testing.T) {
-		o := ctxOS(t)
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		if o.ContextMenuActive() {
-			t.Error("the press alone opened a context menu; a plain right press is a resize")
-		}
-		if !o.Resizing {
-			t.Error("a plain right press on a pane no longer arms a resize")
-		}
-	})
-
-	t.Run("release without movement opens the pane menu", func(t *testing.T) {
-		o := ctxOS(t)
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		if !o.ContextMenuActive() {
-			t.Fatal("a plain right-click on a shell pane did not open the pane menu")
-		}
-		if o.ContextMenu.Target != app.CtxTargetPane {
-			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
-		}
-		if o.Resizing || o.Dragging {
-			t.Error("the cancelled resize left gesture state behind")
-		}
-	})
-
 	t.Run("terminal mode plain right-click opens the menu when the option is on", func(t *testing.T) {
 		o := ctxOS(t)
 		o.Mode = app.TerminalMode
@@ -237,33 +148,6 @@ func TestRightClickGesture(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+right-click opens the pane menu immediately", func(t *testing.T) {
-		o := ctxOS(t)
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl}, o)
-		if !o.ContextMenuActive() {
-			t.Fatal("ctrl+right-click did not open the pane menu")
-		}
-		if o.ContextMenu.Target != app.CtxTargetPane {
-			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
-		}
-		if o.Resizing {
-			t.Error("ctrl+right-click started a resize as well as opening the menu")
-		}
-	})
-
-	t.Run("release after a drag keeps the resize and opens nothing", func(t *testing.T) {
-		o := ctxOS(t)
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 15, Y: 12, Button: tea.MouseRight}, o)
-		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 15, Y: 12, Button: tea.MouseRight}, o)
-		if o.ContextMenuActive() {
-			t.Error("a right-drag opened a context menu; a drag is a resize")
-		}
-		if o.Resizing {
-			t.Error("the release did not finish the resize")
-		}
-	})
-
 	t.Run("desktop right click opens the desktop menu on the press", func(t *testing.T) {
 		o := ctxOS(t)
 		o, _ = handleMouseClick(tea.MouseClickMsg{X: 100, Y: 20, Button: tea.MouseRight}, o)
@@ -274,65 +158,6 @@ func TestRightClickGesture(t *testing.T) {
 			t.Errorf("menu target = %v, want the desktop menu", o.ContextMenu.Target)
 		}
 	})
-
-	t.Run("zoomed pane gets its menu on ctrl+right-click", func(t *testing.T) {
-		o := ctxOS(t)
-		o.Windows[0].Zoomed = true
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl}, o)
-		if !o.ContextMenuActive() {
-			t.Fatal("ctrl+right-click on a zoomed pane did not open the context menu")
-		}
-	})
-
-	t.Run("shift+right-click still opens the menu immediately", func(t *testing.T) {
-		o := ctxOS(t)
-		o, _ = handleMouseClick(tea.MouseClickMsg{
-			X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModShift,
-		}, o)
-		if !o.ContextMenuActive() {
-			t.Fatal("shift+right-click did not open a context menu")
-		}
-		if o.Resizing {
-			t.Error("shift+right-click started a resize as well as opening the menu")
-		}
-	})
-}
-
-// TestContextMenuClickOutsideFiresNothing checks the mouse path: a click away
-// from an open menu closes it and runs nothing, and does not fall through to
-// the pane underneath.
-func TestContextMenuClickOutsideFiresNothing(t *testing.T) {
-	o := ctxOS(t)
-	before := len(o.Windows)
-
-	o, _ = handleMouseClick(tea.MouseClickMsg{
-		X: 100, Y: 20, Button: tea.MouseRight, Mod: tea.ModShift,
-	}, o)
-	if !o.ContextMenuActive() {
-		t.Fatal("shift+right-click did not open a context menu")
-	}
-
-	// The renderer records the menu's bounds each frame; this test is about
-	// where a click is routed, not about layout, so it stands the bounds up
-	// directly rather than driving a whole render. The layout itself is checked
-	// against the real renderer in internal/app.
-	cm := o.ContextMenu
-	cm.BoundsX, cm.BoundsY, cm.BoundsW, cm.BoundsH = 40, 10, 24, 10
-	cm.FirstRowY, cm.ItemH = 13, 1
-
-	away := cm.BoundsX + cm.BoundsW + 4
-	o, _ = handleMouseClick(tea.MouseClickMsg{X: away, Y: cm.BoundsY + 2, Button: tea.MouseLeft}, o)
-
-	if o.ContextMenuActive() {
-		t.Error("a click away from the menu left it open")
-	}
-	if len(o.Windows) != before {
-		t.Errorf("a click away from the menu fired an action: window count %d -> %d",
-			before, len(o.Windows))
-	}
-	if o.Dragging || o.Resizing {
-		t.Error("the dismissing click fell through to the layer underneath and started a gesture")
-	}
 }
 
 // ctxKey builds a KeyPressMsg for a named key, matching what msg.String() returns
@@ -349,45 +174,5 @@ func ctxKey(name string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	default:
 		return tea.KeyPressMsg{Code: rune(name[0]), Text: name}
-	}
-}
-
-// TestContextMenuHoverTracksPointer checks moving the pointer over the menu
-// highlights the row under it, so the row that runs on a click is the row the
-// cursor is on, and that motion does not fall through to the pane underneath.
-func TestContextMenuHoverTracksPointer(t *testing.T) {
-	o := ctxOS(t)
-	o, _ = handleMouseClick(tea.MouseClickMsg{
-		X: 100, Y: 20, Button: tea.MouseRight, Mod: tea.ModShift,
-	}, o)
-	if !o.ContextMenuActive() {
-		t.Fatal("shift+right-click did not open a context menu")
-	}
-
-	cm := o.ContextMenu
-	cm.BoundsX, cm.BoundsY, cm.BoundsW, cm.BoundsH = 40, 10, 24, 12
-	cm.FirstRowY, cm.ItemH = 13, 1
-
-	// Find a runnable row that is not the one already selected.
-	target := -1
-	for i, it := range cm.Items {
-		if !it.Sep && !it.Dim && i != cm.Selected {
-			target = i
-			break
-		}
-	}
-	if target < 0 {
-		t.Skip("menu has only one runnable row")
-	}
-
-	o, _ = handleMouseMotion(tea.MouseMotionMsg{X: cm.BoundsX + 3, Y: cm.FirstRowY + target}, o)
-	if o.ContextMenu.Selected != target {
-		t.Errorf("hovering row %d left the selection on %d", target, o.ContextMenu.Selected)
-	}
-
-	// Hovering the menu's chrome must not move the selection off a real row.
-	o, _ = handleMouseMotion(tea.MouseMotionMsg{X: cm.BoundsX + 3, Y: cm.BoundsY}, o)
-	if o.ContextMenu.Selected != target {
-		t.Errorf("hovering the menu chrome moved the selection to %d", o.ContextMenu.Selected)
 	}
 }

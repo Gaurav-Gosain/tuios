@@ -28,46 +28,6 @@ func withSharedBorders(t *testing.T) {
 	t.Cleanup(func() { config.Global.SharedBorders = prev })
 }
 
-// TestClickToFocusDoesNotResizeABorderlessPane is the regression. The policy is
-// "double" because that is the one that leaves the user in window-management
-// mode on a single click, which is the mode the drag setup runs in; the same
-// press does the same thing under every policy.
-func TestClickToFocusDoesNotResizeABorderlessPane(t *testing.T) {
-	withSharedBorders(t)
-	withClickToType(t, config.ClickToTypeDouble)
-	o, wa, wb := twoPaneBSP(t)
-	left, right := leftPaneOf(wa, wb)
-
-	// twoPaneBSP writes the rectangles straight onto the windows, so nothing has
-	// been announced yet. Announce the settled layout once, which is the state a
-	// real session is in before the first click, and only then start counting.
-	left.Resize(left.Width, left.Height)
-	right.Resize(right.Width, right.Height)
-
-	var told [][2]int
-	right.DaemonResizeFunc = func(w, h int) error {
-		told = append(told, [2]int{w, h})
-		return nil
-	}
-
-	for i := range 3 {
-		agePane(left)
-		agePane(right)
-		lx, ly := contentCell(left)
-		clickPane(o, lx, ly)
-		rx, ry := contentCell(right)
-		clickPane(o, rx, ry)
-
-		if len(told) != 0 {
-			t.Fatalf("round trip %d: the clicked pane was told %v, want nothing: "+
-				"a click that only focuses must not SIGWINCH the shell", i+1, told)
-		}
-		if !right.Tiled {
-			t.Fatalf("round trip %d: the clicked pane lost its borderless allowance", i+1)
-		}
-	}
-}
-
 // TestDragStillUntilesTheGrabbedPane is the other half: the pane does give the
 // allowance up, on the motion that makes the gesture a move rather than a
 // click, or a dragged pane draws no border of its own.

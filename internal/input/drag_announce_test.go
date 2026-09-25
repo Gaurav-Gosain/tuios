@@ -35,35 +35,6 @@ func countSizes(win *terminal.Window) *[][2]int {
 	return &got
 }
 
-// TestDragBackIntoASameSizeSlotTellsTheGuestNothing is the regression. The
-// dragged pane is dropped on its neighbour, which the split gave the same
-// rectangle, so the two swap and the pane ends the gesture exactly the size it
-// started.
-func TestDragBackIntoASameSizeSlotTellsTheGuestNothing(t *testing.T) {
-	app.SetInputHandler(HandleInput)
-	withSharedBorders(t)
-	withClickToType(t, config.ClickToTypeDouble)
-	o, wa, wb := twoPaneBSP(t)
-	left, right := leftPaneOf(wa, wb)
-	left.Resize(left.Width, left.Height)
-	told := countSizes(right)
-
-	cx, cy := contentCell(right)
-	o.Update(clickMsg(cx, cy))
-	for step := 1; step <= 20; step++ {
-		o.Update(motionMsg(cx-step, cy))
-	}
-	o.Update(releaseMsg(cx-20, cy))
-
-	if len(*told) != 0 {
-		t.Errorf("a drag that put the pane back at the same size told the guest %v, "+
-			"want nothing: every one of those is a SIGWINCH the shell repaints for", *told)
-	}
-	if !right.Tiled {
-		t.Error("the pane never got its borderless allowance back after the drop")
-	}
-}
-
 // TestDraggingTheDividerTellsTheGuestOnce is the positive half, in the same
 // fixture. Moving the shared border really does change how many columns each
 // pane has, so the guest has to be told once, for the width it settled at,

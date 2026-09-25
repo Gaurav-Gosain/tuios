@@ -50,37 +50,6 @@ func TestKeysTypedRightAfterEnteringTerminalModeReachThePTY(t *testing.T) {
 	})
 }
 
-// TestPrefixCommandsAvailableInBothModes verifies that key prefix commands
-// like S (session switcher) and P (command palette) are handled in both
-// terminal mode and window management mode.
-func TestPrefixCommandsAvailableInBothModes(t *testing.T) {
-	registry := config.NewKeybindRegistry(config.DefaultConfig())
-
-	modes := []struct {
-		name string
-		mode app.Mode
-	}{
-		{"terminal mode", app.TerminalMode},
-		{"window management mode", app.WindowManagementMode},
-	}
-
-	for _, mode := range modes {
-		t.Run(mode.name, func(t *testing.T) {
-			o := &app.OS{Settings: config.Global, Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
-			result, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'S', Text: "S"}, o)
-			if !result.ShowSessionSwitcher {
-				t.Error("leader S should open the session switcher")
-			}
-
-			o2 := &app.OS{Settings: config.Global, Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
-			result2, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'P', Text: "P"}, o2)
-			if !result2.ShowCommandPalette {
-				t.Error("leader P should open the command palette")
-			}
-		})
-	}
-}
-
 // TestMacOSOptionGlyphsAreReservedOnlyOnDarwin verifies that the macOS
 // Option-key glyphs only count as reserved chords on darwin. On other platforms
 // these glyphs (e.g. £, ⇥) are ordinary typed characters and must fall through

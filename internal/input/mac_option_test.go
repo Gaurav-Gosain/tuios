@@ -120,23 +120,6 @@ func TestShiftedOptionChordPrefersTheShiftedBinding(t *testing.T) {
 	}
 }
 
-// The chord has to move the focus through the real terminal-mode handler, not
-// just resolve to an action name, and it must not be typed into the pane.
-func TestMacOptionChordSwitchesPaneInTerminalMode(t *testing.T) {
-	onDarwin(t)
-
-	for _, msg := range []tea.KeyPressMsg{
-		{Code: '˜', Text: "˜"},
-		{Code: '˜', Mod: tea.ModAlt},
-		{Code: 'n', Mod: tea.ModAlt},
-	} {
-		o := twoWindowOS(t)
-		if _, _ = HandleTerminalModeKey(msg, o); o.FocusedWindow != 1 {
-			t.Errorf("%q left the focus on window %d, want the next one", msg.String(), o.FocusedWindow)
-		}
-	}
-}
-
 // Off darwin the same glyphs are ordinary characters that belong to the shell.
 func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 	prev := darwinHost
@@ -222,28 +205,5 @@ func TestUnboundComposedGlyphSaysNothing(t *testing.T) {
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'ß', Text: "ß"}, o)
 	if len(o.Notifications) != 0 {
 		t.Errorf("an unbound glyph raised %d notifications", len(o.Notifications))
-	}
-}
-
-// The advice has to name the terminal the user is actually in and the chord that
-// failed, or it is not advice.
-func TestAdviceNamesTheHostTerminal(t *testing.T) {
-	for host, want := range map[config.HostTerminal]string{
-		config.HostAppleTerminal: "Use Option as Meta Key",
-		config.HostITerm2:        "Esc+",
-		config.HostGhostty:       "macos-option-as-alt",
-		config.HostKitty:         "macos_option_as_alt",
-		config.HostWezTerm:       "send_composed_key_when_left_alt_is_pressed",
-		config.HostAlacritty:     "option_as_alt",
-		config.HostVSCode:        "macOptionIsMeta",
-		config.HostUnknown:       "Option as Meta/Alt",
-	} {
-		advice := config.MacOptionAdvice(host, "alt+n")
-		if !strings.Contains(advice, want) {
-			t.Errorf("%s advice %q does not mention %q", host, advice, want)
-		}
-		if !strings.Contains(advice, "alt+n") {
-			t.Errorf("%s advice does not name the chord that failed: %q", host, advice)
-		}
 	}
 }

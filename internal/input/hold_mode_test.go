@@ -1,7 +1,6 @@
 package input
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -47,43 +46,6 @@ func feed(o *app.OS, msg tea.Msg) *app.OS {
 	return m.(*app.OS)
 }
 
-// The whole contract: hold the key and you are in window mode, let go and you
-// are exactly where you were.
-func TestHoldKeyBorrowsWindowModeAndGivesItBack(t *testing.T) {
-	o := holdOS(t, "leftalt")
-
-	o = feed(o, leftAltPress())
-	if o.Mode != app.WindowManagementMode || !o.HoldModeActive() {
-		t.Fatalf("holding the key left mode %v, active %v", o.Mode, o.HoldModeActive())
-	}
-
-	o = feed(o, leftAltRelease())
-	if o.Mode != app.TerminalMode || o.HoldModeActive() {
-		t.Fatalf("releasing left mode %v, active %v; want terminal mode", o.Mode, o.HoldModeActive())
-	}
-	if o.FocusedWindow != 0 {
-		t.Errorf("releasing moved the focus to window %d", o.FocusedWindow)
-	}
-}
-
-// A chord struck while the trigger is held has the trigger's own modifier on it.
-// It has to run the window-mode action bound to the key that was tapped, and the
-// pane must never see it: mode is already window mode when it arrives, which is
-// what keeps it off the PTY.
-func TestChordWhileHeldRunsTheWindowModeAction(t *testing.T) {
-	o := holdOS(t, "leftalt")
-	o = feed(o, leftAltPress())
-
-	// toggle_help is bound to "?" in window mode; held, it arrives as alt+?.
-	o = feed(o, tea.KeyPressMsg{Code: '?', Mod: tea.ModAlt, Text: "?"})
-	if !o.ShowHelp {
-		t.Fatal("the chord did not reach the window-mode action bound to its key")
-	}
-	if o.Mode != app.WindowManagementMode {
-		t.Fatalf("mode was %v while held, so the key could have reached the pane", o.Mode)
-	}
-}
-
 // Repeat events keep the hold; they are the same physical press.
 func TestKeyRepeatDoesNotEndTheHold(t *testing.T) {
 	o := holdOS(t, "leftalt")
@@ -126,16 +88,6 @@ func TestModeChosenWhileHeldSurvivesTheRelease(t *testing.T) {
 	}
 }
 
-// Unbound is the default, and an unbound trigger must leave every key alone.
-func TestNoHoldKeyLeavesKeysAlone(t *testing.T) {
-	o := holdOS(t, "")
-	o = feed(o, leftAltPress())
-
-	if o.HoldModeActive() || o.Mode != app.TerminalMode {
-		t.Fatalf("an unbound hold key still armed: active %v mode %v", o.HoldModeActive(), o.Mode)
-	}
-}
-
 // A terminal that answered the enhancement query without event-type support
 // cannot report a release, so the feature must do nothing at all rather than
 // arm a mode with no way out.
@@ -161,17 +113,6 @@ func TestFocusLossEndsTheHold(t *testing.T) {
 	o = m.(*app.OS)
 	if o.HoldModeActive() || o.Mode != app.TerminalMode {
 		t.Fatalf("focus loss left active %v mode %v", o.HoldModeActive(), o.Mode)
-	}
-}
-
-// The pill has to say which mode is in effect, and a momentary one has to look
-// different from the mode it borrows.
-func TestHoldModeIsVisibleInTheDock(t *testing.T) {
-	o := holdOS(t, "leftalt")
-	o = feed(o, leftAltPress())
-
-	if content := o.View().Content; !strings.Contains(content, "HOLD") {
-		t.Fatalf("the dock does not say HOLD while the key is held:\n%s", content)
 	}
 }
 

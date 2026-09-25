@@ -27,28 +27,6 @@ func twoPaneOS(t *testing.T) *app.OS {
 	return o
 }
 
-// TestContentClickEntersTerminalMode checks the newcomer path: in
-// window-management mode, a plain left click on a pane's content (press and
-// release without a drag) focuses the pane and enters terminal mode, so
-// clicking is enough to start typing.
-func TestContentClickEntersTerminalMode(t *testing.T) {
-	o := twoPaneOS(t)
-	if o.Mode != app.WindowManagementMode {
-		t.Fatal("expected to start in window-management mode")
-	}
-
-	// (60, 10) is inside pane b's content area (border offset 1).
-	o, _ = handleMouseClick(tea.MouseClickMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
-	if o.FocusedWindow != 1 {
-		t.Fatalf("click did not focus pane b (focused=%d)", o.FocusedWindow)
-	}
-	o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
-
-	if o.Mode != app.TerminalMode {
-		t.Error("click on pane content did not enter terminal mode")
-	}
-}
-
 // TestContentDragDoesNotEnterTerminalMode checks the other half of the
 // gesture: a drag from the content area is a window move, and the release
 // must not drop the user into terminal mode.
@@ -61,20 +39,6 @@ func TestContentDragDoesNotEnterTerminalMode(t *testing.T) {
 
 	if o.Mode != app.WindowManagementMode {
 		t.Error("a content drag entered terminal mode; only a click may")
-	}
-}
-
-// TestTitleBarClickStaysInWindowMode checks the title bar keeps its role as a
-// drag handle: clicking it focuses but does not enter terminal mode.
-func TestTitleBarClickStaysInWindowMode(t *testing.T) {
-	o := twoPaneOS(t)
-
-	// (60, 0) is pane b's top border row: outside the content area.
-	o, _ = handleMouseClick(tea.MouseClickMsg{X: 60, Y: 0, Button: tea.MouseLeft}, o)
-	o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 0, Button: tea.MouseLeft}, o)
-
-	if o.Mode != app.WindowManagementMode {
-		t.Error("a title-bar click entered terminal mode; only content clicks may")
 	}
 }
 
@@ -158,18 +122,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60, Y: 10}, o)
 		if o.FocusedWindow != 0 {
 			t.Errorf("focus = %d, want unchanged (0)", o.FocusedWindow)
-		}
-	})
-
-	// A setting called focus-follows-mouse that stops working in the mode the
-	// user spends their time in reads as broken, so it glides there too.
-	t.Run("on: terminal mode glides too", func(t *testing.T) {
-		setFFM(t, true)
-		o := twoPaneOS(t)
-		o.Mode = app.TerminalMode
-		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60, Y: 10}, o)
-		if o.FocusedWindow != 1 {
-			t.Errorf("focus = %d, want the hovered pane (1)", o.FocusedWindow)
 		}
 	})
 

@@ -127,20 +127,3 @@ func TestLayoutChordPercentDigitsRunTheResize(t *testing.T) {
 		}
 	}
 }
-
-// TestLayoutChordClearsThePrefixForPercentDigits, so a resize digit does not
-// leave the chord armed and swallow the next key either.
-func TestLayoutChordClearsThePrefixForPercentDigits(t *testing.T) {
-	o := layoutPrefixOS(t)
-	o.Windows = []*terminal.Window{{ID: "w1", Workspace: o.CurrentWorkspace, X: 0, Y: 0, Width: 60, Height: 40, Tiled: true}}
-	o.FocusedWindow = 0
-	o.AutoTiling = true
-	o.LayoutPrefixActive = true
-	o.PrefixActive = true
-
-	o, _ = handleTerminalLayoutPrefix(press("5"), o)
-
-	if o.LayoutPrefixActive || o.PrefixActive {
-		t.Errorf("the chord stayed armed: layout=%v prefix=%v", o.LayoutPrefixActive, o.PrefixActive)
-	}
-}

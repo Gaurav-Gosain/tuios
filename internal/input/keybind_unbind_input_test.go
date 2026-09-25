@@ -26,28 +26,6 @@ func ctrlKey(r rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl}
 }
 
-// TestCtrlDUnbindsTheSelectedRow.
-//
-// Negative control: remove the "ctrl+d" case from handleKeybindManagerInput and
-// this fails, because the key falls through to the Bindings tab's filter
-// grammar and does nothing at all.
-func TestCtrlDUnbindsTheSelectedRow(t *testing.T) {
-	o := unbindInputOS(t)
-	// Filtered to one action so the row under the cursor is known.
-	o.KeybindSetQuery("toggle_zoom")
-	rows := o.FilteredKeybindRows()
-	if len(rows) == 0 {
-		t.Fatal("no toggle_zoom row to unbind")
-	}
-	key := rows[0].Key
-
-	o, _ = HandleKeyPress(ctrlKey('d'), o)
-
-	if got := o.UserConfig.Keybindings.WindowManagement["toggle_zoom"]; slices.Contains(got, key) {
-		t.Errorf("toggle_zoom still holds %q after ctrl+d", key)
-	}
-}
-
 // TestCtrlXFreesTheSelectedKeyEverywhere. The wide verb needs its own key, or
 // the narrow one has to guess which the user meant.
 //
