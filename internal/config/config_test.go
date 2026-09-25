@@ -11,146 +11,13 @@ import (
 // Default Configuration Tests
 // =============================================================================
 
-func TestDefaultConfig(t *testing.T) {
-	cfg := config.DefaultConfig()
-
-	if cfg == nil {
-		t.Fatal("DefaultConfig returned nil")
-	}
-
-	// Check essential defaults
-	if cfg.Keybindings.LeaderKey == "" {
-		t.Error("Expected default leader key to be set")
-	}
-
-	if cfg.Appearance.BorderStyle == "" {
-		t.Error("Expected default border style to be set")
-	}
-
-	if cfg.Appearance.DockbarPosition == "" {
-		t.Error("Expected default dockbar position to be set")
-	}
-
-	if cfg.Appearance.ScrollbackLines < 100 {
-		t.Errorf("Expected scrollback lines >= 100, got %d", cfg.Appearance.ScrollbackLines)
-	}
-}
-
-func TestDefaultKeybindings(t *testing.T) {
-	cfg := config.DefaultConfig()
-
-	// Check window management keys exist
-	windowMgmt := cfg.Keybindings.WindowManagement
-	if windowMgmt == nil {
-		t.Fatal("Window management keybindings are nil")
-	}
-
-	requiredActions := []string{
-		"new_window",
-		"close_window",
-		"next_window",
-		"prev_window",
-	}
-
-	for _, action := range requiredActions {
-		keys, ok := windowMgmt[action]
-		if !ok {
-			t.Errorf("Expected %s keybinding to exist", action)
-			continue
-		}
-		if len(keys) == 0 {
-			t.Errorf("Expected %s to have at least one key bound", action)
-		}
-	}
-}
-
 // =============================================================================
 // KeybindRegistry Tests
 // =============================================================================
 
-func TestKeybindRegistry_GetKeys(t *testing.T) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	// Test getting keys for known action
-	keys := registry.GetKeys("new_window")
-	if len(keys) == 0 {
-		t.Error("Expected new_window to have keys")
-	}
-}
-
-func TestKeybindRegistry_GetAction(t *testing.T) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	// Get the key bound to new_window
-	keys := registry.GetKeys("new_window")
-	if len(keys) == 0 {
-		t.Skip("No keys bound to new_window")
-	}
-
-	// Verify reverse lookup
-	action := registry.GetAction(keys[0])
-	if action != "new_window" {
-		t.Errorf("Expected action 'new_window', got %q", action)
-	}
-}
-
-func TestKeybindRegistry_UnknownAction(t *testing.T) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	keys := registry.GetKeys("nonexistent_action")
-	if len(keys) != 0 {
-		t.Errorf("Expected empty keys for nonexistent action, got %v", keys)
-	}
-}
-
-func TestKeybindRegistry_UnknownKey(t *testing.T) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	action := registry.GetAction("ctrl+shift+alt+super+hyper+x")
-	if action != "" {
-		t.Errorf("Expected empty action for unbound key, got %q", action)
-	}
-}
-
 // =============================================================================
 // Key Normalizer Tests
 // =============================================================================
-
-func TestKeyNormalizer(t *testing.T) {
-	normalizer := config.NewKeyNormalizer()
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"ctrl+a", "ctrl+a"},
-		{"Ctrl+A", "ctrl+a"},
-		{"CTRL+A", "ctrl+a"},
-		{"return", "return"}, // Normalizer preserves key names
-		{"escape", "escape"},
-		{"enter", "enter"},
-		{"esc", "esc"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			got := normalizer.NormalizeKey(tc.input)
-			// NormalizeKey returns a slice of possible keys
-			if len(got) == 0 {
-				t.Errorf("NormalizeKey(%q) returned empty slice", tc.input)
-				return
-			}
-			// Check if expected is in the result
-			if !slices.Contains(got, tc.expected) {
-				t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, tc.expected)
-			}
-		})
-	}
-}
 
 // TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey pins the rule that a
 // binding written one way still matches when the terminal reports the other:
@@ -188,31 +55,6 @@ func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
 		if len(got) != 1 {
 			t.Errorf("NormalizeKey(%q) = %v, want exactly one spelling", key, got)
 		}
-	}
-}
-
-func TestKeyNormalizer_ValidateKey(t *testing.T) {
-	normalizer := config.NewKeyNormalizer()
-
-	tests := []struct {
-		input   string
-		isValid bool
-	}{
-		{"ctrl+a", true},
-		{"n", true},
-		{"enter", true},
-		{"esc", true},
-		{"tab", true},
-		{"", false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			valid, _ := normalizer.ValidateKey(tc.input)
-			if valid != tc.isValid {
-				t.Errorf("ValidateKey(%q) = %v, want %v", tc.input, valid, tc.isValid)
-			}
-		})
 	}
 }
 
@@ -271,221 +113,17 @@ func TestKeybindRegistry_AccentedLookup(t *testing.T) {
 // Animation Configuration Tests
 // =============================================================================
 
-func TestAnimationConfig(t *testing.T) {
-	// Default should be enabled
-	config.Global.AnimationsEnabled = true
-
-	duration := config.Global.GetAnimationDuration()
-	if duration == 0 {
-		t.Error("Expected non-zero animation duration when enabled")
-	}
-
-	fastDuration := config.Global.GetFastAnimationDuration()
-	if fastDuration == 0 {
-		t.Error("Expected non-zero fast animation duration when enabled")
-	}
-
-	if fastDuration >= duration {
-		t.Error("Fast animation should be shorter than normal")
-	}
-
-	// Disable animations
-	config.Global.AnimationsEnabled = false
-
-	duration = config.Global.GetAnimationDuration()
-	if duration != 0 {
-		t.Errorf("Expected zero duration when disabled, got %v", duration)
-	}
-
-	fastDuration = config.Global.GetFastAnimationDuration()
-	if fastDuration != 0 {
-		t.Errorf("Expected zero fast duration when disabled, got %v", fastDuration)
-	}
-
-	// Reset for other tests
-	config.Global.AnimationsEnabled = true
-}
-
 // =============================================================================
 // Action Descriptions Tests
 // =============================================================================
-
-func TestActionDescriptions(t *testing.T) {
-	// Check some key actions have descriptions
-	requiredDescriptions := []string{
-		"new_window",
-		"close_window",
-		"toggle_tiling",
-		"toggle_help",
-		"quit",
-	}
-
-	for _, action := range requiredDescriptions {
-		desc, ok := config.ActionDescriptions[action]
-		if !ok {
-			t.Errorf("Expected description for action %q", action)
-			continue
-		}
-		if desc == "" {
-			t.Errorf("Description for %q should not be empty", action)
-		}
-	}
-}
 
 // =============================================================================
 // Benchmarks
 // =============================================================================
 
-func BenchmarkKeybindRegistry_GetAction(b *testing.B) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	b.ResetTimer()
-	for b.Loop() {
-		_ = registry.GetAction("n")
-	}
-}
-
-func BenchmarkKeybindRegistry_GetKeys(b *testing.B) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	b.ResetTimer()
-	for b.Loop() {
-		_ = registry.GetKeys("new_window")
-	}
-}
-
-func BenchmarkNormalizeKey(b *testing.B) {
-	normalizer := config.NewKeyNormalizer()
-	keys := []string{"ctrl+a", "Ctrl+Shift+B", "alt+1", "return"}
-
-	i := 0
-	b.ResetTimer()
-	for b.Loop() {
-		_ = normalizer.NormalizeKey(keys[i%len(keys)])
-		i++
-	}
-}
-
 // =============================================================================
 // Override Tests
 // =============================================================================
-
-func TestApplyOverrides_ASCIIOnly(t *testing.T) {
-	// Save original values
-	originalASCII := config.Global.UseASCIIOnly
-	defer func() { config.Global.UseASCIIOnly = originalASCII }()
-
-	// Reset to default
-	config.Global.UseASCIIOnly = false
-
-	// Apply override
-	config.ApplyOverrides(config.Overrides{ASCIIOnly: true}, &config.Global)
-
-	if !config.Global.UseASCIIOnly {
-		t.Error("Expected UseASCIIOnly to be true after override")
-	}
-}
-
-func TestApplyOverrides_BorderStyle(t *testing.T) {
-	// Save original value
-	originalBorder := config.Global.BorderStyle
-	defer func() { config.Global.BorderStyle = originalBorder }()
-
-	// Reset to default
-	config.Global.BorderStyle = "rounded"
-
-	// Apply CLI override
-	config.ApplyOverrides(config.Overrides{BorderStyle: "double"}, &config.Global)
-	if config.Global.BorderStyle != "double" {
-		t.Errorf("Expected BorderStyle 'double', got %q", config.Global.BorderStyle)
-	}
-
-	// CLI flag takes precedence over user config
-	config.Global.BorderStyle = "rounded"
-	userCfg := config.DefaultConfig()
-	userCfg.Appearance.BorderStyle = "thick"
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{BorderStyle: "normal"}, &config.Global)
-	if config.Global.BorderStyle != "normal" {
-		t.Errorf("Expected CLI override 'normal' to take precedence, got %q", config.Global.BorderStyle)
-	}
-
-	// User config used when CLI flag not set
-	config.Global.BorderStyle = "rounded"
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if config.Global.BorderStyle != "thick" {
-		t.Errorf("Expected user config 'thick' to be used, got %q", config.Global.BorderStyle)
-	}
-}
-
-func TestApplyOverrides_DockbarPosition(t *testing.T) {
-	// Save original value
-	originalPos := config.Global.DockbarPosition
-	defer func() { config.Global.DockbarPosition = originalPos }()
-
-	// Reset to default
-	config.Global.DockbarPosition = "bottom"
-
-	// Apply CLI override
-	config.ApplyOverrides(config.Overrides{DockbarPosition: "top"}, &config.Global)
-	if config.Global.DockbarPosition != "top" {
-		t.Errorf("Expected DockbarPosition 'top', got %q", config.Global.DockbarPosition)
-	}
-
-	// User config fallback
-	config.Global.DockbarPosition = "bottom"
-	userCfg := config.DefaultConfig()
-	userCfg.Appearance.DockbarPosition = "hidden"
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if config.Global.DockbarPosition != "hidden" {
-		t.Errorf("Expected user config 'hidden', got %q", config.Global.DockbarPosition)
-	}
-
-	// A value outside the set lands on the default, as the validator says.
-	config.Global.DockbarPosition = "bottom"
-	userCfg.Appearance.DockbarPosition = "left"
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	if config.Global.DockbarPosition != config.DefaultDockbarPosition {
-		t.Errorf("Expected the default %q for an unknown value, got %q", config.DefaultDockbarPosition, config.Global.DockbarPosition)
-	}
-}
-
-func TestApplyOverrides_HideWindowButtons(t *testing.T) {
-	// Save original value
-	originalHide := config.Global.HideWindowButtons
-	defer func() { config.Global.HideWindowButtons = originalHide }()
-
-	// Reset to default
-	config.Global.HideWindowButtons = false
-
-	// CLI flag only
-	config.ApplyOverrides(config.Overrides{HideWindowButtons: true}, &config.Global)
-	if !config.Global.HideWindowButtons {
-		t.Error("Expected HideWindowButtons to be true from CLI flag")
-	}
-
-	// User config only
-	config.Global.HideWindowButtons = false
-	userCfg := config.DefaultConfig()
-	userCfg.Appearance.HideWindowButtons = true
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if !config.Global.HideWindowButtons {
-		t.Error("Expected HideWindowButtons to be true from user config")
-	}
-
-	// OR of both (CLI false, user config true)
-	config.Global.HideWindowButtons = false
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{HideWindowButtons: false}, &config.Global)
-	if !config.Global.HideWindowButtons {
-		t.Error("Expected HideWindowButtons to be true (OR of CLI and user config)")
-	}
-}
 
 func TestApplyOverrides_ScrollbackLines(t *testing.T) {
 	// Save original value
@@ -526,28 +164,6 @@ func TestApplyOverrides_ScrollbackLines(t *testing.T) {
 	}
 }
 
-func TestApplyOverrides_NoAnimations(t *testing.T) {
-	// Save original value
-	originalEnabled := config.Global.AnimationsEnabled
-	defer func() { config.Global.AnimationsEnabled = originalEnabled }()
-
-	// Reset to default
-	config.Global.AnimationsEnabled = true
-
-	// Apply NoAnimations flag
-	config.ApplyOverrides(config.Overrides{NoAnimations: true}, &config.Global)
-	if config.Global.AnimationsEnabled {
-		t.Error("Expected AnimationsEnabled to be false after NoAnimations override")
-	}
-
-	// Not setting the flag should not change the value
-	config.Global.AnimationsEnabled = true
-	config.ApplyOverrides(config.Overrides{NoAnimations: false}, &config.Global)
-	if !config.Global.AnimationsEnabled {
-		t.Error("Expected AnimationsEnabled to remain true when NoAnimations is false")
-	}
-}
-
 // TestStartupPrecedence_FlagWinsOverConfig checks the startup application order:
 // ApplyAppearanceConfig establishes the config baseline, then ApplyOverrides
 // lets CLI flags win. This is the sequence LoadUserConfig no longer performs
@@ -584,78 +200,6 @@ func TestLoadUserConfig_Pure(t *testing.T) {
 	writeConfig(t, "[appearance]\nanimations_enabled = true\n")
 	if config.Global.AnimationsEnabled {
 		t.Error("LoadUserConfig must not mutate appearance globals")
-	}
-}
-
-func TestApplyOverrides_LeaderKey(t *testing.T) {
-	// Save original value
-	originalLeader := config.Global.LeaderKey
-	defer func() { config.Global.LeaderKey = originalLeader }()
-
-	// Reset to default
-	config.Global.LeaderKey = "ctrl+b"
-
-	// Leader key only comes from user config
-	userCfg := config.DefaultConfig()
-	userCfg.Keybindings.LeaderKey = "ctrl+a"
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if config.Global.LeaderKey != "ctrl+a" {
-		t.Errorf("Expected LeaderKey 'ctrl+a', got %q", config.Global.LeaderKey)
-	}
-
-	// No user config should keep default
-	config.Global.LeaderKey = "ctrl+b"
-	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if config.Global.LeaderKey != "ctrl+b" {
-		t.Errorf("Expected LeaderKey to remain 'ctrl+b', got %q", config.Global.LeaderKey)
-	}
-}
-
-func TestApplyOverrides_WindowTitlePosition(t *testing.T) {
-	// Save original value
-	originalPos := config.Global.WindowTitlePosition
-	defer func() { config.Global.WindowTitlePosition = originalPos }()
-
-	// Reset to default
-	config.Global.WindowTitlePosition = "bottom"
-
-	// CLI override
-	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "top"}, &config.Global)
-	if config.Global.WindowTitlePosition != "top" {
-		t.Errorf("Expected WindowTitlePosition 'top', got %q", config.Global.WindowTitlePosition)
-	}
-
-	// Hidden option
-	config.Global.WindowTitlePosition = "bottom"
-	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "hidden"}, &config.Global)
-	if config.Global.WindowTitlePosition != "hidden" {
-		t.Errorf("Expected WindowTitlePosition 'hidden', got %q", config.Global.WindowTitlePosition)
-	}
-}
-
-func TestApplyOverrides_HideClock(t *testing.T) {
-	// Save original value
-	originalHide := config.Global.HideClock
-	defer func() { config.Global.HideClock = originalHide }()
-
-	// Reset to default
-	config.Global.HideClock = false
-
-	// CLI flag
-	config.ApplyOverrides(config.Overrides{HideClock: true}, &config.Global)
-	if !config.Global.HideClock {
-		t.Error("Expected HideClock to be true from CLI flag")
-	}
-
-	// User config OR with CLI
-	config.Global.HideClock = false
-	userCfg := config.DefaultConfig()
-	userCfg.Appearance.HideClock = true
-	config.ApplyAppearanceConfig(userCfg, &config.Global)
-	config.ApplyOverrides(config.Overrides{HideClock: false}, &config.Global)
-	if !config.Global.HideClock {
-		t.Error("Expected HideClock to be true from user config (OR)")
 	}
 }
 

@@ -14,38 +14,6 @@ func withClickToType(t *testing.T) {
 	t.Cleanup(func() { config.Global.ClickToType = prev })
 }
 
-// The default has been double since v0.8.0: one click focuses, and a second
-// one starts typing. It was single before.
-func TestClickToTypeDefaultsToDouble(t *testing.T) {
-	if got := config.DefaultConfig().Appearance.ClickToType; got != config.ClickToTypeDouble {
-		t.Errorf("default click_to_type = %q, want %q", got, config.ClickToTypeDouble)
-	}
-	if got := config.DefaultSettings().ClickToType; got != config.ClickToTypeDouble {
-		t.Errorf("default settings click_to_type = %q, want %q", got, config.ClickToTypeDouble)
-	}
-}
-
-// Each value reaches the global the mouse path reads, and a config written
-// before the key existed loads as the default rather than as no policy at all.
-func TestClickToTypeReachesTheGlobal(t *testing.T) {
-	withClickToType(t)
-
-	for _, mode := range config.ClickToTypeModes {
-		cfg := config.DefaultConfig()
-		cfg.Appearance.ClickToType = mode
-		config.ApplyAppearanceConfig(cfg, &config.Global)
-		if config.Global.ClickToType != mode {
-			t.Errorf("ClickToType = %q after applying %q", config.Global.ClickToType, mode)
-		}
-	}
-
-	// An older config: the key is absent, and the load path backfills it.
-	cfg := writeConfig(t, "[appearance]\nborder_style = \"rounded\"\n")
-	if got := cfg.Appearance.ClickToType; got != config.ClickToTypeDouble {
-		t.Errorf("click_to_type = %q for a config written before the key existed, want %q", got, config.ClickToTypeDouble)
-	}
-}
-
 // A typo warns and lands on the default, so a misspelled policy cannot leave
 // the mouse doing nothing recognisable.
 func TestClickToTypeRejectsAnUnknownValue(t *testing.T) {

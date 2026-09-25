@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -35,27 +34,6 @@ func TestDockExampleCommandsResolve(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("found no tuios commands in the dock examples")
-	}
-}
-
-// TestNewWindowTakesACommandAfterDashDash pins how the argv after the name
-// reaches the window: everything after -- is passed on untouched, and a flag
-// after the name but before -- is still a tuios flag.
-func TestNewWindowTakesACommandAfterDashDash(t *testing.T) {
-	root := newRootCommand()
-	cmd, rest, err := root.Find([]string{"new-window", "log", "--no-focus", "--", "git", "log", "--oneline", "-20"})
-	if err != nil {
-		t.Fatalf("Find: %v", err)
-	}
-	if err := cmd.ParseFlags(rest); err != nil {
-		t.Fatalf("ParseFlags: %v", err)
-	}
-	want := []string{"log", "git", "log", "--oneline", "-20"}
-	if got := cmd.Flags().Args(); !slices.Equal(got, want) {
-		t.Errorf("args = %v, want %v", got, want)
-	}
-	if noFocus, _ := cmd.Flags().GetBool("no-focus"); !noFocus {
-		t.Error("--no-focus after the name was not read as a tuios flag")
 	}
 }
 

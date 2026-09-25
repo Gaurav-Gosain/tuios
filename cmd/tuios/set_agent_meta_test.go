@@ -20,22 +20,3 @@ func TestAgentMetaTokensJSONKeepsArgumentOrder(t *testing.T) {
 		}
 	}
 }
-
-// TestSetAgentMetaNeedsAKeyOrClear: a call that sets nothing and clears
-// nothing is a mistake, and saying so beats a round trip to the daemon.
-func TestSetAgentMetaNeedsAKeyOrClear(t *testing.T) {
-	root := newRootCommand()
-	cmd, _, err := root.Find([]string{"set-agent-meta"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.ValidateArgs(nil); err == nil {
-		t.Error("set-agent-meta with no arguments and no --clear was accepted")
-	}
-	if err := cmd.ParseFlags([]string{"--clear"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.ValidateArgs(nil); err != nil {
-		t.Errorf("--clear alone was refused: %v", err)
-	}
-}

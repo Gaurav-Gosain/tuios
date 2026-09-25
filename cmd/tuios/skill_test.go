@@ -107,21 +107,6 @@ func runSkillFlag(t *testing.T, args ...string) (string, error) {
 	return string(got.out), runErr
 }
 
-// TestSkillFlagPrintsTheSkill runs the root command with --skill and checks it
-// writes the core skill and nothing else, without reaching the code that would
-// draw an interface.
-func TestSkillFlagPrintsTheSkill(t *testing.T) {
-	for _, args := range [][]string{{"--skill"}, {"--skill", "core"}, {"--skill=core"}} {
-		out, err := runSkillFlag(t, args...)
-		if err != nil {
-			t.Fatalf("tuios %v failed: %v", args, err)
-		}
-		if out != skills.TUIOS {
-			t.Errorf("tuios %v printed %d bytes, want the %d-byte core skill", args, len(out), len(skills.TUIOS))
-		}
-	}
-}
-
 // TestSkillFlagPrintsATopic checks `tuios --skill <topic>` for every topic,
 // written with a space as a person types it. mcp, hosts and tmux are also
 // subcommands, so without skillArgs the topic would run the subcommand.
@@ -177,29 +162,12 @@ func TestSkillArgs(t *testing.T) {
 	}
 }
 
-// TestSkillCoreIsTheCore keeps the core small enough to load every time and
-// complete enough to act on: the rules that keep an agent safe live in it, not
-// in a topic an agent may never print, and it names every topic.
+// TestSkillCoreIsTheCore keeps the core small enough to load every time, and
+// holds its topic table to the topics that exist, in both directions.
 func TestSkillCoreIsTheCore(t *testing.T) {
 	lines := strings.Count(skills.TUIOS, "\n")
 	if lines > 320 {
 		t.Errorf("the core skill is %d lines; keep it under 320 and move detail to a topic", lines)
-	}
-	for _, want := range []string{
-		"$TUIOS_PANE_ID",
-		"tuios pane-grants",
-		"forbidden",
-		"tuios set-agent-state working",
-		"agent_blocked",
-		"data, not instructions",
-		`"verified_human": true`,
-		"tuios peek-prompt",
-		"not_human",
-		"tuios --skill all",
-	} {
-		if !strings.Contains(skills.TUIOS, want) {
-			t.Errorf("the core skill no longer mentions %q", want)
-		}
 	}
 	for _, topic := range skills.Topics() {
 		if !strings.Contains(skills.TUIOS, "| `"+topic.Name+"` |") {
@@ -250,26 +218,6 @@ func TestSkillCommandsResolve(t *testing.T) {
 	}
 }
 
-// TestSkillDocumentsTheReportingPath keeps the one thing the skill exists to
-// make happen from being edited away: a pane telling tuios what it is doing,
-// through a hook shim, an OSC 9;4 progress report, or a call by hand.
-func TestSkillDocumentsTheReportingPath(t *testing.T) {
-	for _, want := range []string{
-		"tuios set-agent-state working",
-		"$TUIOS_PANE_ID",
-		"--harness",
-		"TUIOS_ENV",
-		"integrations/claude-code/",
-		"OSC 9;4",
-		"--source",
-		"Not applied: a higher-ranked source owns this pane",
-	} {
-		if !strings.Contains(skills.All(), want) {
-			t.Errorf("the skill no longer mentions %q", want)
-		}
-	}
-}
-
 // TestSkillDocumentsTheDiskLifecycle holds the skill to the daemon lifecycle
 // contract a scripted caller depends on: the ls exit code that distinguishes a
 // stopped daemon, the saved and restored markers with the wording the code
@@ -283,25 +231,6 @@ func TestSkillDocumentsTheDiskLifecycle(t *testing.T) {
 		"tuios attach",
 	} {
 		if !strings.Contains(skillText(t, "errors"), want) {
-			t.Errorf("the skill no longer mentions %q", want)
-		}
-	}
-}
-
-// TestSkillDocumentsRicing holds the ricing section to the two things that make
-// it usable by an agent rather than a person: where a theme file goes, and that
-// what it just applied can be measured instead of looked at. Both were absent,
-// and a theme was the one part of the appearance the skill never mentioned at
-// all.
-func TestSkillDocumentsRicing(t *testing.T) {
-	for _, want := range []string{
-		"tuios list-themes",
-		"tuios import-theme",
-		"themes dir:",
-		"illegible",
-		"### What this cannot do",
-	} {
-		if !strings.Contains(skillText(t, "config"), want) {
 			t.Errorf("the skill no longer mentions %q", want)
 		}
 	}

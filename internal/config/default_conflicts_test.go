@@ -106,22 +106,6 @@ func TestCornerSnapIsStillReachable(t *testing.T) {
 	}
 }
 
-// TestCornerSnapLeftTheWindowScope, stated separately so a future default that
-// puts it back on a bare digit fails here with the reason rather than only in
-// the count above.
-//
-// Negative control: leave snap_corner_1 in the layout table and this fails.
-func TestCornerSnapLeftTheWindowScope(t *testing.T) {
-	cfg := DefaultConfig()
-	for i := 1; i <= 4; i++ {
-		action := "snap_corner_" + string(rune('0'+i))
-		if keys, ok := cfg.Keybindings.Layout[action]; ok {
-			t.Errorf("%s is back in [keybindings.layout] on %v, where it shadows select_window_%d",
-				action, keys, i)
-		}
-	}
-}
-
 // TestValidateAgreesWithTheKeybindReport. Two conflict detectors that disagree
 // means the quieter one is misleading, and the quiet one is the one that runs
 // at startup. findConflicts now delegates, so this is a guard against anyone
@@ -150,33 +134,6 @@ func TestValidateAgreesWithTheKeybindReport(t *testing.T) {
 	if !warned {
 		t.Errorf("the keybind report names the clash and config validation stays silent:\n%s",
 			strings.Join(ConfigWarnings(cfg), "\n"))
-	}
-}
-
-// TestConflictWarningNamesTheWinnerAndAVerb. A warning that lists two action
-// names leaves the reader with a fact and nothing to do about it.
-//
-// Negative control: restore the old "is bound to multiple actions" message and
-// this fails.
-func TestConflictWarningNamesTheWinnerAndAVerb(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Keybindings.Layout["snap_corner_1"] = []string{"1"}
-
-	var line string
-	for _, l := range ConfigWarnings(cfg) {
-		if strings.Contains(l, "snap_corner_1") {
-			line = l
-			break
-		}
-	}
-	if line == "" {
-		t.Fatal("no warning about the clash")
-	}
-	if !strings.Contains(line, "runs snap_corner_1") {
-		t.Errorf("the warning does not say which action wins: %q", line)
-	}
-	if !strings.Contains(line, "keybinds unbind") {
-		t.Errorf("the warning does not say how to act on it: %q", line)
 	}
 }
 

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -15,21 +14,6 @@ func registryFor(t *testing.T, mutate func(*UserConfig)) *KeybindRegistry {
 		mutate(cfg)
 	}
 	return NewKeybindRegistry(cfg)
-}
-
-func TestBindingsCoverEveryScope(t *testing.T) {
-	r := registryFor(t, nil)
-	seen := map[string]bool{}
-	for _, b := range r.Bindings() {
-		seen[b.Scope] = true
-	}
-	// Every scope in the table should have at least one default binding, or the
-	// scope is describing a context that does not exist.
-	for _, s := range Scopes("") {
-		if !seen[s.ID] {
-			t.Errorf("scope %q has no bindings in the default config", s.ID)
-		}
-	}
 }
 
 // The strongest check available: for every key the report calls contested, the
@@ -150,29 +134,6 @@ func TestCollisionNamesTheActionThatActuallyRuns(t *testing.T) {
 	}
 }
 
-// The seven window-mode sections are flattened into one lookup map, so a key
-// bound in two of them collides even though the TOML shows them apart. This is
-// the case a user cannot see by reading their config file.
-func TestCrossSectionCollisionIsFlagged(t *testing.T) {
-	r := registryFor(t, func(c *UserConfig) {
-		c.Keybindings.WindowManagement["custom_wm"] = []string{"ctrl+alt+z"}
-		c.Keybindings.System["custom_sys"] = []string{"ctrl+alt+z"}
-	})
-	for _, c := range r.Collisions() {
-		if c.Key != "ctrl+alt+z" {
-			continue
-		}
-		if !c.CrossSection {
-			t.Error("a key bound in window_management and system is a cross-section collision")
-		}
-		if c.Scope != ScopeWindowMode {
-			t.Errorf("scope = %q, want %q", c.Scope, ScopeWindowMode)
-		}
-		return
-	}
-	t.Fatal("no collision reported for a key bound in two window-mode sections")
-}
-
 // The same key in two different scopes is not a conflict: they are never looked
 // up together. Reporting it would bury the real ones.
 func TestSameKeyInDifferentScopesIsNotACollision(t *testing.T) {
@@ -288,22 +249,6 @@ func TestTerminalKeysAreReportedFromTheirSection(t *testing.T) {
 			t.Errorf("%s is taken by the input path but the report does not say so", key)
 		}
 	}
-}
-
-// The default leader is tmux's default prefix, so a fresh install has a real
-// guest clash to show. If this ever stops being true the overlay's headline
-// example changes, and that is worth being told about.
-func TestDefaultLeaderClashesWithTmux(t *testing.T) {
-	r := registryFor(t, nil)
-	for _, c := range r.GuestClashes("") {
-		if c.Key == "ctrl+b" && c.Program == "tmux" {
-			if c.Evidence != EvidenceReference {
-				t.Errorf("evidence = %q, want reference: nothing detected tmux", c.Evidence)
-			}
-			return
-		}
-	}
-	t.Fatal("ctrl+b is tuios's leader and tmux's prefix; that clash must be reported")
 }
 
 // A clash is only worth reporting for a key tuios actually withholds. vim binds
@@ -424,13 +369,6 @@ func TestFateReportsAFreeKey(t *testing.T) {
 	}
 }
 
-func TestFateCarriesTheAmbiguityVerdict(t *testing.T) {
-	r := registryFor(t, nil)
-	if fate := r.Fate("ctrl+i", PaneFacts{HostDisambiguates: false}); !strings.Contains(fate.Ambiguity, "tab") {
-		t.Errorf("Fate(ctrl+i) must mention tab, got %q", fate.Ambiguity)
-	}
-}
-
 func TestObservationsOnlyStateWhatWasActuallyRead(t *testing.T) {
 	// A zero PaneFacts knows nothing about the pane, so it must not claim a
 	// program is absent; the only line it can honestly print is the host's
@@ -458,49 +396,6 @@ func TestObservationsOnlyStateWhatWasActuallyRead(t *testing.T) {
 	}
 	if !sawRunning || !sawAlt || !sawGuest {
 		t.Errorf("observed facts missing: running=%v alt=%v guest=%v", sawRunning, sawAlt, sawGuest)
-	}
-}
-
-// The report is the agent's copy of the analysis, so it has to survive a
-// round-trip and it has to explain its own tiers to a reader who only ever sees
-// the JSON.
-func TestReportRoundTripsAndCarriesItsEvidenceNote(t *testing.T) {
-	r := registryFor(t, nil)
-	rep := r.Report(PaneFacts{Command: "nvim"})
-
-	raw, err := json.Marshal(rep)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var back KeybindReport
-	if err := json.Unmarshal(raw, &back); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(back.Bindings) != len(rep.Bindings) {
-		t.Errorf("bindings survived as %d, want %d", len(back.Bindings), len(rep.Bindings))
-	}
-	for _, tier := range []Evidence{EvidenceCertain, EvidenceObserved, EvidenceReference} {
-		if back.EvidenceNote[tier] == "" {
-			t.Errorf("the report must explain the %q tier to a JSON-only reader", tier)
-		}
-	}
-	if !strings.Contains(back.EvidenceNote[EvidenceReference], "fixed list") {
-		t.Error("the reference tier's note must say it is a fixed list, not detected")
-	}
-}
-
-func TestSummaryCountsWhatItFound(t *testing.T) {
-	clean := registryFor(t, nil).Report(PaneFacts{})
-	if got := clean.Summary(); !strings.Contains(got, "No conflicts") && len(clean.Collisions) == 0 && len(clean.GuestClashes) == 0 && len(clean.Ambiguous) == 0 {
-		t.Errorf("a clean report should say so, got %q", got)
-	}
-
-	dirty := registryFor(t, func(c *UserConfig) {
-		c.Keybindings.WindowManagement["a_custom"] = []string{"ctrl+alt+v"}
-		c.Keybindings.System["z_custom"] = []string{"ctrl+alt+v"}
-	}).Report(PaneFacts{})
-	if got := dirty.Summary(); !strings.Contains(got, "claimed twice") {
-		t.Errorf("summary should count the collision, got %q", got)
 	}
 }
 

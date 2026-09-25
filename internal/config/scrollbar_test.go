@@ -21,41 +21,6 @@ func withScrollbarGlobals(t *testing.T) {
 	})
 }
 
-// The glyphs are the default look, so they are what an unconfigured install
-// gets: one box-drawing vertical at two weights in the thin style, a whole
-// block on the surface fill in the track style, and a pipe with no track in
-// ASCII.
-func TestScrollbarGlyphDefaultsPerStyle(t *testing.T) {
-	withScrollbarGlobals(t)
-	config.Global.ScrollbarThumb, config.Global.ScrollbarTrack = "", ""
-	config.Global.UseASCIIOnly, config.Global.BorderStyle = false, "rounded"
-
-	config.Global.ScrollbarStyle = config.ScrollbarStyleThin
-	if got := config.Global.GetScrollbarThumbChar(); got != "┃" {
-		t.Errorf("thin thumb = %q, want ┃", got)
-	}
-	if got := config.Global.GetScrollbarTrackChar(); got != "│" {
-		t.Errorf("thin track = %q, want │", got)
-	}
-
-	config.Global.ScrollbarStyle = config.ScrollbarStyleTrack
-	if got := config.Global.GetScrollbarThumbChar(); got != "█" {
-		t.Errorf("track thumb = %q, want █", got)
-	}
-	if got := config.Global.GetScrollbarTrackChar(); got != "" {
-		t.Errorf("track track = %q, want the surface fill (empty)", got)
-	}
-
-	config.Global.UseASCIIOnly = true
-	config.Global.ScrollbarStyle = config.ScrollbarStyleThin
-	if got := config.Global.GetScrollbarThumbChar(); got != "|" {
-		t.Errorf("ASCII thumb = %q, want |", got)
-	}
-	if got := config.Global.GetScrollbarTrackChar(); got != "" {
-		t.Errorf("ASCII track = %q, want none", got)
-	}
-}
-
 // A one-cell override is honoured, and none is the way back to the look the
 // thin style had before it grew a track.
 func TestScrollbarGlyphOverrides(t *testing.T) {

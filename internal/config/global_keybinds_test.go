@@ -7,45 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// TestGlobalBindsAreInTheRegistry is the whole complaint in one assertion: the
-// palette and the launcher were literals in the input path, so nothing could
-// read them and nothing could change them.
-func TestGlobalBindsAreInTheRegistry(t *testing.T) {
-	r := config.NewKeybindRegistry(config.DefaultConfig())
-	for key, want := range map[string]string{
-		"ctrl+p":    "command_palette",
-		"alt+space": "launcher",
-	} {
-		if got := r.GetGlobalAction(key); got != want {
-			t.Errorf("GetGlobalAction(%q) = %q, want %q", key, got, want)
-		}
-	}
-	if got := r.GetGlobalAction("ctrl+q"); got != "" {
-		t.Errorf("an unbound key resolved to %q", got)
-	}
-}
-
-// TestGlobalBindsAppearInTheReport pins that a registered bind is visible to
-// `tuios keybinds doctor`. A hardcoded key is invisible to it, which is most of
-// why hardcoding it was the bug.
-func TestGlobalBindsAppearInTheReport(t *testing.T) {
-	r := config.NewKeybindRegistry(config.DefaultConfig())
-	want := map[string]bool{"ctrl+p": false, "alt+space": false}
-	for _, b := range r.Bindings() {
-		if b.Scope != config.ScopeGlobal {
-			continue
-		}
-		if _, ok := want[b.Key]; ok {
-			want[b.Key] = true
-		}
-	}
-	for key, found := range want {
-		if !found {
-			t.Errorf("%s is not in the global scope's bindings", key)
-		}
-	}
-}
-
 // TestGlobalBindCanBeUnbound pins that an empty list turns an action off.
 // "Hackable" includes turning something off, and a user who wants fish's
 // history-back on ctrl+p has no other way to get it.

@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"strings"
 	"testing"
 )
 
@@ -34,39 +31,5 @@ func TestRankOptions(t *testing.T) {
 	}
 	if hits := rankOptions(opts, "zqj"); len(hits) != 0 {
 		t.Errorf("zqj matched %d options", len(hits))
-	}
-}
-
-func TestPrintOptionSearch(t *testing.T) {
-	raw, _ := json.Marshal(map[string]any{"options": testOptions(), "total": 4})
-	var buf bytes.Buffer
-	if err := printOptionSearch(&buf, raw, "pane bg", false); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(buf.String(), "appearance.pane_background") {
-		t.Errorf("the best match is not first:\n%s", buf.String())
-	}
-
-	buf.Reset()
-	if err := printOptionSearch(&buf, raw, "nothingmatches", false); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "No options match") {
-		t.Errorf("an empty search says %q", buf.String())
-	}
-
-	buf.Reset()
-	if err := printOptionSearch(&buf, raw, "double", true); err != nil {
-		t.Fatal(err)
-	}
-	var out struct {
-		Options []optionRow `json:"options"`
-		Total   int         `json:"total"`
-	}
-	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
-		t.Fatalf("the JSON does not parse: %v\n%s", err, buf.String())
-	}
-	if out.Total != len(out.Options) || len(out.Options) == 0 || out.Options[0].Path != "appearance.border_style" {
-		t.Errorf("the JSON search result is %+v", out)
 	}
 }

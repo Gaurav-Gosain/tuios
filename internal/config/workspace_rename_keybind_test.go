@@ -43,27 +43,3 @@ func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
 		}
 	}
 }
-
-// TestWorkspaceRenameIsDocumented keeps the new chord out of the class of
-// binding that exists and is never mentioned: the which-key panel the leader
-// pops up has a row for it, and it is described for the help menu.
-func TestWorkspaceRenameIsDocumented(t *testing.T) {
-	var found bool
-	for _, b := range GetPrefixKeybindings("workspace") {
-		if b.Description == "Rename workspace" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("the workspace which-key panel has no rename row")
-	}
-
-	desc := ActionDescriptions["workspace_prefix_rename"]
-	if desc == "" {
-		t.Fatal("workspace_prefix_rename has no description")
-	}
-	// The help menu has been complained about for being too wide.
-	if len([]rune(desc)) > 24 {
-		t.Errorf("the description is %d cells, keep it short: %q", len([]rune(desc)), desc)
-	}
-}

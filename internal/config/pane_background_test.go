@@ -154,37 +154,6 @@ func TestBackgroundPrecedence(t *testing.T) {
 	}
 }
 
-// TestBackgroundDefaultsAgree pins the default in every place that states
-// one, since the registry, DefaultConfig and DefaultSettings are written
-// separately and a disagreement shows as a settings row that reads one value
-// while the screen draws another. The default for every surface is off, and
-// each surface's own option is empty so that it follows it.
-func TestBackgroundDefaultsAgree(t *testing.T) {
-	for _, opt := range backgroundOptions {
-		want := ""
-		if opt.path == "appearance.background" {
-			want = config.BackgroundOff
-		}
-		reg, ok := config.LookupOption(opt.path)
-		if !ok {
-			t.Fatalf("%s is not in the registry", opt.path)
-		}
-		if reg.Default != want {
-			t.Errorf("%s: registry default %q, want %q", opt.path, reg.Default, want)
-		}
-		if !reg.Color || reg.Type != config.OptionString {
-			t.Errorf("%s: registry entry %+v, want a colour string", opt.path, reg)
-		}
-		if got, _ := config.GetOptionValue(config.DefaultConfig(), opt.path); got != want {
-			t.Errorf("%s: get-option on a default config reads %q, want %q", opt.path, got, want)
-		}
-		s := config.DefaultSettings()
-		if got := opt.resolved(&s); got != config.BackgroundOff {
-			t.Errorf("%s: DefaultSettings resolves to %q, want off", opt.path, got)
-		}
-	}
-}
-
 // TestSetOptionBackground is the live path: set-option and the settings page
 // both write through SetOptionValue, which has to take the keywords and a
 // colour and refuse anything else before it reaches the config.

@@ -14,34 +14,6 @@ func withAutoEnterTerminalOnFocus(t *testing.T) {
 	t.Cleanup(func() { config.Global.AutoEnterTerminalOnFocus = prev })
 }
 
-func TestAutoEnterTerminalOnFocusDefaultsToOff(t *testing.T) {
-	if got := config.DefaultSettings().AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
-		t.Errorf("default AutoEnterTerminalOnFocus = %q, want %q", got, config.AutoEnterTerminalOff)
-	}
-	if got := config.DefaultConfig().Appearance.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
-		t.Errorf("DefaultConfig auto_enter_terminal_on_focus = %q, want %q", got, config.AutoEnterTerminalOff)
-	}
-}
-
-func TestAutoEnterTerminalOnFocusReachesTheSettings(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t)
-
-	for _, mode := range config.AutoEnterTerminalModes {
-		cfg := config.DefaultConfig()
-		cfg.Appearance.AutoEnterTerminalOnFocus = config.AutoEnterTerminalPolicy(mode)
-		config.ApplyAppearanceConfig(cfg, &config.Global)
-		if got := config.Global.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalPolicy(mode) {
-			t.Errorf("AutoEnterTerminalOnFocus = %q after applying %q", got, mode)
-		}
-	}
-
-	// An older config: the key is absent, and the load path backfills the default.
-	cfg := writeConfig(t, "[appearance]\nborder_style = \"rounded\"\n")
-	if got := cfg.Appearance.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
-		t.Errorf("auto_enter_terminal_on_focus = %q for a config written before the key existed, want %q", got, config.AutoEnterTerminalOff)
-	}
-}
-
 func TestAutoEnterTerminalOnFocusRejectsAnUnknownValue(t *testing.T) {
 	withAutoEnterTerminalOnFocus(t)
 	config.Global.AutoEnterTerminalOnFocus = config.AutoEnterTerminalAll

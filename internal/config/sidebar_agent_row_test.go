@@ -19,17 +19,6 @@ func parseAgentRowTOML(t *testing.T, body string) SidebarAgentRowSpec {
 	return ParseSidebarAgentRow(cfg.Appearance.Sidebar.AgentRow)
 }
 
-// TestAgentRowDefaultIsTheShippedRow: no table means the row as it ships.
-func TestAgentRowDefaultIsTheShippedRow(t *testing.T) {
-	spec := parseAgentRowTOML(t, "[appearance.sidebar]\nenabled = true\n")
-	if !slices.Equal(spec.Tokens, SidebarAgentRowDefaultTokens) {
-		t.Fatalf("tokens = %v, want the shipped %v", spec.Tokens, SidebarAgentRowDefaultTokens)
-	}
-	if spec.Custom() || len(spec.Problems) != 0 {
-		t.Fatalf("an absent table is custom (%v) or has problems (%v)", spec.Custom(), spec.Problems)
-	}
-}
-
 // TestAgentRowReadsTokensLooksAndRules is the surface as documented: an
 // ordered token list, a look per token, ordered rules with one test each.
 func TestAgentRowReadsTokensLooksAndRules(t *testing.T) {

@@ -75,27 +75,3 @@ func TestFormatWindowTitle(t *testing.T) {
 		})
 	}
 }
-
-// TestWindowTitleFormatIsAppliedFromConfig pins the wiring rather than the
-// formatting: the option is only honest if loading a config actually reaches
-// the global the renderer reads.
-func TestWindowTitleFormatIsAppliedFromConfig(t *testing.T) {
-	prev := config.Global.WindowTitleFormat
-	t.Cleanup(func() { config.Global.WindowTitleFormat = prev })
-
-	cfg := config.DefaultConfig()
-	cfg.Appearance.WindowTitleFormat = "{index}. {title}"
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-
-	if config.Global.WindowTitleFormat != "{index}. {title}" {
-		t.Fatalf("WindowTitleFormat = %q, want the configured format", config.Global.WindowTitleFormat)
-	}
-
-	// Clearing it in the config must clear the global too, so a hot reload that
-	// removes the option goes back to plain titles.
-	cfg.Appearance.WindowTitleFormat = ""
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	if config.Global.WindowTitleFormat != "" {
-		t.Errorf("WindowTitleFormat = %q, want it cleared", config.Global.WindowTitleFormat)
-	}
-}

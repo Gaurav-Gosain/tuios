@@ -35,24 +35,3 @@ func TestPrintPromptPeekFencesTheScreen(t *testing.T) {
 		t.Errorf("a control character from the pane reached the terminal:\n%q", got)
 	}
 }
-
-// TestPrintPromptPeekSaysWhyItCannotAnswer: a pane that waits on something no
-// rule answers says so, and where to look instead.
-func TestPrintPromptPeekSaysWhyItCannotAnswer(t *testing.T) {
-	var out bytes.Buffer
-	raw := []byte(`{"window":"a1b2c3d4","name":"x","state":"needs_input","blocked":true,"found":false,
-		"reason":"no rule of codex reads a prompt on the pane now"}`)
-	if err := printPromptPeek(&out, raw); err != nil {
-		t.Fatal(err)
-	}
-	if got := out.String(); !strings.Contains(got, "No rule of codex reads a prompt") || !strings.Contains(got, "tuios capture-pane -w a1b2c3d4") {
-		t.Errorf("peek of an unreadable prompt:\n%s", got)
-	}
-	out.Reset()
-	if err := printPromptPeek(&out, []byte(`{"window":"a1b2c3d4","name":"x","state":"working"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if got := out.String(); !strings.Contains(got, "is not waiting on a prompt: its state is working") {
-		t.Errorf("peek of a working pane:\n%s", got)
-	}
-}

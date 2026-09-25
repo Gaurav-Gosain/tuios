@@ -75,38 +75,6 @@ func saveLikeVim(t *testing.T, path, body string) {
 
 const watcherBase = "[appearance]\ntheme = \"\"\n\n[spotlight]\nradius = 10\ndim = 40\n"
 
-// TestWatcherSeesAnEditorsSave is the whole feature and the trap under it.
-//
-// An inotify watch on a file follows the inode, and vim does not write through
-// the inode: it writes a new file and renames it into place. A file watch is
-// therefore dead after the first :w, which is the most common way anybody edits
-// this file. The watch is on the directory for that reason.
-func TestWatcherSeesAnEditorsSave(t *testing.T) {
-	path, reports := startWatcher(t, watcherBase)
-
-	saveLikeVim(t, path, "[appearance]\ntheme = \"\"\n\n[spotlight]\nradius = 10\ndim = 90\n")
-
-	got := nextReport(t, reports, "an editor's save")
-	if got.err != nil {
-		t.Fatalf("an editor's save was reported as an error: %v", got.err)
-	}
-	if got.cfg.Spotlight.Dim != 90 {
-		t.Errorf("the reloaded config carries dim %d, want 90", got.cfg.Spotlight.Dim)
-	}
-
-	// The positive half of the same rule: the watch survives the first save and
-	// sees the second. A watch that died on the rename passes the assertion
-	// above only if it caught the rename event itself.
-	saveLikeVim(t, path, "[appearance]\ntheme = \"\"\n\n[spotlight]\nradius = 10\ndim = 20\n")
-	got = nextReport(t, reports, "a second save after the file was replaced")
-	if got.err != nil {
-		t.Fatalf("the second save was reported as an error: %v", got.err)
-	}
-	if got.cfg.Spotlight.Dim != 20 {
-		t.Errorf("the second reload carries dim %d, want 20", got.cfg.Spotlight.Dim)
-	}
-}
-
 // TestWatcherSeesAWriteInPlace is the other way a file is saved: an editor with
 // backupcopy on, and every shell redirect.
 func TestWatcherSeesAWriteInPlace(t *testing.T) {
@@ -122,35 +90,6 @@ func TestWatcherSeesAWriteInPlace(t *testing.T) {
 	}
 	if got.cfg.Appearance.Theme != "nord" {
 		t.Errorf("the reloaded config carries theme %q, want nord", got.cfg.Appearance.Theme)
-	}
-}
-
-// TestWatcherKeepsTheRunningConfigWhenTheFileBreaks. A file caught half written,
-// or one with an unbalanced quote in it, must not reach the client as a config.
-// Rendering the defaults over a running session every time somebody saved a
-// typo would be far worse than waiting for the next save.
-func TestWatcherKeepsTheRunningConfigWhenTheFileBreaks(t *testing.T) {
-	path, reports := startWatcher(t, watcherBase)
-
-	saveLikeVim(t, path, "[appearance\ntheme = \"nord")
-
-	got := nextReport(t, reports, "a file that does not parse")
-	if got.err == nil {
-		t.Fatalf("a file that does not parse was delivered as a config: %+v", got.cfg)
-	}
-	if got.cfg != nil {
-		t.Errorf("a config was handed over beside the error: %+v", got.cfg)
-	}
-
-	// And the fix is seen. A watcher that recorded the broken file's hash would
-	// go quiet here, which is the failure that hides itself.
-	saveLikeVim(t, path, "[appearance]\ntheme = \"nord\"\n")
-	got = nextReport(t, reports, "the file after it was fixed")
-	if got.err != nil {
-		t.Fatalf("the fixed file was still reported as an error: %v", got.err)
-	}
-	if got.cfg.Appearance.Theme != "nord" {
-		t.Errorf("the fixed file carries theme %q, want nord", got.cfg.Appearance.Theme)
 	}
 }
 

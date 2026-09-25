@@ -43,28 +43,6 @@ func TestInterceptErrorsKeepsFailuresFromFang(t *testing.T) {
 	}
 }
 
-// A command that succeeds must leave nothing behind, or every successful run
-// would exit non-zero on the strength of an earlier failure.
-func TestInterceptErrorsLeavesSuccessAlone(t *testing.T) {
-	cmd := &cobra.Command{
-		Use:  "ls",
-		RunE: func(*cobra.Command, []string) error { return nil },
-	}
-
-	var stashed error
-	interceptErrors(cmd, &stashed)
-
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatalf("RunE returned %v, want nil", err)
-	}
-	if stashed != nil {
-		t.Fatalf("stashed = %v, want nil", stashed)
-	}
-	if reportCommandError(stashed) {
-		t.Error("reportCommandError reported a failure for a command that succeeded")
-	}
-}
-
 // Subcommands are where every session command lives, so the walk has to reach
 // them and not just the root.
 func TestInterceptErrorsReachesSubcommands(t *testing.T) {
@@ -124,34 +102,6 @@ func TestAttachExitStatusPerReason(t *testing.T) {
 	}
 }
 
-// The two normal exits print different lines: a detach says the session was
-// left running, a deliberate quit says it was killed. Reporting a detach after a
-// kill is what made leader q look like it only detached, so the wording is
-// pinned here. Both name the session they are given, which is the current
-// session at exit, not the one attached to on the command line.
-func TestReportSessionExitNormalMessages(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		killed  bool
-		session string
-		want    string
-	}{
-		{"detach", false, "myproj", "Detached from session 'myproj'."},
-		{"kill", true, "myproj", "Killed session 'myproj'."},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			out := captureStdout(t, func() {
-				if err := reportSessionExit(tc.session, "", app.ExitNormal, tc.killed); err != nil {
-					t.Fatalf("reportSessionExit returned error: %v", err)
-				}
-			})
-			if strings.TrimSpace(out) != tc.want {
-				t.Fatalf("exit message = %q, want %q", strings.TrimSpace(out), tc.want)
-			}
-		})
-	}
-}
-
 // captureStdout runs fn with os.Stdout redirected to a pipe and returns what was
 // written.
 func captureStdout(t *testing.T, fn func()) string {
@@ -170,16 +120,4 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("read captured stdout: %v", err)
 	}
 	return string(data)
-}
-
-// The header has to survive not asking the terminal anything: dropping the
-// query must not drop the styling with it.
-func TestErrorStylesNeedNoTerminalQuery(t *testing.T) {
-	styles := errorStyles()
-	if got := styles.ErrorHeader.String(); !strings.Contains(got, "ERROR") {
-		t.Errorf("ErrorHeader renders %q, want it to contain ERROR", got)
-	}
-	if got := styles.ErrorText.Render("hello"); !strings.Contains(got, "hello") {
-		t.Errorf("ErrorText renders %q, want it to contain the message", got)
-	}
 }

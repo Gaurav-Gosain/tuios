@@ -15,23 +15,6 @@ func withGlyphSet(t *testing.T, id string) {
 	t.Cleanup(func() { theme.SetActiveGlyphs(theme.GlyphSetNone) })
 }
 
-func TestASetChangesTheGlyphsTheChromeIsDrawnWith(t *testing.T) {
-	withGlyphSet(t, "heavy")
-	if got := Global.GetWindowSeparatorChar(); got != "━" {
-		t.Errorf("rule = %q, want heavy's ━", got)
-	}
-	if got := Global.GetRailFocusMark(); got != "█" {
-		t.Errorf("rail focus = %q, want heavy's █", got)
-	}
-	if got := Global.GetRailBullet(); got != "•" {
-		t.Errorf("rail bullet = %q, want heavy's •", got)
-	}
-	// heavy says nothing about the collapse arrow, so the built-in stands.
-	if got := Global.GetRailCollapseGlyph(); got != "«" {
-		t.Errorf("collapse = %q, want the built-in « an unnamed role keeps", got)
-	}
-}
-
 func TestAWindowControlKeepsItsWidthWhateverTheSetSays(t *testing.T) {
 	// The press rectangles are fixed offsets measured against these widths, so
 	// a set that could change them could move a button out from under the

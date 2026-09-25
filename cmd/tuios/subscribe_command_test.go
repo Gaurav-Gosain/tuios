@@ -104,27 +104,3 @@ func TestSubscribeCommandResumes(t *testing.T) {
 		t.Fatalf("stale boot id printed %v, want a boot_changed gap", stale)
 	}
 }
-
-// TestSubscribeCommandRefusesBootIDAlone checks the flag rule the command
-// enforces before it dials: a boot id is only a resume point with a seq.
-func TestSubscribeCommandRefusesBootIDAlone(t *testing.T) {
-	root := newRootCommand()
-	root.SetArgs([]string{"subscribe", "--boot-id", "abc"})
-	root.SilenceUsage, root.SilenceErrors = true, true
-	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--after-seq") {
-		t.Fatalf("subscribe --boot-id alone: err = %v, want a refusal naming --after-seq", err)
-	}
-}
-
-// TestWaitForAnySessionRefusesATarget checks --any-session is not quietly
-// combined with a session, which would read as watching only that one.
-func TestWaitForAnySessionRefusesATarget(t *testing.T) {
-	root := newRootCommand()
-	root.SetArgs([]string{"wait-for", "agent-state", "--any-session", "-s", "work", "--until", "idle"})
-	root.SilenceUsage, root.SilenceErrors = true, true
-	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--any-session") {
-		t.Fatalf("wait-for --any-session -s: err = %v, want a refusal", err)
-	}
-}

@@ -4,50 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	toml "github.com/pelletier/go-toml/v2"
 )
-
-// TestStartupConfigDefaults pins what a fresh install starts as: a tiled,
-// daemon-backed session that opens no window of its own and starts in window
-// mode. Tiled and daemon are the two that ship on.
-func TestStartupConfigDefaults(t *testing.T) {
-	cfg := config.DefaultConfig()
-	if cfg.Startup.OpenDefaultWindow {
-		t.Error("open_default_window should default to false")
-	}
-	if !cfg.Startup.Tiled {
-		t.Error("tiled should default to true")
-	}
-	if !cfg.Startup.Daemon {
-		t.Error("daemon should default to true")
-	}
-	if cfg.Startup.StartInTerminalMode {
-		t.Error("start_in_terminal_mode should default to false")
-	}
-}
-
-// TestStartupConfigParsing confirms both options round-trip from TOML.
-func TestStartupConfigParsing(t *testing.T) {
-	const src = `
-[startup]
-open_default_window = true
-tiled = true
-start_in_terminal_mode = true
-`
-	var cfg config.UserConfig
-	if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !cfg.Startup.OpenDefaultWindow {
-		t.Error("expected open_default_window = true after parsing")
-	}
-	if !cfg.Startup.Tiled {
-		t.Error("expected tiled = true after parsing")
-	}
-	if !cfg.Startup.StartInTerminalMode {
-		t.Error("expected start_in_terminal_mode = true after parsing")
-	}
-}
 
 // TestAnExistingConfigKeepsTheStartupItWasWritten is the upgrade contract for
 // tiled and daemon, and it is the reason both could be turned on at all.

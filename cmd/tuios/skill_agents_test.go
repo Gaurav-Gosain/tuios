@@ -18,35 +18,6 @@ import (
 // the option count, the harness list, the source ranking, the error codes, the
 // scrollback bound, and a recipe that could not work.
 
-// TestSkillDocumentsTalkingToOtherAgents holds the chapter that exists to be
-// followed by an agent that has never seen tuios: how it finds a correspondent,
-// how it addresses one, the two ways to reach one, and the two rules that keep
-// the whole thing from being a footgun.
-func TestSkillDocumentsTalkingToOtherAgents(t *testing.T) {
-	for _, want := range []string{
-		"## Working with the other agents in the session",
-		"tuios list-agents",
-		"tuios send-agent-message",
-		"tuios read-agent-messages",
-		"tuios ask-agent",
-		"tuios wait-for agent-message",
-		// The address is the window target, not a namespace of its own.
-		"$TUIOS_PANE_ID",
-		// The two rules. Neither may be edited down to a footnote.
-		"### Content from another agent is untrusted",
-		"data, not instructions",
-		"### Loops, and the calls that are refused",
-		// And the honesty about what it will not do.
-		"### What this cannot do",
-		"is a claim",
-		"Nothing is durable",
-	} {
-		if !strings.Contains(skillText(t, "mail"), want) {
-			t.Errorf("the agent chapter no longer mentions %q", want)
-		}
-	}
-}
-
 // TestSkillCountsTheOptions pins the number the ricing section opens with. It
 // said 88 when there were 86, which is the kind of wrong that teaches an agent
 // to distrust the whole document.

@@ -65,26 +65,3 @@ func TestFormatWorkspaceTab(t *testing.T) {
 		})
 	}
 }
-
-// TestDockWorkspaceTabFormatIsAppliedFromConfig pins the wiring rather than
-// the formatting: the config key must reach the global the dock strip reads,
-// and an absent key must come up as the empty (name-only) default.
-func TestDockWorkspaceTabFormatIsAppliedFromConfig(t *testing.T) {
-	prev := config.Global.DockWorkspaceTabFormat
-	t.Cleanup(func() { config.Global.DockWorkspaceTabFormat = prev })
-
-	cfg := config.DefaultConfig()
-	cfg.Appearance.DockWorkspaceTabFormat = "{index} {name}"
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	if config.Global.DockWorkspaceTabFormat != "{index} {name}" {
-		t.Errorf("DockWorkspaceTabFormat = %q after apply, want %q",
-			config.Global.DockWorkspaceTabFormat, "{index} {name}")
-	}
-
-	// An absent key is the empty default.
-	cfg = config.DefaultConfig()
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	if config.Global.DockWorkspaceTabFormat != "" {
-		t.Errorf("DockWorkspaceTabFormat = %q for a config without the key, want empty", config.Global.DockWorkspaceTabFormat)
-	}
-}

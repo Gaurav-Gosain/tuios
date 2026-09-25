@@ -61,13 +61,3 @@ func TestValidateKeyDoesNotAllocateForAPlainBinding(t *testing.T) {
 		}
 	}
 }
-
-// BenchmarkValidateConfigDefault validates the default config, which checks
-// every default binding through ValidateKey.
-func BenchmarkValidateConfigDefault(b *testing.B) {
-	cfg := DefaultConfig()
-	b.ReportAllocs()
-	for b.Loop() {
-		ValidateConfig(cfg)
-	}
-}

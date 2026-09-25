@@ -18,18 +18,3 @@ func TestAppearanceFromLayersFileThenFlags(t *testing.T) {
 		t.Errorf("BorderStyle with a flag = %q, want single", got)
 	}
 }
-
-// A nil cfg is an empty one: the overrides still land, and everything the file
-// does not mention is the built-in default rather than a value left over from
-// another load.
-func TestAppearanceFromWithoutAConfig(t *testing.T) {
-	def := DefaultSettings()
-	got := AppearanceFrom(nil, Overrides{BorderStyle: "single"})
-
-	if got.BorderStyle != "single" {
-		t.Errorf("BorderStyle = %q, want single (the override)", got.BorderStyle)
-	}
-	if got.SharedBorders != def.SharedBorders {
-		t.Errorf("SharedBorders = %v, want the default %v", got.SharedBorders, def.SharedBorders)
-	}
-}

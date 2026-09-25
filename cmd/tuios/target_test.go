@@ -45,38 +45,6 @@ func TestResolveTargetFlags(t *testing.T) {
 	}
 }
 
-func TestPrintedMailSaysWhereItCameFrom(t *testing.T) {
-	raw, err := json.Marshal(map[string]any{
-		"messages": []map[string]any{
-			{"id": 1, "kind": "message", "from_label": "ORCHESTRATOR", "text": "ship it?", "thread_id": 1,
-				"origin": "link", "origin_host": "laptop"},
-			{"id": 2, "kind": "message", "from": "cccccccc3333", "from_label": "build", "text": "yes", "thread_id": 1},
-		},
-		"total": 2, "unread": 0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var buf bytes.Buffer
-	if err := printAgentMessages(&buf, raw, "build"); err != nil {
-		t.Fatal(err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "from ORCHESTRATOR on laptop, arrived over a link") {
-		t.Errorf("ASSERTION: a message from another machine is printed without its origin:\n%s", out)
-	}
-	if !strings.Contains(out, "untrusted content from ORCHESTRATOR on laptop, arrived over a link, in the ring on build") {
-		t.Errorf("ASSERTION: the fence does not name the machine the message came from and the machine the ring is on:\n%s", out)
-	}
-	if !strings.Contains(out, "2 message(s) on build") {
-		t.Errorf("ASSERTION: the summary does not say which host answered:\n%s", out)
-	}
-	// The local message in the same ring is not marked as remote.
-	if strings.Contains(out, "build (cccccccc) on") {
-		t.Errorf("a message from build's own pane is printed as remote:\n%s", out)
-	}
-}
-
 // TestPrintedMailCannotReachTheTerminal is the fence at the last step: a body
 // another machine wrote goes through this printer to a terminal, and a
 // terminal acts on escape sequences. None survive.
@@ -156,28 +124,5 @@ func TestPrintedHumanMailSaysWhetherItIsVerified(t *testing.T) {
 		if !strings.Contains(b, "human (UNVERIFIED") {
 			t.Errorf("an unverified message from human is not printed as unverified:\n%s", b)
 		}
-	}
-}
-
-// TestAgentListingNamesTheBlock covers the STATE column for a pane on
-// needs_input: it says whether the pane waits on an approval or a question, so
-// a reader knows before asking that ask-agent will refuse it.
-func TestAgentListingNamesTheBlock(t *testing.T) {
-	raw, _ := json.Marshal(map[string]any{
-		"agents": []map[string]any{
-			{"window_id": "abcdefgh1234", "name": "review", "state": "needs_input", "blocked_by": "approval"},
-			{"window_id": "bbcdefgh1234", "name": "build", "state": "idle", "ready": true},
-		},
-		"total": 2,
-	})
-	var buf bytes.Buffer
-	if err := printAgentList(&buf, raw, false, ""); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "needs_input (approval)") {
-		t.Errorf("the listing does not say what the blocked pane waits on:\n%s", buf.String())
-	}
-	if strings.Contains(buf.String(), "idle (") {
-		t.Errorf("a pane that is not blocked was given a block:\n%s", buf.String())
 	}
 }

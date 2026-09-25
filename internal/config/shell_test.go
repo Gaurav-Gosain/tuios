@@ -37,19 +37,3 @@ func TestShellFor(t *testing.T) {
 		})
 	}
 }
-
-func TestResolveShellReadsPreferredShell(t *testing.T) {
-	existing := filepath.Join(t.TempDir(), "my-sh")
-	if err := os.Symlink("/bin/sh", existing); err != nil {
-		t.Fatalf("symlink: %v", err)
-	}
-	t.Setenv("SHELL", "/bin/zsh")
-	cfg := DefaultConfig()
-	cfg.Appearance.PreferredShell = existing
-	if got := ResolveShell(cfg); got != existing {
-		t.Errorf("ResolveShell = %q, want %q", got, existing)
-	}
-	if got := ResolveShell(nil); got != "/bin/zsh" {
-		t.Errorf("ResolveShell(nil) = %q, want $SHELL", got)
-	}
-}

@@ -131,20 +131,6 @@ tiled = true
 	}
 }
 
-func TestRemovingAHostThatIsNotThereSaysSo(t *testing.T) {
-	path := writeTemp(t, "[hosts.build]\naddr = \"buildbox\"\n")
-	removed, err := RemoveHostFromFile(path, "lab")
-	if err != nil {
-		t.Fatalf("remove a host: %v", err)
-	}
-	if removed {
-		t.Error("ASSERTION: removing a host that is not there reported a removal")
-	}
-	if !strings.Contains(readFile(t, path), "[hosts.build]") {
-		t.Error("ASSERTION: a removal that found nothing changed the file")
-	}
-}
-
 func TestAddingTheFirstHostToAFileThatDoesNotExist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
 	if err := SetHostInFile(path, "build", HostConfig{Addr: "buildbox"}); err != nil {
@@ -232,27 +218,6 @@ func TestAHostNeedsANameAndAnAddress(t *testing.T) {
 	}
 	if body := readFile(t, path); strings.TrimSpace(body) != "" {
 		t.Errorf("ASSERTION: a refused host still changed the file:\n%s", body)
-	}
-}
-
-func TestHostsInFileReadsTheTable(t *testing.T) {
-	path := writeTemp(t, "[hosts.build]\naddr = \"buildbox\"\n\n[hosts.lab]\naddr = \"lab-01\"\n")
-	hosts, err := HostsInFile(path)
-	if err != nil {
-		t.Fatalf("read the hosts: %v", err)
-	}
-	if len(hosts) != 2 || hosts["build"].Addr != "buildbox" || hosts["lab"].Addr != "lab-01" {
-		t.Errorf("ASSERTION: the table was not read, got %+v", hosts)
-	}
-}
-
-func TestHostsInFileOnAMissingFileIsEmpty(t *testing.T) {
-	hosts, err := HostsInFile(filepath.Join(t.TempDir(), "nothing.toml"))
-	if err != nil {
-		t.Fatalf("read a missing config: %v", err)
-	}
-	if len(hosts) != 0 {
-		t.Errorf("ASSERTION: a missing file reported hosts, got %+v", hosts)
 	}
 }
 

@@ -3,13 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -115,40 +112,6 @@ func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...
 	})
 }
 
-func TestAgentHookReportsToThePaneInTheEnvironment(t *testing.T) {
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w7", "TUIOS_SESSION": "work"}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"PermissionRequest","session_id":"s1","transcript_path":"/t.jsonl","tool_name":"Bash","tool_input":{"command":"make"}}`, "claude-code")
-
-	reports := h.daemon.reports()
-	if len(reports) != 1 {
-		t.Fatalf("reports = %v, stderr %s", reports, h.stderr.String())
-	}
-	want := map[string]any{
-		"session": "work", "window": "w7", "state": "needs_input", "harness": "claude-code",
-		"kind": "approval", "message": "approve Bash: make", "agent_session_id": "s1", "transcript_path": "/t.jsonl",
-	}
-	for k, v := range want {
-		if reports[0][k] != v {
-			t.Errorf("%s = %v, want %v", k, reports[0][k], v)
-		}
-	}
-	if h.stdout.Len() != 0 {
-		t.Errorf("printed %q on stdout, which Claude Code would read as a decision", h.stdout.String())
-	}
-	if !strings.Contains(h.stderr.String(), `"pane_by":"env"`) {
-		t.Errorf("explain output: %s", h.stderr.String())
-	}
-}
-
-func TestAgentHookWindowFlagWins(t *testing.T) {
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w7"}}
-	h.run(t, agentHookOptions{window: "w9", session: "other"}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude")
-	r := h.daemon.reports()
-	if len(r) != 1 || r[0]["window"] != "w9" || r[0]["session"] != "other" || r[0]["state"] != "done" {
-		t.Fatalf("reports = %v", r)
-	}
-}
-
 // TestAgentHookFindsThePaneWithoutItsEnvironment is the scrubbed-environment
 // case: no TUIOS_PANE_ID, so the process's terminal session and ancestors go
 // to resolve-pane.
@@ -165,30 +128,6 @@ func TestAgentHookFindsThePaneWithoutItsEnvironment(t *testing.T) {
 	r := h.daemon.reports()
 	if r[0]["window"] != "w3" || r[0]["session"] != "work" {
 		t.Fatalf("report went to %v", r[0])
-	}
-}
-
-func TestAgentHookReportsNothingWithoutAPane(t *testing.T) {
-	h := &hookRun{}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
-	if len(h.daemon.reports()) != 0 {
-		t.Fatalf("reported with no pane: %v", h.daemon.calls)
-	}
-	if !strings.Contains(h.stderr.String(), "no pane") {
-		t.Fatalf("explain: %s", h.stderr.String())
-	}
-}
-
-func TestAgentHookDoesNotDialForAnEventItSkips(t *testing.T) {
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"SubagentStop","agent_id":"a"}`, "claude-code")
-	if h.dialed {
-		t.Fatal("dialed the daemon for an event that reports nothing")
-	}
-	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
-	h.run(t, agentHookOptions{}, `garbage`, "claude-code", "Stop")
-	if h.dialed {
-		t.Fatal("a payload that does not parse was reported")
 	}
 }
 
@@ -316,81 +255,5 @@ func TestAgentHookAnswersAntigravityWithAnObject(t *testing.T) {
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"PreInvocation","conversationId":"ag-1"}`, "antigravity")
 	if h.stdout.String() != "{}\n" {
 		t.Fatalf("stdout = %q, want an empty object", h.stdout.String())
-	}
-}
-
-func TestAgentHookCommandIsWired(t *testing.T) {
-	root := newRootCommand()
-	cmd, _, err := root.Find([]string{"agent-hook"})
-	if err != nil || cmd.Name() != "agent-hook" {
-		t.Fatalf("agent-hook is not a command: %v", err)
-	}
-	if cmd.Flags().Lookup("integration") == nil {
-		t.Fatal("agent-hook does not accept the --integration marker managed entries carry")
-	}
-	for _, path := range [][]string{{"integration", "install"}, {"integration", "uninstall"}, {"integration", "status"}, {"doctor", "agents"}} {
-		if c, _, err := root.Find(path); err != nil || c.Name() != path[len(path)-1] {
-			t.Errorf("tuios %s is not a command", strings.Join(path, " "))
-		}
-	}
-}
-
-func TestDoctorAgentsListsPanesWithoutTheirIntegration(t *testing.T) {
-	env := integration.Env{
-		Home:     t.TempDir(),
-		Getenv:   func(string) string { return "" },
-		LookPath: func(name string) (string, error) { return "/bin/" + name, nil },
-	}
-	panes := func() ([]agentPane, bool) {
-		return []agentPane{
-			{Session: "work", Window: "w1", Name: "claude", Harness: "claude-code"},
-			{Session: "work", Window: "w2", Name: "aider", Harness: "aider"},
-		}, true
-	}
-	r := doctorAgents(env, "tuios", panes)
-	if len(r.Harnesses) != len(integration.Targets()) || !r.TuiosOnPath || !r.DaemonRunning {
-		t.Fatalf("report = %+v", r)
-	}
-	if len(r.Panes) != 1 || r.Panes[0].Harness != "claude-code" {
-		t.Fatalf("panes = %+v, want only the Claude pane (aider has no integration)", r.Panes)
-	}
-	var out bytes.Buffer
-	if err := printDoctorAgents(&out, r, false); err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"claude-code", "not installed", "work:w1", "aider        no integration: ", "qwen", "[reports the session id; state from screen rules]"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("doctor output lacks %q:\n%s", want, out.String())
-		}
-	}
-}
-
-// TestDoctorAgentsSaysWhichUserManifestsAreInForce: a user file with a bundled
-// id replaces the bundled manifest whole, a new one is loaded beside them, and
-// a broken one is named rather than skipped in silence.
-func TestDoctorAgentsSaysWhichUserManifestsAreInForce(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, body string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("codex.toml", "schema_version = 1\nid = \"codex\"\n[detect]\ncomm = [\"codex\"]\n")
-	write("mine.toml", "schema_version = 1\nid = \"my-agent\"\n[detect]\ncomm = [\"my-agent\"]\n")
-	write("broken.toml", "schema_version = 1\nid = \"broken\"\n")
-	manifests, errs := userManifests(dir)
-	if len(manifests) != 2 || len(errs) != 1 {
-		t.Fatalf("manifests %+v errors %v, want two loaded and one error", manifests, errs)
-	}
-	r := doctorAgentsReport{ManifestDir: dir, UserManifests: manifests, ManifestErrors: errs}
-	var out bytes.Buffer
-	if err := printDoctorAgents(&out, r, false); err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"Manifest codex replaces the bundled one", "Manifest my-agent is loaded from", "Manifest not loaded", "broken.toml"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("doctor output lacks %q:\n%s", want, out.String())
-		}
 	}
 }

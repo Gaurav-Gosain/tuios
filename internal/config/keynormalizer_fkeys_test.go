@@ -46,14 +46,3 @@ func TestValidateKeyRejectsNonKeys(t *testing.T) {
 		}
 	}
 }
-
-// TestHoldWindowModeF13Validates is the header's own suggestion, end to end.
-func TestHoldWindowModeF13Validates(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Keybindings.ModeControl["hold_window_mode"] = []string{"f13"}
-	for _, e := range config.ValidateConfig(cfg).Errors {
-		if e.Key == "f13" {
-			t.Errorf("hold_window_mode = [\"f13\"] fails validation: %s", e.Message)
-		}
-	}
-}

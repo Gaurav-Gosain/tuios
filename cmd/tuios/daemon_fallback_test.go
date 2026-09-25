@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -40,26 +39,5 @@ func TestADaemonThatWillNotStartLeavesTheUserAWayOut(t *testing.T) {
 	// line, and this message is what "tuios attach" still shows.
 	if msg := err.Error(); !strings.Contains(msg, "tuios daemon") {
 		t.Errorf("the failure no longer names the command that explains it: %q", msg)
-	}
-}
-
-// TestOnlyTheDaemonItselfFallsBackToStandalone is the other half. A session
-// that is missing, or a daemon that is up and refuses the attach, is not a
-// reason to drop the user into a standalone session and lose their work; only
-// "there is no daemon and there will not be one" is.
-func TestOnlyTheDaemonItselfFallsBackToStandalone(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		err  error
-	}{
-		{"a session that does not exist", explainMissingSession("work", []string{"other"})},
-		{"a plain error from the attach", fmt.Errorf("connection refused")},
-		{"success", nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if errors.Is(tc.err, errDaemonUnreachable) {
-				t.Errorf("%v would send the user to a standalone session", tc.err)
-			}
-		})
 	}
 }

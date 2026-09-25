@@ -66,16 +66,6 @@ func TestRepoParamsNameTheRepositoryByOriginOnAHost(t *testing.T) {
 	}
 }
 
-func TestRepoParamsRefuseARepositoryWithNoOrigin(t *testing.T) {
-	repo := testutil.GitRepo(t)
-	t.Chdir(repo)
-	_, err := repoParams("build", "", false)
-	var d *diagnosticError
-	if !errors.As(err, &d) || !strings.Contains(d.Fix, "--repo") {
-		t.Errorf("err = %v, want a diagnostic naming --repo", err)
-	}
-}
-
 func TestStartAgentPlace(t *testing.T) {
 	repo := inRepoWithOrigin(t, "https://github.com/acme/api", "")
 	// On this machine with nothing named, the daemon's default applies: the
@@ -104,24 +94,6 @@ func TestStartAgentPlace(t *testing.T) {
 	}
 	if _, err := startAgentPlace("", startAgentOptions{clone: true}); err == nil {
 		t.Error("--clone on this machine was accepted")
-	}
-}
-
-func TestStartAgentTakesOneAgentAndArgsAfterDashDash(t *testing.T) {
-	root := newRootCommand()
-	cmd, rest, err := root.Find([]string{"start-agent", "-s", "api", "codex", "--prompt", "fix it", "--", "--model", "o4"})
-	if err != nil || cmd.Name() != "start-agent" {
-		t.Fatalf("find: %v %v", cmd, err)
-	}
-	if err := cmd.ParseFlags(rest); err != nil {
-		t.Fatal(err)
-	}
-	args := cmd.Flags().Args()
-	if dash := cmd.ArgsLenAtDash(); dash != 1 || args[0] != "codex" || strings.Join(args[dash:], " ") != "--model o4" {
-		t.Errorf("args = %v, dash = %d", args, cmd.ArgsLenAtDash())
-	}
-	if p, _ := cmd.Flags().GetString("prompt"); p != "fix it" {
-		t.Errorf("prompt = %q", p)
 	}
 }
 

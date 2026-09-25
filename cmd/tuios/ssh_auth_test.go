@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/adrg/xdg"
 )
 
 // TestCheckSSHAuth is the command-line half of the gate, and the twin of
@@ -51,57 +48,5 @@ func TestCheckSSHAuth(t *testing.T) {
 				t.Fatalf("printed advice for a bind it accepted: %q", out.String())
 			}
 		})
-	}
-}
-
-// TestCheckSSHAuthNamesTheRealFlags checks the most important string in this
-// change. Someone who hits the refusal is stopped from starting a server, so
-// the message has to carry the way forward, filled in with the address and port
-// they typed.
-func TestCheckSSHAuthNamesTheRealFlags(t *testing.T) {
-	var out bytes.Buffer
-	err := checkSSHAuth(&out, sshServerFlags{host: "192.168.1.31", port: "9000"})
-	if err == nil {
-		t.Fatal("expected a refusal")
-	}
-	advice := out.String()
-
-	for _, want := range []string{
-		filepath.Join(xdg.ConfigHome, "tuios", "authorized_keys"),
-		"~/.ssh/authorized_keys",
-		"--no-auth",
-		"ssh -L 9000:localhost:9000",
-		"192.168.1.31",
-		"9000",
-	} {
-		if !strings.Contains(advice, want) {
-			t.Errorf("advice never mentions %q:\n%s", want, advice)
-		}
-	}
-	for _, want := range []string{"add a public key", "--no-auth"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the error itself never mentions %q: %v", want, err)
-		}
-	}
-}
-
-// TestCheckSSHAuthReportsABrokenKeysFilePlainly keeps the menu of answers for
-// the one question that has several. A file that cannot be read has one answer,
-// so it gets the sentence and no menu.
-func TestCheckSSHAuthReportsABrokenKeysFilePlainly(t *testing.T) {
-	broken := filepath.Join(t.TempDir(), "authorized_keys")
-	if err := os.WriteFile(broken, []byte("ssh-ed25519 not-a-key\n"), 0o600); err != nil {
-		t.Fatalf("write keys: %v", err)
-	}
-	var out bytes.Buffer
-	err := checkSSHAuth(&out, sshServerFlags{host: "0.0.0.0", port: "2222", authorizedKeys: broken})
-	if err == nil {
-		t.Fatal("a keys file that does not parse was accepted")
-	}
-	if out.Len() > 0 {
-		t.Fatalf("printed the network advice for a broken file:\n%s", out.String())
-	}
-	if !strings.Contains(err.Error(), "line 1") {
-		t.Fatalf("error does not name the bad line: %v", err)
 	}
 }

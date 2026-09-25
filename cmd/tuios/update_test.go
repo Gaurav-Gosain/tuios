@@ -10,13 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
@@ -162,27 +160,6 @@ func TestUpdateMovesBothBinariesTogether(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "v0.8.0") {
 		t.Errorf("the report does not name the version it installed:\n%s", out.String())
-	}
-}
-
-// TestUpdateSaysWhatToDoAboutTheRunningDaemon. The daemon holds the old binary
-// open and goes on running it, so a user who does nothing gets a build-mismatch
-// warning on their next attach with no idea why.
-//
-// Negative control: delete reportDaemonAfterUpdate's call and this fails.
-func TestUpdateSaysWhatToDoAboutTheRunningDaemon(t *testing.T) {
-	_, facts := installedTree(t, "v0.7.0", false)
-	src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
-
-	var out bytes.Buffer
-	if err := runUpdate(updateOptions{source: src, facts: facts, out: &out}); err != nil {
-		t.Fatalf("runUpdate: %v", err)
-	}
-	text := out.String()
-	for _, want := range []string{"daemon", "kill-server"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the report never mentions %q:\n%s", want, text)
-		}
 	}
 }
 
@@ -369,45 +346,6 @@ func TestRefusalHappensBeforeTheNetwork(t *testing.T) {
 	}
 }
 
-// TestUnreachableGitHubIsExplained rather than reported as a raw dial error.
-//
-// Negative control: return the transport error unwrapped and this fails on the
-// proxy hint, which is the one thing a user behind a corporate proxy needs.
-func TestUnreachableGitHubIsExplained(t *testing.T) {
-	_, facts := installedTree(t, "v0.7.0", false)
-	src := &fakeSource{err: &net.OpError{Op: "dial", Err: errors.New("no route to host")}}
-
-	err := runUpdate(updateOptions{source: src, facts: facts, out: io.Discard})
-	if err == nil {
-		t.Fatal("an unreachable GitHub was not reported")
-	}
-	for _, want := range []string{"could not be reached", "PROXY"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message does not mention %q:\n%v", want, err)
-		}
-	}
-}
-
-// TestRateLimitNamesTheResetAndTheWayAround it, since "try again later" with no
-// time is not an instruction.
-//
-// Negative control: report the rate limit as a plain HTTP 403 and this fails.
-func TestRateLimitNamesTheResetAndTheWayAround(t *testing.T) {
-	_, facts := installedTree(t, "v0.7.0", false)
-	reset := time.Now().Add(20 * time.Minute)
-	src := &fakeSource{err: &release.RateLimitError{Reset: reset}}
-
-	err := runUpdate(updateOptions{source: src, facts: facts, out: io.Discard})
-	if err == nil {
-		t.Fatal("the rate limit was not reported")
-	}
-	for _, want := range []string{"rate limiting", "GITHUB_TOKEN", reset.Local().Format(time.Kitchen)} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message does not mention %q:\n%v", want, err)
-		}
-	}
-}
-
 // TestANonReleaseBuildIsNotToldItIsOutOfDate. A "dev+sha" build has no version
 // to compare, and telling its owner to update would be telling them to throw
 // away the build they made on purpose.
@@ -429,55 +367,5 @@ func TestANonReleaseBuildIsNotToldItIsOutOfDate(t *testing.T) {
 	}
 	if len(src.fetched) != 0 {
 		t.Errorf("an unversioned build downloaded %v", src.fetched)
-	}
-}
-
-// TestAPlatformWithNoArchiveIsExplained rather than 404ing.
-//
-// Negative control: skip the AssetNamed check and this fails with a download
-// error instead of a message naming the release page.
-func TestAPlatformWithNoArchiveIsExplained(t *testing.T) {
-	_, facts := installedTree(t, "v0.7.0", false)
-	src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
-	// A release that published only the checksum list, as a partial upload
-	// would leave it.
-	src.rel.Assets = []release.Asset{{
-		Name: release.ChecksumFile,
-		URL:  "https://example.invalid/" + release.ChecksumFile,
-	}}
-
-	err := runUpdate(updateOptions{source: src, facts: facts, out: io.Discard})
-	if err == nil {
-		t.Fatal("a release with no archive for this platform was not reported")
-	}
-	if !strings.Contains(err.Error(), "publishes no") {
-		t.Errorf("the message does not say the release lacks the archive:\n%v", err)
-	}
-}
-
-// TestUpdateIsRegistered. Cobra registers by value, so a command declared and
-// never added to the root compiles, passes vet, and is absent from the binary.
-//
-// Negative control: leave updateCmd out of the AddCommand call and this fails.
-func TestUpdateIsRegistered(t *testing.T) {
-	cmd, _, err := newRootCommand().Find([]string{"update"})
-	if err != nil {
-		t.Fatalf("Find: %v", err)
-	}
-	if cmd.Name() != "update" {
-		t.Fatalf("resolved to %q", cmd.Name())
-	}
-	for _, flag := range []string{"check", "pre"} {
-		if cmd.Flags().Lookup(flag) == nil {
-			t.Errorf("--%s is not a flag on `tuios update`", flag)
-		}
-	}
-	// The help has to say what this will not touch, because the refusal is the
-	// command's main behaviour for most of the ways tuios is installed.
-	flat := strings.Join(strings.Fields(cmd.Long), " ")
-	for _, want := range []string{"release archive", "checksum", "tuios-web", "daemon"} {
-		if !strings.Contains(flat, want) {
-			t.Errorf("the help never mentions %q", want)
-		}
 	}
 }

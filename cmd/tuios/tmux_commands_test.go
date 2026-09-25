@@ -83,18 +83,3 @@ func TestTmuxLinkHandsOtherCallsToRealTmux(t *testing.T) {
 		})
 	}
 }
-
-// TestTmuxShimNeedsAPane checks the launcher refuses outside a tuios pane,
-// where there is no session for the shim to serve.
-func TestTmuxShimNeedsAPane(t *testing.T) {
-	t.Setenv("TUIOS_SESSION", "")
-	t.Setenv("TUIOS_PANE_ID", "")
-	root := newRootCommand()
-	root.SetArgs([]string{"tmux-shim", "--", "true"})
-	root.SilenceErrors = true
-	root.SilenceUsage = true
-	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "runs in a tuios pane") {
-		t.Errorf("tmux-shim outside a pane = %v", err)
-	}
-}

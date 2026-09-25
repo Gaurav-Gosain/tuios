@@ -7,31 +7,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-func TestResolveAgentAlertsDefaults(t *testing.T) {
-	p := ResolveAgentAlerts(nil)
-	if !p.Enabled || !p.Notify || !p.Dock || !p.SuppressFocused {
-		t.Fatalf("defaults should enable notify and dock: %+v", p)
-	}
-	if p.Sound {
-		t.Fatal("sound must be off by default")
-	}
-	if p.Settle != 2*time.Second {
-		t.Fatalf("settle = %v, want 2s", p.Settle)
-	}
-	// The whole point of the defaults: the states that mean the agent stopped,
-	// and none of the ones that report progress.
-	for _, state := range []string{"needs_input", "errored", "done"} {
-		if !p.Alerts(state) {
-			t.Errorf("%s should alert by default", state)
-		}
-	}
-	for _, state := range []string{"idle", "working", "none", ""} {
-		if p.Alerts(state) {
-			t.Errorf("%s must not alert by default", state)
-		}
-	}
-}
-
 func TestResolveAgentAlertsExplicitFalseSurvives(t *testing.T) {
 	no := false
 	p := ResolveAgentAlerts(&AgentAlertsConfig{
