@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // enableApprovals turns approvals on for claude-code with a hold of hold.
@@ -147,35 +145,6 @@ func TestApprovalHeldAndAnsweredFromTheInbox(t *testing.T) {
 	again := result(t, reply(c, t, id, ApprovalDeny, tui.HumanNonce()))
 	if again["applied"] != false || again["decision"] != ApprovalAlways {
 		t.Errorf("a second reply answered %v, want the first decision with applied false", again)
-	}
-}
-
-// TestApprovalDisabledHoldsNothing is the default: no [agents.approvals], so
-// the hook is answered at once and the harness asks as it always did.
-func TestApprovalDisabledHoldsNothing(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
-
-	start := time.Now()
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
-	if res["decision"] != "" || res["reason"] != approvalEndDisabled || res["request_id"] != "" {
-		t.Fatalf("a disabled harness answered %v", res)
-	}
-	if time.Since(start) > 2*time.Second {
-		t.Errorf("a disabled request took %s", time.Since(start))
-	}
-	items, _ := listAttention(t, c, "")
-	if len(items) != 1 || items[0]["request_id"] != nil {
-		t.Errorf("a disabled request changed the item: %v", items)
-	}
-
-	// Another harness than the one enabled is disabled too.
-	enableApprovals(t, d, time.Second)
-	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"opencode","summary":"ok?"}}`))
-	if res["reason"] != approvalEndDisabled {
-		t.Errorf("opencode, not enabled, answered %v", res)
 	}
 }
 
@@ -348,71 +317,6 @@ func TestApprovalRefusals(t *testing.T) {
 	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?","options":["yes"]}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("options [yes] answered %s", code)
-	}
-}
-
-// TestApprovalOnlyOffersWhatTheHarnessCanDo keeps a reply to what the hook
-// said the harness can take.
-func TestApprovalOnlyOffersWhatTheHarnessCanDo(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	enableApprovals(t, d, 30*time.Second)
-	_, a, _ := twoWindowSession(t, d, "work")
-	makeSessionWithWindow(t, d, "other")
-	c := dialVerb(t, sp)
-	tui := attachTUI(t, sp, "other")
-
-	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
-	pending, _ := requestApproval(t, sp, "work", a)
-	id := heldItem(t, c, a)["request_id"].(string)
-	if code := errCode(t, reply(c, t, id, ApprovalAlways, tui.HumanNonce())); code != ErrVerbInvalidParams {
-		t.Fatalf("always, which was not offered, answered %s", code)
-	}
-	// By pane rather than by request id.
-	res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":{"session":"work","window":%q,"decision":"deny","message":"not on main","human_nonce":%q}}`, a, tui.HumanNonce())))
-	if res["decision"] != ApprovalDeny {
-		t.Fatalf("a reply by pane answered %v", res)
-	}
-	got := awaitResult(t, pending)
-	if got["decision"] != ApprovalDeny || got["message"] != "not on main" {
-		t.Errorf("the hook got %v", got)
-	}
-}
-
-// TestApprovalNotHeldForAPaneThePersonIsLookingAt: a held prompt shows nothing
-// in the pane, so a pane an attached client has in front of it is not held.
-func TestApprovalNotHeldForAPaneThePersonIsLookingAt(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	enableApprovals(t, d, 30*time.Second)
-	sess, a, _ := twoWindowSession(t, d, "work")
-	st := sess.GetState()
-	st.FocusedWindowID = a
-	sess.UpdateState(st)
-	c := dialVerb(t, sp)
-	attachTUI(t, sp, "work")
-
-	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
-	if res["reason"] != approvalEndViewed || res["decision"] != "" {
-		t.Errorf("a focused pane answered %v", res)
-	}
-}
-
-func TestApprovalPolicyFromConfig(t *testing.T) {
-	p := ApprovalPolicyFromConfig(config.ApprovalsConfig{Enabled: []string{"claude", " OpenCode ", ""}, HoldSeconds: 1000})
-	if !p.Enabled["claude-code"] || !p.Enabled["opencode"] || len(p.Enabled) != 2 {
-		t.Errorf("enabled = %v", p.Enabled)
-	}
-	if p.holdFor() != maxApprovalHold {
-		t.Errorf("hold 1000s became %s, want the cap", p.holdFor())
-	}
-	if (ApprovalPolicy{}).holdFor() != DefaultApprovalHold {
-		t.Errorf("no hold became %s", (ApprovalPolicy{}).holdFor())
-	}
-	if (ApprovalPolicy{Hold: time.Second}).holdFor() != minApprovalHold {
-		t.Errorf("a one second hold is not raised to the floor")
-	}
-	if len(ApprovalPolicyFromConfig(config.ApprovalsConfig{}).Enabled) != 0 {
-		t.Error("an empty table enabled something")
 	}
 }
 

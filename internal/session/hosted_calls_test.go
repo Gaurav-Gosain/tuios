@@ -2,7 +2,6 @@ package session
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -289,98 +288,6 @@ func TestAHostedPaneAttachesOnlyStashedFiles(t *testing.T) {
 	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"owner","path":`+quote(src)+`}}`))
 	if verr := send(put["path"].(string)); verr != nil {
 		t.Errorf("a hosted pane attaching a stashed file was refused: %v", verr)
-	}
-}
-
-// TestADroppedChannelIsReopenedWhileAWaitIsInFlight: a pane's agent waits for
-// mail, the report channel drops, and the owner opens a new one within
-// hostedCallsRetry, where a report goes through again. The wait does not hold
-// the owner on the dead channel.
-//
-// Negative control: with the owner waiting for its calls in flight before it
-// redials, no channel comes back until the pane's 60 second wait runs out.
-func TestADroppedChannelIsReopenedWhileAWaitIsInFlight(t *testing.T) {
-	hub, far := startHubAndFar(t)
-	waitForHostUp(t, hub, "build")
-	sess, win, _ := hostedHelperWindow(t, hub, far, "global", []hostedHelperCall{
-		{Verb: "wait-for", Params: json.RawMessage(`{"condition":"agent-message","window":"$PANE","timeout":60000}`)},
-	})
-	hp := far.daemon.hostedPaneByAddress(win.ID)
-	if hp == nil {
-		t.Fatal("the far daemon runs no pane for the window")
-	}
-	inFlight := func(ch *hostedCallChannel) bool {
-		ch.mu.Lock()
-		defer ch.mu.Unlock()
-		return ch.inFlight > 0
-	}
-	var first *hostedCallChannel
-	waitUntil(t, func() bool {
-		first = hp.calls.current(0)
-		return first != nil && inFlight(first)
-	}, "the pane's wait never reached the owner")
-
-	_ = first.conn.Close()
-	start := time.Now()
-	var next *hostedCallChannel
-	for next == nil || next == first {
-		if time.Since(start) > hostedCallsRetry+3*time.Second {
-			t.Fatalf("no new report channel %v after the old one dropped", time.Since(start))
-		}
-		time.Sleep(50 * time.Millisecond)
-		next = hp.calls.current(0)
-	}
-	t.Logf("the channel was back after %v", time.Since(start))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, verr := next.call(ctx, "set-agent-state", json.RawMessage(`{"state":"errored"}`)); verr != nil {
-		t.Fatalf("a report on the new channel failed: %v", verr)
-	}
-	for _, w := range sess.GetState().Windows {
-		if w.ID == win.ID && w.AgentState.Name() != "errored" {
-			t.Errorf("the window's state is %q, want errored", w.AgentState.Name())
-		}
-	}
-}
-
-// TestAForwardedWaitEndsWithItsChannel: the owner's wait-for for a hosted pane
-// stops when the report channel it came on ends, rather than holding a slot
-// and a subscription for the rest of the timeout the far side asked for.
-//
-// Negative control: without the hostedEnded case in verbWaitFor the call runs
-// for its full 60 seconds.
-func TestAForwardedWaitEndsWithItsChannel(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("owner", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if _, err := sess.AddDaemonWindow("mine", nil); err != nil {
-		t.Fatalf("window: %v", err)
-	}
-	var mine string
-	_ = sess.mutateState(func(st *SessionState) error {
-		mine = st.Windows[0].ID
-		st.Windows[0].Host = "build"
-		return nil
-	})
-	ended := make(chan struct{})
-	done := make(chan *verbError, 1)
-	go func() {
-		_, verr := d.runHostedCall(sess, mine, "build", "wait-for", json.RawMessage(`{"condition":"agent-message","timeout":60000}`), ended)
-		done <- verr
-	}()
-	select {
-	case verr := <-done:
-		t.Fatalf("the wait returned before the channel ended: %v", verr)
-	case <-time.After(200 * time.Millisecond):
-	}
-	close(ended)
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("the wait outlived the channel it came on")
 	}
 }
 

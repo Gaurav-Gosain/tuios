@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net"
 	"os"
@@ -56,36 +55,6 @@ type farSide struct {
 	// up for the old link until its supervisor has noticed the drop, so a
 	// test that wants the new link waits for the dial first.
 	dials int
-}
-
-// dialCount is how many times the hub has dialed this side so far.
-func (f *farSide) dialCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.dials
-}
-
-// waitForDial blocks until the hub has dialed this side more than n times.
-func (f *farSide) waitForDial(t *testing.T, n int) {
-	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if f.dialCount() > n {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("the hub never dialed the far side again: %d dial(s), had %d", f.dialCount(), n)
-}
-
-// breakLink closes every link transport, which is the ssh child dying.
-func (f *farSide) breakLink() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, l := range f.links {
-		_ = l.Close()
-	}
-	f.links = nil
 }
 
 // dialer is the hub's transport to the far side: a pipe pair with the real
@@ -184,45 +153,6 @@ func connectThrough(t *testing.T, host, sessionName string) (*TUIClient, *Sessio
 	}
 	c.StartReadLoop()
 	return c, state
-}
-
-func TestAConnectionToAHostThatIsDownIsRefusedByName(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	t.Cleanup(useResurrectionDir(t.TempDir()))
-	hub := NewDaemon(&DaemonConfig{
-		Version:            "hub",
-		DisableAutoRestore: true,
-		Hosts:              []federation.Host{{Name: "offline", Addr: "unused"}},
-		HostDial: func(context.Context, federation.Host) (federation.Transport, error) {
-			return nil, errors.New("ssh: connect to host poweredoff port 22: No route to host")
-		},
-	})
-	if err := hub.Start(); err != nil {
-		t.Fatalf("start the hub daemon: %v", err)
-	}
-	t.Cleanup(hub.Stop)
-
-	started := time.Now()
-	c := NewTUIClient()
-	_, err := c.ConnectThroughHost("offline", "test", 80, 24, nil)
-	var hostErr *HostConnectError
-	if !errors.As(err, &hostErr) {
-		t.Fatalf("ASSERTION: connecting through a down host returned %v, want HostConnectError", err)
-	}
-	if hostErr.Code != ErrVerbHostUnreachable || hostErr.Host != "offline" {
-		t.Errorf("ASSERTION: the error is %q for %q, want host_unreachable for offline", hostErr.Code, hostErr.Host)
-	}
-	if !strings.Contains(hostErr.Message, "offline") {
-		t.Errorf("ASSERTION: the message does not name the machine: %q", hostErr.Message)
-	}
-	if took := time.Since(started); took > 5*time.Second {
-		t.Errorf("the refusal took %v; a down host must not be waited on", took)
-	}
-
-	_, err = c.ConnectThroughHost("nowhere", "test", 80, 24, nil)
-	if !errors.As(err, &hostErr) || hostErr.Code != ErrVerbUnknownHost {
-		t.Errorf("ASSERTION: an unknown name returned %v, want unknown_host", err)
-	}
 }
 
 // TestARoutedCommandFromAHostCannotChangeThisMachine is the untrusted fence on

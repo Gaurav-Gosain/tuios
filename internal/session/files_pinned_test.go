@@ -10,29 +10,21 @@ import "testing"
 // user walked into asks that question about a directory the pane never
 // claimed. Every step away from the pane's own folder came back marked "read
 // only: wrong folder".
-
-// TestAHandPickedFolderIsNotJudgedAgainstThePane is the report.
 //
-// Negative control: dropping the Pinned term makes this fail, which is the
-// behaviour that was on screen.
-func TestAHandPickedFolderIsNotJudgedAgainstThePane(t *testing.T) {
-	if spoofCheckWanted(ReadDirPayload{WindowID: "w1", Dir: "/somewhere/else", Pinned: true}) {
-		t.Error("a folder the user walked into was judged against the pane's shell")
-	}
-}
-
-// TestAPaneSteeredListingIsStillJudged. The check is the whole reason the
-// daemon answers this question, and it has to survive the fix.
-func TestAPaneSteeredListingIsStillJudged(t *testing.T) {
-	if !spoofCheckWanted(ReadDirPayload{WindowID: "w1", Dir: "/src"}) {
-		t.Error("the pane's own folder is no longer checked")
-	}
-}
-
-// TestAListingAboutNoPaneIsNotJudged. Without a pane there is no claim to
-// compare against, which is what the payload's own comment has always said.
-func TestAListingAboutNoPaneIsNotJudged(t *testing.T) {
-	if spoofCheckWanted(ReadDirPayload{Dir: "/src"}) {
-		t.Error("a listing about no pane was judged against one")
+// Negative control: dropping the Pinned term makes the hand-picked case fail,
+// which is the behaviour that was on screen.
+func TestWhichListingsAreJudgedAgainstThePane(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload ReadDirPayload
+		want    bool
+	}{
+		{"a folder the user walked into", ReadDirPayload{WindowID: "w1", Dir: "/somewhere/else", Pinned: true}, false},
+		{"the pane's own folder", ReadDirPayload{WindowID: "w1", Dir: "/src"}, true},
+		{"a listing about no pane", ReadDirPayload{Dir: "/src"}, false},
+	} {
+		if got := spoofCheckWanted(tc.payload); got != tc.want {
+			t.Errorf("%s: spoof check wanted = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

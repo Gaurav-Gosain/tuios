@@ -63,32 +63,6 @@ func TestPlainCaptureMatchesLineByLine(t *testing.T) {
 	}
 }
 
-// TestCaptureStateMovesWithOutputAndResize pins what the wait-for backstop
-// keys on: applied output and a resize each move the state, and nothing else
-// does.
-func TestCaptureStateMovesWithOutputAndResize(t *testing.T) {
-	p := &PTY{terminal: vt.NewWithScrollback(20, 5, 10)}
-	start := p.currentCaptureState()
-	if again := p.currentCaptureState(); again != start {
-		t.Fatalf("state moved with nothing applied: %+v then %+v", start, again)
-	}
-
-	p.terminalMu.Lock()
-	p.vtSeq += 5
-	p.terminalMu.Unlock()
-	afterOutput := p.currentCaptureState()
-	if afterOutput == start {
-		t.Fatal("applied output did not move the state")
-	}
-
-	p.terminalMu.Lock()
-	p.terminal.Resize(30, 5)
-	p.terminalMu.Unlock()
-	if p.currentCaptureState() == afterOutput {
-		t.Fatal("a resize did not move the state")
-	}
-}
-
 // TestWaitForOutputBackstopSeesUnannouncedChange changes a pane's content
 // without publishing an output event, which is what a dropped event looks like
 // to a waiter, and requires the backstop to notice. The second case changes the

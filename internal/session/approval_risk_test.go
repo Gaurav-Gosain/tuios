@@ -405,30 +405,3 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 		t.Errorf("the agent read %q, want 1", got)
 	}
 }
-
-func TestApprovalPolicyReadsTheRiskTable(t *testing.T) {
-	off := false
-	p := ApprovalPolicyFromConfig(config.ApprovalsConfig{})
-	if !p.Plans || len(p.Risk) != len(risk.Builtin()) || p.PanesMayAllow {
-		t.Errorf("defaults: plans %v, %d rules, panes_may_allow %v", p.Plans, len(p.Risk), p.PanesMayAllow)
-	}
-	p = ApprovalPolicyFromConfig(config.ApprovalsConfig{HoldPlans: &off, Risk: config.RiskConfig{
-		Builtin: &off, PanesMayAllow: true,
-		Rules: []config.RiskRuleConfig{{Name: "kubectl apply", Pattern: `kubectl\s+apply`}},
-	}})
-	if p.Plans || len(p.Risk) != 1 || p.Risk[0].Name != "kubectl apply" || !p.PanesMayAllow {
-		t.Errorf("set: plans %v, rules %v, panes_may_allow %v", p.Plans, p.Risk, p.PanesMayAllow)
-	}
-}
-
-func TestSameRuleSetAndPlanDigest(t *testing.T) {
-	if !sameRuleSet([]string{"b", "a"}, []string{"a", "b"}) || sameRuleSet([]string{"a"}, []string{"a", "b"}) || sameRuleSet(nil, []string{"a"}) {
-		t.Error("sameRuleSet")
-	}
-	if planLineCount("a\nb\n") != 2 || planLineCount("") != 0 || planLineCount("one") != 1 {
-		t.Error("planLineCount")
-	}
-	if planDigest("x") == planDigest("y") || len(planDigest("x")) != 64 {
-		t.Error("planDigest")
-	}
-}

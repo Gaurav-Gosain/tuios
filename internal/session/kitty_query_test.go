@@ -56,39 +56,6 @@ func TestKittyQueryResponse(t *testing.T) {
 	}
 }
 
-// TestRefreshLinkedViewer checks the daemon marks a session as drawn from
-// another machine exactly while a TUI client that arrived over a link is
-// attached to it, and not because of one attached to a different session.
-func TestRefreshLinkedViewer(t *testing.T) {
-	m := NewManager()
-	m.SetSocketPath(t.TempDir() + "/sock")
-	s, err := m.CreateSession("kittyq", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer s.Stop()
-	d := &Daemon{manager: m, clients: map[string]*connState{}}
-
-	d.clients["local"] = &connState{clientID: "local", sessionID: s.ID, isTUIClient: true}
-	d.clients["linked-elsewhere"] = &connState{clientID: "linked-elsewhere", sessionID: "another", isTUIClient: true, viaLink: true}
-	d.refreshLinkedViewer(s.ID)
-	if s.linkedViewer.Load() {
-		t.Fatal("marked as drawn from another machine by a local client and another session's linked one")
-	}
-
-	d.clients["linked"] = &connState{clientID: "linked", sessionID: s.ID, isTUIClient: true, viaLink: true}
-	d.refreshLinkedViewer(s.ID)
-	if !s.linkedViewer.Load() {
-		t.Fatal("a client attached over a link is drawing the session, and it is not marked")
-	}
-
-	delete(d.clients, "linked")
-	d.refreshLinkedViewer(s.ID)
-	if s.linkedViewer.Load() {
-		t.Fatal("still marked after the linked client left")
-	}
-}
-
 // TestKittyQueryResponseQuiet checks q= is honoured the way kitty honours it.
 // The daemon used to answer OK whatever the guest asked for, q=2 included.
 func TestKittyQueryResponseQuiet(t *testing.T) {

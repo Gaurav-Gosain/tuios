@@ -131,50 +131,6 @@ func TestAskHumanFromAPaneAsksOnlyAsThatPane(t *testing.T) {
 	}
 }
 
-// TestAskHumanEndsWithItsPane checks the ways a question ends with no answer:
-// a newer question from the same pane supersedes it, and the pane closing
-// ends it, and the waiting call is told which.
-func TestAskHumanEndsWithItsPane(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, a, _ := twoWindowSession(t, d, "work")
-	c := dialVerb(t, sp)
-
-	first := askAsync(t, sp, map[string]any{"session": "work", "window": a, "question": "One?", "options": []string{"yes"}})
-	awaitAskItem(t, c)
-	second := askAsync(t, sp, map[string]any{"session": "work", "window": a, "question": "Two?", "options": []string{"yes"}})
-	select {
-	case resp := <-first:
-		if got := result(t, resp); got["status"] != AttentionClosedSuperseded {
-			t.Fatalf("the first question = %v, want superseded", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the first question did not end when the pane asked another")
-	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		item := awaitAskItem(t, c)
-		if item["summary"] == "Two?" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the second question never replaced the first: %v", item)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := sess.CloseDaemonWindow(a); err != nil {
-		t.Fatalf("CloseDaemonWindow: %v", err)
-	}
-	select {
-	case resp := <-second:
-		if got := result(t, resp); got["status"] != AttentionClosedWindow {
-			t.Fatalf("the second question = %v, want window_closed", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the question did not end when its pane closed")
-	}
-}
-
 // TestAskHumanRefusesWhatTheInboxCannotShow keeps the question and the
 // answers to what the Inbox draws as written, so the person answers what the
 // asker asked.

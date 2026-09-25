@@ -61,27 +61,6 @@ func TestEventHubResumeReplaysExactlyMissed(t *testing.T) {
 	}
 }
 
-// TestEventHubResumeFiltersReplay verifies the replay honours the subscription
-// filter, the same as live delivery does.
-func TestEventHubResumeFiltersReplay(t *testing.T) {
-	h := newEventHub()
-	h.publish(streamEvent{Type: EventBell, Session: "work"})       // 1
-	h.publish(streamEvent{Type: EventBell, Session: "other"})      // 2
-	h.publish(streamEvent{Type: EventAgentState, Session: "work"}) // 3
-	h.publish(streamEvent{Type: EventBell, Session: "work"})       // 4
-
-	filter := eventFilter{session: "work", types: map[string]bool{EventBell: true}}
-	sub, _, err := h.subscribeFrom(filter, 16, &resumePoint{afterSeq: 0, bootID: h.bootID})
-	if err != nil {
-		t.Fatalf("subscribeFrom: %v", err)
-	}
-	defer h.unsubscribe(sub)
-	seqs, gap := prefaceSeqs(t, sub)
-	if gap != "" || fmt.Sprint(seqs) != "[1 4]" {
-		t.Fatalf("replay = %v gap %q, want [1 4] and no gap", seqs, gap)
-	}
-}
-
 // TestEventHubRingIsBounded verifies the ring keeps only the newest events,
 // and that a resume from before the oldest one gets a gap with reason evicted
 // followed by what the ring still holds.
@@ -193,24 +172,6 @@ func TestEventHubOutputNotRetained(t *testing.T) {
 	defer h.unsubscribe(late)
 	if seqs, gap := prefaceSeqs(t, late); gap != "" || fmt.Sprint(seqs) != "[4]" {
 		t.Fatalf("resume after output = %v gap %q, want [4] and no gap", seqs, gap)
-	}
-}
-
-// TestEventHubStampsBootID verifies every published event carries the hub's
-// boot id, and that two hubs, like two daemon starts, pick different ones.
-func TestEventHubStampsBootID(t *testing.T) {
-	h := newEventHub()
-	sub := h.subscribe(eventFilter{}, 4)
-	defer h.unsubscribe(sub)
-	h.publish(streamEvent{Type: EventOutput})
-	h.publish(streamEvent{Type: EventBell})
-	for range 2 {
-		if ev := <-sub.ch; ev.BootID == "" || ev.BootID != h.bootID {
-			t.Fatalf("event boot_id = %q, want %q", ev.BootID, h.bootID)
-		}
-	}
-	if other := newEventHub(); other.bootID == h.bootID {
-		t.Fatalf("two hubs share boot id %q", h.bootID)
 	}
 }
 

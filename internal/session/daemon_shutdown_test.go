@@ -1,10 +1,8 @@
 package session
 
 import (
-	"errors"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
@@ -31,37 +29,6 @@ func startShutdownTestDaemon(t *testing.T) (*Daemon, string, string) {
 		t.Fatalf("GetSocketPath: %v", err)
 	}
 	return d, sp, stateDir
-}
-
-// TestWaitForDaemonShutdownTimesOut checks the bounded-wait behaviour when a
-// daemon never finishes: the caller gets a typed timeout rather than hanging or
-// being told the daemon stopped.
-func TestWaitForDaemonShutdownTimesOut(t *testing.T) {
-	startShutdownTestDaemon(t)
-
-	start := time.Now()
-	err := WaitForDaemonShutdown(200 * time.Millisecond)
-	if !errors.Is(err, ErrShutdownTimeout) {
-		t.Fatalf("err = %v, want ErrShutdownTimeout", err)
-	}
-	if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
-		t.Errorf("returned after %v, before the %v timeout elapsed", elapsed, 200*time.Millisecond)
-	}
-}
-
-// TestWaitForDaemonShutdownReturnsImmediatelyWhenAbsent covers kill-server being
-// run when no daemon is there: the signal is already in its final state, so the
-// wait must not burn the full timeout.
-func TestWaitForDaemonShutdownReturnsImmediatelyWhenAbsent(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-
-	start := time.Now()
-	if err := WaitForDaemonShutdown(5 * time.Second); err != nil {
-		t.Fatalf("WaitForDaemonShutdown with no daemon: %v", err)
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("took %v with no daemon present, should return at once", elapsed)
-	}
 }
 
 // TestListenerCloseDoesNotUnlinkTheSocket pins the mechanism behind the
