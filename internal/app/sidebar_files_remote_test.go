@@ -55,3 +55,26 @@ func TestMovingBetweenTwoMachinesAtTheSamePathAsksAgain(t *testing.T) {
 		t.Errorf("the listing is recorded against %q, want lab", m.filesView.Host)
 	}
 }
+
+// TestStayingOnOneMachineDoesNotAskTwice. The machine is part of what names a
+// listing, not a reason to ask again: a second look at the same directory on
+// the same machine is the case the guard exists for.
+func TestStayingOnOneMachineDoesNotAskTwice(t *testing.T) {
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.filesView.Show = 1
+
+	w := &terminal.Window{
+		ID: "w1", Cwd: "/home/ubuntu", Host: "build",
+		Width: 40, Height: 20, Workspace: 1, PTYID: "pty-1",
+	}
+	m.Windows = []*terminal.Window{w}
+	m.CurrentWorkspace = 1
+	m.FocusedWindow = 0
+
+	if cmd := m.FilesSyncCmd(); cmd == nil {
+		t.Fatal("ASSERTION: the first look asked for nothing")
+	}
+	if cmd := m.FilesSyncCmd(); cmd != nil {
+		t.Error("the same directory on the same machine was asked for twice")
+	}
+}

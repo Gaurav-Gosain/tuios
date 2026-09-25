@@ -110,6 +110,32 @@ func TestRailDropsTheBranchWhenItDoesNotFit(t *testing.T) {
 	t.Fatalf("the directory label never reached the rail:\n%s", strings.Join(rows, "\n"))
 }
 
+// TestRailPlaceRidesTheCache: the place is a render input, so a shell that
+// changes branch has to rebuild the rail rather than leave a stale word on it.
+func TestRailPlaceRidesTheCache(t *testing.T) {
+	m := bareShellOS(t, 1)
+	m.SessionName = "session-0"
+	m.DaemonClient = placedClient()
+	sidebarText(t, m)
+	sig := m.sidebarCache.sig
+
+	// The same sessions, and only one branch differs: a listing that changed
+	// in nothing else is the case the comparison has to catch.
+	m.DaemonClient.UpdateSessionCache([]session.SessionInfo{
+		{Name: "session-0", Dir: "tuios", Branch: "fix/rail"},
+		{Name: "session-1", Dir: "docs"},
+		{Name: "api", Dir: "payments", Branch: "release"},
+		{Name: "session-2", Dir: "site", Branch: "next", DisplayName: "Site"},
+	})
+	sidebarText(t, m)
+	if m.sidebarCache.sig == sig {
+		t.Fatal("a branch change did not rebuild the rail")
+	}
+	if !strings.Contains(sessionRow(t, railText(t, m), "tuios"), "fix/rail") {
+		t.Error("the new branch never reached the drawn row")
+	}
+}
+
 // TestOpeningTheRailReplansTheListingPoll: the poll armed at attach for a lone
 // session with the rail hidden is slow and refreshes nothing, and it re-plans
 // only when it fires. Opening the rail has to arm a fresh poll at once, and the
