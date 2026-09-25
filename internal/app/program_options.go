@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 )
 
 // ProgramOptions is the one list of Bubble Tea options a tuios client runs
@@ -97,7 +98,7 @@ func debugLogEvent(m *OS, msg tea.Msg) {
 		return
 	}
 
-	f, err := os.OpenFile("/tmp/tuios-events.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := debuglog.Open(debuglog.EventsPath)
 	if err != nil {
 		return
 	}

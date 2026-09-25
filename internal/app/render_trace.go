@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -42,9 +43,9 @@ func init() {
 	}
 
 	if dir := filepath.Dir(renderTracePath); dir != "" {
-		_ = os.MkdirAll(dir, 0o755)
+		_ = os.MkdirAll(dir, 0o700)
 	}
-	fh, err := os.OpenFile(renderTracePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	fh, err := debuglog.Open(renderTracePath)
 	if err != nil {
 		// Tracing is a diagnostic; never take the session down over it. stdout
 		// is the TUI, so there is nowhere useful to report this.

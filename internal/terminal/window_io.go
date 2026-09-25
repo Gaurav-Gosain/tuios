@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -32,7 +33,7 @@ func debugLogf(format string, v ...any) {
 	if !debugInternal() {
 		return
 	}
-	f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := debuglog.Open(debuglog.Path)
 	if err != nil {
 		return
 	}

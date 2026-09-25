@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -32,7 +33,7 @@ func (e *Emulator) handleCsi(cmd ansi.Cmd, params ansi.Params) {
 
 	// Debug logging for CSI 't' sequences (XTWINOPS)
 	if cmd.Final() == 't' && debugInternal() {
-		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		if f, err := debuglog.Open(debuglog.Path); err == nil {
 			_, _ = fmt.Fprintf(f, "[%s] VT-CSI: received CSI %q (cmd=%d, final=%c)\n",
 				time.Now().Format("15:04:05.000"), paramsString(cmd, params), int(cmd), cmd.Final())
 			_ = f.Close()

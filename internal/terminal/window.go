@@ -18,6 +18,7 @@ import (
 	xpty "github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -664,7 +665,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 		debugMsg := fmt.Sprintf("[%s] NewWindow TERM=%s COLORTERM=%s (envTERM=%s envCOLORTERM=%s)\n",
 			time.Now().Format("15:04:05.000"), termType, colorTerm, os.Getenv("TERM"), os.Getenv("COLORTERM"))
-		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		if f, err := debuglog.Open(debuglog.Path); err == nil {
 			_, _ = f.WriteString(debugMsg)
 			_ = f.Close()
 		}

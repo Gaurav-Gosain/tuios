@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -15,7 +16,7 @@ func sixelPassthroughLog(format string, args ...any) {
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") != "1" {
 		return
 	}
-	f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := debuglog.Open(debuglog.Path)
 	if err != nil {
 		return
 	}

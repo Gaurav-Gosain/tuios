@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -66,7 +67,7 @@ func runLocal() error {
 	// stream to a file so the screen stays clean; the external daemon subprocess
 	// already discards its own output, so this covers the in-process client.
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if lf, lerr := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); lerr == nil {
+		if lf, lerr := debuglog.Open(debuglog.Path); lerr == nil {
 			log.SetOutput(lf)
 		}
 	}

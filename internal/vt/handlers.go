@@ -3,9 +3,9 @@ package vt
 import (
 	"fmt"
 	"io"
-	"os"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -1023,7 +1023,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// Debug logging
 		debugLog := func(msg string) {
 			if debugInternal() {
-				if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				if f, err := debuglog.Open(debuglog.Path); err == nil {
 					_, _ = fmt.Fprintf(f, "[%s] VT-XTWINOPS: %s\n", time.Now().Format("15:04:05.000"), msg)
 					_ = f.Close()
 				}
