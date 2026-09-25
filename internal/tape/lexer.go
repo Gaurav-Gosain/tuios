@@ -1,8 +1,10 @@
 package tape
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Lexer tokenizes .tape file input
@@ -91,6 +93,25 @@ func (l *Lexer) readString(quote byte) string {
 				sb.WriteByte('\'')
 			case '`':
 				sb.WriteByte('`')
+			case 'a':
+				sb.WriteByte('\a')
+			case 'b':
+				sb.WriteByte('\b')
+			case 'f':
+				sb.WriteByte('\f')
+			case 'v':
+				sb.WriteByte('\v')
+			case 'x', 'u', 'U':
+				// The recorder writes a Type line with %q, which spells a
+				// byte or rune strconv does not call printable as \xHH,
+				// \uHHHH or \UHHHHHHHH: an escape byte, a no-break space, the
+				// zero-width joiner inside an emoji. Read without these, the
+				// tape typed the letters instead. A backslash and letter not
+				// followed by enough hex digits keep their old meaning, the
+				// letter itself.
+				if !l.readHexEscape(&sb) {
+					sb.WriteByte(l.ch)
+				}
 			default:
 				sb.WriteByte(l.ch)
 			}
@@ -105,6 +126,34 @@ func (l *Lexer) readString(quote byte) string {
 	}
 
 	return sb.String()
+}
+
+// readHexEscape reads the hex digits of a \x, \u or \U escape, the lexer
+// sitting on the letter, and writes what they name: \x a single byte, which
+// is how %q spells a byte that is not valid UTF-8, and \u and \U a rune. It
+// leaves the lexer on the last digit and reports false, consuming nothing,
+// when the digits are not all there or \u and \U name no valid rune.
+func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
+	n := map[byte]int{'x': 2, 'u': 4, 'U': 8}[l.ch]
+	if l.nextPos+n > len(l.input) {
+		return false
+	}
+	v, err := strconv.ParseUint(l.input[l.nextPos:l.nextPos+n], 16, 32)
+	if err != nil {
+		return false
+	}
+	if l.ch == 'x' {
+		sb.WriteByte(byte(v))
+	} else {
+		if !utf8.ValidRune(rune(v)) {
+			return false
+		}
+		sb.WriteRune(rune(v))
+	}
+	for range n {
+		l.readChar()
+	}
+	return true
 }
 
 // readIdentifier reads an identifier or keyword
