@@ -173,3 +173,28 @@ func TestASwitchTheUserAskedForEndsTheReconnect(t *testing.T) {
 }
 
 var _ = terminal.Window{}
+
+// TestTheSamePanesAreKeptAcrossAReconnect is what makes the return cheap and
+// what keeps a scrolled view where it was. A session whose panes did not change
+// is resumed on the panes already drawn, so each one asks the daemon only for
+// the rows it does not hold and keeps the scroll anchor it was carrying.
+func TestTheSamePanesAreKeptAcrossAReconnect(t *testing.T) {
+	win := newTestWindow(t, "recon-0003", 40, 10)
+	m := newTestOS(win)
+
+	same := &session.SessionState{Windows: []session.WindowState{{ID: "recon-0003", PTYID: win.PTYID}}}
+	if !m.samePaneSet(same) {
+		t.Errorf("ASSERTION: an unchanged session is rebuilt from scratch, which throws away every pane's history and its scroll position")
+	}
+
+	changed := &session.SessionState{Windows: []session.WindowState{
+		{ID: "recon-0003", PTYID: win.PTYID},
+		{ID: "recon-0004", PTYID: "pty-recon-0004"},
+	}}
+	if m.samePaneSet(changed) {
+		t.Error("ASSERTION: a session that gained a pane while the link was down is resumed on the old panes, so the new one is never drawn")
+	}
+	if m.samePaneSet(nil) {
+		t.Error("ASSERTION: an attach that returned no state is treated as an unchanged session")
+	}
+}

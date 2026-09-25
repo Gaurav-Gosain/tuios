@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -165,5 +166,36 @@ func TestDockSanitizeKeepsColourAndDropsControls(t *testing.T) {
 		if got := dockSanitize(tc.in); got != tc.want {
 			t.Errorf("dockSanitize(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestDockComponentRunsAndLaunders is the contract end to end: a command runs,
+// its first line becomes the cell, colour survives, and everything else that
+// could reach the screen does not.
+func TestDockComponentRunsAndLaunders(t *testing.T) {
+	engine := newDockEngine([]*dockComponent{{
+		Name:     "custom/hello",
+		Command:  "printf 'br\\033[33manch\\033[0m\\033[2Jx\\nsecond line\\n'",
+		MaxWidth: 24,
+	}})
+	t.Cleanup(engine.Stop)
+	engine.Start()
+
+	select {
+	case u := <-engine.Updates():
+		engine.applyUpdate(u)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the component never reported")
+	}
+
+	got := engine.Text("custom/hello")
+	if !strings.Contains(got, "\x1b[33m") {
+		t.Errorf("cell %q lost its colour; SGR is the one escape a component may emit", got)
+	}
+	if strings.Contains(got, "\x1b[2J") {
+		t.Errorf("cell %q kept an erase sequence; a dock cell may not redraw somebody else's screen", got)
+	}
+	if strings.Contains(got, "second line") {
+		t.Errorf("cell %q took more than the first line", got)
 	}
 }

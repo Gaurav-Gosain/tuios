@@ -408,3 +408,19 @@ func TestTheGlobalRowIsNotOfferedWhenTheGroupIsNot(t *testing.T) {
 		}
 	}
 }
+
+// TestChoosingAnotherMachineIsNotDoneOnTheUIGoroutine.
+//
+// Opening a pane elsewhere dials a stream on the link and waits for that
+// daemon to spawn a process. Doing it inline would freeze every pane on screen
+// for as long as it took, which on a machine that has gone away is the full
+// budget.
+//
+// Negative control: calling the verb inline and returning nil fails here.
+func TestChoosingAnotherMachineIsNotDoneOnTheUIGoroutine(t *testing.T) {
+	m := pickerOS(t)
+	cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "build", Label: "build", Up: true})
+	if cmd == nil {
+		t.Fatal("choosing another machine did no work off the UI goroutine")
+	}
+}
