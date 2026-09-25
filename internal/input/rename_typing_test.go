@@ -37,7 +37,7 @@ func TestRenameTakesASpace(t *testing.T) {
 		t.Fatalf("rename buffer = %q, want %q", o.RenameBuffer, "build v2")
 	}
 
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
+	_, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
 	if w.CustomName != "build v2" {
 		t.Fatalf("committed name = %q, want the spaced name", w.CustomName)
 	}
@@ -57,7 +57,7 @@ func TestRenameTakesNonASCII(t *testing.T) {
 		if o.RenameBuffer != name {
 			t.Errorf("typing %q left buffer %q", name, o.RenameBuffer)
 		}
-		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
+		_, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
 		if w.CustomName != name {
 			t.Errorf("committed name = %q, want %q", w.CustomName, name)
 		}

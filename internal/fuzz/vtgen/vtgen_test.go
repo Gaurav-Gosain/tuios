@@ -192,7 +192,11 @@ func TestScriptIsReproducible(t *testing.T) {
 		}
 	}
 	input := []byte("a corpus entry that a mutator produced")
-	if vtgen.FromBytes(input).Script(50).String() != vtgen.FromBytes(input).Script(50).String() {
+	// Two separate calls, each from its own copy of the generator state, so
+	// the comparison catches anything that is not a function of the bytes.
+	first := vtgen.FromBytes(input).Script(50).String()
+	second := vtgen.FromBytes(input).Script(50).String()
+	if first != second {
 		t.Fatal("the same bytes produced two different scripts")
 	}
 }

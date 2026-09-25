@@ -40,9 +40,8 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatal("no subscriber after Subscribe")
 	}
 	chunk := bytes.Repeat([]byte("o"), 16<<10)
-	var seq int64
 	for range 64 { // 1 MiB, four times the bound
-		seq = p.feedRing(chunk)
+		p.feedRing(chunk)
 	}
 	if q := sub.queued.Load(); q > maxSubscriberQueue {
 		t.Fatalf("a stream nobody takes holds %d bytes, the bound is %d", q, maxSubscriberQueue)
@@ -64,7 +63,7 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 	}
 
 	// Gapped and drained: nothing more is queued until the stream is rebuilt.
-	seq = p.feedRing(chunk)
+	p.feedRing(chunk)
 	if len(ch) != 0 {
 		t.Fatal("a gapped stream was handed another chunk, which would paint past the hole")
 	}
@@ -99,7 +98,6 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 	default:
 		t.Fatal("after the resume the stream got nothing")
 	}
-	_ = seq
 }
 
 // TestResumeAfterGapWaitsForTheDrain: a gapped stream that still holds chunks

@@ -116,7 +116,7 @@ func TestPressingTheDeleteKeyAgainDoesNotAnswerTheDialog(t *testing.T) {
 		t.Fatal("a repeated keypress closed the dialog")
 	}
 	// And "y" is not a yes either: the answer is a selection.
-	o, _ = HandleKeyPress(press("y"), o)
+	_, _ = HandleKeyPress(press("y"), o)
 	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
 		t.Fatalf("\"y\" answered the dialog: %v", err)
 	}

@@ -381,8 +381,7 @@ func TestCopyModeSelectionIgnoresButtonFreeMotion(t *testing.T) {
 		t.Fatal("a held drag selected nothing")
 	}
 
-	next, _ := o.Update(tea.MouseMotionMsg{X: 21, Y: 1})
-	o = next.(*app.OS)
+	o.Update(tea.MouseMotionMsg{X: 21, Y: 1})
 	if got := selectedText(win); got != want {
 		t.Errorf("button-free motion extended the selection: %q -> %q", want, got)
 	}

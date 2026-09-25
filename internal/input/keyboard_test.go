@@ -28,7 +28,7 @@ func TestKeysTypedRightAfterEnteringTerminalModeReachThePTY(t *testing.T) {
 			t.Fatalf("i did not enter terminal mode (mode %v)", o.Mode)
 		}
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'a', Text: "a"}, o)
-		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: '2', Text: "2"}, o)
+		_, _ = HandleKeyPress(tea.KeyPressMsg{Code: '2', Text: "2"}, o)
 		if string(pty.got) != "a2" {
 			t.Fatalf("the shell got %q for keys typed at once after entering terminal mode, want %q", pty.got, "a2")
 		}

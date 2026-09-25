@@ -137,8 +137,15 @@ func TestPaletteFromParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("paletteFromParams(nil) error: %v", err)
 	}
-	if len(pal) != 16 {
-		t.Fatalf("xterm palette len = %d, want 16", len(pal))
+	// The palette is a [16] array, so its length says nothing. Check the
+	// entries: an empty palette is the xterm table, not zero values.
+	for i, c := range pal {
+		if c == nil {
+			t.Fatalf("the default palette has no colour at %d", i)
+		}
+	}
+	if got, want := ResolveSGR("\x1b[31m", pal), ResolveSGR("\x1b[31m", xtermPalette()); got != want {
+		t.Fatalf("an empty palette resolved red to %q, want the xterm %q", got, want)
 	}
 
 	// Wrong length → error.

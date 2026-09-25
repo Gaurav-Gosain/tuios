@@ -184,6 +184,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		if o.FocusedWindow != 0 {
 			t.Errorf("a drag crossing pane b moved focus to %d", o.FocusedWindow)
 		}
-		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
+		_, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
 	})
 }

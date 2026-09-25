@@ -93,7 +93,10 @@ func TestFingerprintSeesTheStrip(t *testing.T) {
 	if StateFingerprint(at(0)) == StateFingerprint(&SessionState{Name: "fp"}) {
 		t.Error("a strip at home fingerprints as a peer that has not said")
 	}
-	if StateFingerprint(at(40)) != StateFingerprint(at(40)) {
+	// Two states built separately, so the comparison catches a fingerprint
+	// that depends on map order or on the pointer rather than the content.
+	first, second := StateFingerprint(at(40)), StateFingerprint(at(40))
+	if first != second {
 		t.Error("the same strip fingerprints differently")
 	}
 }

@@ -52,7 +52,7 @@ func setNonZero(t *testing.T, v reflect.Value) {
 		v.SetBool(true)
 	case reflect.Slice:
 		v.Set(reflect.Append(reflect.MakeSlice(v.Type(), 0, 1), reflect.Zero(v.Type().Elem())))
-	case reflect.Ptr:
+	case reflect.Pointer:
 		elem := reflect.New(v.Type().Elem())
 		if elem.Elem().Kind() == reflect.Bool {
 			elem.Elem().SetBool(false)
