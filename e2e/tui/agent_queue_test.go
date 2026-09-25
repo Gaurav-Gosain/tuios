@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"github.com/Gaurav-Gosain/tuitest"
 	"strings"
 	"testing"
 	"time"
@@ -57,4 +58,57 @@ func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	alive(t, term, "after the queued message was typed")
+}
+
+// TestNarrowRailKeepsTheAgentNameBesideAQueue: on the rail an 80 column
+// screen gets, "1 queued" used to leave "a…" of an agent called agent. The
+// name wins: the figure shortens or goes before the name is cut. The frame
+// is saved under artifactDir.
+//
+// How this could pass wrongly, written down first: "agent" is also the
+// session's name, so the row read is the one under the agents section's
+// header and inside the rail's columns; and the row might be drawn before the
+// queue reaches it, so the test waits for its queue figure first.
+func TestNarrowRailKeepsTheAgentNameBesideAQueue(t *testing.T) {
+	const cols, rows = 80, 24
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "agent", "working", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "agent", "--name", "agent"); err != nil {
+		t.Fatalf("name the pane: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "queue", "-s", "agent", "also add a CHANGELOG entry"); err != nil {
+		t.Fatalf("queue: %v\n%s", err, out)
+	}
+	term := attachIn(t, base, "agent", startOpts{cols: cols, rows: rows, shippedLooks: true})
+	railCol := cols - narrowRailWidth
+	railText := func(s tuitest.Screen, y int) string {
+		var b strings.Builder
+		for x := railCol; x < cols; x++ {
+			b.WriteString(s.Cell(x, y).Content)
+		}
+		return b.String()
+	}
+	// The row under the agents section's header, which is the agent's.
+	agentRow := func(s tuitest.Screen) string {
+		for y := range rows - 1 {
+			if strings.HasPrefix(strings.TrimSpace(strings.Trim(railText(s, y), "│ ")), "agents") {
+				return railText(s, y+1)
+			}
+		}
+		return ""
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(agentRow(s), "q") }, uiTimeout); err != nil {
+		t.Fatalf("the rail never listed the agent: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "rail-80x24")
+	if row := agentRow(term.Screen()); !strings.Contains(row, "agent") {
+		t.Errorf("the rail cut the agent's name for its queue: %q\n%s", row, term.Snapshot())
+	}
 }

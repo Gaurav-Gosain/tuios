@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,4 +215,117 @@ func TestReviewOverlayAt80x24(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
 	}
+}
+
+// TestReviewFrameAndStatusLine is the review's frame and its status line on
+// the real terminal. The rules under the header and above the footer meet the
+// frame's sides; a dock message from anything else, here another client
+// opening a window, stays off the review's status line and the compare
+// view's; and a message the review raised itself is shown there. The frames
+// are saved under artifactDir.
+//
+// How this could pass wrongly, written down first: the other client's window
+// might not reach this client before the check ends, so the check waits for
+// the window to be listed and then watches the screen for as long as the
+// message lives; and the status line might show nothing at all, so the
+// review's own message is asserted to show.
+func TestReviewFrameAndStatusLine(t *testing.T) {
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "fr")
+	dir := artifactDir(t)
+
+	term := attachIn(t, base, session, startOpts{})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "M README", "esc close")
+	joined := 0
+	for _, l := range strings.Split(term.Snapshot(), "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "├") && strings.HasSuffix(l, "┤") {
+			joined++
+		}
+		if strings.HasPrefix(l, "│─") {
+			t.Errorf("a rule stops short of the frame: %q", l)
+		}
+	}
+	if joined < 2 {
+		t.Errorf("%d rules meet the frame, want the header's and the footer's\n%s", joined, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "review")
+
+	if out, err := tuiosCLI(t, base, "new-window", "extra", "-s", session, "--no-focus"); err != nil {
+		t.Fatalf("open a window from another client: %v\n%s", err, out)
+	}
+	watchAbsent := func(where string) {
+		t.Helper()
+		deadline := time.Now().Add(2500 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			if text := term.Screen().Text(); strings.Contains(text, "Window created") {
+				t.Fatalf("the %s shows a dock message it did not raise\n%s", where, term.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	watchAbsent("review")
+
+	sendKeys(t, term, "w")
+	waitScreen(t, term, "the compare view never opened", "Compare", "esc back")
+	if out, err := tuiosCLI(t, base, "new-window", "extra-2", "-s", session, "--no-focus"); err != nil {
+		t.Fatalf("open a window from another client: %v\n%s", err, out)
+	}
+	watchAbsent("compare view")
+	sendKeys(t, term, "d")
+	waitScreen(t, term, "the compare view did not show its own message", "Mark two attempts with m, then d diffs them")
+	saveArtifact(t, term, dir, "compare-own-message")
+	t.Logf("frames in %s", dir)
+}
+
+// TestFanSurvivesADaemonRestart: a fan's sessions come back from kill-server
+// and a restore still in their group and still managed, so the review diffs
+// against the fan's base and compare lists both attempts. The worktree rows
+// after the restore and the compare view are saved under artifactDir.
+//
+// How this could pass wrongly, written down first: the restore might not
+// have run when the rows are read, so the rows are polled until both
+// sessions are back; and a group read from the branch name alone would pass
+// the rows check, so compare is opened too, which needs the managed mark.
+func TestFanSurvivesADaemonRestart(t *testing.T) {
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "rs")
+	dir := artifactDir(t)
+
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new", "after", "--detach"); err != nil {
+		t.Fatalf("start the daemon again: %v\n%s", err, out)
+	}
+	var rows []map[string]any
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		rows = worktreeRows(t, base, "--group", "try/rs")
+		managed := 0
+		for _, r := range rows {
+			if r["group"] == "try/rs" && r["managed"] == true {
+				managed++
+			}
+		}
+		if managed == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the fan did not come back in its group and managed: %v", rows)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if data, err := json.MarshalIndent(rows, "", "  "); err == nil {
+		_ = os.WriteFile(filepath.Join(dir, "worktree-rows-after-restart.json"), data, 0o644)
+	}
+
+	term := attachIn(t, base, session, startOpts{})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened after the restart", "Review", "vs main", "M README")
+	sendKeys(t, term, "w")
+	waitScreen(t, term, "compare found no fan after the restart", "Compare  try/rs in repo, 2 attempts", "repo-try-rs ", session)
+	saveArtifact(t, term, dir, "compare-after-restart")
+	t.Logf("artifacts in %s", dir)
 }
