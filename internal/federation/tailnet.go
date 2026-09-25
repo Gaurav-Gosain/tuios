@@ -16,9 +16,9 @@ import (
 // from, so nobody has to remember what a machine is called or type out a
 // MagicDNS name by hand.
 //
-// It reads and never writes. The only call made is Status, which is the same
-// call `tailscale status` makes, and it needs no root and no operator setting:
-// the local API grants read to any connection on the socket. If tailscaled is
+// It reads and never writes. The only call made is `tailscale status --json`,
+// which needs no root and no operator setting: the local API grants read to
+// any connection on the socket. If tailscaled is
 // not running, or the machine is not on a tailnet, the list is empty and
 // nothing else changes.
 //
