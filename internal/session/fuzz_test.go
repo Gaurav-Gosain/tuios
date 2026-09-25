@@ -2,7 +2,6 @@ package session
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 // verbLineSeeds are request lines the daemon accepts on its socket, plus the
 // malformed and hostile shapes an untrusted client can send. Anything that can
 // open the socket can send these, so the decoder has to reject them cheaply.
+// FuzzVerbDispatch (fuzz_verb_test.go) runs them through the dispatcher.
 var verbLineSeeds = []string{
 	`{"id":1,"verb":"list-verbs","params":{}}`,
 	`{"id":1,"verb":"list-sessions"}`,
@@ -58,88 +58,6 @@ var verbLineSeeds = []string{
 	"{\"verb\":\"\xff\xfe\"}",
 	"{\"verb\":\"a\\ud800\"}",
 	"{\"verb\":\"\\u0000\"}",
-}
-
-// FuzzVerbRequestDecode drives the JSON decode and verb-lookup path that
-// dispatchVerbLine runs on every line arriving from a socket client, stopping
-// short of the handlers themselves (which need a live daemon).
-//
-// The lookup path is where an unknown verb turns into a did-you-mean hint, and
-// that hint compares the client's string against every registered verb. The
-// line limit is 16 MiB, so this has to stay cheap for a name of any length.
-func FuzzVerbRequestDecode(f *testing.F) {
-	for _, s := range verbLineSeeds {
-		f.Add([]byte(s))
-	}
-
-	known := knownVerbNames()
-
-	f.Fuzz(func(t *testing.T, line []byte) {
-		// The daemon's scanner caps a line at 16 MiB; stay under it so the
-		// target measures the decode path rather than the scanner.
-		if len(line) > 16*1024*1024 {
-			line = line[:16*1024*1024]
-		}
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			return
-		}
-
-		var req verbRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			// Malformed JSON is answered with an error envelope. That envelope
-			// must still be serialisable, or the daemon cannot reply at all.
-			resp := &verbResponse{
-				Error: newVerbError(ErrVerbInvalidRequest, "malformed JSON request: "+err.Error()),
-			}
-			if _, merr := json.Marshal(resp); merr != nil {
-				t.Fatalf("error envelope for a malformed line is not serialisable: %v", merr)
-			}
-			return
-		}
-
-		if req.Verb == "" {
-			return
-		}
-		if _, ok := verbRegistry[req.Verb]; ok {
-			return
-		}
-
-		// Unknown verb: this is the hint path. It must return within a budget
-		// that does not scale with the client's string, since any client can
-		// send a 16 MiB one and the daemon answers on the accept goroutine.
-		done := make(chan string, 1)
-		go func() { done <- closestMatch(req.Verb, known) }()
-
-		var suggestion string
-		select {
-		case suggestion = <-done:
-		case <-time.After(10 * time.Second):
-			t.Fatalf("closestMatch did not return within 10s for a %d-byte verb", len(req.Verb))
-		}
-
-		// A suggestion is only useful if it names a verb that exists.
-		if suggestion != "" {
-			if _, ok := verbRegistry[suggestion]; !ok {
-				t.Fatalf("closestMatch suggested %q, which is not a registered verb", suggestion)
-			}
-			if suggestion == req.Verb {
-				t.Fatalf("closestMatch suggested the verb the client already sent")
-			}
-		}
-
-		resp := &verbResponse{
-			ID: req.ID,
-			Error: hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+req.Verb, &VerbHint{
-				Verb:       "list-verbs",
-				DidYouMean: suggestion,
-				Available:  known,
-			}),
-		}
-		if _, err := json.Marshal(resp); err != nil {
-			t.Fatalf("unknown-verb envelope is not serialisable: %v", err)
-		}
-	})
 }
 
 // FuzzClosestMatch drives the suggestion path directly, including the edit
@@ -217,6 +135,10 @@ func FuzzReadMessageFraming(f *testing.F) {
 		'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
 		'u', 'v', 'w', 'x', 'y', 'z', 'd', 'a', 't', 'a'))
 	f.Add(frame(2+36, byte(MsgPTYOutput), wireCodecGob))
+	// A PTY frame whose id is all padding, and one whose codec byte is not
+	// the one a writer sends.
+	f.Add(append(frame(2+36+2, byte(MsgInput), wireCodecGob), append(make([]byte, 36), 'h', 'i')...))
+	f.Add(frame(3, byte(MsgResize), 1, 'x'))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -227,12 +149,26 @@ func FuzzReadMessageFraming(f *testing.F) {
 		// A single reader can hold several frames; a desync on one frame must
 		// not turn into an unbounded read loop on the rest.
 		for range 64 {
+			off := len(data) - r.Len()
 			msg, err := ReadMessage(r)
 			if err != nil {
 				break
 			}
 			if msg == nil {
 				t.Fatalf("ReadMessage returned a nil message and no error")
+			}
+			// The writer must put back exactly the frame the reader took,
+			// apart from the codec byte, which the reader ignores and the
+			// writer always sends as gob. A frame that re-encodes to other
+			// bytes is one a relaying daemon forwards changed.
+			consumed := append([]byte(nil), data[off:len(data)-r.Len()]...)
+			consumed[5] = wireCodecGob
+			var back bytes.Buffer
+			if err := WriteMessage(&back, msg); err != nil {
+				t.Fatalf("WriteMessage of a frame ReadMessage accepted: %v", err)
+			}
+			if !bytes.Equal(back.Bytes(), consumed) {
+				t.Fatalf("frame re-encodes differently:\nread  %x\nwrote %x", consumed, back.Bytes())
 			}
 			// The reader accepted the frame, so it was within the cap and the
 			// body was fully present.
@@ -255,6 +191,17 @@ func FuzzReadMessageFraming(f *testing.F) {
 					}
 					if len(payload) > len(msg.Payload) {
 						t.Fatalf("ParseBinaryPTYMessage returned more data than the payload held")
+					}
+					if strings.HasSuffix(ptyID, "\x00") {
+						t.Fatalf("ParseBinaryPTYMessage left padding on the ID: %q", ptyID)
+					}
+					// And the PTY writer puts the same frame back.
+					var pty bytes.Buffer
+					if err := writePTYFrame(&pty, msg.Type, ptyID, payload); err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(pty.Bytes(), consumed) {
+						t.Fatalf("PTY frame for %q re-encodes differently:\nread  %x\nwrote %x", ptyID, consumed, pty.Bytes())
 					}
 				}
 			}

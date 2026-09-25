@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -837,14 +838,10 @@ func ParseBinaryPTYMessage(payload []byte) (ptyID string, data []byte, err error
 	if len(payload) < 36 {
 		return "", nil, fmt.Errorf("payload too short for PTY message: %d bytes", len(payload))
 	}
-	ptyID = string(payload[:36])
-	// Trim null bytes from ID
-	for i := len(ptyID) - 1; i >= 0; i-- {
-		if ptyID[i] != 0 {
-			ptyID = ptyID[:i+1]
-			break
-		}
-	}
+	// Trim the NUL padding from the ID. The loop this replaces stopped at the
+	// first byte that was not NUL, so an ID of nothing but padding came back
+	// as 36 NUL bytes rather than empty (FuzzReadMessageFraming).
+	ptyID = strings.TrimRight(string(payload[:36]), "\x00")
 	data = payload[36:]
 	return ptyID, data, nil
 }
