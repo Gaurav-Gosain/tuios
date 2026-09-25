@@ -17,6 +17,7 @@ require (
 	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/epilande/go-devicons v0.0.0-20250505162540-0661cab71a28
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/lrstanley/bubbletint/v2 v2.0.2
 	github.com/lrstanley/go-nf v0.0.0-20260418212552-215ab243b591
