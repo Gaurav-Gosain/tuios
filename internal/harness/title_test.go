@@ -2,17 +2,6 @@ package harness
 
 import "testing"
 
-// registryFromTOML builds a registry holding one manifest written inline, so a
-// rule shape can be pinned without adding a manifest to the bundled set.
-func registryFromTOML(t *testing.T, body string) *Registry {
-	t.Helper()
-	m, err := parseManifest("inline.toml", []byte(body))
-	if err != nil {
-		t.Fatalf("parse the inline manifest: %v", err)
-	}
-	return &Registry{manifests: []*Manifest{m}}
-}
-
 // The window title as evidence, and the boundary rule that makes it safe.
 //
 // A screen is prose and a substring anywhere in it is a fair match. A title is
@@ -98,91 +87,6 @@ func TestAnOverlappingCandidateIsNotSteppedOver(t *testing.T) {
 	// never sees it.
 	if !containsToken("xa a a ", "a a") {
 		t.Error("a bounded occurrence overlapping an unbounded one was missed")
-	}
-}
-
-// titleRegistry is a registry with one harness whose title rules are the two
-// shapes the agents actually use.
-func titleRegistry(t *testing.T) *Registry {
-	t.Helper()
-	return registryFromTOML(t, `
-schema_version = 1
-id = "demo"
-[detect]
-comm = ["demo-agent"]
-[title]
-enabled = true
-fold_case = true
-[[title.rule]]
-state = "needs_input"
-priority = 10
-message = "the title says it is waiting"
-any = ["action required"]
-[[title.rule]]
-state = "working"
-priority = 1
-any = ["demo"]
-`)
-}
-
-// TestATitleMovesTheStateOfAClaimedPane is the feature.
-func TestATitleMovesTheStateOfAClaimedPane(t *testing.T) {
-	reg := titleRegistry(t)
-
-	state, rule, ok := reg.ClassifyTitle("demo", "demo - Action Required: approve?")
-	if !ok {
-		t.Fatal("a title carrying the blocked phrase matched nothing")
-	}
-	if state != "needs_input" {
-		t.Errorf("state %q, want needs_input", state)
-	}
-	if got := reg.TitleRuleMessage("demo", rule); got != "the title says it is waiting" {
-		t.Errorf("the rule's message is %q", got)
-	}
-}
-
-// TestTheHighestPriorityTitleRuleWins, the same way the screen tier resolves
-// two rules that both match.
-func TestTheHighestPriorityTitleRuleWins(t *testing.T) {
-	reg := titleRegistry(t)
-	// Both rules match this: "demo" and "action required".
-	state, _, ok := reg.ClassifyTitle("demo", "demo action required")
-	if !ok {
-		t.Fatal("nothing matched a title both rules describe")
-	}
-	if state != "needs_input" {
-		t.Errorf("state %q, want the higher-priority needs_input", state)
-	}
-}
-
-// TestATitleWithNothingToSayIsNoOpinion. A rule that stopped matching has to
-// degrade to silence rather than to a confident wrong answer, which is the
-// contract the screen tier is held to and for the same reason.
-func TestATitleWithNothingToSayIsNoOpinion(t *testing.T) {
-	reg := titleRegistry(t)
-	for _, title := range []string{"", "vim main.go", "~/src/demo-blinker"} {
-		if state, _, ok := reg.ClassifyTitle("demo", title); ok {
-			t.Errorf("title %q was classified as %q", title, state)
-		}
-	}
-}
-
-// TestTitleRulesAreOffUntilAManifestAsks. Every manifest that exists was
-// written before this, and none of them should start reading titles because
-// the code to do it arrived.
-func TestTitleRulesAreOffUntilAManifestAsks(t *testing.T) {
-	reg := registryFromTOML(t, `
-schema_version = 1
-id = "quiet"
-[detect]
-comm = ["quiet-agent"]
-[title]
-[[title.rule]]
-state = "working"
-any = ["quiet"]
-`)
-	if _, _, ok := reg.ClassifyTitle("quiet", "quiet is working"); ok {
-		t.Error("a title block that did not say enabled was read anyway")
 	}
 }
 

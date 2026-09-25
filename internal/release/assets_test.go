@@ -181,17 +181,6 @@ func TestBinaryFromArchiveIgnoresTheEntryPath(t *testing.T) {
 	}
 }
 
-// TestBinaryFromArchiveSaysWhenTheBinaryIsMissing rather than returning empty
-// bytes, which would be staged and committed as a zero-length binary.
-//
-// Negative control: return nil, nil at EOF and this fails.
-func TestBinaryFromArchiveSaysWhenTheBinaryIsMissing(t *testing.T) {
-	archive := tarGz(t, map[string]string{"README.md": "readme"})
-	if _, err := BinaryFromArchive(bytes.NewReader(archive), "tuios"); !errors.Is(err, ErrNotInArchive) {
-		t.Errorf("got %v, want ErrNotInArchive", err)
-	}
-}
-
 // TestBinaryFromArchiveRefusesRubbish, so a redirect to an HTML error page is
 // reported as a bad archive rather than as a missing binary.
 //

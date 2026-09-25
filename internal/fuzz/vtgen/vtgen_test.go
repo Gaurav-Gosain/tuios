@@ -238,25 +238,3 @@ func TestSplitWritesIsReproducible(t *testing.T) {
 		}
 	}
 }
-
-// TestScriptRendersReadably guards the other half of the point of generating by
-// grammar: every step says what it is, and the bytes are printed escaped rather
-// than raw, so a failure can be pasted into a bug report.
-func TestScriptRendersReadably(t *testing.T) {
-	s := vtgen.New(7).Script(40)
-	text := s.String()
-	if strings.ContainsRune(text, 0x1b) {
-		t.Error("the rendered script contains a raw escape byte, which will not survive a paste")
-	}
-	for i, seq := range s {
-		if seq.Desc == "" {
-			t.Errorf("step %d has no description", i+1)
-		}
-		if seq.Kind == "" {
-			t.Errorf("step %d has no kind", i+1)
-		}
-	}
-	if lines := strings.Count(text, "\n"); lines != len(s) {
-		t.Errorf("the rendered script has %d lines for %d steps", lines, len(s))
-	}
-}

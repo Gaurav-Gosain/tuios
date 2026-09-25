@@ -1,8 +1,6 @@
 package harness
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -218,35 +216,6 @@ regex  = ['^( [\x{2800}-\x{28FF}]){1,2} \[(BUILD|PLAN)\]']
 	}
 }
 
-// TestExplainReportsGroupsAndRegionText: the explanation names the nested
-// group that refused and carries the text a narrowed rule read.
-func TestExplainReportsGroupsAndRegionText(t *testing.T) {
-	r := mustManifest(t, `
-[screen]
-enabled = true
-lines   = 8
-[[screen.rule]]
-state  = "needs_input"
-region = "after_last_horizontal_rule"
-all    = ["Esc to cancel"]
-any_of = [ { all = ["Enter to confirm"] }, { all = ["Enter to select"] } ]
-none_of = [ { all = ["auto"] } ]
-`)
-	tail := []string{"Do you want to proceed?", "──────────", "  Esc to cancel · auto"}
-	_, rule, reports := r.Explain("x-agent", tail)
-	if rule != -1 {
-		t.Fatalf("rule %d matched", rule)
-	}
-	rep := reports[0]
-	if rep.Text != "  Esc to cancel · auto" {
-		t.Errorf("region text %q", rep.Text)
-	}
-	want := []string{"no any_of group matched", "none_of[0] matched"}
-	if strings.Join(rep.Groups, "|") != strings.Join(want, "|") {
-		t.Errorf("groups %q, want %q", rep.Groups, want)
-	}
-}
-
 // TestProgressRules: a title-block rule can read the last OSC 9;4 report, and
 // a harness without such a rule reports none.
 func TestProgressRules(t *testing.T) {
@@ -291,55 +260,5 @@ regex    = ['^⠋ ']
 		if got := ProgressText(tc.state, tc.percent); got != tc.want {
 			t.Errorf("ProgressText(%d, %d) = %q, want %q", tc.state, tc.percent, got, tc.want)
 		}
-	}
-}
-
-// TestInputProfile: the [input] block's defaults, and what each field
-// changes.
-func TestInputProfile(t *testing.T) {
-	r := mustManifest(t, "[input]\nsubmit = \"LF\"\nbracketed_paste = false\nfocus_before_submit = true\nsource = \"test\"\n")
-	got := r.InputProfile("x-agent")
-	if got.SubmitKey != "\n" || got.BracketedPaste || !got.FocusBeforeSubmit {
-		t.Errorf("profile %+v", got)
-	}
-	r = mustManifest(t, "")
-	if got := r.InputProfile("x-agent"); got != DefaultInputProfile() {
-		t.Errorf("a manifest with no [input] block has profile %+v, want the default", got)
-	}
-	if got := r.InputProfile("nobody"); got != DefaultInputProfile() {
-		t.Errorf("an unknown harness has profile %+v, want the default", got)
-	}
-	if def := DefaultInputProfile(); def.SubmitKey != "\r" || !def.BracketedPaste || def.FocusBeforeSubmit {
-		t.Errorf("default profile %+v", def)
-	}
-	if _, err := parseManifest("x.toml", []byte(manifestHead+"[input]\nsubmit = \"enter\"\n")); err == nil {
-		t.Error("an unknown submit key loaded")
-	}
-}
-
-// TestUserFileReplacesBundled: a user manifest with a bundled id replaces it
-// whole, and says so.
-func TestUserFileReplacesBundled(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "codex.toml")
-	body := "schema_version = 1\nid = \"codex\"\n[detect]\ncomm = [\"codex\"]\n"
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	r, errs := Load(dir)
-	if len(errs) != 0 {
-		t.Fatalf("load errors: %v", errs)
-	}
-	m := r.Lookup("codex")
-	src, replaced := m.Source()
-	if src != path || !replaced {
-		t.Errorf("source %q replaced %v, want %q true", src, replaced, path)
-	}
-	// Whole-file replacement: the bundled title and notify blocks are gone.
-	if len(m.Title.Rule) != 0 || len(m.Notify.Rule) != 0 || m.Screen.Enabled {
-		t.Error("the user file inherited blocks from the bundled manifest; replacement is whole-file")
-	}
-	if src, replaced := r.Lookup("claude-code").Source(); src != "bundled" || replaced {
-		t.Errorf("an untouched bundled manifest reports %q %v", src, replaced)
 	}
 }

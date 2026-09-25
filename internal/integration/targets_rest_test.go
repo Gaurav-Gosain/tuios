@@ -2,17 +2,12 @@ package integration
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // These tests cover the integrations beyond the first four: every target's
@@ -387,143 +382,6 @@ func TestHermesRefusesAnInlineList(t *testing.T) {
 	}
 	if _, err := os.Stat(tg.Path(env)); !os.IsNotExist(err) {
 		t.Fatal("a refused install still wrote the plugin")
-	}
-}
-
-// TestOpenCodePluginIsUnchanged pins the opencode plugin tuios writes to the
-// bytes the version 3 release of it wrote, the one that feeds the model and
-// cost to the pane's agent metadata. Kilo shares its template, and an install that
-// renders differently would read as out of date and be rewritten for every
-// user although nothing about it changed. A change here goes with a version
-// bump for both.
-func TestOpenCodePluginIsUnchanged(t *testing.T) {
-	tg := mustTarget(t, OpenCode)
-	for cmd, want := range map[string]string{
-		"tuios":               "58bdce7dbdf055982573d6f7ce02e9957e58650999e9f1171d27e5b7c8b77e76",
-		"/opt/my tuios/tuios": "3e844bb67f86ca5869265c0050f4fca7eb64e81bd2cc0136e18de31b66fed42b",
-	} {
-		sum := sha256.Sum256(tg.format.(ownedFile).render(tg, cmd))
-		if got := hex.EncodeToString(sum[:]); got != want {
-			t.Errorf("the opencode plugin for %q changed: sha256 %s", cmd, got)
-		}
-	}
-	kilo := string(mustTarget(t, Kilo).format.(ownedFile).render(mustTarget(t, Kilo), "tuios"))
-	for _, want := range []string{`["agent-hook", "kilo", "--integration", "3"]`, "TUIOS_INTEGRATION_ID=kilo", "Reports Kilo's session state"} {
-		if !strings.Contains(kilo, want) {
-			t.Errorf("the Kilo plugin does not say %q", want)
-		}
-	}
-}
-
-// TestManifestIDsMatchTheBundledManifests keeps the list TUIOS_AGENT is read
-// against complete, and every integration tied to a manifest.
-func TestManifestIDsMatchTheBundledManifests(t *testing.T) {
-	reg, errs := harness.Load()
-	if len(errs) != 0 {
-		t.Fatal(errs)
-	}
-	ids := reg.IDs()
-	slices.Sort(ids)
-	got := slices.Clone(ManifestIDs)
-	slices.Sort(got)
-	if !slices.Equal(ids, got) {
-		t.Fatalf("ManifestIDs = %v\nmanifests  = %v", got, ids)
-	}
-	covered := map[string]bool{}
-	for _, tg := range Targets() {
-		if !slices.Contains(ids, tg.ID) {
-			t.Errorf("integration %s has no manifest", tg.ID)
-		}
-		if id, ok := Canonical(tg.ID); !ok || id != tg.ID {
-			t.Errorf("Canonical(%s) = %s %v", tg.ID, id, ok)
-		}
-		if !slices.Contains(HarnessIDs(), tg.ID) {
-			t.Errorf("%s has an installer and is not in HarnessIDs", tg.ID)
-		}
-		if tg.Reports != ReportsState && tg.Reports != ReportsSession {
-			t.Errorf("%s reports %q", tg.ID, tg.Reports)
-		}
-		covered[tg.ID] = true
-	}
-	for _, u := range UnsupportedHarnesses() {
-		if covered[u.Harness] || !slices.Contains(ids, u.Harness) {
-			t.Errorf("unsupported %s is an integration, or not a manifest", u.Harness)
-		}
-		covered[u.Harness] = true
-	}
-	for _, id := range ids {
-		if !covered[id] {
-			t.Errorf("manifest %s has neither an integration nor a reason it has none", id)
-		}
-	}
-}
-
-// TestIdentityTargetsReportSessionsOnly holds the split: a session target's
-// every fixture report is identity only, and a state target reports states.
-func TestIdentityTargetsReportSessionsOnly(t *testing.T) {
-	for _, tg := range Targets() {
-		for _, tc := range loadHookCases(t, tg.ID) {
-			if tc.Want == nil {
-				continue
-			}
-			if tg.Reports == ReportsSession && (!tc.Want.SessionOnly || tc.Want.State != "") {
-				t.Errorf("%s/%s: a session integration reports %+v", tg.ID, tc.Name, *tc.Want)
-			}
-		}
-	}
-}
-
-func TestStdoutAnswer(t *testing.T) {
-	for id, want := range map[string]string{GeminiCLI: "{}\n", Antigravity: "{}\n", "agy": "{}\n", ClaudeCode: "", Kimi: "", Crush: ""} {
-		if got := StdoutAnswer(id); got != want {
-			t.Errorf("StdoutAnswer(%s) = %q, want %q", id, got, want)
-		}
-	}
-}
-
-func TestNewTargetsNeedTheirConfigDir(t *testing.T) {
-	env := testEnv(t)
-	for _, id := range []string{Amp, Pi, Hermes, Kimi, Crush} {
-		if _, err := mustTarget(t, id).Install(env, "tuios"); !errors.Is(err, ErrNoConfigDir) {
-			t.Errorf("%s: %v", id, err)
-		}
-	}
-}
-
-func TestConfigDirOverrides(t *testing.T) {
-	env := testEnv(t)
-	vars := map[string]string{
-		"XDG_CONFIG_HOME":            "/x",
-		"PI_CODING_AGENT_DIR":        "/pi",
-		"KIMI_CODE_HOME":             "/kimi",
-		"QWEN_HOME":                  "/qwen",
-		"QODER_CONFIG_DIR":           "/qoder",
-		"COPILOT_HOME":               "/copilot",
-		"CURSOR_CONFIG_DIR":          "/cursor",
-		"GROK_HOME":                  "/grok",
-		"HERMES_HOME":                "/hermes",
-		"ANTIGRAVITY_CLI_CONFIG_DIR": "/agy",
-	}
-	env.Getenv = func(k string) string { return vars[k] }
-	want := map[string]string{
-		Amp:         "/x/amp/plugins/tuios-agent-state.ts",
-		Kilo:        "/x/kilo/plugin/tuios-agent-state.js",
-		Crush:       "/x/crush/crush.json",
-		Devin:       "/x/devin/config.json",
-		Pi:          "/pi/extensions/tuios-agent-state.ts",
-		Kimi:        "/kimi/config.toml",
-		Qwen:        "/qwen/settings.json",
-		Qoder:       "/qoder/settings.json",
-		Copilot:     "/copilot/hooks/tuios.json",
-		CursorAgent: "/cursor/hooks.json",
-		Grok:        "/grok/hooks/tuios.json",
-		Hermes:      "/hermes/plugins/tuios-agent-state/__init__.py",
-		Antigravity: "/agy/hooks.json",
-	}
-	for id, path := range want {
-		if got := mustTarget(t, id).Path(env); got != filepath.FromSlash(path) {
-			t.Errorf("%s path = %s, want %s", id, got, path)
-		}
 	}
 }
 

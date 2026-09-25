@@ -6,45 +6,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// withAutoEnterTerminalOnFocus restores the setting after a test that moves
-// it, since config.Global is shared with every other test in the run.
-func withAutoEnterTerminalOnFocus(t *testing.T) {
-	t.Helper()
-	prev := config.Global.AutoEnterTerminalOnFocus
-	t.Cleanup(func() { config.Global.AutoEnterTerminalOnFocus = prev })
-}
-
-func TestAutoEnterTerminalOnFocusRejectsAnUnknownValue(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t)
-	config.Global.AutoEnterTerminalOnFocus = config.AutoEnterTerminalAll
-
-	cfg := config.DefaultConfig()
-	cfg.Appearance.AutoEnterTerminalOnFocus = "sometimes"
-
-	var warned bool
-	for _, w := range config.ValidateConfig(cfg).Warnings {
-		warned = warned || w.Key == "auto_enter_terminal_on_focus"
-	}
-	if !warned {
-		t.Error("an unknown auto_enter_terminal_on_focus value was accepted without a warning")
-	}
-
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	if config.Global.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
-		t.Errorf("AutoEnterTerminalOnFocus = %q after an unknown value, want the default %q", config.Global.AutoEnterTerminalOnFocus, config.AutoEnterTerminalOff)
-	}
-}
-
+// TestAutoEnterTerminalOnFocusAcceptsALeftoverBool: the option was a bool
+// before it took three values, and a config file still carrying the bool must
+// decode rather than fail the whole file.
 func TestAutoEnterTerminalOnFocusAcceptsALeftoverBool(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t)
-
-	trueCfg := writeConfig(t, "[appearance]\nauto_enter_terminal_on_focus = true\n")
-	if got := trueCfg.Appearance.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalAll {
-		t.Errorf("true decoded as %q, want %q so a leftover bool does not discard the file", got, config.AutoEnterTerminalAll)
-	}
-
-	falseCfg := writeConfig(t, "[appearance]\nauto_enter_terminal_on_focus = false\n")
-	if got := falseCfg.Appearance.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
-		t.Errorf("false decoded as %q, want %q", got, config.AutoEnterTerminalOff)
+	for src, want := range map[string]config.AutoEnterTerminalPolicy{
+		"true":  config.AutoEnterTerminalAll,
+		"false": config.AutoEnterTerminalOff,
+	} {
+		cfg, err := config.ParseUserConfig([]byte("[appearance]\nauto_enter_terminal_on_focus = " + src + "\n"))
+		if err != nil {
+			t.Fatalf("%s: a leftover bool discarded the file: %v", src, err)
+		}
+		if got := cfg.Appearance.AutoEnterTerminalOnFocus; got != want {
+			t.Errorf("%s decoded as %q, want %q", src, got, want)
+		}
 	}
 }

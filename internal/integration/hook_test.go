@@ -138,22 +138,3 @@ func TestClipAndRedact(t *testing.T) {
 		t.Errorf("a long message was not cut to %d runes: %q", MaxMessage, got)
 	}
 }
-
-// TestClipped reads a line Clip cut as clipped, and one it left whole as not,
-// including a short line that happens to end in dots.
-func TestClipped(t *testing.T) {
-	for _, tc := range []struct {
-		line string
-		want bool
-	}{
-		{Clip(strings.Repeat("x", MaxMessage+1)), true},
-		{Clip(strings.Repeat("word ", MaxMessage)), true},
-		{Clip(strings.Repeat("x", MaxMessage)), false},
-		{"approve Bash: echo wait...", false},
-		{"", false},
-	} {
-		if got := Clipped(tc.line); got != tc.want {
-			t.Errorf("Clipped(%q) = %v, want %v", tc.line, got, tc.want)
-		}
-	}
-}

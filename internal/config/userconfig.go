@@ -94,7 +94,7 @@ type DebugConfig struct {
 // session, on an empty screen the user opens the first window on. The two are
 // booleans with no fill-missing pass, so a config file that does not name them
 // reads them as false and an existing install keeps the floating, standalone
-// session it already had. See TestAnExistingConfigKeepsTheStartupItWasWritten.
+// session it already had.
 type StartupConfig struct {
 	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
 	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: true)

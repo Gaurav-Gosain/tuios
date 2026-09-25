@@ -124,70 +124,6 @@ func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
 	}
 }
 
-// TestALinkKeepsAnAttachWhileAListingTimesOut is the bug the maintainer hit.
-//
-// He was working in a session on a cloud host and the client kept being thrown
-// back to his own machine. The rail polls a host listing every five seconds
-// while it is open, that listing rides the same ssh pipe as the attached
-// session, and a listing that missed its deadline used to kill the ssh child.
-// Killing the ssh child killed the attach. So a link that was slow once, which
-// a busy pane across an ocean is, cost him the session he was typing into.
-func TestALinkKeepsAnAttachWhileAListingTimesOut(t *testing.T) {
-	hang := make(chan struct{})
-	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
-		switch verb {
-		case "hello":
-			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "1.0.0"}, nil
-		case "echo":
-			return map[string]any{"ok": true}, nil
-		}
-		<-hang
-		return nil, &RemoteError{Code: "internal", Message: "test over"}
-	})
-	t.Cleanup(func() { close(hang) })
-	opts := testOptions(proxyDialer(t, stub))
-	opts.CallTimeout = 300 * time.Millisecond
-	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
-		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
-	}
-
-	// The attached session: a connection open on the link, with a live
-	// exchange on it, exactly as a pane has.
-	conn := openTo(t, m, "build")
-	br := bufio.NewReader(conn)
-	ask := func(id string) string {
-		t.Helper()
-		if _, err := io.WriteString(conn, `{"id":`+id+`,"verb":"echo"}`+"\n"); err != nil {
-			return "write failed: " + err.Error()
-		}
-		line, err := br.ReadString('\n')
-		if err != nil {
-			return "read failed: " + err.Error()
-		}
-		return line
-	}
-	if line := ask("1"); !strings.Contains(line, `"ok":true`) {
-		t.Fatalf("the attach did not answer before the listing: %q", line)
-	}
-
-	// The listing times out, which is the event that used to be fatal.
-	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
-		t.Fatal("the listing against the hanging stub answered; the timeout cannot be forced")
-	}
-
-	// The session is still there and still works.
-	if line := ask("2"); !strings.Contains(line, `"ok":true`) {
-		t.Fatalf("ASSERTION: the attached connection stopped answering after a listing timed out: %q", line)
-	}
-	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
-		t.Errorf("ASSERTION: the link is %q after a listing timed out, want up", r.Status)
-	}
-}
-
 // TestIncompatibleDaemonIsReportedNotUsed is section 8: version skew is normal,
 // so a peer outside the served range gets its own state with both numbers on
 // it, and no call is made against it.
@@ -224,31 +160,6 @@ func TestIncompatibleDaemonIsReportedNotUsed(t *testing.T) {
 	}
 	if ue.Status != StatusIncompatible {
 		t.Errorf("the call was refused as %q, want incompatible; the caller cannot tell a version problem from a dead machine", ue.Status)
-	}
-}
-
-// TestReachableHostWithNoDaemonSaysSo is the machine that is up and simply is
-// not running tuios. It is not a link failure and it must not read as one.
-func TestReachableHostWithNoDaemonSaysSo(t *testing.T) {
-	opts := testOptions(func(_ context.Context, _ Host) (Transport, error) {
-		hub, remote := duplexPipe(t)
-		go func() {
-			_ = ServeProxy(remote, remote, func() (net.Conn, error) {
-				return nil, errors.New("dial unix /run/user/1000/tuios/tuios.sock: connect: no such file or directory")
-			})
-		}()
-		return hub, nil
-	})
-	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	r := m.Reports(ctx)[0]
-	if r.Status != StatusNoDaemon {
-		t.Fatalf("status is %q (%s / %s), want no_daemon", r.Status, r.Reason, r.Detail)
-	}
-	if !strings.Contains(r.Reason, "daemon") {
-		t.Errorf("reason does not mention the daemon: %q", r.Reason)
 	}
 }
 

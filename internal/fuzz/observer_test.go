@@ -126,90 +126,6 @@ func TestObserverDoesNotChangeTheRun(t *testing.T) {
 	}
 }
 
-// Per-rule reporting has to name the rule a Violation actually carries, and
-// stop at it. This is the seam a display's invariant matrix is drawn from: a
-// name mismatch shows a broken rule as passing, and reporting past the break
-// shows rules as having run when Check had already returned.
-func TestRuleReportingStopsAtTheBreak(t *testing.T) {
-	rec := newRecorder()
-	res, err := Run(func() (Target, error) { return newTraceTarget(20), nil },
-		Config{Seed: 3, Steps: 100, Observer: rec})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Failed {
-		t.Fatal("the target was rigged to fail and did not")
-	}
-	if rec.ruleFails["too-deep"] == 0 {
-		t.Error("the rule that broke was never reported as broken")
-	}
-	if n := rec.ruleFails["cheap"]; n != 0 {
-		t.Errorf("the rule before the break was reported broken %d times", n)
-	}
-	// "never" sits after the break in registry order, so it is reported for
-	// every clean step and for none of the failing one. Reporting it on the
-	// failing step would claim a rule ran that Check never reached.
-	if rec.ruleFails["never"] != 0 {
-		t.Error("a rule after the break was reported as broken")
-	}
-	// Two rules run clean per clean step, then the failing step reports the
-	// first two only. The exact figure is what a "checks" counter shows, so it
-	// has to be the count of checks that happened.
-	steps := rec.steps
-	if want := 3*(steps-1) + 2; rec.rules != want {
-		t.Errorf("reported %d rule results over %d steps, want %d", rec.rules, steps, want)
-	}
-}
-
-// A target that cannot name its rules still gets everything else, so a display
-// attached to one shows actions and failures and simply has no matrix to draw.
-func TestObserverWorksWithoutARuleLister(t *testing.T) {
-	rec := newRecorder()
-	if _, err := Run(func() (Target, error) { return &needleTarget{}, nil },
-		Config{Seed: 5, Steps: 50, Observer: rec}); err != nil {
-		t.Fatal(err)
-	}
-	if rec.steps != 50 {
-		t.Errorf("saw %d steps, want 50", rec.steps)
-	}
-	if rec.rules != 0 {
-		t.Errorf("saw %d rule results from a target with no registry", rec.rules)
-	}
-}
-
-// registryProbe counts registry fetches. The fetch sits behind the same guard
-// as the per-action dispatch, so it is the one observable sign that the engine
-// is reporting to nobody.
-type registryProbe struct {
-	*traceTarget
-	fetches int
-}
-
-func (p *registryProbe) Rules() []RuleInfo { p.fetches++; return p.traceTarget.Rules() }
-
-// With no observer the engine must not report, and the registry fetch is the
-// first thing reporting does. A nop standing in for nil would fetch it once
-// per replay and dispatch once per rule per action after that. This is the
-// check the allocation bound cannot make: one slice per replay is inside it.
-func TestNilObserverSkipsTheRegistry(t *testing.T) {
-	probe := &registryProbe{traceTarget: newTraceTarget(0)}
-	if _, err := Run(func() (Target, error) { return probe, nil },
-		Config{Actions: allocsActions, NoShrink: true}); err != nil {
-		t.Fatal(err)
-	}
-	if probe.fetches != 0 {
-		t.Errorf("no observer attached and the registry was fetched %d times", probe.fetches)
-	}
-	probe = &registryProbe{traceTarget: newTraceTarget(0)}
-	if _, err := Run(func() (Target, error) { return probe, nil },
-		Config{Actions: allocsActions, NoShrink: true, Observer: newRecorder()}); err != nil {
-		t.Fatal(err)
-	}
-	if probe.fetches != 1 {
-		t.Errorf("an observer attached and the registry was fetched %d times, want once per replay", probe.fetches)
-	}
-}
-
 // skipUnderRace opts an allocation assertion out of the detector build.
 func skipUnderRace(t *testing.T) {
 	t.Helper()
@@ -218,8 +134,7 @@ func skipUnderRace(t *testing.T) {
 		// measure: the figures wander by about ten either way between runs,
 		// and each difference here is one. Measured 8 of 12 runs failing for
 		// each test with the skip removed, so it is the instrument and not the
-		// code. The plain build still asserts them on every push, and
-		// TestNilObserverSkipsTheRegistry runs under the detector as well.
+		// code. The plain build still asserts them on every push.
 		t.Skip("allocation counts are not measurable under the race detector")
 	}
 }

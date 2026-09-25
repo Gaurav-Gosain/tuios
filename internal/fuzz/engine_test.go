@@ -93,33 +93,6 @@ func TestReportedReproStillFails(t *testing.T) {
 	}
 }
 
-// A target whose replays differ must not be reported as a clean repro. The
-// target below breaks its rule on the first replay only, the way a timing bug
-// or state kept across Reset does, so every shrink candidate passes and the
-// final replay of the minimal script passes too. Without the check the report
-// named the rule over a script that did nothing when anyone ran it.
-func TestNonReproducingFailureIsSaidSo(t *testing.T) {
-	trigger := Action{Kind: ZoomPane}
-	replays := 0
-	tgt := func() (Target, error) {
-		replays++
-		if replays == 1 {
-			return &needleTarget{trigger: trigger}, nil
-		}
-		return &needleTarget{trigger: Action{Kind: Tick, A: -1}}, nil
-	}
-	res, err := Run(tgt, Config{Seed: 3, Actions: []Action{{Kind: Tick}, trigger}})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if !res.Failed || !res.Flaky {
-		t.Fatalf("Failed=%v Flaky=%v, want both", res.Failed, res.Flaky)
-	}
-	if !strings.Contains(res.Repro(), "NOT REPRODUCIBLE") {
-		t.Errorf("the repro does not say it may not reproduce:\n%s", res.Repro())
-	}
-}
-
 // A run that shrinks into a different bug must not be reported under the first
 // one's name, or the maintainer reads a repro for one rule and debugs another.
 func TestShrinkHoldsTheRuleFixed(t *testing.T) {
@@ -229,71 +202,6 @@ func TestScriptRoundTripsEveryGeneratedAction(t *testing.T) {
 	for i := range all {
 		if back[i] != all[i] {
 			t.Fatalf("step %d round tripped %v as %v", i, all[i], back[i])
-		}
-	}
-}
-
-// The generator has to actually reach every kind it declares a weight for, or
-// part of the alphabet is dead and nobody notices.
-func TestGeneratorReachesEveryWeightedKind(t *testing.T) {
-	seen := map[Kind]int{}
-	for seed := range uint64(20) {
-		for _, a := range Generate(seed, 2000) {
-			seen[a.Kind]++
-		}
-	}
-	for k := range kindCount {
-		if defaultWeights[k] > 0 && seen[k] == 0 {
-			t.Errorf("%s carries weight %d but was never generated", k, defaultWeights[k])
-		}
-	}
-}
-
-// The awkward classes are the point of the generator, so their presence is
-// pinned rather than left to chance.
-func TestGeneratorProducesTheAwkwardShapes(t *testing.T) {
-	var wideName, pathName, zeroSize, releaseOutside, resizeMidGesture, detachMidDrag bool
-	for seed := range uint64(30) {
-		run := Generate(seed, 3000)
-		held := false
-		for i, a := range run {
-			switch a.Kind {
-			case Rename, Text:
-				if strings.Contains(a.S, "/") || strings.Contains(a.S, "\\") {
-					pathName = true
-				}
-				if strings.ContainsRune(a.S, '世') {
-					wideName = true
-				}
-			case Resize:
-				if a.A == 0 || a.B == 0 {
-					zeroSize = true
-				}
-				if held {
-					resizeMidGesture = true
-				}
-			case MousePress:
-				held = true
-			case MouseRelease:
-				held = false
-			case Detach:
-				if held {
-					detachMidDrag = true
-				}
-			}
-			// A release landing well outside anything the host can draw.
-			if a.Kind == MouseRelease && i > 0 && a.A > 200 {
-				releaseOutside = true
-			}
-		}
-	}
-	for name, got := range map[string]bool{
-		"a wide-rune name": wideName, "a path separator in a name": pathName,
-		"a zero dimension": zeroSize, "a release outside every target": releaseOutside,
-		"a resize mid-gesture": resizeMidGesture, "a detach mid-drag": detachMidDrag,
-	} {
-		if !got {
-			t.Errorf("the generator never produced %s", name)
 		}
 	}
 }

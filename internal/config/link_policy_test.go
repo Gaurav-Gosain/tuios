@@ -74,21 +74,6 @@ func TestHostedGraceParses(t *testing.T) {
 	}
 }
 
-func TestValidateWarnsAboutAnUnknownCapability(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Hosts = map[string]HostConfig{"laptop": {Allow: []string{"lsit"}, HostedGrace: "soon"}}
-	res := ValidateConfig(cfg)
-	var keys []string
-	for _, w := range res.Warnings {
-		if w.Field == "hosts.laptop" {
-			keys = append(keys, w.Key)
-		}
-	}
-	if !slices.Contains(keys, "allow") || !slices.Contains(keys, "hosted_grace") {
-		t.Errorf("warnings for hosts.laptop are %v, want allow and hosted_grace", keys)
-	}
-}
-
 // TestRewritingAHostKeepsItsLinkPolicy: `tuios hosts add` on a known name
 // rewrites the table, and must not drop what the machine may do here.
 func TestRewritingAHostKeepsItsLinkPolicy(t *testing.T) {

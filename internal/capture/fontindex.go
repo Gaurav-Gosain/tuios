@@ -81,13 +81,6 @@ func loadFontIndex() *fontIndex {
 	return fontIndexVal
 }
 
-// resetFontIndex drops the scan so the next lookup rebuilds it. Tests own this;
-// nothing else needs it.
-func resetFontIndex() {
-	fontIndexOnce = sync.Once{}
-	fontIndexVal = nil
-}
-
 // maxFontFiles bounds the walk. A large machine has a few thousand faces; a
 // number far past that means the walk wandered somewhere it should not have,
 // and a capture drawn in the fallback face beats one that never arrives.

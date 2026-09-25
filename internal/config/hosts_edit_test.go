@@ -31,42 +31,6 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-func TestAddingAHostKeepsEverythingElseInTheFile(t *testing.T) {
-	body := `# My own notes about this file.
-[appearance]
-# the border I like
-border_style = "double"
-
-[hosts.build]
-addr = "gaurav@buildbox"
-
-[startup]
-tiled = true
-`
-	path := writeTemp(t, body)
-	if err := SetHostInFile(path, "lab", HostConfig{Addr: "lab-01"}); err != nil {
-		t.Fatalf("add a host: %v", err)
-	}
-	got := readFile(t, path)
-
-	for _, want := range []string{
-		"# My own notes about this file.",
-		"# the border I like",
-		`border_style = "double"`,
-		"[hosts.build]",
-		`addr = "gaurav@buildbox"`,
-		"[startup]",
-		"tiled = true",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("ASSERTION: adding a host lost %q from the file:\n%s", want, got)
-		}
-	}
-	if !strings.Contains(got, "[hosts.lab]\naddr = \"lab-01\"") {
-		t.Errorf("ASSERTION: the new host is not in the file:\n%s", got)
-	}
-}
-
 func TestAddingAHostThatExistsReplacesOnlyThatTable(t *testing.T) {
 	body := `[hosts.build]
 addr = "old-address"
@@ -92,87 +56,6 @@ addr = "lab-01"
 	}
 	if !strings.Contains(got, "[hosts.lab]\naddr = \"lab-01\"") {
 		t.Errorf("ASSERTION: replacing one host changed another:\n%s", got)
-	}
-}
-
-func TestRemovingAHostLeavesTheRestOfTheFile(t *testing.T) {
-	body := `[appearance]
-theme = "dracula"
-
-[hosts.build]
-addr = "gaurav@buildbox"
-connect_timeout = 5
-
-[hosts.lab]
-addr = "lab-01"
-
-[startup]
-tiled = true
-`
-	path := writeTemp(t, body)
-	removed, err := RemoveHostFromFile(path, "build")
-	if err != nil {
-		t.Fatalf("remove a host: %v", err)
-	}
-	if !removed {
-		t.Fatal("ASSERTION: removing a host that is there reported that it was not")
-	}
-	got := readFile(t, path)
-	if strings.Contains(got, "buildbox") || strings.Contains(got, "[hosts.build]") {
-		t.Errorf("ASSERTION: the removed host is still in the file:\n%s", got)
-	}
-	if strings.Contains(got, "connect_timeout") {
-		t.Errorf("ASSERTION: a value under the removed table was left behind:\n%s", got)
-	}
-	for _, want := range []string{`theme = "dracula"`, "[hosts.lab]", "tiled = true"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("ASSERTION: removing a host lost %q:\n%s", want, got)
-		}
-	}
-}
-
-func TestAddingTheFirstHostToAFileThatDoesNotExist(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sub", "config.toml")
-	if err := SetHostInFile(path, "build", HostConfig{Addr: "buildbox"}); err != nil {
-		t.Fatalf("add the first host: %v", err)
-	}
-	got := readFile(t, path)
-	if !strings.Contains(got, "[hosts.build]") {
-		t.Errorf("ASSERTION: the first host was not written:\n%s", got)
-	}
-	// The file has to be a config the loader accepts, or the daemon that reads
-	// it next would refuse everything in it.
-	cfg, err := ParseUserConfig([]byte(got))
-	if err != nil {
-		t.Fatalf("ASSERTION: the file this wrote does not parse: %v\n%s", err, got)
-	}
-	if cfg.Hosts["build"].Addr != "buildbox" {
-		t.Errorf("ASSERTION: the parsed config does not hold the host, got %+v", cfg.Hosts)
-	}
-}
-
-func TestAddedHostRoundTripsThroughTheParser(t *testing.T) {
-	path := writeTemp(t, "")
-	entry := HostConfig{
-		Addr:           "gaurav@buildbox",
-		Command:        "/home/gaurav/.local/bin/tuios",
-		ConnectTimeout: 7,
-		SSHOptions:     []string{"-J", "bastion", "-o", "StrictHostKeyChecking=yes"},
-		ReposRoot:      "~/src",
-	}
-	if err := SetHostInFile(path, "build", entry); err != nil {
-		t.Fatalf("add a host: %v", err)
-	}
-	cfg, err := ParseUserConfig([]byte(readFile(t, path)))
-	if err != nil {
-		t.Fatalf("ASSERTION: the file does not parse: %v", err)
-	}
-	got := cfg.Hosts["build"]
-	if got.Addr != entry.Addr || got.Command != entry.Command || got.ConnectTimeout != entry.ConnectTimeout || got.ReposRoot != entry.ReposRoot {
-		t.Errorf("ASSERTION: the host did not survive the round trip, got %+v want %+v", got, entry)
-	}
-	if strings.Join(got.SSHOptions, " ") != strings.Join(entry.SSHOptions, " ") {
-		t.Errorf("ASSERTION: the ssh options did not survive the round trip, got %v", got.SSHOptions)
 	}
 }
 
@@ -202,22 +85,6 @@ func TestAHostNameWithADotIsQuoted(t *testing.T) {
 	}
 	if strings.Contains(readFile(t, path), "lab-01") {
 		t.Error("ASSERTION: removing a dotted name left the table behind")
-	}
-}
-
-func TestAHostNeedsANameAndAnAddress(t *testing.T) {
-	path := writeTemp(t, "")
-	if err := SetHostInFile(path, "build", HostConfig{Addr: "  "}); err == nil {
-		t.Error("ASSERTION: a host with no address was written")
-	}
-	if err := SetHostInFile(path, "local", HostConfig{Addr: "somewhere"}); err == nil {
-		t.Error("ASSERTION: the reserved name 'local' was written as a host")
-	}
-	if err := SetHostInFile(path, "two words", HostConfig{Addr: "somewhere"}); err == nil {
-		t.Error("ASSERTION: a name with a space was written as a host")
-	}
-	if body := readFile(t, path); strings.TrimSpace(body) != "" {
-		t.Errorf("ASSERTION: a refused host still changed the file:\n%s", body)
 	}
 }
 

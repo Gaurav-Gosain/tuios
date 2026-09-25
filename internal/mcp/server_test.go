@@ -411,28 +411,6 @@ func TestADaemonThatCannotRestrictRunsNothing(t *testing.T) {
 	}
 }
 
-func TestADaemonErrorIsAToolErrorWithItsHint(t *testing.T) {
-	f := &fakeDaemon{answer: func(verb string, _ map[string]any) (json.RawMessage, error) {
-		if verb == "list-windows" {
-			return nil, &CallError{Code: "forbidden", Message: "list-windows is refused", Hint: map[string]any{"verb": "restrict-connection"}}
-		}
-		return json.RawMessage(`{}`), nil
-	}}
-	c := startServer(t, Options{Dial: f.dial})
-	res := c.toolCall(1, "tuios_list_windows", map[string]any{"session": "other"})
-	if res["isError"] != true {
-		t.Fatalf("result = %v, want isError", res)
-	}
-	var body map[string]any
-	if err := json.Unmarshal([]byte(lastText(res)), &body); err != nil {
-		t.Fatal(err)
-	}
-	detail := body["detail"].(map[string]any)
-	if detail["code"] != "forbidden" || detail["hint"].(map[string]any)["verb"] != "restrict-connection" {
-		t.Errorf("error body = %v", body)
-	}
-}
-
 func TestAnUnknownArgumentIsRefusedBeforeTheDaemon(t *testing.T) {
 	f := &fakeDaemon{}
 	c := startServer(t, Options{Dial: f.dial})

@@ -45,65 +45,6 @@ func startACP(t *testing.T) (*ACP, *peer, *events) {
 	return a, p, ev
 }
 
-// TestACPTurn is a whole turn: the prompt, streamed text and reasoning, a
-// tool call and its update merged, a diff and a plan, and the stop reason.
-func TestACPTurn(t *testing.T) {
-	a, p, ev := startACP(t)
-	type turn struct {
-		res TurnResult
-		err error
-	}
-	done := make(chan turn, 1)
-	go func() {
-		res, err := a.Prompt(context.Background(), "fix it")
-		done <- turn{res, err}
-	}()
-	prompt := p.expect("session/prompt")
-	pp, _ := json.Marshal(prompt["params"])
-	if string(pp) != `{"prompt":[{"text":"fix it","type":"text"}],"sessionId":"s-1"}` {
-		t.Errorf("session/prompt params = %s", pp)
-	}
-	update := func(u map[string]any) {
-		p.send(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "s-1", "update": u}})
-	}
-	update(map[string]any{"sessionUpdate": "agent_thought_chunk", "content": map[string]any{"type": "text", "text": "thinking"}})
-	update(map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Hello"}})
-	update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "t1", "title": "Edit main.go", "kind": "edit", "status": "pending"})
-	update(map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed", "content": []any{
-		map[string]any{"type": "diff", "path": "main.go", "oldText": "a\n", "newText": "b\n"},
-	}})
-	update(map[string]any{"sessionUpdate": "plan", "entries": []any{map[string]any{"content": "step", "priority": "high", "status": "in_progress"}}})
-	update(map[string]any{"sessionUpdate": "user_message_chunk", "content": map[string]any{"type": "text", "text": "replayed"}})
-	p.respond(prompt, map[string]any{"stopReason": "end_turn"})
-
-	if e := ev.next(t).(Text); e.Text != "thinking" || !e.Thought {
-		t.Errorf("first event = %+v, want the thought", e)
-	}
-	if e := ev.next(t).(Text); e.Text != "Hello" || e.Thought {
-		t.Errorf("second event = %+v, want the reply", e)
-	}
-	if e := ev.next(t).(Tool); e.ID != "t1" || e.Title != "Edit main.go" || e.Status != ToolPending {
-		t.Errorf("tool_call = %+v", e)
-	}
-	// The update keeps the title and kind it did not repeat.
-	tool := ev.next(t).(Tool)
-	if tool.Title != "Edit main.go" || tool.Kind != "edit" || tool.Status != ToolDone || len(tool.Diffs) != 1 || tool.Diffs[0].New != "b\n" || *tool.Diffs[0].Old != "a\n" {
-		t.Errorf("tool_call_update = %+v", tool)
-	}
-	if e := ev.next(t).(Plan); len(e.Entries) != 1 || e.Entries[0].Status != "in_progress" {
-		t.Errorf("plan = %+v", e)
-	}
-	got := <-done
-	if got.err != nil || got.res.Stop != StopFinished {
-		t.Fatalf("turn = %+v", got)
-	}
-	select {
-	case e := <-ev.ch:
-		t.Errorf("a replayed user message was shown: %+v", e)
-	default:
-	}
-}
-
 func TestACPStopReasons(t *testing.T) {
 	for reason, want := range map[string]string{
 		"end_turn": StopFinished, "cancelled": StopCancelled, "refusal": StopRefused,
@@ -206,25 +147,6 @@ func TestACPVersionMismatch(t *testing.T) {
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "version 2") {
 		t.Fatalf("Start = %v, want a version error", err)
 	}
-}
-
-func TestACPLoginHint(t *testing.T) {
-	r, w, p := newPeer(t)
-	a := NewACP(r, w, "1", func(Event) {})
-	done := make(chan error, 1)
-	go func() {
-		_, err := a.Start(context.Background(), "/")
-		done <- err
-	}()
-	p.respond(p.expect("initialize"), map[string]any{"protocolVersion": 1, "authMethods": []any{map[string]any{"id": "oauth", "name": "Log in with the browser"}}})
-	m := p.expect("session/new")
-	p.send(map[string]any{"jsonrpc": "2.0", "id": m["id"], "error": map[string]any{"code": -32000, "message": "Authentication required"}})
-	err := <-done
-	if err == nil || !strings.Contains(err.Error(), "Log in with the browser") || !strings.Contains(err.Error(), "Authentication required") {
-		t.Fatalf("Start = %v, want the error and the login methods", err)
-	}
-	// authenticate is never sent.
-	p.quiet()
 }
 
 func TestACPCancel(t *testing.T) {

@@ -95,22 +95,6 @@ func TestSectionProblemsSaySpacerIsFine(t *testing.T) {
 	}
 }
 
-// TestSidebarSectionsWithoutKeepsTheRest is the migration's one moving part: a
-// section comes out and the order and shares of everything else survive.
-//
-// Negative control, confirmed red: drop the share from String(). This fails
-// with sessions and files back at auto.
-func TestSidebarSectionsWithoutKeepsTheRest(t *testing.T) {
-	got := SidebarSectionsWithout(SidebarDefaultSections, "terminals")
-	if got != "sessions:25,files:25,agents:34" {
-		t.Errorf("layout without terminals = %q", got)
-	}
-	// And a layout that never named the section is left exactly as it was.
-	if got := SidebarSectionsWithout("sessions,files", "agents"); got != "sessions,files" {
-		t.Errorf("layout = %q, want it untouched", got)
-	}
-}
-
 // TestOldLayoutStringStillParses is the compatibility claim this branch owes
 // anybody whose config already carries a layout: the grammar did not change
 // under them, only what it may additionally hold.

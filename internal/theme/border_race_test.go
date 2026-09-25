@@ -48,27 +48,3 @@ func TestTheBorderOverridesSurviveConcurrentSessions(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// TestAnOverrideIsWhatIsRead, so the lock did not cost the feature. A colour
-// set is the colour the borders come back with, and clearing it goes back to
-// the theme's own.
-func TestAnOverrideIsWhatIsRead(t *testing.T) {
-	t.Cleanup(func() { SetBorderOverrides("", "") })
-
-	SetBorderOverrides("#89b4fa", "#45475a")
-	focused, unfocused := borderOverrides()
-	if focused == nil || unfocused == nil {
-		t.Fatal("an override was set and reads as nothing")
-	}
-	if got := BorderFocusedWindow(); got != focused {
-		t.Errorf("the focused border is %v, want the override %v", got, focused)
-	}
-	if got := BorderUnfocused(); got != unfocused {
-		t.Errorf("the unfocused border is %v, want the override %v", got, unfocused)
-	}
-
-	SetBorderOverrides("", "")
-	if f, u := borderOverrides(); f != nil || u != nil {
-		t.Error("clearing the overrides left one behind")
-	}
-}

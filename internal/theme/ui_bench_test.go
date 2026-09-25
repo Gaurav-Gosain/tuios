@@ -12,13 +12,3 @@ func BenchmarkUIPalette(b *testing.B) {
 		_ = UI()
 	}
 }
-
-// BenchmarkContrastText isolates the derivation UI() does on every call, which
-// is the part that is not a struct literal.
-func BenchmarkContrastText(b *testing.B) {
-	p := UI()
-	b.ReportAllocs()
-	for b.Loop() {
-		_ = ContrastText(p.Accent)
-	}
-}

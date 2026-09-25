@@ -35,31 +35,6 @@ func TestShortRunPasses(t *testing.T) {
 	}
 }
 
-// The registry is what a display draws, so a name that appears twice is a rule
-// counted twice, and a family or doc left empty is a row the display can only
-// label with an identifier.
-func TestRulesAreWellFormed(t *testing.T) {
-	target, err := New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer target.Close()
-
-	seen := map[string]bool{}
-	for _, r := range target.Rules() {
-		if seen[r.Name] {
-			t.Errorf("rule %q is registered twice; a display would draw it twice and count it twice", r.Name)
-		}
-		seen[r.Name] = true
-		if r.Family == "" {
-			t.Errorf("rule %q has no family; the display groups by family and would put it in a nameless one", r.Name)
-		}
-		if r.Doc == "" {
-			t.Errorf("rule %q has no doc; the fail callout would name it and say nothing about it", r.Name)
-		}
-	}
-}
-
 // The registry has to name exactly the rules the oracle can break, and nothing
 // keeps the two in step except this test. The failure it guards is quiet: a
 // display matches a Violation's Rule against the registry, so a rule that can

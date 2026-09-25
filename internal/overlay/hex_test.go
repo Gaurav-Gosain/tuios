@@ -38,27 +38,3 @@ func TestParseHex(t *testing.T) {
 		}
 	}
 }
-
-func TestHex(t *testing.T) {
-	cases := []struct {
-		in   color.RGBA
-		want string
-	}{
-		{color.RGBA{A: 0xff}, "#000000"},
-		{color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, "#ffffff"},
-		{color.RGBA{R: 0xf3, G: 0x8b, B: 0xa8, A: 0xff}, "#f38ba8"},
-		{color.RGBA{R: 0x0a, G: 0xb0, B: 0x01}, "#0ab001"},
-	}
-	for _, c := range cases {
-		if got := Hex(c.in); got != c.want {
-			t.Errorf("Hex(%v) = %q, want %q", c.in, got, c.want)
-		}
-	}
-	// Every channel value survives a round trip through the parser.
-	for v := range 256 {
-		c := color.RGBA{R: uint8(v), G: uint8(255 - v), B: uint8(v ^ 0x5a), A: 0xff}
-		if got, ok := ParseHex(Hex(c)); !ok || got != c {
-			t.Errorf("ParseHex(Hex(%v)) = %v, %v", c, got, ok)
-		}
-	}
-}

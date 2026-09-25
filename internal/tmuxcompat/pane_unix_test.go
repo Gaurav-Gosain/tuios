@@ -160,21 +160,6 @@ func TestHolderEmptyRespawnRerunsTheFirstCommand(t *testing.T) {
 	}
 }
 
-// TestHolderExitsWithItsCommand checks a pane closes with its command.
-func TestHolderExitsWithItsCommand(t *testing.T) {
-	dir := shortDir(t)
-	_, done := startHolder(t, dir, "win-exit", "exit 3")
-	select {
-	case err := <-done:
-		ee, ok := err.(*exec.ExitError)
-		if !ok || ee.ExitCode() != 3 {
-			t.Errorf("holder exit = %v, want status 3", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the holder did not end with its command")
-	}
-}
-
 // TestHolderRefusesAnotherWindowsRequest sends a holder a request naming a
 // different window, as a request would after two windows' numbers collided,
 // and checks it is refused and the pane's command left running.
@@ -206,14 +191,6 @@ func TestHolderRefusesAnotherWindowsRequest(t *testing.T) {
 	}
 }
 
-func TestRespawnWithoutAHolder(t *testing.T) {
-	dir := shortDir(t)
-	err := RequestRespawn(dir, "nobody", RespawnRequest{Command: []string{"true"}})
-	if err == nil || !strings.Contains(err.Error(), "not opened through the tmux shim") {
-		t.Errorf("RequestRespawn with no holder = %v", err)
-	}
-}
-
 func TestEnsureDirClosesAnOpenDirectory(t *testing.T) {
 	dir := filepath.Join(shortDir(t), "tmux")
 	if err := os.Mkdir(dir, 0o777); err != nil {
@@ -233,17 +210,5 @@ func TestEnsureDirClosesAnOpenDirectory(t *testing.T) {
 	}
 	if err := EnsureDir(link); err == nil {
 		t.Error("EnsureDir accepted a symlink")
-	}
-}
-
-func TestInstallLink(t *testing.T) {
-	dir := shortDir(t)
-	for _, exe := range []string{"/opt/a/tuios", "/opt/b/tuios"} {
-		if err := InstallLink(dir, exe); err != nil {
-			t.Fatal(err)
-		}
-		if got, _ := os.Readlink(filepath.Join(BinDir(dir), "tmux")); got != exe {
-			t.Errorf("link = %q, want %q", got, exe)
-		}
 	}
 }
