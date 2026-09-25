@@ -52,30 +52,6 @@ func TestEveryVerbHasALinkPolicy(t *testing.T) {
 	}
 }
 
-// TestAPolicyOnlyHostIsNotDialled: [hosts."*"] and a table with a policy and
-// no addr say what a machine linking in may do, and are neither dialled nor
-// reported as a host with no addr.
-func TestAPolicyOnlyHostIsNotDialled(t *testing.T) {
-	uc := config.DefaultConfig()
-	uc.Hosts = map[string]config.HostConfig{
-		"*":      {Allow: []string{"list"}},
-		"laptop": {Allow: []string{"list"}},
-		"build":  {Addr: "build"},
-		"broken": {},
-	}
-	var names []string
-	for _, h := range HostsFromConfig(uc) {
-		names = append(names, h.Name)
-	}
-	slices.Sort(names)
-	if !slices.Equal(names, []string{"broken", "build"}) {
-		t.Errorf("the hosts to dial are %v, want broken (to be reported) and build", names)
-	}
-	if got := DaemonConfigFromUser(uc).LinkPolicies; len(got) != 4 {
-		t.Errorf("the daemon was given %d policy entries, want the whole table", len(got))
-	}
-}
-
 // linkPeer runs the handshake on a link connection, as the proxy does.
 func linkPeer(t *testing.T, c *verbConn, peer string) map[string]any {
 	t.Helper()

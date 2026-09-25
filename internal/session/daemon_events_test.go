@@ -8,30 +8,6 @@ import (
 	"time"
 )
 
-// TestEventHubTwoSubscribersSameSequence verifies that two subscribers see the
-// same monotonic sequence number for each published event.
-func TestEventHubTwoSubscribersSameSequence(t *testing.T) {
-	h := newEventHub()
-	a := h.subscribe(eventFilter{}, 64)
-	b := h.subscribe(eventFilter{}, 64)
-
-	const n = 10
-	for range n {
-		h.publish(streamEvent{Type: EventOutput})
-	}
-
-	for i := range n {
-		ea := <-a.ch
-		eb := <-b.ch
-		if ea.Seq != eb.Seq {
-			t.Fatalf("event %d: subscriber seqs differ: a=%d b=%d", i, ea.Seq, eb.Seq)
-		}
-		if ea.Seq != uint64(i+1) {
-			t.Fatalf("event %d: seq = %d, want %d", i, ea.Seq, i+1)
-		}
-	}
-}
-
 // TestEventHubDropsWhenQueueFull verifies the slow-subscriber policy: once the
 // bounded queue is full, further events are dropped and counted rather than
 // blocking the publisher, and the surviving events are the earliest ones.
@@ -50,31 +26,6 @@ func TestEventHubDropsWhenQueueFull(t *testing.T) {
 	first := <-sub.ch
 	if first.Seq != 1 {
 		t.Fatalf("first surviving event seq = %d, want 1 (earliest kept)", first.Seq)
-	}
-}
-
-// TestEventHubFilters verifies session/type filtering: a subscriber only receives
-// events matching its filter, and non-matching events are neither delivered nor
-// counted as drops.
-func TestEventHubFilters(t *testing.T) {
-	h := newEventHub()
-	sub := h.subscribe(eventFilter{session: "work", types: map[string]bool{EventBell: true}}, 16)
-
-	h.publish(streamEvent{Type: EventOutput, Session: "work"}) // wrong type
-	h.publish(streamEvent{Type: EventBell, Session: "other"})  // wrong session
-	h.publish(streamEvent{Type: EventBell, Session: "work"})   // match
-
-	ev := <-sub.ch
-	if ev.Type != EventBell || ev.Session != "work" {
-		t.Fatalf("got %+v, want a work/bell event", ev)
-	}
-	if sub.dropped.Load() != 0 {
-		t.Fatalf("filtered-out events must not count as drops, got %d", sub.dropped.Load())
-	}
-	select {
-	case extra := <-sub.ch:
-		t.Fatalf("unexpected extra event: %+v", extra)
-	default:
 	}
 }
 

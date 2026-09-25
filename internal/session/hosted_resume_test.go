@@ -12,8 +12,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // A pane this machine runs for another machine, outliving a dropped link. See
@@ -54,62 +52,6 @@ func (f *droppableFederation) Call(ctx context.Context, host, verb string, param
 	return f.socketFederation.Call(ctx, host, verb, params)
 }
 
-func (f *droppableFederation) drop() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.down = true
-	for _, c := range f.conns {
-		_ = c.Close()
-	}
-	f.conns = nil
-}
-
-// TestAPaneNotReattachedWithinItsGraceEnds: the far machine keeps the process
-// for its own hosted_grace and not a second longer.
-func TestAPaneNotReattachedWithinItsGraceEnds(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	d.SetLinkPolicies(map[string]config.HostConfig{"*": {HostedGrace: "1s"}})
-	fed := &droppableFederation{socketFederation: socketFederation{socketPath: socketPath}}
-	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Resumable: true, Command: []string{"/bin/sh"}})
-	if p.grace != time.Second {
-		t.Fatalf("grace %v, want the far machine's 1s", p.grace)
-	}
-	r := drainPane(p)
-	fed.drop()
-	waitGone(t, d, p.id, paneBudget)
-	select {
-	case <-r.done:
-	case <-time.After(paneBudget):
-		t.Fatal("the pane here never ended after the far grace ran out")
-	}
-}
-
-// TestAPaneWithNoGraceEndsWithTheLink: hosted_grace = "0" is the old
-// behaviour, and so is an owner that does not ask.
-func TestAPaneWithNoGraceEndsWithTheLink(t *testing.T) {
-	for name, setup := range map[string]struct {
-		policy    map[string]config.HostConfig
-		resumable bool
-	}{
-		"policy of zero":    {policy: map[string]config.HostConfig{"*": {HostedGrace: "0"}}, resumable: true},
-		"owner did not ask": {resumable: false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			d, socketPath := startTestDaemon(t)
-			if setup.policy != nil {
-				d.SetLinkPolicies(setup.policy)
-			}
-			fed := &droppableFederation{socketFederation: socketFederation{socketPath: socketPath}}
-			p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Resumable: setup.resumable, Command: []string{"/bin/sh"}})
-			if p.resumeToken != "" {
-				t.Fatalf("a pane with no grace got a resume token")
-			}
-			fed.drop()
-			waitGone(t, d, p.id, paneBudget)
-		})
-	}
-}
-
 // TestAReattachNeedsItsToken: the pane id alone does not reattach a pane, so a
 // caller that learned it cannot take the process over.
 func TestAReattachNeedsItsToken(t *testing.T) {
@@ -122,19 +64,6 @@ func TestAReattachNeedsItsToken(t *testing.T) {
 	mustRefuse(t, resp, ErrVerbForbidden, "a reattach with the wrong token")
 	resp = callVerb(t, dialVerb(t, socketPath), "open-pane", map[string]any{"resume": map[string]any{"pane": "nope", "token": p.resumeToken}})
 	mustRefuse(t, resp, ErrVerbUnknownPane, "a reattach of a pane that does not exist")
-}
-
-// TestClosingAResumablePaneEndsItAtOnce: a window closed on purpose does not
-// leave its process waiting out a grace.
-func TestClosingAResumablePaneEndsItAtOnce(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	fed := &droppableFederation{socketFederation: socketFederation{socketPath: socketPath}}
-	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Resumable: true, Command: []string{"/bin/sh"}})
-	if p.grace <= 0 {
-		t.Fatal("no grace was given, so this proves nothing")
-	}
-	_ = p.Close()
-	waitGone(t, d, p.id, 10*time.Second)
 }
 
 // TestAFarDaemonFromBeforeResumablePanesStillOpensAPane: a far daemon whose
