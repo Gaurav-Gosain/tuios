@@ -116,13 +116,28 @@ func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
 	if cmd == nil || cmd.PayloadErr == nil || cmd.Quiet >= 2 {
 		return nil
 	}
-	if IsKittyResponsePayload(cmd.RawPayload) {
+	if IsKittyEchoedResponse(cmd) {
 		return nil
 	}
 	if cmd.Action != KittyActionQuery && cmd.ImageID == 0 && cmd.ImageNumber == 0 {
 		return nil
 	}
 	return BuildKittyResponse(false, cmd.ImageID, "EINVAL:payload is not valid base64")
+}
+
+// IsKittyEchoedResponse reports whether a parsed graphics command is a
+// terminal's reply coming back as input rather than a command from a guest.
+//
+// The payload shape alone is not enough. A chunk of real image data can be
+// all capital letters behind a leading E: a run of dark pixels encodes to
+// "EAAAAAAA", and the last chunk of a chunked transmission is often short
+// enough to pass the length cap. Dropping it as an echo left the transmission
+// without its m=0, so the image never appeared. A reply carries no key but
+// the ids (i=, I=, p=), and every transmission carries at least one other key
+// (a=, f=, s=, v=, t= on the first chunk, m= on every later one), so a command
+// is an echo only when it has the reply's keys and the reply's payload.
+func IsKittyEchoedResponse(cmd *KittyCommand) bool {
+	return cmd != nil && !cmd.otherKeys && IsKittyResponsePayload(cmd.RawPayload)
 }
 
 // IsKittyResponsePayload reports whether a graphics payload looks like an
@@ -172,6 +187,9 @@ func parseKittyControlParams(control string, cmd *KittyCommand) {
 		key, value, ok := strings.Cut(pair, "=")
 		if !ok {
 			continue
+		}
+		if key != "i" && key != "I" && key != "p" {
+			cmd.otherKeys = true
 		}
 
 		switch key {

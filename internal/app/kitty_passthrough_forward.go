@@ -87,7 +87,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
 	// When parsed, they appear as transmit commands with Data="OK" or error message.
 	// Real transmit commands have binary/base64 image data, not status strings.
-	if cmd.Action == vt.KittyActionTransmit && len(cmd.RawPayload) > 0 && isKittyResponse(cmd.RawPayload) {
+	if cmd.Action == vt.KittyActionTransmit && len(cmd.RawPayload) > 0 && vt.IsKittyEchoedResponse(cmd) {
 		kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", cmd.RawPayload)
 		return nil
 	}

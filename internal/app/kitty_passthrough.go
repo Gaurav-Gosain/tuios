@@ -23,14 +23,6 @@ func kittyPassthroughLog(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "[%s] KITTY-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
-// isKittyResponse checks if a graphics payload looks like an echoed kitty
-// protocol response rather than real image data. The rule lives in the vt
-// package, which needs it too: it must not answer an echoed error with
-// another error. See vt.IsKittyResponsePayload.
-func isKittyResponse(payload string) bool {
-	return vt.IsKittyResponsePayload(payload)
-}
-
 type KittyPassthrough struct {
 	mu      sync.Mutex
 	enabled bool

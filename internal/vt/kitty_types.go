@@ -104,4 +104,9 @@ type KittyCommand struct {
 	// the two never apply to the same command, and a colour overflows int on a
 	// 32-bit build, so it needs its own width.
 	BackgroundColor uint32
+
+	// otherKeys is set when the control data named a key other than the
+	// image, image number and placement ids, which are the only keys a reply
+	// from a terminal carries. See IsKittyEchoedResponse.
+	otherKeys bool
 }

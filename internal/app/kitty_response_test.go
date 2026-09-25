@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // TestIsKittyResponse verifies the tightened echoed-response heuristic. It runs
@@ -19,8 +21,8 @@ func TestIsKittyResponse(t *testing.T) {
 		"EINVAL:bad graphics params",
 	}
 	for _, r := range responses {
-		if !isKittyResponse(r) {
-			t.Errorf("isKittyResponse(%q) = false, want true (real echoed response)", r)
+		if !vt.IsKittyResponsePayload(r) {
+			t.Errorf("vt.IsKittyResponsePayload(%q) = false, want true (real echoed response)", r)
 		}
 	}
 
@@ -35,8 +37,8 @@ func TestIsKittyResponse(t *testing.T) {
 		"EABCDEF" + "abc",          // uppercase run then lowercase, no ':'
 	}
 	for _, d := range notResponses {
-		if isKittyResponse(d) {
-			t.Errorf("isKittyResponse(%q) = true, want false (real image data)", d)
+		if vt.IsKittyResponsePayload(d) {
+			t.Errorf("vt.IsKittyResponsePayload(%q) = true, want false (real image data)", d)
 		}
 	}
 }
@@ -59,7 +61,7 @@ func TestIsKittyResponseDoesNotDropBase64Chunks(t *testing.T) {
 			raw[i] = next()
 		}
 		payload := base64.StdEncoding.EncodeToString(raw)
-		if isKittyResponse(payload) {
+		if vt.IsKittyResponsePayload(payload) {
 			t.Fatalf("isKittyResponse misclassified a base64 image chunk as a response: %q...", payload[:16])
 		}
 	}
