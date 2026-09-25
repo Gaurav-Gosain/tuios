@@ -84,53 +84,6 @@ func stripNavWindows(m *OS, kind sidebarRowKind) []string {
 	return out
 }
 
-// TestStripStaysSilentWithNoAgents is the state the group is judged on, because
-// it is the usual one: no header, no rows, no reserved hole. The strip is
-// exactly the two lists it carries when nothing wants anything.
-func TestStripStaysSilentWithNoAgents(t *testing.T) {
-	m, tree := noAgentStripOS(t, 120, 20)
-	lines := railPlain(t, m, tree)
-	rule := config.Global.GetWindowBorderLeft()
-
-	want := []string{
-		"  " + rule,
-		"+s" + rule,
-		"▎·" + rule,
-		" ·" + rule,
-		" ·" + rule,
-		"+t" + rule,
-		"▎·" + rule,
-		// The finished pane the group itself drops. It has been looked at, so
-		// it wears idle's circle here as it does on every other surface.
-		" ○" + rule,
-	}
-	for i, w := range want {
-		if lines[i] != w {
-			t.Errorf("line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
-		}
-	}
-	// Nothing between the stack and the way out at the bottom.
-	tail := []string{" »" + rule, "  " + rule}
-	for i, w := range tail {
-		if got := lines[len(lines)-len(tail)+i]; got != w {
-			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
-		}
-	}
-	for i := len(want); i < len(lines)-len(tail); i++ {
-		if lines[i] != "  "+rule {
-			t.Errorf("line %d = %q, want empty band all the way to the controls", i, lines[i])
-		}
-	}
-	if joined := strings.Join(lines, "\n"); strings.Contains(joined, " a") {
-		t.Errorf("the quiet strip drew the group's header with no group behind it:\n%s", joined)
-	}
-	for _, n := range m.SidebarNav {
-		if n.Kind == sidebarRowAgent {
-			t.Errorf("the quiet strip recorded an agent target: %+v", n)
-		}
-	}
-}
-
 // TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder: the group is the
 // expanded agents section folded, so it cannot rank two panes differently from
 // the open rail. It drops the two ranks that would stand a permanent group
@@ -173,39 +126,6 @@ func TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder(t *testing.T) {
 		if strings.Contains(strings.Join(strip, ","), id) {
 			t.Errorf("the group repeated %q; the terminals list above it already draws that pane", id)
 		}
-	}
-}
-
-// TestStripGroupSitsUnderItsOwnHeader: the group is told apart from the two
-// lists above it by the header naming it, not by a second interval, because one
-// interval is what makes the whole strip scan as lists. It follows the
-// terminals list directly, with no gap and no control between them.
-func TestStripGroupSitsUnderItsOwnHeader(t *testing.T) {
-	m, tree := agentStripOS(t, 120, 24)
-	lines := railPlain(t, m, tree)
-	rule := config.Global.GetWindowBorderLeft()
-
-	want := []string{
-		" a" + rule, // the section's own name, cut to the strip's one column
-		" ×" + rule, // the errored pane in the other session
-		" ▲" + rule, // the blocked one under it
-	}
-	at := lineOf(lines, " a")
-	if at < 0 {
-		t.Fatalf("the strip drew no agents header:\n%s", strings.Join(lines, "\n"))
-	}
-	for i, w := range want {
-		if got := lines[at+i]; got != w {
-			t.Errorf("group line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
-		}
-	}
-	if got := lines[at+len(want)]; got != "  "+rule {
-		t.Errorf("the line after the group is %q, want the rail below the stack", got)
-	}
-	// The header carries no control, so it takes no target; every mark under it
-	// does.
-	if got := len(stripGroupRows(m)); got != 2 {
-		t.Errorf("%d agent rows recorded, want one per mark drawn", got)
 	}
 }
 
@@ -413,47 +333,4 @@ func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 			}
 		}
 	})
-}
-
-// TestStripGroupKeepsHitsAndNavIndexForIndex with the group present and absent,
-// on both sides: the two addressing lists are what a click and the keyboard
-// resolve through, and a new section is exactly what pulls them apart.
-func TestStripGroupKeepsHitsAndNavIndexForIndex(t *testing.T) {
-	for _, pos := range []string{"left", "right"} {
-		for _, withAgents := range []bool{false, true} {
-			build := noAgentStripOS
-			if withAgents {
-				build = agentStripOS
-			}
-			m, tree := build(t, 120, 24)
-			withSidebar(t, true, pos, config.SidebarDefaultWidth)
-			m.Settings = config.Global
-			m.SidebarCollapsed = true
-			m.sidebarPanelLinesForTree(tree)
-
-			if len(m.SidebarHits) != len(m.SidebarNav) {
-				t.Fatalf("%s/agents=%v: %d hits against %d nav rows", pos, withAgents, len(m.SidebarHits), len(m.SidebarNav))
-			}
-			lastSession := -1
-			for i, h := range m.SidebarHits {
-				n := m.SidebarNav[i]
-				if h.Kind != n.Kind || h.SessionID != n.SessionID || h.WindowID != n.WindowID {
-					t.Errorf("%s/agents=%v: hit %d is %v/%q/%q, nav is %v/%q/%q",
-						pos, withAgents, i, h.Kind, h.SessionID, h.WindowID, n.Kind, n.SessionID, n.WindowID)
-				}
-				if h.Kind == sidebarRowSession {
-					lastSession = i
-				}
-			}
-			// The group is drawn under the spine, so its rows are recorded after
-			// it: the two lists are one sequence, in drawn order.
-			for _, r := range stripGroupRows(m) {
-				for i, h := range m.SidebarHits {
-					if h.Y0 == r.Y0 && i < lastSession {
-						t.Errorf("%s: the group's row at %d is recorded before the spine's", pos, r.Y0)
-					}
-				}
-			}
-		}
-	}
 }

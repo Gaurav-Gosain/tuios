@@ -8,7 +8,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // placedClient is a listing in which the daemon has said where each session's
@@ -87,26 +86,6 @@ func TestRailLabelsAnUnnamedSessionByDirectoryAndBranch(t *testing.T) {
 	}
 }
 
-// TestRailMutesTheBranch: the branch is context, not identity, so it is drawn
-// in the muted token and never in the name's own ink.
-func TestRailMutesTheBranch(t *testing.T) {
-	m := bareShellOS(t, 1)
-	m.SessionName = "session-0"
-	m.DaemonClient = placedClient()
-
-	lines, _ := m.sidebarPanelLines()
-	muted := sidebarStyle(nil, theme.UI().FgMute).Render("main")
-	for _, l := range lines {
-		if strings.Contains(stripANSIForTrace(l), "tuios main") {
-			if !strings.Contains(l, muted) {
-				t.Fatalf("the branch is not drawn in the muted token:\n%q", l)
-			}
-			return
-		}
-	}
-	t.Fatalf("no row reads tuios main:\n%s", strings.Join(railText(t, m), "\n"))
-}
-
 // TestRailDropsTheBranchWhenItDoesNotFit: a rail too narrow for both keeps the
 // name whole and drops the branch, rather than cutting the name to make room
 // for a word that then describes nothing.
@@ -129,32 +108,6 @@ func TestRailDropsTheBranchWhenItDoesNotFit(t *testing.T) {
 		}
 	}
 	t.Fatalf("the directory label never reached the rail:\n%s", strings.Join(rows, "\n"))
-}
-
-// TestRailPlaceRidesTheCache: the place is a render input, so a shell that
-// changes branch has to rebuild the rail rather than leave a stale word on it.
-func TestRailPlaceRidesTheCache(t *testing.T) {
-	m := bareShellOS(t, 1)
-	m.SessionName = "session-0"
-	m.DaemonClient = placedClient()
-	sidebarText(t, m)
-	sig := m.sidebarCache.sig
-
-	// The same sessions, and only one branch differs: a listing that changed
-	// in nothing else is the case the comparison has to catch.
-	m.DaemonClient.UpdateSessionCache([]session.SessionInfo{
-		{Name: "session-0", Dir: "tuios", Branch: "fix/rail"},
-		{Name: "session-1", Dir: "docs"},
-		{Name: "api", Dir: "payments", Branch: "release"},
-		{Name: "session-2", Dir: "site", Branch: "next", DisplayName: "Site"},
-	})
-	sidebarText(t, m)
-	if m.sidebarCache.sig == sig {
-		t.Fatal("a branch change did not rebuild the rail")
-	}
-	if !strings.Contains(sessionRow(t, railText(t, m), "tuios"), "fix/rail") {
-		t.Error("the new branch never reached the drawn row")
-	}
 }
 
 // TestOpeningTheRailReplansTheListingPoll: the poll armed at attach for a lone

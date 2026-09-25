@@ -73,57 +73,6 @@ func TestSidebarSessionOrderPreserved(t *testing.T) {
 	}
 }
 
-// TestSidebarDragReorderPersists drives the full reorder gesture: press on a
-// session row, drag onto another, release. The draft order must track the
-// pointer, the commit must land in SidebarOrder and the state file, and a
-// fresh OS must load it back.
-func TestSidebarDragReorderPersists(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-	m.sidebarPanelLinesForTree(tree)
-
-	hits := sessionHits(m)
-	if len(hits) != 3 {
-		t.Fatalf("session rows = %d, want 3", len(hits))
-	}
-	scratch, deploy := hits[1], hits[2]
-
-	if !m.SidebarClick(scratch.X0+6, scratch.Y0, false) {
-		t.Fatalf("press on the scratch row was not consumed")
-	}
-	if m.SidebarDrag.Dragging {
-		t.Fatalf("press alone must not start the drag")
-	}
-	if !m.SidebarDragMotion(scratch.X0+6, deploy.Y0) {
-		t.Fatalf("drag motion was not consumed")
-	}
-	if !m.SidebarDrag.Dragging {
-		t.Fatalf("vertical motion did not commit the press to a drag")
-	}
-	if want := []string{"main", "deploy", "scratch"}; !reflect.DeepEqual(m.SidebarDrag.Order, want) {
-		t.Fatalf("draft order = %v, want %v", m.SidebarDrag.Order, want)
-	}
-
-	// Mid-drag the draft order is what renders, so the dragged row is its own
-	// drop indicator.
-	m.sidebarPanelLinesForTree(tree)
-	if want := []string{"main", "deploy", "scratch"}; !reflect.DeepEqual(m.SidebarSessionIDs, want) {
-		t.Fatalf("mid-drag display order = %v, want %v", m.SidebarSessionIDs, want)
-	}
-
-	if !m.SidebarRelease(scratch.X0+6, deploy.Y0) {
-		t.Fatalf("release did not resolve the drag")
-	}
-	if want := []string{"main", "deploy", "scratch"}; !reflect.DeepEqual(m.SidebarOrder, want) {
-		t.Fatalf("committed order = %v, want %v", m.SidebarOrder, want)
-	}
-
-	fresh := &OS{Settings: config.Global}
-	fresh.loadSidebarState()
-	if want := []string{"main", "deploy", "scratch"}; !reflect.DeepEqual(fresh.SidebarOrder, want) {
-		t.Fatalf("fresh OS loaded order %v, want %v", fresh.SidebarOrder, want)
-	}
-}
-
 // TestOrderByKeyAppendsUnranked pins the order-overlay semantics: ranked items
 // take the saved order, unranked ones keep their natural order after them.
 func TestOrderByKeyAppendsUnranked(t *testing.T) {

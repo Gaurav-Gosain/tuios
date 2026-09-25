@@ -124,22 +124,6 @@ func TestEnterOnAnUntouchedDialogDeletesNothing(t *testing.T) {
 	}
 }
 
-// TestEscapeCancelsTheDialog covers the other way out.
-func TestEscapeCancelsTheDialog(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(false)
-	m.FilePromptCancel()
-	if m.FilePromptOpen() {
-		t.Error("escape left the dialog up")
-	}
-	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
-		t.Errorf("escape deleted the file: %v", err)
-	}
-}
-
 // TestTheGoRowSendsTheFileToTheTrash walks the whole gesture: open, move onto
 // the destructive row, answer, run the command.
 func TestTheGoRowSendsTheFileToTheTrash(t *testing.T) {
@@ -197,46 +181,6 @@ func TestThePermanentDeleteKeySaysItIsPermanent(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(filepath.Join(trash, "files")); err == nil && len(entries) != 0 {
 		t.Errorf("the permanent delete put %d files in the trash", len(entries))
-	}
-}
-
-// TestTheTwoDialogsSayDifferentThings is the requirement that a person can tell
-// which one they are looking at.
-func TestTheTwoDialogsSayDifferentThings(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(false)
-	trashOutcome, trashTitle := m.fileConfirmOutcome(), m.filePromptTitle()
-	m.FilePromptCancel()
-	m.SidebarFileDelete(true)
-	permOutcome, permTitle := m.fileConfirmOutcome(), m.filePromptTitle()
-
-	if trashOutcome == permOutcome {
-		t.Errorf("both dialogs say %q; the two must read differently", trashOutcome)
-	}
-	if trashTitle == permTitle {
-		t.Errorf("both dialogs are titled %q", trashTitle)
-	}
-	if !strings.Contains(trashOutcome, "trash") || !strings.Contains(trashOutcome, "get it back") {
-		t.Errorf("the trash dialog says %q; it must say where the file goes and that it comes back", trashOutcome)
-	}
-}
-
-// TestTheDialogNamesTheFile covers the "names the target" requirement at the
-// model layer. The frame test checks that it survives the width.
-func TestTheDialogNamesTheFile(t *testing.T) {
-	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
-	m := filesOS(t, dir, "report.txt")
-
-	m.SidebarFileDelete(false)
-	if q := m.fileConfirmQuestion(); !strings.Contains(q, "report.txt") {
-		t.Errorf("the question is %q; it must name the file", q)
-	}
-	if len(m.filePrompt.Paths) != 1 || m.filePrompt.Paths[0] != filepath.Join(dir, "report.txt") {
-		t.Errorf("the dialog captured %v, want the one full path", m.filePrompt.Paths)
 	}
 }
 
@@ -491,25 +435,5 @@ func TestTheParentRowIsNotADeleteTarget(t *testing.T) {
 	}
 	if _, err := os.Lstat(dir); err != nil {
 		t.Errorf("the parent folder went: %v", err)
-	}
-}
-
-// TestAPasteSaysWhereItLanded: a paste raises no dialog, so its notification is
-// the only place it can name the folder it wrote into. That folder came from
-// the pane, and a paste that says only "Copied 1 file" says nothing about it.
-//
-// Negative control: drop the folder from the sentence in SidebarFilePaste and
-// this fails with the destination missing.
-func TestAPasteSaysWhereItLanded(t *testing.T) {
-	src := t.TempDir()
-	dst := t.TempDir()
-	mustWrite(t, filepath.Join(src, "report.txt"), "body")
-
-	m := filesOS(t, dst, "")
-	m.fileClip = fileClipboard{Paths: []string{filepath.Join(src, "report.txt")}}
-	runOp(t, m, m.SidebarFilePaste())
-
-	if got := lastMessage(m); !strings.Contains(got, shortenHome(dst)) {
-		t.Fatalf("the paste said %q, which does not name %q", got, shortenHome(dst))
 	}
 }

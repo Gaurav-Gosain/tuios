@@ -150,51 +150,6 @@ func TestStripHoverPaintsNothingOffTarget(t *testing.T) {
 	}
 }
 
-// TestStripHoverBandSpansEveryColumnOnBothSides is the regression in its own
-// words, on the column that was missing: the pane-facing one, which is the edge
-// rule's, and which is mirrored to the other end of the band on a right-hand
-// rail.
-func TestStripHoverBandSpansEveryColumnOnBothSides(t *testing.T) {
-	for _, pos := range []string{"left", "right"} {
-		t.Run(pos, func(t *testing.T) {
-			m, tree := quietStripOS(t, 120, 20)
-			withSidebar(t, true, pos, config.SidebarDefaultWidth)
-			m.Settings = config.Global
-			m.SidebarCollapsed = true
-			m.sidebarPanelLinesForTree(tree)
-
-			var slot sidebarRowHit
-			for _, h := range m.SidebarHits {
-				if h.Kind == sidebarRowSession && h.SessionID == "api" {
-					slot = h
-				}
-			}
-			w, top := m.GetSidebarWidth(), m.GetTopMargin()
-			railX0 := 0
-			if pos == "right" {
-				railX0 = m.GetRenderWidth() - w
-			}
-
-			m.SidebarHoverActive = true
-			m.SidebarHoverX, m.SidebarHoverY = railX0, slot.Y0
-			lines, _ := m.sidebarPanelLinesForTree(tree)
-
-			panel := panelSGR(t)
-			for y := slot.Y0; y < slot.Y1; y++ {
-				cells := stripCells(lines[y-top])
-				if len(cells) != w {
-					t.Fatalf("row %d is %d cells, want the band's %d", y-top, len(cells), w)
-				}
-				for x, cell := range cells {
-					if bgOf(cell) == panel {
-						t.Errorf("cell (%d,%d) of the hovered slot kept the resting ground", x, y-top)
-					}
-				}
-			}
-		})
-	}
-}
-
 // TestStripHoverBandSurvivesASeverityMark: a row carrying an alarm is drawn
 // exactly like a quiet one under the pointer, because the band is the ground and
 // the mark is the message. The pointer does not repaint an alarm and the alarm

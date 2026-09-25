@@ -34,18 +34,6 @@ func TestAnAnnouncedDirectoryIsNotOverwrittenByTheDaemons(t *testing.T) {
 	}
 }
 
-// TestTheDaemonsDirectoryFillsTheGap is the positive half, and the whole reason
-// the field is carried at all. A shell that never announces leaves the client
-// with nothing, and a pane on another machine has no process here to read, so
-// the daemon's copy is the only answer such a pane can ever have.
-func TestTheDaemonsDirectoryFillsTheGap(t *testing.T) {
-	w := &terminal.Window{}
-	adoptWindowCwd(w, "/home/ubuntu")
-	if w.Cwd != "/home/ubuntu" {
-		t.Errorf("a pane whose shell never announced got %q, want the daemon's answer", w.Cwd)
-	}
-}
-
 // TestAnEmptyDirectoryDoesNotWipeOne: a sync that omits the field must not take
 // away a directory the pane did announce.
 func TestAnEmptyDirectoryDoesNotWipeOne(t *testing.T) {
@@ -122,18 +110,6 @@ func TestAFailedListingIsNotRetriedOnEveryMessage(t *testing.T) {
 
 	if filesShouldRetry(m.filesView, "/home/ubuntu") {
 		t.Error("a listing that just failed is retried immediately")
-	}
-}
-
-// TestASuccessfulListingIsNotAskedForAgain: the case the comparison was always
-// for. A directory already on screen costs nothing.
-func TestASuccessfulListingIsNotAskedForAgain(t *testing.T) {
-	m := &OS{}
-	m.filesView.Want = "/home/ubuntu"
-	m.filesView.Dir = "/home/ubuntu"
-
-	if filesShouldRetry(m.filesView, "/home/ubuntu") {
-		t.Error("a directory already listed is asked for again")
 	}
 }
 

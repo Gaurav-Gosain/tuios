@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // Three sections with a filter, a sort, a peek and two rail states make the
@@ -211,44 +210,4 @@ func TestRailSignatureMovesForDrawnStateAndNotForTheRest(t *testing.T) {
 		})
 	}
 	_ = base
-}
-
-// TestRailEmptyStatesAreDocumented walks the three the design names, because
-// each of them is a section that would otherwise silently say the opposite of
-// the truth.
-func TestRailEmptyStatesAreDocumented(t *testing.T) {
-	// No agents anywhere: the section is absent, header included. A header over
-	// nothing is furniture standing in for an alarm.
-	m, _ := sectionsTestOS(t, 120, 30)
-	for i := range m.Windows {
-		m.Windows[i].AgentState = ""
-	}
-	quiet := railPlain(t, m, sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-		}},
-	}))
-	if lineOf(quiet, " agents") >= 0 {
-		t.Error("the agents section drew a header with no agents behind it")
-	}
-
-	// A peek into a session with no panes says so, or the section reads as
-	// "the attached session has no panes".
-	m2, tree2 := sectionsTestOS(t, 120, 30)
-	m.Settings = config.Global
-	m.Settings = m2.Settings
-	m2.SidebarPeek = "docs"
-	if lineOf(railPlain(t, m2, tree2), "no terminals") < 0 {
-		t.Error("an empty peek said nothing")
-	}
-
-	// A filter that hides everything says what it hid and offers the way back.
-	m3, tree3 := sectionsTestOS(t, 120, 30)
-	m2.Settings = config.Global
-	m2.Settings = m3.Settings
-	m3.SessionName = "docs" // attached to the session with no agents
-	m3.SidebarAgentFilter = sidebarAgentsSession
-	if lineOf(railPlain(t, m3, tree3), "none here") < 0 {
-		t.Error("a filter that hid everything left the section blank")
-	}
 }

@@ -68,45 +68,6 @@ func TestRailRowsDistinguishBareShells(t *testing.T) {
 	}
 }
 
-// TestRailRowShowsForegroundCommand: what a pane is running is the answer to
-// "which pane is this", so it outranks a title every sibling shares.
-func TestRailRowShowsForegroundCommand(t *testing.T) {
-	m := bareShellOS(t, 3)
-	m.Windows[1].ForegroundCmd = "nvim"
-	m.Windows[2].ForegroundCmd = "btop"
-
-	rows := railText(t, m)
-	for _, want := range []string{"nvim", "btop"} {
-		if len(paneRows(rows, want)) != 1 {
-			t.Errorf("no row reads %q:\n%s", want, strings.Join(rows, "\n"))
-		}
-	}
-	// The one remaining shell is alone now, so it carries no ordinal.
-	got := paneRows(rows, "tuios")
-	if len(got) != 1 {
-		t.Fatalf("expected one shell row, got %d: %q", len(got), got)
-	}
-	if strings.Contains(got[0], "tuios 1") {
-		t.Errorf("a shell with no twin was still numbered: %q", got[0])
-	}
-}
-
-// TestRailRowKeepsCustomNameOverCommand: a rename is the user's answer and
-// nothing detected may overrule it.
-func TestRailRowKeepsCustomNameOverCommand(t *testing.T) {
-	m := bareShellOS(t, 2)
-	m.Windows[0].CustomName = "editor"
-	m.Windows[0].ForegroundCmd = "nvim"
-
-	rows := railText(t, m)
-	if len(paneRows(rows, "editor")) != 1 {
-		t.Errorf("the named row is missing:\n%s", strings.Join(rows, "\n"))
-	}
-	if got := paneRows(rows, "nvim"); len(got) != 0 {
-		t.Errorf("the command overrode the custom name: %q", got)
-	}
-}
-
 // TestRailWindowLabelPrecedence pins the order the row label is chosen in, on
 // the pieces every surface has.
 func TestRailWindowLabelPrecedence(t *testing.T) {

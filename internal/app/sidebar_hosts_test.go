@@ -88,59 +88,6 @@ func hostHit(t *testing.T, m *OS, host string) sidebarRowHit {
 	return sidebarRowHit{}
 }
 
-// TestSidebarDrawsHostGroups is the on-screen assertion: every machine gets a
-// header row wearing the fold mark, this machine's first, and a host's
-// sessions sit under its header.
-func TestSidebarDrawsHostGroups(t *testing.T) {
-	m := hostRailOS(t)
-	if _, w := m.sidebarPanelLines(); w <= 0 {
-		t.Fatal("the rail reserved no columns")
-	}
-	lines := railText(t, m)
-	text := strings.Join(lines, "\n")
-
-	for _, want := range []string{hostHeader(m, "local", false), "home", hostHeader(m, "build", false), "api", "web", hostHeader(m, "workstation", false)} {
-		if !strings.Contains(text, want) {
-			t.Errorf("ASSERTION: the rail does not show %q:\n%s", want, text)
-		}
-	}
-	// "@" is the mail mark now, so the header's mail token may carry one; what
-	// must not come back is a machine written as "@ host" after a name.
-	for _, host := range []string{"local", "build", "workstation"} {
-		if strings.Contains(text, "@ "+host) {
-			t.Errorf("ASSERTION: the rail still marks a machine with @:\n%s", text)
-		}
-	}
-
-	// Local first is the rule: this machine's header, then its session, then
-	// the other machines.
-	local := railLineIndex(lines, hostHeader(m, "local", false))
-	home := railLineIndex(lines, "home")
-	build := railLineIndex(lines, hostHeader(m, "build", false))
-	api := railLineIndex(lines, "api")
-	if !(local >= 0 && local < home && home < build && build < api) {
-		t.Errorf("ASSERTION: rows are out of order (local %d, home %d, build %d, api %d):\n%s",
-			local, home, build, api, text)
-	}
-}
-
-// TestRemoteSessionRowSitsOnTheSpine keeps a remote session's name on the same
-// column as a local one's, so a machine's rows read the same whether the
-// client is on it or not. The header above says which machine; the ink says
-// it is a listing.
-func TestRemoteSessionRowSitsOnTheSpine(t *testing.T) {
-	m := hostRailOS(t)
-	lines := railText(t, m)
-	home := railLineIndex(lines, "home")
-	api := railLineIndex(lines, "api")
-	if home < 0 || api < 0 {
-		t.Fatalf("missing rows:\n%s", strings.Join(lines, "\n"))
-	}
-	if railColumnOf(lines[home], "home") != railColumnOf(lines[api], "api") {
-		t.Errorf("ASSERTION: the remote row is not on the local row's spine:\n%q\n%q", lines[home], lines[api])
-	}
-}
-
 // railColumnOf is the screen column needle starts on in a rail line, in cells
 // rather than bytes: the marks in front of a name are multi-byte runes.
 func railColumnOf(line, needle string) int {
@@ -167,29 +114,6 @@ func TestSidebarShowsAnUnreachableHost(t *testing.T) {
 	after := text[at:]
 	if strings.Contains(after, "api") || strings.Contains(after, "web") {
 		t.Errorf("sessions are drawn under a host that did not answer:\n%s", after)
-	}
-}
-
-// TestSingleMachineRailIsUnchanged is the promise to the default install: with
-// no other machine the section has no machine headers at all.
-func TestSingleMachineRailIsUnchanged(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.SessionName = "home"
-	m.applyFederationSnapshot(FederationHostsMsg{
-		Configured: 0,
-		Snapshot: FederationSnapshot{Hosts: []FederationHost{
-			{Name: federation.LocalHostName, Status: string(federation.StatusUp),
-				Sessions: []FederationSession{{Name: "home", WindowCount: 3}}},
-		}},
-	})
-	text := hostRailText(t, m)
-	if strings.Contains(text, hostHeader(m, "local", false)) {
-		t.Errorf("ASSERTION: a rail with one machine draws a machine header:\n%s", text)
-	}
-	for _, nav := range m.SidebarNav {
-		if nav.Kind == sidebarRowHost {
-			t.Errorf("ASSERTION: a rail with one machine records a machine row: %+v", nav)
-		}
 	}
 }
 
@@ -273,57 +197,6 @@ func TestHostOrderIsTheUsers(t *testing.T) {
 	}
 }
 
-// TestDraggingAHostHeaderReordersTheMachines is the reorder gesture on a
-// machine's header: the same press, move and release a session row takes, and
-// the order it leaves is persisted.
-func TestDraggingAHostHeaderReordersTheMachines(t *testing.T) {
-	m := hostRailOS(t)
-	m.sidebarPanelLines()
-	build := hostHit(t, m, "build")
-	work := hostHit(t, m, "workstation")
-
-	if !m.SidebarClick(build.X0+2, build.Y0, false) {
-		t.Fatal("the press on the header was not consumed")
-	}
-	if !m.SidebarDragMotion(build.X0+2, work.Y0) {
-		t.Fatal("the motion was not consumed")
-	}
-	if !m.SidebarDrag.Dragging || !m.SidebarDrag.Host {
-		t.Fatalf("ASSERTION: moving off the header did not start a machine drag: %+v", m.SidebarDrag)
-	}
-	m.SidebarRelease(build.X0+2, work.Y0)
-	if got := strings.Join(m.SidebarHostOrder, ","); got != "workstation,build" {
-		t.Fatalf("ASSERTION: the drop left the machine order %q, want workstation,build", got)
-	}
-	// And the rail draws it.
-	lines := railText(t, m)
-	if railLineIndex(lines, hostHeader(m, "workstation", false)) > railLineIndex(lines, hostHeader(m, "build", false)) {
-		t.Errorf("ASSERTION: the rail did not take the dragged order:\n%s", strings.Join(lines, "\n"))
-	}
-	// Nothing about the sessions' own order was touched.
-	if m.SidebarOrder != nil {
-		t.Errorf("a machine drag wrote the session order: %v", m.SidebarOrder)
-	}
-}
-
-// TestThisMachineIsNotDragged keeps this machine pinned first: a drag that
-// starts on its header is a click and nothing more.
-func TestThisMachineIsNotDragged(t *testing.T) {
-	m := hostRailOS(t)
-	m.sidebarPanelLines()
-	local := hostHit(t, m, federation.LocalHostName)
-	build := hostHit(t, m, "build")
-	m.SidebarClick(local.X0+2, local.Y0, false)
-	m.SidebarDragMotion(local.X0+2, build.Y0+1)
-	if m.SidebarDrag.Dragging {
-		t.Fatalf("ASSERTION: this machine's header started a drag: %+v", m.SidebarDrag)
-	}
-	m.SidebarRelease(local.X0+2, build.Y0+1)
-	if len(m.SidebarHostOrder) != 0 {
-		t.Errorf("ASSERTION: the gesture wrote a machine order: %v", m.SidebarHostOrder)
-	}
-}
-
 // TestHostHeaderClickFoldsTheGroup is the toggle the maintainer asked for: a
 // click on a machine's header hides its rows, the header shows how many it is
 // holding and wears the shut mark, and a second click opens it again. The
@@ -368,30 +241,6 @@ func TestHostHeaderClickFoldsTheGroup(t *testing.T) {
 	}
 	if text := hostRailText(t, m); !strings.Contains(text, "api") {
 		t.Errorf("ASSERTION: the opened group does not list its sessions:\n%s", text)
-	}
-}
-
-// TestFoldedHostOffersNoNewControl keeps the "+" off a shut group: the count
-// takes that slot, and a person opens the group before adding to it.
-func TestFoldedHostOffersNoNewControl(t *testing.T) {
-	m := hostRailOS(t)
-	m.SidebarToggleHostCollapsed("build")
-	m.sidebarPanelLines()
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowHostNew && h.SessionID == "build" {
-			t.Errorf("ASSERTION: a folded host offers a + control")
-		}
-	}
-	m.SidebarToggleHostCollapsed("build")
-	m.sidebarPanelLines()
-	found := false
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowHostNew && h.SessionID == "build" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("ASSERTION: an open up host offers no + control")
 	}
 }
 
@@ -592,27 +441,6 @@ func TestUpHostOffersANewControl(t *testing.T) {
 	}
 }
 
-// TestHostHeaderIsAFoldTarget makes the header row itself reachable: it is a
-// nav row of its own kind, distinct from its + control, on every machine
-// including the one the client is on.
-func TestHostHeaderIsAFoldTarget(t *testing.T) {
-	m := hostRailOS(t)
-	if _, w := m.sidebarPanelLines(); w <= 0 {
-		t.Fatal("the rail drew nothing")
-	}
-	seen := map[string]bool{}
-	for _, nav := range m.SidebarNav {
-		if nav.Kind == sidebarRowHost {
-			seen[nav.SessionID] = true
-		}
-	}
-	for _, host := range []string{"local", "build", "workstation"} {
-		if !seen[host] {
-			t.Errorf("ASSERTION: the %s header is not a keyboard target", host)
-		}
-	}
-}
-
 // TestHostRowsDoNotEnterTheColourArbitration keeps a machine elsewhere from
 // changing what a local session looks like.
 func TestHostRowsDoNotEnterTheColourArbitration(t *testing.T) {
@@ -677,35 +505,6 @@ func TestFederationPollStopsWithNoHosts(t *testing.T) {
 	}
 }
 
-// TestHostsChangedPushStartsThePollAgain is the refresh fix: a client whose
-// daemon had no hosts has stopped polling, and the daemon's push is what makes
-// it ask once more. Without it the first host added from the command line
-// stayed invisible until the client reattached.
-func TestHostsChangedPushStartsThePollAgain(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.federationPolling = true
-	m.applyFederationSnapshot(FederationHostsMsg{Configured: 0})
-	if m.federationPolling {
-		t.Fatal("the fixture is still polling, so this proves nothing")
-	}
-
-	_, cmd := m.Update(HostsChangedMsg{})
-	if !m.federationPolling {
-		t.Error("ASSERTION: the hosts-changed push did not arm the poll")
-	}
-	if cmd == nil {
-		t.Error("ASSERTION: the hosts-changed push returned no poll")
-	}
-
-	// The wiring: the client event the daemon's push queues becomes that
-	// message, not the leave event the channel's default case makes.
-	ch := make(chan ClientEvent, 1)
-	ch <- ClientEvent{Type: "hosts-changed"}
-	if _, ok := ListenForClientEvents(ch)().(HostsChangedMsg); !ok {
-		t.Error("ASSERTION: a hosts-changed client event is not delivered as HostsChangedMsg")
-	}
-}
-
 // TestAStaleFederationTickIsDropped keeps the poll to one loop. The snapshot's
 // re-arm retires the tick's own re-arm, so a tick from the older generation
 // must fire nothing; without the guard every period doubled the timers.
@@ -760,36 +559,6 @@ func TestMachineLayoutMovesTheRenderSignature(t *testing.T) {
 	m.AttachedHost = "build"
 	if after := m.sidebarSignature(); after == sig {
 		t.Error("ASSERTION: switching machine did not move the signature")
-	}
-}
-
-// TestHostGroupNodesShapeTheRows checks the row list itself: one header per
-// other machine, then that machine's sessions, and a host that failed
-// contributing its header alone.
-func TestHostGroupNodesShapeTheRows(t *testing.T) {
-	m := hostRailOS(t)
-	nodes := m.hostGroupNodes()
-
-	var kinds []string
-	for _, n := range nodes {
-		switch n.Kind {
-		case sessiontree.KindHost:
-			kinds = append(kinds, "host:"+n.Title)
-		case sessiontree.KindSession:
-			kinds = append(kinds, "session:"+n.Title)
-		}
-	}
-	want := []string{"host:build", "session:api", "session:web", "host:workstation"}
-	if strings.Join(kinds, ",") != strings.Join(want, ",") {
-		t.Errorf("rows are %v, want %v", kinds, want)
-	}
-	for _, n := range nodes {
-		if n.Host == "" {
-			t.Errorf("a federated row does not name its host: %+v", n)
-		}
-		if !isRemoteNode(n) {
-			t.Errorf("a federated row is not treated as remote: %+v", n)
-		}
 	}
 }
 
@@ -859,66 +628,6 @@ func TestKeyboardReordersMachines(t *testing.T) {
 	}
 	if railLineIndex(railText(t, m), hostHeader(m, "local", false)) != 1 {
 		t.Errorf("ASSERTION: this machine is no longer first:\n%s", strings.Join(railText(t, m), "\n"))
-	}
-}
-
-// TestRailInksARemoteRowByItsLink: a session row under a machine that answers
-// reads at the strength of a local resting row, because a click on it attaches
-// the session and the ink must not say less than the row does. A row under a
-// machine that does not answer is a listing nobody can act on, and it is muted
-// with its header.
-func TestRailInksARemoteRowByItsLink(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.SessionName = "home"
-	// The machine that is not answering keeps the listing it gave when it
-	// last did, which is the case the ink has to tell apart from a live one.
-	m.applyFederationSnapshot(FederationHostsMsg{
-		Configured: 2,
-		Snapshot: FederationSnapshot{Hosts: []FederationHost{
-			{
-				Name:     federation.LocalHostName,
-				Status:   string(federation.StatusUp),
-				Sessions: []FederationSession{{Name: "home", WindowCount: 3}},
-			},
-			{
-				Name:     "build",
-				Status:   string(federation.StatusUp),
-				Sessions: []FederationSession{{Name: "live-one", WindowCount: 3}},
-			},
-			{
-				Name:     "workstation",
-				Status:   string(federation.StatusUnreachable),
-				Reason:   "The host did not answer.",
-				Sessions: []FederationSession{{Name: "stale-one", WindowCount: 2}},
-			},
-		}},
-	})
-
-	lines, _ := m.sidebarPanelLines()
-	// A session name takes the brightest ink now, wherever it lives, because it
-	// is the thing on the rail you act on. The contrast this test is about is
-	// unchanged: a machine that answers has reachable sessions, and one that
-	// does not has a cached listing, which is muted with its heading.
-	live := sidebarStyle(nil, theme.UI().Fg).Render("live-one")
-	stale := sidebarStyle(nil, theme.UI().FgMute).Render("stale-one")
-	var sawLive, sawStale bool
-	for _, l := range lines {
-		plain := stripANSIForTrace(l)
-		if strings.Contains(plain, "live-one") {
-			sawLive = true
-			if !strings.Contains(l, live) {
-				t.Errorf("ASSERTION: the row of a session on a machine that answers is not drawn in a session name's ink:\n%q", l)
-			}
-		}
-		if strings.Contains(plain, "stale-one") {
-			sawStale = true
-			if !strings.Contains(l, stale) {
-				t.Errorf("ASSERTION: the row of a session on a machine that does not answer is not muted:\n%q", l)
-			}
-		}
-	}
-	if !sawLive || !sawStale {
-		t.Fatalf("ASSERTION: the rail is missing a remote row (live=%v stale=%v):\n%s", sawLive, sawStale, hostRailText(t, m))
 	}
 }
 

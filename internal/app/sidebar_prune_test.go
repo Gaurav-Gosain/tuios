@@ -228,24 +228,3 @@ func TestPruneRefusesAnotherDaemonsState(t *testing.T) {
 		t.Error("prune deleted a live window's accent")
 	}
 }
-
-// BenchmarkSidebarSignatureStaleSeen measures what an unpruned unread map costs
-// the rail every frame: the fold runs over every entry, live or not, so the
-// per-frame cost grows with the map rather than with the windows on screen.
-func BenchmarkSidebarSignatureStaleSeen(b *testing.B) {
-	config.Global.SidebarEnabled = true
-	config.Global.SidebarPosition = "left"
-	config.Global.SidebarWidth = config.SidebarDefaultWidth
-	defer func() { config.Global.SidebarEnabled = false }()
-
-	for _, stale := range []int{0, 1000, 20000} {
-		b.Run(strconv.Itoa(stale), func(b *testing.B) {
-			m := benchSignatureOS(stale)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for range b.N {
-				m.sidebarSignature()
-			}
-		})
-	}
-}

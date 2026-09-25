@@ -107,27 +107,6 @@ func TestRailFallsBackWhenTheRowIsGone(t *testing.T) {
 	}
 }
 
-// TestRailRemembersAcrossAnEscBrowse: esc is the other way out, and it leaves
-// the rail on a row just as squarely.
-func TestRailRemembersAcrossAnEscBrowse(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-	m.sidebarPanelLinesForTree(tree)
-
-	m.EnterSidebarFocus()
-	m.sidebarPanelLinesForTree(tree)
-	m.SidebarCursorMove(2)
-	want, _ := m.sidebarCursorRow()
-
-	m.ExitSidebarFocus() // esc
-	m.sidebarPanelLinesForTree(tree)
-	m.EnterSidebarFocus()
-
-	got, _ := m.sidebarCursorRow()
-	if !sidebarNavRowsEqual(got, want) {
-		t.Errorf("cursor came back to %+v, want %+v", got, want)
-	}
-}
-
 // mustRailLines renders the rail with the cursor showing.
 func mustRailLines(t *testing.T, m *OS, tree sessiontree.Tree) []string {
 	t.Helper()

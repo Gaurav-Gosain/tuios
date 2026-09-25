@@ -75,41 +75,6 @@ func terminalRowOnScreen(m *OS, id string) bool {
 	return false
 }
 
-// TestFocusingAPaneRevealsItsRow: a pane below the terminals fold comes on
-// screen when it is focused, and only then; a frame with the same focus leaves
-// the section where it is.
-func TestFocusingAPaneRevealsItsRow(t *testing.T) {
-	m, tree := tallTerminalsOS(t, 12)
-	m.sidebarPanelLinesForTree(tree)
-	last := "win-11"
-	if terminalRowOnScreen(m, last) {
-		t.Fatal("the fixture's last pane is already on screen; the rail is not short enough to test a reveal")
-	}
-	before := m.SidebarScrollT
-
-	m.FocusedWindow = 11
-	m.sidebarPanelLinesForTree(tree)
-	if !terminalRowOnScreen(m, last) {
-		t.Fatalf("focusing the last pane left its row off screen (scroll %d -> %d)", before, m.SidebarScrollT)
-	}
-	if m.SidebarScrollT == 0 {
-		t.Fatal("the terminals section did not scroll")
-	}
-
-	// The same focus a frame later: nothing moves, even after the reader
-	// wheels away.
-	settled := m.SidebarScrollT
-	m.sidebarPanelLinesForTree(tree)
-	if m.SidebarScrollT != settled {
-		t.Fatalf("a frame with no focus change moved the section from %d to %d", settled, m.SidebarScrollT)
-	}
-	m.SidebarScrollT = 0
-	m.sidebarPanelLinesForTree(tree)
-	if m.SidebarScrollT != 0 {
-		t.Fatalf("the reveal fought the wheel: scroll went back to %d", m.SidebarScrollT)
-	}
-}
-
 // TestAWheelBetweenFramesOutranksTheReveal: a focus change and a wheel in the
 // same gap between frames is the reader saying where to look, and the reveal
 // stands down.

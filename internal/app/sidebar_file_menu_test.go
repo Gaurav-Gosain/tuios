@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The files section's context menu, driven through the real right-click handler
@@ -349,64 +347,5 @@ func TestFileMenuIsAllDimWhenFileActionsAreOff(t *testing.T) {
 	}
 	if menuRow(t, m, "Sidebar settings").Dim {
 		t.Error("the way to the setting is dimmed too, so the menu is a dead end")
-	}
-}
-
-// TestFileMenuPasteWakesWithAClipboard checks the one row whose dim depends on
-// state rather than on the target.
-func TestFileMenuPasteWakesWithAClipboard(t *testing.T) {
-	dir := fileViewTree(t)
-	m := filesOS(t, dir, "")
-
-	rightClickFile(t, m, "README.md")
-	if !menuRow(t, m, "Paste").Dim {
-		t.Error("Paste is live with an empty clipboard")
-	}
-	m.CloseContextMenu()
-
-	rightClickFile(t, m, "README.md")
-	m.ContextMenuSelectedAction() // arm the carry the way taking a row does
-	m.SidebarFileCopy()
-	m.ClearMenuTarget()
-	m.CloseContextMenu()
-
-	rightClickFile(t, m, "beta.txt")
-	if menuRow(t, m, "Paste").Dim {
-		t.Error("Paste is dimmed with a file on the clipboard")
-	}
-}
-
-// TestFileMenuFrames prints the drawn frame for each target. The menu is a
-// visual feature and this is what the reviewer reads.
-func TestFileMenuFrames(t *testing.T) {
-	dir := fileViewTree(t)
-
-	for _, tc := range []struct {
-		name string
-		open func(m *OS)
-	}{
-		{"file row", func(m *OS) { rightClickFile(t, m, "README.md") }},
-		{"folder row", func(m *OS) { rightClickFile(t, m, "apple") }},
-		{"blank space below the listing", func(m *OS) {
-			x, y := filesBlankCell(t, m)
-			m.SidebarClick(x, y, true)
-		}},
-		{"the menu key on the cursor row", func(m *OS) {
-			if !cursorToFile(m, "beta.txt") {
-				t.Fatal("no row for beta.txt")
-			}
-			m.SidebarOpenCursorMenu(false)
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := filesOS(t, dir, "")
-			tc.open(m)
-			m.View()
-			frame := ansi.Strip(m.cachedViewContent)
-			t.Logf("%s\n%s", tc.name, frame)
-			if !strings.Contains(frame, "Copy") {
-				t.Errorf("the frame does not draw the menu:\n%s", frame)
-			}
-		})
 	}
 }

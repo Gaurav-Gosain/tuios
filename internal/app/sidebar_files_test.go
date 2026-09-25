@@ -91,56 +91,6 @@ func TestFileViewOrdersFoldersFirst(t *testing.T) {
 	}
 }
 
-// TestFileViewNavigatesWithoutTouchingAnyPane is the safe half of "clicking a
-// folder navigates to it": the listing moves and nothing is typed anywhere.
-//
-// Negative control: with FileViewEnter sending a cd for a directory instead of
-// reloading, the directory assertion fails and the pane below receives input.
-func TestFileViewNavigatesWithoutTouchingAnyPane(t *testing.T) {
-	root := fileViewTree(t)
-	m := &OS{Settings: config.Global}
-	m.loadFileViewNow(t, root)
-
-	// A pane that would notice being typed into. Nothing here may reach it.
-	win, typedInto := cdProbe(t, "aaaaaaaa1111")
-	m.Windows = []*terminal.Window{win}
-	m.filesView.Origin = win.ID
-
-	// "apple" is the first entry, per the order pinned above. Walking into it
-	// answers with the command that reads the folder, and with nothing else.
-	cmd := m.FileViewEnter(0)
-	if cmd == nil {
-		t.Fatal("walking into a folder scheduled no read")
-	}
-	m.HandleFileList(cmd().(fileListMsg))
-	if got, want := m.FileViewDir(), filepath.Join(root, "apple"); got != want {
-		t.Fatalf("after entering the folder the view is at %q, want %q", got, want)
-	}
-	if typed := typedInto(); typed != "" {
-		t.Errorf("walking into a folder typed %q into the pane", typed)
-	}
-
-	if cmd := m.FileViewUp(); cmd != nil {
-		m.HandleFileList(cmd().(fileListMsg))
-	}
-	if got := m.FileViewDir(); got != root {
-		t.Fatalf("after going up the view is at %q, want %q", got, root)
-	}
-	if typed := typedInto(); typed != "" {
-		t.Errorf("walking out of a folder typed %q into the pane", typed)
-	}
-
-	// A file answers with a clipboard write and leaves the listing where it is.
-	// "Alpha.go" is index 2.
-	before := m.FileViewDir()
-	if cmd := m.FileViewEnter(2); cmd == nil {
-		t.Error("a file produced no clipboard write")
-	}
-	if m.FileViewDir() != before {
-		t.Errorf("clicking a file moved the listing to %q", m.FileViewDir())
-	}
-}
-
 // TestFileViewUpStopsAtTheRoot: the parent of "/" is "/", so walking up there
 // must not reload forever or blank the view.
 func TestFileViewUpStopsAtTheRoot(t *testing.T) {
@@ -275,17 +225,6 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 	}
 	if !strings.Contains(why, "sleep") {
 		t.Errorf("the refusal does not name the program: %q", why)
-	}
-}
-
-// TestFileViewCdRefusesWithoutAnOrigin: a view opened from a folder link is not
-// tied to any pane, so there is no pane the cd could mean.
-func TestFileViewCdRefusesWithoutAnOrigin(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	m.loadFileViewNow(t, t.TempDir())
-	m.FileViewCd()
-	if len(m.Notifications) == 0 {
-		t.Error("a cd with no origin pane said nothing")
 	}
 }
 

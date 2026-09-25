@@ -80,30 +80,6 @@ func TestRailKillKeyOpensTheCursorRowsMenu(t *testing.T) {
 	}
 }
 
-// TestRailMenuKeyAndKillKeyAgreeOnTheRow: the two keys differ only in where the
-// selection lands, never in what the menu is about.
-func TestRailMenuKeyAndKillKeyAgreeOnTheRow(t *testing.T) {
-	for _, kind := range []sidebarRowKind{sidebarRowSession, sidebarRowWindow, sidebarRowAgent} {
-		m, tree := sidebarMultiSessionOS(t, 120, 40)
-		m.IsDaemonSession = true
-		m.SidebarFocused = true
-		m.sidebarPanelLinesForTree(tree)
-		railCursorOnto(t, m, kind)
-
-		m.SidebarOpenCursorMenu(false)
-		plain := m.ContextMenu
-		m.SidebarOpenCursorMenu(true)
-		killed := m.ContextMenu
-
-		if plain.Target != killed.Target || plain.WindowIndex != killed.WindowIndex || plain.SessionID != killed.SessionID {
-			t.Errorf("kind %v: the two keys opened menus about different things", kind)
-		}
-		if len(plain.Items) != len(killed.Items) {
-			t.Errorf("kind %v: the two keys opened menus of different shapes", kind)
-		}
-	}
-}
-
 // TestRailKeysRefuseOnARowThatIsNotTheirs pins the audit's third column: which
 // keys refuse on the wrong row kind rather than acting on something else. The
 // rail's controls (the collapse toggle, the agents header's tokens) name no

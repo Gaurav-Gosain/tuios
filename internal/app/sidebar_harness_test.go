@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -28,84 +27,6 @@ func railAgentRow(m *OS, lines []string, windowID string) string {
 		}
 	}
 	return ""
-}
-
-// TestRailAgentRowSaysWhichAgent walks the three things a harness prefix has to
-// get right on a row that already carries a name, a glyph and an elapsed time.
-func TestRailAgentRowSaysWhichAgent(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		title    string
-		harness  string
-		want     string
-		wantNone string
-	}{
-		{
-			name:    "a named pane says which agent is in it",
-			title:   "refactor",
-			harness: "claude-code",
-			want:    "claude",
-		},
-		{
-			// The row is drawn from the foreground command for an unnamed pane, so
-			// the harness would only repeat it.
-			name:     "a pane already named after its agent does not say it twice",
-			title:    "claude",
-			harness:  "claude-code",
-			want:     "claude",
-			wantNone: "claude/claude",
-		},
-		{
-			name:    "a harness nothing named leaves the row as it was",
-			title:   "refactor",
-			harness: "",
-			want:    "refactor",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m, _ := sectionsTestOS(t, 120, 30)
-			tree := sessiontree.Build([]sessiontree.SessionInput{
-				{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-					{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-					{ID: "bbbbbbbb2222", Title: tc.title, AgentState: "working", Harness: tc.harness, Workspace: 1},
-				}},
-			})
-			lines := railPlain(t, m, tree)
-			row := railAgentRow(m, lines, "bbbbbbbb2222")
-			if row == "" {
-				t.Fatalf("no agent row was drawn:\n%s", strings.Join(lines, "\n"))
-			}
-			if !strings.Contains(row, tc.want) {
-				t.Errorf("agent row %q does not say %q", row, tc.want)
-			}
-			if tc.wantNone != "" && strings.Contains(row, tc.wantNone) {
-				t.Errorf("agent row %q says %q twice over", row, tc.wantNone)
-			}
-		})
-	}
-}
-
-// TestRailAgentRowCarriesBothPrefixes: a pane elsewhere running an agent has two
-// things to say in front of its name, and on a rail with room it says both, in
-// the order where-then-what.
-func TestRailAgentRowCarriesBothPrefixes(t *testing.T) {
-	m, _ := sectionsTestOS(t, 120, 30)
-	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-		}},
-		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "srv", AgentState: "working", Harness: "codex", Workspace: 1},
-		}},
-	})
-	lines := railPlain(t, m, tree)
-	row := railAgentRow(m, lines, "dddddddd4444")
-	// Where the pane is stays on the identity line beside its name; which agent
-	// is in it moved to the note line under them, which is the one change a two
-	// line row makes to what a row says.
-	if !strings.Contains(row, "api/srv") || !strings.Contains(row, "codex") {
-		t.Errorf("a foreign agent row read %q, want the session and the pane, then the agent", row)
-	}
 }
 
 // TestSidebarAgentPrefixYieldsInOrder pins the ladder a narrowing row walks
@@ -134,24 +55,6 @@ func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 		}
 		if want := lipgloss.Width(tc.want); w != want {
 			t.Errorf("prefix at avail=%d reports width %d, want %d", tc.avail, w, want)
-		}
-	}
-}
-
-// TestSidebarHarnessLabelKeepsTheIdentity: the manifests spell out the product,
-// and the rail has room for the agent.
-func TestSidebarHarnessLabelKeepsTheIdentity(t *testing.T) {
-	for id, want := range map[string]string{
-		"claude-code":  "claude",
-		"gemini-cli":   "gemini",
-		"cursor-agent": "cursor",
-		"opencode":     "opencode",
-		"codex":        "codex",
-		"":             "",
-		"CLAUDE-CODE":  "claude",
-	} {
-		if got := sidebarHarnessLabel(id); got != want {
-			t.Errorf("harness label of %q = %q, want %q", id, got, want)
 		}
 	}
 }

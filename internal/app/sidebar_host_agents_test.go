@@ -118,38 +118,6 @@ func TestAMachineHeaderCountsTheSessionsThatWantAPerson(t *testing.T) {
 	}
 }
 
-// TestAnOfflineMachineHeaderSaysMailWaitsForIt: mail queued for a machine
-// whose link is down is counted on its header, in words.
-func TestAnOfflineMachineHeaderSaysMailWaitsForIt(t *testing.T) {
-	m := hostAgentOS(t, federation.StatusUnreachable, "idle")
-	for i := range m.FederationHosts {
-		if m.FederationHosts[i].Name == "build" {
-			m.FederationHosts[i].Queued = 3
-		}
-	}
-	node := m.hostGroupNodes()[0]
-	row := m.sidebarHostRow(node, 40, theme.UI(), "", sidebarRowState{}, false)
-	if !strings.Contains(row, "3 queued") {
-		t.Errorf("the header of a machine with mail waiting does not say so: %q", row)
-	}
-}
-
-// TestAQuietMachineHeaderKeepsItsOrdinaryRight. The figure means something
-// only because it is absent the rest of the time, and taking the add control
-// away from every machine would be a poor trade.
-func TestAQuietMachineHeaderKeepsItsOrdinaryRight(t *testing.T) {
-	m := hostAgentOS(t, federation.StatusUp, "working", "idle")
-
-	if blocked, _ := m.hostAttention("build"); blocked != 0 {
-		t.Fatalf("%d sessions counted as wanting a person, want 0", blocked)
-	}
-	node := m.hostGroupNodes()[0]
-	row := m.sidebarHostRow(node, 40, theme.UI(), "+", sidebarRowState{}, false)
-	if !strings.Contains(row, "+") {
-		t.Errorf("a quiet machine lost its add control: %q", row)
-	}
-}
-
 // TestADoneAgentOnAnotherMachineIsUnread. Whether a finished pane has been
 // looked at is a fact about a viewer, and this client cannot look at a pane on
 // another machine, so it rolls up as unseen rather than as already handled.

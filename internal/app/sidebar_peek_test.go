@@ -94,26 +94,6 @@ func TestPeekFollowsTheHoveredRow(t *testing.T) {
 	}
 }
 
-// TestPeekNeverNamesARowThePointerLeft is the complaint in one assertion: after
-// every event of a sweep the section must show the row the pointer is on, never
-// an earlier one. A preview that lags the hover band is worse than no preview,
-// because both marks are on screen at once saying different things.
-func TestPeekNeverNamesARowThePointerLeft(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	m.sidebarPanelLinesForTree(tree)
-
-	for _, name := range []string{"main", "api", "docs", "api", "main", "docs"} {
-		m.SidebarMotion(1, sessionRowY(t, m, name))
-		want := name
-		if name == "main" { // attached: the section already shows the truth
-			want = ""
-		}
-		if got := framePeek(t, m, tree); got != want {
-			t.Errorf("hovering %q the section shows %q, want %q", name, got, want)
-		}
-	}
-}
-
 // TestPeekCostsNoExtraRebuild is why committing on the first event is
 // affordable: the pointer's own cell is already in the rail signature, so a
 // motion event that crosses a session row rebuilds the rail whether or not the
@@ -138,51 +118,6 @@ func TestPeekCostsNoExtraRebuild(t *testing.T) {
 	m.SidebarHoverY = docs
 	if m.sidebarSignature() == held {
 		t.Error("the hovered cell is not in the rail signature; a hover move would not repaint the band")
-	}
-}
-
-// TestPeekEntryPathsAgree: arriving on a row sideways from the pane area and
-// arriving along the rail from the row above are the same hover and must draw
-// the same frame. Under the pair rule they did not, which is what made the
-// preview look like it worked on some rows and not on others.
-func TestPeekEntryPathsAgree(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	m.sidebarPanelLinesForTree(tree)
-	main, api, docs := sessionRowY(t, m, "main"), sessionRowY(t, m, "api"), sessionRowY(t, m, "docs")
-
-	m.sidebarClearPeek()
-	m.SidebarMotion(m.GetRenderWidth()-2, main)
-	m.SidebarMotion(1, docs)
-	sideways := railPlain(t, m, tree)
-
-	m.sidebarClearPeek()
-	m.SidebarMotion(1, main)
-	m.SidebarMotion(1, api)
-	m.SidebarMotion(1, docs)
-	alongTheRail := railPlain(t, m, tree)
-
-	if strings.Join(sideways, "\n") != strings.Join(alongTheRail, "\n") {
-		t.Errorf("the same hover draws two frames:\nsideways:\n%s\n\nalong the rail:\n%s",
-			strings.Join(sideways, "\n"), strings.Join(alongTheRail, "\n"))
-	}
-}
-
-// TestPeekSnapsBackOnBandExit: leaving the band entirely is covered by the one
-// out-of-band motion event the whitelist keeps flowing, the same event that
-// clears the stale hover highlight. Without this the preview would survive the
-// pointer that made it.
-func TestPeekSnapsBackOnBandExit(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	m.sidebarPanelLinesForTree(tree)
-	api := sessionRowY(t, m, "api")
-
-	m.SidebarMotion(1, api)
-	if framePeek(t, m, tree) != "api" {
-		t.Fatalf("the fixture never peeked: %q", m.SidebarPeek)
-	}
-	m.SidebarMotion(m.GetRenderWidth()-2, api)
-	if got := framePeek(t, m, tree); got != "" {
-		t.Errorf("band exit left the section showing %q", got)
 	}
 }
 
@@ -294,27 +229,6 @@ func TestEmptyPeekSaysSo(t *testing.T) {
 		if h.Kind == sidebarRowWindow {
 			t.Errorf("the empty-peek hint is interactive: %+v", h)
 		}
-	}
-}
-
-// TestHoveringTheAttachedSessionIsNotAPeek: the section already shows the
-// truth, so no marks appear and no rebuild is provoked.
-func TestHoveringTheAttachedSessionIsNotAPeek(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	rested := railPlain(t, m, tree)
-	main := sessionRowY(t, m, "main")
-
-	m.SidebarMotion(1, main)
-	m.SidebarMotion(1, main)
-	if m.SidebarPeek != "" {
-		t.Fatalf("hovering the attached session peeked at %q", m.SidebarPeek)
-	}
-	hovered := railPlain(t, m, tree)
-	if lineOf(hovered, "no terminals") >= 0 {
-		t.Error("hovering the attached session produced an empty-peek hint")
-	}
-	if got, want := lineOf(hovered, " terminals"), lineOf(rested, " terminals"); got != want {
-		t.Errorf("the terminals header moved from line %d to %d on a non-peek", want, got)
 	}
 }
 

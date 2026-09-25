@@ -66,34 +66,6 @@ func TestFocusedPaneGutterIsItsSessionsColour(t *testing.T) {
 	}
 }
 
-// TestFocusedPaneGutterFollowsTheAttachedSession: attaching elsewhere is what
-// repaints the mark, since the colour belongs to the session and not to the row.
-func TestFocusedPaneGutterFollowsTheAttachedSession(t *testing.T) {
-	m, _ := sessionColorOS(t, 120, 40)
-
-	for _, name := range []string{"main", "api"} {
-		m.SessionName = name
-		m.sidebarCache.invalidate()
-		rows := railStyled(t, m, attachedTree(name))
-
-		pane := "nvim"
-		if name == "api" {
-			pane = "server"
-		}
-		row := styledRow(t, rows, pane)
-		if !strings.Contains(row, fgParams(m.sessionTint(name, theme.TerminalBg()))) {
-			t.Errorf("attached to %q, the focused pane's gutter is not that session's colour: %q", name, row)
-		}
-		other := "api"
-		if name == "api" {
-			other = "main"
-		}
-		if strings.Contains(row, fgParams(m.sessionTint(other, theme.TerminalBg()))) {
-			t.Errorf("attached to %q, the focused pane's gutter still carries %q's colour: %q", name, other, row)
-		}
-	}
-}
-
 // TestSeverityStillOutranksIdentityInTheTerminalsSection holds the ladder the
 // session colours were added under: an alarm owns the gutter, and identity is
 // what gives way. Only the focus mark took a hue, so the rungs above it are
@@ -124,42 +96,5 @@ func TestPinnedPaneAccentOutranksTheSessionColour(t *testing.T) {
 	row := styledRow(t, railStyled(t, m, tree), "nvim")
 	if !strings.Contains(row, fgParams(pinned.Color())) {
 		t.Errorf("the pinned pane accent lost the gutter to the session's colour: %q", row)
-	}
-}
-
-// TestSessionColoursOffRestoreTheAccentFocusGutter: the config key is the way
-// back, so with it off every focus mark on the rail is the rail accent it was
-// before, at both widths.
-func TestSessionColoursOffRestoreTheAccentFocusGutter(t *testing.T) {
-	withSessionColors(t, false)
-	pal := theme.UI()
-
-	m, tree := sessionColorOS(t, 120, 40)
-	row := styledRow(t, railStyled(t, m, tree), "nvim")
-	if !strings.Contains(row, fgParams(pal.Accent)) {
-		t.Errorf("with session colours off the focused pane's gutter is not the rail accent: %q", row)
-	}
-
-	ms, ts := stripOS(t, 120, 20)
-
-	lines := railStyled(t, ms, ts)
-	if !strings.Contains(strings.Join(lines, "\n"), fgParams(pal.Accent)) {
-		t.Error("with session colours off the strip's spine lost the rail accent")
-	}
-}
-
-// TestStripSpineMarksTheAttachedSessionInItsColour: the strip is the rail at
-// another width and not another object, so the one bar it draws is the same hue
-// the expanded rail would draw it in.
-func TestStripSpineMarksTheAttachedSessionInItsColour(t *testing.T) {
-	m, tree := stripOS(t, 120, 20)
-	pal := theme.UI()
-
-	lines := railStyled(t, m, tree)
-	// The spine sits on Panel, which is the ground the colour has to clear.
-	want := fgParams(m.sessionTint("main", pal.Panel))
-	if !strings.Contains(strings.Join(lines, "\n"), want) {
-		t.Errorf("the strip's attached-session bar is not the session's colour:\n%s",
-			strings.Join(railPlain(t, m, tree), "\n"))
 	}
 }

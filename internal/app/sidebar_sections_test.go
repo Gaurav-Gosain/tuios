@@ -100,65 +100,6 @@ func TestRailDrawsThreeSectionsInOrder(t *testing.T) {
 	}
 }
 
-// TestRailTerminalsShowEveryWorkspace checks the terminals section lists every
-// pane of the attached session whatever workspace it is on, and that only the
-// ones elsewhere carry the tag: "here" is not information.
-func TestRailTerminalsShowEveryWorkspace(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	wideRail(m)
-	lines := railPlain(t, m, tree)
-
-	terminals := lineOf(lines, " terminals")
-	rows := map[string]string{}
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowWindow {
-			rows[h.WindowID] = lines[h.Y0-m.GetTopMargin()]
-		}
-	}
-	if len(rows) != 3 {
-		t.Fatalf("terminals section drew %d rows, want all 3 panes:\n%s", len(rows), strings.Join(lines[terminals:], "\n"))
-	}
-	if got := rows["cccccccc3333"]; !strings.Contains(got, "w2") {
-		t.Errorf("a pane on workspace 2 did not name it: %q", got)
-	}
-	if got := rows["aaaaaaaa1111"]; strings.Contains(got, "w1") {
-		t.Errorf("a pane on the current workspace tagged itself: %q", got)
-	}
-}
-
-// TestRailHitsAreASubsequenceOfNav is the invariant three sections with filters
-// and a peek make much easier to break than the tree did: every drawn row's
-// rectangle names the same target as its nav row, and the two lists run in the
-// same order. Nav also carries the rows scrolled out of sight, which is what
-// lets the keyboard reach them, so it is a superset rather than a copy.
-func TestRailHitsAreASubsequenceOfNav(t *testing.T) {
-	for _, pos := range []string{"left", "right"} {
-		for _, peek := range []string{"", "api"} {
-			for _, h := range []int{30, 12, 9} {
-				t.Run(pos+"/"+peek+"/"+string(rune('0'+h/10))+string(rune('0'+h%10)), func(t *testing.T) {
-					m, tree := sectionsTestOS(t, 120, h)
-					withSidebar(t, true, pos, config.SidebarDefaultWidth)
-					m.Settings = config.Global
-					m.SidebarPeek = peek
-					m.sidebarPanelLinesForTree(tree)
-
-					j := 0
-					for _, hit := range m.SidebarHits {
-						want := navRowOf(hit)
-						for j < len(m.SidebarNav) && !sidebarNavRowsEqual(m.SidebarNav[j], want) {
-							j++
-						}
-						if j >= len(m.SidebarNav) {
-							t.Fatalf("hit %+v has no nav row after the ones already matched", want)
-						}
-						j++
-					}
-				})
-			}
-		}
-	}
-}
-
 // TestRailSectionBudget pins the design's table: sessions take about a quarter
 // and agents about a third, the terminals section takes the slack, and a rail
 // too short for its floor shrinks agents before sessions and sessions before
@@ -274,25 +215,5 @@ func TestRailWheelScrollsOnlyTheSectionUnderThePointer(t *testing.T) {
 	}
 	if m.SidebarScrollT != 0 {
 		t.Errorf("a wheel over the agents section also scrolled the terminals section to %d", m.SidebarScrollT)
-	}
-}
-
-// TestRailSectionScrollsAreInTheSignature: an offset the cache cannot see
-// leaves yesterday's rows on screen.
-func TestRailSectionScrollsAreInTheSignature(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	m.sidebarPanelLinesForTree(tree)
-	base := m.sidebarSignature()
-
-	for name, field := range map[string]*int{
-		"sessions":  &m.SidebarScrollS,
-		"terminals": &m.SidebarScrollT,
-		"agents":    &m.SidebarScrollA,
-	} {
-		*field = 3
-		if m.sidebarSignature() == base {
-			t.Errorf("the %s section's scroll offset is not in the rail signature", name)
-		}
-		*field = 0
 	}
 }

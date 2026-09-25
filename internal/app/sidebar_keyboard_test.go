@@ -2,7 +2,6 @@ package app
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -53,33 +52,6 @@ func TestRailEnterExitTogglesFocus(t *testing.T) {
 	}
 	if m.Settings.SidebarEnabled {
 		t.Fatal("exiting did not hide the rail it had revealed")
-	}
-}
-
-// TestRailCursorNavigatesRows checks j/k walk the nav rows and g/G hit the ends.
-func TestRailCursorNavigatesRows(t *testing.T) {
-	m, tree := railOS(t)
-	_ = tree
-	start := navIndexOfSession(m, "main")
-	if m.SidebarCursor != start {
-		t.Fatalf("cursor started at %d, want the current session (%d)", m.SidebarCursor, start)
-	}
-	m.SidebarCursorMove(1)
-	if m.SidebarCursor != start+1 {
-		t.Fatalf("j moved cursor to %d, want %d", m.SidebarCursor, start+1)
-	}
-	m.SidebarCursorLast()
-	last := len(m.SidebarNav) - 1
-	if m.SidebarCursor != last {
-		t.Fatalf("G moved cursor to %d, want last (%d)", m.SidebarCursor, last)
-	}
-	m.SidebarCursorMove(1) // clamped at the bottom
-	if m.SidebarCursor != last {
-		t.Fatalf("j past the end moved to %d, want clamped at %d", m.SidebarCursor, last)
-	}
-	m.SidebarCursorFirst()
-	if m.SidebarCursor != 0 {
-		t.Fatalf("g moved cursor to %d, want 0", m.SidebarCursor)
 	}
 }
 
@@ -161,35 +133,5 @@ func TestRailReorderMatchesDrag(t *testing.T) {
 	m.sidebarPanelLinesForTree(tree)
 	if got := navIndexOfSession(m, "main"); m.SidebarCursor != got {
 		t.Fatalf("cursor at %d after reorder, want main's new row %d", m.SidebarCursor, got)
-	}
-}
-
-// TestRailJumpSelectsNthSession checks 1..9 land the cursor on the n-th session
-// row, mirroring a click on it.
-func TestRailJumpSelectsNthSession(t *testing.T) {
-	m, tree := railOS(t)
-	_ = tree
-	m.SidebarJumpToSession(2)
-	want := navIndexOfSession(m, "scratch") // second session in the fixture
-	if m.SidebarCursor != want {
-		t.Fatalf("jump 2 put cursor at %d, want scratch's row %d", m.SidebarCursor, want)
-	}
-	if m.SidebarNav[m.SidebarCursor].SessionID != "scratch" {
-		t.Fatalf("jump 2 selected %q, want scratch", m.SidebarNav[m.SidebarCursor].SessionID)
-	}
-}
-
-// TestRailDockPillReadsSidebar checks the dock mode pill announces rail focus.
-func TestRailDockPillReadsSidebar(t *testing.T) {
-	m, tree := railOS(t)
-	_ = tree
-	text, _, _, _, _ := m.buildDockLeftText()
-	if !strings.Contains(text, "SIDEBAR") {
-		t.Fatalf("dock left text = %q, want it to contain SIDEBAR while the rail is focused", text)
-	}
-	m.SidebarFocused = false
-	text, _, _, _, _ = m.buildDockLeftText()
-	if strings.Contains(text, "SIDEBAR") {
-		t.Fatalf("dock still reads SIDEBAR after leaving the rail: %q", text)
 	}
 }

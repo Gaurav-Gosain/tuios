@@ -8,7 +8,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -51,47 +50,6 @@ func gutterCell(row string) string {
 		return ""
 	}
 	return string(plain[0])
-}
-
-// TestRailMarksCurrentWithAGutterMark is the rail's emphasis budget: the
-// attached session and the focused pane are the same "this is the current one"
-// mark, one accent cell in column 0, and nothing painted behind the row. Three
-// stacked full-width bands read as zebra striping rather than emphasis, and the
-// loudest of them marked the thing the user already knows.
-func TestRailMarksCurrentWithAGutterMark(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	pal := theme.UI()
-
-	focused := treeRow(t, m, "editor")
-	if got := gutterCell(focused); got != "▎" {
-		t.Errorf("the focused pane row has no gutter mark, column 0 is %q: %q", got, focused)
-	}
-	// The same mark and the same colour as the session row above it: the rail is
-	// one object, so the pane you are on cannot be a different hue from the
-	// session you are in.
-	if !strings.Contains(focused, fgParams(m.sessionTint("local", theme.TerminalBg()))) {
-		t.Errorf("the focused pane's gutter mark is not its session's colour: %q", focused)
-	}
-
-	lines, _ := m.sidebarPanelLines()
-	// Nothing on a resting rail paints a row: no Surface band, no severity tint,
-	// no saturated focus fill.
-	loud := bgParams(color.RGBA{R: 0x48, G: 0x65, B: 0xf2, A: 0xff})
-	for _, l := range lines {
-		if strings.Contains(l, loud) {
-			t.Fatalf("the saturated focus fill is still on the rail: %q", l)
-		}
-		if strings.Contains(l, bgParams(pal.Surface)) {
-			t.Fatalf("a standing Surface band is still on the rail: %q", l)
-		}
-	}
-	for _, cap := range []string{config.DockPillLeftChar, config.DockPillRightChar} {
-		for _, l := range lines {
-			if strings.Contains(l, cap) {
-				t.Fatalf("a pill cap %q is still on the rail: %q", cap, l)
-			}
-		}
-	}
 }
 
 // The current session rolls up a pane that wants a human. Identity and

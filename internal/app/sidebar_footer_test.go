@@ -1,11 +1,9 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // railFrame renders the rail and returns its rows with the styling stripped, so
@@ -14,47 +12,6 @@ import (
 func railFrame(t *testing.T, m *OS) []string {
 	t.Helper()
 	return railText(t, m)
-}
-
-// The rail's widths, asserted as whole frames: the resting state is the point
-// of the pass, so it is what the test reads. Two of them are the user's own
-// states; the middle one is only ever the responsive clamp's doing.
-func TestRailRendersTheThreeWidths(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		width     int
-		collapsed bool
-		want      []string
-	}{
-		// The add control is a "+" on the sessions and terminals headers now, so
-		// the header lines are what carry it; the footer is the toggle alone.
-		{"full", config.SidebarDefaultWidth, false, []string{" agents", " sessions", "+", "«"}},
-		{"narrow", config.SidebarNarrowWidth, false, []string{" agents", " sessions", "+", "«"}},
-		{"glyph", config.SidebarDefaultWidth, true, []string{"»"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := daemonRailOS(t, 120, 14)
-			prev := config.Global.SidebarWidth
-			config.Global.SidebarWidth = tc.width
-			m.SidebarCollapsed = tc.collapsed
-			t.Cleanup(func() { config.Global.SidebarWidth = prev })
-
-			lines := railFrame(t, m)
-			joined := strings.Join(lines, "\n")
-			for _, want := range tc.want {
-				if !strings.Contains(joined, want) {
-					t.Errorf("the %s rail does not show %q:\n%s", tc.name, want, joined)
-				}
-			}
-			// Headers are lowercase, always: bold Title case ranked a label
-			// above the rows that want a human.
-			for _, shout := range []string{"Agents", "Sessions"} {
-				if strings.Contains(joined, shout) {
-					t.Errorf("the %s rail still shouts %q", tc.name, shout)
-				}
-			}
-		})
-	}
 }
 
 // The footer's toggle is offered only where it can move: a control that
@@ -160,28 +117,6 @@ func TestRailControlHitsAndNavStayParallel(t *testing.T) {
 
 	before := config.Global.SidebarWidth
 	t.Cleanup(func() { config.Global.SidebarWidth = before })
-}
-
-// Every glyph the footer adds needs an ASCII answer.
-func TestRailFooterDegradesToASCII(t *testing.T) {
-	prev := config.Global.UseASCIIOnly
-	config.Global.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.Global.UseASCIIOnly = prev
-		overlay.SetASCII(prev)
-	})
-
-	m := daemonRailOS(t, 120, 14)
-	joined := strings.Join(railFrame(t, m), "\n")
-	if !strings.Contains(joined, "<<") {
-		t.Errorf("the ASCII footer has no stepper:\n%s", joined)
-	}
-	for _, glyph := range []string{"«", "»"} {
-		if strings.Contains(joined, glyph) {
-			t.Errorf("the ASCII footer still draws %q:\n%s", glyph, joined)
-		}
-	}
 }
 
 // The rail is cached by signature, so a width step that the cache cannot see

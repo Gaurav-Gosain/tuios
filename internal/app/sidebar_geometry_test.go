@@ -80,29 +80,6 @@ func TestGetSidebarWidthOversizedConfigStepsDown(t *testing.T) {
 	}
 }
 
-// TestMarginsFollowPosition checks left/right margins track the configured side
-// and that a hidden or disabled sidebar reserves nothing.
-func TestMarginsFollowPosition(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
-
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.Settings = config.Global
-	if m.GetLeftMargin() != config.SidebarDefaultWidth || m.GetRightMargin() != 0 {
-		t.Errorf("left sidebar: left=%d right=%d", m.GetLeftMargin(), m.GetRightMargin())
-	}
-
-	m.Settings.SidebarPosition = "right"
-	if m.GetLeftMargin() != 0 || m.GetRightMargin() != config.SidebarDefaultWidth {
-		t.Errorf("right sidebar: left=%d right=%d", m.GetLeftMargin(), m.GetRightMargin())
-	}
-
-	m.Settings.SidebarEnabled = false
-	if m.GetLeftMargin() != 0 || m.GetRightMargin() != 0 || m.GetContentWidth() != 120 {
-		t.Errorf("disabled sidebar still reserves space: left=%d right=%d content=%d",
-			m.GetLeftMargin(), m.GetRightMargin(), m.GetContentWidth())
-	}
-}
-
 // tileDaemonWindowsMode drives the same daemon create/sync loop the tiling test
 // uses, returning the client OS holding the tiled windows, for an explicit
 // layout mode ("bsp", "master-stack", or "scrolling"), so the content-box

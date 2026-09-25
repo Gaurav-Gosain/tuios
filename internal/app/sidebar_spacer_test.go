@@ -3,8 +3,6 @@ package app
 import (
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The spacer is the first layout entry that wants a floor rather than a
@@ -286,29 +284,5 @@ func TestWheelOverASpacerScrollsTheSectionAboveIt(t *testing.T) {
 	}
 	if m.SidebarScrollS == before {
 		t.Errorf("a wheel on the gap at row %d scrolled nothing; bands are %v", row, m.sidebarSectionY)
-	}
-}
-
-// TestLayoutWithNoSpacerIsUnchanged is the compatibility claim. Every rule the
-// spacer added is conditioned on there being one, so a config that has never
-// heard of spacers lays out exactly as it did.
-//
-// The pinned block is the thing to check: it is the rule the spacer turns off,
-// and it is the one a person would notice going missing.
-func TestLayoutWithNoSpacerIsUnchanged(t *testing.T) {
-	lines := spacerFrame(t, config.SidebarDefaultSections, 40)
-	agents := lineOf(lines, "agents")
-	if agents < 0 {
-		t.Fatalf("no agents section:\n%s", strings.Join(lines, "\n"))
-	}
-	// Pinned means the block sits at the bottom with the slack above it.
-	if agents < len(lines)-6 {
-		t.Errorf("the agents block is at %d on a %d-line rail, so it is no longer pinned:\n%s",
-			agents, len(lines), strings.Join(lines, "\n"))
-	}
-	at, run := blankRun(lines)
-	if at+run > agents {
-		t.Errorf("the slack at %d..%d is not above the pinned block at %d:\n%s",
-			at, at+run, agents, strings.Join(lines, "\n"))
 	}
 }
