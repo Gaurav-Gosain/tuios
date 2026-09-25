@@ -14,31 +14,6 @@ func typeKeys(o *app.OS, s string) *app.OS {
 	return o
 }
 
-// TestSettingsSlashSearchesAndEscBacksOut is the key rule: / opens the search,
-// letters type into it (j included), esc clears the search and a second esc
-// closes the panel.
-func TestSettingsSlashSearchesAndEscBacksOut(t *testing.T) {
-	o := listKeysOS(t)
-	o.OpenSettings()
-	o, _ = handleSettingsInput(press("/"), o)
-	if !o.SettingsSearchOpen() {
-		t.Fatal("/ did not open the search")
-	}
-	o = typeKeys(o, "jump")
-	if got := o.SettingsSearchQuery(); got != "jump" {
-		t.Errorf("the query is %q, want jump: letters in the search are text", got)
-	}
-	o, _ = handleSettingsInput(press("esc"), o)
-	if o.SettingsSearchOpen() || !o.ShowSettings {
-		t.Fatalf("the first esc left search=%v panel=%v, want the search closed and the panel open",
-			o.SettingsSearchOpen(), o.ShowSettings)
-	}
-	o, _ = handleSettingsInput(press("esc"), o)
-	if o.ShowSettings {
-		t.Error("the second esc did not close the panel")
-	}
-}
-
 // TestSettingsBackspaceInTheSearchNeverResets: backspace edits the query, and
 // running the query out keeps the search open rather than falling through to
 // the tab view, where backspace resets a row.

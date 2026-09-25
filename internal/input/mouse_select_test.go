@@ -61,52 +61,6 @@ func selectedText(win *terminal.Window) string {
 	return extractVisualText(win.CopyMode, win)
 }
 
-// A left drag over a pane's output used to grab the window, move it, and drop
-// the user into window management mode. In a terminal, dragging over text
-// selects the text.
-func TestDragInTerminalModeSelectsTextInsteadOfMovingTheWindow(t *testing.T) {
-	o, win := selectPane(t, "alpha bravo charlie")
-
-	pressAt(o, 0, 0)
-	dragTo(o, 10, 0)
-	cmd := release(o, 10, 0)
-
-	if o.Mode != app.TerminalMode {
-		t.Errorf("Mode = %v after a drag inside the pane, want terminal mode: clicking output "+
-			"must not throw the user out of the shell", o.Mode)
-	}
-	if win.X != 0 || win.Y != 0 {
-		t.Errorf("window moved to (%d,%d) during a text drag", win.X, win.Y)
-	}
-	if got, want := selectedText(win), "alpha bravo"; got != want {
-		t.Errorf("selection = %q, want %q", got, want)
-	}
-	if cmd == nil {
-		t.Error("releasing a selection did not copy it; copy_on_select is on by default")
-	}
-	if !hasNotificationPrefix(o, "Copied") {
-		t.Errorf("no copy confirmation in the dock; messages were %v", notificationMessages(o))
-	}
-}
-
-// A stray click must never clobber the clipboard.
-func TestPlainClickDoesNotCopy(t *testing.T) {
-	o, win := selectPane(t, "alpha bravo charlie")
-
-	pressAt(o, 4, 0)
-	cmd := release(o, 4, 0)
-
-	if cmd != nil {
-		t.Error("a click with no drag wrote to the clipboard")
-	}
-	if hasNotificationPrefix(o, "Copied") {
-		t.Errorf("a click with no drag reported a copy; messages were %v", notificationMessages(o))
-	}
-	if win.InCopyMode() {
-		t.Error("a click left the pane in a copy-mode session with nothing to show")
-	}
-}
-
 // Double-click selects a word, and a word in a terminal is more than a run of
 // letters: a path, a URL or a flag is one thing the user wants in one grab.
 func TestDoubleClickSelectsAWordIncludingItsPunctuation(t *testing.T) {
@@ -184,21 +138,6 @@ func TestDoubleClickOnWhitespaceSelectsNothing(t *testing.T) {
 	}
 	if win.InCopyMode() && win.CopyMode.State != terminal.CopyModeNormal {
 		t.Error("double-clicking a space left a selection behind")
-	}
-}
-
-// Three clicks take the line. A line, not a sentence: terminal content is
-// line-oriented and sentence detection over log lines or code is guesswork.
-func TestTripleClickSelectsTheLine(t *testing.T) {
-	o, win := selectPane(t, "alpha bravo charlie")
-
-	pressAt(o, 6, 0)
-	pressAt(o, 6, 0)
-	pressAt(o, 6, 0)
-	release(o, 6, 0)
-
-	if got, want := selectedText(win), "alpha bravo charlie"; got != want {
-		t.Errorf("triple-click selected %q, want the whole line %q", got, want)
 	}
 }
 

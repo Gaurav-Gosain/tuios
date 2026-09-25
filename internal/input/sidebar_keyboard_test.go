@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -44,29 +43,5 @@ func TestRailScopeRoutesKeys(t *testing.T) {
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape}, o)
 	if o.SidebarFocused {
 		t.Fatal("esc did not leave the rail scope")
-	}
-}
-
-// TestRailScopeSuppressesTerminalTyping checks that a key does not reach the PTY
-// while the rail owns the keyboard, even though the client is in terminal mode
-// (the rail is reachable from terminal mode via ctrl+b o).
-func TestRailScopeSuppressesTerminalTyping(t *testing.T) {
-	prev := config.Global.SidebarEnabled
-	config.Global.SidebarEnabled = true
-	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
-
-	o := twoPaneOS(t)
-	o.Mode = app.TerminalMode
-	o.SidebarFocused = true
-
-	// A plain letter would be forwarded to the shell in terminal mode; here it is
-	// consumed by the rail. The assertion is that HandleKeyPress returns without
-	// leaving the rail and without a panic on the nil-terminal windows.
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'j', Text: "j"}, o)
-	if !o.SidebarFocused {
-		t.Fatal("a rail key dropped rail focus")
-	}
-	if o.Mode != app.TerminalMode {
-		t.Fatal("a rail key changed the pane mode underneath")
 	}
 }

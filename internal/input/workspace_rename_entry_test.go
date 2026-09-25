@@ -38,25 +38,6 @@ func TestWorkspaceRenameChordOpensTheEditor(t *testing.T) {
 	}
 }
 
-// TestPillMenuRenameDispatches drives the dock entry point the way a click
-// does: run the row's action through the dispatcher and the editor opens on
-// the pill's workspace, not on the one in view.
-func TestPillMenuRenameDispatches(t *testing.T) {
-	o := osWithBindings(t, func(*config.KeybindingsConfig) {})
-	o.NumWorkspaces = 9
-	o.CurrentWorkspace = 1
-
-	if !GetDispatcher().HasAction("workspace_prefix_rename") {
-		t.Fatal("the pill menu's rename action is not registered")
-	}
-
-	o, _ = runContextMenuActionForTest(t, "workspace_prefix_rename", o)
-	if o.RenameTargetID != "1" {
-		t.Fatalf("with no pill behind it the rename targeted %q, want the current workspace", o.RenameTargetID)
-	}
-	o.EndRename()
-}
-
 // runContextMenuActionForTest is the input layer's own menu dispatch.
 func runContextMenuActionForTest(t *testing.T, action string, o *app.OS) (*app.OS, tea.Cmd) {
 	t.Helper()

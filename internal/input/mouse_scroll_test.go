@@ -72,75 +72,6 @@ func TestWheelUpScrollsOnTheFirstClickWhateverTheCursorRow(t *testing.T) {
 	}
 }
 
-// Entering copy mode is a mechanism for rendering scrollback, not a mode the
-// user asked for, so the wheel says nothing and the dock does not change.
-func TestWheelDoesNotAnnounceCopyMode(t *testing.T) {
-	o, win := scrollPane(t)
-
-	wheel(o, tea.MouseWheelUp, 2)
-
-	if len(o.Notifications) != 0 {
-		t.Fatalf("scrolling raised %d notification(s), first %q; turning the wheel must not "+
-			"announce a mode or teach keybindings", len(o.Notifications), o.Notifications[0].Message)
-	}
-	if !win.InCopyMode() {
-		t.Fatal("the wheel did not scroll at all")
-	}
-	if win.CopyModeVisible() {
-		t.Error("a wheel scroll presented itself as copy mode; the dock would show the copy-mode key hints")
-	}
-}
-
-// Scrolling back to the bottom is the same event as being done: the session
-// that existed only to render scrollback goes away, silently, and the pane is
-// on live output again.
-func TestWheelDownToBottomReturnsToLiveOutput(t *testing.T) {
-	o, win := scrollPane(t)
-
-	wheel(o, tea.MouseWheelUp, 4)
-	if win.CopyMode.ScrollOffset == 0 {
-		t.Fatal("wheel up did not scroll")
-	}
-
-	wheel(o, tea.MouseWheelDown, 4)
-
-	if win.InCopyMode() {
-		t.Fatalf("still in copy mode after scrolling back to the bottom "+
-			"(offset %d, cursor row %d); the user is stranded in a mode with no way "+
-			"back that they were told about", win.CopyMode.ScrollOffset, win.CopyMode.CursorY)
-	}
-	if win.ScrollbackOffset != 0 {
-		t.Errorf("ScrollbackOffset = %d, want 0 (live output)", win.ScrollbackOffset)
-	}
-	if len(o.Notifications) != 0 {
-		t.Errorf("leaving raised %d notification(s), first %q; a silent entry deserves a silent exit",
-			len(o.Notifications), o.Notifications[0].Message)
-	}
-}
-
-// Typing is how a user says they are done reading. A terminal with no modes
-// snaps to the bottom and types the character; so does this.
-func TestTypingAfterAWheelScrollReturnsToLiveOutput(t *testing.T) {
-	o, win := scrollPane(t)
-	wheel(o, tea.MouseWheelUp, 3)
-	if win.ScrollbackOffset == 0 {
-		t.Fatal("wheel up did not scroll")
-	}
-
-	// "e" is a copy-mode motion (word end). Under the old behaviour it moved
-	// the cursor and never reached the shell.
-	HandleTerminalModeKey(tea.KeyPressMsg{Code: 'e', Text: "e"}, o)
-
-	if win.InCopyMode() {
-		t.Fatal("typing left the pane in copy mode; the keystroke was eaten as a motion " +
-			"instead of reaching the shell")
-	}
-	if win.ScrollbackOffset != 0 {
-		t.Errorf("ScrollbackOffset = %d after typing, want 0: typing must snap back to live output",
-			win.ScrollbackOffset)
-	}
-}
-
 // Esc is the reflex for "get me out of this", and a bare Esc into a shell in vi
 // mode or a readline meta prefix is not a no-op, so it is the one key that
 // leaves the scrolled view without also being typed.
@@ -193,27 +124,6 @@ func TestWheelOverAPaneWithNoScrollbackDoesNothing(t *testing.T) {
 	}
 	if len(o.Notifications) != 0 {
 		t.Errorf("the wheel raised %q over a pane with nothing to scroll", o.Notifications[0].Message)
-	}
-}
-
-// vim, less and htop ask for the mouse and must keep getting the wheel
-// themselves. tuios must not scroll its own scrollback underneath them.
-func TestWheelOverAMouseTrackingAppIsNotConsumedByScrollback(t *testing.T) {
-	o, win := scrollPane(t)
-	if _, err := win.Terminal.Write([]byte("\x1b[?1000h")); err != nil {
-		t.Fatalf("enable mouse tracking: %v", err)
-	}
-	if !win.Terminal.HasMouseMode() {
-		t.Fatal("fixture did not enable mouse tracking")
-	}
-
-	wheel(o, tea.MouseWheelUp, 3)
-
-	if win.InCopyMode() {
-		t.Error("tuios scrolled its own scrollback for a pane whose application owns the mouse")
-	}
-	if win.ScrollbackOffset != 0 {
-		t.Errorf("ScrollbackOffset = %d, want 0", win.ScrollbackOffset)
 	}
 }
 

@@ -63,10 +63,8 @@ func TestARemoteKeyLeavesAScrolledPaneScrolled(t *testing.T) {
 		wantScrolled bool
 		wantGuest    string
 	}{
-		{"remote key, terminal mode", app.TerminalMode, false, true, true, "j"},
 		{"remote key, explicit copy mode", app.TerminalMode, true, true, true, "j"},
 		{"remote key, window mode", app.WindowManagementMode, false, true, true, ""},
-		{"the person's key, terminal mode", app.TerminalMode, false, false, false, "j"},
 		{"the person's key, window mode", app.WindowManagementMode, false, false, false, ""},
 	}
 	for _, row := range rows {

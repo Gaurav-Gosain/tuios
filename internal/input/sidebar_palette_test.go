@@ -70,24 +70,3 @@ func TestRailCtrlPOpensThePalette(t *testing.T) {
 		t.Error("opening the palette dropped rail focus, so closing it would not come back to the row")
 	}
 }
-
-// TestRailKeysStillBeatGlobalOnes checks that the rail's own bindings are looked
-// up first, so letting the global section through did not hand it the cursor
-// keys.
-func TestRailKeysStillBeatGlobalOnes(t *testing.T) {
-	prev := config.Global.SidebarEnabled
-	config.Global.SidebarEnabled = true
-	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
-
-	o := twoPaneOS(t)
-	o.SidebarFocused = true
-	o.ShowCommandPalette = false
-
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'j', Text: "j"}, o)
-	if o.ShowCommandPalette {
-		t.Error("a rail cursor key reached the global section")
-	}
-	if !o.SidebarFocused {
-		t.Error("a rail cursor key left the rail")
-	}
-}

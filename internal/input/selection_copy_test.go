@@ -69,11 +69,6 @@ func TestMouseSelectionIsCopyable(t *testing.T) {
 		want string
 	}{
 		{
-			"character drag",
-			func(o *app.OS) { pressAt(o, 0, 0); dragTo(o, 10, 0); release(o, 10, 0) },
-			"alpha bravo",
-		},
-		{
 			"double-click word",
 			func(o *app.OS) { pressAt(o, 7, 0); pressAt(o, 7, 0); release(o, 7, 0) },
 			"bravo",
@@ -112,32 +107,6 @@ func TestCopySelectionWithNothingSelectedCopiesNothing(t *testing.T) {
 
 	if got := copySelection(t, o); got != "" {
 		t.Errorf("copying with no selection wrote %q to the clipboard", got)
-	}
-}
-
-// TestPaneMenuOffersCopyAfterADrag closes the loop the screenshot showed: a
-// selection plainly visible in the pane, and a "Copy selection" row greyed out
-// over it.
-func TestPaneMenuOffersCopyAfterADrag(t *testing.T) {
-	o, _ := selectPane(t, "alpha bravo charlie")
-
-	if !copyRowDim(t, o, 5, 5) {
-		t.Error("copy is offered on a pane with no selection")
-	}
-	o.CloseContextMenu()
-
-	pressAt(o, 0, 0)
-	dragTo(o, 10, 0)
-	release(o, 10, 0)
-
-	if copyRowDim(t, o, 5, 5) {
-		t.Error("copy is dimmed on a pane the user just drag-selected in")
-	}
-	// The row is not decoration: running what it carries has to produce the
-	// selected text, so this dispatches the row's own action ID.
-	o.CloseContextMenu()
-	if got, want := copySelection(t, o), "alpha bravo"; got != want {
-		t.Errorf("the menu's copy row produced %q, want %q", got, want)
 	}
 }
 

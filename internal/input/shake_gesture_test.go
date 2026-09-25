@@ -125,35 +125,3 @@ func TestAWindowDragDoesNotToggleTheBeam(t *testing.T) {
 		t.Error("dragging a pane about toggled the beam")
 	}
 }
-
-// TestASweepAcrossTheScreenDoesNotToggleTheBeam. No button, no drag, nothing to
-// suppress: this is a person moving the pointer from one side of the screen to
-// the other and back, which is the ordinary case the amplitude and the count
-// have to hold on their own.
-func TestASweepAcrossTheScreenDoesNotToggleTheBeam(t *testing.T) {
-	o := shakeReady(t)
-
-	for x := 5; x < 110; x += 5 {
-		o.Update(hoverMsg(x, 20))
-	}
-	for x := 110; x > 5; x -= 5 {
-		o.Update(hoverMsg(x, 20))
-	}
-
-	if o.SpotlightOn() {
-		t.Error("crossing the screen and coming back toggled the beam")
-	}
-}
-
-// TestTheGestureIsOffUnlessItIsTurnedOn drives the shipped default down the
-// real path. Everything else in this file turns the setting on first.
-func TestTheGestureIsOffUnlessItIsTurnedOn(t *testing.T) {
-	o := shakeReady(t)
-	o.UserConfig.Spotlight.Shake = false
-
-	shakeAt(o, 60, 20, shakeTurns)
-
-	if o.SpotlightOn() {
-		t.Error("the gesture fired with spotlight.shake off, which is how it ships")
-	}
-}

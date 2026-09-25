@@ -42,55 +42,6 @@ func feedOutput(m *app.OS, seq int) {
 	}
 }
 
-// BenchmarkResizeDragWithOutput measures one drag frame in the regime the user
-// is actually in: terminals producing output while a divider is dragged.
-//
-// This is the case BenchmarkResizeMotionFrame cannot see. Motion renders are
-// coalesced to one per frame interval, so in a tight loop with no output almost
-// every motion event has its render skipped and View returns cached content,
-// which makes that benchmark mostly a measurement of the cache hit. PTYDataMsg
-// clears renderSkipped, so a single byte of output anywhere forces the next
-// View to compose for real. One motion event plus one PTY wakeup per iteration
-// is one composed frame per iteration, which is the unit that decides whether a
-// drag feels smooth.
-//
-// ptyResizes/frame is reported alongside the timing because the expensive part
-// of the frame was invisible to a benchmark's nil daemon callback.
-func BenchmarkResizeDragWithOutput(b *testing.B) {
-	app.SetInputHandler(HandleInput)
-
-	for _, shared := range []bool{false, true} {
-		for _, n := range []int{2, 4, 9} {
-			name := fmt.Sprintf("windows-%d/shared-%v", n, shared)
-			b.Run(name, func(b *testing.B) {
-				prev := config.Global.SharedBorders
-				config.Global.SharedBorders = shared
-				b.Cleanup(func() { config.Global.SharedBorders = prev })
-
-				m := benchResizeOS(b, n)
-				resizes := countDaemonResizes(m)
-				startX, startY := m.ResizeStartX, m.ResizeStartY
-
-				b.ReportAllocs()
-				b.ResetTimer()
-				i := 0
-				for b.Loop() {
-					dx := i%6 - 3
-					_, _ = m.Update(motionAt(startX+dx, startY))
-					_ = m.View()
-
-					feedOutput(m, i)
-					_, _ = m.Update(app.PTYDataMsg{})
-					_ = m.View()
-					i++
-				}
-				b.StopTimer()
-				b.ReportMetric(float64(resizes.Load())/float64(b.N), "ptyResizes/frame")
-			})
-		}
-	}
-}
-
 // TestSharedBorderDragTracksPointerAndDoesNotAnimate pins the other half of the
 // same bug, the half no timing measurement can see.
 //

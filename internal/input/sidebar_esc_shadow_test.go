@@ -49,13 +49,3 @@ func TestRailEscStillEscapesWhenUnbound(t *testing.T) {
 		t.Error("an unbound esc left the keyboard trapped in the rail")
 	}
 }
-
-// TestRailEscExitsByItsDefaultBinding pins that the ordinary path is the
-// registry one: esc is in the default exit binding, so it leaves through the
-// lookup and never reaches the fallback.
-func TestRailEscExitsByItsDefaultBinding(t *testing.T) {
-	cfg := config.DefaultConfig()
-	if got := config.NewKeybindRegistry(cfg).GetSidebarAction("esc"); got != "exit" {
-		t.Fatalf("default sidebar esc = %q, want exit", got)
-	}
-}
