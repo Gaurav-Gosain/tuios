@@ -23,6 +23,11 @@ func enablePixelMouse(e *Emulator) {
 	e.SetCellSize(10, 20)
 }
 
+func enableCellMouse(e *Emulator) {
+	_, _ = e.Write([]byte("\x1b[?1003h\x1b[?1006h"))
+	e.SetCellSize(10, 20)
+}
+
 func TestEncodeMousePixelMode(t *testing.T) {
 	e := NewEmulator(80, 24)
 	defer func() { _ = e.Close() }()
@@ -44,6 +49,19 @@ func TestEncodeMousePixelMode(t *testing.T) {
 	gotWheel := e.EncodeMouseEvent(MouseWheel{X: 3, Y: 4, Button: MouseWheelUp})
 	if gotWheel != "\x1b[<64;36;91M" {
 		t.Fatalf("pixel-mode wheel = %q, want %q", gotWheel, "\x1b[<64;36;91M")
+	}
+}
+
+func TestEncodeMouseCellModeUnchanged(t *testing.T) {
+	e := NewEmulator(80, 24)
+	defer func() { _ = e.Close() }()
+	enableCellMouse(e)
+
+	// Without 1016, the existing SGR-cell (1006) encoding is used: cell (3,4)
+	// reported 1-based as 4;5, no pixel scaling.
+	got := e.EncodeMouseEvent(MouseClick{X: 3, Y: 4, Button: MouseLeft})
+	if got != "\x1b[<0;4;5M" {
+		t.Fatalf("cell-mode click = %q, want %q", got, "\x1b[<0;4;5M")
 	}
 }
 
