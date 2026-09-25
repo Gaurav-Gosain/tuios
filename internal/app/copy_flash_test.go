@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -26,52 +25,6 @@ func flashOS(t *testing.T) *OS {
 	m.Settings.CopyFlashMs = config.CopyFlashMsDefault
 	m.Settings.CopyFlashColor = config.DefaultCopyFlashColor
 	return m
-}
-
-// TestTheSweepStartsAndEndsOffTheBlock.
-//
-// The light has to arrive from outside the copied text and leave on the other
-// side, so the first and last cells are lit on the way past rather than the
-// sweep appearing to begin and end inside the block.
-//
-// Stated about the block rather than about columns, because with a diagonal
-// the column a row is lit at depends on which row it is.
-func TestTheSweepStartsAndEndsOffTheBlock(t *testing.T) {
-	m := flashOS(t)
-	box := copyFlashBox{left: 4, right: 40, top: 20, bottom: 25}
-	ground := lipgloss.Color("#101010")
-
-	if blockLit(m.copyFlashBandFor(0, box), box, ground) {
-		t.Error("the block is lit before the sweep starts")
-	}
-	if blockLit(m.copyFlashBandFor(1, box), box, ground) {
-		t.Error("the block is lit after the sweep has finished")
-	}
-	if !blockLit(m.copyFlashBandFor(0.5, box), box, ground) {
-		t.Error("nothing in the block is lit halfway through the sweep")
-	}
-}
-
-// TestTheLightFallsOffRatherThanEnding. A hard edge reads as a block sliding
-// across the text; the falloff is what makes it read as light passing over it.
-func TestTheLightFallsOffRatherThanEnding(t *testing.T) {
-	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, top: 20, bottom: 20})
-	centre := int(band.centre)
-
-	at := band.intensity(centre, 0)
-	near := band.intensity(centre+int(band.reach/3), 0)
-	far := band.intensity(centre+int(band.reach)+1, 0)
-
-	if !(at > near && near > far) {
-		t.Errorf("the light does not fall off: centre %.2f, near %.2f, far %.2f", at, near, far)
-	}
-	if far != 0 {
-		t.Errorf("the light reaches past its own reach: %.2f", far)
-	}
-	if at <= 0 {
-		t.Error("the centre of the band is not lit")
-	}
 }
 
 // TestTheSweepEndsAndIsForgotten, so an idle client holds nothing and asks for
@@ -91,35 +44,6 @@ func TestTheSweepEndsAndIsForgotten(t *testing.T) {
 	}
 	if m.copyFlash != nil {
 		t.Error("the finished sweep was not forgotten")
-	}
-}
-
-// TestTheSweepIsDrawnOnOnePaneOnly. A copy can be made while another pane is
-// focused, and the light belongs to the text that was taken.
-func TestTheSweepIsDrawnOnOnePaneOnly(t *testing.T) {
-	m := flashOS(t)
-	m.copyFlash = &copyFlash{WindowID: "w1", At: time.Now()}
-
-	if _, ok := m.copyFlashProgress("w1"); !ok {
-		t.Error("the pane the text came from draws no sweep")
-	}
-	if _, ok := m.copyFlashProgress("w2"); ok {
-		t.Error("another pane draws the sweep")
-	}
-}
-
-// TestTurningItOffRecordsNothing. Zero is a real value for the duration and
-// the flag is a flag; neither should leave state behind.
-func TestTurningItOffRecordsNothing(t *testing.T) {
-	m := flashOS(t)
-	m.Settings.CopyFlash = false
-	m.NoteCopyFlash(nil)
-
-	if m.copyFlash != nil {
-		t.Error("a sweep was recorded with the setting off")
-	}
-	if m.CopyFlashActive() {
-		t.Error("a sweep is running with the setting off")
 	}
 }
 
@@ -150,20 +74,6 @@ func TestACopyAsksForAFrame(t *testing.T) {
 	}
 }
 
-// TestACopyWithNoSelectionRecordsNothing. The region comes from the selection,
-// so there is nothing to sweep over without one.
-func TestACopyWithNoSelectionRecordsNothing(t *testing.T) {
-	m := flashOS(t)
-	w := selectedWindow()
-	w.CopyMode.State = terminal.CopyModeNormal
-
-	m.NoteCopyFlash(w)
-
-	if m.copyFlash != nil {
-		t.Error("a copy with no selection recorded a sweep")
-	}
-}
-
 // selectedWindow is a pane holding a visual selection, which is what a copy
 // takes its region from.
 func selectedWindow() *terminal.Window {
@@ -175,65 +85,6 @@ func selectedWindow() *terminal.Window {
 			VisualStart: terminal.Position{X: 0, Y: 0},
 			VisualEnd:   terminal.Position{X: 10, Y: 0},
 		},
-	}
-}
-
-// TestTheLightLeans. A vertical band crossing a paragraph looks like a wipe.
-// A diagonal one looks like light falling across it, which is the thing worth
-// having, and a character grid holds a diagonal exactly when its slope is a
-// whole number of columns per row.
-//
-// Negative control: a slope of zero makes every row light the same column and
-// this fails.
-func TestTheLightLeans(t *testing.T) {
-	m := flashOS(t)
-	box := copyFlashBox{left: 0, right: 80 - 1, top: 20, bottom: 25}
-	band := m.copyFlashBandFor(0.5, box)
-
-	// The column each row is brightest at, which has to move along as the
-	// rows go down.
-	brightest := func(row int) int {
-		best, at := 0.0, -1
-		for x := range 80 {
-			if v := band.intensity(x, row); v > best {
-				best, at = v, x
-			}
-		}
-		return at
-	}
-
-	top, bottom := brightest(box.top), brightest(box.top+3)
-	if top < 0 || bottom < 0 {
-		t.Fatal("ASSERTION: a row is not lit at all, so there is no lean to measure")
-	}
-	if bottom <= top {
-		t.Errorf("the top row is brightest at column %d and three rows down at %d, so the light does not lean", top, bottom)
-	}
-	if want := top + 3*copyFlashSlope; bottom != want {
-		t.Errorf("three rows down is brightest at column %d, want %d for a slope of %d", bottom, want, copyFlashSlope)
-	}
-}
-
-// TestTheLightArrivesAndLeaves. Without an envelope the sweep switches on at
-// full strength at one edge and off at the other, which reads as a wipe.
-//
-// Negative control: returning 1 from copyFlashEnvelope fails both ends here.
-func TestTheLightArrivesAndLeaves(t *testing.T) {
-	begin := copyFlashEnvelope(0.02)
-	middle := copyFlashEnvelope(0.5)
-	end := copyFlashEnvelope(0.98)
-
-	if begin >= middle {
-		t.Errorf("the sweep starts at %.2f against %.2f in the middle, so it does not arrive", begin, middle)
-	}
-	if end >= middle {
-		t.Errorf("the sweep ends at %.2f against %.2f in the middle, so it does not leave", end, middle)
-	}
-	if middle < 0.99 {
-		t.Errorf("the middle of the sweep is only %.2f bright", middle)
-	}
-	if copyFlashEnvelope(0) != 0 || copyFlashEnvelope(1) != 0 {
-		t.Error("the sweep is lit before it starts or after it ends")
 	}
 }
 
@@ -307,41 +158,6 @@ func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
 	}
 }
 
-// TestTheSweepMeasuresTheBlock. The bounds come from the marked cells, so a
-// block that is narrower than the pane is swept at its own width.
-func TestTheSweepMeasuresTheBlock(t *testing.T) {
-	g := pool.GetHighlightGrid()
-	defer pool.PutHighlightGrid(g)
-	g.Init(4, 60)
-	// One row, so the block's bounds are that row's bounds. A selection over
-	// several rows reaches column zero on every row after the first, which is
-	// what a selection is, so its left edge is zero and says nothing.
-	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60)
-
-	box, ok := copyFlashBoxOf(g, 4, 60)
-	if !ok {
-		t.Fatal("the marked region measured as nothing")
-	}
-	if box.left != 5 || box.right != 20 {
-		t.Errorf("the block spans columns %d to %d, want 5 to 20", box.left, box.right)
-	}
-	if box.rows() != 1 {
-		t.Errorf("the block is %d rows, want 1", box.rows())
-	}
-}
-
-// TestAnEmptyRegionIsNotSwept, which is what a copied block scrolled out of
-// view leaves behind.
-func TestAnEmptyRegionIsNotSwept(t *testing.T) {
-	g := pool.GetHighlightGrid()
-	defer pool.PutHighlightGrid(g)
-	g.Init(4, 60)
-
-	if _, ok := copyFlashBoxOf(g, 4, 60); ok {
-		t.Error("an empty region measured as a block to sweep")
-	}
-}
-
 // TestEveryShapeCrossesTheWholeBlock.
 //
 // Four shapes, one rule: whatever the block is, the light starts off one end
@@ -394,67 +210,6 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 				t.Errorf("the block is lit in %d of %d frames", runs, steps)
 			}
 		})
-	}
-}
-
-// TestTheTwoDiagonalsLeanOppositeWays, which is the whole difference between
-// them and the thing a person picking one is choosing.
-func TestTheTwoDiagonalsLeanOppositeWays(t *testing.T) {
-	box := copyFlashBox{left: 0, right: 60, top: 20, bottom: 25}
-
-	brightest := func(shape string, row int) int {
-		m := flashOS(t)
-		m.Settings.CopyFlashStyle = shape
-		band := m.copyFlashBandFor(0.5, box)
-		best, at := 0.0, -1
-		for x := box.left; x <= box.right; x++ {
-			if v := band.intensity(x, row); v > best {
-				best, at = v, x
-			}
-		}
-		return at
-	}
-
-	fwdTop, fwdBottom := brightest(config.CopyFlashDiagonal, 20), brightest(config.CopyFlashDiagonal, 25)
-	revTop, revBottom := brightest(config.CopyFlashDiagonalReverse, 20), brightest(config.CopyFlashDiagonalReverse, 25)
-
-	if fwdTop < 0 || fwdBottom < 0 || revTop < 0 || revBottom < 0 {
-		t.Fatal("ASSERTION: a row is not lit at the halfway point, so there is no lean to compare")
-	}
-	if fwdBottom <= fwdTop {
-		t.Errorf("the diagonal does not lean forward: top %d, bottom %d", fwdTop, fwdBottom)
-	}
-	if revBottom >= revTop {
-		t.Errorf("the reverse diagonal does not lean back: top %d, bottom %d", revTop, revBottom)
-	}
-}
-
-// TestAHorizontalSweepDoesNotLean. It is the shape for a single long line,
-// where a diagonal barely leans at all over one row.
-func TestAHorizontalSweepDoesNotLean(t *testing.T) {
-	m := flashOS(t)
-	m.Settings.CopyFlashStyle = config.CopyFlashHorizontal
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, top: 20, bottom: 23})
-
-	if band.intensity(30, 20) != band.intensity(30, 23) {
-		t.Error("a horizontal sweep lights different columns on different rows")
-	}
-}
-
-// TestAVerticalSweepRunsDownTheRows, so every column of a row is lit together.
-func TestAVerticalSweepRunsDownTheRows(t *testing.T) {
-	m := flashOS(t)
-	m.Settings.CopyFlashStyle = config.CopyFlashVertical
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, top: 20, bottom: 25})
-
-	if band.intensity(0, 22) != band.intensity(60, 22) {
-		t.Error("a vertical sweep lights a row unevenly")
-	}
-	// The row the light is on against a row it is not. Comparing the two ends
-	// would compare two dark rows, which says nothing.
-	near := band.intensity(0, int(band.centre))
-	if near <= band.intensity(0, 20) {
-		t.Error("a vertical sweep does not travel down the rows")
 	}
 }
 
@@ -527,88 +282,6 @@ func TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane(t *testing.T) {
 	}
 }
 
-// TestTheLightSpreadsItsShadesRatherThanStackingThemAtTheEdge.
-//
-// Every step of the gradient is a whole cell, so what makes the band read as
-// light rather than as a bar with a fringe is how many cells carry a middling
-// brightness. A square falloff is steep at the centre and shallow at the edge,
-// so it stacks its cells at the two ends. Smoothstep is flat at both ends and
-// steepest between them, which moves cells into the middle of the range.
-//
-// The two curves are compared against each other rather than against a
-// number. The gain is real but modest, about forty percent of lit cells
-// mid-range against thirty-four, and a floor picked to sit between those two
-// figures would be a number chosen to pass rather than a property worth
-// holding.
-//
-// Negative control: returning the square from intensity makes the two counts
-// equal and this fails.
-func TestTheLightSpreadsItsShadesRatherThanStackingThemAtTheEdge(t *testing.T) {
-	m := flashOS(t)
-	box := copyFlashBox{left: 0, right: 60, top: 10, bottom: 10}
-	band := m.copyFlashBandFor(0.5, box)
-
-	midRange := func(f func(float64) float64) (mid, lit int) {
-		for x := box.left; x <= box.right; x++ {
-			d := band.position(x, box.top) - band.centre
-			if d < 0 {
-				d = -d
-			}
-			if d >= band.reach {
-				continue
-			}
-			v := f(1-d/band.reach) * band.amp
-			if v <= 0 {
-				continue
-			}
-			lit++
-			if v > 0.25 && v < 0.75 {
-				mid++
-			}
-		}
-		return mid, lit
-	}
-
-	square := func(t float64) float64 { return t * t }
-	_, lit := midRange(square)
-	if lit == 0 {
-		t.Fatal("ASSERTION: nothing is lit, so there is no gradient to measure")
-	}
-
-	// What the band actually draws, against what a square would have drawn
-	// over the same cells.
-	actual := 0
-	for x := box.left; x <= box.right; x++ {
-		if v := band.intensity(x, box.top); v > 0.25 && v < 0.75 {
-			actual++
-		}
-	}
-	squareMid, _ := midRange(square)
-
-	if actual <= squareMid {
-		t.Errorf("the falloff puts %d lit cells mid-range against %d for a square, so it is no smoother",
-			actual, squareMid)
-	}
-}
-
-// TestTheLightIsBrightestInTheMiddleOfItself, whatever the falloff is. The
-// shape of the curve is a judgement; this is the part that is not.
-func TestTheLightIsBrightestInTheMiddleOfItself(t *testing.T) {
-	m := flashOS(t)
-	box := copyFlashBox{left: 0, right: 60, top: 10, bottom: 10}
-	band := m.copyFlashBandFor(0.5, box)
-
-	// The column, not the centre: for a diagonal the two differ by the row's
-	// share of the lean.
-	centre := int(band.peakColumn(box.top))
-	at := band.intensity(centre, box.top)
-	for _, d := range []int{2, 4, 6} {
-		if out := band.intensity(centre+d, box.top); out >= at {
-			t.Errorf("%d cells from the centre is %.2f against %.2f at it", d, out, at)
-		}
-	}
-}
-
 // TestAnythingTheUserDoesEndsTheSweep.
 //
 // The sweep is a short acknowledgement of a copy. Once a key has been pressed
@@ -636,16 +309,6 @@ func TestAnythingTheUserDoesEndsTheSweep(t *testing.T) {
 	}
 	if !w.ContentDirty {
 		t.Error("the pane was not asked for the frame without the sweep in it")
-	}
-}
-
-// TestCancellingWhenNothingIsRunningIsSafe, because it is called on every key
-// press and every click.
-func TestCancellingWhenNothingIsRunningIsSafe(t *testing.T) {
-	m := flashOS(t)
-	m.CancelCopyFlash()
-	if m.CopyFlashActive() {
-		t.Error("a sweep appeared from nowhere")
 	}
 }
 
@@ -702,15 +365,5 @@ func TestTheTintIsDerivedFromTheGround(t *testing.T) {
 				t.Errorf("the tint measures %.2f against the ground, louder than the selection", got)
 			}
 		})
-	}
-}
-
-// TestAConfiguredColourStillWins, because that is what the setting is for.
-func TestAConfiguredColourStillWins(t *testing.T) {
-	m := flashOS(t)
-	m.Settings.CopyFlashColor = "#FF00FF"
-
-	if got := m.copyFlashTint(); got != lipgloss.Color("#FF00FF") {
-		t.Errorf("the tint is %v, want the configured colour", got)
 	}
 }

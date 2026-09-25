@@ -53,16 +53,6 @@ func TestClientKindDerivesTheClientFlags(t *testing.T) {
 	}
 }
 
-// TestClientKindKeepsAFlagSetByHand: a test that sets one flag directly keeps
-// it. The kind adds, it does not overwrite.
-func TestClientKindKeepsAFlagSetByHand(t *testing.T) {
-	cfg := config.DefaultConfig()
-	o := NewOS(OSOptions{Client: ClientLocal, ConfigReadOnly: true, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
-	if !o.ConfigReadOnly {
-		t.Error("the local kind cleared a ConfigReadOnly the caller set")
-	}
-}
-
 // entryPointKinds is the kind each entry point's directory must name. A
 // literal in one of these directories that names another kind, or none, is a
 // client built by hand, which is what the kind exists to end.

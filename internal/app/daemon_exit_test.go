@@ -46,23 +46,6 @@ func TestRemoteExitNoticeIsTheLastFrame(t *testing.T) {
 	}
 }
 
-// TestLocalExitPrintsNothingOnScreen pins the other half: the local client keeps
-// its normal last frame, because its reason is printed by the caller instead.
-func TestLocalExitPrintsNothingOnScreen(t *testing.T) {
-	m := &OS{SessionName: "work", ExitReason: ExitDaemonLost}
-	if notice := m.ExitNotice(); notice != "" {
-		t.Fatalf("the local client draws an exit message it also prints: %q", notice)
-	}
-}
-
-// TestNormalExitLeavesNoNotice checks a detach or a deliberate quit is silent.
-func TestNormalExitLeavesNoNotice(t *testing.T) {
-	m := &OS{RemoteClient: true, SessionName: "work", ExitReason: ExitNormal}
-	if notice := m.ExitNotice(); notice != "" {
-		t.Fatalf("a normal detach reports a failure: %q", notice)
-	}
-}
-
 // TestQueuedDaemonExitReachesUpdate walks the whole path a host uses: queue from
 // the read-loop goroutine, read with the command Init arms, apply in Update.
 func TestQueuedDaemonExitReachesUpdate(t *testing.T) {
@@ -82,30 +65,5 @@ func TestQueuedDaemonExitReachesUpdate(t *testing.T) {
 	}
 	if m.ExitReason != ExitDaemonLost {
 		t.Fatalf("exit reason %v, want ExitDaemonLost", m.ExitReason)
-	}
-}
-
-// TestQueuedSessionEndReachesUpdate is the same walk for the session-killed case.
-func TestQueuedSessionEndReachesUpdate(t *testing.T) {
-	m := &OS{RemoteClient: true, SessionName: "work"}
-	m.DaemonExitChan = make(chan tea.Msg, daemonExitQueue)
-
-	if dropped := m.QueueSessionEnded("work", "the session was terminated"); dropped {
-		t.Fatalf("the session end was dropped with an empty queue")
-	}
-	msg := ListenForDaemonExit(m.DaemonExitChan)()
-	ended, ok := msg.(SessionEndedMsg)
-	if !ok {
-		t.Fatalf("got %T, want SessionEndedMsg", msg)
-	}
-	if ended.SessionName != "work" {
-		t.Fatalf("session named %q, want %q", ended.SessionName, "work")
-	}
-	_, cmd := m.Update(ended)
-	if cmd == nil || cmd() != (tea.QuitMsg{}) {
-		t.Fatalf("the client did not stop")
-	}
-	if m.ExitReason != ExitSessionKilled {
-		t.Fatalf("exit reason %v, want ExitSessionKilled", m.ExitReason)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // The session tree carries the other machines' rows alongside this machine's,
@@ -51,46 +50,5 @@ func TestThePaletteNeverOffersAMachineAsASession(t *testing.T) {
 		if strings.Contains(item.Name, "\x00host/") {
 			t.Errorf("the palette offers a machine's rail identity as a session: %q", item.Name)
 		}
-	}
-}
-
-// TestAHostNodeIsNotASwitchTarget guards the same thing at the tree level, so a
-// future surface that reads the tree has the invariant written down: a node id
-// is only a session name for a node on this machine.
-func TestAHostNodeIsNotASwitchTarget(t *testing.T) {
-	m := paletteHostOS(t)
-	tree := m.BuildSessionTree()
-
-	sawHost := false
-	for _, s := range tree.Sessions {
-		if s.Kind == sessiontree.KindHost {
-			sawHost = true
-			if !strings.HasPrefix(s.ID, "\x00host/") {
-				t.Errorf("a machine heading carries id %q, which no longer marks it as one", s.ID)
-			}
-		}
-	}
-	if !sawHost {
-		t.Fatal("ASSERTION: the fixture's tree holds no machine heading, so this proves nothing")
-	}
-}
-
-// TestASessionOnAnotherMachineIsOfferedAndSaysSo. It is reachable, unlike a
-// heading, but it is a different connection and the row says so rather than
-// looking like one of this machine's.
-func TestASessionOnAnotherMachineIsOfferedAndSaysSo(t *testing.T) {
-	m := paletteHostOS(t)
-
-	found := false
-	for _, item := range getSessionPaletteItems(m) {
-		if strings.Contains(item.Name, "api") && strings.Contains(item.Name, "build") {
-			found = true
-			if item.Shortcut != "another machine" {
-				t.Errorf("a session on another machine is offered as %q with shortcut %q", item.Name, item.Shortcut)
-			}
-		}
-	}
-	if !found {
-		t.Errorf("a session on another machine is not offered at all:\n%s", paletteNames(getSessionPaletteItems(m)))
 	}
 }

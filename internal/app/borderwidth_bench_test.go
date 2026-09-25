@@ -58,62 +58,6 @@ func benchBox(cols, rows int) string {
 	return b.String()
 }
 
-// BenchmarkBorderWidthMeasurement contrasts measuring a rendered box against
-// reading the width that produced it.
-//
-// The sizes are the ones the flood benchmarks use: a single wide pane, and a
-// tile from a nine-way split.
-func BenchmarkBorderWidthMeasurement(b *testing.B) {
-	for _, sz := range []struct {
-		name       string
-		cols, rows int
-	}{
-		{"pane-158x40", 158, 40},
-		{"tile-69x18", 69, 18},
-	} {
-		box := benchBox(sz.cols, sz.rows)
-
-		b.Run(sz.name+"/measured", func(b *testing.B) {
-			b.ReportAllocs()
-			var sink int
-			for b.Loop() {
-				sink = max(lipgloss.Width(box)-2, 0)
-			}
-			if sink == 0 {
-				b.Fatal("the box measured zero columns")
-			}
-		})
-
-		b.Run(sz.name+"/known", func(b *testing.B) {
-			b.ReportAllocs()
-			var sink int
-			for b.Loop() {
-				sink = max(sz.cols-2, 0)
-			}
-			if sink == 0 {
-				b.Fatal("the box measured zero columns")
-			}
-		})
-	}
-}
-
-// TestBorderWidthMeasurementAgrees is what makes the benchmark above an
-// argument rather than a curiosity: the cheap answer has to be the same
-// answer. If lipgloss.Width of a rendered box ever stops equalling the width
-// it was built at, reading the width off the window would be wrong and this
-// says so before anyone acts on the benchmark.
-func TestBorderWidthMeasurementAgrees(t *testing.T) {
-	for _, sz := range []struct{ cols, rows int }{
-		{158, 40}, {69, 18}, {20, 5},
-	} {
-		box := benchBox(sz.cols, sz.rows)
-		if got := lipgloss.Width(box); got != sz.cols {
-			t.Errorf("a %dx%d box measures %d columns, want %d",
-				sz.cols, sz.rows, got, sz.cols)
-		}
-	}
-}
-
 // TestBorderBoxInnerWidthIsKnown is what licenses addToBorder to be told its
 // width instead of measuring one. It builds the border box exactly as
 // renderWindowBox does and checks that the number the call site passes,

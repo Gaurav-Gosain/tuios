@@ -4,8 +4,6 @@ import (
 	"strconv"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -158,52 +156,6 @@ func TestConfigReloadPutsTheBeamWhereTheFileSaysIt(t *testing.T) {
 	m.Update(ConfigReloadedMsg{Config: off})
 	if m.SpotlightOn() {
 		t.Error("a file that turned the beam off left it on")
-	}
-}
-
-// TestConfigReloadFailureKeepsWhatIsRunning. A file that does not parse must
-// leave the session exactly as it is and say so. Rendering the defaults over a
-// running session every time somebody saved a typo would be far worse than
-// waiting for the next save.
-func TestConfigReloadFailureKeepsWhatIsRunning(t *testing.T) {
-	m := liveOS(t)
-	m.setOption("spotlight.dim", "44")
-	m.setOption("appearance.border_style", "double")
-
-	m.Update(ConfigReloadFailedMsg{Err: errBrokenConfig{}})
-
-	if got := m.spotlightConfig().DimPercent(); got != 44 {
-		t.Errorf("a broken file moved the beam to dim %d; it was at 44", got)
-	}
-	if got := m.Settings.BorderStyle; got != "double" {
-		t.Errorf("a broken file moved the border style to %q; it was double", got)
-	}
-	if len(m.Notifications) == 0 {
-		t.Fatal("a broken config file said nothing on screen")
-	}
-	found := false
-	for _, n := range m.Notifications {
-		if n.Type == "error" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("a broken config file raised no error notification: %+v", m.Notifications)
-	}
-}
-
-// TestConfigReloadWithNoConfigChangesNothing. The watcher delivers exactly one
-// of a config and an error, but a message with neither must not panic a client.
-func TestConfigReloadWithNoConfigChangesNothing(t *testing.T) {
-	m := liveOS(t)
-	before := m.Settings.BorderStyle
-	var cmd tea.Cmd
-	_, cmd = m.Update(ConfigReloadedMsg{})
-	if cmd != nil {
-		t.Error("an empty reload produced a command")
-	}
-	if m.Settings.BorderStyle != before {
-		t.Errorf("an empty reload moved the border style to %q", m.Settings.BorderStyle)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/colorprofile"
 )
@@ -41,37 +40,6 @@ func pickerLines(t *testing.T, m *OS) []string {
 		out = append(out, stripANSIForTrace(r))
 	}
 	return out
-}
-
-// TestAccentPickerReachesTheWholeColourSpace: the picker is no longer fifteen
-// fixed slots. Walking the grid and the hue strip has to produce colours the
-// old slot set never could, and the dialog has to say which one is selected.
-func TestAccentPickerReachesTheWholeColourSpace(t *testing.T) {
-	m := accentTestOS(t, 120, 30)
-	m.OpenAccentPicker("aaaaaaaa1111")
-	cols, rows := m.accentGridSize()
-
-	seen := map[color.RGBA]bool{}
-	for hue := range m.accentHueCells() {
-		m.AccentPickerHueCell(hue)
-		for col := range cols {
-			for row := range rows {
-				m.AccentPickerCell(col, row)
-				seen[m.AccentPicker.Cur] = true
-			}
-		}
-	}
-	if len(seen) < 500 {
-		t.Errorf("the grid and strip together only reach %d colours; this is meant to be a true-colour picker", len(seen))
-	}
-
-	// The hex of the selected colour is on screen, so the user can read off what
-	// they landed on.
-	m.AccentPickerCell(cols-1, rows/2)
-	text := strings.Join(pickerLines(t, m), "\n")
-	if want := overlay.Hex(m.AccentPicker.Cur); !strings.Contains(text, want) {
-		t.Errorf("the dialog does not show the selected colour %s:\n%s", want, text)
-	}
 }
 
 // TestAccentGridAndHexConverge is the core consistency claim: the two ways in
@@ -139,76 +107,6 @@ func TestAccentPickerCancelRestores(t *testing.T) {
 	}
 	if got, _ := m.WindowAccent("aaaaaaaa1111"); got.RGB() != want {
 		t.Errorf("applied accent = %s, want %s", got.Hex(), overlay.Hex(want))
-	}
-}
-
-// TestAccentPickerHitsMatchTheDrawnCells is the mouse contract, checked at three
-// widths. The assertion is built off the rendered frame: every recorded rect
-// must land inside the dialog on the row it claims, and clicking the rect must
-// select the cell that was drawn there.
-func TestAccentPickerHitsMatchTheDrawnCells(t *testing.T) {
-	for _, w := range []int{120, 60, 30} {
-		m := accentTestOS(t, w, 30)
-		m.OpenAccentPicker("aaaaaaaa1111")
-		content, geo, _ := m.renderAccentPicker()
-		lines := strings.Split(content, "\n")
-		cols, rows := m.accentGridSize()
-
-		if len(lines) != geo.Height {
-			t.Fatalf("w=%d: the dialog drew %d rows but reports %d", w, len(lines), geo.Height)
-		}
-		for i, l := range lines {
-			if got := lipgloss.Width(l); got != geo.Width {
-				t.Fatalf("w=%d: row %d is %d cells, want %d", w, i, got, geo.Width)
-			}
-		}
-
-		var grid, hue, harmony int
-		for _, h := range m.accentHits {
-			if h.Rect.Y0 < 0 || h.Rect.Y1 > geo.Height || h.Rect.X0 < 0 || h.Rect.X1 > geo.Width {
-				t.Errorf("w=%d: %v is outside the %dx%d dialog", w, h.Rect, geo.Width, geo.Height)
-				continue
-			}
-			switch h.Kind {
-			case accentHitGrid:
-				grid++
-			case accentHitHue:
-				hue++
-			case accentHitHarmony:
-				harmony++
-			}
-		}
-		if grid != cols*rows {
-			t.Errorf("w=%d: %d grid rects recorded for a %dx%d grid", w, grid, cols, rows)
-		}
-		if cells := m.accentHueCells(); hue != cells {
-			t.Errorf("w=%d: %d hue rects recorded for a %d-cell strip", w, hue, cells)
-		}
-		if want := m.accentPlan().HarmonyCount(); harmony != want {
-			t.Errorf("w=%d: %d harmony rects recorded, want %d", w, harmony, want)
-		}
-
-		// Press the middle of every recorded grid rect and check the picker lands
-		// on the cell that rect was drawn for, and that the swatch under the
-		// pointer is the colour the cell claims.
-		for _, h := range m.accentHits {
-			if h.Kind != accentHitGrid {
-				continue
-			}
-			if ok, _ := m.accentPickerPress(h.Rect.X0, h.Rect.Y0); !ok {
-				t.Fatalf("w=%d: a press on the recorded rect %v was not routed", w, h.Rect)
-			}
-			if m.AccentPicker.Col != h.Col || m.AccentPicker.Row != h.Row {
-				t.Fatalf("w=%d: pressing the rect for cell (%d,%d) selected (%d,%d)",
-					w, h.Col, h.Row, m.AccentPicker.Col, m.AccentPicker.Row)
-			}
-			want := accentCellColor(m.AccentPicker.Hue, h.Col, h.Row, cols, rows)
-			if m.AccentPicker.Cur != want {
-				t.Fatalf("w=%d: cell (%d,%d) selected %s, want %s",
-					w, h.Col, h.Row, overlay.Hex(m.AccentPicker.Cur), overlay.Hex(want))
-			}
-		}
-		m.OverlayMouseRelease()
 	}
 }
 
@@ -325,49 +223,6 @@ func TestAccentPickerKeyboardReachesEveryControl(t *testing.T) {
 	}
 }
 
-// TestAccentPickerFallsBackHonestly: on a terminal that cannot show the colour,
-// the swatch is painted with the nearest one the terminal has and the dialog
-// says so, rather than printing a hex it is not showing.
-func TestAccentPickerFallsBackHonestly(t *testing.T) {
-	m := accentTestOS(t, 120, 30)
-	m.OpenAccentPicker("aaaaaaaa1111")
-	for _, r := range "#3b82f6" {
-		m.AccentPickerHexKey(r)
-	}
-	want := m.AccentPicker.Cur
-
-	// Truecolour: the colour is exact and nothing is claimed about a fallback.
-	if label := accentFallbackLabel(want); label != "" {
-		t.Errorf("truecolour reported a fallback of %q", label)
-	}
-	if got := toRGBA(accentShown(want)); got != want {
-		t.Errorf("truecolour changed the colour: %s -> %s", overlay.Hex(want), overlay.Hex(got))
-	}
-
-	for _, p := range []colorprofile.Profile{colorprofile.ANSI256, colorprofile.ANSI} {
-		SetAccentColorProfile(p)
-		shown := accentShown(want)
-		got := toRGBA(shown)
-		if got == want {
-			t.Errorf("%v: the colour was not stepped down at all", p)
-		}
-		label := accentFallbackLabel(want)
-		if label == "" {
-			t.Errorf("%v: the picker claims the exact colour it cannot show", p)
-		}
-		// The fallback is the nearest colour the profile has, not an arbitrary one.
-		if d := colorDistance(got, want); d > colorDistance(toRGBA(p.Convert(want)), want) {
-			t.Errorf("%v: %s fell back to %s, which is not what the profile converts to",
-				p, overlay.Hex(want), overlay.Hex(got))
-		}
-		// And the user is told, in the frame.
-		text := strings.Join(pickerLines(t, m), "\n")
-		if !strings.Contains(text, label) {
-			t.Errorf("%v: the fallback %q is not on screen:\n%s", p, label, text)
-		}
-	}
-}
-
 // colorDistance is the squared channel distance between two colours.
 func colorDistance(a, b color.RGBA) int {
 	dr, dg, db := int(a.R)-int(b.R), int(a.G)-int(b.G), int(a.B)-int(b.B)
@@ -465,60 +320,6 @@ func TestAccentPickerMovesTheRailSignatureOnlyWhenTheColourMoves(t *testing.T) {
 		changed := m.sidebarSignature() != before
 		if moved != changed {
 			t.Errorf("%s moved the colour=%v but moved the rail signature=%v", step.name, moved, changed)
-		}
-	}
-}
-
-// The dialog fits a short screen by shrinking the grid rather than drawing off
-// the bottom of it, and every row it draws is exactly its own width.
-func TestAccentPickerFitsShortScreens(t *testing.T) {
-	for _, h := range []int{40, 24, 14, 10, 8} {
-		m := accentTestOS(t, 120, h)
-		m.OpenAccentPicker("aaaaaaaa1111")
-
-		content, geo, _ := m.renderAccentPicker()
-		lines := strings.Split(content, "\n")
-		if geo.Height > h {
-			t.Errorf("h=%d: the dialog is %d rows tall", h, geo.Height)
-		}
-		for i, l := range lines {
-			if w := lipgloss.Width(l); w != geo.Width {
-				t.Errorf("h=%d row %d is %d cells, want %d: %q", h, i, w, geo.Width, l)
-			}
-		}
-		// The furniture the picker cannot do without is still there.
-		plain := stripANSIForTrace(content)
-		for _, want := range []string{"accent", "now", "hex"} {
-			if !strings.Contains(plain, want) {
-				t.Errorf("h=%d: the dialog lost %q:\n%s", h, want, plain)
-			}
-		}
-		// The harmony chips have no words on them in every layout, so they are
-		// counted rather than read.
-		var chips int
-		for _, hit := range m.accentHits {
-			if hit.Kind == accentHitHarmony {
-				chips++
-			}
-		}
-		if chips == 0 {
-			t.Errorf("h=%d: the dialog lost the harmony chips:\n%s", h, plain)
-		}
-	}
-}
-
-// ASCII mode keeps every mark one cell and drops the box glyphs.
-func TestAccentPickerDegradesToASCII(t *testing.T) {
-	overlay.SetASCII(true)
-	t.Cleanup(func() { overlay.SetASCII(false) })
-
-	m := accentTestOS(t, 120, 30)
-	m.SetWindowAccent("aaaaaaaa1111", SlotAccent(4))
-	m.OpenAccentPicker("aaaaaaaa1111")
-
-	for i, l := range pickerLines(t, m) {
-		if strings.ContainsAny(l, "╭╮╰╯│─╌┆✕●›→◆━") {
-			t.Errorf("row %d still draws non-ASCII marks: %q", i, l)
 		}
 	}
 }

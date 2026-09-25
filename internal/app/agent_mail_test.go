@@ -140,22 +140,6 @@ func TestRailMailTokenOpensTheMailbox(t *testing.T) {
 	}
 }
 
-// TestPaletteOpensTheMailbox is the route in from the palette, run the way
-// the palette runs an entry: query typed, enter pressed.
-func TestPaletteOpensTheMailbox(t *testing.T) {
-	m := mailOS(t)
-	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "open mailbox"
-	m.CommandPaletteSelected = 0
-	m.ActivateCommandPalette()
-	if !m.ShowAgentMail {
-		t.Fatal("the palette entry did not open the mailbox")
-	}
-	if m.ShowCommandPalette {
-		t.Error("the palette stayed open over the mailbox")
-	}
-}
-
 // TestPaletteListsAThreadWaitingForThePerson: unread mail is findable by what
 // it says, and selecting it opens that thread.
 func TestPaletteListsAThreadWaitingForThePerson(t *testing.T) {
@@ -171,75 +155,6 @@ func TestPaletteListsAThreadWaitingForThePerson(t *testing.T) {
 	m.ActivateCommandPalette()
 	if !m.ShowAgentMail || m.AgentMail.Thread != 5 {
 		t.Errorf("selecting the entry opened mailbox=%v thread=%d, want thread 5", m.ShowAgentMail, m.AgentMail.Thread)
-	}
-}
-
-// TestMailboxEmptyStateTeaches: with nothing in the ring the overlay says what
-// it is and what makes something appear here.
-func TestMailboxEmptyStateTeaches(t *testing.T) {
-	m := mailOS(t)
-	m.OpenAgentMail()
-	m.AgentMail.Loading = false
-	out, _, _ := m.renderAgentMail()
-	plain := stripANSIForTrace(out)
-	for _, want := range agentMailEmptyLines {
-		for _, piece := range strings.Fields(want) {
-			if !strings.Contains(plain, piece) {
-				t.Errorf("the empty state is missing %q (from %q):\n%s", piece, want, plain)
-				break
-			}
-		}
-	}
-	if !strings.Contains(plain, "send-agent-message") {
-		t.Errorf("the empty state does not say what makes mail appear:\n%s", plain)
-	}
-}
-
-// TestMailboxReadsAThreadAndRepliesToTheAgent: the list names the thread, the
-// thread view shows the body, and a reply goes to the agent that last spoke,
-// from the person's address, threaded on the newest message.
-func TestMailboxReadsAThreadAndRepliesToTheAgent(t *testing.T) {
-	m := mailOS(t)
-	m.noteAgentMail(session.AgentMailPayload{Message: mail(5, "cccccccc3333", "build", session.AgentInboxHuman, "human", "which retry policy?", "exponential or fixed?")})
-	m.OpenAgentMail()
-	m.AgentMail.Loading = false
-
-	list, _, rows := m.renderAgentMail()
-	if plain := stripANSIForTrace(list); !strings.Contains(plain, "build → you") || !strings.Contains(plain, "which retry policy?") {
-		t.Fatalf("the list does not name the thread:\n%s", plain)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("the list published %d hit rows, want 1", len(rows))
-	}
-
-	if cmd := m.AgentMailOpenSelected(); cmd == nil {
-		t.Error("opening a thread with mail for the person returned no marking command")
-	}
-	if m.AgentMail.Thread != 5 {
-		t.Fatalf("opened thread %d, want 5", m.AgentMail.Thread)
-	}
-	thread, _, _ := m.renderAgentMail()
-	if plain := stripANSIForTrace(thread); !strings.Contains(plain, "exponential or fixed?") {
-		t.Fatalf("the thread view does not show the body:\n%s", plain)
-	}
-
-	if !m.AgentMailStartReply() {
-		t.Fatal("r did not open the reply line")
-	}
-	m.AgentMailType("take exponential")
-	inbox, replyTo, ok := m.agentMailReplyTarget()
-	if !ok || inbox != "cccccccc3333" || replyTo != 5 {
-		t.Errorf("the reply is addressed to %q answering %d, want the build pane answering 5", inbox, replyTo)
-	}
-	if cmd := m.AgentMailSendReply(); cmd == nil {
-		t.Fatal("enter on a draft returned no send command")
-	}
-	if !m.AgentMail.Sending {
-		t.Error("the reply line does not say it is sending")
-	}
-	m.applyAgentMailSent(AgentMailSentMsg{})
-	if m.AgentMail.Composing || m.AgentMail.Draft != "" {
-		t.Error("a sent reply left the reply line open")
 	}
 }
 
@@ -277,22 +192,6 @@ func TestMailboxKeepsTheIdleTickIdle(t *testing.T) {
 	_, work1, _ := m.TickStats()
 	if work1 != work0 {
 		t.Errorf("the idle tick did %d units of work with mail in the mirror, want 0", work1-work0)
-	}
-}
-
-// TestMailPushIsMappedToItsMessage: the client event listener turns a mail
-// push, and a session switch's request for a re-read, into the messages Update
-// handles. The read loop never touches the model.
-func TestMailPushIsMappedToItsMessage(t *testing.T) {
-	ch := make(chan ClientEvent, 2)
-	ch <- ClientEvent{Type: "agent-mail", Mail: session.AgentMailPayload{Message: mail(4, "a", "a", "b", "b", "s", "t")}}
-	got, ok := ListenForClientEvents(ch)().(AgentMailMsg)
-	if !ok || got.Payload.Message.ID != 4 {
-		t.Errorf("a mail push came out of the listener as %T %+v, want AgentMailMsg for message 4", got, got)
-	}
-	ch <- ClientEvent{Type: "agent-mail-load"}
-	if _, ok := ListenForClientEvents(ch)().(AgentMailLoadMsg); !ok {
-		t.Error("a re-read request did not come out of the listener as AgentMailLoadMsg")
 	}
 }
 

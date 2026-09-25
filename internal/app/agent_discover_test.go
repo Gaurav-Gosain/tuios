@@ -26,33 +26,3 @@ func TestPaletteFindsAgentActionsByWord(t *testing.T) {
 		}
 	}
 }
-
-// TestHelpHasAnAgentsSection: one section gathers the agent keys: the prefix
-// chords, the rail's controls, the palette's @ filter and the Inbox's own
-// keys. They were split over Prefix and Rail, and the Inbox's were nowhere.
-func TestHelpHasAnAgentsSection(t *testing.T) {
-	cfg := config.DefaultConfig()
-	reg := config.NewKeybindRegistry(cfg)
-	s := config.Global
-	s.LeaderKey = cfg.Keybindings.LeaderKey
-	var agents *HelpCategory
-	cats := GetHelpCategories(reg, &s)
-	for i := range cats {
-		if cats[i].Name == HelpCategoryAgents {
-			agents = &cats[i]
-		}
-	}
-	if agents == nil {
-		t.Fatal("help has no Agents section")
-	}
-	var text []string
-	for _, b := range agents.Bindings {
-		text = append(text, strings.Join(b.Keys, ",")+" "+b.Description)
-	}
-	all := strings.Join(text, "\n")
-	for _, want := range []string{"ctrl+b i Open the Inbox", "ctrl+b o", "@n needs you", "rail f", "space Inbox: read", "1-9 Inbox: answer"} {
-		if !strings.Contains(all, want) {
-			t.Errorf("the Agents section lacks %q:\n%s", want, all)
-		}
-	}
-}

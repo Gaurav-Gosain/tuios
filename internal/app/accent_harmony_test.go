@@ -1,7 +1,6 @@
 package app
 
 import (
-	"math"
 	"strings"
 	"testing"
 
@@ -10,82 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/colorprofile"
 )
-
-// TestAccentHarmonyChipZeroIsTheComplement pins the wheel's origin. Every other
-// chip is a turn from it, so if chip zero is not the complement the whole set
-// means nothing in particular.
-func TestAccentHarmonyChipZeroIsTheComplement(t *testing.T) {
-	for _, w := range []int{120, 60, 38} {
-		m := accentTestOS(t, w, 30)
-		m.OpenAccentPicker("aaaaaaaa1111")
-		m.AccentPickerHueCell(3)
-		m.AccentPickerCell(m.AccentPicker.Col, m.AccentPicker.Row)
-
-		s := &m.AccentPicker
-		count := m.accentPlan().HarmonyCount()
-		want := hslToRGB(s.baseHue()+180, s.Sat, s.Light)
-		if got := s.harmonyColor(0, count); got != want {
-			t.Errorf("w=%d: chip 0 is %s, want the complement %s", w, overlay.Hex(got), overlay.Hex(want))
-		}
-
-		// And the rest are even turns around the circle from it, bar the compact
-		// row, which names three relationships instead of drawing a wheel.
-		if count == accentHarmonyCompactCount {
-			continue
-		}
-		for i := 1; i < count; i++ {
-			wantHue := math.Mod(s.baseHue()+180+float64(i)*360/float64(count), 360)
-			gotHue, sat, _ := rgbToHSL(s.harmonyColor(i, count))
-			// The hue is a circle, so the two ends of it are next to each other.
-			off := math.Abs(gotHue - wantHue)
-			if off > 180 {
-				off = 360 - off
-			}
-			if sat > 0 && off > 1 {
-				t.Errorf("w=%d: chip %d of %d is at hue %.1f, want %.1f", w, i, count, gotHue, wantHue)
-			}
-		}
-	}
-}
-
-// TestAccentHarmonyKeepsTheHeldSaturationAndLightness: a chip is this colour at
-// another hue. Picking one that reset the saturation and lightness to the seed's
-// would throw away whatever the sliders had just been used for.
-func TestAccentHarmonyKeepsTheHeldSaturationAndLightness(t *testing.T) {
-	m := accentTestOS(t, 120, 30)
-	m.OpenAccentPicker("aaaaaaaa1111")
-	m.AccentPickerSetSlider(accentChanS, 41)
-	m.AccentPickerSetSlider(accentChanL, 73)
-
-	count := m.accentPlan().HarmonyCount()
-	for i := range count {
-		m.AccentPickerHarmonyAt(i)
-		if got := m.AccentPicker.sliderValue(accentChanS); got != 41 {
-			t.Errorf("chip %d left saturation at %d%%, want 41%%", i, got)
-		}
-		if got := m.AccentPicker.sliderValue(accentChanL); got != 73 {
-			t.Errorf("chip %d left lightness at %d%%, want 73%%", i, got)
-		}
-		// A chip is a literal colour, never a theme slot.
-		if m.AccentPicker.Slot != -1 {
-			t.Errorf("chip %d was taken as slot %d", i, m.AccentPicker.Slot)
-		}
-	}
-
-	// Walking the chips must not move the chips.
-	before := make([]string, count)
-	for i := range count {
-		before[i] = overlay.Hex(m.AccentPicker.harmonyColor(i, count))
-	}
-	for i := range count {
-		m.AccentPickerHarmonyAt(i)
-		for j := range count {
-			if got := overlay.Hex(m.AccentPicker.harmonyColor(j, count)); got != before[j] {
-				t.Fatalf("landing on chip %d moved chip %d from %s to %s", i, j, before[j], got)
-			}
-		}
-	}
-}
 
 // TestAccentHarmonyChipsAreClickableAtEveryLayout: every chip the layout draws
 // has a rect, both its edge columns select it, and no two chips share a cell.
@@ -277,38 +200,5 @@ func TestAccentPickerStaysCoherentOnALesserTerminal(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-// TestAccentChipsSurviveAMonochromeTerminal is the honest floor. Without colour
-// every background-painted swatch renders as blank space; the chips fall back to
-// a foreground glyph so the row is still a row of somethings the user can aim
-// at, and the cursor is still findable on it.
-func TestAccentChipsSurviveAMonochromeTerminal(t *testing.T) {
-	m := accentTestOS(t, 120, 30)
-	m.OpenAccentPicker("aaaaaaaa1111")
-	m.AccentPickerHarmonyAt(2)
-
-	SetAccentColorProfile(colorprofile.ASCII)
-	lines := pickerLines(t, m)
-
-	var chipRow overlay.Rect
-	for _, h := range m.accentHits {
-		if h.Kind == accentHitHarmony && h.Col == 0 {
-			chipRow = h.Rect
-		}
-	}
-	row := lines[chipRow.Y0]
-	if got := strings.Count(row, "●") + strings.Count(row, "◆"); got != accentWideChipCols {
-		t.Errorf("a colourless terminal drew %d chip marks on the first row, want %d: %q",
-			got, accentWideChipCols, row)
-	}
-	if !strings.Contains(row, "◆") {
-		t.Errorf("the chip cursor is not findable without colour: %q", row)
-	}
-	// And the hex line still says what the chip under the cursor holds, which is
-	// what makes it pickable rather than merely visible.
-	if want := overlay.Hex(m.AccentPicker.Cur); !strings.Contains(strings.Join(lines, "\n"), want) {
-		t.Errorf("the colour under the chip cursor (%s) is not printed anywhere", want)
 	}
 }

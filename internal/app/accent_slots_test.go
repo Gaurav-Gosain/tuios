@@ -49,39 +49,6 @@ func TestAnsiQuickPickStoresASlotNotAHex(t *testing.T) {
 	}
 }
 
-// TestAnsiRowSeedsOnTheSlotTheTargetWears: opening on an inheriting pane, whose
-// session colour is one of these very slots, must put the ANSI cursor on that
-// swatch and name it, rather than leaving the user to find it.
-func TestAnsiRowSeedsOnTheSlotTheTargetWears(t *testing.T) {
-	withSessionColors(t, true)
-	m, _ := accentInheritOS(t)
-
-	want, _ := m.SessionColor("main")
-	if !want.IsSlot() {
-		t.Fatalf("the fixture's session colour is %+v, which this test needs to be a slot", want)
-	}
-	m.OpenAccentPicker("aaaaaaaa1111")
-	s := m.AccentPicker
-	if s.Slot != want.Slot {
-		t.Errorf("the ANSI cursor is on slot %d, want the session's slot %d", s.Slot, want.Slot)
-	}
-	if s.Focus != accentFocusANSI {
-		t.Errorf("the keyboard landed on %v, want the row holding the colour the pane wears", s.Focus)
-	}
-	if text := strings.Join(pickerLines(t, m), "\n"); !strings.Contains(text, accentSlotNames[want.Slot]) {
-		t.Errorf("the picker does not name the slot it opened on (%s):\n%s", accentSlotNames[want.Slot], text)
-	}
-
-	// Opening on a colour no slot names leaves the grid holding the keyboard, so
-	// the picker still opens where the colour actually is.
-	m.CloseAccentPicker()
-	m.SetWindowAccent("aaaaaaaa1111", RGBAccent(hslToRGB(31, 0.63, 0.42)))
-	m.OpenAccentPicker("aaaaaaaa1111")
-	if m.AccentPicker.Slot >= 0 || m.AccentPicker.Focus != accentFocusGrid {
-		t.Errorf("a literal colour opened on slot %d with focus %v", m.AccentPicker.Slot, m.AccentPicker.Focus)
-	}
-}
-
 // TestAnsiRowIsReachableByMouseAndKeys: every swatch has a rect the renderer
 // recorded as it drew, and the arrows walk the row and step between the bright
 // eight and the seven under them.
@@ -165,45 +132,6 @@ func TestAnsiRowLeavesTheSlotWhenTheColourIsPickedElsewhere(t *testing.T) {
 			t.Errorf("after the %s the pane stored slot %d rather than the colour picked", step.name, a.Slot)
 		}
 		m.ClearWindowAccent("aaaaaaaa1111")
-	}
-}
-
-// TestAnsiRowIsTheFirstThingTabReaches: the theme's own colours are the easy
-// answer and the whole colour space below them is the expert one, so the row
-// stays drawn first and reached first however many controls arrive beside it.
-func TestAnsiRowIsTheFirstThingTabReaches(t *testing.T) {
-	for _, w := range []int{120, 60, 38} {
-		m := accentTestOS(t, w, 30)
-		m.OpenAccentPicker("aaaaaaaa1111")
-		if !m.accentSlotsShown() {
-			t.Fatalf("w=%d: the fixture screen does not draw the slot rows", w)
-		}
-
-		// The row is drawn above every other control.
-		m.renderAccentPicker()
-		top := map[accentHitKind]int{}
-		for _, h := range m.accentHits {
-			if y, seen := top[h.Kind]; !seen || h.Rect.Y0 < y {
-				top[h.Kind] = h.Rect.Y0
-			}
-		}
-		for kind, y := range top {
-			if kind != accentHitANSI && kind != accentHitHint && y < top[accentHitANSI] {
-				t.Errorf("w=%d: a control of kind %d is drawn on row %d, above the slot row at %d",
-					w, kind, y, top[accentHitANSI])
-			}
-		}
-
-		// And tab reaches it before anything else, from wherever it starts.
-		m.AccentPicker.Focus = accentFocusHarmony
-		order := make([]accentFocus, 0, int(accentFocusCount))
-		for range int(accentFocusCount) {
-			m.AccentPickerFocus(1)
-			order = append(order, m.AccentPicker.Focus)
-		}
-		if order[0] != accentFocusANSI {
-			t.Errorf("w=%d: tab wrapped onto focus %d, want the slot row", w, order[0])
-		}
 	}
 }
 

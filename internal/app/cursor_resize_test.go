@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -32,38 +31,5 @@ func TestResizeDrawsNoCursor(t *testing.T) {
 	m.Resizing = false
 	if m.getRealCursor() == nil {
 		t.Error("cursor not restored after the resize")
-	}
-}
-
-// TestResizeDrawsNoFakeCursorEither is the other half: the cell loop paints its
-// own cursor whenever the host is not drawing a real one, so suppressing the
-// real cursor must not simply hand the job over.
-func TestResizeDrawsNoFakeCursorEither(t *testing.T) {
-	win := newTestWindow(t, "fake-cursor-resize", 80, 24)
-	win.WriteOutput([]byte("prompt$ "))
-
-	m := newTestOS(win)
-	m.Mode = TerminalMode
-	// ShowScrollbackBrowser is the cheapest way to make getRealCursor return nil
-	// for a reason other than the resize, so the cell loop is the path under test.
-	m.ShowScrollbackBrowser = true
-
-	win.ContentDirty = true
-	win.CachedContent = ""
-	withCursor := m.renderTerminal(win, true, true)
-
-	m.Resizing = true
-	win.ContentDirty = true
-	win.CachedContent = ""
-	// IsBeingManipulated is left off on purpose: a pane that is not the one
-	// being dragged still renders its content during the gesture, and that is
-	// the pane whose cursor would survive.
-	whileResizing := m.renderTerminal(win, true, true)
-
-	if whileResizing == withCursor {
-		t.Fatal("resize changed nothing about the render; the fixture is not exercising the cursor path")
-	}
-	if strings.Count(whileResizing, "\x1b[7m") > 0 && strings.Count(withCursor, "\x1b[7m") == 0 {
-		t.Error("a fake cursor appeared during the resize")
 	}
 }

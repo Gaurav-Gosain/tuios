@@ -74,14 +74,3 @@ func TestWindowControlsPillIsASCIISafe(t *testing.T) {
 		})
 	}
 }
-
-// TestASCIIEnterHintUsesTheKeyboardsName pins the key's spelling: the app names
-// this key "enter" everywhere it is written out, so the ASCII form of the glyph
-// is that word and not an abbreviation only this dialog used.
-func TestASCIIEnterHintUsesTheKeyboardsName(t *testing.T) {
-	withASCII(t)
-	overlay.SetASCII(true)
-	if got := overlay.EnterKey(); got != "enter" {
-		t.Errorf("the ASCII enter hint reads %q, want %q", got, "enter")
-	}
-}

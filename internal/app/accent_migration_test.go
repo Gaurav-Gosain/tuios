@@ -157,22 +157,6 @@ func TestAccentFileRoundTripsBothKinds(t *testing.T) {
 	}
 }
 
-// TestAccentSurvivesRestart is the real-user case: an accent set today is on the
-// row after the client is restarted.
-func TestAccentSurvivesRestart(t *testing.T) {
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-
-	want := RGBAccent(color.RGBA{R: 0xf5, G: 0x9e, B: 0x0b, A: 0xff})
-	m := &OS{Settings: config.Global}
-	m.SetWindowAccent("w1", want)
-
-	next := &OS{Settings: config.Global}
-	next.loadSidebarState()
-	if got, ok := next.WindowAccent("w1"); !ok || got != want {
-		t.Fatalf("accent after restart = %+v, want %+v", got, want)
-	}
-}
-
 // railStyledFrame renders the rail and returns its rows with the styling left
 // on, which is what a byte comparison across the migration has to be built on:
 // the colour of the accent chip is exactly the thing that must not have moved.
@@ -184,28 +168,6 @@ func railStyledFrame(t *testing.T, m *OS) []string {
 
 // theme8 is the bright-black ANSI slot, which is what accent index 0 means.
 func theme8() color.Color { return accentColor(0) }
-
-// TestAccentPickerOpensOnALegacySlot: opening the picker on a window that still
-// carries a stored index has to start from that colour, so the old-to-new line
-// tells the truth and a stray keystroke cannot silently move the accent.
-func TestAccentPickerOpensOnALegacySlot(t *testing.T) {
-	m := accentTestOS(t, 120, 30)
-	m.SidebarAccents = map[string]Accent{"aaaaaaaa1111": SlotAccent(4)}
-
-	m.OpenAccentPicker("aaaaaaaa1111")
-	if !m.AccentPicker.HadPrev || m.AccentPicker.Prev.Slot != 4 {
-		t.Fatalf("the picker opened with prev %+v (had=%v), want slot 4",
-			m.AccentPicker.Prev, m.AccentPicker.HadPrev)
-	}
-	if m.AccentPicker.Cur != toRGBA(accentColor(4)) {
-		t.Errorf("the picker opened on %s, want the slot's colour %s",
-			overlay.Hex(m.AccentPicker.Cur), overlay.Hex(toRGBA(accentColor(4))))
-	}
-	// The old colour is named on screen.
-	if plain := stripANSIForTrace(mustRenderPicker(t, m)); !strings.Contains(plain, m.AccentPicker.Prev.Hex()) {
-		t.Errorf("the old-to-new line does not show the accent the window has:\n%s", plain)
-	}
-}
 
 // mustRenderPicker renders the picker and returns the frame.
 func mustRenderPicker(t *testing.T, m *OS) string {

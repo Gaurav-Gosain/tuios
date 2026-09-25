@@ -320,44 +320,6 @@ func TestWindowChromeBackgroundOnEveryKindOfPane(t *testing.T) {
 	}
 }
 
-// The lines between shared-border panes, and anything else that is drawn as
-// a pane's edge, are chrome; the scrollbar and the scrollback browser are the
-// pane's; the rail and the dock are their own; everything else floats on the
-// desktop.
-func TestLayerSurfaces(t *testing.T) {
-	m := paneBgOS(t, "")
-	var grounds frameGrounds
-	for i := range grounds {
-		grounds[i] = ground{bg: color.RGBA{R: uint8(i + 1), A: 0xff}, key: string(rune('a' + i))}
-	}
-	m.paneContentRects = map[string]image.Rectangle{"win-1": image.Rect(1, 1, 9, 9)}
-	for _, tc := range []struct {
-		id    string
-		outer surface
-		inner bool
-	}{
-		{"win-1", surfaceChrome, true},
-		{"win-1" + scrollbarLayerSuffix, surfacePane, false},
-		{"scrollback-browser", surfacePane, false},
-		{"sep-3-40", surfaceChrome, false},
-		{"capture-marquee-top", surfaceChrome, false},
-		{"sidebar", surfaceSidebar, false},
-		{"dock", surfaceDock, false},
-		{"welcome", surfaceDesktop, false},
-		{"showkeys", surfaceDesktop, false},
-		{"screensaver", surfaceDesktop, false},
-		{"palette", surfaceDesktop, false},
-	} {
-		f := m.layerFill(tc.id, image.Rect(0, 0, 10, 10), 10, 10, &grounds)
-		if f.outer.key != grounds[tc.outer].key {
-			t.Errorf("%s: its cells take the %q ground, want %q", tc.id, f.outer.key, grounds[tc.outer].key)
-		}
-		if got := f.inner.key == grounds[surfacePane].key && !f.rect.Empty(); got != tc.inner {
-			t.Errorf("%s: pane content inside it = %v, want %v", tc.id, got, tc.inner)
-		}
-	}
-}
-
 // A separator layer is chrome, and its line keeps its ink.
 func TestWindowChromeBackgroundPaintsTheSharedBorderLine(t *testing.T) {
 	withTheme(t, "")

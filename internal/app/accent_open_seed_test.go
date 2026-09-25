@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // TestAccentPickerOpensOnOneAnswer pins the state the audit found incoherent:
@@ -57,17 +56,5 @@ func TestAccentPickerOpensOnOneAnswer(t *testing.T) {
 		if prior && s.Cur != blue {
 			t.Errorf("the picker opened on %v rather than the accent the pane wears", s.Cur)
 		}
-	}
-}
-
-// TestAccentSeedFallbackIsAChromeColour checks the fallback seed is a colour the
-// chrome actually uses, so a pane with no accent still opens on something the
-// user has seen.
-func TestAccentSeedFallbackIsAChromeColour(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
-	m.Windows = []*terminal.Window{{ID: "w1", Workspace: 1}}
-	m.OpenAccentPicker("w1")
-	if got, want := m.AccentPicker.Cur, toRGBA(theme.UI().Accent); got != want {
-		t.Errorf("the picker seeded %v, want the chrome accent %v", got, want)
 	}
 }

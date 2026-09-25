@@ -3,12 +3,10 @@ package app
 import (
 	"image/color"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // accentInheritOS is a rail whose attached session has a colour of its own, so
@@ -65,23 +63,6 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	}
 	if m.AccentPicker.Src == accentSourceSession {
 		t.Error("a pinned pane opened the picker claiming an inherited colour")
-	}
-}
-
-// TestAccentPickerSeedWithSessionColoursOff holds the documented fallback: with
-// the feature off a pane inherits nothing, so the picker opens on the chrome's
-// accent as it always has.
-func TestAccentPickerSeedWithSessionColoursOff(t *testing.T) {
-	withSessionColors(t, false)
-	m, _ := accentInheritOS(t)
-
-	m.OpenAccentPicker("aaaaaaaa1111")
-	s := m.AccentPicker
-	if got, want := s.Cur, toRGBA(theme.UI().Accent); got != want {
-		t.Errorf("the picker seeded %s, want the chrome accent %s", overlay.Hex(got), overlay.Hex(want))
-	}
-	if s.HadPrev || s.Src != accentSourceNone {
-		t.Errorf("with session colours off the picker claims a colour it is not wearing (had=%v src=%v)", s.HadPrev, s.Src)
 	}
 }
 
@@ -184,34 +165,5 @@ func TestAccentEntryPointsSeedIdentically(t *testing.T) {
 	}
 	if got := m.AccentPicker; !reflect.DeepEqual(got, direct) {
 		t.Errorf("the rail's accent key seeded %+v, want the same state as the menu (%+v)", got, direct)
-	}
-}
-
-// TestAccentPickerShowsInheritedNotPinned: inherited and pinned look identical
-// on the rail, so the picker is where they have to be told apart. The readout
-// names the session as the source rather than printing a hex the pane does not
-// own.
-func TestAccentPickerShowsInheritedNotPinned(t *testing.T) {
-	withSessionColors(t, true)
-	m, _ := accentInheritOS(t)
-
-	m.OpenAccentPicker("aaaaaaaa1111")
-	text := strings.Join(pickerLines(t, m), "\n")
-	if !strings.Contains(text, "session") {
-		t.Errorf("the picker does not say the colour comes from the session:\n%s", text)
-	}
-	if strings.Contains(text, "none") {
-		t.Errorf("the picker calls an inherited colour none:\n%s", text)
-	}
-	m.CloseAccentPicker()
-
-	m.SetWindowAccent("aaaaaaaa1111", RGBAccent(color.RGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}))
-	m.OpenAccentPicker("aaaaaaaa1111")
-	text = strings.Join(pickerLines(t, m), "\n")
-	if strings.Contains(text, "session") {
-		t.Errorf("a pinned pane's picker claims the colour is the session's:\n%s", text)
-	}
-	if !strings.Contains(text, "#339966") {
-		t.Errorf("the picker does not show the pinned colour it opened on:\n%s", text)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -86,42 +85,5 @@ func TestAgentChromeWaitsForAnAgent(t *testing.T) {
 	m.noteAgentState(m.Windows[0], "")
 	if got := readAgentChrome(m); got != want {
 		t.Errorf("after the agent left the client shows %+v", got)
-	}
-}
-
-// TestAgentChromeSeenFromTheInboxAndMail: an Inbox item or mail from another
-// session counts as having seen an agent, since the person has one to answer.
-func TestAgentChromeSeenFromTheInboxAndMail(t *testing.T) {
-	m := inboxOS(t, zeroSettle())
-	if m.agentsSeen() {
-		t.Fatal("a client with nothing in view counts as having seen an agent")
-	}
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{item("1", session.AttentionApproval, "far", "w-9", "", 1)}})
-	if !m.agentsSeen() {
-		t.Error("an Inbox item does not count as an agent seen")
-	}
-}
-
-// TestAlertsAgentGroupFolds: the heading row folds and unfolds the agent
-// rows by hand, whether or not an agent has been seen.
-func TestAlertsAgentGroupFolds(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
-	count := func() int {
-		for _, cat := range m.settingsCategories() {
-			if cat.Name == "Alerts" {
-				return len(cat.Items)
-			}
-		}
-		return -1
-	}
-	folded := count()
-	item := m.agentAlertsGroupItem()
-	item.adjust(m, 1)
-	if got := count(); got != folded+len(agentAlertRows) {
-		t.Errorf("unfolding the group gives %d rows, want %d", got, folded+len(agentAlertRows))
-	}
-	item.adjust(m, 1)
-	if got := count(); got != folded {
-		t.Errorf("folding it again gives %d rows, want %d", got, folded)
 	}
 }

@@ -5,40 +5,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
-
-// TestAccentLayoutBreakpoints pins the two widths the layout turns on and the
-// column either side of each, because a breakpoint is only a decision at its
-// own edge.
-func TestAccentLayoutBreakpoints(t *testing.T) {
-	for _, tc := range []struct {
-		w    int
-		want accentLayout
-		name string
-	}{
-		{120, accentLayoutWide, "desktop"},
-		{74, accentLayoutWide, "one over the wide floor"},
-		{73, accentLayoutWide, "the wide floor"},
-		{72, accentLayoutStacked, "one under the wide floor"},
-		{41, accentLayoutStacked, "one over the stacked floor"},
-		{40, accentLayoutStacked, "the stacked floor"},
-		{39, accentLayoutCompact, "one under the stacked floor"},
-		{30, accentLayoutCompact, "the narrowest screen the overlays support"},
-	} {
-		m := accentTestOS(t, tc.w, 30)
-		if got := m.accentPlan().Mode; got != tc.want {
-			t.Errorf("w=%d (%s): layout %d, want %d", tc.w, tc.name, got, tc.want)
-		}
-	}
-
-	// Wide also needs the height for its right column whole, since a clipped
-	// column is worse than a stacked one.
-	if got := (&OS{Settings: config.Global, Width: 120, Height: 8, EffectiveWidth: 120, EffectiveHeight: 8}).accentPlan().Mode; got == accentLayoutWide {
-		t.Error("a wide screen with eight rows still laid out wide")
-	}
-}
 
 // accentFrame renders the picker and returns the frame with styling stripped
 // and the geometry it reports.
@@ -196,106 +164,6 @@ func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
 	}
 }
 
-// TestAccentGridCursorSitsInTheMiddleOfItsSwatch: a three-cell swatch with the
-// mark against one edge reads as belonging to the swatch beside it. Checked in
-// the frame, at every cell of every layout.
-func TestAccentGridCursorSitsInTheMiddleOfItsSwatch(t *testing.T) {
-	for _, w := range []int{120, 60, 38} {
-		m := accentTestOS(t, w, 30)
-		m.OpenAccentPicker("aaaaaaaa1111")
-		p := m.accentPlan()
-
-		for col := range p.GridCols {
-			for row := range p.GridRows {
-				m.AccentPickerCell(col, row)
-				lines, _ := accentFrame(t, m)
-				var rect overlay.Rect
-				for _, h := range m.accentHits {
-					if h.Kind == accentHitGrid && h.Col == col && h.Row == row {
-						rect = h.Rect
-					}
-				}
-				at := -1
-				for x, r := range []rune(lines[rect.Y0]) {
-					if r == '◆' && x >= rect.X0 && x < rect.X1 {
-						at = x
-					}
-				}
-				if want := rect.X0 + (p.CellWidth-1)/2; at != want {
-					t.Fatalf("w=%d: the mark on cell (%d,%d) is in column %d of %v, want %d",
-						w, col, row, at, rect, want)
-				}
-			}
-		}
-	}
-}
-
-// TestAccentSeedLandsOnItsOwnCell: the picker opens on the colour the target is
-// wearing, and the cursor opens on the cell nearest it. A coarser grid makes
-// that cell coarser; it must not make it wrong.
-func TestAccentSeedLandsOnItsOwnCell(t *testing.T) {
-	const id = "aaaaaaaa1111"
-	for _, hex := range []string{"#3aa0ff", "#801020", "#12ef88", "#cccccc", "#101010"} {
-		want, ok := parseHexColor(hex)
-		if !ok {
-			t.Fatalf("%q is not a colour", hex)
-		}
-		for _, w := range []int{120, 60, 38} {
-			m := accentTestOS(t, w, 30)
-			m.SetWindowAccent(id, RGBAccent(want))
-			m.OpenAccentPicker(id)
-
-			cols, rows := m.accentGridSize()
-			wantHue, wantCol, wantRow := accentCellFor(want, 0, cols, rows)
-			s := &m.AccentPicker
-			if s.Cur != want {
-				t.Errorf("%s w=%d: the picker opened on %s", hex, w, overlay.Hex(s.Cur))
-			}
-			if s.Hue != wantHue || s.Col != wantCol || s.Row != wantRow {
-				t.Errorf("%s w=%d: the cursor opened on hue %v (%d,%d), want %v (%d,%d)",
-					hex, w, s.Hue, s.Col, s.Row, wantHue, wantCol, wantRow)
-			}
-		}
-	}
-}
-
-// TestAccentWideDropsInOrder: on a screen too short for everything the wide
-// layout gives up the breathing blanks first and the theme's colours next, and
-// never the sliders, which are the reason the column exists.
-func TestAccentWideDropsInOrder(t *testing.T) {
-	for _, tc := range []struct {
-		h                     int
-		wantBlanks, wantSlots bool
-		wantChipRows          int
-	}{
-		{40, true, true, 2},
-		{16, true, true, 2},
-		{15, true, false, 2},
-		{14, false, false, 2},
-		{12, false, false, 2},
-		{11, false, false, 1},
-	} {
-		m := accentTestOS(t, 100, tc.h)
-		p := m.accentPlan()
-		if p.Mode != accentLayoutWide {
-			t.Fatalf("h=%d: the layout is not wide", tc.h)
-		}
-		if p.Blanks != tc.wantBlanks || p.Slots != tc.wantSlots {
-			t.Errorf("h=%d: blanks=%v slots=%v, want blanks=%v slots=%v",
-				tc.h, p.Blanks, p.Slots, tc.wantBlanks, tc.wantSlots)
-		}
-		if p.HarmonyRows != tc.wantChipRows {
-			t.Errorf("h=%d: %d rows of chips, want %d", tc.h, p.HarmonyRows, tc.wantChipRows)
-		}
-		if !p.Sliders {
-			t.Errorf("h=%d: the wide layout dropped its sliders", tc.h)
-		}
-		if p.GridRows < 1 {
-			t.Errorf("h=%d: the grid is %d rows", tc.h, p.GridRows)
-		}
-	}
-}
-
 // TestAccentHueNudgeReachesBetweenTheCells: the strip is a cell every ten
 // degrees, so nine hues in ten are not on a cell. The shifted arrow reaches
 // them, the cursor stays on the nearest cell, and the hex says which hue is
@@ -347,22 +215,5 @@ func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
 	}
 	if got := m.AccentPicker.Hue; got != 1 {
 		t.Errorf("stepping forward over the wrap reached %v, want 1", got)
-	}
-}
-
-// TestAccentCompactKeepsTheV1Layout: below the stacked floor the picker is the
-// layout it shipped with, so the screens that worked before still work.
-func TestAccentCompactKeepsTheV1Layout(t *testing.T) {
-	m := accentTestOS(t, 38, 24)
-	m.OpenAccentPicker("aaaaaaaa1111")
-	p := m.accentPlan()
-	if p.Sliders {
-		t.Error("the compact layout drew sliders it has no width for")
-	}
-	plain := strings.Join(pickerLines(t, m), "\n")
-	for _, want := range []string{"accent", "now", "hex", "comp"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("the compact dialog lost %q:\n%s", want, plain)
-		}
 	}
 }

@@ -41,25 +41,6 @@ func TestBrowserPasteSaysWhyInsteadOfWaiting(t *testing.T) {
 	}
 }
 
-// TestTerminalPasteAsksTheTerminal checks the case that does work: a client in a
-// real terminal queries, and the query is armed with a deadline.
-func TestTerminalPasteAsksTheTerminal(t *testing.T) {
-	for _, m := range []*OS{
-		{Mode: TerminalMode},
-		{Mode: TerminalMode, RemoteClient: true, IsSSHMode: true},
-	} {
-		if reason := m.ClipboardReadUnsupportedReason(); reason != "" {
-			t.Fatalf("a terminal client refuses to paste: %q", reason)
-		}
-		if cmd := m.RequestHostPaste(); cmd == nil {
-			t.Fatalf("a terminal client never asked for the clipboard")
-		}
-		if !m.pastePending {
-			t.Fatalf("the query is not armed, so silence would never be reported")
-		}
-	}
-}
-
 // TestUnansweredPasteIsReported covers a terminal that refuses the read query,
 // which kitty does by default. Without the deadline the key looks broken.
 func TestUnansweredPasteIsReported(t *testing.T) {

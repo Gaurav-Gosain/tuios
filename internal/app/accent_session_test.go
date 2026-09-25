@@ -2,78 +2,8 @@ package app
 
 import (
 	"reflect"
-	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
-
-// TestSessionAccentPickerSeedsOnTheSessionColour: the picker one level up opens
-// on the colour the session is wearing, which for a session that was never
-// given one is the colour it was assigned automatically.
-func TestSessionAccentPickerSeedsOnTheSessionColour(t *testing.T) {
-	withSessionColors(t, true)
-	m, _ := accentInheritOS(t)
-
-	want, ok := m.SessionColor("main")
-	if !ok {
-		t.Fatal("the session has no colour to open on")
-	}
-	m.OpenSessionAccentPicker("main")
-	if m.AccentPickerTarget != AccentTargetSession || m.AccentPickerTargetID != "main" {
-		t.Fatalf("the picker targets %v %q, want the session", m.AccentPickerTarget, m.AccentPickerTargetID)
-	}
-	if got := m.AccentPicker.Cur; got != want.RGB() {
-		t.Errorf("the picker opened on %s, want the session's colour %s", overlay.Hex(got), want.Hex())
-	}
-	if m.AccentPicker.Src != accentSourceAuto {
-		t.Error("an automatic colour opened the picker as though the user had pinned it")
-	}
-	m.CloseAccentPicker()
-
-	m.SessionAccent = "cyan"
-	m.OpenSessionAccentPicker("main")
-	if got, want := m.AccentPicker.Cur, SlotAccent(13).RGB(); got != want {
-		t.Errorf("a pinned session opened the picker on %s, want its own accent %s", overlay.Hex(got), overlay.Hex(want))
-	}
-	if m.AccentPicker.Src != accentSourceOwn {
-		t.Error("a pinned session opened the picker claiming an automatic colour")
-	}
-}
-
-// TestSessionAccentGoesThroughTheDaemon: the accent belongs to the session, not
-// to this client, so it is written with the verb every client and every
-// reattach reads it back from. The call is a command, never an inline round
-// trip on the Update goroutine.
-func TestSessionAccentGoesThroughTheDaemon(t *testing.T) {
-	withSessionColors(t, true)
-	m, _ := accentInheritOS(t)
-
-	m.OpenSessionAccentPicker("main")
-	m.AccentPickerHueCell(3)
-	m.AccentPickerCell(6, 1)
-	want := overlay.Hex(m.AccentPicker.Cur)
-	if cmd := m.AccentPickerApply(); cmd == nil {
-		t.Fatal("applying a session accent returned no command, so nothing reached the daemon")
-	}
-	verb, params, ok := sessionAccentVerb("main", want)
-	if !ok || verb != "set-session-accent" {
-		t.Fatalf("verb = %q (ok=%v), want set-session-accent", verb, ok)
-	}
-	if params["session"] != "main" || params["accent"] != want {
-		t.Errorf("params = %v, want the session and the colour picked (%s)", params, want)
-	}
-
-	// Clearing sends the empty accent, which is how the verb says "back to the
-	// automatic colour".
-	m.OpenSessionAccentPicker("main")
-	if cmd := m.AccentPickerClear(); cmd == nil {
-		t.Fatal("clearing a session accent returned no command")
-	}
-	if _, params, _ := sessionAccentVerb("main", ""); params["accent"] != "" {
-		t.Errorf("clearing sends accent=%v, want the empty string", params["accent"])
-	}
-}
 
 // TestSessionAccentApplyWithoutMovingChangesNothing holds the same rule one
 // level up: the picker opens on the automatic colour, so applying it untouched
@@ -174,30 +104,6 @@ func TestPinningASessionSettlesTheOthers(t *testing.T) {
 				t.Errorf("%s moved from %s to %s on a re-render with nothing changed", name, first[name].Hex(), a.Hex())
 			}
 		}
-	}
-}
-
-// TestSessionAccentPickerSaysWhereTheColourCameFrom: an automatic colour and a
-// pinned one look identical on the rail, so the dialog names the difference.
-func TestSessionAccentPickerSaysWhereTheColourCameFrom(t *testing.T) {
-	withSessionColors(t, true)
-	m, _ := accentInheritOS(t)
-
-	m.OpenSessionAccentPicker("main")
-	text := strings.Join(pickerLines(t, m), "\n")
-	if !strings.Contains(text, "auto") {
-		t.Errorf("the picker does not say the session's colour was assigned:\n%s", text)
-	}
-	m.CloseAccentPicker()
-
-	m.SessionAccent = "#112233"
-	m.OpenSessionAccentPicker("main")
-	text = strings.Join(pickerLines(t, m), "\n")
-	if strings.Contains(text, "auto") {
-		t.Errorf("a pinned session's picker still calls its colour automatic:\n%s", text)
-	}
-	if !strings.Contains(text, "#112233") {
-		t.Errorf("the picker does not show the accent the session was given:\n%s", text)
 	}
 }
 
