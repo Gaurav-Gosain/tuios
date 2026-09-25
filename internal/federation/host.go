@@ -101,6 +101,11 @@ func NewTable(hosts []Host) (*Table, []error) {
 		case strings.TrimSpace(h.Addr) == "":
 			problems = append(problems, fmt.Errorf("host %q was ignored, because it has no addr", name))
 			continue
+		case strings.HasPrefix(strings.TrimSpace(h.Addr), "-"):
+			// The addr is an ssh argument, and one that starts with a dash
+			// is read as an option, which can run a command locally.
+			problems = append(problems, fmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
+			continue
 		}
 		if _, dup := t.hosts[name]; dup {
 			problems = append(problems, fmt.Errorf("host %q was ignored, because the name is already used", name))
