@@ -76,3 +76,19 @@ func TestSectionProblemsSaySpacerIsFine(t *testing.T) {
 		t.Errorf("problems = %v, want one complaint naming the spacer", got)
 	}
 }
+
+// TestOldLayoutStringStillParses is the compatibility claim this branch owes
+// anybody whose config already carries a layout: the grammar did not change
+// under them, only what it may additionally hold.
+func TestOldLayoutStringStillParses(t *testing.T) {
+	for _, source := range []string{
+		SidebarDefaultSections,
+		"terminals,sessions",
+		"files:60,sessions:20,terminals,agents:20",
+		"agents:50,files:50,sessions,terminals",
+	} {
+		if got := strings.Join(names(source), ","); got != source {
+			t.Errorf("layout %q parsed back as %q", source, got)
+		}
+	}
+}

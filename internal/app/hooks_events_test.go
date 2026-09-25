@@ -43,3 +43,34 @@ func TestAfterDetachWaitsForHooks(t *testing.T) {
 		t.Error("FireDetached returned before its hook ran")
 	}
 }
+
+// hookRecorder collects the contexts hooks fired with, in place of running a
+// shell per event.
+type hookRecorder struct {
+	mu    sync.Mutex
+	fired []hooks.Context
+}
+
+// record registers every event on m and returns the recorder collecting them.
+// Registering all of them (rather than only the one under test) is what catches
+// an action that fires the wrong event as well as one that fires none.
+func record(t *testing.T, m *OS) *hookRecorder {
+	t.Helper()
+	if m.HookManager == nil {
+		m.HookManager = hooks.NewManager()
+	}
+	// NewOS loads the config of whoever is running the tests, hooks included.
+	// Drop those first: a developer with a real hook configured would otherwise
+	// see it fire alongside the test's and fail the one-event-per-action checks.
+	m.HookManager.ClearAll()
+	r := &hookRecorder{}
+	m.HookManager.SetRunner(func(_ string, ctx hooks.Context) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.fired = append(r.fired, ctx)
+	})
+	for _, e := range hooks.AllEvents() {
+		m.HookManager.Register(e, "true")
+	}
+	return r
+}

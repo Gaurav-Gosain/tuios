@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 )
 
 // TestAgentBaseName checks the reduction of a comm or argv token to the base name
@@ -145,4 +146,53 @@ func ptyIDOfWindow(t *testing.T, sess *Session, windowID string) string {
 	}
 	t.Fatalf("window %s not found", windowID)
 	return ""
+}
+
+// TestAgentResumesAfterStall is the regression for an agent whose indicator
+// latched: once the silence timer demoted a detected agent to idle, nothing in
+// the daemon could ever move it back to working, so a pane running a coding
+// agent showed idle for the rest of its life no matter how hard the agent then
+// worked. Output from a pane whose agent is still in the foreground is the
+// signal that it resumed.
+func TestAgentResumesAfterStall(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
+
+	// The detector finds the agent and promotes the pane.
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+
+	// The pane goes quiet and the silence timer demotes it to idle.
+	const stall = 30 * time.Second
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }, nil); n != 1 {
+		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after stall = %q, want idle", got)
+	}
+
+	// The user sends a prompt: the agent produces output again while still in the
+	// foreground. The pane has to go back to working.
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
+		t.Fatal("output from a resumed agent did not change the pane's state")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state after the agent resumed = %q, want working", got)
+	}
+	// The pane is still running the harness the detector named, and the screen
+	// tier reads that id to know whose rules to run against it.
+	if got := agentHarnessIDOf(t, sess, id); got != "claude-code" {
+		t.Fatalf("harness after the agent resumed = %q, want claude-code", got)
+	}
+
+	// A detection poll must not undo the resume.
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
+		t.Fatalf("detection poll after resume changed %d windows, want 0", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state after a poll following resume = %q, want working", got)
+	}
 }

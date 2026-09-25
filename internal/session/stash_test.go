@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // These tests hit the stash the way it will actually be used and the way it will
@@ -363,4 +365,143 @@ func quote(s string) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// TestStashForgetDeletesTheSessionDirectory is half the lifetime promise: the
+// store goes when the session does.
+func TestStashForgetDeletesTheSessionDirectory(t *testing.T) {
+	s, base := newStore(t)
+	src := filepath.Join(base, "a.txt")
+	writeBytes(t, src, 256, 1)
+
+	res, err := s.put("sess-1", src, nil)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	other, err := s.put("sess-2", src, nil)
+	if err != nil {
+		t.Fatalf("put into a second session: %v", err)
+	}
+
+	s.forget("sess-1")
+
+	if _, err := os.Stat(res.Entry.Path); !os.IsNotExist(err) {
+		t.Errorf("the killed session's file is still there (%v)", err)
+	}
+	if _, err := os.Stat(filepath.Dir(res.Entry.Path)); !os.IsNotExist(err) {
+		t.Error("the killed session's directory is still there")
+	}
+	// The other session is untouched, which is why the boxes are per session.
+	if _, err := os.Stat(other.Entry.Path); err != nil {
+		t.Errorf("another session's file went with it: %v", err)
+	}
+}
+
+// TestStashSweepClearsEverything is the other half: nothing survives the daemon.
+func TestStashSweepClearsEverything(t *testing.T) {
+	s, base := newStore(t)
+	src := filepath.Join(base, "a.txt")
+	writeBytes(t, src, 256, 1)
+
+	res, err := s.put("sess-1", src, nil)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	root := filepath.Join(base, "stash")
+
+	s.sweep()
+
+	if _, err := os.Stat(res.Entry.Path); !os.IsNotExist(err) {
+		t.Errorf("a stashed file survived the sweep (%v)", err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Error("the stash root survived the sweep")
+	}
+	// And the store is usable again afterwards, which is what makes the sweep
+	// safe to run at start as well as at shutdown.
+	if _, err := s.put("sess-1", src, nil); err != nil {
+		t.Errorf("the store is unusable after a sweep: %v", err)
+	}
+}
+
+// TestStashedFileVanishesWithTheSession is the lifetime promise measured through
+// the verbs: kill the session, and the files are gone.
+func TestStashedFileVanishesWithTheSession(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "doomed")
+	c := dialVerb(t, sp)
+
+	src := filepath.Join(t.TempDir(), "a.txt")
+	writeBytes(t, src, 128, 51)
+	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"doomed","path":`+quote(src)+`}}`))
+	stored := put["path"].(string)
+	if _, err := os.Stat(stored); err != nil {
+		t.Fatalf("the file was not stored: %v", err)
+	}
+
+	result(t, c.call(t, `{"id":2,"verb":"kill-session","params":{"session":"doomed"}}`))
+
+	if _, err := os.Stat(stored); !os.IsNotExist(err) {
+		t.Errorf("a stashed file outlived its session (%v)", err)
+	}
+	if _, err := os.Stat(filepath.Dir(stored)); !os.IsNotExist(err) {
+		t.Error("the killed session's stash directory is still there")
+	}
+	// The source is untouched. The stash copies; it does not move.
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("killing the session deleted the source file: %v", err)
+	}
+}
+
+// TestStashedFileVanishesWithTheDaemon is the other lifetime case, and the one
+// that matters for a machine that keeps running: stopping the daemon takes the
+// files with it.
+func TestStashedFileVanishesWithTheDaemon(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "shutting")
+	c := dialVerb(t, sp)
+
+	src := filepath.Join(t.TempDir(), "a.txt")
+	writeBytes(t, src, 128, 61)
+	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"shutting","path":`+quote(src)+`}}`))
+	stored := put["path"].(string)
+	root := filepath.Dir(filepath.Dir(stored))
+
+	d.Stop()
+
+	if _, err := os.Stat(stored); !os.IsNotExist(err) {
+		t.Errorf("a stashed file outlived the daemon (%v)", err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Error("the stash root outlived the daemon")
+	}
+}
+
+// TestStashSweepClearsAnUncleanPredecessor covers the case the shutdown path
+// cannot: a daemon that was killed left files behind, and the next daemon has to
+// remove them before it serves anything.
+func TestStashSweepClearsAnUncleanPredecessor(t *testing.T) {
+	runtimeDir := testutil.RuntimeDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	t.Cleanup(useResurrectionDir(t.TempDir()))
+
+	// Residue from a daemon that never got to run its shutdown.
+	leftoverDir := filepath.Join(runtimeDir, "tuios", "stash", "gone-session")
+	if err := os.MkdirAll(leftoverDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	leftover := filepath.Join(leftoverDir, "deadbeef.txt")
+	if err := os.WriteFile(leftover, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	if err := d.Start(); err != nil {
+		t.Fatalf("daemon Start: %v", err)
+	}
+	t.Cleanup(d.Stop)
+
+	if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+		t.Errorf("a previous daemon's stashed file survived the next daemon's start (%v)", err)
+	}
 }

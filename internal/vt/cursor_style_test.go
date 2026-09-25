@@ -1,6 +1,8 @@
 package vt
 
-import "testing"
+import (
+	"testing"
+)
 
 // The DECSCUSR parameters and the shape each names. 0 and 1 are the same
 // blinking block; 2 is the shape a pane has before anything asks.
@@ -88,5 +90,29 @@ func TestCursorStyleAfterRestoreYieldsToTheGuest(t *testing.T) {
 	}
 	if style, steady := term.CursorStyle(); style != CursorUnderline || !steady {
 		t.Errorf("got style %d steady %v, want underline steady", style, steady)
+	}
+}
+
+// TestRestoreCursorStyleRoundTrips is the reattach path in miniature: the
+// daemon reads the shape off its emulator, it travels on the wire, and the
+// client's fresh emulator is primed with it. A backend that dropped either half
+// would rebuild every pane as a block.
+func TestRestoreCursorStyleRoundTrips(t *testing.T) {
+	for _, tc := range decscusrCases {
+		src := New(10, 5)
+		if _, err := src.Write([]byte(tc.seq)); err != nil {
+			t.Fatalf("write %q: %v", tc.seq, err)
+		}
+		style, steady := src.CursorStyle()
+		_ = src.Close()
+
+		dst := New(10, 5)
+		dst.RestoreCursorStyle(style, steady)
+		gotStyle, gotSteady := dst.CursorStyle()
+		if gotStyle != tc.style || gotSteady != tc.steady {
+			t.Errorf("%q restored as style %d steady %v, want style %d steady %v",
+				tc.seq, gotStyle, gotSteady, tc.style, tc.steady)
+		}
+		_ = dst.Close()
 	}
 }

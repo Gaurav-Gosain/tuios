@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -136,5 +137,76 @@ func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
 		[]byte("goroutine 1 [running]:\nmain.main()\n"), baseFacts("handling an event"))
 	if !strings.Contains(small.IssueURL(), "main.main") {
 		t.Error("a short report lost its trace from the issue body")
+	}
+}
+
+// TestUpdatePanicPutsTheCrashOverlayOnScreen is the Update-path proof.
+//
+// The panic is real and it happens inside handleMsg, on the registered input
+// handler, which is the extension point every keystroke in the running program
+// goes through. Nothing here asserts that a function was called: it panics,
+// the barrier catches it, and then the test reads the string View produced and
+// checks the words a user would see.
+//
+// Before this change the same panic was caught, logged and left invisible: the
+// frame did not update and LogError draws nothing.
+func TestUpdatePanicPutsTheCrashOverlayOnScreen(t *testing.T) {
+	m := crashTestOS(t)
+
+	SetInputHandler(func(_ tea.Msg, _ *OS) (tea.Model, tea.Cmd) {
+		panic("the pane index was -1, which cannot happen")
+	})
+	t.Cleanup(func() { SetInputHandler(nil) })
+
+	model, _ := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if model != tea.Model(m) {
+		t.Fatal("Update did not return the model unchanged after a recovered panic")
+	}
+	if !m.CrashActive() {
+		t.Fatal("a panic in Update did not put the crash overlay on screen")
+	}
+
+	frame := m.View().Content
+	for _, want := range []string{
+		"tuios hit a bug",
+		"the pane index was -1",
+		"Your panes and your session are still running",
+		"copy report",
+		"open an issue",
+	} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("the crash frame never says %q:\n%s", want, frame)
+		}
+	}
+}
+
+// TestRenderPanicPutsTheCrashOverlayOnScreen is the render-path proof, and it
+// is the gap this change closed.
+//
+// A nil entry in Windows is a real impossible state: every producer appends a
+// live window, so a nil is a bug somewhere else that only shows up here, in the
+// compositor, which dereferences it. Before safeComposeFrame that panic escaped
+// View into bubbletea, which restores the terminal, prints a Go traceback to
+// stderr and stops. Locally the user is left at a shell looking at a traceback;
+// over SSH the session ends; in a browser the tab's program ends.
+func TestRenderPanicPutsTheCrashOverlayOnScreen(t *testing.T) {
+	m := crashTestOS(t)
+	m.Windows = append(m.Windows, nil)
+
+	frame := m.View().Content
+
+	if !m.CrashActive() {
+		t.Fatalf("a panic while drawing did not put the crash overlay on screen:\n%s", frame)
+	}
+	for _, want := range []string{"tuios hit a bug", "drawing the screen", "copy report"} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("the crash frame never says %q:\n%s", want, frame)
+		}
+	}
+	// The frame returned on the panicking pass, not on some later one. A crash
+	// screen that only appears on the next tick is a blank screen for however
+	// long the next tick takes, and on the render path there may not be one.
+	if strings.TrimSpace(frame) == "" {
+		t.Fatal("View returned an empty frame instead of the crash overlay")
 	}
 }

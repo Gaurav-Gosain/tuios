@@ -55,3 +55,45 @@ func TestIdlePaneArmsNoTimers(t *testing.T) {
 		t.Errorf("a session with nothing held has %d holds and timer=%v", held, timer != nil)
 	}
 }
+
+// agentHarnessIDOf reads the harness a window is attributed to.
+func agentHarnessIDOf(t *testing.T, sess *Session, windowID string) string {
+	t.Helper()
+	for _, w := range sess.GetState().Windows {
+		if w.ID == windowID {
+			return w.AgentHarness
+		}
+	}
+	t.Fatalf("window %s not found", windowID)
+	return ""
+}
+
+// paintPane writes to the pane's emulator and records that the pane wrote, which
+// is one event in the daemon and two calls here because the test bypasses the
+// read loop that would otherwise do both.
+//
+// The screen is cleared first, in the same write, because the pane has a real
+// shell in it. That shell prints its prompt a few tens of milliseconds after
+// the window is created, and a test that paints before the prompt arrives sees
+// a clean screen while one that paints after sees its text appended to the
+// prompt's line: "sh-3.2$ Do you want to make this edit to main.go?" instead of
+// the question on its own. Which side of that the test lands on is a race it
+// usually won and sometimes lost, and losing it is a nightly failure on a rule
+// that matches the line rather than a defect in the rule. Clearing costs
+// nothing and settles it, and it goes in the same feedVT call so the shell,
+// which writes under the same lock, cannot land between the clear and the text.
+func paintPane(t *testing.T, p *PTY, data string) {
+	t.Helper()
+	feedVT(t, p, clearScreen+data)
+	p.lastOutput.Store(time.Now().UnixNano())
+}
+
+// claudePermissionPrompt is what Claude Code paints and then goes silent behind.
+// It is the exact shape the bundled manifest's first rule keys on.
+const claudePermissionPrompt = "Do you want to proceed?\r\n" +
+	"\xe2\x9d\xaf 1. Yes\r\n" +
+	"  2. Yes, and don't ask again\r\n" +
+	"  3. No, and tell Claude what to do differently (esc)\r\n"
+
+// clearScreen erases the display and homes the cursor.
+const clearScreen = "\x1b[2J\x1b[H"
