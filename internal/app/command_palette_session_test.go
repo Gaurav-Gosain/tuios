@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -70,5 +71,22 @@ func TestFilteredPaletteItemsMatchesSessionEntries(t *testing.T) {
 	}
 	if len(filtered[0].Match) == 0 {
 		t.Error("the top row carries no match positions, so the renderer cannot highlight it")
+	}
+}
+
+// TestSessionPaletteItemSelectCurrentSessionIsNoOp checks that selecting the
+// palette entry for the session the client is already on shows an
+// informational notice rather than calling SwitchToSession, which would error
+// out immediately in standalone mode (no daemon client).
+func TestSessionPaletteItemSelectCurrentSessionIsNoOp(t *testing.T) {
+	m, _, _ := sessionPaletteTestOS(t)
+
+	items := getSessionPaletteItems(m)
+	items[0].Action(m)
+	if len(m.Notifications) != 1 {
+		t.Fatalf("Notifications = %d, want 1", len(m.Notifications))
+	}
+	if !strings.Contains(m.Notifications[0].Message, "Already on this session") {
+		t.Errorf("notification = %q, want it to mention already being on this session", m.Notifications[0].Message)
 	}
 }

@@ -377,3 +377,68 @@ func TestRecentActionsIsARingOfNames(t *testing.T) {
 		t.Fatal("an empty action name entered the ring")
 	}
 }
+
+// TestCrashOverlaySaysWhatTheKeyDid pins the overlay's own feedback line.
+//
+// This is not a nicety. A crash caught while drawing the screen is the
+// compositor failing, so the dock is not drawn and ShowNotification has nowhere
+// to appear: without a line on the overlay itself, pressing c copies the report
+// and changes nothing on screen, which reads as a key that does not work.
+func TestCrashOverlaySaysWhatTheKeyDid(t *testing.T) {
+	m := crashTestOS(t)
+	m.Windows = append(m.Windows, nil)
+	_ = m.View() // panics in the compositor, arms the overlay
+
+	if got := m.CrashNotice(); got != "" {
+		t.Fatalf("a fresh overlay already had a notice: %q", got)
+	}
+
+	if cmd := m.CopyCrashReport(); cmd == nil {
+		t.Fatal("c produced no clipboard command")
+	}
+	if !strings.Contains(m.CrashNotice(), "Copied the report") {
+		t.Fatalf("c left no notice: %q", m.CrashNotice())
+	}
+	frame := m.View().Content
+	if !strings.Contains(frame, "Copied the report") {
+		t.Fatalf("the frame does not say the report was copied:\n%s", frame)
+	}
+
+	m.DismissCrash()
+	if m.CrashNotice() != "" {
+		t.Fatalf("the notice outlived the overlay: %q", m.CrashNotice())
+	}
+}
+
+// TestCrashOverlaySaysWhenItLeftDetailsOut pins the cut being visible.
+//
+// A block that silently ends at a different fact on every terminal size reads
+// as a report whose contents depend on the screen, and the one thing a user has
+// to be able to trust here is that c sends the whole of it.
+func TestCrashOverlaySaysWhenItLeftDetailsOut(t *testing.T) {
+	m := crashTestOS(t)
+	m.NoteCrash("handling an event", "boom", []byte("goroutine 1 [running]:\n"))
+	report := m.Crash()
+
+	tall := RenderCrashScreen(report, "", 120, 44)
+	if strings.Contains(tall, "more details") {
+		t.Errorf("a tall screen claimed it left details out:\n%s", tall)
+	}
+	for _, f := range report.Facts {
+		if !strings.Contains(tall, f.Label) {
+			t.Errorf("a tall screen dropped the %q row", f.Label)
+		}
+	}
+
+	short := RenderCrashScreen(report, "", 80, 20)
+	if !strings.Contains(short, "more details") {
+		t.Errorf("a short screen cut the details and did not say so:\n%s", short)
+	}
+	// And it still offers the way out, which is the point of cutting the facts
+	// rather than the footer.
+	for _, want := range []string{"copy report", "open an issue"} {
+		if !strings.Contains(short, want) {
+			t.Errorf("a short screen lost %q from the footer:\n%s", want, short)
+		}
+	}
+}

@@ -202,3 +202,42 @@ func TestAccentPickerStaysCoherentOnALesserTerminal(t *testing.T) {
 		}
 	}
 }
+
+// TestAccentHarmonyKeepsTheHeldSaturationAndLightness: a chip is this colour at
+// another hue. Picking one that reset the saturation and lightness to the seed's
+// would throw away whatever the sliders had just been used for.
+func TestAccentHarmonyKeepsTheHeldSaturationAndLightness(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	m.AccentPickerSetSlider(accentChanS, 41)
+	m.AccentPickerSetSlider(accentChanL, 73)
+
+	count := m.accentPlan().HarmonyCount()
+	for i := range count {
+		m.AccentPickerHarmonyAt(i)
+		if got := m.AccentPicker.sliderValue(accentChanS); got != 41 {
+			t.Errorf("chip %d left saturation at %d%%, want 41%%", i, got)
+		}
+		if got := m.AccentPicker.sliderValue(accentChanL); got != 73 {
+			t.Errorf("chip %d left lightness at %d%%, want 73%%", i, got)
+		}
+		// A chip is a literal colour, never a theme slot.
+		if m.AccentPicker.Slot != -1 {
+			t.Errorf("chip %d was taken as slot %d", i, m.AccentPicker.Slot)
+		}
+	}
+
+	// Walking the chips must not move the chips.
+	before := make([]string, count)
+	for i := range count {
+		before[i] = overlay.Hex(m.AccentPicker.harmonyColor(i, count))
+	}
+	for i := range count {
+		m.AccentPickerHarmonyAt(i)
+		for j := range count {
+			if got := overlay.Hex(m.AccentPicker.harmonyColor(j, count)); got != before[j] {
+				t.Fatalf("landing on chip %d moved chip %d from %s to %s", i, j, before[j], got)
+			}
+		}
+	}
+}

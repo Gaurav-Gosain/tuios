@@ -1,14 +1,16 @@
 package app
 
 import (
-	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"image/color"
 	"strings"
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -365,5 +367,40 @@ func TestTheTintIsDerivedFromTheGround(t *testing.T) {
 				t.Errorf("the tint measures %.2f against the ground, louder than the selection", got)
 			}
 		})
+	}
+}
+
+// TestTheSweepMeasuresTheBlock. The bounds come from the marked cells, so a
+// block that is narrower than the pane is swept at its own width.
+func TestTheSweepMeasuresTheBlock(t *testing.T) {
+	g := pool.GetHighlightGrid()
+	defer pool.PutHighlightGrid(g)
+	g.Init(4, 60)
+	// One row, so the block's bounds are that row's bounds. A selection over
+	// several rows reaches column zero on every row after the first, which is
+	// what a selection is, so its left edge is zero and says nothing.
+	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60)
+
+	box, ok := copyFlashBoxOf(g, 4, 60)
+	if !ok {
+		t.Fatal("the marked region measured as nothing")
+	}
+	if box.left != 5 || box.right != 20 {
+		t.Errorf("the block spans columns %d to %d, want 5 to 20", box.left, box.right)
+	}
+	if box.rows() != 1 {
+		t.Errorf("the block is %d rows, want 1", box.rows())
+	}
+}
+
+// TestAnEmptyRegionIsNotSwept, which is what a copied block scrolled out of
+// view leaves behind.
+func TestAnEmptyRegionIsNotSwept(t *testing.T) {
+	g := pool.GetHighlightGrid()
+	defer pool.PutHighlightGrid(g)
+	g.Init(4, 60)
+
+	if _, ok := copyFlashBoxOf(g, 4, 60); ok {
+		t.Error("an empty region measured as a block to sweep")
 	}
 }
