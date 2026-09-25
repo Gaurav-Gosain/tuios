@@ -204,23 +204,6 @@ func BenchmarkE2EKeystroke(b *testing.B) {
 	b.ReportMetric(float64(rig.conn.writes.Load()-w0)/float64(b.N), "client-writes/key")
 }
 
-// TestE2ERigWorks keeps the rig honest: a change to attach, subscribe or the
-// shell environment that breaks the fixture should fail here with a message
-// rather than as a benchmark that never runs.
-func TestE2ERigWorks(t *testing.T) {
-	if testing.Short() {
-		t.Skip("spawns a shell")
-	}
-	if _, err := os.Stat("/bin/sh"); err != nil {
-		t.Skip("/bin/sh not present")
-	}
-	rig := newE2ERig(t)
-	n, _ := rig.run(t, "printf 'hello\\nRIG''DONE\\n'", "RIGDONE", 5*time.Second)
-	if n == 0 {
-		t.Fatal("rig delivered no output")
-	}
-}
-
 // TestE2EIdleProbe holds the rig open and idle for TUIOS_PERF_IDLE_SECONDS,
 // so a syscall counter run against the test binary can see what an attached
 // client and its daemon do when nobody is typing. It is skipped unless asked

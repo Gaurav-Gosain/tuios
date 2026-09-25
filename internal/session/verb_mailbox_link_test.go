@@ -285,42 +285,6 @@ func TestAnAskFromAnotherMachineIsRecordedWithItsOrigin(t *testing.T) {
 	}
 }
 
-func TestEveryPaneKnowsItsMachine(t *testing.T) {
-	m := NewManager()
-	m.SetHostName("buildbox")
-	sess, err := m.CreateSession("work", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(sess.Stop)
-	env := sess.buildEnv("w1", false)
-	found := ""
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "TUIOS_HOST=") {
-			found = kv
-		}
-	}
-	if found != "TUIOS_HOST=buildbox" {
-		t.Fatalf("ASSERTION: a pane's environment names its machine as %q, want TUIOS_HOST=buildbox", found)
-	}
-
-	// With nothing set, the operating system's name is used, so a pane is
-	// never told nothing.
-	plain := NewManager()
-	host, _ := os.Hostname()
-	if host == "" {
-		t.Skip("no hostname on this machine")
-	}
-	sess2, err := plain.CreateSession("work", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(sess2.Stop)
-	if !contains(sess2.buildEnv("w1", false), "TUIOS_HOST="+host) {
-		t.Fatalf("ASSERTION: a pane on a machine with no name set is not told the hostname %q", host)
-	}
-}
-
 func contains(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

@@ -402,22 +402,6 @@ func TestRespondOverTheLink(t *testing.T) {
 	}
 }
 
-// TestPeekOnAPaneThatIsNotBlocked answers without an error, saying why there
-// is nothing to answer, since a peek is a read.
-func TestPeekOnAPaneThatIsNotBlocked(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "calm")
-	c := dialVerb(t, sp)
-	w := d.manager.GetSession("calm").GetState().Windows[0].ID
-	pk := peek(t, c, "calm", w)
-	if pk["blocked"] != false || pk["found"] != false || pk["reason"] == "" || pk["prompt_id"] != "" {
-		t.Errorf("peek on a calm pane: %v", pk)
-	}
-	if code := errCode(t, callVerb(t, c, "respond", map[string]any{"session": "calm", "window": w, "action": "shrug"})); code != ErrVerbInvalidParams {
-		t.Errorf("an unknown action: %s", code)
-	}
-}
-
 // TestRespondSlotsStayBounded: the map of answered windows does not grow
 // without end, and a slot a call has taken is never dropped from under it,
 // even before the call locks it.

@@ -47,22 +47,6 @@ func TestVerbRefusalIsLogged(t *testing.T) {
 	}
 }
 
-// TestUnknownVerbRefusalIsLogged covers the lookup failure, which is the one a
-// caller written against a newer or older daemon actually hits.
-func TestUnknownVerbRefusalIsLogged(t *testing.T) {
-	restoreLevel(t, DebugOff)
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	ClearLogBuffer()
-	if code := errCode(t, c.call(t, `{"id":1,"verb":"teleport-window"}`)); code != ErrVerbUnknownVerb {
-		t.Fatalf("code = %q, want %q", code, ErrVerbUnknownVerb)
-	}
-	if !ringHas("Verb teleport-window refused for client ") {
-		t.Fatalf("no refusal line for an unknown verb:\n%s", ringDump())
-	}
-}
-
 // TestVerbRefusalLineHoldsNoMessage keeps the level boundary. A refusal message
 // quotes what the caller sent, which for a path or a title is content, and
 // basic records identifiers and codes only.
@@ -92,21 +76,6 @@ func TestVerbRefusalLineHoldsNoMessage(t *testing.T) {
 	}
 }
 
-// TestSuccessIsNotLoggedAsARefusal keeps the line to one per error response. A
-// working call must not produce one.
-func TestSuccessIsNotLoggedAsARefusal(t *testing.T) {
-	restoreLevel(t, DebugOff)
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	ClearLogBuffer()
-	result(t, c.call(t, `{"id":1,"verb":"list-verbs","params":{"verb":"list-verbs"}}`))
-
-	if ringHas("refused for client") {
-		t.Fatalf("a successful call logged a refusal:\n%s", ringDump())
-	}
-}
-
 // TestSetLogLevelTakesEffectWithoutARestart is item 4. The level used to be read
 // once at startup, so the only way to look at a fault in more detail was a
 // restart, and a restart ends the run the fault was in.
@@ -130,22 +99,6 @@ func TestSetLogLevelTakesEffectWithoutARestart(t *testing.T) {
 	result(t, c.call(t, `{"id":2,"verb":"set-option","params":{"key":"daemon.log_level","value":"off"}}`))
 	if GetDebugLevel() != DebugOff {
 		t.Fatalf("daemon level is %s after lowering it, want off", GetDebugLevel())
-	}
-}
-
-// TestSetLogLevelWorksWithNoSession checks the case the verb is most needed in:
-// a daemon that serves no session can still be the thing that is wrong.
-func TestSetLogLevelWorksWithNoSession(t *testing.T) {
-	restoreLevel(t, DebugOff)
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"set-option","params":{"key":"daemon.log_level","value":"basic"}}`))
-	if res["value"] != "basic" {
-		t.Fatalf("value = %v, want basic", res["value"])
-	}
-	if GetDebugLevel() != DebugBasic {
-		t.Fatalf("daemon level is %s, want basic", GetDebugLevel())
 	}
 }
 

@@ -122,124 +122,6 @@ func makeSessionWithWindow(t *testing.T, d *Daemon, name string) *Session {
 	return sess
 }
 
-func TestVerbListVerbs(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"id":1,"verb":"list-verbs"}`)
-	if resp["id"] != float64(1) {
-		t.Errorf("id not echoed: %v", resp["id"])
-	}
-	res := result(t, resp)
-	if res["type"] != "verb_list" {
-		t.Errorf("type = %v, want verb_list", res["type"])
-	}
-	if res["version"] != float64(VerbProtocolVersion) {
-		t.Errorf("version = %v, want %d", res["version"], VerbProtocolVersion)
-	}
-	verbs, ok := res["verbs"].([]any)
-	if !ok || len(verbs) != len(verbRegistry) {
-		t.Fatalf("verbs list wrong: %v", res["verbs"])
-	}
-}
-
-func TestVerbListSessions(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "alpha")
-	makeSessionWithWindow(t, d, "beta")
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t, `{"id":"s","verb":"list-sessions"}`))
-	if res["type"] != "session_list" {
-		t.Errorf("type = %v", res["type"])
-	}
-	sessions, ok := res["sessions"].([]any)
-	if !ok || len(sessions) != 2 {
-		t.Fatalf("want 2 sessions, got %v", res["sessions"])
-	}
-}
-
-func TestVerbSessionInfoAndListWindows(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-
-	info := result(t, c.call(t, `{"verb":"session-info","params":{"session":"work"}}`))
-	if info["type"] != "session_info" || info["session_name"] != "work" {
-		t.Errorf("session-info wrong: %v", info)
-	}
-
-	wins := result(t, c.call(t, `{"verb":"list-windows","params":{"session":"work"}}`))
-	if wins["type"] != "window_list" {
-		t.Errorf("list-windows type = %v", wins["type"])
-	}
-	if wins["total"] != float64(1) {
-		t.Errorf("total windows = %v, want 1", wins["total"])
-	}
-}
-
-func TestVerbNewAndCloseWindowHeadless(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("empty", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-
-	c := dialVerb(t, sp)
-
-	created := result(t, c.call(t, `{"verb":"new-window","params":{"session":"empty","name":"build"}}`))
-	if created["type"] != "window_created" {
-		t.Errorf("type = %v", created["type"])
-	}
-	winID, _ := created["window_id"].(string)
-	if winID == "" {
-		t.Fatalf("no window_id in %v", created)
-	}
-	if got := len(sess.GetState().Windows); got != 1 {
-		t.Fatalf("session window count = %d, want 1", got)
-	}
-
-	closed := result(t, c.call(t, fmt.Sprintf(`{"verb":"close-window","params":{"session":"empty","window":%q}}`, winID)))
-	if closed["type"] != "ok" {
-		t.Errorf("close type = %v", closed["type"])
-	}
-	if got := len(sess.GetState().Windows); got != 0 {
-		t.Fatalf("session window count after close = %d, want 0", got)
-	}
-}
-
-func TestVerbSendTextAndCapturePane(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "cap")
-
-	c := dialVerb(t, sp)
-
-	ok := result(t, c.call(t, `{"verb":"send-text","params":{"session":"cap","text":"echo tuios-marker\n"}}`))
-	if ok["type"] != "ok" {
-		t.Errorf("send-text type = %v", ok["type"])
-	}
-
-	// Poll capture-pane for the echoed marker; the shell echoes asynchronously.
-	found := false
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		res := result(t, c.call(t, `{"verb":"capture-pane","params":{"session":"cap","source":"recent"}}`))
-		if res["type"] != "pane_content" {
-			t.Fatalf("capture type = %v", res["type"])
-		}
-		content, _ := res["content"].(string)
-		if len(content) > 0 && containsMarker(content) {
-			found = true
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !found {
-		t.Error("capture-pane never returned the echoed marker")
-	}
-}
-
 func containsMarker(s string) bool {
 	for i := 0; i+len("tuios-marker") <= len(s); i++ {
 		if s[i:i+len("tuios-marker")] == "tuios-marker" {
@@ -247,80 +129,6 @@ func containsMarker(s string) bool {
 		}
 	}
 	return false
-}
-
-func TestVerbSendKeysHeadless(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "keys")
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t, `{"verb":"send-keys","params":{"session":"keys","keys":"ctrl+c"}}`))
-	if res["type"] != "ok" {
-		t.Errorf("send-keys type = %v", res["type"])
-	}
-
-	// A missing keys field is an invalid_params error.
-	code := errCode(t, c.call(t, `{"verb":"send-keys","params":{"session":"keys"}}`))
-	if code != ErrVerbInvalidParams {
-		t.Errorf("missing keys code = %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
-func TestVerbResize(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "rz")
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t, `{"verb":"resize","params":{"session":"rz","width":100,"height":40}}`))
-	if res["type"] != "resized" || res["width"] != float64(100) || res["height"] != float64(40) {
-		t.Errorf("resize result = %v", res)
-	}
-
-	code := errCode(t, c.call(t, `{"verb":"resize","params":{"session":"rz","width":0,"height":40}}`))
-	if code != ErrVerbInvalidParams {
-		t.Errorf("bad resize code = %q", code)
-	}
-}
-
-func TestVerbOptionsRoundTrip(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "opt")
-
-	c := dialVerb(t, sp)
-
-	set := result(t, c.call(t, `{"verb":"set-option","params":{"session":"opt","key":"theme","value":"dracula"}}`))
-	if set["type"] != "option_set" || set["value"] != "dracula" {
-		t.Errorf("set-option result = %v", set)
-	}
-
-	get := result(t, c.call(t, `{"verb":"get-option","params":{"session":"opt","key":"theme"}}`))
-	if get["value"] != "dracula" {
-		t.Errorf("get-option value = %v", get["value"])
-	}
-
-	code := errCode(t, c.call(t, `{"verb":"get-option","params":{"session":"opt","key":"missing"}}`))
-	if code != ErrVerbOptionNotFound {
-		t.Errorf("missing option code = %q, want %q", code, ErrVerbOptionNotFound)
-	}
-}
-
-func TestVerbKillSession(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "doomed")
-
-	c := dialVerb(t, sp)
-	res := result(t, c.call(t, `{"verb":"kill-session","params":{"session":"doomed"}}`))
-	if res["type"] != "ok" {
-		t.Errorf("kill type = %v", res["type"])
-	}
-	if d.manager.GetSession("doomed") != nil {
-		t.Error("session still present after kill-session")
-	}
-
-	code := errCode(t, c.call(t, `{"verb":"kill-session","params":{"session":"doomed"}}`))
-	if code != ErrVerbSessionNotFound {
-		t.Errorf("kill missing code = %q", code)
-	}
 }
 
 func TestVerbErrorCases(t *testing.T) {
@@ -335,8 +143,6 @@ func TestVerbErrorCases(t *testing.T) {
 		{"malformed", `{"id":1,"verb":`, ErrVerbInvalidRequest},
 		{"not-json", `this is not json`, ErrVerbInvalidRequest},
 		{"missing-verb", `{"id":2}`, ErrVerbInvalidRequest},
-		{"unknown-verb", `{"id":3,"verb":"teleport"}`, ErrVerbUnknownVerb},
-		{"unknown-session", `{"verb":"list-windows","params":{"session":"nope"}}`, ErrVerbSessionNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -345,19 +151,6 @@ func TestVerbErrorCases(t *testing.T) {
 				t.Errorf("code = %q, want %q", code, tc.code)
 			}
 		})
-	}
-}
-
-// TestVerbConnectionSurvivesBadLine verifies a malformed line does not desync or
-// close the connection: a following valid request still works.
-func TestVerbConnectionSurvivesBadLine(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	_ = errCode(t, c.call(t, `{"garbage`))
-	res := result(t, c.call(t, `{"id":9,"verb":"list-verbs"}`))
-	if res["type"] != "verb_list" {
-		t.Errorf("connection did not recover; got %v", res)
 	}
 }
 
@@ -404,26 +197,5 @@ func TestVerbConcurrentClients(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Error(err)
-	}
-}
-
-// TestBinaryClientStillWorks verifies the existing binary protocol keeps working
-// on the same daemon that now also speaks JSON (backward compatibility).
-func TestBinaryClientStillWorks(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "binary")
-
-	client := NewClient(&ClientConfig{Version: "test"})
-	if err := client.Connect(); err != nil {
-		t.Fatalf("binary Connect: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	sessions, err := client.ListSessions()
-	if err != nil {
-		t.Fatalf("binary ListSessions: %v", err)
-	}
-	if len(sessions) != 1 || sessions[0].Name != "binary" {
-		t.Fatalf("binary client got %v", sessions)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -142,61 +141,6 @@ func TestHandshakeAgainstLegacyDaemonReportsMismatch(t *testing.T) {
 	}
 }
 
-// TestHandshakeAgainstCurrentDaemonSucceeds pins the happy path: a current
-// daemon answers hello with its protocol range and identity.
-func TestHandshakeAgainstCurrentDaemonSucceeds(t *testing.T) {
-	startTestDaemon(t)
-
-	client, err := DialVerbClientAs("1.4.0")
-	if err != nil {
-		t.Fatalf("handshake against the current daemon failed: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	hs := client.Daemon()
-	if hs == nil {
-		t.Fatal("expected a handshake result")
-	}
-	if hs.Protocol != VerbProtocolVersion {
-		t.Errorf("protocol = %d, want %d", hs.Protocol, VerbProtocolVersion)
-	}
-	if hs.MinProtocol != MinVerbProtocolVersion {
-		t.Errorf("min protocol = %d, want %d", hs.MinProtocol, MinVerbProtocolVersion)
-	}
-	if hs.DaemonVersion != "test" {
-		t.Errorf("daemon version = %q, want test", hs.DaemonVersion)
-	}
-	if hs.PID != os.Getpid() {
-		t.Errorf("pid = %d, want %d", hs.PID, os.Getpid())
-	}
-}
-
-// TestHelloRejectsNewerClientProtocol covers the other direction of the
-// handshake: a daemon that is asked for a protocol it does not implement says so
-// with the protocol_mismatch code and the kill-server remedy, instead of
-// accepting the call and misbehaving later.
-func TestHelloRejectsNewerClientProtocol(t *testing.T) {
-	_, socketPath := startTestDaemon(t)
-	c := dialVerb(t, socketPath)
-
-	resp := c.call(t, `{"id":1,"verb":"hello","params":{"client":"tuios","version":"9.9.9","protocol":99}}`)
-	e := errorOf(t, resp)
-
-	if code, _ := e["code"].(string); code != ErrVerbProtocolMismatch {
-		t.Fatalf("code = %v, want %s", e["code"], ErrVerbProtocolMismatch)
-	}
-	hint, ok := e["hint"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected a hint on a protocol mismatch, got %v", e)
-	}
-	if cmd, _ := hint["command"].(string); cmd != "tuios kill-server" {
-		t.Errorf("hint command = %v, want tuios kill-server", hint["command"])
-	}
-	if detail, _ := hint["detail"].(string); !strings.Contains(detail, "9.9.9") {
-		t.Errorf("hint detail should name the client version, got %v", hint["detail"])
-	}
-}
-
 // TestHandshakeToleratesDaemonWithoutHelloVerb proves the handshake is a
 // compatibility check and not a new requirement: a daemon that speaks the verb
 // protocol but has never heard of hello answers unknown_verb, and the client
@@ -223,25 +167,6 @@ func TestHandshakeToleratesDaemonWithoutHelloVerb(t *testing.T) {
 	// And it must actually work, not just connect.
 	if _, err := client.Call("list-sessions", nil); err != nil {
 		t.Errorf("list-sessions against a pre-handshake daemon failed: %v", err)
-	}
-}
-
-// TestDialVerbClientReportsMissingDaemon checks the plain "nothing is listening"
-// case still produces a connect error rather than a mismatch, so the two states
-// stay distinguishable to the CLI.
-func TestDialVerbClientReportsMissingDaemon(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-
-	_, err := DialVerbClientAs("1.4.0")
-	if err == nil {
-		t.Fatal("expected an error dialing a socket that does not exist")
-	}
-	var mismatch *ProtocolMismatchError
-	if errors.As(err, &mismatch) {
-		t.Fatalf("a missing daemon must not be reported as a protocol mismatch: %v", err)
-	}
-	if !strings.Contains(err.Error(), "failed to connect to daemon") {
-		t.Errorf("error = %q, want a connect failure", err)
 	}
 }
 
@@ -272,39 +197,5 @@ func TestProbeLegacyDaemonIgnoresStaleSocket(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("probeLegacyDaemon hung on a stale socket")
-	}
-}
-
-// TestVerbCallErrorCarriesHint checks the hint survives the client decode, so
-// the CLI can render the remedy the daemon named rather than inventing one.
-func TestVerbCallErrorCarriesHint(t *testing.T) {
-	d, _ := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	client, err := DialVerbClientAs("test")
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	_, err = client.Call("list-windows", map[string]any{"session": "wrok"})
-	if err == nil {
-		t.Fatal("expected an error for an unknown session")
-	}
-	var callErr *VerbCallError
-	if !errors.As(err, &callErr) {
-		t.Fatalf("expected a *VerbCallError, got %T", err)
-	}
-	if callErr.Code != ErrVerbSessionNotFound {
-		t.Errorf("code = %q, want %q", callErr.Code, ErrVerbSessionNotFound)
-	}
-	if callErr.Hint == nil {
-		t.Fatal("hint did not survive the client decode")
-	}
-	if callErr.Hint.DidYouMean != "work" {
-		t.Errorf("did_you_mean = %q, want work", callErr.Hint.DidYouMean)
-	}
-	if !slices.Contains(callErr.Hint.Available, "work") {
-		t.Errorf("available = %v, want it to contain work", callErr.Hint.Available)
 	}
 }

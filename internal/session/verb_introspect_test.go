@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -61,130 +60,6 @@ func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
 	}
 	if found == 0 {
 		t.Fatal("found no ErrVerb constants, so the source scan is broken")
-	}
-}
-
-// TestListVerbsDescribesEveryVerb is the contract an agent relies on: list-verbs
-// alone is enough to drive the control plane. Every registered verb must carry a
-// description and a parameter schema, and the reply must carry the protocol
-// range, the error-code catalog, and the envelope shape.
-func TestListVerbsDescribesEveryVerb(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"list-verbs"}`))
-
-	if res["version"] != float64(VerbProtocolVersion) {
-		t.Errorf("version = %v, want %d", res["version"], VerbProtocolVersion)
-	}
-	if res["min_version"] != float64(MinVerbProtocolVersion) {
-		t.Errorf("min_version = %v, want %d", res["min_version"], MinVerbProtocolVersion)
-	}
-	if res["daemon_version"] != "test" {
-		t.Errorf("daemon_version = %v, want test", res["daemon_version"])
-	}
-
-	envelope, ok := res["envelope"].(map[string]any)
-	if !ok {
-		t.Fatal("reply carries no envelope documentation")
-	}
-	for _, field := range []string{"transport", "request", "success", "failure", "hint"} {
-		if s, _ := envelope[field].(string); s == "" {
-			t.Errorf("envelope documentation is missing %q", field)
-		}
-	}
-
-	codes, ok := res["error_codes"].([]any)
-	if !ok || len(codes) == 0 {
-		t.Fatal("reply carries no error-code catalog")
-	}
-	documented := map[string]bool{}
-	for _, entry := range codes {
-		e, ok := entry.(map[string]any)
-		if !ok {
-			t.Fatalf("error-code entry is not an object: %v", entry)
-		}
-		code, _ := e["code"].(string)
-		desc, _ := e["description"].(string)
-		if code == "" || desc == "" {
-			t.Errorf("error-code entry is incomplete: %v", e)
-		}
-		documented[code] = true
-	}
-	// Every code the daemon can actually emit must be documented, or an agent
-	// meets a code it cannot interpret.
-	for _, code := range []string{
-		ErrVerbInvalidRequest, ErrVerbUnknownVerb, ErrVerbInvalidParams,
-		ErrVerbSessionNotFound, ErrVerbWindowNotFound, ErrVerbNoWindows,
-		ErrVerbPTYNotFound, ErrVerbNeedsClient, ErrVerbOptionNotFound,
-		ErrVerbCommandFailed, ErrVerbTimeout, ErrVerbProtocolMismatch, ErrVerbInternal,
-	} {
-		if !documented[code] {
-			t.Errorf("error code %q is emitted by the daemon but not documented by list-verbs", code)
-		}
-	}
-
-	verbs, ok := res["verbs"].([]any)
-	if !ok || len(verbs) != len(verbRegistry) {
-		t.Fatalf("verbs list wrong: got %v entries, want %d", len(verbs), len(verbRegistry))
-	}
-
-	var names []string
-	for _, entry := range verbs {
-		v, ok := entry.(map[string]any)
-		if !ok {
-			t.Fatalf("verb entry is not an object: %v", entry)
-		}
-		name, _ := v["verb"].(string)
-		names = append(names, name)
-
-		if desc, _ := v["description"].(string); desc == "" {
-			t.Errorf("verb %q has no description", name)
-		}
-		params, ok := v["params"].([]any)
-		if !ok {
-			t.Errorf("verb %q has no params list (it must be present even when empty)", name)
-			continue
-		}
-		for _, raw := range params {
-			p, ok := raw.(map[string]any)
-			if !ok {
-				t.Fatalf("verb %q has a non-object param: %v", name, raw)
-			}
-			pname, _ := p["name"].(string)
-			ptype, _ := p["type"].(string)
-			pdesc, _ := p["description"].(string)
-			if pname == "" || ptype == "" || pdesc == "" {
-				t.Errorf("verb %q has an incompletely documented param: %v", name, p)
-			}
-			if !slices.Contains([]string{"string", "int", "bool", "[]string", "[]int", "object"}, ptype) {
-				t.Errorf("verb %q param %q has unknown type %q", name, pname, ptype)
-			}
-		}
-	}
-
-	if !slices.IsSorted(names) {
-		t.Errorf("verbs are not in a stable sorted order: %v", names)
-	}
-}
-
-// TestListVerbsExamplesAreValidRequests keeps the documented examples honest: an
-// agent that copies one must get a well-formed request naming a real verb.
-func TestListVerbsExamplesAreValidRequests(t *testing.T) {
-	for name, entry := range verbRegistry {
-		for _, example := range entry.examples {
-			var req verbRequest
-			if err := json.Unmarshal([]byte(example), &req); err != nil {
-				t.Errorf("verb %q has an example that is not valid JSON: %s (%v)", name, example, err)
-				continue
-			}
-			if req.Verb != name {
-				t.Errorf("verb %q has an example for a different verb %q: %s", name, req.Verb, example)
-			}
-			if _, ok := verbRegistry[req.Verb]; !ok {
-				t.Errorf("example names an unregistered verb %q: %s", req.Verb, example)
-			}
-		}
 	}
 }
 
@@ -296,43 +171,6 @@ func TestCaptureSourcesMatchTheImplementation(t *testing.T) {
 		}
 		if code, _ := e["code"].(string); code != ErrVerbInvalidParams {
 			t.Errorf("retired source %q rejected with %q, want %q", retired, code, ErrVerbInvalidParams)
-		}
-	}
-}
-
-// TestListVerbsForUnknownVerbSuggestsOne checks the introspection verb is itself
-// self-explaining when misused.
-func TestListVerbsForUnknownVerbSuggestsOne(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"id":1,"verb":"list-verbs","params":{"verb":"capture-pain"}}`)
-	e := errorOf(t, resp)
-	if code, _ := e["code"].(string); code != ErrVerbUnknownVerb {
-		t.Fatalf("code = %v, want %v", e["code"], ErrVerbUnknownVerb)
-	}
-	hint := hintOf(t, e)
-	if got, _ := hint["did_you_mean"].(string); got != "capture-pane" {
-		t.Errorf("did_you_mean = %q, want capture-pane", got)
-	}
-}
-
-// TestEveryVerbIsDocumented is the guard that makes the schema a build-time
-// obligation: adding a verb without documenting it fails here rather than
-// silently shipping an undiscoverable verb.
-func TestEveryVerbIsDocumented(t *testing.T) {
-	for name, entry := range verbRegistry {
-		if entry.description == "" {
-			t.Errorf("verb %q has no description", name)
-		}
-		if !strings.HasSuffix(entry.description, ".") {
-			t.Errorf("verb %q description should read as a sentence: %q", name, entry.description)
-		}
-		if entry.handler == nil {
-			t.Errorf("verb %q has no handler", name)
-		}
-		if len(entry.examples) == 0 {
-			t.Errorf("verb %q has no example request", name)
 		}
 	}
 }

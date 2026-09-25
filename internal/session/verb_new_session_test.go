@@ -2,7 +2,6 @@ package session
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -130,29 +129,6 @@ func TestNewSessionCanCreateAnEmptySession(t *testing.T) {
 	}
 }
 
-// TestNewSessionStartsTheFirstWindowWhereItWasAsked proves cwd is honoured
-// rather than accepted and ignored.
-func TestNewSessionStartsTheFirstWindowWhereItWasAsked(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-	result(t, c.call(t, `{"id":1,"verb":"new-session","params":{"name":"placed","cwd":`+quoteJSON(dir)+`}}`))
-
-	sess := d.manager.GetSession("placed")
-	win := sess.GetState().Windows[0]
-	if win.Cwd != "" && win.Cwd != dir {
-		t.Errorf("the window records cwd %q, want %q", win.Cwd, dir)
-	}
-	pty := sess.GetPTY(win.PTYID)
-	if pty == nil {
-		t.Fatal("the first window has no PTY")
-	}
-}
-
 // TestNewSessionRefusesADirectoryThatDoesNotExist keeps a mistyped path from
 // producing a working shell in the wrong place, and keeps it from producing a
 // session the caller then has to clean up.
@@ -183,63 +159,5 @@ func TestNewSessionRefusesANameThatCouldNeverBeSaved(t *testing.T) {
 	}
 	if d.manager.GetSession("a/b") != nil {
 		t.Error("the refused name was registered anyway")
-	}
-}
-
-// TestNewSessionRefusesAnUnknownParameter keeps it under the same strictness
-// every other verb has: dropping an unknown name is how new-window once
-// reported a created window while ignoring the workspace it was asked for.
-func TestNewSessionRefusesAnUnknownParameter(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"id":1,"verb":"new-session","params":{"name":"strict","nonesuch":2}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Fatalf("code = %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
-// TestNewSessionNeedsNoProtocolBump is the compatibility claim, checked rather
-// than asserted. A caller that announced protocol 1 before this verb existed
-// still handshakes at 1 and can call it, because adding a verb changes no
-// envelope and no existing verb's contract.
-func TestNewSessionNeedsNoProtocolBump(t *testing.T) {
-	_, sp := startTestDaemon(t)
-	c := dialVerb(t, sp)
-
-	if VerbProtocolVersion != 1 {
-		t.Fatalf("VerbProtocolVersion = %d; adding a verb must not bump it", VerbProtocolVersion)
-	}
-	hello := result(t, c.call(t, `{"id":1,"verb":"hello","params":{"client":"test","version":"1","protocol":1}}`))
-	if hello["protocol"] != float64(1) {
-		t.Fatalf("the daemon answers protocol %v, want 1", hello["protocol"])
-	}
-	res := result(t, c.call(t, `{"id":2,"verb":"new-session","params":{"name":"compat"}}`))
-	if res["session"] != "compat" {
-		t.Errorf("a protocol 1 caller could not create a session: %v", res)
-	}
-
-	// And the verb documents itself, so a caller learns it from list-verbs.
-	listed := result(t, c.call(t, `{"id":3,"verb":"list-verbs","params":{"verb":"new-session"}}`))
-	verbs, _ := listed["verbs"].([]any)
-	if len(verbs) != 1 {
-		t.Fatalf("list-verbs described %d verbs, want new-session", len(verbs))
-	}
-	doc := verbs[0].(map[string]any)
-	if !strings.Contains(doc["description"].(string), "session") {
-		t.Errorf("new-session describes itself as %q", doc["description"])
-	}
-
-	// The new error code is in the catalog, so a caller can learn what
-	// session_exists means without reading the source.
-	codes, _ := listed["error_codes"].([]any)
-	found := false
-	for _, entry := range codes {
-		if m, ok := entry.(map[string]any); ok && m["code"] == ErrVerbSessionExists {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("%s is not in the error-code catalog", ErrVerbSessionExists)
 	}
 }

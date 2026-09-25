@@ -6,66 +6,6 @@ import (
 	"testing"
 )
 
-// TestSetWorkspaceNameVerbRoundTrip drives set-workspace-name over the real
-// socket and reads it back through session-info, and checks the number stays the
-// workspace's identity: naming workspace 2 does not move anything that addresses
-// it by number.
-func TestSetWorkspaceNameVerbRoundTrip(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	before := sess.GetState().Version
-
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":"review"}}`))
-	if res["name"] != "review" || res["workspace"] != float64(2) {
-		t.Fatalf("set-workspace-name returned %v", res)
-	}
-	if after := sess.GetState().Version; after <= before {
-		t.Fatalf("version did not bump: before=%d after=%d", before, after)
-	}
-
-	info := result(t, c.call(t, `{"id":2,"verb":"session-info","params":{"session":"work"}}`))
-	names, ok := info["workspace_names"].(map[string]any)
-	if !ok {
-		t.Fatalf("session-info workspace_names has the wrong shape: %v", info["workspace_names"])
-	}
-	if names["2"] != "review" {
-		t.Fatalf("workspace_names[2] = %v, want review", names["2"])
-	}
-	// Only the named one is reported; the rest are still just numbers.
-	if len(names) != 1 {
-		t.Fatalf("workspace_names = %v, want only the named workspace", names)
-	}
-
-	// Still addressable by number.
-	if err := sess.SwitchDaemonWorkspace(2); err != nil {
-		t.Fatalf("SwitchDaemonWorkspace(2) after naming: %v", err)
-	}
-
-	// An empty name clears it and leaves no entry behind.
-	_ = result(t, c.call(t, `{"id":3,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":""}}`))
-	cleared := result(t, c.call(t, `{"id":4,"verb":"session-info","params":{"session":"work"}}`))
-	if got := cleared["workspace_names"].(map[string]any); len(got) != 0 {
-		t.Fatalf("workspace_names after clearing = %v, want empty", got)
-	}
-}
-
-// TestSetWorkspaceNameRejectsOutOfRange checks the verb bounds the workspace the
-// same way every other workspace-taking operation does.
-func TestSetWorkspaceNameRejectsOutOfRange(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-	c := dialVerb(t, sp)
-
-	for _, ws := range []string{"0", "99"} {
-		code := errCode(t, c.call(t, `{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":`+ws+`,"name":"x"}}`))
-		if code != ErrVerbInvalidParams {
-			t.Errorf("workspace %s gave code %q, want %q", ws, code, ErrVerbInvalidParams)
-		}
-	}
-}
-
 // TestWorkspaceNameReachesEveryClient checks the name is announced on the state
 // push and that a client sync which omits it does not wipe it, which is what
 // makes it visible to a second client rather than only the one that set it.

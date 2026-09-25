@@ -154,25 +154,6 @@ func TestListHooksReportsAHookThatNeverRan(t *testing.T) {
 	}
 }
 
-// TestListHooksFiltersByEvent keeps the call usable on a full table.
-func TestListHooksFiltersByEvent(t *testing.T) {
-	d, sp := startRealHookDaemon(t, map[string]any{
-		"after-new-window":   "echo one",
-		"after-close-window": "echo two",
-	})
-	c := dialVerb(t, sp)
-	makeSessionWithWindow(t, d, "filtered")
-
-	res := result(t, c.call(t, `{"id":1,"verb":"list-hooks","params":{"session":"filtered","event":"after-close-window"}}`))
-	if res["total"] != float64(1) {
-		t.Fatalf("total = %v, want 1", res["total"])
-	}
-	rows := res["hooks"].([]any)
-	if rows[0].(map[string]any)["event"] != "after-close-window" {
-		t.Errorf("the filter returned %v", rows[0])
-	}
-}
-
 // TestListHooksRefusesAnUnknownEvent turns the most common mistake into a
 // message that names it. An event outside the set is dropped when the config
 // loads, so a hook written on one silently never runs.

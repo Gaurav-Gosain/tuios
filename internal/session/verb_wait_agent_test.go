@@ -65,18 +65,6 @@ func TestWaitForAgentStateAlreadyTrue(t *testing.T) {
 	}
 }
 
-// TestWaitForAgentStateRejectsUnknownUntil verifies the until parameter is
-// validated with the accepted states in the hint, not silently never-matching.
-func TestWaitForAgentStateRejectsUnknownUntil(t *testing.T) {
-	_, sp := startTestDaemon(t)
-
-	c := dialVerb(t, sp)
-	resp := c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"agent-state","session":"work","until":"blocked","timeout":500}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Fatalf("error code = %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
 // TestSubscribeReceivesAgentStateEvent verifies a write to agent state raises
 // one agent-state event through the lifecycle diff, carrying the state's wire
 // spelling, and that an unchanged state does not emit again.

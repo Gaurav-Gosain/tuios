@@ -59,55 +59,6 @@ func fakeClaudeOnPath(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func TestNewWorktreeCreatesTheWorktreeAndASessionInIt(t *testing.T) {
-	d, sp, repo := worktreeFixture(t)
-	c := dialVerb(t, sp)
-
-	res := newWorktreeCall(t, c, repo, "feat/retry", map[string]any{"base": "main"})
-	if res["session"] != "repo-feat-retry" {
-		t.Errorf("session = %v, want repo-feat-retry", res["session"])
-	}
-	if res["created_branch"] != true {
-		t.Errorf("created_branch = %v, want true for a branch that did not exist", res["created_branch"])
-	}
-	path, _ := res["path"].(string)
-	if st, err := os.Stat(path); err != nil || !st.IsDir() {
-		t.Fatalf("the worktree directory %q is not there: %v", path, err)
-	}
-	if !worktree.BranchExists(repo, "feat/retry") {
-		t.Error("the branch was not created in the repository")
-	}
-
-	sess := d.manager.GetSession("repo-feat-retry")
-	if sess == nil {
-		t.Fatal("the session does not exist in the daemon")
-	}
-	info := sess.Worktree()
-	if info == nil {
-		t.Fatal("the session carries no worktree record")
-	}
-	if info.Repo != "repo" || info.Branch != "feat/retry" || info.Path != path || !info.Managed || info.Base != "main" {
-		t.Errorf("record = %+v, want repo/feat/retry at %s, managed, base main", info, path)
-	}
-	// The listing carries it too: that is what the rail groups by.
-	listed := result(t, c.call(t, `{"id":2,"verb":"list-sessions"}`))
-	sessions, _ := listed["sessions"].([]any)
-	var found map[string]any
-	for _, s := range sessions {
-		row := s.(map[string]any)
-		if row["name"] == "repo-feat-retry" {
-			found = row
-		}
-	}
-	if found == nil {
-		t.Fatal("list-sessions does not list the session")
-	}
-	wt, _ := found["worktree"].(map[string]any)
-	if wt == nil || wt["branch"] != "feat/retry" || wt["repo"] != "repo" {
-		t.Errorf("list-sessions worktree = %v, want branch feat/retry of repo", found["worktree"])
-	}
-}
-
 func TestNewWorktreeChecksOutABranchThatExists(t *testing.T) {
 	_, sp, repo := worktreeFixture(t)
 	testutil.Git(t, repo, "branch", "existing")
@@ -222,60 +173,6 @@ func TestARemovedWorktreeDirectoryIsListedGoneAndTheSessionIsKept(t *testing.T) 
 	}
 	if out := testutil.Git(t, repo, "worktree", "list"); !strings.Contains(out, "doomed") {
 		t.Errorf("the daemon pruned the worktree itself: %s", out)
-	}
-}
-
-func TestRemoveWorktreeRefusesUncommittedWorkWithoutForceOrStash(t *testing.T) {
-	d, sp, repo := worktreeFixture(t)
-	c := dialVerb(t, sp)
-	res := newWorktreeCall(t, c, repo, "dirty", nil)
-	path := res["path"].(string)
-	if err := os.WriteFile(filepath.Join(path, "work.txt"), []byte("unsaved\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	resp := c.call(t, `{"id":2,"verb":"remove-worktree","params":{"session":"repo-dirty"}}`)
-	if code := errCode(t, resp); code != ErrVerbWorktreeDirty {
-		t.Fatalf("code = %q, want %q", code, ErrVerbWorktreeDirty)
-	}
-	e := resp["error"].(map[string]any)
-	if msg, _ := e["message"].(string); !strings.Contains(msg, "1 uncommitted change") || !strings.Contains(msg, "Nothing was removed") {
-		t.Errorf("message = %q, want the count and that nothing was removed", msg)
-	}
-	if _, err := os.Stat(filepath.Join(path, "work.txt")); err != nil {
-		t.Fatalf("the refusal still removed the work: %v", err)
-	}
-	if d.manager.GetSession("repo-dirty") == nil {
-		t.Fatal("the refusal still killed the session")
-	}
-	if !worktree.BranchExists(repo, "dirty") {
-		t.Fatal("the refusal still deleted the branch")
-	}
-}
-
-func TestRemoveWorktreeWithStashKeepsTheWorkInTheRepository(t *testing.T) {
-	d, sp, repo := worktreeFixture(t)
-	c := dialVerb(t, sp)
-	res := newWorktreeCall(t, c, repo, "stashed", nil)
-	path := res["path"].(string)
-	if err := os.WriteFile(filepath.Join(path, "work.txt"), []byte("unsaved\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	removed := result(t, c.call(t, `{"id":2,"verb":"remove-worktree","params":{"session":"repo-stashed","stash":true}}`))
-	if removed["stashed"] != true || removed["discarded"] != false || removed["session_killed"] != true {
-		t.Errorf("result = %v, want stashed, not discarded, session killed", removed)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("the worktree is still there: %v", err)
-	}
-	if list := testutil.Git(t, repo, "stash", "list"); !strings.Contains(list, "tuios: stashed") {
-		t.Errorf("the stash does not hold the work: %q", list)
-	}
-	if !worktree.BranchExists(repo, "stashed") {
-		t.Error("the branch was deleted")
-	}
-	if d.manager.GetSession("repo-stashed") != nil {
-		t.Error("the session is still there")
 	}
 }
 

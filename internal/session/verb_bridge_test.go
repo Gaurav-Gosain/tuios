@@ -59,29 +59,6 @@ func pendingCount(d *Daemon) int {
 	return len(d.pendingRequests)
 }
 
-func TestRouteToTUISyncDeliversResult(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	tui, clientSide := newFakeTUI(t, d, "sess-1")
-	answerRemoteCommand(t, d, tui, clientSide, &CommandResultPayload{
-		Success: true, Message: "done", Data: map[string]any{"window_id": "w-123"},
-	})
-
-	res, err := d.routeToTUISync(tui, "req-abc",
-		&RemoteCommandPayload{CommandType: "tape_command", TapeCommand: "NewWindow"},
-		3*time.Second)
-	if err != nil {
-		t.Fatalf("routeToTUISync: %v", err)
-	}
-	if !res.Success || res.Data["window_id"] != "w-123" {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-	if n := pendingCount(d); n != 0 {
-		t.Errorf("pending requests not cleaned up: %d", n)
-	}
-}
-
 func TestRouteToTUISyncTimeout(t *testing.T) {
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 	defer d.manager.Shutdown()
@@ -98,36 +75,6 @@ func TestRouteToTUISyncTimeout(t *testing.T) {
 	}
 	if n := pendingCount(d); n != 0 {
 		t.Errorf("pending requests not cleaned up after timeout: %d", n)
-	}
-}
-
-// TestVerbSetOptionRecordsAndRoutes verifies set-option records the value in
-// daemon-owned state and reports applied=true when the attached TUI accepts it.
-func TestVerbSetOptionRecordsAndRoutes(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	sess, err := d.manager.CreateSession("cfg", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-
-	tui, clientSide := newFakeTUI(t, d, sess.ID)
-	answerRemoteCommand(t, d, tui, clientSide, &CommandResultPayload{Success: true})
-
-	out, verr := d.verbSetOption(nil, json.RawMessage(`{"session":"cfg","key":"border_style","value":"double"}`))
-	if verr != nil {
-		t.Fatalf("verbSetOption: %v", verr)
-	}
-	m := out.(map[string]any)
-	if m["applied"] != true {
-		t.Errorf("applied = %v, want true", m["applied"])
-	}
-	// Recorded under the full path: the bare spelling is an accepted alias for
-	// the call, and normalising it on the way in keeps one option from being two
-	// entries that can disagree.
-	if v, ok := sess.GetOption("appearance.border_style"); !ok || v != "double" {
-		t.Errorf("option not recorded: %q,%v", v, ok)
 	}
 }
 

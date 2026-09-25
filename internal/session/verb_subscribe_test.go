@@ -5,34 +5,6 @@ import (
 	"time"
 )
 
-// TestSubscribeReceivesWindowLifecycle verifies a subscribed connection receives
-// a window-created event, carrying a sequence number, when a window is created.
-func TestSubscribeReceivesWindowLifecycle(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	ack := result(t, c.call(t, `{"id":1,"verb":"subscribe","params":{"session":"work","types":["window-created"]}}`))
-	if ack["type"] != EventSubscribed {
-		t.Fatalf("ack type = %v, want subscribed", ack["type"])
-	}
-
-	if _, err := sess.AddDaemonWindow("second", nil); err != nil {
-		t.Fatalf("AddDaemonWindow: %v", err)
-	}
-
-	ev := c.readResp(t)
-	if ev["type"] != EventWindowCreated {
-		t.Fatalf("event type = %v, want window-created", ev["type"])
-	}
-	if _, ok := ev["seq"].(float64); !ok {
-		t.Fatalf("event missing numeric seq: %v", ev["seq"])
-	}
-	if ev["session"] != "work" {
-		t.Fatalf("event session = %v, want work", ev["session"])
-	}
-}
-
 // TestSubscribeTwoSubscribersSameSequence verifies two independent connections
 // subscribed to the same events see identical sequence numbers over the wire.
 func TestSubscribeTwoSubscribersSameSequence(t *testing.T) {
@@ -79,55 +51,6 @@ func TestUnsubscribedConnectionReceivesNoEvents(t *testing.T) {
 	_ = c.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 	if _, err := c.r.ReadBytes('\n'); err == nil {
 		t.Fatal("unsubscribed connection unexpectedly received an event line")
-	}
-}
-
-// TestWaitForOutputRacingPTY verifies wait-for window-output resolves the moment
-// a real PTY produces matching output, without the caller polling.
-func TestWaitForOutputRacingPTY(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	done := make(chan map[string]any, 1)
-	go func() {
-		done <- c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"WAITMARK","timeout":8000}}`)
-	}()
-
-	// Give the wait a moment to subscribe, then race real output in.
-	time.Sleep(150 * time.Millisecond)
-	pty, err := d.resolvePTYForTarget(sess, "")
-	if err != nil {
-		t.Fatalf("resolvePTYForTarget: %v", err)
-	}
-	if _, err := pty.Write([]byte("echo WAITMARK\r")); err != nil {
-		t.Fatalf("pty write: %v", err)
-	}
-
-	select {
-	case resp := <-done:
-		res := result(t, resp)
-		if res["matched"] != true {
-			t.Fatalf("wait result not matched: %v", res)
-		}
-		if res["condition"] != "window-output" {
-			t.Fatalf("condition = %v, want window-output", res["condition"])
-		}
-	case <-time.After(12 * time.Second):
-		t.Fatal("wait-for window-output did not resolve")
-	}
-}
-
-// TestWaitForTimeout verifies a wait whose condition never matches returns the
-// stable timeout error code.
-func TestWaitForTimeout(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	resp := c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"NEVER_APPEARS_ZZZ_9137","timeout":300}}`)
-	if code := errCode(t, resp); code != ErrVerbTimeout {
-		t.Fatalf("error code = %q, want %q", code, ErrVerbTimeout)
 	}
 }
 

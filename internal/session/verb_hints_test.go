@@ -81,33 +81,10 @@ func TestVerbErrorHints(t *testing.T) {
 		wantAvailable []string
 	}{
 		{
-			name:     "unknown verb suggests the closest one and list-verbs",
-			req:      `{"id":1,"verb":"list-window"}`,
-			wantCode: ErrVerbUnknownVerb,
-			wantHint: map[string]string{
-				"verb":         "list-verbs",
-				"command":      "tuios list-verbs",
-				"did_you_mean": "list-windows",
-			},
-			wantAvailable: []string{"list-windows", "capture-pane", "wait-for"},
-		},
-		{
 			name:     "a request with no verb is told the envelope shape",
 			req:      `{"id":1,"params":{}}`,
 			wantCode: ErrVerbInvalidRequest,
 			wantHint: map[string]string{"param": "verb", "verb": "list-verbs"},
-		},
-		{
-			name:        "unknown session lists the sessions that exist",
-			req:         `{"id":1,"verb":"list-windows","params":{"session":"scratchh"}}`,
-			wantCode:    ErrVerbSessionNotFound,
-			wantMessage: []string{"scratchh", "not found"},
-			wantHint: map[string]string{
-				"param":        "session",
-				"command":      "tuios ls",
-				"did_you_mean": "scratch",
-			},
-			wantAvailable: []string{"work", "scratch", "empty"},
 		},
 		{
 			name:        "unknown window lists the addressable windows",

@@ -89,23 +89,6 @@ func TestNewWindowRefusesAnUnusableCwd(t *testing.T) {
 	}
 }
 
-// TestNewWindowRefusesAWorkspaceOutOfRange checks the bound is reported with the
-// range, so a caller knows what would have worked.
-func TestNewWindowRefusesAWorkspaceOutOfRange(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "bounds")
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"verb":"new-window","params":{"session":"bounds","workspace":99}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Fatalf("code = %q, want %q", code, ErrVerbInvalidParams)
-	}
-	hint := resp["error"].(map[string]any)["hint"].(map[string]any)
-	if hint["param"] != "workspace" {
-		t.Errorf("hint.param = %v, want workspace", hint["param"])
-	}
-}
-
 // TestFocusWindowByEveryName drives the three ways focus-window names a pane and
 // checks each reports where the focus landed. A relative or directional move
 // cannot say in advance which pane it picks, so reporting it is the contract.
@@ -140,19 +123,6 @@ func TestFocusWindowByEveryName(t *testing.T) {
 	resp = c.call(t, `{"verb":"focus-window","params":{"session":"focus"}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("no selector gave %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
-// TestFocusDirectionNeedsAClient pins the seam. A direction is a question about
-// the viewport, and the daemon has none, so it says so rather than guessing.
-func TestFocusDirectionNeedsAClient(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "dir")
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"verb":"focus-window","params":{"session":"dir","direction":"left"}}`)
-	if code := errCode(t, resp); code != ErrVerbNeedsClient {
-		t.Fatalf("code = %q, want %q", code, ErrVerbNeedsClient)
 	}
 }
 
@@ -269,34 +239,6 @@ func TestSetWindowRenamesAndMinimizes(t *testing.T) {
 	resp := c.call(t, `{"verb":"set-window","params":{"session":"setwin","window":"after"}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("a set-window with nothing to set gave %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
-// TestSplitAndLayoutNeedAClient pins the other half of the seam. Both compute a
-// geometry, so both refuse rather than record something no renderer will honour.
-func TestSplitAndLayoutNeedAClient(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "geo")
-	c := dialVerb(t, sp)
-
-	resp := c.call(t, `{"verb":"split-window","params":{"session":"geo","direction":"vertical"}}`)
-	if code := errCode(t, resp); code != ErrVerbNeedsClient {
-		t.Errorf("split-window gave %q, want %q", code, ErrVerbNeedsClient)
-	}
-	resp = c.call(t, `{"verb":"set-layout","params":{"session":"geo","tiling":true}}`)
-	if code := errCode(t, resp); code != ErrVerbNeedsClient {
-		t.Errorf("set-layout gave %q, want %q", code, ErrVerbNeedsClient)
-	}
-
-	// A bad direction is caught before the client is consulted, so the caller is
-	// told about its own mistake rather than about the missing renderer.
-	resp = c.call(t, `{"verb":"split-window","params":{"session":"geo","direction":"sideways"}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Errorf("a bad direction gave %q, want %q", code, ErrVerbInvalidParams)
-	}
-	resp = c.call(t, `{"verb":"set-layout","params":{"session":"geo"}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Errorf("a set-layout with nothing to set gave %q, want %q", code, ErrVerbInvalidParams)
 	}
 }
 

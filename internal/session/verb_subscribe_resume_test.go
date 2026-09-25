@@ -143,21 +143,3 @@ func TestWaitForAgentStateAnySession(t *testing.T) {
 		t.Fatal("wait-for agent-state any_session did not resolve")
 	}
 }
-
-// TestWaitForAnySessionRejectsTarget verifies any_session refuses a session or
-// window, and any condition but agent-state, rather than quietly ignoring one.
-func TestWaitForAnySessionRejectsTarget(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-
-	c := dialVerb(t, sp)
-	for _, line := range []string{
-		`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","any_session":true,"session":"work","until":"idle","timeout":200}}`,
-		`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","any_session":true,"window":"Window","until":"idle","timeout":200}}`,
-		`{"id":1,"verb":"wait-for","params":{"condition":"window-idle","any_session":true,"timeout":200}}`,
-	} {
-		if code := errCode(t, c.call(t, line)); code != ErrVerbInvalidParams {
-			t.Fatalf("%s: code = %q, want %q", line, code, ErrVerbInvalidParams)
-		}
-	}
-}

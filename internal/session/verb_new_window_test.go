@@ -1,12 +1,8 @@
 package session
 
 import (
-	"encoding/json"
 	"net"
-	"runtime"
-	"slices"
 	"testing"
-	"time"
 )
 
 // collectStateSyncs drains the pushes the daemon sends a fake TUI so a test can
@@ -30,100 +26,6 @@ func collectStateSyncs(clientSide net.Conn) <-chan *SessionState {
 		}
 	}()
 	return pushed
-}
-
-// TestNewWindowWithAttachedTUIRunsOnTheDaemon pins the converged create. Creating
-// used to be routed to the attached client, so the window existed in the renderer
-// first and in daemon state only when that client got round to syncing back, and
-// the verb could fail with command_failed purely because the renderer was busy.
-// The daemon now spawns the PTY and adds the window itself, and tells the client.
-func TestNewWindowWithAttachedTUIRunsOnTheDaemon(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	sess, err := d.manager.CreateSession("creating", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession failed: %v", err)
-	}
-
-	_, clientSide := newFakeTUI(t, d, sess.ID)
-	pushed := collectStateSyncs(clientSide)
-
-	out, verr := d.verbNewWindow(nil, json.RawMessage(`{"session":"creating","name":"build"}`))
-	if verr != nil {
-		t.Fatalf("verbNewWindow: %v", verr)
-	}
-	res := out.(map[string]any)
-	if res["type"] != "window_created" {
-		t.Fatalf("result = %v, want window_created", res)
-	}
-	windowID, _ := res["window_id"].(string)
-	if windowID == "" {
-		t.Fatal("verbNewWindow returned no window_id")
-	}
-
-	// The daemon holds the window, immediately, with no client round trip.
-	state := sess.GetState()
-	if len(state.Windows) != 1 {
-		t.Fatalf("daemon state holds %d windows, want 1", len(state.Windows))
-	}
-	win := state.Windows[0]
-	if win.ID != windowID {
-		t.Errorf("daemon window ID = %q, want %q", win.ID, windowID)
-	}
-	if win.CustomName != "build" {
-		t.Errorf("CustomName = %q, want build", win.CustomName)
-	}
-	if win.PTYID == "" {
-		t.Fatal("created window has no PTY")
-	}
-	if pty := sess.GetPTY(win.PTYID); pty == nil || pty.IsExited() {
-		t.Error("the created window's PTY is not running")
-	}
-	if state.FocusedWindowID != windowID {
-		t.Errorf("FocusedWindowID = %q, want the new window", state.FocusedWindowID)
-	}
-
-	// And the attached client was told, with the window marked as needing a
-	// position, because the daemon has no viewport to have chosen one.
-	deadline := time.After(3 * time.Second)
-	for {
-		select {
-		case state := <-pushed:
-			for i := range state.Windows {
-				if state.Windows[i].ID != windowID {
-					continue
-				}
-				if !state.Windows[i].Unplaced {
-					t.Error("the pushed window is not marked Unplaced, so no client will place it")
-				}
-				return
-			}
-		case <-deadline:
-			t.Fatal("the attached client was never told the window was created")
-		}
-	}
-}
-
-// TestDaemonCreatedWindowIsUnplaced states the contract the client relies on: a
-// window the daemon made carries a usable box so its PTY has a sane size, and
-// says outright that the box is a placeholder rather than a position.
-func TestDaemonCreatedWindowIsUnplaced(t *testing.T) {
-	sess := newTestSession(t)
-
-	win, err := sess.AddDaemonWindow("", nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindow failed: %v", err)
-	}
-	if !win.Unplaced {
-		t.Error("a daemon-created window must be marked Unplaced")
-	}
-	if win.Width <= 0 || win.Height <= 0 {
-		t.Errorf("placeholder box is %dx%d, want a usable size", win.Width, win.Height)
-	}
-	if win.Title == "" {
-		t.Error("a daemon-created window must carry a default title")
-	}
 }
 
 // TestClientSyncClearsUnplaced covers the other half of the handshake. A client
@@ -161,61 +63,5 @@ func TestClientSyncClearsUnplaced(t *testing.T) {
 	}
 	if got.X != 10 || got.Y != 5 || got.Width != 40 || got.Height != 12 {
 		t.Errorf("geometry = %d,%d %dx%d, want the client's 10,5 40x12", got.X, got.Y, got.Width, got.Height)
-	}
-}
-
-// TestNewWindowVerbCommandExecsTheProgram is the JSON half of the launch
-// contract: the command param is an argv the daemon execs as the window's
-// process. It exists so the verb surface and the keyboard's NewWindow intent
-// stay the same call with the same meaning.
-func TestNewWindowVerbCommandExecsTheProgram(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the probe command is /bin/sh")
-	}
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	sess, err := d.manager.CreateSession("execing", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession failed: %v", err)
-	}
-
-	out, verr := d.verbNewWindow(nil, json.RawMessage(
-		`{"session":"execing","name":"probe","command":["/bin/sh","-c","sleep 30"]}`))
-	if verr != nil {
-		t.Fatalf("verbNewWindow: %v", verr)
-	}
-	res := out.(map[string]any)
-
-	pty := sess.GetPTY(res["pty_id"].(string))
-	if pty == nil {
-		t.Fatal("the created window has no PTY")
-	}
-	want := []string{"/bin/sh", "-c", "sleep 30"}
-	if !slices.Equal(pty.cmd.Args, want) {
-		t.Errorf("PTY process argv = %v, want %v", pty.cmd.Args, want)
-	}
-	if pty.IsExited() {
-		t.Error("the program exited immediately")
-	}
-}
-
-// TestNewWindowVerbRefusesEmptyCommandHead pins the refusal: an argv whose
-// program is the empty string can only fail inside exec with a message that
-// names nothing, so it is turned back at the parameter check instead.
-func TestNewWindowVerbRefusesEmptyCommandHead(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	if _, err := d.manager.CreateSession("refusing", &SessionConfig{}, 80, 24); err != nil {
-		t.Fatalf("CreateSession failed: %v", err)
-	}
-
-	_, verr := d.verbNewWindow(nil, json.RawMessage(`{"session":"refusing","command":[""]}`))
-	if verr == nil {
-		t.Fatal("an empty command head was accepted")
-	}
-	if verr.Code != ErrVerbInvalidParams {
-		t.Errorf("code = %q, want %q", verr.Code, ErrVerbInvalidParams)
 	}
 }

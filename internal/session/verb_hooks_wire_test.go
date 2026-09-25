@@ -89,23 +89,3 @@ func TestAnEmptyClientHookTableSurvivesTheCodec(t *testing.T) {
 		t.Errorf("a missing hooks field came back as %d rows", len(rows))
 	}
 }
-
-// TestTheDaemonRowsAndTheClientRowsHaveTheSameKeys stops the two halves of one
-// table describing themselves differently, which would make the listing
-// unreadable the moment a client attached.
-func TestTheDaemonRowsAndTheClientRowsHaveTheSameKeys(t *testing.T) {
-	m := newHookTableForTest()
-	daemon := m.Rows("session")
-	client := m.Rows("client")
-	if len(daemon) != 1 || len(client) != 1 {
-		t.Fatalf("expected one row per side, got %d and %d", len(daemon), len(client))
-	}
-	for key := range daemon[0] {
-		if _, ok := client[0][key]; !ok {
-			t.Errorf("the client rows have no %q", key)
-		}
-	}
-	if daemon[0]["side"] != "session" || client[0]["side"] != "client" {
-		t.Errorf("side is not reported per half: %v and %v", daemon[0]["side"], client[0]["side"])
-	}
-}

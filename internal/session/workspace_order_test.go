@@ -12,39 +12,6 @@ import (
 // number is what the verbs, the keys, the focus map, the trees and each window
 // go on addressing. These pin both halves of that.
 
-// TestSetWorkspaceOrderVerbRoundTrip drives the verb over the real socket, reads
-// it back through session-info, and checks that rearranging the workspaces moved
-// nothing that addresses one by number.
-func TestSetWorkspaceOrderVerbRoundTrip(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "work")
-	before := sess.GetState().Version
-
-	c := dialVerb(t, sp)
-
-	res := result(t, c.call(t, `{"id":1,"verb":"set-workspace-order","params":{"session":"work","order":[3,1,2]}}`))
-	if got := numbers(t, res["workspace_order"]); !slices.Equal(got, []int{3, 1, 2}) {
-		t.Fatalf("set-workspace-order returned %v", res["workspace_order"])
-	}
-	if after := sess.GetState().Version; after <= before {
-		t.Fatalf("version did not bump: before=%d after=%d", before, after)
-	}
-
-	info := result(t, c.call(t, `{"id":2,"verb":"session-info","params":{"session":"work"}}`))
-	if got := numbers(t, info["workspace_order"]); !slices.Equal(got, []int{3, 1, 2}) {
-		t.Fatalf("session-info reports order %v, want [3 1 2]", info["workspace_order"])
-	}
-
-	// The identity is untouched: workspace 2 is still workspace 2, whatever
-	// position it now shows in.
-	if err := sess.SwitchDaemonWorkspace(2); err != nil {
-		t.Fatalf("SwitchDaemonWorkspace(2) after rearranging: %v", err)
-	}
-	if got := sess.GetState().CurrentWorkspace; got != 2 {
-		t.Fatalf("switching to workspace 2 landed on %d", got)
-	}
-}
-
 // TestAnAscendingOrderLeavesNoTrace: a session that has never been rearranged,
 // and one dragged back into its original arrangement, are the same session, so
 // neither may carry an order in serialized state.

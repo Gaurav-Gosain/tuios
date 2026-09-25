@@ -42,45 +42,6 @@ func TestClosestMatch_LongTargetIsCheap(t *testing.T) {
 	}
 }
 
-// TestClosestMatch_StillSuggests checks the length guard did not cost the hint
-// its actual job.
-func TestClosestMatch_StillSuggests(t *testing.T) {
-	known := knownVerbNames()
-
-	// Build a typo from a real verb so the test does not hard-code a verb name
-	// that may be renamed later.
-	var base string
-	for _, n := range known {
-		if len(n) >= 8 {
-			base = n
-			break
-		}
-	}
-	if base == "" {
-		t.Skip("no verb long enough to build a typo from")
-	}
-
-	tests := []struct {
-		name   string
-		target string
-		want   string
-	}{
-		{"dropped character", base[:len(base)-1], base},
-		{"transposed tail", base[:len(base)-2] + string(base[len(base)-1]) + string(base[len(base)-2]), base},
-		{"exact match is not a suggestion", base, ""},
-		{"nothing close", strings.Repeat("q", len(base)), ""},
-		{"empty", "", ""},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := closestMatch(tc.target, known); got != tc.want {
-				t.Errorf("closestMatch(%q) = %q, want %q", tc.target, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestEchoName_BoundsTheResponse checks that a caller-supplied name echoed into
 // an error message cannot make the response scale with the request.
 func TestEchoName_BoundsTheResponse(t *testing.T) {

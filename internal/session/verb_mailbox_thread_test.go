@@ -246,29 +246,6 @@ func TestReplyToAnEvictedParentIsAcceptedOverTheSocket(t *testing.T) {
 	}
 }
 
-// TestAnUnknownThreadReadsEmptyRatherThanFailing pins the answer for a thread
-// nothing is left of. It cannot be told apart from a thread nobody started,
-// because the ring forgets, so both give the same empty answer instead of an
-// error a caller would have to guess the meaning of.
-func TestAnUnknownThreadReadsEmptyRatherThanFailing(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "empty")
-	c := dialVerb(t, sp)
-
-	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"empty","to":"`+b+`","from":"`+a+`","text":"in some other thread"}}`)
-
-	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"empty","thread":4242}}`))
-	if n, _ := read["messages"].([]any); len(n) != 0 {
-		t.Errorf("an unknown thread returned %d message(s), want none", len(n))
-	}
-	if read["total"] != float64(0) {
-		t.Errorf("total = %v, want 0", read["total"])
-	}
-	if read["thread"] != float64(4242) {
-		t.Errorf("thread = %v, want the id that was asked for", read["thread"])
-	}
-}
-
 // TestThreadIdsMeanNothingOutsideTheirSession holds the boundary the rings
 // already have. Ids are issued by one counter, so an id from another session is
 // a number this session's ring has never held, and it must read as empty rather

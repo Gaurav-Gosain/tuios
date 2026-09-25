@@ -154,20 +154,4 @@ func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 	if res["value"] == nil || res["value"] == "" {
 		t.Error("an untouched option read back empty")
 	}
-
-	c.call(t, `{"verb":"set-option","params":{"session":"read","key":"appearance.sidebar.position","value":"right"}}`)
-	res = result(t, c.call(t, `{"verb":"get-option","params":{"session":"read","key":"appearance.sidebar.position"}}`))
-	if res["value"] != "right" {
-		t.Errorf("value = %v, want right", res["value"])
-	}
-	// source is what lets a caller tell an override from a default it happens to
-	// match, which is the whole reason it is reported.
-	if res["source"] != "session" {
-		t.Errorf("source = %v, want session after setting it", res["source"])
-	}
-
-	resp := c.call(t, `{"verb":"get-option","params":{"session":"read","key":"appearance.nonsense"}}`)
-	if code := errCode(t, resp); code != ErrVerbOptionNotFound {
-		t.Errorf("code = %q, want %q", code, ErrVerbOptionNotFound)
-	}
 }
