@@ -42,7 +42,7 @@ var ensureRegistryOnce sync.Once
 // with no theme selected.
 func EnsureRegistry() {
 	ensureRegistryOnce.Do(func() {
-		tint.NewDefaultRegistry()
+		newBuiltinRegistry()
 		if themesDir, err := GetThemesDir(); err == nil {
 			if _, err := LoadCustomThemes(themesDir); err != nil {
 				log.Printf("Warning: error loading custom themes: %v", err)
