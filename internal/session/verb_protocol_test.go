@@ -154,6 +154,19 @@ func TestVerbErrorCases(t *testing.T) {
 	}
 }
 
+// TestVerbConnectionSurvivesBadLine verifies a malformed line does not desync or
+// close the connection: a following valid request still works.
+func TestVerbConnectionSurvivesBadLine(t *testing.T) {
+	_, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	_ = errCode(t, c.call(t, `{"garbage`))
+	res := result(t, c.call(t, `{"id":9,"verb":"list-verbs"}`))
+	if res["type"] != "verb_list" {
+		t.Errorf("connection did not recover; got %v", res)
+	}
+}
+
 // TestVerbIDEchoTypes verifies both numeric and string ids echo back verbatim.
 func TestVerbIDEcho(t *testing.T) {
 	_, sp := startTestDaemon(t)

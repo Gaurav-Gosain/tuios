@@ -1,7 +1,9 @@
 package session
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,6 +37,70 @@ func readWholeBundle(t *testing.T, c *verbConn, session string, full bool) (map[
 		})+`}`))
 	}
 	return first, data
+}
+
+func TestBundleWorktreeCarriesCommitsAndUncommittedWork(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	created := newWorktreeCall(t, c, repo, "feat/pull", map[string]any{"base": "main"})
+	path := created["path"].(string)
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("committed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "commit", "-q", "-am", "work")
+	if err := os.WriteFile(filepath.Join(path, "notes.txt"), []byte("not committed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	head, _ := worktree.HeadCommit(path)
+
+	// Small chunks, so the transfer takes several calls.
+	old := bundleChunkBytes
+	bundleChunkBytes = 64
+	t.Cleanup(func() { bundleChunkBytes = old })
+
+	first, data := readWholeBundle(t, c, "repo-feat-pull", false)
+	if first["branch"] != "feat/pull" || first["head"] != head || first["full"] != false || first["changes"] != float64(1) {
+		t.Errorf("first reply = %v, want branch feat/pull at %s, a thin bundle and one change", first, head)
+	}
+	if int(first["size"].(float64)) != len(data) {
+		t.Fatalf("read %d bytes, size says %d", len(data), int(first["size"].(float64)))
+	}
+	sum := sha256.Sum256(data)
+	if hex.EncodeToString(sum[:]) != first["sha256"] {
+		t.Error("the bytes read do not match the transfer's sha256")
+	}
+	// The transfer is gone after its last chunk.
+	if n := d.bundles.count(); n != 0 {
+		t.Errorf("%d transfers open after the last chunk", n)
+	}
+
+	// The bytes are a bundle and a patch another checkout can use.
+	nb := int(first["bundle_bytes"].(float64))
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "b"), data[:nb], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "p"), data[nb:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receiver := filepath.Join(t.TempDir(), "receiver")
+	testutil.Git(t, filepath.Dir(receiver), "clone", "-q", repo, receiver)
+	if !worktree.HasCommit(receiver, first["base_commit"].(string)) {
+		t.Fatal("the receiver lacks the base commit")
+	}
+	if err := worktree.FetchBundle(receiver, filepath.Join(dir, "b"), "feat/pull", "feat/pull"); err != nil {
+		t.Fatalf("fetch the bundle: %v", err)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	if _, err := worktree.Add(receiver, wt, "feat/pull", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := worktree.ApplyPatch(wt, filepath.Join(dir, "p")); err != nil {
+		t.Fatalf("apply the patch: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(wt, "notes.txt")); string(got) != "not committed\n" {
+		t.Errorf("notes.txt = %q", got)
+	}
 }
 
 func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {

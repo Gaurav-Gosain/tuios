@@ -59,6 +59,29 @@ func pendingCount(d *Daemon) int {
 	return len(d.pendingRequests)
 }
 
+func TestRouteToTUISyncDeliversResult(t *testing.T) {
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	defer d.manager.Shutdown()
+
+	tui, clientSide := newFakeTUI(t, d, "sess-1")
+	answerRemoteCommand(t, d, tui, clientSide, &CommandResultPayload{
+		Success: true, Message: "done", Data: map[string]any{"window_id": "w-123"},
+	})
+
+	res, err := d.routeToTUISync(tui, "req-abc",
+		&RemoteCommandPayload{CommandType: "tape_command", TapeCommand: "NewWindow"},
+		3*time.Second)
+	if err != nil {
+		t.Fatalf("routeToTUISync: %v", err)
+	}
+	if !res.Success || res.Data["window_id"] != "w-123" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if n := pendingCount(d); n != 0 {
+		t.Errorf("pending requests not cleaned up: %d", n)
+	}
+}
+
 func TestRouteToTUISyncTimeout(t *testing.T) {
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 	defer d.manager.Shutdown()

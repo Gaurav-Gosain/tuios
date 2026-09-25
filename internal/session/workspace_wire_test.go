@@ -33,6 +33,35 @@ func TestOlderPayloadReadsAsUnknown(t *testing.T) {
 	}
 }
 
+// TestNewerPayloadIsIgnorableByAnOlderReader stands in for the other direction:
+// the fields are omitted when zero and named, so a reader that does not know
+// them drops them and keeps the rest. Modelled with a struct that lacks them.
+func TestNewerPayloadIsIgnorableByAnOlderReader(t *testing.T) {
+	data, err := json.Marshal(SessionInfo{
+		Name:             "work",
+		CurrentWorkspace: 3,
+		Windows:          []WindowSummary{{ID: "w1", Title: "nvim", Workspace: 3}},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// The shape an older build compiled against.
+	var older struct {
+		Name    string `json:"name"`
+		Windows []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal(data, &older); err != nil {
+		t.Fatalf("an older reader could not parse a newer listing: %v", err)
+	}
+	if older.Name != "work" || len(older.Windows) != 1 || older.Windows[0].Title != "nvim" {
+		t.Errorf("an older reader lost the fields it does know: %+v", older)
+	}
+}
+
 // TestZeroWorkspaceIsOmitted keeps the wire quiet for the case that carries no
 // information, which is what makes the skew above free.
 func TestZeroWorkspaceIsOmitted(t *testing.T) {
