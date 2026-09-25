@@ -334,6 +334,27 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 	}
 }
 
+// TestDockStaysOneScreenWideWithAMessage is the containment check on the whole
+// bar rather than the block alone. The dock is composed of a left block, the
+// window pills and the right block, and a message that fits its own budget can
+// still push the bar past the screen if the budget ignored what the rest of the
+// dock is already using.
+func TestDockStaysOneScreenWideWithAMessage(t *testing.T) {
+	long := strings.Repeat("a very long failure message that keeps going ", 4)
+
+	for _, width := range notifWidths {
+		m := notifTestOS(t, width)
+		m.ShowNotification(long, "error", m.Settings.NotificationDuration)
+
+		dock, _ := m.renderDockString()
+		for i, line := range strings.Split(dock, "\n") {
+			if got := lipgloss.Width(line); got != width {
+				t.Errorf("width %d: dock row %d is %d columns", width, i, got)
+			}
+		}
+	}
+}
+
 // TestQueuedErrorIsStillIndicatedWhenBuried is the overflow contract.
 //
 // The newest message wins the block, which means a later info can push an error
