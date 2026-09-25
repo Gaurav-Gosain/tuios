@@ -161,7 +161,7 @@ comprehensive keyboard/mouse interactions.`,
 
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
-	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof", "", "Serve net/http/pprof on this address for live profiling (e.g. localhost:6060)")
+	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof", "", "Serve /debug/pprof profiles on this address for live profiling (e.g. localhost:6060)")
 
 	// Local to the root command: the skill describes tuios as a whole, and the
 	// theme listing and preview are root-level actions that print and exit, so

@@ -5,14 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux
 	"os"
 	"os/signal"
-	"runtime"
 	"runtime/pprof"
 	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -22,29 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
-
-// startPprofServer serves net/http/pprof on --pprof when that flag is set.
-//
-// Block/mutex profiling is sampled, not exhaustive: rate 1 samples every event
-// and adds heavy overhead under load, which is not worth it for representative
-// contention data. Output is not printed so it cannot corrupt the TUI on stdout.
-//
-// Every path that runs the TUI calls this, including the daemon-attached one.
-// Profiling an attached client is the only way to see the compositor under a
-// real multi-pane session, which is where the interesting contention lives.
-func startPprofServer() {
-	if pprofAddr == "" {
-		return
-	}
-	runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
-	runtime.SetMutexProfileFraction(100)
-	go func() {
-		srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("pprof server error: %v", err)
-		}
-	}()
-}
 
 // loadAndApplyConfig loads the user config (falling back to defaults on error),
 // applies the appearance globals as the baseline, then applies the CLI-flag

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -22,15 +21,21 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("%s returned %d %s", e.URL, e.Status, http.StatusText(e.Status))
+	return fmt.Sprintf("%s returned %d %s", e.URL, e.Status, statusText[e.Status])
+}
+
+// statusText is the reason phrase of the statuses GitHub answers with.
+var statusText = map[int]string{
+	400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+	405: "Method Not Allowed", 406: "Not Acceptable", 408: "Request Timeout",
+	409: "Conflict", 410: "Gone", 422: "Unprocessable Entity",
+	429: "Too Many Requests", 451: "Unavailable For Legal Reasons",
+	500: "Internal Server Error", 501: "Not Implemented", 502: "Bad Gateway",
+	503: "Service Unavailable", 504: "Gateway Timeout",
 }
 
 // GitHub reads releases from api.github.com.
 type GitHub struct {
-	// Client is the HTTP client. Zero means a client with Timeout, which is the
-	// only setting that matters here: the default client has none at all, so a
-	// hung connection would hang the command forever.
-	Client *http.Client
 	// Repo is owner/name. Zero means Repo.
 	Repo string
 	// Token is an optional API token, which raises the rate limit from sixty
@@ -59,17 +64,9 @@ func NewGitHub() *GitHub {
 		token = os.Getenv("GH_TOKEN")
 	}
 	return &GitHub{
-		Client: &http.Client{Timeout: httpTimeout},
-		Repo:   Repo,
-		Token:  token,
+		Repo:  Repo,
+		Token: token,
 	}
-}
-
-func (g *GitHub) client() *http.Client {
-	if g.Client != nil {
-		return g.Client
-	}
-	return &http.Client{Timeout: httpTimeout}
 }
 
 func (g *GitHub) repo() string {
@@ -166,29 +163,20 @@ func (g *GitHub) getJSON(ctx context.Context, url string, into any) error {
 	return nil
 }
 
-func (g *GitHub) do(ctx context.Context, url, accept string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (g *GitHub) do(ctx context.Context, url, accept string) (*response, error) {
+	resp, err := curlGet(ctx, url, accept, g.Token)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", accept)
-	req.Header.Set("User-Agent", "tuios-update")
-	if g.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+g.Token)
-	}
-	resp, err := g.client().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode == http.StatusOK {
+	if resp.StatusCode == 200 {
 		return resp, nil
 	}
 	_ = resp.Body.Close()
 	// 403 and 429 are both how a spent allowance arrives, and the remaining
 	// header is what tells them apart from a genuine refusal.
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		if resp.Header.Get("X-RateLimit-Remaining") == "0" {
-			return nil, &RateLimitError{Reset: parseResetHeader(resp.Header.Get("X-RateLimit-Reset"))}
+	if resp.StatusCode == 403 || resp.StatusCode == 429 {
+		if resp.Header["X-Ratelimit-Remaining"] == "0" {
+			return nil, &RateLimitError{Reset: parseResetHeader(resp.Header["X-Ratelimit-Reset"])}
 		}
 	}
 	return nil, &HTTPError{Status: resp.StatusCode, URL: url}

@@ -134,7 +134,7 @@ tuios --standalone
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
 - `--cpuprofile <file>`: Write CPU profile to file
-- `--pprof <addr>`: Serve net/http/pprof on this address for live profiling, such as localhost:6060
+- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as localhost:6060. Delta profiles (`?seconds=` on heap and the like) are not served; take two and compare them with `go tool pprof -diff_base`
 - `-h, --help`: Show help for tuios
 - `-v, --version`: Show version information
 
@@ -3395,6 +3395,10 @@ are not.
 
 Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
 never required and no token is created for you.
+
+The lookup and the download run through `curl`, which must be on `PATH`. It
+honours `HTTPS_PROXY` and `NO_PROXY`, and the token is handed to it on stdin,
+not on its command line.
 
 ---
 
