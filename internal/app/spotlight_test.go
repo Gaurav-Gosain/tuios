@@ -71,39 +71,64 @@ func spotlightRestore(canvas *lipgloss.Canvas, fg, bg color.Color) {
 // step further and mints colours the cache has not seen. A real frame is
 // composed fresh each time and carries the palette it carried last frame, which
 // is what restoring reproduces.
+//
+// Three screens take different paths through the pass: a themed one, a
+// themeless one mixing colours the pass can scale with ones it cannot (the
+// blend cache must still serve the first kind), and one where nothing
+// resolves and every cell goes to SGR 2.
 func TestSpotlightAllocatesNothing(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
 	// Boxed once, outside the measurement: an interface parameter taking a
 	// color.RGBA value allocates at every call, which would be counted as the
 	// pass's own.
 	var fg color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
 	var bg color.Color = color.RGBA{R: 40, G: 40, B: 60, A: 0xFF}
-	canvas := spotlightTestCanvas(t, realCols, realRows)
-	s := newSpotlightTestState()
+	var cube color.Color = ansi.IndexedColor(214)
+	var basic color.Color = ansi.BasicColor(2)
+	inks := []color.Color{fg, cube, basic, nil}
 
-	// The restore is inside the measured function, so it has to be free or the
-	// number below is not the pass's.
-	if base := testing.AllocsPerRun(20, func() { spotlightRestore(canvas, fg, bg) }); base != 0 {
-		t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
-	}
+	for _, tc := range []struct {
+		name    string
+		theme   string
+		canvas  func(t testing.TB, w, h int) *lipgloss.Canvas
+		restore func(canvas *lipgloss.Canvas)
+	}{
+		{"themed", "catppuccin_mocha", spotlightTestCanvas,
+			func(c *lipgloss.Canvas) { spotlightRestore(c, fg, bg) }},
+		{"mixed", "", spotlightMixedCanvas,
+			func(c *lipgloss.Canvas) { spotlightRestoreMixed(c, inks) }},
+		{"faint", "", spotlightTestCanvas,
+			func(c *lipgloss.Canvas) { spotlightRestore(c, basic, nil) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withTheme(t, tc.theme)
+			canvas := tc.canvas(t, realCols, realRows)
+			tc.restore(canvas)
+			s := newSpotlightTestState()
 
-	// AllocsPerRun counts every allocation in the process, so a goroutine an
-	// earlier test left winding down is charged to the pass: a full package
-	// run in a loaded container measured 2 per frame this way. The least of
-	// three measurements is taken. An allocation the pass makes itself is in
-	// every one of them, so this still fails for any pass that allocates.
-	allocs := testing.AllocsPerRun(20, func() {
-		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
-		spotlightRestore(canvas, fg, bg)
-	})
-	for range 2 {
-		allocs = min(allocs, testing.AllocsPerRun(20, func() {
-			s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
-			spotlightRestore(canvas, fg, bg)
-		}))
-	}
-	if allocs != 0 {
-		t.Errorf("the pass allocated %.0f times per frame; it must allocate none", allocs)
+			// The restore is inside the measured function, so it has to be
+			// free or the number below is not the pass's.
+			if base := testing.AllocsPerRun(20, func() { tc.restore(canvas) }); base != 0 {
+				t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
+			}
+
+			// AllocsPerRun counts every allocation in the process, so a
+			// goroutine an earlier test left winding down is charged to the
+			// pass: a full package run in a loaded container measured 2 per
+			// frame this way. The least of three measurements is taken. An
+			// allocation the pass makes itself is in every one of them, so
+			// this still fails for any pass that allocates.
+			frame := func() {
+				s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
+				tc.restore(canvas)
+			}
+			allocs := testing.AllocsPerRun(20, frame)
+			for range 2 {
+				allocs = min(allocs, testing.AllocsPerRun(20, frame))
+			}
+			if allocs != 0 {
+				t.Errorf("the pass allocated %.0f times per frame; it must allocate none", allocs)
+			}
+		})
 	}
 }
 
@@ -139,56 +164,6 @@ func spotlightRestoreMixed(canvas *lipgloss.Canvas, inks []color.Color) {
 			cell := canvas.CellAt(x, y)
 			cell.Style.Fg, cell.Style.Bg, cell.Style.Attrs = inks[(x/8+y)%len(inks)], nil, 0
 		}
-	}
-}
-
-// TestSpotlightMixedPathAllocatesNothing holds the same bar for a themeless
-// screen, which since the resolvability rule is two paths interleaved on one
-// canvas.
-//
-// The blend cache is keyed on the source colour and the level, and a mixed
-// screen must not defeat it: the cells the pass can scale keep hitting it, and
-// the cells it cannot never reach it at all.
-func TestSpotlightMixedPathAllocatesNothing(t *testing.T) {
-	withTheme(t, "")
-	// Boxed once, outside the measurement: an interface parameter taking a
-	// color.RGBA value allocates at every call, which would be counted as the
-	// pass's own.
-	var rgba color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
-	var cube color.Color = ansi.IndexedColor(214)
-	var basic color.Color = ansi.BasicColor(2)
-	inks := []color.Color{rgba, cube, basic, nil}
-	canvas := spotlightMixedCanvas(t, realCols, realRows)
-	s := newSpotlightTestState()
-
-	if base := testing.AllocsPerRun(20, func() { spotlightRestoreMixed(canvas, inks) }); base != 0 {
-		t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
-	}
-
-	allocs := testing.AllocsPerRun(20, func() {
-		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
-		spotlightRestoreMixed(canvas, inks)
-	})
-	if allocs != 0 {
-		t.Errorf("the mixed pass allocated %.0f times per frame; it must allocate none", allocs)
-	}
-}
-
-// TestSpotlightFaintPathAllocatesNothing holds the same bar for a screen with
-// nothing the pass can resolve at all, which is every cell on SGR 2.
-func TestSpotlightFaintPathAllocatesNothing(t *testing.T) {
-	withTheme(t, "")
-	var basic color.Color = ansi.BasicColor(2)
-	canvas := spotlightTestCanvas(t, realCols, realRows)
-	spotlightRestore(canvas, basic, nil)
-	s := newSpotlightTestState()
-
-	allocs := testing.AllocsPerRun(20, func() {
-		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
-		spotlightRestore(canvas, basic, nil)
-	})
-	if allocs != 0 {
-		t.Errorf("the faint pass allocated %.0f times per frame", allocs)
 	}
 }
 
