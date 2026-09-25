@@ -248,6 +248,16 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
 
+	// The worktree record goes back on for the same reason: it is
+	// daemon-owned, and the canonical one is what the respawned first shell
+	// detected, which knows the repository and the branch and nothing tuios
+	// wrote. A fan's sessions lost their group and their managed mark on every
+	// restart, so review fell back to the default base and compare found no
+	// fan. A detected record is left to detection, which follows the shell.
+	if wt := restoredWorktree(state.Worktree); wt != nil {
+		_ = sess.SetWorktree(wt)
+	}
+
 	// The conversation ids go back on after UpdateState for the same reason:
 	// they are daemon-owned, UpdateState takes them from canonical state, and
 	// the session was created empty. Without this every restore dropped the
@@ -277,4 +287,22 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		})
 	}
 	return sess, offers, nil
+}
+
+// restoredWorktree is a saved managed worktree record as a restored session
+// takes it, or nil for a record detection owns. A fan prompt still waiting
+// when the daemon went down is said not to have been sent: nothing resumes the
+// wait across a restart, so a record left pending would say so forever. A
+// check that was running needs nothing here; fanVerifyReport reads it as ended
+// by the restart.
+func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
+	if saved == nil || !saved.Managed {
+		return nil
+	}
+	wt := *saved
+	if PromptWaiting(wt.PromptStatus) {
+		wt.PromptStatus = PromptNotSent
+		wt.PromptNote = "The daemon restarted before the prompt was typed. Send the prompt with send-text."
+	}
+	return &wt
 }
