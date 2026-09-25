@@ -244,26 +244,49 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 
 ### Testing
 
-- Table-driven tests preferred (see `internal/tape/lexer_test.go`)
+Follow the Testing rules under Testing Approach. For the unit tests that stay:
+
 - Test file naming: `*_test.go`
-- Benchmarks with `Benchmark*` prefix
+- Benchmarks with `Benchmark*` prefix, and only for a perf budget
 - Use `t.Run()` for subtests
 
 ## Testing Approach
 
-### Unit Tests
+### Testing rules
+
+- Never write unit tests after you write code.
+- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
+- If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+
+A unit test is kept only when it catches a real bug the E2E suite misses. The
+kinds that stay are VT conformance, fuzz, wire compatibility, security
+boundaries, deterministic race regressions and perf budgets. Do not add one
+outside those kinds.
+
+### E2E Tests
+
+The E2E suite runs a real `tuios` binary against real daemons. It is under
+`e2e/tui`, its own Go module, and skips unless `TUIOS_E2E` is set. Without
+`TUIOS_E2E_BIN` it builds the binary itself.
 
 ```bash
-# All tests
+go build -o /tmp/tuios ./cmd/tuios
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -timeout 40m .
+```
+
+A test that claims to cover a bug must fail on a build with the fix removed.
+`e2e/tui/NEGATIVE_CONTROLS.md` records those runs and the rules for them.
+
+### Kept Unit Tests
+
+```bash
+# Everything outside e2e/tui
 go test ./...
 
-# Specific package
-go test ./internal/tape/...
+# One package
+go test ./internal/vt/
 
-# With verbose output
-go test -v ./internal/config/...
-
-# Run benchmarks
+# Perf budgets
 go test -bench=. ./internal/app/...
 ```
 
