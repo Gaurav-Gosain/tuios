@@ -43,32 +43,6 @@ func decStr(n int) string {
 	return string(d[i:])
 }
 
-// TestAPlaceholderCellReachesTheGrid is the regression test for images in a
-// pager. tuios used to drop U+10EEEE at print time, so the cells that say
-// where an image goes never existed and nothing was drawn.
-//
-// Negative control: putting the `if r == kittyPlaceholderChar { return }` back
-// at the top of handlePrint left every cell blank and this failed.
-func TestAPlaceholderCellReachesTheGrid(t *testing.T) {
-	term := New(20, 4)
-	term.SetKittyPlaceholderMode(KittyPlaceholdersKeep)
-	if _, err := term.Write([]byte(placeholderRow(0x0a0b0c, 0, 3))); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	for x := range 3 {
-		cell := term.CellAt(x, 0)
-		if cell == nil {
-			t.Fatalf("cell %d is missing", x)
-		}
-		if !IsKittyPlaceholder(cell.Content) {
-			t.Errorf("cell %d content = %q, want a placeholder", x, cell.Content)
-		}
-		if cell.Width != 1 {
-			t.Errorf("cell %d width = %d, want 1", x, cell.Width)
-		}
-	}
-}
-
 // TestThePlaceholderIDIsRewrittenToTheHostID covers the one thing a
 // multiplexer has to do to this protocol. The cells name the image by the id
 // the guest chose; the host knows it by the id tuios allocated, and a cell

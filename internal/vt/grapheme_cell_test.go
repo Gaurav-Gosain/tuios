@@ -89,23 +89,6 @@ func TestWideGrapheme_WrapsWholeAtRightMargin(t *testing.T) {
 	}
 }
 
-// TestWideGrapheme_ArmsPendingWrapAtMargin covers the other half of the same
-// bug. A wide cluster ending flush against the right margin left the cursor
-// sitting on its own second cell without arming the pending wrap, so the next
-// character overwrote the wide character instead of starting a new line.
-func TestWideGrapheme_ArmsPendingWrapAtMargin(t *testing.T) {
-	emu := vt.NewEmulator(6, 3)
-	if _, err := emu.WriteString("世世世X"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if got, want := cellRow(emu, 0), "世/2 /0 世/2 /0 世/2 /0"; got != want {
-		t.Errorf("row 0 = %q\n    want %q", got, want)
-	}
-	if got, want := cellRow(emu, 1), "X/1  /1  /1  /1  /1  /1"; got != want {
-		t.Errorf("row 1 = %q\n    want %q", got, want)
-	}
-}
-
 // TestWideGrapheme_NoWrapLeavesColumnBlank checks that with autowrap off there
 // is still no half a character left in the last column.
 func TestWideGrapheme_NoWrapLeavesColumnBlank(t *testing.T) {

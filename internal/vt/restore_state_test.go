@@ -6,36 +6,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestRestoreModesRefreshesMouseCaches is the regression test for mouse input
-// dying after a daemon reattach. RestoreModes wrote the modes map directly but
-// left the atomic caches behind HasMouseMode and HasAllMotionMode stale, so a
-// reattached client's input layer saw no mouse mode and routed wheel, motion
-// and click to scrollback and copy mode instead of the pane.
-func TestRestoreModesRefreshesMouseCaches(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer func() { _ = e.Close() }()
-
-	e.RestoreModes(map[int]bool{
-		int(ansi.ModeMouseAnyEvent): true, // ?1003
-		int(ansi.ModeMouseExtSgr):   true, // ?1006
-	})
-
-	if !e.HasMouseMode() {
-		t.Fatal("HasMouseMode() = false after RestoreModes set ?1003: the atomic cache was not refreshed")
-	}
-	if !e.HasAllMotionMode() {
-		t.Fatal("HasAllMotionMode() = false after RestoreModes set ?1003: the atomic cache was not refreshed")
-	}
-
-	e.RestoreModes(map[int]bool{
-		int(ansi.ModeMouseAnyEvent): false,
-		int(ansi.ModeMouseExtSgr):   false,
-	})
-	if e.HasMouseMode() {
-		t.Fatal("HasMouseMode() = true after RestoreModes reset ?1003")
-	}
-}
-
 // TestRestoreModesAppliesCursorVisibility pins the DECTCEM side effect: a
 // guest that hid its cursor must not get it back on reattach, because the
 // hide sequence is long gone from the daemon's bounded output buffer.

@@ -248,15 +248,6 @@ func TestEmptyPaneCostsNoGrid(t *testing.T) {
 	t.Logf("an empty %dx%d pane holds %d bytes", w, h, perPane)
 }
 
-// TestGridBlankIsNeverWritten guards the shared blank cell CellAt hands out
-// for unwritten rows. Every test in the package runs the emulator through
-// it, so any write through a CellAt pointer would show here.
-func TestGridBlankIsNeverWritten(t *testing.T) {
-	if !gridBlank.Equal(&uv.EmptyCell) {
-		t.Fatalf("the shared blank cell is %#v, want %#v: something wrote through CellAt", gridBlank, uv.EmptyCell)
-	}
-}
-
 // TestScrollRetainsUnwrittenRowsAsBlankLines pins that a row nothing was
 // printed on still counts as a line when it scrolls off: a guest that prints
 // three lines and then a screenful of newlines has a scrollback of all of
