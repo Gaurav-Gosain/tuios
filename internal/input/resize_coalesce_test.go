@@ -116,6 +116,73 @@ func TestResizeInteractionTickFlushesSkippedMotion(t *testing.T) {
 	}
 }
 
+// TestSharedBorderResizeSettlesAtRelease drives a shared-borders resize drag
+// through the real Update path and checks the two things deferring the ratio
+// sync could break: the layout has to settle where the pointer was released,
+// and it has to stay there when the workspace is retiled. The second check is
+// the one that matters, because a retile rebuilds geometry from the tree's
+// ratios, so a drag whose final sync was skipped would silently lose its result
+// the next time anything triggered a layout.
+func TestSharedBorderResizeSettlesAtRelease(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = prev })
+
+	m := benchResizeOS(t, 4)
+	startX, startY := m.ResizeStartX, m.ResizeStartY
+	before := m.View().Content
+
+	const steps = 20
+	midDrag := ""
+	for i := 1; i <= steps; i++ {
+		_, _ = m.Update(motionAt(startX-i, startY))
+		// A real drag is interleaved with interaction ticks, which is what
+		// flushes a motion whose draw was coalesced away.
+		if i%4 == 0 {
+			_, _ = m.Update(app.TickerMsg(time.Now()))
+		}
+		midDrag = m.View().Content
+	}
+	// The separator has to track the pointer while the drag is in flight, not
+	// only once it ends. That is the whole reason the sync runs during a drag.
+	if midDrag == before {
+		t.Fatal("no frame during the drag differed from the pre-drag frame; the layout did not follow the pointer")
+	}
+
+	finalX := startX - steps
+	_, _ = m.Update(releaseAt(finalX, startY))
+	after := m.View().Content
+	if after == before {
+		t.Fatal("frame after release is identical to the frame before the drag; the resize never reached the screen")
+	}
+
+	focused := m.GetFocusedWindow()
+	if focused == nil {
+		t.Fatal("no focused window after drag")
+	}
+	settled := focused.X + focused.Width
+
+	// Retiling reapplies the layout from the tree's ratios. If the drag's final
+	// sync ran, the geometry is already what the ratios describe and nothing
+	// moves; if it was skipped, the window snaps back to its pre-drag size.
+	geom := make(map[string][4]int, len(m.Windows))
+	for _, w := range m.Windows {
+		geom[w.ID] = [4]int{w.X, w.Y, w.Width, w.Height}
+	}
+	m.TileAllWindows()
+	for _, w := range m.Windows {
+		if got, want := ([4]int{w.X, w.Y, w.Width, w.Height}), geom[w.ID]; got != want {
+			t.Fatalf("window %s moved on retile: got %v, want %v; the drag's ratios were not committed to the tree", w.ID, got, want)
+		}
+	}
+
+	if settled >= startX {
+		t.Fatalf("resized edge settled at %d, which is not left of the drag start %d", settled, startX)
+	}
+}
+
 // TestSharedBorderMotionCostDoesNotScaleWithWindowCount is the guard on the
 // property this optimisation exists for. The ratio sync is whole-tree work, so
 // running it per motion event made a shared-borders drag cost more the more

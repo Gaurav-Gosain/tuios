@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -62,6 +63,38 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 	} {
 		if got := tc.lookup(tc.key); got != tc.want {
 			t.Errorf("%s resolved to %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}
+
+// TestLeaderExploreTogglesRailFocus checks both halves of the toggle. The second
+// half only works because the rail lets the leader through: it swallows every
+// other unbound key, so ctrl+b could not otherwise start a chord from inside it.
+func TestLeaderExploreTogglesRailFocus(t *testing.T) {
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
+
+	leader := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
+	explore := tea.KeyPressMsg{Code: 'e', Text: "e"}
+
+	for _, mode := range []app.Mode{app.WindowManagementMode, app.TerminalMode} {
+		o := twoPaneOS(t)
+		o.Mode = mode
+
+		o, _ = HandleKeyPress(leader, o)
+		o, _ = HandleKeyPress(explore, o)
+		if !o.SidebarFocused {
+			t.Fatalf("ctrl+b e in mode %v did not focus the rail", mode)
+		}
+
+		o, _ = HandleKeyPress(leader, o)
+		if !o.PrefixActive {
+			t.Fatalf("the rail swallowed the leader in mode %v", mode)
+		}
+		o, _ = HandleKeyPress(explore, o)
+		if o.SidebarFocused {
+			t.Fatalf("ctrl+b e in mode %v did not leave the rail", mode)
 		}
 	}
 }
