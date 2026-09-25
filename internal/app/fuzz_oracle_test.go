@@ -691,11 +691,33 @@ func (f *fuzzOS) frameRows() []string {
 	return strings.Split(stripANSIForTrace(lipgloss.Sprint(f.m.GetCanvas(true).Render())), "\n")
 }
 
+// renderGrid is the frame as cells, indexed by screen column. It used to be
+// the runes of each row, which puts every cell after a wide character one
+// index early: a window renamed "世界" drew those two runes into four columns
+// of the sidebar on the same row as a pane's marker, and the rule read the
+// marker two columns late and reported the pane as painted over. A wide
+// cluster takes its first rune in its first column and 0 in the columns it
+// covers; the marks of a cluster ride on its first rune.
 func (f *fuzzOS) renderGrid() [][]rune {
 	rows := f.frameRows()
 	g := make([][]rune, len(rows))
 	for i, r := range rows {
-		g[i] = []rune(r)
+		var cells []rune
+		for s := r; s != ""; {
+			cluster, w := ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
+			if cluster == "" {
+				break
+			}
+			s = s[len(cluster):]
+			if w == 0 {
+				continue
+			}
+			cells = append(cells, []rune(cluster)[0])
+			for range w - 1 {
+				cells = append(cells, 0)
+			}
+		}
+		g[i] = cells
 	}
 	return g
 }

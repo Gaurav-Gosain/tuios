@@ -1,0 +1,12 @@
+# guest-cells: the oracle indexed the frame by rune, so a wide-character window
+# title in the sidebar on the marker row put every later cell one index early
+# per wide character, and a pane marker read two columns late.
+resize 200 20
+new-pane
+new-pane
+workspace 0
+new-pane
+rename "世界"
+focus 0
+new-pane
+new-pane
