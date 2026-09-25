@@ -66,6 +66,41 @@ func TestNextWindowFromWindowModeEntersTerminalMode(t *testing.T) {
 	}
 }
 
+// TestPrevWindowFromWindowModeEntersTerminalMode is the other cycle key, all.
+func TestPrevWindowFromWindowModeEntersTerminalMode(t *testing.T) {
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
+	start := focusedID(o)
+
+	o, _ = HandleKeyPress(shiftTab(), o)
+
+	if got := focusedID(o); got == start {
+		t.Fatalf("shift+tab did not move focus from %q", start)
+	}
+	if o.Mode != app.TerminalMode {
+		t.Errorf("mode = %v after prev_window, want terminal mode", o.Mode)
+	}
+}
+
+// TestNumberedSelectFromWindowModeEntersTerminalMode is targeted: pick a pane
+// by number, then type in it. Digits 1-4 in window-management mode are
+// snap-corner keys; numbered select is the action (and the leader-then-digit
+// chord).
+func TestNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
+	if focusedID(o) != "a" {
+		t.Fatalf("fixture focused %q, want a", focusedID(o))
+	}
+
+	o, _ = GetDispatcher().Dispatch("select_window_2", press("2"), o)
+
+	if got := focusedID(o); got != "b" {
+		t.Errorf("focused %q after select_window_2, want b", got)
+	}
+	if o.Mode != app.TerminalMode {
+		t.Errorf("mode = %v after numbered select, want terminal mode", o.Mode)
+	}
+}
+
 // TestPrefixNumberedSelectFromWindowModeEntersTerminalMode is the chord users
 // actually press: leader, then a digit.
 func TestPrefixNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {

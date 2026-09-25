@@ -120,6 +120,23 @@ func TestShiftedOptionChordPrefersTheShiftedBinding(t *testing.T) {
 	}
 }
 
+// The chord has to move the focus through the real terminal-mode handler, not
+// just resolve to an action name, and it must not be typed into the pane.
+func TestMacOptionChordSwitchesPaneInTerminalMode(t *testing.T) {
+	onDarwin(t)
+
+	for _, msg := range []tea.KeyPressMsg{
+		{Code: '˜', Text: "˜"},
+		{Code: '˜', Mod: tea.ModAlt},
+		{Code: 'n', Mod: tea.ModAlt},
+	} {
+		o := twoWindowOS(t)
+		if _, _ = HandleTerminalModeKey(msg, o); o.FocusedWindow != 1 {
+			t.Errorf("%q left the focus on window %d, want the next one", msg.String(), o.FocusedWindow)
+		}
+	}
+}
+
 // Off darwin the same glyphs are ordinary characters that belong to the shell.
 func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 	prev := darwinHost

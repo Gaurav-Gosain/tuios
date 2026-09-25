@@ -61,6 +61,33 @@ func hasPastedNotification(o *app.OS) bool {
 	return false
 }
 
+// An incoming tea.PasteMsg is passthrough input from the outer terminal (for
+// example an fcitx5 IME commit that arrives wrapped in bracketed-paste
+// markers). It must reach the pane's PTY verbatim, must not overwrite the
+// user's stored clipboard, and must not raise a "Pasted N characters"
+// notification. This is the regression from issue #113.
+func TestIncomingPasteIsPassthroughNotClipboard(t *testing.T) {
+	o, sent := pasteHarness(t, false)
+
+	const sentinel = "user-clipboard-do-not-touch"
+	o.ClipboardContent = sentinel
+
+	_, _ = HandleInput(tea.PasteMsg{Content: "中文"}, o)
+
+	if o.ClipboardContent != sentinel {
+		t.Errorf("ClipboardContent = %q, want it left as %q: an incoming terminal paste "+
+			"must not clobber the user's real clipboard", o.ClipboardContent, sentinel)
+	}
+	if hasPastedNotification(o) {
+		t.Errorf("incoming paste raised a %q notification; IME/terminal paste must be silent",
+			"Pasted")
+	}
+	if got := sent.String(); got != "中文" {
+		t.Errorf("PTY received %q, want the CJK text %q delivered raw (inner app has no "+
+			"bracketed paste)", got, "中文")
+	}
+}
+
 // When the inner app has bracketed paste enabled, the incoming paste must be
 // re-wrapped so the app still sees a paste, and the multi-byte UTF-8 payload
 // must survive the wrapping intact.
