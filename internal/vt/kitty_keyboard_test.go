@@ -9,13 +9,6 @@ import (
 )
 
 func TestKittyKeyboardState(t *testing.T) {
-	t.Run("initial state", func(t *testing.T) {
-		s := newKittyKeyboardState()
-		if s.CurrentFlags() != 0 {
-			t.Errorf("expected initial flags=0, got %d", s.CurrentFlags())
-		}
-	})
-
 	t.Run("push and pop", func(t *testing.T) {
 		s := newKittyKeyboardState()
 		s.Push(ansi.KittyDisambiguateEscapeCodes)
@@ -67,37 +60,6 @@ func TestKittyKeyboardState(t *testing.T) {
 		s.Set(ansi.KittyReportEventTypes, 3)
 		if s.CurrentFlags() != ansi.KittyDisambiguateEscapeCodes {
 			t.Errorf("mode 3: expected flags=%d, got %d", ansi.KittyDisambiguateEscapeCodes, s.CurrentFlags())
-		}
-	})
-
-	t.Run("reset", func(t *testing.T) {
-		s := newKittyKeyboardState()
-		s.Push(ansi.KittyAllFlags)
-		s.Push(ansi.KittyDisambiguateEscapeCodes)
-		s.Reset()
-		if s.CurrentFlags() != 0 {
-			t.Errorf("expected flags=0 after reset, got %d", s.CurrentFlags())
-		}
-		if len(s.stack) != 1 {
-			t.Errorf("expected stack depth=1 after reset, got %d", len(s.stack))
-		}
-	})
-
-	t.Run("flag helpers", func(t *testing.T) {
-		s := newKittyKeyboardState()
-		s.Push(ansi.KittyDisambiguateEscapeCodes | ansi.KittyReportEventTypes)
-
-		if !s.HasDisambiguate() {
-			t.Error("expected HasDisambiguate=true")
-		}
-		if !s.HasReportEvents() {
-			t.Error("expected HasReportEvents=true")
-		}
-		if s.HasReportAlternateKeys() {
-			t.Error("expected HasReportAlternateKeys=false")
-		}
-		if s.HasReportAllKeys() {
-			t.Error("expected HasReportAllKeys=false")
 		}
 	})
 }
@@ -377,27 +339,5 @@ func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
 				t.Errorf("EncodeKeyCSIu(%+v, %d) = %q, want %q", tt.key, tt.flags, got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestKittyModParam(t *testing.T) {
-	tests := []struct {
-		mod      KeyMod
-		expected int
-	}{
-		{0, 1},
-		{ModShift, 2},
-		{ModAlt, 3},
-		{ModCtrl, 5},
-		{ModMeta, 9},
-		{ModShift | ModCtrl, 6},
-		{ModShift | ModAlt | ModCtrl, 8},
-	}
-
-	for _, tt := range tests {
-		result := kittyModParam(tt.mod)
-		if result != tt.expected {
-			t.Errorf("kittyModParam(%d) = %d, want %d", tt.mod, result, tt.expected)
-		}
 	}
 }

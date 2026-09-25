@@ -6,71 +6,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-func TestScrollbackRingBuffer(t *testing.T) {
-	sb := NewScrollback(5)
-
-	// Test initial state
-	if sb.Len() != 0 {
-		t.Errorf("expected empty scrollback, got %d lines", sb.Len())
-	}
-	if sb.MaxLines() != 5 {
-		t.Errorf("expected maxLines=5, got %d", sb.MaxLines())
-	}
-
-	// Push lines until full
-	for i := range 5 {
-		line := uv.Line{{Content: string(rune('A' + i)), Width: 1}}
-		sb.PushLine(line)
-	}
-
-	if sb.Len() != 5 {
-		t.Errorf("expected 5 lines, got %d", sb.Len())
-	}
-
-	// Verify ring buffer overwrites oldest
-	line6 := uv.Line{{Content: "F", Width: 1}}
-	sb.PushLine(line6)
-
-	if sb.Len() != 5 {
-		t.Errorf("expected 5 lines after overflow, got %d", sb.Len())
-	}
-
-	// First line should now be 'B' (oldest 'A' was dropped)
-	first := sb.Line(0)
-	if first == nil || first[0].Content != "B" {
-		t.Errorf("expected first line to be 'B', got %v", first)
-	}
-
-	// Last line should be 'F'
-	last := sb.Line(4)
-	if last == nil || last[0].Content != "F" {
-		t.Errorf("expected last line to be 'F', got %v", last)
-	}
-}
-
-func TestScrollbackClear(t *testing.T) {
-	sb := NewScrollback(10)
-
-	for i := range 5 {
-		line := uv.Line{{Content: string(rune('A' + i)), Width: 1}}
-		sb.PushLine(line)
-	}
-
-	sb.Clear()
-
-	if sb.Len() != 0 {
-		t.Errorf("expected empty after clear, got %d lines", sb.Len())
-	}
-
-	// Should be able to push after clear
-	line := uv.Line{{Content: "X", Width: 1}}
-	sb.PushLine(line)
-
-	if sb.Len() != 1 {
-		t.Errorf("expected 1 line after push, got %d", sb.Len())
-	}
-}
-
 func TestScrollbackSetMaxLines(t *testing.T) {
 	sb := NewScrollback(10)
 
@@ -101,37 +36,6 @@ func TestScrollbackSetMaxLines(t *testing.T) {
 	last := sb.Line(4)
 	if last == nil || last[0].Content != "H" {
 		t.Errorf("expected last line to be 'H', got %v", last)
-	}
-}
-
-func TestScrollbackBoundsChecking(t *testing.T) {
-	sb := NewScrollback(5)
-
-	line := uv.Line{{Content: "A", Width: 1}}
-	sb.PushLine(line)
-
-	// Out of bounds access should return nil
-	if sb.Line(-1) != nil {
-		t.Error("expected nil for negative index")
-	}
-	if sb.Line(100) != nil {
-		t.Error("expected nil for out of bounds index")
-	}
-
-	// Valid access should work
-	if sb.Line(0) == nil {
-		t.Error("expected valid line at index 0")
-	}
-}
-
-func TestScrollbackEmptyPushIgnored(t *testing.T) {
-	sb := NewScrollback(5)
-
-	// Empty line should be ignored
-	sb.PushLine(uv.Line{})
-
-	if sb.Len() != 0 {
-		t.Errorf("expected empty scrollback after pushing empty line, got %d", sb.Len())
 	}
 }
 

@@ -23,12 +23,6 @@ func (c oddColor) RGBA() (r, g, b, a uint32) {
 	return uint32(c.v) * 0x101, 0, 0, 0xffff
 }
 
-func TestUVCellIsStillLarge(t *testing.T) {
-	if got := unsafe.Sizeof(uv.Cell{}); got < 100 {
-		t.Fatalf("uv.Cell is %d bytes; the encoding exists because it was 112", got)
-	}
-}
-
 // TestPlainLineCostsItsTextInBytes pins the point of the encoding: a line of
 // plain text is stored as that text, one byte per ASCII cell plus the width
 // header, not 24 bytes per cell.

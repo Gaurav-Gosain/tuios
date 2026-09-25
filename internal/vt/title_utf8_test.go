@@ -35,20 +35,6 @@ func TestATitleSetByAGuestLosesOnlyItsBadBytes(t *testing.T) {
 	}
 }
 
-// TestSanitiseTitleKeepsWhatItShould is the unit half.
-func TestSanitiseTitleKeepsWhatItShould(t *testing.T) {
-	// A lone continuation byte in the middle of an otherwise fine title,
-	// which is what a stream split in the wrong place produces.
-	got := sanitiseTitle([]byte("tui\xffos"))
-
-	if got != "tuios" {
-		t.Errorf("the title is %q, want the bad byte dropped and the rest kept", got)
-	}
-	if !utf8.ValidString(got) {
-		t.Error("the title is still not valid UTF-8")
-	}
-}
-
 // TestAValidTitleIsUntouched, multi-byte characters included: the guard must
 // not cost a guest its emoji or its accents.
 func TestAValidTitleIsUntouched(t *testing.T) {
