@@ -10,8 +10,55 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// These tests pin the agent review, triage, queue and approval verbs: who may
-// call each one, over which link capability, and the wire fields they add.
+// These tests pin the foundation of the agent review, triage, queue and
+// approval work: what each new verb may be called by, over which link
+// capability, and the wire fields it adds. The tables are the security model's
+// first line, so each entry is written out here rather than read back from the
+// table it checks.
+
+// agentWorkVerbTable is what each new verb needs: its restricted-connection
+// and pane-grant class, its link capabilities, and whether it types into a
+// pane.
+var agentWorkVerbTable = []struct {
+	verb   string
+	scope  scopeKind
+	link   []string
+	typing bool
+}{
+	{"review-diff", scopeRead, []string{config.LinkAllowWrite}, false},
+	{"compare-fan", scopeRead, []string{config.LinkAllowList}, false},
+	{"agent-activity", scopeRead, []string{config.LinkAllowList}, false},
+	{"list-queued", scopeRead, []string{config.LinkAllowList}, false},
+	{"get-approval", scopeRead, []string{config.LinkAllowList}, false},
+	{"review-note", scopeWrite, []string{config.LinkAllowWrite}, false},
+	{"send-review", scopeWrite, []string{config.LinkAllowWrite}, true},
+	{"queue-prompt", scopeWrite, []string{config.LinkAllowWrite}, true},
+	{"cancel-queued", scopeWrite, []string{config.LinkAllowWrite}, false},
+	{"verify-fan", scopeLaunch, []string{config.LinkAllowOpen, config.LinkAllowWrite}, false},
+	{"keep-fan", scopeDeny, []string{config.LinkAllowWrite}, false},
+	{"mark-attention", scopeDeny, []string{config.LinkAllowRespond}, false},
+}
+
+func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
+	for _, row := range agentWorkVerbTable {
+		if _, ok := verbRegistry[row.verb]; !ok {
+			t.Errorf("%s is not registered", row.verb)
+			continue
+		}
+		if got, ok := verbScopes[row.verb]; !ok || got != row.scope {
+			t.Errorf("%s has scope %v (listed %v), want %v", row.verb, got, ok, row.scope)
+		}
+		if got := grantKind(row.verb); got != row.scope {
+			t.Errorf("%s needs %v from a pane, want %v", row.verb, got, row.scope)
+		}
+		if got := verbCapabilities[row.verb]; !slices.Equal(got, row.link) {
+			t.Errorf("%s needs %v over a link, want %v", row.verb, got, row.link)
+		}
+		if typingVerbs[row.verb] != row.typing {
+			t.Errorf("%s typing = %v, want %v", row.verb, typingVerbs[row.verb], row.typing)
+		}
+	}
+}
 
 // TestMarkAttentionIsThePersonsOnly: the proof comes before anything else, so
 // a caller without a live nonce is refused before the item is even looked up.
@@ -325,6 +372,24 @@ func TestTheQueueCountIsTheDaemons(t *testing.T) {
 	two := StateFingerprint(&SessionState{Windows: []WindowState{{ID: "a", AgentQueued: 2}}})
 	if one == two {
 		t.Error("the state fingerprint does not see the queue")
+	}
+}
+
+// TestTheActivityEventIsOptIn: a subscriber that names no types never gets
+// it; one that names it does.
+func TestTheActivityEventIsOptIn(t *testing.T) {
+	ev := streamEvent{Type: EventAgentActivity, Session: "work", Window: "w"}
+	if (eventFilter{}).match(ev) {
+		t.Error("a subscriber that named no types got agent-activity")
+	}
+	if !(eventFilter{types: map[string]bool{EventAgentActivity: true}}).match(ev) {
+		t.Error("a subscriber that named agent-activity did not get it")
+	}
+	if !(eventFilter{}).match(streamEvent{Type: EventAgentState}) {
+		t.Error("the opt-in rule dropped an ordinary event")
+	}
+	if !slices.Contains(knownEventTypes, EventAgentActivity) {
+		t.Error("subscribe does not accept agent-activity in types")
 	}
 }
 

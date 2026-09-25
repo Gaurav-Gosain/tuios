@@ -66,6 +66,148 @@ func capturePane(t *testing.T, c *verbConn, session, window string) string {
 	return content
 }
 
+// waitPaneHolds polls a pane until it shows want.
+func waitPaneHolds(t *testing.T, c *verbConn, session, window, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second * testDeadlineScale)
+	for {
+		text := capturePane(t, c, session, window)
+		if strings.Contains(text, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pane %s never showed %q; it shows:\n%s", window, want, text)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+// TestRestoreKeepsTheConversationID is the gap under the whole feature: the
+// state file kept each pane's agent_session_id, and the restore dropped it,
+// because the id is daemon-owned and the restore's state push took daemon
+// fields from the empty session it had just created. A window from another
+// machine loses it on purpose.
+func TestRestoreKeepsTheConversationID(t *testing.T) {
+	echoHarness(t)
+	d, _ := startTestDaemon(t)
+	d.resumeAgents = resumeModeOff
+
+	sess, err := d.restoreSession(savedAgentSession("keep"))
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	got := map[string]WindowState{}
+	for _, w := range sess.GetState().Windows {
+		got[w.ID] = w
+	}
+	if w := got["win-agent"]; w.AgentSessionID != "5f1c-9a3d" || w.AgentSessionHarness != "echoer" {
+		t.Errorf("the restored pane lost its conversation: id %q harness %q", w.AgentSessionID, w.AgentSessionHarness)
+	}
+	if w := got["win-aider"]; w.AgentSessionID != "a1" {
+		t.Errorf("a pane whose harness cannot resume lost its id %q; it is still worth keeping", w.AgentSessionID)
+	}
+	if w := got["win-remote"]; w.AgentSessionID != "" || w.AgentSessionHarness != "" {
+		t.Errorf("a pane that ran on another machine kept that machine's conversation %q", w.AgentSessionID)
+	}
+	if w := got["win-ended"]; w.AgentSessionID != "e1-ended" {
+		t.Errorf("a pane whose agent had exited lost its id %q; resume-agent still needs it", w.AgentSessionID)
+	}
+}
+
+// TestRestoreOffersOnlyWhatWasRunning is the pane where the person quit the
+// agent and went back to shell work before the restart. Its id is kept, so it
+// can still be resumed by hand, but the restore does not offer it: no Resume
+// row in ask mode and nothing typed in auto mode.
+func TestRestoreOffersOnlyWhatWasRunning(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	if _, err := d.restoreSession(savedAgentSession("ended-ask")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitAttention(t, c, "the running pane's offer", hasKind(AttentionResume, "win-agent"))
+	if hasKind(AttentionResume, "win-ended")(mustList(t, c)) {
+		t.Error("ask mode offered a conversation whose agent had already exited")
+	}
+
+	d.resumeAgents = resumeModeAuto
+	if _, err := d.restoreSession(savedAgentSession("ended-auto")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitPaneHolds(t, c, "ended-auto", "win-agent", "resumed-5f1c-9a3d")
+	// The running pane's command landed, and the ended pane's would have been
+	// typed 100 ms later at most; give it well past that.
+	time.Sleep(time.Second)
+	if text := capturePane(t, c, "ended-auto", "win-ended"); strings.Contains(text, "resumed-") {
+		t.Errorf("auto mode typed into a pane whose agent had exited:\n%s", text)
+	}
+
+	res := result(t, c.call(t, `{"id":1,"verb":"resume-agent","params":{"session":"ended-auto","window":"win-ended","dry_run":true}}`))
+	if res["command"] != "echo resumed-e1-ended" {
+		t.Errorf("resume-agent by hand on the ended pane answered %v", res)
+	}
+}
+
+// TestRestoreOffersOnce is a Resume row nobody answered: the restored pane
+// holds a new shell and no agent, so the state the next save writes makes no
+// offer, and a dismissed row does not come back on every later restart.
+func TestRestoreOffersOnce(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	sess, err := d.restoreSession(savedAgentSession("once"))
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitAttention(t, c, "the first restore's offer", hasKind(AttentionResume, "win-agent"))
+
+	saved := sess.ResurrectionState()
+	w, ok := findWindowState(saved, "win-agent")
+	if !ok {
+		t.Fatal("the next save lost the pane")
+	}
+	if w.AgentSessionID != "5f1c-9a3d" {
+		t.Errorf("the next save lost the conversation id: %q", w.AgentSessionID)
+	}
+	if agentWasLive(w) {
+		t.Fatalf("the next save says an agent runs in the new shell: state %q harness %q", w.AgentState, w.AgentHarness)
+	}
+	if o, ok := d.resumeOfferFor("once", w); ok {
+		t.Errorf("a second restart would offer %v again", o)
+	}
+}
+
+// mustList is every open Inbox item.
+func mustList(t *testing.T, c *verbConn) []map[string]any {
+	t.Helper()
+	items, _ := listAttention(t, c, "")
+	return items
+}
+
+// TestRestoreResumesAutomatically is auto: the command is typed into the
+// restored shell with no item opened.
+func TestRestoreResumesAutomatically(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+	d.resumeAgents = resumeModeAuto
+
+	if _, err := d.restoreSession(savedAgentSession("auto")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitPaneHolds(t, c, "auto", "win-agent", "resumed-5f1c-9a3d")
+	if items, _ := listAttention(t, c, ""); len(items) != 0 {
+		t.Errorf("auto mode opened %v", items)
+	}
+	for _, w := range []string{"win-aider", "win-plain"} {
+		if text := capturePane(t, c, "auto", w); strings.Contains(text, "resumed-") || strings.Contains(text, "aider") && strings.Contains(text, "--") {
+			t.Errorf("auto typed into %s, which has nothing to resume:\n%s", w, text)
+		}
+	}
+}
+
 // TestResumeAgentRefusesWhatItCannotDo covers each refusal: nothing
 // recorded, a harness with no resume command, an id a shell would read as
 // more than one argument, and a pane running a program.
@@ -127,5 +269,87 @@ func TestResumeAgentRefusesWhatItCannotDo(t *testing.T) {
 	}
 	if text := capturePane(t, c, "refuse", "win-agent"); strings.Contains(text, "resumed-") {
 		t.Errorf("the command was typed into a running program:\n%s", text)
+	}
+}
+
+// TestAutoResumeFallsBackToAsking holds the promise auto makes: a shell that
+// never reaches its prompt gets the question instead of the command.
+func TestAutoResumeFallsBackToAsking(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+	d.resumeAgents = resumeModeOff
+	if _, err := d.restoreSession(savedAgentSession("fallback")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	sess := d.manager.GetSession("fallback")
+	pty, err := d.resolvePTYForTarget(sess, "win-agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !waitShellPrompt(t.Context(), pty, 5*time.Second, 200*time.Millisecond) {
+		t.Fatal("the restored shell never drew its prompt")
+	}
+	if _, err := pty.Write([]byte("sleep 30\r")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		pgid, ok := readForegroundPGID(pty.ShellPID())
+		if !ok {
+			t.Skip("this platform does not say which process group holds a terminal")
+		}
+		if pgid != pty.ShellPID() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("sleep never took the foreground")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// The offer is made from the window as it was saved, agent running.
+	saved, _ := findWindowState(savedAgentSession("fallback"), "win-agent")
+	o, ok := d.resumeOfferFor("fallback", saved)
+	if !ok {
+		t.Fatal("no offer for the resumable pane")
+	}
+	d.autoResume(o, 0)
+	items := waitAttention(t, c, "the fallback", hasKind(AttentionResume, "win-agent"))
+	if len(items) != 1 {
+		t.Errorf("the Inbox holds %v", items)
+	}
+}
+
+// TestResumeItemClosesWhenAnAgentWorks: a resume typed by hand, or a new
+// agent, puts the pane to work, and the offer is spent.
+func TestResumeItemClosesWhenAnAgentWorks(t *testing.T) {
+	a, _ := recordingAttention()
+	a.openResume(AttentionItem{Session: "work", Window: "w1", Summary: "claude --resume 5f1c"})
+	a.openResume(AttentionItem{Session: "work", Window: "w2", Summary: "claude --resume 7a"})
+
+	a.noteSessionEvent("work", agentEvent("w1", "none", "idle", "", "", 0, 0))
+	if len(openItems(t, a)) != 2 {
+		t.Fatalf("idle closed a resume offer: %v", openItems(t, a))
+	}
+	a.noteSessionEvent("work", agentEvent("w1", "idle", "working", "", "", 0, 0))
+	a.noteSessionEvent("work", SessionEvent{Type: EventWindowClosed, Window: "w2"})
+	if items := openItems(t, a); len(items) != 0 {
+		t.Errorf("working and a closed window left %v open", items)
+	}
+}
+
+// TestSavedResumeItemsAreNotLoaded: the restore opens resume items from the
+// windows it brings back, so a saved one is dropped rather than doubled.
+func TestSavedResumeItemsAreNotLoaded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "items.json")
+	a, _ := recordingAttention()
+	a.path = path
+	a.openResume(AttentionItem{Session: "work", Window: "w1", Summary: "claude --resume 5f1c"})
+	a.saveNowAndFreeze()
+
+	b, _ := recordingAttention()
+	b.load(path, func(string, string) bool { return true })
+	if items := openItems(t, b); len(items) != 0 {
+		t.Errorf("a saved resume item came back: %v", items)
 	}
 }

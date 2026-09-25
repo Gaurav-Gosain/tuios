@@ -3,13 +3,13 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 )
 
-// These tests pin who may mark an Inbox item, and the races in its wake and
-// restore.
+// These tests pin the Inbox's lifecycle: snooze, wake, unread and restore.
 
 // fakeClock is a clock a test moves by hand.
 type fakeClock struct {
@@ -21,6 +21,12 @@ func (c *fakeClock) now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
+}
+
+func (c *fakeClock) add(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
 }
 
 // lifecycleStore is a recording store on a fake clock.
@@ -45,6 +51,40 @@ func snooze(t *testing.T, a *attentionStore, id string, until int64) *verbError 
 	defer a.mu.Unlock()
 	_, verr := a.snoozeLocked(id, until)
 	return verr
+}
+
+// TestSnoozedItemsSurviveARestart: a snoozed finished item is saved with
+// snoozed_until and comes back asleep; one whose time passed while the daemon
+// was down wakes.
+func TestSnoozedItemsSurviveARestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "attention", "items.json")
+	a, _, clock := lifecycleStore(t)
+	a.noteSessionEvent("work", agentEvent("w1", "working", "done", "", "one", 0, 1))
+	a.noteSessionEvent("work", agentEvent("w2", "working", "done", "", "two", 0, 1))
+	items := openItems(t, a)
+	_ = snooze(t, a, items[0].ID, SnoozeUntilChange)
+	_ = snooze(t, a, items[1].ID, clock.now().Add(time.Second).UnixNano())
+	a.mu.Lock()
+	data := a.encodeLocked()
+	a.mu.Unlock()
+	writeAttentionFile(path, data)
+
+	clock.add(time.Minute)
+	b, _, _ := lifecycleStore(t)
+	b.now = clock.now
+	b.load(path, func(string, string) bool { return true })
+	if n := b.snoozedCount(); n != 2 {
+		t.Fatalf("%d items came back asleep, want 2", n)
+	}
+	b.wakeDue()
+	open := openItems(t, b)
+	if len(open) != 1 || open[0].ID != items[1].ID {
+		t.Fatalf("after the restart %+v is open, want %s", open, items[1].ID)
+	}
+	listed, _, _ := b.list(attentionQuery{snoozed: true})
+	if len(listed) != 2 || listed[1].ID != items[0].ID || listed[1].SnoozedUntil != SnoozeUntilChange {
+		t.Errorf("the listing after the restart is %+v", listed)
+	}
 }
 
 // TestMarkAttentionRefusesAPaneWithACopiedNonce: a live nonce is the

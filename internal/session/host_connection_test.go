@@ -57,6 +57,36 @@ type farSide struct {
 	dials int
 }
 
+// dialCount is how many times the hub has dialed this side so far.
+func (f *farSide) dialCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dials
+}
+
+// waitForDial blocks until the hub has dialed this side more than n times.
+func (f *farSide) waitForDial(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if f.dialCount() > n {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the hub never dialed the far side again: %d dial(s), had %d", f.dialCount(), n)
+}
+
+// breakLink closes every link transport, which is the ssh child dying.
+func (f *farSide) breakLink() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.links {
+		_ = l.Close()
+	}
+	f.links = nil
+}
+
 // dialer is the hub's transport to the far side: a pipe pair with the real
 // proxy on the other end, dialing the far daemon's socket per stream.
 func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
