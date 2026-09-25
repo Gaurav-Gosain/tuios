@@ -207,11 +207,29 @@ func (m *OS) centerOrigin(w, h int) (int, int) {
 func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	off := m.overlayOffset(kind)
-	x := (rw-geo.Width)/2 + off[0]
+	x := m.panelCenterX(geo.Width, rw) + off[0]
 	y := m.overlayAnchorY(kind, geo.Height, rh) + off[1]
 	x = max(min(x, rw-geo.Width), 0)
 	y = max(min(y, rh-geo.Height), 0)
 	return x, y
+}
+
+// panelCenterX is the left column that centres a panel w cells wide: in the
+// columns the panes have when it fits there, and on the whole screen when it
+// does not.
+//
+// Centred on the whole screen, a panel that fitted beside the rail still ran
+// a few cells into it, and cut the rail mid-word: "erminals", "iles" and
+// "gents" down the edge of the help panel, the gutter marks gone beside the
+// Inbox. Beside the rail it leaves the rail whole, which is where the agents
+// the Inbox is about are listed. The modal dialogs keep the screen centre, see
+// centerOrigin: they are small, and ask for an answer where the eye already
+// is.
+func (m *OS) panelCenterX(w, screenW int) int {
+	if room := m.GetContentWidth(); w <= room {
+		return m.GetLeftMargin() + (room-w)/2
+	}
+	return (screenW - w) / 2
 }
 
 // overlayAnchor is the top row a panel was centred at when it opened, and the
