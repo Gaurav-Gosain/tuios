@@ -140,6 +140,22 @@ func (m *OS) hostCaps() *HostCapabilities {
 	return GetHostCapabilities()
 }
 
+// hostCellSize is one host cell in pixels.
+//
+// It exists because iconCellSize is not it: that is the launcher's icon box,
+// which is two cells wide by one tall, and reading it as a cell told the
+// preview every cell was twice as wide as it is. The picture was then placed
+// into a box half the width it needed and drawn squeezed to fit, which is the
+// "horizontally stretched" report. Anything that has to reason in pixels about
+// a cell asks this.
+func (m *OS) hostCellSize() (w, h int) {
+	caps := m.hostCaps()
+	if caps.CellWidth <= 0 || caps.CellHeight <= 0 {
+		return 0, 0
+	}
+	return caps.CellWidth, caps.CellHeight
+}
+
 func DetectHostCapabilities() *HostCapabilities {
 	caps := &HostCapabilities{}
 

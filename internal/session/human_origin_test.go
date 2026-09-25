@@ -149,19 +149,6 @@ func waitHelper(t *testing.T, out string) string {
 	return ""
 }
 
-// runInPane types a command into a pane's shell.
-func runInPane(t *testing.T, d *Daemon, sess *Session, window, line string) {
-	t.Helper()
-	pty, err := d.resolvePTYForTarget(sess, window)
-	if err != nil {
-		t.Fatalf("resolvePTYForTarget: %v", err)
-	}
-	waitForQuiet(t, pty, 200*time.Millisecond, 5*time.Second)
-	if _, err := pty.Write([]byte(line + "\r")); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-}
-
 func skipWithoutPeerPID(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
