@@ -181,7 +181,7 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 	if _, err := os.Lstat(path); err == nil {
 		return false, fmt.Errorf("%s already exists", path)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return false, err
 	}
 	if BranchExists(repoRoot, branch) {

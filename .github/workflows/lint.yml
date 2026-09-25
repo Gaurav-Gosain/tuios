@@ -1,0 +1,79 @@
+name: Lint
+
+# Static analysis on every pull request: golangci-lint with the repository's
+# .golangci.yml, govulncheck for known vulnerabilities in code tuios reaches,
+# and go vet on the platforms the release builds for but no test job runs on.
+# The unit test workflow covers gofmt, tidy and vet on linux.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golangci:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # A cache key of its own, rather than racing the unit test job for
+          # the plain go.sum key (see go-test.yml).
+          cache-dependency-path: |
+            go.sum
+            .golangci.yml
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # Pinned, so a new linter release cannot fail a pull request that
+          # changed nothing. Bump it on purpose.
+          version: v2.14.0
+          args: --timeout 20m
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
+          go-package: ./...
+
+  cross-vet:
+    name: go vet (${{ matrix.goos }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The release targets besides linux, which go-test.yml vets. A test
+        # file that uses a unix-only syscall without a build tag breaks these
+        # and nothing else.
+        goos: [darwin, windows, freebsd, openbsd]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/lint.yml
+
+      - name: Vet
+        env:
+          GOOS: ${{ matrix.goos }}
+        run: go vet ./...

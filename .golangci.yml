@@ -1,0 +1,104 @@
+# golangci-lint v2 configuration. The lint workflow runs it on every pull
+# request; run it locally with `golangci-lint run ./...`.
+#
+# The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus
+# gosec, limited to the rules that found real problems here. Every exclusion
+# below says why it is there. A finding that is wrong for one line gets a
+# //nolint with its reason on that line, not a new rule here.
+version: "2"
+
+run:
+  timeout: 20m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - gosec
+
+  settings:
+    errcheck:
+      # Printing to the terminal or to a writer the CLI was handed. A failed
+      # write there has nowhere to be reported, which is why errcheck already
+      # leaves fmt.Printf alone.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - charm.land/lipgloss/v2.Fprint
+        - charm.land/lipgloss/v2.Fprintf
+        - charm.land/lipgloss/v2.Fprintln
+        - charm.land/lipgloss/v2.Print
+        - charm.land/lipgloss/v2.Printf
+        - charm.land/lipgloss/v2.Println
+
+    govet:
+      enable-all: true
+      disable:
+        # Struct field order is chosen for reading, not for padding.
+        - fieldalignment
+        # Shadowing err in a nested scope is idiomatic Go.
+        - shadow
+
+    staticcheck:
+      checks:
+        - all
+        # Package comments and initialisms: the codebase has its own
+        # conventions and the default set leaves these off too.
+        - -ST1000
+        - -ST1003
+        # Receiver names differ where a file reads better with its own.
+        - -ST1016
+        # "X, when set, ..." and grouped one-line accessors read better than
+        # the forced "X ..." form.
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        # The quickfix suggestions (tagged switch, De Morgan, merged
+        # declarations) are style, not defects.
+        - -QF1001
+        - -QF1002
+        - -QF1003
+        - -QF1006
+        - -QF1007
+        - -QF1008
+
+    gosec:
+      # The file-permission rules found keystroke logs readable by every user
+      # in /tmp. The rest of gosec's rules are listed below with why they are
+      # not run.
+      includes:
+        - G301 # directory permissions
+        - G302 # file permissions on open and chmod
+        - G306 # file permissions on WriteFile
+        - G307 # deferred Close on a written file
+      # Not run:
+      # G115 integer conversions: the terminal parser narrows bounded values
+      #      on purpose, hundreds of times, on its hottest paths.
+      # G204 subprocess with a variable: a terminal multiplexer runs the
+      #      user's programs, shells and editors by design.
+      # G304 file path from a variable: the paths are the user's own files
+      #      and config.
+      # G404 math/rand: used for animation, fuzzing and the browser demo,
+      #      never for a secret.
+      # G103 unsafe: two audited zero-copy conversions in the VT parser.
+      # G101, G602, G702, G703: false positives on this tree (token names,
+      #      guarded indexes, and env vars the user sets for themselves).
+
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # A test that ignores an error from a write or a Close fails on the
+      # assertion that follows it, which says more than a second check would.
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Tests create fixtures with ordinary permissions in their own temp dirs.
+      - path: _test\.go|internal/testutil/
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt

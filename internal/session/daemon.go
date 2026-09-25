@@ -883,7 +883,7 @@ func (d *Daemon) Start() error {
 	}
 	d.listener = listener
 
-	if err := os.Chmod(socketPath, 0700); err != nil {
+	if err := os.Chmod(socketPath, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
 		return fmt.Errorf("failed to set socket permissions: %w", err)
@@ -1235,7 +1235,7 @@ func listenLinkSocket(path, lost string) net.Listener {
 	if ul, ok := ll.(*net.UnixListener); ok {
 		ul.SetUnlinkOnClose(false)
 	}
-	if err := os.Chmod(path, 0700); err != nil {
+	if err := os.Chmod(path, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
 		_ = ll.Close()
 		_ = os.Remove(path)
 		log.Printf("The link socket %s could not be secured: %v. %s", path, err, lost)

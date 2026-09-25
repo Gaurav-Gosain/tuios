@@ -62,7 +62,7 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	dir := filepath.Dir(target)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // another tool's config directory, made the way that tool makes it
 		return fmt.Errorf("failed to create %s: %w", dir, err)
 	}
 	mode := fs.FileMode(0o644)

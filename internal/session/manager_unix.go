@@ -61,7 +61,7 @@ func ensureSocketDir(dir string) error {
 		return fmt.Errorf("socket directory %s belongs to another user; set XDG_RUNTIME_DIR to a directory you own", dir)
 	}
 	if st.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(dir, 0o700); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory, which needs the execute bit to be entered
 			return fmt.Errorf("socket directory %s is open to other users and could not be closed: %w", dir, err)
 		}
 	}

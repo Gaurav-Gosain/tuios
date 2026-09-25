@@ -67,17 +67,17 @@ func createPath(cwd, raw string) (string, error) {
 		return "", err
 	}
 	if isDir {
-		if err := os.MkdirAll(full, 0o755); err != nil {
+		if err := os.MkdirAll(full, 0o755); err != nil { //nolint:gosec // the user asked for this file or folder, so it gets ordinary permissions less the umask
 			return "", err
 		}
 		return "New folder " + clean, nil
 	}
 	if parent := filepath.Dir(full); parent != cwd {
-		if err := os.MkdirAll(parent, 0o755); err != nil {
+		if err := os.MkdirAll(parent, 0o755); err != nil { //nolint:gosec // the user asked for this file or folder, so it gets ordinary permissions less the umask
 			return "", err
 		}
 	}
-	f, err := os.OpenFile(full, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(full, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644) //nolint:gosec // the user asked for this file or folder, so it gets ordinary permissions less the umask
 	if err != nil {
 		return "", err
 	}
@@ -121,7 +121,7 @@ func renameEntry(cwd, oldName, newName string) (string, error) {
 		return "", err
 	}
 	if parent := filepath.Dir(dst); parent != cwd {
-		if err := os.MkdirAll(parent, 0o755); err != nil {
+		if err := os.MkdirAll(parent, 0o755); err != nil { //nolint:gosec // the user asked for this file or folder, so it gets ordinary permissions less the umask
 			return "", err
 		}
 	}

@@ -11,7 +11,7 @@ package lexers
 import (
 	"strings"
 
-	. "github.com/alecthomas/chroma/v2" //nolint:revive // the rules read as chroma's do
+	. "github.com/alecthomas/chroma/v2" //nolint:revive,staticcheck // the rules read as chroma's do, so they stay diffable against it
 )
 
 // registerCodedLexers adds Go, Go text templates and Markdown to reg. The

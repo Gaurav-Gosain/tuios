@@ -289,7 +289,7 @@ func clone(remote, parent, protocols string) (string, error) {
 	if _, err := os.Lstat(dest); err == nil {
 		return "", fmt.Errorf("%s already exists and its origin is not %s", dest, remote)
 	}
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if err := os.MkdirAll(parent, 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
