@@ -391,9 +391,6 @@ func (s *ScrollingLayout) ScrollToFocusedColumn(screenWidth int) {
 	s.reveal(screenWidth, scrollPeek)
 }
 
-// FocusColumnContaining sets focus to the column containing the given window ID.
-// Returns true if the window was found. If not found, FocusedCol is unchanged
-// and the caller should avoid scrolling the viewport.
 // ColumnContaining is the index of the column holding a window, or -1.
 //
 // It reports without moving the focus, which is what a caller asking where a
@@ -410,6 +407,9 @@ func (s *ScrollingLayout) ColumnContaining(windowID int) int {
 	return -1
 }
 
+// FocusColumnContaining sets focus to the column containing the given window ID.
+// Returns true if the window was found. If not found, FocusedCol is unchanged
+// and the caller should avoid scrolling the viewport.
 func (s *ScrollingLayout) FocusColumnContaining(windowID int) bool {
 	for ci := range s.Columns {
 		if at := slices.Index(s.Columns[ci].WindowIDs, windowID); at >= 0 {

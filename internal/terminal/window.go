@@ -41,12 +41,16 @@ import (
 // lock-free variant for callers that are already inside, as with
 // ScrollbackLenSync and ScrollbackLen), or hoist the read out of the locked region entirely.
 
-// LockIO/UnlockIO: exclusive lock for PTY writes (mutates cell buffer).
-func (w *Window) LockIO()   { w.ioMu.Lock() }
+// LockIO takes the exclusive lock for PTY writes, which mutate the cell buffer.
+func (w *Window) LockIO() { w.ioMu.Lock() }
+
+// UnlockIO releases the lock LockIO took.
 func (w *Window) UnlockIO() { w.ioMu.Unlock() }
 
-// RLockIO/RUnlockIO: shared lock for rendering (reads cell buffer).
-func (w *Window) RLockIO()   { w.ioMu.RLock() }
+// RLockIO takes the shared lock for rendering, which reads the cell buffer.
+func (w *Window) RLockIO() { w.ioMu.RLock() }
+
+// RUnlockIO releases the lock RLockIO took.
 func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 
 // TryRLockIO takes the read side only if it is free, and reports whether it

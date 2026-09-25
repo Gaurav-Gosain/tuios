@@ -30,11 +30,11 @@ func TestConform_UnicodeOnScreen(t *testing.T) {
 		},
 		{
 			name:   "a zero width joiner family is one cluster",
-			in:     "\U0001f469‍\U0001f469‍\U0001f467",
-			want:   "\U0001f469‍\U0001f469‍\U0001f467",
+			in:     "\U0001f469\u200d\U0001f469\u200d\U0001f467",
+			want:   "\U0001f469\u200d\U0001f469\u200d\U0001f467",
 			cursor: "2,0",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "\U0001f469‍\U0001f469‍\U0001f467", width: 2},
+				{x: 0, y: 0, content: "\U0001f469\u200d\U0001f469\u200d\U0001f467", width: 2},
 			},
 		},
 		{

@@ -1052,7 +1052,7 @@ func (m *OS) FocusDirection(direction string) error {
 	return nil
 }
 
-// ToggleZoom toggles zoom on the focused window (tape executor interface).
+// ToggleZoomExec toggles zoom on the focused window (tape executor interface).
 func (m *OS) ToggleZoomExec() error {
 	m.ToggleZoom()
 	return nil

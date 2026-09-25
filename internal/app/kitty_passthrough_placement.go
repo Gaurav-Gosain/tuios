@@ -637,7 +637,6 @@ func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
 	return false
 }
 
-// deleteOnePlacement removes the image and all its placements from graphics memory.
 // HideAllPlacements hides all visible image placements. Used during resize
 // to prevent stale positions. RefreshAllPlacements will re-place them.
 func (kp *KittyPassthrough) HideAllPlacements() {
@@ -660,6 +659,7 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 	kp.flushToHost()
 }
 
+// deleteOnePlacement removes the image and all its placements from graphics memory.
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")

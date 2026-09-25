@@ -452,10 +452,10 @@ func TestApprovalNotHeldUnlessShownWhole(t *testing.T) {
 		"too long":          "approve Bash: echo " + strings.Repeat("a", attentionMaxSummary),
 		"a newline":         "approve Bash: ls\nrm -rf ~",
 		"doubled spaces":    "approve Bash: ls  -la",
-		"a bidi override":   "approve Bash: echo ‮ftp",
+		"a bidi override":   "approve Bash: echo \u202eftp",
 		"a masked secret":   "approve Bash: API_TOKEN=abcdef123456 make",
 		"a control char":    "approve Bash: ls\x1b[2J",
-		"a zero width char": "approve Bash: rm​ -rf",
+		"a zero width char": "approve Bash: rm\u200b -rf",
 	} {
 		t.Run(name, func(t *testing.T) {
 			raw, _ := json.Marshal(map[string]any{"session": "work", "window": a, "harness": "claude-code", "summary": line})

@@ -16,7 +16,7 @@ import (
 // It receives the command payload and returns success/error.
 type RemoteCommandHandler func(payload *RemoteCommandPayload) error
 
-// Multi-client handler types
+// StateSyncHandler and the handler types below are the multi-client callbacks.
 type StateSyncHandler func(state *SessionState, triggerType, sourceID string)
 type ClientJoinedHandler func(clientID string, clientCount int, width, height int)
 type ClientLeftHandler func(clientID string, clientCount int)

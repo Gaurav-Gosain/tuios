@@ -323,7 +323,7 @@ returns once they are started; 'tuios fan compare' shows how they end.`,
 		RunE: func(c *cobra.Command, args []string) error {
 			dash := c.ArgsLenAtDash()
 			if dash != 1 {
-				return errors.New("fan verify takes the session, then -- and the command: tuios fan verify <session> -- go test ./...")
+				return errors.New("fan verify takes the session, then -- and the command: tuios fan verify <session> -- go test ./...") //nolint:staticcheck // ST1005: the string ends in the ./... package pattern, not a full stop
 			}
 			return fanVerifyRun(args[0], fanVerifyCommandLine(args[1:]), timeout, !noWait, jsonOut)
 		},

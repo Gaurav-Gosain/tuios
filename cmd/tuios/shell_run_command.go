@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,7 +28,7 @@ type runResult struct {
 func runInPane(sessionName, windowTarget string, args []string, timeout, lines int, jsonOutput bool) error {
 	command := strings.Join(args, " ")
 	if strings.TrimSpace(command) == "" {
-		return fmt.Errorf("run needs a command line, e.g. tuios run -w build -- go test ./...")
+		return errors.New("run needs a command line, e.g. tuios run -w build -- go test ./...") //nolint:staticcheck // ST1005: the string ends in the ./... package pattern, not a full stop
 	}
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {

@@ -556,9 +556,6 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 	m.MarkAllDirty()
 }
 
-// SidebarNewSession creates a detached session and switches to it: create and
-// go, no prompt. The name matches what `tuios new` would have picked, so the
-// two ways in never invent different conventions.
 // SidebarNewSessionHere is the rail's "+" on the sessions header. It asks
 // which machine when there is more than one, the same way the dock's control
 // and the palette entry do, so the three agree about what the verb means.

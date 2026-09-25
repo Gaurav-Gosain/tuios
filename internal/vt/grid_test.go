@@ -144,11 +144,11 @@ func TestGridFillAreaMatchesUVBuffer(t *testing.T) {
 	cellOfWidth := func(rng *rand.Rand) *uv.Cell {
 		switch rng.Intn(6) {
 		case 0:
-			return &uv.Cell{Content: "​", Width: 0}
+			return &uv.Cell{Content: "\u200b", Width: 0}
 		case 1:
 			return &uv.Cell{Content: "漢", Width: 2, Style: uv.Style{Attrs: 1}}
 		case 2:
-			return &uv.Cell{Content: "\U0001F468‍\U0001F469‍\U0001F467", Width: 3}
+			return &uv.Cell{Content: "\U0001F468\u200d\U0001F469\u200d\U0001F467", Width: 3}
 		default:
 			return randomGridCell(rng)
 		}

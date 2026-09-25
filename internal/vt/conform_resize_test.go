@@ -43,7 +43,7 @@ func TestConform_ResizeCuttingAWideCharacter(t *testing.T) {
 		{"a wide rune at the new edge", "a世世", 6, 4},
 		{"a cluster carrying a mark", "世́世́世́", 6, 5},
 		{"an emoji with a presentation selector", "☝️☝️☝️", 6, 5},
-		{"a zero width joiner sequence", "\U0001f469‍\U0001f4bb\U0001f469‍\U0001f4bb", 6, 5},
+		{"a zero width joiner sequence", "\U0001f469\u200d\U0001f4bb\U0001f469\u200d\U0001f4bb", 6, 5},
 		{"a flag", "\U0001f1fa\U0001f1f8\U0001f1fa\U0001f1f8", 6, 5},
 		{"a narrowing to one column", "世世世", 6, 1},
 	} {
