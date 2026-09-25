@@ -108,6 +108,10 @@ type kittyStep struct {
 	win     int
 	body    string
 	imageID uint32
+	// op is a lifecycle event instead of a guest command: "close",
+	// "clear" or "refresh", with shift moving the panes for a refresh.
+	op    string
+	shift int
 }
 
 func decodeKittySteps(in []byte) []kittyStep {
@@ -131,7 +135,7 @@ func decodeKittySteps(in []byte) []kittyStep {
 			ids = ",i=" + strconv.Itoa(int(id))
 		}
 		var body string
-		switch b2 % 10 {
+		switch b2 % 13 {
 		case 0:
 			body = "a=T,f=" + f + ",s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ids + ";" + payload
 		case 1:
@@ -154,8 +158,17 @@ func decodeKittySteps(in []byte) []kittyStep {
 			// An animation frame edit of an image the pane may never have
 			// sent.
 			body = "a=f,r=1,x=0,y=0,s=1,v=1,f=24" + ids + ";" + base64.StdEncoding.EncodeToString(px[:3])
-		default:
+		case 9:
 			body = "a=T,f=100" + ids + ",q=" + strconv.Itoa(int(b3%3)) + ";" + payload
+		case 10:
+			steps = append(steps, kittyStep{win: win, op: "close"})
+			continue
+		case 11:
+			steps = append(steps, kittyStep{win: win, op: "clear"})
+			continue
+		default:
+			steps = append(steps, kittyStep{win: win, op: "refresh", shift: int(b3 % 7)})
+			continue
 		}
 		steps = append(steps, kittyStep{win: win, body: body, imageID: id})
 	}
@@ -169,6 +182,9 @@ func FuzzKittyPassthrough(f *testing.F) {
 	f.Add([]byte{0x02, 0x05, 0x04, 0x00, 0x02, 0x05, 0x05, 0x00, 0x02, 0x00, 0x02, 0x11})
 	f.Add([]byte{0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x02})
 	f.Add([]byte{0x04, 0x10, 0x06, 0x00, 0x05, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x01})
+	// Both panes place an image, then a refresh, a clear and a close.
+	f.Add([]byte{0x02, 0x05, 0x00, 0x10, 0x03, 0x05, 0x00, 0x20, 0x02, 0x00, 0x0c, 0x03,
+		0x03, 0x00, 0x0b, 0x00, 0x02, 0x00, 0x0a, 0x00, 0x03, 0x00, 0x0c, 0x01})
 
 	f.Fuzz(func(t *testing.T, in []byte) {
 		steps := decodeKittySteps(in)
@@ -200,11 +216,57 @@ func FuzzKittyPassthrough(f *testing.F) {
 				}
 			}
 		}
+		// The panes side by side on a 100x30 host, each 30x10 with a
+		// one-cell border. A refresh may move them.
+		geometry := func(shift int) map[string]*WindowPositionInfo {
+			out := map[string]*WindowPositionInfo{}
+			for i, w := range wins {
+				out[w] = &WindowPositionInfo{
+					WindowX: 10*i + 40*i + shift, WindowY: 2 + shift,
+					ContentOffsetX: 1, ContentOffsetY: 1,
+					Width: 30, Height: 10, ContentWidth: 28, ContentHeight: 8,
+					Visible: true, ScreenWidth: 100, ScreenHeight: 30, WindowZ: i,
+					LayoutX: 0, LayoutY: 0, LayoutW: 100, LayoutH: 30,
+				}
+			}
+			return out
+		}
 		for n, st := range steps {
 			win := wins[st.win]
 			kp.mu.Lock()
 			firstNew := kp.nextHostID
 			kp.mu.Unlock()
+			if st.op != "" {
+				switch st.op {
+				case "close":
+					kp.OnWindowClose(win)
+				case "clear":
+					kp.ClearWindow(win)
+				case "refresh":
+					geo := geometry(st.shift)
+					kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo { return geo })
+				}
+				out := append(kp.FlushPending(), host.take()...)
+				apcs, bad := hostTokens(out)
+				if bad != "" {
+					t.Fatalf("step %d (%s of %s): host got %s", n, st.op, win[:6], bad)
+				}
+				for _, body := range apcs {
+					m := apcImageID.FindStringSubmatch(body)
+					if m == nil {
+						continue
+					}
+					hostID, _ := strconv.ParseUint(m[1], 10, 32)
+					got := owner[hostID]
+					// A refresh redraws every pane, so an id there only has to
+					// be one tuios allocated. A close or clear is about one pane.
+					if hostID != 0 && (got == "" || (st.op != "refresh" && got != win)) {
+						t.Fatalf("step %d: the %s of %s sent image id %d (owner %q):\n%q",
+							n, st.op, win[:6], hostID, got, body)
+					}
+				}
+				continue
+			}
 			cmd, err := vt.ParseKittyCommand([]byte(st.body))
 			if err != nil || cmd == nil {
 				t.Fatalf("step %d: the harness built an unparseable command %q", n, st.body)
