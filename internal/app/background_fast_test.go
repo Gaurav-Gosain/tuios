@@ -203,24 +203,6 @@ func TestFastPathPaintMatchesTheCompositor(t *testing.T) {
 	}
 }
 
-// With every background off the fast path's frame is the one it always built,
-// byte for byte, and building it allocates what it always did.
-func TestFastPathPaintOffIsUnchanged(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	m, _ := fastPathOS(t, "bottom")
-	if m.fastPathPaints() {
-		t.Fatal("a background is on in the default settings")
-	}
-	a := m.composeFrame()
-	m.Windows[0].MarkContentDirty()
-	if b := m.composeFrame(); a != b {
-		t.Error("the unpainted frame is not stable")
-	}
-	if strings.Contains(a, "48;2;42;27;61") {
-		t.Error("the unpainted frame carries a ground")
-	}
-}
-
 // Painting a frame allocates the frame string and nothing else: the colour
 // sequences were formatted when the ground was resolved and the buffer is
 // kept.

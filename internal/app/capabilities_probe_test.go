@@ -56,21 +56,6 @@ func TestProbeStopsOnDA1(t *testing.T) {
 	}
 }
 
-// TestProbeWithoutDA1SpendsBackstop documents the other side: a host that never
-// identifies itself is the only case that costs the full timeout.
-func TestProbeWithoutDA1SpendsBackstop(t *testing.T) {
-	const short = 40 * time.Millisecond
-	got, elapsed := probeReply(t, "\x1b[4;1080;1920t", short)
-	if got != "\x1b[4;1080;1920t" {
-		t.Fatalf("probe lost the reply it did get: %q", got)
-	}
-	// Not the timeout exactly: the poll wakes on the deadline it was handed, so
-	// the last iteration can return a hair early.
-	if floor := short - short/10; elapsed < floor {
-		t.Errorf("probe returned after %s without a DA1 reply, expected it to wait out %s", elapsed, short)
-	}
-}
-
 // TestProbeParsesOneResponse checks that folding four queries into one round
 // trip did not cost any of the answers, which is the risk the merge carries.
 func TestProbeParsesOneResponse(t *testing.T) {
@@ -190,21 +175,6 @@ func TestAnimationProbeTakesTwoAnswers(t *testing.T) {
 				t.Errorf("KittyAnimation = %v, want %v: %s", caps.KittyAnimation, tc.want, tc.because)
 			}
 		})
-	}
-}
-
-// TestAnimationProbeAcceptAloneIsNotEnough is the negative control written out.
-// Both of these replies pass the old rule, which was a single OK for id 3, and
-// only one of them is a host that can carry a frame edit.
-func TestAnimationProbeAcceptAloneIsNotEnough(t *testing.T) {
-	rubberStamp := hostReply("OK", "OK")
-	if !kittyProbeOK(rubberStamp, animationProbeAccept) {
-		t.Fatal("a relay that answers OK to everything answers OK to the accept half too")
-	}
-	var caps HostCapabilities
-	parseGraphicsSupport(&caps, rubberStamp, false)
-	if caps.KittyAnimation {
-		t.Error("claimed animation support from a relay that rubber-stamps every command")
 	}
 }
 

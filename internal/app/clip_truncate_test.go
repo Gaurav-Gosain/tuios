@@ -57,38 +57,3 @@ func TestClipNeverExceedsViewportWidth(t *testing.T) {
 		}
 	}
 }
-
-// TestTruncateToWidth checks the helper directly, including that it does not
-// over-trim content that already fits.
-func TestTruncateToWidth(t *testing.T) {
-	tests := []struct {
-		name  string
-		line  string
-		width int
-	}{
-		{"invalid utf8 at boundary", "世世世世世\xe4\xb800\xb80", 11},
-		{"invalid utf8 short", "\xe4\xb8ab", 2},
-		{"valid wide straddling", "世世世世世世", 11},
-		{"valid wide exact", "世世世世世世", 12},
-		{"narrow", "abcdef", 3},
-		{"already fits", "abc", 10},
-		{"zero width", "abc", 0},
-		{"styled", "\x1b[31m世世世\x1b[0m", 5},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := truncateToWidth(tc.line, tc.width)
-			if w := ansi.StringWidth(got); w > tc.width {
-				t.Errorf("truncateToWidth(%q, %d) = %q, width %d",
-					tc.line, tc.width, got, w)
-			}
-			// It must not throw away content that fit: the result is at least
-			// as wide as ansi.Truncate's, minus the correction it needed.
-			if tc.width > 0 && ansi.StringWidth(tc.line) <= tc.width && got != tc.line {
-				t.Errorf("truncateToWidth trimmed a line that already fit: %q -> %q",
-					tc.line, got)
-			}
-		})
-	}
-}

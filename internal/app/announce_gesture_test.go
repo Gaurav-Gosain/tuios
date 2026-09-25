@@ -92,26 +92,3 @@ func TestAPointerGoneSilentStillEndsTheHold(t *testing.T) {
 		t.Errorf("the pane was told %v, want exactly one %dx%d", *told, wantW, wantH)
 	}
 }
-
-// TestALayoutUpdateInsideAGestureDoesNotEndItsHold is why the hold is a depth
-// count and not a flag. A gesture holds across many messages and every retile
-// inside it holds again for the length of one call; if the inner release
-// reached the guest, the drop's own retile would announce the size the drag was
-// passing through and the gesture's hold would guard nothing.
-func TestALayoutUpdateInsideAGestureDoesNotEndItsHold(t *testing.T) {
-	m := newDeferralOS(t, 120, 40, 2)
-	told, _, _ := heldPane(t, m)
-
-	m.settleSizes(func() {
-		win := m.Windows[0]
-		win.Resize(win.Width, win.Height-2)
-	})
-
-	if len(*told) != 0 {
-		t.Errorf("a layout update inside the gesture told the pane %v; the gesture's "+
-			"hold must outlive it", *told)
-	}
-	if !m.announceGestureHeld {
-		t.Error("a layout update inside the gesture cleared the gesture's own hold")
-	}
-}

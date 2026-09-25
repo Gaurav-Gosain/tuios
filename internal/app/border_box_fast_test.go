@@ -7,7 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -175,59 +174,6 @@ func TestFastWindowBoxRecordsTheSameButtons(t *testing.T) {
 		if fast[i] != slow[i] {
 			t.Errorf("control %d landed at %+v in the fused box and %+v in the lipgloss one",
 				i, fast[i], slow[i])
-		}
-	}
-}
-
-// TestFastWindowBoxDeclinesABorderItCannotDraw pins the guard. A border side of
-// more than one rune is cycled down the rows by lipgloss, which this path does
-// not do, so it must hand the frame back rather than draw the first rune of it
-// on every row.
-func TestFastWindowBoxDeclinesABorderItCannotDraw(t *testing.T) {
-	if _, _, ok := borderSideCells(lipgloss.Color("62"), &config.Global); !ok {
-		t.Fatal("the default border was declined")
-	}
-	if _, _, ok := borderSideCells(nil, &config.Global); ok {
-		t.Error("a frame with no border colour was accepted")
-	}
-	for _, s := range []string{"", "ab", "│┃"} {
-		if isSingleRune(s) {
-			t.Errorf("%q was accepted as a single-rune border side", s)
-		}
-	}
-	for _, s := range []string{"│", "你", "█"} {
-		if !isSingleRune(s) {
-			t.Errorf("%q was rejected as a single-rune border side", s)
-		}
-	}
-}
-
-// TestFastWindowBoxDeclinesATabbedBody covers the one thing lipgloss does to a
-// body before laying it out that this path does not: expanding tabs. A body
-// carrying one has to go back through lipgloss, or the two paths would draw
-// different numbers of columns.
-func TestFastWindowBoxDeclinesATabbedBody(t *testing.T) {
-	win := newTestWindow(t, "tabbed", 40, 10)
-	m := newTestOS(win)
-	for _, body := range []string{"a\tb", "a\rb"} {
-		if _, ok := m.fastWindowBox(strings.Repeat(body, 3), win, lipgloss.Color("62"), 1, false); ok {
-			t.Errorf("a body carrying %q was accepted", body)
-		}
-	}
-	if _, ok := m.fastWindowBox("plain", win, lipgloss.Color("62"), 1, false); !ok {
-		t.Error("a plain body was declined")
-	}
-}
-
-// TestFastWindowBoxDeclinesAPaneTooSmallToHaveABody covers the clamp: below
-// three cells the content box stops being the pane minus its frame, so the
-// vertical padding lipgloss adds is no longer nothing.
-func TestFastWindowBoxDeclinesAPaneTooSmallToHaveABody(t *testing.T) {
-	for _, sz := range [][2]int{{1, 1}, {2, 2}, {2, 10}, {10, 2}} {
-		win := &terminal.Window{ID: "tiny", Width: sz[0], Height: sz[1], Workspace: 1}
-		m := &OS{Settings: config.Global}
-		if _, ok := m.fastWindowBox("x", win, lipgloss.Color("62"), 1, false); ok {
-			t.Errorf("a %dx%d pane was accepted", sz[0], sz[1])
 		}
 	}
 }

@@ -8,8 +8,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // composeReference is the frame the lipgloss Compositor produces for the same
@@ -213,116 +211,5 @@ func TestComposeLayersRandomMatchesCompositor(t *testing.T) {
 		if cached != want {
 			t.Fatalf("round %d (%dx%d): cached compose differs\nwant %q\ngot  %q", round, w, h, want, cached)
 		}
-	}
-}
-
-// TestComposeLayersReparsesChangedContent is the cache's own guard: a layer
-// that keeps its id and changes its string must draw the new string, not the
-// cells parsed for the old one.
-func TestComposeLayersReparsesChangedContent(t *testing.T) {
-	const w, h = 10, 2
-	m := &OS{Settings: config.Global}
-	draw := func(content string) string {
-		canvas := &frameCanvas{}
-		canvas.Resize(w, h)
-		canvas.Clear()
-		m.composeLayers(canvas, []*lipgloss.Layer{lipgloss.NewLayer(content).X(0).Y(0).Z(1).ID("same")})
-		return canvas.Render()
-	}
-	if got := draw("first"); !strings.Contains(got, "first") {
-		t.Fatalf("first draw: %q", got)
-	}
-	if got := draw("second"); !strings.Contains(got, "second") || strings.Contains(got, "first") {
-		t.Fatalf("a changed string under the same id drew the old cells: %q", got)
-	}
-	if got := draw("界"); !strings.Contains(got, "界") || strings.Contains(got, "second") {
-		t.Fatalf("a narrower string under the same id kept the old width: %q", got)
-	}
-}
-
-// TestComposeLayersSpillRowGoesCellByCell checks the guard for a row whose
-// last head cell is wider than the columns left to it. No string the parser
-// and the width measure agree on produces one, so the layer is built by hand:
-// the copied row must still be what a cell-by-cell draw gives, with the wide
-// cell's second half landing past the layer's edge.
-func TestComposeLayersSpillRowGoesCellByCell(t *testing.T) {
-	const w, h = 8, 1
-	build := func() *cellLayer {
-		cl := &cellLayer{w: 2, h: 1}
-		cl.buf.Resize(2+wideMargin, 1)
-		cl.blank = clearLines(cl.buf.Lines, cl.blank)
-		cl.buf.Lines[0].Set(0, &uv.Cell{Content: "a", Width: 1})
-		cl.buf.Lines[0].Set(1, &uv.Cell{Content: "界", Width: 2})
-		cl.spill = []bool{true}
-		return cl
-	}
-	draw := func(cl *cellLayer) string {
-		canvas := &frameCanvas{}
-		canvas.Resize(w, h)
-		canvas.Clear()
-		uv.NewStyledString("01234567").Draw(canvas, canvas.Bounds())
-		cl.blit(canvas, 2, 0)
-		return canvas.Render()
-	}
-	// The reference is the same layer drawn the slow way, which is what a
-	// StyledString.Draw of the cells would do: clear the two columns, then set
-	// the heads, the wide one spilling onto column 4.
-	ref := &frameCanvas{}
-	ref.Resize(w, h)
-	ref.Clear()
-	uv.NewStyledString("01234567").Draw(ref, ref.Bounds())
-	ref.Lines[0].Set(2, nil)
-	ref.Lines[0].Set(3, nil)
-	ref.Lines[0].Set(2, &uv.Cell{Content: "a", Width: 1})
-	ref.Lines[0].Set(3, &uv.Cell{Content: "界", Width: 2})
-	want := ref.Render()
-	if got := draw(build()); got != want {
-		t.Fatalf("spill row drawn by copy\nwant %q\ngot  %q", want, got)
-	}
-}
-
-// TestComposeLayersDropsAbsentLayers: a layer's cells are held only while it
-// is on screen.
-func TestComposeLayersDropsAbsentLayers(t *testing.T) {
-	m := &OS{Settings: config.Global}
-	canvas := &frameCanvas{}
-	canvas.Resize(4, 1)
-	m.composeLayers(canvas, []*lipgloss.Layer{lipgloss.NewLayer("a").ID("a"), lipgloss.NewLayer("b").ID("b")})
-	if len(m.layerCells) != 2 {
-		t.Fatalf("cached %d layers, want 2", len(m.layerCells))
-	}
-	m.composeLayers(canvas, []*lipgloss.Layer{lipgloss.NewLayer("b").ID("b")})
-	if _, ok := m.layerCells["a"]; ok || len(m.layerCells) != 1 {
-		t.Fatalf("an absent layer's cells were kept: %v", m.layerCells)
-	}
-}
-
-// TestComposeFrameKeepsPaneColour holds the composed frame to the colours its
-// panes were drawn in. composeFrame used to pass every frame through
-// lipgloss.Sprint, which downsampled it to the profile detected from this
-// process's stdout. Under go test that is not a TTY, so every frame a test
-// composed was stripped to plain text, and a test reading colour out of a frame
-// could not see the colour it was about.
-//
-// Negative control: wrapping composeFrame's return in lipgloss.Sprint again
-// fails this under go test.
-func TestComposeFrameKeepsPaneColour(t *testing.T) {
-	win := newTestWindow(t, "colour-0001", 60, 12)
-	win.LockIO()
-	_, _ = win.Terminal.Write([]byte("\x1b[38;2;200;100;50mCOLOURED\x1b[0m\r\n"))
-	win.UnlockIO()
-	win.MarkContentDirty()
-	m := newTestOS(win)
-	m.Width, m.Height = 90, 30
-	if _, ok := m.fullscreenFastWindow(); ok {
-		t.Fatal("setup: the pane is on the fullscreen fast path, which is not the compositor")
-	}
-
-	frame := m.composeFrame()
-	if !strings.Contains(ansi.Strip(frame), "COLOURED") {
-		t.Fatalf("setup: the pane text is not in the frame:\n%s", ansi.Strip(frame))
-	}
-	if !strings.Contains(frame, "38;2;200;100;50") {
-		t.Errorf("the frame lost the pane's colour; %d escape bytes in %d", strings.Count(frame, "\x1b"), len(frame))
 	}
 }

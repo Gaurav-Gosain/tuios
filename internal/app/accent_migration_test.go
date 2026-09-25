@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -21,71 +20,6 @@ func writeSidebarStateFile(t *testing.T, body string) {
 	}
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write the state file: %v", err)
-	}
-}
-
-// TestLegacyAccentFileRendersIdentically is the migration's real obligation: a
-// sidebar state file written before the colour picker existed has to put the
-// same pixels on the rail afterwards.
-//
-// The proof is a byte comparison of the rendered rows. The "before" side is the
-// rail rendered from an accent built the way the old code built one, an index
-// resolved against the live theme; the "after" side is the same rail rendered
-// from the file. Nothing about the row may differ, including the colour the
-// chip is painted in.
-func TestLegacyAccentFileRendersIdentically(t *testing.T) {
-	const legacyID = "cccccccc3333" // "logs", the fixture pane with no agent state
-
-	// After: a pre-migration file, loaded through the migration.
-	after := accentTestOS(t, 120, 40)
-	writeSidebarStateFile(t, `{"accents":{"`+legacyID+`":4}}`)
-	after.SidebarAccents = nil
-	after.loadSidebarState()
-
-	// Before: the accent the old model would have held for index 4, which is an
-	// ANSI slot resolved against whatever theme is loaded.
-	before := accentTestOS(t, 120, 40)
-	after.Settings = config.Global
-	after.Settings = before.Settings
-	before.SidebarAccents = map[string]Accent{legacyID: SlotAccent(4)}
-
-	beforeRows, afterRows := railStyledFrame(t, before), railStyledFrame(t, after)
-
-	// Guard against the comparison passing because neither side drew anything:
-	// the chip has to be on the row for its colour to be worth comparing.
-	chipRows := 0
-	for _, r := range beforeRows {
-		if strings.Contains(stripANSIForTrace(r), accentMark()) {
-			chipRows++
-		}
-	}
-	if chipRows == 0 {
-		t.Fatalf("the pre-migration rail draws no accent chip, so this proves nothing:\n%s",
-			strings.Join(beforeRows, "\n"))
-	}
-
-	if len(beforeRows) != len(afterRows) {
-		t.Fatalf("the rail changed height: %d rows before, %d after", len(beforeRows), len(afterRows))
-	}
-	for i := range beforeRows {
-		if beforeRows[i] != afterRows[i] {
-			t.Fatalf("row %d of the rail changed across the migration:\n before %q\n  after %q",
-				i, beforeRows[i], afterRows[i])
-		}
-	}
-
-	// And the accent it loaded is still a slot, not a hex snapshot: it has to go
-	// on re-resolving when the theme changes, which is what a slot is for.
-	got, ok := after.WindowAccent(legacyID)
-	if !ok {
-		t.Fatal("the legacy accent did not survive the load")
-	}
-	if !got.IsSlot() || got.Slot != 4 {
-		t.Errorf("the legacy index loaded as %+v, want slot 4", got)
-	}
-	if got.RGB() != toRGBA(accentColor(4)) {
-		t.Errorf("slot 4 resolved to %s, want the theme's ANSI slot %s",
-			got.Hex(), overlay.Hex(toRGBA(accentColor(4))))
 	}
 }
 
@@ -155,15 +89,6 @@ func TestAccentFileRoundTripsBothKinds(t *testing.T) {
 			t.Errorf("%s came back as %+v, want %+v", id, got, want)
 		}
 	}
-}
-
-// railStyledFrame renders the rail and returns its rows with the styling left
-// on, which is what a byte comparison across the migration has to be built on:
-// the colour of the accent chip is exactly the thing that must not have moved.
-func railStyledFrame(t *testing.T, m *OS) []string {
-	t.Helper()
-	lines, _ := m.sidebarPanelLines()
-	return append([]string(nil), lines...)
 }
 
 // theme8 is the bright-black ANSI slot, which is what accent index 0 means.

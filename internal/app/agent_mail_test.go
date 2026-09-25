@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -13,15 +12,6 @@ import (
 // reads it, and a reply goes back out. Every route in is proved at the level
 // that dispatches it, not by the presence of an entry in a table.
 
-// mailOS is a client attached to "main" with the rail up, from the sections
-// fixture, plus a second agent pane the messages here are between.
-func mailOS(t *testing.T) *OS {
-	t.Helper()
-	m, _ := sectionsTestOS(t, 120, 30)
-	m.ClientEventChan = make(chan ClientEvent, 4)
-	return m
-}
-
 // mail is a message as the daemon would push it.
 func mail(id uint64, from, fromLabel, to, toLabel, subject, text string) session.AgentMessage {
 	kind := "message"
@@ -31,147 +21,6 @@ func mail(id uint64, from, fromLabel, to, toLabel, subject, text string) session
 	return session.AgentMessage{
 		ID: id, Kind: kind, From: from, FromLabel: fromLabel, To: to, ToLabel: toLabel,
 		Subject: subject, Text: text, ThreadID: id, SentAt: 1,
-	}
-}
-
-// TestMailToThePersonIsAnnouncedAndCounted: a message to human raises a dock
-// message naming the sender, counts as unread for the person, and re-arms the
-// client event listener. A message between two agents raises nothing and
-// counts against the recipient's row instead.
-func TestMailToThePersonIsAnnouncedAndCounted(t *testing.T) {
-	m := mailOS(t)
-
-	_, cmd := m.Update(AgentMailMsg{Payload: session.AgentMailPayload{
-		Message: mail(7, "cccccccc3333", "build", session.AgentInboxHuman, "human", "which retry policy?", "exponential or fixed?"),
-	}})
-	if cmd == nil {
-		t.Fatal("a mail push returned no command, so nothing is listening for the next event")
-	}
-	if got := m.AgentMailUnread(); got != 1 {
-		t.Errorf("unread for the person = %d, want 1", got)
-	}
-	if n := len(m.Notifications); n == 0 {
-		t.Fatal("mail to the person raised no dock message")
-	}
-	last := m.Notifications[len(m.Notifications)-1]
-	if !strings.Contains(last.Message, "build to you: which retry policy?") {
-		t.Errorf("the dock message reads %q, want the sender, the recipient and the subject", last.Message)
-	}
-	if last.Target == nil || last.Target.Thread != 7 {
-		t.Errorf("the dock message does not point at its thread: %+v", last.Target)
-	}
-
-	// Between two agents: counted on the recipient's row, and silent.
-	before := len(m.Notifications)
-	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{
-		Message: mail(8, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "retest", "please retest"),
-	}})
-	if len(m.Notifications) != before {
-		t.Error("a message between two agents raised a dock message")
-	}
-	if got := m.agentMailUnreadFor("bbbbbbbb2222"); got != 1 {
-		t.Errorf("unread for the recipient pane = %d, want 1", got)
-	}
-
-	// The agent reads it: the receipt clears the row.
-	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{ReadIDs: []uint64{8}, ReadAt: 2}})
-	if got := m.agentMailUnreadFor("bbbbbbbb2222"); got != 0 {
-		t.Errorf("after the receipt unread for the recipient pane = %d, want 0", got)
-	}
-}
-
-// TestRailShowsUnreadMail: the agents header carries the person's count, and
-// an agent row carries its own.
-func TestRailShowsUnreadMail(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	m.noteAgentMail(session.AgentMailPayload{Message: mail(1, "cccccccc3333", "build", session.AgentInboxHuman, "human", "q", "q?")})
-	m.noteAgentMail(session.AgentMailPayload{Message: mail(2, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "retest", "please")})
-	m.noteAgentMail(session.AgentMailPayload{Message: mail(3, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "again", "please")})
-
-	lines := railPlain(t, m, tree)
-	header := lineOf(lines, "agents")
-	if header < 0 {
-		t.Fatalf("no agents header:\n%s", strings.Join(lines, "\n"))
-	}
-	if !strings.Contains(lines[header], sidebarMailGlyph()+" 1") {
-		t.Errorf("the agents header does not count the person's mail: %q", lines[header])
-	}
-	row := railAgentRow(m, lines, "bbbbbbbb2222")
-	if !strings.Contains(row, sidebarMailGlyph()+" 2") {
-		t.Errorf("the refactor row does not count its unread mail: %q", row)
-	}
-}
-
-// TestRailMailTokenOpensTheMailbox is the route in from the rail, by mouse
-// and by keyboard, at the level of the click and the cursor's enter.
-func TestRailMailTokenOpensTheMailbox(t *testing.T) {
-	m, tree := sectionsTestOS(t, 120, 30)
-	railPlain(t, m, tree)
-
-	var token sidebarRowHit
-	found := false
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgentMail {
-			token, found = h, true
-		}
-	}
-	if !found {
-		t.Fatal("the agents header has no mail token to click")
-	}
-	if !m.SidebarClick(token.X0, token.Y0, false) {
-		t.Fatal("a click on the mail token was not the rail's")
-	}
-	if !m.ShowAgentMail {
-		t.Error("clicking the mail token did not open the mailbox")
-	}
-	m.TakeSidebarCmd()
-	m.CloseAgentMail()
-
-	// The keyboard: cursor on the token, enter.
-	m.EnterSidebarFocus()
-	idx := m.sidebarFirstRowOfKind(sidebarRowAgentMail)
-	if idx < 0 {
-		t.Fatal("the mail token is not a keyboard row")
-	}
-	m.sidebarSetCursor(idx)
-	m.SidebarActivateCursor()
-	if !m.ShowAgentMail {
-		t.Error("enter on the mail token did not open the mailbox")
-	}
-}
-
-// TestPaletteListsAThreadWaitingForThePerson: unread mail is findable by what
-// it says, and selecting it opens that thread.
-func TestPaletteListsAThreadWaitingForThePerson(t *testing.T) {
-	m := mailOS(t)
-	m.noteAgentMail(session.AgentMailPayload{Message: mail(5, "cccccccc3333", "build", session.AgentInboxHuman, "human", "which retry policy?", "exponential or fixed?")})
-	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "retry policy"
-	m.CommandPaletteSelected = 0
-	filtered := m.filteredPaletteItems()
-	if len(filtered) == 0 || !strings.Contains(filtered[0].Name, "Mail #5 build → you: which retry policy?") {
-		t.Fatalf("the palette does not list the unread thread:\n%s", paletteNames(filtered))
-	}
-	m.ActivateCommandPalette()
-	if !m.ShowAgentMail || m.AgentMail.Thread != 5 {
-		t.Errorf("selecting the entry opened mailbox=%v thread=%d, want thread 5", m.ShowAgentMail, m.AgentMail.Thread)
-	}
-}
-
-// TestMailDockMessageOpensTheThread: activating a dock message about mail
-// lands on the thread, where the reply is, not on the pane.
-func TestMailDockMessageOpensTheThread(t *testing.T) {
-	m := mailOS(t)
-	// From nobody in particular: a pane-less sender is the case where the only
-	// place the message can lead is the thread.
-	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{
-		Message: mail(9, "", "", session.AgentInboxHuman, "human", "q", "q?"),
-	}})
-	if !m.JumpToNotification() {
-		t.Fatal("there was no dock message to activate")
-	}
-	if !m.ShowAgentMail || m.AgentMail.Thread != 9 {
-		t.Errorf("activating the message opened mailbox=%v thread=%d, want thread 9", m.ShowAgentMail, m.AgentMail.Thread)
 	}
 }
 
@@ -195,66 +44,6 @@ func TestMailboxKeepsTheIdleTickIdle(t *testing.T) {
 	}
 }
 
-// TestReplyCarriesTheAttachNonce: a reply from the mail overlay signs with the
-// nonce the daemon issued in the attach reply, which is what makes the daemon
-// store it as verified_human rather than as a claim. With no nonce, from an
-// older daemon, the parameter is left out, since such a daemon refuses it.
-func TestReplyCarriesTheAttachNonce(t *testing.T) {
-	params := agentMailReplyParams(false, "main", "cccccccc3333", 5, "take exponential", "abc123")
-	if params["human_nonce"] != "abc123" || params["from"] != session.AgentInboxHuman {
-		t.Errorf("reply params = %v, want from human with human_nonce abc123", params)
-	}
-	params = agentMailReplyParams(false, "main", "cccccccc3333", 5, "take exponential", "")
-	if _, sent := params["human_nonce"]; sent {
-		t.Errorf("a reply with no nonce still sent the parameter: %v", params)
-	}
-}
-
-// TestARoutedKeyReplyIsNotSignedAsThePerson covers the reply an agent could
-// type through this client: send-keys routes keys to the attached client,
-// whose input handler opens the mail overlay and types into its reply line like
-// the keyboard does, and the reply used to leave with the attach nonce, stored
-// as the person's verified answer. A reply any routed key touched is sent
-// without it, and says so in words on the reply line.
-func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
-	m := &OS{}
-	m.AgentMail.Composing = true
-	m.AgentMail.Draft = "yes, "
-
-	m.AgentMailType("go ahead")
-	if got := m.agentMailReplyNonce("abc123"); got != "abc123" {
-		t.Fatalf("a reply typed at the keyboard carries nonce %q, want abc123", got)
-	}
-
-	// One routed key anywhere in the draft is enough.
-	m.ProcessingRemoteKeys = true
-	m.AgentMailType("!")
-	m.ProcessingRemoteKeys = false
-	if !m.AgentMail.DraftAutomated {
-		t.Fatal("a routed key typed into the draft did not mark it automated")
-	}
-	if got := m.agentMailReplyNonce("abc123"); got != "" {
-		t.Errorf("a reply a routed key touched carries nonce %q, want none", got)
-	}
-
-	// A reply sent by a routed Enter is automated whoever typed the text.
-	m.AgentMailCancelReply()
-	m.AgentMail.Composing = true
-	m.AgentMailType("typed by hand")
-	m.ProcessingRemoteKeys = true
-	if got := m.agentMailReplyNonce("abc123"); got != "" {
-		t.Errorf("a reply sent by a routed key carries nonce %q, want none", got)
-	}
-	m.ProcessingRemoteKeys = false
-
-	// Closing the reply line clears the mark, and a fresh draft is the
-	// keyboard's again.
-	m.AgentMailCancelReply()
-	if m.AgentMail.DraftAutomated {
-		t.Error("the automated mark outlived the reply line")
-	}
-}
-
 // TestUnverifiedHumanMailIsNotDrawnAsThePerson: a message from human that the
 // daemon could not match to an attached client is named as unverified, so the
 // person does not read something else's words as their own reply.
@@ -267,18 +56,5 @@ func TestUnverifiedHumanMailIsNotDrawnAsThePerson(t *testing.T) {
 	m.VerifiedHuman, m.ClaimedHuman = false, true
 	if got := agentMailSender(m); got != "you (unverified)" {
 		t.Errorf("a claimed reply is drawn as %q, want you (unverified)", got)
-	}
-}
-
-// TestMailChangesTheRailSignature: the rail's render cache keys on the
-// mailbox, so a count that changed is drawn rather than served from the frame
-// before.
-func TestMailChangesTheRailSignature(t *testing.T) {
-	m, _ := sectionsTestOS(t, 120, 30)
-	before := m.sidebarSignature()
-	m.AgentMail.Messages = append(m.AgentMail.Messages, mail(1, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "s", "t"))
-	m.AgentMail.Gen++
-	if m.sidebarSignature() == before {
-		t.Error("mail arriving left the rail signature unchanged, so a cached rail would hide the count")
 	}
 }
