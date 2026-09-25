@@ -165,3 +165,45 @@ func TestMobileBarWellFormed(t *testing.T) {
 		}
 	}
 }
+
+// Every command in the row is one tap: the leader and the bound key, together.
+func TestMobileBarChords(t *testing.T) {
+	_, rows := mobileBar(defaultRegistry(t), "ctrl+b")
+	keys := rows[0].Keys
+
+	want := map[string]struct {
+		key   string
+		shift bool
+	}{
+		"new":    {key: "c"},
+		"close":  {key: "x"},
+		"tile":   {key: " "},
+		"prev":   {key: "p"},
+		"next":   {key: "n"},
+		"zoom":   {key: "z"},
+		"vsplit": {key: "|", shift: true},
+		"hsplit": {key: "-"},
+		"cmds":   {key: "P", shift: true},
+		"config": {key: ","},
+		"help":   {key: "?", shift: true},
+	}
+	if len(keys) != len(want)+1 {
+		t.Errorf("chord row has %d buttons, want %d and the latch", len(keys), len(want))
+	}
+	for label, w := range want {
+		got, ok := findKey(keys, label)
+		if !ok {
+			t.Errorf("no %q button", label)
+			continue
+		}
+		if got.Key != w.key || got.Shift != w.shift {
+			t.Errorf("%q sends {Key:%q Shift:%v}, want {Key:%q Shift:%v}", label, got.Key, got.Shift, w.key, w.shift)
+		}
+		if !got.Prefixed {
+			t.Errorf("%q is not prefixed, so it types its key into the pane", label)
+		}
+		if got.Ctrl || got.Alt {
+			t.Errorf("%q carries %+v; none of the default bindings is modified", label, got)
+		}
+	}
+}

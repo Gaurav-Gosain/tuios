@@ -171,3 +171,25 @@ func TestRecorder_NotRecording(t *testing.T) {
 		t.Error("Should not record when not enabled")
 	}
 }
+
+func TestRecorder_ModifierCombos(t *testing.T) {
+	r := NewRecorder()
+	r.Start()
+
+	r.RecordKey("ctrl+c")
+	r.RecordKey("ctrl+v")
+	r.RecordKey("alt+tab")
+
+	r.Stop()
+
+	commands := r.GetCommands()
+	if len(commands) != 3 {
+		t.Errorf("Expected 3 commands, got %d", len(commands))
+	}
+
+	for _, cmd := range commands {
+		if cmd.Type != CommandTypeKeyCombo {
+			t.Errorf("Expected KeyCombo command, got %v", cmd.Type)
+		}
+	}
+}

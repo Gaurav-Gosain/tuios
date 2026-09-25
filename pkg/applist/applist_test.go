@@ -255,3 +255,17 @@ func TestCommandLineQuotesExecArguments(t *testing.T) {
 		t.Fatalf("CommandLine = %q, want %q", got, want)
 	}
 }
+
+// TestArgvUsesExec: an entry carrying an Exec runs it verbatim, because its
+// Path is a .desktop file and its arguments are part of what it means.
+func TestArgvUsesExec(t *testing.T) {
+	e := Entry{
+		Name:   "org.gnome.Nautilus",
+		Path:   "/usr/share/applications/org.gnome.Nautilus.desktop",
+		Source: SourceDesktop,
+		Exec:   []string{"nautilus", "--new-window"},
+	}
+	if got := e.Argv(); !slices.Equal(got, []string{"nautilus", "--new-window"}) {
+		t.Fatalf("Argv = %v, want the Exec argv", got)
+	}
+}

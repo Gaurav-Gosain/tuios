@@ -344,3 +344,26 @@ Up 10`
 		}
 	}
 }
+
+func TestParserSwitchWorkspace(t *testing.T) {
+	input := `SwitchWorkspace 2`
+
+	commands, _ := ParseFile(input)
+
+	if len(commands) == 0 {
+		t.Fatal("No commands parsed")
+	}
+
+	cmd := commands[0]
+	if cmd.Type != CommandTypeSwitchWS {
+		t.Errorf("Expected CommandTypeSwitchWS, got %v", cmd.Type)
+	}
+
+	if len(cmd.Args) == 0 {
+		t.Fatal("No arguments in command")
+	}
+
+	if cmd.Args[0] != "2" {
+		t.Errorf("Expected workspace 2, got %s", cmd.Args[0])
+	}
+}

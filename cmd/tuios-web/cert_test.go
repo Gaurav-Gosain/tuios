@@ -334,3 +334,24 @@ func TestCertDaysShortensValidity(t *testing.T) {
 		t.Errorf("--cert-days 10 produced a certificate valid until %s", cert.NotAfter)
 	}
 }
+
+func TestCertPath(t *testing.T) {
+	dir := t.TempDir()
+	applyCertFlags(t, certFlags{host: "localhost", dir: dir})
+
+	out, err := runCert(t, "cert", "path", "--cert-dir", dir)
+	if err != nil {
+		t.Fatalf("cert path: %v", err)
+	}
+	if got := strings.TrimSpace(out); got != filepath.Join(dir, "sip.crt") {
+		t.Errorf("cert path printed %q", got)
+	}
+
+	out, err = runCert(t, "cert", "path", "--cert-dir", dir, "--key")
+	if err != nil {
+		t.Fatalf("cert path --key: %v", err)
+	}
+	if got := strings.TrimSpace(out); got != filepath.Join(dir, "sip.key") {
+		t.Errorf("cert path --key printed %q", got)
+	}
+}

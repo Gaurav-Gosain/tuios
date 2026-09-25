@@ -346,3 +346,38 @@ func TestNarrowFrameKeepsTheInstruments(t *testing.T) {
 		}
 	}
 }
+
+// The figure/ground claim, asserted on the drawn frame. No cell of the rail
+// band may be transparent: a fragment rendered without a background emits a
+// reset, and the reset shows whatever the terminal had in that cell before,
+// which reads as a hole punched through the instrument. The first capture round
+// found exactly that, in a state every assertion on the state behind the frame
+// had passed.
+//
+// The band is allowed more than one fill. It is allowed exactly three: its own
+// ground, the title chip, and the key badges in the hint strip. Anything else
+// is a fill nobody decided on.
+func TestRailBandHasNoHoles(t *testing.T) {
+	pal := palette(false)
+	allowed := map[string]string{
+		hexBg(pal.Panel):  "Panel",
+		hexBg(pal.Accent): "the title chip",
+		hexBg(pal.Card):   "a key badge",
+	}
+	for _, size := range [][2]int{{120, 34}, {100, 30}, {160, 44}} {
+		dr := newDriver(t, Options{Screen: demoScreen(70, 14), Width: size[0], Height: size[1]})
+		dr.actions(300)
+		for y, line := range strings.Split(dr.d.Frame(), "\n") {
+			cs := cells(line)
+			if len(cs) < railWidth {
+				t.Fatalf("%dx%d row %d decoded to %d cells", size[0], size[1], y, len(cs))
+			}
+			for x, c := range cs[len(cs)-railWidth:] {
+				if _, ok := allowed[c.bg]; !ok {
+					t.Fatalf("%dx%d rail cell (%d,%d) %q sits on %s, which is not the band, the chip or a badge",
+						size[0], size[1], x, y, string(c.r), c.bg)
+				}
+			}
+		}
+	}
+}
