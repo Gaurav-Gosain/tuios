@@ -939,10 +939,10 @@ func (d reviewDraw) unifiedLine(row reviewRow, cursor bool, markCell func(color.
 func (d reviewDraw) splitLine(row reviewRow, cursor bool, markCell func(color.Color) string) string {
 	dv, pal := d.look.dv, d.look.pal
 	lines := d.file.Hunks[row.hunk].Lines
-	left, right := -1, -1
+	var left, right int
 	switch lines[row.line].Op {
 	case review.OpDelete:
-		left = row.line
+		left, right = row.line, -1
 	case review.OpContext:
 		left, right = row.line, row.line
 	default:

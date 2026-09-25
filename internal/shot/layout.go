@@ -123,13 +123,12 @@ func bgRuns(g *Grid) []bgRun {
 		}
 		for x := 0; x < g.Cols; x++ {
 			c := row[x]
-			span := 1
 			if c.Width == 0 {
 				// A continuation cell inherits the wide cell's background,
 				// which the run already covers.
 				continue
 			}
-			span = int(c.Width)
+			span := int(c.Width)
 			if c.BGDefault {
 				flush()
 				continue

@@ -627,7 +627,7 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 			})
 	}
 	if p.Window == "" && !p.Literal && tui != nil && !paneTypesRaw(cs) {
-		keys := p.Keys
+		var keys string
 		count := len(parsed)
 		if p.Raw {
 			keys = strings.Repeat(p.Keys, repeat)

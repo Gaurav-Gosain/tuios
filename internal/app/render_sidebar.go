@@ -1427,7 +1427,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		if at >= 0 {
 			tallRowH = tall
 			if grown := sidebarBudgetLines(avail, plans, planRows, tall); grown[at] >= nA*sidebarAgentRowTall {
-				budget, planRowH, agentRowH = grown, tall, sidebarAgentRowTall
+				budget, agentRowH = grown, sidebarAgentRowTall
 				rowH[sidebarSectionAgents] = sidebarAgentRowTall
 			}
 		}
@@ -1496,11 +1496,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		line += 1 + budget[i]
 		prev = p.Section
 	}
-	if pinned == sidebarSectionCount || rowsIn[pinned] == 0 {
-		// Nothing is pinned, so the slack falls where it always did: under the
-		// last drawn section, above the footer.
-		line += slack
-	}
+	// With nothing pinned the slack falls where it always did, under the last
+	// drawn section and above the footer, and nothing below reads past it.
 	// The band above the pinned block belongs to the section over it, so the
 	// wheel keeps working on the gap the block floats in.
 	if drawn > 1 && pinned != sidebarSectionCount {

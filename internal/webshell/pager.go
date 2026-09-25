@@ -38,8 +38,7 @@ func cmdView(s *shell, args []string) int {
 		s.fail(name + ": which file? Try " + bold + name + " README.md" + reset)
 		return 1
 	}
-	var content string
-	shown := target
+	var content, shown string
 	if target != "" {
 		p := resolve(s.cwd, target)
 		c, ok := readFile(p)

@@ -177,9 +177,10 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 	if pathList != "" {
 		path, err = lookPathIn(name, pathList)
 	} else {
-		path, err = exec.LookPath(name)
 		// exec resolves the name again at spawn, on the same PATH, so the
-		// name as written is what is kept.
+		// lookup only checks that it is there and the name as written is
+		// what is kept.
+		_, err = exec.LookPath(name)
 		path = name
 	}
 	if err != nil {

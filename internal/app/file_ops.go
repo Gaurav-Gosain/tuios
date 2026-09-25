@@ -56,7 +56,7 @@ func createPath(cwd, raw string) (string, error) {
 		return "", errors.New("empty path")
 	}
 	isDir := strings.HasSuffix(raw, "/") || strings.HasSuffix(raw, string(os.PathSeparator))
-	clean, err := relativeUnder(strings.TrimRight(raw, "/"+string(os.PathSeparator)))
+	clean, err := relativeUnder(strings.TrimRightFunc(raw, isPathSeparator))
 	if err != nil {
 		return "", err
 	}
@@ -400,4 +400,10 @@ func capitalizeFirst(s string) string {
 		r[0] -= 'a' - 'A'
 	}
 	return string(r) + "."
+}
+
+// isPathSeparator reports whether r separates path elements here: '/' on every
+// platform, and the backslash too on Windows.
+func isPathSeparator(r rune) bool {
+	return r == '/' || r == os.PathSeparator
 }

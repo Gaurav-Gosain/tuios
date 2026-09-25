@@ -218,7 +218,6 @@ func (s *Session) Run(ctx context.Context) int {
 				s.keysHandled()
 			}
 		case <-gone:
-			gone = nil
 			// Show whatever it said before it went.
 			s.drain()
 			s.cancelAll()
