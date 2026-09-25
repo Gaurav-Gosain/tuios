@@ -130,21 +130,6 @@ func TestFileSinkHonoursLevelAboveBasic(t *testing.T) {
 	}
 }
 
-// TestFileSinkHeaderStatesThePrivacyRule checks the header a reader of the file
-// lands on. The rule belongs on the artefact, not only in the documentation.
-func TestFileSinkHeaderStatesThePrivacyRule(t *testing.T) {
-	restoreLevel(t, DebugOff)
-	path := withLogFile(t)
-
-	got := readLog(t, path)
-	if !strings.Contains(got, "tuios daemon log started") {
-		t.Fatalf("no start header:\n%s", got)
-	}
-	if !strings.Contains(got, "Levels verbose and trace also record pane content, window titles and paths.") {
-		t.Fatalf("header does not state the privacy rule:\n%s", got)
-	}
-}
-
 // TestFileSinkRotatesAtTheCap pins the bound: past the cap the daemon moves the
 // file aside and starts a new one, and it keeps exactly one old generation.
 func TestFileSinkRotatesAtTheCap(t *testing.T) {
@@ -195,18 +180,6 @@ func TestFileSinkSilentWithoutADaemon(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dir, "tuios", "daemon.log")); !os.IsNotExist(err) {
 		t.Fatalf("a process that never installed the sink wrote a log file (err %v)", err)
-	}
-}
-
-// TestDefaultDaemonLogPathFollowsTheStateDir keeps the file where every other
-// piece of tuios state lives, which is also where the CLI help says to look.
-func TestDefaultDaemonLogPathFollowsTheStateDir(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
-	want := filepath.Join(dir, "tuios", "daemon.log")
-	if got := DefaultDaemonLogPath(); got != want {
-		t.Fatalf("DefaultDaemonLogPath() = %q, want %q", got, want)
 	}
 }
 

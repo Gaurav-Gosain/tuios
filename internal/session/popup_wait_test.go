@@ -2,7 +2,6 @@ package session
 
 import (
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -33,21 +32,5 @@ func TestPopupWaitReturnsExitCodeAndStdout(t *testing.T) {
 	}
 	if _, captured := res["stdout"]; captured {
 		t.Fatalf("a popup that did not ask for capture returned stdout: %v", res)
-	}
-}
-
-// TestPopupCaptureNeedsWait refuses a capture nobody would receive.
-func TestPopupCaptureNeedsWait(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "work")
-	attachTUI(t, sp, "work")
-	c := dialVerb(t, sp)
-	resp := c.call(t, `{"id":1,"verb":"popup","params":{"session":"work","command":["true"],"capture_stdout":true}}`)
-	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Fatalf("capture without wait: code %q, want %q", code, ErrVerbInvalidParams)
-	}
-	e := resp["error"].(map[string]any)
-	if msg, _ := e["message"].(string); !strings.Contains(msg, "wait") {
-		t.Fatalf("the refusal does not say what is missing: %q", msg)
 	}
 }

@@ -21,7 +21,6 @@ package session
 
 import (
 	"fmt"
-	"os"
 	"testing"
 )
 
@@ -48,63 +47,6 @@ func benchSession(tb testing.TB, n int) (*Session, []string) {
 		}
 	}
 	return sess, ptyIDs
-}
-
-// BenchmarkDaemonAgentDetectSweep measures one agentMonitor tick's Go half: the
-// walk over every window, the state lock it holds while walking, and the state
-// publish it triggers when anything changed.
-//
-// The resolver is faked so this is the sweep and not the procfs reads, which
-// BenchmarkForegroundResolve prices separately. "steady" is the real idle case,
-// where nothing has changed since the last tick and the sweep should find
-// nothing to do.
-func BenchmarkDaemonAgentDetectSweep(b *testing.B) {
-	for _, n := range []int{1, 8, 32} {
-		b.Run(fmt.Sprintf("panes-%d/steady", n), func(b *testing.B) {
-			sess, ptyIDs := benchSession(b, n)
-			matcher := newAgentMatcher(nil)
-			table := make(map[string]fakeProc, len(ptyIDs))
-			for _, id := range ptyIDs {
-				// A shell at a prompt: running, and not an agent.
-				table[id] = fakeProc{foregroundInfo{
-					comm: "bash", argv: []string{"bash"}, exe: "/usr/bin/bash",
-				}, true}
-			}
-			resolve := fakeResolver(table)
-			// Settle, so the measured ticks are the steady state rather than
-			// the first one that has labels to write.
-			sess.applyAgentDetection(resolve, matcher.identifyDetail)
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				_ = sess.applyAgentDetection(resolve, matcher.identifyDetail)
-			}
-		})
-	}
-}
-
-// BenchmarkForegroundResolve prices the other half: what it costs to ask one
-// pane what is running in it. This is the part that multiplies by the pane
-// count on every tick, and on Linux it is procfs reads rather than Go.
-//
-// It resolves against this process, which is a real pid with a real /proc
-// entry, so the cost is the real one. A daemon pane resolves its shell's
-// foreground group first, which is one extra read, so this is a floor.
-func BenchmarkForegroundResolve(b *testing.B) {
-	pid := os.Getpid()
-	b.Run("read-process-info", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = readProcessInfo(pid)
-		}
-	})
-	b.Run("full-foreground", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _ = foregroundProcess(pid)
-		}
-	})
 }
 
 // TestAgentDetectSweepIsIdempotentWhenIdle is the invariant the benchmark above

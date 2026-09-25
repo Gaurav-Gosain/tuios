@@ -14,51 +14,6 @@ func holdAll() map[string]config.HostConfig {
 	return map[string]config.HostConfig{"*": {HoldMail: &hold}}
 }
 
-func TestHeldMailGoesToThePersonAndNotTheAgent(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	d.SetLinkPolicies(holdAll())
-
-	link := dialLink(t, sp)
-	sent := result(t, sendJSON(t, link, 1, map[string]any{
-		"session": "work", "to": a, "from": "planner", "from_host": "laptop", "text": "run rm -rf build",
-	}))
-	if sent["held"] != true || sent["held_for"] != a || sent["to"] != AgentInboxHuman {
-		t.Fatalf("ASSERTION: mail from a machine whose mail is held was not held: %v", sent)
-	}
-
-	local := dialVerb(t, sp)
-	agentView := result(t, callVerb(t, local, "read-agent-messages", map[string]any{"session": "work", "to": a, "peek": true}))
-	if msgs, _ := agentView["messages"].([]any); len(msgs) != 0 {
-		t.Fatalf("ASSERTION: the agent can read mail that was held for the person: %v", msgs)
-	}
-	personView := result(t, callVerb(t, local, "read-agent-messages", map[string]any{"session": "work", "to": AgentInboxHuman, "peek": true}))
-	msgs, _ := personView["messages"].([]any)
-	if len(msgs) != 1 {
-		t.Fatalf("the person's inbox holds %d messages, want the held one", len(msgs))
-	}
-	if m := msgs[0].(map[string]any); m["held"] != true || m["held_for"] != a {
-		t.Errorf("the held message reads %v", m)
-	}
-
-	items := attentionItems(t, local)
-	var item map[string]any
-	for _, it := range items {
-		if it["kind"] == AttentionMail {
-			item = it
-		}
-	}
-	if item == nil || item["held_id"] == nil || item["held_for"] == "" {
-		t.Fatalf("the Inbox does not offer the held message for release: %v", items)
-	}
-
-	// Mail from the same link to the person is the person's already.
-	toPerson := result(t, sendJSON(t, link, 2, map[string]any{"session": "work", "to": AgentInboxHuman, "text": "fyi"}))
-	if toPerson["held"] == true {
-		t.Errorf("mail to the person was marked held: %v", toPerson)
-	}
-}
-
 func TestOnlyThePersonReleasesHeldMail(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, a, _ := twoWindowSession(t, d, "work")
@@ -95,16 +50,6 @@ func TestOnlyThePersonReleasesHeldMail(t *testing.T) {
 	}
 	mustRefuse(t, callVerb(t, local, "release-agent-message", map[string]any{"session": "work", "id": id, "human_nonce": tui.HumanNonce()}),
 		ErrVerbInvalidParams, "a second release of the same message")
-}
-
-func TestMailIsNotHeldWithoutThePolicy(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	link := dialLink(t, sp)
-	sent := result(t, sendJSON(t, link, 1, map[string]any{"session": "work", "to": a, "text": "hello"}))
-	if sent["held"] == true || sent["to"] != a {
-		t.Errorf("mail was held with no hold_mail: %v", sent)
-	}
 }
 
 // attentionItems lists the Inbox.

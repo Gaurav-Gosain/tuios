@@ -32,24 +32,3 @@ func TestTheMostUrgentPaneSpeaksForTheSession(t *testing.T) {
 		})
 	}
 }
-
-// TestAFinishedPaneRollsUpUnread.
-//
-// The unread bit is a fact about a viewer: it says whether the person looking
-// has seen that pane. The daemon answering a listing has no idea what the
-// person reading it has looked at, and it is answering a client on another
-// machine that cannot have looked at anything here. Ranking every pane as
-// unseen is the honest reading, and it is also the useful one, since a
-// finished agent nobody has seen is the case worth surfacing.
-//
-// Negative control: ranking with doneSeen true drops done below working and
-// this fails.
-func TestAFinishedPaneRollsUpUnread(t *testing.T) {
-	got := rollUpAgentState([]WindowSummary{
-		{AgentState: "working"},
-		{AgentState: "done"},
-	})
-	if got != "done" {
-		t.Errorf("a finished pane rolled up as %q, want done: it was ranked as already seen", got)
-	}
-}

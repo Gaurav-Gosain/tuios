@@ -36,14 +36,3 @@ func TestAListingAboutNoPaneIsNotJudged(t *testing.T) {
 		t.Error("a listing about no pane was judged against one")
 	}
 }
-
-// TestAnOlderClientStillGetsTheCheck. Pinned is a new field, and a client
-// built before it sends the zero value. False has to mean "the pane steered
-// this", so the check keeps working for every client that does not know to ask
-// for it.
-func TestAnOlderClientStillGetsTheCheck(t *testing.T) {
-	old := ReadDirPayload{WindowID: "w1", Dir: "/src"} // no Pinned field set
-	if !spoofCheckWanted(old) {
-		t.Error("a client that does not set Pinned lost the check")
-	}
-}

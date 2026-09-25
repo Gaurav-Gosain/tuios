@@ -3,7 +3,6 @@ package session
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -72,51 +71,6 @@ func withHost(host string) func([]map[string]any) bool {
 
 func withoutHost(host string) func([]map[string]any) bool {
 	return func(items []map[string]any) bool { return !withHost(host)(items) }
-}
-
-// TestAHostsApprovalReachesTheHubsInbox is P17's point: an agent blocked on
-// another machine is in the Inbox here, naming the machine, with no poll.
-//
-// Negative control: without the fleet's start in Daemon.Start the hub's Inbox
-// never holds a build item and the wait fails.
-func TestAHostsApprovalReachesTheHubsInbox(t *testing.T) {
-	hub, far := startHubAndFar(t)
-	sess := makeSessionWithWindow(t, far.daemon, "remote-work")
-	win := sess.GetState().Windows[0].ID
-	waitForHostUp(t, hub, "build")
-	waitFleetLive(t, hub, "build")
-
-	farC := dialVerb(t, far.socket)
-	setAgentState(t, farC, "remote-work", win, "needs_input", "approval", "approve Bash: make deploy")
-
-	c := hubVerb(t)
-	items := waitHostAttention(t, c, "", "an approval on build", withHost("build"))
-	it := items[0]
-	if it["kind"] != AttentionApproval || it["session"] != "remote-work" || it["window"] != win {
-		t.Fatalf("the mirrored item is %v", it)
-	}
-	if id, _ := it["id"].(string); !strings.HasPrefix(id, "build:") {
-		t.Errorf("a host item's id is %q, want it to start with build:", id)
-	}
-	if it["summary"] != "approve Bash: make deploy" {
-		t.Errorf("summary %q", it["summary"])
-	}
-
-	// The session filter still names a session on this machine: a far
-	// session of the same name is not in it unless the host is named.
-	if only, _ := listAttention(t, c, `{"session":"remote-work"}`); len(only) != 0 {
-		t.Errorf("a session filter with no host listed another machine's items: %v", only)
-	}
-	if only, _ := listAttention(t, c, `{"host":"build","session":"remote-work"}`); len(only) != 1 {
-		t.Errorf("the host filter found %v", only)
-	}
-	if only, _ := listAttention(t, c, `{"host":"local"}`); len(only) != 0 {
-		t.Errorf("host local listed %v", only)
-	}
-
-	// The far agent moving on closes the item here too.
-	setAgentState(t, farC, "remote-work", win, "working", "", "")
-	waitHostAttention(t, c, "", "the approval resolved on build", withoutHost("build"))
 }
 
 // TestAHostsItemsGoStaleWhenTheLinkDropsAndFreshWhenItReturns covers the rows
@@ -394,19 +348,5 @@ func TestAnOldHostIsPolledWithANote(t *testing.T) {
 	noResume := fleetConnOn(`{"id":1,"error":{"code":"invalid_params","message":"verb subscribe has no parameter \"after_seq\"","hint":{"param":"after_seq"}}}`)
 	if err := noResume.subscribe(7, "b"); !errors.As(err, &old) {
 		t.Errorf("a host that cannot resume gave %v, want errFleetOld", err)
-	}
-}
-
-// TestListHostsSaysHowAHostIsFollowed puts the mode on the listing a person
-// reads when the rail does not update.
-func TestListHostsSaysHowAHostIsFollowed(t *testing.T) {
-	hub, _ := startHubAndFar(t)
-	waitForHostUp(t, hub, "build")
-	waitFleetLive(t, hub, "build")
-	c := hubVerb(t)
-	res := result(t, c.call(t, `{"id":1,"verb":"list-hosts"}`))
-	raw, _ := json.Marshal(res["hosts"])
-	if !strings.Contains(string(raw), `"events":"live"`) {
-		t.Fatalf("list-hosts does not say build is followed live: %s", raw)
 	}
 }

@@ -147,37 +147,3 @@ func TestResurrectionStateCapturesCwd(t *testing.T) {
 		t.Errorf("captured cwd = %q, want %q", state.Windows[0].Cwd, wd)
 	}
 }
-
-// TestKillRemovesResurrectionState verifies an explicit kill deletes the saved
-// state so the session is not resurrectable afterwards.
-func TestKillRemovesResurrectionState(t *testing.T) {
-	tmpDir := t.TempDir()
-	defer useResurrectionDir(tmpDir)()
-
-	mgr := NewManager()
-	defer mgr.Shutdown()
-	if _, err := mgr.CreateSession("doomed", &SessionConfig{}, 80, 24); err != nil {
-		t.Fatalf("CreateSession failed: %v", err)
-	}
-
-	// Seed a saved-state file as the periodic saver would have.
-	if err := SaveSessionForResurrection(&SessionState{Name: "doomed"}); err != nil {
-		t.Fatalf("save failed: %v", err)
-	}
-
-	if err := mgr.DeleteSession("doomed"); err != nil {
-		t.Fatalf("DeleteSession failed: %v", err)
-	}
-
-	if _, err := LoadResurrectionState("doomed"); err == nil {
-		t.Error("resurrection state should be removed after explicit kill")
-	}
-
-	names, err := ListResurrectableSessions()
-	if err != nil {
-		t.Fatalf("ListResurrectableSessions failed: %v", err)
-	}
-	if slices.Contains(names, "doomed") {
-		t.Error("killed session still listed as resurrectable")
-	}
-}

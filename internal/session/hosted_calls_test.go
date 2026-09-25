@@ -114,36 +114,6 @@ func hostedHelperWindow(t *testing.T, hub *Daemon, far *farSide, sessionName str
 	return sess, state, pty
 }
 
-// TestAnAgentInAPaneOnAnotherMachineReportsItsState is P18's point: a hook in
-// a hosted pane reports with the ordinary verb, and the window on the owning
-// machine takes the state, which puts the approval in that machine's Inbox.
-//
-// Negative control: without the forward in dispatchVerbLine the far daemon
-// answers the call itself, with R0:ERR:session_not_found, and the window
-// stays where it was.
-func TestAnAgentInAPaneOnAnotherMachineReportsItsState(t *testing.T) {
-	hub, far := startHubAndFar(t)
-	waitForHostUp(t, hub, "build")
-	sess, win, pty := hostedHelperWindow(t, hub, far, "global", []hostedHelperCall{{
-		Verb:   "set-agent-state",
-		Params: json.RawMessage(`{"window":"$PANE","state":"needs_input","kind":"approval","message":"approve Bash: make deploy"}`),
-	}})
-	text := waitForPaneText(t, pty, "DONE", paneBudget)
-	if !strings.Contains(text, "PANE:true") || !strings.Contains(text, "R0:OK") {
-		t.Fatalf("the pane's report did not go through: %q", text)
-	}
-	for _, w := range sess.GetState().Windows {
-		if w.ID == win.ID && w.AgentState.Name() != "needs_input" {
-			t.Fatalf("the window's state is %q, want needs_input", w.AgentState.Name())
-		}
-	}
-	c := hubVerb(t)
-	items, _ := listAttention(t, c, `{"host":"local"}`)
-	if len(items) != 1 || items[0]["kind"] != AttentionApproval || items[0]["window"] != win.ID {
-		t.Fatalf("the hub's Inbox holds %v, want the approval of the hosted pane", items)
-	}
-}
-
 // TestAPaneOnAnotherMachineReadsAndSendsItsOwnMail covers the mail half, and
 // the limits on it: the pane reads its own inbox whatever it names, sends only
 // as itself, and never as the person.

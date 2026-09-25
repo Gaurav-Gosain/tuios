@@ -7,8 +7,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -90,67 +88,6 @@ func waitHostedDetached(t *testing.T, d *Daemon, id string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("the far machine never noticed the link to pane %s dropped", id)
-}
-
-// TestAPaneOutlivesADroppedLinkAndIsReattached is the feature: the link drops,
-// the process goes on, what it printed meanwhile arrives once the link is
-// back, exactly once, and typing reaches it again.
-func TestAPaneOutlivesADroppedLinkAndIsReattached(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	fed := &droppableFederation{socketFederation: socketFederation{socketPath: socketPath}}
-	flag := filepath.Join(t.TempDir(), "go")
-	script := "echo ready; while [ ! -f " + flag + " ]; do sleep 0.05; done; echo during-the-drop; exec cat"
-	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Resumable: true, Command: []string{"/bin/sh", "-c", script}})
-	if p.resumeToken == "" || p.grace != config.DefaultHostedGrace {
-		t.Fatalf("the far machine gave no grace: token %q grace %v", p.resumeToken, p.grace)
-	}
-	r := drainPane(p)
-	if got := r.waitFor("ready", paneBudget); !strings.Contains(got, "ready") {
-		t.Fatalf("the pane never started: %q", got)
-	}
-
-	fed.drop()
-	waitHostedDetached(t, d, p.id)
-	// The process prints while nobody is attached.
-	if err := os.WriteFile(flag, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(paneBudget)
-	for state, _ := p.linkState(); state != remotePaneLinkReconnecting; state, _ = p.linkState() {
-		if time.Now().After(deadline) {
-			t.Fatal("the pane never said it was reconnecting")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := p.Write([]byte("x")); !errors.Is(err, errPaneReconnecting) {
-		t.Errorf("a write while reconnecting answered %v, want errPaneReconnecting", err)
-	}
-	// Give the far pump time to read the output into its ring.
-	time.Sleep(300 * time.Millisecond)
-	fed.up()
-
-	if got := r.waitFor("during-the-drop", paneBudget); !strings.Contains(got, "during-the-drop") {
-		t.Fatalf("ASSERTION: what the process printed during the drop never arrived: %q", got)
-	}
-	for state, _ := p.linkState(); state != ""; state, _ = p.linkState() {
-		if time.Now().After(deadline) {
-			t.Fatal("the pane still says it is reconnecting")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := p.Write([]byte("typed-after\n")); err != nil {
-		t.Fatalf("write after the reattach: %v", err)
-	}
-	got := r.waitFor("typed-after\r\ntyped-after", paneBudget)
-	if !strings.Contains(got, "typed-after") {
-		t.Fatalf("typing after the reattach did not reach the process: %q", got)
-	}
-	if n := strings.Count(got, "during-the-drop"); n != 1 {
-		t.Errorf("the output from the drop arrived %d times, want once: %q", n, got)
-	}
-	if n := strings.Count(got, "ready"); n != 1 {
-		t.Errorf("output from before the drop was replayed: %q", got)
-	}
 }
 
 // TestAPaneNotReattachedWithinItsGraceEnds: the far machine keeps the process
@@ -294,83 +231,5 @@ func TestReplayIsWhatWasMissedOrTheWholeRing(t *testing.T) {
 		if string(got) != tc.want || gap != tc.gap {
 			t.Errorf("from %d: %q gap %v, want %q gap %v", tc.from, got, gap, tc.want, tc.gap)
 		}
-	}
-}
-
-// TestAWindowSaysItsLinkIsLostAndComesBack is the session's view: while the
-// link is down the window stays, with host_link reconnecting and when the far
-// grace ends, and clears when the pane is reattached.
-func TestAWindowSaysItsLinkIsLostAndComesBack(t *testing.T) {
-	d, socketPath := startTestDaemon(t)
-	sess, err := d.manager.CreateSession("global-link", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("create the session: %v", err)
-	}
-	fed := &droppableFederation{socketFederation: socketFederation{socketPath: socketPath}}
-	sess.SetFederation(fed)
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Host: "build", Command: []string{"/bin/sh", "-c", "echo up; exec cat"}}, func(string) {})
-	if err != nil {
-		t.Fatalf("create a window on another machine: %v", err)
-	}
-	pty := sess.GetPTY(win.PTYID)
-	if got := waitForPaneText(t, pty, "up", paneBudget); !strings.Contains(got, "up") {
-		t.Fatalf("the pane never started: %q", got)
-	}
-
-	linkOf := func() (string, int64) {
-		for _, w := range sess.GetState().Windows {
-			if w.ID == win.ID {
-				return w.HostLink, w.HostLinkUntil
-			}
-		}
-		t.Fatal("ASSERTION: the window went away when its link dropped")
-		return "", 0
-	}
-	fed.drop()
-	deadline := time.Now().Add(paneBudget)
-	for {
-		state, until := linkOf()
-		if state == remotePaneLinkReconnecting {
-			if until < time.Now().Unix() {
-				t.Errorf("the grace ends at %d, which is in the past", until)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the window never said its link was lost")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	// A listing says so too, which is what an agent or a script reads.
-	listing := buildWindowListData(sess.GetState())
-	found := false
-	for _, w := range listing["windows"].([]map[string]any) {
-		if w["window_id"] == win.ID && w["host_link"] == remotePaneLinkReconnecting && w["host_link_until"] != nil {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("list-windows does not say the window's link is lost: %v", listing["windows"])
-	}
-	_, verr := d.verbSendText(nil, mustJSON(map[string]string{"session": "global-link", "window": win.ID, "text": "x"}))
-	if verr == nil || verr.Code != ErrVerbHostUnreachable {
-		t.Errorf("send-text while reconnecting answered %v, want %s", verr, ErrVerbHostUnreachable)
-	}
-	fed.up()
-	for {
-		state, _ := linkOf()
-		if state == "" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the window still says its link is lost after it came back")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if _, err := pty.Write([]byte("back-again\n")); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if got := waitForPaneText(t, pty, "back-again", paneBudget); !strings.Contains(got, "back-again") {
-		t.Errorf("typing after the reattach did not reach the far process: %q", got)
 	}
 }

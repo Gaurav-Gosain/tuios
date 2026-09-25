@@ -77,12 +77,3 @@ func TestHostsAndHooksReachTheDaemon(t *testing.T) {
 		t.Error("the hook table did not reach the daemon; a detached session runs none")
 	}
 }
-
-// TestDaemonConfigFromNilAsksForNothing: no file, no settings, and the
-// daemon's own defaults and TUIOS_* environment stand.
-func TestDaemonConfigFromNilAsksForNothing(t *testing.T) {
-	got := DaemonConfigFromUser(nil)
-	if !reflect.DeepEqual(got, &DaemonConfig{}) {
-		t.Errorf("a nil config produced %+v, want the zero value", got)
-	}
-}

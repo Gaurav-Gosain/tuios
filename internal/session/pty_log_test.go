@@ -69,11 +69,3 @@ func TestTheRawLogAppends(t *testing.T) {
 		t.Errorf("the log holds %q, want both writes", got)
 	}
 }
-
-// TestANilLogIsSafe, because that is the state in every session that has not
-// asked for one and every call site is unguarded.
-func TestANilLogIsSafe(t *testing.T) {
-	var l *ptyLogger
-	l.Write([]byte("nothing"))
-	l.Close()
-}

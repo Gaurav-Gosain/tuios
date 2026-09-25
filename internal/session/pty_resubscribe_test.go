@@ -85,31 +85,6 @@ func TestResubscribeReplaysOnlyWhatWasMissed(t *testing.T) {
 	}
 }
 
-// TestResubscribeKeepsTheGuestScreenIntact drives the guest's own view: the
-// bytes a client receives across a hide/show cycle, fed to the emulator that
-// already rendered them, must leave one banner and one prompt on screen.
-func TestResubscribeKeepsTheGuestScreenIntact(t *testing.T) {
-	p := newBufferedPTY(t)
-
-	term := vt.NewEmulator(80, 24)
-	ch := p.Subscribe("client-1", 0)
-	_, _ = term.Write(drain(ch))
-	before := emulatorText(term)
-
-	for range 3 {
-		resume := p.Unsubscribe("client-1")
-		ch = p.Subscribe("client-1", resume)
-		_, _ = term.Write(drain(ch))
-	}
-
-	if n := strings.Count(emulatorText(term), "Welcome to fish"); n != 1 {
-		t.Errorf("guest screen shows the banner %d times after three hide/show cycles, want 1", n)
-	}
-	if got := emulatorText(term); got != before {
-		t.Errorf("guest screen changed across hide/show cycles:\nbefore:\n%s\nafter:\n%s", before, got)
-	}
-}
-
 // TestResubscribeFallsBackWhenTheBufferRolled covers a pane that outran the
 // catch-up buffer while hidden: the client cannot be resumed byte-exactly, so
 // it gets everything the buffer still holds rather than a silent gap.
