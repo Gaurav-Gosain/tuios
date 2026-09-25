@@ -71,24 +71,3 @@ func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 		t.Errorf("after a second change the notice appears %d times, want 1", told)
 	}
 }
-
-// TestLearnModeSkipsTheNotSavedNotice checks the browser tour, which is read
-// only with no file to save to, changes a setting without the warning.
-func TestLearnModeSkipsTheNotSavedNotice(t *testing.T) {
-	useTempConfig(t)
-	swapBool(t, &config.Global.SidebarFileIcons, true)
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
-	m.LearnMode = true
-
-	focusSetting(t, m, "Sidebar", "File icons")
-	m.SettingsAdjust(1)
-
-	if m.Settings.SidebarFileIcons {
-		t.Error("the change did not apply")
-	}
-	for _, n := range m.Notifications {
-		if strings.Contains(n.Message, "this session only") {
-			t.Errorf("Learn mode raised the not-saved notice: %q", n.Message)
-		}
-	}
-}

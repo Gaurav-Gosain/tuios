@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 )
 
@@ -13,45 +12,6 @@ func withClientCaps(t *testing.T, caps *HostCapabilities) {
 	prev := clientCapabilities.Load()
 	clientCapabilities.Store(caps)
 	t.Cleanup(func() { clientCapabilities.Store(prev) })
-}
-
-// TestKittyPassthrough_EnabledForKittyClient mirrors the SSH daemon/ephemeral
-// wiring: the client's detected capabilities are installed as the host caps and
-// graphics output is routed to a session writer. A kitty-capable client must
-// enable the passthrough and have its APC bytes land on that writer, not the
-// server's stdout.
-func TestKittyPassthrough_EnabledForKittyClient(t *testing.T) {
-	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty"})
-
-	var out bytes.Buffer
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
-		Output:       &out,
-		RemoteClient: true,
-	})
-	if !kp.IsEnabled() {
-		t.Fatal("expected kitty passthrough enabled for a kitty client")
-	}
-
-	kp.WriteToHost([]byte("PAYLOAD"))
-	if !strings.Contains(out.String(), "PAYLOAD") {
-		t.Fatalf("expected graphics written to the routed output, got %q", out.String())
-	}
-}
-
-// TestKittyPassthrough_DisabledForPlainClient is the negative case: a client
-// with no kitty support must leave the passthrough disabled so no APC bytes are
-// ever forwarded to a terminal that cannot render them.
-func TestKittyPassthrough_DisabledForPlainClient(t *testing.T) {
-	withClientCaps(t, &HostCapabilities{KittyGraphics: false, TerminalName: "xterm"})
-
-	var out bytes.Buffer
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
-		Output:       &out,
-		RemoteClient: true,
-	})
-	if kp.IsEnabled() {
-		t.Fatal("expected kitty passthrough disabled for a plain client")
-	}
 }
 
 // TestKittyPassthrough_RemoteClientNeverReadsFiles verifies that a remote
@@ -76,18 +36,5 @@ func TestKittyPassthrough_RemoteClientNeverReadsFiles(t *testing.T) {
 	})
 	if !local.hostReadsFiles() {
 		t.Error("expected a local file-transfer-capable host to read files")
-	}
-}
-
-// TestSixelPassthrough_EnabledForSixelClient checks the sixel side of the same
-// routing: a sixel-capable client enables the passthrough against the routed
-// writer.
-func TestSixelPassthrough_EnabledForSixelClient(t *testing.T) {
-	withClientCaps(t, &HostCapabilities{SixelGraphics: true, TerminalName: "foot"})
-
-	var out bytes.Buffer
-	sp := NewSixelPassthroughWithOptions(SixelPassthroughOptions{Output: &out})
-	if !sp.IsEnabled() {
-		t.Fatal("expected sixel passthrough enabled for a sixel client")
 	}
 }

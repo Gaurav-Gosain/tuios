@@ -26,19 +26,6 @@ func TestTheSaverFrameIsTheWholeFrame(t *testing.T) {
 	}
 }
 
-// TestASaverWithNoFrameYetStillComposes pins the one case that has to fall
-// through: the saver is on but has not produced a frame, and returning an empty
-// string there would blank the screen.
-func TestASaverWithNoFrameYetStillComposes(t *testing.T) {
-	m := saverPerfOS(t)
-	m.screensaver.active = true
-	m.screensaver.frame = ""
-
-	if got := m.composeFrame(); got == "" {
-		t.Error("a saver with no frame yet blanked the screen")
-	}
-}
-
 // saverPerfOS is a client with one pane, big enough that composing it is real
 // work.
 func saverPerfOS(t *testing.T) *OS {

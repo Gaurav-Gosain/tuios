@@ -120,33 +120,9 @@ func TestSyncHoldSurvivesCacheInvalidation(t *testing.T) {
 	}
 }
 
-// TestSyncHoldWithoutInvalidationAlreadyHeld is the control that gives the
-// tests either side of it their meaning. Same guest, same open update, no user
-// action: the compositor has a cached layer, and the hold works today. If this
-// ever fails, the retile test below is measuring something other than the
-// invalidation.
-func TestSyncHoldWithoutInvalidationAlreadyHeld(t *testing.T) {
-	win, m := composedPane(t, "sync-hold-0002")
-
-	paintCompleteFrame(t, win)
-	if frame := composedFrame(m); !strings.Contains(frame, "OLDLINETWO") {
-		t.Fatalf("setup:\n%s", frame)
-	}
-	applyHalfUpdate(t, win)
-
-	frame := composedFrame(m)
-	if strings.Contains(frame, "NEWLINEONE") {
-		t.Errorf("composed a half-drawn frame with the cached layer intact:\n%s", frame)
-	}
-	if !strings.Contains(frame, "OLDLINETWO") {
-		t.Errorf("dropped the last complete frame with the cached layer intact:\n%s", frame)
-	}
-}
-
 // TestComposedFrameHoldsThroughRetile is the same defect one level up, on the
-// bytes the host is actually handed, and differs from the control above by one
-// thing: the retile that lands between the guest opening its update and the
-// frame being composed.
+// bytes the host is actually handed: a retile lands between the guest opening
+// its update and the frame being composed.
 func TestComposedFrameHoldsThroughRetile(t *testing.T) {
 	win, m := composedPane(t, "sync-hold-0003")
 

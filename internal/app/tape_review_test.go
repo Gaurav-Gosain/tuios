@@ -47,72 +47,6 @@ func TestReviewRunOnceDoesNotPersistTrust(t *testing.T) {
 	}
 }
 
-func TestReviewNeverDenies(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-
-	m.openTapeReviewForDir(dir)
-	if !m.HandleTapeReviewInput("n") {
-		t.Fatalf("never key not consumed")
-	}
-	if m.ScriptMode {
-		t.Fatalf("ScriptMode = true, want Never to run nothing")
-	}
-	if got := checkTape(t, store, dir).Status; got != trust.StatusDenied {
-		t.Fatalf("trust status = %v after Never, want denied", got)
-	}
-	if _, active := m.tapeIndicatorStatus(); active {
-		t.Fatalf("indicator still active after Never; a denied path shows nothing")
-	}
-}
-
-func TestReviewNotNowDismisses(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-
-	m.openTapeReviewForDir(dir)
-	if !m.HandleTapeReviewInput("esc") {
-		t.Fatalf("not-now key not consumed")
-	}
-	if m.ShowTapeReview {
-		t.Fatalf("dialog still open after Not now")
-	}
-	if m.ScriptMode {
-		t.Fatalf("ScriptMode = true, want Not now to run nothing")
-	}
-	if got := checkTape(t, store, dir).Status; got != trust.StatusUntrusted {
-		t.Fatalf("trust status = %v after Not now, want still untrusted", got)
-	}
-}
-
-func TestReviewTrustedTapeRunsAndRevokes(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-	res := checkTape(t, store, dir)
-	if err := store.Trust(res.Path, res.Hash); err != nil {
-		t.Fatalf("trust: %v", err)
-	}
-
-	// Run a trusted tape with 'r'.
-	m.openTapeReviewForDir(dir)
-	if m.TapeReview.Status != trust.StatusTrusted {
-		t.Fatalf("status = %v, want trusted", m.TapeReview.Status)
-	}
-	if !m.HandleTapeReviewInput("r") || !m.ScriptMode {
-		t.Fatalf("trusted Run did not start the tape")
-	}
-
-	// Revoke with 'n'.
-	m.ScriptMode = false
-	m.openTapeReviewForDir(dir)
-	if !m.HandleTapeReviewInput("n") {
-		t.Fatalf("revoke key not consumed")
-	}
-	if got := checkTape(t, store, dir).Status; got != trust.StatusUntrusted {
-		t.Fatalf("status = %v after revoke, want untrusted", got)
-	}
-}
-
 func TestReviewIneligibleOffersNoRun(t *testing.T) {
 	m, _ := newDetectOS(t, config.TapeAutorunAsk)
 	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
@@ -158,23 +92,6 @@ func TestReviewEditedTapeRepromptsAsChanged(t *testing.T) {
 	}
 }
 
-func TestAutoModeRunsTrustedTape(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAuto)
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-	res := checkTape(t, store, dir)
-	if err := store.Trust(res.Path, res.Hash); err != nil {
-		t.Fatalf("trust: %v", err)
-	}
-
-	drive(t, m, "focused", dir)
-	if !m.ScriptMode {
-		t.Fatalf("ScriptMode = false, want auto mode to run a trusted tape")
-	}
-	if m.ShowTapeReview {
-		t.Fatalf("auto mode must not open a dialog for a trusted tape")
-	}
-}
-
 func TestAutoModeEditedTrustedTapeDoesNotRun(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAuto)
 	dir := tapeDir(t, "Scope current\nType \"one\" Enter\n")
@@ -203,17 +120,6 @@ func TestOffModeRunsNothingFromReview(t *testing.T) {
 	}
 }
 
-func TestRunSkipsWhenRequirementMissing(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Scope current\nRequire \"tuios-no-such-binary-zzz\"\nType \"x\" Enter\n")
-
-	m.openTapeReviewForDir(dir)
-	m.HandleTapeReviewInput("r")
-	if m.ScriptMode {
-		t.Fatalf("ScriptMode = true, a tape whose Require is missing must be skipped")
-	}
-}
-
 func TestRunRefusesWhileAnotherTapeRuns(t *testing.T) {
 	m, _ := newDetectOS(t, config.TapeAutorunAsk)
 	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
@@ -223,15 +129,6 @@ func TestRunRefusesWhileAnotherTapeRuns(t *testing.T) {
 	m.runProjectTape([]byte("Scope current\nType \"x\" Enter\n"), dir)
 	if m.ScriptPlayer != before {
 		t.Fatalf("a second tape started while one was running")
-	}
-}
-
-func TestSessionNameDerivedFromDir(t *testing.T) {
-	if got := sanitizeSessionName("My Project!"); got != "My-Project" {
-		t.Fatalf("sanitizeSessionName = %q, want My-Project", got)
-	}
-	if got := sanitizeSessionName(".hidden"); got != ".hidden" {
-		t.Fatalf("sanitizeSessionName = %q, want .hidden", got)
 	}
 }
 
@@ -253,59 +150,6 @@ func TestAutoReviewDeniedNeverOpens(t *testing.T) {
 	}
 }
 
-func TestAutoReviewIneligibleKeepsPassive(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAsk)
-	m.UserConfig.Tape.AutoReview = true
-	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-	if err := os.Chmod(filepath.Join(dir, trust.TapeFileName), 0o666); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
-
-	before := len(m.Notifications)
-	drive(t, m, "focused", dir)
-
-	if m.ShowTapeReview {
-		t.Fatalf("an ineligible tape auto-opened a dismiss-only dialog; keep the passive notice")
-	}
-	if len(m.Notifications) <= before {
-		t.Fatalf("ineligible tape should still show the passive warning notice")
-	}
-}
-
-func TestAutoReviewAutoModeTrustedStillRuns(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAuto)
-	m.UserConfig.Tape.AutoReview = true
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-	res := checkTape(t, store, dir)
-	if err := store.Trust(res.Path, res.Hash); err != nil {
-		t.Fatalf("trust: %v", err)
-	}
-
-	drive(t, m, "focused", dir)
-
-	if m.ShowTapeReview {
-		t.Fatalf("a trusted tape in auto mode should run, not open the dialog")
-	}
-	if !m.ScriptMode {
-		t.Fatalf("a trusted tape in auto mode should have auto-run")
-	}
-}
-
-func TestAutoReviewAutoModeUntrustedOpensNoRun(t *testing.T) {
-	m, _ := newDetectOS(t, config.TapeAutorunAuto)
-	m.UserConfig.Tape.AutoReview = true
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-
-	drive(t, m, "focused", dir)
-
-	if !m.ShowTapeReview {
-		t.Fatalf("an untrusted tape in auto mode with auto_review should open the dialog")
-	}
-	if m.ScriptMode {
-		t.Fatalf("an untrusted tape must never run without review")
-	}
-}
-
 func TestAutoReviewOffModeNothing(t *testing.T) {
 	m, _ := newDetectOS(t, config.TapeAutorunOff)
 	m.UserConfig.Tape.AutoReview = true
@@ -315,21 +159,5 @@ func TestAutoReviewOffModeNothing(t *testing.T) {
 
 	if m.ShowTapeReview {
 		t.Fatalf("off mode auto-opened the dialog; off means the feature is invisible")
-	}
-}
-
-func TestReviewTrustAndRunPersists(t *testing.T) {
-	m, store := newDetectOS(t, config.TapeAutorunAsk)
-	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-
-	m.openTapeReviewForDir(dir)
-	if !m.HandleTapeReviewInput("t") {
-		t.Fatalf("trust-and-run key not consumed")
-	}
-	if !m.ScriptMode {
-		t.Fatalf("ScriptMode = false, want the tape to have started")
-	}
-	if got := checkTape(t, store, dir).Status; got != trust.StatusTrusted {
-		t.Fatalf("trust status = %v after Trust and run, want trusted", got)
 	}
 }

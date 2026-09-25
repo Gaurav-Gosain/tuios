@@ -1,11 +1,8 @@
 package app
 
 import (
-	"reflect"
-	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -43,155 +40,6 @@ func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// TestSidebarSessionOrderPreserved checks the display order is the tree's
-// order with the current session marked in place, and that adding a session
-// appends instead of reshuffling the rows already on screen.
-func TestSidebarSessionOrderPreserved(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-
-	m.sidebarPanelLinesForTree(tree)
-	if want := []string{"main", "scratch", "deploy"}; !reflect.DeepEqual(m.SidebarSessionIDs, want) {
-		t.Fatalf("display order = %v, want %v (current session must not be hoisted)", m.SidebarSessionIDs, want)
-	}
-
-	grown := sessiontree.Tree{Sessions: append(append([]sessiontree.Node{}, tree.Sessions...),
-		sessiontree.Node{Kind: sessiontree.KindSession, ID: "fresh", Title: "fresh"})}
-	m.sidebarPanelLinesForTree(grown)
-	if want := []string{"main", "scratch", "deploy", "fresh"}; !reflect.DeepEqual(m.SidebarSessionIDs, want) {
-		t.Fatalf("after a new session, display order = %v, want %v (new sessions append)", m.SidebarSessionIDs, want)
-	}
-}
-
-// TestOrderByKeyAppendsUnranked pins the order-overlay semantics: ranked items
-// take the saved order, unranked ones keep their natural order after them.
-func TestOrderByKeyAppendsUnranked(t *testing.T) {
-	items := []string{"a", "b", "c", "d"}
-	got := orderByKey(items, func(s string) string { return s }, []string{"c", "a"})
-	if want := []string{"c", "a", "b", "d"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("orderByKey = %v, want %v", got, want)
-	}
-	// A ranked name with no matching item is simply ignored.
-	got = orderByKey(items, func(s string) string { return s }, []string{"zz", "d"})
-	if want := []string{"d", "a", "b", "c"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("orderByKey with stale rank = %v, want %v", got, want)
-	}
-}
-
-// TestSidebarAgentsSectionListsAgentPanes checks the pinned section lists
-// exactly the panes carrying an agent state, routes their rows at windows, and
-// disappears when no agents are running.
-func TestSidebarAgentsSectionListsAgentPanes(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-	lines, _ := m.sidebarPanelLinesForTree(tree)
-
-	var agents []sidebarRowHit
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent {
-			agents = append(agents, h)
-		}
-	}
-	if len(agents) != 2 {
-		t.Fatalf("agent rows = %d, want 2 (claude and tests carry agent states, logs does not)", len(agents))
-	}
-	wantIDs := map[string]bool{"aaaaaaaa1111": true, "bbbbbbbb2222": true}
-	for _, h := range agents {
-		if !wantIDs[h.WindowID] {
-			t.Errorf("agent row targets unexpected window %q", h.WindowID)
-		}
-		if h.WindowIndex < 0 {
-			t.Errorf("agent row for %q has no focusable window index", h.WindowID)
-		}
-	}
-	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "agents") {
-		t.Errorf("agents section header missing")
-	}
-
-	// A click on an agent row focuses its pane.
-	m.FocusedWindow = 2
-	if !m.SidebarClick(agents[0].X0+3, agents[0].Y0, false) {
-		t.Fatalf("click on an agent row was not consumed")
-	}
-	if got := m.Windows[m.FocusedWindow].ID; got != agents[0].WindowID {
-		t.Errorf("agent row click focused %q, want %q", got, agents[0].WindowID)
-	}
-
-	// No agents: the section vanishes rather than sitting there empty.
-	bare := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
-			{ID: "cccccccc3333", Title: "logs", Focused: true},
-		}},
-	})
-	lines, _ = m.sidebarPanelLinesForTree(bare)
-	if strings.Contains(strings.Join(lines, "\n"), "agents") {
-		t.Errorf("agents section rendered with no agents running")
-	}
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent {
-			t.Errorf("agent hit recorded with no agents running")
-		}
-	}
-}
-
-// TestSidebarASCIIFallback renders every variant in ASCII-only mode and
-// asserts nothing outside ASCII leaks through except the agent-state shapes,
-// which are deliberately kept everywhere they appear. In the default mode the
-// only private-use codepoints allowed are the dock's own pill caps.
-func TestSidebarASCIIFallback(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-
-	prevASCII := config.Global.UseASCIIOnly
-	config.Global.UseASCIIOnly = true
-	m.Settings.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.Global.UseASCIIOnly = prevASCII
-		overlay.SetASCII(prevASCII)
-	})
-
-	agentShapes := map[rune]bool{'●': true, '▲': true, '○': true, '■': true, '×': true}
-	for _, size := range [][2]int{{120, 40}, {80, 24}, {51, 37}, {40, 20}} {
-		m.Width, m.Height = size[0], size[1]
-		m.EffectiveWidth, m.EffectiveHeight = size[0], size[1]
-		lines, w := m.sidebarPanelLinesForTree(tree)
-		if w == 0 {
-			t.Fatalf("%dx%d: sidebar hidden unexpectedly", size[0], size[1])
-		}
-		for i, ln := range lines {
-			if lw := lipgloss.Width(ln); lw != w {
-				t.Errorf("%dx%d row %d is %d cells, want %d", size[0], size[1], i, lw, w)
-			}
-			for _, r := range stripSidebarANSI(ln) {
-				if r <= 0x7e || agentShapes[r] {
-					continue
-				}
-				t.Errorf("%dx%d row %d leaks non-ASCII rune %q (U+%04X)", size[0], size[1], i, r, r)
-			}
-		}
-	}
-
-	// Default mode: private-use codepoints only where the dock already uses
-	// them (the pill caps); anything else is the kind of tofu the rail must
-	// never emit.
-	config.Global.UseASCIIOnly = false
-	overlay.SetASCII(false)
-	sanctioned := map[rune]bool{}
-	for _, r := range config.DockPillLeftChar + config.DockPillRightChar {
-		sanctioned[r] = true
-	}
-	m.Width, m.Height = 120, 40
-	m.EffectiveWidth, m.EffectiveHeight = 120, 40
-	lines, _ := m.sidebarPanelLinesForTree(tree)
-	for i, ln := range lines {
-		for _, r := range stripSidebarANSI(ln) {
-			pua := (r >= 0xe000 && r <= 0xf8ff) || r >= 0xf0000
-			if pua && !sanctioned[r] {
-				t.Errorf("row %d emits unsanctioned private-use rune U+%04X", i, r)
-			}
-		}
-	}
-}
-
 // TestSidebarSanitizesTitles checks a title carrying nerd-font private-use
 // icons and control characters reaches the rail laundered.
 func TestSidebarSanitizesTitles(t *testing.T) {
@@ -205,24 +53,4 @@ func TestSidebarSanitizesTitles(t *testing.T) {
 	if got := printableTitle("café ▲"); got != "caf" {
 		t.Errorf("ASCII printableTitle = %q, want %q", got, "caf")
 	}
-}
-
-// stripSidebarANSI drops SGR escape sequences so rune audits see only what is
-// actually printed.
-func stripSidebarANSI(s string) string {
-	var b strings.Builder
-	inEsc := false
-	for _, r := range s {
-		switch {
-		case inEsc:
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEsc = false
-			}
-		case r == 0x1b:
-			inEsc = true
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }

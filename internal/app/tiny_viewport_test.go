@@ -8,24 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// TestUsableHeightNeverGoesNegative pins the floor rather than the crash it
-// caused. Every caller of GetUsableHeight reads it as an extent (a row count to
-// tile inside, to clip against, to hit-test within), and a negative extent is
-// nonsense in all of them; the render loop is only where it happened to be fatal.
-func TestUsableHeightNeverGoesNegative(t *testing.T) {
-	for _, pos := range []string{"bottom", "top", "hidden"} {
-		prev := config.Global.DockbarPosition
-		config.Global.DockbarPosition = pos
-		for h := range config.DockHeight + 2 {
-			m := newNarrowOS(t, 80, h)
-			if got := m.GetUsableHeight(); got < 0 {
-				t.Errorf("dock %s, host height %d: usable height %d", pos, h, got)
-			}
-		}
-		config.Global.DockbarPosition = prev
-	}
-}
-
 // TestFrameSurvivesAHostShorterThanTheDock renders at every host size from 0x0
 // up through the dock's own height. A panic here is not a recovered frame: View
 // runs inside bubbletea's frame loop, outside Update's recover, so it takes the

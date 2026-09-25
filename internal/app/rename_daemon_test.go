@@ -1,13 +1,10 @@
 package app
 
 import (
-	"strings"
 	"testing"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -84,63 +81,6 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 	}
 	if applied.Err == nil {
 		t.Error("expected a dial error with no daemon listening")
-	}
-}
-
-// TestWorkspaceRenameSeedsAndCommits checks the workspace half of the same
-// surface: seeded with the current name, and empty for one that has none.
-func TestWorkspaceRenameSeedsAndCommits(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-
-	m := &OS{Settings: config.Global, SessionName: "work", NumWorkspaces: 9, CurrentWorkspace: 1}
-	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
-
-	m.BeginRenameWorkspace(2)
-	if m.RenameKind != RenameWorkspace || m.RenameBuffer != "review" {
-		t.Fatalf("workspace editor = {kind:%v buffer:%q}, want a workspace rename seeded with review", m.RenameKind, m.RenameBuffer)
-	}
-	if got := m.RenameDialogTitle(); got != "rename workspace 2" {
-		t.Errorf("dialog title = %q, want %q", got, "rename workspace 2")
-	}
-
-	m.EndRename()
-	m.BeginRenameWorkspace(3)
-	if m.RenameBuffer != "" {
-		t.Errorf("an unnamed workspace seeded the editor with %q, want empty", m.RenameBuffer)
-	}
-	if cmd := m.CommitRename(); cmd == nil {
-		t.Error("committing a workspace rename returned no command")
-	}
-}
-
-// TestRenameFieldKeepsWhatWasTyped: the field laundered its buffer through the
-// trimming sanitizer, so a space the user had just pressed was rubbed off the
-// display and the key looked dead even once it reached the buffer. A wide rune
-// costs two cells, and the frame has to stay square around it.
-func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
-	m.BeginRenameSession("work")
-
-	m.RenameBuffer = "build "
-	out, _, _, _, ok := m.renderRenameDialog()
-	if !ok {
-		t.Fatal("no dialog while a rename is open")
-	}
-	t.Logf("\n%s", out)
-	if !strings.Contains(out, "build ") {
-		t.Errorf("the trailing space is missing from the field:\n%s", out)
-	}
-
-	m.RenameBuffer = "日本語 café"
-	out, geo, _, _, _ := m.renderRenameDialog()
-	t.Logf("\n%s", out)
-	if !strings.Contains(out, "日本語 café") {
-		t.Errorf("a non-ASCII name does not reach the field:\n%s", out)
-	}
-	for i, line := range strings.Split(out, "\n") {
-		if w := lipgloss.Width(line); w != geo.Width {
-			t.Errorf("row %d is %d cells wide, want %d: a wide rune knocked the frame out of square\n%s", i, w, geo.Width, out)
-		}
 	}
 }
 

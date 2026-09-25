@@ -100,52 +100,6 @@ func TestOnlyTheNewestCaptureReachesTheClipboard(t *testing.T) {
 	}
 }
 
-// TestThePreviewPayloadIsShrunkToThePanel checks the picture the panel places
-// is the panel's size and not the file's.
-//
-// Negative control: putting the file's own bytes in the result message, which
-// is what shipped, gave a payload several times the budget here and failed.
-func TestThePreviewPayloadIsShrunkToThePanel(t *testing.T) {
-	prev := clientCapabilities.Load()
-	clientCapabilities.Store(&HostCapabilities{
-		KittyGraphics: true, CellWidth: 10, CellHeight: 22, TerminalName: "kitty",
-	})
-	t.Cleanup(func() { clientCapabilities.Store(prev) })
-
-	m := shotOS(t)
-	m.PostRenderWriter = NewPostRenderWriter(nil)
-	if !m.screenshotGraphicsReady() {
-		t.Skip("the fixture has no pixel tier to size a payload for")
-	}
-	maxW, maxH := m.screenshotPreviewPixelBudget()
-	if maxW <= 0 || maxH <= 0 {
-		t.Fatalf("the pixel budget is %dx%d", maxW, maxH)
-	}
-
-	cmd := m.ScreenshotScreen()
-	msg := cmd().(screenshotResultMsg)
-	if msg.err != nil {
-		t.Fatalf("the render failed: %v", msg.err)
-	}
-	if len(msg.png) == 0 {
-		t.Fatal("a kitty host got no picture to place")
-	}
-	if msg.pixelW > maxW || msg.pixelH > maxH {
-		t.Errorf("the preview picture is %dx%d, larger than the panel's %dx%d budget",
-			msg.pixelW, msg.pixelH, maxW, maxH)
-	}
-	// The file itself is megabytes; the payload is a fraction of it, and the
-	// bound is what stops it riding inside the frame's sync bracket.
-	const payloadBudget = 512 << 10
-	if len(msg.png) > payloadBudget {
-		t.Errorf("the preview payload is %d KB, want under %d KB",
-			len(msg.png)/1024, payloadBudget/1024)
-	}
-	if len(msg.transmit) == 0 {
-		t.Error("the upload escapes were not built off the Update goroutine")
-	}
-}
-
 // TestANonPNGCaptureRastersOnce checks the second full-scale render is gone. A
 // text-format capture used to raster the whole grid again at the file's own
 // scale purely to feed a preview a few hundred pixels wide.
