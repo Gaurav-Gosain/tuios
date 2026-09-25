@@ -10,8 +10,6 @@ import (
 	"math"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gomono"
-	"golang.org/x/image/font/gofont/gomonobold"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -187,14 +185,17 @@ func parseFontFace(data []byte, index int) (*sfnt.Font, error) {
 func loadFaces(f *Frame, size float64) (*faceSet, error) {
 	fs := &faceSet{size: size}
 	opts := &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull}
-	var err error
-	if fs.regularFont, err = opentype.Parse(gomono.TTF); err != nil {
+	regularTTF, boldTTF, err := goMonoFonts()
+	if err != nil {
+		return nil, fmt.Errorf("inflate embedded font: %w", err)
+	}
+	if fs.regularFont, err = opentype.Parse(regularTTF); err != nil {
 		return nil, fmt.Errorf("parse embedded font: %w", err)
 	}
 	if fs.regular, err = opentype.NewFace(fs.regularFont, opts); err != nil {
 		return nil, fmt.Errorf("embedded face: %w", err)
 	}
-	if fs.boldFont, err = opentype.Parse(gomonobold.TTF); err != nil {
+	if fs.boldFont, err = opentype.Parse(boldTTF); err != nil {
 		return nil, fmt.Errorf("parse embedded bold font: %w", err)
 	}
 	if fs.bold, err = opentype.NewFace(fs.boldFont, opts); err != nil {
