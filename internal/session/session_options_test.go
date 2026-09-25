@@ -47,3 +47,29 @@ func TestSessionOptionsConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestTheStateSnapshotDoesNotShareItsOptionsMap: GetState hands out a copy of
+// the options bag, so a write through the snapshot must not reach the session.
+// A shared map would let a caller encoding or editing a snapshot race SetOption
+// on the live one.
+//
+// NEGATIVE CONTROL: return s.state.Options from GetState instead of the copy and
+// the write reaches the session.
+func TestTheStateSnapshotDoesNotShareItsOptionsMap(t *testing.T) {
+	sess, err := NewSession("opt-test", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer sess.Stop()
+
+	sess.SetOption("border_style", "double")
+
+	state := sess.GetState()
+	if state.Options["border_style"] != "double" {
+		t.Fatalf("GetState Options missing value: %+v", state.Options)
+	}
+	state.Options["border_style"] = "mutated"
+	if v, _ := sess.GetOption("border_style"); v != "double" {
+		t.Fatalf("GetState returned a live map reference; option was mutated to %q", v)
+	}
+}
