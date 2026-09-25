@@ -1,6 +1,7 @@
 package federation
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,27 @@ func TestTableRefusesReservedAndMalformedNames(t *testing.T) {
 	}
 	if h.Addr != "gaurav@buildbox" {
 		t.Errorf("build addr is %q, want gaurav@buildbox", h.Addr)
+	}
+}
+
+// TestLookupNamesTheConfiguredHosts is section 3's fail-fast rule: an unknown
+// name is answered with the real set, never with a guess.
+func TestLookupNamesTheConfiguredHosts(t *testing.T) {
+	table, _ := NewTable([]Host{
+		{Name: "build", Addr: "a"},
+		{Name: "work", Addr: "b"},
+	})
+	_, err := table.Lookup("buil")
+	if !errors.Is(err, ErrUnknownHost) {
+		t.Fatalf("lookup of a near miss returned %v, want ErrUnknownHost", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "build") || !strings.Contains(msg, "work") {
+		t.Errorf("error does not list the configured hosts: %s", msg)
+	}
+	// A near miss must not be resolved for the caller.
+	if strings.Contains(msg, "did you mean") {
+		t.Errorf("error suggests a host; exact resolution is the whole defense: %s", msg)
 	}
 }
 
