@@ -3,6 +3,8 @@ package worktree
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
@@ -87,5 +89,93 @@ func TestCloneRefusesALocalPathBeforeRunningGit(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(parent); len(entries) != 0 {
 		t.Errorf("a refused clone left %d entries behind", len(entries))
+	}
+}
+
+func TestBundleAndPatchCarryAWorktreesWorkToAnotherCheckout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixture uses POSIX paths")
+	}
+	sender := testutil.GitRepo(t)
+	receiver := filepath.Join(t.TempDir(), "receiver")
+	testutil.Git(t, filepath.Dir(receiver), "clone", "-q", sender, receiver)
+
+	path := filepath.Join(t.TempDir(), "wt")
+	if _, err := Add(sender, path, "feat/x", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("committed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "commit", "-q", "-am", "commit on the branch")
+	// Uncommitted: one staged edit, one unstaged new file, one binary file.
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("committed\nstaged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "add", "README")
+	if err := os.WriteFile(filepath.Join(path, "new.txt"), []byte("untracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "blob.bin"), []byte{0, 1, 2, 255, 0}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statusBefore := testutil.Git(t, path, "status", "--porcelain")
+
+	head, err := HeadCommit(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := MergeBase(path, "main", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "b.bundle")
+	if err := Bundle(path, "feat/x", base, bundle); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	patch := filepath.Join(dir, "w.patch")
+	n, err := WorkingPatch(path, patch)
+	if err != nil {
+		t.Fatalf("WorkingPatch: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("WorkingPatch counted %d paths, want 3", n)
+	}
+	// The sender's index is as it was: the staged edit is still the only
+	// staged thing, and the new files are still untracked.
+	if after := testutil.Git(t, path, "status", "--porcelain"); after != statusBefore {
+		t.Errorf("WorkingPatch changed the worktree's status:\nbefore:\n%s\nafter:\n%s", statusBefore, after)
+	}
+
+	if !HasCommit(receiver, base) {
+		t.Fatal("the receiver lacks the base, so the fixture is wrong")
+	}
+	if HasCommit(receiver, head) {
+		t.Fatal("the receiver already has the head, so the fixture proves nothing")
+	}
+	if err := FetchBundle(receiver, bundle, "feat/x", "pulled"); err != nil {
+		t.Fatalf("FetchBundle: %v", err)
+	}
+	if got, _ := BranchCommit(receiver, "pulled"); got != head {
+		t.Errorf("the pulled branch is at %s, want %s", got, head)
+	}
+	wt := filepath.Join(t.TempDir(), "pulled-wt")
+	if _, err := Add(receiver, wt, "pulled", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyPatch(wt, patch); err != nil {
+		t.Fatalf("ApplyPatch: %v", err)
+	}
+	for name, want := range map[string]string{"README": "committed\nstaged\n", "new.txt": "untracked\n", "blob.bin": "\x00\x01\x02\xff\x00"} {
+		got, err := os.ReadFile(filepath.Join(wt, name))
+		if err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v; want %q", name, got, err, want)
+		}
+	}
+
+	// A branch with nothing past the base makes no bundle.
+	if err := Bundle(path, "feat/x", head, filepath.Join(dir, "empty.bundle")); !errors.Is(err, ErrEmptyBundle) {
+		t.Errorf("Bundle with nothing to carry = %v, want ErrEmptyBundle", err)
 	}
 }

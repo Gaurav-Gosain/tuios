@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // parseAgentRowTOML runs a config file through the real decoder and the
@@ -94,5 +96,34 @@ fg = "info"
 	}
 	if !found {
 		t.Fatalf("the validator did not warn about the table: %+v", result.Warnings)
+	}
+}
+
+// TestAgentRowSurvivesASave: the settings page writes the config back out, and
+// the table has to come back through the writer as it went in.
+func TestAgentRowSurvivesASave(t *testing.T) {
+	body := `
+[appearance.sidebar.agent_row]
+tokens = ["harness", "name", "elapsed"]
+
+[[appearance.sidebar.agent_row.elapsed.rule]]
+gt = 30
+fg = "warning"
+`
+	cfg, err := ParseUserConfig([]byte(body))
+	if err != nil {
+		t.Fatalf("ParseUserConfig: %v", err)
+	}
+	out, err := toml.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	again, err := ParseUserConfig(out)
+	if err != nil {
+		t.Fatalf("ParseUserConfig(marshalled): %v\n%s", err, out)
+	}
+	before, after := ParseSidebarAgentRow(cfg.Appearance.Sidebar.AgentRow), ParseSidebarAgentRow(again.Appearance.Sidebar.AgentRow)
+	if before.Fingerprint != after.Fingerprint {
+		t.Fatalf("the table changed through a save:\n before %s\n after  %s\n%s", before.Fingerprint, after.Fingerprint, out)
 	}
 }

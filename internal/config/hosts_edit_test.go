@@ -106,3 +106,48 @@ key = "x"
 		t.Errorf("ASSERTION: the removal swallowed the array of tables that followed:\n%s", got)
 	}
 }
+
+func TestAddingTheFirstHostToAFileThatDoesNotExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "config.toml")
+	if err := SetHostInFile(path, "build", HostConfig{Addr: "buildbox"}); err != nil {
+		t.Fatalf("add the first host: %v", err)
+	}
+	got := readFile(t, path)
+	if !strings.Contains(got, "[hosts.build]") {
+		t.Errorf("ASSERTION: the first host was not written:\n%s", got)
+	}
+	// The file has to be a config the loader accepts, or the daemon that reads
+	// it next would refuse everything in it.
+	cfg, err := ParseUserConfig([]byte(got))
+	if err != nil {
+		t.Fatalf("ASSERTION: the file this wrote does not parse: %v\n%s", err, got)
+	}
+	if cfg.Hosts["build"].Addr != "buildbox" {
+		t.Errorf("ASSERTION: the parsed config does not hold the host, got %+v", cfg.Hosts)
+	}
+}
+
+func TestAddedHostRoundTripsThroughTheParser(t *testing.T) {
+	path := writeTemp(t, "")
+	entry := HostConfig{
+		Addr:           "gaurav@buildbox",
+		Command:        "/home/gaurav/.local/bin/tuios",
+		ConnectTimeout: 7,
+		SSHOptions:     []string{"-J", "bastion", "-o", "StrictHostKeyChecking=yes"},
+		ReposRoot:      "~/src",
+	}
+	if err := SetHostInFile(path, "build", entry); err != nil {
+		t.Fatalf("add a host: %v", err)
+	}
+	cfg, err := ParseUserConfig([]byte(readFile(t, path)))
+	if err != nil {
+		t.Fatalf("ASSERTION: the file does not parse: %v", err)
+	}
+	got := cfg.Hosts["build"]
+	if got.Addr != entry.Addr || got.Command != entry.Command || got.ConnectTimeout != entry.ConnectTimeout || got.ReposRoot != entry.ReposRoot {
+		t.Errorf("ASSERTION: the host did not survive the round trip, got %+v want %+v", got, entry)
+	}
+	if strings.Join(got.SSHOptions, " ") != strings.Join(entry.SSHOptions, " ") {
+		t.Errorf("ASSERTION: the ssh options did not survive the round trip, got %v", got.SSHOptions)
+	}
+}

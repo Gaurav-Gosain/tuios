@@ -2,7 +2,10 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"testing"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 // TestLegacyEscapeBindingMovesOffDetach covers the one binding whose meaning
@@ -143,4 +146,76 @@ func withSidebarGlobals(t *testing.T) {
 		Global.SidebarShowGlyphs, Global.SidebarShowCounts, Global.SidebarSections = sg, sc, sx
 		Global.SidebarMarquee, Global.DockWorkspaceTabs = mq, dt
 	})
+}
+
+// TestSidebarExplicitFalseSurvivesApply is the other half of the tri-state: an
+// explicit false must reach the global, which is what makes a toggle turned off
+// in the settings page survive a reload.
+func TestSidebarExplicitFalseSurvivesApply(t *testing.T) {
+	withSidebarGlobals(t)
+	Global.SidebarMarquee, Global.DockWorkspaceTabs = true, true
+
+	cfg := loadTOML(t, `
+[appearance]
+dock_workspace_tabs = false
+
+[appearance.sidebar]
+show_agents = false
+marquee = false
+workspaces = "off"
+`)
+	ApplyAppearanceConfig(cfg, &Global)
+
+	if Global.SidebarMarquee || Global.DockWorkspaceTabs {
+		t.Errorf("explicit false dropped: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
+	}
+	// show_agents = false is the migration this branch owes anybody whose config
+	// already carries it: the section is off the rail, by way of the layout.
+	if got := layoutNames(t); slices.Contains(got, "agents") {
+		t.Errorf("layout = %v, want no agents section", got)
+	}
+	// And the toggle is consumed, so the next save writes the layout and not the
+	// boolean. Leaving it in the file would fold it again over a layout the user
+	// had since put agents back into.
+	if cfg.Appearance.Sidebar.ShowAgents != nil {
+		t.Errorf("show_agents = %v, want it cleared once folded", *cfg.Appearance.Sidebar.ShowAgents)
+	}
+	// The deprecated key still parses into the struct (a config file written
+	// before it was dropped must not fail to load); nothing reads it any more.
+	if cfg.Appearance.Sidebar.Workspaces != "off" {
+		t.Errorf("workspaces = %q, want the deprecated key still parsed as off", cfg.Appearance.Sidebar.Workspaces)
+	}
+}
+
+// TestSidebarSaveDropsLegacyKeys checks the migration is one-way: what a saved
+// config writes is the table, so the flat keys do not linger and start
+// disagreeing with it.
+func TestSidebarSaveDropsLegacyKeys(t *testing.T) {
+	cfg := loadTOML(t, `
+[appearance]
+sidebar_enabled = true
+sidebar_position = "right"
+`)
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	out := string(data)
+	for _, key := range []string{"sidebar_enabled", "sidebar_position", "sidebar_width", "sidebar_show_"} {
+		if strings.Contains(out, key) {
+			t.Errorf("saved config still carries the legacy key %q", key)
+		}
+	}
+
+	var round UserConfig
+	if err := toml.Unmarshal(data, &round); err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if s := round.Appearance.Sidebar; s.Enabled == nil || !*s.Enabled || s.Position != "right" {
+		t.Errorf("round trip lost the migrated values: %+v", s)
+	}
+	// The table is written last, so no [appearance] scalar falls inside it.
+	if round.Appearance.BorderStyle != cfg.Appearance.BorderStyle {
+		t.Errorf("border_style = %q after round trip, want %q", round.Appearance.BorderStyle, cfg.Appearance.BorderStyle)
+	}
 }

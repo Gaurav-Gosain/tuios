@@ -216,3 +216,12 @@ func equalFontName(a, b string) bool {
 func squeezeSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// resetFontCache empties the lookup cache. Tests own it; nothing else needs it,
+// because the answer cannot change under a running process.
+func resetFontCache() {
+	fontCacheMu.Lock()
+	defer fontCacheMu.Unlock()
+	fontCache = map[string]FontFace{}
+	resetFontIndex()
+}

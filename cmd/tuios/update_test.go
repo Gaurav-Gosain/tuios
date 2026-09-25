@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -193,5 +194,134 @@ func TestAMissingChecksumFileIsRefused(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dir, release.ExecutableName("tuios"))); got != "old tuios" {
 		t.Errorf("tuios was replaced: %q", got)
+	}
+}
+
+// TestUpdateMovesBothBinariesTogether. tuios and tuios-web are separate
+// binaries that talk to one daemon, and the daemon compares their versions and
+// warns when they differ. An update that moved one and not the other would
+// manufacture the exact mismatch that warning exists to catch.
+//
+// Negative control: drop tuios-web from the wanted list in installRelease and
+// this fails on the web binary's contents.
+func TestUpdateMovesBothBinariesTogether(t *testing.T) {
+	dir, facts := installedTree(t, "v0.7.0", true)
+	src := buildRelease(t, "v0.8.0", map[string]string{
+		"tuios":     "new tuios",
+		"tuios-web": "new tuios-web",
+	})
+
+	var out bytes.Buffer
+	if err := runUpdate(updateOptions{source: src, facts: facts, out: &out}); err != nil {
+		t.Fatalf("runUpdate: %v\n%s", err, out.String())
+	}
+	if got := readFile(t, filepath.Join(dir, release.ExecutableName("tuios"))); got != "new tuios" {
+		t.Errorf("tuios holds %q", got)
+	}
+	if got := readFile(t, filepath.Join(dir, release.ExecutableName("tuios-web"))); got != "new tuios-web" {
+		t.Errorf("tuios-web holds %q", got)
+	}
+	if !strings.Contains(out.String(), "v0.8.0") {
+		t.Errorf("the report does not name the version it installed:\n%s", out.String())
+	}
+}
+
+// TestCheckInstallsNothing. --check has to be safe to run from a cron job.
+//
+// Negative control: let --check fall through to installRelease and this fails
+// on the untouched-binary check.
+func TestCheckInstallsNothing(t *testing.T) {
+	dir, facts := installedTree(t, "v0.7.0", true)
+	src := buildRelease(t, "v0.8.0", map[string]string{
+		"tuios":     "new tuios",
+		"tuios-web": "new tuios-web",
+	})
+
+	var out bytes.Buffer
+	if err := runUpdate(updateOptions{source: src, facts: facts, out: &out, check: true}); err != nil {
+		t.Fatalf("runUpdate: %v", err)
+	}
+	if got := readFile(t, filepath.Join(dir, release.ExecutableName("tuios"))); got != "old tuios" {
+		t.Errorf("--check replaced the binary: %q", got)
+	}
+	if len(src.fetched) != 0 {
+		t.Errorf("--check downloaded %v", src.fetched)
+	}
+	if !strings.Contains(out.String(), "v0.8.0 is available") {
+		t.Errorf("--check does not report the newer release:\n%s", out.String())
+	}
+}
+
+// TestUpdateRefusesWhatItDoesNotOwn, naming the installer and the command that
+// does update it.
+//
+// Negative control: drop the Replaceable check in runUpdate and every row here
+// proceeds to a download.
+func TestUpdateRefusesWhatItDoesNotOwn(t *testing.T) {
+	cases := []struct {
+		name  string
+		facts release.Facts
+		fix   string
+	}{
+		{"nix", release.Facts{Path: "/nix/store/x-tuios/bin/tuios"}, "nix profile"},
+		{"homebrew", release.Facts{Path: "/opt/homebrew/Cellar/tuios/0.7.0/bin/tuios"}, "brew upgrade"},
+		{"system package", release.Facts{Path: "/usr/bin/tuios", BuiltBy: "goreleaser"}, "package manager"},
+		{"source build", release.Facts{Path: "/home/x/.local/bin/tuios", BuiltBy: "install.sh"}, "scripts/install.sh"},
+		{"go install", release.Facts{Path: "/home/x/go/bin/tuios", ModuleVersion: "v0.7.0"}, "go install"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
+			facts := tc.facts
+			err := runUpdate(updateOptions{source: src, facts: &facts, out: io.Discard})
+			if err == nil {
+				t.Fatal("the update was not refused")
+			}
+			if !strings.Contains(err.Error(), tc.fix) {
+				t.Errorf("the refusal does not name %q:\n%v", tc.fix, err)
+			}
+			if len(src.fetched) != 0 {
+				t.Errorf("a refused update still downloaded %v", src.fetched)
+			}
+		})
+	}
+}
+
+// TestRefusalHappensBeforeTheNetwork, stated on its own because it is what
+// makes `tuios update` safe to run on a machine with no network and a packaged
+// binary: the answer is the same either way.
+//
+// Negative control: look up the release before calling Detect and this fails
+// with the transport error instead of the refusal.
+func TestRefusalHappensBeforeTheNetwork(t *testing.T) {
+	src := &fakeSource{err: errors.New("dial tcp: no route to host")}
+	facts := release.Facts{Path: "/nix/store/x-tuios/bin/tuios"}
+	err := runUpdate(updateOptions{source: src, facts: &facts, out: io.Discard})
+	if err == nil || !strings.Contains(err.Error(), "Nix") {
+		t.Errorf("got %v, want the Nix refusal rather than a network error", err)
+	}
+}
+
+// TestANonReleaseBuildIsNotToldItIsOutOfDate. A "dev+sha" build has no version
+// to compare, and telling its owner to update would be telling them to throw
+// away the build they made on purpose.
+//
+// Negative control: treat an unparsable version as older than everything and
+// this fails: the source build downloads and installs a release over itself.
+func TestANonReleaseBuildIsNotToldItIsOutOfDate(t *testing.T) {
+	dir, facts := installedTree(t, "dev+abc123def456", false)
+	// Still stamped goreleaser, so provenance passes and only the version
+	// comparison stands between this and an install.
+	src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
+
+	err := runUpdate(updateOptions{source: src, facts: facts, out: io.Discard})
+	if err == nil {
+		t.Fatal("an unversioned build was updated without comment")
+	}
+	if got := readFile(t, filepath.Join(dir, release.ExecutableName("tuios"))); got != "old tuios" {
+		t.Errorf("the binary was replaced: %q", got)
+	}
+	if len(src.fetched) != 0 {
+		t.Errorf("an unversioned build downloaded %v", src.fetched)
 	}
 }

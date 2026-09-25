@@ -72,3 +72,23 @@ func TestPanesShrinkRatherThanOverlap(t *testing.T) {
 		}
 	}
 }
+
+// TestATightRegionGivesUpGroundBeforeItGivesUpTheRegion states the order of
+// precedence when the asked-for gaps do not fit. Ground is spacing and a pane
+// outside the region is not on screen, so the gaps shrink first.
+//
+// Without it, nine panes at a gap of two on a region six rows tall put the
+// bottom row three rows past the end of it.
+func TestATightRegionGivesUpGroundBeforeItGivesUpTheRegion(t *testing.T) {
+	for _, c := range []struct{ n, w, h, gap int }{
+		{9, 45, 6, 2}, {7, 30, 6, 2}, {9, 45, 8, 2}, {6, 24, 9, 3},
+	} {
+		layouts := CalculateTilingLayout(c.n, c.w, c.h, 0, 0.5, c.gap)
+		for _, pair := range overlapping(layouts) {
+			t.Errorf("n=%d %dx%d gap=%d: %+v and %+v overlap", c.n, c.w, c.h, c.gap, pair[0], pair[1])
+		}
+		for _, r := range outside(layouts, c.w, c.h, 0) {
+			t.Errorf("n=%d %dx%d gap=%d: %+v is outside the region", c.n, c.w, c.h, c.gap, r)
+		}
+	}
+}

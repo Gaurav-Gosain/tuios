@@ -148,3 +148,39 @@ func TestUpstreamOfReadsTheConfig(t *testing.T) {
 		t.Errorf("a branch with no section resolves to %q, want nothing", got)
 	}
 }
+
+// TestTheCountsAreNotRecomputedWhileNothingMoves is the package's whole reason
+// to exist. A sidebar refreshes on a timer, and a subprocess per refresh per
+// pane is what makes a sidebar stutter on a large repository.
+//
+// Negative control: with the hash comparison in Read removed, the second and
+// third reads each spend a subprocess and this fails with 3.
+func TestTheCountsAreNotRecomputedWhileNothingMoves(t *testing.T) {
+	ran := withTracking(t)
+	repo := repoWithUpstream(t)
+
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "-A")
+	testutil.Git(t, repo, "commit", "-m", "work")
+
+	for range 3 {
+		if _, ok := Read(repo); !ok {
+			t.Fatal("not a repository")
+		}
+	}
+	if got := ran.Load(); got != 1 {
+		t.Errorf("counting ran %d times across three reads with nothing moving, want 1", got)
+	}
+
+	// And it does run again once HEAD moves, or the cache would be a bug that
+	// happens to make the test above pass.
+	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "more")
+	if _, ok := Read(repo); !ok {
+		t.Fatal("not a repository")
+	}
+	if got := ran.Load(); got != 2 {
+		t.Errorf("counting ran %d times after HEAD moved, want 2", got)
+	}
+}

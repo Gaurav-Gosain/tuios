@@ -205,3 +205,19 @@ func TestScriptRoundTripsEveryGeneratedAction(t *testing.T) {
 		}
 	}
 }
+
+// The generator has to actually reach every kind it declares a weight for, or
+// part of the alphabet is dead and nobody notices.
+func TestGeneratorReachesEveryWeightedKind(t *testing.T) {
+	seen := map[Kind]int{}
+	for seed := range uint64(20) {
+		for _, a := range Generate(seed, 2000) {
+			seen[a.Kind]++
+		}
+	}
+	for k := range kindCount {
+		if defaultWeights[k] > 0 && seen[k] == 0 {
+			t.Errorf("%s carries weight %d but was never generated", k, defaultWeights[k])
+		}
+	}
+}

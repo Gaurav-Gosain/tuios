@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // rlo and pdf are the bidi override and its end, built from their code points
@@ -116,5 +118,26 @@ func TestInboxLine(t *testing.T) {
 	p := NewPermission(Tool{Title: "Run\x1b[2J  command", Kind: "execute", Input: map[string]string{"command": "rm -rf /"}}, once, func(int) {}, func() {})
 	if got := StateLine(p); got != "approve execute: Run[2J command" {
 		t.Errorf("StateLine = %q", got)
+	}
+}
+
+// TestDiffIsBounded: a huge diff shows maxDiffLines lines and says how many
+// more there are, and two texts too large to compare still diff.
+func TestDiffIsBounded(t *testing.T) {
+	var a, b []string
+	for i := range 3000 {
+		a = append(a, "old"+string(rune('a'+i%26)))
+		b = append(b, "new"+string(rune('a'+i%26)))
+	}
+	oldText := strings.Join(a, "\n")
+	out := ansi.Strip(renderDiffs([]Diff{{Path: "big", Old: &oldText, New: strings.Join(b, "\n")}}))
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(lines) != maxDiffLines+1 || !strings.Contains(lines[len(lines)-1], "more diff lines") {
+		t.Errorf("a big diff showed %d lines, last %q", len(lines), lines[len(lines)-1])
+	}
+	for _, l := range lines[2:maxDiffLines] {
+		if l[0] != '+' && l[0] != '-' && l[0] != '@' {
+			t.Fatalf("a diff line lost its sign: %q", l)
+		}
 	}
 }

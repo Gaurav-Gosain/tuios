@@ -1,6 +1,7 @@
 package fuzzy
 
 import (
+	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -66,4 +67,42 @@ func TestFilterIndexIsAllocationLean(t *testing.T) {
 	if allocs > 40 {
 		t.Fatalf("FilterIndex allocated %.0f times over %d candidates", allocs, len(corpus))
 	}
+}
+
+// TestSortIsStableAcrossKeystrokes is the guard on the tiebreak: the same
+// candidates in a different input order must come out in the same order, or
+// results shuffle under the user's cursor as the list is rebuilt.
+func TestSortIsStableAcrossKeystrokes(t *testing.T) {
+	corpus := []string{"make", "cmake", "qmake", "makeinfo", "automake", "makepkg"}
+	want := rank(t, "make", corpus...)
+
+	shuffled := make([]string, len(corpus))
+	copy(shuffled, corpus)
+	rng := rand.New(rand.NewPCG(1, 2))
+	for range 50 {
+		rng.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+		got := rank(t, "make", shuffled...)
+		if len(got) != len(want) {
+			t.Fatalf("hit count changed: %v vs %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("order changed with input order: %v, want %v", got, want)
+			}
+		}
+	}
+}
+
+// rank returns the candidates ordered best first, which is the only property
+// the callers actually depend on.
+func rank(t *testing.T, pattern string, candidates ...string) []string {
+	t.Helper()
+	hits := Filter(pattern, candidates)
+	out := make([]string, len(hits))
+	for i, h := range hits {
+		out[i] = h.Text
+	}
+	return out
 }
