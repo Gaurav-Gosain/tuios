@@ -1123,21 +1123,35 @@ default `mode = "open"` every pane holds `admin`. Prefer a verb where one
 exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 
 **Available Commands:**
+
+`tuios run-command --list` prints this list from the binary.
+
 | Command | Arguments | Description |
 |---------|-----------|-------------|
 | `NewWindow` | `[name]` | Create a new terminal window |
-| `CloseWindow` | | Close the focused window |
-| `FocusNext` | | Focus the next window |
-| `FocusPrev` | | Focus the previous window |
-| `FocusWindow` | `<id-or-name>` | Focus a specific window |
-| `ToggleFullscreen` | | Toggle fullscreen mode |
-| `ToggleTiling` | | Toggle tiling mode |
-| `SetTheme` | `<theme>` | Change the color theme |
+| `CloseWindow` | `[name]` | Close the focused window, or every window with that name |
+| `NextWindow` | | Focus the next window |
+| `PrevWindow` | | Focus the previous window |
+| `FocusWindow` | `<name>` | Focus a window by name |
+| `RenameWindow` | `<name>` or `<old> <new>` | Rename the focused or a named window |
+| `MinimizeWindow` | `[name]` | Minimize the focused or a named window |
+| `RestoreWindow` | `[name]` | Restore the focused or a named window |
+| `TerminalMode` | | Switch to terminal mode |
+| `WindowManagementMode` | | Switch to window management mode |
+| `ToggleTiling`, `EnableTiling`, `DisableTiling` | | Turn tiling mode on or off |
+| `SnapLeft`, `SnapRight`, `SnapFullscreen` | | Snap the focused window |
+| `Split` | `horizontal` or `vertical` | Split the focused window |
+| `RotateSplit` | | Rotate the split direction |
+| `EqualizeSplits` | | Equalize all split ratios |
+| `Screenshot` | | Save the focused window as an image |
 | `SwitchWorkspace` | `<1-9>` | Switch to workspace |
 | `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
-| `MinimizeWindow` | | Minimize focused window |
-| `RestoreWindow` | `<id-or-name>` | Restore a minimized window |
+| `EnableAnimations`, `DisableAnimations`, `ToggleAnimations` | | Turn UI animations on or off |
 | `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/hidden) |
+| `SetBorderStyle` | `<style>` | Change window border style |
+| `SetTheme` | `<theme>` | Change the color theme |
+| `ShowNotification` | `<message> [type]` | Show a notification |
+| `ListWindows`, `GetWindow [id-or-name]`, `GetSessionInfo` | | The older spellings of `list-windows`, `get-window` and `session-info`, which are the ones to use |
 
 **Examples:**
 ```bash
