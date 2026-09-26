@@ -80,7 +80,6 @@ func crashPanel(report *CrashReport, notice string, width, height int, pal overl
 	body := max(height-overhead, 1)
 
 	p := overlay.Panel{
-		Glyph: "",
 		Title: "tuios hit a bug",
 		Width: inner,
 		Body:  strings.Join(crashBody(report, notice, inner, body, pal), "\n"),

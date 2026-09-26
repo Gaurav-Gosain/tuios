@@ -117,7 +117,6 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	}
 
 	panel := overlay.Panel{
-		Glyph: "", // command
 		Title: "Command Palette",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),

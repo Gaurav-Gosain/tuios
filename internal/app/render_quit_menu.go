@@ -20,7 +20,6 @@ func (m *OS) renderQuitMenu() (string, overlay.Geometry, []overlayRowHit) {
 		title = "Session: " + printableTitle(m.SessionName)
 	}
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "", // warning
 		Title:      title,
 		Width:      quitMenuInnerWidth,
 		MaxVisible: max(len(items), 1),

@@ -23,7 +23,6 @@ func (m *OS) renderWorkspaceSwitcher() (string, overlay.Geometry, []overlayRowHi
 	}
 
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "",
 		Title:      "Workspaces",
 		Width:      workspaceSwitcherWidth,
 		MaxVisible: workspaceSwitcherRows,

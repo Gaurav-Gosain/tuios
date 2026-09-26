@@ -159,7 +159,6 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	}
 
 	panel := overlay.Panel{
-		Glyph: theme.Glyphs().Dot,
 		Title: "Screenshot",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),

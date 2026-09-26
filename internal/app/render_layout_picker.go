@@ -21,7 +21,6 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 			overlay.Style(bg).Foreground(pal.Fg).Render(overlay.Truncate(m.LayoutSaveBuffer, max(width-7, 1))) +
 			overlay.Style(bg).Foreground(pal.Accent).Render("█")
 		panel := overlay.Panel{
-			Glyph: "",
 			Title: "Save layout",
 			Width: width,
 			Body:  input,
@@ -37,7 +36,6 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "",
 		Title:      "Load layout",
 		Width:      layoutPickerWidth,
 		MaxVisible: 10,

@@ -773,7 +773,6 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 	body := m.renderHelpBody(bindings, inSearch, showCategoryTag, pal, width, rows)
 
 	panel := overlay.Panel{
-		Glyph: "", // keyboard
 		Title: "Keybindings",
 		Width: width,
 		Body:  body,

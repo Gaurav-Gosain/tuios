@@ -18,7 +18,6 @@ import (
 // with an optional search line, a scrolling list of rows, a scroll indicator,
 // and returns the per-row hit rects for mouse routing.
 type listOverlay struct {
-	Glyph      string
 	Title      string
 	Width      int
 	MaxVisible int
@@ -138,7 +137,6 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	}
 
 	panel := overlay.Panel{
-		Glyph: cfg.Glyph,
 		Title: cfg.Title,
 		Width: cfg.Width,
 		Body:  strings.Join(lines, "\n"),
@@ -159,7 +157,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 
 // simpleOverlayPanel renders a plain informational panel (no list) for overlay
 // sub-states such as confirmations or empty/unavailable messages.
-func (m *OS) simpleOverlayPanel(glyph, title string, bodyLines []string, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
+func (m *OS) simpleOverlayPanel(title string, bodyLines []string, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
 	pal := theme.UI()
 	bg := pal.Surface
 	width := m.panelWidth(simplePanelWidth)
@@ -172,7 +170,6 @@ func (m *OS) simpleOverlayPanel(glyph, title string, bodyLines []string, hints [
 		}
 	}
 	panel := overlay.Panel{
-		Glyph: glyph,
 		Title: title,
 		Width: width,
 		Body:  strings.Join(styled, "\n"),

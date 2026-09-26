@@ -28,7 +28,6 @@ func livePickerMove(selected, scroll *int, delta, n, visible int, wrap bool) boo
 
 // livePickerPanel describes one picker for renderLivePicker.
 type livePickerPanel struct {
-	Glyph string
 	Title string
 	Query string
 	Items []string
@@ -90,7 +89,6 @@ func renderLivePicker(p livePickerPanel) (string, overlay.Geometry, []overlayRow
 	lines = append(lines, p.Footer(pal)...)
 
 	panel := overlay.Panel{
-		Glyph: p.Glyph,
 		Title: p.Title,
 		Width: p.Width,
 		Body:  strings.Join(lines, "\n"),

@@ -64,7 +64,7 @@ func agentMailWho(th agentMailThread) string {
 // thread, on the shared overlay grammar.
 func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
-		return m.simpleOverlayPanel("", "Mail",
+		return m.simpleOverlayPanel("Mail",
 			[]string{"Mail needs the daemon.", "", "Start a daemon session with: tuios new"},
 			[]overlay.Hint{{Key: "esc", Label: "close"}})
 	}
@@ -90,7 +90,7 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		if st.Error != "" {
 			lines = append(append([]string{}, lines...), "", st.Error)
 		}
-		return m.simpleOverlayPanel("", title, lines, []overlay.Hint{{Key: "esc", Label: "close"}})
+		return m.simpleOverlayPanel(title, lines, []overlay.Hint{{Key: "esc", Label: "close"}})
 	}
 	if len(threads) > 0 {
 		st.Selected = clampInt(st.Selected, 0, len(threads)-1)

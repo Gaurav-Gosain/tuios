@@ -112,9 +112,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		}
 		if replying {
 			// A reply from the rail to a pane with nothing in the Inbox.
-			return m.simpleOverlayPanel("", title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
+			return m.simpleOverlayPanel(title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
 		}
-		return m.simpleOverlayPanel("", title, lines, m.keyHints(
+		return m.simpleOverlayPanel(title, lines, m.keyHints(
 			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
 			config.ActionInboxMailbox, "mailbox", config.ActionInboxClose, "close"))
 	}
@@ -508,7 +508,6 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		title = strings.TrimSuffix(title, "s")
 	}
 	panel := overlay.Panel{
-		Glyph: inboxKindGlyph(it.Kind),
 		Title: title + ": " + inboxWho(it),
 		Width: width,
 		Body:  strings.Join(body, "\n"),

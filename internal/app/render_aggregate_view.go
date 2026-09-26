@@ -58,7 +58,6 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "\uf009", // grid of panes
 		Title:      "Windows",
 		Width:      aggregateViewWidth,
 		MaxVisible: min(max(len(filtered), 1), aggregateViewMaxRows),

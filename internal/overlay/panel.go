@@ -21,7 +21,10 @@ type Hint struct {
 // hints. Width is the inner content width; the rendered block is Width+4 cells
 // wide (a two-cell pad on each side).
 type Panel struct {
-	Glyph     string // optional leading glyph for the title chip
+	// Title is the chip's whole content. There is no icon in front of it:
+	// panels used to take one each, and they drifted into a mix of Nerd Font
+	// icons on some panels and none on most, which read as inconsistent and
+	// drew as boxes without a Nerd Font.
 	Title     string
 	Width     int
 	Tabs      []string
@@ -233,14 +236,6 @@ func planTabRun(tabs []string, active, width int) tabRun {
 // tabArrows returns the overflow glyphs, honoring ASCII mode.
 func tabArrows() (string, string) { return ArrowLeft(), ArrowRight() }
 
-// glyphPrefix returns the glyph plus a trailing space, honoring ASCII mode.
-func glyphPrefix(glyph string) string {
-	if UseASCII() || glyph == "" {
-		return ""
-	}
-	return glyph + " "
-}
-
 // tabsRow renders the section tab strip on exactly one row: a left gutter, the
 // run of tabs that fits, a right gutter. The active tab is an accent pill, the
 // rest muted. It also returns the panel-relative rect of each drawn tab and of
@@ -386,7 +381,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	lines = append(lines, blank) // 0: top pad
 
 	// 1: title chip. The whole row is a drag handle.
-	chip := Chip(Truncate(glyphPrefix(p.Glyph)+p.Title, max(p.Width-2, 1)), pal.Accent, pal.PillFg)
+	chip := Chip(Truncate(p.Title, max(p.Width-2, 1)), pal.Accent, pal.PillFg)
 	lines = append(lines, line(chip))
 	geo.TitleBar = Rect{X0: 0, Y0: len(lines) - 1, X1: totalW, Y1: len(lines)}
 	lines = append(lines, blank) // 2: blank

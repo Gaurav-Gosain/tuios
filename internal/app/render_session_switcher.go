@@ -16,7 +16,7 @@ const sessionSwitcherWidth = 58
 func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit) {
 	// Daemon-only feature.
 	if !m.IsDaemonSession || m.DaemonClient == nil {
-		return m.simpleOverlayPanel("", "Sessions",
+		return m.simpleOverlayPanel("Sessions",
 			[]string{"Sessions need the daemon.", "", "Start a daemon session with: tuios new"},
 			[]overlay.Hint{{Key: "esc", Label: "close"}})
 	}
@@ -26,7 +26,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		// What it would take down, counted off the same state the close dialog
 		// counts: a destructive answer given without the toll is a guess, and this
 		// one used to say only that it could not be undone.
-		return m.simpleOverlayPanel("", "Delete session?",
+		return m.simpleOverlayPanel("Delete session?",
 			[]string{
 				"'" + m.SessionLabel(m.SessionSwitcherConfirmDelete) + "'",
 				m.SessionTollFor(m.SessionSwitcherConfirmDelete).Line(),
@@ -51,7 +51,6 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 	}
 
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "",
 		Title:      "Sessions",
 		Width:      sessionSwitcherWidth,
 		MaxVisible: 10,

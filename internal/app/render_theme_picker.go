@@ -40,7 +40,6 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.themePickerItems()
 	width, visible, hints := m.themePickerLayout()
 	return renderLivePicker(livePickerPanel{
-		Glyph:    "", // palette
 		Title:    "Theme",
 		Query:    m.ThemePickerQuery,
 		Items:    items,

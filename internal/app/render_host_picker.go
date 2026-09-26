@@ -18,7 +18,6 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	return m.renderListOverlay(listOverlay{
-		Glyph:      "",
 		Title:      hostPickerTitle(m.HostPickerPurpose),
 		Width:      hostPickerWidth,
 		MaxVisible: 10,

@@ -75,7 +75,6 @@ func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	panel := overlay.Panel{
-		Glyph: "", // dock
 		Title: title,
 		Width: width,
 		Body:  strings.Join(lines, "\n"),

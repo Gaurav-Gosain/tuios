@@ -40,7 +40,6 @@ func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.glyphPickerItems()
 	width, visible, hints := m.glyphPickerLayout()
 	return renderLivePicker(livePickerPanel{
-		Glyph:    "󰊄", // glyph set
 		Title:    "Glyph set",
 		Query:    m.GlyphPickerQuery,
 		Items:    items,

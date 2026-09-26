@@ -144,7 +144,6 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 	panel := overlay.Panel{
 		// Written as an escape so the codepoint survives tooling that does not
 		// carry private-use glyphs. The panel drops it in ASCII mode itself.
-		Glyph:     "", // keyboard
 		Title:     "Keybinds",
 		Width:     width,
 		Tabs:      KeybindTabNames,

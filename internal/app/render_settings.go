@@ -193,7 +193,6 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	panel := overlay.Panel{
-		Glyph:     "", // gear
 		Title:     title,
 		Width:     width,
 		Tabs:      tabs,

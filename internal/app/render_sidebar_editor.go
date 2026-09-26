@@ -72,7 +72,6 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	panel := overlay.Panel{
-		Glyph: "",
 		Title: title,
 		Width: width,
 		Body:  strings.Join(lines, "\n"),

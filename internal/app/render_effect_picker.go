@@ -92,7 +92,6 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	lines = append(lines, m.effectPickerDetail(items, pal, width)...)
 
 	panel := overlay.Panel{
-		Glyph: "󰤄", // sleep
 		Title: "Screen saver effect",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
