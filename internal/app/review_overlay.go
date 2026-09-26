@@ -207,6 +207,11 @@ type reviewState struct {
 	rowsWidth int
 	// pageRows is how many diff rows the last frame showed.
 	pageRows int
+	// frameRows are the diff rows the frame being drawn laid out, set by
+	// reviewDiffLines and cleared when renderReview returns, so the footer
+	// reads the row under the cursor without laying the file out again.
+	frameRows    []reviewRow
+	frameRowsSet bool
 	// loadErr is why the diff shown is missing, for a review opened from
 	// the compare view whose diff could not be read.
 	loadErr string
@@ -801,7 +806,10 @@ func (m *OS) reviewRowUnderCursor() (reviewRow, bool) {
 	if r.listFocus {
 		return reviewRow{}, false
 	}
-	rows := m.reviewRows(m.reviewRowsWidth())
+	rows := r.frameRows
+	if !r.frameRowsSet {
+		rows = m.reviewRows(m.reviewRowsWidth())
+	}
 	if r.cursor < 0 || r.cursor >= len(rows) {
 		return reviewRow{}, false
 	}
