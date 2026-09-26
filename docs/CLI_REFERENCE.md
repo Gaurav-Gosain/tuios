@@ -3912,9 +3912,14 @@ tuios list-verbs --json          # for scripting
 
 - `0`: Success
 - `1`: Error (configuration error, network error, file not found, etc.)
-- `3`: `tuios ls` found no daemon running. It lists the sessions saved on disk
-  instead, so a script can tell a stopped daemon from a running one with no
-  sessions, which exits `0`
+- `2`: `tuios ask-human` waited out its `--timeout` with no answer. The
+  question stays in the Inbox
+- `3`: The command needed a daemon and found none running. `tuios ls` lists the
+  sessions saved on disk instead, so a script can tell a stopped daemon from a
+  running one with no sessions, which exits `0`
+
+`tuios run` exits with the status of the command it ran, and `tuios popup
+--wait` with its command's status (`130` when the popup is closed).
 
 A `tuios attach` that ends because its session was killed, or because the daemon
 was lost, exits `1`. A normal detach exits `0`.
