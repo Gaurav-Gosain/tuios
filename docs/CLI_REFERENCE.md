@@ -1190,7 +1190,10 @@ tuios set-config <path> <value> [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 
-**Available Paths:**
+**Paths:** every option `tuios list-options` prints can be set, by its full
+path (`appearance.dockbar_position`) or, for an `[appearance]` option, by its
+name alone. Some of them:
+
 | Path | Values | Description |
 |------|--------|-------------|
 | `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
