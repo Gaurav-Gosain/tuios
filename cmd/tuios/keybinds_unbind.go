@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The command-line half of unbinding. The overlay is the discoverable way to do
@@ -146,7 +147,7 @@ func nearestActionHint(cfg *config.UserConfig, action string) []string {
 		}
 	}
 	sort.Strings(names)
-	if near := closestName(action, names); near != "" {
+	if near := session.ClosestMatch(action, names); near != "" {
 		return []string{"Did you mean " + near + "?"}
 	}
 	return nil

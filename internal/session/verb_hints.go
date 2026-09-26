@@ -211,6 +211,13 @@ func echoName(name string) string {
 	return name[:maxEchoedName] + "... (" + strconv.Itoa(len(name)) + " bytes)"
 }
 
+// ClosestMatch is closestMatch for the CLI, so a misspelled name gets the
+// same suggestion whether the daemon or the command line is the one refusing
+// it.
+func ClosestMatch(target string, candidates []string) string {
+	return closestMatch(target, candidates)
+}
+
 // closestMatch returns the candidate closest to target by edit distance, or ""
 // when nothing is close enough to suggest. The threshold scales with the length
 // of the target so short names do not match everything: a 3-character target

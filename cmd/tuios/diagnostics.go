@@ -341,7 +341,7 @@ func explainMissingSession(name string, available []string) error {
 		e.Fix = fmt.Sprintf("run 'tuios new %s' to create it, or 'tuios resurrect' to see saved sessions.", name)
 	default:
 		e.Cause = "the name does not match any live session."
-		if closest := closestName(name, sorted); closest != "" {
+		if closest := session.ClosestMatch(name, sorted); closest != "" {
 			e.Extra = append(e.Extra, fmt.Sprintf("Did you mean %q?", closest))
 		}
 		e.Extra = append(e.Extra, "Sessions: "+strings.Join(truncateList(sorted, 12), ", ")+".")
@@ -362,59 +362,6 @@ func savedSession(name string) (session.ResurrectableInfo, bool) {
 		}
 	}
 	return session.ResurrectableInfo{}, false
-}
-
-// closestName is the CLI-side spelling suggestion, matching the policy the
-// daemon uses for its hints so the two never disagree.
-func closestName(target string, candidates []string) string {
-	if target == "" {
-		return ""
-	}
-	limit := min(len(target)/4+1, 3)
-
-	best, bestDist := "", limit+1
-	for _, c := range candidates {
-		if c == target {
-			continue
-		}
-		d := editDistance(strings.ToLower(target), strings.ToLower(c))
-		if d < bestDist {
-			bestDist, best = d, c
-		}
-	}
-	if bestDist > limit {
-		return ""
-	}
-	return best
-}
-
-// editDistance is the Levenshtein distance between a and b.
-func editDistance(a, b string) int {
-	ar, br := []rune(a), []rune(b)
-	if len(ar) == 0 {
-		return len(br)
-	}
-	if len(br) == 0 {
-		return len(ar)
-	}
-
-	prev := make([]int, len(br)+1)
-	cur := make([]int, len(br)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(ar); i++ {
-		cur[0] = i
-		for j := 1; j <= len(br); j++ {
-			cost := 1
-			if ar[i-1] == br[j-1] {
-				cost = 0
-			}
-			cur[j] = min(cur[j-1]+1, prev[j]+1, prev[j-1]+cost)
-		}
-		prev, cur = cur, prev
-	}
-	return prev[len(br)]
 }
 
 // Terminal capability checks. These run before the TUI takes over the screen,
