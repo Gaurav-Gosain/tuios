@@ -52,7 +52,22 @@ func TestAClientSyncKeepsTheDaemonsWindowFields(t *testing.T) {
 			name:      "agent kind and session id",
 			canonical: WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentKind: "approval", AgentSessionID: "s1"},
 			incoming:  WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "x"},
-			want:      WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "x", AgentKind: "approval", AgentSessionID: "s1"},
+			want:      WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentKind: "approval", AgentSessionID: "s1"},
+		},
+		{
+			// A push echoing a state the daemon has since moved on from. The
+			// agent fields used to be carried only when the push left them all
+			// empty, so this put working back over needs_input.
+			name:      "a stale agent state in the push",
+			canonical: WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "approve?", AgentHarness: "claude-code", AgentStateAt: 9},
+			incoming:  WindowState{ID: "w1", AgentState: AgentStateWorking, AgentMessage: "building", AgentHarness: "claude-code", AgentStateAt: 5},
+			want:      WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "approve?", AgentHarness: "claude-code", AgentStateAt: 9},
+		},
+		{
+			name:      "a stale foreground command, pid and directory in the push",
+			canonical: WindowState{ID: "w1", ForegroundCmd: "", ShellPID: 42, Cwd: "/now"},
+			incoming:  WindowState{ID: "w1", ForegroundCmd: "nvim", ShellPID: 41, Cwd: "/then"},
+			want:      WindowState{ID: "w1", ShellPID: 42, Cwd: "/now"},
 		},
 		{
 			name:      "finished turn count",

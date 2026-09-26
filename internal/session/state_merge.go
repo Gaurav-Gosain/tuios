@@ -135,9 +135,15 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// only the daemon holds the process, and a client sync never reports one.
 	// Without this every client push would strip the pid the corroboration needs.
 	shellPIDs := make(map[string]int, len(canonical.Windows))
-	// Agent state is daemon-owned and clients never set it, so it is carried over
-	// by window id exactly as Cwd is; without this a client sync (which omits it)
-	// would wipe every pane's reported state.
+	// Agent state is daemon-owned and clients never set it, so canonical wins
+	// unconditionally, like the agent meta below. Without this a client sync
+	// (which omits it) would wipe every pane's reported state.
+	//
+	// It used to be carried only when the push left every agent field empty,
+	// which let any push that did carry them win: a snapshot echoing a state
+	// the daemon has since moved on from put the old state back, and a client
+	// could set a pane's state around the precedence set-agent-state enforces.
+	// The TUI never sends these fields, so nothing relied on that.
 	type agent struct {
 		state   AgentState
 		message string
@@ -145,12 +151,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		at      int64
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
-	// The kind of a block and the harness's session id are daemon-owned too, but
-	// they are carried apart from the block above and taken from canonical
-	// unconditionally. A client that predates them sends a window with its
-	// agent state and without them, and the block above keeps a client's agent
-	// fields whenever any of them is set, so riding along there would lose them
-	// on every sync from an older client.
+	// The kind of a block and the harness's session id are daemon-owned too,
+	// and taken from canonical unconditionally on the same terms.
 	type agentIdentity struct {
 		kind           string
 		sessionID      string
@@ -232,18 +234,23 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
-		if w.Cwd == "" {
-			w.Cwd = cwds[w.ID]
+		// Where the daemon holds a value, it wins over whatever the push says:
+		// no client reads these from anything but the daemon, so a different
+		// value in a push is an older copy. Where it holds none, the push's
+		// value stands, which is how a restore hands in the directory and the
+		// pid of the shell it just respawned to a session created empty.
+		if cwd, ok := cwds[w.ID]; ok || w.Cwd == "" {
+			w.Cwd = cwd
 		}
-		if w.ForegroundCmd == "" {
-			w.ForegroundCmd = fgCmds[w.ID]
+		if pid, ok := shellPIDs[w.ID]; ok || w.ShellPID == 0 {
+			w.ShellPID = pid
 		}
-		if w.ShellPID == 0 {
-			w.ShellPID = shellPIDs[w.ID]
+		if host, ok := hosts[w.ID]; ok || w.Host == "" {
+			w.Host = host
 		}
-		if w.Host == "" {
-			w.Host = hosts[w.ID]
-		}
+		// The foreground command is canonical's whatever the push says, empty
+		// included: a command that exited has to be able to clear.
+		w.ForegroundCmd = fgCmds[w.ID]
 		if c := completions[w.ID]; c > w.CompletionSeq {
 			w.CompletionSeq = c
 		}
@@ -257,12 +264,11 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentKind = ids.kind
 		w.AgentSessionID = ids.sessionID
 		w.AgentSessionHarness = ids.sessionHarness
-		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
-			w.AgentState = a.state
-			w.AgentMessage = a.message
-			w.AgentHarness = a.harness
-			w.AgentStateAt = a.at
-		}
+		a := agents[w.ID]
+		w.AgentState = a.state
+		w.AgentMessage = a.message
+		w.AgentHarness = a.harness
+		w.AgentStateAt = a.at
 		// Taken from canonical whatever the client sent: no client sets it, so
 		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]
