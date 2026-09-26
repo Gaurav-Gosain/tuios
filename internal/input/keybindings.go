@@ -1,10 +1,9 @@
-// Package input implements key mapping definitions and ANSI escape sequence builders for TUIOS.
-//
-// This module handles:
+// Key mapping definitions and ANSI escape sequence builders. This file handles:
 // - Converting Bubble Tea KeyPressMsg to raw terminal bytes
 // - ANSI/VT escape sequence generation for terminal compatibility
 // - Function key support with modifier combinations
 // - macOS Option key character mappings
+
 package input
 
 import (

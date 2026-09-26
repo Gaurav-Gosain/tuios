@@ -298,69 +298,51 @@ graph LR
 
 ### SGR Sequence Processing
 
-The VT emulator's SGR handler (`internal/vt/csi_sgr.go`) implements conditional theme routing with fallback to standard processing:
+The pure Go emulator's SGR handler (`internal/vt/csi_sgr.go`) reads every SGR
+through one function, `readStyleWithTheme`, with or without a theme. It used to
+hand the unthemed case to `uv.ReadStyle`, which read an underline
+subparameter such as `4:7` as a bare SGR 7 and dropped SGR 21, so a pane drew
+differently depending on whether a theme was set. The colours agree either
+way:
 
-```go
-func (e *Emulator) handleSgr(params ansi.Params) {
-    // When theming is disabled, use standard ANSI color processing
-    if !e.hasThemeColors() {
-        uv.ReadStyle(params, &e.scr.cur.Pen)
-        return
-    }
+- **SGR 30-37, 40-47, 90-97, 100-107** resolve through `PaletteColor`: the
+  theme's colour when a theme or the guest's own OSC 4 has claimed the slot,
+  and otherwise the index itself, so the host paints it from the user's own
+  palette.
+- **Indexed `38;5;n`, `48;5;n`, `58;5;n`** go through `parseThemedColor`,
+  which lets `ansi.ReadStyleColor` decide what is a colour and how many
+  parameters it takes, then resolves an index from 0 to 15 through the theme.
+  Indices 16 to 255 pass through.
+- **Truecolor** passes through unchanged. An SGR that is one truecolor colour
+  and nothing else, which is what a truecolor repaint sends for every cell, is
+  answered before the loop.
 
-    // When theming is enabled, route colors through theme palette
-    e.readStyleWithTheme(params, &e.scr.cur.Pen)
-}
-```
+This keeps:
 
-**Format Detection and Parameter Handling:**
-
-The handler distinguishes between different color formats by examining the parameter sequence:
-
-```go
-// Example: Indexed foreground color ESC[38;5;nm
-case 38:
-    if i+2 < len(params) {
-        next, _, _ := params.Param(i+1, -1)
-        if next == 5 { // Indexed color format
-            colorIndex, _, _ := params.Param(i+2, -1)
-            if colorIndex >= 0 && colorIndex <= 15 {
-                // Use themed color for base ANSI palette
-                pen.Foreground(e.IndexedColor(colorIndex))
-                i += 2  // Skip format indicator and color index
-                continue
-            }
-        }
-    }
-    // Standard processing for 256-color (16-255) and RGB
-    var c color.Color
-    n := ansi.ReadStyleColor(params[i:], &c)
-    if n > 0 {
-        pen.Foreground(c)
-        i += n - 1
-    }
-```
-
-This approach ensures:
-
-- Conditional theme application (only when theme is enabled)
-- Consistent color schemes across themed windows
-- Respect for application-specific color choices (256-color, RGB)
-- Compatibility with legacy and modern terminal applications
+- Consistent colour schemes across themed windows
+- Respect for application-specific colour choices (256-colour, RGB)
+- The user's own palette for every slot nothing has claimed
 
 ### Background Color Treatment
 
-TUIOS uses transparent backgrounds (`nil`) for the terminal's default background to ensure TUI applications render correctly:
+A cell written on the default background keeps a nil background, so the
+terminal's own background shows through it and TUI applications that expect to
+control their own background render correctly. The theme's colours reach the
+emulator through `applyTheme` (`internal/terminal/window_theme.go`):
 
 ```go
-// In internal/terminal/window.go
-terminal.SetThemeColors(
+t.SetThemeColors(
     theme.TerminalFg(),
-    nil,  // Transparent background allows TUI apps to control their own bg
+    theme.TerminalBg(),
     theme.TerminalCursor(),
     theme.GetANSIPalette(),
 )
 ```
+
+The theme background given here is the emulator's default background. It is
+what an OSC 11 query is answered with when the guest has set no background of
+its own and no pane background is painted, and it never becomes a cell's
+background.
 
 **Design Rationale:**
 
@@ -381,8 +363,8 @@ TUIOS supports live theme switching without restarting windows:
 **Update Flow:**
 
 1. Theme change triggered (user action or config reload)
-2. `OS.UpdateAllWindowThemes()` called (`internal/app/os.go`)
-3. For each window: `Window.UpdateThemeColors()` (`internal/terminal/window.go`)
+2. `OS.UpdateAllWindowThemes()` called (`internal/app/os_window.go`)
+3. For each window: `Window.UpdateThemeColors()` (`internal/terminal/window_theme.go`)
 4. VT emulator's theme colors refreshed via `Terminal.SetThemeColors()`
 5. Windows marked dirty to trigger re-render
 6. New theme colors immediately visible
@@ -398,9 +380,9 @@ TUIOS supports live theme switching without restarting windows:
 
 | Component         | File                          | Responsibility                             |
 | ----------------- | ----------------------------- | ------------------------------------------ |
-| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences with conditional theme routing; fallback to standard ANSI when theming disabled |
-| **Theme Colors**  | `internal/terminal/window.go` | Initialize and update window theme colors with transparent backgrounds |
-| **Theme Manager** | `internal/app/os.go`          | Propagate theme changes to all windows     |
+| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences, resolving the sixteen palette slots through the theme when one claims them |
+| **Theme Colors**  | `internal/terminal/window_theme.go` | Initialize and update window theme colors; cells keep a nil default background |
+| **Theme Manager** | `internal/app/os_window.go`   | Propagate theme changes to all windows     |
 | **Theme Config**  | `internal/theme/theme.go`     | Define color palettes and theme variants   |
 
 ## Rendering Pipeline
@@ -504,10 +486,10 @@ graph LR
 
 When clients join, leave, or sync state, notifications are displayed:
 
-- **Client joined/left**: Shows connection count
-- **Mode changes**: "Switched to Terminal/Window mode"
-- **Window changes**: "Window created/closed (N total)"
+- **Client joined/left**: "Client joined (N connected)", "Client left (N connected)"
+- **Window changes**: "Window created (N total)", "Window closed (N remaining)"
 - **Workspace changes**: "Switched to workspace N"
+- **Session size**: "Session size: WxH (N clients)" when the shared size changes
 
 ## SSH Server Architecture
 
@@ -557,7 +539,10 @@ graph TB
 
 ### SSH Session Isolation
 
-Each SSH connection receives:
+By default `tuios ssh` attaches each connection to a session of the daemon, like
+a local `tuios attach`, so several connections can share one session and it
+outlives them (see [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-ssh)). The diagram
+above is `--ephemeral`, where each SSH connection receives:
 
 - Dedicated OS instance (window manager state)
 - Independent workspace configuration

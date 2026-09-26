@@ -293,8 +293,9 @@ This will overwrite your existing configuration after confirmation.`,
 
 	keybindsListCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all keybindings",
-		Long:  `Display all configured keybindings in a formatted table`,
+		Short: "List the common keybindings",
+		Long: `Display the common keybindings, as configured, in formatted tables.
+tuios keybinds doctor lists every scope.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return listKeybindings()
 		},
@@ -1898,7 +1899,7 @@ that need its terminal, so they are only listed while a client is attached.`,
 	var refreshDockJSON bool
 	refreshDockCmd := &cobra.Command{
 		Use:   "refresh-dock [component]",
-		Short: "Re-run a dock component now",
+		Short: "Run a dock component again now",
 		Long: `Re-run a dock component immediately, whatever its refresh mode says, and clear
 a give-up so a component whose script has just been fixed starts working again
 without restarting the session.

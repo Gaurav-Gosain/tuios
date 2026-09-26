@@ -1758,7 +1758,7 @@ message are unchanged. `TestValidateKeyModifiersOnEachPlatform` pins both on
 macOS and elsewhere and passes on the old code too, and
 `TestValidateKeyDoesNotAllocateForAPlainBinding` fails on it (5 allocations per
 call). The real config is the maintainer's 548-line one; `ValidateConfigDefault`
-is the in-repo benchmark on the default config.
+was the in-repo benchmark on the default config, since removed.
 
 | Benchmark | before | after | |
 |---|---|---|---|

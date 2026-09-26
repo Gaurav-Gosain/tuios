@@ -17,10 +17,9 @@ Over the socket every failure carries a stable code in the error envelope:
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `repo_not_found`, `not_repo`, `no_notes`, `queue_full`,
-`risk_unacknowledged`, `internal`. A verb `list-verbs` lists that answers
-`internal` with "not built yet" is registered ahead of its work: nothing was
-done, and retrying will not help. The CLI folds the same information into its
-messages.
+`risk_unacknowledged`, `internal`. `internal` is a failure inside the daemon
+that none of the others names; its message says what went wrong. The CLI folds
+the same information into its messages.
 
 ## What each asks of you
 

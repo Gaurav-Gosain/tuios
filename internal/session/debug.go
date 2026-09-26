@@ -1,4 +1,3 @@
-// Package session provides persistent session management for TUIOS.
 package session
 
 import (

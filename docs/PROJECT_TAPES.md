@@ -25,7 +25,7 @@ Nothing runs until you review the content and choose to run or trust it.
 2. About 400ms later a passive banner slides in and a `tape ?` badge appears in
    the dock. Nothing has executed. Your shell never lost a keystroke.
 3. Press `Ctrl+B` `T` `t` (or open the command palette with `Ctrl+P` and choose
-   **Tape: Review Project Tape**). A dialog shows the tape's path, its trust
+   **Tape: review the project tape**). A dialog shows the tape's path, its trust
    status, what it will build, and its full content.
 4. Read it, then choose an action:
    - **`r` Run once**: run it now without remembering the decision.

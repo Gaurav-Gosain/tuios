@@ -25,8 +25,8 @@ const sockNameAllowance = len("/tuios/tuios.sock.pid")
 //
 // t.TempDir is not short enough on macOS. It roots at $TMPDIR, which is a
 // per-user path under /var/folders about 49 characters long, and it appends
-// the test's own name: TestRemoveWorktreeRefusesUncommittedWorkWithoutForceOrStash
-// reaches 130 characters before the socket name is added. Every daemon test in
+// the test's own name, so a long test name reaches 130 characters before the
+// socket name is added. Every daemon test in
 // the tree failed that way, and the error named the symptom rather than the
 // cause.
 //

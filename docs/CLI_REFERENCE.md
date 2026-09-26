@@ -116,7 +116,7 @@ tuios --standalone
 - `--skill [topic]`: Print the embedded agent skill and exit: the core, one topic, or `all` (see [Agent Skill](#agent-skill))
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
-- `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)
+- `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)
 - `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
 - `--window-button-style <style>`: How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`
@@ -241,7 +241,7 @@ exec tuios --theme dracula "$@"
 skill teaches an agent to drive TUIOS from inside a pane. It is split so an
 agent loads only what it needs:
 
-- `tuios --skill` prints the core (about 250 lines): how to tell it is in a
+- `tuios --skill` (or `--skill core`) prints the core (about 280 lines): how to tell it is in a
   pane, what its pane may do, addressing, reading and writing panes, running
   work and waiting for it, reporting its own state, talking to other agents and
   the person safely, and a table of the topics.
@@ -374,6 +374,13 @@ Shows a table with:
 - `branch` is the git branch checked out there. A detached HEAD reads as its short hash.
 
 Both come from the directory the shell last reported over OSC 7, or the directory the shell started in. Both are omitted when unknown. The sidebar labels a session with a generated name (`session-0`) by `dir`, and shows `branch` after any session name.
+
+A session whose directory is inside a linked git worktree (not a main
+checkout) also carries `worktree`: the repository (`repo`, `repo_root`), the
+`branch` and the worktree's `path`, `gone: true` once the directory no longer
+exists, and for one tuios made, its `base`, its fan `group` and the prompt a
+fan sent it. It is what the rail groups by. `global: true` marks a global session, and
+`restored: true` one rebuilt from saved state that nobody has attached to yet.
 
 ### `tuios kill-session`
 
@@ -1116,21 +1123,35 @@ default `mode = "open"` every pane holds `admin`. Prefer a verb where one
 exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 
 **Available Commands:**
+
+`tuios run-command --list` prints this list from the binary.
+
 | Command | Arguments | Description |
 |---------|-----------|-------------|
 | `NewWindow` | `[name]` | Create a new terminal window |
-| `CloseWindow` | | Close the focused window |
-| `FocusNext` | | Focus the next window |
-| `FocusPrev` | | Focus the previous window |
-| `FocusWindow` | `<id-or-name>` | Focus a specific window |
-| `ToggleFullscreen` | | Toggle fullscreen mode |
-| `ToggleTiling` | | Toggle tiling mode |
-| `SetTheme` | `<theme>` | Change the color theme |
+| `CloseWindow` | `[name]` | Close the focused window, or every window with that name |
+| `NextWindow` | | Focus the next window |
+| `PrevWindow` | | Focus the previous window |
+| `FocusWindow` | `<name>` | Focus a window by name |
+| `RenameWindow` | `<name>` or `<old> <new>` | Rename the focused or a named window |
+| `MinimizeWindow` | `[name]` | Minimize the focused or a named window |
+| `RestoreWindow` | `[name]` | Restore the focused or a named window |
+| `TerminalMode` | | Switch to terminal mode |
+| `WindowManagementMode` | | Switch to window management mode |
+| `ToggleTiling`, `EnableTiling`, `DisableTiling` | | Turn tiling mode on or off |
+| `SnapLeft`, `SnapRight`, `SnapFullscreen` | | Snap the focused window |
+| `Split` | `horizontal` or `vertical` | Split the focused window |
+| `RotateSplit` | | Rotate the split direction |
+| `EqualizeSplits` | | Equalize all split ratios |
+| `Screenshot` | | Save the focused window as an image |
 | `SwitchWorkspace` | `<1-9>` | Switch to workspace |
 | `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
-| `MinimizeWindow` | | Minimize focused window |
-| `RestoreWindow` | `<id-or-name>` | Restore a minimized window |
+| `EnableAnimations`, `DisableAnimations`, `ToggleAnimations` | | Turn UI animations on or off |
 | `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/hidden) |
+| `SetBorderStyle` | `<style>` | Change window border style |
+| `SetTheme` | `<theme>` | Change the color theme |
+| `ShowNotification` | `<message> [type]` | Show a notification |
+| `ListWindows`, `GetWindow [id-or-name]`, `GetSessionInfo` | | The older spellings of `list-windows`, `get-window` and `session-info`, which are the ones to use |
 
 **Examples:**
 ```bash
@@ -1169,7 +1190,10 @@ tuios set-config <path> <value> [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 
-**Available Paths:**
+**Paths:** every option `tuios list-options` prints can be set, by its full
+path (`appearance.dockbar_position`) or, for an `[appearance]` option, by its
+name alone. Some of them:
+
 | Path | Values | Description |
 |------|--------|-------------|
 | `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
@@ -3271,14 +3295,17 @@ View and inspect keybinding configuration.
 
 #### `tuios keybinds list`
 
-Display all configured keybindings in formatted tables organized by category.
+Display the common keybindings, as configured, in formatted tables organized
+by category. `tuios keybinds doctor` lists every scope.
 
 **Example:**
 ```bash
 tuios keybinds list
 ```
 
-**Output:** Shows comprehensive tables with all keybindings across categories:
+**Output:** One table per category, and a category with nothing bound is left
+out:
+- Global
 - Window Management
 - Workspaces
 - Layout
@@ -3724,6 +3751,60 @@ installs report only when `TUIOS_ENV` or `TUIOS_AGENT` is set.
 TUIOS_AGENT=claude-code docker run -it sandbox claude
 ```
 
+### Variables tuios sets in a pane
+
+`TUIOS_ENV`, `TUIOS_SOCKET`, `TUIOS_PANE_ID`, `TUIOS_WINDOW_ID`,
+`TUIOS_SESSION`, `TUIOS_HOST`, `TUIOS_PANE_TOKEN` and `TUIOS_PANE_GRANTS`. See
+[Environment](AGENT_STATE.md#environment) for what each one means.
+
+### Agent detection
+
+`TUIOS_AGENT_AUTODETECT`, `TUIOS_AGENT_DETECT_SECONDS`,
+`TUIOS_AGENT_BINARIES` and `TUIOS_AGENT_STALL_SECONDS`, read by the daemon as
+it starts. See
+[Turning detection off or widening it](AGENT_STATE.md#turning-detection-off-or-widening-it)
+and [The stall heuristic](AGENT_STATE.md#the-stall-heuristic).
+
+### `TUIOS_WORKTREE_DIR`
+
+Where the daemon puts the worktrees `tuios worktree new` and `tuios fan`
+create, instead of `$XDG_DATA_HOME/tuios/worktrees`. Set it in the daemon's
+environment, before it starts.
+
+### `TUIOS_LOG_LEVEL`
+
+The daemon's log level from the start: `off`, `errors`, `basic`, `messages`,
+`verbose` or `trace` (or `0` to `5`). It wins over `daemon.log_level`.
+`tuios logs` reads what it records.
+
+### `TUIOS_NO_SOUND`
+
+Any value silences the agent alert sounds, whatever
+`notifications.agent.sound` says. For a CI job or a recording.
+
+### `TUIOS_SSH`
+
+The ssh program to run instead of `ssh` on `PATH`: for the daemon's links to
+the `[hosts]` machines (set it where the daemon starts), and for `--ssh` and
+`tuios hosts test`.
+
+### `TUIOS_HOST_RECONNECT_BUDGET`
+
+How long a client attached to a session on another machine keeps dialing a
+dropped link before it gives up, as a Go duration (`10m`). Three minutes when
+unset. Read once, when the client starts.
+
+### `TUIOS_CELL_SIZE`
+
+The terminal's cell size in pixels, as `WIDTHxHEIGHT` (`10x20`), for a terminal
+that does not answer the pixel geometry query. Images and captures drawn in
+cells are sized from it. The SSH server reads the same variable.
+
+### `TUIOS_KITTY_GRAPHICS`, `TUIOS_KITTY_PLACEHOLDERS`, `TUIOS_KITTY_ANIMATION`, `TUIOS_SIXEL_GRAPHICS`
+
+`1` or `0` overrides what tuios detected about the host terminal's kitty
+graphics, kitty Unicode placeholders, kitty animation and sixel support.
+
 ### `$SHELL`
 
 TUIOS uses your default shell from this variable. If not set, it attempts to detect the appropriate shell for your platform.
@@ -3831,9 +3912,14 @@ tuios list-verbs --json          # for scripting
 
 - `0`: Success
 - `1`: Error (configuration error, network error, file not found, etc.)
-- `3`: `tuios ls` found no daemon running. It lists the sessions saved on disk
-  instead, so a script can tell a stopped daemon from a running one with no
-  sessions, which exits `0`
+- `2`: `tuios ask-human` waited out its `--timeout` with no answer. The
+  question stays in the Inbox
+- `3`: The command needed a daemon and found none running. `tuios ls` lists the
+  sessions saved on disk instead, so a script can tell a stopped daemon from a
+  running one with no sessions, which exits `0`
+
+`tuios run` exits with the status of the command it ran, and `tuios popup
+--wait` with its command's status (`130` when the popup is closed).
 
 A `tuios attach` that ends because its session was killed, or because the daemon
 was lost, exits `1`. A normal detach exits `0`.

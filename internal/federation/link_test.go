@@ -323,8 +323,8 @@ func TestOversizedRemoteResponseIsRefused(t *testing.T) {
 var proxySocket = flag.String("fed.proxysock", "", "helper process: serve the link proxy against this daemon socket")
 
 // TestHelperStdioProxy is not a test. It is this binary re-executed as the
-// remote proxy by the far machine the link tests stand up (farMachine.install), so the framing runs
-// over a real process's real stdio.
+// remote proxy by the far machine the link tests stand up (farMachine.install
+// in remote_test.go), so the framing runs over a real process's real stdio.
 func TestHelperStdioProxy(t *testing.T) {
 	sock := *proxySocket
 	if sock == "" {

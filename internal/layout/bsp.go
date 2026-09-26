@@ -1,4 +1,3 @@
-// Package layout provides window tiling and layout management for the terminal.
 package layout
 
 import (

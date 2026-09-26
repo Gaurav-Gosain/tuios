@@ -187,7 +187,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Screenshots**: `tuios screenshot` renders a pane to PNG, SVG, ANSI, HTML or text
 - **Dock Components**: Your own commands drawn in the dock, updated on events, from a running command, or by polling ([examples](examples/dock/README.md))
 - **Customizable Keybindings**: TOML configuration with Kitty protocol support
-- **Hooks**: Run shell commands on nine events, including window, workspace, attach and agent state changes ([docs](docs/HOOKS.md))
+- **Hooks**: Run shell commands on ten events, including window, workspace, attach and agent state changes ([docs](docs/HOOKS.md))
 - **Mouse Support**: Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
 - **SSH Server Mode**: Remote terminal multiplexing
 - **Web Terminal Mode**: Browser-based access (separate `tuios-web` binary)
@@ -239,7 +239,7 @@ tuios kill-session mysession # Kill session
 
 ```bash
 # In-app: Ctrl+B, L, l to load / Ctrl+B, L, s to save
-# Or via command palette: Ctrl+P → "Save Layout" / "Load Layout"
+# Or via command palette: Ctrl+P → "Save layout" / "Load layout"
 
 # CLI:
 tuios layout list            # List saved layouts
@@ -251,7 +251,7 @@ tuios layout export mysetup  # Export as tape script
 
 ```bash
 tuios config edit            # Edit config in $EDITOR
-tuios keybinds list          # View all keybindings
+tuios keybinds list          # View the common keybindings
 ```
 
 See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, `window_button_position`, custom themes, and keybinding customization.
@@ -277,7 +277,7 @@ TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [
 
 - **Event-driven rendering**: Zero CPU at idle. Renders only when PTY data arrives or interaction occurs.
 - **Kitty graphics**: Flicker-free via image ID reuse. Tearing-free via mode 2026 sync + render cycle batching.
-- **Fast unfocused render**: Unfocused panes use emulator's built-in `Render()` instead of cell-by-cell.
+- **Fast unfocused render**: Unfocused panes use emulator's built-in `Render()` instead of cell-by-cell, unless `appearance.dim_unfocused` needs each cell.
 - **Style caching**: LRU cache with sequence-based change detection (40-60% allocation reduction).
 - **Viewport culling**: Off-screen and minimized panes skip rendering.
 - **Memory pooling**: Pooled strings, buffers, and styles.
@@ -298,8 +298,9 @@ installs the pure Go one, and `tuios --version` says which is installed.
 
 ```bash
 go test ./...              # Run tests
-go vet ./...               # Lint
-staticcheck ./...          # Static analysis
+go vet ./...               # Vet
+golangci-lint run          # Lint with the checks CI runs (.golangci.yml)
+govulncheck ./...          # Known vulnerabilities in what the build reaches
 ```
 
 **Support:** [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B81N8V1R)

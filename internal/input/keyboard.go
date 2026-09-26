@@ -1,4 +1,3 @@
-// Package input implements keyboard event handling for TUIOS.
 package input
 
 import (

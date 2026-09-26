@@ -26,6 +26,11 @@ import (
 //     still off screen. That is the positive control on the row above: a fix
 //     that only stopped the strip moving would leave the user typing into a
 //     pane they cannot see, and this suite would say so.
+//
+// One control matters most here: giving EnsureFocusedVisible the peek margin,
+// so it moves an already-visible column. That fails the "kept" row too, which
+// is how these tests are known to be bound to the threshold rather than to the
+// name of the function called.
 
 // stripClient brings up one client on one daemon session with three named
 // panes in the scrolling layout, focused on the leftmost column.

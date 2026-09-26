@@ -550,6 +550,28 @@ as an interpreter and which token was eligible to name an agent, the processes
 read behind a wrapper, and every manifest in lookup order: which one matched and
 on which predicate, and for each that refused, what it was comparing against.
 
+### Turning detection off or widening it
+
+The detector polls every pane every two seconds. Three `[daemon]` options,
+read when the daemon starts, change that:
+
+```toml
+[daemon]
+agent_autodetect = false         # off: only a harness's own reports mark a pane
+agent_detect_seconds = 5         # poll interval; 0 is the default, negative is off
+agent_binaries = ["myagent"]     # more names to treat as agents, added to the built-in list
+```
+
+Each has an environment variable the daemon reads as it starts.
+`TUIOS_AGENT_AUTODETECT` (`0`, `false`, `no` or `off` turns detection off) and
+`TUIOS_AGENT_DETECT_SECONDS` (`0` or less turns it off) count only when the
+option is unset; `TUIOS_AGENT_BINARIES`, comma separated, is added to the
+option's list. A name
+from `agent_binaries` marks the pane as an agent by its process name alone,
+with no manifest behind it, so it gets no screen or title rules; a manifest in
+the user directory (see [Your own manifests](#your-own-manifests)) is the way to
+teach tuios a harness properly.
+
 ## Screen rules
 
 An agent waiting on a human is the state that matters most and the hardest one
@@ -968,8 +990,9 @@ window with no name.
 
 Every mark is East Asian Ambiguous width, so a terminal that draws ambiguous
 characters two cells wide (common with CJK locales) should run with
-`--ascii-only` (or `appearance.ascii_only`, or the `ascii` glyph set). The
-ASCII forms keep one meaning per character: mail is `@`, a thread from another
+`--ascii-only`. The `ascii` glyph set (`appearance.glyphs`) does not change
+these marks: it covers the chrome's glyphs only. The ASCII forms keep one
+meaning per character: mail is `@`, a thread from another
 machine `~`, an Inbox item to resume `>` and mail waiting to be sent `^`, and
 none of those is a state's mark.
 

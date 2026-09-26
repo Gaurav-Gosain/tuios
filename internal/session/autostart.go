@@ -1,4 +1,3 @@
-// Package session provides daemon auto-start functionality.
 package session
 
 import (

@@ -38,7 +38,7 @@ the themes directory on each call. `tuios import-theme <file>` converts a kitty,
 ghostty, alacritty, or wezterm colour scheme into a theme file here, sniffing
 the format from the file's content.
 
-In the running app, the command palette (`Ctrl+P`) has a **Theme Picker** entry,
+In the running app, the command palette (`Ctrl+P`) has a **Theme picker** entry,
 and the settings page (`Ctrl+B` `,`) has a Theme row that opens the same picker.
 The picker is searchable and shows a color swatch for each theme; cancelling
 restores the theme that was active when you opened it.

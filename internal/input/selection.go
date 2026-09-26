@@ -1,4 +1,3 @@
-// Package input implements clipboard paste routing for TUIOS.
 package input
 
 import (

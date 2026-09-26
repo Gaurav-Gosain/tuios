@@ -115,11 +115,20 @@ top of the library:
 
 ## Accepted divergences
 
-Tracked in `TestGhosttyKnownDivergences`; each entry names which side is
-right, and an entry that starts agreeing must be deleted.
+Two are tracked in `TestGhosttyKnownDivergences`; each entry names which
+side is right, and an entry that starts agreeing fails the test until it is
+deleted.
 
-- SGR 21 (double underline): the library honors it, the pure emulator
-  drops it. The library is right.
+- SGR `4:7`, an underline style no standard defines: the library falls back to
+  a single underline, the pure emulator leaves the underline off, as tmux does.
+  Neither is wrong by any specification.
+- SGR `1;38;0`, colour type 0: the library reads the 0 as SGR 0 and resets the
+  bold, the pure emulator consumes it as the colour type, as xterm and tmux
+  do. The pure emulator is right.
+
+The pure emulator now reads SGR 21 as a double underline, as the library does,
+so that entry is gone. These differ by design and have no entry:
+
 - Resize semantics: the library reflows wrapped lines and moves rows
   between screen and history; the pure emulator clips. Both are valid
   terminal behaviors; the reflow is what Ghostty itself does.

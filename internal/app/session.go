@@ -1,4 +1,3 @@
-// Package app provides the core TUIOS application logic and window management.
 package app
 
 import (
