@@ -441,7 +441,7 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 		m.applyInboxSnapshot(inner)
 		m.noteAgentsSeen()
 	case InboxEventsMsg:
-		cmd = m.applyInboxEvents(inner)
+		cmd = tea.Batch(m.applyInboxEvents(inner), m.foreignAgentRefreshCmd(inner.Events))
 		m.noteAgentsSeen()
 	case InboxDownMsg:
 		m.applyInboxDown(inner)
@@ -453,6 +453,34 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	}
 	return tea.Batch(cmd, m.InboxApprovalFetch(), m.InboxRecapFetch(), listenForInbox(m.inboxEvents))
 }
+
+// foreignAgentRefreshCmd refreshes the session listing when an attention event
+// is about another session on this machine and the rail is on screen. The rail
+// reads other sessions' agent state from that listing, which is otherwise
+// polled every few seconds, while the dock reads this event at once. Without
+// the refresh the dock said "2 agents need you in docs" for up to three
+// seconds while the rail's row for docs still showed a plain session.
+func (m *OS) foreignAgentRefreshCmd(events []InboxEvent) tea.Cmd {
+	if m.DaemonClient == nil || !m.SidebarActive() {
+		return nil
+	}
+	attached := m.DaemonClient.SessionName()
+	for _, ev := range events {
+		if ev.Item != nil && ev.Item.Host == "" && ev.Item.Session != attached {
+			client := m.DaemonClient
+			return func() tea.Msg {
+				client.TryRefreshSessionList()
+				return foreignListingRefreshedMsg{}
+			}
+		}
+	}
+	return nil
+}
+
+// foreignListingRefreshedMsg says a listing refresh asked for by an attention
+// event has landed. Its only job is to reach Update, so the rail is drawn from
+// the new listing now rather than on whatever message comes next.
+type foreignListingRefreshedMsg struct{}
 
 // applyInboxSnapshot replaces the mirror with a fresh listing.
 func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {

@@ -1736,6 +1736,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case inboxWatchMsg:
 		return m, m.handleInboxWatch(msg)
 
+	case foreignListingRefreshedMsg:
+		return m, nil
+
 	case InboxAlertDueMsg:
 		m.applyInboxAlertDue(msg)
 		return m, nil
