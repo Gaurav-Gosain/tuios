@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,9 +38,15 @@ type vtgenRepro struct {
 	SplitSeed uint64 `json:"split_seed"`
 	// BudgetMS, when set, is how long all the oracles together may take. It
 	// pins a performance fix, so it is set well above the fixed time and well
-	// below the time the bug took.
-	BudgetMS int          `json:"budget_ms,omitempty"`
-	Script   vtgen.Script `json:"script"`
+	// below the time the bug took. The race detector multiplies the time by
+	// more than any margin a budget can keep, so an instrumented build skips
+	// it and relies on BudgetAllocMB.
+	BudgetMS int `json:"budget_ms,omitempty"`
+	// BudgetAllocMB, when set, is how many megabytes all the oracles together
+	// may allocate. Unlike the time it does not move with the machine, its
+	// load or the race detector, so it holds in every build.
+	BudgetAllocMB uint64       `json:"budget_alloc_mb,omitempty"`
+	Script        vtgen.Script `json:"script"`
 }
 
 // pinnable renders a failing script in the form a file here takes.
@@ -46,6 +54,10 @@ func pinnable(s vtgen.Script, seed uint64, broken string) string {
 	b, err := json.MarshalIndent(vtgenRepro{Why: broken, SplitSeed: seed, Script: s}, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("(cannot render the repro: %v)", err)
+	}
+	var back vtgenRepro
+	if err := json.Unmarshal(b, &back); err != nil || !reflect.DeepEqual(back.Script, s) {
+		return fmt.Sprintf("(the repro does not read back as the same script, so pinning it would guard something else: %v)\n%s", err, b)
 	}
 	return "to pin it, save as " + vtgenReproDir + "/<what-it-broke>.json:\n" + string(b)
 }
@@ -71,6 +83,9 @@ func TestVTGenRepros(t *testing.T) {
 			if len(r.Script) == 0 || r.Why == "" {
 				t.Fatalf("%s: a pinned script needs steps and a why", f)
 			}
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
 			start := time.Now()
 			for _, o := range []struct {
 				name string
@@ -85,8 +100,13 @@ func TestVTGenRepros(t *testing.T) {
 					t.Errorf("%s (%s): %s\n\n%s", o.name, r.Why, broken, r.Script)
 				}
 			}
-			if took := time.Since(start); r.BudgetMS > 0 && took > time.Duration(r.BudgetMS)*time.Millisecond {
+			took := time.Since(start)
+			runtime.ReadMemStats(&after)
+			if r.BudgetMS > 0 && !raceEnabled && took > time.Duration(r.BudgetMS)*time.Millisecond {
 				t.Errorf("the oracles took %s, over the %dms budget (%s)", took, r.BudgetMS, r.Why)
+			}
+			if mb := (after.TotalAlloc - before.TotalAlloc) >> 20; r.BudgetAllocMB > 0 && mb > r.BudgetAllocMB {
+				t.Errorf("the oracles allocated %d MB, over the %d MB budget (%s)", mb, r.BudgetAllocMB, r.Why)
 			}
 		})
 	}

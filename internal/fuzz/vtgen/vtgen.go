@@ -16,10 +16,13 @@
 package vtgen
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Seq is one step of a script: bytes to write, or a resize, with a description
@@ -38,6 +41,52 @@ type Seq struct {
 
 	// Cols and Rows are the new size when Kind is "resize".
 	Cols, Rows int
+}
+
+// seqJSON is a Seq as a pinned script stores it. encoding/json writes each
+// byte of a string that is not UTF-8 as U+FFFD, and a script is full of such
+// bytes: eight-bit controls, overlong and CESU-8 encodings, lone continuation
+// bytes. A step carrying one is stored in BytesQuoted instead, as a Go string
+// literal without its quotes, so reading the file back gives the same bytes.
+// A step of valid UTF-8 keeps the plain Bytes field, which reads better.
+type seqJSON struct {
+	Kind        string
+	Bytes       string
+	BytesQuoted string `json:",omitempty"`
+	Desc        string
+	Cols, Rows  int
+}
+
+// MarshalJSON writes the step so that UnmarshalJSON gives back the same bytes.
+func (s Seq) MarshalJSON() ([]byte, error) {
+	j := seqJSON{Kind: s.Kind, Bytes: s.Bytes, Desc: s.Desc, Cols: s.Cols, Rows: s.Rows}
+	if !utf8.ValidString(s.Bytes) {
+		q := strconv.Quote(s.Bytes)
+		j.Bytes, j.BytesQuoted = "", q[1:len(q)-1]
+	}
+	return json.Marshal(j)
+}
+
+// UnmarshalJSON reads a step written by MarshalJSON, or by hand with either
+// Bytes or BytesQuoted.
+func (s *Seq) UnmarshalJSON(b []byte) error {
+	var j seqJSON
+	if err := json.Unmarshal(b, &j); err != nil {
+		return err
+	}
+	*s = Seq{Kind: j.Kind, Bytes: j.Bytes, Desc: j.Desc, Cols: j.Cols, Rows: j.Rows}
+	if j.BytesQuoted == "" {
+		return nil
+	}
+	if j.Bytes != "" {
+		return errors.New("a step sets both Bytes and BytesQuoted")
+	}
+	raw, err := strconv.Unquote(`"` + j.BytesQuoted + `"`)
+	if err != nil {
+		return fmt.Errorf("BytesQuoted %q is not a Go string literal: %w", j.BytesQuoted, err)
+	}
+	s.Bytes = raw
+	return nil
 }
 
 // Script is a run.
