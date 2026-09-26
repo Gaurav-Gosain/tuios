@@ -117,7 +117,7 @@ func (m *OS) GetFocusedWindowID() string {
 // resolveWindowTarget resolves a window target string to a window ID.
 // If target is empty, returns the focused window ID.
 // Matching order: exact ID, the position list-windows prints (all-digit
-// targets), a unique ID prefix, window name (CustomName then Title). The
+// targets), window name (CustomName then Title), a unique ID prefix. The
 // order matches the daemon-side findWindowStateIndex so a target means the
 // same thing whether or not a client is attached.
 func (m *OS) resolveWindowTarget(target string) (string, error) {
@@ -141,6 +141,17 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		return m.Windows[idx].ID, nil
 	}
 
+	// Window name (CustomName first, then Title), before the id prefix: a
+	// name made of hex digits is also a prefix of some window's uuid now and
+	// then, and the name is the one the caller meant. See findWindowStateIndex.
+	matches := m.findWindowsByName(target)
+	if len(matches) == 1 {
+		return matches[0].ID, nil
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
+	}
+
 	// Try unique ID prefix match
 	var prefixMatch *terminal.Window
 	prefixCount := 0
@@ -155,15 +166,6 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 	}
 	if prefixCount > 1 {
 		return "", fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
-	}
-
-	// Try window name match (CustomName first, then Title)
-	matches := m.findWindowsByName(target)
-	if len(matches) == 1 {
-		return matches[0].ID, nil
-	}
-	if len(matches) > 1 {
-		return "", fmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
 	}
 
 	return "", fmt.Errorf("no window found matching %q", target)

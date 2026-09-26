@@ -41,9 +41,9 @@ func (s *SessionState) workspaceBound() int {
 
 // findWindowStateIndex resolves a window target string to an index into
 // state.Windows. It matches, in order: an exact window ID, the position that
-// list-windows prints when the target is all digits and in range, a unique
-// window ID prefix, an exact CustomName, then an exact Title. It returns -1
-// when there is no match, and an error when a prefix or name is ambiguous.
+// list-windows prints when the target is all digits and in range, an exact
+// CustomName, an exact Title, then a unique window ID prefix. It returns -1
+// when there is no match, and an error when a name or prefix is ambiguous.
 func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	if target == "" {
 		return -1, fmt.Errorf("empty window target")
@@ -63,25 +63,18 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		return idx, nil
 	}
 
-	// Unique ID prefix.
-	prefixIdx, prefixCount := -1, 0
-	for i := range windows {
-		if strings.HasPrefix(windows[i].ID, target) {
-			prefixIdx = i
-			prefixCount++
-		}
-	}
-	if prefixCount == 1 {
-		return prefixIdx, nil
-	}
-	if prefixCount > 1 {
-		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
-			describeWindows(windows, func(w WindowState) bool { return strings.HasPrefix(w.ID, target) }))
-	}
-
-	// Exact name. A name given with set-window or new-window wins over a
-	// title, which the program in the window sets and can change at any time,
-	// so a window's own name cannot be shadowed by another window's title.
+	// Exact name, before the id prefix. A window id is a uuid, so any name
+	// made only of hex digits ("db", "cafe", "a1") is also a prefix of an id
+	// some of the time, about once in 256 windows for a two letter name. With
+	// the prefix tried first, a target naming one window reached whichever
+	// other window's id happened to start with it, and set-agent-state on
+	// "db" reported success for a pane that was never touched. A name is what
+	// a person typed on purpose; an id prefix that is also somebody's name is
+	// a coincidence.
+	//
+	// A name given with set-window or new-window wins over a title, which the
+	// program in the window sets and can change at any time, so a window's own
+	// name cannot be shadowed by another window's title.
 	for _, byName := range []func(w WindowState) bool{
 		func(w WindowState) bool { return w.CustomName == target },
 		func(w WindowState) bool { return w.Title == target },
@@ -100,6 +93,22 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 			return -1, fmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
 				describeWindows(windows, byName))
 		}
+	}
+
+	// Unique ID prefix.
+	prefixIdx, prefixCount := -1, 0
+	for i := range windows {
+		if strings.HasPrefix(windows[i].ID, target) {
+			prefixIdx = i
+			prefixCount++
+		}
+	}
+	if prefixCount == 1 {
+		return prefixIdx, nil
+	}
+	if prefixCount > 1 {
+		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
+			describeWindows(windows, func(w WindowState) bool { return strings.HasPrefix(w.ID, target) }))
 	}
 
 	return -1, fmt.Errorf("no window found matching %q", target)

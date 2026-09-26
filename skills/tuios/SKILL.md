@@ -73,9 +73,10 @@ session is used, which is a guess when several are live. Inside a pane, pass
 `-s "$TUIOS_SESSION"`.
 
 Windows are addressed with `-w`, which takes, in order: the full uuid, the index
-`list-windows` prints (all digits), a unique id prefix, or the exact window
-name (a name you gave, before a program's title). An ambiguous prefix or name
-is an error, never a guess. The index shifts when an earlier window closes, so
+`list-windows` prints (all digits), the exact window name (a name you gave,
+before a program's title), or a unique id prefix. A name wins over a prefix, so
+a pane called `db` is never mistaken for a pane whose id starts with `db`. An
+ambiguous name or prefix is an error, never a guess. The index shifts when an earlier window closes, so
 a script holds the id or the name.
 
 A pane running an agent is a window like any other and is addressed the same

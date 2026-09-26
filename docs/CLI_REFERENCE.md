@@ -822,7 +822,7 @@ tuios send-keys <keys> [flags]
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
-- `-w, --window <target>`: Target window: full id, the index `list-windows` prints, a unique id prefix, or the exact name (default: the attached client, else the focused window)
+- `-w, --window <target>`: Target window: full id, the index `list-windows` prints, the exact name, or a unique id prefix (default: the attached client, else the focused window)
 - `-N, --repeat <n>`: Send the whole sequence n times, 1 to 1000 (default 1)
 - `-l, --literal`: Write the argument to the window's terminal unchanged, with no key names
 - `-r, --raw`: Treat each character as a separate key (no splitting on space/comma)
