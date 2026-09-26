@@ -405,6 +405,38 @@ func TestReviewWrappedNoteIsOneStop(t *testing.T) {
 	t.Logf("frames in %s", dir)
 }
 
+// TestReviewNarrowSplitNoticeGoesWithTheSplit asks for the split view on an
+// 80 column screen, where two columns do not fit, and then for one column
+// again. The status line says the split does not fit, and it has to stop
+// saying so once one column is back: it used to stay for the notification's
+// whole six seconds over the unified view it had just recommended.
+//
+// How this could pass wrongly, written down first:
+//   - The notice could never appear, and then its going proves nothing, so
+//     it is waited for first.
+//   - It fades on its own after six seconds, so the wait for it to go is
+//     two seconds, well inside that.
+//
+// Negative control: without the statusID reset in ReviewToggleSplit, the
+// notice is still on screen two seconds after the second s.
+func TestReviewNarrowSplitNoticeGoesWithTheSplit(t *testing.T) {
+	const notice = "Too narrow for two columns"
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "nn")
+	term := attachIn(t, base, session, startOpts{cols: 80, rows: 24})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "M README", "esc close")
+	sendKeys(t, term, "s")
+	waitScreen(t, term, "s on a narrow column did not say the split does not fit", notice)
+	sendKeys(t, term, "s")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), notice)
+	}, 2*time.Second); err != nil {
+		t.Fatalf("back on one column, the status line still says the split does not fit: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "review-unified-again")
+}
+
 // TestReviewFooterKeepsItsRightMargin opens the split view at 120 columns,
 // where its keys fill the footer to within a cell. The footer kept a cell of
 // margin on the left only, so a strip that fitted to the cell ran into the
