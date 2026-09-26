@@ -180,7 +180,7 @@ The aggregate view is a searchable list of **every window across every
 workspace**, with a short preview of each window's content. It is the fastest
 way to find a pane when you have windows spread over several workspaces.
 
-Open it from the command palette: `Ctrl+P`, then "Aggregate View (All Windows)".
+Open it from the command palette: `Ctrl+P`, then "All windows".
 It has no default keybinding.
 
 | Key | Action |
@@ -200,8 +200,8 @@ joined with ` | ` and truncated to 80 characters. It is a snapshot taken when th
 list is built, not a live view.
 
 Each entry carries the window's working directory, so searching by directory
-works. The directory is read from the shell's process on Linux only; on other
-platforms it is empty.
+works. The directory is read from the shell's process on Linux (procfs) and
+macOS (libproc); on other platforms it is empty.
 
 Limitations: minimized and floating windows are included and marked rather than
 filtered out.
@@ -215,8 +215,8 @@ hosts.
 | Input | Action |
 |---|---|
 | `Ctrl+Shift+Click` on a window | Add or remove that window from the multifocus set |
-| Palette: "Toggle Multifocus" | Add or remove the currently focused window |
-| Palette: "Clear Multifocus" | Empty the set |
+| Palette: "Toggle multifocus" | Add or remove the currently focused window |
+| Palette: "Clear multifocus" | Empty the set |
 
 Windows in the set are drawn with a distinct border color so it is obvious which
 ones will receive your keystrokes. A notification reports the size of the set as

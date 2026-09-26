@@ -239,7 +239,7 @@ tuios kill-session mysession # Kill session
 
 ```bash
 # In-app: Ctrl+B, L, l to load / Ctrl+B, L, s to save
-# Or via command palette: Ctrl+P → "Save Layout" / "Load Layout"
+# Or via command palette: Ctrl+P → "Save layout" / "Load layout"
 
 # CLI:
 tuios layout list            # List saved layouts
