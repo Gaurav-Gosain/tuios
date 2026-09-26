@@ -229,7 +229,7 @@ type AppearanceConfig struct {
 	// prefix command, in milliseconds, so ctrl+b then left left left walks
 	// three columns. Zero turns it off. This is tmux's repeat-time.
 	PrefixRepeatTime       *int   `toml:"prefix_repeat_time"`
-	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS (default: 60, max: 120)
+	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS: 0 uses 60, otherwise 10 to 120
 	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
@@ -243,7 +243,7 @@ type AppearanceConfig struct {
 	ZoomFollowsFocus       *bool  `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
 	WindowButtonZoom       *bool  `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
-	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
+	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
 	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
 	// because that is what a settings stepper and a CLI argument can carry: the
@@ -472,7 +472,7 @@ type ScrollbarConfig struct {
 	Style string `toml:"style"` // thin, track (default: track)
 	Thumb string `toml:"thumb"` // one-cell glyph (default: thin ▐, track █, ASCII |)
 	Track string `toml:"track"` // one-cell glyph or none (default: thin ▕, track the surface fill, ASCII none)
-	Tint  string `toml:"tint"`  // border, muted, #RRGGBB (default: border)
+	Tint  string `toml:"tint"`  // quiet, border, muted, #RRGGBB (default: quiet)
 }
 
 // SelectionConfig holds the [appearance.selection] table: the colours a pane
