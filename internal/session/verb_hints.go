@@ -203,8 +203,12 @@ func validateCaptureSource(source string) *verbError {
 const maxEchoedName = 128
 
 // echoName renders a caller-supplied name for an error message, truncating it
-// so the response stays proportional to the request.
+// so the response stays proportional to the request. An empty name comes back
+// as "", so a message about it does not end in a blank.
 func echoName(name string) string {
+	if name == "" {
+		return `""`
+	}
 	if len(name) <= maxEchoedName {
 		return name
 	}

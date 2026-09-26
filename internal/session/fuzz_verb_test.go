@@ -133,20 +133,22 @@ func FuzzVerbDispatch(f *testing.F) {
 			verr := checkParamNames(req.Verb, entry, req.Params)
 			var got map[string]json.RawMessage
 			isObject := len(bytes.TrimSpace(req.Params)) > 0 && json.Unmarshal(req.Params, &got) == nil
-			undeclared := ""
+			// hasUndeclared is kept apart from the name because "" is a
+			// name a client can send, and no verb declares it.
+			undeclared, hasUndeclared := "", false
 			for name := range got {
 				declared := false
 				for _, p := range entry.params {
 					declared = declared || p.Name == name
 				}
 				if !declared {
-					undeclared = name
+					undeclared, hasUndeclared = name, true
 				}
 			}
 			switch {
-			case isObject && undeclared != "" && verr == nil:
+			case isObject && hasUndeclared && verr == nil:
 				t.Fatalf("%s accepted undeclared parameter %q", req.Verb, undeclared)
-			case (!isObject || undeclared == "") && verr != nil:
+			case (!isObject || !hasUndeclared) && verr != nil:
 				t.Fatalf("%s refused params %s with only declared names: %s", req.Verb, req.Params, verr.Message)
 			case verr != nil && verr.Code != ErrVerbInvalidParams:
 				t.Fatalf("%s refused an undeclared parameter with code %q", req.Verb, verr.Code)
