@@ -104,7 +104,7 @@ var macOptionTabMap = map[string]string{
 // The four dead keys (e, i, n, u) emit their accent only once a second key ends
 // the composition, so the glyph below is what arrives after that; a terminal that
 // swallows the dead key entirely gives tuios nothing to match, which is what
-// macOptionAdvice exists to explain.
+// MacOptionAdvice exists to explain.
 var macOptionLetters = map[string]string{
 	"a": "å", "b": "∫", "c": "ç", "d": "∂", "e": "´", "f": "ƒ", "g": "©",
 	"h": "˙", "i": "ˆ", "j": "∆", "k": "˚", "l": "¬", "m": "µ", "n": "˜",

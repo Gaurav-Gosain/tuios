@@ -62,7 +62,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	viewportHeight := m.GetUsableHeight()
 	// The sidebar reserves a horizontal band, so the content region a pane may
 	// occupy runs from leftMargin to rightClip rather than 0 to the full render
-	// width. leftClip/rightClip are the absolute screen columns the content is
+	// width. leftMargin/rightClip are the absolute screen columns the content is
 	// clipped to; the sidebar layer (composed below at a high Z) paints over the
 	// reserved band, so a pane that overruns into it is covered.
 	leftMargin := m.GetLeftMargin()

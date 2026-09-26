@@ -168,7 +168,7 @@ func TestVerbConnectionSurvivesBadLine(t *testing.T) {
 	}
 }
 
-// TestVerbIDEchoTypes verifies both numeric and string ids echo back verbatim.
+// TestVerbIDEcho verifies both numeric and string ids echo back verbatim.
 func TestVerbIDEcho(t *testing.T) {
 	_, sp := startTestDaemon(t)
 	c := dialVerb(t, sp)

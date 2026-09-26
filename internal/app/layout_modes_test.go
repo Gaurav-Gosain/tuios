@@ -182,8 +182,7 @@ var contractSizes = []struct{ w, h int }{{160, 48}, {120, 40}, {80, 24}, {51, 37
 // scheme is the limit, not its arithmetic: a fresh tree splits the pane it just
 // inserted, so the nth pane is a 2^(n-1)th of the screen and the ninth is one
 // 256th of it, a single row on any terminal a person owns. Six is where a
-// split is still a split. TestBSPExhaustsTheRegionByHalvingIt states that limit
-// on its own so it cannot drift quietly.
+// split is still a split.
 func contractCounts(mode string) []int {
 	if mode == LayoutModeBSP {
 		return []int{1, 2, 3, 4, 5, 6}

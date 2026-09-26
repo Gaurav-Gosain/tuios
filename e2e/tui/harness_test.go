@@ -738,6 +738,12 @@ func runInShell(t *testing.T, term *tuitest.Terminal, cmd, want string, timeout 
 	}
 }
 
+// renameDialogUp reports whether the rename micro-dialog is on screen.
+func renameDialogUp(s tuitest.Screen) bool {
+	text := s.Text()
+	return strings.Contains(text, "rename") && strings.Contains(text, "esc cancel")
+}
+
 // renameWindow renames the focused window through the rename keybinding and
 // only returns once the name is committed.
 //
@@ -752,11 +758,6 @@ func runInShell(t *testing.T, term *tuitest.Terminal, cmd, want string, timeout 
 // The commit still requires the dialog gone as well as the name present: the
 // dialog renders the buffer as you type, so the name alone was satisfied by the
 // harness's own keystrokes and said nothing about enter.
-func renameDialogUp(s tuitest.Screen) bool {
-	text := s.Text()
-	return strings.Contains(text, "rename") && strings.Contains(text, "esc cancel")
-}
-
 func renameWindow(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 
@@ -1113,8 +1114,8 @@ func mouseHover(t *testing.T, term *tuitest.Terminal, col, row int) {
 //
 // It is spelled out rather than imported because this module does not depend on
 // the one under test. Nothing else in the app draws it, and no notification
-// contains it, so a plain search of the screen is unambiguous. TestTilingChip
-// pins it against the real binary.
+// contains it, so a plain search of the screen is unambiguous.
+// TestTheDockChipTracksTiling pins it against the real binary.
 const tilingModeIcon = "\uf00a"
 
 // tilingIsOn reports whether the dock says the session is tiled.

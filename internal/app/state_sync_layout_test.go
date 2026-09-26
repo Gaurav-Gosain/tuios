@@ -137,8 +137,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 // It does not assert that a geometry-only sync is adopted verbatim whatever it
 // says. Under tiling a pane's rectangle is not shared state: it is what the
 // shared tree and the client's own render size come to between them, so a
-// rectangle from a differently sized peer is not this client's answer. See
-// TestSyncFromASmallerPeerIsRetiled.
+// rectangle from a differently sized peer is not this client's answer.
 func TestSyncFromAnEqualPeerDoesNotRetile(t *testing.T) {
 	const existingID = "win-0000-0000-0000-0000-000000000001"
 

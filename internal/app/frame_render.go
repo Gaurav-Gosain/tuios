@@ -15,7 +15,7 @@ import (
 // and joins them again: two more copies of the frame. Under a flood the diff's
 // allocations were near half of every object the client allocated per frame.
 //
-// renderFrame writes the same bytes. Each step of Lines.Render is kept in the
+// frameRenderer.render writes the same bytes. Each step of Lines.Render is kept in the
 // same order with the same conditions, so the test that compares the two over
 // random cell buffers is the definition of done here; what changed is only
 // how each step is answered. Equality is asked of the structs first and of

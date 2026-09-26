@@ -739,7 +739,7 @@ func explainResurrectFailure(sessionName string, err error) error {
 			for _, info := range infos {
 				names = append(names, info.Name)
 			}
-			if closest := closestName(sessionName, names); closest != "" {
+			if closest := session.ClosestMatch(sessionName, names); closest != "" {
 				e.Extra = append(e.Extra, fmt.Sprintf("Did you mean %q?", closest))
 			}
 			e.Extra = append(e.Extra, "Restorable: "+strings.Join(truncateList(names, 12), ", ")+".")

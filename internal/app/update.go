@@ -258,10 +258,6 @@ func getInputHandler() InputHandler {
 	return nil
 }
 
-// Init initializes the TUIOS application and returns initial commands to run.
-// It starts the tick timer and listens for window exits.
-// Note: Mouse tracking, bracketed paste, and focus reporting are now configured
-// in the View() method as per bubbletea v2.0.0-beta.5 API changes.
 // reportConfigWarnings puts the config problems found at load time in front of
 // the user. They are written to the in-app log (leader D l) rather than to
 // stdout, because loading happens before the alternate screen is entered and
@@ -281,6 +277,10 @@ func (m *OS) reportConfigWarnings() {
 	)
 }
 
+// Init initializes the TUIOS application and returns initial commands to run.
+// It starts the tick timer and listens for window exits.
+// Note: Mouse tracking, bracketed paste, and focus reporting are now configured
+// in the View() method as per bubbletea v2.0.0-beta.5 API changes.
 func (m *OS) Init() tea.Cmd {
 	m.reportConfigWarnings()
 
@@ -515,14 +515,16 @@ func IdleTickCmd() tea.Cmd {
 	})
 }
 
-// ListenForPTYData returns a Cmd that blocks until a PTY reader signals
-// new data, then sends a PTYDataMsg to trigger re-rendering.
+// autoScrollTick schedules the next AutoScrollTickMsg, which keeps scrolling
+// while a drag is held outside the content area.
 func autoScrollTick() tea.Cmd {
 	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 		return AutoScrollTickMsg{}
 	})
 }
 
+// ListenForPTYData returns a Cmd that blocks until a PTY reader signals
+// new data, then sends a PTYDataMsg to trigger re-rendering.
 func ListenForPTYData(ch <-chan struct{}) tea.Cmd {
 	return func() tea.Msg {
 		<-ch

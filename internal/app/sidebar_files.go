@@ -1,9 +1,7 @@
 package app
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -158,7 +157,7 @@ type fileListMsg struct {
 // can hand it a directory that never answers and check that the client keeps
 // drawing, which is the whole claim this design makes and the one thing a
 // synchronous read could not pass.
-var readDirFunc = readDirCapped
+var readDirFunc = session.ReadDirCapped
 
 // queueSidebarCmd parks a command a rail row produced.
 //
@@ -448,7 +447,7 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 		spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
 		items, capped, err := readDirFunc(dir, fileViewMaxEntries)
 		if err != nil {
-			return fileListMsg{Gen: gen, Dir: dir, Err: fileViewError(err), Spoofed: spoofed}
+			return fileListMsg{Gen: gen, Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
 		}
 		entries := make([]fileEntry, 0, len(items))
 		for _, it := range items {
@@ -681,59 +680,6 @@ func (m *OS) RefreshFileView() tea.Cmd {
 		return nil
 	}
 	return m.requestFileList(m.filesView.Want, m.filesView.Origin, m.filesView.Pinned)
-}
-
-// readDirCapped reads at most limit names from dir and says whether there were
-// more.
-//
-// os.ReadDir is the obvious call and the wrong one here: it reads the whole
-// directory and sorts it before returning, so its cost is the directory's size
-// and there is no point at which a caller can stop it. This opens the directory
-// and takes one bounded batch instead, then asks for one more name only to find
-// out whether the listing is complete.
-//
-// The batch arrives in whatever order the filesystem hands it over, unlike
-// os.ReadDir's sorted result. The caller sorts it either way, so the only thing
-// that changes is which names a capped listing holds, and on a directory that
-// large there is no ordering that makes the cut the right one.
-func readDirCapped(dir string, limit int) (entries []os.DirEntry, capped bool, err error) {
-	f, err := os.Open(dir)
-	if err != nil {
-		return nil, false, err
-	}
-	defer func() { _ = f.Close() }()
-
-	// io.EOF is how a directory with fewer than limit names left in it reports
-	// that it is finished, so it is the expected end and not a failure.
-	entries, err = f.ReadDir(limit)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, false, err
-	}
-	if len(entries) < limit {
-		return entries, false, nil
-	}
-	more, err := f.ReadDir(1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		// The batch above is good and the only thing this second read decides is
-		// a note on one row, so a failure here loses the note rather than the
-		// listing.
-		return entries, false, nil
-	}
-	return entries, len(more) > 0, nil
-}
-
-// fileViewError turns a read failure into one short sentence the rail can draw.
-// The wrapped error carries the whole path, which is already on the header row
-// above it and does not fit twice.
-func fileViewError(err error) string {
-	switch {
-	case os.IsNotExist(err):
-		return "That folder is gone."
-	case os.IsPermission(err):
-		return "You can not read that folder."
-	default:
-		return "Could not read that folder."
-	}
 }
 
 // FileViewUp walks to the parent directory. At the root there is no parent and

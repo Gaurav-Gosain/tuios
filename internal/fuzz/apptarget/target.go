@@ -215,7 +215,7 @@ func (t *Target) Close() {
 	}
 }
 
-// clock is a monotonic stand-in for wall time. Ticks carry a timestamp and
+// ticks is a monotonic stand-in for wall time. Ticks carry a timestamp and
 // several code paths compare it against a stored one, so a run driven by
 // time.Now would take a different branch on a slow machine and stop
 // reproducing.

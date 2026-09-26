@@ -75,16 +75,6 @@ const (
 // had to stall. A variable so a test can lower it.
 var maxQueuedBytes int64 = 16 << 20
 
-// outputWriter is a goroutine that serializes writes to the terminal emulator.
-// It batches pending chunks into capped VT writes and coalesces render
-// signals to prevent partial-frame flickering.
-//
-// The anti-flicker mechanism: instead of signaling a re-render on every
-// VT write (which shows incomplete frames mid-sync-update), we defer the
-// signal. A separate renderCoalescer goroutine fires at a capped rate and
-// only signals when there's actually new output. The cap is ~120fps while
-// frames are cheap and widens with what a frame actually costs; see
-// coalesceInterval.
 // outputChunk is one queued batch of daemon output and the epoch it was queued
 // under. See Window.outputEpoch.
 type outputChunk struct {
@@ -157,6 +147,16 @@ func (w *Window) noteOutput() {
 	}
 }
 
+// outputWriter is a goroutine that serializes writes to the terminal emulator.
+// It batches pending chunks into capped VT writes and coalesces render
+// signals to prevent partial-frame flickering.
+//
+// The anti-flicker mechanism: instead of signaling a re-render on every
+// VT write (which shows incomplete frames mid-sync-update), we defer the
+// signal. A separate renderCoalescer goroutine fires at a capped rate and
+// only signals when there's actually new output. The cap is ~120fps while
+// frames are cheap and widens with what a frame actually costs; see
+// coalesceInterval.
 func (w *Window) outputWriter() {
 	defer func() {
 		if r := recover(); r != nil {

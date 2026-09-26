@@ -45,7 +45,7 @@ func awaitAskItem(t *testing.T, c *verbConn) map[string]any {
 	}
 }
 
-// answerAsk calls answer-ask with the given nonce.
+// answerAskCall calls answer-ask with the given nonce.
 func answerAskCall(t *testing.T, c *verbConn, requestID, answer, nonce string) map[string]any {
 	t.Helper()
 	raw, _ := json.Marshal(map[string]any{"request_id": requestID, "answer": answer, "human_nonce": nonce})

@@ -54,7 +54,7 @@ type SSHServerConfig struct {
 	Overrides config.Overrides
 }
 
-// sshServerContext holds the server-wide context for daemon mode
+// sshServerConfig holds the server-wide configuration for daemon mode.
 var sshServerConfig *SSHServerConfig
 
 // applyAppearanceOnce guards the process-wide appearance-config application.

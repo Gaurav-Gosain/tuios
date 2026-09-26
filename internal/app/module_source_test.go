@@ -88,7 +88,7 @@ func selectorCall(call *ast.CallExpr) (pkg, name string, ok bool) {
 	return ident.Name, sel.Sel.Name, true
 }
 
-// enclosingFuncs walks a file and calls visit for every function declaration
+// forEachFuncBody walks a file and calls visit for every function declaration
 // and literal with its body, innermost last.
 func forEachFuncBody(file *ast.File, visit func(name string, body *ast.BlockStmt)) {
 	ast.Inspect(file, func(n ast.Node) bool {

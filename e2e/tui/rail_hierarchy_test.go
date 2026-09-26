@@ -45,7 +45,6 @@ func nameColOf(s tuitest.Screen, row int, name string) int {
 	return len([]rune(line[:i]))
 }
 
-// boldAt reports whether the cell at (col, row) is drawn bold.
 // ruledAfter reports whether a heading's rule runs out of the name on this row.
 // It looks for the rule glyph anywhere to the right of where the name ends,
 // which is where the heading draws it and where no item row draws anything.
@@ -59,6 +58,7 @@ func ruledAfter(s tuitest.Screen, row, fromCol int) bool {
 	return false
 }
 
+// boldAt reports whether the cell at (col, row) is drawn bold.
 func boldAt(s tuitest.Screen, col, row int) bool {
 	return s.Cell(col, row).Bold
 }

@@ -1,15 +1,17 @@
 // Package federation carries the link layer between one tuios daemon and the
 // daemons of other machines the user has named in config.
 //
-// The shape, from ~/tuios-federation.md sections 2 and 4: the local daemon is a
-// hub that dials out over ssh, remote daemons are passive and never dial back,
-// and there is no mesh. A link is an `ssh <addr> tuios stdio-proxy` child
-// process whose stdio carries the framing in this file, multiplexed so one ssh
-// connection can hold several logical streams (stage 1 uses one, the control
-// stream).
+// The shape: the local daemon is a hub that dials out over ssh, remote daemons
+// are passive and never dial back, and there is no mesh. A link is an
+// `ssh <addr> tuios stdio-proxy` child process whose stdio carries the framing
+// in this file, multiplexed so one ssh connection can hold several logical
+// streams: the control stream, and one per connection a client opens through
+// open-host-connection.
 //
-// Stage 1 is read-only. Nothing in this package sends a verb that mutates
-// remote state; the only calls made are listings and the hello handshake.
+// Nothing in this package sends a verb that mutates remote state; the only
+// calls it makes are listings and the hello handshake. A stream opened for a
+// client carries that client's bytes, which this package relays and does not
+// read.
 // Everything that comes back is untrusted data from another machine: it is
 // bounded on the way in, and it is never interpreted as an instruction.
 //

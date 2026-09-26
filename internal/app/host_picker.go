@@ -42,7 +42,7 @@ type HostPickerItem struct {
 	Global bool
 }
 
-// HostPickerItems is this machine followed by every configured one, in the
+// buildHostPickerItems is this machine followed by every configured one, in the
 // order the rail lists them, so the picker and the rail agree.
 func (m *OS) buildHostPickerItems() []HostPickerItem {
 	items := []HostPickerItem{{

@@ -1237,7 +1237,7 @@ type OS struct {
 	// column: without this, sliding down from R onto G would start driving G.
 	accentDragCol int
 	// Sidebar hover: the last mouse position seen inside the band, so the row
-	// under the cursor is highlighted the way overlay rows are. HoverActive is
+	// under the cursor is highlighted the way overlay rows are. SidebarHoverActive is
 	// cleared as soon as motion leaves the band.
 	SidebarHoverActive bool
 	SidebarHoverX      int

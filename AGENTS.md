@@ -131,7 +131,7 @@ tuios/
 │   │   ├── emulator.go     # Parser state machine
 │   │   ├── screen.go       # Screen buffer management
 │   │   └── scrollback.go   # 10,000 line history
-│   ├── session/            # The daemon: sessions, PTYs (pty_unix.go, pty_windows.go), wire protocol, JSON verbs
+│   ├── session/            # The daemon: sessions, PTYs, wire protocol, JSON verbs
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
 │   ├── gitstate/           # Branch and upstream drift for the sidebar
@@ -429,9 +429,10 @@ go run ./cmd/tuios tape play examples/demo.tape
 
 ### Platform Differences
 
-- PTY handling differs: `internal/terminal/window_unix.go` vs `window_windows.go`,
-  `internal/session/pty_unix.go` vs `pty_windows.go`, and
-  `internal/ptyspawn/spawn_unix.go` vs `spawn_windows.go`
+- PTY handling differs: `internal/terminal/window_unix.go` vs `window_windows.go`
+  and `internal/ptyspawn/spawn_unix.go` vs `spawn_windows.go`. The daemon's
+  platform split is in `internal/session/daemon_unix.go` vs `daemon_windows.go`
+  and `manager_unix.go` vs `manager_windows.go`
 - Workspace keybinds differ: `opt+N` on macOS, `alt+N` on Linux
 - See `internal/config/userconfig.go` → `getDefaultWorkspaceKeybinds()`
 

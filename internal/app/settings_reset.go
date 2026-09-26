@@ -29,8 +29,7 @@ const settingsUndoLimit = 50
 //
 // The value is the registry default except for the enums whose default is the
 // empty string without the empty string being a value they accept: for those
-// the built-in is the first value they accept (TestEnumDefaultIsTheFirstAccepted
-// pins it), and writing that is what resetting them can do.
+// the built-in is the first value they accept, and writing that is what resetting them can do.
 func (m *OS) settingDefault(item settingItem) (value, shown string, ok bool) {
 	if !item.derived || item.Path == "" {
 		return "", "", false

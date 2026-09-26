@@ -109,9 +109,9 @@ func listDir(dir string, max int) *DirListingPayload {
 	}
 	out := &DirListingPayload{Dir: dir}
 
-	entries, capped, err := readDirCapped(dir, limit)
+	entries, capped, err := ReadDirCapped(dir, limit)
 	if err != nil {
-		out.Err = dirReadError(err)
+		out.Err = DirReadError(err)
 		return out
 	}
 	out.Capped = capped
@@ -192,8 +192,21 @@ func sameDirOnDisk(a, b string) bool {
 	return os.SameFile(ai, bi)
 }
 
-// readDirCapped reads at most limit names and says whether more were left.
-func readDirCapped(dir string, limit int) (entries []os.DirEntry, capped bool, err error) {
+// ReadDirCapped reads at most limit names from dir and says whether there were
+// more. The client's own listing of a local pane's directory reads through it
+// too, so the two ends cap and fail the same way.
+//
+// os.ReadDir is the obvious call and the wrong one here: it reads the whole
+// directory and sorts it before returning, so its cost is the directory's size
+// and there is no point at which a caller can stop it. This opens the directory
+// and takes one bounded batch instead, then asks for one more name only to find
+// out whether the listing is complete.
+//
+// The batch arrives in whatever order the filesystem hands it over, unlike
+// os.ReadDir's sorted result. The caller sorts it either way, so the only thing
+// that changes is which names a capped listing holds, and on a directory that
+// large there is no ordering that makes the cut the right one.
+func ReadDirCapped(dir string, limit int) (entries []os.DirEntry, capped bool, err error) {
 	f, err := os.Open(dir)
 	if err != nil {
 		return nil, false, err
@@ -219,10 +232,12 @@ func readDirCapped(dir string, limit int) (entries []os.DirEntry, capped bool, e
 	return entries, len(more) > 0, nil
 }
 
-// dirReadError turns a filesystem error into the sentence a rail row shows.
+// DirReadError turns a filesystem error into the sentence a rail row shows.
 // The row is about twenty four cells wide, so these are short on purpose, and
-// they say what is true rather than naming the syscall.
-func dirReadError(err error) string {
+// they say what is true rather than naming the syscall. The wrapped error
+// carries the whole path, which is already on the header row above it and
+// does not fit twice.
+func DirReadError(err error) string {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return "That folder is gone."

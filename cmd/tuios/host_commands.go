@@ -429,8 +429,8 @@ var stdioProxyAs string
 // interpreted as escape sequences by whatever is watching.
 //
 // It does not start a daemon. Starting one restores that machine's saved
-// sessions, which is a change to remote state, and stage 1 of federation reads
-// only. A machine with no daemon running is reported as such by 'tuios hosts'.
+// sessions, which is a change to remote state nobody on that machine asked
+// for. A machine with no daemon running is reported as such by 'tuios hosts'.
 //
 // pinnedPeer is the --as flag: the name this machine's link policy is resolved
 // for, whatever the hub says it is called. Set in a forced command in

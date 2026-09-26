@@ -15,12 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// spoofPane builds a client with one local-PTY-shaped pane whose shell really
-// sits in realDir, and makes that pane print an OSC 7 naming sayDir instead.
-//
-// The shell is a real process, because /proc is the only thing that can
-// corroborate one and a fake pgid corroborates nothing. It is started in
-// realDir with its own process group, so its pgid is its pid.
 // requireShellCWD skips when this platform cannot read another process's
 // working directory, which is the whole basis of the guard these tests assert.
 //
@@ -52,6 +46,12 @@ func requireShellCWD(t *testing.T) {
 	}
 }
 
+// spoofPane builds a client with one local-PTY-shaped pane whose shell really
+// sits in realDir, and makes that pane print an OSC 7 naming sayDir instead.
+//
+// The shell is a real process, because /proc is the only thing that can
+// corroborate one and a fake pgid corroborates nothing. It is started in
+// realDir with its own process group, so its pgid is its pid.
 func spoofPane(t *testing.T, realDir, sayDir string) *OS {
 	t.Helper()
 	requireShellCWD(t)

@@ -230,11 +230,6 @@ func collapsedRepoList(repos map[string]bool) []string {
 	return out
 }
 
-// pruneWindowKeyedState drops the accents and unread bits of windows that are
-// gone. Both maps are keyed by window ID and both are persisted, so an entry a
-// closed pane leaves behind outlives the pane in the state file and is reloaded
-// every start; the rail's signature folds every unread bit on every frame, so
-// the map's size is also a per-frame cost.
 // ownsSidebarState reports whether the state file's window IDs were written by
 // the daemon this client is talking to, which is the only case where an ID
 // missing from the listing means the pane is gone rather than that it belongs
@@ -253,6 +248,11 @@ func (m *OS) ownsSidebarState() bool {
 	return m.sidebarStateSocket == socket
 }
 
+// pruneWindowKeyedState drops the accents and unread bits of windows that are
+// gone. Both maps are keyed by window ID and both are persisted, so an entry a
+// closed pane leaves behind outlives the pane in the state file and is reloaded
+// every start; the rail's signature folds every unread bit on every frame, so
+// the map's size is also a per-frame cost.
 func (m *OS) pruneWindowKeyedState() {
 	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 && len(m.SidebarAgentSeenAt) == 0 {
 		return

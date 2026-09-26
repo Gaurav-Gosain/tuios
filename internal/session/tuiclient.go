@@ -1602,7 +1602,7 @@ func (c *TUIClient) createSession(name string, width, height int, global bool) e
 }
 
 // RefreshSessionList queries the daemon for an up-to-date session list and
-// updates the cached availableSessionNames. Blocks until response arrives.
+// updates the cached availableSessions. Blocks until response arrives.
 // Safe to call while the read loop is running.
 func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	listMsg, err := NewMessage(MsgList, nil)

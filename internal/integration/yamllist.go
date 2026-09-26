@@ -45,15 +45,16 @@ func yamlBlank(line string) bool {
 	return t == "" || strings.HasPrefix(t, "#")
 }
 
-// locate finds the list: the index of the top-level key's line (-1 when
-// absent), the end of its block, the index of the sub key's line (-1 when
-// absent), the indent its children use, and the item lines of the list.
+// yamlListPlace is where a list sits in a file's lines. See locate.
 type yamlListPlace struct {
 	key, end, sub, childIndent int
 	items                      []int
 	flowEmpty                  bool
 }
 
+// locate finds the list: the index of the top-level key's line (-1 when
+// absent), the end of its block, the index of the sub key's line (-1 when
+// absent), the indent its children use, and the item lines of the list.
 func (f yamlListItem) locate(lines []string) (yamlListPlace, error) {
 	p := yamlListPlace{key: -1, sub: -1, childIndent: 2}
 	for i, line := range lines {

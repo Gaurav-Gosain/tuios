@@ -324,17 +324,6 @@ func (m *OS) ApplyBSPLayout() {
 	}
 }
 
-// CancelSnapAnimation drops any in-flight snap animation for win.
-//
-// A snap animation owns its window's geometry until it finishes: every tick it
-// writes an interpolated rectangle, ignoring whatever else has set X, Y, Width
-// or Height in the meantime. So anything that positions a window directly has
-// to retire the animation first, or the next tick will overwrite it with a
-// frame of a transition the user has already moved past. Starting a resize
-// drag while a window is still animating into place is the ordinary way to hit
-// that: the drag sets geometry per motion event, the animation stamps its own
-// back over all of it on the next tick, and the layout jumps to wherever the
-// old transition had got to.
 // bspZoomCanvas works the camera out for a BSP layout.
 //
 // It needs two passes: the rectangle the tiler gave the zoomed pane at the
@@ -365,6 +354,17 @@ func (m *OS) bspZoomCanvas(tree *layout.BSPTree, bounds layout.Rect, layouts map
 	return m.zoomCanvasAt(zoomBounds, zoomedRect), zoomBounds, true
 }
 
+// CancelSnapAnimation drops any in-flight snap animation for win.
+//
+// A snap animation owns its window's geometry until it finishes: every tick it
+// writes an interpolated rectangle, ignoring whatever else has set X, Y, Width
+// or Height in the meantime. So anything that positions a window directly has
+// to retire the animation first, or the next tick will overwrite it with a
+// frame of a transition the user has already moved past. Starting a resize
+// drag while a window is still animating into place is the ordinary way to hit
+// that: the drag sets geometry per motion event, the animation stamps its own
+// back over all of it on the next tick, and the layout jumps to wherever the
+// old transition had got to.
 func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 	for i := len(m.Animations) - 1; i >= 0; i-- {
 		if m.Animations[i].Window == win && m.Animations[i].Type == ui.AnimationSnap {

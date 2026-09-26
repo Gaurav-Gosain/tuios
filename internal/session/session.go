@@ -592,7 +592,6 @@ type ScrollStripState struct {
 	ViewportX int `json:"viewport_x"`
 }
 
-// PTY represents a daemon-managed pseudo-terminal.
 // paneIO is where a pane's bytes come from and go to.
 //
 // A pane on this machine gets the pty the daemon spawned, which is what this
@@ -613,6 +612,7 @@ type paneIO interface {
 	Resize(width, height int) error
 }
 
+// PTY represents a daemon-managed pseudo-terminal.
 type PTY struct {
 	ID string
 	// host is the machine the process is on, empty for this one. It is what
@@ -1214,7 +1214,7 @@ func (s *Session) publishState(snap *SessionState) {
 //
 // It answers false only when fp is exactly what was forwarded last time, which
 // means every peer already holds this state and the message would tell them
-// nothing. See the call site in handleStateUpdate for why a suppressed sync
+// nothing. See the call site in handleUpdateState for why a suppressed sync
 // costs a peer nothing.
 func (s *Session) NoteBroadcastFingerprint(fp uint64) bool {
 	s.pushMu.Lock()

@@ -211,7 +211,7 @@ func TestFileReadRunsOffTheUpdateGoroutine(t *testing.T) {
 // The directory built here is one name past the cap, which is the smallest tree
 // that tells a bounded read from an unbounded one.
 //
-// Negative control, confirmed red: with readDirCapped replaced by os.ReadDir,
+// Negative control, confirmed red: with session.ReadDirCapped replaced by os.ReadDir,
 // every name is read and both assertions fail.
 func TestALargeDirectoryIsBounded(t *testing.T) {
 	dir := t.TempDir()

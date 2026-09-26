@@ -55,7 +55,7 @@ func TestStaleClientSyncKeepsDaemonCreatedWindow(t *testing.T) {
 	}
 }
 
-// TestStaleClientSyncKeepsDaemonRename covers the per-window daemon-owned
+// TestStaleClientSyncKeepsDaemonMetadata covers the per-window daemon-owned
 // fields: a rename, a workspace move and a minimize performed daemon-side must
 // all survive a client push that still carries the old values.
 func TestStaleClientSyncKeepsDaemonMetadata(t *testing.T) {

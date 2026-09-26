@@ -16,7 +16,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// wireCase writes a stream, snapshots the source, restores into the
+// runWireCase writes a stream, snapshots the source, restores into the
 // destination and compares. packed picks the form the snapshot takes on the
 // wire; a client on this backend may be answered by a daemon of either age,
 // so the callers run both.

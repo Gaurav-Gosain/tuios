@@ -41,7 +41,7 @@ func surfaceOS(t *testing.T) (*OS, *terminal.Window, *terminal.Window) {
 	return m, a, b
 }
 
-// frameCells composes a frame with the sidebar, the overlays and the dock and
+// composedCells composes a frame with the sidebar, the overlays and the dock and
 // copies its cells, since the canvas is reused by the next frame.
 func composedCells(m *OS) [][]uv.Cell {
 	canvas := m.GetCanvas(true)

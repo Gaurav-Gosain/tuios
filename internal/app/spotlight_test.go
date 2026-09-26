@@ -42,7 +42,7 @@ func spotlightTestCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 	return canvas
 }
 
-// spotlightTestState is a beam state with its ground already read, so a test
+// newSpotlightTestState is a beam state with its ground already read, so a test
 // can call apply without an OS around it.
 func newSpotlightTestState() *spotlightState { return &spotlightState{} }
 

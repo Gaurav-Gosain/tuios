@@ -26,7 +26,7 @@ import (
 // render, and it makes the shrinker's job well defined: one failing run names
 // one rule.
 
-// fuzzClock is a monotonic stand-in for wall time. Ticks carry a timestamp and
+// fuzzTicks is a monotonic stand-in for wall time. Ticks carry a timestamp and
 // several code paths compare it against a stored one, so a run driven by
 // time.Now would take a different branch on a slow machine and stop
 // reproducing.

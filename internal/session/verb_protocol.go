@@ -2253,7 +2253,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"sessions":       len(d.manager.ListSessions()),
 		// link_policy says this daemon holds links to a policy, so a proxy
 		// must reach it on a link socket and never on this one. See
-		// dialForLink in cmd/tuios.
+		// DialForLink in link_dial.go.
 		"link_policy": true,
 		// pane_grants says this daemon holds calls from panes to their
 		// grants and takes a pane's token with pane-grants, which the CLI

@@ -29,15 +29,6 @@ const (
 // found on screen without counting offsets from the panel border.
 var effectBands = []string{"none", "short", "medium", "long"}
 
-// effectRowsOnScreen returns the screen rows of the picker's effect list, in
-// order, paired with their text.
-// effectNameIn returns the effect a picker row names.
-//
-// The picker is drawn over the settings panel, so one screen row can carry a
-// settings label on the left and an effect on the right: "> Effect
-// binarypath long". The name is always the field before the duration band,
-// never the first field, which is what made this test click the wrong column
-// when the fifth match happened to be one of those rows.
 // trimRowEdge drops the trailing spaces and the pane's right border from a
 // row. A tiled pane reaches the last column, so its border sits after the
 // picker's own text and would otherwise read as the row's last field.
@@ -103,6 +94,13 @@ func maskToPicker(line string, start, end int) string {
 	return trimRowEdge(string(r))
 }
 
+// effectNameIn returns the effect a picker row names.
+//
+// The picker is drawn over the settings panel, so one screen row can carry a
+// settings label on the left and an effect on the right: "> Effect
+// binarypath long". The name is always the field before the duration band,
+// never the first field, which is what made this test click the wrong column
+// when the fifth match happened to be one of those rows.
 func effectNameIn(line string) string {
 	fields := strings.Fields(trimRowEdge(line))
 	if len(fields) < 2 {
@@ -111,6 +109,8 @@ func effectNameIn(line string) string {
 	return fields[len(fields)-2]
 }
 
+// effectRowsOnScreen returns the screen rows of the picker's effect list, in
+// order, paired with their text.
 func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
 	start, end, ok := pickerSpan(s)
 	_, height := s.Size()

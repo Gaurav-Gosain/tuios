@@ -101,7 +101,7 @@ func (hp *hostedPane) deliver(chunk []byte) {
 	}
 }
 
-// replayFrom is what an owner that has received from bytes is missing, and
+// replayFromLocked is what an owner that has received from bytes is missing, and
 // whether that is more than the ring holds. The caller holds out.
 func (hp *hostedPane) replayFromLocked(from int64) ([]byte, bool) {
 	start := hp.outSeq - int64(len(hp.ring))

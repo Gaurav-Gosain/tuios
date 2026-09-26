@@ -125,12 +125,13 @@ func duration(d time.Duration) string {
 	}
 }
 
+// measureFloor is the elapsed time under which rate reports "measuring".
+const measureFloor = 250 * time.Millisecond
+
 // rate is the trailing measured throughput: actions divided by the elapsed time
 // of the run so far. Under measureFloor there is not enough elapsed time for
 // the figure to mean anything, and a run that has been going for a millisecond
 // will happily report three million actions a second, so it says so instead.
-const measureFloor = 250 * time.Millisecond
-
 func rate(v float64, d time.Duration, suffix string) string {
 	if d < measureFloor {
 		return "measuring"

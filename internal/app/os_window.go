@@ -61,7 +61,6 @@ func (m *OS) ToggleFloating() {
 	}
 }
 
-// setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
 // installPassthroughs registers every emulator callback for a window, under
 // the window's IO lock. The PTY reader is already pumping the emulator by the
 // time these run, and it drives the callbacks from under the same lock
@@ -78,6 +77,7 @@ func (m *OS) installPassthroughs(window *terminal.Window) {
 	window.UnlockIO()
 }
 
+// setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
 func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 	if window == nil {
 		return

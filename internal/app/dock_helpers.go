@@ -32,7 +32,7 @@ type DockLayout struct {
 	TapeText   string
 	LeftWidth  int
 	RightWidth int
-	// CustomWidth is the room the custom cells on each side asked for, so the
+	// CustomLeft, CustomCenter and CustomRight are the room the custom cells on each side asked for, so the
 	// layout pass and the draw pass reserve against the same number.
 	CustomLeft     int
 	CustomCenter   int

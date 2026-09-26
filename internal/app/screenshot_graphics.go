@@ -107,7 +107,7 @@ func (m *OS) screenshotPreviewPictureBox() (inset, cols, rows int, ok bool) {
 // frame just drawn, or takes it down when the panel is not up.
 //
 // The panel blanks the rows this is about to draw over, so the two tiers do not
-// show at once; see blankPictureRows. Both sides read the box from
+// show at once; see pictureBodyRows. Both sides read the box from
 // screenshotPreviewPictureBox, so they cannot disagree about which rows those
 // are.
 //

@@ -387,7 +387,7 @@ func (a *attentionStore) rememberLocked(requestID string, out approvalOutcome) {
 	}
 }
 
-// holdFor finds the running hold on a pane, if there is one.
+// holdOn finds the running hold on a pane, if there is one.
 func (a *attentionStore) holdOn(session, window string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

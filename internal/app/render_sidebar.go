@@ -129,22 +129,6 @@ const (
 // the label out of a narrow rail.
 func sidebarAddGlyph(s *config.Settings) string { return s.GetRailAddGlyph() }
 
-// sidebarHeaderAdd places a section header's add control: right-aligned on the
-// same spine every other trailing figure lands on, one cell in from the rail's
-// edge. It returns the styled token and the content-relative columns it took,
-// or ok false when the header has no room for it beside its own label, since
-// half a control is half a click target.
-//
-// The control lives in the header rather than in the footer because that is
-// what binds it to a section. One "+ new" pinned to the rail's bottom edge sat
-// directly under the agents block and read as "new agent", which is not a thing
-// the rail can do; the same glyph on the sessions header cannot be read as
-// anything but "another one of these".
-// sidebarRowBg is the ground a rail row is drawn on. It lives here rather than
-// at each use because a row's parts are rendered in more than one place and
-// they have to agree: the "+" on a machine's header is built before the row
-// around it is, and rendering it on the default ground left a block of
-// unhighlighted cells sitting in the middle of a highlighted row.
 // sidebarRowState is why a row is lit, and the two reasons are not the same
 // thing. The keyboard cursor is where the next key lands. The mouse wash is
 // only where the pointer happens to be.
@@ -170,6 +154,12 @@ func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 
 // sidebarRowBg is the ground a row paints. Three steps, not one.
 //
+// It is one function rather than a choice made at each use because a row's
+// parts are rendered in more than one place and they have to agree: the "+" on
+// a machine's header is built before the row around it is, and rendering it on
+// the default ground left a block of unhighlighted cells sitting in the middle
+// of a highlighted row.
+//
 // The cursor on a focused rail takes Surface, the strongest of the three
 // grounds. The cursor on an unfocused rail drops to RowSel, so a rail that does
 // not own the keyboard stops claiming that it does while still saying where the
@@ -189,6 +179,17 @@ func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
 	return nil
 }
 
+// sidebarHeaderAdd places a section header's add control: right-aligned on the
+// same spine every other trailing figure lands on, one cell in from the rail's
+// edge. It returns the styled token and the content-relative columns it took,
+// or ok false when the header has no room for it beside its own label, since
+// half a control is half a click target.
+//
+// The control lives in the header rather than in the footer because that is
+// what binds it to a section. One "+ new" pinned to the rail's bottom edge sat
+// directly under the agents block and read as "new agent", which is not a thing
+// the rail can do; the same glyph on the sessions header cannot be read as
+// anything but "another one of these".
 func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool, s *config.Settings, rowBg color.Color) (string, sidebarTokenSpan, bool) {
 	gw := lipgloss.Width(sidebarAddGlyph(s))
 	x0 := cw - 1 - gw

@@ -18,9 +18,7 @@ import (
 //
 // NEGATIVE CONTROL: run against the tree before the fix, the second client's
 // frame after the step still read "BRAVO ... CHARLIE" while the client that had
-// moved the focus read "ALPHA ... BRAVO", and the assertion below failed. The
-// same run at the internal level is TestPeerScrollsFocusIntoView, where the
-// peer had the focused pane at x=-65 on a screen 100 wide.
+// moved the focus read "ALPHA ... BRAVO", and the assertion below failed.
 func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)

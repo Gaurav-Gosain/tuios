@@ -35,7 +35,7 @@ import (
 // back into an emulator cell, which was most of what a restore allocated. A
 // reader that wants the cells, such as a test oracle, calls Unpack.
 
-// isBlankCell reports whether a cell is what a never-written cell looks like,
+// isBlank reports whether a cell is what a never-written cell looks like,
 // which is what a row's tail is trimmed down to. A wide rune's continuation is
 // empty too, but it is not blank: writing a blank over it would empty the
 // rune it belongs to, so a tail stops short of one.

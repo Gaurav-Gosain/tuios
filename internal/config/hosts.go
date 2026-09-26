@@ -1,7 +1,8 @@
 package config
 
-// The [hosts] table names the other machines whose daemons this one may ask
-// for listings. It is federation stage 1's whole configuration surface.
+// The [hosts] table names the other machines whose daemons this one links to:
+// for listings, and for the connections a client opens to attach a session or
+// run a verb there.
 //
 //	[hosts.build]
 //	addr = "gaurav@buildbox"
