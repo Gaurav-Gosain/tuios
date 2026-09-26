@@ -375,6 +375,13 @@ Shows a table with:
 
 Both come from the directory the shell last reported over OSC 7, or the directory the shell started in. Both are omitted when unknown. The sidebar labels a session with a generated name (`session-0`) by `dir`, and shows `branch` after any session name.
 
+A session whose directory is inside a linked git worktree (not a main
+checkout) also carries `worktree`: the repository (`repo`, `repo_root`), the
+`branch` and the worktree's `path`, `gone: true` once the directory no longer
+exists, and for one tuios made, its `base`, its fan `group` and the prompt a
+fan sent it. It is what the rail groups by. `global: true` marks a global session, and
+`restored: true` one rebuilt from saved state that nobody has attached to yet.
+
 ### `tuios kill-session`
 
 Kill a specific session.
