@@ -116,7 +116,7 @@ tuios --standalone
 - `--skill [topic]`: Print the embedded agent skill and exit: the core, one topic, or `all` (see [Agent Skill](#agent-skill))
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
-- `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)
+- `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)
 - `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
 - `--window-button-style <style>`: How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`
@@ -3271,14 +3271,17 @@ View and inspect keybinding configuration.
 
 #### `tuios keybinds list`
 
-Display all configured keybindings in formatted tables organized by category.
+Display the common keybindings, as configured, in formatted tables organized
+by category. `tuios keybinds doctor` lists every scope.
 
 **Example:**
 ```bash
 tuios keybinds list
 ```
 
-**Output:** Shows comprehensive tables with all keybindings across categories:
+**Output:** One table per category, and a category with nothing bound is left
+out:
+- Global
 - Window Management
 - Workspaces
 - Layout
@@ -3723,6 +3726,60 @@ installs report only when `TUIOS_ENV` or `TUIOS_AGENT` is set.
 ```bash
 TUIOS_AGENT=claude-code docker run -it sandbox claude
 ```
+
+### Variables tuios sets in a pane
+
+`TUIOS_ENV`, `TUIOS_SOCKET`, `TUIOS_PANE_ID`, `TUIOS_WINDOW_ID`,
+`TUIOS_SESSION`, `TUIOS_HOST`, `TUIOS_PANE_TOKEN` and `TUIOS_PANE_GRANTS`. See
+[Environment](AGENT_STATE.md#environment) for what each one means.
+
+### Agent detection
+
+`TUIOS_AGENT_AUTODETECT`, `TUIOS_AGENT_DETECT_SECONDS`,
+`TUIOS_AGENT_BINARIES` and `TUIOS_AGENT_STALL_SECONDS`, read by the daemon as
+it starts. See
+[Turning detection off or widening it](AGENT_STATE.md#turning-detection-off-or-widening-it)
+and [The stall heuristic](AGENT_STATE.md#the-stall-heuristic).
+
+### `TUIOS_WORKTREE_DIR`
+
+Where the daemon puts the worktrees `tuios worktree new` and `tuios fan`
+create, instead of `$XDG_DATA_HOME/tuios/worktrees`. Set it in the daemon's
+environment, before it starts.
+
+### `TUIOS_LOG_LEVEL`
+
+The daemon's log level from the start: `off`, `errors`, `basic`, `messages`,
+`verbose` or `trace` (or `0` to `5`). It wins over `daemon.log_level`.
+`tuios logs` reads what it records.
+
+### `TUIOS_NO_SOUND`
+
+Any value silences the agent alert sounds, whatever
+`notifications.agent.sound` says. For a CI job or a recording.
+
+### `TUIOS_SSH`
+
+The ssh program to run instead of `ssh` on `PATH`: for the daemon's links to
+the `[hosts]` machines (set it where the daemon starts), and for `--ssh` and
+`tuios hosts test`.
+
+### `TUIOS_HOST_RECONNECT_BUDGET`
+
+How long a client attached to a session on another machine keeps dialing a
+dropped link before it gives up, as a Go duration (`10m`). Three minutes when
+unset. Read once, when the client starts.
+
+### `TUIOS_CELL_SIZE`
+
+The terminal's cell size in pixels, as `WIDTHxHEIGHT` (`10x20`), for a terminal
+that does not answer the pixel geometry query. Images and captures drawn in
+cells are sized from it. The SSH server reads the same variable.
+
+### `TUIOS_KITTY_GRAPHICS`, `TUIOS_KITTY_PLACEHOLDERS`, `TUIOS_KITTY_ANIMATION`, `TUIOS_SIXEL_GRAPHICS`
+
+`1` or `0` overrides what tuios detected about the host terminal's kitty
+graphics, kitty Unicode placeholders, kitty animation and sixel support.
 
 ### `$SHELL`
 
