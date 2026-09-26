@@ -1,7 +1,7 @@
 charm.land/lipgloss/v2 v2.0.6 h1:EaGKeuA8FvF+v2BT5VmZd2LoYLaMZJXA5n34th8nCIQ=
 charm.land/lipgloss/v2 v2.0.6/go.mod h1:ipDDJNSGa1hlwDtSfW1s2/xR8Vdhbut4PXh2zEKZd0Q=
-github.com/Gaurav-Gosain/tuitest v0.0.0-20260926053530-8db5fa33ff08 h1:HYuBK7R8/uxu5E5KaZqJvmvDiDiDAin1JVcf5Mr4KoQ=
-github.com/Gaurav-Gosain/tuitest v0.0.0-20260926053530-8db5fa33ff08/go.mod h1:MxcJdsQRG/OBoZOM/EDH72PJJn1TiK3s96Z32d2wSBE=
+github.com/Gaurav-Gosain/tuitest v0.0.0-20260926082612-8912ebbdd5f7 h1:Yhd9VcmmHX1t8oxTcQWbHznk+h3IMEFEl5dm3o+odDY=
+github.com/Gaurav-Gosain/tuitest v0.0.0-20260926082612-8912ebbdd5f7/go.mod h1:MxcJdsQRG/OBoZOM/EDH72PJJn1TiK3s96Z32d2wSBE=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=

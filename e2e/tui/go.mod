@@ -2,7 +2,7 @@ module github.com/Gaurav-Gosain/tuios/e2e/tui
 
 go 1.26.6
 
-require github.com/Gaurav-Gosain/tuitest v0.0.0-20260926053530-8db5fa33ff08
+require github.com/Gaurav-Gosain/tuitest v0.0.0-20260926082612-8912ebbdd5f7
 
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
