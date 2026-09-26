@@ -115,7 +115,7 @@ func (v *VimState) clampCursorX() {
 	}
 }
 
-// charType classifies a rune: 0=space/null, 1=word, 2=punctuation.
+// vimCharType classifies a rune: 0=space/null, 1=word, 2=punctuation.
 func vimCharType(r rune) int {
 	if r == 0 || unicode.IsSpace(r) {
 		return 0

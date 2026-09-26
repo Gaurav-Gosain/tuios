@@ -485,7 +485,7 @@ func (a *attentionStore) openUnread(it AttentionItem) AttentionItem {
 	return *a.items[id]
 }
 
-// resolveMarkTarget finds the item mark-attention names: by id, open or
+// resolveMarkTargetLocked finds the item mark-attention names: by id, open or
 // asleep, or by session, window and kind. The caller holds mu.
 func (a *attentionStore) resolveMarkTargetLocked(p markAttentionParams) (string, bool) {
 	if p.ID != "" {

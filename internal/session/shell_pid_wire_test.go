@@ -46,7 +46,7 @@ func (w *syncWatcher) await(t *testing.T, what string, ok func(*SessionState) bo
 	}
 }
 
-// windowByID finds a window in a state, or fails.
+// stateWindow finds a window in a state, or fails.
 func stateWindow(t *testing.T, s *SessionState, id string) WindowState {
 	t.Helper()
 	for _, w := range s.Windows {

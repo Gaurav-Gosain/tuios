@@ -205,12 +205,6 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 	return sidebarHeaderRow(sidebarFilesLabel, right, cw, pal)
 }
 
-// sidebarFileRow draws one row of the listing on the rail's spine.
-//
-// A directory wears the primary ink and a trailing slash; a file wears neither.
-// That is `ls -F`'s distinction, and it is what the row still says on a terminal
-// with no colour and no icon at all. The icon in the glyph column is the layer
-// on top of it, not instead of it.
 // sidebarFilesEmptyRow says why the section is listing nothing.
 //
 // The section has a directory or it does not, and when it does not the listing
@@ -223,6 +217,12 @@ func sidebarFilesEmptyRow(cw int, pal overlay.Palette) string {
 		Render(" "+overlay.Truncate("no directory yet", max(cw-2, 1))), cw, nil)
 }
 
+// sidebarFileRow draws one row of the listing on the rail's spine.
+//
+// A directory wears the primary ink and a trailing slash; a file wears neither.
+// That is `ls -F`'s distinction, and it is what the row still says on a terminal
+// with no colour and no icon at all. The icon in the glyph column is the layer
+// on top of it, not instead of it.
 func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sidebarRowState) string {
 	var bg color.Color
 	if st.lit() {

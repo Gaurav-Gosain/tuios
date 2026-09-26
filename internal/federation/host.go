@@ -22,9 +22,9 @@ const LocalHostName = "local"
 const DefaultConnectTimeout = 10 * time.Second
 
 // DefaultCallTimeout bounds one control-plane call over a live link. It is
-// short because every stage 1 call is a listing: a link that has been dialed
-// and handshaken and still cannot answer a listing in this long is hung, and
-// the supervisor tears it down and redials.
+// short because every control-plane call is a listing: a link that has been
+// dialed and handshaken and still cannot answer a listing in this long is hung,
+// and the supervisor tears it down and redials.
 const DefaultCallTimeout = 8 * time.Second
 
 // DefaultRemoteCommand is the name the link looks for on the far side. What

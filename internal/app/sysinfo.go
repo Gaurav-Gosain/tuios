@@ -104,19 +104,15 @@ func (m *OS) UpdateRAMUsage() {
 	m.RAMUsage = v.UsedPercent
 }
 
-// UpdateCPUHistory updates the CPU usage history.
-// This is a placeholder implementation that maintains the existing CPU history structure.
-// In the future, this should be refactored to use the system.CPUMonitor.
+// UpdateCPUHistory samples CPU usage at most once per config.CPUUpdateInterval
+// and keeps the last ten samples for the dock's graph.
 func (m *OS) UpdateCPUHistory() {
 	now := time.Now()
-	// Update every 500ms (as defined in config.CPUUpdateInterval)
 	if now.Sub(m.LastCPUUpdate) < config.CPUUpdateInterval {
 		return
 	}
 
 	m.LastCPUUpdate = now
-	// For now, we'll use a simple placeholder value
-	// In a full refactor, this would use system.CPUMonitor or directly call platform-specific functions
 	usage := getCPUUsageSimple()
 
 	// Keep last 10 samples for a compact graph

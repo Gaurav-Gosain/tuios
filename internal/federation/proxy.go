@@ -13,10 +13,9 @@ import (
 // Every stream the hub opens gets its own connection to the local daemon
 // socket, and bytes are copied both ways until either side ends.
 //
-// It never starts a daemon. The federation document has stdio-proxy start one
-// if needed, and stage 1 does not, because starting a daemon restores that
-// machine's saved sessions: a side effect on remote state, from a command whose
-// whole contract is that it only reads. A host with no daemon running reports
+// It never starts a daemon, because starting a daemon restores that machine's
+// saved sessions: a side effect on remote state that nobody on that machine
+// asked for. A host with no daemon running reports
 // itself that way instead, which is a true and useful answer.
 //
 // It returns when in ends, which is what happens when the hub closes the link

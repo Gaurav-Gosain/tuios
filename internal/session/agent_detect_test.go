@@ -120,13 +120,14 @@ func TestAgentMatcher(t *testing.T) {
 	}
 }
 
-// fakeResolver returns a resolve function backed by a per-PTY table, so agent
-// detection can be exercised without a real /proc or a real agent process.
+// fakeProc is one PTY's entry in a fakeResolver table.
 type fakeProc struct {
 	info    foregroundInfo
 	running bool
 }
 
+// fakeResolver returns a resolve function backed by a per-PTY table, so agent
+// detection can be exercised without a real /proc or a real agent process.
 func fakeResolver(table map[string]fakeProc) func(string) (foregroundInfo, bool) {
 	return func(ptyID string) (foregroundInfo, bool) {
 		p, ok := table[ptyID]

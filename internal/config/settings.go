@@ -285,7 +285,7 @@ type Settings struct {
 	CopyFlash      bool
 	CopyFlashMs    int
 	CopyFlashColor string
-	// CopyFlashStyle is the shape the sweep takes. See app.CopyFlashShapes.
+	// CopyFlashStyle is the shape the sweep takes. One of CopyFlashStyles.
 	CopyFlashStyle string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.

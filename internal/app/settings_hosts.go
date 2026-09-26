@@ -30,8 +30,8 @@ import (
 // already polls. The settings page starts no link and holds no link. What it
 // can do is write the config file, which the daemon follows.
 //
-// Stage 1 has not changed here: only listings cross a link. There is no row on
-// this page that starts, changes or stops anything on another machine.
+// There is no row on this page that starts, changes or stops anything on
+// another machine.
 
 // hostAddRowLabel is the label of the row that adds a machine. It is matched by
 // name in the tests, so it is spelled once.

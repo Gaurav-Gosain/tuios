@@ -9,9 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// blockingWriter simulates the ssh session output: a writer that accepts a
-// bounded amount and then blocks (a slow remote client whose TCP window is
-// full). It records total bytes written.
+// countingWriter stands in for the ssh session output. It accepts every write
+// and records the total bytes written.
 type countingWriter struct {
 	mu    sync.Mutex
 	total int

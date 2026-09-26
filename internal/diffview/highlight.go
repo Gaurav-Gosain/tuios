@@ -78,7 +78,7 @@ func lexerFor(path, text string) chroma.Lexer {
 // ends; that is the most a view of part of a file can do.
 func Highlight(path string, lines []string) (out [][]Span) {
 	// A lexer that hands text to one this build does not carry panics
-	// mid-tokenise. gen_lexers.go refuses to write such a set, and this
+	// mid-tokenise. lexers/gen.go refuses to write such a set, and this
 	// keeps a mistake in it to a plain hunk rather than a crash.
 	defer func() {
 		if recover() != nil {

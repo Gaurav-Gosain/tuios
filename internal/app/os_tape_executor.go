@@ -1120,20 +1120,17 @@ func (m *OS) LoadLayoutExec(name string) error {
 	return fmt.Errorf("layout template not found: %s", name)
 }
 
-// handleRemoteSendKeys processes key sequences for TUIOS.
-// When literal=true, keys are sent directly to the focused terminal PTY.
-// When raw=true, each character is treated as a separate key (no splitting on space/comma).
-// When both are false, keys are parsed as space/comma separated tokens.
-// Returns a tea.Cmd if additional processing is needed.
-//
-// Key format (when literal=false and raw=false):
-//   - Single keys: "i", "n", "Enter", "Escape", "Space"
-//   - Key combos: "ctrl+b", "alt+1", "shift+Enter"
-//   - Sequences (space or comma-separated): "ctrl+b,n" or "ctrl+b n"
-//
 // startRemoteSendKeys initiates sequential key processing for remote send-keys.
 // Keys are processed one at a time via RemoteKeyMsg to allow proper UI updates between keys.
 // Animations are disabled during remote key processing to ensure immediate layout updates.
+//
+// When literal=true, keys are sent directly to the target terminal PTY (the
+// focused one when there is no target). When raw=true, each character is
+// treated as a separate key (no splitting on space/comma). When both are false,
+// keys are parsed as space/comma separated tokens:
+//   - Single keys: "i", "n", "Enter", "Escape", "Space"
+//   - Key combos: "ctrl+b", "alt+1", "shift+Enter"
+//   - Sequences (space or comma-separated): "ctrl+b,n" or "ctrl+b n"
 //
 // Special key names: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
 // Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12

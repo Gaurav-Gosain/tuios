@@ -37,7 +37,7 @@ type Tool struct {
 	Terminal bool
 	// Input holds the call's raw input as the agent sent it, when it did:
 	// each string it holds, by key. It is what decides whether the title is
-	// the whole call (see inboxLine).
+	// the whole call (see InboxLine).
 	Input map[string]string
 	// OtherInput says the raw input held something that is not a string, or
 	// could not be read.

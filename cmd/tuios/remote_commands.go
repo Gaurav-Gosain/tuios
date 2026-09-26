@@ -2579,8 +2579,6 @@ func maybeCopyScreenshot(path, format string, req screenshotRequest) (bool, []st
 	return true, nil
 }
 
-// popupOptions is the `tuios popup` command line, gathered so the runner reads
-// as one thing rather than as seven positional arguments.
 // defaultPopupCallTimeout is the read deadline of a popup call that does not
 // wait, the verb client's own default.
 const defaultPopupCallTimeout = 30 * time.Second
@@ -2607,6 +2605,8 @@ func printPopupResult(w io.Writer, raw json.RawMessage) error {
 	return nil
 }
 
+// popupOptions is the `tuios popup` command line, gathered so the runner reads
+// as one thing rather than as seven positional arguments.
 type popupOptions struct {
 	session   string
 	name      string

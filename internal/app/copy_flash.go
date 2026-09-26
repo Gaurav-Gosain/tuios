@@ -163,7 +163,7 @@ type copyFlashBand struct {
 	amp float64
 	// slope is how far the light leans, in columns per row, and vertical makes
 	// it travel down the rows instead of across the columns. Together they are
-	// the four shapes; see copyFlashShape.
+	// the four shapes; see copyFlashBandFor.
 	slope    float64
 	vertical bool
 

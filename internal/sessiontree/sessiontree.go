@@ -21,10 +21,9 @@ const (
 	// KindWindow is a window node under a session.
 	KindWindow
 	// KindHost is a federated host's group header. Its rows are the sessions
-	// that machine holds, which follow it in the same list. A host node and the
-	// session nodes under it are read only: stage 1 of federation carries
-	// listings and nothing else, so nothing addresses them and nothing selects
-	// them.
+	// that machine holds, which follow it in the same list. The session nodes
+	// under it belong to that machine: selecting one attaches it in this client,
+	// and none is ever renamed, moved or deleted from here.
 	KindHost
 	// KindRepo is a repository's group header. Its rows are the worktree
 	// sessions of that repository, which follow it in the same list. See

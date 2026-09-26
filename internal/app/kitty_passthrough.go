@@ -606,6 +606,14 @@ const (
 // proportion to how expensive it is. A fixed threshold was tried first and
 // behaved badly in both directions: it does not decay, so one slow write
 // suppressed every frame until some unrelated graphics write reset it.
+func (kp *KittyPassthrough) hostBacklogged() bool {
+	if kp.writeInFlight.Load() {
+		return true
+	}
+	until := kp.pacedUntilNanos.Load()
+	return until != 0 && time.Now().UnixNano() < until
+}
+
 // chargePacing books the cost of one piece of graphics work against the
 // stream, holding the next frame back for a multiple of it.
 //
@@ -629,16 +637,6 @@ func (kp *KittyPassthrough) chargePacing(cost time.Duration) {
 	}
 }
 
-func (kp *KittyPassthrough) hostBacklogged() bool {
-	if kp.writeInFlight.Load() {
-		return true
-	}
-	until := kp.pacedUntilNanos.Load()
-	return until != 0 && time.Now().UnixNano() < until
-}
-
-// WriteToHost writes graphics data directly to the host terminal,
-// wrapped in synchronized update sequences to prevent tearing.
 // asyncFrameWriter drains asyncFrameCh and writes video frames to hostOut
 // in a background goroutine so the VT callback and render loop stay
 // responsive during high-fps video playback.
@@ -719,6 +717,8 @@ func (kp *KittyPassthrough) writeRemoteVideoFrame(job *remoteVideoJob) {
 	kp.writeHostSequence(syncBegin, fix, syncEnd)
 }
 
+// WriteToHost writes graphics data directly to the host terminal,
+// wrapped in synchronized update sequences to prevent tearing.
 func (kp *KittyPassthrough) WriteToHost(data []byte) {
 	if kp.hostOut == nil || len(data) == 0 {
 		return

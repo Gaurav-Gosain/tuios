@@ -218,7 +218,7 @@ type InboxMarkedMsg struct {
 	Err   error
 }
 
-// inboxSnoozedItem is a snoozed item in the mirror, by id.
+// inboxSnoozedIndex is the index of a snoozed item in the mirror, by id, or -1.
 func (m *OS) inboxSnoozedIndex(id string) int {
 	for i := range m.Inbox.life.Snoozed {
 		if m.Inbox.life.Snoozed[i].ID == id {

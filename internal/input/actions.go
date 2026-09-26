@@ -910,8 +910,6 @@ func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleKillSessionNext kills the current session after switching this client
-// to the next one, in that order (see OS.KillSessionGoNext for why).
 // handleOpenSettings opens the settings overlay. Bound to "," in mode_control,
 // which the default layout binds too; mode_control is consulted after layout, so
 // settings wins and `keybinds doctor` names the resize bind it shadows.
@@ -950,6 +948,8 @@ func handleRenameSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleKillSessionNext kills the current session after switching this client
+// to the next one, in that order (see OS.KillSessionGoNext for why).
 func handleKillSessionNext(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.KillSessionGoNext(o.NextSessionName())
 }

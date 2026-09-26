@@ -12,11 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// The federation control plane, stage 1: three read verbs and nothing else.
+// The federation control plane's three read verbs.
 //
 // Every one of them asks a remote daemon for a listing and never tells it to do
 // anything. There is no verb here that creates, kills, resizes, writes or
-// attaches, and adding one is stage 2 work with a different risk profile.
+// attaches. Acting on another machine goes through open-host-connection
+// (verb_host_connection.go), which relays the client's own connection and
+// decodes none of it.
 //
 // The aggregation rule these three share: hosts that answer are listed, hosts
 // that do not are listed with their status and reason, and one dead host never

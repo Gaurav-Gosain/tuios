@@ -15,8 +15,7 @@ import (
 )
 
 // runtimeIsDarwin reports whether the process is running on macOS.
-// The macOS Option-key character tables (IsMacOSOptionKey, IsMacOSOptionTab)
-// must only be consulted on darwin: their glyphs (¡ ™ £ ¢ ∞ § ¶ • ª, ⇥ ⇤) are
+// The macOS Option-key character tables (config.MacOSOptionChord) must only be consulted on darwin: their glyphs (¡ ™ £ ¢ ∞ § ¶ • ª, ⇥ ⇤) are
 // ordinary typed characters on many non-US layouts (e.g. £ is Shift+3 on UK),
 // so treating them as workspace/window shortcuts on other platforms hijacks
 // real input before it reaches the shell.
@@ -139,7 +138,7 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 		}
 
 		// Handle other modifier combinations (function keys, etc.)
-		// Pass the masked modifier to handleModifierKeys
+		// Pass the masked modifier to handleModifierKeysWithMod
 		if modSeq := handleModifierKeysWithMod(key, actualMod); len(modSeq) > 0 {
 			return modSeq
 		}

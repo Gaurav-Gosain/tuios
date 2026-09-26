@@ -269,7 +269,7 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 }
 
 // SelectionToken is the confirm token for a set of targets, each named by a
-// key that identifies one pane for good (selectionKey), in any order. It is
+// key that identifies one pane for good (selectionKeys), in any order. It is
 // not a secret. It says the caller saw this exact set, so a write that names
 // it goes to that set and no other: a pane that joined or left the selection
 // between the look and the write changes the token, and the write is refused.
