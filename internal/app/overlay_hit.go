@@ -246,20 +246,32 @@ type overlayAnchor struct {
 // centred afresh every frame it jumped up and down the screen under the
 // cursor at each of those, a row or three at a time. Held at its first top it
 // grows and shrinks at the bottom edge instead, which is where a reader is not
-// looking. overlayOrigin still clamps it on screen, so a panel that outgrows
-// the room below moves up only as far as it has to. A new screen height
-// centres it again.
+// looking. A new screen height centres it again.
+//
+// The hold covers a change of a few rows, not a different panel. The Inbox
+// opens on its short empty state and fills when its first item lands; held at
+// the empty state's top, the full list sat on the bottom edge with half the
+// screen empty above it. A panel whose centred top has moved more than
+// overlayAnchorSlack rows from where it is held is centred again and held
+// there.
 func (m *OS) overlayAnchorY(kind string, h, screenH int) int {
-	if a, ok := m.overlayAnchors[kind]; ok && a.screenH == screenH {
+	y := (screenH - h) / 2
+	if a, ok := m.overlayAnchors[kind]; ok && a.screenH == screenH &&
+		a.y+h <= screenH && abs(a.y-y) <= overlayAnchorSlack {
 		return a.y
 	}
-	y := (screenH - h) / 2
 	if m.overlayAnchors == nil {
 		m.overlayAnchors = make(map[string]overlayAnchor)
 	}
 	m.overlayAnchors[kind] = overlayAnchor{y: y, screenH: screenH}
 	return y
 }
+
+// overlayAnchorSlack is how far, in rows, a held panel's top may sit from the
+// top that would centre it before it is centred again: a risky approval's
+// armed line or a snooze picker's footer moves the centre a row or two, and a
+// panel that filled with a list moves it by half the list.
+const overlayAnchorSlack = 3
 
 // forgetClosedOverlayAnchors drops the anchor of every panel not drawn this
 // frame, so a panel opened again is centred again.
