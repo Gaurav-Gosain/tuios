@@ -103,6 +103,7 @@ tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
 ├── cmd/tuios-web/          # Web terminal server binary (separate for security)
 ├── cmd/tuios-wasm/         # Browser build for the Learn tuios tour (js/wasm)
+├── cmd/tuios-fuzz/         # The property fuzzer, drawn while it runs; kept out of the shipped binary
 ├── internal/
 │   ├── app/                # Core window manager, OS model, rendering
 │   │   ├── os.go           # Central state (OS struct), window lifecycle
@@ -126,10 +127,11 @@ tuios/
 │   │   └── window_unix.go / window_windows.go  # Platform-specific window and PTY glue
 │   ├── ptyspawn/           # The one path every PTY-backed process is spawned through (spawn_unix.go, spawn_windows.go)
 │   ├── vt/                 # Terminal emulation: pure Go, plus libghostty-vt behind -tags ghostty
-│   │   ├── emulator.go     # Parser state machine
+│   │   ├── emulator.go     # The pure Go Emulator and its write path
+│   │   ├── parser.go       # Parser state machine
 │   │   ├── screen.go       # Screen buffer management
-│   │   └── scrollback.go   # 10,000 line history
-│   ├── session/            # The daemon: sessions, PTYs (pty_unix.go, pty_windows.go), wire protocol, JSON verbs
+│   │   └── scrollback.go   # History ring (10,000 lines unless configured)
+│   ├── session/            # The daemon: sessions, PTYs (session.go), wire protocol, JSON verbs
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
 │   ├── gitstate/           # Branch and upstream drift for the sidebar
@@ -140,6 +142,9 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── harness/            # Agent harness manifests and detection
+│   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)
+│   ├── mcp/                # The MCP server behind tuios mcp
+│   ├── risk/               # Marks an approval risky by the shipped and configured rules
 │   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
@@ -154,11 +159,13 @@ tuios/
 │   │   ├── executor.go     # Command execution
 │   │   └── player.go       # Playback engine
 │   ├── server/             # SSH server (Wish v2)
+│   ├── served/             # The model a server (SSH, web) hands to one remote client
 │   ├── theme/              # Color theming
 │   ├── layout/             # Window tiling algorithms
 │   ├── pool/               # Memory pooling
 │   └── ui/                 # Animation system
-│                           # (plus sound, transcript, guestenv, perf, fuzz, testutil)
+│                           # (plus cliflags, debuglog, fang, listnav, sound,
+│                           #  transcript, guestenv, perf, fuzz, testutil)
 ├── pkg/                    # Embeddable facade (tuios), applist, fuzzy
 ├── docs/                   # Documentation
 │   ├── ARCHITECTURE.md     # Technical architecture diagrams
@@ -428,8 +435,9 @@ go run ./cmd/tuios tape play examples/demo.tape
 ### Platform Differences
 
 - PTY handling differs: `internal/terminal/window_unix.go` vs `window_windows.go`,
-  `internal/session/pty_unix.go` vs `pty_windows.go`, and
-  `internal/ptyspawn/spawn_unix.go` vs `spawn_windows.go`
+  and `internal/ptyspawn/spawn_unix.go` vs `spawn_windows.go`. The daemon's
+  `PTY` in `internal/session/session.go` has no per-platform file: it resizes
+  through `ptyspawn.SetWinsize`, which falls back to a plain resize on ConPTY
 - Workspace keybinds differ: `opt+N` on macOS, `alt+N` on Linux
 - See `internal/config/userconfig.go` → `getDefaultWorkspaceKeybinds()`
 
