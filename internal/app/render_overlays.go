@@ -664,22 +664,33 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		renderWidth := m.GetRenderWidth()
 		renderHeight := m.GetRenderHeight()
+		// The corners are the panes' corners when the overlay fits beside the
+		// rail, so it does not sit over the rail with two of the rail's
+		// columns showing past its edge. When it does not fit, it is placed on
+		// the screen and then covers the rail whole.
+		regionX, regionW := 0, renderWidth
+		if room := m.GetContentWidth(); overlayWidth+4 <= room {
+			regionX, regionW = m.GetLeftMargin(), room
+		}
 		switch m.Settings.WhichKeyPosition {
 		case "top-left":
-			overlayX = 2
+			overlayX = regionX + 2
 			overlayY = 1
 		case "top-right":
-			overlayX = renderWidth - overlayWidth - 2
+			overlayX = regionX + regionW - overlayWidth - 2
 			overlayY = 1
 		case "bottom-left":
-			overlayX = 2
+			overlayX = regionX + 2
 			overlayY = renderHeight - overlayHeight - 2
 		case "center":
-			overlayX = (renderWidth - overlayWidth) / 2
+			overlayX = regionX + (regionW-overlayWidth)/2
 			overlayY = (renderHeight - overlayHeight) / 2
 		default:
-			overlayX = renderWidth - overlayWidth - 2
+			overlayX = regionX + regionW - overlayWidth - 2
 			overlayY = renderHeight - overlayHeight - 2
+		}
+		if regionW == renderWidth {
+			overlayX = m.railCoverX(overlayX, overlayWidth, renderWidth)
 		}
 		// A binding list taller than the screen would otherwise be positioned
 		// off the top, hiding the first entries with no way to reach them.

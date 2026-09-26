@@ -151,6 +151,7 @@ a working negative control look like a broken one for half an hour.
 | The review footer kept a margin on its left only, so a key strip that fitted to the cell ran into the frame | n/a, injected | `reviewHints` in `internal/app/render_review.go` fits against `width-1` | `TestReviewFooterKeepsItsRightMargin` (footer ends "esc close│") | **caught** |
 | The review's "too narrow for two columns" line stayed over the unified view it had recommended | n/a, injected | the `statusID` reset in `ReviewToggleSplit` disabled | `TestReviewNarrowSplitNoticeGoesWithTheSplit` (still on screen 2s after the second s) | **caught** |
 | A panel wider than the panes' columns covered all of the rail but a column or two, leaving fragments of its rows down the panel's edge | n/a, injected | `panelCenterX` in `internal/app/overlay_hit.go` centres on the screen alone | `TestAPanelWiderThanThePanesCoversTheWholeRail` (row 2 ends in the rail's ground) | **caught** |
+| The which-key overlay took the screen's bottom-right corner and sat over the rail with two of its columns showing | n/a, injected | the which-key corners taken from the whole screen in `internal/app/render_overlays.go` | `TestWhichKeySitsBesideTheRail` (row 2 of the rail changed under the overlay) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

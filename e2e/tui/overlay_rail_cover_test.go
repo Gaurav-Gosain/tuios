@@ -7,6 +7,68 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
+// TestWhichKeySitsBesideTheRail presses the prefix at 120 columns with the
+// shipped looks. The which-key overlay is anchored to the bottom-right corner,
+// and it took the screen's corner, not the panes': it sat over the rail with
+// the rail's last two columns showing past its edge, a "+" and the "d" of
+// "cd" beside the bindings. It fits beside the rail at this width, so it now
+// goes there and the rail stays whole. The frame is saved under artifactDir.
+//
+// How this could pass wrongly, written down first:
+//   - The overlay could not be open yet, so it is waited for by a binding
+//     only it lists.
+//   - The rail could be drawn over and its header happen to be above the
+//     overlay's top, so every row of the rail band is compared with the
+//     frame from before the prefix, not only the header.
+//
+// Negative control: with the which-key corners taken from the whole screen,
+// the rail's rows change under the overlay and the test fails.
+func TestWhichKeySitsBesideTheRail(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-wk", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-wk"}, shippedLooks: true})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1 && railHeaderColumn(s) >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached with the rail up: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	before := term.Screen()
+	railX := railHeaderColumn(before)
+	_, rows := before.Size()
+	railBand := func(s tuitest.Screen, r int) string {
+		runes := []rune(s.Line(r))
+		if railX-1 >= len(runes) {
+			return ""
+		}
+		return string(runes[railX-1:])
+	}
+
+	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the which-key overlay", "Toggle tiling")
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	after := term.Screen()
+	saveArtifact(t, term, artifactDir(t), "whichkey-beside-rail")
+	// The dock and its rule are left out: the prefix changes what the dock says.
+	for r := 2; r < rows; r++ {
+		if got, want := railBand(after, r), railBand(before, r); got != want {
+			t.Fatalf("row %d of the rail changed under the which-key overlay:\n got %q\nwant %q\n%s",
+				r, got, want, term.Snapshot())
+		}
+	}
+}
+
 // TestAPanelWiderThanThePanesCoversTheWholeRail opens the Inbox on an 80
 // column screen with the shipped looks, where the rail takes the right 16
 // columns and the Inbox is wider than the 64 left for the panes. Centred on

@@ -234,7 +234,13 @@ func (m *OS) panelCenterX(w, screenW int) int {
 	if room := m.GetContentWidth(); w <= room {
 		return m.GetLeftMargin() + (room-w)/2
 	}
-	x := (screenW - w) / 2
+	return m.railCoverX((screenW-w)/2, w, screenW)
+}
+
+// railCoverX moves a block w cells wide that starts at x and runs partly over
+// the rail so that it covers the rail completely, since a rail cut down to a
+// column or two is only fragments of its rows.
+func (m *OS) railCoverX(x, w, screenW int) int {
 	if right := m.GetRightMargin(); right > 0 && x+w > screenW-right && x+w < screenW {
 		x = screenW - w
 	}
