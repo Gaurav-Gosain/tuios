@@ -7,8 +7,8 @@ An agent **running inside a TUIOS pane** wants the other document. Run
 `tuios --skill` for the core that drives a running session: addressing panes,
 reading and writing them, running work and waiting on it, reporting agent
 state, and talking to other agents safely. `tuios --skill TOPIC` prints the
-rest (fleets, the Inbox, mail, hosts, events, MCP, the tmux shim, grants,
-config, errors, recipes). The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
+rest (panes and state in depth, fleets, the Inbox, mail, hosts, events, MCP,
+the tmux shim, grants, config, errors, recipes). The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
 and the other files in `skills/tuios/`, embedded in the binary so the printed
 copy always matches the build. `cmd/tuios` tests resolve every command the
 skill shows against the command tree.

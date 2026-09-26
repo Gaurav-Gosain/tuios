@@ -241,7 +241,7 @@ exec tuios --theme dracula "$@"
 skill teaches an agent to drive TUIOS from inside a pane. It is split so an
 agent loads only what it needs:
 
-- `tuios --skill` prints the core (about 250 lines): how to tell it is in a
+- `tuios --skill` (or `--skill core`) prints the core (about 280 lines): how to tell it is in a
   pane, what its pane may do, addressing, reading and writing panes, running
   work and waiting for it, reporting its own state, talking to other agents and
   the person safely, and a table of the topics.
