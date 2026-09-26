@@ -20,6 +20,9 @@ visible consumer, idle CPU under ~0.5%.
   binary, opens three idle shells, idles 10s, and asserts the app writes
   ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
   process dump its tick counters on clean exit.
+- `scripts/binary-size.sh`: builds the stripped release binary for
+  linux/amd64 and darwin/arm64 and fails over the budget. See "Binary size
+  budget" below.
 
 ## Numbers
 
@@ -1999,3 +2002,145 @@ The one-pane rows of `BenchmarkBackgrounds` before this change (`panes-1`)
 were never on the fast path: that fixture has the rail on, which takes the
 fast path away with or without a background. The `fullscreen` rows were added
 to measure the case this change is about.
+
+## 2026-09 final pass: re-measured after the r2 agent features
+
+Every baseline above re-measured on main at 62ec9c0c, which adds the r2 agent
+features (rich rail rows, Inbox replies, the away recap), the review overlay
+and its diff view, the background options and the size cuts, against
+e632e021, the commit the last numbers above were taken on.
+
+### Measurement conditions
+
+Apple M3 Pro, 11 cores, macOS, Go 1.27.1, shared with other agents at a load
+average of 4 to 8. The test binaries of both commits were built from
+`git archive` of each and run alternately (base, new, then new, base) for six
+rounds, `-test.cpu 1 -test.benchtime 200ms -test.benchmem` under `nice -n 15`,
+compared with `benchstat`. The daemon flood rig ran at `-test.cpu 4` with
+`-test.benchtime 3x`. Allocation counts, bytes and wire bytes are exact; a time
+is called a change only where `benchstat` gives p < 0.05 and it is larger than
+the spread.
+
+### Regressions found
+
+None on the paths this file tracks. Against e632e021:
+
+- **Render path** (`KeystrokeFrame`, `KeystrokeFrameTiled`, `ClientFrame`,
+  `CompositorGetCanvas`, `RenderTerminalReal`, `RenderTerminalUnfocused`,
+  `RenderWindowBoxFlood`, `Backgrounds`, `PaneBackground`, `PointerSweep`,
+  `NotificationTick`): every time reads `~`. Allocations are identical except
+  one allocation and about 190 bytes more per keystroke frame (0.1%), below
+  anything a frame shows.
+- **Rail and Inbox, twelve-agent fleet**: `SidebarAgentsRebuild` fell from
+  1217 to 1125 allocations and 44.5 to 43.1 KiB; the cached rail is unchanged
+  at 0 allocations. `InboxRender` gained 12 allocations and 3.6 KiB (+4.9%),
+  from the reply and recap lines, with time `~`.
+- **Daemon**: `PTYOutputChunk`, `PTYBroadcast`, `ScreenSettleArm`,
+  `EventPublishNoSubs`, `AttentionOutputEvent` and `AttentionRepeatedBlock`
+  still allocate nothing per chunk and read `~` or within 3.5%.
+  `WireTerminalStateCaughtUp`, `WireTerminalStateApply` and `SnapshotPack`
+  have identical wire bytes and allocations; the packed decodes are 2% to 9%
+  faster. A 16 MiB flood through a real daemon (`E2EFlood`) is 240 ms per op on
+  both sides, 67 MB/s, with the same batches and one write per op; its profile
+  is still the emulator (`Emulator.Write` 28% of the process, the scrollback
+  push 13%) and the session's stream and read loop under 5%, so nothing the
+  agent features added shows under a flood.
+- **vt**: every benchmark reads `~` but `CaptureScrollback`, +2.4% to +3.0%
+  (p=0.002) inside a +/-20% spread on the new side. The scrollback's retained memory, from
+  `BenchmarkScrollbackRetainedMemory`, is 216.6 bytes a line on both sides,
+  1.80 MiB for a 2000 line ring.
+- **Input**: `KeyTerminalTyped` 9 allocations, `KeyPrefixChord` 10, the
+  motion filter 1, all identical; the resize drag benchmarks read `~`.
+- **Manifest engine** (`Classify`): identical allocations, times `~`.
+- **Latency** (`TestLatencyEcho`, three rounds a side): echo p50 0.68 to
+  0.76 ms at one and four panes on both sides. The daemon round trip is
+  bimodal at about 135 us or 200 us on both, as the second daemon pass saw.
+- **Idle**: `BenchmarkIdleTick` is still 0 render/tick, 0 work/tick, 296 B/op,
+  5 allocs/op. `TestIdleCostStaysLow` writes 0 wire bytes over 10 s on both
+  binaries, three runs each, with `ticks` 104 to 105, `work` 0 to 3 and
+  `render` 0 to 2 over the whole run on both (the few are boot, not idle).
+  Idle daemon CPU, a detached
+  daemon with zsh panes over 120 s, from `ps` at 10 ms resolution: 8 panes
+  10 ms/min on both, 32 panes 20 ms/min before and 25 ms/min after, the same as
+  the agent detection poll entry measured.
+
+`ScrollbackRetainedMemory`, `EmulatorRenderReal`, `PrintCombining` and the
+`ResizeDragWithOutput` and `ResizeMotion*` benchmarks were removed from the
+tree by the strict test pass. They were measured here by copying the base
+commit's benchmark files into a scratch copy of main; nothing was restored.
+
+### New hot spot: the review overlay on a large diff
+
+`BenchmarkReviewFrame` draws the review over a diff of 400 files whose first
+file is 5000 lines in one hunk. A frame with nothing changed allocated 2.8 MB.
+`reviewRows` lays out every row of the current file, and a frame ran it twice:
+once for the diff column and once for the footer, which only asks whether the
+cursor is on a note. Both grew their slice by doubling, so each call allocated
+about twice the 320 KB the rows need. The footer now reads the rows the diff
+column laid out, kept on the review state while `renderReview` runs and
+cleared when it returns, and `reviewRows` sizes its slice from the hunks first.
+The e2e review tests (`TestReviewOverlayNotesSendCompareAndKeep`,
+`TestReviewOverlayAt80x24`, `TestReviewFrameAndStatusLine`,
+`TestReviewWrappedNoteIsOneStop`, `TestReviewNotesReachTheAgent`) pass on the
+changed binary.
+
+Eight rounds, main against the change:
+
+| `ReviewFrame` | before | after | |
+|---|---|---|---|
+| `unified/cached` B/op | 2774 KiB | 823 KiB | -70% |
+| `unified/cached` time | 1.78 ms | 1.26 ms | -29% (p=0.000) |
+| `split/cached` B/op | 2.93 MiB | 1.02 MiB | -65% |
+| `split/cached` time | 2.32 ms | 1.76 ms | -24% (p=0.000) |
+| `unified/page` B/op | 5.41 MiB | 2.28 MiB | -58% |
+| `unified/page` time | 5.07 ms | 3.19 ms | -37% (p=0.002) |
+| `unified/first` B/op | 8.47 MiB | 6.56 MiB | -23% |
+| `unified/end` B/op | 11.30 MiB | 7.80 MiB | -31% |
+
+A page down still lays the file out once more in `ReviewMove`, which is one
+call per key. What is left of a first frame and a jump to the end is chroma
+tokenising the lines on screen (`regexp2` and `chroma.matchRules`, about 80%
+of the bytes), which is upstream.
+
+### Measured and deliberately not changed
+
+- **`applyInboxEvents`** now costs 11 us, 7.4 KiB and 43 allocations for a
+  burst of sixteen events, against 2.8 us, 2.5 KiB and 8 when the Inbox entry
+  above was written. The Inbox keeps the cursor on the item it was on
+  (`clampInboxSelection`, since 8aae8a68), which builds the overlay's rows
+  three times per burst. A burst arrives at most once per 150 ms, so this is
+  about 0.007% of a core; caching the rows would add an invalidation surface to
+  the Inbox for nothing a person can notice.
+- **A twelve-pane agent fleet with the rail on.** A scratch benchmark (tiled,
+  207x55, twelve agent panes in every state, rail on) composes a keystroke
+  frame in 1.76 ms and 1096 allocations, the same time as nine plain tiled
+  panes (1.75 ms, 920 allocations): the rail is served from its cache. A frame
+  where one agent changes state costs 2.17 ms and 2554 allocations, the rail
+  rebuild. Nothing to take out.
+- **The extra allocation on a keystroke frame.** One allocation and about 190
+  bytes per frame, identical on every keystroke benchmark. 0.1% of the frame,
+  not chased.
+
+### Binary size budget
+
+`.github/workflows/binary-size.yml` runs `scripts/binary-size.sh` on every pull
+request and push to main. It builds tuios the way the release does
+(`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
+darwin/arm64 with the Go version go.mod names, prints the size, and fails when
+a binary is over its budget.
+
+| target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
+|---|---|---|---|
+| linux/amd64 | 25,182,370 | 26,000,000 | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 24,600,000 | 25,265,154 |
+
+The budgets are about 3% above the size they were set at and below the size
+before the size cuts, so undoing those cuts fails the job. A Go 1.27 toolchain
+builds binaries up to about 120 KB larger than 1.26.6, which is inside the room.
+
+To raise a budget, do it on purpose in its own commit: run
+`scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
+little above the printed size in the `budget` function of that script, and say
+in the commit message what grew and why it is worth the bytes. A Go version
+bump that grows the runtime is a reason; a dependency added for one helper
+function is usually not, and is better replaced.
