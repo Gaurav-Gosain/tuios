@@ -44,7 +44,7 @@ type Interface struct {
 func (i *Interface) Register(fs *pflag.FlagSet) {
 	fs.BoolVar(&i.ASCIIOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
 	fs.StringVar(&i.ThemeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
-	fs.StringVar(&i.BorderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
+	fs.StringVar(&i.BorderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)")
 	fs.StringVar(&i.DockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or top)")
 	fs.BoolVar(&i.HideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	fs.StringVar(&i.WindowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or dots)")
