@@ -1152,6 +1152,20 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 	return m.reviewNoteCmd("add", params)
 }
 
+// reviewTooNarrow is the status line for a split asked for on a column too
+// narrow to draw it.
+const reviewTooNarrow = "Too narrow for two columns. Widen the window, or press s for one column."
+
+// reviewStatusIs reports whether the review's status line is showing message.
+func (m *OS) reviewStatusIs(message string) bool {
+	for _, n := range m.Notifications {
+		if n.ID == m.review.statusID {
+			return n.Message == message
+		}
+	}
+	return false
+}
+
 // ReviewToggleSplit switches the diff between one column and the two sides
 // next to each other. The cursor stays on the line it was on. On a column
 // too narrow for two sides the choice is kept for when it is wide enough,
@@ -1162,7 +1176,11 @@ func (m *OS) ReviewToggleSplit() {
 	before, had := m.reviewRowUnderCursor()
 	r.split = !r.split
 	if e := r.currentFile(); r.split && e != nil && e.file != nil && len(e.file.Hunks) > 0 && !reviewSplitFits(e.file, width) {
-		m.reviewNotify("Too narrow for two columns. Widen the window, or s for one column", "info", m.Settings.NotificationDuration)
+		m.reviewNotify(reviewTooNarrow, "info", m.Settings.NotificationDuration)
+	} else if !r.split && m.reviewStatusIs(reviewTooNarrow) {
+		// Back on one column, the line saying two do not fit is about a
+		// layout no longer asked for.
+		r.statusID = ""
 	}
 	if !had {
 		return

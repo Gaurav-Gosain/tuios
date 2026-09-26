@@ -229,7 +229,7 @@ func (m *OS) dockCustomCell(name string) string {
 	if text == "" {
 		return ""
 	}
-	pal := theme.UI()
+	pal := theme.GroundUI()
 	return lipgloss.NewStyle().
 		Background(pal.Panel).
 		Foreground(theme.Readable(pal.FgDim, pal.Panel)).

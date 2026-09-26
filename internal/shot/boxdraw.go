@@ -234,21 +234,38 @@ func (b *glyphBuilder) drawArms(arms [4]uint8) {
 	if l != armNone || r != armNone {
 		overV = hMax / 2
 	}
-	if l != armNone {
+	// Two arms of one weight on one axis are one stroke, drawn as one rect.
+	// Drawn as two that meet at the centre, each anti-aliases its own end, and
+	// where the centre falls between pixels the two partial pixels composite
+	// to less than full ink: a straight border came out with a faint notch in
+	// the middle of every cell.
+	switch {
+	case l != armNone && l == r:
 		t := b.armThickness(l)
-		b.rect(0, cy-t/2, cx+overH, cy+t/2)
+		b.rect(0, cy-t/2, b.w, cy+t/2)
+	default:
+		if l != armNone {
+			t := b.armThickness(l)
+			b.rect(0, cy-t/2, cx+overH, cy+t/2)
+		}
+		if r != armNone {
+			t := b.armThickness(r)
+			b.rect(cx-overH, cy-t/2, b.w, cy+t/2)
+		}
 	}
-	if r != armNone {
-		t := b.armThickness(r)
-		b.rect(cx-overH, cy-t/2, b.w, cy+t/2)
-	}
-	if u != armNone {
+	switch {
+	case u != armNone && u == d:
 		t := b.armThickness(u)
-		b.rect(cx-t/2, 0, cx+t/2, cy+overV)
-	}
-	if d != armNone {
-		t := b.armThickness(d)
-		b.rect(cx-t/2, cy-overV, cx+t/2, b.h)
+		b.rect(cx-t/2, 0, cx+t/2, b.h)
+	default:
+		if u != armNone {
+			t := b.armThickness(u)
+			b.rect(cx-t/2, 0, cx+t/2, cy+overV)
+		}
+		if d != armNone {
+			t := b.armThickness(d)
+			b.rect(cx-t/2, cy-overV, cx+t/2, b.h)
+		}
 	}
 }
 

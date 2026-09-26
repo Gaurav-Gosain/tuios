@@ -93,7 +93,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		return ""
 	}
 
-	pal := theme.UI()
+	pal := theme.GroundUI()
 	y := m.GetDockbarContentYPosition()
 	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
@@ -162,7 +162,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 func (m *OS) renderDockString() (string, int) {
 	m.ensureDockPlan()
 	layout := m.CalculateDockLayout()
-	pal := theme.UI()
+	pal := theme.GroundUI()
 
 	sysInfoStyle := lipgloss.NewStyle().
 		Foreground(pal.FgMute).

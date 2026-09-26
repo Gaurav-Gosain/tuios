@@ -514,13 +514,15 @@ func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
 }
 
 // reviewHints draws key hints in width cells: as many as fit, in order, with
-// the last one always shown.
+// the last one always shown. A cell of margin is kept on both sides; with it
+// on the left only, a strip that fitted to the cell ran into the frame's
+// right edge.
 func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	if len(hints) == 0 {
 		return reviewSpaces(width, pal.Surface)
 	}
 	last := hints[len(hints)-1]
-	room := width - 1 - ansi.StringWidth(reviewHintStrip([]overlay.Hint{last}, pal))
+	room := width - 2 - ansi.StringWidth(reviewHintStrip([]overlay.Hint{last}, pal))
 	var fit []overlay.Hint
 	for _, h := range hints[:len(hints)-1] {
 		try := append(append([]overlay.Hint{}, fit...), h)

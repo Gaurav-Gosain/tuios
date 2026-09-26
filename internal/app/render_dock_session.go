@@ -36,7 +36,7 @@ func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
 		return "", nil
 	}
 
-	pal := theme.UI()
+	pal := theme.GroundUI()
 	cells := make([]dockSessionCell, 0, 3)
 	// Creating comes first, at the far end from closing. The two most
 	// different things the strip does are the two furthest apart, and the one

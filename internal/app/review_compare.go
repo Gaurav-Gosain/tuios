@@ -556,17 +556,22 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	narrow := inner < 100
 	now := time.Now()
 
-	title := "Compare  " + reviewText(c.group)
+	// The header row and its rule, the way the review draws its own, so
+	// w and esc move between two views of one frame rather than two frames.
+	about := ""
 	if c.repo != "" {
-		title += " in " + reviewText(c.repo)
+		about += " in " + reviewText(c.repo)
 	}
-	title += ", " + reviewCount(len(c.rows), "attempt")
+	about += ", " + reviewCount(len(c.rows), "attempt")
 	if c.base != "" {
-		title += " vs " + reviewText(c.base)
+		about += " vs " + reviewText(c.base)
 	}
 	if c.loading {
-		title += ", counting"
+		about += ", counting"
 	}
+	header := reviewPaint([]reviewSeg{{pal.AccentBright, " Compare", true}, {pal.Fg, "  " + reviewText(c.group), true},
+		{pal.FgDim, about, false}}, inner, pal.Surface)
+	rule := reviewInk(strings.Repeat(hzGlyph(), inner), pal.FgMute, pal.Surface)
 
 	sessW := 10
 	for _, row := range c.rows {
@@ -588,10 +593,11 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	}
 
 	body := make([]string, 0, h-2)
+	body = append(body, header, rule)
 	body = append(body, reviewPaint([]reviewSeg{{pal.FgMute,
 		"    " + left("session", sessW) + " " + left("agent", agentW) + left("state", stateW) +
 			right("files", filesW) + "  " + left("+/-", diffW) + left("check", checkW) + right("age", ageW), false}}, inner, pal.Surface))
-	listH := h - 2 - 4
+	listH := h - 2 - 6
 	start := 0
 	if c.cursor >= listH {
 		start = c.cursor - listH + 1
@@ -661,5 +667,5 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 		footer = reviewHints(hints, inner, pal)
 	}
 	body = append(body, footer)
-	return reviewFrame(w, h, title, body, pal.Accent, pal.Surface)
+	return reviewFrame(w, h, "", body, pal.Accent, pal.Surface)
 }

@@ -404,3 +404,65 @@ func TestReviewWrappedNoteIsOneStop(t *testing.T) {
 	saveArtifact(t, term, dir, "note-selected-again")
 	t.Logf("frames in %s", dir)
 }
+
+// TestReviewNarrowSplitNoticeGoesWithTheSplit asks for the split view on an
+// 80 column screen, where two columns do not fit, and then for one column
+// again. The status line says the split does not fit, and it has to stop
+// saying so once one column is back: it used to stay for the notification's
+// whole six seconds over the unified view it had just recommended.
+//
+// How this could pass wrongly, written down first:
+//   - The notice could never appear, and then its going proves nothing, so
+//     it is waited for first.
+//   - It fades on its own after six seconds, so the wait for it to go is
+//     two seconds, well inside that.
+//
+// Negative control: without the statusID reset in ReviewToggleSplit, the
+// notice is still on screen two seconds after the second s.
+func TestReviewNarrowSplitNoticeGoesWithTheSplit(t *testing.T) {
+	const notice = "Too narrow for two columns"
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "nn")
+	term := attachIn(t, base, session, startOpts{cols: 80, rows: 24})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "M README", "esc close")
+	sendKeys(t, term, "s")
+	waitScreen(t, term, "s on a narrow column did not say the split does not fit", notice)
+	sendKeys(t, term, "s")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), notice)
+	}, 2*time.Second); err != nil {
+		t.Fatalf("back on one column, the status line still says the split does not fit: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "review-unified-again")
+}
+
+// TestReviewFooterKeepsItsRightMargin opens the split view at 120 columns,
+// where its keys fill the footer to within a cell. The footer kept a cell of
+// margin on the left only, so a strip that fitted to the cell ran into the
+// frame: "esc close│". The frame is saved under artifactDir.
+//
+// How this could pass wrongly, written down first:
+//   - The view could be unified, whose keys are two cells shorter and leave
+//     room either way, so the test waits for "s unified", which only the
+//     split view offers.
+//   - The footer could lose its last key instead, so the line has to end in
+//     "esc close" before the margin.
+//
+// Negative control: with reviewHints fitting against width-1, the footer
+// line ends "esc close│" and the test fails.
+func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
+	base, repo := fanFixture(t)
+	session := reviewFan(t, base, repo, "fm")
+	term := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "M README", "s split")
+	sendKeys(t, term, "s")
+	waitScreen(t, term, "s did not switch to the split view", "s unified", "esc close")
+	saveArtifact(t, term, artifactDir(t), "review-split-footer")
+	s := term.Screen()
+	line := strings.TrimRight(s.Line(rowWith(s, "esc close")), " ")
+	if !strings.HasSuffix(line, "esc close │") {
+		t.Fatalf("the footer does not end in a cell of margin before the frame: %q\n%s", line, term.Snapshot())
+	}
+}

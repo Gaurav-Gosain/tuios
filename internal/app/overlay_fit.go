@@ -33,7 +33,7 @@ func (m *OS) panelWidth(preferred int) int {
 // search input, a rule, a scroll indicator, a description line); tabs and hints
 // are measured from the panel itself so their wrapped height is accounted for.
 func (m *OS) panelBodyRows(preferred, extra, width int, tabs []string, hints []overlay.Hint) int {
-	rh := m.GetRenderHeight()
+	rh := m.panelRoomHeight()
 	if rh <= 0 {
 		return preferred // size not known yet; the caller's preference stands
 	}
@@ -58,7 +58,7 @@ func panelChrome(extra, width int, tabs []string, hints []overlay.Hint) int {
 // below three rows stops being a list.
 func (m *OS) panelBody(preferred, extra, width int, tabs []string, hints []overlay.Hint) (int, []overlay.Hint) {
 	rows := m.panelBodyRows(preferred, extra, width, tabs, hints)
-	rh := m.GetRenderHeight()
+	rh := m.panelRoomHeight()
 	if rh <= 0 || len(hints) == 0 || rows+panelChrome(extra, width, tabs, hints) <= rh {
 		return rows, hints
 	}
@@ -76,4 +76,16 @@ func scrollWindow(scroll, selected, count, visible int) int {
 		scroll = selected - visible + 1
 	}
 	return clampInt(scroll, 0, count-visible)
+}
+
+// panelRoomHeight is the rows a panel is fitted to: the screen under a dock at
+// the top. Fitted to the whole screen, a tall panel such as the settings page
+// or the help ran up over that dock and left the ends of its pills and its
+// buttons showing beside the panel's title.
+func (m *OS) panelRoomHeight() int {
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return rh
+	}
+	return max(rh-m.GetTopMargin(), 1)
 }

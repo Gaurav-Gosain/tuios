@@ -203,3 +203,66 @@ func UI() overlay.Palette {
 
 	return p
 }
+
+// GroundUI is UI for chrome written straight on the terminal's own
+// background rather than on a dialog's surface: the rail and the dock.
+//
+// UI's neutrals and inks are a dark ramp, which is right for the dialogs that
+// paint their own ground and right beside a dark theme. The rail and the dock
+// paint nothing, so their labels land on the theme's background, and on a
+// light theme the ramp's near-white inks were written on near-white: the
+// rail's session names, the dock's notice and the dock's buttons could not be
+// read. On a light ground the ramp is rebuilt from that ground, with the
+// ground as its canvas and a band one step darker as its surface, and the ink
+// tiers are measured on it the way a theme's own chrome surface is. On a dark
+// ground this is UI unchanged.
+func GroundUI() overlay.Palette {
+	p := UI()
+	ground := RailGround()
+	if !groundIsLight(ground) {
+		return p
+	}
+	if c := CurrentChrome(); c != nil && c.Surface != nil {
+		// A theme that names its own chrome surface has already chosen the
+		// ramp its chrome is drawn in.
+		return p
+	}
+	c := groundChrome(ground)
+	p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
+	p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+	return p
+}
+
+// groundIsLight reports whether dark ink reads better on ground than light.
+func groundIsLight(ground color.Color) bool {
+	return overlay.ContrastRatio(ground, color.Black) > overlay.ContrastRatio(ground, color.White)
+}
+
+// groundChromeMemo keeps the last ramp built for a ground: GroundUI is asked
+// on every rail and dock rebuild, and the ramp only changes with the theme.
+var groundChromeMemo struct {
+	sync.Mutex
+	key   [4]uint32
+	valid bool
+	c     Chrome
+}
+
+// groundChrome is the neutral ramp and ink tiers for chrome on a light ground.
+func groundChrome(ground color.Color) Chrome {
+	r, g, b, a := ground.RGBA()
+	key := [4]uint32{r, g, b, a}
+	groundChromeMemo.Lock()
+	defer groundChromeMemo.Unlock()
+	if groundChromeMemo.valid && groundChromeMemo.key == key {
+		return groundChromeMemo.c
+	}
+	surface := overlay.Darker(ground, chromeRamp.canvas)
+	c := Chrome{
+		Canvas:  ground,
+		Surface: surface,
+		Panel:   overlay.Darker(surface, chromeRamp.panel),
+	}
+	c.deriveRamp()
+	groundChromeMemo.key, groundChromeMemo.valid, groundChromeMemo.c = key, true, c
+	return c
+}

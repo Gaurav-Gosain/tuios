@@ -776,7 +776,7 @@ func (m *OS) calculateDockRightWidth() int {
 		if len(tiers) == 0 {
 			return 0
 		}
-		return lipgloss.Width(renderCopyModeHelp(tiers[0], theme.UI()))
+		return lipgloss.Width(renderCopyModeHelp(tiers[0], theme.GroundUI()))
 	}
 
 	// The meters reserve the room they will draw in, and nothing when they are

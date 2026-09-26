@@ -206,11 +206,14 @@ func (m *OS) centerOrigin(w, h int) (int, int) {
 // shifted by that kind's drag offset, and clamped so the panel stays on screen.
 func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+	// Centred in the rows under a dock at the top, and kept below it while it
+	// fits there. See panelRoomHeight.
+	top := min(m.GetTopMargin(), max(rh-geo.Height, 0))
 	off := m.overlayOffset(kind)
 	x := m.panelCenterX(geo.Width, rw) + off[0]
-	y := m.overlayAnchorY(kind, geo.Height, rh) + off[1]
+	y := top + m.overlayAnchorY(kind, geo.Height, rh-top) + off[1]
 	x = max(min(x, rw-geo.Width), 0)
-	y = max(min(y, rh-geo.Height), 0)
+	y = max(min(y, rh-geo.Height), top)
 	return x, y
 }
 
@@ -225,11 +228,29 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 // the Inbox is about are listed. The modal dialogs keep the screen centre, see
 // centerOrigin: they are small, and ask for an answer where the eye already
 // is.
+//
+// A panel too wide for the panes' columns covers the rail, and covers all of
+// it. Centred on the screen it covered all but a column or two, and the rail's
+// remnant down the panel's edge read as litter: "e…", "1…", a lone "+" from
+// the headers, cut off beside the Inbox on an 80 column screen.
 func (m *OS) panelCenterX(w, screenW int) int {
 	if room := m.GetContentWidth(); w <= room {
 		return m.GetLeftMargin() + (room-w)/2
 	}
-	return (screenW - w) / 2
+	return m.railCoverX((screenW-w)/2, w, screenW)
+}
+
+// railCoverX moves a block w cells wide that starts at x and runs partly over
+// the rail so that it covers the rail completely, since a rail cut down to a
+// column or two is only fragments of its rows.
+func (m *OS) railCoverX(x, w, screenW int) int {
+	if right := m.GetRightMargin(); right > 0 && x+w > screenW-right && x+w < screenW {
+		x = screenW - w
+	}
+	if left := m.GetLeftMargin(); left > 0 && x > 0 && x < left {
+		x = 0
+	}
+	return max(x, 0)
 }
 
 // overlayAnchor is the top row a panel was centred at when it opened, and the
@@ -246,20 +267,32 @@ type overlayAnchor struct {
 // centred afresh every frame it jumped up and down the screen under the
 // cursor at each of those, a row or three at a time. Held at its first top it
 // grows and shrinks at the bottom edge instead, which is where a reader is not
-// looking. overlayOrigin still clamps it on screen, so a panel that outgrows
-// the room below moves up only as far as it has to. A new screen height
-// centres it again.
+// looking. A new screen height centres it again.
+//
+// The hold covers a change of a few rows, not a different panel. The Inbox
+// opens on its short empty state and fills when its first item lands; held at
+// the empty state's top, the full list sat on the bottom edge with half the
+// screen empty above it. A panel whose centred top has moved more than
+// overlayAnchorSlack rows from where it is held is centred again and held
+// there.
 func (m *OS) overlayAnchorY(kind string, h, screenH int) int {
-	if a, ok := m.overlayAnchors[kind]; ok && a.screenH == screenH {
+	y := (screenH - h) / 2
+	if a, ok := m.overlayAnchors[kind]; ok && a.screenH == screenH &&
+		a.y+h <= screenH && abs(a.y-y) <= overlayAnchorSlack {
 		return a.y
 	}
-	y := (screenH - h) / 2
 	if m.overlayAnchors == nil {
 		m.overlayAnchors = make(map[string]overlayAnchor)
 	}
 	m.overlayAnchors[kind] = overlayAnchor{y: y, screenH: screenH}
 	return y
 }
+
+// overlayAnchorSlack is how far, in rows, a held panel's top may sit from the
+// top that would centre it before it is centred again: a risky approval's
+// armed line or a snooze picker's footer moves the centre a row or two, and a
+// panel that filled with a list moves it by half the list.
+const overlayAnchorSlack = 3
 
 // forgetClosedOverlayAnchors drops the anchor of every panel not drawn this
 // frame, so a panel opened again is centred again.

@@ -1152,7 +1152,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		contentX0++
 	}
 
-	pal := theme.UI()
+	pal := theme.GroundUI()
 	variant := sidebarVariant(w)
 	cw := w - 1 // content columns beside the edge rule
 	edge := sidebarEdgeRule(&m.Settings)
