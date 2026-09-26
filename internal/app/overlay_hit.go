@@ -225,11 +225,23 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 // the Inbox is about are listed. The modal dialogs keep the screen centre, see
 // centerOrigin: they are small, and ask for an answer where the eye already
 // is.
+//
+// A panel too wide for the panes' columns covers the rail, and covers all of
+// it. Centred on the screen it covered all but a column or two, and the rail's
+// remnant down the panel's edge read as litter: "e…", "1…", a lone "+" from
+// the headers, cut off beside the Inbox on an 80 column screen.
 func (m *OS) panelCenterX(w, screenW int) int {
 	if room := m.GetContentWidth(); w <= room {
 		return m.GetLeftMargin() + (room-w)/2
 	}
-	return (screenW - w) / 2
+	x := (screenW - w) / 2
+	if right := m.GetRightMargin(); right > 0 && x+w > screenW-right && x+w < screenW {
+		x = screenW - w
+	}
+	if left := m.GetLeftMargin(); left > 0 && x > 0 && x < left {
+		x = 0
+	}
+	return max(x, 0)
 }
 
 // overlayAnchor is the top row a panel was centred at when it opened, and the
