@@ -409,6 +409,7 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 		"\x1b[?47$p", "\x1b[?47h\x1b[?47$p",
 		"\x1b[?1016$p", "\x1b[?1016h\x1b[?1016$p",
 		"\x1b[?2048$p",
+		"\x1b[?2027$p", "\x1b[?2027l\x1b[?2027$p", "\x1bc\x1b[?2027$p",
 	} {
 		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
 			p := newDiffPair(t, 20, 5)

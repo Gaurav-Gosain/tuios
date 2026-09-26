@@ -676,7 +676,8 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 //
 // Reporting the method actually in use is the fix. Honouring mode 2027 would
 // mean changing placement to match, which is a different and much larger
-// change than making the answer true.
+// change than making the answer true. For the same reason 2027 defaults to
+// set, so DECRQM tells a program the truth before it resets the mode.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
 }
