@@ -127,6 +127,13 @@ right, and an entry that starts agreeing must be deleted.
   backend (the limit is a construction option).
 - The pen's open OSC 8 hyperlink is not carried across a wire snapshot
   (cell hyperlinks are).
+- Grapheme clustering (DEC mode 2027) is set by default on both backends,
+  and RIS keeps it set. The library's own default is off, which gives a ZWJ
+  family or a flag one cell per codepoint; the host terminal draws the same
+  bytes as one two-column glyph, so the row and the pane border shifted.
+  A program that resets 2027 turns clustering off in the library only: the
+  pure emulator always places by grapheme width. Pinned by
+  `TestGhosttyGraphemeClusteringDefault`.
 
 ## Blast radius
 

@@ -436,14 +436,25 @@ func (g *grid) String() string {
 	return b.String()
 }
 
-// Render returns the grid as styled text, as uv.Buffer.Render does.
+// Render returns the grid as styled text, one line per row, with a cluster
+// break between neighbouring cells that would otherwise re-parse as one
+// cluster (see Emulator.Render). Both backends render through here: the
+// ghostty one used uv.Line.Render, which builds a string per row and
+// allocates for every style change, and does not break clusters.
 func (g *grid) Render() string {
 	var b strings.Builder
-	for y := range g.rows {
+	for y, line := range g.rows {
 		if y > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(g.rowOrBlank(y).Render())
+		if line == nil {
+			// A row nothing has written renders as the blanks it holds.
+			for range g.width {
+				b.WriteByte(' ')
+			}
+			continue
+		}
+		renderRowBreakingClusters(&b, line)
 	}
 	return b.String()
 }

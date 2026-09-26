@@ -40,7 +40,7 @@ var defaultModes = []struct {
 	{ansi.ModeInBandResize, ansi.ModeReset},        // ?2048
 	{ansi.ModeBracketedPaste, ansi.ModeReset},      // ?2004
 	{ansi.ModeSynchronizedOutput, ansi.ModeReset},  // ?2026
-	{ansi.ModeUnicodeCore, ansi.ModeReset},         // ?2027
+	{ansi.ModeUnicodeCore, ansi.ModeSet},           // ?2027, see WidthMethod
 	{ansi.ModeLightDark, ansi.ModeReset},           // ?2031
 	{ansi.ModeLeftRightMargin, ansi.ModeReset},     // ?69
 	{ansi.ModeOrigin, ansi.ModeReset},              // ?6

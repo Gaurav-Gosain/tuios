@@ -38,18 +38,6 @@ const (
 	diffFuzzRows = 12
 )
 
-// diffPrelude is written to both emulators before any script runs.
-//
-// Mode 2027 is grapheme clustering. The pure emulator clusters
-// unconditionally; the library gates it on the mode, which is off by default,
-// so with no prelude the two disagree about the width of the first flag or
-// ZWJ sequence the generator draws and every campaign dies at step three
-// having tested nothing. Turning it on is a no-op for the pure emulator and
-// puts the library in the mode the pure emulator is permanently in, so the
-// rest of the grammar becomes reachable. The default-off disagreement is not
-// swept away by this: it is pinned by TestGhosttyGraphemeClusteringDefault.
-const diffPrelude = "\x1b[?2027h"
-
 // divergence is one disagreement between the backends.
 //
 // Sig is what makes it *this* disagreement rather than any disagreement, and
@@ -320,10 +308,6 @@ func diffReplay(s vtgen.Script) (found divergence) {
 		_ = gh.Close()
 	}()
 
-	if d := diffWrite(pure, gh, diffPrelude); d.found() {
-		return d.at("prelude")
-	}
-
 	for i, seq := range s {
 		if seq.Kind == "resize" {
 			pure.Resize(seq.Cols, seq.Rows)
@@ -354,10 +338,6 @@ func diffReplaySplit(s vtgen.Script, seed uint64) (found divergence) {
 		}
 		_ = gh.Close()
 	}()
-
-	if d := diffWrite(pure, gh, diffPrelude); d.found() {
-		return d.at("prelude")
-	}
 
 	writes := s.SplitWrites(seed)
 	for i, w := range writes {
@@ -395,8 +375,8 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 		if hasC1Introducer(seq.Bytes) {
 			continue
 		}
-		// The prelude owns mode 2027; a script toggling it would undo the
-		// setup mid-run and reintroduce the clustering divergence pinned by
+		// Resetting mode 2027 turns clustering off in the library and not in
+		// the pure emulator, which clusters whatever the mode says. Pinned by
 		// TestGhosttyGraphemeClusteringDefault.
 		if seq.Kind == "mode" && strings.Contains(seq.Bytes, "2027") {
 			continue
@@ -666,18 +646,20 @@ func TestGhosttyEightBitControlsInUTF8(t *testing.T) {
 	}
 }
 
-// TestGhosttyGraphemeClusteringDefault pins the second divergence, and the
-// reason diffReplay writes diffPrelude.
+// TestGhosttyGraphemeClusteringDefault pins grapheme clustering (DEC mode
+// 2027) as the default on both backends, and the divergence left when a
+// program resets it.
 //
-// With mode 2027 off, which is the default, the library measures each
-// codepoint on its own: a flag is two clusters of two columns, a ZWJ family
-// is three. The pure emulator always clusters, so it calls all of them one
-// cluster of two columns. Turning 2027 on makes them agree exactly, which is
-// what the prelude does.
+// The library's own default is off, which measures each codepoint on its own:
+// a flag is two clusters of two columns and a ZWJ family is one per person.
+// That was the default tuios shipped. The host terminal tuios re-emits into
+// clusters the same bytes into one glyph of two columns, so the line sheared
+// left from the emoji onward and the pane border moved with it. The ghostty
+// backend now sets the mode default at construction, and RIS keeps it.
 //
-// The default is the case that ships. The host terminal tuios re-emits into
-// has its own answer, and when the host disagrees with the pane's model the
-// line shears sideways from the emoji onward.
+// With 2027 reset the library stops clustering and the pure emulator does
+// not, since it always places by grapheme width. That is the one divergence
+// left here, and diffFilter drops mode 2027 from campaigns because of it.
 func TestGhosttyGraphemeClusteringDefault(t *testing.T) {
 	cases := []struct {
 		name, in string
@@ -688,22 +670,25 @@ func TestGhosttyGraphemeClusteringDefault(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Default: the two disagree.
-			p := newDiffPair(t, 40, 12)
-			p.write(t, []byte(tc.in))
-			if !diffScreens(p.pure, p.gh).found() && !diffCursor(p.pure, p.gh).found() {
-				t.Fatalf("the two backends now agree on %q with mode 2027 off; "+
-					"delete this entry and drop diffPrelude", tc.in)
+			for _, prefix := range []string{"", "\x1bc"} {
+				p := newDiffPair(t, 40, 12)
+				p.write(t, []byte(prefix+tc.in))
+				if d := diffScreens(p.pure, p.gh); d.found() {
+					t.Errorf("prefix %q: %q diverges by default: %s", prefix, tc.in, d)
+				}
+				if d := diffCursor(p.pure, p.gh); d.found() {
+					t.Errorf("prefix %q: %q diverges by default: %s", prefix, tc.in, d)
+				}
+				if got := p.gh.CursorPosition().X; got != 2 {
+					t.Errorf("prefix %q: ghostty cursor after %q at column %d, want 2", prefix, tc.in, got)
+				}
 			}
 
-			// With 2027 on they must agree, which is what the campaign relies on.
 			q := newDiffPair(t, 40, 12)
-			q.write(t, []byte(diffPrelude+tc.in))
-			if d := diffScreens(q.pure, q.gh); d.found() {
-				t.Errorf("with mode 2027 set, %q still diverges: %s", tc.in, d)
-			}
-			if d := diffCursor(q.pure, q.gh); d.found() {
-				t.Errorf("with mode 2027 set, %q still diverges: %s", tc.in, d)
+			q.write(t, []byte("\x1b[?2027l"+tc.in))
+			if !diffScreens(q.pure, q.gh).found() && !diffCursor(q.pure, q.gh).found() {
+				t.Fatalf("the two backends now agree on %q with mode 2027 reset; "+
+					"update this test and drop the 2027 filter in diffFilter", tc.in)
 			}
 		})
 	}
@@ -721,8 +706,7 @@ func TestGhosttyGraphemeClusteringDefault(t *testing.T) {
 // defensible design choice rather than a conformance question, it says that
 // instead of pretending.
 
-// diffProbe drives both backends through the grapheme-clustering prelude and
-// the input, and reports what each ended up with, so a pinned case can state
+// diffProbe drives both backends through the input, and reports what each ended up with, so a pinned case can state
 // both sides in one line.
 type diffProbe struct {
 	pureCell, ghCell     string
@@ -733,7 +717,7 @@ type diffProbe struct {
 func probeBoth(t *testing.T, in string, x, y int) diffProbe {
 	t.Helper()
 	p := newDiffPair(t, 40, 12)
-	p.write(t, []byte(diffPrelude+in))
+	p.write(t, []byte(in))
 	cell := func(term Terminal) string {
 		c := term.CellAt(x, y)
 		if c == nil || c.Content == "" {
@@ -927,7 +911,7 @@ func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newDiffPair(t, 40, 12)
-			p.write(t, []byte(diffPrelude+tc.in))
+			p.write(t, []byte(tc.in))
 			if got := bgAt(p.pure, tc.x, tc.y); got != tc.wantPure {
 				t.Errorf("pure background at (%d,%d) = %v, want %v", tc.x, tc.y, got, tc.wantPure)
 			}
@@ -948,7 +932,7 @@ func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 // side that matches the DEC documentation.
 func TestGhosttyDivergence_LeftRightMarginReset(t *testing.T) {
 	p := newDiffPair(t, 40, 12)
-	p.write(t, []byte(diffPrelude+"\x1b[?69h\x1b[5;20s\x1b[?69l"))
+	p.write(t, []byte("\x1b[?69h\x1b[5;20s\x1b[?69l"))
 
 	full := uv.Rect(0, 0, 40, 12)
 	if got := p.pure.ScrollRegion(); got != full {
@@ -976,7 +960,7 @@ func TestGhosttyDivergence_LeftRightMarginReset(t *testing.T) {
 func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
 	t.Run("dropped at column 0 by both", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"́"))
+		p.write(t, []byte("́"))
 		if d := diffScreens(p.pure, p.gh); d.found() {
 			t.Errorf("orphan mark at the origin diverged: %s", d)
 		}
@@ -984,7 +968,7 @@ func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
 
 	t.Run("attached to the last character by both", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"AB\á"))
+		p.write(t, []byte("AB\á"))
 		if d := diffScreens(p.pure, p.gh); d.found() {
 			t.Errorf("mark after a control diverged: %s", d)
 		}
@@ -995,7 +979,7 @@ func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
 
 	t.Run("attached to a written space by both", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"AB \x1b[1;4H́"))
+		p.write(t, []byte("AB \x1b[1;4H́"))
 		if d := diffScreens(p.pure, p.gh); d.found() {
 			t.Errorf("mark on a written space diverged: %s", d)
 		}
@@ -1003,7 +987,7 @@ func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
 
 	t.Run("never-written cell still differs", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"\x1b[1;4H́"))
+		p.write(t, []byte("\x1b[1;4H́"))
 		pc, gc := p.pure.CellAt(2, 0), p.gh.CellAt(2, 0)
 		if pc == nil || pc.Content != " ́" {
 			t.Fatalf("pure cell (2,0) = %s, want the mark on a space; if the pure "+
@@ -1027,7 +1011,7 @@ func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
 func TestGhosttyDivergence_UnderlineStyleOutOfRange(t *testing.T) {
 	t.Run("4:5 is in range and both agree", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"\x1b[4:5mX"))
+		p.write(t, []byte("\x1b[4:5mX"))
 		if d := diffScreens(p.pure, p.gh); d.found() {
 			t.Errorf("4:5 diverged: %s", d)
 		}
@@ -1035,7 +1019,7 @@ func TestGhosttyDivergence_UnderlineStyleOutOfRange(t *testing.T) {
 
 	t.Run("4:7 is out of range and they differ", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		p.write(t, []byte(diffPrelude+"\x1b[4:7mX"))
+		p.write(t, []byte("\x1b[4:7mX"))
 		pc, gc := p.pure.CellAt(0, 0), p.gh.CellAt(0, 0)
 		if pc == nil || gc == nil {
 			t.Fatal("no cell written")

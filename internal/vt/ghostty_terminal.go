@@ -195,6 +195,15 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		gh.WithSize(clampU16(w), clampU16(h)),
 		gh.WithMaxScrollbackLines(uint(t.scrollbackMax)),
 		gh.WithMaxScrollbackBytes(uint(t.scrollbackMax)*ghosttyScrollbackRowBudget),
+		// Grapheme clustering (DEC mode 2027) is on by default, and RIS
+		// restores it. The library's own default is off, which measures a
+		// ZWJ sequence, a flag or a base with VS16 one codepoint at a time:
+		// the family emoji takes eight columns in the grid. tuios re-emits
+		// the row as text, the host terminal clusters it into two, and the
+		// rest of the row and the pane border shift left. The pure emulator
+		// always clusters, and so does Ghostty itself by default. An app
+		// may still reset 2027 for itself.
+		gh.WithModeDefault(gh.ModeGraphemeCluster, true),
 		gh.WithWritePty(func(_ *gh.Terminal, data []byte) {
 			// Query responses; the pipe write never blocks.
 			_, _ = t.pipe.Write(data)

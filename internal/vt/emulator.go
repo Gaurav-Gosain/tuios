@@ -326,23 +326,7 @@ func clustersJoin(a, b string) bool {
 // two characters on the grid but one flag to any parser reading them back. A
 // cluster break separates such neighbours.
 func (e *Emulator) Render() string {
-	lines := e.scr.buf.rows
-	width := e.scr.buf.Width()
-	var b strings.Builder
-	for i, line := range lines {
-		if line == nil {
-			// A row nothing has written renders as the blanks it holds.
-			for range width {
-				b.WriteByte(' ')
-			}
-		} else {
-			renderRowBreakingClusters(&b, line)
-		}
-		if i < len(lines)-1 {
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
+	return e.scr.buf.Render()
 }
 
 // renderRowBreakingClusters renders one row into b, inserting a cluster
@@ -676,7 +660,8 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 //
 // Reporting the method actually in use is the fix. Honouring mode 2027 would
 // mean changing placement to match, which is a different and much larger
-// change than making the answer true.
+// change than making the answer true. For the same reason 2027 defaults to
+// set, so DECRQM tells a program the truth before it resets the mode.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
 }
