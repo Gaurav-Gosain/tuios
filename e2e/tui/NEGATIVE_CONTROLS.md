@@ -153,6 +153,7 @@ a working negative control look like a broken one for half an hour.
 | A panel wider than the panes' columns covered all of the rail but a column or two, leaving fragments of its rows down the panel's edge | n/a, injected | `panelCenterX` in `internal/app/overlay_hit.go` centres on the screen alone | `TestAPanelWiderThanThePanesCoversTheWholeRail` (row 2 ends in the rail's ground) | **caught** |
 | The which-key overlay took the screen's bottom-right corner and sat over the rail with two of its columns showing | n/a, injected | the which-key corners taken from the whole screen in `internal/app/render_overlays.go` | `TestWhichKeySitsBesideTheRail` (row 2 of the rail changed under the overlay) | **caught** |
 | The which-key list was cut to the screen's rows and ran up over a dock at the top | n/a, injected | the list measured from the top of the screen in `internal/app/render_overlays.go` | `TestWhichKeySitsBesideTheRail` ("the which-key title is on row 1, over the dock") | **caught** |
+| A panel taller than the rows under a dock at the top was fitted to the whole screen and ran up over the dock | n/a, injected | `panelRoomHeight` returns the screen's rows and `overlayOrigin` places from row 0 | `TestATallPanelStaysUnderTheDock` (the settings page covered the dock's pills) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

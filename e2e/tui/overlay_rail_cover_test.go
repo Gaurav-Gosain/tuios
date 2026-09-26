@@ -86,6 +86,66 @@ func TestWhichKeySitsBesideTheRail(t *testing.T) {
 	}
 }
 
+// TestATallPanelStaysUnderTheDock opens the settings page at 120x40 with the
+// shipped looks, where the dock is on the top two rows. The page is taller
+// than the rows under the dock, and it was fitted to the whole screen: it ran
+// up over the dock, and the ends of the dock's pills and buttons showed on
+// both sides of the page's title. It is fitted to the rows under the dock now.
+// The frame is saved under artifactDir.
+//
+// How this could pass wrongly, written down first:
+//   - The page could be short enough to fit either way, so the test waits for
+//     its last row, the footer, and requires it on the screen's last rows.
+//   - The dock could change for its own reasons when a panel opens, so what
+//     is compared is its left end, the workspace pills, which only a panel
+//     drawn over them changes.
+//
+// Negative control: with panelRoomHeight returning the whole screen's rows
+// and overlayOrigin placing from row 0, the settings page covers the dock's
+// pills and the test fails. Either change alone keeps row 0 clear at this
+// size, since the page is one row shorter than the screen.
+func TestATallPanelStaysUnderTheDock(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-tall", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-tall"}, shippedLooks: true})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1 && dockOnTop(s)
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached with the dock on top: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	pills := func(s tuitest.Screen) string {
+		runes := []rune(s.Line(0))
+		return string(runes[:min(len(runes), 12)])
+	}
+	before := pills(term.Screen())
+
+	if err := term.SendKeys(",", "1"); err != nil {
+		t.Fatalf("open settings: %v", err)
+	}
+	waitText(t, term, "the settings page", "Settings", "esc close")
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	s := term.Screen()
+	saveArtifact(t, term, artifactDir(t), "settings-under-dock")
+	if footer := rowWith(s, "esc close"); footer < 35 {
+		t.Fatalf("the settings footer is on row %d: the page fits under the dock either way and this tests nothing\n%s",
+			footer, term.Snapshot())
+	}
+	if got := pills(s); got != before {
+		t.Fatalf("the settings page covered the dock's pills: row 0 began %q and now begins %q\n%s",
+			before, got, term.Snapshot())
+	}
+}
+
 // TestAPanelWiderThanThePanesCoversTheWholeRail opens the Inbox on an 80
 // column screen with the shipped looks, where the rail takes the right 16
 // columns and the Inbox is wider than the 64 left for the panes. Centred on
