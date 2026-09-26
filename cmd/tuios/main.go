@@ -2478,7 +2478,7 @@ would accept a question right now.`,
 	sendAgentMessageCmd := &cobra.Command{
 		Use:   "send-agent-message <text>",
 		Short: "Leave a message for another agent, or post a notice to the session",
-		Long: `Queue a message in the session's agent ring. With --to it goes to one pane's
+		Long: `Queue a message in the session's agent ring. With -w it goes to one pane's
 inbox; without, it is a notice everyone in the session can read.
 
 It does not touch the recipient's keyboard, which is the point: a message can be

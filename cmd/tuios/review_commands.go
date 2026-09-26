@@ -337,7 +337,11 @@ func newReviewNoteCommand() *cobra.Command {
 	var sessionName, window, side, hunk, edit, remove string
 	var jsonOutput bool
 	cmd := &cobra.Command{
-		Use:   "note [FILE:LINE] TEXT...",
+		// FILE:LINE is not bracketed although --edit and --remove go without
+		// it: the help renderer moves a bracketed part to the end of the usage
+		// line, which printed "note TEXT... [FILE:LINE]", the opposite of every
+		// example. The other forms are in the text and the examples.
+		Use:   "note FILE:LINE TEXT...",
 		Short: "Leave a review note on a line of a pane's changes",
 		Long: `Leave a note on a line of what the agent in a pane changed, for 'tuios review
 send' to pass to the agent. FILE is relative to the repository root and LINE
@@ -349,9 +353,10 @@ The note keeps the line's text, so it follows the line when the file changes;
 one whose line is gone is marked outdated. A note is at most 1000 bytes. A
 worktree holds at most 200 notes.
 
---edit ID replaces a note's text and --remove ID drops one. From inside a pane
-only the notes that pane wrote can be changed; from a shell, any but the ones
-left from the attached client.`,
+'tuios review note --edit ID TEXT...' replaces a note's text and 'tuios
+review note --remove ID' drops one. From inside a pane only the notes that
+pane wrote can be changed; from a shell, any but the ones left from the
+attached client.`,
 		Example: `  tuios review note api/retry.go:42 'log the attempt number here too'
   tuios review note -w build --hunk '@@ -88,4 +100,6 @@' api/retry.go 'wrap with context'
   tuios review note --edit n3 'wrap it with the attempt number'

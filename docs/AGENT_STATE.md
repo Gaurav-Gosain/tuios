@@ -1494,7 +1494,7 @@ have, and it runs the same check as a reply from `human` (see
 pane is refused even with a live nonce it copied, and where the kernel gives
 both pids the caller must be the process that attached. An agent cannot empty
 the list the person reads to find out what the agents want. Reading the
-person's inbox with `read-agent-messages --to human` marks the mail read, and
+person's inbox with `read-agent-messages -w human` marks the mail read, and
 the mail item follows it, but only from outside every pane: from a pane that
 read is a peek.
 

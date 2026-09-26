@@ -301,10 +301,14 @@ func newFanVerifyCommand() *cobra.Command {
 	var jsonOut, noWait bool
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		Use:   "verify [<host>:]<session> -- <command>...",
+		// No brackets before the end: the help renderer moves every bracketed
+		// part to the end of the usage line, which printed the host after the
+		// command. The host form is in the text instead.
+		Use:   "verify <session> -- <command>...",
 		Short: "Run one check in every attempt of a fan-out",
 		Long: `Run a command in every attempt of a fan-out, in a window named verify in
-each session, and say which passed.
+each session, and say which passed. Name the session host:session for a
+fan-out on another machine.
 
 The command runs with sh -c in each worktree, with your PATH. One argument
 after -- is a shell line, so it can hold && and pipes. Several are one
