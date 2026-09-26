@@ -1,0 +1,44 @@
+name: Binary size
+
+# Builds the tuios binary the way the release does (CGO_ENABLED=0, -trimpath,
+# -ldflags "-s -w") for linux/amd64 and darwin/arm64, prints its size, and
+# fails when it grows past the budget in scripts/binary-size.sh. docs/perf.md,
+# "Binary size budget", says how the budget was set and how to raise it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    name: binary size (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux/amd64, darwin/arm64]
+    steps:
+      - uses: actions/checkout@v7
+
+      # The budget was measured on the Go version go.mod names. A different
+      # toolchain links a different runtime, so the job builds with that one.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/binary-size.yml
+
+      - name: Build and check the size
+        run: scripts/binary-size.sh ${{ matrix.target }} | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
