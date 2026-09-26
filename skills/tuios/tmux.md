@@ -36,8 +36,9 @@ on `PATH`.
 ## What it can reach
 
 It never reaches another session: every target resolves inside the caller's
-own. It is held to your pane's grants: opening, closing and respawning other
-panes needs `admin` (`tuios pane-grants` shows what you hold). It is not a
+own. It is held to your pane's grants: opening, closing, focusing and naming
+panes, showing or naming a workspace, and respawning any pane but your own
+need `admin` (`tuios pane-grants` shows what you hold). It is not a
 sandbox; for an agent held to its own session, use `tuios mcp` or give its pane
 fewer grants.
 
