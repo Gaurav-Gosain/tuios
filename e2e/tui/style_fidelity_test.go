@@ -70,7 +70,7 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 	}
 	names := writeStreams(t, dir, inW)
 
-	ref := startTerm(t, []string{"/bin/sh"},
+	ref := tuitest.StartT(t, []string{"/bin/sh"},
 		tuitest.WithSize(inW, inH),
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv("PS1=$ ", "ENV=", "TERM=xterm-256color", "COLORTERM=truecolor"),

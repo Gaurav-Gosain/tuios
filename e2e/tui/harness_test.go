@@ -373,93 +373,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
 	}
-	return startTerm(t, argv, opts...)
-}
-
-// startTerm is tuitest.StartT with the teardown check of closeTerm in place of
-// tuitest's own. Every terminal in this package is started through it.
-func startTerm(t *testing.T, argv []string, opts ...tuitest.Option) *tuitest.Terminal {
-	t.Helper()
-	term, err := tuitest.Start(argv, opts...)
-	if err != nil {
-		t.Fatalf("tuitest: spawn %v: %v", argv, err)
-	}
-	t.Cleanup(func() { closeTerm(t, term) })
-	return term
-}
-
-// survivorPids matches the pids in the error tuitest's Close returns when a
-// process it started outlived the teardown, which reads
-// "ptyproc: 1 process(es) survived teardown: [5623]".
-var survivorPids = regexp.MustCompile(`survived teardown: \[([0-9 ]+)\]`)
-
-// closeTerm tears a terminal and everything it started down, and fails the
-// test if a process is still running afterwards.
-//
-// It is tuitest's Close with one correction, on Linux. tuitest decides that a
-// process is still running from the state letter in /proc/<pid>/stat, and
-// counts every letter except Z. A process being reaped also passes through X
-// (EXIT_DEAD): its parent's wait has claimed it and the kernel has not yet
-// removed it from the process table. In a daemon-backed test the client, the
-// daemon and the pane shells all die within a few milliseconds of the first
-// signal, and the daemon and the shells are reaped by init, since their parents
-// died first, while tuitest is still checking. A check that lands in that
-// window names a dead process as a survivor. That is the "1 process(es)
-// survived teardown" CI reported in daemon-backed tests that passed everything
-// else, with nothing left running a moment later for logSurvivors to find.
-//
-// So each pid tuitest names is read again. A pid that is gone, a zombie, or in
-// X has exited. Anything else is still running and fails the test with its
-// name, state and wait channel. Nothing waits here: a process that has not
-// exited when tuitest gives up fails exactly as it did before.
-func closeTerm(t *testing.T, term *tuitest.Terminal) {
-	t.Helper()
-	err := term.Close()
-	if err == nil {
-		return
-	}
-	m := survivorPids.FindStringSubmatch(err.Error())
-	if m == nil || runtime.GOOS != "linux" {
-		t.Errorf("tuitest: %v", err)
-		return
-	}
-	var running []string
-	for _, field := range strings.Fields(m[1]) {
-		pid, convErr := strconv.Atoi(field)
-		if convErr != nil {
-			t.Errorf("tuitest: %v", err)
-			return
-		}
-		if state, ok := procState(pid); ok && state != "Z" && state != "X" {
-			running = append(running, describeProc(pid))
-		}
-	}
-	if len(running) > 0 {
-		t.Errorf("tuitest: %v\n%s", err, strings.Join(running, "\n"))
-		return
-	}
-	t.Logf("tuitest named %s as surviving teardown, and each had already exited: "+
-		"it was read while being reaped (%v)", m[1], err)
-}
-
-// procState is the state letter of pid in /proc/<pid>/stat, and false when the
-// process is gone. The letter is the first field after the last ')', because
-// the command name before it may itself hold spaces and parentheses.
-func procState(pid int) (string, bool) {
-	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
-	if err != nil {
-		return "", false
-	}
-	s := string(b)
-	i := strings.LastIndexByte(s, ')')
-	if i < 0 {
-		return "", false
-	}
-	fields := strings.Fields(s[i+1:])
-	if len(fields) == 0 {
-		return "", false
-	}
-	return fields[0], true
+	return tuitest.StartT(t, argv, opts...)
 }
 
 // describeProc names a process for a failure message: its name, state, parent,
@@ -490,7 +404,7 @@ func describeProc(pid int) string {
 // running at this point by design and is listed too; its parent pid tells it
 // apart. A process that has begun to exit has already given up its working
 // directory, and one owned by another user does not show it, so neither is
-// listed; closeTerm names those by pid. Linux only: it reads /proc.
+// listed; tuitest's teardown check names those by pid. Linux only: it reads /proc.
 func logSurvivors(t *testing.T, base string) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
