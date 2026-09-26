@@ -1,4 +1,3 @@
-// Package input implements vim-style copy mode for TUIOS.
 package input
 
 import (

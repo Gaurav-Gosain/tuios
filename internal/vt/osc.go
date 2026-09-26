@@ -1,4 +1,3 @@
-// Package vt provides a virtual terminal implementation.
 package vt
 
 import (

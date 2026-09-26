@@ -1,6 +1,6 @@
-// Package input implements TUIOS input handling and key forwarding.
-//
-// This module handles keyboard input in both Window Management and Terminal modes.
+// Package input routes keyboard and mouse input for TUIOS: the dispatch between
+// Window Management and Terminal modes, the prefix commands, the encoding of
+// keys for the focused pane's PTY, mouse handling, copy mode and paste.
 package input
 
 import (

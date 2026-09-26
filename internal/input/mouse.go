@@ -1,4 +1,3 @@
-// Package input implements mouse event handling for TUIOS.
 package input
 
 import (

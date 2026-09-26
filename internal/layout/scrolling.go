@@ -1,6 +1,6 @@
-// Package layout provides window tiling and layout management for the terminal.
 // This file implements niri-style scrolling tiling where windows are arranged
 // as columns on an infinite horizontal strip with a viewport.
+
 package layout
 
 import "slices"
