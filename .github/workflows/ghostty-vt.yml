@@ -89,6 +89,8 @@ jobs:
                  / github.com\/Gaurav-Gosain\/tuios\/internal\/vt( |$)/ {print $1}' |
             sort -u)
           echo "$pkgs"
+          # $pkgs is split on purpose: one argument per package.
+          # shellcheck disable=SC2086
           PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
             go test -tags ghostty -count=1 -short $pkgs
 
