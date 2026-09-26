@@ -326,7 +326,15 @@ func (m *OS) reviewRows(width int) []reviewRow {
 		}
 	}
 
-	var rows []reviewRow
+	// One row per hunk and per line, plus the info row and a few per note,
+	// so a file of thousands of lines is laid out without regrowing.
+	size := 1 + 2*len(atLine) + 2*len(atHunk) + 2*len(loose)
+	if e.file != nil {
+		for _, hunk := range e.file.Hunks {
+			size += 1 + len(hunk.Lines)
+		}
+	}
+	rows := make([]reviewRow, 0, size)
 	addNote := func(i, hunk int, placed bool) {
 		n := r.notes[i]
 		if ed != nil && ed.noteID == n.ID {
@@ -549,6 +557,7 @@ func (m *OS) renderReview() string {
 	body = append(body, reviewPaint(m.reviewHeader(pal), inner, pal.Surface), rule)
 
 	listLines := m.reviewListLines(listW, paneH, pal)
+	defer func() { r.frameRows, r.frameRowsSet = nil, false }()
 	diffLines := m.reviewDiffLines(diffW, paneH, look)
 	sp := reviewSpaces(1, pal.Surface)
 	sep := sp + reviewInk(vtGlyph(), pal.FgMute, pal.Surface) + sp
@@ -714,6 +723,7 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 	var rows []reviewRow
 	if r.diff != nil {
 		rows = m.reviewRows(width)
+		r.frameRows, r.frameRowsSet = rows, true
 	}
 	if r.cursor >= len(rows) {
 		r.cursor = max(len(rows)-1, 0)
