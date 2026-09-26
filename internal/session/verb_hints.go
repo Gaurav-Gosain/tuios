@@ -112,7 +112,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoNotes, "send-review found no unsent review notes for the pane, so nothing was sent. Add one with review-note first."},
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
-	{ErrVerbInternal, "Unexpected server-side failure, or a verb or parameter this daemon lists and has not built yet."},
+	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 
 // VerbHint is the structured remedy attached to an error envelope. Every field
