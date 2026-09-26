@@ -84,6 +84,14 @@ type settingItem struct {
 	// session's pane geometry), and writing its path alone would leave that
 	// state behind.
 	derived bool
+	// differs is the changed check of a hand-written row that stands in for a
+	// registry path. Such a row cannot use the derived rows' check, which reads
+	// the config, because its value in force is not always the config's: the
+	// pane geometry rows show the session's, and the keycast and spotlight rows
+	// show the live toggle. So the row says what is in force, in the config's
+	// spelling, and differsFromDefault compares that with the registry
+	// default. Without it these rows never showed the changed dot.
+	differs func(m *OS) bool
 }
 
 // settingsCategory groups related settings under a tab.
@@ -625,6 +633,7 @@ func (m *OS) themeItem() settingItem {
 			m.setThemeSelection(v)
 		})
 	item.activate = func(m *OS) tea.Cmd { m.OpenThemePicker(); return nil }
+	item.differs = differsFromDefault("appearance.theme", func(*OS) string { return theme.CurrentThemeID() })
 	return item
 }
 
@@ -639,6 +648,7 @@ func (m *OS) glyphItem() settingItem {
 		func() string { return theme.ActiveGlyphSetID() },
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
 	item.activate = func(m *OS) tea.Cmd { m.OpenGlyphPicker(); return nil }
+	item.differs = differsFromDefault("appearance.glyphs", func(*OS) string { return theme.ActiveGlyphSetID() })
 	return item
 }
 
@@ -658,6 +668,7 @@ func (m *OS) screensaverEffectItem() settingItem {
 		func() string { return m.screensaverConfig().EffectName() },
 		func(m *OS, v string) { m.setOption("screensaver.effect", v) })
 	item.activate = func(m *OS) tea.Cmd { return m.OpenEffectPicker() }
+	item.differs = differsFromDefault("screensaver.effect", func(m *OS) string { return m.screensaverConfig().EffectName() })
 	return item
 }
 
@@ -701,6 +712,9 @@ func (m *OS) sectionLayoutItem() settingItem {
 			return strconv.Itoa(n) + " sections"
 		},
 		activate: func(m *OS) tea.Cmd { m.OpenSectionEditor(); return nil },
+		differs: differsFromDefault("appearance.sidebar.sections", func(m *OS) string {
+			return m.optionValue("appearance.sidebar.sections")
+		}),
 	}
 }
 
@@ -740,7 +754,7 @@ func (m *OS) agentRowItem() settingItem {
 // "unlimited" for a number: the config holds an int, and a stepper walking to
 // the cap one frame at a time is not how anyone sets this.
 func (m *OS) maxFPSItem() settingItem {
-	return enumItem("Max FPS", "Highest frame rate tuios draws at. A higher value applies at the next start.", fpsOptions,
+	item := enumItem("Max FPS", "Highest frame rate tuios draws at. A higher value applies at the next start.", fpsOptions,
 		func() string {
 			if m.Settings.NormalFPS >= config.MaxFPSCap {
 				return "unlimited"
@@ -756,18 +770,22 @@ func (m *OS) maxFPSItem() settingItem {
 			}
 			m.setOption("appearance.max_fps", strconv.Itoa(fps))
 		})
+	item.differs = differsFromDefault("appearance.max_fps", func(m *OS) string { return m.optionValue("appearance.max_fps") })
+	return item
 }
 
 // showKeysItem is the keycast toggle. Hand-written because the overlay's live
 // state is a model field the renderer reads directly, so the row has to move
 // both it and the config.
 func (m *OS) showKeysItem() settingItem {
-	return boolItem("Show keys", "Show each key you press in the bottom right corner.",
+	item := boolItem("Show keys", "Show each key you press in the bottom right corner.",
 		func() bool { return m.ShowKeys },
 		func(m *OS, v bool) {
 			m.ShowKeys = v
 			m.setOption("debug.show_key_events", strconv.FormatBool(v))
 		})
+	item.differs = differsFromDefault("debug.show_key_events", func(m *OS) string { return strconv.FormatBool(m.ShowKeys) })
+	return item
 }
 
 // agentAlertRows are the Alerts tab's rows about agents, under the heading row
@@ -823,12 +841,14 @@ func (m *OS) agentAlertsGroupItem() settingItem {
 // model field the render path reads directly, so the row has to move both it
 // and the config. The keycast row is hand-written for the same reason.
 func (m *OS) spotlightItem() settingItem {
-	return boolItem("Spotlight", "Light the area around the cursor and dim the rest.",
+	item := boolItem("Spotlight", "Light the area around the cursor and dim the rest.",
 		func() bool { return m.SpotlightOn() },
 		func(m *OS, v bool) {
 			m.SetSpotlight(v)
 			m.setOption("spotlight.enabled", strconv.FormatBool(v))
 		})
+	item.differs = differsFromDefault("spotlight.enabled", func(m *OS) string { return strconv.FormatBool(m.SpotlightOn()) })
+	return item
 }
 
 // OpenSettings shows the settings overlay, initializing the theme registry so

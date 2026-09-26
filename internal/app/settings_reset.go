@@ -65,9 +65,12 @@ func (m *OS) settingDefault(item settingItem) (value, shown string, ok bool) {
 	return value, shown, true
 }
 
-// settingDiffers reports whether a derived row's value in force is not its
-// default.
+// settingDiffers reports whether a row's value in force is not its default:
+// a derived row's by the registry, a hand-written one's by its own differs.
 func (m *OS) settingDiffers(item settingItem) bool {
+	if !item.derived && item.differs != nil {
+		return item.differs(m)
+	}
 	def, _, ok := m.settingDefault(item)
 	if !ok {
 		return false
@@ -87,7 +90,9 @@ func (m *OS) settingDiffers(item settingItem) bool {
 // settingsDefaultNote is the line added to a changed row's description: what
 // the default is and the key that goes back to it.
 func (m *OS) settingsDefaultNote(item settingItem) string {
-	if !m.settingDiffers(item) {
+	// A hand-written row carries the dot but has no reset: writing its path
+	// back would leave the state it moves beside the config behind.
+	if !item.derived || !m.settingDiffers(item) {
 		return ""
 	}
 	_, shown, _ := m.settingDefault(item)
@@ -124,6 +129,9 @@ func (m *OS) SettingsResetSelected() tea.Cmd {
 	}
 	def, shown, derived := m.settingDefault(item)
 	switch {
+	case !derived && m.settingDiffers(item):
+		m.ShowNotification(item.Label+" has no reset here. Change it with its control.", "info", m.Settings.NotificationDuration)
+		return nil
 	case !derived:
 		m.ShowNotification(item.Label+" has no single default to go back to here.", "info", m.Settings.NotificationDuration)
 		return nil
@@ -169,4 +177,26 @@ func (m *OS) optionEffectiveOf(path, value string) string {
 		return o.Accepted[0]
 	}
 	return value
+}
+
+// differsFromDefault is the changed check for a hand-written row that stands
+// in for path. now is the value in force, spelled the way the config spells
+// it. An empty value, and a zero for an int whose default is not zero, are
+// the default, as they are for a derived row.
+func differsFromDefault(path string, now func(m *OS) string) func(m *OS) bool {
+	return func(m *OS) bool {
+		o, ok := config.LookupOption(path)
+		if !ok {
+			return false
+		}
+		v := now(m)
+		if v == "" || (o.Type == config.OptionInt && v == "0") {
+			return false
+		}
+		def := o.Default
+		if def == "" && len(o.Accepted) > 0 {
+			def = o.Accepted[0]
+		}
+		return v != def
+	}
 }

@@ -129,7 +129,7 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 // adopted, a row reading the config would show a value the layout is not
 // using, and its first toggle would appear to do nothing.
 func (m *OS) sharedBordersItem() settingItem {
-	return boolItem(
+	item := boolItem(
 		settingLabel("appearance.shared_borders"),
 		registryDescription("appearance.shared_borders"),
 		func() bool { return m.SharedBorders },
@@ -137,6 +137,8 @@ func (m *OS) sharedBordersItem() settingItem {
 			m.SetSharedBordersSetting(v)
 		},
 	)
+	item.differs = differsFromDefault("appearance.shared_borders", func(m *OS) string { return strconv.FormatBool(m.SharedBorders) })
+	return item
 }
 
 // paneGapItem is the settings row for the pane gap, hand-written for the same
@@ -150,9 +152,10 @@ func (m *OS) paneGapItem() settingItem {
 		adjust: func(m *OS, dir int) {
 			m.SetPaneGapSetting(m.PaneGap + dir)
 		},
-		setNum: func(m *OS, v int) { m.SetPaneGapSetting(v) },
-		numMin: 0,
-		numMax: config.PaneGapMax,
+		setNum:  func(m *OS, v int) { m.SetPaneGapSetting(v) },
+		numMin:  0,
+		numMax:  config.PaneGapMax,
+		differs: differsFromDefault("appearance.gap", func(m *OS) string { return strconv.Itoa(m.PaneGap) }),
 		// No gauge. The gap is a count of cells over a range of eight, so the
 		// number is already the whole story and a bar beside it only says the
 		// same thing less exactly.
@@ -196,6 +199,7 @@ func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int))
 		meter: func(m *OS) float64 {
 			return float64(clampInt(get(m), lo, hi)-lo) / float64(hi-lo)
 		},
+		differs: differsFromDefault(path, func(m *OS) string { return strconv.Itoa(get(m)) }),
 	}
 }
 

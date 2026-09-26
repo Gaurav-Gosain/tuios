@@ -12,7 +12,13 @@ import (
 func searchOS(t *testing.T) *OS {
 	t.Helper()
 	useTempConfig(t)
-	m := &OS{Settings: config.Global, Width: 120, Height: 44, UserConfig: config.DefaultConfig()}
+	// The session's pane geometry is seeded from the config the way the
+	// factory seeds it, so the rows that show it read the default too.
+	m := &OS{
+		Settings: config.Global, Width: 120, Height: 44, UserConfig: config.DefaultConfig(),
+		MasterRatio: config.Global.MasterRatioFraction(), ScrollColumnWidth: config.Global.ScrollColumnWidth,
+		SharedBorders: config.Global.SharedBorders, PaneGap: config.Global.PaneGap,
+	}
 	m.OpenSettings()
 	return m
 }
