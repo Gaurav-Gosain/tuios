@@ -31,10 +31,15 @@ import (
 //     different value, so what a relaying daemon forwards is not what it was
 //     sent.
 //
+// decodePayload runs the nesting scan of wire_gobscan.go before gob, so every
+// input here goes through the scan too, and a panic, a spin or an allocation
+// in it fails the same checks.
+//
 // Not covered here: a SerializedBSPNode tree nested a few million deep decodes
 // by recursion and overflows the goroutine stack, which is a fatal error the
-// fuzzer cannot survive to report. The daemon never decodes one: see
-// wire_bounds.go and TestDaemonBoundsWhatClientsSend.
+// fuzzer cannot survive to report. Neither side decodes one: see
+// wire_bounds.go and TestDaemonBoundsWhatClientsSend for the daemon, and
+// wire_gobscan.go and TestClientBoundsWhatDaemonsSend for any payload.
 
 // wirePayloads are the bodies the daemon and its clients decode, one
 // constructor each. The first byte of a fuzz input picks one.

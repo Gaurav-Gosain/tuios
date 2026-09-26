@@ -44,6 +44,10 @@ import (
 // recurse (the merge, the fingerprint, the save, the rebroadcast) sees them,
 // and a command result's data is held to a depth no command produces.
 //
+// Under both, every payload either side decodes is scanned first for how
+// deeply it nests (wire_gobscan.go). That is what bounds the other direction,
+// a daemon's frames to a client, which have no small size to cap them at.
+//
 // None of this changes the wire. An older client or peer sends the same
 // frames, and only what is over a limit is refused.
 

@@ -28,10 +28,14 @@ func encodePayload(v any) ([]byte, error) {
 }
 
 // decodePayload deserializes a gob payload into v. An empty payload leaves v
-// untouched.
+// untouched. A payload that nests too deeply for gob to decode safely is
+// refused before gob sees it: see wire_gobscan.go.
 func decodePayload(data []byte, v any) error {
 	if len(data) == 0 {
 		return nil
+	}
+	if err := checkGobNesting(data); err != nil {
+		return fmt.Errorf("gob decode: %w", err)
 	}
 	dec := gob.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(v); err != nil {
