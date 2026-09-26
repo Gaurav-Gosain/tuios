@@ -589,9 +589,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// and its rule. A prefix with more bindings than the rest of the screen
 		// can hold says how many it left out rather than running off the bottom
 		// where they cannot be read.
+		//
+		// The room starts under a dock at the top: measured from the top of
+		// the screen, a long list ran up over that dock and cut its notice in
+		// half.
 		moreCount := 0
-		if rh := m.GetRenderHeight(); rh > 0 {
-			maxRows := max(rh-5, 1)
+		if room := m.GetRenderHeight() - m.GetTopMargin(); room > 0 {
+			maxRows := max(room-5, 1)
 			if len(bindings) > maxRows {
 				moreCount = len(bindings) - (maxRows - 1)
 				bindings = bindings[:maxRows-1]
@@ -695,7 +699,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// A binding list taller than the screen would otherwise be positioned
 		// off the top, hiding the first entries with no way to reach them.
 		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
-		overlayY = max(min(overlayY, renderHeight-overlayHeight), 0)
+		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.GetTopMargin(), 0)
 
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).

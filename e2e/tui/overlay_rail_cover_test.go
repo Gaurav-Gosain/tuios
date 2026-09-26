@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,8 +22,12 @@ import (
 //     overlay's top, so every row of the rail band is compared with the
 //     frame from before the prefix, not only the header.
 //
-// Negative control: with the which-key corners taken from the whole screen,
-// the rail's rows change under the overlay and the test fails.
+// The list is also longer than 40 rows hold, and it is cut to the panes' rows
+// so that it does not run up over the dock on the top two.
+//
+// Negative controls: with the which-key corners taken from the whole screen,
+// the rail's rows change under the overlay; with the list cut to the screen's
+// rows, the title lands over the dock.
 func TestWhichKeySitsBesideTheRail(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -66,6 +71,18 @@ func TestWhichKeySitsBesideTheRail(t *testing.T) {
 			t.Fatalf("row %d of the rail changed under the which-key overlay:\n got %q\nwant %q\n%s",
 				r, got, want, term.Snapshot())
 		}
+	}
+	// The list is longer than forty rows can hold, and it is cut to the
+	// panes' rows rather than run up over the dock on the top two.
+	titleRow := -1
+	for r := 0; r < rows && titleRow < 0; r++ {
+		if slices.Contains(strings.Fields(after.Line(r)), "prefix") {
+			titleRow = r
+		}
+	}
+	// Row 0 is the dock, row 1 its rule and row 2 the overlay's top pad.
+	if titleRow < 3 {
+		t.Fatalf("the which-key title is on row %d, over the dock on the top two rows\n%s", titleRow, term.Snapshot())
 	}
 }
 
