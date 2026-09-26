@@ -36,8 +36,8 @@ func startShutdownTestDaemon(t *testing.T) (*Daemon, string, string) {
 // file on Close by default, and shutdown closes the listener first, so the
 // socket used to vanish at the top of shutdown, before any state was saved,
 // and WaitForDaemonShutdown could return mid-shutdown and find nothing on
-// disk. That is how TestSocketRemovalMeansStateIsPersisted failed under load:
-// the wait's first poll lost a microsecond race with listener.Close. The
+// disk. That is how a test of the saved state failed under load: the wait's
+// first poll lost a microsecond race with listener.Close. The
 // daemon opts out of unlink-on-close, which makes shutdown's own explicit
 // Remove the only unlink and the documented order the real one.
 func TestListenerCloseDoesNotUnlinkTheSocket(t *testing.T) {

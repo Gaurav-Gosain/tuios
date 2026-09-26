@@ -316,8 +316,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// a blend. That is the whole cost of the feature and it falls exactly on
 	// the panes it applies to: an unfocused pane with dim on renders cell by
 	// cell like a focused one. It is charged only on a frame that was going to
-	// re-read the emulator anyway, since a clean pane serves its cache above,
-	// and BenchmarkDimUnfocusedPane measures what it comes to.
+	// re-read the emulator anyway, since a clean pane serves its cache above.
 	// The run of cells the pointer is on, if it is on one in this pane. Read
 	// once here rather than per cell: it is a pane-wide fact, and the test
 	// inside the loop is then two integer comparisons.

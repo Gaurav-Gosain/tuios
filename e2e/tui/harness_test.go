@@ -1113,8 +1113,8 @@ func mouseHover(t *testing.T, term *tuitest.Terminal, col, row int) {
 //
 // It is spelled out rather than imported because this module does not depend on
 // the one under test. Nothing else in the app draws it, and no notification
-// contains it, so a plain search of the screen is unambiguous. TestTilingChip
-// pins it against the real binary.
+// contains it, so a plain search of the screen is unambiguous.
+// TestTheDockChipTracksTiling pins it against the real binary.
 const tilingModeIcon = "\uf00a"
 
 // tilingIsOn reports whether the dock says the session is tiled.

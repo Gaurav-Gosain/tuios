@@ -194,7 +194,7 @@ func TestCtrlPOpensPaletteWindowModeLegacy(t *testing.T) {
 	alive(t, term, "after legacy ctrl+p window mode")
 }
 
-// TestLeaderPStillWorks guards the other palette binding is unaffected: leader
+// TestLeaderPPrevWindowStillWorks guards the other palette binding is unaffected: leader
 // (Ctrl+B) then P must still cycle to the previous window, not open the palette.
 // This is a regression guard for the fix, exercised in terminal mode where the
 // leader chord lives.

@@ -64,7 +64,7 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 	}
 }
 
-// TestTooltipPendingClosesEvenWhenTheRowHasNothingToSay: the gate is closed by
+// TestTooltipPendingClosesOnASilentRow: the gate is closed by
 // the drawing frame, not by the label, or a silent row would hold the tick open
 // for as long as the pointer sat on it.
 func TestTooltipPendingClosesOnASilentRow(t *testing.T) {

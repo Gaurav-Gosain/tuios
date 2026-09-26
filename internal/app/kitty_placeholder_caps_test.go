@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestHostDrawsPlaceholdersReadsTheTerminalsOwnAnswer pins the detection. It is
+// TestHostDrawsPlaceholders pins the detection. It is
 // a heuristic, and the point of the test is that it is a heuristic over what
 // the terminal said about itself rather than over an inherited TERM.
 func TestHostDrawsPlaceholders(t *testing.T) {
