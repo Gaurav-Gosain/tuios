@@ -5,7 +5,9 @@ go 1.26.6
 require github.com/Gaurav-Gosain/tuitest v0.0.0-20260923071412-3a3274ede1b1
 
 require (
+	charm.land/lipgloss/v2 v2.0.6 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
+	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260816001655-68d539dca504 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 )
 
