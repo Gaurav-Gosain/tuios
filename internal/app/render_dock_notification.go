@@ -225,7 +225,7 @@ func (s notifStatus) notifMeta() string {
 	// used to be was picked for one background and measured under 4.5:1 on two
 	// thirds of the themes.
 	bg := theme.NotificationGround()
-	dim := theme.Readable(theme.UI().FgDim, bg)
+	dim := theme.Readable(theme.GroundUI().FgDim, bg)
 
 	var parts []string
 	if s.msg.Sticky {
@@ -284,7 +284,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// left edge now that there is no fill to open.
 	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
 	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
-	if glyph, fg := agentMark(s.msg.AgentState, false, theme.UI()); glyph != "" {
+	if glyph, fg := agentMark(s.msg.AgentState, false, theme.GroundUI()); glyph != "" {
 		// A message about an agent wears that state's mark in that state's
 		// colour, the same one the rail and the title bar draw, so the dock
 		// does not say "needs you" in a shape used nowhere else.
@@ -322,7 +322,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - notifChromeWidth - lipgloss.Width(meta)
 	text := notifFit(s.msg.Message, room)
-	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(theme.UI().Fg, bg))
+	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(theme.GroundUI().Fg, bg))
 	if s.msg.Target != nil {
 		// Underline is the one link mark everyone reads without being taught,
 		// costs no columns, and never appears on a message with nowhere to go,

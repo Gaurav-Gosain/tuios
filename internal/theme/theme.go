@@ -324,7 +324,7 @@ func NotificationInfo() color.Color {
 // carry the message. On the bare canvas the four severities clear the floor as
 // themselves.
 func NotificationGround() color.Color {
-	return UI().Canvas
+	return GroundUI().Canvas
 }
 
 // RailRule returns the ink for the chrome's structure: the rail's edge, the
