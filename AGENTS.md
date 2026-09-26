@@ -55,11 +55,13 @@ go test -race ./...
 
 # Run the tests of the ghostty backend. `go build -tags ghostty ./...` compiles
 # it and runs none of its tests, so a change that passes the plain suite can
-# still be wrong on the backend scripts/install.sh builds by default. This is
-# the command the ghostty-vt workflow runs.
+# still be wrong on the backend scripts/install.sh builds by default. The
+# ghostty-vt workflow runs every package whose tests link internal/vt; these
+# are the ones that matter most, the renderer in internal/app included.
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
   go test -tags ghostty -count=1 -short \
-    ./internal/vt/ ./internal/session/ ./internal/terminal/
+    ./internal/vt/ ./internal/session/ ./internal/terminal/ \
+    ./internal/app/ ./internal/input/ ./cmd/tuios/
 ```
 
 ### Browser build (Learn tuios)

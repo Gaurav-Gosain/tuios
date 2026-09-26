@@ -1,6 +1,10 @@
 # The ghostty build tag swaps the terminal emulator for libghostty-vt. This
 # job keeps that build compiling and its differential harness honest: the
-# same bytes must produce the same state on both emulators.
+# same bytes must produce the same state on both emulators. It also runs the
+# tests of every package built on the emulator, because scripts/install.sh
+# ships this backend by default and the go-test workflow only covers the
+# pure one. The renderer tests in internal/app failed here for weeks while
+# this job ran only the emulator's own packages.
 name: ghostty-vt
 
 on:
@@ -10,6 +14,9 @@ on:
       - "internal/vt/**"
       - "internal/session/**"
       - "internal/terminal/**"
+      - "internal/app/**"
+      - "internal/input/**"
+      - "cmd/tuios/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
@@ -19,6 +26,9 @@ on:
       - "internal/vt/**"
       - "internal/session/**"
       - "internal/terminal/**"
+      - "internal/app/**"
+      - "internal/input/**"
+      - "cmd/tuios/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
@@ -68,11 +78,19 @@ jobs:
       - name: Tagged build compiles everywhere
         run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 
-      - name: Differential and wire fidelity
+      # Every package whose tests link the emulator, found from the import
+      # graph so a new one is covered without editing this list: the
+      # differential and wire fidelity tests in internal/vt and
+      # internal/session, and the renderer, input and CLI tests above them.
+      - name: Tests on the ghostty backend
         run: |
+          pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... |
+            awk '$1 ~ /^github.com\/Gaurav-Gosain\/tuios\// &&
+                 / github.com\/Gaurav-Gosain\/tuios\/internal\/vt( |$)/ {print $1}' |
+            sort -u)
+          echo "$pkgs"
           PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
-            go test -tags ghostty -count=1 -short \
-            ./internal/vt/ ./internal/session/ ./internal/terminal/
+            go test -tags ghostty -count=1 -short $pkgs
 
       - name: Pure build unaffected
         run: CGO_ENABLED=0 go build ./...
