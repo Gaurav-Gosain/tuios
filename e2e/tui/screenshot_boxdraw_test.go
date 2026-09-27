@@ -128,3 +128,113 @@ func TestScreenshotDrawsAStraightBorderWithoutNotches(t *testing.T) {
 		}
 	}
 }
+
+// TestScreenshotDrawsAHorizontalRuleWithoutNubs renders a run of U+2500
+// through `tuios screenshot` and reads the PNG back. A straight rule has to be
+// the same in every column: each pixel row across it one even colour, and no
+// ink past its end. Each cell used to overdraw half a pixel into its
+// neighbours to close the seam between them, and where two cells overlapped
+// the stroke's anti-aliased edge was drawn twice, so every rule and every pane
+// border in a capture had a faint brighter nub beside it at each cell
+// boundary, and a faint half pixel of ink in the cell after its end.
+//
+// How this could pass wrongly, written down first:
+//   - The row could miss the rule, or be the prompt. The row read is the one
+//     with the most ink in the top of the picture, and its inked run has to be
+//     about six cells long.
+//   - The rows checked could all be inside the stroke, where the overlap is
+//     invisible; the nub is in the rows at its edges. Every row within half a
+//     cell of the stroke is checked, including the ones with no ink at all.
+//   - The rule could stop short, so there would be no cell boundary in it.
+//     Six cells means five boundaries inside it.
+//
+// The PNG is saved under artifactDir.
+//
+// Negative control: with rect bleeding half a pixel past every cell edge it
+// touches again, the check fails on a row at the stroke's edge, at a pixel on
+// a cell boundary.
+func TestScreenshotDrawsAHorizontalRuleWithoutNubs(t *testing.T) {
+	const session = "e2e-rule"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	rule := strings.Repeat(`\342\224\200`, 6)
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "-l",
+		"clear; printf '"+rule+`\n'`+"\r"); err != nil {
+		t.Fatalf("print the rule: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		pane, _ := tuiosCLI(t, base, "capture-pane", "-s", session)
+		if strings.Contains(pane, strings.Repeat("─", 6)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never showed the rule:\n%s", pane)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	out := filepath.Join(artifactDir(t), "rule.png")
+	if cliOut, err := tuiosCLI(t, base, "screenshot", "-s", session, "--format", "png",
+		"--frame", "none", "--theme", "catppuccin_mocha", "--out", out, "--no-copy"); err != nil {
+		t.Fatalf("tuios screenshot: %v\n%s", err, cliOut)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode %s: %v", out, err)
+	}
+	b := img.Bounds()
+	bg := img.At(b.Max.X-1, b.Max.Y-1)
+
+	// The rule is on the first line, so it is in the top of the picture.
+	row, rowInk := -1, 0
+	for y := b.Min.Y; y < b.Min.Y+b.Dy()/4; y++ {
+		ink := 0
+		for x := b.Min.X; x < b.Min.X+b.Dx()/4; x++ {
+			ink += inkDistance(img.At(x, y), bg)
+		}
+		if ink > rowInk {
+			row, rowInk = y, ink
+		}
+	}
+	if row < 0 {
+		t.Fatalf("no rule in the top of %s", out)
+	}
+	x0, x1 := -1, -1
+	for x := b.Min.X; x < b.Max.X; x++ {
+		if inkDistance(img.At(x, row), bg) > 30 {
+			if x0 < 0 {
+				x0 = x
+			}
+			x1 = x
+		} else if x0 >= 0 {
+			break
+		}
+	}
+	// Six cells of a picture no more than two hundred and forty columns wide.
+	if x0 < 0 || x1-x0 < 6*b.Dx()/240 {
+		t.Fatalf("the rule at y=%d runs from %d to %d, too short for six cells; see %s", row, x0, x1, out)
+	}
+	halfCell := (x1 - x0 + 1) / 12
+	for y := row - halfCell; y <= row+halfCell; y++ {
+		first := inkDistance(img.At(x0, y), bg)
+		for x := x0; x <= x1; x++ {
+			if ink := inkDistance(img.At(x, y), bg); ink-first > 3 || first-ink > 3 {
+				t.Fatalf("row y=%d of the rule is not one colour: %d at x=%d against %d at its start (x=%d); see %s",
+					y, ink, x, first, x0, out)
+			}
+		}
+		for x := x1 + 1; x <= x1+halfCell; x++ {
+			if ink := inkDistance(img.At(x, y), bg); ink > 3 {
+				t.Fatalf("ink %d at x=%d, y=%d, past the rule's end at x=%d; see %s", ink, x, y, x1, out)
+			}
+		}
+	}
+}

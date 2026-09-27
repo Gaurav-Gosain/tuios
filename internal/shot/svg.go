@@ -3,6 +3,7 @@ package shot
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -57,12 +58,20 @@ func RenderSVG(g *Grid, f *Frame, decorations []Decoration) []byte {
 
 	// The content group carries the one transform from cell units to
 	// pixels; a decoration layer appended later addresses (col,row) and
-	// inherits this geometry.
+	// inherits this geometry. It is a whole number of units, so a position
+	// snapped to the pixel grid inside the group is on the grid outside it as
+	// well: the box glyphs and the background cells are laid on whole pixels
+	// (see boxdraw.go), and a fractional offset here would put every one of
+	// them back between two.
+	l.gridX, l.gridY = math.Round(l.gridX), math.Round(l.gridY)
 	fmt.Fprintf(&b, `<g transform="translate(%s,%s)">`+"\n", fnum(l.gridX), fnum(l.gridY))
 	for _, r := range bgRuns(g) {
-		fmt.Fprintf(&b, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>`+"\n",
-			fnum(float64(r.col)*l.cw), fnum(float64(r.row)*l.ch),
-			fnum(float64(r.cells)*l.cw), fnum(l.ch), Hex(r.color))
+		// On whole pixels like the PNG backend's cell backgrounds, so a
+		// background and a block glyph drawn over it cover the same pixels.
+		x0, x1 := math.Round(float64(r.col)*l.cw), math.Round(float64(r.col+r.cells)*l.cw)
+		y0, y1 := math.Round(float64(r.row)*l.ch), math.Round(float64(r.row+1)*l.ch)
+		fmt.Fprintf(&b, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s" shape-rendering="crispEdges"/>`+"\n",
+			fnum(x0), fnum(y0), fnum(x1-x0), fnum(y1-y0), Hex(r.color))
 	}
 	for _, r := range textRuns(g) {
 		writeSVGRun(&b, r, l)
@@ -153,13 +162,18 @@ func writeSVGRun(b *strings.Builder, r run, l layout) {
 	}
 
 	if r.procedural != 0 {
-		paths, _ := proceduralPaths(r.procedural, l.cw, l.ch)
+		// Laid out in the document's units and handed back in them, so the
+		// group's own offset comes off again.
+		paths, _ := proceduralPaths(r.procedural, l.gridX+x, l.gridY+y, l.cw, l.ch)
 		for _, p := range paths {
 			op := opacity
 			if p.opacity > 0 {
 				op = fmt.Sprintf(` fill-opacity="%s"`, fnum(p.opacity))
 			}
-			fmt.Fprintf(b, `<path d="%s" fill="%s"%s/>`+"\n", pathData(p, x, y), fill, op)
+			if p.crisp {
+				op += ` shape-rendering="crispEdges"`
+			}
+			fmt.Fprintf(b, `<path d="%s" fill="%s"%s/>`+"\n", pathData(p, -l.gridX, -l.gridY), fill, op)
 		}
 		writeSVGDecor(b, r, x, y, w, l)
 		return

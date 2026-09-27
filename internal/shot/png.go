@@ -318,13 +318,15 @@ func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
 	}
 
 	if r.procedural != 0 {
-		paths, _ := proceduralPaths(r.procedural, l.cw, l.ch)
+		// The paths come back on the canvas's own pixel grid, so they are
+		// filled with no further offset.
+		paths, _ := proceduralPaths(r.procedural, x, y, l.cw, l.ch)
 		for _, p := range paths {
 			pc := ink
 			if p.opacity > 0 {
 				pc = Mix(c.BG, ink, p.opacity)
 			}
-			fillPath(img, p, x, y, pc)
+			fillPath(img, p, 0, 0, pc)
 		}
 		drawPNGDecor(img, r, x, y, w, l, ink)
 		return
@@ -495,12 +497,12 @@ func fillRect(img *image.RGBA, x, y, w, h float64, c Color) {
 // fillPath rasterizes one gpath at an origin with anti-aliasing.
 func fillPath(img *image.RGBA, p gpath, ox, oy float64, c Color) {
 	minX, minY, maxX, maxY := pathBounds(p, ox, oy)
-	// Clip to the canvas before sizing the rasterizer. A procedural glyph in
-	// the first or last column deliberately bleeds edgeBleed past its cell to
-	// close the seam with its neighbour, and at frame none that cell edge is
-	// the canvas edge, so an unclipped rect indexes past the pixel buffer.
-	// The rasterizer accepts path coordinates outside its own bounds, so
-	// clipping the rect is all that is needed and the geometry is unchanged.
+	// Clip to the canvas before sizing the rasterizer. A path is allowed to
+	// reach past the canvas (a curve's control points can, and at frame none a
+	// glyph in the first or last column ends on the canvas edge), and an
+	// unclipped rect would index past the pixel buffer. The rasterizer accepts
+	// path coordinates outside its own bounds, so clipping the rect is all
+	// that is needed and the geometry is unchanged.
 	clip := img.Bounds()
 	x0, y0 := max(int(minX), clip.Min.X), max(int(minY), clip.Min.Y)
 	x1, y1 := min(int(maxX+1), clip.Max.X), min(int(maxY+1), clip.Max.Y)

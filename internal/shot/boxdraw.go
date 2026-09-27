@@ -12,6 +12,14 @@ import "math"
 // paths in cell-local pixel coordinates, SVG serializes them, PNG feeds them
 // to the rasterizer, and the seams are unconstructible.
 //
+// The geometry is laid on the output's pixel grid, the way a terminal lays its
+// own box glyphs. Each cell is snapped to whole pixels, so two neighbours share
+// one edge exactly, and every straight stroke has a whole-pixel thickness and
+// whole-pixel edges, so it has no anti-aliased fringe. A line through a row of
+// cells is then one run of solid pixels with nothing at the joins. The pixel is
+// a device pixel for PNG, at whatever scale it is drawn, and a user unit for
+// SVG, which is a device pixel at any whole zoom.
+//
 // Covered: box drawing U+2500-257F, block elements U+2580-259F, braille
 // U+2800-28FF, powerline U+E0B0-E0B7.
 
@@ -23,9 +31,13 @@ type gop struct {
 }
 
 // A gpath is one filled subpath group with an optional opacity (0 means 1).
+// crisp marks an axis-aligned rectangle on whole pixels, which SVG draws
+// without anti-aliasing so that a viewer zoomed to a fraction does not open a
+// hairline between two cells that share an edge.
 type gpath struct {
 	ops     []gop
 	opacity float64
+	crisp   bool
 }
 
 // IsProcedural reports whether r is drawn as geometry instead of font text.
@@ -46,25 +58,28 @@ func IsProcedural(r rune) bool {
 	return false
 }
 
-// proceduralPaths returns the filled paths for r in a cell of w by h pixels,
-// with (0,0) the cell's top-left corner. ok is false when r is not in a
-// covered range.
-func proceduralPaths(r rune, w, h float64) ([]gpath, bool) {
+// proceduralPaths returns the filled paths for r in the cell whose top-left
+// corner is (x, y) and whose size is w by h, in the output's own coordinates:
+// device pixels for PNG, user units for SVG. The paths come back in those same
+// coordinates, snapped to the pixel grid as the note at the top of this file
+// says. ok is false when r is not in a covered range.
+func proceduralPaths(r rune, x, y, w, h float64) ([]gpath, bool) {
 	if !IsProcedural(r) {
 		return nil, false
 	}
-	b := &glyphBuilder{w: w, h: h}
-	// Light stroke: about 1/14 of the cell height, never under 1px, so the
-	// weight tracks the font size the way a terminal's own box glyphs do.
-	b.t = h / 14
-	if b.t < 1 {
-		b.t = 1
-	}
-	// Double-line gap offset from the centerline.
-	b.o = b.t * 1.6
-	if b.o < 2 {
-		b.o = 2
-	}
+	// The cell's own edges, on whole pixels. Rounding the absolute position of
+	// each edge, not the size, is what makes a cell's right edge the very pixel
+	// boundary its neighbour's left edge is: both are the same number rounded.
+	// It is also the rounding the PNG backend fills cell backgrounds with.
+	x0, y0 := math.Round(x), math.Round(y)
+	b := &glyphBuilder{w: math.Round(x+w) - x0, h: math.Round(y+h) - y0}
+	// Light stroke: about 1/14 of the cell height in whole pixels, never under
+	// one, so the weight tracks the font size the way a terminal's own box
+	// glyphs do and every stroke of a weight is the same width.
+	b.t = max(math.Round(b.h/14), 1)
+	// Double-line offset of each stroke's centre from the centreline, also
+	// whole pixels, and far enough apart that the two strokes never touch.
+	b.o = max(math.Round(b.t*1.6), 2)
 	switch {
 	case r >= 0x2500 && r <= 0x257F:
 		b.boxDrawing(r)
@@ -76,6 +91,17 @@ func proceduralPaths(r rune, w, h float64) ([]gpath, bool) {
 		b.powerline(r)
 	case r == 0x21B5:
 		b.returnArrow()
+	}
+	for i := range b.paths {
+		ops := b.paths[i].ops
+		for j := range ops {
+			ops[j].x += x0
+			ops[j].y += y0
+			ops[j].c1x += x0
+			ops[j].c1y += y0
+			ops[j].c2x += x0
+			ops[j].c2y += y0
+		}
 	}
 	return b.paths, true
 }
@@ -95,35 +121,29 @@ func (b *glyphBuilder) clampY(y float64) float64 {
 	return min(max(y, 0), b.h)
 }
 
-// edgeBleed is how far a fill that touches a cell edge overdraws into the
-// neighbor. Cells land on fractional pixel positions, so two abutting fills
-// each cover the shared pixel at partial alpha and a run of box glyphs reads
-// as a dashed line. Terminals avoid it by snapping to the pixel grid; the
-// backends here cannot (SVG has no grid), so a slight overdraw closes the
-// seam instead, in both backends at once.
-const edgeBleed = 0.5
-
-// rect appends an axis-aligned filled rectangle, clamped to the cell, with
-// edges that touch the cell boundary bled past it.
+// rect appends an axis-aligned filled rectangle, clamped to the cell and with
+// every edge on a whole pixel.
+//
+// Every edge is rounded on its own, and that is enough to keep strokes even:
+// the strokes are whole pixels thick, so a stroke's two edges have the same
+// fractional part and round the same way, and so do the edges of two strokes
+// that are meant to meet. Where an edge lies on the cell's boundary it lands on
+// the boundary its neighbour's edge lands on, and the two fills abut with
+// nothing between them and nothing doubled.
+//
+// This replaced a half-pixel bleed past every cell edge a fill touched. The
+// bleed closed the seam between two cells at fractional positions, but where it
+// overlapped the neighbour's fill it drew the stroke's anti-aliased fringe
+// twice, which left a faint brighter nub beside the line at every cell
+// boundary, and past the end of a line it put half a pixel of ink in the next
+// cell.
 func (b *glyphBuilder) rect(x0, y0, x1, y1 float64) {
-	x0, x1 = b.clampX(x0), b.clampX(x1)
-	y0, y1 = b.clampY(y0), b.clampY(y1)
+	x0, x1 = math.Round(b.clampX(x0)), math.Round(b.clampX(x1))
+	y0, y1 = math.Round(b.clampY(y0)), math.Round(b.clampY(y1))
 	if x1 <= x0 || y1 <= y0 {
 		return
 	}
-	if x0 <= 0 {
-		x0 = -edgeBleed
-	}
-	if x1 >= b.w {
-		x1 = b.w + edgeBleed
-	}
-	if y0 <= 0 {
-		y0 = -edgeBleed
-	}
-	if y1 >= b.h {
-		y1 = b.h + edgeBleed
-	}
-	b.paths = append(b.paths, gpath{ops: []gop{
+	b.paths = append(b.paths, gpath{crisp: true, ops: []gop{
 		{op: 'M', x: x0, y: y0},
 		{op: 'L', x: x1, y: y0},
 		{op: 'L', x: x1, y: y1},
@@ -292,10 +312,18 @@ func (b *glyphBuilder) dashes(n int, vertical bool, weight uint8) {
 // arcCorner renders one of the light rounded corners U+256D..U+2570.
 // dx,dy say which edges the arms leave through: dx=+1 right, -1 left;
 // dy=+1 down, -1 up.
+//
+// The straight legs are the pixels a straight line through the cell is, and
+// the elbow is built on the snapped centre with a radius that puts the legs'
+// inner ends on whole pixels, so the curve meets each leg on a pixel boundary
+// rather than half a pixel inside one.
 func (b *glyphBuilder) arcCorner(dx, dy float64) {
-	cx, cy := b.w/2, b.h/2
 	t := b.t
-	rr := min(cx, cy) * 0.75
+	// The centre of the stroke rect draws for a line at w/2 and h/2.
+	cx := math.Round(b.w/2-t/2) + t/2
+	cy := math.Round(b.h/2-t/2) + t/2
+	frac := cx - math.Floor(cx) // cy has the same one: both are whole plus t/2
+	rr := math.Round(min(b.w/2, b.h/2)*0.75+frac) - frac
 	// Straight legs from the edges up to where the arc begins.
 	if dx > 0 {
 		b.rect(cx+rr, cy-t/2, b.w, cy+t/2)
