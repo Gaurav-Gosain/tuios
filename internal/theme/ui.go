@@ -316,23 +316,61 @@ func lightDialogChrome(ground color.Color) Chrome {
 	return c
 }
 
-// liftOnLight holds the palette's coloured inks to the text floor on a light
+// liftOnLight holds the palette's coloured inks to their floors on a light
 // surface. A theme's bright slots are picked to read on its own background in
 // a terminal, where they are mostly marks and highlights; on the chrome they
 // are key names, headers, the title chip and status words, and a light
-// theme's bright cyan or yellow measures under 2:1 on a pale grey. Each is
-// carried toward the surface's text end only as far as it has to go, so the
-// hue survives, and at 256 colours the result is stepped to the palette entry
-// the terminal will draw.
+// theme's bright cyan or yellow measures under 2:1 on a pale grey.
+//
+// Each ink is taken down in luminance at its own chromaticity, one small step
+// at a time, until it clears its floor on the grounds it is written on as the
+// depth shows them. Blending toward black instead drained the chroma with the
+// light. At 256 colours the ink is the palette entry nearest it in hue that
+// reads, since a stepped-down blend of a dark enough blue lands on the grey
+// ramp.
 func liftOnLight(p *overlay.Palette, d overlay.Depth) {
-	grounds := []color.Color{p.Surface, p.Panel}
-	for _, ink := range []*color.Color{&p.Accent, &p.AccentBright, &p.Selected, &p.Warn, &p.Success, &p.Info, &p.Warning} {
-		for _, g := range grounds {
-			*ink = overlay.ReadableAt(*ink, g, ContrastFloor)
-		}
+	surface := []color.Color{overlay.Shown(p.Surface)}
+	rows := []color.Color{overlay.Shown(p.Surface), overlay.Shown(p.Panel)}
+	if d == overlay.Depth256 {
+		// The cursor row as Derive will place it, beside the surface.
+		rows[1] = overlay.Apart256(p.Panel, p.Surface)
+	}
+	// The key ink is written on the surface: footers, which-key, the search
+	// sigil. Everything else also marks a row the cursor can be on. The
+	// accent is text, a header or a title, and holds the text floor; the
+	// status colours are marks and pill grounds, and hold the mark floor, so a
+	// warning keeps its own hue at 256 colours rather than turning an
+	// error's red.
+	inks := []struct {
+		ink     *color.Color
+		grounds []color.Color
+		floor   float64
+	}{
+		{&p.AccentBright, surface, ContrastFloor},
+		{&p.Accent, rows, ContrastFloor}, {&p.Selected, rows, ContrastFloor},
+		{&p.Info, rows, MarkFloor}, {&p.Warn, rows, MarkFloor},
+		{&p.Success, rows, MarkFloor}, {&p.Warning, rows, MarkFloor},
+	}
+	for _, it := range inks {
 		if d == overlay.Depth256 {
-			*ink = overlay.To256(*ink)
+			if q := overlay.ReadableEntry256(*it.ink, it.grounds, it.floor); q != nil {
+				*it.ink = q
+			}
+			continue
 		}
+		reads := func(c color.Color) bool {
+			for _, g := range it.grounds {
+				if overlay.ContrastRatio(c, g) < it.floor {
+					return false
+				}
+			}
+			return true
+		}
+		c := *it.ink
+		for step := 1.0; step < 21 && !reads(c); step *= 1.05 {
+			c = overlay.Darker(*it.ink, step)
+		}
+		*it.ink = c
 	}
 }
 

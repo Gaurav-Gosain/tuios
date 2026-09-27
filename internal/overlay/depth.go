@@ -213,3 +213,51 @@ func nearestGrey(c color.Color) color.Color {
 	try(231)
 	return best
 }
+
+// ReadableEntry256 is the entry of the 256-colour cube (16 to 231) nearest c
+// in hue that clears floor on every ground, as the depth shows them. Hue comes
+// before lightness: the entry has to be darker or lighter than c to read, and
+// what should survive the step is the colour. Stepping c toward the text end
+// and then to the palette drained its chroma below greyChroma on a light
+// ground, so a blue key came out a grey one. It returns To256(c) when that
+// already reads, and nil when no cube entry does.
+func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color.Color {
+	reads := func(q color.Color) bool {
+		for _, g := range grounds {
+			if ContrastRatio(q, Shown(g)) < floor {
+				return false
+			}
+		}
+		return true
+	}
+	if q := To256(c); reads(q) {
+		return q
+	}
+	v := toLab(c)
+	hue := math.Atan2(v.b, v.a)
+	table := xterm256Lab()
+	var best color.Color
+	bestD := math.Inf(1)
+	for i := range 216 {
+		e := table[i]
+		if math.Hypot(e.a, e.b) < greyChroma {
+			continue
+		}
+		dh := math.Abs(math.Atan2(e.b, e.a) - hue)
+		if dh > math.Pi {
+			dh = 2*math.Pi - dh
+		}
+		// A radian of hue weighs as much as the whole lightness range, so the
+		// hue decides and lightness breaks the ties.
+		dl := v.l - e.l
+		d := dh*dh + dl*dl
+		if d >= bestD {
+			continue
+		}
+		q := ansi.IndexedColor(uint8(16 + i)) // #nosec G115 -- i is within [0, 215].
+		if reads(q) {
+			best, bestD = q, d
+		}
+	}
+	return best
+}

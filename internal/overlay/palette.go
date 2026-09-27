@@ -26,6 +26,7 @@ package overlay
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -155,7 +156,13 @@ func (p *Palette) checkContrast() {
 		p.FgDim = ReadableAt(p.FgDim, g, ContrastFloor)
 	}
 	p.Fg = ReadableAt(p.Fg, p.Card, ContrastFloor)
-	p.FgMute = ReadableAt(p.FgMute, p.Surface, MarkFloor)
+	// The quiet ink labels rows too, a row's age or its session, and those
+	// labels ride the cursor row with it. On the constant ramp it clears the
+	// floor there already; on a light ramp the cursor row is the darker step
+	// and it did not.
+	for _, g := range [...]color.Color{p.Surface, p.RowSel, p.RowSelQuiet} {
+		p.FgMute = ReadableAt(p.FgMute, g, MarkFloor)
+	}
 }
 
 // derive16 is Derive at 16 colours. Every ground is the terminal's own
@@ -174,7 +181,8 @@ func derive16(p Palette) Palette {
 }
 
 // apart256 is To256(c), moved one step along the grey ramp when it lands on the
-// same entry as surface. The step goes the way c lies from surface in
+// same entry as surface, or to the nearest other cube entry when the surface
+// is one. The step goes the way c lies from surface in
 // truecolor, or away from the surface's own end when the two were equal.
 func apart256(c, surface color.Color) color.Color {
 	q := To256(c)
@@ -182,8 +190,14 @@ func apart256(c, surface color.Color) color.Color {
 		return q
 	}
 	g, ok := q.(ansi.IndexedColor)
-	if !ok || g < 232 {
+	if !ok {
 		return q
+	}
+	if g < 232 {
+		// A tinted surface, such as a warm light theme's, is a cube entry,
+		// and the grey ramp is no step from it. The step is the nearest
+		// other entry on c's side of the surface.
+		return nearestApart(c, surface)
 	}
 	dir := 1
 	switch lc, ls := relativeLuminance(c), relativeLuminance(surface); {
@@ -194,3 +208,45 @@ func apart256(c, surface color.Color) color.Color {
 	}
 	return Grey(int(g) - 232 + dir)
 }
+
+// nearestApart is the entry from 16 to 255 nearest c in OKLab that is not
+// surface and lies on the same side of it in luminance as c. A tinted c keeps
+// off the neutral entries and is matched hue first, with its chroma held near
+// c's, so a warm panel's cursor row stays warm: the cube's steps are coarse,
+// and the nearest entry by distance alone can be a neutral or a neighbouring
+// hue at the right lightness.
+func nearestApart(c, surface color.Color) color.Color {
+	v := toLab(c)
+	darker := relativeLuminance(c) <= relativeLuminance(surface)
+	ls := relativeLuminance(surface)
+	tinted := math.Hypot(v.a, v.b) >= greyChroma
+	best, bestD := surface, math.Inf(1)
+	for i, e := range xterm256Lab() {
+		q := ansi.IndexedColor(uint8(16 + i)) // #nosec G115 -- i is within [0, 239].
+		if q == surface || (tinted && math.Hypot(e.a, e.b) < greyChroma) {
+			continue
+		}
+		if lq := relativeLuminance(q); (lq < ls) != darker {
+			continue
+		}
+		dl, da, db := v.l-e.l, v.a-e.a, v.b-e.b
+		d := dl*dl + da*da + db*db
+		if tinted {
+			dh := math.Abs(math.Atan2(e.b, e.a) - math.Atan2(v.b, v.a))
+			if dh > math.Pi {
+				dh = 2*math.Pi - dh
+			}
+			dc := math.Hypot(e.a, e.b) - math.Hypot(v.a, v.b)
+			d = dh*dh + dl*dl + 4*dc*dc
+		}
+		if d < bestD {
+			best, bestD = q, d
+		}
+	}
+	return best
+}
+
+// Apart256 is the step a ground c takes at 256 colours beside surface, the
+// same step Derive gives the panel and the cursor row: To256(c), moved off
+// surface's own entry when the two land on it.
+func Apart256(c, surface color.Color) color.Color { return apart256(c, To256(surface)) }
