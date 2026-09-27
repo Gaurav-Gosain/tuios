@@ -22,7 +22,9 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 
 ## Documentation
 
-Full documentation is available at **[tuios.dev](https://tuios.dev)** (hosted) or in the [`docs/`](./docs/) folder.
+Full documentation is available at **[tuios.dev](https://tuios.dev)** (hosted) or in the [`docs/`](./docs/) folder. To try tuios without installing it, take the guided tour at **[tuios.dev/learn](https://tuios.dev/learn)**: the real app, compiled to WebAssembly, with a practice shell in every pane.
+
+What changed in v0.8.0 is in the [release notes](docs/release-notes/v0.8.0.md).
 
 ### Quick Links
 - **[Getting Started](https://tuios.dev/docs/getting-started)**: Install and first session
@@ -88,7 +90,9 @@ go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest
 docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 ```
 
-**[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)**: Pre-built binaries for all platforms.
+**[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)**: Pre-built binaries for Linux, macOS, Windows, FreeBSD and OpenBSD, with a `checksums.txt`. The `tuios-ghostty_*` archives are `tuios` built on the [libghostty-vt emulator](./docs/ghostty-vt.md), for Linux, macOS and Windows on amd64 and arm64.
+
+**Building from source** needs Go 1.26.6 or newer.
 
 **Updating.** If you installed with the quick install script or a release
 binary, `tuios update` fetches the newest release and puts it in place
@@ -115,8 +119,8 @@ and prints the right command rather than overwriting it.
 
 ### Agents
 The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
-- **Agent State**: Panes running a coding agent show whether it is working, waiting for you, done or errored, as a shape in the title and a row on the rail. `tuios integration install` wires 18 harnesses (Claude Code, Codex, Gemini CLI, opencode and more) to report it, and tuios detects 22 agent CLIs by their process and screen
-- **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode and Kilo permission requests with one key
+- **Agent State**: Panes running a coding agent show whether it is working, waiting for you, done or errored, as a shape in the title and a row on the rail. `tuios integration install` wires 18 harnesses (Claude Code, Codex, Gemini CLI, opencode and more) to report it, and tuios detects 23 agent CLIs by their process and screen
+- **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode, Kilo and Qwen Code permission requests with one key
 - **Questions and Messages**: `tuios ask-human` puts a question with fixed answers in your Inbox. Agents mail each other with `tuios send-agent-message`, and `tuios ask-agent` asks one and waits for its answer. It never types into a pane waiting on a prompt, and replies from you are marked verified
 - **Fleets**: `tuios fan` starts one prompt in several agents, mixed harnesses allowed, each in its own git worktree. `tuios start-agent` starts one helper beside you, in its TUI or headless over ACP or the Codex app-server. Selectors such as `group:fan/retry needs:you` address a whole group
 - **Resume**: After a daemon restart, the Inbox offers to resume each agent conversation that was running
@@ -191,7 +195,10 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Mouse Support**: Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
 - **SSH Server Mode**: Remote terminal multiplexing
 - **Web Terminal Mode**: Browser-based access (separate `tuios-web` binary)
-- **Themes**: Bundled themes plus custom themes from JSON ([docs](docs/THEMES.md))
+- **Themes**: Bundled themes plus custom themes from JSON, with chrome designed for truecolor, 256 and 16 colours and for light themes ([docs](docs/THEMES.md))
+- **Host Colours**: tuios asks your terminal for its colours, passes them to programs that ask, and follows its light and dark switch
+- **Backgrounds**: `appearance.background` paints empty cells with the theme's background or a colour of your own, per surface if you like
+- **Motion**: `appearance.motion` is `none`, `basic` or `full` (fades, the working shimmer, confetti)
 - **Glyph Sets**: Choose the characters the chrome is drawn with ([docs](docs/GLYPHS.md))
 
 ## Quick Start
@@ -254,7 +261,7 @@ tuios config edit            # Edit config in $EDITOR
 tuios keybinds list          # View the common keybindings
 ```
 
-See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, `window_button_position`, custom themes, and keybinding customization.
+See the [configuration reference](https://tuios.dev/docs/configuration) (or run `tuios list-options`) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, `window_button_position`, custom themes, and keybinding customization.
 
 ## Architecture
 
