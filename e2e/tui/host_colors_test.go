@@ -68,8 +68,8 @@ func hexColor(hex string) shot.Color {
 	return c
 }
 
-// hostPalette is the palette the host draws with on a given ground.
-func hostPalette(fg, bg string) *shot.Palette {
+// hostGroundPalette is the palette the host draws with on a given ground.
+func hostGroundPalette(fg, bg string) *shot.Palette {
 	p := &shot.Palette{FG: hexColor(fg), BG: hexColor(bg)}
 	for i, hex := range hostANSI {
 		p.ANSI[i] = hexColor(hex)
@@ -97,7 +97,7 @@ func hostInkAt(s tuitest.Screen, col, row int) (color.Color, bool) {
 	if c == nil {
 		return nil, false
 	}
-	p := hostPalette("#000000", "#000000")
+	p := hostGroundPalette("#000000", "#000000")
 	return p.Resolve(c, p.FG), true
 }
 
@@ -427,7 +427,7 @@ func hostColorsAt(t *testing.T, depth hostDepth) {
 	}
 	windowManagementMode(t, term)
 	saveArtifact(t, term, artifacts, "light-host")
-	renderScreenPNG(t, term.Screen(), hostPalette(lightFg, lightBg), filepath.Join(artifacts, "light-host-terminal.png"))
+	renderScreenPNG(t, term.Screen(), hostGroundPalette(lightFg, lightBg), filepath.Join(artifacts, "light-host-terminal.png"))
 	if depth.contrast {
 		checkRailReads(t, term, rgb(lightBg), "light host", true)
 	}
@@ -477,7 +477,7 @@ func hostColorsAt(t *testing.T, depth hostDepth) {
 	// Judged afresh it would read as dark.
 	switchTo(midBg, midFg)
 	saveArtifact(t, term, artifacts, "grey-after-light")
-	renderScreenPNG(t, term.Screen(), hostPalette(midFg, midBg), filepath.Join(artifacts, "grey-after-light-terminal.png"))
+	renderScreenPNG(t, term.Screen(), hostGroundPalette(midFg, midBg), filepath.Join(artifacts, "grey-after-light-terminal.png"))
 	if pill := pillGround(); depth.ramp && !neutral(pill) {
 		t.Errorf("on the mid grey %s after a light host the pill's fill is %+v, the dark ramp's; the light ramp should be held\n%s",
 			midBg, pill, term.SnapshotStyled())
@@ -489,7 +489,7 @@ func hostColorsAt(t *testing.T, depth hostDepth) {
 	// is not shown again for a mode it is already in, so only the rail is
 	// measured here.
 	saveArtifact(t, term, artifacts, "dark-host")
-	renderScreenPNG(t, term.Screen(), hostPalette(darkFg, darkBg), filepath.Join(artifacts, "dark-host-terminal.png"))
+	renderScreenPNG(t, term.Screen(), hostGroundPalette(darkFg, darkBg), filepath.Join(artifacts, "dark-host-terminal.png"))
 	if depth.contrast {
 		checkRailReads(t, term, rgb(darkBg), "dark host", false)
 	}
@@ -499,7 +499,7 @@ func hostColorsAt(t *testing.T, depth hostDepth) {
 	// The same grey after the dark scheme: now the dark ramp is held.
 	switchTo(midBg, midFg)
 	saveArtifact(t, term, artifacts, "grey-after-dark")
-	renderScreenPNG(t, term.Screen(), hostPalette(midFg, midBg), filepath.Join(artifacts, "grey-after-dark-terminal.png"))
+	renderScreenPNG(t, term.Screen(), hostGroundPalette(midFg, midBg), filepath.Join(artifacts, "grey-after-dark-terminal.png"))
 	if pill := pillGround(); depth.ramp && pill != darkPill {
 		t.Errorf("on the mid grey %s after a dark host the pill's fill is %+v, not the dark ramp's %+v; the dark ramp should be held\n%s",
 			midBg, pill, darkPill, term.SnapshotStyled())
