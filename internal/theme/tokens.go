@@ -18,14 +18,14 @@ import (
 // traffic lights. The render code measures them against the ground they land
 // on and lifts one that misses its floor.
 func WindowDots() (closeDot, minimise, zoom color.Color) {
-	return slotAt16(9, lipgloss.Color("#ff5f57")),
-		slotAt16(11, lipgloss.Color("#febc2e")),
-		slotAt16(10, lipgloss.Color("#28c840"))
+	return slotAt16(9, tokDotClose),
+		slotAt16(11, tokDotMinimise),
+		slotAt16(10, tokDotZoom)
 }
 
 // LinkHover is the ink of the link under the pointer in a pane.
 func LinkHover() color.Color {
-	return slotAt16(14, lipgloss.Color("#7DCFFF"))
+	return slotAt16(14, tokLinkHover)
 }
 
 // BorderMultifocus is the border of a window that is one of several focused
@@ -35,23 +35,23 @@ func BorderMultifocus() color.Color { return overlay.Slot(3) }
 // ScrollIndicator is the ink of the scrollback position on a window's bottom
 // border.
 func ScrollIndicator() color.Color {
-	return slotAt16(11, lipgloss.Color("#fbbf24"))
+	return slotAt16(11, tokScrollIndicator)
 }
 
 // CursorFallback is the pair a drawn cursor cell uses when the cell under it
 // names no colour of its own: white on black, which reverses into a block.
 func CursorFallback() (fg, bg color.Color) {
-	return slotAt16(15, lipgloss.Color("#FFFFFF")), slotAt16(0, lipgloss.Color("#000000"))
+	return slotAt16(15, tokWhite), slotAt16(0, tokBlack)
 }
 
 // ShowkeysKey is the key-cast pill for an ordinary key: its ground and ink.
 func ShowkeysKey() (bg, fg color.Color) {
-	return slotAt16(8, lipgloss.Color("#3a3a5e")), slotAt16(15, lipgloss.Color("#ffffff"))
+	return slotAt16(8, tokKeyGround), slotAt16(15, tokWhite)
 }
 
 // ShowkeysLeader is the key-cast pill for the leader key: its ground and ink.
 func ShowkeysLeader() (bg, fg color.Color) {
-	return slotAt16(14, lipgloss.Color("#00d9ff")), slotAt16(0, lipgloss.Color("#000000"))
+	return slotAt16(14, tokLeaderGround), slotAt16(0, tokBlack)
 }
 
 // SpotlightShade is the colour the spotlight carries an unlit cell toward:
@@ -60,3 +60,18 @@ func SpotlightShade() color.Color { return spotlightShade }
 
 // spotlightShade is boxed once, because the spotlight reads it for every cell.
 var spotlightShade color.Color = color.RGBA{A: 0xFF}
+
+// The literals behind the tokens above, parsed once: lipgloss.Color parses its
+// string on every call, and the window dots and the cursor are asked for on
+// every frame.
+var (
+	tokDotClose        = lipgloss.Color("#ff5f57")
+	tokDotMinimise     = lipgloss.Color("#febc2e")
+	tokDotZoom         = lipgloss.Color("#28c840")
+	tokLinkHover       = lipgloss.Color("#7DCFFF")
+	tokScrollIndicator = lipgloss.Color("#fbbf24")
+	tokWhite           = lipgloss.Color("#ffffff")
+	tokBlack           = lipgloss.Color("#000000")
+	tokKeyGround       = lipgloss.Color("#3a3a5e")
+	tokLeaderGround    = lipgloss.Color("#00d9ff")
+)
