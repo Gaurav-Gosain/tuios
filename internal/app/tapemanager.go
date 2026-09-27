@@ -495,11 +495,9 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 	file := m.TapeManager.Files[i]
 	selected := i == m.TapeManager.SelectedIndex
 
-	rowBg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	rowBg := pal.Ground(st, pal.Surface)
 	nameFg := pal.Fg
-	if selected {
-		rowBg, nameFg = pal.RowSel, pal.Fg
-	}
 
 	marker := "  "
 	if selected {
@@ -528,7 +526,7 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 	}
 
 	gap := max(width-lipgloss.Width(row)-lipgloss.Width(right), 1)
-	return overlay.Fill(row+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+right, width, rowBg)
+	return pal.Row(row+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+right, width, st, pal.Surface)
 }
 
 func formatFileSize(size int64) string {

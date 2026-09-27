@@ -98,7 +98,8 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		start := m.CommandPaletteScroll
 		end := min(start+visible, len(filtered))
 		for i := start; i < end; i++ {
-			lines = append(lines, paletteRow(filtered[i], i == m.CommandPaletteSelected, pal, width))
+			st := overlay.RowState{Cursor: i == m.CommandPaletteSelected, Focused: true}
+			lines = append(lines, pal.Row(paletteRow(filtered[i], st.Cursor, pal, width), width, st, bg))
 		}
 		for len(lines) < visible+2 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
@@ -143,10 +144,9 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 // paletteRow renders one command row: a category tag, the name, and the
 // shortcut, with a full-width highlight bar when selected.
 func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, width int) string {
-	bg := pal.Surface
+	bg := pal.Ground(overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 	nameColor := pal.FgDim
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 	}
 
@@ -196,7 +196,9 @@ func paletteRowName(name, agentState string, doneSeen bool, match []int, bg, nam
 		return nameStyle.Render(name)
 	}
 
-	hitStyle := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true)
+	// At 16 colours the accent may be a slot close to the name's own ink, so a
+	// match is underlined as well as bold there.
+	hitStyle := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Underline(pal.Depth == overlay.Depth16)
 	var out, run strings.Builder
 	hot := false
 	flush := func() {

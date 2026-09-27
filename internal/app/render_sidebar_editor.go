@@ -57,7 +57,7 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	start := m.SectionEditorScroll
 	end := min(start+visible, len(rows))
 	for i := start; i < end; i++ {
-		lines = append(lines, m.sectionEditorLine(rows[i], i == m.SectionEditorSelected, pal, width))
+		lines = append(lines, pal.Row(m.sectionEditorLine(rows[i], i == m.SectionEditorSelected, pal, width), width, overlay.RowState{Cursor: i == m.SectionEditorSelected, Focused: true}, pal.Surface))
 	}
 	for shown := end - start; shown < visible; shown++ {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -112,7 +112,7 @@ func (m *OS) sectionEditorLine(row railEditorRow, selected bool, pal overlay.Pal
 	nameColor := pal.FgDim
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
+		bg = pal.Ground(overlay.RowState{Cursor: true, Focused: true}, bg)
 		nameColor = pal.Fg
 		marker = "› "
 	}

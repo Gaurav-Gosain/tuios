@@ -59,11 +59,11 @@ func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 // glyphRow renders one set: its name on the left and the shape strip on the
 // right, with a highlight bar when selected.
 func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) string {
-	bg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	bg := pal.Ground(st, pal.Surface)
 	nameColor := pal.FgDim
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 		marker = "› "
 	}
@@ -85,7 +85,7 @@ func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) 
 	// it is a preview of chrome.
 	shape := overlay.Style(bg).Foreground(pal.Fg).Render(strip)
 	gap := max(width-lipgloss.Width(left)-stripW, 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + shape
+	return pal.Mark(left+overlay.Style(bg).Render(strings.Repeat(" ", gap)), st) + shape
 }
 
 // glyphPickerDetail is the two lines under the list: what the selected set says

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"image/color"
 	"sort"
 	"strconv"
 	"strings"
@@ -273,10 +272,10 @@ func (m *OS) refoldAgentsOnPaneFocus() {
 // sidebarAgentFoldRow draws the fold line, "+3 at rest", muted, at the name
 // column. On a tall section the second line names the folded panes.
 func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palette, st sidebarRowState, names bool) string {
-	var rowBg color.Color
+	rowBg := sidebarRowBg(st, pal)
 	fg := pal.FgMute
 	if st.lit() {
-		rowBg, fg = pal.Surface, pal.Fg
+		fg = pal.Fg
 	}
 	indent := sidebarNameCol
 	text := "+" + strconv.Itoa(e.Fold) + " at rest"

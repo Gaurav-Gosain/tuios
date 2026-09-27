@@ -128,6 +128,8 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
+		// Typing a reply takes the keyboard, so the row it answers goes quiet.
+		Unfocused: replying,
 		Position: func() (int, int) {
 			n, of := 0, 0
 			for i, r := range rows {
