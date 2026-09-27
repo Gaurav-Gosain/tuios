@@ -150,6 +150,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// and the border style pick the character of the edge rule facing the panes,
 	// so a rail drawn before either moved is not the rail this frame draws.
 	mixB(m.Settings.UseASCIIOnly)
+	mixB(m.Settings.NoNerdFont)
 	mixS(m.Settings.BorderStyle)
 
 	// View state: scroll, focus, and hover all restyle rows. Each section holds

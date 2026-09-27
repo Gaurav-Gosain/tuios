@@ -1858,7 +1858,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if s.GlyphSet == "" {
 		s.GlyphSet = theme.GlyphSetNone
 	}
-	theme.SetActiveGlyphs(s.GlyphSet)
+	// The terminal's own limits, when the config chose no set. See
+	// DetectGlyphEnv.
+	theme.SetActiveGlyphs(s.applyGlyphEnv())
 	s.ShowCPU = cfg.Appearance.ShowCPU
 	s.ShowRAM = cfg.Appearance.ShowRAM
 	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll

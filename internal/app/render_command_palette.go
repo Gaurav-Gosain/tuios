@@ -77,8 +77,13 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	// Search input.
 	// The accent is the theme's and the panel's ground is not, so both are
 	// measured against it. The cursor is a block, so the mark floor is enough.
-	cursor := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render("█")
-	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render("› ") +
+	cursorInk := theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)
+	cursor := overlay.Style(bg).Foreground(cursorInk).Render("█")
+	if overlay.UseASCII() {
+		// A full block is not ASCII; a reversed blank draws the same block.
+		cursor = overlay.Cursor(" ", bg, cursorInk)
+	}
+	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.Sigil()) +
 		overlay.Style(bg).Foreground(pal.Fg).Render(m.CommandPaletteQuery) + cursor
 	lines = append(lines, search, overlay.Rule(width, bg, pal))
 
@@ -169,7 +174,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 
 	marker := "  "
 	if selected {
-		marker = "› "
+		marker = overlay.Sigil()
 	}
 	name := overlay.Truncate(printableTitle(item.Name), max(width-2-tagW-shortcutW-1, 1))
 	left := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Render(marker) +

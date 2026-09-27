@@ -54,7 +54,7 @@ func (m *OS) contextMenuWidth(cm *ContextMenu) int {
 // renderer cannot disagree about how much room the left side takes.
 func contextMenuRowLeft(it ContextMenuItem, s *config.Settings) string {
 	icon := ""
-	if it.Icon != "" && !s.UseASCIIOnly {
+	if it.Icon != "" && !s.NerdFontsOff() {
 		icon = it.Icon + " "
 	}
 	return "  " + icon + it.Label
@@ -146,7 +146,7 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 	}
 
 	left := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker)
-	if it.Icon != "" && !m.Settings.UseASCIIOnly {
+	if it.Icon != "" && !m.Settings.NerdFontsOff() {
 		left += overlay.Style(rowBg).Foreground(iconColor).Render(it.Icon + " ")
 	}
 

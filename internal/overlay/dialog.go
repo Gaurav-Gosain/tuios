@@ -88,7 +88,19 @@ func hintKey(k string) string {
 	if k == EnterGlyph {
 		return EnterKey()
 	}
+	if UseASCII() {
+		if word, ok := asciiArrowKeys[k]; ok {
+			return word
+		}
+	}
 	return k
+}
+
+// asciiArrowKeys are the arrow glyphs hint strips name keys with, spelled out
+// for a terminal that draws only ASCII.
+var asciiArrowKeys = map[string]string{
+	"↑↓": "up/down", "←→": "left/right",
+	"↑": "up", "↓": "down", "←": "left", "→": "right",
 }
 
 // SigilMark is the one-cell marker fronting an input field or the row a cursor

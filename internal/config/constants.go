@@ -696,7 +696,7 @@ func (s *Settings) GetDockWorkspaceCapRight() string {
 
 // GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconWindow() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconWindowASCII
 	}
 	return DockModeIconWindow
@@ -704,7 +704,7 @@ func (s *Settings) GetDockModeIconWindow() string {
 
 // GetDockModeIconTerminal returns the appropriate terminal mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconTerminal() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconTerminalASCII
 	}
 	return DockModeIconTerminal
@@ -712,7 +712,7 @@ func (s *Settings) GetDockModeIconTerminal() string {
 
 // GetDockModeIconTiling returns the appropriate tiling mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconTiling() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconTilingASCII
 	}
 	return DockModeIconTiling
@@ -720,7 +720,7 @@ func (s *Settings) GetDockModeIconTiling() string {
 
 // GetDockIconTerminalCount returns the appropriate terminal count icon based on UseASCIIOnly
 func (s *Settings) GetDockIconTerminalCount() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconTerminalCountASCII
 	}
 	return DockIconTerminalCount
@@ -728,7 +728,7 @@ func (s *Settings) GetDockIconTerminalCount() string {
 
 // GetDockIconWorkspaceCount returns the appropriate workspace count icon based on UseASCIIOnly
 func (s *Settings) GetDockIconWorkspaceCount() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconWorkspaceCountASCII
 	}
 	return DockIconWorkspaceCount
@@ -736,7 +736,7 @@ func (s *Settings) GetDockIconWorkspaceCount() string {
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.
 func (s *Settings) GetDockIconLeaveRunning() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconLeaveRunningASCII
 	}
 	return DockIconLeaveRunning
@@ -744,7 +744,7 @@ func (s *Settings) GetDockIconLeaveRunning() string {
 
 // GetDockIconCloseSession returns the close-session icon for the current glyph set.
 func (s *Settings) GetDockIconCloseSession() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconCloseSessionASCII
 	}
 	return DockIconCloseSession

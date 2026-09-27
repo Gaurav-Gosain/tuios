@@ -71,6 +71,7 @@ type Overrides struct {
 // needs a line here if a CLI flag can override it.
 func ApplyOverrides(overrides Overrides, s *Settings) {
 	if overrides.ASCIIOnly {
+		s.ASCIIRequested = true
 		s.UseASCIIOnly = true
 	}
 	if overrides.BorderStyle != "" {

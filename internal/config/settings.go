@@ -45,9 +45,25 @@ type Settings struct {
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
 
-	// UseASCIIOnly controls whether to use ASCII fallback characters instead of Nerd Fonts
-	// Set via --ascii-only command-line flag
+	// UseASCIIOnly controls whether to use ASCII fallback characters instead
+	// of Nerd Fonts. It is the effective answer: set by --ascii-only
+	// (ASCIIRequested), or by a terminal whose locale is not UTF-8 when no
+	// glyph set was chosen (see GlyphEnv).
 	UseASCIIOnly bool
+
+	// ASCIIRequested records --ascii-only, so re-applying the config at
+	// runtime can recompute UseASCIIOnly without losing the flag.
+	ASCIIRequested bool
+
+	// GlyphEnv is what the terminal tuios draws on can show, read from its
+	// locale and TERM when the client starts. See DetectGlyphEnv.
+	GlyphEnv GlyphEnv
+
+	// NoNerdFont is set when GlyphEnv is GlyphEnvUnicode and no glyph set was
+	// chosen: the icons that are not glyph set roles (the dock's, the
+	// notification marks) take their ASCII forms. Read it through
+	// NerdFontsOff.
+	NoNerdFont bool
 
 	// AnimationsEnabled controls whether UI animations are enabled
 	// Set via --no-animations flag or appearance.animations_enabled config
