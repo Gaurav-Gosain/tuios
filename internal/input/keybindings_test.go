@@ -58,3 +58,27 @@ func TestLegacyKeyEncoding(t *testing.T) {
 		}
 	}
 }
+
+// TestHomeEndFollowDECCKM pins the fix for a pane whose shell cannot move its
+// caret: under DECCKM (application cursor keys) Home and End must be sent as
+// SS3, the sequences xterm sends and the ones terminfo's khome/kend name, not
+// as the CSI forms the special-key table used unconditionally before.
+func TestHomeEndFollowDECCKM(t *testing.T) {
+	tests := []struct {
+		name      string
+		code      rune
+		appCursor bool
+		want      []byte
+	}{
+		{"home, application mode", tea.KeyHome, true, []byte("\x1bOH")},
+		{"home, normal mode", tea.KeyHome, false, []byte("\x1b[H")},
+		{"end, application mode", tea.KeyEnd, true, []byte("\x1bOF")},
+		{"end, normal mode", tea.KeyEnd, false, []byte("\x1b[F")},
+	}
+	for _, tt := range tests {
+		got := getRawKeyBytesWithMode(tea.KeyPressMsg{Code: tt.code}, tt.appCursor)
+		if !bytes.Equal(got, tt.want) {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

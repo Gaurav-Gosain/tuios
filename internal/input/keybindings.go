@@ -40,8 +40,12 @@ var ctrlKeyMap = map[rune]byte{
 }
 
 // Special key codes (non-modifiers)
-// Note: Arrow keys (Up, Down, Left, Right) are handled separately in getRawKeyBytesWithMode
-// to support DECCKM (application cursor keys) mode switching between CSI and SS3 sequences
+// Note: the cursor keys (Up, Down, Left, Right, Home, End) are handled
+// separately in getRawKeyBytesWithMode to support DECCKM (application cursor
+// keys) mode switching between CSI and SS3 sequences. Home and End matter as
+// much as the arrows do: zsh's terminfo says khome=\EOH and kend=\EOF while
+// zle holds DECCKM on, so the CSI form reaches no binding and the caret does
+// not move.
 var specialKeyMap = map[rune][]byte{
 	tea.KeyEnter:     {'\r'},
 	tea.KeyTab:       {'\t'},
@@ -52,8 +56,6 @@ var specialKeyMap = map[rune][]byte{
 	tea.KeyInsert:    {0x1b, '[', '2', '~'},
 	tea.KeyPgUp:      {0x1b, '[', '5', '~'},
 	tea.KeyPgDown:    {0x1b, '[', '6', '~'},
-	tea.KeyHome:      {0x1b, '[', 'H'},
-	tea.KeyEnd:       {0x1b, '[', 'F'},
 }
 
 // Function keys F1-F12
@@ -144,7 +146,10 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 	}
 
 	// Handle cursor keys with DECCKM (application cursor keys) mode support
-	// When applicationCursorKeys is true, send SS3 sequences (ESC O x) instead of CSI sequences (ESC [ x)
+	// When applicationCursorKeys is true, send SS3 sequences (ESC O x) instead of CSI sequences (ESC [ x).
+	// Home and End follow the arrows: xterm sends ESC O H / ESC O F under
+	// DECCKM, and terminfo (xterm, xterm-kitty, screen, tmux) records exactly
+	// that as khome/kend, so a shell that enabled the mode binds the SS3 form.
 	switch key.Code {
 	case tea.KeyUp:
 		if applicationCursorKeys {
@@ -166,6 +171,16 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 			return []byte{0x1b, 'O', 'D'}
 		}
 		return []byte{0x1b, '[', 'D'}
+	case tea.KeyHome:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'H'}
+		}
+		return []byte{0x1b, '[', 'H'}
+	case tea.KeyEnd:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'F'}
+		}
+		return []byte{0x1b, '[', 'F'}
 	}
 
 	// Handle special keys (no modifiers) using lookup table
