@@ -126,3 +126,30 @@ func TestOnlyAReleaseBuildIsReplaceable(t *testing.T) {
 		}
 	}
 }
+
+// TestHomebrewFixNamesFormulaOrCask. `brew install tuios` is the homebrew-core
+// formula, which lives in the Cellar; the tap ships a cask, which lives in the
+// Caskroom. `brew upgrade --cask tuios` on a formula install fails, so the
+// command printed has to follow the path.
+//
+// Negative control: return "brew upgrade --cask tuios" for every Homebrew path
+// and the two Cellar rows fail.
+func TestHomebrewFixNamesFormulaOrCask(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/opt/homebrew/Cellar/tuios/0.8.0/bin/tuios", "brew upgrade tuios"},
+		{"/home/linuxbrew/.linuxbrew/Cellar/tuios/0.8.0/bin/tuios", "brew upgrade tuios"},
+		{"/opt/homebrew/Caskroom/tuios/0.8.0/tuios", "brew upgrade --cask tuios"},
+	}
+	for _, tc := range cases {
+		p := Detect(Facts{Path: tc.path, BuiltBy: "goreleaser", GOOS: "darwin"})
+		if p.Origin != OriginHomebrew {
+			t.Fatalf("%s: Origin = %v, want Homebrew", tc.path, p.Origin)
+		}
+		if p.Fix != tc.want {
+			t.Errorf("%s: Fix = %q, want %q", tc.path, p.Fix, tc.want)
+		}
+	}
+}
