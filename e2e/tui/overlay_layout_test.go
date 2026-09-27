@@ -437,8 +437,10 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 		want, gone []string
 	}{
 		{cols: 50, want: []string{"^r rename", "^d delete", "esc close"}, gone: []string{"ctrl+"}},
-		{cols: 44, want: []string{"^r rename", "^d delete", "esc"}, gone: []string{"ctrl+", "close"}},
-		{cols: 40, want: []string{"^r rename", "^d   esc"}, gone: []string{"ctrl+", "delete", "close"}},
+		// Narrower, a whole low-priority hint goes before any label does, and
+		// "esc close" always keeps its label: no key is left standing bare.
+		{cols: 44, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
+		{cols: 40, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
 	}
 	for _, c := range cases {
 		t.Run(itoa(c.cols)+"cols", func(t *testing.T) {

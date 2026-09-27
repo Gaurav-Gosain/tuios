@@ -19,8 +19,9 @@ import (
 //
 //   - truecolor and 256: a colour tuios can read channels off (the truecolor
 //     and cube inks, and under a theme the ANSI slot, which the theme defines)
-//     is darker. At 256 the darker colour is written as another index, and
-//     "darker" is measured on the xterm table.
+//     moves toward its ground: darker on the dark terminal, lighter under the
+//     light theme, whose scrim pulls toward its light surface. At 256 the new
+//     colour is written as another index, measured on the xterm table.
 //   - an ANSI slot with no theme is the user's own colour, which tuios cannot
 //     blend, and it goes faint instead.
 //   - 16 colours: every word goes faint and keeps its colour.
@@ -109,7 +110,7 @@ func modalDimRun(t *testing.T, themeName string, d chromeDepth) {
 		checkDimmed(t, term, dimWords[i], was, now, d.name, themeName)
 	}
 	// The rail is behind the palette too: its text is quieter or faint.
-	if was, now := before.Cell(railCol, railRow), dimmed.Cell(railCol, railRow); !now.Faint && !darker(now.Fg, was.Fg) {
+	if was, now := before.Cell(railCol, railRow), dimmed.Cell(railCol, railRow); !now.Faint && !quieter(now.Fg, was.Fg, themeName != "") {
 		t.Errorf("the rail's session name at (%d,%d) was not dimmed: %+v then %+v\n%s",
 			railCol, railRow, was, now, term.SnapshotStyled())
 	}
@@ -214,11 +215,24 @@ func checkDimmed(t *testing.T, term *tuitest.Terminal, word string, was, now tui
 				word, depth, was.Fg, now.Fg, term.SnapshotStyled())
 		}
 	default:
-		if !darker(now.Fg, was.Fg) {
-			t.Errorf("%s at %s colours is %+v under the palette and was %+v: not darker\n%s",
+		// On a dark theme the scrim pulls text toward black; on a light one
+		// it pulls it toward the light surface. Either way the text sits
+		// closer to its ground than it did.
+		if !quieter(now.Fg, was.Fg, themeName != "") {
+			t.Errorf("%s at %s colours is %+v under the palette and was %+v: not moved toward its ground\n%s",
 				word, depth, now.Fg, was.Fg, term.SnapshotStyled())
 		}
 	}
+}
+
+// quieter reports whether text moved toward its ground under the scrim:
+// darker on the dark terminal, lighter under the light theme, whose scrim
+// pulls toward the light surface.
+func quieter(now, was tuitest.Color, light bool) bool {
+	if light {
+		return darker(was, now)
+	}
+	return darker(now, was)
 }
 
 // darker reports whether a is a darker colour than b, measured as the host

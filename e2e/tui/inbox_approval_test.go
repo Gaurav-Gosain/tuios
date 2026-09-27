@@ -82,9 +82,11 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	// The answer keys are said in text on the row, and again in the hints.
+	// The answer keys are said in the hints. "answer in pane" is the lowest
+	// priority hint and gives way first when the footer is short; enter
+	// still answers in the pane.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "approve Bash: go test", "allow", "deny", "answer in pane")
+		return screenHas(s, "Approvals 1", "approve Bash: go test", "allow", "deny")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never offered to answer the held approval: %v\n%s", err, term.Snapshot())
 	}
