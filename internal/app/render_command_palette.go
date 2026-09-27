@@ -53,9 +53,9 @@ func (m *OS) paletteFooter() []overlay.Hint {
 // selection cannot scroll out of the rows actually drawn.
 func (m *OS) paletteLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(paletteInnerWidth)
-	// Body lines that are not command rows: the search input, its rule, and the
-	// match count.
-	rows, hints = m.panelBody(paletteMaxVisible, 3, width, nil, m.paletteFooter())
+	// Body lines that are not command rows: the search input and its rule. The
+	// match count rides the search line.
+	rows, hints = m.panelBody(paletteMaxVisible, 2, width, nil, m.paletteFooter())
 	return width, rows, hints
 }
 
@@ -155,7 +155,15 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.Sigil()) +
 		overlay.Style(bg).Foreground(pal.Fg).Render(m.CommandPaletteQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
+	count := ""
+	if len(filtered) > 0 && len(list) > visible {
+		// Counted against the rows this query could reach, not against every
+		// row in the model. The action rows are hidden without the "#" token
+		// and the command rows are hidden with it, so a denominator that added
+		// both would say "65 of 289" over a list that can only ever hold 65.
+		count = fmt.Sprintf("%d of %d commands", len(filtered), paletteReachable(items, m.CommandPaletteQuery))
+	}
+	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
 
 	start := m.CommandPaletteScroll
 	end := min(start+visible, len(list))
@@ -167,10 +175,9 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		if keybinds, rest := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds {
 			empty.Message = keybindPaletteHint(rest)
 		}
-		// The count row stays blank, so the empty state takes the rows the
-		// list would have and the panel keeps its height.
+		// The empty state takes the rows the list would have, so the panel
+		// keeps its height.
 		lines = append(lines, empty.Lines(width, visible, bg, pal)...)
-		lines = append(lines, overlay.Style(bg).Render(" "))
 	} else {
 		headerStyle := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true)
 		for _, l := range list[start:end] {
@@ -182,17 +189,6 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 			lines = append(lines, pal.Row(paletteRow(filtered[l.item], st.Cursor, pal, width, metaW), width, st, bg))
 		}
 		for len(lines) < visible+2 {
-			lines = append(lines, overlay.Style(bg).Render(" "))
-		}
-		if len(list) > visible {
-			// Counted against the rows this query could reach, not against every
-			// row in the model. The action rows are hidden without the "#" token
-			// and the command rows are hidden with it, so a denominator that
-			// added both would say "65 of 289" over a list that can only ever
-			// hold 65.
-			info := fmt.Sprintf("%d of %d commands", len(filtered), paletteReachable(items, m.CommandPaletteQuery))
-			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
-		} else {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	}
@@ -317,4 +313,16 @@ func paletteRowName(name, agentState string, doneSeen bool, match []int, bg, nam
 	}
 	flush()
 	return out.String()
+}
+
+// searchWithCount is a search line with a match count set right-aligned on it,
+// in the quiet ink: the count describes the list, and set in the list it read
+// as one more row. The count is left off when the query leaves it no room.
+func searchWithCount(search, count string, width int, bg color.Color, pal overlay.Palette) string {
+	sw, cw := lipgloss.Width(search), lipgloss.Width(count)
+	if count == "" || sw+2+cw > width {
+		return search
+	}
+	return search + overlay.Style(bg).Render(strings.Repeat(" ", width-sw-cw)) +
+		overlay.Style(bg).Foreground(pal.FgMute).Render(count)
 }

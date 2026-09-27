@@ -42,9 +42,9 @@ var launcherHints = []overlay.Hint{
 // selection cannot scroll out of the rows actually drawn.
 func (m *OS) launcherLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(launcherInnerWidth)
-	// Body lines that are not program rows: the search input, its rule, and the
-	// match count.
-	rows, hints = m.panelBody(launcherMaxVisible, 3, width, nil, launcherHints)
+	// Body lines that are not program rows: the search input and its rule. The
+	// match count rides the search line.
+	rows, hints = m.panelBody(launcherMaxVisible, 2, width, nil, launcherHints)
 	return width, rows, hints
 }
 
@@ -84,14 +84,18 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 	cursor := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render("█")
 	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render("› ") +
 		overlay.Style(bg).Foreground(pal.Fg).Render(m.LauncherQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
+	count := ""
+	if len(filtered) > visible {
+		count = fmt.Sprintf("%d of %d programs", len(filtered), len(items))
+	}
+	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
 
 	start, end := 0, 0
 	if len(filtered) == 0 {
 		if msg := m.launcherEmptyLine(); msg != "" {
 			lines = append(lines, overlay.Empty{Message: msg, Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
 		}
-		for len(lines) < visible+3 {
+		for len(lines) < visible+2 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	} else {
@@ -101,12 +105,6 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 			lines = append(lines, launcherRow(filtered[i], i == m.LauncherSelected, pal, width, iconW))
 		}
 		for len(lines) < visible+2 {
-			lines = append(lines, overlay.Style(bg).Render(" "))
-		}
-		if len(filtered) > visible {
-			info := fmt.Sprintf("%d of %d programs", len(filtered), len(items))
-			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
-		} else {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	}
