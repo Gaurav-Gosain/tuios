@@ -23,5 +23,30 @@
     "name": "unknown event",
     "payload": {"hook_event_name": "tool_call", "session_id": "pi-1"},
     "skip": "event not mapped"
+  },
+  {
+    "name": "ui_prompt_start for a confirm",
+    "payload": {"hook_event_name": "ui_prompt_start", "session_id": "pi-1", "kind": "confirm", "title": "Allow rm -rf build?", "busy": true},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Allow rm -rf build?", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "ui_prompt_start for a choice",
+    "payload": {"hook_event_name": "ui_prompt_start", "session_id": "pi-1", "kind": "select", "title": "Pick a model", "busy": false},
+    "want": {"state": "needs_input", "kind": "question", "message": "Pick a model", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "ui_prompt_start with no title",
+    "payload": {"hook_event_name": "ui_prompt_start", "session_id": "pi-1", "kind": "custom", "busy": true},
+    "want": {"state": "needs_input", "kind": "question", "message": "waits for an answer", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "ui_prompt_end in a turn",
+    "payload": {"hook_event_name": "ui_prompt_end", "session_id": "pi-1", "kind": "confirm", "busy": true},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "ui_prompt_end at rest",
+    "payload": {"hook_event_name": "ui_prompt_end", "session_id": "pi-1", "kind": "select", "busy": false},
+    "want": {"state": "idle", "if_state": "needs_input", "agent_session_id": "pi-1"}
   }
 ]

@@ -1088,6 +1088,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// HerdrEnv returns the herdr protocol variables a pane with the given
+	// window id that runs the given command is started with, nil for none.
+	// See Manager.HerdrEnv.
+	HerdrEnv func(windowID string, command []string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -1384,7 +1388,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			} else {
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnvWith(windowID, restored, extraEnv)
+			cmd.Env = s.buildEnvFor(windowID, restored, extraEnv, command)
 			if stdout != nil {
 				cmd.Stdout = stdout
 			}
@@ -2339,12 +2343,19 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 	return s.buildEnvWith(windowID, restored, nil)
 }
 
-// buildEnvWith is buildEnv with a caller's own variables. They replace the
+// buildEnvWith is buildEnvFor a pane that runs the user's shell.
+func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
+	return s.buildEnvFor(windowID, restored, extra, nil)
+}
+
+// buildEnvFor is buildEnv with a caller's own variables, for a pane that runs
+// command (nil for the user's shell). The caller's variables replace the
 // daemon's variables of the same name, and every variable set below them,
 // TERM and the TUIOS_ contract, is set after them and wins. The caller's
 // variables are checked before they get here (callerEnv), which refuses a
-// TUIOS_ name outright.
-func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
+// TUIOS_ name outright. command decides what a harness started directly is
+// told beyond that: see guestenv.TermProgramFor.
+func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []string) []string {
 	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
 	// inside tmux would otherwise hand every pane the variables that make a
 	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
@@ -2377,7 +2388,7 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 	}
 	env = append(env, "COLORTERM="+colorTerm)
 	kitty, sixel := s.GraphicsCapabilities()
-	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(kitty, sixel))
+	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
 	// TUIOS_HOST names the machine this pane runs on. A pane is always local
@@ -2412,6 +2423,11 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
 		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
+	}
+	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
+	// socket here, when this pane starts one. See herdr_compat.go.
+	if s.config != nil && s.config.HerdrEnv != nil {
+		env = append(env, s.config.HerdrEnv(windowID, command)...)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.

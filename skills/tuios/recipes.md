@@ -59,8 +59,8 @@ answer=$(tuios ask-human 'Drop the v1 endpoint?' -o drop -o keep --timeout 90000
 
 ## Approvals without going to the pane
 
-To answer Claude Code's, opencode's or Kilo's permission prompts from the
-Inbox with `1` (once), `2` (always) or `3` (deny), the person adds this to
+To answer Claude Code's, Qwen Code's, opencode's or Kilo's permission prompts
+from the Inbox with `1` (once), `2` (always) or `3` (deny), the person adds this to
 config.toml and installs the integration:
 
 ```toml

@@ -2,22 +2,82 @@
   {
     "name": "SessionStart",
     "payload": {"hook_event_name": "SessionStart", "session_id": "cp-1", "timestamp": "2026-09-01T10:00:00Z", "cwd": "/src", "source": "startup"},
-    "want": {"session_only": true, "agent_session_id": "cp-1"}
+    "want": {"state": "idle", "agent_session_id": "cp-1"}
   },
   {
     "name": "sessionStart camelCase",
     "payload": {"sessionId": "cp-2", "timestamp": 1788000000000, "cwd": "/src", "source": "resume"},
     "event": "sessionStart",
-    "want": {"session_only": true, "agent_session_id": "cp-2"}
+    "want": {"state": "idle", "agent_session_id": "cp-2"}
   },
   {
-    "name": "no session id",
-    "payload": {"hook_event_name": "SessionStart", "cwd": "/src"},
-    "skip": "names no session"
+    "name": "UserPromptSubmit",
+    "payload": {"hook_event_name": "UserPromptSubmit", "session_id": "cp-1", "prompt": "fix the build"},
+    "want": {"state": "working", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "PreToolUse",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "cp-1", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}},
+    "want": {"state": "working", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "PreToolUse for ask_user is a question",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "cp-1", "tool_name": "AskUserQuestion", "tool_input": {"question": "Which branch?"}},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which branch?", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "PostToolUse",
+    "payload": {"hook_event_name": "PostToolUse", "session_id": "cp-1", "tool_name": "Bash", "tool_result": {"result_type": "success"}},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "PostToolUseFailure",
+    "payload": {"hook_event_name": "PostToolUseFailure", "session_id": "cp-1", "tool_name": "Bash", "error": "exit 1"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "a permission prompt notification",
+    "payload": {"sessionId": "cp-1", "timestamp": 1788000000000, "cwd": "/src", "hook_event_name": "Notification", "message": "Copilot wants to run: git push", "title": "Permission needed", "notification_type": "permission_prompt"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Copilot wants to run: git push", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "an elicitation notification",
+    "payload": {"sessionId": "cp-1", "hook_event_name": "Notification", "message": "Which environment?", "notification_type": "elicitation_dialog"},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which environment?", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "a background shell finishing is not the pane's state",
+    "payload": {"sessionId": "cp-1", "hook_event_name": "Notification", "message": "Shell completed", "notification_type": "shell_completed"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Stop",
+    "payload": {"hook_event_name": "Stop", "session_id": "cp-1", "transcript_path": "/tmp/cp-1.jsonl", "stop_reason": "end_turn", "stop_hook_active": false},
+    "want": {"state": "done", "agent_session_id": "cp-1", "transcript_path": "/tmp/cp-1.jsonl"}
+  },
+  {
+    "name": "an error that ends the turn",
+    "payload": {"hook_event_name": "ErrorOccurred", "session_id": "cp-1", "error": {"message": "model call failed", "name": "Error"}, "error_context": "model_call", "recoverable": false},
+    "want": {"state": "errored", "message": "model call failed", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "a recoverable error",
+    "payload": {"hook_event_name": "ErrorOccurred", "session_id": "cp-1", "error": {"message": "retrying", "name": "Error"}, "recoverable": true},
+    "skip": "recoverable"
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"hook_event_name": "SessionEnd", "session_id": "cp-1", "reason": "user_exit"},
+    "want": {"state": "none", "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "a subagent's event",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "cp-1", "agent_id": "sub-1", "tool_name": "Bash"},
+    "skip": "subagent"
   },
   {
     "name": "an event tuios does not register",
-    "payload": {"hook_event_name": "PreToolUse", "session_id": "cp-1", "tool_name": "bash"},
+    "payload": {"hook_event_name": "PreCompact", "session_id": "cp-1", "trigger": "auto"},
     "skip": "event not mapped"
   },
   {

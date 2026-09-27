@@ -232,7 +232,7 @@ func TestAgentHookReadsTheCodexNotifyArgument(t *testing.T) {
 // set-agent-state, so the pane's state is left to its screen rules.
 func TestAgentHookSendsASessionOnlyReport(t *testing.T) {
 	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1", "TUIOS_SESSION": "work"}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qw-1","source":"startup"}`, "qwen")
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qd-1","source":"startup"}`, "qoder")
 	if r := h.daemon.reports(); len(r) != 0 {
 		t.Fatalf("an identity event reported a state: %v", r)
 	}
@@ -242,7 +242,7 @@ func TestAgentHookSendsASessionOnlyReport(t *testing.T) {
 			sent = c.params
 		}
 	}
-	want := map[string]any{"session": "work", "window": "w1", "harness": "qwen", "agent_session_id": "qw-1", "harness_pid": float64(4250)}
+	want := map[string]any{"session": "work", "window": "w1", "harness": "qoder", "agent_session_id": "qd-1", "harness_pid": float64(4250)}
 	for k, v := range want {
 		if sent[k] != v {
 			t.Errorf("%s = %v, want %v (calls %v)", k, sent[k], v, h.daemon.calls)
@@ -257,7 +257,7 @@ func TestAgentHookSendsASessionOnlyReport(t *testing.T) {
 
 	// A daemon without the verb gets nothing, and --explain says why.
 	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{old: true}}
-	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qw-1"}`, "qwen")
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qd-1"}`, "qoder")
 	for _, c := range h.daemon.calls {
 		if c.verb == "set-agent-session" || c.verb == "set-agent-state" {
 			t.Fatalf("reported to a daemon without set-agent-session: %v", h.daemon.calls)

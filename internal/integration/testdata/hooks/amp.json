@@ -33,5 +33,20 @@
     "name": "session.start with no thread",
     "payload": {"hook_event_name": "session.start", "session_id": ""},
     "skip": "names no session"
+  },
+  {
+    "name": "tool.call for ask_user_choice",
+    "payload": {"hook_event_name": "tool.call", "session_id": "T-1", "tool": "ask_user_choice", "question": "Which approach?"},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which approach?", "agent_session_id": "T-1"}
+  },
+  {
+    "name": "tool.call for any other tool",
+    "payload": {"hook_event_name": "tool.call", "session_id": "T-1", "tool": "Bash"},
+    "skip": "not a question"
+  },
+  {
+    "name": "tool.result for ask_user_choice",
+    "payload": {"hook_event_name": "tool.result", "session_id": "T-1", "tool": "ask_user_choice"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "T-1"}
   }
 ]

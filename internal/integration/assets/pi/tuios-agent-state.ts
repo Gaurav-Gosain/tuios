@@ -8,8 +8,12 @@
 //
 // Reports Pi's turns to the tuios pane it runs in, through
 // `tuios agent-hook pi`: session_start names the session, agent_start starts
-// work and agent_settled ends it. Only the TUI mode reports, since the print,
-// JSON and RPC modes run with no terminal a pane could show.
+// work and agent_settled ends it. ui_prompt_start says Pi is waiting on the
+// person in a blocking prompt (a confirm, a choice, a line of input), and
+// ui_prompt_end that the prompt was answered; both say whether a turn is
+// running, so an answered prompt goes back to working or to rest. Only the TUI
+// mode reports, since the print, JSON and RPC modes run with no terminal a
+// pane could show.
 
 import { spawn } from "node:child_process";
 
@@ -61,5 +65,20 @@ export default function (pi) {
   });
   pi.on("agent_settled", (_event, ctx) => {
     if (tui && ctx?.isIdle?.() !== false) report("agent_settled", ctx, {});
+  });
+  pi.on("ui_prompt_start", (event, ctx) => {
+    if (!tui) return;
+    report("ui_prompt_start", ctx, {
+      kind: typeof event?.kind === "string" ? event.kind : "",
+      title: typeof event?.title === "string" ? event.title : "",
+      busy: ctx?.isIdle?.() === false,
+    });
+  });
+  pi.on("ui_prompt_end", (event, ctx) => {
+    if (!tui) return;
+    report("ui_prompt_end", ctx, {
+      kind: typeof event?.kind === "string" ? event.kind : "",
+      busy: ctx?.isIdle?.() === false,
+    });
   });
 }

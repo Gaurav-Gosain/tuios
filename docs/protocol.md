@@ -3384,7 +3384,7 @@ Wire compatibility: new verbs. An older daemon answers `unknown_verb`.
 
 Hold a pane's permission prompt until the person answers it in the Inbox.
 `tuios agent-hook` calls it; a script has little reason to. It is for a harness
-that takes a decision back from its hook: Claude Code's `PermissionRequest`
+that takes a decision back from its hook: Claude Code's and Qwen Code's `PermissionRequest`
 hook, and opencode or Kilo through the plugin tuios installs. The call does not
 answer until the person answers with `reply-approval` or the hold ends, and it
 is opt in: nothing is held unless `[agents.approvals]` in the config names the

@@ -179,7 +179,7 @@ func TestCursorHooksFileGetsAVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := compactJSON(t, readFile(t, tg.Path(env)))
-	if got != `{"hooks":{"sessionStart":[{"command":"tuios agent-hook cursor-agent --integration 1"}]},"version":1}` {
+	if got != `{"hooks":{"beforeSubmitPrompt":[{"command":"tuios agent-hook cursor-agent --integration 2"}],"postToolUse":[{"command":"tuios agent-hook cursor-agent --integration 2"}],"postToolUseFailure":[{"command":"tuios agent-hook cursor-agent --integration 2"}],"sessionEnd":[{"command":"tuios agent-hook cursor-agent --integration 2"}],"sessionStart":[{"command":"tuios agent-hook cursor-agent --integration 2"}],"stop":[{"command":"tuios agent-hook cursor-agent --integration 2"}]},"version":1}` {
 		t.Fatalf("hooks.json = %s", got)
 	}
 }
@@ -212,7 +212,7 @@ func TestAntigravityOwnsOneNamedBlock(t *testing.T) {
 
 func TestOwnedJSONHookFilesAreWholeFiles(t *testing.T) {
 	cases := map[string]string{
-		Copilot: `{"hooks":{"SessionStart":[{"bash":"tuios agent-hook copilot --integration 1","powershell":"tuios agent-hook copilot --integration 1","timeoutSec":5,"type":"command"}]},"version":1}`,
+		Copilot: `{"hooks":{"ErrorOccurred":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"PostToolUse":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"PostToolUseFailure":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"PreToolUse":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"SessionEnd":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"SessionStart":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"Stop":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"UserPromptSubmit":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}],"notification":[{"bash":"tuios agent-hook copilot --integration 2","powershell":"tuios agent-hook copilot --integration 2","timeoutSec":5,"type":"command"}]},"version":1}`,
 		Grok:    `{"hooks":{"SessionStart":[{"hooks":[{"command":"tuios agent-hook grok --integration 1","timeout":5,"type":"command"}]}]}}`,
 	}
 	for id, want := range cases {

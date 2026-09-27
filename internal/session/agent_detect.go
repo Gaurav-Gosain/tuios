@@ -26,14 +26,16 @@ var defaultAgentBinaries = []string{
 	"aider",
 	"cursor-agent",
 	"opencode",
-	"goose",
 	"crush",
 	"gemini",
 	"amp",
 	// Names distinctive enough to match on their own. Harnesses whose command is
 	// a common English word (agent, pi, cn, forge) are deliberately absent: a
 	// false positive labels an unrelated pane as an agent, which is worse than
-	// missing one, and a user who wants them can add them by name.
+	// missing one, and a user who wants them can add them by name. goose is
+	// absent for the same reason: pressly's database migration tool has the
+	// name too, and goose's manifest recognises the agent by where its
+	// installers put it.
 	"droid",
 	"cline",
 	"kilocode",

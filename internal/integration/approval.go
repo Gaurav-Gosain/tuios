@@ -10,8 +10,9 @@ import (
 
 // Answering a permission prompt from the Inbox.
 //
-// Some harnesses let a hook decide a permission prompt: Claude Code reads a
-// decision from its PermissionRequest hook's stdout, and opencode takes a reply
+// Some harnesses let a hook decide a permission prompt: Claude Code and Qwen
+// Code read a decision from their PermissionRequest hook's stdout, and opencode
+// takes a reply
 // to a permission request through its SDK, which the tuios plugin sends with
 // what the hook prints. For those events Translate adds an Approval to the
 // report, and `tuios agent-hook` may hold the prompt with the daemon's
@@ -35,6 +36,8 @@ import (
 // Codex is left out on purpose: its PermissionRequest hook runs before its own
 // reviewer has decided whether to ask at all, so a hook that waited would ask
 // the person about calls Codex would have allowed or refused by itself.
+// GitHub Copilot CLI's permissionRequest runs before its rules and auto-allow
+// in the same way, and is left out for the same reason (hook_copilot.go).
 
 // Decisions a held prompt can end with, the same words the daemon uses.
 const (
@@ -136,6 +139,8 @@ func (a *Approval) Answer(harness, decision, message string) (string, bool) {
 		return claudeAnswer(decision, message, a.suggestions)
 	case OpenCode, Kilo:
 		return openCodeAnswer(decision, message)
+	case Qwen:
+		return qwenAnswer(decision, message)
 	}
 	return "", false
 }

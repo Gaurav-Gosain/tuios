@@ -16,15 +16,29 @@ package integration
 //
 //	session.created                 idle, and the session id
 //	chat.message, tool.execute.before,
-//	session.status busy or retry    working
-//	session.status idle             nothing (session.idle says more)
+//	session.status busy             working
+//	session.status retry            working, with the retry's reason
+//	session.status idle             done, only if the pane is working or in
+//	                                needs_input
 //	permission.asked                needs_input, kind approval
 //	question.asked                  needs_input, kind question
 //	permission.replied, question.replied,
 //	question.rejected               working, only if the pane is in needs_input
-//	session.idle                    done
+//	session.idle                    done, only if the pane is working or in
+//	                                needs_input
 //	session.error                   errored
 //	session.deleted                 none
+//
+// session.status idle is the end of a turn. opencode's schema marks
+// session.idle deprecated in its favour (packages/schema/src/
+// session-status-event.ts), and still sends both for now. Both mean done only
+// for a pane in a turn: an idle status also comes at rest, and a pane that is
+// already done must not report the same turn twice. So the second of the two
+// events a turn ends with changes nothing.
+
+// openCodeTurnStates are the states a pane is in during a turn, the ones an
+// idle status ends.
+const openCodeTurnStates = "working,needs_input"
 
 func translateOpenCode(id string, in Input, p fields) Decision {
 	event := eventName(in, p)
@@ -36,10 +50,17 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 		r.State = "working"
 	case "session.status":
 		switch p.str("status") {
-		case "busy", "retry", "running", "working", "pending":
+		case "busy", "running", "working", "pending":
 			r.State = "working"
+		case "retry":
+			r.State = "working"
+			if msg := Clip(p.str("retry_message")); msg != "" {
+				r.Message = "retrying: " + msg
+			}
+		case "idle":
+			r.State, r.IfState = "done", openCodeTurnStates
 		default:
-			return skip(id, event, "status "+p.str("status")+" is left to session.idle")
+			return skip(id, event, "status "+p.str("status")+" is not a state change")
 		}
 	case "permission.asked", "permission.updated":
 		r.State, r.Kind = "needs_input", "approval"
@@ -58,7 +79,7 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 	case "permission.replied", "question.replied", "question.rejected":
 		r.State, r.IfState = "working", claudeClearsBlock
 	case "session.idle":
-		r.State = "done"
+		r.State, r.IfState = "done", openCodeTurnStates
 	case "session.error":
 		r.State = "errored"
 		r.Message = Clip(p.str("error"))

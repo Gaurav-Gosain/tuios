@@ -272,6 +272,65 @@ Targeting follows the same rules as the other window verbs: `-s`/`--session`
 selects the session (default: most recently active), `-w`/`--window` selects the
 window by id or name (default: the focused window).
 
+`set-agent-state` is tuios's contract, and the one to build on: it is
+documented, versioned with the verb protocol, and it is what `tuios agent-hook`
+and every integration tuios installs call. A pane finds the daemon through
+`TUIOS_SOCKET` and names itself with `TUIOS_PANE_ID` (see
+[Environment](#environment)).
+
+### herdr's pane state protocol
+
+tuios also accepts the reports some harnesses already send to herdr, another
+multiplexer for coding agents, so they work with no install step. Crush sends
+them natively when it finds herdr's environment in its pane. It is an input
+only: tuios answers nothing else a herdr client could ask.
+
+A pane that is to report this way is started with:
+
+| Variable | Value |
+| --- | --- |
+| `HERDR_ENV` | `1` |
+| `HERDR_SOCKET_PATH` | `<daemon socket>.herdr`, a socket of tuios's own, owner only |
+| `HERDR_PANE_ID` | the pane's window id, the same as `TUIOS_PANE_ID` |
+
+herdr reads `HERDR_SOCKET_PATH` as the path of its own server and
+`HERDR_ENV=1` as "inside herdr", so tuios sets them only where they are wanted:
+in a pane that starts Crush directly (`tuios new-window NAME crush`,
+`start-agent crush`, `fan --agent crush`), or in every pane with
+`herdr_protocol = "always"` in `[agents]` (see
+[the configuration reference](CONFIGURATION.md#harnesses-that-report-to-herdr)).
+A shell pane is not told it is a herdr pane by default, and tuios never listens
+on herdr's own socket, so a real herdr on the same machine is untouched. The
+other way round, a tuios started inside a herdr pane does not pass that pane's
+`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its
+own panes, the way it does not pass on `TMUX`, so an agent in a tuios pane never
+sets the state of the herdr pane around it.
+
+The wire is herdr's: one JSON object per connection on one line, `{"id",
+"method", "params"}`, answered with one line, `{"id", "result": {"type":
+"ok"}}` or `{"id", "error": {"code", "message"}}`, and the connection closes.
+
+| Method | What tuios does |
+| --- | --- |
+| `pane.report_agent` `state: working` | `working` |
+| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, which reports `blocked` only on a permission request, kind `approval` |
+| `pane.report_agent` `state: idle` | `done` when the pane is `working` or `needs_input`, since the harness came to rest from a turn, and `idle` otherwise |
+| `pane.report_agent` `state: unknown` | nothing |
+| `pane.report_agent_session` | the conversation id, as `set-agent-session` |
+| `pane.release_agent` | `none` |
+| `ping` | a pong |
+| anything else | error `unsupported` |
+
+Each report goes through `set-agent-state` with source `report`, the harness
+named by `agent` when tuios knows it, and `agent_session_id` when sent, so it
+has the same rank, guards and alerts as a hook's report. A report whose `seq`
+is not above the last one from the same `source` for the pane is dropped
+without an error, as herdr does; Crush seeds its `seq` from the clock, so a
+restarted Crush is never stale. A request speaks only for the caller's own
+pane: the daemon places the connecting process the way it places every caller
+(see [How a process is placed](#how-a-process-is-placed)) and answers
+`forbidden` to a `pane_id` that is not that pane, and to a process in no pane.
+
 ## Sources and precedence
 
 More than one thing can have an opinion about a pane. `set-agent-state` takes an
@@ -1722,21 +1781,21 @@ harness in the config:
 
 ```toml
 [agents.approvals]
-enabled = ["claude-code", "opencode"]   # ids or aliases: claude, claude-code, opencode, kilo
+enabled = ["claude-code", "opencode"]   # ids or aliases: claude, claude-code, opencode, kilo, qwen
 hold_seconds = 120                      # kept between 10 and 300
 ```
 
 The config file is watched, so a change applies to the next prompt. Then
-install the integration again (`tuios integration install claude-code`), since
-version 2 of it is the one that gives the hook time to wait. A pane
+install the integration again (`tuios integration install claude-code`, or
+`qwen`), since version 2 of each is the one that gives the hook time to wait. A pane
 `start-agent --protocol` opened needs none of this: see
 [Headless agents over a protocol](#headless-agents-over-a-protocol).
 
 What happens on a prompt:
 
-1. The harness runs `tuios agent-hook` for the prompt: Claude Code's
-   `PermissionRequest`, or `permission.asked` through the opencode and Kilo
-   plugin. The hook reports the pane as `needs_input`, kind `approval`, as it
+1. The harness runs `tuios agent-hook` for the prompt: Claude Code's or Qwen
+   Code's `PermissionRequest`, or `permission.asked` through the opencode and
+   Kilo plugin. The hook reports the pane as `needs_input`, kind `approval`, as it
    always did.
 2. With the harness enabled, and the call one the Inbox can show whole (see
    below), the hook then calls `request-approval` and waits. The Approvals row
@@ -1756,8 +1815,9 @@ else that changes what it does, and that argument must fit the line exactly:
 not cut, not masked as a secret, no newline, tab or doubled space, no control
 or invisible character. The calls held are Claude Code's `Bash` (not with
 `dangerouslyDisableSandbox`), `Read`, `Glob` and `Grep` without a `path`,
-`WebFetch` and `WebSearch`, and opencode's `bash` (not with `workdir`), `read`
-and `webfetch`. Everything else is answered in the pane as before: `Write`,
+`WebFetch` and `WebSearch`, opencode's `bash` (not with `workdir`), `read`
+and `webfetch`, and Qwen Code's `run_shell_command` (not with `directory`),
+`read_file` and `web_fetch`. Everything else is answered in the pane as before: `Write`,
 `Edit`, `MultiEdit` and `NotebookEdit`, whose body the line cannot show, MCP
 tools, and a command too long for the line. The daemon checks the line again
 before it holds, and the Inbox does not answer a line it would draw with
@@ -1793,13 +1853,20 @@ What is supported:
 | --- | --- | --- |
 | Claude Code | `PermissionRequest` hook output (`hookSpecificOutput.decision`) | once and deny, and always when every `permission_suggestions` entry is a rule tuios can show |
 | opencode, Kilo | The plugin posts the reply to opencode's permission route | once and deny, and always when the request lists its `always` patterns |
+| Qwen Code | `PermissionRequest` hook output, in Claude Code's shape | once and deny. Qwen Code ignores `updatedPermissions` from this hook, so always is not offered |
 
 Claude Code's `AskUserQuestion` is not held: its answer is a choice, not yes or
 no, and stays in Claude Code's own dialog. `ExitPlanMode` is held as a plan:
 see [Plans](#plans).
 Codex is not held either: its `PermissionRequest` hook runs before its own
 reviewer decides whether to ask at all, so holding it would ask you about calls
-Codex would have settled itself.
+Codex would have settled itself. GitHub Copilot CLI's `permissionRequest` hook
+runs before its rules, session approvals and auto-allow in the same way, so it
+is not held for the same reason. Cursor has no hook that runs when it shows its
+own approval prompt, and its permission hooks block a call on an empty answer,
+so tuios registers none of them. Qwen Code's `ask_user_question` comes through
+`PermissionRequest` too; it is reported as a question and answered in the
+pane.
 
 Safety: the hook prints a decision only when the daemon returned one that the
 person made and the harness was offered. Every error prints nothing: no daemon,
@@ -2135,9 +2202,9 @@ tuios integration uninstall codex
 tuios doctor agents                     # PATH, install state, and panes missing theirs
 ```
 
-An integration reports one of two things. Eight report the pane's **state**:
+An integration reports one of two things. Eleven report the pane's **state**:
 their hooks cover the whole turn, from the prompt through approvals to the end.
-The other ten report only the **session**: the harness's own id for the
+The other seven report only the **session**: the harness's own id for the
 conversation, stored on the pane with `set-agent-session` so it can be resumed,
 while the pane's state keeps coming from the manifest's screen and title rules.
 Their hooks miss events a state needs, an interrupt, a cancelled approval or the
@@ -2155,24 +2222,36 @@ status` and `tuios doctor agents` say which each one is.
 | Kilo | state | `plugin/tuios-agent-state.js` in `~/.config/kilo` (or `$XDG_CONFIG_HOME/kilo`), the opencode plugin under Kilo's id | opencode's plugin API, which Kilo forks |
 | Amp | state | `plugins/tuios-agent-state.ts` in `~/.config/amp` (or `$XDG_CONFIG_HOME/amp`) | [plugin API](https://ampcode.com/manual/plugin-api) |
 | Kimi Code CLI | state | `[[hooks]]` tables between two marker comments at the end of `~/.kimi-code/config.toml` (or `$KIMI_CODE_HOME`); needs 0.14.0 or newer | [hooks](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html) |
-| Pi | state | `extensions/tuios-agent-state.ts` in `~/.pi/agent` (or `$PI_CODING_AGENT_DIR`) | herdr's Pi extension |
+| Pi | state | `extensions/tuios-agent-state.ts` in `~/.pi/agent` (or `$PI_CODING_AGENT_DIR`) | herdr's Pi extension, and Pi's extension events |
+| GitHub Copilot CLI | state | `hooks/tuios.json` in `~/.copilot` (or `$COPILOT_HOME`), a file of its own | [hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference) |
+| Cursor Agent | state | hooks in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
+| Qwen Code | state | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | [hooks](https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md) |
 | Antigravity CLI | session | a `tuios` block in `~/.gemini/config/hooks.json` (or `$ANTIGRAVITY_CLI_CONFIG_DIR`) | herdr's Antigravity installer |
-| GitHub Copilot CLI | session | `hooks/tuios.json` in `~/.copilot` (or `$COPILOT_HOME`), a file of its own | [hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration) |
 | Crush | session | a `PreToolUse` hook in `~/.config/crush/crush.json` (or `$XDG_CONFIG_HOME/crush`) | [hooks](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) |
-| Cursor Agent | session | a `sessionStart` hook in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
 | Devin CLI | session | `hooks` in `config.json` in `$XDG_CONFIG_HOME/devin`, `~/.config/devin` or `%APPDATA%\devin` | herdr's Devin installer |
 | Droid | session | `hooks` in `~/.factory/settings.json` | herdr's Droid installer |
 | Grok CLI | session | `hooks/tuios.json` in `~/.grok` (or `$GROK_HOME`), a file of its own | herdr's Grok installer |
 | Hermes Agent | session | a plugin in `plugins/tuios-agent-state/` under `~/.hermes` (or `$HERMES_HOME`), and `tuios-agent-state` in `plugins.enabled` in its `config.yaml` | herdr's Hermes plugin |
 | Qoder CLI | session | `hooks` in `~/.qoder/settings.json` (or `$QODER_CONFIG_DIR`) | [hooks](https://docs.qoder.com/zh/cli/hooks) |
-| Qwen Code | session | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | herdr's Qwen installer |
 
-Four recognised harnesses have no integration, and `tuios doctor agents` names
+Five recognised harnesses have no integration, and `tuios doctor agents` names
 them with the reason: aider (its one hook, `notifications-command`, replaces the
 user's own and carries nothing), Cline (one executable per event in a directory
-that has moved between releases, behind a setting), Kiro (no documented
+that has moved between releases, behind a setting), goose (its hooks have no
+event for a prompt that waits on you, goose issue 12007, and a `working` report
+from a hook would outrank the screen that shows one), Kiro (no documented
 user-wide hook location or payload) and maki (Lua plugins loaded from the user's
-own `init.lua`). Their state comes from their manifests.
+own `init.lua`). Their state comes from their manifests. goose's manifest reads
+its tool approval prompt, any other open prompt and its spinner; it has no idle
+rule, since its idle prompt has not been measured. Only a `goose` installed
+where goose's own installers put it (`~/.local/bin`, or Homebrew's
+`block-goose-cli`) is recognised, because Homebrew's `goose` is a database
+migration tool.
+
+Qwen Code reads a command hook's `timeout` of 1000 or more as milliseconds and
+a smaller one as seconds, where older releases read every value as
+milliseconds, so every timeout tuios writes there is 1000 or more:
+`PermissionRequest` gets 310000, the rest 5000.
 
 A plugin, an extension, and the hook file of its own tuios writes for Copilot
 and Grok are files tuios owns whole. Each carries the version marker in its
@@ -2327,8 +2406,13 @@ from `needs_input`, `Notification` `ToolPermission` to `needs_input` kind
 above. The opencode plugin maps `session.status` busy and `chat.message` to
 `working`, `permission.asked` to `needs_input` kind `approval`,
 `question.asked` to kind `question`, the replies to `working` from
-`needs_input`, `session.idle` to `done`, `session.error` to `errored`, and
-drops every event from a child session. Kilo, a fork of opencode, runs the same
+`needs_input`, `session.error` to `errored`, and drops every event from a child
+session. `session.status` idle ends the turn: `done`, only from `working` or
+`needs_input`, since an idle status also comes at rest. opencode's schema marks
+the older `session.idle` event deprecated in its favour; while opencode still
+sends it, the plugin forwards it under the same rule, so whichever of the two
+comes second changes nothing. A `retry` status is `working` with the reason
+(`retrying: Rate limited by Anthropic`). Kilo, a fork of opencode, runs the same
 plugin under its own id and gets the same map.
 
 Kimi Code CLI maps like Claude Code: `SessionStart` to `idle`,
@@ -2340,16 +2424,60 @@ Kimi Code CLI maps like Claude Code: `SessionStart` to `idle`,
 tool is `needs_input` kind `question` with the question as the message. The Amp
 plugin maps `agent.start` to `working` and `agent.end` to `done`, `errored` or
 `idle` by its status (`done`, `error`, `cancelled`), and sends the thread id on
-`session.start` as a session report. It subscribes to nothing that decides
-anything, `tool.call` above all, so it cannot change what Amp permits; Amp's
-approval prompts come from its screen rules. The Pi extension maps
+`session.start` as a session report. A question Amp asks with its built-in
+`ask_user_choice` tool is `needs_input` kind `question`, with the question as
+the message, until the tool's result comes back. Seeing the question start
+takes a `tool.call` handler, which must answer allow or reject, and Amp's plugin
+API does not say how the answers of several plugins combine. So the plugin
+listens there only when its answer cannot change what Amp permits: no Amp
+permission setting is in force (`amp.permissions`, `amp.guardedFiles.allowlist`,
+`amp.mcpPermissions`, or `amp.dangerouslyAllowAll = false`), so Amp allows every
+tool anyway, and no other plugin is installed in `~/.config/amp/plugins` or the
+project's `.amp/plugins`. Its answer is then always allow. Otherwise questions
+and Amp's approval prompts come from its screen rules. The Pi extension maps
 `agent_start` to `working`, `agent_settled` to `done`, and `session_start` to
-`idle` (`working` after a reload mid-turn), only in Pi's TUI mode.
+`idle` (`working` after a reload mid-turn), only in Pi's TUI mode. Pi emits
+`ui_prompt_start` and `ui_prompt_end` around every blocking prompt an extension
+shows: the start is `needs_input`, kind `approval` for a confirm and `question`
+for a choice, a line of input, an editor or a custom prompt, with the prompt's
+title; the end is `working` from `needs_input`, or `idle` when no turn is
+running.
+
+Qwen Code maps like Claude Code: `SessionStart` to `idle` (not after
+compaction), `UserPromptSubmit` and `PreToolUse` to `working`,
+`PermissionRequest` to `needs_input` kind `approval` (kind `question` for its
+`ask_user_question` tool), `PostToolUse`, `PostToolUseFailure` and
+`PermissionDenied` to `working` only from `needs_input`, `Notification`
+`permission_prompt` to `needs_input` and `idle_prompt` to `idle` only from
+`working` or `unknown`, `Stop` to `done` with the first line of
+`last_assistant_message`, `StopFailure` to `errored`, and `SessionEnd` to
+`none`. Its `PermissionRequest` runs after Qwen Code's own rules, just before
+its dialog, and takes a decision back, so the Inbox can answer it.
+
+GitHub Copilot CLI maps `SessionStart` to `idle`, `UserPromptSubmit` and
+`PreToolUse` to `working` (a `PreToolUse` for `AskUserQuestion`, its `ask_user`
+tool, is `needs_input` kind `question`), `PostToolUse` and `PostToolUseFailure`
+to `working` only from `needs_input`, the `notification` hook's
+`permission_prompt` to `needs_input` kind `approval` and `elicitation_dialog` to
+kind `question`, `Stop` to `done`, an `ErrorOccurred` that is not recoverable to
+`errored`, and `SessionEnd` to `none`. Its `permissionRequest` hook is not used:
+it fires before Copilot's rules and auto-allow, so it fires for calls Copilot
+then allows without asking, while the `permission_prompt` notification fires
+only when a prompt is shown.
+
+Cursor Agent maps `sessionStart` to `idle`, `beforeSubmitPrompt`,
+`postToolUse` and `postToolUseFailure` to `working`, `stop` to `done`, `idle`
+or `errored` by its status (`completed`, `aborted`, `error`), and `sessionEnd`
+to `none`. Cursor calls `preToolUse`, `beforeShellExecution`,
+`beforeMCPExecution`, `beforeReadFile` and `subagentStart` permission hooks and
+blocks the action when one prints no valid answer, so tuios registers none of
+them, and no Cursor hook runs when Cursor shows its own approval prompt. That
+prompt comes from the screen rules, which may take over a `working` report
+while it is on screen (see [The one exception: a visible blocker](#the-one-exception-a-visible-blocker)).
 
 The session integrations report the conversation id from these events and
-nothing else: Copilot, Droid, Qoder, Qwen and Grok `SessionStart` (Grok's id
-from `GROK_SESSION_ID` first), Cursor `sessionStart`, Devin `SessionStart` and
-`UserPromptSubmit`, Antigravity `PreInvocation` (`conversationId`), Crush
+nothing else: Droid, Qoder and Grok `SessionStart` (Grok's id from
+`GROK_SESSION_ID` first), Devin `SessionStart` and `UserPromptSubmit`, Antigravity `PreInvocation` (`conversationId`), Crush
 `PreToolUse` (`CRUSH_SESSION_ID` first; it is the only event Crush has), and
 Hermes `on_session_start` and `on_session_reset` for an interactive session.
 
@@ -2481,8 +2609,8 @@ fails rather than send the report without its condition.
 The one hook that may wait is a permission prompt with approvals on (see
 [Approvals from the Inbox](#approvals-from-the-inbox)). The 500 ms limit still
 covers its report; the wait after it is bounded by the daemon's hold and by the
-hook's own 305 second limit, below the 310 seconds the Claude Code integration
-gives that hook. With approvals off it returns as fast as any other hook.
+hook's own 305 second limit, below the 310 seconds the Claude Code and Qwen
+Code integrations give that hook. With approvals off it returns as fast as any other hook.
 
 ### The old shim
 
@@ -2965,6 +3093,30 @@ wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
 
 One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
 name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
+
+A pane that starts Crush, or every pane with `herdr_protocol = "always"`, also
+gets `HERDR_ENV`, `HERDR_SOCKET_PATH` and `HERDR_PANE_ID`. See
+[herdr's pane state protocol](#herdrs-pane-state-protocol).
+
+### What a pane says its terminal is
+
+`TERM_PROGRAM` names a terminal the programs in the pane know, for the graphics
+tuios can pass through to yours: `ghostty` when your terminal takes kitty
+graphics, `WezTerm` when it takes sixel, and `TUIOS` when it takes neither.
+Image tools choose their output from this name.
+
+One pane is told something else. Codex sends its notifications as OSC 9, which
+tuios shows with their text, only to a terminal it knows by that name (Ghostty,
+iTerm2, kitty, Warp, WezTerm), and rings the bell for any other. So a pane that
+starts Codex directly (`tuios new-window NAME codex`, `start-agent codex`,
+`fan --agent codex`) on a terminal with neither graphics protocol is told
+`TERM_PROGRAM=WarpTerminal`. Codex treats that name like an unknown terminal in
+everything else (no image protocol, no keyboard workaround, the same link
+style), so only its notifications change. A shell is never told it, since image
+tools such as chafa read it as a kitty graphics terminal. For Codex started from
+a shell prompt on such a terminal, set `notification_method = "osc9"` under
+`[tui]` in `~/.codex/config.toml`. It sends OSC 9 wherever Codex runs, which
+terminals that do not know it ignore.
 
 ### A pane on another machine
 

@@ -64,10 +64,11 @@ Code CLI's config.toml, a hook file of tuios's own in GitHub Copilot CLI and
 Grok CLI's hooks directories, and a plugin for opencode, Kilo, Amp, Pi and
 Hermes Agent (which is also turned on in its config.yaml).
 
-Claude Code, Codex, Gemini CLI, opencode, Kilo, Amp, Kimi and Pi report the
-pane's state. The rest report only the conversation id, so a pane can be
-resumed, and leave the state to the pane's screen rules: their hooks miss
-events a state needs, and a state from a hook outranks every screen rule.
+Claude Code, Codex, GitHub Copilot CLI, Cursor Agent, Gemini CLI, opencode,
+Kilo, Amp, Kimi, Pi and Qwen Code report the pane's state. The rest report
+only the conversation id, so a pane can be resumed, and leave the state to the
+pane's screen rules: their hooks miss events a state needs, and a state from a
+hook outranks every screen rule.
 
 Every entry tuios writes runs "tuios agent-hook" and carries a version
 marker, so install replaces an older one, uninstall removes exactly what
