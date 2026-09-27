@@ -342,8 +342,9 @@ func desktopBlank(g ground) uv.Cell {
 // default text colour (OSC 10), is asking what it is drawn on. With a pane
 // background painted, the honest answer is the painted ground and the ink
 // tuios gives default text there, so a program that picks a light or a dark
-// palette from the answer picks the one that reads. With the pane background
-// off nothing changes, and the emulator answers as it always has.
+// palette from the answer picks the one that reads. With no theme, the host
+// terminal's own colours answer whatever the paint does not: see
+// paneReportNow in host_colors.go.
 //
 // Two emulators can be asked. A pane this process runs itself answers from its
 // own emulator, which syncReportColors keeps told. A pane in a daemon session
@@ -351,28 +352,26 @@ func desktopBlank(g ground) uv.Cell {
 // client pushes: see paneReportHex and the session package's
 // report_colors.go.
 
-// syncReportColors gives every pane's emulator the pane ground to answer with.
-// It runs before every composed frame, so a pane made since the last one, a
-// theme switched, or an option changed is caught without each of those paths
-// having to remember; a window already told is a string comparison, and with
-// the option off both strings are empty.
+// syncReportColors gives every pane's emulator the answers. It runs before
+// every composed frame, so a pane made since the last one, a theme switched,
+// an option changed or the host's colours learned is caught without each of
+// those paths having to remember; a window already told is a string
+// comparison, and with nothing to report the strings are empty.
 func (m *OS) syncReportColors() {
-	g := m.paneGround()
+	r := m.paneReportNow()
 	for _, w := range m.Windows {
 		if w != nil {
-			w.SetReportColors(g.fg, g.bg, g.key)
+			w.SetReportColors(r.fg, r.bg, r.pal, r.key)
 		}
 	}
 }
 
-// paneReportHex is the pane ground as the #rrggbb pair the daemon is sent,
-// empty for a colour that is not painted.
-func (m *OS) paneReportHex() (bg, fg string) {
-	g := m.paneGround()
-	if !g.on() {
-		return "", ""
-	}
-	return colorHex(g.bg), colorHex(g.fg)
+// paneReportHex is the answers as the daemon is sent them: the pair as
+// #rrggbb, empty for a colour there is no answer for, and the sixteen as the
+// comma list SessionState.PaneReportPalette describes.
+func (m *OS) paneReportHex() (bg, fg, pal string) {
+	r := m.paneReportNow()
+	return r.bgHex, r.fgHex, r.palHex
 }
 
 // colorHex spells a colour as #rrggbb, and nil as empty.

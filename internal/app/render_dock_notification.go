@@ -2,12 +2,14 @@ package app
 
 import (
 	"fmt"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"image/color"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -220,12 +222,12 @@ func notifBudget(renderWidth int) int {
 // The counter takes the colour of the worst thing waiting, so an error that a
 // later info pushed out of the block still says so from underneath it.
 // Otherwise it is dim, because a queue of routine messages is not news.
-func (s notifStatus) notifMeta() string {
+func (s notifStatus) notifMeta(pal overlay.Palette) string {
 	// Dim against the bar's own ground rather than a fixed grey. The grey it
 	// used to be was picked for one background and measured under 4.5:1 on two
 	// thirds of the themes.
-	bg := theme.NotificationGround()
-	dim := theme.Readable(theme.GroundUI().FgDim, bg)
+	bg := pal.Canvas
+	dim := theme.Readable(pal.FgDim, bg)
 
 	var parts []string
 	if s.msg.Sticky {
@@ -275,7 +277,8 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// The severity is the theme's, so it is measured against the bar's ground
 	// before it is drawn on it. A mark carries its meaning in its weight as well
 	// as its colour, so it is held to the mark floor and keeps more of its hue.
-	bg := theme.NotificationGround()
+	ground := m.groundUI()
+	bg := ground.Canvas
 	sev := theme.ReadableAt(theme.NotificationSeverity(s.msg.Type), bg, theme.MarkFloor)
 	inked := lipgloss.NewStyle().Foreground(sev)
 
@@ -284,7 +287,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// left edge now that there is no fill to open.
 	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
 	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
-	if glyph, fg := agentMark(s.msg.AgentState, false, theme.GroundUI()); glyph != "" {
+	if glyph, fg := agentMark(s.msg.AgentState, false, ground); glyph != "" {
 		// A message about an agent wears that state's mark in that state's
 		// colour, the same one the rail and the title bar draw, so the dock
 		// does not say "needs you" in a shape used nowhere else.
@@ -310,11 +313,11 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// The meta gives way before the message does only when it has to: the
 	// counter outranks the esc affordance, because a buried error is news and a
 	// dismissal hint the user has seen before is not.
-	meta := s.notifMeta()
+	meta := s.notifMeta(ground)
 	if notifChromeWidth+lipgloss.Width(meta) > budget {
 		bare := s
 		bare.msg.Sticky = false
-		meta = bare.notifMeta()
+		meta = bare.notifMeta(ground)
 	}
 	if notifChromeWidth+lipgloss.Width(meta) > budget {
 		meta = ""
@@ -322,7 +325,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - notifChromeWidth - lipgloss.Width(meta)
 	text := notifFit(s.msg.Message, room)
-	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(theme.GroundUI().Fg, bg))
+	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(ground.Fg, bg))
 	if s.msg.Target != nil {
 		// Underline is the one link mark everyone reads without being taught,
 		// costs no columns, and never appears on a message with nowhere to go,
@@ -338,7 +341,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	return notifBlock{
 		Text:     block,
-		Rule:     notifBurnRule(s, width, &m.Settings),
+		Rule:     notifBurnRule(s, width, &m.Settings, m.railRule()),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
 		drawn: notifDrawn{
@@ -380,7 +383,7 @@ func notifFit(message string, room int) string {
 // affordance, and it is the reason the burn is on the rule rather than in a
 // cell of its own: a line that has stopped is legible as stopped at a glance,
 // where a single character that has stopped changing is not.
-func notifBurnRule(s notifStatus, span int, set *config.Settings) string {
+func notifBurnRule(s notifStatus, span int, set *config.Settings, rule color.Color) string {
 	if span <= 0 {
 		return ""
 	}
@@ -389,7 +392,7 @@ func notifBurnRule(s notifStatus, span int, set *config.Settings) string {
 
 	burnt := lipgloss.NewStyle().Foreground(theme.NotificationSeverity(s.msg.Type)).
 		Render(strings.Repeat(notifRuleStroke(s.msg.Type, set), lit))
-	rest := lipgloss.NewStyle().Foreground(theme.RailRule()).
+	rest := lipgloss.NewStyle().Foreground(rule).
 		Render(strings.Repeat(set.GetWindowSeparatorChar(), span-lit))
 	return burnt + rest
 }

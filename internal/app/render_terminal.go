@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -768,7 +767,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// it painted a black band under the sweep and made the light
 				// on it read as gold on black rather than as the pane getting
 				// brighter.
-				cellBg := theme.TerminalBg()
+				cellBg := m.terminalBg()
 				if ground.on() {
 					cellBg = ground.bg
 				}

@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The split between the sections above and the block the rail pins to its
@@ -170,7 +169,7 @@ func (m *OS) sidebarDividerRow(cw int, pal overlay.Palette, active bool) string 
 	grip := min(sidebarDividerGrip, max(cw-2, 1))
 	lead := max((cw-grip)/2, 0)
 	return sidebarFit(sidebarStyle(nil, nil).Render(strings.Repeat(" ", lead))+
-		sidebarStyle(nil, theme.RailRule()).Render(strings.Repeat(glyph, grip)), cw, nil)
+		sidebarStyle(nil, m.railRule()).Render(strings.Repeat(glyph, grip)), cw, nil)
 }
 
 // SidebarSplitActive reports whether a divider drag is in progress, so the

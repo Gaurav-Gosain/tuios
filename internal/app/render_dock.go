@@ -93,7 +93,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		return ""
 	}
 
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 	y := m.GetDockbarContentYPosition()
 	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
@@ -162,7 +162,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 func (m *OS) renderDockString() (string, int) {
 	m.ensureDockPlan()
 	layout := m.CalculateDockLayout()
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 
 	sysInfoStyle := lipgloss.NewStyle().
 		Foreground(pal.FgMute).
@@ -486,7 +486,7 @@ func (m *OS) renderDockString() (string, int) {
 	// width-only key served the old hairline until the next resize. The colour
 	// follows the theme. Styling with a width wraps the whole row by grapheme,
 	// which was close to half of what the dock cost per frame.
-	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), theme.RailRule()
+	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), m.railRule()
 	if m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar || m.cachedSeparatorColor != ruleColor {
 		m.cachedSeparator = lipgloss.NewStyle().
 			Width(renderWidth).

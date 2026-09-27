@@ -267,7 +267,7 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp, &m.Settings)
 	glyphInk := ink
 	if mark.Hex != "" {
-		glyphInk = theme.FileIconInkOn(mark.Hex, sidebarGroundOr(bg))
+		glyphInk = theme.FileIconInkOn(mark.Hex, m.sidebarGroundOr(bg))
 	}
 	glyph := sidebarStyle(bg, glyphInk).Render(mark.Glyph)
 	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, sidebarNameAvail(cw, 0)))

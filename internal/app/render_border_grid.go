@@ -364,10 +364,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	// The focused perimeter is drawn bold as well as tinted so the signal
 	// survives themes where the two border colors are close, and so it is not
 	// carried by hue alone.
-	unfocusedStr := sgrForeground(theme.BorderUnfocused())
-	focusColor := theme.BorderFocusedWindow()
+	unfocusedStr := sgrForeground(theme.BorderUnfocusedOn(m.host.bg))
+	focusColor := theme.BorderFocusedWindowOn(m.host.bg)
 	if m.Mode == TerminalMode {
-		focusColor = theme.BorderFocusedTerminal()
+		focusColor = theme.BorderFocusedTerminalOn(m.host.bg)
 	}
 	focusedStr := "\x1b[1m" + sgrForeground(focusColor)
 

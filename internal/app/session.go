@@ -29,10 +29,10 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		// it can reconcile rather than let a stale push undo its own mutations.
 		BaseVersion: m.DaemonStateVersion,
 	}
-	// What this client paints behind pane content, for the daemon's emulators
-	// to answer OSC 11 and OSC 10 with. See report_colors.go in the session
-	// package.
-	state.PaneReportBg, state.PaneReportFg = m.paneReportHex()
+	// What this client paints behind pane content, or its terminal's own
+	// colours, for the daemon's emulators to answer OSC 11, OSC 10 and OSC 4
+	// with. See report_colors.go in the session package.
+	state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette = m.paneReportHex()
 
 	// Build map of window -> animation for quick lookup
 	windowAnimations := make(map[*terminal.Window]*ui.Animation)

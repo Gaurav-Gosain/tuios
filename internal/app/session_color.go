@@ -276,7 +276,7 @@ func (m *OS) sessionBorderTint() (focused, unfocused color.Color, ok bool) {
 	if !m.Settings.SessionBorder {
 		return nil, nil, false
 	}
-	bg := theme.TerminalBg()
+	bg := m.terminalBg()
 	tint := m.sessionTint(m.SessionName, bg)
 	if tint == nil {
 		return nil, nil, false
@@ -284,16 +284,16 @@ func (m *OS) sessionBorderTint() (focused, unfocused color.Color, ok bool) {
 	return tint, overlay.MixColors(tint, bg, sessionBorderQuiet), true
 }
 
-// railGround is what a rail row is actually drawn on: the band under the
+// rowGround is what a rail row is actually drawn on: the band under the
 // pointer or the cursor when it has one, and the terminal's own background
 // otherwise, since the rail paints no slab of its own. Contrast is measured
 // against this and never against the overlay palette's panel colour, which the
 // rail never uses.
-func railGround(rowBg color.Color) color.Color {
+func (m *OS) rowGround(rowBg color.Color) color.Color {
 	if rowBg != nil {
 		return rowBg
 	}
-	return theme.TerminalBg()
+	return m.terminalBg()
 }
 
 // accentSource says where the colour something is wearing came from, which the

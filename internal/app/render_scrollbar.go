@@ -295,17 +295,17 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 		return scrollbarQuietInk(ground, scrollbarQuietThumbContrast),
 			scrollbarQuietInk(ground, scrollbarQuietTrackContrast)
 	case config.ScrollbarTintMuted:
-		return theme.BorderUnfocused(), track
+		return theme.BorderUnfocusedOn(m.host.bg), track
 	}
 	if hex, ok := m.Settings.ScrollbarTintHex(); ok {
 		return lipgloss.Color(hex), track
 	}
 	if !focused {
-		return theme.BorderUnfocused(), track
+		return theme.BorderUnfocusedOn(m.host.bg), track
 	}
-	focus := theme.BorderFocusedWindow()
+	focus := theme.BorderFocusedWindowOn(m.host.bg)
 	if m.Mode == TerminalMode {
-		focus = theme.BorderFocusedTerminal()
+		focus = theme.BorderFocusedTerminalOn(m.host.bg)
 	}
 	acc, ok := m.WindowAccent(window.ID)
 	if !ok {
@@ -342,7 +342,7 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	// content, so that is the terminal's background and not the chrome's canvas;
 	// the track style paints its column, so it is the fill it paints.
 	pal := theme.UI()
-	ground := theme.TerminalBg()
+	ground := m.terminalBg()
 	base := lipgloss.NewStyle()
 	if m.Settings.ScrollbarStyle == config.ScrollbarStyleTrack {
 		ground = pal.Surface

@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"os"
 	"strings"
 	"time"
@@ -377,7 +378,37 @@ func (m *OS) shotPalette() *shot.Palette {
 	// the guess above is the xterm defaults. The host terminal is the one
 	// resolving those indices on screen, and it will say what it resolves them
 	// to, so ask it rather than guess. See HostCapabilities.ANSI.
-	return hostPalette(m.hostCaps(), p)
+	return m.liveHostPalette(hostPalette(m.hostCaps(), p))
+}
+
+// liveHostPalette overlays what the terminal has said since the startup probe:
+// the answers Bubble Tea brought in, and the colours of the scheme it switched
+// to. See host_colors.go. A capture taken after a switch to dark is drawn on
+// the dark ground the screen is on, not the light one tuios started on.
+func (m *OS) liveHostPalette(p *shot.Palette) *shot.Palette {
+	h := &m.host
+	if h.gen == 0 || p == nil {
+		return p
+	}
+	out := *p
+	for i, c := range h.ansi {
+		if c != nil {
+			out.ANSI[i] = shotColor(c)
+		}
+	}
+	if h.fg != nil {
+		out.FG = shotColor(h.fg)
+	}
+	if h.bg != nil {
+		out.BG = shotColor(h.bg)
+	}
+	return &out
+}
+
+// shotColor turns a colour into a renderer colour.
+func shotColor(c color.Color) shot.Color {
+	r, g, b, _ := c.RGBA()
+	return shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
 // hostPalette overlays whatever the host terminal said about its own colours

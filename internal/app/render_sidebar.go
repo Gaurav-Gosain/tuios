@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // sidebarRestoredTag is the rail's marker for a session rebuilt from saved
@@ -497,11 +496,11 @@ func sidebarStyle(bg, fg color.Color) lipgloss.Style {
 // or the rail's own ground when it paints none. A nil background is not "no
 // colour", it is the terminal's own, which is what anything measuring contrast
 // on the rail has to be measured against.
-func sidebarGroundOr(bg color.Color) color.Color {
+func (m *OS) sidebarGroundOr(bg color.Color) color.Color {
 	if bg != nil {
 		return bg
 	}
-	return theme.RailGround()
+	return m.railGround()
 }
 
 // sidebarFit truncates (ANSI-aware) and pads s to exactly cw cells on bg, so a
@@ -670,8 +669,8 @@ func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette, s *config.
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
 // panes, drawn in the window-border character at the dock separator's color:
 // the rail's edge is the vertical sibling of the dock's hairline.
-func sidebarEdgeRule(s *config.Settings) string {
-	return lipgloss.NewStyle().Foreground(theme.RailRule()).Render(s.GetWindowBorderLeft())
+func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
+	return lipgloss.NewStyle().Foreground(rule).Render(s.GetWindowBorderLeft())
 }
 
 // sidebarHeaderRow renders a quiet section header: the label, lowercase and
@@ -1152,10 +1151,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		contentX0++
 	}
 
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 	variant := sidebarVariant(w)
 	cw := w - 1 // content columns beside the edge rule
-	edge := sidebarEdgeRule(&m.Settings)
+	edge := sidebarEdgeRule(&m.Settings, m.railRule())
 	// While the rail owns the keyboard its edge rule burns accent instead of the
 	// dock's muted hairline, so the focus is legible at the frame, not only on a
 	// single highlighted row.
@@ -1664,7 +1663,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// the same way three lines up, so the preview and its source are
 			// visibly one thing rather than two lists that happen to be adjacent.
 			ink := pal.Fg
-			if tint := m.sessionTint(shown, theme.TerminalBg()); tint != nil {
+			if tint := m.sessionTint(shown, m.terminalBg()); tint != nil {
 				ink = tint
 			}
 			// The label gives way to the control, never the other way round: a
@@ -2309,7 +2308,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	// pane is running an agent the state owns that cell, so identity falls to
 	// the gutter, and when a pane wants a human the severity owns that one too
 	// and identity gives way entirely. An alarm outranks a label.
-	tint := m.sessionTint(node.ID, railGround(rowBg))
+	tint := m.sessionTint(node.ID, m.rowGround(rowBg))
 	stated := agentStateIndicator(node.AgentState) != ""
 
 	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal, &m.Settings)
@@ -2421,7 +2420,7 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		// as a mismatch rather than as a distinction. It says nothing new, which is
 		// why the section is otherwise still uncoloured: one session's panes are on
 		// screen at a time, so a hue per row would separate them from nothing.
-		tint := m.sessionTint(e.SessionID, railGround(rowBg))
+		tint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
 		accent, accented := m.WindowAccent(e.WindowID)
 		if preview, ok := m.accentPreview(AccentTargetWindow, e.WindowID); ok {
 			// The open picker previews the colour under its cursor on the row it
@@ -2818,14 +2817,14 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// gives in words and gives up first when the row runs out of room.
 	gutter := sidebarGutter(false, e.State, rowBg, pal, &m.Settings)
 	if e.Foreign && !sidebarAttention(e.State) {
-		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
+		if tint := m.agentIdentityTint(e, m.rowGround(rowBg)); tint != nil {
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
 	}
 	// On a compact rail this is the pane's only row, so it carries the focus
 	// mark the terminals row would have.
 	if e.Focused && m.GetSidebarWidth() <= sidebarCompactWidth && sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
-		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, railGround(rowBg)), rowBg, pal, &m.Settings)
+		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, m.rowGround(rowBg)), rowBg, pal, &m.Settings)
 	}
 	nameRoom := max(avail-shownW-afterW, 1)
 	body := shown +
