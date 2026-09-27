@@ -8,8 +8,8 @@ import (
 )
 
 // TestInboxThatFillsAfterOpeningIsCentred opens the Inbox with nothing in it,
-// then a risky approval arrives and fills it with the list, the detail and a
-// two-line footer. The panel keeps its first top while it fits, so it does not
+// then a risky approval arrives and fills it with the list, the detail and the
+// footer. The panel keeps its first top while it fits, so it does not
 // jump at every small change. It used to keep that top however much it grew,
 // which left the filled Inbox on the bottom edge with half the screen empty
 // above it. A panel whose centre moves more than a few rows is centred again.
@@ -37,7 +37,9 @@ func TestInboxThatFillsAfterOpeningIsCentred(t *testing.T) {
 
 	startHeldHook(t, base, `{"hook_event_name":"PermissionRequest","session_id":"e2e-risk","tool_name":"Bash","tool_input":{"command":"rm -rf build/"}}`)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "Risky: recursive delete", "esc close")
+		// The footer is the row's keys, shortened to fit one line, so it is
+		// found by its first hint rather than by "esc close".
+		return screenHas(s, "Approvals 1", "Risky: recursive delete", "1 allow")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never filled with the risky approval: %v\n%s", err, term.Snapshot())
 	}
@@ -54,7 +56,7 @@ func TestInboxThatFillsAfterOpeningIsCentred(t *testing.T) {
 		if title < 0 && strings.HasPrefix(strings.TrimSpace(line), "Inbox") {
 			title = r
 		}
-		if strings.Contains(line, "esc close") {
+		if strings.Contains(line, "1 allow") {
 			footer = r
 		}
 	}

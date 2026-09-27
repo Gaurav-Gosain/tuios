@@ -80,9 +80,8 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 		shown++
 	}
 	if len(items) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).
-			Render("  No matching effects"))
-		shown++
+		lines = append(lines, overlay.Empty{Message: "No matching effects", Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
+		shown = visible
 	}
 	for shown < visible {
 		lines = append(lines, overlay.Style(bg).Render(" "))

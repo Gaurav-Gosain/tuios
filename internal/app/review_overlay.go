@@ -182,14 +182,17 @@ type reviewState struct {
 	// overlay is not shown yet.
 	pending bool
 	open    bool
-	// loading is set while a diff is read again inside an open overlay.
-	loading bool
-	who     string
-	query   reviewQuery
-	diff    *reviewDiffResult
-	notes   []review.Note
-	files   []reviewFileEntry
-	file    int
+	// loading is set while a diff is read again inside an open overlay, and
+	// loadingSince is when that read went out: the header says "reading"
+	// only once it has run past overlay.LoadingDelay.
+	loading      bool
+	loadingSince time.Time
+	who          string
+	query        reviewQuery
+	diff         *reviewDiffResult
+	notes        []review.Note
+	files        []reviewFileEntry
+	file         int
 	// listFocus is set while the keys move through the file list.
 	listFocus  bool
 	cursor     int
@@ -494,6 +497,7 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 func (m *OS) reviewReload() tea.Cmd {
 	r := &m.review
 	r.loading = true
+	r.loadingSince = time.Now()
 	return m.reviewLoadCmd(r.query, false)
 }
 

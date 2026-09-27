@@ -27,6 +27,26 @@ Set `appearance.wrap_lists = false` to stop at the ends instead of wrapping.
 The close-session and file confirmations never wrap, so up from Cancel cannot
 land on the answer that deletes.
 
+With nothing typed, the command palette lists its commands under category
+headers. The headers are not rows: the cursor steps over them. Once you type,
+the commands are ranked by how well they match, and each row names its
+category in a quiet column on the right.
+
+The prefix menu (which-key) shows the keys after the leader in sections
+(Windows, Panes, Sessions, Modes, Menus, Tools, and Agents once an agent has
+run), laid out in as many columns as the screen holds. A key marked with `+`
+opens a further menu. On a screen too narrow for every column, the
+descriptions are cut before any key is left out.
+
+The key hints at the foot of a panel stay on one row. When they do not fit,
+they shorten in steps: `ctrl+` becomes `^`, `alt+` becomes `M-` and `shift+`
+becomes `S-`; then labels are dropped from the last hint backwards, keeping the
+keys; then the last hints are dropped for `…`.
+
+An empty list says why it is empty in the middle of the panel, with the one key
+worth pressing next under it. A list that is still loading draws nothing for
+its first half second, so a fast load never flashes a "reading" line.
+
 ## Settings
 
 `,` in window-management mode, or `ctrl+b ,`, opens the settings page. It

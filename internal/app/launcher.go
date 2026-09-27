@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
@@ -47,6 +49,7 @@ func (m *OS) OpenLauncher() tea.Cmd {
 	m.LauncherSelected = 0
 	m.LauncherScroll = 0
 	m.rebuildLauncherItems()
+	m.LauncherOpenedAt = time.Now()
 	return tea.Batch(m.ScanPathApps(), m.LauncherIconWork())
 }
 

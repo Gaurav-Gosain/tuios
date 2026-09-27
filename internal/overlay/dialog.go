@@ -122,20 +122,7 @@ func hintStrip(hints []Hint, bg color.Color, pal Palette) (string, int) {
 	if len(hints) == 0 {
 		return "", 0
 	}
-	// Both measured against the ground they land on: the accent follows the
-	// terminal theme, and FgMute is furniture rather than text.
-	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
-	labelStyle := Style(bg).Foreground(pal.FgDim)
-	parts := make([]string, 0, len(hints))
-	w := 0
-	for i, h := range hints {
-		if i > 0 {
-			w += 2
-		}
-		parts = append(parts, keyStyle.Render(hintKey(h.Key))+labelStyle.Render(" "+h.Label))
-		w += hintWidth(h)
-	}
-	return strings.Join(parts, labelStyle.Render("  ")), w
+	return renderHints(fittedHints{Hints: hints}, dialogSep, bg, pal)
 }
 
 // HintStrip renders key hints as one line on the given background, in the shape
@@ -170,13 +157,15 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	}
 	top += frame.Render(tr)
 
-	// Bottom border: the hints ride in it, right-aligned, dropping from the end
-	// when the frame runs out of room rather than wrapping onto a row.
-	hints := d.Hints
-	strip, stripW := hintStrip(hints, bg, pal)
-	for len(hints) > 0 && stripW+3 > w {
-		hints = hints[:len(hints)-1]
-		strip, stripW = hintStrip(hints, bg, pal)
+	// Bottom border: the hints ride in it, right-aligned, shortened in tiers
+	// when the frame runs out of room rather than wrapping onto a row. Three
+	// cells are the border's own: a rule cell and a pad each side.
+	fitted := fitHints(d.Hints, w-3, dialogSep)
+	hints := fitted.Hints
+	var strip string
+	var stripW int
+	if len(d.Hints) > 0 {
+		strip, stripW = renderHints(fitted, dialogSep, bg, pal)
 	}
 	bottom := frame.Render(bl)
 	if stripW > 0 {
@@ -204,7 +193,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 		x, y := w-stripW-1, len(lines)-1
 		for i, h := range hints {
 			if i > 0 {
-				x += 2
+				x += dialogSep
 			}
 			hintRects = append(hintRects, Rect{X0: x, Y0: y, X1: x + hintWidth(h), Y1: y + 1})
 			x += hintWidth(h)

@@ -27,9 +27,17 @@ type listOverlay struct {
 	Selected   int
 	// Scroll points at the caller's scroll offset; the renderer clamps it to the
 	// rows it can actually show, which depends on the screen height.
-	Scroll   *int
-	EmptyMsg string
-	Hints    []overlay.Hint
+	Scroll *int
+	// EmptyMsg is what the list says when it has no rows, centred in the room
+	// the rows would take, with EmptyHint under it: the one key worth
+	// pressing next, "esc close" unless the caller names a better one.
+	EmptyMsg  string
+	EmptyHint overlay.Hint
+	// Pending says a load is out that has not yet run past
+	// overlay.LoadingDelay. An empty list draws nothing while it is set, so a
+	// fast load never flashes a loading line.
+	Pending bool
+	Hints   []overlay.Hint
 	// Detail is lines shown under the list, above the position line, each at
 	// most the fitted width: more about the selected row than the row holds.
 	// DetailFor builds them for the fitted width.
@@ -104,13 +112,16 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		lines = append(lines, pal.Row(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, st, bg))
 		shown++
 	}
-	if cfg.Count == 0 {
-		msg := cfg.EmptyMsg
-		if msg == "" {
-			msg = "Nothing here"
+	if cfg.Count == 0 && !cfg.Pending {
+		empty := overlay.Empty{Message: cfg.EmptyMsg, Hint: cfg.EmptyHint}
+		if empty.Message == "" {
+			empty.Message = "Nothing here"
 		}
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+msg))
-		shown++
+		if empty.Hint.Key == "" {
+			empty.Hint = overlay.Hint{Key: "esc", Label: "close"}
+		}
+		lines = append(lines, empty.Lines(cfg.Width, cfg.MaxVisible, bg, pal)...)
+		shown = cfg.MaxVisible
 	}
 	for shown < cfg.MaxVisible {
 		lines = append(lines, overlay.Style(bg).Render(" "))

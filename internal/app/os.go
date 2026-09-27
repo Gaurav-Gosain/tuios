@@ -856,6 +856,13 @@ type OS struct {
 	// per frame is the difference between an overlay that costs nothing to
 	// leave open and one that does not.
 	LauncherItems []LauncherItem
+	// LauncherOpenedAt is when the launcher last opened, which is when its
+	// scan started: "Scanning for programs" waits for the loading delay.
+	LauncherOpenedAt time.Time
+	// loadingFrameAt is the latest loading frame armed (see loadingFrameCmd).
+	loadingFrameAt time.Time
+	// whichKeyCache is the which-key panel's last layout.
+	whichKeyCache whichKeyCache
 	// launcherIcons holds the decoded app icons and what is currently drawn on
 	// the host. Nil until the launcher first needs one.
 	launcherIcons *launcherIcons

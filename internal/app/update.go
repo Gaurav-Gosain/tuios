@@ -709,10 +709,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
 	replan := m.foreignSessionReplanCmd()
-	if sync == nil && replan == nil && gitSync == nil {
+	// A load a handler started gets its loading frame armed here, for the
+	// same reason: one check rather than a timer in each place a load starts.
+	loading := m.loadingFrameCmd()
+	if sync == nil && replan == nil && gitSync == nil && loading == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync)
+	return model, tea.Batch(cmd, sync, replan, gitSync, loading)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -1304,6 +1307,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
+
+	case loadingShownMsg:
+		// A load may have run past the loading delay, so its state is drawn
+		// now rather than whenever something else next asks for a frame.
+		m.renderSkipped = false
+		return m, nil
 
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)

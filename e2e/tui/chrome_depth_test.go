@@ -143,7 +143,13 @@ func findPalette(t *testing.T, term *tuitest.Terminal) palettePanel {
 	}
 	p.ruleStart, p.ruleEnd = col, col+w
 	p.left, p.right = p.ruleStart-overlay.DefaultPanelPadding, p.ruleEnd+overlay.DefaultPanelPadding
+	// The first list row is the first category's header when nothing is
+	// typed; the selected command is the first row under the rule with the
+	// cursor mark.
 	p.selRow = p.titleRow + 4
+	if !strings.Contains(s.Line(p.selRow), "›") {
+		p.selRow++
+	}
 	if !strings.Contains(s.Line(p.selRow), "›") {
 		t.Fatalf("row %d is not the palette's selected row\n%s", p.selRow, term.Snapshot())
 	}

@@ -107,29 +107,23 @@ func TabRowCount(tabs []string, _ int) int {
 
 // HintRowCount reports how many rows the footer hint strip of a panel of the
 // given inner width needs. Hosts use it to budget the body's row count against
-// the screen height before they build the body.
-func HintRowCount(hints []Hint, width int) int {
+// the screen height before they build the body. The strip shortens in tiers
+// rather than wrapping (see fitHints), so it is one row for any hints at all.
+func HintRowCount(hints []Hint, _ int) int {
 	if len(hints) == 0 {
 		return 0
 	}
-	rows, curW := 1, 0
-	for _, h := range hints {
-		w := hintWidth(h)
-		if curW > 0 && curW+3+w > width {
-			rows++
-			curW = 0
-		}
-		if curW > 0 {
-			curW += 3
-		}
-		curW += w
-	}
-	return rows
+	return 1
 }
 
-// hintWidth is the rendered width of one hint: the key, a space, and the label.
+// hintWidth is the rendered width of one hint: the key, and a space and the
+// label when it has one.
 func hintWidth(h Hint) int {
-	return lipgloss.Width(hintKey(h.Key)) + 1 + lipgloss.Width(h.Label)
+	w := lipgloss.Width(hintKey(h.Key))
+	if h.Label != "" {
+		w += 1 + lipgloss.Width(h.Label)
+	}
+	return w
 }
 
 // tabGap is the single bg-colored column between two tabs.
@@ -319,39 +313,41 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 	return b.String(), rects, prev, next
 }
 
-// footerRows renders the muted key-hint strip, wrapping onto further rows when
-// the hints do not fit across one.
+// footerRows renders the muted key-hint strip on one row, shortened in tiers
+// when the hints do not fit across it (see fitHints).
 func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
-	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
-	// FgDim, not FgMute: the footer is the only place a panel says what its keys
-	// do, and FgMute is a furniture token picked to disappear against the canvas.
-	// On the panel's lighter Surface it did disappear, at 1.81:1 when the quiet
-	// tier was Oyster and 3.07:1 since, which is furniture contrast either way.
-	labelStyle := Style(bg).Foreground(pal.FgDim)
-	sep := Style(bg).Render("   ")
-	const sepW = 3
+	strip, _ := renderHints(fitHints(hints, width, footerSep), footerSep, bg, pal)
+	return []string{strip}
+}
 
-	var rows []string
-	var cur []string
-	curW := 0
-	for _, h := range hints {
-		part := keyStyle.Render(hintKey(h.Key)) + labelStyle.Render(" "+h.Label)
-		w := lipgloss.Width(part)
-		if curW > 0 && curW+sepW+w > width {
-			rows = append(rows, strings.Join(cur, sep))
-			cur = cur[:0]
-			curW = 0
+// renderHints draws a fitted strip: keys bright and bold, labels in FgDim, sep
+// cells between pairs, and the ellipsis last when hints were dropped. It
+// returns the strip and its width.
+func renderHints(f fittedHints, sep int, bg color.Color, pal Palette) (string, int) {
+	// Both measured against the ground they land on: the accent follows the
+	// terminal theme. FgDim, not FgMute, for the labels: the footer is the only
+	// place a panel says what its keys do, and FgMute is a furniture token
+	// picked to disappear against the canvas.
+	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
+	labelStyle := Style(bg).Foreground(pal.FgDim)
+	gap := labelStyle.Render(strings.Repeat(" ", sep))
+	var b strings.Builder
+	for i, h := range f.Hints {
+		if i > 0 {
+			b.WriteString(gap)
 		}
-		if curW > 0 {
-			curW += sepW
+		b.WriteString(keyStyle.Render(hintKey(h.Key)))
+		if h.Label != "" {
+			b.WriteString(labelStyle.Render(" " + h.Label))
 		}
-		cur = append(cur, part)
-		curW += w
 	}
-	if len(cur) > 0 {
-		rows = append(rows, strings.Join(cur, sep))
+	if f.Truncated {
+		if len(f.Hints) > 0 {
+			b.WriteString(gap)
+		}
+		b.WriteString(labelStyle.Render(Ellipsis()))
 	}
-	return rows
+	return b.String(), hintsWidth(f.Hints, sep, f.Truncated)
 }
 
 // Render assembles the panel and returns the rendered string plus the geometry
@@ -430,4 +426,25 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 
 	geo.Height = len(lines)
 	return strings.Join(lines, "\n"), geo
+}
+
+// FrameBlock gives a block drawn outside Panel the frame a Panel draws when the
+// palette asks for one (Palette.Framed): rows is the block, each totalW cells
+// wide with at least one blank cell of padding on every side, and the frame
+// takes that outermost cell, so the block keeps its size. On a palette that
+// needs no frame the rows come back as they are.
+func FrameBlock(rows []string, totalW int, bg color.Color, pal Palette) []string {
+	if !pal.Framed || len(rows) < 2 || totalW < 2 {
+		return rows
+	}
+	tl, tr, bl, br, h, v := dialogFrame()
+	edge := Style(bg).Foreground(pal.Edge)
+	side := edge.Render(v)
+	out := make([]string, len(rows))
+	out[0] = edge.Render(tl + strings.Repeat(h, totalW-2) + tr)
+	for i := 1; i < len(rows)-1; i++ {
+		out[i] = side + Fill(ansi.Cut(rows[i], 1, totalW-1), totalW-2, bg) + side
+	}
+	out[len(rows)-1] = edge.Render(bl + strings.Repeat(h, totalW-2) + br)
+	return out
 }

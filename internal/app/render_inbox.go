@@ -25,10 +25,14 @@ const inboxWidth = 72
 // says what would appear here.
 var inboxEmptyLines = []string{
 	"Nothing is waiting for you.",
-	"Agents that block on an approval or a question, write to you, error,",
-	"finish a turn you have not looked at, or can resume after a restart",
-	"show up here, from every session.",
+	"Agents that block on an approval or a question, write to you, error, " +
+		"finish a turn you have not looked at, or can resume after a restart " +
+		"show up here, from every session.",
 }
+
+// inboxEmptyRows is the height of the empty Inbox's body, so it opens at
+// about the size it will be once something arrives.
+const inboxEmptyRows = 9
 
 // renderInbox renders the Inbox overlay: each kind under a heading in words,
 // oldest first, with how long each item has waited. Nothing is said by colour
@@ -114,7 +118,14 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			// A reply from the rail to a pane with nothing in the Inbox.
 			return m.simpleOverlayPanel(title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
 		}
-		return m.simpleOverlayPanel(title, lines, m.keyHints(
+		// The one key offered in the middle is the mailbox, the place to
+		// look when nothing is waiting; without a daemon there is nothing
+		// to open, and it offers the way out.
+		next := overlay.Hint{Key: "esc", Label: "close"}
+		if mb := m.keyHints(config.ActionInboxMailbox, "mailbox"); len(mb) > 0 && m.IsDaemonSession && !st.Unsupported {
+			next = mb[0]
+		}
+		return m.emptyPanel(title, inboxWidth, inboxEmptyRows, lines[0], lines[1:], next, m.keyHints(
 			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
 			config.ActionInboxMailbox, "mailbox", config.ActionInboxClose, "close"))
 	}
@@ -273,7 +284,7 @@ func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 	// The keys for the row come first and the footer keeps to one line: the
 	// keys that work on the whole list give way, the selector first, then the
 	// filter. Both are in help, and the empty Inbox offers them.
-	for len(hints)-1 > rowHints && overlay.HintRowCount(hints, inboxWidth) > 1 {
+	for len(hints)-1 > rowHints && !overlay.HintsFit(hints, inboxWidth) {
 		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
 	}
 	return hints
@@ -449,8 +460,10 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	hints := []overlay.Hint{}
 	switch {
 	case pk == nil && p.Loading:
-		body = append(body, "")
-		add(pal.FgDim, "Reading the prompt...")
+		if overlay.ShowLoading(p.LoadingSince, now) {
+			body = append(body, "")
+			add(pal.FgDim, "Reading the prompt...")
+		}
 	case pk == nil:
 	case !pk.Found:
 		body = append(body, "")
@@ -489,7 +502,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	case p.Sending:
 		body = append(body, "")
 		add(pal.FgDim, "Answering, and waiting for the pane to move on...")
-	case p.Loading && pk != nil:
+	case p.Loading && pk != nil && overlay.ShowLoading(p.LoadingSince, now):
 		body = append(body, "")
 		add(pal.FgDim, "Reading the prompt again...")
 	}
