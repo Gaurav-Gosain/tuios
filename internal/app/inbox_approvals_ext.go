@@ -551,13 +551,14 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 			}
 		}
 		if it.DenyMessage {
-			hints = append(hints, m.keyHints(config.ActionInboxDenyReason, "keep planning with a reason")...)
+			hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxDenyReason, "keep planning with a reason"))...)
 		}
 		if pv := &m.Inbox.approvals.plan; pv.requestID == it.RequestID && len(inboxPlanLines(pv.text, max(m.panelWidth(inboxWidth)-6, 8))) > m.inboxPlanWindow() {
 			// Offered only when there is more than one screen of it.
 			hints = append(hints, overlay.Hint{Key: m.inboxKeyOr(config.ActionInboxDetailDown, "J") + "/" + m.inboxKeyOr(config.ActionInboxDetailUp, "K"), Label: "scroll"})
 		}
-		hints = append(hints, m.keyHints(config.ActionInboxGo, "answer in pane", config.ActionInboxClose, "close")...)
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "answer in pane"))...)
+		hints = append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 		return detail, hints, true
 	case it.Kind == session.AttentionApproval && held && (inboxRisky(it) || it.DenyMessage):
 		now := time.Now()
@@ -589,7 +590,7 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 					rest = append(rest, h)
 				}
 			}
-			hints = append(append(answers, m.keyHints(config.ActionInboxDenyReason, "deny with reason")...), rest...)
+			hints = append(append(answers, overlay.Optional(m.keyHints(config.ActionInboxDenyReason, "deny with reason"))...), rest...)
 		}
 		return detail, hints, true
 	case it.Kind == session.AttentionApproval && inboxRisky(it):

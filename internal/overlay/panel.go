@@ -10,10 +10,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Hint is one key/label pair shown in a panel footer.
+// Hint is one key/label pair shown in a panel footer. Priority says what a
+// strip too narrow for every hint gives up first (see fitHints).
 type Hint struct {
-	Key   string
-	Label string
+	Key      string
+	Label    string
+	Priority HintPriority
 }
 
 // Panel is a borderless floating panel: a solid surface fill with an inset

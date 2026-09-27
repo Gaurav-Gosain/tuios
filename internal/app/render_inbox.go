@@ -221,7 +221,12 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	var hints []overlay.Hint
 	for i := 0; i+1 < len(pairs); i += 2 {
 		if key := m.inboxKey(pairs[i]); key != "" {
-			hints = append(hints, overlay.Hint{Key: key, Label: pairs[i+1]})
+			h := overlay.Hint{Key: key, Label: pairs[i+1]}
+			if pairs[i] == config.ActionInboxClose {
+				// The way out keeps its label on any key it is bound to.
+				h.Priority = overlay.HintEssential
+			}
+			hints = append(hints, h)
 		}
 	}
 	return hints
@@ -657,8 +662,10 @@ func (m *OS) inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
 			hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
 		}
 	}
+	// Answering in the pane is a second way to do what the answers do, so a
+	// narrow footer gives it up before the answers and dismiss.
+	hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "answer in pane"))...)
 	return append(hints, m.keyHints(
-		config.ActionInboxGo, "answer in pane",
 		config.ActionInboxDismiss, "dismiss",
 		config.ActionInboxClose, "close")...)
 }
@@ -702,7 +709,7 @@ func inboxAskDetail(it session.AttentionItem, width int) []string {
 func (m *OS) inboxAskHints(it session.AttentionItem) []overlay.Hint {
 	hints := []overlay.Hint{{Key: inboxAskKeys(it), Label: "answer"}}
 	if it.Window != "" {
-		hints = append(hints, m.keyHints(config.ActionInboxGo, "go to pane")...)
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "go to pane"))...)
 	}
 	return append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxClose, "close")...)
 }

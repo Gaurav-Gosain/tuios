@@ -13,19 +13,69 @@ import (
 //  1. every hint as written;
 //  2. modifier names shortened: ctrl+ becomes ^, alt+ becomes M-, shift+
 //     becomes S-;
-//  3. labels dropped one at a time from the end, so the keys stay and the
-//     first hints, which a host lists first because they matter most, keep
-//     their words longest;
-//  4. whole hints dropped from the end, and an ellipsis where they were.
+//  3. whole hints dropped, lowest priority first and, within a priority, the
+//     last listed first, until the strip fits. An essential hint (see
+//     HintEssential, and every hint on the esc key) is never dropped here.
+//     Once the strip fits, a dropped hint that fits in the room left is put
+//     back, so a long label dropped early does not take a short one with it;
+//  4. only when the essential hints alone do not fit: their labels dropped
+//     from the end, so a key shows without its label only when nothing else
+//     can;
+//  5. hints dropped from the end, and an ellipsis where they were.
 //
-// The hints that survive are always a prefix of the ones asked for. A host
-// that makes the hints pressable reads Geometry.Hints by index, and a prefix
-// keeps that index meaning the same hint.
+// A key never shows without its label while dropping a whole hint could make
+// room instead: a footer of bare keys says nothing a person can act on. The
+// hints that survive keep the order they were given in, and Geometry.Hints
+// keeps one entry per hint asked for, so a host that makes the hints pressable
+// reads it by the index it gave.
+
+// HintPriority orders the hints of a strip for dropping. The zero value is
+// HintNormal, so a hint that says nothing is dropped after the optional ones
+// and before the essential ones.
+type HintPriority int8
+
+const (
+	// HintOptional is a hint the strip gives up first: a second way to do
+	// something another hint already offers, or a key that is in help.
+	HintOptional HintPriority = -1
+	// HintNormal is the default.
+	HintNormal HintPriority = 0
+	// HintEssential is a hint the strip keeps whole while anything else can
+	// go: the way out of a panel. A hint on the esc key is essential whatever
+	// its priority says.
+	HintEssential HintPriority = 1
+)
+
+// Optional returns hints with each marked HintOptional.
+func Optional(hints []Hint) []Hint {
+	for i := range hints {
+		hints[i].Priority = HintOptional
+	}
+	return hints
+}
+
+// Essential returns hints with each marked HintEssential.
+func Essential(hints []Hint) []Hint {
+	for i := range hints {
+		hints[i].Priority = HintEssential
+	}
+	return hints
+}
+
+// rank is the priority fitHints drops by.
+func (h Hint) rank() HintPriority {
+	if h.Key == "esc" || h.Priority >= HintEssential {
+		return HintEssential
+	}
+	return h.Priority
+}
 
 // fittedHints is a strip as it will be drawn: the hints in the form that fits,
-// and whether any were dropped off the end.
+// where each came from in the strip asked for, and whether any were dropped
+// off the end.
 type fittedHints struct {
 	Hints     []Hint
+	Index     []int
 	Truncated bool
 }
 
@@ -55,11 +105,20 @@ func HintsFit(hints []Hint, width int) bool {
 	return hintsWidth(hints, footerSep, false) <= width
 }
 
+// identity is 0..n-1.
+func identity(n int) []int {
+	idx := make([]int, n)
+	for i := range idx {
+		idx[i] = i
+	}
+	return idx
+}
+
 // fitHints applies the tiers until the strip fits in width cells with sep
 // cells between pairs.
 func fitHints(hints []Hint, width, sep int) fittedHints {
 	if len(hints) == 0 || hintsWidth(hints, sep, false) <= width {
-		return fittedHints{Hints: hints}
+		return fittedHints{Hints: hints, Index: identity(len(hints))}
 	}
 	out := make([]Hint, len(hints))
 	for i, h := range hints {
@@ -67,20 +126,67 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 		out[i].Key = ShortKey(h.Key)
 	}
 	if hintsWidth(out, sep, false) <= width {
-		return fittedHints{Hints: out}
+		return fittedHints{Hints: out, Index: identity(len(out))}
 	}
-	for i := len(out) - 1; i >= 0; i-- {
-		if out[i].Label == "" {
+
+	// Tier 3: drop whole hints by priority, the last listed first.
+	kept := make([]bool, len(out))
+	for i := range kept {
+		kept[i] = true
+	}
+	pick := func() fittedHints {
+		var f fittedHints
+		for i, k := range kept {
+			if k {
+				f.Hints = append(f.Hints, out[i])
+				f.Index = append(f.Index, i)
+			}
+		}
+		return f
+	}
+	var dropped []int
+	fits := false
+	for _, pr := range []HintPriority{HintOptional, HintNormal} {
+		for i := len(out) - 1; i >= 0 && !fits; i-- {
+			if !kept[i] || out[i].rank() > pr {
+				continue
+			}
+			kept[i] = false
+			dropped = append(dropped, i)
+			fits = hintsWidth(pick().Hints, sep, false) <= width
+		}
+		if fits {
+			break
+		}
+	}
+	if fits {
+		// Put back what fits in the room left, the last dropped first: it is
+		// the one of highest priority, or the earliest listed of its priority.
+		for j := len(dropped) - 1; j >= 0; j-- {
+			i := dropped[j]
+			kept[i] = true
+			if hintsWidth(pick().Hints, sep, false) > width {
+				kept[i] = false
+			}
+		}
+		return pick()
+	}
+
+	// Tier 4: only essential hints are left and they do not fit whole.
+	f := pick()
+	for i := len(f.Hints) - 1; i >= 0; i-- {
+		if f.Hints[i].Label == "" {
 			continue
 		}
-		out[i].Label = ""
-		if hintsWidth(out, sep, false) <= width {
-			return fittedHints{Hints: out}
+		f.Hints[i].Label = ""
+		if hintsWidth(f.Hints, sep, false) <= width {
+			return f
 		}
 	}
-	for n := len(out) - 1; n >= 0; n-- {
-		if hintsWidth(out[:n], sep, true) <= width {
-			return fittedHints{Hints: out[:n], Truncated: true}
+	// Tier 5.
+	for n := len(f.Hints) - 1; n >= 0; n-- {
+		if hintsWidth(f.Hints[:n], sep, true) <= width {
+			return fittedHints{Hints: f.Hints[:n], Index: f.Index[:n], Truncated: true}
 		}
 	}
 	return fittedHints{Truncated: true}

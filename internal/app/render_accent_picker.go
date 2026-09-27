@@ -218,9 +218,11 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 
 	// The hints ride the border rather than the body, so they come from the
 	// dialog's own geometry and are already in its coordinates. A narrow frame
-	// drops them from the end, and what comes back is what was drawn.
+	// drops some, and a dropped one comes back as an empty rect.
 	for i, r := range geo.Hints {
-		m.accentHits = append(m.accentHits, accentHit{Rect: r, Kind: accentHitHint, Col: i})
+		if !r.Empty() {
+			m.accentHits = append(m.accentHits, accentHit{Rect: r, Kind: accentHitHint, Col: i})
+		}
 	}
 
 	// The picker routes its own clicks off the rects above, so it registers no

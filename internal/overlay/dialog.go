@@ -202,12 +202,13 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	// after it, and the pairs are two cells apart.
 	var hintRects []Rect
 	if stripW > 0 {
+		hintRects = make([]Rect, len(d.Hints))
 		x, y := w-stripW-1, len(lines)-1
 		for i, h := range hints {
 			if i > 0 {
 				x += dialogSep
 			}
-			hintRects = append(hintRects, Rect{X0: x, Y0: y, X1: x + hintWidth(h), Y1: y + 1})
+			hintRects[fitted.Index[i]] = Rect{X0: x, Y0: y, X1: x + hintWidth(h), Y1: y + 1}
 			x += hintWidth(h)
 		}
 	}
