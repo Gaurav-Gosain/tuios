@@ -101,10 +101,17 @@ func Detect(f Facts) Provenance {
 			Fix:    "nix profile upgrade tuios",
 		}
 	case isHomebrewPath(p, f.BrewPrefix):
+		// `brew install tuios` is the homebrew-core formula, built from source
+		// into the Cellar. The tap ships a cask of the release archive, which
+		// lives in the Caskroom. Each is upgraded by its own command.
+		fix := "brew upgrade tuios"
+		if strings.Contains(p, "/Caskroom/") {
+			fix = "brew upgrade --cask tuios"
+		}
 		return Provenance{
 			Origin: OriginHomebrew,
 			What:   "Homebrew",
-			Fix:    "brew upgrade --cask tuios",
+			Fix:    fix,
 		}
 	case isSystemPath(p):
 		return Provenance{

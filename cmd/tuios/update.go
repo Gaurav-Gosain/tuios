@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/release"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // `tuios update`: replace a binary installed from a release archive with the
@@ -228,6 +229,21 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 				What:  fmt.Sprintf("There is no release archive this command can pick for %s/%s.", runtime.GOOS, runtime.GOARCH),
 				Cause: err.Error(),
 				Fix:   "download the right archive by hand from " + releasePage(rel),
+			}
+		}
+		// A ghostty build is replaced by a ghostty build. Both install as
+		// `tuios`, so taking the pure Go archive here would quietly swap the
+		// emulator under the user. Only tuios has a ghostty archive, and not
+		// every platform publishes one, so the pure Go archive is the fallback
+		// and the report says so.
+		if binary == "tuios" && vt.Backend == "ghostty" {
+			ghosttyName, err := release.AssetName("tuios-ghostty", rel.Tag, runtime.GOOS, runtime.GOARCH)
+			if err == nil {
+				if _, ok := rel.AssetNamed(ghosttyName); ok {
+					name = ghosttyName
+				} else {
+					fmt.Fprintf(out, "%s publishes no %s, so this installs the pure Go backend.\n", rel.Tag, ghosttyName)
+				}
 			}
 		}
 		asset, ok := rel.AssetNamed(name)
