@@ -40,19 +40,19 @@ func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 // and one on workspace 2, in the given border mode.
 func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	t.Helper()
-	origShared, origAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	origShared, origAnim := config.Global.SharedBorders, config.Global.Motion
 	origStyle, origASCII, origSidebar := config.Global.BorderStyle, config.Global.UseASCIIOnly, config.Global.SidebarEnabled
 	config.Global.SharedBorders = shared
 	// Tiling applies geometry through an animation when animations are on, which
 	// would leave the panes at their nominal size for the length of the test.
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	// The ASCII set draws every corner as "+", which would hide a pane box among
 	// the separator glyphs.
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	config.Global.SidebarEnabled = false
 	t.Cleanup(func() {
-		config.Global.SharedBorders, config.Global.AnimationsEnabled = origShared, origAnim
+		config.Global.SharedBorders, config.Global.Motion = origShared, origAnim
 		config.Global.BorderStyle, config.Global.UseASCIIOnly = origStyle, origASCII
 		config.Global.SidebarEnabled = origSidebar
 	})

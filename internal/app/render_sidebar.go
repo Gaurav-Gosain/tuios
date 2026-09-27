@@ -1087,7 +1087,7 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
-	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
+	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID(sidebarLayerID)
 }
 
 // sidebarWindowSection windows one section's rows onto the lines it was given,
@@ -1120,6 +1120,7 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 // the one-cell edge rule on the side facing the panes.
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
+	m.motion.rail = m.motion.rail[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
 	// Colours are arbitrated over this machine's sessions only. A remote row
 	// draws in its host group's muted ink, and letting one into the arbitration
@@ -1791,7 +1792,17 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-			lines = append(lines, compose(st.mark(pal, m.sidebarAgentRow(e, variant, cw, pal, st, tall))))
+			row, bodyW := m.sidebarAgentRow(e, variant, cw, pal, st, tall)
+			// A working agent's name is where the shimmer sweeps. Recorded
+			// only for that state, so a rail with no working agent records
+			// nothing and the motion clock never starts. See shimmer.go.
+			if e.State == "working" && bodyW > 0 {
+				x0 := contentX0 + sidebarNameCol
+				m.motion.rail = append(m.motion.rail, shimmerSpan{
+					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
+				})
+			}
+			lines = append(lines, compose(st.mark(pal, row)))
 			if tall {
 				lines = append(lines, compose(st.mark(pal, m.sidebarAgentNoteRow(e, variant, cw, pal, st))))
 			}
@@ -2711,7 +2722,10 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 // tall says the row has a note line under it, which is where the harness name
 // goes: carrying it here as well would print one thing twice, and the line has
 // only ever had room for one name.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) string {
+//
+// It also returns how many columns the name and the tokens around it take, from
+// sidebarNameCol, which is the span the working shimmer sweeps.
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) (string, int) {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
@@ -2833,5 +2847,5 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
 		after
 	return sidebarComposeRow(gutter,
-		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg)
+		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg), lipgloss.Width(body)
 }

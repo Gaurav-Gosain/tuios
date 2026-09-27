@@ -89,6 +89,7 @@ var settingsUIExcluded = map[string]string{
 	"appearance.sidebar_show_glyphs":  "alias of appearance.sidebar.show_glyphs",
 	"appearance.sidebar_show_counts":  "alias of appearance.sidebar.show_counts",
 	"appearance.sidebar.workspaces":   "replaced by appearance.dock_workspace_tabs",
+	"appearance.animations_enabled":   "replaced by appearance.motion (false is none)",
 
 	// The two section switches. They fold into appearance.sidebar.sections on
 	// load, which is the one place membership lives: a layout may carry two

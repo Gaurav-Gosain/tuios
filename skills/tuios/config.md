@@ -123,6 +123,12 @@ tuios set-config appearance.window_title_format "{index}: {title}"
 `dim_unfocused` (0 to 90) quiets the content of unfocused panes. It reaches only
 cells a program coloured itself unless a theme is set.
 
+`appearance.modal_dim` (0 to 90, default 30) darkens the screen behind an open
+panel such as the command palette; 0 turns it off. `appearance.motion` is
+`none`, `basic` (window slides only) or `full` (the default: also the panel
+fade-in and the shimmer on a working agent's rail row). The old
+`animations_enabled` still works and maps `false` to `none`.
+
 **Record the old values first.** There is no preview and no undo:
 
 ```sh

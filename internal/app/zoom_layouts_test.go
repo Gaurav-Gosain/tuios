@@ -155,9 +155,9 @@ func TestOpeningAPaneWhileZoomedGivesItTheZoom(t *testing.T) {
 			name = "camera"
 		}
 		t.Run(name, func(t *testing.T) {
-			prev := config.Global.AnimationsEnabled
-			config.Global.AnimationsEnabled = false
-			defer func() { config.Global.AnimationsEnabled = prev }()
+			prev := config.Global.Motion
+			config.Global.Motion = config.MotionNone
+			defer func() { config.Global.Motion = prev }()
 
 			h := newOpenAnimHarness(120, 40)
 			h.m.Settings.ZoomSize = size
@@ -281,9 +281,9 @@ func TestAddWindowPlacesThePaneBeforeFocusingIt(t *testing.T) {
 // afterwards to disagree, so that rectangle stood. It arrived with no animation
 // either, because a box handed over directly is not a journey.
 func TestAnEchoDoesNotStampTheRegionOnACameraZoom(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	defer func() { config.Global.AnimationsEnabled = prev }()
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	defer func() { config.Global.Motion = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 	h.m.Settings.ZoomSize = 95
@@ -342,9 +342,9 @@ func TestTheHandoverOnACreationReachesTheDaemon(t *testing.T) {
 			name = "camera"
 		}
 		t.Run(name, func(t *testing.T) {
-			prev := config.Global.AnimationsEnabled
-			config.Global.AnimationsEnabled = false
-			defer func() { config.Global.AnimationsEnabled = prev }()
+			prev := config.Global.Motion
+			config.Global.Motion = config.MotionNone
+			defer func() { config.Global.Motion = prev }()
 
 			h := newOpenAnimHarness(120, 40)
 			h.m.Settings.ZoomSize = size

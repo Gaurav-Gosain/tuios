@@ -21,9 +21,9 @@ import (
 // scrollRig is a real daemon session in the scrolling layout with n panes.
 func scrollRig(t *testing.T, n int) *rig {
 	t.Helper()
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prev })
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prev })
 
 	r := newRig(t, n)
 	r.m.AutoTiling = true

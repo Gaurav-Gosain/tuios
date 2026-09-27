@@ -40,6 +40,11 @@ var preV080Pins = []lookPin{
 	{table: "appearance.sidebar", key: "enabled", value: `false`, legacy: "sidebar_enabled"},
 	{table: "appearance.sidebar", key: "position", value: `"left"`, legacy: "sidebar_position"},
 	{table: "appearance.sidebar", key: "width", value: `28`, legacy: "sidebar_width"},
+	// Not a v0.8.0 change: the modal dim came after it, and it darkens every
+	// cell behind an overlay, which is what many of these tests read while
+	// one is open. The screen before v0.8.0 had no dim. modal_dim_test.go
+	// drives it with the shipped looks.
+	{table: "appearance", key: "modal_dim", value: `0`},
 }
 
 // shippedLooksBases holds the isolation roots whose tests asked for the

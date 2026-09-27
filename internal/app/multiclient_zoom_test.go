@@ -45,18 +45,18 @@ func twoClientsOnOneTiledSession(t *testing.T) (*rig, *peer, *exchange) {
 // asks for them off and the one about the dividers asks for them on.
 func clientsOnOneTiledSession(t *testing.T, panes int, shared bool) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevAnim := config.Global.AnimationsEnabled
+	prevAnim := config.Global.Motion
 	prevEnabled := config.Global.SidebarEnabled
 	prevWidth := config.Global.SidebarWidth
 	prevPos := config.Global.SidebarPosition
 	prevShared := config.Global.SharedBorders
 	config.Global.SharedBorders = shared
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	config.Global.SidebarEnabled = true
 	config.Global.SidebarWidth = 24
 	config.Global.SidebarPosition = "left"
 	t.Cleanup(func() {
-		config.Global.AnimationsEnabled = prevAnim
+		config.Global.Motion = prevAnim
 		config.Global.SidebarEnabled = prevEnabled
 		config.Global.SidebarWidth = prevWidth
 		config.Global.SidebarPosition = prevPos

@@ -206,7 +206,9 @@ type AppearanceConfig struct {
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden (default: top)
 	PreferredShell           string                  `toml:"preferred_shell"`              // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled        *bool                   `toml:"animations_enabled"`           // Enable UI animations (default: true). Set to false for instant transitions.
+	AnimationsEnabled        *bool                   `toml:"animations_enabled,omitempty"` // Deprecated: folded into motion on load (false is none)
+	Motion                   string                  `toml:"motion"`                       // How much moves: none, basic (window slides), full (also fades and the working shimmer) (default: full)
+	ModalDim                 *int                    `toml:"modal_dim"`                    // Percent the screen behind a modal overlay is darkened; 0 is off (default: 30)
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
@@ -660,6 +662,8 @@ func DefaultConfig() *UserConfig {
 			KittyPlaceholders:        KittyPlaceholdersAuto,
 			AutoEnterTerminalOnFocus: AutoEnterTerminalOff,
 			Glyphs:                   theme.GlyphSetNone,
+			Motion:                   MotionFull,
+			ModalDim:                 new(ModalDimDefault),
 			PanelPadding:             overlay.DefaultPanelPadding,
 			ClockFormat:              DefaultClockFormat,
 			MasterRatio:              MasterRatioDefault,
@@ -1499,6 +1503,17 @@ func createDefaultConfig() (*UserConfig, error) {
 // ApplyAppearanceConfig, which must run on the Bubble Tea goroutine.
 func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	migrateLegacySidebar(cfg)
+	migrateAnimationsEnabled(&cfg.Appearance)
+
+	// An unknown level falls back to the default; validation reports it.
+	if !slices.Contains(MotionLevels, cfg.Appearance.Motion) {
+		cfg.Appearance.Motion = defaultCfg.Appearance.Motion
+	}
+	if cfg.Appearance.ModalDim == nil {
+		cfg.Appearance.ModalDim = new(*defaultCfg.Appearance.ModalDim)
+	} else if d := *cfg.Appearance.ModalDim; d < 0 || d > ModalDimMax {
+		cfg.Appearance.ModalDim = new(min(max(d, 0), ModalDimMax))
+	}
 
 	if cfg.Appearance.BorderStyle == "" {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
@@ -1858,7 +1873,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if s.GlyphSet == "" {
 		s.GlyphSet = theme.GlyphSetNone
 	}
-	theme.SetActiveGlyphs(s.GlyphSet)
+	// The terminal's own limits, when the config chose no set. See
+	// DetectGlyphEnv.
+	theme.SetActiveGlyphs(s.applyGlyphEnv())
 	s.ShowCPU = cfg.Appearance.ShowCPU
 	s.ShowRAM = cfg.Appearance.ShowRAM
 	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll
@@ -1878,10 +1895,19 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.LeaderKey = cfg.Keybindings.LeaderKey
 	}
 
-	// AnimationsEnabled defaults to true (nil means use default)
-	// Only set global if explicitly configured
-	if cfg.Appearance.AnimationsEnabled != nil {
-		s.AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
+	// The motion level. A config that was not run through the load path (one
+	// built in code) can still carry the old boolean, so it is folded here as
+	// well as on load.
+	a := cfg.Appearance
+	migrateAnimationsEnabled(&a)
+	if slices.Contains(MotionLevels, a.Motion) {
+		s.Motion = a.Motion
+	}
+	if s.NoAnimationsFlag {
+		s.Motion = MotionNone
+	}
+	if a.ModalDim != nil {
+		s.ModalDim = min(max(*a.ModalDim, 0), ModalDimMax)
 	}
 
 	// ConfirmQuit defaults to false (nil means use default)

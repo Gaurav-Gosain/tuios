@@ -59,7 +59,7 @@ func runTapeInteractive(tapeFile string) error {
 	// Force animations off for deterministic playback of hand-written tapes,
 	// matching recorded tapes (the recorder prepends DisableAnimations). Tapes
 	// can still re-enable them explicitly with EnableAnimations.
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 
 	player := tape.NewPlayer(commands)
 

@@ -31,10 +31,10 @@ import (
 // been through it, and the tree it left behind outlives the switch.
 func modeOS(t *testing.T, mode string, shared bool, gap, n, w, h int) *OS {
 	t.Helper()
-	prevAnim, prevShared, prevGap := config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap
-	config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap = false, shared, gap
+	prevAnim, prevShared, prevGap := config.Global.Motion, config.Global.SharedBorders, config.Global.PaneGap
+	config.Global.Motion, config.Global.SharedBorders, config.Global.PaneGap = config.MotionNone, shared, gap
 	t.Cleanup(func() {
-		config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap = prevAnim, prevShared, prevGap
+		config.Global.Motion, config.Global.SharedBorders, config.Global.PaneGap = prevAnim, prevShared, prevGap
 	})
 
 	m := &OS{

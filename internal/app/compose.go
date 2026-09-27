@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"slices"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -289,31 +290,34 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 	grounds := m.frameGrounds()
 	painted := grounds.any()
 
+	// The motion passes. The scrim goes on once, under the first modal layer;
+	// a fade goes on right after its own overlay is drawn; the shimmer right
+	// after the rail. Each is a pass over cells already on the canvas, in draw
+	// order, so none of them reaches a layer drawn above it. See scrim.go,
+	// motion.go and shimmer.go.
+	now := time.Now()
+	scrimmed := m.Settings.ModalDim <= 0
+	fading := m.motion.fading > 0
+	shimmer := len(m.motion.rail) > 0
+
 	area := canvas.Bounds()
 	for _, cl := range ordered {
 		if cl.layer == nil || !cl.bounds.Overlaps(area) {
 			continue
 		}
-		if cl.cells != nil {
-			var fill layerFill
-			if painted {
-				fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), &grounds)
-			}
-			// Parsed here, in draw order, and not when the layers were
-			// collected: two layers on one frame that share an id share the
-			// cellLayer too, and each has to hold its own cells at the moment
-			// it is drawn. Nothing on the frame today shares an id, and
-			// nothing enforces that either.
-			cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
-			cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
-			continue
+		if !scrimmed && scrimBehind(cl.layer.GetID()) {
+			m.applyScrim(canvas)
+			scrimmed = true
 		}
-		uv.NewStyledString(cl.layer.GetContent()).Draw(canvas, cl.bounds)
-		// A layer with no id has no surface of its own, so its transparent
-		// cells are the desktop's. Every layer the frame builds today has an
-		// id; this keeps one added without from punching a hole.
-		if g := grounds[surfaceDesktop]; g.on() {
-			paintGround(canvas.Lines, cl.bounds.Intersect(area), g)
+		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
+		switch id := cl.layer.GetID(); {
+		case fading:
+			m.applyFade(canvas, id, cl.bounds, now)
+			if shimmer && id == sidebarLayerID {
+				m.applyShimmer(canvas, now)
+			}
+		case shimmer && id == sidebarLayerID:
+			m.applyShimmer(canvas, now)
 		}
 	}
 
@@ -327,6 +331,32 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 	}
 	clear(ordered)
 	m.composeScratch = ordered[:0]
+}
+
+// drawComposedLayer draws one layer onto the canvas: from its parsed cells
+// when it has an id, and straight from its string otherwise.
+func (m *OS) drawComposedLayer(canvas *frameCanvas, cl composedLayer, painted bool, grounds *frameGrounds, area image.Rectangle) {
+	if cl.cells != nil {
+		var fill layerFill
+		if painted {
+			fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), grounds)
+		}
+		// Parsed here, in draw order, and not when the layers were
+		// collected: two layers on one frame that share an id share the
+		// cellLayer too, and each has to hold its own cells at the moment
+		// it is drawn. Nothing on the frame today shares an id, and
+		// nothing enforces that either.
+		cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
+		cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
+		return
+	}
+	uv.NewStyledString(cl.layer.GetContent()).Draw(canvas, cl.bounds)
+	// A layer with no id has no surface of its own, so its transparent
+	// cells are the desktop's. Every layer the frame builds today has an
+	// id; this keeps one added without from punching a hole.
+	if g := grounds[surfaceDesktop]; g.on() {
+		paintGround(canvas.Lines, cl.bounds.Intersect(area), g)
+	}
 }
 
 // layerZ is a layer's z, with the compositor's root at zero.

@@ -1014,7 +1014,7 @@ and appearance.border_style are the same path.
   tuios set-config border_style rounded
 
   # Turn animations off
-  tuios set-config animations_enabled false
+  tuios set-config motion none
 
   # Hide window buttons
   tuios set-config hide_window_buttons true`,

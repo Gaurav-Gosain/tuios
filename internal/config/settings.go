@@ -45,17 +45,44 @@ type Settings struct {
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
 
-	// UseASCIIOnly controls whether to use ASCII fallback characters instead of Nerd Fonts
-	// Set via --ascii-only command-line flag
+	// UseASCIIOnly controls whether to use ASCII fallback characters instead
+	// of Nerd Fonts. It is the effective answer: set by --ascii-only
+	// (ASCIIRequested), or by a terminal whose locale is not UTF-8 when no
+	// glyph set was chosen (see GlyphEnv).
 	UseASCIIOnly bool
 
-	// AnimationsEnabled controls whether UI animations are enabled
-	// Set via --no-animations flag or appearance.animations_enabled config
-	AnimationsEnabled bool
+	// ASCIIRequested records --ascii-only, so re-applying the config at
+	// runtime can recompute UseASCIIOnly without losing the flag.
+	ASCIIRequested bool
+
+	// GlyphEnv is what the terminal tuios draws on can show, read from its
+	// locale and TERM when the client starts. See DetectGlyphEnv.
+	GlyphEnv GlyphEnv
+
+	// NoNerdFont is set when GlyphEnv is GlyphEnvUnicode and no glyph set was
+	// chosen: the icons that are not glyph set roles (the dock's, the
+	// notification marks) take their ASCII forms. Read it through
+	// NerdFontsOff.
+	NoNerdFont bool
+
+	// Motion is how much the UI animates: MotionNone, MotionBasic or
+	// MotionFull. Set via appearance.motion, or --no-animations for none.
+	// Read it through MotionAllows, which also honours AnimationsSuppressed.
+	Motion string
+
+	// NoAnimationsFlag records --no-animations, so re-applying the config at
+	// runtime keeps the level at none until something sets the level itself
+	// (OS.SetMotion).
+	NoAnimationsFlag bool
 
 	// AnimationsSuppressed is set to true temporarily to disable animations
-	// (e.g., during remote command processing). This takes precedence over AnimationsEnabled.
+	// (e.g., during remote command processing). This takes precedence over
+	// Motion.
 	AnimationsSuppressed bool
+
+	// ModalDim is the percent the screen behind a modal overlay is darkened
+	// by. Zero turns it off. Set via appearance.modal_dim.
+	ModalDim int
 
 	// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown
 	// every time, regardless of whether there are active foreground processes.
@@ -603,7 +630,8 @@ func DefaultSettings() Settings {
 		NotificationErrorSticky:     true,
 		NormalFPS:                   60,
 		UseASCIIOnly:                false,
-		AnimationsEnabled:           true,
+		Motion:                      MotionFull,
+		ModalDim:                    ModalDimDefault,
 		AnimationsSuppressed:        false,
 		AlwaysConfirmQuit:           false,
 		WhichKeyEnabled:             true,

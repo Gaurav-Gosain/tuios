@@ -13,6 +13,9 @@ type tickStats struct {
 	Ticks  uint64
 	Work   uint64
 	Render uint64
+	// Motion is every motion clock frame handled (see motion.go). With nothing
+	// moving it stays at zero, because the clock is never armed.
+	Motion uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -29,6 +32,6 @@ func (m *OS) DumpTickStats() {
 	if path == "" {
 		return
 	}
-	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d\n",
-		m.tickStats.Ticks, m.tickStats.Work, m.tickStats.Render)), 0o600)
+	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d motion=%d\n",
+		m.tickStats.Ticks, m.tickStats.Work, m.tickStats.Render, m.tickStats.Motion)), 0o600)
 }

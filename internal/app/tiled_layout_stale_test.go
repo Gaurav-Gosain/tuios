@@ -73,14 +73,14 @@ func TestSettledTiledLayoutIsNeverStale(t *testing.T) {
 		t.Run(tc.what, func(t *testing.T) {
 			prevGap, prevShared := config.Global.PaneGap, config.Global.SharedBorders
 			prevSidebar, prevSide := config.Global.SidebarEnabled, config.Global.SidebarPosition
-			prevAnim := config.Global.AnimationsEnabled
+			prevAnim := config.Global.Motion
 			t.Cleanup(func() {
 				config.Global.PaneGap, config.Global.SharedBorders = prevGap, prevShared
 				config.Global.SidebarEnabled, config.Global.SidebarPosition = prevSidebar, prevSide
-				config.Global.AnimationsEnabled = prevAnim
+				config.Global.Motion = prevAnim
 			})
 			config.Global.PaneGap, config.Global.SharedBorders = tc.gap, tc.shared
-			config.Global.AnimationsEnabled = false
+			config.Global.Motion = config.MotionNone
 			if tc.sidebar {
 				config.Global.SidebarEnabled, config.Global.SidebarPosition = true, "left"
 			}
@@ -105,9 +105,9 @@ func TestSettledTiledLayoutIsNeverStale(t *testing.T) {
 // TestLayoutFromASmallerScreenIsStale is the true-positive direction, taken at
 // the check itself rather than through a whole sync.
 func TestLayoutFromASmallerScreenIsStale(t *testing.T) {
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	m := nPaneTiledOS(t, 2, 160, 48)
 	if m.tiledLayoutStale() {

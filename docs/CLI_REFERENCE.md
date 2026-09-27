@@ -130,7 +130,7 @@ tuios --standalone
 - `--show-clock`: Show the clock overlay
 - `--show-cpu`: Show a CPU graph in the dock
 - `--show-ram`: Show RAM usage in the dock
-- `--no-animations`: Disable UI animations for instant transitions
+- `--no-animations`: Disable UI animations for instant transitions (`appearance.motion = none` for this run)
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
 - `--cpuprofile <file>`: Write CPU profile to file
@@ -1198,7 +1198,9 @@ name alone. Some of them:
 |------|--------|-------------|
 | `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
-| `animations_enabled` | `true`, `false` | Enable/disable animations |
+| `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
+| `modal_dim` | `0` to `90` | Percent the screen behind a modal panel is darkened (default `30`, `0` is off) |
+| `animations_enabled` | `true`, `false` | Deprecated on/off switch: `false` sets `motion` to `none`, `true` to `full` |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
@@ -1218,7 +1220,7 @@ tuios set-config dockbar_position bottom
 tuios set-config border_style rounded
 
 # Turn animations off
-tuios set-config animations_enabled false
+tuios set-config motion none
 
 # Hide window buttons
 tuios set-config hide_window_buttons true

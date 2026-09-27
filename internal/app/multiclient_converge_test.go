@@ -254,17 +254,17 @@ func newFleet(t *testing.T, seed uint64) *fleet {
 	t.Helper()
 
 	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
-	prevAnim := config.Global.AnimationsEnabled
+	prevAnim := config.Global.Motion
 	prevSidebar := config.Global.SidebarEnabled
 	prevSidebarWidth := config.Global.SidebarWidth
 	prevSidebarPos := config.Global.SidebarPosition
 	prevDockPos := config.Global.DockbarPosition
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	config.Global.SidebarEnabled = true
 	config.Global.SidebarWidth = 24
 	t.Cleanup(func() {
 		config.Global.SharedBorders, config.Global.PaneGap = prevShared, prevGap
-		config.Global.AnimationsEnabled = prevAnim
+		config.Global.Motion = prevAnim
 		config.Global.SidebarEnabled = prevSidebar
 		config.Global.SidebarWidth = prevSidebarWidth
 		config.Global.SidebarPosition = prevSidebarPos

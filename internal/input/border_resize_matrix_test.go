@@ -23,12 +23,12 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 	t.Helper()
 	app.SetInputHandler(HandleInput)
 
-	prevAnim := config.Global.AnimationsEnabled
+	prevAnim := config.Global.Motion
 	prevShared := config.Global.SharedBorders
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	config.Global.SharedBorders = shared
 	t.Cleanup(func() {
-		config.Global.AnimationsEnabled = prevAnim
+		config.Global.Motion = prevAnim
 		config.Global.SharedBorders = prevShared
 	})
 

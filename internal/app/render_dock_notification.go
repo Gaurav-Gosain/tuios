@@ -122,7 +122,7 @@ func notifSeverityRank(notifType string) int {
 // notifGlyph is the severity mark. It is the one part of the block that is
 // never truncated: a message cut down to nothing still says how bad it was.
 func notifGlyph(notifType string, s *config.Settings) string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		switch notifType {
 		case "error":
 			return config.NotificationIconError

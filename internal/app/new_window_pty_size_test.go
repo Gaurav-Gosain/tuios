@@ -72,9 +72,9 @@ func daemonNewWindow(state *session.SessionState, id string, width, height, work
 // is left at the placement box: the pane and its shell disagree, permanently,
 // because nothing resizes again until the user does.
 func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	const width, height = 130, 55
 

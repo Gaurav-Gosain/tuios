@@ -23,6 +23,7 @@ type sidebarRenderCache struct {
 	nav        []sidebarNavRow
 	sections   [sidebarSectionCount][2]int
 	stripRows  []sidebarStripRow
+	shimmer    []shimmerSpan
 }
 
 // invalidate drops the cached rail, forcing the next frame to rebuild. Called
@@ -66,6 +67,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
 		m.sidebarSectionY = m.sidebarCache.sections
 		m.sidebarStripRows = append(m.sidebarStripRows[:0], m.sidebarCache.stripRows...)
+		m.motion.rail = append(m.motion.rail[:0], m.sidebarCache.shimmer...)
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 
@@ -82,6 +84,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
 		sections:   m.sidebarSectionY,
 		stripRows:  append([]sidebarStripRow(nil), m.sidebarStripRows...),
+		shimmer:    append([]shimmerSpan(nil), m.motion.rail...),
 	}
 	return lines, w
 }
@@ -150,6 +153,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// and the border style pick the character of the edge rule facing the panes,
 	// so a rail drawn before either moved is not the rail this frame draws.
 	mixB(m.Settings.UseASCIIOnly)
+	mixB(m.Settings.NoNerdFont)
 	mixS(m.Settings.BorderStyle)
 
 	// View state: scroll, focus, and hover all restyle rows. Each section holds

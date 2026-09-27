@@ -385,7 +385,8 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		"layout_mode":        m.LayoutModeName(),
 		"theme":              themeName,
 		"dockbar_position":   dockbarPosition,
-		"animations_enabled": m.Settings.AnimationsEnabled,
+		"animations_enabled": m.Settings.AnimationsOn(),
+		"motion":             m.Settings.Motion,
 		"width":              m.Width,
 		"height":             m.Height,
 		"workspace_windows":  workspaceWindows,
@@ -817,25 +818,37 @@ func (m *OS) remember(path, value string) {
 	_ = config.SetOptionValue(m.UserConfig, path, value)
 }
 
-// EnableAnimations enables UI animations.
+// SetMotion puts this client's motion level at one of config.MotionLevels and
+// records it in the config the registry re-applies from. It is the one place a
+// level is set at runtime, so it also lifts --no-animations: a level somebody
+// chose after starting outranks the flag they started with.
+func (m *OS) SetMotion(level string) error {
+	if !slices.Contains(config.MotionLevels, level) {
+		return fmt.Errorf("unknown motion level: %s (want %s)", level, strings.Join(config.MotionLevels, ", "))
+	}
+	m.Settings.NoAnimationsFlag = false
+	m.Settings.Motion = level
+	m.remember("appearance.motion", level)
+	return nil
+}
+
+// EnableAnimations sets the motion level to full.
 func (m *OS) EnableAnimations() error {
-	m.Settings.AnimationsEnabled = true
-	m.remember("appearance.animations_enabled", "true")
+	_ = m.SetMotion(config.MotionFull)
 	m.ShowNotification("Animations on", "info", m.Settings.NotificationDuration)
 	return nil
 }
 
-// DisableAnimations disables UI animations.
+// DisableAnimations sets the motion level to none.
 func (m *OS) DisableAnimations() error {
-	m.Settings.AnimationsEnabled = false
-	m.remember("appearance.animations_enabled", "false")
+	_ = m.SetMotion(config.MotionNone)
 	m.ShowNotification("Animations off", "info", m.Settings.NotificationDuration)
 	return nil
 }
 
-// ToggleAnimations toggles UI animations.
+// ToggleAnimations switches between no motion and full motion.
 func (m *OS) ToggleAnimations() error {
-	if m.Settings.AnimationsEnabled {
+	if m.Settings.AnimationsOn() {
 		return m.DisableAnimations()
 	}
 	return m.EnableAnimations()
@@ -853,6 +866,8 @@ func (m *OS) SetConfig(path, value string) error {
 		return m.SetDockbarPosition(value)
 	case "appearance.border_style", "border_style":
 		return m.SetBorderStyle(value)
+	case "appearance.motion", "motion":
+		return m.SetMotion(value)
 	case "appearance.animations_enabled", "animations_enabled", "animations":
 		switch value {
 		case "true", "on", "1", "enabled":
@@ -920,6 +935,10 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 	}
 	if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
 		return err
+	}
+	// A level chosen now outranks --no-animations. See SetMotion.
+	if path == "appearance.motion" {
+		m.Settings.NoAnimationsFlag = false
 	}
 
 	// ApplyAppearanceConfig is the one funnel from the config struct to the

@@ -147,6 +147,23 @@ type spotlightState struct {
 	x, y     int
 	anchored bool
 
+	cellShade
+}
+
+// cellShade carries composed cells toward one colour by one of 16 quantised
+// levels, behind a cache, in place on the canvas. The spotlight is built on it,
+// and so are the scrim behind a modal overlay and an overlay's fade-in: each
+// holds its own, because each carries toward a different colour or by a
+// different amount and they would evict each other's blends.
+type cellShade struct {
+	// toward is the colour every cell is carried toward. Nil means
+	// spotlightDark, black, which is what the spotlight and the scrim use.
+	toward color.Color
+	// noFaint leaves a colour the shade cannot read channels off unchanged,
+	// instead of setting SGR 2 on it. The fade wants that: a faint that
+	// appears for a handful of frames and vanishes is a flicker, not a fade.
+	noFaint bool
+
 	// groundFg, groundBg are what the terminal paints a cell that names no
 	// colour of its own, boxed once. They are what such a cell is dimmed from,
 	// not what anything is carried toward: see spotlightDark. Assigning a
@@ -361,7 +378,7 @@ func spotlightLevel(dx, dy, full, rim float64) uint8 {
 //
 // The unlit region still shares one style: every cell in it that named no
 // colour comes out of the cache as the same pair.
-func (s *spotlightState) dimCell(cell *uv.Cell, level uint8) {
+func (s *cellShade) dimCell(cell *uv.Cell, level uint8) {
 	fg, bg := cell.Style.Fg, cell.Style.Bg
 	r := &s.run
 	if !r.have || r.level != level || r.inFg != fg || r.inBg != bg {
@@ -376,7 +393,7 @@ func (s *spotlightState) dimCell(cell *uv.Cell, level uint8) {
 // buildRun computes the blend for one (foreground, background, level) triple
 // and remembers it, so the run of cells that shares it costs one comparison
 // each.
-func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
+func (s *cellShade) buildRun(fg, bg color.Color, level uint8) {
 	r := &s.run
 	r.inFg, r.inBg, r.level, r.have = fg, bg, level, true
 
@@ -396,7 +413,7 @@ func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
 	if s.dimmable(fg) {
 		r.outFg, r.outFaint = s.blendCached(fg, level, t), false
 	} else {
-		r.outFg, r.outFaint = fg, true
+		r.outFg, r.outFaint = fg, !s.noFaint
 	}
 	if s.dimmable(bg) {
 		r.outBg = s.blendCached(bg, level, t)
@@ -433,7 +450,7 @@ func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
 // SGR 2 is what stands in for the blend when this is false. It is weaker: it
 // moves the foreground only, by an amount the host picks rather than the dim
 // setting.
-func (s *spotlightState) dimmable(c color.Color) bool {
+func (s *cellShade) dimmable(c color.Color) bool {
 	if isNilColor(c) {
 		return false
 	}
@@ -459,12 +476,16 @@ func hostPaletteColor(c color.Color) bool {
 // blendCached is blendColors behind a cache of the levels the rim quantises to.
 // The cached value is already boxed, so a hit writes an interface and allocates
 // nothing.
-func (s *spotlightState) blendCached(src color.Color, level uint8, t float64) color.Color {
+func (s *cellShade) blendCached(src color.Color, level uint8, t float64) color.Color {
 	key := spotBlendKey{src: packColor8(src), level: level}
 	if c, ok := s.blend[key]; ok {
 		return c
 	}
-	c := blendColors(src, spotlightDark, t)
+	toward := s.toward
+	if toward == nil {
+		toward = spotlightDark
+	}
+	c := blendColors(src, toward, t)
 	if s.blend == nil {
 		s.blend = make(map[spotBlendKey]color.Color, 256)
 	} else if len(s.blend) >= spotlightCacheMax {
@@ -486,7 +507,7 @@ func packColor8(c color.Color) uint32 {
 
 // syncGround re-reads the pair a cell that names no colour is dimmed from, when
 // the theme has changed or nothing has been read yet.
-func (s *spotlightState) syncGround() {
+func (s *cellShade) syncGround() {
 	id := theme.CurrentThemeID()
 	if s.groundValid && s.groundTheme == id {
 		return
@@ -504,7 +525,7 @@ func (s *spotlightState) syncGround() {
 // A fraction of t leaves the cell at 1-t of its brightness, so dim 75 is the
 // screen at a quarter of the light. Level 0 is always zero, which is what makes
 // a cell inside the beam identical to the one the compositor drew.
-func (s *spotlightState) syncLevels(dim int) {
+func (s *cellShade) syncLevels(dim int) {
 	if s.levelsDim == dim {
 		return
 	}

@@ -841,12 +841,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+D a",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				s.AnimationsEnabled = !s.AnimationsEnabled
-				if s.AnimationsEnabled {
-					m.ShowNotification("Animations on", "success", s.NotificationDuration)
-				} else {
-					m.ShowNotification("Animations off", "info", s.NotificationDuration)
-				}
+				_ = m.ToggleAnimations()
 				return m, nil
 			},
 		},

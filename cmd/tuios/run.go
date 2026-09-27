@@ -32,6 +32,15 @@ func loadAndApplyConfig() *config.UserConfig {
 		userConfig = config.DefaultConfig()
 	}
 
+	// What this terminal can draw, from its locale and TERM. It only decides
+	// the glyphs when the config chose no set and --ascii-only was not given;
+	// ApplyAppearanceConfig folds it in. See config.DetectGlyphEnv.
+	env, why := config.DetectGlyphEnv(os.Getenv)
+	config.Global.GlyphEnv = env
+	if why != "" {
+		log.Printf("glyphs: %s, so the chrome is drawn with %s glyphs unless a glyph set or --ascii-only is chosen", why, env)
+	}
+
 	// Appearance globals are the baseline; CLI flags win. LoadUserConfig no longer
 	// applies globals itself, so this must run before ApplyOverrides.
 	config.ApplyAppearanceConfig(userConfig, &config.Global)

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // celebrateTestOS is a one pane screen with some text on it, so a burst has
@@ -16,7 +18,7 @@ func celebrateTestOS(t *testing.T) *OS {
 	win.MarkContentDirty()
 	m := newTestOS(win)
 	m.Width, m.Height = 90, 30
-	m.Settings.AnimationsEnabled = true
+	m.Settings.Motion = config.MotionFull
 	m.Settings.AnimationsSuppressed = false
 	return m
 }
@@ -108,7 +110,7 @@ func TestCelebrationBurstsShareOneTimer(t *testing.T) {
 // is a sparkle that does not move: one timer to clear it, not a frame rate.
 func TestCelebrationStillWhenAnimationsAreOff(t *testing.T) {
 	m := celebrateTestOS(t)
-	m.Settings.AnimationsEnabled = false
+	m.Settings.Motion = config.MotionNone
 	before := m.composeFrame()
 	if m.Celebrate(CelebrateOptions{}) == nil {
 		t.Fatal("the sparkle scheduled nothing to clear it")

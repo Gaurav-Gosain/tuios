@@ -71,6 +71,7 @@ type Overrides struct {
 // needs a line here if a CLI flag can override it.
 func ApplyOverrides(overrides Overrides, s *Settings) {
 	if overrides.ASCIIOnly {
+		s.ASCIIRequested = true
 		s.UseASCIIOnly = true
 	}
 	if overrides.BorderStyle != "" {
@@ -113,7 +114,8 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 		s.ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
 	}
 	if overrides.NoAnimations {
-		s.AnimationsEnabled = false
+		s.NoAnimationsFlag = true
+		s.Motion = MotionNone
 	}
 	if overrides.ConfirmQuit {
 		s.AlwaysConfirmQuit = true

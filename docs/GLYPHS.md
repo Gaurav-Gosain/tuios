@@ -16,6 +16,7 @@ writing your own.
 - [Writing a Set](#writing-a-set)
 - [Roles](#roles)
 - [Cell Widths](#cell-widths)
+- [What the Terminal Can Draw](#what-the-terminal-can-draw)
 - [ASCII Mode](#ascii-mode)
 - [Limitations](#limitations)
 
@@ -170,6 +171,31 @@ padding.
 `separator`, `ellipsis`, `collapse` and `expand` take any width: each is drawn
 somewhere that measures it rather than budgeting a column for it. Border runes
 must be one cell.
+
+## What the Terminal Can Draw
+
+When the config names no glyph set and `--ascii-only` is not given, tuios reads
+the client's environment when it starts and picks the glyphs the terminal can
+draw:
+
+- **A locale that is not UTF-8.** The first of `LC_ALL`, `LC_CTYPE` and `LANG`
+  that is set decides. A value that does not name UTF-8 (`C`, `POSIX`,
+  `en_US.ISO-8859-1`) means the terminal decodes bytes in another encoding,
+  so tuios runs as if `--ascii-only` were given. None of the three set at all
+  is not read as the C locale: a fresh container and a macOS terminal with
+  locale variables turned off both draw UTF-8 fine.
+- **`TERM=linux`, the Linux console.** Its font has box drawing and no Nerd
+  Font icons, so the chrome takes the `unicode` set and the dock, notification
+  and context menu icons take their ASCII forms.
+
+A glyph set in the config (`appearance.glyphs`, any value but the default) or
+`--ascii-only` always wins. `tuios list-glyphs` prints what the terminal it
+runs in would pick and why, and the client logs its choice with `--debug`.
+
+The choice is made by each local client from the terminal it runs in, so two
+clients on one session can draw different glyphs. Clients served by `tuios ssh`
+and `tuios-web` are not detected this way: the server's environment says
+nothing about the remote terminal.
 
 ## ASCII Mode
 

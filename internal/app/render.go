@@ -329,6 +329,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.
 		m.SidebarHits = m.SidebarHits[:0]
+		m.motion.rail = m.motion.rail[:0]
 	}
 
 	m.composeLayers(canvas, layers)
@@ -640,6 +641,9 @@ func (m *OS) composeFrame() string {
 		return m.screensaver.frame
 	}
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
+		// The fast path draws no rail, so no working row is on screen and the
+		// shimmer's clock must not go on asking for frames.
+		m.motion.rail = m.motion.rail[:0]
 		return m.buildFullscreenFrame(window)
 	}
 	canvas := m.GetCanvas(true)

@@ -421,18 +421,20 @@ func (s *Settings) GetScrollColumnMax() int {
 }
 
 // GetAnimationDuration returns the animation duration for standard operations.
-// Returns 0 if animations are disabled or suppressed, causing instant transitions.
+// Returns 0 when the motion level is none or animations are suppressed, so
+// the transition is instant.
 func (s *Settings) GetAnimationDuration() time.Duration {
-	if !s.AnimationsEnabled || s.AnimationsSuppressed {
+	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
 	return DefaultAnimationDuration
 }
 
 // GetFastAnimationDuration returns the animation duration for fast operations.
-// Returns 0 if animations are disabled or suppressed, causing instant transitions.
+// Returns 0 when the motion level is none or animations are suppressed, so
+// the transition is instant.
 func (s *Settings) GetFastAnimationDuration() time.Duration {
-	if !s.AnimationsEnabled || s.AnimationsSuppressed {
+	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
 	return FastAnimationDuration
@@ -696,7 +698,7 @@ func (s *Settings) GetDockWorkspaceCapRight() string {
 
 // GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconWindow() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconWindowASCII
 	}
 	return DockModeIconWindow
@@ -704,7 +706,7 @@ func (s *Settings) GetDockModeIconWindow() string {
 
 // GetDockModeIconTerminal returns the appropriate terminal mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconTerminal() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconTerminalASCII
 	}
 	return DockModeIconTerminal
@@ -712,7 +714,7 @@ func (s *Settings) GetDockModeIconTerminal() string {
 
 // GetDockModeIconTiling returns the appropriate tiling mode icon based on UseASCIIOnly
 func (s *Settings) GetDockModeIconTiling() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockModeIconTilingASCII
 	}
 	return DockModeIconTiling
@@ -720,7 +722,7 @@ func (s *Settings) GetDockModeIconTiling() string {
 
 // GetDockIconTerminalCount returns the appropriate terminal count icon based on UseASCIIOnly
 func (s *Settings) GetDockIconTerminalCount() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconTerminalCountASCII
 	}
 	return DockIconTerminalCount
@@ -728,7 +730,7 @@ func (s *Settings) GetDockIconTerminalCount() string {
 
 // GetDockIconWorkspaceCount returns the appropriate workspace count icon based on UseASCIIOnly
 func (s *Settings) GetDockIconWorkspaceCount() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconWorkspaceCountASCII
 	}
 	return DockIconWorkspaceCount
@@ -736,7 +738,7 @@ func (s *Settings) GetDockIconWorkspaceCount() string {
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.
 func (s *Settings) GetDockIconLeaveRunning() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconLeaveRunningASCII
 	}
 	return DockIconLeaveRunning
@@ -744,7 +746,7 @@ func (s *Settings) GetDockIconLeaveRunning() string {
 
 // GetDockIconCloseSession returns the close-session icon for the current glyph set.
 func (s *Settings) GetDockIconCloseSession() string {
-	if s.UseASCIIOnly {
+	if s.NerdFontsOff() {
 		return DockIconCloseSessionASCII
 	}
 	return DockIconCloseSession
