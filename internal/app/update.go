@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // TickerMsg represents a periodic tick event for maintenance tasks
@@ -1624,6 +1625,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Terminal lost focus. A key held when the window went away will never
 		// report its release, so the hold ends here rather than outliving it.
 		m.EndHold()
+		return m, nil
+
+	case tea.ColorProfileMsg:
+		// The colour profile the frame writer steps colours down to. The chrome
+		// is drawn for it rather than drawn in truecolor and stepped down, so it
+		// is learned from the same message the writer was configured from, and
+		// every cached row built for another depth is dropped.
+		if theme.ColorProfile() != msg.Profile {
+			theme.SetColorProfile(msg.Profile)
+			m.MarkAllDirty()
+		}
 		return m, nil
 
 	case tea.KeyboardEnhancementsMsg:

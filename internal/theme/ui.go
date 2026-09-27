@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/exp/charmtone"
+	tint "github.com/lrstanley/bubbletint/v2"
 )
 
 // The contrast math lives in the overlay package, which owns the palette these
@@ -123,7 +124,56 @@ var chromeRamp = struct {
 // with it: every ink was chosen against the ground it is written on, so
 // opening the ground up without re-deriving the inks would trade off-accent
 // chrome for unreadable chrome. See Chrome.
+//
+// The palette is built for the colour depth the terminal has (see Depth): the
+// designed ramp in truecolor, a hand-set grey ramp at 256 colours, and the
+// terminal's own colours, slots and attributes at 16. Every derived token and
+// every contrast check goes through overlay.Derive.
+//
+// It is memoised on what it is built from, because the derivation measures
+// every ink on every ground it is promised on and render code asks for the
+// palette many times a frame.
 func UI() overlay.Palette {
+	key := currentUIKey()
+	uiMemo.Lock()
+	defer uiMemo.Unlock()
+	if uiMemo.valid && uiMemo.key == key {
+		return uiMemo.pal
+	}
+	p := buildUI(key.depth)
+	uiMemo.key, uiMemo.valid, uiMemo.pal = key, true, p
+	return p
+}
+
+// uiKey is everything UI reads: the depth, the theme and its chrome. The
+// theme's colours are keyed by pointer, and a theme file that is read again
+// makes new ones, so an edited theme is a new key.
+type uiKey struct {
+	depth   overlay.Depth
+	tint    *tint.Tint
+	colours [6]*tint.Color
+	chrome  *Chrome
+}
+
+func currentUIKey() uiKey {
+	k := uiKey{depth: Depth()}
+	if t := Current(); t != nil {
+		k.tint = t
+		k.colours = [6]*tint.Color{t.BrightBlue, t.BrightCyan, t.BrightRed, t.BrightGreen, t.Yellow, t.Bg}
+		k.chrome = CurrentChrome()
+	}
+	return k
+}
+
+var uiMemo struct {
+	sync.Mutex
+	key   uiKey
+	valid bool
+	pal   overlay.Palette
+}
+
+// buildUI builds the palette for depth d.
+func buildUI(d overlay.Depth) overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
 		Panel:    charmtone.BBQ,
@@ -150,6 +200,7 @@ func UI() overlay.Palette {
 		Info:    charmtone.Malibu,
 		Warning: charmtone.Tang,
 	}
+	customRamp := false
 
 	if t := Current(); t != nil {
 		p.Accent = t.BrightBlue
@@ -183,25 +234,49 @@ func UI() overlay.Palette {
 				p.Info = c.Info
 			}
 			if c.Canvas != nil {
-				p.Canvas = c.Canvas
+				p.Canvas, customRamp = c.Canvas, true
 			}
 			if c.Panel != nil {
-				p.Panel, p.RowSel = c.Panel, c.Panel
+				p.Panel, p.RowSel, customRamp = c.Panel, c.Panel, true
 			}
 			if c.Surface != nil {
-				p.Surface = c.Surface
+				p.Surface, customRamp = c.Surface, true
 				p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
 			}
 			if c.Card != nil {
-				p.Card = c.Card
+				p.Card, customRamp = c.Card, true
 			}
 		}
 	}
 
-	// Pick the pill foreground for contrast against whichever accent is active.
-	p.PillFg = ContrastText(p.Accent)
+	switch d {
+	case overlay.Depth16:
+		// The theme's own sixteen, by slot, so the terminal paints them from
+		// the user's palette. With no theme the slots are the same ones a
+		// theme's chrome derives from, and the user's terminal is the theme.
+		p.Accent, p.Selected, p.Info = overlay.Slot(12), overlay.Slot(12), overlay.Slot(12)
+		p.AccentBright = overlay.Slot(14)
+		p.Warn, p.Success, p.Warning = overlay.Slot(9), overlay.Slot(10), overlay.Slot(3)
+		// The primary and secondary inks are the terminal's own foreground,
+		// which is picked to read on its own background; the quiet ink is
+		// bright black, the one slot every palette makes a quiet grey.
+		p.Fg, p.FgDim, p.FgMute = overlay.NoColor, overlay.NoColor, overlay.Slot(8)
+	case overlay.Depth256:
+		if !customRamp {
+			// Set by hand on the grey ramp. Stepping the charmtone neutrals
+			// down one at a time put the panel band and the cursor row on
+			// index 17, navy, because BBQ's slight blue cast wins the colour
+			// cube by perceptual distance.
+			p.Canvas, p.Panel, p.Surface = overlay.Grey(2), overlay.Grey(3), overlay.Grey(5)
+			p.RowSel, p.RowSelQuiet, p.Hover, p.Card = overlay.Grey(3), overlay.Grey(4), overlay.Grey(6), overlay.Grey(7)
+			p.Fg, p.FgDim, p.FgMute = overlay.Grey(23), overlay.Grey(18), overlay.Grey(13)
+		}
+		p.Accent, p.AccentBright, p.Selected = overlay.To256(p.Accent), overlay.To256(p.AccentBright), overlay.To256(p.Selected)
+		p.Warn, p.Success = overlay.To256(p.Warn), overlay.To256(p.Success)
+		p.Info, p.Warning = overlay.To256(p.Info), overlay.To256(p.Warning)
+	}
 
-	return p
+	return overlay.Derive(p)
 }
 
 // GroundUI is UI for chrome written straight on the terminal's own
@@ -215,9 +290,13 @@ func UI() overlay.Palette {
 // read. On a light ground the ramp is rebuilt from that ground, with the
 // ground as its canvas and a band one step darker as its surface, and the ink
 // tiers are measured on it the way a theme's own chrome surface is. On a dark
-// ground this is UI unchanged.
+// ground this is UI unchanged, and so it is at 16 colours, where the ground is
+// the terminal's own whatever it is.
 func GroundUI() overlay.Palette {
 	p := UI()
+	if p.Depth == overlay.Depth16 {
+		return p
+	}
 	ground := RailGround()
 	if !groundIsLight(ground) {
 		return p
@@ -227,9 +306,18 @@ func GroundUI() overlay.Palette {
 		// ramp its chrome is drawn in.
 		return p
 	}
-	c := groundChrome(ground)
+	key := currentUIKey()
+	c := groundChrome(ground, p.Depth)
+	if c.derived && c.derivedFor == key {
+		return c.pal
+	}
 	p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
 	p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+	p.RowSelQuiet, p.Hover = nil, nil
+	p = overlay.Derive(p)
+	groundChromeMemo.Lock()
+	groundChromeMemo.c.pal, groundChromeMemo.c.derived, groundChromeMemo.c.derivedFor = p, true, key
+	groundChromeMemo.Unlock()
 	return p
 }
 
@@ -240,20 +328,32 @@ func groundIsLight(ground color.Color) bool {
 
 // groundChromeMemo keeps the last ramp built for a ground: GroundUI is asked
 // on every rail and dock rebuild, and the ramp only changes with the theme.
+// The palette derived from it is kept beside it, since deriving measures every
+// ink on every ground.
 var groundChromeMemo struct {
 	sync.Mutex
 	key   [4]uint32
+	depth overlay.Depth
 	valid bool
-	c     Chrome
+	c     groundRamp
+}
+
+// groundRamp is a light ground's ramp, and the palette derived from it once
+// GroundUI has asked for one.
+type groundRamp struct {
+	Chrome
+	pal        overlay.Palette
+	derived    bool
+	derivedFor uiKey
 }
 
 // groundChrome is the neutral ramp and ink tiers for chrome on a light ground.
-func groundChrome(ground color.Color) Chrome {
+func groundChrome(ground color.Color, d overlay.Depth) groundRamp {
 	r, g, b, a := ground.RGBA()
 	key := [4]uint32{r, g, b, a}
 	groundChromeMemo.Lock()
 	defer groundChromeMemo.Unlock()
-	if groundChromeMemo.valid && groundChromeMemo.key == key {
+	if groundChromeMemo.valid && groundChromeMemo.key == key && groundChromeMemo.depth == d {
 		return groundChromeMemo.c
 	}
 	surface := overlay.Darker(ground, chromeRamp.canvas)
@@ -263,6 +363,7 @@ func groundChrome(ground color.Color) Chrome {
 		Panel:   overlay.Darker(surface, chromeRamp.panel),
 	}
 	c.deriveRamp()
-	groundChromeMemo.key, groundChromeMemo.valid, groundChromeMemo.c = key, true, c
-	return c
+	groundChromeMemo.key, groundChromeMemo.depth, groundChromeMemo.valid = key, d, true
+	groundChromeMemo.c = groundRamp{Chrome: c}
+	return groundChromeMemo.c
 }

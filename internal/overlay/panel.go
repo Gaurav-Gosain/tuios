@@ -249,9 +249,7 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 	// space instead, which costs one column per gap rather than two.
 	pill := func(name string, isActive bool) string {
 		if isActive {
-			return lipgloss.NewStyle().
-				Background(pal.Accent).Foreground(pal.PillFg).
-				Bold(true).Padding(0, 1).Render(name)
+			return Chip(name, pal.Accent, pal.PillFg)
 		}
 		return Style(bg).Foreground(pal.FgDim).Render(name)
 	}
@@ -374,11 +372,33 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 		}
 		return Fill(s, totalW, bg)
 	}
+	top, bottom := blank, blank
+
+	// A framed panel draws its hairline in the outermost padding cells, so the
+	// frame costs no geometry: the body, the tabs and every hit rectangle a
+	// host recorded are where they are on an unframed panel.
+	if pal.Framed && sidePad() >= 1 {
+		tl, tr, bl, br, h, v := dialogFrame()
+		edge := Style(bg).Foreground(pal.Edge)
+		side := edge.Render(v)
+		inner := totalW - 2
+		innerPad := Style(bg).Render(strings.Repeat(" ", sidePad()-1))
+		line = func(content string) string {
+			s := innerPad + content
+			if lipgloss.Width(s) > inner {
+				s = ansi.Truncate(s, inner, "")
+			}
+			return side + Fill(s, inner, bg) + side
+		}
+		blank = line("")
+		top = edge.Render(tl + strings.Repeat(h, inner) + tr)
+		bottom = edge.Render(bl + strings.Repeat(h, inner) + br)
+	}
 
 	var lines []string
 	geo := Geometry{Width: totalW, InnerWidth: p.Width, BodyX: sidePad()}
 
-	lines = append(lines, blank) // 0: top pad
+	lines = append(lines, top) // 0: top pad
 
 	// 1: title chip. The whole row is a drag handle.
 	chip := Chip(Truncate(p.Title, max(p.Width-2, 1)), pal.Accent, pal.PillFg)
@@ -406,7 +426,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 			lines = append(lines, line(r))
 		}
 	}
-	lines = append(lines, blank) // bottom pad
+	lines = append(lines, bottom) // bottom pad
 
 	geo.Height = len(lines)
 	return strings.Join(lines, "\n"), geo

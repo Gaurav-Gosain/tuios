@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
 
@@ -96,16 +97,6 @@ func ContrastRatio(a, b color.Color) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// MixColors blends a toward b by t in 0..1.
-func MixColors(a, b color.Color, t float64) color.Color {
-	ar, ag, ab, _ := a.RGBA()
-	br, bg, bb, _ := b.RGBA()
-	blend := func(x, y uint32) uint8 {
-		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
-	}
-	return color.RGBA{R: blend(ar, br), G: blend(ag, bg), B: blend(ab, bb), A: 0xFF}
-}
-
 // Readable returns c lifted toward the ground's text end until it clears
 // ContrastFloor against bg, and c untouched when it already does.
 //
@@ -121,19 +112,48 @@ func Readable(c, bg color.Color) color.Color { return ReadableAt(c, bg, Contrast
 // held to MarkFloor instead, which keeps more of the hue: lifting a severity
 // colour all the way to text contrast is what turns a theme's red into pink.
 func ReadableAt(c, bg color.Color, floor float64) color.Color {
-	if ContrastRatio(c, bg) >= floor {
+	if terminalOwned(c) || terminalOwned(bg) {
+		return readableOwned(c, bg)
+	}
+	d := CurrentDepth()
+	if d == Depth16 {
+		// An RGB colour at 16 colours is stepped down by the frame writer to a
+		// slot whose RGB only the terminal knows, so there is nothing honest to
+		// measure. The 16-colour palette is built from slots for this reason.
 		return c
 	}
-	target := ContrastText(bg)
+	if ContrastRatio(Shown(c), Shown(bg)) >= floor {
+		return Shown(c)
+	}
+	target := ContrastText(Shown(bg))
 	// Sixteen steps puts the answer within ~6% of the least blending that
-	// works, which is finer than the terminal's own colour rounding.
+	// works, which is finer than the terminal's own colour rounding. At 256
+	// colours each candidate is measured as the palette entry it becomes,
+	// which is the colour that has to clear the floor.
 	const steps = 16
 	for i := 1; i < steps; i++ {
-		if mixed := MixColors(c, target, float64(i)/steps); ContrastRatio(mixed, bg) >= floor {
+		if mixed := Shown(MixColors(c, target, float64(i)/steps)); ContrastRatio(mixed, Shown(bg)) >= floor {
 			return mixed
 		}
 	}
-	return target
+	return Shown(target)
+}
+
+// readableOwned is ReadableAt for a pair the terminal paints: a slot or the
+// default colour on either side. Only one failure can be seen without knowing
+// the user's palette, and it is the one that matters: an ink on a ground of the
+// same slot, which is invisible in every palette. That ink becomes the default
+// foreground, which the terminal picks to read on its own colours.
+func readableOwned(c, bg color.Color) color.Color {
+	if isNoColor(c) || isNoColor(bg) {
+		return c
+	}
+	if a, ok := c.(ansi.BasicColor); ok {
+		if b, ok := bg.(ansi.BasicColor); ok && a == b {
+			return NoColor
+		}
+	}
+	return c
 }
 
 // ContrastText picks a foreground that reads on the given (usually saturated)

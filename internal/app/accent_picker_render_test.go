@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 )
 
@@ -25,9 +26,9 @@ func accentTestOS(t *testing.T, w, h int) *OS {
 // terminal happened to run them.
 func truecolorForTest(t *testing.T) {
 	t.Helper()
-	prev := accentProfile.Load()
+	prev := theme.ColorProfile()
 	SetAccentColorProfile(colorprofile.TrueColor)
-	t.Cleanup(func() { accentProfile.Store(prev) })
+	t.Cleanup(func() { SetAccentColorProfile(prev) })
 }
 
 // pickerLines renders the picker and returns its rows with styling stripped.

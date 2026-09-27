@@ -2144,3 +2144,39 @@ little above the printed size in the `budget` function of that script, and say
 in the commit message what grew and why it is worth the bytes. A Go version
 bump that grows the runtime is a reason; a dependency added for one helper
 function is usually not, and is better replaced.
+
+## 2026-09 chrome colour depth and OKLab blending
+
+Measured on an Apple M3 Pro shared with other work, so every comparison is an
+interleaved A/B: the test binaries of origin/main and of this change run
+alternately, six rounds, and `benchstat` compares the two files.
+
+The chrome palette (`theme.UI()`) is now built per colour depth and derives a
+larger token set, with every ink measured on every ground it is promised on.
+That made building it several times dearer, so it is memoised on what it is
+built from (the depth, the theme's colours, the theme's chrome):
+
+| Benchmark | Before | After | Allocations |
+|---|---|---|---|
+| `BenchmarkUIPalette` | 390 ns | 30 ns | 0, unchanged |
+
+The frame benchmarks (`BenchmarkKeystrokeFrame`, `BenchmarkCompositorGetCanvas`,
+`BenchmarkBackgrounds`, `BenchmarkSpotlightFrame`, `BenchmarkSpotlightApply`,
+`BenchmarkSidebarPanelLinesCached`) show no significant change in time, bytes
+or allocations (geomean -2.9%, every row p > 0.05 or faster).
+
+`blendColors`, the dim's and the spotlight's blend, moved from gamma-encoded
+sRGB to OKLab (`overlay.MixColors`), which costs cube roots per call. The
+spotlight already blends through a cache. The unfocused-pane dim did not, so a
+render now carries a 64-entry direct-mapped memo on its stack, which also hands
+back colours already boxed. `BenchmarkDimUnfocusedRuns` (new; 480 style runs in
+six colours, one memo per pane render):
+
+| Case | Time | Allocations |
+|---|---|---|
+| before: sRGB, no memo | 17.2 µs | 960 |
+| after: OKLab, memo | 13.6 µs | 7 |
+| OKLab without the memo | 75 µs | 960 |
+
+The last row is why the memo is there: without it the perceptual blend would
+cost four times the old one.
