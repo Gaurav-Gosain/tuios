@@ -12,6 +12,8 @@ overlays, the dockbar) from them.
 - [Theme File Format](#theme-file-format)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
+- [Colour Depth](#colour-depth)
+- [Lists: Focus and Hover](#lists-focus-and-hover)
 - [Limitations](#limitations)
 
 ## Selecting a Theme
@@ -215,6 +217,52 @@ past black or white clamps, so a near-black surface gets a black canvas, and a
 near-white one a white card. The focused border and the mode pills are accent
 colors and do not follow `surface`; a light surface under an accent picked for
 a dark one is the case to raise if a pill disappears.
+
+## Colour Depth
+
+The chrome is designed separately for each colour depth a terminal can have,
+rather than drawn in truecolor and stepped down one colour at a time. tuios
+reads the depth from the terminal the way every other program does, from
+`TERM`, `COLORTERM` and `NO_COLOR`, and it is the same depth the frame writer
+uses.
+
+| Depth | Detected when | What the chrome does |
+|---|---|---|
+| truecolor | `COLORTERM=truecolor` or `24bit`, or a terminal known to have it (kitty, ghostty, wezterm, alacritty, foot) | The designed ramp, as described above. |
+| 256 | `TERM` ends in `256color` and there is no `COLORTERM`: Apple Terminal, mosh, tmux without `Tc` | The neutral ramp is set by hand on the xterm grey ramp (232 to 255), so no panel or selected row turns navy. The accent and status colours step to their nearest palette entry, and every ink is measured against the grey it is actually drawn on. |
+| 16 | `TERM=xterm`, `TERM=linux`, `NO_COLOR` | No grounds are painted: panels use your terminal's own background and frame themselves with a thin line. Text is your terminal's own foreground, quiet text is bright black, colours are your palette's slots (the accent is bright blue, keys bright cyan), the selected row is reverse video, and a title chip is reverse video in the accent. |
+
+With a theme loaded, the 16-colour chrome still uses slot numbers, so it takes
+its colours from whatever palette your terminal is set to; set the terminal to
+the same theme to see the theme's colours. A theme's `chrome` colours are RGB
+and have no slot, so at 16 colours they give way to the slots their roles
+derive from.
+
+**mosh.** mosh 1.4 and later pass 24-bit colour through, but mosh does not
+forward `COLORTERM`, so tuios over mosh sees 256 colours. If your terminal has
+truecolor, set it on the remote side:
+
+```bash
+export COLORTERM=truecolor
+```
+
+## Lists: Focus and Hover
+
+Every list in tuios (the rail, the Inbox, the review overlay, settings, the
+command palette and every picker) follows one rule:
+
+- **The cell is reserved.** Whatever the cursor row shows, a mark or a bold
+  name, has its cell kept on every other row, so nothing moves when the cursor
+  does.
+- **Only colour changes.** The cursor, the pointer and focus change grounds and
+  inks, never the layout.
+- **A list without the keyboard still shows its cursor**, on a quieter ground.
+  In the review overlay, the file list keeps its cursor while the diff has the
+  keys, and the diff keeps its cursor while the file list does.
+
+At 16 colours the grounds become attributes: the cursor of the focused list is
+reverse video, and the cursor of an unfocused list and the row under the
+pointer are underlined.
 
 ## Limitations
 

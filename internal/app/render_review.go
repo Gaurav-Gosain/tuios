@@ -676,13 +676,16 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 			status = e.file.Status
 		}
 		counts := reviewFileCounts(*r, e)
+		// The file under the cursor keeps a quiet ground while the diff has
+		// the keyboard, so the list still says which file the diff is.
+		st := overlay.RowState{Cursor: idx == r.file, Focused: r.listFocus}
 		mark := " "
-		bg := pal.Surface
+		bg := pal.Ground(st, pal.Surface)
 		fg := pal.FgDim
-		if idx == r.file {
+		if st.Cursor {
 			fg = pal.Fg
-			if r.listFocus {
-				mark, bg = overlay.SigilMark(), pal.RowSel
+			if st.Focused {
+				mark = overlay.SigilMark()
 			}
 		}
 		pathW := max(width-4-ansi.StringWidth(counts), 1)
@@ -693,12 +696,12 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 			path = ell + ansi.TruncateLeft(path, ansi.StringWidth(path)-pathW+ansi.StringWidth(ell), "")
 		}
 		pad := max(width-3-ansi.StringWidth(path)-ansi.StringWidth(counts), 1)
-		out[i] = reviewPaint([]reviewSeg{
+		out[i] = pal.Row(reviewPaint([]reviewSeg{
 			{pal.AccentBright, mark, false},
 			{reviewStatusColor(status, pal), status + " ", false},
 			{fg, path + strings.Repeat(" ", pad), idx == r.file},
 			{pal.FgMute, counts, false},
-		}, width, bg)
+		}, width, bg), width, st, pal.Surface)
 	}
 	return out
 }
@@ -790,7 +793,9 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 			continue
 		}
 		sel := idx == r.cursor || (selNote >= 0 && rows[idx].kind == reviewRowNote && rows[idx].note == selNote)
-		out[i] = d.row(rows[idx], sel && !r.listFocus)
+		// The diff's cursor stays on a quiet ground while the file list has
+		// the keyboard, so the place the diff will resume is always shown.
+		out[i] = d.row(rows[idx], overlay.RowState{Cursor: sel, Focused: !r.listFocus})
 	}
 	return out
 }
@@ -805,11 +810,33 @@ type reviewDraw struct {
 	split bool
 }
 
-// row draws one diff row in d.width cells.
-func (d reviewDraw) row(row reviewRow, cursor bool) string {
+// row draws one diff row in d.width cells, in the state st the cursor gives
+// it (see overlay.RowState).
+func (d reviewDraw) row(row reviewRow, st overlay.RowState) string {
+	return d.look.pal.Mark(d.rowBody(row, st), st)
+}
+
+// reviewCursorTint is the cursor's ground on a row that has a tint of its own,
+// a hunk header or a note: the accent carried into that tint, half as far for
+// the cursor of the column without the keyboard. At 16 colours the row keeps
+// its ground and the cursor is an attribute (see overlay.Palette.Mark).
+func reviewCursorTint(bg color.Color, pal overlay.Palette, st overlay.RowState) color.Color {
+	if pal.Depth == overlay.Depth16 {
+		return bg
+	}
+	t := 0.24
+	if !st.Focused {
+		t = 0.12
+	}
+	return overlay.Shown(overlay.MixColors(bg, pal.Accent, t))
+}
+
+// rowBody is row before the 16-colour cursor attributes.
+func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	pal, dv := d.look.pal, d.look.dv
+	cursor := st.Cursor
 	mark := " "
-	if cursor && (row.kind != reviewRowNote || row.first) {
+	if cursor && st.Focused && (row.kind != reviewRowNote || row.first) {
 		mark = overlay.SigilMark()
 	}
 	// markCell is the first cell, which holds the cursor's mark on the
@@ -819,7 +846,7 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 	}
 	rowBg := func(bg color.Color) color.Color {
 		if cursor {
-			return pal.RowSel
+			return pal.Ground(st, bg)
 		}
 		return bg
 	}
@@ -831,7 +858,7 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 	case reviewRowHunk:
 		bg := d.look.hunkBg
 		if cursor {
-			bg = overlay.MixColors(bg, pal.Accent, 0.24)
+			bg = reviewCursorTint(bg, pal, st)
 		}
 		head, ctx := reviewSplitHeader(reviewText(d.file.Hunks[row.hunk].Header))
 		return markCell(bg) + reviewPaint([]reviewSeg{
@@ -847,7 +874,7 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 		indent := reviewNoteIndent(d.file, d.split)
 		bg := d.look.noteBg
 		if cursor {
-			bg = overlay.MixColors(bg, pal.Accent, 0.24)
+			bg = reviewCursorTint(bg, pal, st)
 		}
 		lead := markCell(dv.GutterBg(diffview.Context, cursor)) + dv.BlankGutter(diffview.Context, cursor, indent-1)
 		if d.file == nil || len(d.file.Hunks) == 0 {

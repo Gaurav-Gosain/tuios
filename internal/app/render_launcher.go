@@ -172,10 +172,10 @@ func (m *OS) launcherEmptyLine() string {
 // launcherRow renders one program row: an icon's worth of reserved blanks, the
 // name, and a right-hand detail, with a full-width highlight bar when selected.
 func launcherRow(item LauncherItem, selected bool, pal overlay.Palette, width, iconW int) string {
-	bg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	bg := pal.Ground(st, pal.Surface)
 	nameColor := pal.FgDim
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 	}
 
@@ -202,7 +202,7 @@ func launcherRow(item LauncherItem, selected bool, pal overlay.Palette, width, i
 		icon + launcherRowName(name, item.Match, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-detailW, 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + detail
+	return pal.Row(left+overlay.Style(bg).Render(strings.Repeat(" ", gap))+detail, width, st, pal.Surface)
 }
 
 // launcherDetail is a row's right-hand meta slot: what the entry says about

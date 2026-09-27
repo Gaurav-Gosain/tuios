@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -231,15 +232,10 @@ const (
 	scrollbarQuietTrackContrast = 2.0
 )
 
-// blendColors mixes a toward b by t in 0..1.
-func blendColors(a, b color.Color, t float64) color.Color {
-	ar, ag, ab, _ := a.RGBA()
-	br, bg, bb, _ := b.RGBA()
-	mix := func(x, y uint32) uint8 {
-		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
-	}
-	return color.RGBA{R: mix(ar, br), G: mix(ag, bg), B: mix(ab, bb), A: 0xFF}
-}
+// blendColors mixes a toward b by t in 0..1, in OKLab. It is the one blend
+// the app's passes use (the dim, the spotlight, the scrollbar), and it is
+// overlay.MixColors so the chrome and the content blend the same way.
+func blendColors(a, b color.Color, t float64) color.Color { return overlay.MixColors(a, b, t) }
 
 // scrollbarQuietInk returns the ground's own high-contrast ink carried back
 // toward the ground until it measures about want:1 against it.

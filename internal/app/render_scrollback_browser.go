@@ -38,7 +38,8 @@ func (m *OS) renderScrollbackBrowser() string {
 	pal := theme.UI()
 	accent := pal.AccentBright
 	dimFg := pal.FgMute
-	selBg := pal.RowSel
+	cursorRow := overlay.RowState{Cursor: true, Focused: true}
+	selBg := pal.Ground(cursorRow, pal.Surface)
 	selFg := pal.Fg
 	normalFg := pal.FgDim
 	multiClr := pal.Success
@@ -152,6 +153,11 @@ func (m *OS) renderScrollbackBrowser() string {
 
 	// === PANES ===
 	leftLines := buildLeftPane(browser, leftW, paneH, selBg, selFg, normalFg, dimFg, multiClr)
+	// At 16 colours the cursor row has no ground to show it by, so it takes
+	// the reverse video every list's cursor takes there.
+	if sel := browser.SelectedIdx - browser.ScrollOffset; sel >= 0 && sel < len(leftLines) {
+		leftLines[sel] = pal.Mark(leftLines[sel], cursorRow)
+	}
 	rightLines := buildRightPane(browser, rightW, paneH, dimFg, accent, okClr, failClr, browserMarks{
 		cursorBg: pal.Selected,
 		visualBg: lipgloss.Color(m.Settings.SelectionBg),

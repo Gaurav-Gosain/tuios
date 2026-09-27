@@ -64,11 +64,11 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 // themeRow renders one theme entry: a name on the left and a color-swatch
 // preview on the right, with a highlight bar when selected.
 func (m *OS) themeRow(id string, selected bool, pal overlay.Palette, width int) string {
-	bg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	bg := pal.Ground(st, pal.Surface)
 	nameColor := pal.FgDim
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 		marker = "› "
 	}
@@ -86,7 +86,9 @@ func (m *OS) themeRow(id string, selected bool, pal overlay.Palette, width int) 
 		overlay.Style(bg).Foreground(nameColor).Bold(selected).Render(name)
 
 	gap := max(width-lipgloss.Width(left)-swatchW, 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + swatch
+	// The swatch is a preview of colour, so at 16 colours only the name takes
+	// the cursor's reverse video and the swatch keeps what it is showing.
+	return pal.Mark(left+overlay.Style(bg).Render(strings.Repeat(" ", gap)), st) + swatch
 }
 
 // themeSwatchStrip renders a theme's preview colors as adjacent two-cell blocks.

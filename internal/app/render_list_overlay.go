@@ -46,6 +46,10 @@ type listOverlay struct {
 	// Position, when set, is where the cursor is for the readout, counted in
 	// what a person counts: the Inbox's items, not its group headings.
 	Position func() (n, of int)
+	// Unfocused says the keyboard is elsewhere, in an editor under the list
+	// say. The cursor row is still drawn, on the quiet ground (see
+	// overlay.RowState), so the list says which row the editor is for.
+	Unfocused bool
 }
 
 // listOverlayLayout returns the fitted inner width and visible row count for a
@@ -95,11 +99,9 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	end := min(start+cfg.MaxVisible, cfg.Count)
 	shown := 0
 	for i := start; i < end; i++ {
-		rowBg := bg
-		if i == cfg.Selected {
-			rowBg = pal.RowSel
-		}
-		lines = append(lines, overlay.Fill(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, rowBg))
+		st := overlay.RowState{Cursor: i == cfg.Selected, Focused: !cfg.Unfocused}
+		rowBg := pal.Ground(st, bg)
+		lines = append(lines, pal.Row(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, st, bg))
 		shown++
 	}
 	if cfg.Count == 0 {

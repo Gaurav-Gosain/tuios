@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ascii, when true, makes the controls avoid non-ASCII glyphs (arrows,
@@ -43,7 +44,14 @@ func Fill(s string, width int, bg color.Color) string {
 }
 
 // Chip renders a small inset pill (used for titles and tags).
+//
+// At 16 colours a chip on a slot is drawn in reverse video: the slot becomes
+// the chip and the terminal's own background becomes its text, which reads in
+// any palette where a fixed ink would only read in some.
 func Chip(label string, bg, fg color.Color) string {
+	if _, ok := bg.(ansi.BasicColor); ok && CurrentDepth() == Depth16 {
+		return lipgloss.NewStyle().Foreground(bg).Reverse(true).Bold(true).Render(" " + label + " ")
+	}
 	return lipgloss.NewStyle().
 		Background(bg).
 		Foreground(fg).

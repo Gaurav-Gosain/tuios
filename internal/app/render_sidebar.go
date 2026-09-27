@@ -147,6 +147,12 @@ type sidebarRowState struct {
 // parts of a row that only care about being on a ground ask.
 func (st sidebarRowState) lit() bool { return st.Cursor || st.Hover }
 
+// mark applies the 16-colour form of the row's state to a finished row (see
+// overlay.RowState). At other depths the row's ground already says it.
+func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
+	return pal.Mark(row, overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover})
+}
+
 // railRowState reads the rail's focus once so a row site does not have to.
 func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.SidebarFocused}
@@ -1631,7 +1637,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				// and activating it folds the group.
 				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
 				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
-				lines = append(lines, compose(m.sidebarRepoRow(s, cw, pal, st)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
 			if isRemoteNode(s) {
@@ -1642,7 +1648,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -1698,7 +1704,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			e := terminals[idx]
 			st := m.railRowState(idx == hoverRow[sidebarSectionTerminals], isCursor(sidebarRowWindow, e.SessionID, e.WindowID))
 			recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
-			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, st, peeking)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarTerminalRow(e, cw, pal, st, peeking))))
 		}
 		if h := hidden[sidebarSectionTerminals]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1726,7 +1732,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
 			}
-			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, st)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarFileRow(row, cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1741,7 +1747,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				break
 			}
 			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false)
-			lines = append(lines, compose(m.sidebarGitRow(gitRows[idx], cw, pal, st)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarGitRow(gitRows[idx], cw, pal, st))))
 		}
 	}
 
@@ -1776,18 +1782,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgentFold, e.SessionID, ""))
 				tall := rowH[sidebarSectionAgents] > 1
 				recordHit(sidebarRowAgentFold, e.SessionID, "", -1, rowH[sidebarSectionAgents])
-				lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, false)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarAgentFoldRow(e, cw, pal, st, false))))
 				if tall {
-					lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, true)))
+					lines = append(lines, compose(st.mark(pal, m.sidebarAgentFoldRow(e, cw, pal, st, true))))
 				}
 				continue
 			}
 			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, st, tall)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarAgentRow(e, variant, cw, pal, st, tall))))
 			if tall {
-				lines = append(lines, compose(m.sidebarAgentNoteRow(e, variant, cw, pal, st)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarAgentNoteRow(e, variant, cw, pal, st))))
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
@@ -2298,8 +2304,9 @@ func (m *OS) windowIndexByID(id string) int {
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
 func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
-	var rowBg color.Color
-	if st.lit() || dragged {
+	rowBg := sidebarRowBg(st, pal)
+	if dragged {
+		// A drag keeps the strongest band on the row riding the pointer.
 		rowBg = pal.Surface
 	}
 
@@ -2404,10 +2411,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 // emphasis. Severity gutters and state glyph colours stay, because they are
 // what the user peeked to see.
 func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, st sidebarRowState, peeked bool) string {
-	var rowBg color.Color
-	if st.lit() {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(st, pal)
 
 	title := printableTitle(e.Title)
 	if title == "" {
@@ -2525,10 +2529,10 @@ const sidebarWorkspaceTagMax = 8
 // back, all on the name spine so it reads as the section's one row rather than
 // as a message about it. Clicking anywhere on it flips the filter.
 func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sidebarRowState) string {
-	var rowBg color.Color
+	rowBg := sidebarRowBg(st, pal)
 	fg := pal.FgMute
 	if st.lit() {
-		rowBg, fg = pal.Surface, pal.Fg
+		fg = pal.Fg
 	}
 	sep := " · "
 	if overlay.UseASCII() {
@@ -2580,10 +2584,7 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // row is stays true at any width, where half a sentence is not a shorter
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
-	var rowBg color.Color
-	if st.lit() {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(st, pal)
 	indent := sidebarNameCol + 1
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
@@ -2717,7 +2718,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		fg = pal.Fg
 	}
 	if st.lit() {
-		rowBg = pal.Surface
+		rowBg = sidebarRowBg(st, pal)
 		fg = pal.Fg
 	}
 

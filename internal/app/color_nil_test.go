@@ -67,7 +67,7 @@ func TestWrappedNilColourDoesNotPanic(t *testing.T) {
 		src.Content = "x"
 		src.Style.Fg, src.Style.Bg = wrappedNil, wrappedNil
 		fg, bg := color.RGBA{R: 200, G: 200, B: 200, A: 255}, color.RGBA{R: 20, G: 20, B: 30, A: 255}
-		got := dimCell(&dst, &src, fg, bg, 0.5)
+		got := dimCell(&dst, &src, fg, bg, 0.5, nil)
 		if got == nil {
 			t.Fatal("dimCell returned nil")
 		}

@@ -271,22 +271,24 @@ func (m *OS) keybindEmptyMessage() string {
 
 // keybindRow renders row i of the active tab.
 func (m *OS) keybindRow(i int, selected bool, pal overlay.Palette, width int) string {
+	var row string
 	switch m.KeybindTab {
 	case KeybindTabConflicts:
-		return m.keybindConflictRow(i, selected, pal, width)
+		row = m.keybindConflictRow(i, selected, pal, width)
 	case KeybindTabGuests:
-		return m.keybindGuestRow(i, selected, pal, width)
+		row = m.keybindGuestRow(i, selected, pal, width)
+	default:
+		row = m.keybindBindingRow(i, selected, pal, width)
 	}
-	return m.keybindBindingRow(i, selected, pal, width)
+	return pal.Row(row, width, overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 }
 
 // keybindRowChrome is the shared start of every row: the background, the
 // selection marker, and the mark column.
 func keybindRowChrome(selected bool, mark string, markFg color.Color, pal overlay.Palette) (color.Color, string) {
-	bg := pal.Surface
+	bg := pal.Ground(overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
 		marker = "› "
 	}
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker)

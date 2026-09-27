@@ -69,7 +69,7 @@ func paneDim(isFocused bool, s *config.Settings) int {
 // they look like, so there is no RGB here to carry anywhere; guessing one would
 // replace the user's own palette with ours on the panes they are not looking
 // at, which is a stranger result than not dimming.
-func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64) *uv.Cell {
+func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, memo *blendMemo) *uv.Cell {
 	if src == nil {
 		return src
 	}
@@ -104,11 +104,11 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64) *uv.Cell {
 			toward = bg
 		}
 		if !isNilColor(toward) {
-			dst.Style.Fg = blendColors(cellFg, toward, t)
+			dst.Style.Fg = memo.mix(cellFg, toward, t)
 		}
 	}
 	if !isNilColor(cellBg) && !isNilColor(bg) {
-		dst.Style.Bg = blendColors(cellBg, bg, t)
+		dst.Style.Bg = memo.mix(cellBg, bg, t)
 	}
 	return dst
 }
@@ -137,4 +137,39 @@ func dimGround() (fg, bg color.Color) {
 		return nil, nil
 	}
 	return fg, bg
+}
+
+// blendMemo keeps the last blends a pane render asked for. The blend is in
+// OKLab (see overlay.MixColors), which costs a few cube roots a call, and a
+// pane's runs repeat a handful of colours, so a render pays for each pair once.
+// It is direct-mapped and lives on the render's stack, so it needs no lock and
+// allocates nothing; a hit also hands back the colour already boxed, which the
+// uncached blend allocated for on every run.
+type blendMemo struct {
+	key [blendMemoSize]uint64
+	out [blendMemoSize]color.Color
+	t   float64
+}
+
+const blendMemoSize = 64
+
+// mix is blendColors behind the memo. The memo holds one blend fraction, the
+// pane's, and starts over if asked for another.
+func (bm *blendMemo) mix(a, b color.Color, t float64) color.Color {
+	if bm == nil {
+		return blendColors(a, b, t)
+	}
+	if bm.t != t {
+		*bm = blendMemo{t: t}
+	}
+	// The tag bit keeps a real key of zero, black onto black, apart from an
+	// empty slot.
+	key := 1<<63 | uint64(packColor8(a))<<24 | uint64(packColor8(b))
+	i := (key ^ key>>17 ^ key>>31) % blendMemoSize
+	if bm.key[i] == key {
+		return bm.out[i]
+	}
+	c := blendColors(a, b, t)
+	bm.key[i], bm.out[i] = key, c
+	return c
 }
