@@ -634,6 +634,13 @@ func firstLineWith(s, sub string) string {
 // the notification's text reaches the attached client. A shell pane beside it
 // is still told TUIOS.
 //
+// The stand-in notifies when a turn ends, after it is sent a prompt, as Codex
+// does, and the prompt is sent only once the client shows the pane. A
+// notification written the instant the pane starts can land before the client
+// has taken the pane's snapshot, and a snapshot carries the screen, not the
+// notifications that passed through it. On Linux a shell script starts fast
+// enough to do that, and the toast never appeared.
+//
 // Negative control: with TermProgramFor answering TermProgram's name for
 // Codex too, the stand-in sees TUIOS and rings the bell instead, and the test
 // fails on the name the pane was told.
@@ -648,6 +655,7 @@ func TestCodexPaneNotificationsArrive(t *testing.T) {
 	// codex-rs/terminal-detection maps TERM_PROGRAM to.
 	script := `#!/bin/sh
 echo "CODEX-SAW TERM_PROGRAM=$TERM_PROGRAM"
+read -r prompt
 case "$TERM_PROGRAM" in
   ghostty|iTerm.app|kitty|WarpTerminal|WezTerm) printf '\033]9;%s\007' "Codex finished: e2e notification" ;;
   *) printf '\007' ;;
@@ -660,6 +668,12 @@ exec cat
 	}
 	if out, err := tuiosCLI(t, base, "new-window", "codex", "-s", "e2e-home", "--", codex); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("CODEX-SAW", uiTimeout); err != nil {
+		t.Fatalf("the client never showed the Codex pane: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-home", "-w", "codex", "finish the turn\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
 	}
 	out := waitCapture(t, base, "e2e-home", "codex", "CODEX-NOTIFIED")
 	log.add("codex pane: %s", firstLineWith(out, "CODEX-SAW"))
