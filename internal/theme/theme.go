@@ -206,7 +206,14 @@ func borderInk(c color.Color) color.Color {
 }
 
 // BorderUnfocused returns the color for unfocused window borders.
-func BorderUnfocused() color.Color {
+func BorderUnfocused() color.Color { return BorderUnfocusedOn(nil) }
+
+// BorderUnfocusedOn is BorderUnfocused for a client that knows its host
+// terminal's background. With no theme the default is a fixed pale colour
+// picked for a dark terminal, which all but vanishes on a light one, so it is
+// measured against the host's ground the way a theme's border is measured
+// against the theme's. A nil ground keeps the fixed colour.
+func BorderUnfocusedOn(hostBg color.Color) color.Color {
 	// A configured colour is returned as chosen: measurement was overridden on
 	// purpose, the same way the scrollbar treats a configured tint.
 	if _, unfocused := borderOverrides(); unfocused != nil {
@@ -214,7 +221,7 @@ func BorderUnfocused() color.Color {
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#FAAAAA")
+		return hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg)
 	}
 	// Light pinkish red: the theme's regular red, which gives a softer, more
 	// muted tone for unfocused windows than bright red.
@@ -222,29 +229,70 @@ func BorderUnfocused() color.Color {
 }
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
-func BorderFocusedWindow() color.Color {
+func BorderFocusedWindow() color.Color { return BorderFocusedWindowOn(nil) }
+
+// BorderFocusedWindowOn is BorderFocusedWindow on a known host background.
+// See BorderUnfocusedOn.
+func BorderFocusedWindowOn(hostBg color.Color) color.Color {
 	if focused, _ := borderOverrides(); focused != nil {
 		return focused
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#AFFFFF")
+		return hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg)
 	}
 	// Light cyan for window mode: use bright cyan
 	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan))
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
-func BorderFocusedTerminal() color.Color {
+func BorderFocusedTerminal() color.Color { return BorderFocusedTerminalOn(nil) }
+
+// BorderFocusedTerminalOn is BorderFocusedTerminal on a known host
+// background. See BorderUnfocusedOn.
+func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
 	if focused, _ := borderOverrides(); focused != nil {
 		return focused
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#AAFFAA")
+		return hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg)
 	}
 	// Light green for terminal mode: use bright green
 	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
+}
+
+// hostBorderInkMemo keeps the last few answers of hostBorderInk. The border
+// colours are asked for on every pane of every frame, and a lift is a walk of
+// up to sixteen contrast measurements.
+var hostBorderInkMemo struct {
+	sync.Mutex
+	keys [6][2][4]uint32
+	ink  [6]color.Color
+	next int
+}
+
+// hostBorderInk lifts a no-theme border colour until it clears the mark floor
+// on the host's ground, and leaves it alone when the ground is not known.
+func hostBorderInk(c, hostBg color.Color) color.Color {
+	if hostBg == nil {
+		return c
+	}
+	cr, cg, cb, ca := c.RGBA()
+	gr, gg, gb, ga := hostBg.RGBA()
+	key := [2][4]uint32{{cr, cg, cb, ca}, {gr, gg, gb, ga}}
+	m := &hostBorderInkMemo
+	m.Lock()
+	defer m.Unlock()
+	for i, k := range m.keys {
+		if m.ink[i] != nil && k == key {
+			return m.ink[i]
+		}
+	}
+	ink := ReadableAt(c, hostBg, MarkFloor)
+	m.keys[m.next], m.ink[m.next] = key, ink
+	m.next = (m.next + 1) % len(m.ink)
+	return ink
 }
 
 // DockColorWindow returns the dock indicator color for window management mode.

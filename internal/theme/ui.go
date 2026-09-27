@@ -217,9 +217,17 @@ func UI() overlay.Palette {
 // tiers are measured on it the way a theme's own chrome surface is. On a dark
 // ground this is UI unchanged.
 func GroundUI() overlay.Palette {
-	p := UI()
 	ground := RailGround()
-	if !groundIsLight(ground) {
+	return GroundUIOn(ground, GroundIsLight(ground))
+}
+
+// GroundUIOn is GroundUI for a ground the caller knows: the host terminal's
+// own background, which only a client can ask for and which differs between
+// the clients of one process. light is the caller's verdict on the ground,
+// so a client that holds its verdict with hysteresis keeps it here too.
+func GroundUIOn(ground color.Color, light bool) overlay.Palette {
+	p := UI()
+	if !light || ground == nil {
 		return p
 	}
 	if c := CurrentChrome(); c != nil && c.Surface != nil {
@@ -233,8 +241,8 @@ func GroundUI() overlay.Palette {
 	return p
 }
 
-// groundIsLight reports whether dark ink reads better on ground than light.
-func groundIsLight(ground color.Color) bool {
+// GroundIsLight reports whether dark ink reads better on ground than light.
+func GroundIsLight(ground color.Color) bool {
 	return overlay.ContrastRatio(ground, color.Black) > overlay.ContrastRatio(ground, color.White)
 }
 
