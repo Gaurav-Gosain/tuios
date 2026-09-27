@@ -4,8 +4,6 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // allPaletteItems returns the merged palette list: the static commands, and the
@@ -70,14 +68,18 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 // PaletteMove moves the command-palette selection by delta and keeps the scroll
 // window in view. Shared by keyboard arrows and the mouse wheel.
 func (m *OS) PaletteMove(delta int) {
-	n := len(m.filteredPaletteItems())
+	filtered := m.filteredPaletteItems()
+	n := len(filtered)
 	if n == 0 {
 		m.CommandPaletteSelected = 0
 		return
 	}
 	m.CommandPaletteSelected = m.listStep(m.CommandPaletteSelected, delta, n)
 	_, visible, _ := m.paletteLayout()
-	m.CommandPaletteScroll = listnav.Scroll(m.CommandPaletteScroll, m.CommandPaletteSelected, n, visible)
+	// The scroll counts list rows, headers included, so it is kept against the
+	// rows the renderer lays out rather than against the commands alone.
+	lines := paletteLines(filtered, paletteGrouped(m.CommandPaletteQuery))
+	m.CommandPaletteScroll = paletteScroll(m.CommandPaletteScroll, lines, m.CommandPaletteSelected, visible)
 }
 
 // PalettePageRows is how many rows a page key moves the palette by.
