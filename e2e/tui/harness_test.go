@@ -227,6 +227,10 @@ type startOpts struct {
 	// logPath, when set, receives the path of the raw PTY log, for a test
 	// that reads what tuios printed after the TUI gave the screen back.
 	logPath *string
+	// wrap runs tuios under another program: argv is wrap followed by the
+	// tuios command line. The host colour tests put a stand-in host terminal
+	// there (testdata/hostterm).
+	wrap []string
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -337,7 +341,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		cols, rows = 120, 40
 	}
 
-	argv := append([]string{tuiosBin}, o.args...)
+	argv := append(append(append([]string{}, o.wrap...), tuiosBin), o.args...)
 	// Animations make frames non-deterministic without testing anything these
 	// assertions care about.
 	if !o.animations {
