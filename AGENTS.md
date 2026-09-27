@@ -241,6 +241,23 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 - Package comments on all packages (see existing `internal/*/` packages)
 - Meaningful variable names (avoid single letters except loop indices)
 
+### Colours in Render Code
+
+- Take every chrome colour from `theme.UI()` (dialogs) or `theme.GroundUI()`
+  (the rail and the dock), both an `overlay.Palette`, or from a named token in
+  `internal/theme`. Never write a literal: `internal/lint` rejects
+  `lipgloss.Color("#...")`, constant `color.RGBA{...}`, `charmtone.*` and
+  constant `ansi.BasicColor`/`IndexedColor` in `internal/app` and
+  `internal/overlay`. A deliberate exception carries `//tuios:allow-color <reason>`.
+- The palette is built per colour depth (`overlay.Depth`: truecolor, 256, 16).
+  At 16 colours every ground is `overlay.NoColor`, so a state that a ground
+  would show has to go through `pal.Row` or `pal.Mark`.
+- Lists follow one rule: `overlay.RowState{Cursor, Focused, Hover}`, the row's
+  ground from `pal.Ground(st, base)`, and the finished row through
+  `pal.Row(content, width, st, base)`. An unfocused list keeps its cursor.
+- Blend with `overlay.MixColors` (OKLab); measure with `overlay.Readable` and
+  `ReadableAt`, which measure the colour the depth will actually show.
+
 ### Error Handling
 
 - Wrap errors with context: `fmt.Errorf("failed to X: %w", err)`
