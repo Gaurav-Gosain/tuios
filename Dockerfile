@@ -6,9 +6,15 @@ COPY . .
 # Both commands. The image shipped only the multiplexer, so the web terminal
 # could not be run from it at all: there was no binary to point an entrypoint
 # at. They are built in one stage because they share a module and a download.
+#
+# VERSION and COMMIT are passed by docker-publish.yml from the tag, so the
+# image's `tuios --version` names its release instead of "dev".
+ARG VERSION=dev
+ARG COMMIT=none
 RUN go mod download &&\
-  CGO_ENABLED=0 go build -o /go/bin/tuios ./cmd/tuios &&\
-  CGO_ENABLED=0 go build -o /go/bin/tuios-web ./cmd/tuios-web
+  LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.builtBy=docker" &&\
+  CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /go/bin/tuios ./cmd/tuios &&\
+  CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /go/bin/tuios-web ./cmd/tuios-web
 
 # RUN go vet -v
 # RUN go test -v

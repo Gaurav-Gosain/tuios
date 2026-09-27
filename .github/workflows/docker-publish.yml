@@ -58,6 +58,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
 
       # attest-build-provenance became a thin wrapper over actions/attest in
       # v4, and its notes point new use at actions/attest. With no predicate
