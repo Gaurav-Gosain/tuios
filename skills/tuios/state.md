@@ -130,7 +130,7 @@ notification is published on `subscribe` as a `notification` event.
 
 ## Detection
 
-Without a report, tuios recognises 22 agent CLIs by their foreground process
+Without a report, tuios recognises 23 agent CLIs by their foreground process
 (through shells, interpreters and launchers such as `npx`), and by screen and
 title rules. The set comes from manifest files and a user can add their own, so
 ask rather than assume:
