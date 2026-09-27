@@ -96,6 +96,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
+          # .goreleaser.yml builds the ghostty CC and PKG_CONFIG_PATH paths
+          # from .Env.PWD. The action starts GoReleaser without a shell, so
+          # nothing sets PWD unless it is given here.
+          PWD: ${{ github.workspace }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
