@@ -22,6 +22,5 @@ keywords:
   - golang
   - terminal
 license: MIT
-commit: cf11b0b7ca8673e515dd637cbb3b56921eb02b03
-version: v0.0.19
-date-released: '2025-10-23'
+version: v0.8.0
+date-released: '2026-09-27'
