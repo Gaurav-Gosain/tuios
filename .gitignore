@@ -38,3 +38,4 @@ zz_*_test.go
 *.test
 .wasm-build/
 /learn-web/
+.zig-cache/

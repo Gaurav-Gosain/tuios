@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Re-runs the release for a tag that already exists, with this workflow file
+  # instead of the one at the tag. A tag is never moved once pushed: the Go
+  # module proxy caches it at first sight.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, for example v0.8.0
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 # Both jobs write to the GitHub release. Nothing in .goreleaser.yml publishes a
 # package or image (the dockers section is commented out, and the image is
@@ -15,7 +26,7 @@ permissions:
 # One release per tag, and never cancelled halfway: a half-published release
 # is worse than a slow one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -27,6 +38,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ env.TAG }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -43,6 +55,13 @@ jobs:
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
+
+      # setup-zig points Zig's caches at .zig-cache in the checkout, and
+      # GoReleaser refuses to release from a tree with untracked files in it.
+      - name: Move the Zig caches out of the checkout
+        run: |
+          echo "ZIG_GLOBAL_CACHE_DIR=$RUNNER_TEMP/zig-global-cache" >> "$GITHUB_ENV"
+          echo "ZIG_LOCAL_CACHE_DIR=$RUNNER_TEMP/zig-local-cache" >> "$GITHUB_ENV"
 
       - name: Cache libghostty-vt
         uses: actions/cache@v6
@@ -61,8 +80,6 @@ jobs:
       # is the body, as before.
       - name: Pick the release notes
         id: notes
-        env:
-          TAG: ${{ github.ref_name }}
         run: |
           if [ -f "docs/release-notes/${TAG}.md" ]; then
             echo "args=release --clean --release-notes docs/release-notes/${TAG}.md" >> "$GITHUB_OUTPUT"
@@ -78,6 +95,7 @@ jobs:
           args: ${{ steps.notes.outputs.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ env.TAG }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
@@ -93,6 +111,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ env.TAG }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -115,8 +134,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          version="${GITHUB_REF_NAME#v}"
-          ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.builtBy=goreleaser"
+          version="${TAG#v}"
+          ldflags="-s -w -X main.version=${version} -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.builtBy=goreleaser"
           # The archive names follow .goreleaser.yml's name_template, which
           # spells amd64 as x86_64. tuios update and the install script look
           # assets up by that name, so the two must not differ.
@@ -136,8 +155,8 @@ jobs:
           # GoReleaser wrote checksums.txt before these archives existed. tuios
           # update refuses an archive checksums.txt does not list, so their
           # digests are appended and the file replaced.
-          gh release download "${GITHUB_REF_NAME}" --pattern checksums.txt --clobber
+          gh release download "${TAG}" --pattern checksums.txt --clobber
           grep -v 'tuios-ghostty_.*_Darwin_' checksums.txt > checksums.new || true
           shasum -a 256 tuios-ghostty_*_Darwin_*.tar.gz >> checksums.new
           mv checksums.new checksums.txt
-          gh release upload "${GITHUB_REF_NAME}" tuios-ghostty_*.tar.gz checksums.txt --clobber
+          gh release upload "${TAG}" tuios-ghostty_*.tar.gz checksums.txt --clobber
