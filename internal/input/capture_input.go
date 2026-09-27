@@ -25,6 +25,10 @@ func HandleCaptureKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndCapture()
 		return o, o.ScreenshotScreen()
 	case "enter", "space":
+		if o.CaptureOverOverlay() {
+			o.EndCapture()
+			return o, o.ScreenshotScreen()
+		}
 		idx := o.CaptureHover()
 		o.EndCapture()
 		return o, o.ScreenshotWindow(idx)

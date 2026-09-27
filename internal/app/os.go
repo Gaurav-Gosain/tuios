@@ -818,6 +818,10 @@ type OS struct {
 	// review is the review overlay: a pane's diff, its notes, and the
 	// compare view of a fan. See review_overlay.go.
 	review reviewState
+	// OverlayLeader is a leader pressed while an overlay owned the keyboard,
+	// held for one key to see whether it starts the screenshot chord. Nil when
+	// nothing is held. See routeOverlayScreenshot in internal/input.
+	OverlayLeader *tea.KeyPressMsg
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle

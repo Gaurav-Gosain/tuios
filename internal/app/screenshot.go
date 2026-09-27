@@ -60,7 +60,11 @@ type captureState struct {
 	// makes tab and enter the way through.
 	Keyboard bool
 	// Dragging is a region selection in progress.
-	Dragging    bool
+	Dragging bool
+	// OverOverlay marks a capture opened while an overlay was on screen. The
+	// panes are under the overlay then, so none is offered: a click or enter
+	// takes the whole screen and a drag takes a region of it.
+	OverOverlay bool
 	AnchorX     int
 	AnchorY     int
 	CursorX     int
@@ -163,13 +167,27 @@ func (m *OS) BeginCapture(mouse bool) {
 	}
 	m.CloseScreenshotPreview(false)
 	wasTerminal := m.Mode == TerminalMode
+	over := m.OverlayOnScreen()
 	m.BeginPointerGesture()
 	m.Capture = captureState{
-		Active: true, Hover: -1, Keyboard: !mouse, wasTerminal: wasTerminal,
+		Active: true, Hover: -1, Keyboard: !mouse, wasTerminal: wasTerminal, OverOverlay: over,
 	}
-	if !mouse {
+	if !mouse && !over {
 		m.Capture.Hover = m.FocusedWindow
 	}
+}
+
+// CaptureOverOverlay reports whether the open capture was started over an
+// overlay, where enter takes the whole screen rather than a pane.
+func (m *OS) CaptureOverOverlay() bool { return m.Capture.Active && m.Capture.OverOverlay }
+
+// OverlayOnScreen reports whether any overlay, panel or dialog is drawn over
+// the panes: every one that owns the keyboard while it is up. Copy mode and
+// the scrollback browser are views of a pane and are not counted.
+func (m *OS) OverlayOnScreen() bool {
+	return m.review.open || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+		m.Renaming() || m.ShowTapeReview || m.ShowTapeManager ||
+		m.ShowLogs || m.ShowCacheStats
 }
 
 // EndCapture leaves capture mode and restores the previous input mode.
@@ -202,6 +220,9 @@ func (m *OS) CaptureHoverNext(delta int) {
 // captureVisibleWindows lists the indices a capture can aim at, in the order
 // tab walks them.
 func (m *OS) captureVisibleWindows() []int {
+	if m.Capture.OverOverlay {
+		return nil
+	}
 	var out []int
 	for i, w := range m.Windows {
 		if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace {

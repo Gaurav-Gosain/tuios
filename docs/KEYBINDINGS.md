@@ -27,6 +27,19 @@ Set `appearance.wrap_lists = false` to stop at the ends instead of wrapping.
 The close-session and file confirmations never wrap, so up from Cancel cannot
 land on the answer that deletes.
 
+## Screenshots over a panel
+
+`Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the
+review, the palette, settings, a menu or a dialog. The panel stays open and is
+part of the capture. The panes are under it, so capture mode does not offer
+one: `enter`, `f` or a click takes the whole screen, and a drag takes a region
+of it.
+
+While a panel is open, the leader is held for one key. If that key is not the
+screenshot key, the panel gets the leader and then the key, in that order, as
+it did before. Copy mode and the scrollback browser keep the leader at once,
+because both page up on `ctrl+b`.
+
 ## Settings
 
 `,` in window-management mode, or `ctrl+b ,`, opens the settings page. It
