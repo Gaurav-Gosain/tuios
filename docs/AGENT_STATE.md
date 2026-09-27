@@ -3035,6 +3035,26 @@ wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
 One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
 name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 
+### What a pane says its terminal is
+
+`TERM_PROGRAM` names a terminal the programs in the pane know, for the graphics
+tuios can pass through to yours: `ghostty` when your terminal takes kitty
+graphics, `WezTerm` when it takes sixel, and `TUIOS` when it takes neither.
+Image tools choose their output from this name.
+
+One pane is told something else. Codex sends its notifications as OSC 9, which
+tuios shows with their text, only to a terminal it knows by that name (Ghostty,
+iTerm2, kitty, Warp, WezTerm), and rings the bell for any other. So a pane that
+starts Codex directly (`tuios new-window -- codex`, `start-agent codex`, `fan
+codex`) on a terminal with neither graphics protocol is told
+`TERM_PROGRAM=WarpTerminal`. Codex treats that name like an unknown terminal in
+everything else (no image protocol, no keyboard workaround, the same link
+style), so only its notifications change. A shell is never told it, since image
+tools such as chafa read it as a kitty graphics terminal. For Codex started from
+a shell prompt on such a terminal, set `notification_method = "osc9"` under
+`[tui]` in `~/.codex/config.toml`. It sends OSC 9 wherever Codex runs, which
+terminals that do not know it ignore.
+
 ### A pane on another machine
 
 A window whose process runs on another machine (`tuios new-window NAME --host

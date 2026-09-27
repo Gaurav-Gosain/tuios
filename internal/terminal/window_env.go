@@ -42,11 +42,12 @@ func guestKittyAnimation() string {
 	return guestenv.KittyAnimationVar(kittyGraphicsHost && kittyAnimationHost)
 }
 
-// guestTermProgram returns the TERM_PROGRAM value for a newly spawned shell.
-func guestTermProgram() string {
+// guestTermProgram returns the TERM_PROGRAM value for a newly spawned pane
+// that runs command, nil for the user's shell.
+func guestTermProgram(command []string) string {
 	graphicsMu.RLock()
 	defer graphicsMu.RUnlock()
-	return guestenv.TermProgram(kittyGraphicsHost, sixelGraphicsHost)
+	return guestenv.TermProgramFor(command, kittyGraphicsHost, sixelGraphicsHost)
 }
 
 // guestBaseEnv is the environment a standalone pane starts from: this

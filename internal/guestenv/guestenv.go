@@ -3,6 +3,8 @@
 // path build a guest environment, and they must agree on what they advertise.
 package guestenv
 
+import "strings"
+
 // TermProgram returns the TERM_PROGRAM value for a guest process, given the
 // graphics capabilities tuios can actually forward to the host terminal.
 //
@@ -23,6 +25,55 @@ func TermProgram(kittyGraphics, sixelGraphics bool) string {
 	default:
 		return "TUIOS"
 	}
+}
+
+// TermProgramFor is TermProgram for a pane that starts argv, nil for the
+// user's shell. It differs from TermProgram in one case: Codex started
+// directly on a host with neither graphics protocol.
+//
+// Codex sends its desktop notifications as OSC 9 only to a terminal it names
+// from TERM_PROGRAM (Ghostty, iTerm2, kitty, Warp and WezTerm), and rings the
+// bell for every other name, TUIOS included
+// (codex-rs/tui/src/notifications/mod.rs and codex-rs/terminal-detection in
+// github.com/openai/codex). tuios shows an OSC 9 notification with its text
+// and a bell only as "bell", so a Codex pane on a plain host lost what the
+// notification said. With kitty graphics or sixel the pane is already told
+// ghostty or WezTerm, and Codex sends OSC 9.
+//
+// Such a pane is told WarpTerminal. Of the names Codex sends OSC 9 to, it is
+// the only one Codex treats like an unknown terminal in every other respect:
+// it picks no image protocol for it, no keyboard workaround, the same resize
+// limits and the same link style. The other names would have Codex, and the
+// image tools it runs, emit graphics this host cannot show. Only Codex's own
+// pane is told this, never a shell: chafa, for one, reads WarpTerminal as a
+// kitty graphics terminal, and a shell prompt may set itself up differently
+// for Warp.
+func TermProgramFor(argv []string, kittyGraphics, sixelGraphics bool) string {
+	name := TermProgram(kittyGraphics, sixelGraphics)
+	if name == "TUIOS" && IsCodex(argv) {
+		return "WarpTerminal"
+	}
+	return name
+}
+
+// IsCodex reports whether argv starts Codex directly: its program's base
+// name is codex, with or without an .exe suffix.
+func IsCodex(argv []string) bool {
+	return programName(argv) == "codex"
+}
+
+// programName is the base name of argv[0], lower-cased, without an .exe
+// suffix, or "" for no argv.
+func programName(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	name := argv[0]
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	name = strings.ToLower(name)
+	return strings.TrimSuffix(name, ".exe")
 }
 
 // KittyAnimationVar returns the TUIOS_KITTY_ANIMATION assignment tuios exports
