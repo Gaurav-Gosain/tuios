@@ -72,13 +72,17 @@ func (p *PTY) winsizeDue(now time.Time) time.Time {
 // from the last cell size a client reported, and drops any held size. The
 // caller holds winsizeMu.
 func (p *PTY) writeWinsizeLocked(width, height int, now time.Time) error {
-	p.winsizeHeld.Store(false)
 	if p.winsizeTimer != nil {
 		p.winsizeTimer.Stop()
 		p.winsizeTimer = nil
 	}
 	p.winsizeWritten = now
-	return ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
+	err := ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
+	// Cleared once the kernel has the size, not before. flushWinsize reads the
+	// flag without the lock, and a clear ahead of the ioctl let a keystroke
+	// through to a guest that then read the size from before the burst.
+	p.winsizeHeld.Store(false)
+	return err
 }
 
 // flushWinsize writes a held size now, if there is one. Write calls it before
