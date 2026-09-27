@@ -8,7 +8,11 @@ require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260816001655-68d539dca504 // indirect
+	github.com/lrstanley/bubbletint/v2 v2.0.2 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
+	golang.org/x/image v0.45.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
 
 require (
