@@ -198,6 +198,10 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		return ""
 	}
 
+	if isKittyModifierKey(key.Code) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
+		return ""
+	}
+
 	code := int(key.Code)
 
 	// Don't encode basic printable characters without modifiers
@@ -380,6 +384,9 @@ func kittyKeyForm(code rune) csiuForm {
 	if n, ok := kittyModifierKeyCodes[code]; ok {
 		return csiuForm{n, 'u'}
 	}
+	if num, ok := kittyFunctionalKeys[code]; ok {
+		return csiuForm{num, 'u'}
+	}
 	return csiuForm{int(code), 'u'}
 }
 
@@ -405,6 +412,46 @@ var kittyModifierKeyCodes = map[rune]int{
 	KeyRightMeta:      57452,
 	KeyIsoLevel3Shift: 57453,
 	KeyIsoLevel5Shift: 57454,
+}
+
+// kittyFunctionalKeys holds the kitty protocol's numbers for the other keys
+// that are not characters: the keypad, F13 and up, Print Screen, Pause and
+// Menu, and the media keys. The decoder hands these over as ultraviolet's
+// private codes, which sit past unicode.MaxRune, so falling through to "the
+// code is the number" put \x1b[1114126u on the wire for keypad Enter -- a key
+// no application has ever heard of. See "Functional key definitions" in the
+// kitty keyboard protocol for the table.
+var kittyFunctionalKeys = func() map[rune]int {
+	m := map[rune]int{
+		KeyKp0: 57399, KeyKp1: 57400, KeyKp2: 57401, KeyKp3: 57402, KeyKp4: 57403,
+		KeyKp5: 57404, KeyKp6: 57405, KeyKp7: 57406, KeyKp8: 57407, KeyKp9: 57408,
+		KeyKpDecimal: 57409, KeyKpDivide: 57410, KeyKpMultiply: 57411,
+		KeyKpMinus: 57412, KeyKpPlus: 57413, KeyKpEnter: 57414, KeyKpEqual: 57415,
+		KeyKpSep: 57416, KeyKpLeft: 57417, KeyKpRight: 57418, KeyKpUp: 57419,
+		KeyKpDown: 57420, KeyKpPgUp: 57421, KeyKpPgDown: 57422, KeyKpHome: 57423,
+		KeyKpEnd: 57424, KeyKpInsert: 57425, KeyKpDelete: 57426, KeyKpBegin: 57427,
+	}
+	// These blocks are declared in the protocol's own order, so they range.
+	blocks := []struct {
+		first, last rune
+		num         int
+	}{
+		{KeyPrintScreen, KeyMenu, 57361},
+		{KeyF13, KeyF35, 57376},
+		{KeyMediaPlay, KeyMute, 57428},
+	}
+	for _, b := range blocks {
+		for c := b.first; c <= b.last; c++ {
+			m[c] = b.num + int(c-b.first)
+		}
+	}
+	return m
+}()
+
+// isKittyModifierKey reports whether code is a modifier pressed on its own,
+// which the protocol reports only under the report-all-keys flag.
+func isKittyModifierKey(code rune) bool {
+	return code >= KeyLeftShift && code <= KeyIsoLevel5Shift
 }
 
 // encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.
@@ -433,6 +480,9 @@ func encodeFormCSIu(form csiuForm, mod KeyMod) string {
 // event type rides on it as a subparameter.
 func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
 	if flags&ansi.KittyReportEventTypes == 0 {
+		return ""
+	}
+	if isKittyModifierKey(key.Code) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
 		return ""
 	}
 	form := kittyKeyForm(key.Code)
