@@ -257,7 +257,10 @@ func groundClient(t *testing.T, cols, rows int, theme, background string, out *s
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "[appearance]\ntheme = \"" + theme + "\"\n"
+	// No dim behind the panel: the overlay is found by the cells that change
+	// when it opens, and the dim changes every cell on screen, the rail too.
+	// modal_dim_test.go holds the dim.
+	cfg := "[appearance]\ntheme = \"" + theme + "\"\nmodal_dim = 0\n"
 	if background != "" {
 		cfg += "background = \"" + background + "\"\n"
 	}

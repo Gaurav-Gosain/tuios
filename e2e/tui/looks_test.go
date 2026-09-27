@@ -283,7 +283,7 @@ func TestPinsKeepWhatTheTestWrote(t *testing.T) {
 		},
 		{
 			name:      "everything already set",
-			src:       "[appearance]\ndockbar_position = \"top\"\nwindow_title_position = \"top\"\nzoom_size = 95\nclick_to_type = \"double\"\n[appearance.scrollbar]\nstyle = \"track\"\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n",
+			src:       "[appearance]\nmodal_dim = 0\ndockbar_position = \"top\"\nwindow_title_position = \"top\"\nzoom_size = 95\nclick_to_type = \"double\"\n[appearance.scrollbar]\nstyle = \"track\"\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n",
 			unchanged: true,
 		},
 		{
