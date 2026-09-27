@@ -57,6 +57,12 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 // it while the daemon's connection goroutines read it.
 var attachSnapshotTaken atomic.Pointer[func()]
 
+// attachReplied runs in handleAttach just after the reply is written, before
+// the checks that repair what the reply missed. It is unset outside tests,
+// which use it to land a state change after the client has joined the
+// broadcast set, and atomic for the reason attachSnapshotTaken is.
+var attachReplied atomic.Pointer[func()]
+
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var payload AttachPayload
 	if err := msg.ParsePayload(&payload); err != nil {
@@ -125,6 +131,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.reserve = payload.Reserve
 	cs.isTUIClient = true
 	cs.humanNonce = humanNonce
+	cs.missedStateSync = false
 	cs.mu.Unlock()
 
 	// Before the reply, so a pane that probes the moment this client can see
@@ -180,10 +187,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// dimensions the last client to sync happened to be. A local client joining
 	// a browser session therefore came up rendering at the browser's width.
 	//
-	// promised is read first: a push that lands between the two reads is in the
-	// snapshot and makes the check after the reply send one state too many,
-	// which is harmless, where the other order would miss it.
-	promised := session.canonicalFingerprint()
+	// The record of the last state forwarded to peers is dropped first. A sync
+	// that repeats that record is not forwarded, on the grounds that every peer
+	// already holds it, and this client does not: it holds the snapshot below.
+	// Dropped before the snapshot, every state that changes after the snapshot
+	// is broadcast, and so either reaches this client or marks it as missed.
+	session.forgetBroadcast()
 	state := session.GetState()
 	if hook := attachSnapshotTaken.Load(); hook != nil {
 		(*hook)()
@@ -217,6 +226,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}); err != nil {
 		return err
 	}
+	if hook := attachReplied.Load(); hook != nil {
+		(*hook)()
+	}
 
 	// The hardest thing that can have happened while the reply was being put
 	// together is the session going away underneath it. A client registers on
@@ -238,10 +250,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// Anything else that moved while the reply was being put together did not
 	// reach this client, because it was not in the broadcast set for that part
-	// of it.
-	// Compare what the reply promised against what the session holds now, and
-	// repair it directly. This runs after the reply, so it cannot race it,
-	// which is the whole reason the repair is here rather than left to a
+	// of it. Compare what the reply promised against what the session holds
+	// now, and repair it directly. This runs after the reply, so it cannot race
+	// it, which is the whole reason the repair is here rather than left to a
 	// broadcast.
 	//
 	// The state is the same case. A state push from another client that lands
@@ -251,13 +262,26 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// broadcast is not repeated for a state already sent. A client joining a
 	// session whose first client had just pushed its pane geometry kept its own
 	// geometry for good, and the two ran the same PTYs at different sizes.
-	if session.canonicalFingerprint() != promised {
+	//
+	// The test is whether a state broadcast skipped this client, not whether
+	// the state moved. A change made after the reply reached this client by
+	// its own broadcast, and sending it again gave the client the same state
+	// twice. See connState.missedStateSync. The repair is queued behind the
+	// broadcasts already on their way to this client, so it cannot overtake
+	// them either.
+	cs.mu.Lock()
+	missed := cs.missedStateSync
+	cs.missedStateSync = false
+	cs.mu.Unlock()
+	if missed {
 		LogBasic("Session %s state moved while %s was attaching; telling it directly",
 			session.Name, cs.clientID)
-		_ = d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
+		if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
 			State:       session.GetState(),
 			TriggerType: "update",
-		})
+		}); err == nil {
+			d.queueBroadcast(cs, msg, "attach state repair")
+		}
 	}
 	if w, h := session.Size(); w > 0 && h > 0 {
 		if r := session.LayoutReserve(); w != effectiveWidth || h != effectiveHeight || r != effectiveReserve {
@@ -669,8 +693,9 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// of them say what the last one said, and each one costs every peer a full
 	// state application and a redraw. A peer already holds this state: it was
 	// either sent it, or handed it in its attach reply, which is this same
-	// snapshot. Nothing else rides on the message, so there is nothing for a
-	// suppressed one to have delivered.
+	// snapshot. An attach drops the record, so a state from before a client
+	// joined is never taken as one it holds. Nothing else rides on the
+	// message, so there is nothing for a suppressed one to have delivered.
 	//
 	// The reconcile reply above is deliberately outside this: it goes to the
 	// sender, whose state is by definition not the merged one.

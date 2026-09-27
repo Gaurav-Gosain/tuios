@@ -446,6 +446,20 @@ type connState struct {
 	// on that.
 	attached bool
 
+	// missedStateSync says a state sync was broadcast to this client's session
+	// while the client was in that window, so the broadcast skipped it. The
+	// attach handler reads it after the reply and sends the current state when
+	// it is set. Guarded by mu, and cleared at the top of every attach.
+	//
+	// A change that reaches the client by broadcast does not set it. The
+	// handler used to compare the state before and after the reply instead,
+	// and that also counted every change made after the reply, which the
+	// client was already being sent: a peer pushing the moment the attach
+	// returned had its first pushes sent to this client twice, and the second
+	// copy went outside the broadcast order and could arrive ahead of the
+	// pushes before it.
+	missedStateSync bool
+
 	// humanNonce is the secret handed to this client in its attach reply, and
 	// replaced on every attach. A mail reply signed with it, from=human, is
 	// stored as verified_human; see verifyHumanNonce. Guarded by mu.
