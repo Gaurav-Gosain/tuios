@@ -26,11 +26,14 @@ type loadingShownMsg struct{}
 // places that start a load do not each have to carry a timer. It reads a few
 // fields and allocates nothing when no load is out.
 func (m *OS) loadingFrameCmd() tea.Cmd {
-	now := time.Now()
-	var due time.Time
+	// The clock is read on the first load found, not on every message.
+	var now, due time.Time
 	consider := func(loading bool, since time.Time) {
 		if !loading || since.IsZero() {
 			return
+		}
+		if now.IsZero() {
+			now = time.Now()
 		}
 		at := since.Add(overlay.LoadingDelay)
 		if at.After(now) && at.After(m.loadingFrameAt) && (due.IsZero() || at.Before(due)) {

@@ -71,8 +71,7 @@ type motionFrameMsg struct{ gen uint64 }
 // on its way if anything is moving. It returns nil when nothing needs a timer,
 // which is the case on every message of an idle session.
 func (m *OS) motionCmd() tea.Cmd {
-	now := time.Now()
-	m.trackModalOverlays(now)
+	m.trackModalOverlays()
 	want := m.motionInterval()
 	if want == 0 {
 		return nil
@@ -122,7 +121,10 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 // trackModalOverlays compares the modal overlays that are up with the ones
 // that were, and starts a fade for each that has just opened. A closed one
 // loses its fade at once: closing is instant, and reopening starts over.
-func (m *OS) trackModalOverlays(now time.Time) {
+//
+// It reads the clock only when the set changed, since it runs after every
+// message and an idle session's messages change nothing.
+func (m *OS) trackModalOverlays() {
 	var open uint64
 	for i := range modalOverlays {
 		if modalOverlays[i].open(m) {
@@ -133,6 +135,7 @@ func (m *OS) trackModalOverlays(now time.Time) {
 	if open == mo.open {
 		return
 	}
+	now := time.Now()
 	opened, closed := open&^mo.open, mo.open&^open
 	mo.open = open
 	fade := m.fadeAllowed()

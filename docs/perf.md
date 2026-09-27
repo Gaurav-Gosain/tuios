@@ -2239,3 +2239,24 @@ The motion clock is its own timer, armed after an Update only while a fade runs
 or a working row is drawn, and never armed otherwise. `TestIdleCostStaysLow`
 and `TestFullMotionWithoutAgentsStaysIdle` (e2e) hold idle at zero bytes and
 zero motion frames with the default `motion = full`.
+
+## 2026-09 Wave 0 and Wave 1 merged
+
+Measured on wave01/final against origin/main (c2a16426): the test binaries of
+both run alternately, six rounds (ten for `BenchmarkIdleTick`), on the shared
+M3 Pro.
+
+- Allocations and bytes per op match origin/main on every render and idle
+  benchmark (`KeystrokeFrame`, `KeystrokeFrameTiled`, `ClientFrame`,
+  `CompositorGetCanvas`, `Backgrounds`, `SpotlightFrame`,
+  `SidebarPanelLinesCached`, `SidebarAgentsCached`, `InboxRender`,
+  `PointerSweep`, `RenderTerminalUnfocused`, `IdleTick`), except the cached
+  review frame at +13 allocations (+0.17%) from the per-depth diff theme. The
+  merge first showed three more allocations per keystroke frame: the colour
+  tokens parsed their hex strings on every call. They are parsed once now.
+- Time shows no significant change on the frame benchmarks (geomean +0.03%).
+- `BenchmarkIdleTick`: 0 render/tick, 0 work/tick, 296 B and 5 allocations,
+  unchanged. Its time went from 270 ns to 348 ns a tick: the motion clock
+  checks which modal overlays are open after every message. The clock is read
+  only when that set changes, and the loading-frame check reads it only while
+  a load is out; before that change the tick was 386 ns.
