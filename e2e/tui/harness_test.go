@@ -160,6 +160,10 @@ func runE2E(m *testing.M) int {
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.
 	sweepShortRuntimeRoots()
+	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
+	// names the person's daemon, and tuiosCLI passes the environment on. The
+	// commands would dial it to check it; the suite has no business there.
+	_ = os.Unsetenv("TUIOS_SOCKET")
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {

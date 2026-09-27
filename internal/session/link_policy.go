@@ -191,6 +191,7 @@ var msgCapabilities = map[MessageType][]string{
 	MsgAttach:           {config.LinkAllowList, config.LinkAllowWrite},
 	MsgInput:            {config.LinkAllowWrite},
 	MsgResize:           {config.LinkAllowWrite},
+	MsgClientFocus:      {config.LinkAllowWrite},
 	MsgClosePTY:         {config.LinkAllowWrite},
 	MsgUpdateState:      {config.LinkAllowWrite},
 	MsgExecuteCommand:   {config.LinkAllowWrite},

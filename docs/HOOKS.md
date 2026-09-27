@@ -55,7 +55,10 @@ is empty, or 0 for a number, so a script can read all of them:
 `after-agent-state` fires only for the transitions `[notifications.agent]`
 alerts on (`needs_input`, `errored` and `done` by default), after its
 `settle_seconds`, outside its `quiet_hours`, and not for the pane an attached
-client is showing when `suppress_focused` is on. Because the daemon runs it, it
+client is showing when `suppress_focused` is on. A terminal that reports focus
+events tells tuios when its window loses focus, and while every attached
+client's terminal is out of focus nobody counts as looking, so the hook fires
+for the shown pane too. `tuios session-info` shows this as `host focus`. Because the daemon runs it, it
 fires with nobody attached, which is how to reach a phone: `tuios --skill
 recipes` has a working ntfy hook. `TUIOS_AGENT_MESSAGE` is the agent's own text,
 so think before a hook sends it off the machine.

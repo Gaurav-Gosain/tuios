@@ -50,7 +50,7 @@ func TestWorkspaceCountIsReportedNotAssumed(t *testing.T) {
 	st.LayoutMode = "scrolling"
 	sess.UpdateState(st)
 
-	data := buildSessionInfoData(sess, sess.GetState(), false)
+	data := buildSessionInfoData(sess, sess.GetState(), false, HostFocusUnknown)
 	if got := data["num_workspaces"]; got != 4 {
 		t.Fatalf("num_workspaces = %v, want 4", got)
 	}

@@ -832,6 +832,9 @@ func listResurrectableSessions() error {
 }
 
 func runDaemon(foreground, disableAutoRestore bool) error {
+	if err := session.CheckSocketEnv(); err != nil {
+		return err
+	}
 	if session.IsDaemonRunning() {
 		pid := session.GetDaemonPID()
 		if pid > 0 {

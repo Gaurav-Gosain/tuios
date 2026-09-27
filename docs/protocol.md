@@ -1683,9 +1683,17 @@ Response:
   "layout_mode": "bsp",
   "width": 120,
   "height": 40,
-  "tui_attached": true
+  "tui_attached": true,
+  "host_focus": "focused"
 }}
 ```
+
+`host_focus` is whether the person can be looking at the session. Each TUI
+client asks its terminal for focus events (DECSET 1004) and reports every
+change to the daemon. It is `focused` when any attached client's terminal has
+focus, `unfocused` when every attached client's terminal reported losing it,
+and `unknown` when no client is attached or a terminal never reports focus. A
+daemon that predates the field omits it.
 
 `tiling_mode` says only whether tiling is on (`tiling` or `floating`) and keeps
 doing so, because callers already dispatch on those two values. `layout_mode`

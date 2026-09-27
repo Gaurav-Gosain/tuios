@@ -55,7 +55,7 @@ func docKeys(m map[string]any) []string {
 
 func TestCLIReferenceSessionInfoShape(t *testing.T) {
 	sess := newTestSession(t)
-	want := docKeys(buildSessionInfoData(sess, sess.GetState(), true))
+	want := docKeys(buildSessionInfoData(sess, sess.GetState(), true, HostFocusFocused))
 	got := docKeys(cliReferenceJSON(t, "### `tuios session-info`"))
 	if !slices.Equal(got, want) {
 		t.Errorf("CLI_REFERENCE session-info sample has fields\n  %v\nthe daemon sends\n  %v", got, want)

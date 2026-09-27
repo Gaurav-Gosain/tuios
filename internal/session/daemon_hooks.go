@@ -257,7 +257,8 @@ func findWindowState(state *SessionState, id string) (WindowState, bool) {
 //
 //   - suppress_focused asks not to be told about a pane the user is looking at.
 //     With no client attached nobody is looking at anything, so it applies only
-//     while a client is attached.
+//     while a client is attached, and only while at least one attached
+//     client's terminal has not reported losing focus.
 //   - The dock message, the bell and the sound cue stay in the client. They
 //     need a terminal and a person. Only the command moves.
 //
@@ -282,9 +283,14 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	sessionID, sessionName, window, to := sess.ID, sess.Name, ev.Window, ev.State
 	ctx := hookContext(sessionName, ev)
 
-	// suppressed reports whether a client is attached and is showing this pane.
+	// suppressed reports whether a client is attached and is showing this
+	// pane, on a terminal that has not said it lost focus. With every client's
+	// terminal out of focus nobody is looking at the pane, whatever it shows.
 	suppressed := func() bool {
 		if !policy.SuppressFocused || d.findTUIClient(sessionID) == nil {
+			return false
+		}
+		if d.sessionHostFocus(sessionID) == HostFocusUnfocused {
 			return false
 		}
 		live := d.manager.GetSessionByID(sessionID)

@@ -1634,15 +1634,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tea.FocusMsg:
-		// Terminal gained focus
-		// Could be used to refresh or resume operations
-		return m, nil
+		// The host terminal gained focus. See host_focus.go.
+		return m, m.noteHostFocus(true)
 
 	case tea.BlurMsg:
-		// Terminal lost focus. A key held when the window went away will never
-		// report its release, so the hold ends here rather than outliving it.
+		// The host terminal lost focus. A key held when the window went away
+		// will never report its release, so the hold ends here rather than
+		// outliving it.
 		m.EndHold()
-		return m, nil
+		return m, m.noteHostFocus(false)
 
 	case tea.ColorProfileMsg:
 		// The colour profile the frame writer steps colours down to. The chrome

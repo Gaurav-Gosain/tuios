@@ -48,6 +48,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		SessionNames: names,
 		Codec:        wireCodecName,
 		Protocol:     ProtocolVersion,
+		ClientFocus:  true,
 	})
 }
 

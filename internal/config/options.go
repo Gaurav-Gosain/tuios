@@ -816,7 +816,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "notifications.agent.suppress_focused", Type: OptionBool, Section: "notifications",
-		Description: "No alert for the pane you are looking at",
+		Description: "No alert for the focused pane while the terminal has focus",
 		Default:     "true",
 	},
 	{

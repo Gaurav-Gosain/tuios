@@ -39,6 +39,12 @@ Pass it to `-w` whenever you mean yourself rather than whatever is focused. It
 is also your address when another agent wants to reach you. The CLI presents
 `TUIOS_PANE_TOKEN` where the daemon needs it; never pass it by hand.
 
+`TUIOS_SOCKET` names the daemon that runs your pane. Setting it does not send a
+command to another daemon: `XDG_RUNTIME_DIR` chooses the daemon, and a command
+refuses when `TUIOS_SOCKET` names a socket where nothing listens. For a
+throwaway daemon of your own, set `XDG_RUNTIME_DIR` and `XDG_STATE_HOME` to
+fresh directories.
+
 `TMUX` and `TMUX_PANE` are not set in a tuios pane, even when tuios runs inside
 tmux, so do not drive panes with `tmux` here: use the tuios verbs. A tool that
 only knows tmux can run under the shim (`tuios --skill tmux`).

@@ -145,6 +145,13 @@ func (m *OS) reconcileOverlayZOrder() {
 // overlayZ returns the z-index for an overlay kind from its position in the
 // stacking order.
 func (m *OS) overlayZ(kind string) int {
+	// The screenshot preview takes every key ahead of every panel, the review
+	// included, so it is drawn above all of them too. A capture taken over the
+	// review would otherwise open its preview underneath it, where it owned
+	// the keyboard and could not be seen.
+	if kind == overlayKindShot {
+		return config.ZIndexReview + 1
+	}
 	for i, k := range m.OverlayZOrder {
 		if k == kind {
 			return config.ZIndexOverlayBase + i

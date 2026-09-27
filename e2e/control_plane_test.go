@@ -97,10 +97,15 @@ func buildTuios(t *testing.T) string {
 // environ returns the isolated environment for a tuios subprocess.
 func (e *env) environ() []string {
 	out := append([]string{}, os.Environ()...)
-	// Drop any inherited XDG vars so ours are authoritative.
+	// Drop any inherited XDG vars so ours are authoritative, and a pane's
+	// TUIOS_SOCKET, which names the person's daemon.
 	filtered := out[:0]
 	for _, kv := range out {
-		if _, isOverridden := e.dirs[strings.SplitN(kv, "=", 2)[0]]; !isOverridden {
+		name := strings.SplitN(kv, "=", 2)[0]
+		if name == "TUIOS_SOCKET" {
+			continue
+		}
+		if _, isOverridden := e.dirs[name]; !isOverridden {
 			filtered = append(filtered, kv)
 		}
 	}

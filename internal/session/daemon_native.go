@@ -151,7 +151,7 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 	case "ListWindows":
 		return buildWindowListData(sess.GetState()), nil
 	case "GetSessionInfo":
-		return buildSessionInfoData(sess, sess.GetState(), false), nil
+		return buildSessionInfoData(sess, sess.GetState(), false, HostFocusUnknown), nil
 	case "GetWindow":
 		state := sess.GetState()
 		target := ""
@@ -369,7 +369,10 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 // buildSessionInfoData builds the session-info result map from session state.
 // It is shared by the session-info JSON verb and the headless GetSessionInfo
 // command.
-func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) map[string]any {
+//
+// hostFocus is the session's host focus (see sessionHostFocus), which only
+// the daemon's client table can say.
+func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool, hostFocus string) map[string]any {
 	tilingMode := "floating"
 	if state.AutoTiling {
 		tilingMode = "tiling"
@@ -410,5 +413,6 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) ma
 		"width":           state.Width,
 		"height":          state.Height,
 		"tui_attached":    hasClient,
+		"host_focus":      hostFocus,
 	}
 }

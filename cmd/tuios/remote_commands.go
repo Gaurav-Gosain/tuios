@@ -873,6 +873,7 @@ func printSessionInfo(raw json.RawMessage) error {
 		Width            int            `json:"width"`
 		Height           int            `json:"height"`
 		TUIAttached      bool           `json:"tui_attached"`
+		HostFocus        string         `json:"host_focus"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -894,6 +895,11 @@ func printSessionInfo(raw json.RawMessage) error {
 		[2]string{"size", fmt.Sprintf("%dx%d", res.Width, res.Height)},
 		[2]string{"attached", fmt.Sprintf("%t", res.TUIAttached)},
 	)
+	// Only a daemon that tracks it sends host_focus, and it says nothing
+	// useful with no client attached.
+	if res.HostFocus != "" && res.TUIAttached {
+		fields = append(fields, [2]string{"host focus", res.HostFocus})
+	}
 	for _, f := range fields {
 		fmt.Printf("%-14s %s\n", f[0], f[1])
 	}

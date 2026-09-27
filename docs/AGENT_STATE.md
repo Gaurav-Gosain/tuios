@@ -3079,7 +3079,7 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 | Variable          | Meaning                                          |
 | ----------------- | ------------------------------------------------ |
 | `TUIOS_ENV`       | `1` when running under tuios                      |
-| `TUIOS_SOCKET`    | Daemon socket path                               |
+| `TUIOS_SOCKET`    | Socket of the daemon that runs the pane. It reports; it does not choose the daemon a command reaches, which `XDG_RUNTIME_DIR` does |
 | `TUIOS_PANE_ID`   | The pane's window id                             |
 | `TUIOS_WINDOW_ID` | The pane's window id (alias of `TUIOS_PANE_ID`)  |
 | `TUIOS_SESSION`   | The session name                                 |
