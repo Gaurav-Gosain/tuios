@@ -193,9 +193,10 @@ read as raised and a chip as inset.
 On a light theme the ramp is built from the theme's background instead: the
 background is the canvas, a dialog's surface sits one small step below it, the
 cursor row one ramp step below that, and inset cards above it. The text tiers
-are measured on it the same way, and the accent, the key colour and the status
-colours are carried toward dark ink only as far as they need to read on it
-(4.5:1). So a dialog on a light theme is a light panel, not a dark slab. The
+are measured on it the same way. The accent and the key colour are darkened at
+their own hue only as far as they need to read on it as text (4.5:1), and the
+status colours as far as they need to read as marks (3:1); at 256 colours each
+is the palette entry nearest its hue that does. So a dialog on a light theme is a light panel, not a dark slab. The
 screen behind a modal panel fades toward the theme's background rather than
 darkening, since 30% toward black turns a near-white screen a mid grey. A
 theme that names its own ramp keeps it, and at 16 colours the panels paint no
