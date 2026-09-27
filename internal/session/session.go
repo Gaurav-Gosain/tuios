@@ -1292,10 +1292,20 @@ func (s *Session) NoteBroadcastFingerprint(fp uint64) bool {
 }
 
 // forgetBroadcastFingerprint drops the record, so the next client sync is
-// forwarded whatever it says. pushMu must already be held: its one caller is
-// publishState, which holds it for the whole delivery.
+// forwarded whatever it says. pushMu must already be held: publishState holds
+// it for the whole delivery. forgetBroadcast is the same for a caller that
+// does not hold it.
 func (s *Session) forgetBroadcastFingerprint() {
 	s.broadcastFPSet = false
+}
+
+// forgetBroadcast drops the record for a client joining the session. The
+// record says what every peer holds, and a joining client holds its attach
+// snapshot instead. See handleAttach.
+func (s *Session) forgetBroadcast() {
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	s.forgetBroadcastFingerprint()
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -1640,16 +1650,6 @@ func (s *Session) PTYCount() int {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
 	return len(s.ptys)
-}
-
-// canonicalFingerprint fingerprints the state as the daemon and its clients
-// have written it, without the live facts GetState fills in on the way out.
-// Those move on their own, and a comparison that is meant to notice a write
-// must not fire on a pane printing a new title.
-func (s *Session) canonicalFingerprint() uint64 {
-	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	return StateFingerprint(s.state)
 }
 
 // GetState returns the current session state.

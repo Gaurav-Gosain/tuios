@@ -292,12 +292,15 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 		// attached, not just sessionID: a client mid-attach is counted by
 		// everything that measures the session and spoken to by nothing. See
 		// connState.attached.
-		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
+		member := cs.sessionID == sessionID && cs.isTUIClient && cs.clientID != excludeClientID
+		match := member && cs.attached
+		// A client still attaching is told afterwards that it missed a state,
+		// by its attach handler. See connState.missedStateSync.
+		if member && !cs.attached && msgType == MsgStateSync {
+			cs.missedStateSync = true
+		}
 		cs.mu.Unlock()
 		if !match {
-			continue
-		}
-		if cs.clientID == excludeClientID {
 			continue
 		}
 		d.queueBroadcast(cs, msg, "broadcastToSession")
