@@ -1,19 +1,33 @@
 package config
 
-// Keybinding represents a single keybinding entry
+// Keybinding is one line of a which-key panel: a key and what it does.
 type Keybinding struct {
 	Key         string
 	Description string
+	// Submenu marks a key that opens another prefix menu rather than doing
+	// something itself. The panel draws it with a leading + so nested menus
+	// can be told from actions at a glance.
+	Submenu bool
 }
+
+// KeybindingGroup is a titled section of a which-key panel. A panel with one
+// untitled group is a plain list.
+type KeybindingGroup struct {
+	Title    string
+	Bindings []Keybinding
+}
+
+func kb(key, desc string) Keybinding  { return Keybinding{Key: key, Description: desc} }
+func sub(key, desc string) Keybinding { return Keybinding{Key: key, Description: desc, Submenu: true} }
 
 // The prefix menu's agent lines. Named so IsAgentPrefixKeybinding can find
 // them by what they say rather than by a key a config may have moved.
 const (
 	whichKeyInbox         = "Inbox"
-	whichKeyOldestWaiting = "Oldest waiting (repeat: next)"
+	whichKeyOldestWaiting = "Oldest waiting"
 	whichKeyInboxMail     = "Inbox: mail"
 	whichKeyReview        = "Review changes"
-	whichKeyNewestDone    = "Newest finished (repeat: older)"
+	whichKeyNewestDone    = "Newest finished"
 )
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
@@ -36,129 +50,143 @@ func IsReviewPrefixKeybinding(k Keybinding) bool {
 	return k.Description == whichKeyReview
 }
 
-// GetPrefixKeybindings returns keybindings for the prefix overlay.
-// isDaemonSession indicates whether we're running in daemon mode (affects detach/quit descriptions).
+// GetPrefixKeybindings returns keybindings for the prefix overlay, every group
+// in order. isDaemonSession indicates whether we're running in daemon mode
+// (affects detach/quit descriptions).
 func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybinding {
+	var out []Keybinding
+	for _, g := range GetPrefixKeybindingGroups(prefixType, isDaemonSession...) {
+		out = append(out, g.Bindings...)
+	}
+	return out
+}
+
+// GetPrefixKeybindingGroups returns the prefix overlay's lines in the sections
+// the panel draws them under. The sub-prefixes are one untitled group each:
+// they are a handful of lines and a heading over them would say what the
+// panel's title already does.
+func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []KeybindingGroup {
 	daemonMode := len(isDaemonSession) > 0 && isDaemonSession[0]
+	one := func(b ...Keybinding) []KeybindingGroup { return []KeybindingGroup{{Bindings: b}} }
 	switch prefixType {
 	case "workspace":
-		return []Keybinding{
-			{"1-9", "Switch to workspace"},
-			{"Shift+1-9", "Move window to workspace"},
-			{"r", "Rename workspace"},
-			{"Esc", "Cancel"},
-		}
-	case "minimize":
-		return []Keybinding{
-			{"m", "Minimize focused window"},
-			{"1-9", "Restore window"},
-			{"Shift+M", "Restore all"},
-			{"Esc", "Cancel"},
-		}
-	case "window":
-		return []Keybinding{
-			{"n", "New window"},
-			{"x", "Close window"},
-			{"r", "Rename window"},
-			{"Tab", "Next window"},
-			{"Shift+Tab", "Previous window"},
-			{"t", "Toggle tiling mode"},
-			{"Esc", "Cancel"},
-		}
-	case "debug":
-		return []Keybinding{
-			{"l", "Toggle log viewer"},
-			{"c", "Toggle cache statistics"},
-			{"k", "Toggle showkeys overlay"},
-			{"a", "Toggle animations"},
-			{"Esc", "Cancel"},
-		}
-	case "tape":
-		return []Keybinding{
-			{"m", "Open tape manager"},
-			{"t", "Review project tape"},
-			{"r", "Start recording"},
-			{"s", "Stop recording"},
-			{"Esc", "Cancel"},
-		}
-	case "layout":
-		return []Keybinding{
-			{"l", "Load layout"},
-			{"s", "Save layout"},
-			{"1-4", "Snap window to a corner"},
-			{"5-9", "Resize focused window width (%)"},
-			{"Shift+5-9", "Resize focused window height (%)"},
-			{"Esc", "Cancel"},
-		}
-	default: // general prefix
-		bindings := []Keybinding{
-			{"c", "Create window"},
-			{"x", "Close window"},
-			{"r", "Rename window"},
-			{",", "Settings"},
-			{"k", "Keybind manager"},
-			{"n", "Next window"},
-			{"p", "Previous window"},
-			// The arrows walk panes, and the prefix stays armed for a moment
-			// so a run of them costs one prefix press. See the repeat window
-			// in internal/input/prefix_repeat.go.
-			{"←/→/↑/↓", "Focus pane in a direction"},
-			{"a", "Launcher"},
-			{"(/)", "Previous/next session"},
-			{"0-9", "Jump to window"},
-			{"z", "Toggle zoom"},
-			{"space", "Toggle tiling"},
-			{"-", "Split horizontal"},
-			{"|/\\", "Split vertical"},
-			{"R", "Rotate split"},
-			{"=", "Equalize splits"},
-			{"w", "Workspace commands..."},
-			{"m", "Minimize commands..."},
-			{"t", "Window commands..."},
-			{"D", "Debug commands..."},
-			{"T", "Tape manager..."},
-			{"P", "Command palette"},
-			{"S", "Session switcher"},
-			{"W", "Workspace switcher"},
-			{"L", "Layout commands..."},
-			{"b", "Toggle sidebar"},
-			{"e", "Focus/leave sidebar"},
-			{"j", "Jump to newest message"},
-			{"i", whichKeyInbox},
-			{"o", whichKeyOldestWaiting},
-			{"M", whichKeyInboxMail},
-			{"O", whichKeyNewestDone},
-			{"v", whichKeyReview},
-			{"X", "Close session"},
-		}
-
-		// In daemon mode, d and Esc have different behaviors
-		if daemonMode {
-			bindings = append(bindings,
-				Keybinding{"d", "Detach session"},
-				Keybinding{"Esc", "Window mode"},
-			)
-		} else {
-			// In local mode, both d and Esc do the same thing
-			bindings = append(bindings,
-				Keybinding{"d/Esc", "Window mode"},
-			)
-		}
-
-		bindings = append(bindings,
-			Keybinding{"[", "Scrollback mode"},
-			Keybinding{"s", "Scrollback browser"},
-			Keybinding{"C", "Take a screenshot"},
-			Keybinding{"?", "Toggle help"},
+		return one(
+			kb("1-9", "Switch to workspace"),
+			kb("Shift+1-9", "Move window to workspace"),
+			kb("r", "Rename workspace"),
+			kb("Esc", "Cancel"),
 		)
-
-		// Quit description differs based on mode
-		if daemonMode {
-			bindings = append(bindings, Keybinding{"q", "Quit menu"})
-		} else {
-			bindings = append(bindings, Keybinding{"q", "Quit application"})
-		}
-
-		return bindings
+	case "minimize":
+		return one(
+			kb("m", "Minimize focused window"),
+			kb("1-9", "Restore window"),
+			kb("Shift+M", "Restore all"),
+			kb("Esc", "Cancel"),
+		)
+	case "window":
+		return one(
+			kb("n", "New window"),
+			kb("x", "Close window"),
+			kb("r", "Rename window"),
+			kb("Tab", "Next window"),
+			kb("Shift+Tab", "Previous window"),
+			kb("t", "Toggle tiling mode"),
+			kb("Esc", "Cancel"),
+		)
+	case "debug":
+		return one(
+			kb("l", "Toggle log viewer"),
+			kb("c", "Toggle cache statistics"),
+			kb("k", "Toggle showkeys overlay"),
+			kb("a", "Toggle animations"),
+			kb("Esc", "Cancel"),
+		)
+	case "tape":
+		return one(
+			kb("m", "Open tape manager"),
+			kb("t", "Review project tape"),
+			kb("r", "Start recording"),
+			kb("s", "Stop recording"),
+			kb("Esc", "Cancel"),
+		)
+	case "layout":
+		return one(
+			kb("l", "Load layout"),
+			kb("s", "Save layout"),
+			kb("1-4", "Snap window to a corner"),
+			kb("5-9", "Resize focused window width (%)"),
+			kb("Shift+5-9", "Resize focused window height (%)"),
+			kb("Esc", "Cancel"),
+		)
 	}
+
+	// The leader's menu, in the sections the panel flows into columns. Each
+	// section is a few lines, so a column holds a section or two whole and the
+	// panel stays short enough to read without scrolling the eye down a list.
+	windows := KeybindingGroup{Title: "Windows", Bindings: []Keybinding{
+		kb("c", "Create window"),
+		kb("x", "Close window"),
+		kb("r", "Rename window"),
+		kb("n/p", "Next/prev window"),
+		kb("0-9", "Jump to window"),
+		kb("z", "Toggle zoom"),
+	}}
+	panes := KeybindingGroup{Title: "Panes", Bindings: []Keybinding{
+		// The arrows walk panes, and the prefix stays armed for a moment
+		// so a run of them costs one prefix press. See the repeat window
+		// in internal/input/prefix_repeat.go.
+		kb("←↑↓→", "Focus pane"),
+		kb("space", "Toggle tiling"),
+		kb("-", "Split horizontal"),
+		kb("|/\\", "Split vertical"),
+		kb("R", "Rotate split"),
+		kb("=", "Equalize splits"),
+	}}
+	sessions := KeybindingGroup{Title: "Sessions", Bindings: []Keybinding{
+		kb("(/)", "Prev/next session"),
+		kb("S", "Sessions"),
+		kb("W", "Workspaces"),
+		kb("X", "Close session"),
+	}}
+	modes := KeybindingGroup{Title: "Modes"}
+	// In daemon mode d detaches and Esc leaves for window mode; in local mode
+	// both leave for window mode.
+	if daemonMode {
+		sessions.Bindings = append(sessions.Bindings, kb("d", "Detach session"), kb("q", "Quit menu"))
+		modes.Bindings = append(modes.Bindings, kb("Esc", "Window mode"))
+	} else {
+		sessions.Bindings = append(sessions.Bindings, kb("q", "Quit application"))
+		modes.Bindings = append(modes.Bindings, kb("d/Esc", "Window mode"))
+	}
+	modes.Bindings = append(modes.Bindings,
+		kb("[", "Scrollback mode"),
+		kb("s", "Scrollback browser"),
+		kb("b", "Toggle sidebar"),
+		kb("e", "Focus sidebar"),
+	)
+	menus := KeybindingGroup{Title: "Menus", Bindings: []Keybinding{
+		sub("w", "Workspace"),
+		sub("m", "Minimize"),
+		sub("t", "Window"),
+		sub("L", "Layout"),
+		sub("T", "Tape"),
+		sub("D", "Debug"),
+	}}
+	tools := KeybindingGroup{Title: "Tools", Bindings: []Keybinding{
+		kb("P", "Command palette"),
+		kb("a", "Launcher"),
+		kb(",", "Settings"),
+		kb("k", "Keybindings"),
+		kb("C", "Screenshot"),
+		kb("j", "Newest message"),
+		kb("?", "Help"),
+	}}
+	agents := KeybindingGroup{Title: "Agents", Bindings: []Keybinding{
+		kb("i", whichKeyInbox),
+		kb("o", whichKeyOldestWaiting),
+		kb("M", whichKeyInboxMail),
+		kb("O", whichKeyNewestDone),
+		kb("v", whichKeyReview),
+	}}
+	return []KeybindingGroup{windows, panes, sessions, modes, menus, tools, agents}
 }

@@ -26,7 +26,7 @@ func whichKeyRowKeys(key string) []string {
 		return []string{"M"}
 	case "Shift+Tab":
 		return []string{"shift+tab"}
-	case "\u2190/\u2192/\u2191/\u2193":
+	case "\u2190\u2191\u2193\u2192":
 		// The panel draws the arrows as arrows, which is what a person reads
 		// on a key. The registry spells them out.
 		return []string{"left", "right", "up", "down"}

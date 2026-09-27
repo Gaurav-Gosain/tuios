@@ -861,6 +861,8 @@ type OS struct {
 	LauncherOpenedAt time.Time
 	// loadingFrameAt is the latest loading frame armed (see loadingFrameCmd).
 	loadingFrameAt time.Time
+	// whichKeyCache is the which-key panel's last layout.
+	whichKeyCache whichKeyCache
 	// launcherIcons holds the decoded app icons and what is currently drawn on
 	// the host. Nil until the launcher first needs one.
 	launcherIcons *launcherIcons
