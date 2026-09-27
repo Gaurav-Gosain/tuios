@@ -2180,3 +2180,35 @@ six colours, one memo per pane render):
 
 The last row is why the memo is there: without it the perceptual blend would
 cost four times the old one.
+
+## 2026-09 modal dim, overlay fade and working-row shimmer
+
+All three are passes over the composed canvas in `composeLayers`, so none of
+them re-renders a pane or rebuilds the rail: the cached layers are copied in as
+on any frame and the pass edits cells in place through the spotlight's
+16-level blend cache (`cellShade`). Apple M3 Pro, a shared machine, medians of
+five or six runs.
+
+| Benchmark | Case | Time | Allocations |
+|---|---|---|---|
+| `BenchmarkModalScrimFrame` (new; nine panes, palette open, one pane dirty) | `modal_dim = 0` | 691 µs | 1406 |
+| | `modal_dim = 30` | 926 µs | 1406 |
+| `BenchmarkShimmerApply` (new; the pass over a twelve-agent rail, truecolor) | | 283 ns | 0 |
+| `BenchmarkCompositorGetCanvas/windows-9/one-dirty` | before / after | 158 µs / 151 µs | 110, unchanged |
+| `BenchmarkCompositorGetCanvas/windows-9/all-dirty` | before / after | 780 µs / 716 µs | 196, unchanged |
+| `BenchmarkIdleTick` | after | 0 render/tick, 0 work/tick | 296 B, 5, unchanged |
+
+The scrim costs about what the spotlight does, a quarter of a millisecond on a
+full 207x55 frame, and only on frames drawn while a modal is open; a modal left
+open over quiet panes draws none. The compositor rows are within noise.
+
+The shimmer asks for at most 15 frames a second, and only while a working
+agent's row is on screen. Each is a frame with nothing dirty plus the pass. A
+hovered overflowing rail row (the marquee) costs more per frame, because the
+rail is never served from its cache while it scrolls
+(`BenchmarkSidebarAgentsRebuild`, about 345 µs).
+
+The motion clock is its own timer, armed after an Update only while a fade runs
+or a working row is drawn, and never armed otherwise. `TestIdleCostStaysLow`
+and `TestFullMotionWithoutAgentsStaysIdle` (e2e) hold idle at zero bytes and
+zero motion frames with the default `motion = full`.
