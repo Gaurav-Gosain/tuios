@@ -87,7 +87,9 @@ tuios doctor agents                      # also lists agent panes missing theirs
 Claude Code, Codex, Copilot, Cursor Agent, Gemini CLI, opencode, Kilo, Amp,
 Kimi, Pi and Qwen report the pane's state. Antigravity, Crush, Devin, Droid,
 Grok, Hermes and Qoder report only the conversation id, so the pane can be
-resumed, and their state keeps coming from screen rules.
+resumed, and their state keeps coming from screen rules. Crush started
+directly in a pane (`tuios new-window NAME crush`, `start-agent crush`) also
+reports its state by itself, over herdr's protocol, which tuios accepts.
 
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
 payload on stdin and reports for the pane it runs in: a prompt or tool call is

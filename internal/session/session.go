@@ -1088,6 +1088,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// HerdrEnv returns the herdr protocol variables a pane with the given
+	// window id that runs the given command is started with, nil for none.
+	// See Manager.HerdrEnv.
+	HerdrEnv func(windowID string, command []string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -2419,6 +2423,11 @@ func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []s
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
 		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
+	}
+	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
+	// socket here, when this pane starts one. See herdr_compat.go.
+	if s.config != nil && s.config.HerdrEnv != nil {
+		env = append(env, s.config.HerdrEnv(windowID, command)...)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.

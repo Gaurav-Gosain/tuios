@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // The [agents] table: how tuios treats the coding agents in its panes.
 //
 //	[agents.approvals]
@@ -27,6 +29,31 @@ type AgentsConfig struct {
 	// Queue is the [agents.queue] table: messages waiting to be typed to an
 	// agent when it comes to rest. See agents_work.go.
 	Queue QueueConfig `toml:"queue,omitempty"`
+	// HerdrProtocol says which panes are told about the socket tuios accepts
+	// herdr's pane state protocol on, which Crush reports to by itself:
+	// "agents" (the default) for a pane that starts such a harness directly,
+	// "always" for every pane, so one started from a shell reports too, and
+	// "off" for none. A pane told about it reads as a herdr pane to anything
+	// that checks HERDR_ENV, herdr itself included, which refuses to start
+	// inside one. See docs/AGENT_STATE.md.
+	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
+}
+
+// The values of [agents] herdr_protocol.
+const (
+	HerdrProtocolAgents = "agents"
+	HerdrProtocolAlways = "always"
+	HerdrProtocolOff    = "off"
+)
+
+// NormalizeHerdrProtocol reads an [agents] herdr_protocol value. Empty and
+// anything unrecognised mean the default, "agents".
+func NormalizeHerdrProtocol(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case HerdrProtocolAlways, HerdrProtocolOff:
+		return v
+	}
+	return HerdrProtocolAgents
 }
 
 // ApprovalsConfig is the [agents.approvals] table: which harnesses hand their

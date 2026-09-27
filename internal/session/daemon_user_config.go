@@ -79,6 +79,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.RecapTestPatterns = uc.Agents.Recap.Resolved().TestPatterns
 	// The daemon holds every pane's delivery queue, so it bounds them.
 	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
+	// The daemon spawns every pane, so it decides which are told about the
+	// herdr protocol socket.
+	cfg.HerdrProtocol = uc.Agents.HerdrProtocol
 	return cfg
 }
 

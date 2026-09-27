@@ -272,6 +272,65 @@ Targeting follows the same rules as the other window verbs: `-s`/`--session`
 selects the session (default: most recently active), `-w`/`--window` selects the
 window by id or name (default: the focused window).
 
+`set-agent-state` is tuios's contract, and the one to build on: it is
+documented, versioned with the verb protocol, and it is what `tuios agent-hook`
+and every integration tuios installs call. A pane finds the daemon through
+`TUIOS_SOCKET` and names itself with `TUIOS_PANE_ID` (see
+[Environment](#environment)).
+
+### herdr's pane state protocol
+
+tuios also accepts the reports some harnesses already send to herdr, another
+multiplexer for coding agents, so they work with no install step. Crush sends
+them natively when it finds herdr's environment in its pane. It is an input
+only: tuios answers nothing else a herdr client could ask.
+
+A pane that is to report this way is started with:
+
+| Variable | Value |
+| --- | --- |
+| `HERDR_ENV` | `1` |
+| `HERDR_SOCKET_PATH` | `<daemon socket>.herdr`, a socket of tuios's own, owner only |
+| `HERDR_PANE_ID` | the pane's window id, the same as `TUIOS_PANE_ID` |
+
+herdr reads `HERDR_SOCKET_PATH` as the path of its own server and
+`HERDR_ENV=1` as "inside herdr", so tuios sets them only where they are wanted:
+in a pane that starts Crush directly (`tuios new-window NAME crush`,
+`start-agent crush`, `fan --agent crush`), or in every pane with
+`herdr_protocol = "always"` in `[agents]` (see
+[the configuration reference](CONFIGURATION.md#harnesses-that-report-to-herdr)).
+A shell pane is not told it is a herdr pane by default, and tuios never listens
+on herdr's own socket, so a real herdr on the same machine is untouched. The
+other way round, a tuios started inside a herdr pane does not pass that pane's
+`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its
+own panes, the way it does not pass on `TMUX`, so an agent in a tuios pane never
+sets the state of the herdr pane around it.
+
+The wire is herdr's: one JSON object per connection on one line, `{"id",
+"method", "params"}`, answered with one line, `{"id", "result": {"type":
+"ok"}}` or `{"id", "error": {"code", "message"}}`, and the connection closes.
+
+| Method | What tuios does |
+| --- | --- |
+| `pane.report_agent` `state: working` | `working` |
+| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, which reports `blocked` only on a permission request, kind `approval` |
+| `pane.report_agent` `state: idle` | `done` when the pane is `working` or `needs_input`, since the harness came to rest from a turn, and `idle` otherwise |
+| `pane.report_agent` `state: unknown` | nothing |
+| `pane.report_agent_session` | the conversation id, as `set-agent-session` |
+| `pane.release_agent` | `none` |
+| `ping` | a pong |
+| anything else | error `unsupported` |
+
+Each report goes through `set-agent-state` with source `report`, the harness
+named by `agent` when tuios knows it, and `agent_session_id` when sent, so it
+has the same rank, guards and alerts as a hook's report. A report whose `seq`
+is not above the last one from the same `source` for the pane is dropped
+without an error, as herdr does; Crush seeds its `seq` from the clock, so a
+restarted Crush is never stale. A request speaks only for the caller's own
+pane: the daemon places the connecting process the way it places every caller
+(see [How a process is placed](#how-a-process-is-placed)) and answers
+`forbidden` to a `pane_id` that is not that pane, and to a process in no pane.
+
 ## Sources and precedence
 
 More than one thing can have an opinion about a pane. `set-agent-state` takes an
@@ -3035,6 +3094,10 @@ wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
 One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
 name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 
+A pane that starts Crush, or every pane with `herdr_protocol = "always"`, also
+gets `HERDR_ENV`, `HERDR_SOCKET_PATH` and `HERDR_PANE_ID`. See
+[herdr's pane state protocol](#herdrs-pane-state-protocol).
+
 ### What a pane says its terminal is
 
 `TERM_PROGRAM` names a terminal the programs in the pane know, for the graphics
@@ -3045,8 +3108,8 @@ Image tools choose their output from this name.
 One pane is told something else. Codex sends its notifications as OSC 9, which
 tuios shows with their text, only to a terminal it knows by that name (Ghostty,
 iTerm2, kitty, Warp, WezTerm), and rings the bell for any other. So a pane that
-starts Codex directly (`tuios new-window -- codex`, `start-agent codex`, `fan
-codex`) on a terminal with neither graphics protocol is told
+starts Codex directly (`tuios new-window NAME codex`, `start-agent codex`,
+`fan --agent codex`) on a terminal with neither graphics protocol is told
 `TERM_PROGRAM=WarpTerminal`. Codex treats that name like an unknown terminal in
 everything else (no image protocol, no keyboard workaround, the same link
 style), so only its notifications change. A shell is never told it, since image

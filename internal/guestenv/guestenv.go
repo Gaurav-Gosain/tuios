@@ -56,6 +56,13 @@ func TermProgramFor(argv []string, kittyGraphics, sixelGraphics bool) string {
 	return name
 }
 
+// SpeaksHerdrProtocol reports whether argv starts, directly, a harness that
+// reports its state over herdr's pane protocol when herdr's environment is
+// set: Crush (internal/herdr/client.go in github.com/charmbracelet/crush).
+func SpeaksHerdrProtocol(argv []string) bool {
+	return programName(argv) == "crush"
+}
+
 // IsCodex reports whether argv starts Codex directly: its program's base
 // name is codex, with or without an .exe suffix.
 func IsCodex(argv []string) bool {
@@ -108,10 +115,17 @@ func KittyAnimationVar(supported bool) string {
 // notifications in tmux DCS passthrough, which tuios drops, and an agent that
 // splits panes through tmux reaches the outer tmux instead of the pane it is
 // in. The pane is a tuios pane, so these are removed.
-var hostMultiplexerVars = []string{"TMUX", "TMUX_PANE"}
+//
+// The same holds for an enclosing herdr. HERDR_ENV and the pane ids name the
+// herdr pane tuios runs in: Crush, and herdr's own hooks, report to it when
+// they see them, so an agent in a tuios pane would set the state of the outer
+// herdr pane. HERDR_SOCKET_PATH stays, since it names herdr's server and says
+// nothing about which pane a process is in; a pane tuios tells about its own
+// herdr protocol socket gets it replaced (see session.Manager.HerdrEnv).
+var hostMultiplexerVars = []string{"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"}
 
-// WithoutHostMultiplexer returns env with every assignment of TMUX and
-// TMUX_PANE removed. The slice is filtered in place, so callers pass a copy
+// WithoutHostMultiplexer returns env with every assignment of the variables
+// in hostMultiplexerVars removed. The slice is filtered in place, so callers pass a copy
 // they own, such as the fresh one os.Environ returns.
 func WithoutHostMultiplexer(env []string) []string {
 	kept := env[:0]

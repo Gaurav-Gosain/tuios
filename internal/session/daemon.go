@@ -33,8 +33,13 @@ type Daemon struct {
 	// linkHumanListener is the third socket, the one the proxy dials for a
 	// stream the hub vouched for. See LinkHumanSocketPath.
 	linkHumanListener net.Listener
-	ctx               context.Context
-	cancel            context.CancelFunc
+	// herdrListener is the socket harnesses that speak herdr's pane state
+	// protocol report to. See herdr_compat.go.
+	herdrListener net.Listener
+	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
+	herdrSeqs herdrSeqs
+	ctx       context.Context
+	cancel    context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
@@ -497,6 +502,9 @@ type DaemonConfig struct {
 	// the client that made its session named none. Empty falls back to $SHELL
 	// and then the platform default, the same order a standalone pane uses.
 	PreferredShell string
+	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
+	// the herdr protocol socket. See Manager.HerdrEnv.
+	HerdrProtocol string
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -601,6 +609,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)
+	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.loadHooks(cfg)
 
@@ -903,6 +912,13 @@ func (d *Daemon) Start() error {
 	// falls back to the plain link socket, and no attach through a link can
 	// verify a reply from human, which is the safe way to lose it.
 	d.linkHumanListener = listenLinkSocket(LinkHumanSocketPath(socketPath), "A reply from human over a link is not verified.")
+	// The herdr protocol socket is optional in the same way. Without it no
+	// pane is told it may report there, and the screen rules carry those
+	// harnesses as before.
+	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
+		d.herdrListener = l
+		d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
+	}
 
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
@@ -962,6 +978,9 @@ func (d *Daemon) Start() error {
 	}
 	if d.linkHumanListener != nil {
 		go d.acceptLinkOn(d.linkHumanListener, true)
+	}
+	if d.herdrListener != nil {
+		go d.acceptHerdrLoop(d.herdrListener)
 	}
 	go d.cleanupLoop()
 	go d.stallMonitor()
@@ -1065,6 +1084,11 @@ func (d *Daemon) shutdown() error {
 		if d.linkHumanListener != nil {
 			_ = d.linkHumanListener.Close()
 			_ = os.Remove(LinkHumanSocketPath(d.manager.SocketPath()))
+		}
+		if d.herdrListener != nil {
+			d.manager.SetHerdrSocket("")
+			_ = d.herdrListener.Close()
+			_ = os.Remove(HerdrSocketPath(d.manager.SocketPath()))
 		}
 
 		// Closing the watcher ends its goroutine and returns every inotify watch

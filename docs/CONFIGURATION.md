@@ -125,7 +125,7 @@ hold_seconds = 120
 ```
 
 `enabled` names the harnesses, by id or alias: `claude-code` (or `claude`),
-`opencode` and `kilo` have a decision channel tuios can answer through. Other
+`opencode`, `kilo` and `qwen` have a decision channel tuios can answer through. Other
 names are accepted and hold nothing. Even for these, only a call the Inbox can
 show whole on one line is held, such as a short shell command or a file read;
 an edit, an MCP tool or a long command is answered in the pane.
@@ -137,9 +137,34 @@ change applies to the next prompt. Like `[dock]` and `[hosts]`, it is not in
 `list-options` and `set-option` cannot change it. Turning it on gives no
 program the power to answer: only you, at an attached client, can. It also
 needs version 2 of the integration:
-run `tuios integration install claude-code` (or `opencode`, `kilo`) again after
-upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
+run `tuios integration install claude-code` (or `opencode`, `kilo`, `qwen`)
+again after upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
 a prompt is held, answered and handed back.
+
+## Harnesses that report to herdr
+
+Crush reports its state natively to herdr, another multiplexer, when it finds
+herdr's environment in its pane. tuios accepts the same reports on a socket of
+its own, `<daemon socket>.herdr`, and `herdr_protocol` in `[agents]` says which
+panes are told about it:
+
+```toml
+[agents]
+herdr_protocol = "agents"   # agents (default), always, off
+```
+
+`agents` tells a pane that starts such a harness directly, as `tuios
+new-window NAME crush`, `start-agent crush` or `fan --agent crush` do. `always` tells
+every pane, so a Crush started from a shell prompt reports too. `off` tells
+none. A pane that is told gets `HERDR_ENV=1`, `HERDR_SOCKET_PATH` naming
+tuios's socket and `HERDR_PANE_ID` naming the pane, so anything that checks
+`HERDR_ENV` reads it as a herdr pane: herdr itself refuses to start inside one
+unless its `experimental.allow_nested` setting is on, and herdr's own hook scripts report to
+tuios from there. That is why `always` is not the default. An unknown value
+reads as `agents`, with a warning. The daemon reads it when it starts and again
+when the file changes; a change applies to the next pane.
+[AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
+accepted.
 
 ## Plans, risk rules, the recap and the queue
 
