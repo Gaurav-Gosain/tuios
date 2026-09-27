@@ -2175,12 +2175,19 @@ status` and `tuios doctor agents` say which each one is.
 | Hermes Agent | session | a plugin in `plugins/tuios-agent-state/` under `~/.hermes` (or `$HERMES_HOME`), and `tuios-agent-state` in `plugins.enabled` in its `config.yaml` | herdr's Hermes plugin |
 | Qoder CLI | session | `hooks` in `~/.qoder/settings.json` (or `$QODER_CONFIG_DIR`) | [hooks](https://docs.qoder.com/zh/cli/hooks) |
 
-Four recognised harnesses have no integration, and `tuios doctor agents` names
+Five recognised harnesses have no integration, and `tuios doctor agents` names
 them with the reason: aider (its one hook, `notifications-command`, replaces the
 user's own and carries nothing), Cline (one executable per event in a directory
-that has moved between releases, behind a setting), Kiro (no documented
+that has moved between releases, behind a setting), goose (its hooks have no
+event for a prompt that waits on you, goose issue 12007, and a `working` report
+from a hook would outrank the screen that shows one), Kiro (no documented
 user-wide hook location or payload) and maki (Lua plugins loaded from the user's
-own `init.lua`). Their state comes from their manifests.
+own `init.lua`). Their state comes from their manifests. goose's manifest reads
+its tool approval prompt, any other open prompt and its spinner; it has no idle
+rule, since its idle prompt has not been measured. Only a `goose` installed
+where goose's own installers put it (`~/.local/bin`, or Homebrew's
+`block-goose-cli`) is recognised, because Homebrew's `goose` is a database
+migration tool.
 
 Qwen Code reads a command hook's `timeout` of 1000 or more as milliseconds and
 a smaller one as seconds, where older releases read every value as

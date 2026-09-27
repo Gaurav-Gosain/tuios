@@ -450,6 +450,7 @@ func UnsupportedHarnesses() []Unsupported {
 	return []Unsupported{
 		{"aider", "its only hook is notifications-command, one command that replaces the user's own and carries no payload"},
 		{"cline", "its hooks are one executable per event in a directory that has moved between releases, behind a setting, and a file tuios wrote would take the name of the user's own"},
+		{"goose", "its hooks have no event for a prompt that waits on the person (goose issue 12007), and a working report from a hook would outrank the screen that shows one"},
 		{"kiro", "its CLI hooks live in per-agent files with no documented user-wide location or payload"},
 		{"maki", "it has Lua plugins but no documented user-wide plugin file tuios could own without editing the user's init.lua"},
 	}

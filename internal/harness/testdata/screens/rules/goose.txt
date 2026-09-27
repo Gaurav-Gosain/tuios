@@ -1,0 +1,64 @@
+# harness: goose
+# want: needs_input
+# how: derived. prompt_tool_confirmation in crates/goose-cli/src/session/mod.rs,
+# drawn the way cliclack draws an open select.
+---
+─── shell | developer ──────────────────────────
+command: rm -rf build
+
+◆  Goose would like to call the above tool, do you allow?
+│  ● Allow (Allow the tool call once)
+│  ○ Always Allow
+│  ○ Deny
+│  ○ Cancel
+└
+=====
+# harness: goose
+# want: needs_input
+# how: derived. The same prompt when goose gives a reason for asking.
+---
+Reason: the command deletes files outside the project.
+
+◆  Do you allow this tool call?
+│  ● Allow (Allow the tool call once)
+│  ○ Deny
+│  ○ Cancel
+└
+=====
+# harness: goose
+# want: needs_input
+# how: derived. An MCP elicitation drawn as a cliclack confirm
+# (crates/goose-cli/src/session/elicitation.rs).
+---
+The deploy extension needs an answer.
+◆  Deploy to production?
+│  ● Yes / ○ No
+└
+=====
+# harness: goose
+# want: working
+# how: derived. ThinkingIndicator in crates/goose-cli/src/session/output.rs.
+---
+◇  Goose would like to call the above tool, do you allow?
+│  Allow
+◒  Pondering the options...  (Ctrl+C to interrupt)
+=====
+# harness: goose
+# want: none
+# how: derived. read_paste_aware_input in crates/goose-cli/src/session/paste.rs
+# reads the next message after "> ". No rule reads it as idle.
+---
+The build passes now.
+
+>
+=====
+# harness: goose
+# want: none
+# how: derived. An answered prompt left above tool output: ◇, not ◆, so it is
+# not read as waiting.
+---
+◇  Goose would like to call the above tool, do you allow?
+│  Allow
+─── shell | developer ──────────────────────────
+command: go test ./...
+ok  	example.com/app	0.412s
