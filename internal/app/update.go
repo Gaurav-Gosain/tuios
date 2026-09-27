@@ -296,6 +296,12 @@ func (m *OS) Init() tea.Cmd {
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
+	// Ask the terminal for its own colours where the startup probe could not,
+	// and follow its light and dark switch. See host_colors.go.
+	if cmd := m.hostColorQueries(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// The dock's components. Everything that used to hold the maintenance tick
 	// at the normal frame rate for a clock is here instead, on its own deadline.
 	if cmd := m.InitDockComponents(); cmd != nil {
@@ -762,6 +768,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// Any non-tick message invalidates the render cache
 	if _, isTick := msg.(TickerMsg); !isTick {
 		m.renderSkipped = false
+	}
+
+	// The host terminal's answers about its own colours. See host_colors.go.
+	if c, ok := m.handleHostColorMsg(msg); ok {
+		return m, c
 	}
 
 	switch msg := msg.(type) {

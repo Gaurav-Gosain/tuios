@@ -482,7 +482,7 @@ func (m *OS) copyFlashTint() color.Color {
 	if c := m.Settings.CopyFlashColor; c != "" {
 		return lipgloss.Color(c)
 	}
-	return overlay.Tone(theme.TerminalBg(), copyFlashLift)
+	return overlay.Tone(m.terminalBg(), copyFlashLift)
 }
 
 // copyFlashLift is how far the ground is carried, as a contrast ratio. The

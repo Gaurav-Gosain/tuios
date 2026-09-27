@@ -217,6 +217,15 @@ func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color) {
 	t.reportFg, t.reportBg = fg, bg
 }
 
+// SetReportPalette mirrors the pure emulator: what an OSC 4 query for one of
+// the sixteen ANSI slots is answered with while neither the guest nor a theme
+// has set the slot.
+func (t *GhosttyTerminal) SetReportPalette(pal [16]color.Color) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.reportPal = pal
+}
+
 func (t *GhosttyTerminal) refreshPaletteClaimsLocked() {
 	t.paletteClaimed = false
 	for i := range 16 {
@@ -277,6 +286,9 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 		arg := string(parts[2])
 		if arg == "?" {
 			c := t.paletteEntryLocked(idx)
+			if c == nil && idx < 16 {
+				c = t.reportPal[idx]
+			}
 			if c == nil {
 				c = ansi.IndexedColor(uint8(idx)) //nolint:gosec // parsePaletteIndex bounds it
 			}

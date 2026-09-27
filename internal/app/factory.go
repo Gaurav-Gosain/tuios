@@ -334,6 +334,12 @@ func NewOS(opts OSOptions) *OS {
 	// Default to BSP layout mode
 	os.UseBSPLayout = true
 
+	// What the startup probe learned about the terminal's own colours, as the
+	// first answer panes and the chrome get. See host_colors.go.
+	if os.asksHostColors() {
+		os.seedHostColors(caps)
+	}
+
 	// Initialize clipboard channel for OSC 52 propagation
 	os.PendingClipboardSet = make(chan string, 1)
 

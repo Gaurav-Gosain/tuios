@@ -64,10 +64,36 @@ OSC 11 and its default text colour with OSC 10, and some pick a dark or light
 palette from the answer. While the pane background paints a colour, a pane's
 OSC 11 is answered with that colour and OSC 10 with the text colour tuios gives
 default text there, so the program sees what it is drawn on. A program that set
-its own colours with OSC 10 or 11 gets its own back. With the pane background
-off the answers are what they always were. In a daemon session the daemon's
-emulator answers, and the client tells it the painted pair when it syncs; with
-several clients attached, the last one to sync decides.
+its own colours with OSC 10 or 11 gets its own back. With a theme on and the
+pane background off, the answers are the theme's colours. With no theme and the
+pane background off, the answers are the host terminal's own: tuios asks the
+terminal it runs in for its background, its text colour and its sixteen ANSI
+colours when it starts or attaches, and tells panes those, so a program on a
+light terminal picks its light palette. OSC 4 queries for the sixteen are
+answered the same way. Each client asks its own terminal, so an SSH or browser
+client on a light terminal and a local one on a dark terminal each get the
+right answer for the session while they are the one typing. In a daemon
+session the daemon's emulator answers, and the client tells it what to answer
+when it syncs; with several clients attached, the last one to sync decides.
+
+With no theme the chrome is drawn for the host's background too: on a light
+terminal the rail, the dock and the unfocused pane borders use the light
+chrome ramp a light theme gets, measured against the terminal's own colour.
+
+**Following light and dark.** A local client turns on mode 2031, and a terminal
+that supports it (ghostty, kitty, contour and others) then tells tuios when the
+system appearance switches between light and dark. tuios asks for the colours
+again, tells panes, and redraws the chrome for the new background. The light
+and dark verdict has hysteresis: a dark verdict turns light only above an 8-bit
+luminance of 140, and a light one turns dark only below 110, so a mid grey
+background does not flip the chrome back and forth. SSH and browser clients
+ask once when they attach and do not follow the switch, because only the local
+client turns the mode off again on exit.
+
+**Terminals that do not answer.** A terminal that answers no colour query,
+such as mosh, leaves everything as it was: panes are told the emulator's
+defaults (a black background and white text) and the chrome uses its dark ramp.
+Set a theme, or `pane_background`, to give panes a real answer there.
 
 All six hot-reload and are on the **Backgrounds** tab of the settings page
 (`Ctrl+B ,`, then `]`): an All surfaces row and one row per surface, each a

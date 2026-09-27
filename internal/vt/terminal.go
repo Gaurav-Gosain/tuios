@@ -93,6 +93,12 @@ type Terminal interface {
 	// drawn on, when that is not the default. A nil colour keeps the default
 	// answer. Nothing is drawn differently; it only changes the answer.
 	SetReportColors(fg, bg color.Color)
+	// SetReportPalette sets what an OSC 4 query for one of the sixteen ANSI
+	// slots is answered with while neither the guest nor a theme has set that
+	// slot: the host terminal's own colour, when tuios knows it. A nil entry
+	// keeps the default answer. Like SetReportColors it changes only the
+	// answer; the slot is still drawn by the host.
+	SetReportPalette(pal [16]color.Color)
 	PaletteColor(i int) color.Color
 	IndexedColor(i int) color.Color
 

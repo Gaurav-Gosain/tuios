@@ -293,12 +293,17 @@ func buildUI(d overlay.Depth) overlay.Palette {
 // ground this is UI unchanged, and so it is at 16 colours, where the ground is
 // the terminal's own whatever it is.
 func GroundUI() overlay.Palette {
-	p := UI()
-	if p.Depth == overlay.Depth16 {
-		return p
-	}
 	ground := RailGround()
-	if !groundIsLight(ground) {
+	return GroundUIOn(ground, GroundIsLight(ground))
+}
+
+// GroundUIOn is GroundUI for a ground the caller knows: the host terminal's
+// own background, which only a client can ask for and which differs between
+// the clients of one process. light is the caller's verdict on the ground,
+// so a client that holds its verdict with hysteresis keeps it here too.
+func GroundUIOn(ground color.Color, light bool) overlay.Palette {
+	p := UI()
+	if p.Depth == overlay.Depth16 || !light || ground == nil {
 		return p
 	}
 	if c := CurrentChrome(); c != nil && c.Surface != nil {
@@ -321,8 +326,8 @@ func GroundUI() overlay.Palette {
 	return p
 }
 
-// groundIsLight reports whether dark ink reads better on ground than light.
-func groundIsLight(ground color.Color) bool {
+// GroundIsLight reports whether dark ink reads better on ground than light.
+func GroundIsLight(ground color.Color) bool {
 	return overlay.ContrastRatio(ground, color.Black) > overlay.ContrastRatio(ground, color.White)
 }
 

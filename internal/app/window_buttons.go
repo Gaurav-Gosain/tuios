@@ -230,7 +230,7 @@ func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []wind
 // on the disc's own colour, so the cell keeps the shape and weight it had while
 // idle and the pill cannot change width under the pointer.
 func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling bool) []windowButtonPiece {
-	ground := theme.TerminalBg()
+	ground := m.terminalBg()
 	gap := lipgloss.NewStyle().Foreground(col).Render(" ")
 	hovered := m.windowButtonHover == window.ID
 

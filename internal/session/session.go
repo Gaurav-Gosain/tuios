@@ -504,6 +504,14 @@ type SessionState struct {
 	// wins, as it does for the rest of what a client owns here.
 	PaneReportBg string `json:"pane_report_bg,omitempty"`
 	PaneReportFg string `json:"pane_report_fg,omitempty"`
+	// PaneReportPalette is the pushing client's host terminal's own sixteen
+	// ANSI colours, as sixteen comma-separated #rrggbb entries with an empty
+	// entry for a slot the host did not answer for. The daemon's emulators
+	// answer a program's OSC 4 query for a slot nothing else has set with it.
+	// Empty keeps the emulator's own answers, which is what an older client
+	// gets. A string rather than a list, so there is nothing to bound: the
+	// daemon reads the first sixteen well-formed entries and ignores the rest.
+	PaneReportPalette string `json:"pane_report_palette,omitempty"`
 	// PaneGeometry is the session's agreed intra-box layout arithmetic: the
 	// inputs that decide how the panes' box is partitioned and how much of each
 	// rectangle a guest may draw in. See PaneGeometryState for why it is session
@@ -886,6 +894,10 @@ type Session struct {
 	// they change cannot miss them. See applyReportColors.
 	reportBgHex, reportFgHex string
 	reportBg, reportFg       color.Color
+	// reportPalHex and reportPal are the host's sixteen, the same way, for
+	// OSC 4.
+	reportPalHex string
+	reportPal    [16]color.Color
 
 	// The last directory read out of each PTY's process, and when. See
 	// liveCwds: GetState is on the render path and reading a process
@@ -1526,6 +1538,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// Before the goroutines start, so the emulator needs no lock yet.
 	if s.reportBg != nil || s.reportFg != nil {
 		terminal.SetReportColors(s.reportFg, s.reportBg)
+	}
+	if s.reportPalHex != "" {
+		terminal.SetReportPalette(s.reportPal)
 	}
 	s.ptys[id] = pty
 

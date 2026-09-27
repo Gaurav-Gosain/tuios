@@ -171,18 +171,18 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			// The mode colour outranks the session's. This border says the keys
 			// are going into the guest, which is the more urgent fact and the
 			// one a person checks before typing.
-			borderColorObj = theme.BorderFocusedTerminal()
+			borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 		case isFocused && tinted:
 			borderColorObj = tint
 		case isFocused:
-			borderColorObj = theme.BorderFocusedWindow()
+			borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
 		case isMultifocused:
 			// Multifocused windows get a distinct border color (yellow/orange)
 			borderColorObj = theme.BorderMultifocus()
 		case tinted:
 			borderColorObj = quietTint
 		default:
-			borderColorObj = theme.BorderUnfocused()
+			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
 		}
 
 		// Effective z-index, computed once so the cached and freshly-rendered
@@ -779,11 +779,11 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	var borderColorObj color.Color
 	switch {
 	case isFocused && m.Mode == TerminalMode:
-		borderColorObj = theme.BorderFocusedTerminal()
+		borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 	case isFocused:
-		borderColorObj = theme.BorderFocusedWindow()
+		borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
 	default:
-		borderColorObj = theme.BorderUnfocused()
+		borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
 	}
 
 	windowIndex := -1

@@ -27,9 +27,12 @@ import (
 // RailGround is what the rail's rows are drawn on.
 //
 // The rail paints no fill of its own, so a row sits on whatever the terminal's
-// background is, which is the theme's when a theme is on. Without a theme tuios
-// paints nothing and cannot ask, so the ground is the chrome ramp's own canvas,
-// which is what every constant ink in the rail was picked against.
+// background is, which is the theme's when a theme is on. Without a theme the
+// ground is the host terminal's own background, which only a client knows (a
+// server process has several, one per client), so a client that has asked
+// passes it to GroundUIOn and RailRuleOn itself. This package on its own falls
+// back to the chrome ramp's canvas, which is what every constant ink in the
+// rail was picked against.
 func RailGround() color.Color {
 	if t := Current(); t != nil {
 		return t.Bg

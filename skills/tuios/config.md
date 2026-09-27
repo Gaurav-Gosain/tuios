@@ -179,7 +179,11 @@ and empty follows it. A colour a program or the chrome set itself always wins,
 so a border keeps its ink. `theme` with no theme set paints nothing. A colour
 literal with no theme keeps the terminal's own text colour, so pick one that
 reads under it. While panes are painted, a program's OSC 11 and OSC 10 queries
-are answered with the painted colours.
+are answered with the painted colours. With no theme and nothing painted,
+OSC 10, OSC 11 and OSC 4 for the sixteen are answered with the host
+terminal's own colours, which the attached client asks its terminal for, so a
+pane on a light terminal is told it is light. A terminal that answers no colour
+query (mosh) leaves the defaults: black and white.
 
 ## The dock's components
 

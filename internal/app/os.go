@@ -442,6 +442,10 @@ type OS struct {
 	// pane or chrome background is on. See background.go.
 	groundCache      [surfaceCount]groundMemo
 	paneContentRects map[string]image.Rectangle
+	// host is what this client's terminal said about its own colours, and
+	// paneReport the answer panes are given from it. See host_colors.go.
+	host       hostColors
+	paneReport paneReportMemo
 	// fastPaint is the buffer the fullscreen fast path paints its frame into
 	// while a background it draws is on. See background_fast.go.
 	fastPaint fastPainter
