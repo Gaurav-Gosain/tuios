@@ -70,6 +70,9 @@ type Emulator struct {
 	// SetReportColors.
 	reportFg, reportBg color.Color
 	guestFg, guestBg   bool
+	// reportPal answers an OSC 4 query for a slot nothing else has set. See
+	// SetReportPalette.
+	reportPal [16]color.Color
 
 	// Terminal modes. Written only by the PTY reader goroutine (via setMode,
 	// RestoreModes, resetModes) but read from the input/render goroutine
@@ -1324,6 +1327,23 @@ func (e *Emulator) SetDefaultBackgroundColor(c color.Color) {
 // while the guest has not set its own. A nil colour keeps the default answer.
 func (e *Emulator) SetReportColors(fg, bg color.Color) {
 	e.reportFg, e.reportBg = fg, bg
+}
+
+// SetReportPalette sets the colours an OSC 4 query for one of the sixteen
+// ANSI slots is answered with while neither the guest nor a theme has set the
+// slot. A nil entry keeps the default answer.
+func (e *Emulator) SetReportPalette(pal [16]color.Color) {
+	e.reportPal = pal
+}
+
+// reportedIndexedColor is the answer to an OSC 4 query: the guest's or the
+// theme's colour for the slot when one is set, the reported colour when there
+// is one, and the xterm default otherwise.
+func (e *Emulator) reportedIndexedColor(i int) color.Color {
+	if i >= 0 && i < 16 && e.paletteEntry(i) == nil && e.reportPal[i] != nil {
+		return e.reportPal[i]
+	}
+	return e.IndexedColor(i)
 }
 
 // reportedForeground is the answer to an OSC 10 query: the guest's own colour

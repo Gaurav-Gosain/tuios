@@ -285,7 +285,7 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 	arg := string(parts[2])
 	if arg == "?" {
 		// Query: respond with current color
-		c := e.IndexedColor(idx)
+		c := e.reportedIndexedColor(idx)
 		if c != nil {
 			var xrgb ansi.XRGBColor
 			xrgb.Color = c
