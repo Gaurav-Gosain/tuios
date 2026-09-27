@@ -741,6 +741,16 @@ type PTY struct {
 	cellWidth  int
 	cellHeight int
 
+	// The window size writes are coalesced; see pty_winsize.go. spawnedAt is
+	// set once at creation. The rest is guarded by winsizeMu, except
+	// winsizeHeld, which is also read without it on the input path.
+	spawnedAt             time.Time
+	winsizeWritten        time.Time
+	winsizeHeld           atomic.Bool
+	heldWidth, heldHeight int
+	winsizeTimer          *time.Timer
+	winsizeClosed         bool
+
 	// vtSeq is the stream position the emulator has consumed, guarded by
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
@@ -1441,6 +1451,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		onExit:       onExit,
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
+		spawnedAt:    time.Now(),
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -2677,6 +2688,7 @@ func (p *PTY) Write(data []byte) (int, error) {
 	if p.pty == nil {
 		return 0, fmt.Errorf("PTY not available")
 	}
+	p.flushWinsize()
 	return p.pty.Write(data)
 }
 
@@ -2717,12 +2729,15 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 		return nil
 	}
 	p.cellWidth, p.cellHeight = cellWidth, cellHeight
-	ws, ok := p.pty.(ptyspawn.WinsizeSetter)
-	if !ok {
+	if _, ok := p.pty.(ptyspawn.WinsizeSetter); !ok {
+		return nil
+	}
+	// A size already held is written with the new pixels when it is due.
+	if p.winsizeHeld.Load() {
 		return nil
 	}
 	width, height := p.Size()
-	return ws.SetWinsize(width, height, width*cellWidth, height*cellHeight)
+	return p.setWinsizeLocked(width, height)
 }
 
 // Resize changes the PTY and terminal emulator size.
@@ -2791,15 +2806,13 @@ func (p *PTY) Resize(width, height int) error {
 		}
 	}
 
-	// The real PTY is resized now regardless, so the guest gets its SIGWINCH
-	// without waiting for the emulator to catch up with the backlog. The
-	// pixel size goes in the same ioctl: see ptyspawn.SetWinsize.
-	if p.pty != nil {
-		p.winsizeMu.Lock()
-		defer p.winsizeMu.Unlock()
-		return ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
-	}
-	return nil
+	// The real PTY is resized without waiting for the emulator to catch up
+	// with the backlog. The pixel size goes in the same ioctl: see
+	// ptyspawn.SetWinsize. A resize inside a burst is held and written with
+	// the burst's last size: see pty_winsize.go.
+	p.winsizeMu.Lock()
+	defer p.winsizeMu.Unlock()
+	return p.setWinsizeLocked(width, height)
 }
 
 // DefaultStateScrollback is how many scrollback lines a state request carries
@@ -3650,6 +3663,9 @@ func (p *PTY) Close() error {
 	if p.terminal != nil {
 		_ = p.terminal.Close()
 	}
+
+	// No held window size may be written once the descriptor is closed.
+	p.closeWinsize()
 
 	// Close PTY. This unblocks readOutput's pending Read, which then closes
 	// vtWriteChan so vtWriter exits.
