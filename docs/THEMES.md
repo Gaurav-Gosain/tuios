@@ -238,6 +238,22 @@ the same theme to see the theme's colours. A theme's `chrome` colours are RGB
 and have no slot, so at 16 colours they give way to the slots their roles
 derive from.
 
+A colour stepped down to 256 goes to the palette entry nearest it in OKLab, and
+a colour with almost no chroma to the grey ramp. Saturated colours never land
+on a grey: a theme's red stays red.
+
+**The review diff.** The diff in the review overlay is designed per depth too,
+so added and removed lines stay distinct without the `+` and `-` column:
+
+| Depth | Added and removed lines | Changed words | Cursor row |
+|---|---|---|---|
+| truecolor | Tints of the theme's green and red mixed into the pane's ground | A stronger tint of the same colour | The accent mixed into the row |
+| 256 | Fixed palette entries: 22 and 52 on a dark ground, 194 and 224 on a light one (the ones Codex uses) | One step brighter: 28 and 88 on dark, 157 and 217 on light | The line number column takes the accent; an added or removed line keeps its colour |
+| 16 | No line grounds. The line numbers and the sign are green for an added line and red for a removed one | Bold and underlined | Reverse video on the line numbers only, so the code keeps its colours and marks |
+
+Light or dark at 256 colours follows the ground the review is drawn on: the
+pane background, the theme's background, or the chrome's surface.
+
 **mosh.** mosh 1.4 and later pass 24-bit colour through, but mosh does not
 forward `COLORTERM`, so tuios over mosh sees 256 colours. If your terminal has
 truecolor, set it on the remote side:

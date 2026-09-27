@@ -2180,3 +2180,30 @@ six colours, one memo per pane render):
 
 The last row is why the memo is there: without it the perceptual blend would
 cost four times the old one.
+
+## 2026-09 review diff per colour depth
+
+Measured the same way as the section above: the test binaries of wave1/colors
+and of this change run alternately, six rounds, on the shared M3 Pro.
+
+The diff theme is built once per ground and depth, as before. At 256 colours
+its grounds are fixed palette entries and at 16 there are none, so a frame
+writes shorter sequences. `BenchmarkReviewFrameDepth` (new; the review of
+`BenchmarkReviewFrame` at each depth, first frame and cached frame):
+
+| Case | Bytes before | Bytes after | Allocations |
+|---|---|---|---|
+| truecolor unified, cached | 823 KiB | 823 KiB | 7,556, unchanged |
+| truecolor split, cached | 1,021 KiB | 1,021 KiB | 8,948, unchanged |
+| 256 unified, cached | 771 KiB | 665 KiB | -2.4% |
+| 256 split, cached | 996 KiB | 843 KiB | -1.5% |
+| 16 unified, cached | 690 KiB | 527 KiB | -4.5% |
+| 16 split, cached | 911 KiB | 628 KiB | -4.4% |
+
+Time showed no significant change in any row (p > 0.05; the machine was under
+a load average of 10 to 40, so the spread was 30 to 170%).
+
+`overlay.To256` places a chromatic colour by a linear search of the 240
+non-slot palette entries in OKLab, about a microsecond. It runs when a palette
+or a diff theme is built, which are memoised, and not per cell;
+`BenchmarkDimUnfocusedRuns` does not change.
