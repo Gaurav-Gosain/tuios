@@ -684,3 +684,70 @@ exec cat
 	log.save(t)
 	alive(t, term, "after the Codex notification")
 }
+
+// TestGooseIsRecognisedWhereItsInstallerPutsIt starts a stand-in for goose's
+// CLI from ~/.local/bin, where goose's installer puts it, drawing goose's
+// tool approval prompt. The detector names the pane goose and its screen
+// rules read the prompt as needs_input, then the spinner as working once the
+// prompt is answered. The same binary installed as a Go tool, where pressly's
+// migration tool of the same name lives, is not taken for an agent at all.
+//
+// Negative controls: with the goose manifest taken out of the bundle, the
+// pane is never named goose and the first wait fails. With goose back in the
+// detector's list of bare agent names, the Go tool reads as an unnamed agent
+// that is working, and the last check fails.
+func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
+	t.Setenv("TUIOS_AGENT_DETECT_SECONDS", "1")
+	term, base := agentSessions(t)
+	log := &stateLog{name: "goose-manifest"}
+	root := t.TempDir()
+	installed := filepath.Join(root, "home", ".local", "bin", "goose")
+	elsewhere := filepath.Join(root, "go", "bin", "goose")
+	for _, bin := range []string{installed, elsewhere} {
+		build := exec.Command("go", "build", "-o", bin, "./testdata/fakegoose")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build fakegoose: %v\n%s", err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "goose", "-s", "e2e-agent", "--no-focus", "--", installed); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	win := windowID(t, base, "e2e-agent", "goose")
+	waitCapture(t, base, "e2e-agent", "goose", "fake goose started")
+	waitAgentState(t, base, "e2e-agent", win, "working", "goose", log, "recognised")
+	// The prompt comes after goose has started, as a tool call does.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, "ask\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "goose", log, "approval prompt on screen")
+	if st.Source != "screen" {
+		t.Errorf("the block came from %s, want the screen rules", st.Source)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, "y\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitAgentState(t, base, "e2e-agent", win, "working", "goose", log, "answered, spinner on screen")
+
+	if out, err := tuiosCLI(t, base, "new-window", "migrate", "-s", "e2e-agent", "--no-focus", "--", elsewhere); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	other := windowID(t, base, "e2e-agent", "migrate")
+	waitCapture(t, base, "e2e-agent", "migrate", "fake goose started")
+	time.Sleep(2 * time.Second)
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", other, "ask\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitCapture(t, base, "e2e-agent", "migrate", "Goose would like to call the above tool")
+	// Several detector ticks, and long enough for the screen rules to have
+	// read the same prompt had the pane been goose.
+	time.Sleep(4 * time.Second)
+	st = readAgentState(t, base, "e2e-agent", other)
+	if st.Harness == "goose" || st.State != "none" {
+		log.save(t)
+		t.Fatalf("a goose outside goose's install locations was taken for the agent: %+v", st)
+	}
+	log.add("%-44s not goose (state=%s source=%s harness=%q)", "the same binary under go/bin", st.State, st.Source, st.Harness)
+	log.save(t)
+	saveFrame(t, term, "goose-manifest")
+	alive(t, term, "after the goose panes")
+}

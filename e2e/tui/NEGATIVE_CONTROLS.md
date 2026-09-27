@@ -166,6 +166,8 @@ a working negative control look like a broken one for half an hour.
 | A Crush pane was not told where tuios accepts herdr's protocol, so Crush reported nothing | n/a, injected | the `HerdrEnv` call taken out of `buildEnvFor` in `internal/session/session.go` | `TestHerdrProtocolReportsACrushPane` (the stand-in printed NO-HERDR) | **caught** |
 | `herdr_protocol = "always"` did not reach a shell pane | n/a, injected | the always case taken out of `Manager.HerdrEnv` | `TestHerdrProtocolAlwaysTellsShellPanes` (the shell read `HE=unset`) | **caught** |
 | A Codex pane on a host with neither kitty graphics nor sixel was told `TERM_PROGRAM=TUIOS`, so Codex rang the bell instead of sending OSC 9 | n/a, injected | `TermProgramFor` made to answer `TermProgram`'s name for Codex too | `TestCodexPaneNotificationsArrive` (the stand-in saw `TUIOS`) | **caught** |
+| goose had no manifest, so its pane was never named and its prompts never read | n/a, injected | `internal/harness/manifests/goose.toml` removed | `TestGooseIsRecognisedWhereItsInstallerPutsIt` (the pane stayed `none`) | **caught** |
+| Any binary named goose, pressly's migration tool included, was taken for an agent | n/a, injected | `goose` put back in `defaultAgentBinaries` | `TestGooseIsRecognisedWhereItsInstallerPutsIt` (the Go tool read as an unnamed agent, `working`) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
