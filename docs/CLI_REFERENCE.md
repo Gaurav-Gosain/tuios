@@ -3816,6 +3816,23 @@ For best color support, set this to `truecolor`:
 export COLORTERM=truecolor
 ```
 
+Without it, tuios falls back to 256 colours unless `TERM` names a terminal
+known to have 24-bit colour. **Mosh** is the common case: mosh 1.4 and
+later pass 24-bit colour through, but mosh-server sets `TERM=xterm-256color` and does not pass
+`COLORTERM` to the remote shell, so tuios sees a 256 colour terminal. If both
+ends of your mosh connection are 1.4 or later and your local terminal has
+truecolor, set it on the remote host, for example in your shell's startup file:
+
+```bash
+export COLORTERM=truecolor
+```
+
+tuios does not try to detect mosh. mosh-server sets no variable of its own
+that marks it, and the version of the mosh client on the other end, which
+decides whether 24-bit colour survives, is not visible from the server. Mosh
+also answers no colour queries, so with no theme tuios cannot learn the
+terminal's background there; see "Programs that ask" in CONFIGURATION.md.
+
 ---
 
 ## When Something Goes Wrong
