@@ -9,11 +9,11 @@
 # the window reports a mismatch, but the better answer is that it does not
 # happen.
 #
-# Usage: scripts/install.sh [ghostty|pure] [options]
+# Usage: scripts/install.sh [pure|ghostty] [options]
 #
-#   ghostty   link the libghostty-vt emulator (default). Needs zig; the pinned
+#   pure      link the pure Go emulator (default). Needs nothing but go.
+#   ghostty   link the libghostty-vt emulator. Needs zig; the pinned
 #             static library is built on first use and cached in .ghostty-vt/.
-#   pure      link the pure Go emulator. Needs nothing but go.
 #
 #   --prefix DIR    install into DIR (default: $TUIOS_PREFIX, else ~/.local/bin)
 #   --kill-server   stop a running daemon after installing, without asking
@@ -46,7 +46,7 @@ note() {
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 [ -f "$ROOT/go.mod" ] || die "no tuios checkout above $0 (the script builds the tree it lives in)"
 
-backend=ghostty
+backend=pure
 prefix=${TUIOS_PREFIX:-$HOME/.local/bin}
 daemon_action=ask
 

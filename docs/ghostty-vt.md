@@ -21,13 +21,13 @@ agree.
 
 ## Installing a local build
 
-`scripts/install.sh` goes from a checkout to a `tuios` on your PATH. It
-builds the pinned library if that has not happened yet, passes
-`PKG_CONFIG_PATH` itself, and runs from any directory.
+`scripts/install.sh` goes from a checkout to a `tuios` on your PATH, and runs
+from any directory. With `ghostty`, it builds the pinned library if that has
+not happened yet and passes `PKG_CONFIG_PATH` itself.
 
 ```sh
-./scripts/install.sh            # ghostty backend (default)
-./scripts/install.sh pure       # the pure Go emulator
+./scripts/install.sh            # the pure Go emulator (default)
+./scripts/install.sh ghostty    # ghostty backend
 ```
 
 The default destination is `~/.local/bin`; override it with `--prefix DIR`

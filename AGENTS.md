@@ -55,7 +55,7 @@ go test -race ./...
 
 # Run the tests of the ghostty backend. `go build -tags ghostty ./...` compiles
 # it and runs none of its tests, so a change that passes the plain suite can
-# still be wrong on the backend scripts/install.sh builds by default. The
+# still be wrong on the backend `scripts/install.sh ghostty` builds. The
 # ghostty-vt workflow runs every package whose tests link internal/vt; these
 # are the ones that matter most, the renderer in internal/app included.
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \

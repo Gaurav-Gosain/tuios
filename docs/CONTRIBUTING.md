@@ -13,8 +13,8 @@ cd tuios
 go build -o tuios ./cmd/tuios   # pure Go backend, needs only go (1.26+)
 go test ./...
 
-# Or build and install onto your PATH, ghostty backend by default
-# (needs zig; see docs/ghostty-vt.md). `pure` installs the pure Go emulator.
+# Or build and install onto your PATH, pure Go emulator by default.
+# `ghostty` installs the ghostty backend (needs zig; see docs/ghostty-vt.md).
 ./scripts/install.sh
 ```
 

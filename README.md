@@ -299,9 +299,10 @@ go build -o tuios ./cmd/tuios
 ```
 
 To install a local build on your PATH instead, `./scripts/install.sh` builds
-and installs into `~/.local/bin`. It defaults to the
-[ghostty emulator backend](./docs/ghostty-vt.md); `./scripts/install.sh pure`
-installs the pure Go one, and `tuios --version` says which is installed.
+and installs into `~/.local/bin`. It builds the pure Go emulator.
+`./scripts/install.sh ghostty` builds the
+[ghostty emulator backend](./docs/ghostty-vt.md) instead, and `tuios --version`
+says which is installed.
 
 ```bash
 go test ./...              # Run tests
