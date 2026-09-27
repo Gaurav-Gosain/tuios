@@ -167,6 +167,11 @@ func (d DaemonDiagnosis) savedSessionsPhrase() string {
 // likely cause, and the exact command that resolves it. It returns an empty
 // string when the daemon is running, so a caller can use it as a guard.
 func (d DaemonDiagnosis) Explain() string {
+	// The TUIOS_SOCKET refusal already says what failed and what to do, and
+	// no socket was probed, so the generic advice below would be wrong.
+	if _, ok := errors.AsType[*SocketEnvError](d.Err); ok {
+		return d.Err.Error()
+	}
 	switch d.State {
 	case DaemonRunning:
 		return ""

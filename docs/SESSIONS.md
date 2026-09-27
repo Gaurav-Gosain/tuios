@@ -574,6 +574,30 @@ correct: the daemon does not either. Saved session state lives in the state
 directory and does survive, which is why a session can be resurrected after a
 reboot.
 
+### Running a separate daemon
+
+`XDG_RUNTIME_DIR` chooses the daemon every `tuios` command reaches (on Windows,
+`LOCALAPPDATA`). To run a second daemon, for a test or a script, give it its own
+runtime and state directories, so it has its own socket and keeps its own saved
+sessions:
+
+```bash
+export XDG_RUNTIME_DIR=/tmp/scratch/run XDG_STATE_HOME=/tmp/scratch/state
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+tuios new scratch --detach      # starts a daemon at /tmp/scratch/run/tuios/tuios.sock
+tuios ls                        # that daemon's sessions
+tuios kill-server               # stops it
+```
+
+`TUIOS_SOCKET` does not choose a daemon. tuios sets it in every pane to the
+socket of the daemon that runs the pane, so a program can find that daemon, and
+every process started from the pane inherits it. A command that finds
+`TUIOS_SOCKET` naming a different socket where no daemon is listening refuses
+and says what to set, because that is someone expecting it to select a daemon.
+When it names the socket the command uses, or another live daemon (a script in
+a pane that set its own `XDG_RUNTIME_DIR`), the command runs against the daemon
+`XDG_RUNTIME_DIR` names.
+
 ## Limitations
 
 - **Screen contents and scrollback never survive the daemon.** They are held in

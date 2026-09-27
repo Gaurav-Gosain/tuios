@@ -8,10 +8,24 @@ import (
 	"path/filepath"
 )
 
-// GetSocketPath returns the path to the daemon socket.
+// GetSocketPath returns the path to the daemon socket. It refuses when
+// TUIOS_SOCKET names a different socket that no daemon listens on; see
+// socket_env.go.
+func GetSocketPath() (string, error) {
+	path, err := defaultSocketPath()
+	if err != nil {
+		return "", err
+	}
+	if err := checkSocketEnv(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// defaultSocketPath is the daemon socket the environment's directories name.
 // On Windows, we use Unix sockets in the user's local app data directory.
 // Windows 10 build 17063+ supports AF_UNIX sockets.
-func GetSocketPath() (string, error) {
+func defaultSocketPath() (string, error) {
 	// Use LOCALAPPDATA for user-specific data
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {

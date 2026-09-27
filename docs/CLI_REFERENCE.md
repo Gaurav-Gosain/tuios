@@ -3738,6 +3738,20 @@ tuios config edit
 
 **Fallback order:** `$EDITOR` → `$VISUAL` → vim → vi → nano → emacs
 
+### `XDG_RUNTIME_DIR`, and `TUIOS_SOCKET`
+
+`XDG_RUNTIME_DIR` chooses the daemon a command reaches: its socket is
+`$XDG_RUNTIME_DIR/tuios/tuios.sock`, or `/tmp/tuios-<uid>/tuios.sock` when the
+variable is unset (`%LOCALAPPDATA%\tuios\tuios.sock` on Windows). Set it, with
+`XDG_STATE_HOME` for separate saved sessions, to run a separate daemon. See
+[Running a separate daemon](SESSIONS.md#running-a-separate-daemon).
+
+`TUIOS_SOCKET` does not choose the daemon. It is set in every pane to the
+socket of the daemon that runs it. A command refuses when `TUIOS_SOCKET` names a
+different socket with no daemon listening, since that is an attempt to select a
+daemon that would otherwise reach the one `XDG_RUNTIME_DIR` names. `tuios mcp`
+is the one reader: it connects to `TUIOS_SOCKET` when it is set, see below.
+
 ### `TUIOS_NO_DAEMON`
 
 Set to `1` to make a plain `tuios` run a standalone session without the daemon,

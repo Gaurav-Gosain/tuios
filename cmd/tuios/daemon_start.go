@@ -28,6 +28,9 @@ var errDaemonUnreachable = errors.New("no daemon is running and one could not be
 // command that may bring a daemon up funnels through here so the wording, the
 // timeout and the failure explanation cannot drift between them.
 func ensureDaemon() error {
+	if err := session.CheckSocketEnv(); err != nil {
+		return err
+	}
 	if session.IsDaemonRunning() {
 		return nil
 	}

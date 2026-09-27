@@ -9,8 +9,22 @@ import (
 	"syscall"
 )
 
-// GetSocketPath returns the path to the daemon socket.
+// GetSocketPath returns the path to the daemon socket. It refuses when
+// TUIOS_SOCKET names a different socket that no daemon listens on; see
+// socket_env.go.
 func GetSocketPath() (string, error) {
+	path, err := defaultSocketPath()
+	if err != nil {
+		return "", err
+	}
+	if err := checkSocketEnv(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// defaultSocketPath is the daemon socket the environment's directories name.
+func defaultSocketPath() (string, error) {
 	// Use XDG_RUNTIME_DIR if available (preferred for sockets)
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir != "" {
