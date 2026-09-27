@@ -709,10 +709,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
 	replan := m.foreignSessionReplanCmd()
-	if sync == nil && replan == nil && gitSync == nil {
+	// The motion clock: armed here, after whatever the message changed, so an
+	// overlay opened by any of the handlers starts its fade on the frame it
+	// first appears in. See motion.go.
+	motion := m.motionCmd()
+	if sync == nil && replan == nil && gitSync == nil && motion == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync)
+	return model, tea.Batch(cmd, sync, replan, gitSync, motion)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -882,6 +886,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// than riding the maintenance tick, which is what keeps the idle path
 		// untouched while it is merely armed.
 		return m, m.handleScreensaverFrame()
+
+	case motionFrameMsg:
+		m.handleMotionFrame(msg)
+		return m, nil
 
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.

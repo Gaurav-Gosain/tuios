@@ -361,6 +361,9 @@ type OS struct {
 	// rest. Client-local appearance, like ShowKeys: nothing about it crosses
 	// the wire and a peer sees its own screen unchanged. See spotlight.go.
 	spotlight spotlightState
+	// motion is the overlay fade-in, the scrim's shade and the working-row
+	// shimmer, with the clock that drives them. See motion.go.
+	motion motionState
 
 	// shake is the pointer gesture that toggles the beam, when the person
 	// turned it on. Fixed size, no timer, no tick: see shake.go.
