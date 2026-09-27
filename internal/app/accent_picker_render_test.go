@@ -280,6 +280,7 @@ func TestAccentPickerPreviewsOnTheRail(t *testing.T) {
 // fold, and the picker gaining a continuous model and five more controls must
 // not have turned that into an allocation per frame.
 func TestAccentPreviewFoldStaysAllocationFree(t *testing.T) {
+	skipAllocCountsUnderRace(t)
 	m := accentTestOS(t, 120, 30)
 	m.OpenAccentPicker("aaaaaaaa1111")
 	m.AccentPickerSetSlider(accentChanS, 61)

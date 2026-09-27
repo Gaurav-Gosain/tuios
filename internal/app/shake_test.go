@@ -28,6 +28,7 @@ func shakeOS(t *testing.T) *OS {
 // TestTheDetectorAllocatesNothing. It runs on every motion event, and motion
 // arrives one event per cell the pointer crosses.
 func TestTheDetectorAllocatesNothing(t *testing.T) {
+	skipAllocCountsUnderRace(t)
 	m := shakeOS(t)
 	now := time.Now()
 	x := 40

@@ -75,6 +75,7 @@ func spotlightRestore(canvas *lipgloss.Canvas, fg, bg color.Color) {
 // blend cache must still serve the first kind), and one where nothing
 // resolves and every cell goes to SGR 2.
 func TestSpotlightAllocatesNothing(t *testing.T) {
+	skipAllocCountsUnderRace(t)
 	// Boxed once, outside the measurement: an interface parameter taking a
 	// color.RGBA value allocates at every call, which would be counted as the
 	// pass's own.

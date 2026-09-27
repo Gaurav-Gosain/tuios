@@ -166,6 +166,7 @@ func TestPaneBackgroundOnTheFullscreenFastPath(t *testing.T) {
 // The option off has to cost nothing per frame beyond a comparison: no
 // allocation, and no map written.
 func TestPaneBackgroundOffAllocatesNothing(t *testing.T) {
+	skipAllocCountsUnderRace(t)
 	withTheme(t, "catppuccin_mocha")
 	m := paneBgOS(t, config.PaneBackgroundOff)
 	if n := testing.AllocsPerRun(100, func() { _ = m.paneGround() }); n != 0 {

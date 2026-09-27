@@ -207,6 +207,7 @@ func TestFastPathPaintMatchesTheCompositor(t *testing.T) {
 // sequences were formatted when the ground was resolved and the buffer is
 // kept.
 func TestFastPathPaintAllocatesOnlyTheFrame(t *testing.T) {
+	skipAllocCountsUnderRace(t)
 	withTheme(t, "catppuccin_mocha")
 	m, win := fastPathOS(t, "bottom")
 	m.Settings.Background = surfaceHex

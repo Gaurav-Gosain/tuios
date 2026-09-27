@@ -16,10 +16,23 @@ import (
 // counts here are the ones the paths were profiled at, and per-frame
 // allocation was a recurring finding in review.
 
+// skipAllocCountsUnderRace skips a test that asserts an allocation count when
+// the binary was built with -race. There sync.Pool drops a share of what is put
+// back on purpose, so a path that is allocation free through a pool allocates
+// on some calls, and the count varies from run to run. See
+// race_enabled_test.go.
+func skipAllocCountsUnderRace(t *testing.T) {
+	t.Helper()
+	if raceEnabled {
+		t.Skip("allocation counts are not meaningful under -race")
+	}
+}
+
 // allocsAtMost runs fn under testing.AllocsPerRun and fails when it allocates
 // more than limit times per call.
 func allocsAtMost(t *testing.T, name string, limit float64, fn func()) {
 	t.Helper()
+	skipAllocCountsUnderRace(t)
 	// One warm-up call outside the measurement so first-call lazy setup (style
 	// cache fill, builder pool priming) is not charged to the average.
 	fn()
