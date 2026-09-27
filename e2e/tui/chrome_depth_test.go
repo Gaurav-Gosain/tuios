@@ -228,6 +228,7 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 				savePNG(t, s, host, dir, "palette")
 
 				checkRailInk(t, term, look.theme, d.name)
+				checkPillCaps(t, term, s)
 				switch d.name {
 				case "16":
 					check16(t, term, s, p)
@@ -297,6 +298,27 @@ func check256(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, p paletteP
 	}
 	if sel, ground := s.Cell(p.ruleStart, p.selRow).Bg, s.Cell(p.ruleStart, p.searchRow).Bg; sel == ground {
 		t.Fatalf("the selected row's ground %+v is the panel's own\n%s", sel, term.SnapshotStyled())
+	}
+}
+
+// pillCapGlyphs are the rounded ends the dock and the rail draw round a pill.
+var pillCapGlyphs = map[string]bool{"\ue0b6": true, "\ue0b4": true, "◖": true, "◗": true}
+
+// checkPillCaps fails on a pill cap drawn in the terminal's default ink. A cap
+// takes the pill's fill as its ink, so a default ink means the fill had no
+// colour: at 16 colours a workspace pill's fill is the terminal's own ground,
+// and its caps were drawn as white half circles round a label on nothing,
+// which read as brackets.
+func checkPillCaps(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) {
+	t.Helper()
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			c := s.Cell(x, y)
+			if pillCapGlyphs[c.Content] && c.Fg.Kind == tuitest.ColorDefault && !c.Reverse {
+				t.Fatalf("pill cap %q at (%d,%d) is drawn in the default ink, so it has no fill to round off\n%s", c.Content, x, y, term.SnapshotStyled())
+			}
+		}
 	}
 }
 

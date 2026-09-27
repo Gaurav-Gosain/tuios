@@ -74,6 +74,13 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	if lc == "" && rc == "" {
 		return pill
 	}
+	// At 16 colours the fill is the terminal's own ground, so there is no
+	// colour for a cap to take: drawn in the default ink it would read as a
+	// bracket round the label. The caps become blanks of the same width, so
+	// the strip's geometry and its hit boxes do not change with the depth.
+	if overlay.IsNoColor(ground) {
+		return strings.Repeat(" ", lipgloss.Width(lc)) + pill + strings.Repeat(" ", lipgloss.Width(rc))
+	}
 	caps := lipgloss.NewStyle().Foreground(ground)
 	return caps.Render(lc) + pill + caps.Render(rc)
 }
