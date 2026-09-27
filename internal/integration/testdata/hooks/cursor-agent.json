@@ -1,17 +1,57 @@
 [
   {
     "name": "sessionStart",
-    "payload": {"hook_event_name": "sessionStart", "session_id": "cu-1", "cursor_version": "1.7.0", "workspace_roots": ["/src"]},
-    "want": {"session_only": true, "agent_session_id": "cu-1"}
+    "payload": {"hook_event_name": "sessionStart", "session_id": "cu-1", "cursor_version": "1.7.0", "workspace_roots": ["/src"], "is_background_agent": false, "composer_mode": "agent"},
+    "want": {"state": "idle", "agent_session_id": "cu-1"}
   },
   {
     "name": "sessionStart with a conversation id",
     "payload": {"hook_event_name": "sessionStart", "conversation_id": "cu-2"},
-    "want": {"session_only": true, "agent_session_id": "cu-2"}
+    "want": {"state": "idle", "agent_session_id": "cu-2"}
   },
   {
-    "name": "stop is not registered",
-    "payload": {"hook_event_name": "stop", "conversation_id": "cu-2", "status": "completed"},
+    "name": "a background agent's session",
+    "payload": {"hook_event_name": "sessionStart", "session_id": "cu-3", "is_background_agent": true},
+    "skip": "background agent"
+  },
+  {
+    "name": "beforeSubmitPrompt",
+    "payload": {"hook_event_name": "beforeSubmitPrompt", "conversation_id": "cu-1", "generation_id": "g-1", "prompt": "fix the build", "attachments": []},
+    "want": {"state": "working", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "postToolUse",
+    "payload": {"hook_event_name": "postToolUse", "conversation_id": "cu-1", "tool_name": "Shell", "tool_input": {"command": "npm test"}, "tool_output": "{}", "duration": 5432},
+    "want": {"state": "working", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "postToolUseFailure",
+    "payload": {"hook_event_name": "postToolUseFailure", "conversation_id": "cu-1", "tool_name": "Shell", "error_message": "denied", "failure_type": "permission_denied"},
+    "want": {"state": "working", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "stop completed",
+    "payload": {"hook_event_name": "stop", "conversation_id": "cu-1", "status": "completed", "loop_count": 0, "transcript_path": "/tmp/cu-1.txt"},
+    "want": {"state": "done", "agent_session_id": "cu-1", "transcript_path": "/tmp/cu-1.txt"}
+  },
+  {
+    "name": "stop aborted",
+    "payload": {"hook_event_name": "stop", "conversation_id": "cu-1", "status": "aborted", "loop_count": 0},
+    "want": {"state": "idle", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "stop error",
+    "payload": {"hook_event_name": "stop", "conversation_id": "cu-1", "status": "error", "loop_count": 0},
+    "want": {"state": "errored", "message": "the turn ended on an error", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "sessionEnd",
+    "payload": {"hook_event_name": "sessionEnd", "session_id": "cu-1", "reason": "user_close"},
+    "want": {"state": "none", "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "a permission hook tuios never registers",
+    "payload": {"hook_event_name": "beforeShellExecution", "conversation_id": "cu-1", "command": "rm -rf build"},
     "skip": "event not mapped"
   }
 ]

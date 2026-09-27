@@ -21,6 +21,17 @@ import (
 // the second attempt's session.
 func reviewFan(t *testing.T, base, repo, name string) string {
 	t.Helper()
+	second, path := reviewFanAt(t, base, repo, name)
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return second
+}
+
+// reviewFanAt starts the fan reviewFan does and returns the second attempt's
+// session and its worktree, changing nothing in it.
+func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
+	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
 		t.Fatalf("start the daemon: %v: %s", err, out)
 	}
@@ -48,10 +59,7 @@ func reviewFan(t *testing.T, base, repo, name string) string {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return second
+	return second, path
 }
 
 // sendKeys presses keys one after another, a moment apart, as a person types.

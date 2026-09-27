@@ -39,7 +39,7 @@ type reviewLook struct {
 // reviewLook is the overlay's colours for this frame.
 func (m *OS) reviewLook() *reviewLook {
 	g := m.paneGround()
-	key := theme.CurrentThemeID() + "\x00" + g.key
+	key := theme.CurrentThemeID() + "\x00" + g.key + "\x00" + theme.Depth().String()
 	if l := m.review.look; l != nil && l.key == key {
 		return l
 	}
@@ -72,7 +72,12 @@ func newReviewLook(g ground) *reviewLook {
 		}
 	}
 	ground = solidColor(ground)
-	if ground != solidColor(pal.Surface) {
+	switch {
+	case pal.Depth == overlay.Depth16:
+		// At 16 colours every ground is the terminal's own, the pane's
+		// included, so the chrome palette is already the one for it.
+		ground = pal.Surface
+	case ground != solidColor(pal.Surface):
 		pal = reviewPaletteOn(pal, ground, solidColor(fg))
 	}
 	syntax := diffview.DefaultSyntax()
@@ -86,7 +91,11 @@ func newReviewLook(g ground) *reviewLook {
 		syntax = diffview.SyntaxFromANSI(slots)
 	}
 	l := &reviewLook{pal: pal}
+	// The diff theme is built for the depth: tints in truecolor, fixed palette
+	// entries at 256 colours, and at 16, where the ground and ink are the
+	// terminal's own, no grounds at all (see diffview.Theme).
 	l.dv = diffview.NewTheme(diffview.Palette{
+		Depth:  pal.Depth,
 		Ground: ground,
 		Fg:     pal.Fg,
 		Accent: pal.Accent,
@@ -94,8 +103,11 @@ func newReviewLook(g ground) *reviewLook {
 		Delete: pal.Warn,
 		Syntax: syntax,
 	})
-	l.hunkBg = overlay.MixColors(ground, pal.Info, 0.12)
-	l.noteBg = overlay.MixColors(ground, pal.Warning, 0.10)
+	l.hunkBg, l.noteBg = pal.Surface, pal.Surface
+	if pal.Depth != overlay.Depth16 {
+		l.hunkBg = overlay.Shown(overlay.MixColors(ground, pal.Info, 0.12))
+		l.noteBg = overlay.Shown(overlay.MixColors(ground, pal.Warning, 0.10))
+	}
 	return l
 }
 
@@ -117,7 +129,10 @@ func reviewPaletteOn(pal overlay.Palette, ground, fg color.Color) overlay.Palett
 	p.Warning = overlay.Readable(pal.Warning, ground)
 	p.RowSel = overlay.MixColors(ground, pal.Accent, 0.22)
 	p.Card = overlay.MixColors(ground, p.Fg, 0.08)
-	return p
+	// The quiet cursor and the hover are derived again for this ground, and
+	// every ink is measured again on them, by the same rule as the chrome's.
+	p.RowSelQuiet, p.Hover = nil, nil
+	return overlay.Derive(p)
 }
 
 // reviewHighlightChunk is how many lines of a hunk are tokenised at a time.

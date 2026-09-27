@@ -36,25 +36,29 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// Capture mode is a gesture over the whole screen, the review
+		// included, so it is asked first.
+		if o.CaptureActive() {
+			result, cmd = handleCaptureMouseClick(msg, o)
+			break
+		}
 		// The review covers the screen: a click must not land on a pane or
 		// a panel under it.
 		if o.ReviewOpen() {
 			return o, nil
 		}
-		if o.CaptureActive() {
-			result, cmd = handleCaptureMouseClick(msg, o)
-		} else if o.ShowScrollbackBrowser {
+		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseClick(msg, o)
 		} else {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
-		if o.ReviewOpen() {
-			return o, nil
-		}
 		if o.CaptureActive() {
 			// Motion never syncs to the daemon, the same as the browser's.
 			return handleCaptureMouseMotion(msg, o)
+		}
+		if o.ReviewOpen() {
+			return o, nil
 		}
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseMotion(msg, o)
@@ -276,6 +280,18 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleScreenshotPreviewKey(msg, o)
 	}
 
+	// The screenshot chord works over any overlay, which would otherwise take
+	// the leader. See overlay_screenshot.go.
+	if m, cmd, ok := routeOverlayScreenshot(msg, o); ok {
+		return m, cmd
+	}
+	return routeKey(msg, o)
+}
+
+// routeKey sends a key to whatever owns the keyboard: an overlay, the rail, or
+// the mode. It is the part of HandleKeyPress after the gestures that own the
+// whole screen, and the screenshot chord replays a held leader through it.
+func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The close confirmation outranks even the quit menu: it is the last thing
 	// between a keystroke and a session that cannot be brought back, so nothing
 	// underneath may answer for it.

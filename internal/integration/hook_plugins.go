@@ -6,18 +6,26 @@ package integration
 
 // The Amp event map. Amp loads TypeScript plugins from ~/.config/amp/plugins
 // (https://ampcode.com/manual/plugin-api, read for this change). The plugin
-// tuios installs (assets/amp/tuios-agent-state.ts) subscribes to session.start,
-// agent.start and agent.end, and runs `tuios agent-hook amp` with the event,
-// the thread id and agent.end's status. It never subscribes to tool.call,
-// whose handler has to answer allow or reject, so installing it cannot change
-// what Amp permits. Approval prompts are left to the manifest's screen rules,
-// which may override a working report once the prompt is on screen.
+// tuios installs (assets/amp/tuios-agent-state.ts) subscribes to
+// session.start, agent.start, agent.end and tool.result, and runs `tuios
+// agent-hook amp` with the event, the thread id and agent.end's status.
 //
-//	session.start           the thread id only (set-agent-session)
-//	agent.start             working
-//	agent.end done          done
-//	agent.end error         errored
-//	agent.end cancelled     idle (the person stopped the turn)
+// A question Amp asks with its built-in ask_user_choice tool (built in since
+// September 2026, https://ampcode.com/news/neo) is seen at tool.call, whose
+// handler has to answer allow or reject. The plugin API does not say how the
+// answers of several plugins combine, so the plugin subscribes to tool.call
+// only when no Amp permission setting is in force, in which case Amp allows
+// every tool, and no other plugin is installed. Its answer is then always
+// allow, which changes nothing. Otherwise the question and every approval
+// prompt are left to the manifest's screen rules.
+//
+//	session.start               the thread id only (set-agent-session)
+//	agent.start                 working
+//	agent.end done              done
+//	agent.end error             errored
+//	agent.end cancelled         idle (the person stopped the turn)
+//	tool.call ask_user_choice   needs_input, kind question, with the question
+//	tool.result ask_user_choice working, only if the pane is in needs_input
 func translateAmp(in Input, p fields) Decision {
 	event := eventName(in, p)
 	sid := p.str("session_id")
@@ -29,6 +37,20 @@ func translateAmp(in Input, p fields) Decision {
 		return send(Amp, event, Report{SessionOnly: true, SessionID: sid})
 	case "agent.start":
 		return send(Amp, event, Report{State: "working", SessionID: sid})
+	case "tool.call":
+		if p.str("tool") != "ask_user_choice" {
+			return skip(Amp, event, "tool "+p.str("tool")+" is not a question")
+		}
+		msg := Clip(p.str("question"))
+		if msg == "" {
+			msg = "a question"
+		}
+		return send(Amp, event, Report{State: "needs_input", Kind: "question", Message: msg, SessionID: sid})
+	case "tool.result":
+		if p.str("tool") != "ask_user_choice" {
+			return skip(Amp, event, "tool "+p.str("tool")+" is not a question")
+		}
+		return send(Amp, event, Report{State: "working", IfState: claudeClearsBlock, SessionID: sid})
 	case "agent.end":
 		switch p.str("status") {
 		case "done":
@@ -112,14 +134,27 @@ func translateKimi(in Input, p fields) Decision {
 // ~/.pi/agent/extensions (PI_CODING_AGENT_DIR overrides the agent directory).
 // The extension tuios installs (assets/pi/tuios-agent-state.ts) listens to
 // session_start, agent_start and agent_settled, the events herdr's working Pi
-// extension uses (src/integration/assets/pi/herdr-agent-state.ts), and only in
-// the TUI mode, since the print and RPC modes run with no terminal to show.
+// extension uses (src/integration/assets/pi/herdr-agent-state.ts), and to
+// ui_prompt_start and ui_prompt_end, which Pi emits around every blocking
+// prompt an extension shows (packages/coding-agent/src/core/extensions/
+// types.ts and runner.ts in the Pi repository, read for this change). It
+// reports only in the TUI mode, since the print and RPC modes run with no
+// terminal to show.
 //
 //	session_start           idle, or working when Pi is mid-turn (a reload
 //	                        replaces the extension without a new agent_start),
 //	                        with the session id and session file
 //	agent_start             working
 //	agent_settled           done
+//	ui_prompt_start         needs_input: kind approval for a confirm, kind
+//	                        question for a select, input, editor or custom
+//	                        prompt, with the prompt's title
+//	ui_prompt_end           working when a turn is running, idle when not,
+//	                        only if the pane is in needs_input
+//
+// A prompt outside a turn (an extension command run at rest) also blocks Pi,
+// so it is reported the same way; its end goes back to idle, not working,
+// because the extension says whether Pi is idle.
 func translatePi(in Input, p fields) Decision {
 	event := eventName(in, p)
 	r := Report{SessionID: p.str("session_id")}
@@ -134,6 +169,20 @@ func translatePi(in Input, p fields) Decision {
 		r.State = "working"
 	case "agent_settled":
 		r.State = "done"
+	case "ui_prompt_start":
+		r.State, r.Kind = "needs_input", "question"
+		if p.str("kind") == "confirm" {
+			r.Kind = "approval"
+		}
+		r.Message = Clip(p.str("title"))
+		if r.Message == "" {
+			r.Message = "waits for an answer"
+		}
+	case "ui_prompt_end":
+		r.State, r.IfState = "idle", claudeClearsBlock
+		if busy, _ := p["busy"].(bool); busy {
+			r.State = "working"
+		}
 	case "":
 		return skip(Pi, event, "the payload names no event")
 	default:

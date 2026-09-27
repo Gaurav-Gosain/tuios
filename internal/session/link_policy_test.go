@@ -37,7 +37,7 @@ func TestEveryVerbHasALinkPolicy(t *testing.T) {
 	for _, t2 := range []MessageType{
 		MsgHello, MsgAttach, MsgDetach, MsgNew, MsgList, MsgKill, MsgResurrect, MsgInput, MsgResize,
 		MsgCreatePTY, MsgReadDir, MsgClosePTY, MsgUpdateState, MsgSubscribePTY, MsgUnsubscribePTY,
-		MsgGetTerminalState, MsgExecuteCommand, MsgCommandResult, MsgGetLogs,
+		MsgGetTerminalState, MsgExecuteCommand, MsgCommandResult, MsgGetLogs, MsgClientFocus,
 	} {
 		if _, ok := msgCapabilities[t2]; !ok {
 			t.Errorf("message %d is handled by the daemon and has no link policy", t2)

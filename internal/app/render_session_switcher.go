@@ -45,9 +45,12 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		m.SessionSwitcherSelected = clampInt(m.SessionSwitcherSelected, 0, len(filtered)-1)
 	}
 
-	empty := "No sessions found"
+	// With a query typed, the next thing to do is make the session it names,
+	// so that is the key the empty state offers.
+	empty, emptyHint := "No sessions found", overlay.Hint{}
 	if m.SessionSwitcherQuery != "" {
-		empty = "No match, Enter to create '" + m.SessionSwitcherQuery + "'"
+		empty = "No match for '" + m.SessionSwitcherQuery + "'"
+		emptyHint = overlay.Hint{Key: overlay.EnterGlyph, Label: "create it"}
 	}
 
 	return m.renderListOverlay(listOverlay{
@@ -60,6 +63,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		Selected:   m.SessionSwitcherSelected,
 		Scroll:     &m.SessionSwitcherScroll,
 		EmptyMsg:   empty,
+		EmptyHint:  emptyHint,
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "switch"},
 			{Key: "ctrl+r", Label: "rename"},

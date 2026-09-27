@@ -648,7 +648,7 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	if d.Truncated {
 		dim("cut at the limits")
 	}
-	if r.loading {
+	if r.loading && overlay.ShowLoading(r.loadingSince, time.Now()) {
 		dim("reading")
 	}
 	return segs
@@ -676,13 +676,16 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 			status = e.file.Status
 		}
 		counts := reviewFileCounts(*r, e)
+		// The file under the cursor keeps a quiet ground while the diff has
+		// the keyboard, so the list still says which file the diff is.
+		st := overlay.RowState{Cursor: idx == r.file, Focused: r.listFocus}
 		mark := " "
-		bg := pal.Surface
+		bg := pal.Ground(st, pal.Surface)
 		fg := pal.FgDim
-		if idx == r.file {
+		if st.Cursor {
 			fg = pal.Fg
-			if r.listFocus {
-				mark, bg = overlay.SigilMark(), pal.RowSel
+			if st.Focused {
+				mark = overlay.SigilMark()
 			}
 		}
 		pathW := max(width-4-ansi.StringWidth(counts), 1)
@@ -693,12 +696,12 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 			path = ell + ansi.TruncateLeft(path, ansi.StringWidth(path)-pathW+ansi.StringWidth(ell), "")
 		}
 		pad := max(width-3-ansi.StringWidth(path)-ansi.StringWidth(counts), 1)
-		out[i] = reviewPaint([]reviewSeg{
+		out[i] = pal.Row(reviewPaint([]reviewSeg{
 			{pal.AccentBright, mark, false},
 			{reviewStatusColor(status, pal), status + " ", false},
 			{fg, path + strings.Repeat(" ", pad), idx == r.file},
 			{pal.FgMute, counts, false},
-		}, width, bg)
+		}, width, bg), width, st, pal.Surface)
 	}
 	return out
 }
@@ -790,7 +793,9 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 			continue
 		}
 		sel := idx == r.cursor || (selNote >= 0 && rows[idx].kind == reviewRowNote && rows[idx].note == selNote)
-		out[i] = d.row(rows[idx], sel && !r.listFocus)
+		// The diff's cursor stays on a quiet ground while the file list has
+		// the keyboard, so the place the diff will resume is always shown.
+		out[i] = d.row(rows[idx], overlay.RowState{Cursor: sel, Focused: !r.listFocus})
 	}
 	return out
 }
@@ -805,11 +810,38 @@ type reviewDraw struct {
 	split bool
 }
 
-// row draws one diff row in d.width cells.
-func (d reviewDraw) row(row reviewRow, cursor bool) string {
+// row draws one diff row in d.width cells, in the state st the cursor gives
+// it (see overlay.RowState).
+func (d reviewDraw) row(row reviewRow, st overlay.RowState) string {
+	if row.kind == reviewRowLine {
+		// A line row marks its cursor on the gutter only, so at 16 colours the
+		// code keeps its colours and its changed words under the cursor.
+		return d.rowBody(row, st)
+	}
+	return d.look.pal.Mark(d.rowBody(row, st), st)
+}
+
+// reviewCursorTint is the cursor's ground on a row that has a tint of its own,
+// a hunk header or a note: the accent carried into that tint, half as far for
+// the cursor of the column without the keyboard. At 16 colours the row keeps
+// its ground and the cursor is an attribute (see overlay.Palette.Mark).
+func reviewCursorTint(bg color.Color, pal overlay.Palette, st overlay.RowState) color.Color {
+	if pal.Depth == overlay.Depth16 {
+		return bg
+	}
+	t := 0.24
+	if !st.Focused {
+		t = 0.12
+	}
+	return overlay.Shown(overlay.MixColors(bg, pal.Accent, t))
+}
+
+// rowBody is row before the 16-colour cursor attributes.
+func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	pal, dv := d.look.pal, d.look.dv
+	cursor := st.Cursor
 	mark := " "
-	if cursor && (row.kind != reviewRowNote || row.first) {
+	if cursor && st.Focused && (row.kind != reviewRowNote || row.first) {
 		mark = overlay.SigilMark()
 	}
 	// markCell is the first cell, which holds the cursor's mark on the
@@ -819,7 +851,7 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 	}
 	rowBg := func(bg color.Color) color.Color {
 		if cursor {
-			return pal.RowSel
+			return pal.Ground(st, bg)
 		}
 		return bg
 	}
@@ -831,7 +863,7 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 	case reviewRowHunk:
 		bg := d.look.hunkBg
 		if cursor {
-			bg = overlay.MixColors(bg, pal.Accent, 0.24)
+			bg = reviewCursorTint(bg, pal, st)
 		}
 		head, ctx := reviewSplitHeader(reviewText(d.file.Hunks[row.hunk].Header))
 		return markCell(bg) + reviewPaint([]reviewSeg{
@@ -840,14 +872,14 @@ func (d reviewDraw) row(row reviewRow, cursor bool) string {
 		}, rest, bg)
 	case reviewRowLine:
 		if d.split {
-			return d.splitLine(row, cursor, markCell)
+			return d.splitLine(row, st, markCell)
 		}
-		return d.unifiedLine(row, cursor, markCell)
+		return d.unifiedLine(row, st, markCell)
 	case reviewRowNote, reviewRowEditor:
 		indent := reviewNoteIndent(d.file, d.split)
 		bg := d.look.noteBg
 		if cursor {
-			bg = overlay.MixColors(bg, pal.Accent, 0.24)
+			bg = reviewCursorTint(bg, pal, st)
 		}
 		lead := markCell(dv.GutterBg(diffview.Context, cursor)) + dv.BlankGutter(diffview.Context, cursor, indent-1)
 		if d.file == nil || len(d.file.Hunks) == 0 {
@@ -934,22 +966,28 @@ func (d reviewDraw) scrolled(h, l int) bool {
 }
 
 // unifiedLine draws a line row in one column: both line numbers, the sign,
-// and the code.
-func (d reviewDraw) unifiedLine(row reviewRow, cursor bool, markCell func(color.Color) string) string {
-	dv := d.look.dv
+// and the code. The cursor's attributes at 16 colours go on the mark and the
+// numbers only (see reviewDraw.row).
+func (d reviewDraw) unifiedLine(row reviewRow, st overlay.RowState, markCell func(color.Color) string) string {
+	dv, pal := d.look.dv, d.look.pal
+	cursor := st.Cursor
 	ln := d.file.Hunks[row.hunk].Lines[row.line]
 	kind := lineKind(ln)
 	gw := d.numW + 1
 	codeW := d.width - 1 - 2*gw - diffview.SignWidth
-	return markCell(dv.GutterBg(kind, cursor)) +
-		dv.Gutter(ln.Old, gw, kind, cursor) + dv.Gutter(ln.New, gw, kind, cursor) +
-		dv.Sign(kind, cursor, d.scrolled(row.hunk, row.line)) + d.code(row.hunk, row.line, kind, cursor, codeW)
+	lead, oldNum, newNum := markCell(dv.GutterBg(kind, cursor)), dv.Gutter(ln.Old, gw, kind, cursor), dv.Gutter(ln.New, gw, kind, cursor)
+	sign, code := dv.Sign(kind, cursor, d.scrolled(row.hunk, row.line)), d.code(row.hunk, row.line, kind, cursor, codeW)
+	if pal.Depth == overlay.Depth16 {
+		return pal.Mark(lead+oldNum+newNum, st) + sign + code
+	}
+	return lead + oldNum + newNum + sign + code
 }
 
 // splitLine draws a line row as its two sides: the old line on the left, the
 // new on the right, and an empty side where a line has no counterpart.
-func (d reviewDraw) splitLine(row reviewRow, cursor bool, markCell func(color.Color) string) string {
+func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(color.Color) string) string {
 	dv, pal := d.look.dv, d.look.pal
+	cursor := st.Cursor
 	lines := d.file.Hunks[row.hunk].Lines
 	var left, right int
 	switch lines[row.line].Op {
@@ -963,22 +1001,32 @@ func (d reviewDraw) splitLine(row reviewRow, cursor bool, markCell func(color.Co
 	gw := d.numW + 1
 	avail := d.width - 2 - 2*(gw+diffview.SignWidth)
 	leftW := avail / 2
-	side := func(l int, num func(review.Line) int, w int) string {
+	// side is one side's number column and the rest of it: its sign and
+	// code. lead goes in front of the numbers, and the cursor's attributes at
+	// 16 colours go on the two of them together.
+	side := func(lead string, l int, num func(review.Line) int, w int) string {
+		var gutter, sign, code string
 		if l < 0 {
-			return dv.BlankGutter(diffview.Missing, cursor, gw) + dv.Sign(diffview.Missing, cursor, false) + dv.Blank(diffview.Missing, cursor, w)
+			gutter = dv.BlankGutter(diffview.Missing, cursor, gw)
+			sign, code = dv.Sign(diffview.Missing, cursor, false), dv.Blank(diffview.Missing, cursor, w)
+		} else {
+			ln := lines[l]
+			kind := lineKind(ln)
+			gutter = dv.Gutter(num(ln), gw, kind, cursor)
+			sign, code = dv.Sign(kind, cursor, d.scrolled(row.hunk, l)), d.code(row.hunk, l, kind, cursor, w)
 		}
-		ln := lines[l]
-		kind := lineKind(ln)
-		return dv.Gutter(num(ln), gw, kind, cursor) + dv.Sign(kind, cursor, d.scrolled(row.hunk, l)) + d.code(row.hunk, l, kind, cursor, w)
+		if pal.Depth == overlay.Depth16 {
+			return pal.Mark(lead+gutter, st) + sign + code
+		}
+		return lead + gutter + sign + code
 	}
 	first := diffview.Missing
 	if left >= 0 {
 		first = lineKind(lines[left])
 	}
 	rule := reviewInk(vtGlyph(), overlay.Structure(pal.Surface), pal.Surface)
-	return markCell(dv.GutterBg(first, cursor)) +
-		side(left, func(ln review.Line) int { return ln.Old }, leftW) + rule +
-		side(right, func(ln review.Line) int { return ln.New }, avail-leftW)
+	return side(markCell(dv.GutterBg(first, cursor)), left, func(ln review.Line) int { return ln.Old }, leftW) + rule +
+		side("", right, func(ln review.Line) int { return ln.New }, avail-leftW)
 }
 
 // reviewFooter is the key line under the panes: the editor's line while one

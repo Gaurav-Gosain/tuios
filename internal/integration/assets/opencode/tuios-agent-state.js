@@ -23,7 +23,11 @@
 // through `tuios agent-statusline __TUIOS_HARNESS__`, from the assistant messages
 // opencode updates: each message's modelID, and the sum of their cost. It runs
 // only when the model or the cost to the cent changed, and once more when the
-// session goes idle, so the turn's last cost is not held back.
+// turn ends, so the turn's last cost is not held back.
+//
+// The end of a turn is session.status idle. opencode's schema marks the older
+// session.idle event deprecated; it is still forwarded while opencode sends
+// it, and the hook takes whichever of the two comes first.
 
 import { spawn } from "node:child_process";
 
@@ -44,6 +48,10 @@ const STATUS_ARGS = ["agent-statusline", "__TUIOS_HARNESS__", "--integration", "
 // model last named, and what was last sent.
 const usage = new Map();
 const USAGE_MAX = 64;
+// ended holds the sessions whose turn end was already sent, so a turn's end
+// sends the usage once although opencode announces it with two events. A
+// busy or retry status starts the next turn.
+const ended = new Set();
 
 function remember(callID, tool, args) {
   if (!callID || !tool) return;
@@ -233,7 +241,20 @@ export const TuiosAgentState = async (ctx) => {
       }
       const sessionID = text(props.sessionID) || text(info?.id);
       if (sessionID && children.has(sessionID)) return;
-      if (type === "session.idle") sendUsage(sessionID, true);
+      const statusType =
+        type === "session.status"
+          ? typeof props.status === "string"
+            ? props.status
+            : text(props.status?.type)
+          : "";
+      if (statusType === "busy" || statusType === "retry") ended.delete(sessionID);
+      if ((type === "session.idle" || statusType === "idle") && !ended.has(sessionID)) {
+        ended.add(sessionID);
+        while (ended.size > USAGE_MAX) {
+          ended.delete(ended.values().next().value);
+        }
+        sendUsage(sessionID, true);
+      }
       switch (type) {
         case "session.created":
         case "session.idle":
@@ -244,8 +265,11 @@ export const TuiosAgentState = async (ctx) => {
           report(type, sessionID, {});
           break;
         case "session.status": {
-          const status = props.status;
-          report(type, sessionID, { status: typeof status === "string" ? status : text(status?.type) });
+          const extra = { status: statusType };
+          if (statusType === "retry") {
+            extra.retry_message = text(props.status?.action?.title) || text(props.status?.message);
+          }
+          report(type, sessionID, extra);
           break;
         }
         case "permission.asked":

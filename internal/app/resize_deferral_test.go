@@ -19,9 +19,9 @@ import (
 func newDeferralOS(t *testing.T, width, height, windows int) *OS {
 	t.Helper()
 
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	m := &OS{
 		Settings:         config.Global,

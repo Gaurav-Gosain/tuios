@@ -201,9 +201,21 @@ var optionSpecs = []Option{
 		Default:     "",
 	},
 	{
+		Path: "appearance.motion", Type: OptionString, Section: "appearance",
+		Description: "How much moves: none, basic (window slides), or full (also overlay fades and the working-agent shimmer)",
+		Accepted:    MotionLevels, Default: MotionFull,
+	},
+	{
+		Path: "appearance.modal_dim", Type: OptionInt, Section: "appearance",
+		Description: "How much the screen behind a modal panel is darkened, as a percent. 0 is off.",
+		Default:     strconv.Itoa(ModalDimDefault), Min: 0, Max: ModalDimMax,
+		Percent: true,
+	},
+	{
 		Path: "appearance.animations_enabled", Type: OptionBool, Section: "appearance",
 		Description: "Animate UI transitions instead of applying them instantly",
 		Default:     "true",
+		Deprecated:  "folded into appearance.motion on load (false is none); set appearance.motion",
 	},
 	{
 		Path: "appearance.confirm_quit", Type: OptionBool, Section: "appearance",
@@ -804,7 +816,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "notifications.agent.suppress_focused", Type: OptionBool, Section: "notifications",
-		Description: "No alert for the pane you are looking at",
+		Description: "No alert for the focused pane while the terminal has focus",
 		Default:     "true",
 	},
 	{

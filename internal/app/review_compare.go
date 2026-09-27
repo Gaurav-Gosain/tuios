@@ -604,10 +604,11 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	}
 	for i := start; i < len(c.rows) && i-start < listH; i++ {
 		row := c.rows[i]
-		bg := pal.Surface
+		st := overlay.RowState{Cursor: i == c.cursor, Focused: true}
+		bg := pal.Ground(st, pal.Surface)
 		cur, mark := " ", " "
-		if i == c.cursor {
-			bg, cur = pal.RowSel, overlay.SigilMark()
+		if st.Cursor {
+			cur = overlay.SigilMark()
 		}
 		if slices.Contains(c.marks, row.Session) {
 			mark = "*"
@@ -629,14 +630,14 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 		if agent == "" {
 			agent = reviewText(row.Harness)
 		}
-		body = append(body, reviewPaint([]reviewSeg{
+		body = append(body, pal.Row(reviewPaint([]reviewSeg{
 			{pal.AccentBright, " " + cur + mark + " ", false},
 			{pal.Fg, left(reviewText(row.Session), sessW) + " ", i == c.cursor},
 			{pal.FgDim, left(agent, agentW) + left(state, stateW) + right(files, filesW) + "  ", false},
 			{pal.FgDim, left(diff, diffW), false},
 			{reviewCheckColor(row, pal), left(reviewCheckWords(row, narrow), checkW), false},
 			{pal.FgMute, right(reviewCheckAge(row, now), ageW), false},
-		}, inner, bg))
+		}, inner, bg), inner, st, pal.Surface))
 	}
 	for len(body) < h-2-3 {
 		body = append(body, reviewSpaces(inner, pal.Surface))

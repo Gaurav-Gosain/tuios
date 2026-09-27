@@ -691,8 +691,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		cmd.Env = append(guestBaseEnv(),
 			"TERM="+termType,
 			"COLORTERM="+colorTerm,
-			"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on
-			"TERM_PROGRAM_VERSION=0.1.0",       // Version for compatibility checking
+			"TERM_PROGRAM="+guestTermProgram(command), // Terminal identity guests can act on
+			"TERM_PROGRAM_VERSION=0.1.0",              // Version for compatibility checking
 			"TUIOS_WINDOW_ID="+id,
 			guestKittyAnimation(), // whether a=f frame edits reach the host
 		)

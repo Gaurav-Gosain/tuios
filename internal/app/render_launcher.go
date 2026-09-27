@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -41,9 +42,9 @@ var launcherHints = []overlay.Hint{
 // selection cannot scroll out of the rows actually drawn.
 func (m *OS) launcherLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(launcherInnerWidth)
-	// Body lines that are not program rows: the search input, its rule, and the
-	// match count.
-	rows, hints = m.panelBody(launcherMaxVisible, 3, width, nil, launcherHints)
+	// Body lines that are not program rows: the search input and its rule. The
+	// match count rides the search line.
+	rows, hints = m.panelBody(launcherMaxVisible, 2, width, nil, launcherHints)
 	return width, rows, hints
 }
 
@@ -83,12 +84,18 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 	cursor := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render("█")
 	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render("› ") +
 		overlay.Style(bg).Foreground(pal.Fg).Render(m.LauncherQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
+	count := ""
+	if len(filtered) > visible {
+		count = fmt.Sprintf("%d of %d programs", len(filtered), len(items))
+	}
+	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
 
 	start, end := 0, 0
 	if len(filtered) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render(m.launcherEmptyLine()))
-		for len(lines) < visible+3 {
+		if msg := m.launcherEmptyLine(); msg != "" {
+			lines = append(lines, overlay.Empty{Message: msg, Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
+		}
+		for len(lines) < visible+2 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	} else {
@@ -98,12 +105,6 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 			lines = append(lines, launcherRow(filtered[i], i == m.LauncherSelected, pal, width, iconW))
 		}
 		for len(lines) < visible+2 {
-			lines = append(lines, overlay.Style(bg).Render(" "))
-		}
-		if len(filtered) > visible {
-			info := fmt.Sprintf("%d of %d programs", len(filtered), len(items))
-			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
-		} else {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	}
@@ -162,20 +163,26 @@ func (m *OS) LauncherVisibleIcons() []string {
 // launcherEmptyLine says why the list is empty, which is two different things.
 // Before the first scan lands there is nothing to match against yet, and saying
 // "no program matches" then is simply wrong.
+//
+// The scan is a loading state, so it is only said once the scan has run past
+// the loading delay; before that the list is blank.
 func (m *OS) launcherEmptyLine() string {
 	if len(m.LauncherItems) == 0 {
-		return "  Scanning for programs…"
+		if !overlay.ShowLoading(m.LauncherOpenedAt, time.Now()) {
+			return ""
+		}
+		return "Scanning for programs" + overlay.Ellipsis()
 	}
-	return "  No program matches"
+	return "No program matches"
 }
 
 // launcherRow renders one program row: an icon's worth of reserved blanks, the
 // name, and a right-hand detail, with a full-width highlight bar when selected.
 func launcherRow(item LauncherItem, selected bool, pal overlay.Palette, width, iconW int) string {
-	bg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	bg := pal.Ground(st, pal.Surface)
 	nameColor := pal.FgDim
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 	}
 
@@ -202,7 +209,7 @@ func launcherRow(item LauncherItem, selected bool, pal overlay.Palette, width, i
 		icon + launcherRowName(name, item.Match, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-detailW, 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + detail
+	return pal.Row(left+overlay.Style(bg).Render(strings.Repeat(" ", gap))+detail, width, st, pal.Surface)
 }
 
 // launcherDetail is a row's right-hand meta slot: what the entry says about

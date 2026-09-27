@@ -57,6 +57,12 @@ func isolateXDG() (dir string, check func() error) {
 	if err := os.Setenv("HOME", tmp); err != nil {
 		panic(fmt.Sprintf("testutil: set HOME: %v", err))
 	}
+	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
+	// names the person's daemon. Nothing selects a daemon by it, but the check
+	// against it dials the socket it names, and a test has no business there.
+	if err := os.Unsetenv("TUIOS_SOCKET"); err != nil {
+		panic(fmt.Sprintf("testutil: unset TUIOS_SOCKET: %v", err))
+	}
 	xdg.Reload()
 
 	return tmp, func() error {

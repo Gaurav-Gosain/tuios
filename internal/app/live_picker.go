@@ -78,8 +78,8 @@ func renderLivePicker(p livePickerPanel) (string, overlay.Geometry, []overlayRow
 		shown++
 	}
 	if len(items) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+p.Empty))
-		shown++
+		lines = append(lines, overlay.Empty{Message: p.Empty, Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(p.Width, p.Visible, bg, pal)...)
+		shown = p.Visible
 	}
 	for shown < p.Visible {
 		lines = append(lines, overlay.Style(bg).Render(" "))

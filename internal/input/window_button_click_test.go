@@ -104,9 +104,9 @@ func TestWindowControlsRunTheirOwnActionAtEitherEnd(t *testing.T) {
 	// Snapping animates, and an animation would leave the pane mid-flight with
 	// its geometry unchanged. With animations off the snap lands on the press,
 	// which is what makes zoom tellable from the other two.
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	prevStyle, prevPos := config.Global.WindowButtonStyle, config.Global.WindowButtonPosition
 	t.Cleanup(func() {

@@ -72,16 +72,14 @@ func (m *OS) marks() *markStyles {
 	return m.markStyleCache
 }
 
-var (
-	// The link under the pointer. An underline and a colour rather than a
-	// filled background, because the run is text the program wrote and the
-	// highlight is saying what it is, not selecting it: a block of colour would
-	// read as the drag-selection the same gesture used to start, which is the
-	// one thing this must not be confused with.
-	linkHoverStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7DCFFF")).
-		Underline(true)
-)
+// linkHoverStyle is the link under the pointer. An underline and a colour
+// rather than a filled background, because the run is text the program wrote
+// and the highlight is saying what it is, not selecting it: a block of colour
+// would read as the drag-selection the same gesture used to start, which is
+// the one thing this must not be confused with.
+func linkHoverStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(theme.LinkHover()).Underline(true)
+}
 
 // isBlankRender reports whether a rendered frame carries no visible text, so
 // styling and cursor positioning alone do not count as content. It walks bytes
@@ -532,6 +530,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// and a zero dimT makes the cell loop below identical to what it was.
 	var (
 		dimScratch   uv.Cell
+		dimMemo      blendMemo
 		dimFg, dimBg color.Color
 		dimT         float64
 	)
@@ -768,7 +767,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// it painted a black band under the sweep and made the light
 				// on it read as gold on black rather than as the pane getting
 				// brighter.
-				cellBg := theme.TerminalBg()
+				cellBg := m.terminalBg()
 				if ground.on() {
 					cellBg = ground.bg
 				}
@@ -840,7 +839,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if hasLinkRun && linkRun.Contains(x, y) {
 				flushBatch()
 
-				builder.WriteString(renderStyledText(linkHoverStyle, char))
+				builder.WriteString(renderStyledText(linkHoverStyle(), char))
 				notePrev(cell)
 				prevIsCursor = false
 				cellWidth := 1
@@ -878,7 +877,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// own entry and the focused pane's entries are untouched.
 				styleCell := cell
 				if dimT > 0 {
-					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT)
+					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT, &dimMemo)
 				}
 				if isCursorPos {
 					styleCell = paneGroundCell(&groundScratch, styleCell, ground)

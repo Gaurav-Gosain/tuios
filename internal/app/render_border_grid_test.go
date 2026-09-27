@@ -23,7 +23,7 @@ import (
 // windows, and restores the SharedBorders global when the test ends.
 func sharedBorderOS(t *testing.T, n int) *OS {
 	t.Helper()
-	originalShared, originalAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	originalShared, originalAnim := config.Global.SharedBorders, config.Global.Motion
 	originalStyle, originalASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
 	originalDock := config.Global.DockbarPosition
 	// The caps sit where the perimeter turns, and the dock's hairline is what a
@@ -33,14 +33,14 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 	config.Global.SharedBorders = true
 	// Tiling applies geometry through an animation when animations are on, which
 	// would leave the windows at their nominal size for the duration of the test.
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	// Pin the border style: other tests in this package mutate it, and the ASCII
 	// set draws every corner as "+", which would hide a difference in the caps.
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	t.Cleanup(func() {
 		config.Global.SharedBorders = originalShared
-		config.Global.AnimationsEnabled = originalAnim
+		config.Global.Motion = originalAnim
 		config.Global.BorderStyle = originalStyle
 		config.Global.UseASCIIOnly = originalASCII
 		config.Global.DockbarPosition = originalDock

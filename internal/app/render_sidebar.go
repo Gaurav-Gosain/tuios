@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // sidebarRestoredTag is the rail's marker for a session rebuilt from saved
@@ -146,6 +145,12 @@ type sidebarRowState struct {
 // lit reports whether the row is drawing any band at all, which is what the
 // parts of a row that only care about being on a ground ask.
 func (st sidebarRowState) lit() bool { return st.Cursor || st.Hover }
+
+// mark applies the 16-colour form of the row's state to a finished row (see
+// overlay.RowState). At other depths the row's ground already says it.
+func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
+	return pal.Mark(row, overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover})
+}
 
 // railRowState reads the rail's focus once so a row site does not have to.
 func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
@@ -497,11 +502,11 @@ func sidebarStyle(bg, fg color.Color) lipgloss.Style {
 // or the rail's own ground when it paints none. A nil background is not "no
 // colour", it is the terminal's own, which is what anything measuring contrast
 // on the rail has to be measured against.
-func sidebarGroundOr(bg color.Color) color.Color {
+func (m *OS) sidebarGroundOr(bg color.Color) color.Color {
 	if bg != nil {
 		return bg
 	}
-	return theme.RailGround()
+	return m.railGround()
 }
 
 // sidebarFit truncates (ANSI-aware) and pads s to exactly cw cells on bg, so a
@@ -670,8 +675,8 @@ func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette, s *config.
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
 // panes, drawn in the window-border character at the dock separator's color:
 // the rail's edge is the vertical sibling of the dock's hairline.
-func sidebarEdgeRule(s *config.Settings) string {
-	return lipgloss.NewStyle().Foreground(theme.RailRule()).Render(s.GetWindowBorderLeft())
+func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
+	return lipgloss.NewStyle().Foreground(rule).Render(s.GetWindowBorderLeft())
 }
 
 // sidebarHeaderRow renders a quiet section header: the label, lowercase and
@@ -1081,7 +1086,7 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
-	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
+	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID(sidebarLayerID)
 }
 
 // sidebarWindowSection windows one section's rows onto the lines it was given,
@@ -1114,6 +1119,7 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 // the one-cell edge rule on the side facing the panes.
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
+	m.motion.rail = m.motion.rail[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
 	// Colours are arbitrated over this machine's sessions only. A remote row
 	// draws in its host group's muted ink, and letting one into the arbitration
@@ -1152,10 +1158,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		contentX0++
 	}
 
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 	variant := sidebarVariant(w)
 	cw := w - 1 // content columns beside the edge rule
-	edge := sidebarEdgeRule(&m.Settings)
+	edge := sidebarEdgeRule(&m.Settings, m.railRule())
 	// While the rail owns the keyboard its edge rule burns accent instead of the
 	// dock's muted hairline, so the focus is legible at the frame, not only on a
 	// single highlighted row.
@@ -1631,7 +1637,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				// and activating it folds the group.
 				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
 				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
-				lines = append(lines, compose(m.sidebarRepoRow(s, cw, pal, st)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
 			if isRemoteNode(s) {
@@ -1642,7 +1648,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -1664,7 +1670,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// the same way three lines up, so the preview and its source are
 			// visibly one thing rather than two lists that happen to be adjacent.
 			ink := pal.Fg
-			if tint := m.sessionTint(shown, theme.TerminalBg()); tint != nil {
+			if tint := m.sessionTint(shown, m.terminalBg()); tint != nil {
 				ink = tint
 			}
 			// The label gives way to the control, never the other way round: a
@@ -1698,7 +1704,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			e := terminals[idx]
 			st := m.railRowState(idx == hoverRow[sidebarSectionTerminals], isCursor(sidebarRowWindow, e.SessionID, e.WindowID))
 			recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
-			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, st, peeking)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarTerminalRow(e, cw, pal, st, peeking))))
 		}
 		if h := hidden[sidebarSectionTerminals]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1726,7 +1732,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
 			}
-			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, st)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarFileRow(row, cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1741,7 +1747,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				break
 			}
 			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false)
-			lines = append(lines, compose(m.sidebarGitRow(gitRows[idx], cw, pal, st)))
+			lines = append(lines, compose(st.mark(pal, m.sidebarGitRow(gitRows[idx], cw, pal, st))))
 		}
 	}
 
@@ -1776,18 +1782,28 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgentFold, e.SessionID, ""))
 				tall := rowH[sidebarSectionAgents] > 1
 				recordHit(sidebarRowAgentFold, e.SessionID, "", -1, rowH[sidebarSectionAgents])
-				lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, false)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarAgentFoldRow(e, cw, pal, st, false))))
 				if tall {
-					lines = append(lines, compose(m.sidebarAgentFoldRow(e, cw, pal, st, true)))
+					lines = append(lines, compose(st.mark(pal, m.sidebarAgentFoldRow(e, cw, pal, st, true))))
 				}
 				continue
 			}
 			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, st, tall)))
+			row, bodyW := m.sidebarAgentRow(e, variant, cw, pal, st, tall)
+			// A working agent's name is where the shimmer sweeps. Recorded
+			// only for that state, so a rail with no working agent records
+			// nothing and the motion clock never starts. See shimmer.go.
+			if e.State == "working" && bodyW > 0 {
+				x0 := contentX0 + sidebarNameCol
+				m.motion.rail = append(m.motion.rail, shimmerSpan{
+					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
+				})
+			}
+			lines = append(lines, compose(st.mark(pal, row)))
 			if tall {
-				lines = append(lines, compose(m.sidebarAgentNoteRow(e, variant, cw, pal, st)))
+				lines = append(lines, compose(st.mark(pal, m.sidebarAgentNoteRow(e, variant, cw, pal, st))))
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
@@ -2298,8 +2314,9 @@ func (m *OS) windowIndexByID(id string) int {
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
 func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
-	var rowBg color.Color
-	if st.lit() || dragged {
+	rowBg := sidebarRowBg(st, pal)
+	if dragged {
+		// A drag keeps the strongest band on the row riding the pointer.
 		rowBg = pal.Surface
 	}
 
@@ -2309,7 +2326,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	// pane is running an agent the state owns that cell, so identity falls to
 	// the gutter, and when a pane wants a human the severity owns that one too
 	// and identity gives way entirely. An alarm outranks a label.
-	tint := m.sessionTint(node.ID, railGround(rowBg))
+	tint := m.sessionTint(node.ID, m.rowGround(rowBg))
 	stated := agentStateIndicator(node.AgentState) != ""
 
 	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal, &m.Settings)
@@ -2404,10 +2421,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 // emphasis. Severity gutters and state glyph colours stay, because they are
 // what the user peeked to see.
 func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, st sidebarRowState, peeked bool) string {
-	var rowBg color.Color
-	if st.lit() {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(st, pal)
 
 	title := printableTitle(e.Title)
 	if title == "" {
@@ -2421,7 +2435,7 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		// as a mismatch rather than as a distinction. It says nothing new, which is
 		// why the section is otherwise still uncoloured: one session's panes are on
 		// screen at a time, so a hue per row would separate them from nothing.
-		tint := m.sessionTint(e.SessionID, railGround(rowBg))
+		tint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
 		accent, accented := m.WindowAccent(e.WindowID)
 		if preview, ok := m.accentPreview(AccentTargetWindow, e.WindowID); ok {
 			// The open picker previews the colour under its cursor on the row it
@@ -2525,10 +2539,10 @@ const sidebarWorkspaceTagMax = 8
 // back, all on the name spine so it reads as the section's one row rather than
 // as a message about it. Clicking anywhere on it flips the filter.
 func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sidebarRowState) string {
-	var rowBg color.Color
+	rowBg := sidebarRowBg(st, pal)
 	fg := pal.FgMute
 	if st.lit() {
-		rowBg, fg = pal.Surface, pal.Fg
+		fg = pal.Fg
 	}
 	sep := " · "
 	if overlay.UseASCII() {
@@ -2580,10 +2594,7 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // row is stays true at any width, where half a sentence is not a shorter
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
-	var rowBg color.Color
-	if st.lit() {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(st, pal)
 	indent := sidebarNameCol + 1
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
@@ -2710,14 +2721,17 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 // tall says the row has a note line under it, which is where the harness name
 // goes: carrying it here as well would print one thing twice, and the line has
 // only ever had room for one name.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) string {
+//
+// It also returns how many columns the name and the tokens around it take, from
+// sidebarNameCol, which is the span the working shimmer sweeps.
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) (string, int) {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
 		fg = pal.Fg
 	}
 	if st.lit() {
-		rowBg = pal.Surface
+		rowBg = sidebarRowBg(st, pal)
 		fg = pal.Fg
 	}
 
@@ -2818,19 +2832,19 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// gives in words and gives up first when the row runs out of room.
 	gutter := sidebarGutter(false, e.State, rowBg, pal, &m.Settings)
 	if e.Foreign && !sidebarAttention(e.State) {
-		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
+		if tint := m.agentIdentityTint(e, m.rowGround(rowBg)); tint != nil {
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
 	}
 	// On a compact rail this is the pane's only row, so it carries the focus
 	// mark the terminals row would have.
 	if e.Focused && m.GetSidebarWidth() <= sidebarCompactWidth && sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
-		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, railGround(rowBg)), rowBg, pal, &m.Settings)
+		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, m.rowGround(rowBg)), rowBg, pal, &m.Settings)
 	}
 	nameRoom := max(avail-shownW-afterW, 1)
 	body := shown +
 		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
 		after
 	return sidebarComposeRow(gutter,
-		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg)
+		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg), lipgloss.Width(body)
 }

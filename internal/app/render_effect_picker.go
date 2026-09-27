@@ -80,9 +80,8 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 		shown++
 	}
 	if len(items) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).
-			Render("  No matching effects"))
-		shown++
+		lines = append(lines, overlay.Empty{Message: "No matching effects", Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
+		shown = visible
 	}
 	for shown < visible {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -123,11 +122,11 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 // here would be a fact about a screen nobody is looking at. See
 // effectOpenings.
 func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width int) string {
-	bg := pal.Surface
+	st := overlay.RowState{Cursor: selected, Focused: true}
+	bg := pal.Ground(st, pal.Surface)
 	nameColor := pal.FgDim
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
 		nameColor = pal.Fg
 		marker = "› "
 	}
@@ -152,7 +151,7 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 
 	right := overlay.Style(bg).Foreground(timingColor).Render(timing)
 	gap := max(width-lipgloss.Width(left)-timingW, 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
+	return pal.Row(left+overlay.Style(bg).Render(strings.Repeat(" ", gap))+right, width, st, pal.Surface)
 }
 
 // effectOpeningWord is a band in the row's right-hand column.

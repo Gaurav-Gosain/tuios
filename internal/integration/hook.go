@@ -102,8 +102,8 @@ func HarnessIDs() []string {
 // harness in the pane is foreign. A test holds this to the manifests.
 var ManifestIDs = []string{
 	"aider", "amp", "antigravity", "claude-code", "cline", "codex", "copilot",
-	"crush", "cursor-agent", "devin", "droid", "gemini-cli", "grok", "hermes",
-	"kilo", "kimi", "kiro", "maki", "opencode", "pi", "qoder", "qwen",
+	"crush", "cursor-agent", "devin", "droid", "gemini-cli", "goose", "grok",
+	"hermes", "kilo", "kimi", "kiro", "maki", "opencode", "pi", "qoder", "qwen",
 }
 
 // hintOwner resolves a TUIOS_AGENT value to a harness id: an alias this
@@ -262,6 +262,12 @@ func Translate(harnessName string, in Input) Decision {
 		return translateKimi(in, p)
 	case Pi:
 		return translatePi(in, p)
+	case Qwen:
+		return translateQwen(in, p)
+	case Copilot:
+		return translateCopilot(in, p)
+	case CursorAgent:
+		return translateCursor(in, p)
 	default:
 		return translateIdentity(id, in, p)
 	}

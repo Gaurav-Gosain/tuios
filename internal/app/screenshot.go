@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"os"
 	"strings"
 	"time"
@@ -60,7 +61,11 @@ type captureState struct {
 	// makes tab and enter the way through.
 	Keyboard bool
 	// Dragging is a region selection in progress.
-	Dragging    bool
+	Dragging bool
+	// OverOverlay marks a capture opened while an overlay was on screen. The
+	// panes are under the overlay then, so none is offered: a click or enter
+	// takes the whole screen and a drag takes a region of it.
+	OverOverlay bool
 	AnchorX     int
 	AnchorY     int
 	CursorX     int
@@ -163,13 +168,27 @@ func (m *OS) BeginCapture(mouse bool) {
 	}
 	m.CloseScreenshotPreview(false)
 	wasTerminal := m.Mode == TerminalMode
+	over := m.OverlayOnScreen()
 	m.BeginPointerGesture()
 	m.Capture = captureState{
-		Active: true, Hover: -1, Keyboard: !mouse, wasTerminal: wasTerminal,
+		Active: true, Hover: -1, Keyboard: !mouse, wasTerminal: wasTerminal, OverOverlay: over,
 	}
-	if !mouse {
+	if !mouse && !over {
 		m.Capture.Hover = m.FocusedWindow
 	}
+}
+
+// CaptureOverOverlay reports whether the open capture was started over an
+// overlay, where enter takes the whole screen rather than a pane.
+func (m *OS) CaptureOverOverlay() bool { return m.Capture.Active && m.Capture.OverOverlay }
+
+// OverlayOnScreen reports whether any overlay, panel or dialog is drawn over
+// the panes: every one that owns the keyboard while it is up. Copy mode and
+// the scrollback browser are views of a pane and are not counted.
+func (m *OS) OverlayOnScreen() bool {
+	return m.review.open || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+		m.Renaming() || m.ShowTapeReview || m.ShowTapeManager ||
+		m.ShowLogs || m.ShowCacheStats
 }
 
 // EndCapture leaves capture mode and restores the previous input mode.
@@ -202,6 +221,9 @@ func (m *OS) CaptureHoverNext(delta int) {
 // captureVisibleWindows lists the indices a capture can aim at, in the order
 // tab walks them.
 func (m *OS) captureVisibleWindows() []int {
+	if m.Capture.OverOverlay {
+		return nil
+	}
 	var out []int
 	for i, w := range m.Windows {
 		if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace {
@@ -377,7 +399,37 @@ func (m *OS) shotPalette() *shot.Palette {
 	// the guess above is the xterm defaults. The host terminal is the one
 	// resolving those indices on screen, and it will say what it resolves them
 	// to, so ask it rather than guess. See HostCapabilities.ANSI.
-	return hostPalette(m.hostCaps(), p)
+	return m.liveHostPalette(hostPalette(m.hostCaps(), p))
+}
+
+// liveHostPalette overlays what the terminal has said since the startup probe:
+// the answers Bubble Tea brought in, and the colours of the scheme it switched
+// to. See host_colors.go. A capture taken after a switch to dark is drawn on
+// the dark ground the screen is on, not the light one tuios started on.
+func (m *OS) liveHostPalette(p *shot.Palette) *shot.Palette {
+	h := &m.host
+	if h.gen == 0 || p == nil {
+		return p
+	}
+	out := *p
+	for i, c := range h.ansi {
+		if c != nil {
+			out.ANSI[i] = shotColor(c)
+		}
+	}
+	if h.fg != nil {
+		out.FG = shotColor(h.fg)
+	}
+	if h.bg != nil {
+		out.BG = shotColor(h.bg)
+	}
+	return &out
+}
+
+// shotColor turns a colour into a renderer colour.
+func shotColor(c color.Color) shot.Color {
+	r, g, b, _ := c.RGBA()
+	return shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
 // hostPalette overlays whatever the host terminal said about its own colours

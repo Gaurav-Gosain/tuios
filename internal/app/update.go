@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // TickerMsg represents a periodic tick event for maintenance tasks
@@ -293,6 +294,12 @@ func (m *OS) Init() tea.Cmd {
 		ListenForSessionKill(m.sessionKillChan()),
 		ListenForNotification(m.ensureNotificationChan()),
 		ListenForCwdChange(m.ensureCwdChangeChan()),
+	}
+
+	// Ask the terminal for its own colours where the startup probe could not,
+	// and follow its light and dark switch. See host_colors.go.
+	if cmd := m.hostColorQueries(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 
 	// The dock's components. Everything that used to hold the maintenance tick
@@ -708,10 +715,17 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
 	replan := m.foreignSessionReplanCmd()
-	if sync == nil && replan == nil && gitSync == nil {
+	// A load a handler started gets its loading frame armed here, for the
+	// same reason: one check rather than a timer in each place a load starts.
+	loading := m.loadingFrameCmd()
+	// The motion clock: armed here, after whatever the message changed, so an
+	// overlay opened by any of the handlers starts its fade on the frame it
+	// first appears in. See motion.go.
+	motion := m.motionCmd()
+	if sync == nil && replan == nil && gitSync == nil && loading == nil && motion == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync)
+	return model, tea.Batch(cmd, sync, replan, gitSync, loading, motion)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -754,6 +768,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// Any non-tick message invalidates the render cache
 	if _, isTick := msg.(TickerMsg); !isTick {
 		m.renderSkipped = false
+	}
+
+	// The host terminal's answers about its own colours. See host_colors.go.
+	if c, ok := m.handleHostColorMsg(msg); ok {
+		return m, c
 	}
 
 	switch msg := msg.(type) {
@@ -881,6 +900,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// than riding the maintenance tick, which is what keeps the idle path
 		// untouched while it is merely armed.
 		return m, m.handleScreensaverFrame()
+
+	case motionFrameMsg:
+		m.handleMotionFrame(msg)
+		return m, nil
 
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
@@ -1304,6 +1327,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
 
+	case loadingShownMsg:
+		// A load may have run past the loading delay, so its state is drawn
+		// now rather than whenever something else next asks for a frame.
+		m.renderSkipped = false
+		return m, nil
+
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)
 		// This triggers SIGWINCH which makes apps like vim/htop/btop redraw
@@ -1616,14 +1645,25 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tea.FocusMsg:
-		// Terminal gained focus
-		// Could be used to refresh or resume operations
-		return m, nil
+		// The host terminal gained focus. See host_focus.go.
+		return m, m.noteHostFocus(true)
 
 	case tea.BlurMsg:
-		// Terminal lost focus. A key held when the window went away will never
-		// report its release, so the hold ends here rather than outliving it.
+		// The host terminal lost focus. A key held when the window went away
+		// will never report its release, so the hold ends here rather than
+		// outliving it.
 		m.EndHold()
+		return m, m.noteHostFocus(false)
+
+	case tea.ColorProfileMsg:
+		// The colour profile the frame writer steps colours down to. The chrome
+		// is drawn for it rather than drawn in truecolor and stepped down, so it
+		// is learned from the same message the writer was configured from, and
+		// every cached row built for another depth is dropped.
+		if theme.ColorProfile() != msg.Profile {
+			theme.SetColorProfile(msg.Profile)
+			m.MarkAllDirty()
+		}
 		return m, nil
 
 	case tea.KeyboardEnhancementsMsg:

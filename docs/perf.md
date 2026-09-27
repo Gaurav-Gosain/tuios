@@ -2144,3 +2144,119 @@ little above the printed size in the `budget` function of that script, and say
 in the commit message what grew and why it is worth the bytes. A Go version
 bump that grows the runtime is a reason; a dependency added for one helper
 function is usually not, and is better replaced.
+
+## 2026-09 chrome colour depth and OKLab blending
+
+Measured on an Apple M3 Pro shared with other work, so every comparison is an
+interleaved A/B: the test binaries of origin/main and of this change run
+alternately, six rounds, and `benchstat` compares the two files.
+
+The chrome palette (`theme.UI()`) is now built per colour depth and derives a
+larger token set, with every ink measured on every ground it is promised on.
+That made building it several times dearer, so it is memoised on what it is
+built from (the depth, the theme's colours, the theme's chrome):
+
+| Benchmark | Before | After | Allocations |
+|---|---|---|---|
+| `BenchmarkUIPalette` | 390 ns | 30 ns | 0, unchanged |
+
+The frame benchmarks (`BenchmarkKeystrokeFrame`, `BenchmarkCompositorGetCanvas`,
+`BenchmarkBackgrounds`, `BenchmarkSpotlightFrame`, `BenchmarkSpotlightApply`,
+`BenchmarkSidebarPanelLinesCached`) show no significant change in time, bytes
+or allocations (geomean -2.9%, every row p > 0.05 or faster).
+
+`blendColors`, the dim's and the spotlight's blend, moved from gamma-encoded
+sRGB to OKLab (`overlay.MixColors`), which costs cube roots per call. The
+spotlight already blends through a cache. The unfocused-pane dim did not, so a
+render now carries a 64-entry direct-mapped memo on its stack, which also hands
+back colours already boxed. `BenchmarkDimUnfocusedRuns` (new; 480 style runs in
+six colours, one memo per pane render):
+
+| Case | Time | Allocations |
+|---|---|---|
+| before: sRGB, no memo | 17.2 µs | 960 |
+| after: OKLab, memo | 13.6 µs | 7 |
+| OKLab without the memo | 75 µs | 960 |
+
+The last row is why the memo is there: without it the perceptual blend would
+cost four times the old one.
+
+## 2026-09 review diff per colour depth
+
+Measured the same way as the section above: the test binaries of wave1/colors
+and of this change run alternately, six rounds, on the shared M3 Pro.
+
+The diff theme is built once per ground and depth, as before. At 256 colours
+its grounds are fixed palette entries and at 16 there are none, so a frame
+writes shorter sequences. `BenchmarkReviewFrameDepth` (new; the review of
+`BenchmarkReviewFrame` at each depth, first frame and cached frame):
+
+| Case | Bytes before | Bytes after | Allocations |
+|---|---|---|---|
+| truecolor unified, cached | 823 KiB | 823 KiB | 7,556, unchanged |
+| truecolor split, cached | 1,021 KiB | 1,021 KiB | 8,948, unchanged |
+| 256 unified, cached | 771 KiB | 665 KiB | -2.4% |
+| 256 split, cached | 996 KiB | 843 KiB | -1.5% |
+| 16 unified, cached | 690 KiB | 527 KiB | -4.5% |
+| 16 split, cached | 911 KiB | 628 KiB | -4.4% |
+
+Time showed no significant change in any row (p > 0.05; the machine was under
+a load average of 10 to 40, so the spread was 30 to 170%).
+
+`overlay.To256` places a chromatic colour by a linear search of the 240
+non-slot palette entries in OKLab, about a microsecond. It runs when a palette
+or a diff theme is built, which are memoised, and not per cell;
+`BenchmarkDimUnfocusedRuns` does not change.
+
+## 2026-09 modal dim, overlay fade and working-row shimmer
+
+All three are passes over the composed canvas in `composeLayers`, so none of
+them re-renders a pane or rebuilds the rail: the cached layers are copied in as
+on any frame and the pass edits cells in place through the spotlight's
+16-level blend cache (`cellShade`). Apple M3 Pro, a shared machine, medians of
+five or six runs.
+
+| Benchmark | Case | Time | Allocations |
+|---|---|---|---|
+| `BenchmarkModalScrimFrame` (new; nine panes, palette open, one pane dirty) | `modal_dim = 0` | 691 µs | 1406 |
+| | `modal_dim = 30` | 926 µs | 1406 |
+| `BenchmarkShimmerApply` (new; the pass over a twelve-agent rail, truecolor) | | 283 ns | 0 |
+| `BenchmarkCompositorGetCanvas/windows-9/one-dirty` | before / after | 158 µs / 151 µs | 110, unchanged |
+| `BenchmarkCompositorGetCanvas/windows-9/all-dirty` | before / after | 780 µs / 716 µs | 196, unchanged |
+| `BenchmarkIdleTick` | after | 0 render/tick, 0 work/tick | 296 B, 5, unchanged |
+
+The scrim costs about what the spotlight does, a quarter of a millisecond on a
+full 207x55 frame, and only on frames drawn while a modal is open; a modal left
+open over quiet panes draws none. The compositor rows are within noise.
+
+The shimmer asks for at most 15 frames a second, and only while a working
+agent's row is on screen. Each is a frame with nothing dirty plus the pass. A
+hovered overflowing rail row (the marquee) costs more per frame, because the
+rail is never served from its cache while it scrolls
+(`BenchmarkSidebarAgentsRebuild`, about 345 µs).
+
+The motion clock is its own timer, armed after an Update only while a fade runs
+or a working row is drawn, and never armed otherwise. `TestIdleCostStaysLow`
+and `TestFullMotionWithoutAgentsStaysIdle` (e2e) hold idle at zero bytes and
+zero motion frames with the default `motion = full`.
+
+## 2026-09 Wave 0 and Wave 1 merged
+
+Measured on wave01/final against origin/main (c2a16426): the test binaries of
+both run alternately, six rounds (ten for `BenchmarkIdleTick`), on the shared
+M3 Pro.
+
+- Allocations and bytes per op match origin/main on every render and idle
+  benchmark (`KeystrokeFrame`, `KeystrokeFrameTiled`, `ClientFrame`,
+  `CompositorGetCanvas`, `Backgrounds`, `SpotlightFrame`,
+  `SidebarPanelLinesCached`, `SidebarAgentsCached`, `InboxRender`,
+  `PointerSweep`, `RenderTerminalUnfocused`, `IdleTick`), except the cached
+  review frame at +13 allocations (+0.17%) from the per-depth diff theme. The
+  merge first showed three more allocations per keystroke frame: the colour
+  tokens parsed their hex strings on every call. They are parsed once now.
+- Time shows no significant change on the frame benchmarks (geomean +0.03%).
+- `BenchmarkIdleTick`: 0 render/tick, 0 work/tick, 296 B and 5 allocations,
+  unchanged. Its time went from 270 ns to 348 ns a tick: the motion clock
+  checks which modal overlays are open after every message. The clock is read
+  only when that set changes, and the loading-frame check reads it only while
+  a load is out; before that change the tick was 386 ns.

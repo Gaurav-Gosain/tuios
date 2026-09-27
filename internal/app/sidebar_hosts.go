@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -740,7 +739,7 @@ func (m *OS) drawHostRow(
 			}
 		}
 		recordHit(sidebarRowHost, GlobalSessionName, "", -1, 1)
-		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add, st, collapsed)))
+		*lines = append(*lines, compose(st.mark(pal, m.sidebarHostRow(node, cw, pal, add, st, collapsed))))
 		return
 	}
 
@@ -766,7 +765,7 @@ func (m *OS) drawHostRow(
 			}
 		}
 		recordHit(sidebarRowHost, node.Host, "", -1, 1)
-		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add, st, collapsed)))
+		*lines = append(*lines, compose(st.mark(pal, m.sidebarHostRow(node, cw, pal, add, st, collapsed))))
 		return
 	}
 
@@ -775,7 +774,7 @@ func (m *OS) drawHostRow(
 		st.Cursor = st.Cursor || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
 		recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
 	}
-	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, st, showCounts)))
+	*lines = append(*lines, compose(st.mark(pal, m.sidebarRemoteSessionRow(node, cw, variant, pal, st, showCounts))))
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -980,10 +979,7 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 // The count takes the same gate a local session row's count takes: a rail too
 // narrow for a name and a number keeps the name.
 func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, showCounts bool) string {
-	var rowBg color.Color
-	if st.lit() {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(st, pal)
 	right, rightW := "", 0
 	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		count := strconv.Itoa(node.WindowCount)

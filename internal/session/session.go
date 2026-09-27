@@ -504,6 +504,14 @@ type SessionState struct {
 	// wins, as it does for the rest of what a client owns here.
 	PaneReportBg string `json:"pane_report_bg,omitempty"`
 	PaneReportFg string `json:"pane_report_fg,omitempty"`
+	// PaneReportPalette is the pushing client's host terminal's own sixteen
+	// ANSI colours, as sixteen comma-separated #rrggbb entries with an empty
+	// entry for a slot the host did not answer for. The daemon's emulators
+	// answer a program's OSC 4 query for a slot nothing else has set with it.
+	// Empty keeps the emulator's own answers, which is what an older client
+	// gets. A string rather than a list, so there is nothing to bound: the
+	// daemon reads the first sixteen well-formed entries and ignores the rest.
+	PaneReportPalette string `json:"pane_report_palette,omitempty"`
 	// PaneGeometry is the session's agreed intra-box layout arithmetic: the
 	// inputs that decide how the panes' box is partitioned and how much of each
 	// rectangle a guest may draw in. See PaneGeometryState for why it is session
@@ -741,6 +749,16 @@ type PTY struct {
 	cellWidth  int
 	cellHeight int
 
+	// The window size writes are coalesced; see pty_winsize.go. spawnedAt is
+	// set once at creation. The rest is guarded by winsizeMu, except
+	// winsizeHeld, which is also read without it on the input path.
+	spawnedAt             time.Time
+	winsizeWritten        time.Time
+	winsizeHeld           atomic.Bool
+	heldWidth, heldHeight int
+	winsizeTimer          *time.Timer
+	winsizeClosed         bool
+
 	// vtSeq is the stream position the emulator has consumed, guarded by
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
@@ -886,6 +904,10 @@ type Session struct {
 	// they change cannot miss them. See applyReportColors.
 	reportBgHex, reportFgHex string
 	reportBg, reportFg       color.Color
+	// reportPalHex and reportPal are the host's sixteen, the same way, for
+	// OSC 4.
+	reportPalHex string
+	reportPal    [16]color.Color
 
 	// The last directory read out of each PTY's process, and when. See
 	// liveCwds: GetState is on the render path and reading a process
@@ -1088,6 +1110,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// HerdrEnv returns the herdr protocol variables a pane with the given
+	// window id that runs the given command is started with, nil for none.
+	// See Manager.HerdrEnv.
+	HerdrEnv func(windowID string, command []string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -1394,7 +1420,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			} else {
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnvWith(windowID, restored, extraEnv)
+			cmd.Env = s.buildEnvFor(windowID, restored, extraEnv, command)
 			if stdout != nil {
 				cmd.Stdout = stdout
 			}
@@ -1451,6 +1477,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		onExit:       onExit,
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
+		spawnedAt:    time.Now(),
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -1532,6 +1559,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// Before the goroutines start, so the emulator needs no lock yet.
 	if s.reportBg != nil || s.reportFg != nil {
 		terminal.SetReportColors(s.reportFg, s.reportBg)
+	}
+	if s.reportPalHex != "" {
+		terminal.SetReportPalette(s.reportPal)
 	}
 	s.ptys[id] = pty
 
@@ -2339,12 +2369,19 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 	return s.buildEnvWith(windowID, restored, nil)
 }
 
-// buildEnvWith is buildEnv with a caller's own variables. They replace the
+// buildEnvWith is buildEnvFor a pane that runs the user's shell.
+func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
+	return s.buildEnvFor(windowID, restored, extra, nil)
+}
+
+// buildEnvFor is buildEnv with a caller's own variables, for a pane that runs
+// command (nil for the user's shell). The caller's variables replace the
 // daemon's variables of the same name, and every variable set below them,
 // TERM and the TUIOS_ contract, is set after them and wins. The caller's
 // variables are checked before they get here (callerEnv), which refuses a
-// TUIOS_ name outright.
-func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
+// TUIOS_ name outright. command decides what a harness started directly is
+// told beyond that: see guestenv.TermProgramFor.
+func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []string) []string {
 	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
 	// inside tmux would otherwise hand every pane the variables that make a
 	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
@@ -2377,7 +2414,7 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 	}
 	env = append(env, "COLORTERM="+colorTerm)
 	kitty, sixel := s.GraphicsCapabilities()
-	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(kitty, sixel))
+	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
 	// TUIOS_HOST names the machine this pane runs on. A pane is always local
@@ -2412,6 +2449,11 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
 		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
+	}
+	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
+	// socket here, when this pane starts one. See herdr_compat.go.
+	if s.config != nil && s.config.HerdrEnv != nil {
+		env = append(env, s.config.HerdrEnv(windowID, command)...)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.
@@ -2677,6 +2719,7 @@ func (p *PTY) Write(data []byte) (int, error) {
 	if p.pty == nil {
 		return 0, fmt.Errorf("PTY not available")
 	}
+	p.flushWinsize()
 	return p.pty.Write(data)
 }
 
@@ -2717,12 +2760,15 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 		return nil
 	}
 	p.cellWidth, p.cellHeight = cellWidth, cellHeight
-	ws, ok := p.pty.(ptyspawn.WinsizeSetter)
-	if !ok {
+	if _, ok := p.pty.(ptyspawn.WinsizeSetter); !ok {
+		return nil
+	}
+	// A size already held is written with the new pixels when it is due.
+	if p.winsizeHeld.Load() {
 		return nil
 	}
 	width, height := p.Size()
-	return ws.SetWinsize(width, height, width*cellWidth, height*cellHeight)
+	return p.setWinsizeLocked(width, height)
 }
 
 // Resize changes the PTY and terminal emulator size.
@@ -2791,15 +2837,13 @@ func (p *PTY) Resize(width, height int) error {
 		}
 	}
 
-	// The real PTY is resized now regardless, so the guest gets its SIGWINCH
-	// without waiting for the emulator to catch up with the backlog. The
-	// pixel size goes in the same ioctl: see ptyspawn.SetWinsize.
-	if p.pty != nil {
-		p.winsizeMu.Lock()
-		defer p.winsizeMu.Unlock()
-		return ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
-	}
-	return nil
+	// The real PTY is resized without waiting for the emulator to catch up
+	// with the backlog. The pixel size goes in the same ioctl: see
+	// ptyspawn.SetWinsize. A resize inside a burst is held and written with
+	// the burst's last size: see pty_winsize.go.
+	p.winsizeMu.Lock()
+	defer p.winsizeMu.Unlock()
+	return p.setWinsizeLocked(width, height)
 }
 
 // DefaultStateScrollback is how many scrollback lines a state request carries
@@ -3650,6 +3694,9 @@ func (p *PTY) Close() error {
 	if p.terminal != nil {
 		_ = p.terminal.Close()
 	}
+
+	// No held window size may be written once the descriptor is closed.
+	p.closeWinsize()
 
 	// Close PTY. This unblocks readOutput's pending Read, which then closes
 	// vtWriteChan so vtWriter exits.

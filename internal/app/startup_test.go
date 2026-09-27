@@ -21,9 +21,9 @@ func newStartupOS(t *testing.T, openWindow, tiled bool) *OS {
 	t.Helper()
 	// Disable animations so the tiling layout is applied to the window geometry
 	// instantly instead of easing into place over ticks the test never runs.
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prev })
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prev })
 
 	cfg := config.DefaultConfig()
 	cfg.Startup.OpenDefaultWindow = openWindow

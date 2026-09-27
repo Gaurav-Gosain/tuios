@@ -119,6 +119,21 @@ func (m *OS) captureLayers() []*lipgloss.Layer {
 
 // captureHintStrip is the one-line instruction bar, in whichkey styling.
 func (m *OS) captureHintStrip(pal overlay.Palette) string {
+	if m.Capture.OverOverlay {
+		// The panes are under the overlay, so none is offered.
+		hints := []overlay.Hint{
+			{Key: "drag", Label: "select region"},
+			{Key: "click", Label: "full screen"},
+			{Key: "esc", Label: "cancel"},
+		}
+		if m.Capture.Keyboard {
+			hints = []overlay.Hint{
+				{Key: overlay.EnterKey(), Label: "full screen"},
+				{Key: "esc", Label: "cancel"},
+			}
+		}
+		return captureHints(pal, hints)
+	}
 	hints := []overlay.Hint{
 		{Key: "click", Label: "capture window"},
 		{Key: "drag", Label: "select region"},
@@ -133,6 +148,11 @@ func (m *OS) captureHintStrip(pal overlay.Palette) string {
 			{Key: "esc", Label: "cancel"},
 		}
 	}
+	return captureHints(pal, hints)
+}
+
+// captureHints draws hints as the strip, in whichkey styling.
+func captureHints(pal overlay.Palette, hints []overlay.Hint) string {
 	key := lipgloss.NewStyle().Background(pal.Card).Foreground(pal.AccentBright).Bold(true)
 	label := lipgloss.NewStyle().Background(pal.Card).Foreground(pal.Fg)
 	sep := lipgloss.NewStyle().Background(pal.Card).Foreground(pal.FgMute).Render(" · ")

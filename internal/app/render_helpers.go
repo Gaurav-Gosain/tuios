@@ -381,7 +381,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 		bottomBorder = renderTitleBadge(windowName, markState, width, color, false, &m.Settings)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
-		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)
+		indicatorStyle := lipgloss.NewStyle().Foreground(theme.ScrollIndicator()).Bold(true)
 		indicator := indicatorStyle.Render(scrollIndicator)
 		indicatorWidth := lipgloss.Width(indicator)
 		lineWidth := max(width-indicatorWidth, 0)
@@ -522,8 +522,7 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	}
 
 	if isCursor {
-		fg := lipgloss.Color("#FFFFFF")
-		bg := lipgloss.Color("#000000")
+		fg, bg := theme.CursorFallback()
 		if cell.Style.Fg != nil {
 			if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 				fg = ansiColor

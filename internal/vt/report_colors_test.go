@@ -119,3 +119,96 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 	})
 	t.Logf("ran on the %s backend", vt.Backend)
 }
+
+// An OSC 4 query for one of the sixteen is answered with the host terminal's
+// own colour for the slot when tuios knows it (SetReportPalette), on either
+// backend. The E2E test of host colours runs the pure emulator in the daemon
+// only, so the libghostty-vt backend is held to it here.
+//
+// The ways it could go wrong, written down before the cases:
+//   - a slot the guest set with OSC 4 must keep the guest's answer;
+//   - a slot the theme sets must keep the theme's answer, since that is the
+//     colour the slot is drawn in;
+//   - a nil entry must keep the xterm default rather than answer black;
+//   - OSC 104 must bring the reported colour back, not the xterm default;
+//   - a slot past 15 must not be touched.
+func TestReportPaletteAnswersOSC4(t *testing.T) {
+	hostRed := color.RGBA{R: 0xc4, G: 0x1a, B: 0x16, A: 0xff}
+	themeRed := color.RGBA{R: 0xf3, G: 0x8b, B: 0xa8, A: 0xff}
+	var pal [16]color.Color
+	pal[1] = hostRed
+
+	answer := func(t *testing.T, term vt.Terminal, in string) string {
+		t.Helper()
+		if _, err := term.Write([]byte(in)); err != nil {
+			t.Fatalf("write %q: %v", in, err)
+		}
+		got := make(chan string, 1)
+		go func() {
+			buf := make([]byte, 512)
+			n, _ := term.Read(buf)
+			got <- string(buf[:n])
+		}()
+		select {
+		case s := <-got:
+			if m := osc4RGB.FindStringSubmatch(s); m != nil {
+				return m[1]
+			}
+			t.Fatalf("the reply %q carries no colour", s)
+		case <-time.After(2 * time.Second):
+		}
+		return ""
+	}
+	fresh := func(t *testing.T) vt.Terminal {
+		term := vt.New(20, 4)
+		t.Cleanup(func() { _ = term.Close() })
+		return term
+	}
+
+	t.Run("the host's slot answers", func(t *testing.T) {
+		term := fresh(t)
+		term.SetReportPalette(pal)
+		if got := answer(t, term, "\x1b]4;1;?\x1b\\"); got != "rgb:c4c4/1a1a/1616" {
+			t.Errorf("OSC 4;1 answered %q, want the host's rgb:c4c4/1a1a/1616", got)
+		}
+	})
+	t.Run("a nil slot keeps the default", func(t *testing.T) {
+		term := fresh(t)
+		before := answer(t, term, "\x1b]4;2;?\x1b\\")
+		term.SetReportPalette(pal)
+		if got := answer(t, term, "\x1b]4;2;?\x1b\\"); got != before || got == "" {
+			t.Errorf("OSC 4;2 answered %q, want the unchanged %q", got, before)
+		}
+	})
+	t.Run("the guest's own slot wins and a reset gives the host's back", func(t *testing.T) {
+		term := fresh(t)
+		term.SetReportPalette(pal)
+		if got := answer(t, term, "\x1b]4;1;rgb:00/ff/00\x1b\\\x1b]4;1;?\x1b\\"); got != "rgb:0000/ffff/0000" {
+			t.Errorf("after OSC 4 set, the query answered %q, want the guest's rgb:0000/ffff/0000", got)
+		}
+		if got := answer(t, term, "\x1b]104;1\x1b\\\x1b]4;1;?\x1b\\"); got != "rgb:c4c4/1a1a/1616" {
+			t.Errorf("after OSC 104, the query answered %q, want the host's rgb:c4c4/1a1a/1616", got)
+		}
+	})
+	t.Run("the theme's slot wins", func(t *testing.T) {
+		term := fresh(t)
+		var theme [16]color.Color
+		theme[1] = themeRed
+		term.SetThemeColors(color.White, color.Black, nil, theme)
+		term.SetReportPalette(pal)
+		if got := answer(t, term, "\x1b]4;1;?\x1b\\"); got != "rgb:f3f3/8b8b/a8a8" {
+			t.Errorf("OSC 4;1 answered %q, want the theme's rgb:f3f3/8b8b/a8a8", got)
+		}
+	})
+	t.Run("a slot past fifteen is untouched", func(t *testing.T) {
+		term := fresh(t)
+		before := answer(t, term, "\x1b]4;17;?\x1b\\")
+		term.SetReportPalette(pal)
+		if got := answer(t, term, "\x1b]4;17;?\x1b\\"); got != before {
+			t.Errorf("OSC 4;17 answered %q, want the unchanged %q", got, before)
+		}
+	})
+	t.Logf("ran on the %s backend", vt.Backend)
+}
+
+var osc4RGB = regexp.MustCompile(`\x1b\]4;\d+;(rgb:[0-9a-fA-F/]+)`)

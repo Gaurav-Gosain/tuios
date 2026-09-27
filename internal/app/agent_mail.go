@@ -107,6 +107,9 @@ type AgentMailState struct {
 	Error string
 	// Loading is true between a read being asked for and the daemon answering.
 	Loading bool
+	// LoadingSince is when that read went out. The panel says it is reading
+	// only once the read has run past overlay.LoadingDelay.
+	LoadingSince time.Time
 	// Sending is true between enter on a reply and the daemon answering.
 	Sending bool
 }
@@ -368,6 +371,7 @@ func (m *OS) agentMailLoad() tea.Cmd {
 		return nil
 	}
 	m.AgentMail.Loading = true
+	m.AgentMail.LoadingSince = time.Now()
 	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
 

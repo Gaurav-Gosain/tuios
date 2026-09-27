@@ -27,9 +27,17 @@ type listOverlay struct {
 	Selected   int
 	// Scroll points at the caller's scroll offset; the renderer clamps it to the
 	// rows it can actually show, which depends on the screen height.
-	Scroll   *int
-	EmptyMsg string
-	Hints    []overlay.Hint
+	Scroll *int
+	// EmptyMsg is what the list says when it has no rows, centred in the room
+	// the rows would take, with EmptyHint under it: the one key worth
+	// pressing next, "esc close" unless the caller names a better one.
+	EmptyMsg  string
+	EmptyHint overlay.Hint
+	// Pending says a load is out that has not yet run past
+	// overlay.LoadingDelay. An empty list draws nothing while it is set, so a
+	// fast load never flashes a loading line.
+	Pending bool
+	Hints   []overlay.Hint
 	// Detail is lines shown under the list, above the position line, each at
 	// most the fitted width: more about the selected row than the row holds.
 	// DetailFor builds them for the fitted width.
@@ -46,6 +54,10 @@ type listOverlay struct {
 	// Position, when set, is where the cursor is for the readout, counted in
 	// what a person counts: the Inbox's items, not its group headings.
 	Position func() (n, of int)
+	// Unfocused says the keyboard is elsewhere, in an editor under the list
+	// say. The cursor row is still drawn, on the quiet ground (see
+	// overlay.RowState), so the list says which row the editor is for.
+	Unfocused bool
 }
 
 // listOverlayLayout returns the fitted inner width and visible row count for a
@@ -95,20 +107,21 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	end := min(start+cfg.MaxVisible, cfg.Count)
 	shown := 0
 	for i := start; i < end; i++ {
-		rowBg := bg
-		if i == cfg.Selected {
-			rowBg = pal.RowSel
-		}
-		lines = append(lines, overlay.Fill(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, rowBg))
+		st := overlay.RowState{Cursor: i == cfg.Selected, Focused: !cfg.Unfocused}
+		rowBg := pal.Ground(st, bg)
+		lines = append(lines, pal.Row(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, st, bg))
 		shown++
 	}
-	if cfg.Count == 0 {
-		msg := cfg.EmptyMsg
-		if msg == "" {
-			msg = "Nothing here"
+	if cfg.Count == 0 && !cfg.Pending {
+		empty := overlay.Empty{Message: cfg.EmptyMsg, Hint: cfg.EmptyHint}
+		if empty.Message == "" {
+			empty.Message = "Nothing here"
 		}
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+msg))
-		shown++
+		if empty.Hint.Key == "" {
+			empty.Hint = overlay.Hint{Key: "esc", Label: "close"}
+		}
+		lines = append(lines, empty.Lines(cfg.Width, cfg.MaxVisible, bg, pal)...)
+		shown = cfg.MaxVisible
 	}
 	for shown < cfg.MaxVisible {
 		lines = append(lines, overlay.Style(bg).Render(" "))

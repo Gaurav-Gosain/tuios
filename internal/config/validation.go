@@ -342,6 +342,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("click_to_type", cfg.Appearance.ClickToType, ClickToTypeModes)
 	checkEnum("auto_enter_terminal_on_focus", string(cfg.Appearance.AutoEnterTerminalOnFocus), AutoEnterTerminalModes)
 	checkEnum("zen_mode", cfg.Appearance.ZenMode, ZenModeModes)
+	checkEnum("motion", cfg.Appearance.Motion, MotionLevels)
 	checkEnum("links", cfg.Appearance.Links, LinkModes)
 	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
 	checkEnum("window_button_position", cfg.Appearance.WindowButtonPosition, WindowButtonPositions)

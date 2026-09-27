@@ -330,7 +330,16 @@ A pane with a live subscription is now sized by that subscription:
   subscriber under the same lock `readOutput` appends and broadcasts under. One
   lock is what puts it at one byte in both streams.
 - The real PTY is resized straight away regardless, so the guest's SIGWINCH does
-  not wait for the emulator to work through a backlog.
+  not wait for the emulator to work through a backlog. The one exception is a
+  burst: a size change within 30 ms of the last one written to the kernel, or
+  within the first 250 ms of the pane's life, is held and written once, as the
+  burst's last size, when that period ends (`internal/session/pty_winsize.go`).
+  The first size change is never held, and input written to the pane writes a
+  held size first, so a guest never reads its size after a keystroke and gets
+  the one from before a resize. The emulator and the subscribers are not
+  held; only the guest hears about a burst later. The reason is macOS
+  `/bin/bash` 3.2, which a SIGWINCH during its startup can kill, and a new pane
+  gets one resize per attached client in its first milliseconds.
 - The daemon announces it as `MsgPTYResized`, which ends the output batch in
   front of it and travels on its own. Coalescing it into the bytes either side
   would put the client's emulator at the wrong width for one of them.

@@ -257,7 +257,10 @@ func groundClient(t *testing.T, cols, rows int, theme, background string, out *s
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "[appearance]\ntheme = \"" + theme + "\"\n"
+	// No dim behind the panel: the overlay is found by the cells that change
+	// when it opens, and the dim changes every cell on screen, the rail too.
+	// modal_dim_test.go holds the dim.
+	cfg := "[appearance]\ntheme = \"" + theme + "\"\nmodal_dim = 0\n"
 	if background != "" {
 		cfg += "background = \"" + background + "\"\n"
 	}
@@ -324,7 +327,7 @@ func groundSteps() []groundStep {
 			close: []any{tuitest.Esc}},
 		{name: "mail", fresh: true, titled: true, keys: []any{tuitest.Ctrl('b'), "M", "m"}, want: []string{"No mail."},
 			close: []any{tuitest.Esc, tuitest.Esc}},
-		{name: "which-key", fresh: true, titled: true, keys: []any{tuitest.Ctrl('b')}, want: []string{"prefix", "Focus pane in a direction"},
+		{name: "which-key", fresh: true, titled: true, keys: []any{tuitest.Ctrl('b')}, want: []string{"prefix", "Focus pane"},
 			close: []any{tuitest.Esc}, check: descriptionsAligned},
 		{name: "context-menu", fresh: true, want: []string{"Close pane"}, close: []any{tuitest.Esc},
 			do: func(t *testing.T, term *tuitest.Terminal) {
@@ -428,8 +431,12 @@ func waitGone(t *testing.T, term *tuitest.Terminal, what, text string) {
 }
 
 // descriptionsAligned fails unless which-key's descriptions start on one
-// column. The arrows key is three bytes a cell, and a width counted in bytes
-// put its description left of every other one.
+// column within a column of the menu. "Create window" and "Focus pane" are in
+// the Windows and Panes sections, which share the first column. The arrows
+// key is three bytes a cell, and a width counted in bytes put its
+// description left of every other one. At 80 columns, with the agent section
+// shown, the menu cuts its descriptions to fit, so only "Create" is looked
+// for.
 func descriptionsAligned(t *testing.T, s tuitest.Screen) {
 	t.Helper()
 	col := func(text string) int {
@@ -439,7 +446,7 @@ func descriptionsAligned(t *testing.T, s tuitest.Screen) {
 		}
 		return len([]rune(s.Line(y)[:strings.Index(s.Line(y), text)]))
 	}
-	if a, b := col("Create window"), col("Focus pane in a direction"); a < 0 || a != b {
+	if a, b := col("Create"), col("Focus pane"); a < 0 || a != b {
 		t.Errorf("which-key descriptions start at columns %d and %d\n%s", a, b, s.Text())
 	}
 }

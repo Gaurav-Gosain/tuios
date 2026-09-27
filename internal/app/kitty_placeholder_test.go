@@ -170,7 +170,7 @@ func TestDimmingLeavesAPlaceholderCellAlone(t *testing.T) {
 		Style:   uv.Style{Fg: color.RGBA{R: 0x0a, G: 0x0b, B: 0x0c, A: 0xff}},
 	}
 	var scratch uv.Cell
-	got := dimCell(&scratch, src, color.White, color.Black, 0.5)
+	got := dimCell(&scratch, src, color.White, color.Black, 0.5, nil)
 
 	r, g, b, _ := got.Style.Fg.RGBA()
 	gotID := uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
@@ -181,7 +181,7 @@ func TestDimmingLeavesAPlaceholderCellAlone(t *testing.T) {
 	// An ordinary cell must still dim, or the guard is too wide.
 	text := &uv.Cell{Content: "a", Width: 1, Style: uv.Style{Fg: color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}}}
 	var scratch2 uv.Cell
-	dimmed := dimCell(&scratch2, text, color.White, color.Black, 0.5)
+	dimmed := dimCell(&scratch2, text, color.White, color.Black, 0.5, nil)
 	if dr, _, _, _ := dimmed.Style.Fg.RGBA(); dr>>8 == 0xff {
 		t.Error("an ordinary cell was not dimmed")
 	}

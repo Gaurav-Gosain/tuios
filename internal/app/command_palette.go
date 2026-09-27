@@ -841,12 +841,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+D a",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				s.AnimationsEnabled = !s.AnimationsEnabled
-				if s.AnimationsEnabled {
-					m.ShowNotification("Animations on", "success", s.NotificationDuration)
-				} else {
-					m.ShowNotification("Animations off", "info", s.NotificationDuration)
-				}
+				_ = m.ToggleAnimations()
 				return m, nil
 			},
 		},
@@ -1005,6 +1000,9 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 			commands = append(commands, item)
 		}
 	}
+	if paletteGrouped(query) {
+		return groupPaletteItems(commands)
+	}
 	out := matchPaletteItems(commands, query)
 	if strings.TrimSpace(query) == "" || len(settings) == 0 {
 		return out
@@ -1024,6 +1022,27 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 		}
 		out = append(out, item)
 	}
+	return out
+}
+
+// paletteGrouped reports whether the palette lists its commands under category
+// headers: only while nothing is typed. A typed query ranks the rows by how
+// well they match, and headers over a ranked list would split it into runs
+// that each restart the ranking.
+func paletteGrouped(query string) bool { return query == "" }
+
+// groupPaletteItems orders items by category, the categories in the order
+// they first appear and the items inside each in the order they were given,
+// so each category is one run under one header.
+func groupPaletteItems(items []CommandPaletteItem) []CommandPaletteItem {
+	rank := map[string]int{}
+	for _, it := range items {
+		if _, ok := rank[it.Category]; !ok {
+			rank[it.Category] = len(rank)
+		}
+	}
+	out := slices.Clone(items)
+	slices.SortStableFunc(out, func(a, b CommandPaletteItem) int { return rank[a.Category] - rank[b.Category] })
 	return out
 }
 

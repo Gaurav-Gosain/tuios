@@ -64,10 +64,36 @@ OSC 11 and its default text colour with OSC 10, and some pick a dark or light
 palette from the answer. While the pane background paints a colour, a pane's
 OSC 11 is answered with that colour and OSC 10 with the text colour tuios gives
 default text there, so the program sees what it is drawn on. A program that set
-its own colours with OSC 10 or 11 gets its own back. With the pane background
-off the answers are what they always were. In a daemon session the daemon's
-emulator answers, and the client tells it the painted pair when it syncs; with
-several clients attached, the last one to sync decides.
+its own colours with OSC 10 or 11 gets its own back. With a theme on and the
+pane background off, the answers are the theme's colours. With no theme and the
+pane background off, the answers are the host terminal's own: tuios asks the
+terminal it runs in for its background, its text colour and its sixteen ANSI
+colours when it starts or attaches, and tells panes those, so a program on a
+light terminal picks its light palette. OSC 4 queries for the sixteen are
+answered the same way. Each client asks its own terminal, so an SSH or browser
+client on a light terminal and a local one on a dark terminal each get the
+right answer for the session while they are the one typing. In a daemon
+session the daemon's emulator answers, and the client tells it what to answer
+when it syncs; with several clients attached, the last one to sync decides.
+
+With no theme the chrome is drawn for the host's background too: on a light
+terminal the rail, the dock and the unfocused pane borders use the light
+chrome ramp a light theme gets, measured against the terminal's own colour.
+
+**Following light and dark.** A local client turns on mode 2031, and a terminal
+that supports it (ghostty, kitty, contour and others) then tells tuios when the
+system appearance switches between light and dark. tuios asks for the colours
+again, tells panes, and redraws the chrome for the new background. The light
+and dark verdict has hysteresis: a dark verdict turns light only above an 8-bit
+luminance of 140, and a light one turns dark only below 110, so a mid grey
+background does not flip the chrome back and forth. SSH and browser clients
+ask once when they attach and do not follow the switch, because only the local
+client turns the mode off again on exit.
+
+**Terminals that do not answer.** A terminal that answers no colour query,
+such as mosh, leaves everything as it was: panes are told the emulator's
+defaults (a black background and white text) and the chrome uses its dark ramp.
+Set a theme, or `pane_background`, to give panes a real answer there.
 
 All six hot-reload and are on the **Backgrounds** tab of the settings page
 (`Ctrl+B ,`, then `]`): an All surfaces row and one row per surface, each a
@@ -125,7 +151,7 @@ hold_seconds = 120
 ```
 
 `enabled` names the harnesses, by id or alias: `claude-code` (or `claude`),
-`opencode` and `kilo` have a decision channel tuios can answer through. Other
+`opencode`, `kilo` and `qwen` have a decision channel tuios can answer through. Other
 names are accepted and hold nothing. Even for these, only a call the Inbox can
 show whole on one line is held, such as a short shell command or a file read;
 an edit, an MCP tool or a long command is answered in the pane.
@@ -137,9 +163,34 @@ change applies to the next prompt. Like `[dock]` and `[hosts]`, it is not in
 `list-options` and `tuios set-config` cannot change it. Turning it on gives no
 program the power to answer: only you, at an attached client, can. It also
 needs version 2 of the integration:
-run `tuios integration install claude-code` (or `opencode`, `kilo`) again after
-upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
+run `tuios integration install claude-code` (or `opencode`, `kilo`, `qwen`)
+again after upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
 a prompt is held, answered and handed back.
+
+## Harnesses that report to herdr
+
+Crush reports its state natively to herdr, another multiplexer, when it finds
+herdr's environment in its pane. tuios accepts the same reports on a socket of
+its own, `<daemon socket>.herdr`, and `herdr_protocol` in `[agents]` says which
+panes are told about it:
+
+```toml
+[agents]
+herdr_protocol = "agents"   # agents (default), always, off
+```
+
+`agents` tells a pane that starts such a harness directly, as `tuios
+new-window NAME crush`, `start-agent crush` or `fan --agent crush` do. `always` tells
+every pane, so a Crush started from a shell prompt reports too. `off` tells
+none. A pane that is told gets `HERDR_ENV=1`, `HERDR_SOCKET_PATH` naming
+tuios's socket and `HERDR_PANE_ID` naming the pane, so anything that checks
+`HERDR_ENV` reads it as a herdr pane: herdr itself refuses to start inside one
+unless its `experimental.allow_nested` setting is on, and herdr's own hook scripts report to
+tuios from there. That is why `always` is not the default. An unknown value
+reads as `agents`, with a warning. The daemon reads it when it starts and again
+when the file changes; a change applies to the next pane.
+[AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
+accepted.
 
 ## Plans, risk rules, the recap and the queue
 

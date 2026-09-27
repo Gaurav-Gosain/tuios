@@ -12,6 +12,8 @@ overlays, the dockbar) from them.
 - [Theme File Format](#theme-file-format)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
+- [Colour Depth](#colour-depth)
+- [Lists: Focus and Hover](#lists-focus-and-hover)
 - [Limitations](#limitations)
 
 ## Selecting a Theme
@@ -188,6 +190,18 @@ stays legible over any terminal content. That ramp is four greys at fixed
 spacing (canvas, panel, surface, card), and the spacing is what makes a panel
 read as raised and a chip as inset.
 
+On a light theme the ramp is built from the theme's background instead: the
+background is the canvas, a dialog's surface sits one small step below it, the
+cursor row one ramp step below that, and inset cards above it. The text tiers
+are measured on it the same way. The accent and the key colour are darkened at
+their own hue only as far as they need to read on it as text (4.5:1), and the
+status colours as far as they need to read as marks (3:1); at 256 colours each
+is the palette entry nearest its hue that does. So a dialog on a light theme is a light panel, not a dark slab. The
+screen behind a modal panel fades toward the theme's background rather than
+darkening, since 30% toward black turns a near-white screen a mid grey. A
+theme that names its own ramp keeps it, and at 16 colours the panels paint no
+ground at all, as below.
+
 `surface` moves the whole ramp. Name it and the other three steps are derived
 at the same spacing, and the three text tiers (primary, secondary, quiet) are
 re-derived against it at the contrast ratios the constant palette has. The
@@ -216,6 +230,68 @@ near-white one a white card. The focused border and the mode pills are accent
 colors and do not follow `surface`; a light surface under an accent picked for
 a dark one is the case to raise if a pill disappears.
 
+## Colour Depth
+
+The chrome is designed separately for each colour depth a terminal can have,
+rather than drawn in truecolor and stepped down one colour at a time. tuios
+reads the depth from the terminal the way every other program does, from
+`TERM`, `COLORTERM` and `NO_COLOR`, and it is the same depth the frame writer
+uses.
+
+| Depth | Detected when | What the chrome does |
+|---|---|---|
+| truecolor | `COLORTERM=truecolor` or `24bit`, or a terminal known to have it (kitty, ghostty, wezterm, alacritty, foot) | The designed ramp, as described above. |
+| 256 | `TERM` ends in `256color` and there is no `COLORTERM`: Apple Terminal, mosh, tmux without `Tc` | The neutral ramp is set by hand on the xterm grey ramp (232 to 255), so no panel or selected row turns navy. The accent and status colours step to their nearest palette entry, and every ink is measured against the grey it is actually drawn on. |
+| 16 | `TERM=xterm`, `TERM=linux`, `NO_COLOR` | No grounds are painted: panels use your terminal's own background and frame themselves with a thin line. Text is your terminal's own foreground, quiet text is bright black, colours are your palette's slots (the accent is bright blue, keys bright cyan), the selected row is reverse video, a title chip is reverse video in the accent, and a workspace tab on the dock has no fill, so it drops its rounded ends. Text on a coloured chip takes the dark ink on your yellow, green and cyan slots and the light ink on the others. |
+
+With a theme loaded, the 16-colour chrome still uses slot numbers, so it takes
+its colours from whatever palette your terminal is set to; set the terminal to
+the same theme to see the theme's colours. A theme's `chrome` colours are RGB
+and have no slot, so at 16 colours they give way to the slots their roles
+derive from.
+
+A colour stepped down to 256 goes to the palette entry nearest it in OKLab, and
+a colour with almost no chroma to the grey ramp. Saturated colours never land
+on a grey: a theme's red stays red.
+
+**The review diff.** The diff in the review overlay is designed per depth too,
+so added and removed lines stay distinct without the `+` and `-` column:
+
+| Depth | Added and removed lines | Changed words | Cursor row |
+|---|---|---|---|
+| truecolor | Tints of the theme's green and red mixed into the pane's ground | A stronger tint of the same colour | The accent mixed into the row |
+| 256 | Fixed palette entries: 22 and 52 on a dark ground, 194 and 224 on a light one (the ones Codex uses) | One step brighter: 28 and 88 on dark, 157 and 217 on light | The line number column takes the accent; an added or removed line keeps its colour |
+| 16 | No line grounds. The line numbers and the sign are green for an added line and red for a removed one | Bold and underlined | Reverse video on the line numbers only, so the code keeps its colours and marks |
+
+Light or dark at 256 colours follows the ground the review is drawn on: the
+pane background, the theme's background, or the chrome's surface.
+
+**mosh.** mosh 1.4 and later pass 24-bit colour through, but mosh does not
+forward `COLORTERM`, so tuios over mosh sees 256 colours. If your terminal has
+truecolor, set it on the remote side:
+
+```bash
+export COLORTERM=truecolor
+```
+
+## Lists: Focus and Hover
+
+Every list in tuios (the rail, the Inbox, the review overlay, settings, the
+command palette and every picker) follows one rule:
+
+- **The cell is reserved.** Whatever the cursor row shows, a mark or a bold
+  name, has its cell kept on every other row, so nothing moves when the cursor
+  does.
+- **Only colour changes.** The cursor, the pointer and focus change grounds and
+  inks, never the layout.
+- **A list without the keyboard still shows its cursor**, on a quieter ground.
+  In the review overlay, the file list keeps its cursor while the diff has the
+  keys, and the diff keeps its cursor while the file list does.
+
+At 16 colours the grounds become attributes: the cursor of the focused list is
+reverse video, and the cursor of an unfocused list and the row under the
+pointer are underlined.
+
 ## Limitations
 
 - **Selection re-reads the directory.** Switching themes applies immediately,
@@ -232,8 +308,9 @@ a dark one is the case to raise if a pill disappears.
   colour picker, seeded on the colour the border is currently drawn in; clearing
   one there unsets the override and hands the border back to the theme.
 - **The chrome's neutrals do not follow the sixteen.** Dialogs and the
-  which-key popup draw on a constant grey ramp regardless of the active theme,
-  by design; `chrome.surface` is the knob that moves it.
+  which-key popup draw on a constant grey ramp on a dark theme, and on a ramp
+  built from the background on a light one, whatever the sixteen are;
+  `chrome.surface` is the knob that moves it.
 
 ## Related Documentation
 

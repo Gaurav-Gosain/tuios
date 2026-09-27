@@ -14,17 +14,11 @@ package integration
 //
 // Sources, per harness, read for this change:
 //
-//	copilot       https://docs.github.com/en/copilot/reference/hooks-configuration
-//	              (~/.copilot/hooks/*.json, SessionStart carries session_id,
-//	              sessionStart carries sessionId); herdr assets/copilot
-//	cursor-agent  https://cursor.com/docs/hooks (sessionStart); herdr
-//	              assets/cursor, which reads session_id or conversation_id
 //	devin         herdr assets/devin (SessionStart and UserPromptSubmit carry
 //	              session_id or sessionId)
 //	droid         herdr assets/droid (SessionStart carries session_id)
 //	qoder         https://docs.qoder.com/zh/cli/hooks (Claude Code's shape),
 //	              as herdr's installer cites it; herdr assets/qodercli
-//	qwen          herdr assets/qwen (SessionStart carries session_id and source)
 //	grok          herdr assets/grok (Grok sets GROK_SESSION_ID in every hook
 //	              process, and its SessionStart is spelled three ways)
 //	antigravity   herdr assets/antigravity_cli (PreInvocation carries
@@ -42,12 +36,9 @@ import "slices"
 
 // identityEvents lists, per harness, the events that name the conversation.
 var identityEvents = map[string][]string{
-	Copilot:     {"SessionStart", "sessionStart"},
-	CursorAgent: {"sessionStart"},
 	Devin:       {"SessionStart", "UserPromptSubmit"},
 	Droid:       {"SessionStart"},
 	Qoder:       {"SessionStart"},
-	Qwen:        {"SessionStart"},
 	Grok:        {"SessionStart", "session_start", "sessionStart"},
 	Antigravity: {"PreInvocation"},
 	Crush:       {"PreToolUse", "pretooluse", "pre_tool_use"},
@@ -57,7 +48,6 @@ var identityEvents = map[string][]string{
 // identitySessionKeys lists, per harness, the payload keys that may hold the
 // conversation id, in the order they are tried.
 var identitySessionKeys = map[string][]string{
-	CursorAgent: {"session_id", "sessionId", "conversation_id", "conversationId"},
 	Antigravity: {"conversationId", "conversation_id"},
 }
 

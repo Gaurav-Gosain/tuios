@@ -131,7 +131,7 @@ func fileIconFit(icon fileIcon) fileIcon {
 
 // fileIconsOn reports whether the nerd font layer draws at all.
 func fileIconsOn(s *config.Settings) bool {
-	return s.SidebarFileIcons && !overlay.UseASCII()
+	return s.SidebarFileIcons && !overlay.UseASCII() && !s.NoNerdFont
 }
 
 // fileIconColorsOn reports whether the colour layer draws. It needs the icons

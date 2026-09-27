@@ -25,10 +25,14 @@ const inboxWidth = 72
 // says what would appear here.
 var inboxEmptyLines = []string{
 	"Nothing is waiting for you.",
-	"Agents that block on an approval or a question, write to you, error,",
-	"finish a turn you have not looked at, or can resume after a restart",
-	"show up here, from every session.",
+	"Agents that block on an approval or a question, write to you, error, " +
+		"finish a turn you have not looked at, or can resume after a restart " +
+		"show up here, from every session.",
 }
+
+// inboxEmptyRows is the height of the empty Inbox's body, so it opens at
+// about the size it will be once something arrives.
+const inboxEmptyRows = 9
 
 // renderInbox renders the Inbox overlay: each kind under a heading in words,
 // oldest first, with how long each item has waited. Nothing is said by colour
@@ -114,7 +118,14 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			// A reply from the rail to a pane with nothing in the Inbox.
 			return m.simpleOverlayPanel(title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
 		}
-		return m.simpleOverlayPanel(title, lines, m.keyHints(
+		// The one key offered in the middle is the mailbox, the place to
+		// look when nothing is waiting; without a daemon there is nothing
+		// to open, and it offers the way out.
+		next := overlay.Hint{Key: "esc", Label: "close"}
+		if mb := m.keyHints(config.ActionInboxMailbox, "mailbox"); len(mb) > 0 && m.IsDaemonSession && !st.Unsupported {
+			next = mb[0]
+		}
+		return m.emptyPanel(title, inboxWidth, inboxEmptyRows, lines[0], lines[1:], next, m.keyHints(
 			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
 			config.ActionInboxMailbox, "mailbox", config.ActionInboxClose, "close"))
 	}
@@ -128,6 +139,8 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
+		// Typing a reply takes the keyboard, so the row it answers goes quiet.
+		Unfocused: replying,
 		Position: func() (int, int) {
 			n, of := 0, 0
 			for i, r := range rows {
@@ -208,7 +221,12 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	var hints []overlay.Hint
 	for i := 0; i+1 < len(pairs); i += 2 {
 		if key := m.inboxKey(pairs[i]); key != "" {
-			hints = append(hints, overlay.Hint{Key: key, Label: pairs[i+1]})
+			h := overlay.Hint{Key: key, Label: pairs[i+1]}
+			if pairs[i] == config.ActionInboxClose {
+				// The way out keeps its label on any key it is bound to.
+				h.Priority = overlay.HintEssential
+			}
+			hints = append(hints, h)
 		}
 	}
 	return hints
@@ -271,7 +289,7 @@ func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 	// The keys for the row come first and the footer keeps to one line: the
 	// keys that work on the whole list give way, the selector first, then the
 	// filter. Both are in help, and the empty Inbox offers them.
-	for len(hints)-1 > rowHints && overlay.HintRowCount(hints, inboxWidth) > 1 {
+	for len(hints)-1 > rowHints && !overlay.HintsFit(hints, inboxWidth) {
 		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
 	}
 	return hints
@@ -447,8 +465,10 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	hints := []overlay.Hint{}
 	switch {
 	case pk == nil && p.Loading:
-		body = append(body, "")
-		add(pal.FgDim, "Reading the prompt...")
+		if overlay.ShowLoading(p.LoadingSince, now) {
+			body = append(body, "")
+			add(pal.FgDim, "Reading the prompt...")
+		}
 	case pk == nil:
 	case !pk.Found:
 		body = append(body, "")
@@ -487,7 +507,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	case p.Sending:
 		body = append(body, "")
 		add(pal.FgDim, "Answering, and waiting for the pane to move on...")
-	case p.Loading && pk != nil:
+	case p.Loading && pk != nil && overlay.ShowLoading(p.LoadingSince, now):
 		body = append(body, "")
 		add(pal.FgDim, "Reading the prompt again...")
 	}
@@ -642,8 +662,10 @@ func (m *OS) inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
 			hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
 		}
 	}
+	// Answering in the pane is a second way to do what the answers do, so a
+	// narrow footer gives it up before the answers and dismiss.
+	hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "answer in pane"))...)
 	return append(hints, m.keyHints(
-		config.ActionInboxGo, "answer in pane",
 		config.ActionInboxDismiss, "dismiss",
 		config.ActionInboxClose, "close")...)
 }
@@ -687,7 +709,7 @@ func inboxAskDetail(it session.AttentionItem, width int) []string {
 func (m *OS) inboxAskHints(it session.AttentionItem) []overlay.Hint {
 	hints := []overlay.Hint{{Key: inboxAskKeys(it), Label: "answer"}}
 	if it.Window != "" {
-		hints = append(hints, m.keyHints(config.ActionInboxGo, "go to pane")...)
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "go to pane"))...)
 	}
 	return append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxClose, "close")...)
 }

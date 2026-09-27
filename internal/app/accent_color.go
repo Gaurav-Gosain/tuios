@@ -3,10 +3,8 @@ package app
 import (
 	"image/color"
 	"math"
-	"os"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -177,15 +175,12 @@ func rgbToHSL(c color.RGBA) (h, s, l float64) {
 	return h, math.Min(s, 1), l
 }
 
-// accentProfile caches the probed colour profile. Zero is colorprofile.Unknown,
-// which is what "not probed yet" looks like. Atomic because every session's
-// render goroutine reads it.
-var accentProfile atomic.Uint32
-
 // SetAccentColorProfile pins the colour profile the accent picker paints and
-// labels through. Exported for the tests that have to prove the fallback, which
-// cannot be done against whatever terminal happens to run them.
-func SetAccentColorProfile(p colorprofile.Profile) { accentProfile.Store(uint32(p)) }
+// labels through, which is the one the chrome is drawn for (see
+// theme.SetColorProfile). Exported for the servers, which learn it from their
+// session, and for the tests that have to prove the fallback, which cannot be
+// done against whatever terminal happens to run them.
+func SetAccentColorProfile(p colorprofile.Profile) { theme.SetColorProfile(p) }
 
 // accentColorProfile is the colour profile the frame is written through.
 //
@@ -196,14 +191,10 @@ func SetAccentColorProfile(p colorprofile.Profile) { accentProfile.Store(uint32(
 // for. A pipe or a monochrome terminal has nothing to step down to, so those
 // are treated as exact and the writer drops what it cannot show.
 func accentColorProfile() colorprofile.Profile {
-	if v := accentProfile.Load(); v != 0 {
-		return colorprofile.Profile(v)
-	}
-	p := colorprofile.Detect(os.Stdout, os.Environ())
+	p := theme.ColorProfile()
 	if p <= colorprofile.ASCII {
 		p = colorprofile.TrueColor
 	}
-	accentProfile.Store(uint32(p))
 	return p
 }
 

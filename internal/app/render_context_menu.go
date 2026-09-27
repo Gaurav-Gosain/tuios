@@ -54,7 +54,7 @@ func (m *OS) contextMenuWidth(cm *ContextMenu) int {
 // renderer cannot disagree about how much room the left side takes.
 func contextMenuRowLeft(it ContextMenuItem, s *config.Settings) string {
 	icon := ""
-	if it.Icon != "" && !s.UseASCIIOnly {
+	if it.Icon != "" && !s.NerdFontsOff() {
 		icon = it.Icon + " "
 	}
 	return "  " + icon + it.Label
@@ -124,10 +124,8 @@ func (m *OS) contextMenuRows(cm *ContextMenu) (start, visible int) {
 // readable, and FgMute is the furniture tier: 3.07:1 on the panel's Surface,
 // and 1.81:1 when this was written and the tier was a step darker.
 func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg color.Color, pal overlay.Palette) string {
-	rowBg := bg
-	if selected && !it.Dim {
-		rowBg = pal.RowSel
-	}
+	st := overlay.RowState{Cursor: selected && !it.Dim, Focused: true}
+	rowBg := pal.Ground(st, bg)
 
 	labelColor := pal.Fg
 	iconColor := pal.AccentBright
@@ -148,7 +146,7 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 	}
 
 	left := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker)
-	if it.Icon != "" && !m.Settings.UseASCIIOnly {
+	if it.Icon != "" && !m.Settings.NerdFontsOff() {
 		left += overlay.Style(rowBg).Foreground(iconColor).Render(it.Icon + " ")
 	}
 
@@ -165,11 +163,11 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 		Render(overlay.Truncate(it.Label, labelRoom))
 
 	if it.Hint == "" {
-		return overlay.Fill(left, width, rowBg)
+		return pal.Row(left, width, st, bg)
 	}
 	hint := overlay.Style(rowBg).Foreground(hintColor).Render(it.Hint)
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(hint), 1)
-	return overlay.Fill(left+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+hint, width, rowBg)
+	return pal.Row(left+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+hint, width, st, bg)
 }
 
 // contextMenuOrigin places the menu against its anchor.

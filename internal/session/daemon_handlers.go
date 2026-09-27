@@ -48,6 +48,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		SessionNames: names,
 		Codec:        wireCodecName,
 		Protocol:     ProtocolVersion,
+		ClientFocus:  true,
 	})
 }
 
@@ -655,9 +656,9 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// Read before the merge, which may keep another state's fields: the pair
 	// is this client's own, and it is what the panes' emulators answer OSC 11
 	// and OSC 10 with. See report_colors.go.
-	reportBg, reportFg := state.PaneReportBg, state.PaneReportFg
+	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
 	accepted := session.UpdateStateFrom(&state, d.mayActAsHuman(cs))
-	session.applyReportColors(reportBg, reportFg)
+	session.applyReportColors(reportBg, reportFg, reportPal)
 
 	// The merged state is a full copy of the session's, retitled from every
 	// live emulator. It is read only by the reconcile reply and the peer

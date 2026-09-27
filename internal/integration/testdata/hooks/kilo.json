@@ -17,12 +17,12 @@
   {
     "name": "session.idle",
     "payload": {"hook_event_name": "session.idle", "session_id": "ses_k1"},
-    "want": {"state": "done", "agent_session_id": "ses_k1"}
+    "want": {"state": "done", "if_state": "working,needs_input", "agent_session_id": "ses_k1"}
   },
   {
     "name": "TUIOS_AGENT naming Kilo itself",
     "env": {"TUIOS_AGENT": "kilo"},
     "payload": {"hook_event_name": "session.idle", "session_id": "ses_k1"},
-    "want": {"state": "done", "agent_session_id": "ses_k1"}
+    "want": {"state": "done", "if_state": "working,needs_input", "agent_session_id": "ses_k1"}
   }
 ]

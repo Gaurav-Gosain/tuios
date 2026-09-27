@@ -352,6 +352,7 @@ var messageTypeNames = [...]string{
 	MsgHostsChanged:     "HostsChanged",
 	MsgReadDir:          "ReadDir",
 	MsgDirListing:       "DirListing",
+	MsgClientFocus:      "ClientFocus",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

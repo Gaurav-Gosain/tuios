@@ -34,9 +34,9 @@ func isoOS(tb testing.TB, n int) *app.OS {
 	// on a retile leaves geometry untouched at the instant it returns and the
 	// snap-back this test is looking for would land after the assertions rather
 	// than before them.
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	tb.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	tb.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	m := &app.OS{
 		Settings:         config.Global,
@@ -401,7 +401,7 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 			m := isoOS(t, 4)
 			// isoOS turns animations off for the other tests; this one is about
 			// what happens when they are on.
-			m.Settings.AnimationsEnabled = true
+			m.Settings.Motion = config.MotionFull
 			buildTree(m, func(leaf func(int) *layout.TileNode) *layout.TileNode {
 				return v(0.5, h(0.5, leaf(1), leaf(2)), h(0.5, leaf(3), leaf(4)))
 			})

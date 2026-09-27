@@ -23,18 +23,25 @@ func applyTheme(t vt.Terminal) {
 }
 
 // SetReportColors tells the emulator what the pane is really drawn on, so an
-// OSC 10 or OSC 11 query from the program is answered with it. key names the
-// pair, and a pair already given is not given again, which is what lets the
-// renderer ask on every frame: with the pane background off the key is empty
-// and so is the one held here.
-func (w *Window) SetReportColors(fg, bg color.Color, key string) {
+// OSC 10 or OSC 11 query from the program is answered with it, and what the
+// host draws the sixteen ANSI slots in, for an OSC 4 query. pal may be nil,
+// which leaves every slot to the default answer. key names all of it, and
+// what was already given is not given again, which is what lets the renderer
+// ask on every frame: with nothing to report the key is empty and so is the
+// one held here.
+func (w *Window) SetReportColors(fg, bg color.Color, pal *[16]color.Color, key string) {
 	if w.reportKey == key {
 		return
 	}
 	w.reportKey = key
+	var slots [16]color.Color
+	if pal != nil {
+		slots = *pal
+	}
 	w.ioMu.Lock()
 	if w.Terminal != nil {
 		w.Terminal.SetReportColors(fg, bg)
+		w.Terminal.SetReportPalette(slots)
 	}
 	w.ioMu.Unlock()
 }

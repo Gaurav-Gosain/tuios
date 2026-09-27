@@ -130,7 +130,7 @@ tuios --standalone
 - `--show-clock`: Show the clock overlay
 - `--show-cpu`: Show a CPU graph in the dock
 - `--show-ram`: Show RAM usage in the dock
-- `--no-animations`: Disable UI animations for instant transitions
+- `--no-animations`: Disable UI animations for instant transitions (`appearance.motion = none` for this run)
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
 - `--cpuprofile <file>`: Write CPU profile to file
@@ -1198,7 +1198,9 @@ name alone. Some of them:
 |------|--------|-------------|
 | `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
-| `animations_enabled` | `true`, `false` | Enable/disable animations |
+| `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
+| `modal_dim` | `0` to `90` | Percent the screen behind a modal panel is dimmed (default `30`, `0` is off). On a light ground the screen fades toward its own background instead of darkening |
+| `animations_enabled` | `true`, `false` | Deprecated on/off switch: `false` sets `motion` to `none`, `true` to `full` |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
@@ -1218,7 +1220,7 @@ tuios set-config dockbar_position bottom
 tuios set-config border_style rounded
 
 # Turn animations off
-tuios set-config animations_enabled false
+tuios set-config motion none
 
 # Hide window buttons
 tuios set-config hide_window_buttons true
@@ -2493,7 +2495,8 @@ attached       true
 named          2=review
 ```
 
-The `display name`, `accent` and `named` lines appear only when those are set.
+The `display name`, `accent` and `named` lines appear only when those are set,
+and `host focus` only while a client is attached.
 
 **JSON Output Structure:**
 ```json
@@ -2502,6 +2505,7 @@ The `display name`, `accent` and `named` lines appear only when those are set.
   "current_workspace": 1,
   "display_name": "",
   "height": 40,
+  "host_focus": "focused",
   "layout_mode": "bsp",
   "master_ratio": 0.5,
   "message": "command executed",
@@ -2537,6 +2541,7 @@ The `display name`, `accent` and `named` lines appear only when those are set.
 | `mode` | Always `unknown`. The input mode belongs to the attached client, which the daemon does not ask |
 | `width`, `height` | The session's size in cells |
 | `tui_attached` | Whether a client is attached |
+| `host_focus` | Whether the person can be looking at the session, from the focus events of the attached clients' terminals: `focused` when any client's terminal has focus, `unfocused` when every one reported losing it, `unknown` when none is attached or a terminal never reports focus |
 
 The theme is not listed here. It is a session option: read it with
 `tuios get-config appearance.theme`.
@@ -2727,13 +2732,13 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line in the caller's session (`tuios tmux display-message -p '#{pane_id}'`). A tmux session is the tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
@@ -3447,7 +3452,7 @@ Manage saved layout templates.
 - `tuios layout list`: List all saved layout templates
 - `tuios layout delete <name>`: Delete a saved layout template
 - `tuios layout dir`: Print the layout templates directory path
-- `tuios layout export <name>`: Export a layout template as JSON
+- `tuios layout export <name>`: Print a layout template as a tape script
 
 #### `tuios layout list`
 
@@ -3484,7 +3489,14 @@ tuios layout dir
 
 #### `tuios layout export`
 
-Export a saved layout template as JSON for sharing or backup.
+Print a saved layout template as a tape script on stdout. The script turns
+tiling on or off as the layout had it, opens one window per saved window,
+renames each window that had a name, and types the `cd` and startup command
+each window was saved with. Run it with `tuios tape play` or, against a
+running session, `tuios tape exec`.
+
+The template itself is a JSON file in the directory `tuios layout dir` prints;
+copy that file to share the layout as it is stored.
 
 **Usage:**
 ```bash
@@ -3493,7 +3505,8 @@ tuios layout export <name>
 
 **Example:**
 ```bash
-tuios layout export dev-layout
+tuios layout export dev-layout > dev-layout.tape
+tuios tape play dev-layout.tape
 ```
 
 ---
@@ -3737,6 +3750,20 @@ tuios config edit
 
 **Fallback order:** `$EDITOR` → `$VISUAL` → vim → vi → nano → emacs
 
+### `XDG_RUNTIME_DIR`, and `TUIOS_SOCKET`
+
+`XDG_RUNTIME_DIR` chooses the daemon a command reaches: its socket is
+`$XDG_RUNTIME_DIR/tuios/tuios.sock`, or `/tmp/tuios-<uid>/tuios.sock` when the
+variable is unset (`%LOCALAPPDATA%\tuios\tuios.sock` on Windows). Set it, with
+`XDG_STATE_HOME` for separate saved sessions, to run a separate daemon. See
+[Running a separate daemon](SESSIONS.md#running-a-separate-daemon).
+
+`TUIOS_SOCKET` does not choose the daemon. It is set in every pane to the
+socket of the daemon that runs it. A command refuses when `TUIOS_SOCKET` names a
+different socket with no daemon listening, since that is an attempt to select a
+daemon that would otherwise reach the one `XDG_RUNTIME_DIR` names. `tuios mcp`
+is the one reader: it connects to `TUIOS_SOCKET` when it is set, see below.
+
 ### `TUIOS_NO_DAEMON`
 
 Set to `1` to make a plain `tuios` run a standalone session without the daemon,
@@ -3825,6 +3852,26 @@ For best color support, set this to `truecolor`:
 ```bash
 export COLORTERM=truecolor
 ```
+
+tuios draws its chrome for the colour depth it detects: truecolor, 256 or 16
+colours (see [THEMES.md](THEMES.md#colour-depth)).
+
+Without it, tuios falls back to 256 colours unless `TERM` names a terminal
+known to have 24-bit colour. **Mosh** is the common case: mosh 1.4 and
+later pass 24-bit colour through, but mosh-server sets `TERM=xterm-256color` and does not pass
+`COLORTERM` to the remote shell, so tuios sees a 256 colour terminal. If both
+ends of your mosh connection are 1.4 or later and your local terminal has
+truecolor, set it on the remote host, for example in your shell's startup file:
+
+```bash
+export COLORTERM=truecolor
+```
+
+tuios does not try to detect mosh. mosh-server sets no variable of its own
+that marks it, and the version of the mosh client on the other end, which
+decides whether 24-bit colour survives, is not visible from the server. Mosh
+also answers no colour queries, so with no theme tuios cannot learn the
+terminal's background there; see "Programs that ask" in CONFIGURATION.md.
 
 ---
 

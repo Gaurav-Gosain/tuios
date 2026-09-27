@@ -156,7 +156,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 			}
 		}
 		line, control, stepless := m.settingsRow(items[i], i == m.SettingsSelected, pal, width, extra)
-		lines = append(lines, line)
+		lines = append(lines, pal.Row(line, width, overlay.RowState{Cursor: i == m.SettingsSelected, Focused: true}, bg))
 		infos = append(infos, rowInfo{control: control, stepless: stepless, idx: i})
 	}
 	if searching && len(items) == 0 {
@@ -269,10 +269,9 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	if len(extra) > 0 {
 		ex = extra[0]
 	}
-	bg := pal.Surface
+	bg := pal.Ground(overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
 		marker = "› "
 	}
 

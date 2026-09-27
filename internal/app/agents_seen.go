@@ -60,19 +60,36 @@ func (m *OS) noteAgentsSeen() {
 	m.saveSidebarState()
 }
 
-// prefixMenuBindings is the which-key menu after the prefix key. The Inbox's
-// three lines wait until an agent has been seen; the keys work either way.
-// The review line is left out on a daemon that cannot review, where the key
-// does what an unbound key does.
+// prefixMenuGroups is the which-key menu after the prefix key, in its
+// sections. The Inbox's lines wait until an agent has been seen, and a section
+// they leave empty goes with them; the keys work either way. The review line
+// is left out on a daemon that cannot review, where the key does what an
+// unbound key does.
+func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
+	groups := config.GetPrefixKeybindingGroups("", m.IsDaemonSession)
+	seen, review := m.agentsSeen(), m.reviewSupported()
+	out := groups[:0]
+	for _, g := range groups {
+		if !seen {
+			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentPrefixKeybinding)
+		}
+		if !review {
+			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsReviewPrefixKeybinding)
+		}
+		if len(g.Bindings) > 0 {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// prefixMenuBindings is prefixMenuGroups as one list.
 func (m *OS) prefixMenuBindings() []config.Keybinding {
-	bindings := config.GetPrefixKeybindings("", m.IsDaemonSession)
-	if !m.agentsSeen() {
-		bindings = slices.DeleteFunc(bindings, config.IsAgentPrefixKeybinding)
+	var out []config.Keybinding
+	for _, g := range m.prefixMenuGroups() {
+		out = append(out, g.Bindings...)
 	}
-	if !m.reviewSupported() {
-		bindings = slices.DeleteFunc(bindings, config.IsReviewPrefixKeybinding)
-	}
-	return bindings
+	return out
 }
 
 // agentIntegrationMsg reports that a harness on this machine has tuios's

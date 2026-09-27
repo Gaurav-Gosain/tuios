@@ -74,6 +74,7 @@ func StateFingerprint(s *SessionState) uint64 {
 	// answer OSC 11 and OSC 10 with, so a push that changes them has news.
 	str(s.PaneReportBg)
 	str(s.PaneReportFg)
+	str(s.PaneReportPalette)
 
 	// Windows are ordered, and the order is meaningful (it is the z-order the
 	// peer rebuilds its list in), so they are hashed as they stand.

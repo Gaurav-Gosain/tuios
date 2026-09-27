@@ -191,9 +191,9 @@ func contentSizes(m *OS) string {
 // already on its way.
 func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()

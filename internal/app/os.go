@@ -361,6 +361,9 @@ type OS struct {
 	// rest. Client-local appearance, like ShowKeys: nothing about it crosses
 	// the wire and a peer sees its own screen unchanged. See spotlight.go.
 	spotlight spotlightState
+	// motion is the overlay fade-in, the scrim's shade and the working-row
+	// shimmer, with the clock that drives them. See motion.go.
+	motion motionState
 
 	// shake is the pointer gesture that toggles the beam, when the person
 	// turned it on. Fixed size, no timer, no tick: see shake.go.
@@ -439,6 +442,10 @@ type OS struct {
 	// pane or chrome background is on. See background.go.
 	groundCache      [surfaceCount]groundMemo
 	paneContentRects map[string]image.Rectangle
+	// host is what this client's terminal said about its own colours, and
+	// paneReport the answer panes are given from it. See host_colors.go.
+	host       hostColors
+	paneReport paneReportMemo
 	// fastPaint is the buffer the fullscreen fast path paints its frame into
 	// while a background it draws is on. See background_fast.go.
 	fastPaint fastPainter
@@ -818,6 +825,13 @@ type OS struct {
 	// review is the review overlay: a pane's diff, its notes, and the
 	// compare view of a fan. See review_overlay.go.
 	review reviewState
+	// OverlayLeader is a leader pressed while an overlay owned the keyboard,
+	// held for one key to see whether it starts the screenshot chord. Nil when
+	// nothing is held. See routeOverlayScreenshot in internal/input.
+	OverlayLeader *tea.KeyPressMsg
+	// hostFocus is whether the host terminal has focus, from its focus
+	// events. See host_focus.go.
+	hostFocus hostFocusState
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle
@@ -856,6 +870,13 @@ type OS struct {
 	// per frame is the difference between an overlay that costs nothing to
 	// leave open and one that does not.
 	LauncherItems []LauncherItem
+	// LauncherOpenedAt is when the launcher last opened, which is when its
+	// scan started: "Scanning for programs" waits for the loading delay.
+	LauncherOpenedAt time.Time
+	// loadingFrameAt is the latest loading frame armed (see loadingFrameCmd).
+	loadingFrameAt time.Time
+	// whichKeyCache is the which-key panel's last layout.
+	whichKeyCache whichKeyCache
 	// launcherIcons holds the decoded app icons and what is currently drawn on
 	// the host. Nil until the launcher first needs one.
 	launcherIcons *launcherIcons

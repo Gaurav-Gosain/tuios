@@ -38,7 +38,7 @@ Tables are not scalar options and are edited in config.toml:
 `[appearance.sidebar.agent_row]` (which tokens an agent row draws, their looks
 and value rules; `now`, `context` and `prompt` read what the hooks and status
 line feed, and `meta` leaves those keys out), `[dock]`, `[hooks]`, `[hosts]`, `[agents.approvals]`,
-`[agents.permissions]` and the keybindings. The file is watched; a hook the
+`[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 
 ## Ricing: the four surfaces
@@ -123,6 +123,12 @@ tuios set-config appearance.window_title_format "{index}: {title}"
 `dim_unfocused` (0 to 90) quiets the content of unfocused panes. It reaches only
 cells a program coloured itself unless a theme is set.
 
+`appearance.modal_dim` (0 to 90, default 30) darkens the screen behind an open
+panel such as the command palette; 0 turns it off. `appearance.motion` is
+`none`, `basic` (window slides only) or `full` (the default: also the panel
+fade-in and the shimmer on a working agent's rail row). The old
+`animations_enabled` still works and maps `false` to `none`.
+
 **Record the old values first.** There is no preview and no undo:
 
 ```sh
@@ -173,7 +179,11 @@ and empty follows it. A colour a program or the chrome set itself always wins,
 so a border keeps its ink. `theme` with no theme set paints nothing. A colour
 literal with no theme keeps the terminal's own text colour, so pick one that
 reads under it. While panes are painted, a program's OSC 11 and OSC 10 queries
-are answered with the painted colours.
+are answered with the painted colours. With no theme and nothing painted,
+OSC 10, OSC 11 and OSC 4 for the sixteen are answered with the host
+terminal's own colours, which the attached client asks its terminal for, so a
+pane on a light terminal is told it is light. A terminal that answers no colour
+query (mosh) leaves the defaults: black and white.
 
 ## The dock's components
 

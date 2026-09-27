@@ -139,6 +139,12 @@ type TUIClient struct {
 	// See BuildMismatch.
 	clientBuild string
 	daemonBuild string
+	// focusSupported says the daemon's welcome offered MsgClientFocus, and
+	// hostFocus is the focus to report: 0 unreported, 1 in, 2 out. focusMu
+	// keeps two reports from going out of order. See ReportHostFocus.
+	focusSupported bool
+	hostFocus      atomic.Int32
+	focusMu        sync.Mutex
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -307,6 +313,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// Recorded rather than refused: the two builds can talk, and refusing would
 	// turn a note into an outage.
 	c.noteDaemonBuild(version, welcome.Version)
+	c.focusSupported = welcome.ClientFocus
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -943,6 +950,28 @@ func (c *TUIClient) ResizePTY(ptyID string, width, height int) error {
 		Width:  width,
 		Height: height,
 	})
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
+// ReportHostFocus tells the daemon whether this client's host terminal has
+// focus. It does nothing on a daemon that did not offer MsgClientFocus, which
+// would refuse the type. It may be called from any goroutine: whatever the
+// order the calls run in, the last message sent carries the latest focus.
+func (c *TUIClient) ReportHostFocus(focused bool) error {
+	v := int32(2)
+	if focused {
+		v = 1
+	}
+	c.hostFocus.Store(v)
+	if !c.focusSupported {
+		return nil
+	}
+	c.focusMu.Lock()
+	defer c.focusMu.Unlock()
+	msg, err := NewMessage(MsgClientFocus, &ClientFocusPayload{Focused: c.hostFocus.Load() == 1})
 	if err != nil {
 		return err
 	}

@@ -1014,7 +1014,7 @@ and appearance.border_style are the same path.
   tuios set-config border_style rounded
 
   # Turn animations off
-  tuios set-config animations_enabled false
+  tuios set-config motion none
 
   # Hide window buttons
   tuios set-config hide_window_buttons true`,
@@ -2384,7 +2384,13 @@ Name a verb to describe only that verb.`,
 	layoutExportCmd := &cobra.Command{
 		Use:   "export [name]",
 		Short: "Export a layout template as a tape script",
-		Args:  cobra.ExactArgs(1),
+		Long: `Print a saved layout template as a tape script on stdout. Run the script
+with 'tuios tape play', or with 'tuios tape exec' against a running session.
+
+The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
+		Example: `  tuios layout export dev-layout > dev-layout.tape
+  tuios tape play dev-layout.tape`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			templates, err := app.LoadLayoutTemplates()
 			if err != nil {

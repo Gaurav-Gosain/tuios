@@ -284,7 +284,7 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 		colorTerm = "truecolor"
 	}
 	env = append(env, "TERM="+term, "COLORTERM="+colorTerm)
-	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(false, false))
+	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(spec.Command, false, false))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	// The session the pane belongs to is deliberately not exported.
 	//

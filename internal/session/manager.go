@@ -6,6 +6,9 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
 // Manager manages all persistent sessions for a user.
@@ -28,6 +31,11 @@ type Manager struct {
 	// reaches the next pane of a session that already exists. It is atomic so
 	// a spawn never needs m.mu.
 	preferredShell atomic.Pointer[string]
+	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
+	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
+	// spawn time through HerdrEnv. See herdr_compat.go.
+	herdrSocket atomic.Pointer[string]
+	herdrMode   atomic.Pointer[string]
 	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
 	// is picked at random for each manager and never leaves memory. See
 	// pane_token.go.
@@ -101,6 +109,43 @@ func (m *Manager) PreferredShell() string {
 	return ""
 }
 
+// SetHerdrSocket records the herdr protocol socket the daemon listens on,
+// "" for none.
+func (m *Manager) SetHerdrSocket(path string) {
+	m.herdrSocket.Store(&path)
+}
+
+// SetHerdrProtocol sets which panes are told about the herdr protocol
+// socket: config.HerdrProtocolAgents, config.HerdrProtocolAlways or
+// config.HerdrProtocolOff.
+func (m *Manager) SetHerdrProtocol(mode string) {
+	m.herdrMode.Store(&mode)
+}
+
+// HerdrEnv is the herdr environment a pane that runs command (nil for the
+// user's shell) is started with, nil for none: HERDR_ENV, HERDR_SOCKET_PATH
+// naming tuios's own socket, and HERDR_PANE_ID naming the pane. A pane gets
+// it when the daemon listens on the socket, [agents] herdr_protocol is not
+// off, and the pane starts a harness known to report over it or the mode is
+// always. See herdr_compat.go for why a shell pane is not told by default.
+func (m *Manager) HerdrEnv(windowID string, command []string) []string {
+	sock := ""
+	if p := m.herdrSocket.Load(); p != nil {
+		sock = *p
+	}
+	mode := config.HerdrProtocolAgents
+	if p := m.herdrMode.Load(); p != nil {
+		mode = config.NormalizeHerdrProtocol(*p)
+	}
+	if sock == "" || windowID == "" || mode == config.HerdrProtocolOff {
+		return nil
+	}
+	if mode != config.HerdrProtocolAlways && !guestenv.SpeaksHerdrProtocol(command) {
+		return nil
+	}
+	return []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + windowID}
+}
+
 // HostName is the name this machine gives itself, for TUIOS_HOST: the
 // hostname the operating system reports, or "" when it reports none.
 func (m *Manager) HostName() string {
@@ -165,6 +210,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.PaneToken == nil {
 		cfg.PaneToken = m.PaneToken
+	}
+	if cfg.HerdrEnv == nil {
+		cfg.HerdrEnv = m.HerdrEnv
 	}
 	if cfg.grants == nil {
 		cfg.grants = m.grants

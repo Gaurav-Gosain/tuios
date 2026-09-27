@@ -9,7 +9,10 @@ argv0     = ["crush"]
 argv_path = ["@charmland/crush", "/crush/"]
 
 # No screen rules: herdr has no manifest for Crush, and none has been written
-# against a live Crush turn yet.
+# against a live Crush turn yet. Crush reports its own state over herdr's pane
+# protocol, which tuios accepts, in a pane that is told about it: one that
+# starts crush directly, or every pane with [agents] herdr_protocol = "always".
+# See internal/session/herdr_compat.go.
 [screen]
 enabled = false
 

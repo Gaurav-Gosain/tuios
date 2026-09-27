@@ -206,7 +206,14 @@ func borderInk(c color.Color) color.Color {
 }
 
 // BorderUnfocused returns the color for unfocused window borders.
-func BorderUnfocused() color.Color {
+func BorderUnfocused() color.Color { return BorderUnfocusedOn(nil) }
+
+// BorderUnfocusedOn is BorderUnfocused for a client that knows its host
+// terminal's background. With no theme the default is a fixed pale colour
+// picked for a dark terminal, which all but vanishes on a light one, so it is
+// measured against the host's ground the way a theme's border is measured
+// against the theme's. A nil ground keeps the fixed colour.
+func BorderUnfocusedOn(hostBg color.Color) color.Color {
 	// A configured colour is returned as chosen: measurement was overridden on
 	// purpose, the same way the scrollbar treats a configured tint.
 	if _, unfocused := borderOverrides(); unfocused != nil {
@@ -214,64 +221,105 @@ func BorderUnfocused() color.Color {
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#FAAAAA")
+		return slotAt16(1, hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg))
 	}
 	// Light pinkish red: the theme's regular red, which gives a softer, more
 	// muted tone for unfocused windows than bright red.
-	return borderInk(t.Red)
+	return slotAt16(1, borderInk(t.Red))
 }
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
-func BorderFocusedWindow() color.Color {
+func BorderFocusedWindow() color.Color { return BorderFocusedWindowOn(nil) }
+
+// BorderFocusedWindowOn is BorderFocusedWindow on a known host background.
+// See BorderUnfocusedOn.
+func BorderFocusedWindowOn(hostBg color.Color) color.Color {
 	if focused, _ := borderOverrides(); focused != nil {
 		return focused
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#AFFFFF")
+		return slotAt16(14, hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg))
 	}
 	// Light cyan for window mode: use bright cyan
-	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan))
+	return slotAt16(14, borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan)))
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
-func BorderFocusedTerminal() color.Color {
+func BorderFocusedTerminal() color.Color { return BorderFocusedTerminalOn(nil) }
+
+// BorderFocusedTerminalOn is BorderFocusedTerminal on a known host
+// background. See BorderUnfocusedOn.
+func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
 	if focused, _ := borderOverrides(); focused != nil {
 		return focused
 	}
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#AAFFAA")
+		return slotAt16(10, hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg))
 	}
 	// Light green for terminal mode: use bright green
-	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
+	return slotAt16(10, borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen)))
+}
+
+// hostBorderInkMemo keeps the last few answers of hostBorderInk. The border
+// colours are asked for on every pane of every frame, and a lift is a walk of
+// up to sixteen contrast measurements.
+var hostBorderInkMemo struct {
+	sync.Mutex
+	keys [6][2][4]uint32
+	ink  [6]color.Color
+	next int
+}
+
+// hostBorderInk lifts a no-theme border colour until it clears the mark floor
+// on the host's ground, and leaves it alone when the ground is not known.
+func hostBorderInk(c, hostBg color.Color) color.Color {
+	if hostBg == nil {
+		return c
+	}
+	cr, cg, cb, ca := c.RGBA()
+	gr, gg, gb, ga := hostBg.RGBA()
+	key := [2][4]uint32{{cr, cg, cb, ca}, {gr, gg, gb, ga}}
+	m := &hostBorderInkMemo
+	m.Lock()
+	defer m.Unlock()
+	for i, k := range m.keys {
+		if m.ink[i] != nil && k == key {
+			return m.ink[i]
+		}
+	}
+	ink := ReadableAt(c, hostBg, MarkFloor)
+	m.keys[m.next], m.ink[m.next] = key, ink
+	m.next = (m.next + 1) % len(m.ink)
+	return ink
 }
 
 // DockColorWindow returns the dock indicator color for window management mode.
 func DockColorWindow() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#5c5cff")
+		return slotAt16(12, lipgloss.Color("#5c5cff"))
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Accent }, t.BrightBlue)
+	return slotAt16(12, chromeOr(func(c *Chrome) color.Color { return c.Accent }, t.BrightBlue))
 }
 
 // DockColorTerminal returns the dock indicator color for terminal mode.
 func DockColorTerminal() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#7aa2f7") // Soft blue
+		return slotAt16(10, lipgloss.Color("#7aa2f7")) // Soft blue
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen)
+	return slotAt16(10, chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 }
 
 // DockColorCopy returns the dock indicator color for copy mode.
 func DockColorCopy() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#e0af68") // Soft amber
+		return slotAt16(3, lipgloss.Color("#e0af68")) // Soft amber
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow)
+	return slotAt16(3, chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow))
 }
 
 // NotificationError returns the color for error notifications.
@@ -283,36 +331,36 @@ func DockColorCopy() color.Color {
 func NotificationError() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#dc2626")
+		return slotAt16(1, lipgloss.Color("#dc2626"))
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Error }, t.Red)
+	return slotAt16(1, chromeOr(func(c *Chrome) color.Color { return c.Error }, t.Red))
 }
 
 // NotificationWarning returns the color for warning notifications.
 func NotificationWarning() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#d97706")
+		return slotAt16(3, lipgloss.Color("#d97706"))
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow)
+	return slotAt16(3, chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow))
 }
 
 // NotificationSuccess returns the color for success notifications.
 func NotificationSuccess() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#16a34a")
+		return slotAt16(2, lipgloss.Color("#16a34a"))
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Success }, t.Green)
+	return slotAt16(2, chromeOr(func(c *Chrome) color.Color { return c.Success }, t.Green))
 }
 
 // NotificationInfo returns the color for info notifications.
 func NotificationInfo() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#2563eb")
+		return slotAt16(4, lipgloss.Color("#2563eb"))
 	}
-	return chromeOr(func(c *Chrome) color.Color { return c.Info }, t.Blue)
+	return slotAt16(4, chromeOr(func(c *Chrome) color.Color { return c.Info }, t.Blue))
 }
 
 // NotificationGround is the ground a message's inks are measured against: the

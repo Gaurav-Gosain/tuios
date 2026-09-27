@@ -171,18 +171,18 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			// The mode colour outranks the session's. This border says the keys
 			// are going into the guest, which is the more urgent fact and the
 			// one a person checks before typing.
-			borderColorObj = theme.BorderFocusedTerminal()
+			borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 		case isFocused && tinted:
 			borderColorObj = tint
 		case isFocused:
-			borderColorObj = theme.BorderFocusedWindow()
+			borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
 		case isMultifocused:
 			// Multifocused windows get a distinct border color (yellow/orange)
-			borderColorObj = lipgloss.Color("3")
+			borderColorObj = theme.BorderMultifocus()
 		case tinted:
 			borderColorObj = quietTint
 		default:
-			borderColorObj = theme.BorderUnfocused()
+			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
 		}
 
 		// Effective z-index, computed once so the cached and freshly-rendered
@@ -329,6 +329,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.
 		m.SidebarHits = m.SidebarHits[:0]
+		m.motion.rail = m.motion.rail[:0]
 	}
 
 	m.composeLayers(canvas, layers)
@@ -640,6 +641,9 @@ func (m *OS) composeFrame() string {
 		return m.screensaver.frame
 	}
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
+		// The fast path draws no rail, so no working row is on screen and the
+		// shimmer's clock must not go on asking for frames.
+		m.motion.rail = m.motion.rail[:0]
 		return m.buildFullscreenFrame(window)
 	}
 	canvas := m.GetCanvas(true)
@@ -775,11 +779,11 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	var borderColorObj color.Color
 	switch {
 	case isFocused && m.Mode == TerminalMode:
-		borderColorObj = theme.BorderFocusedTerminal()
+		borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 	case isFocused:
-		borderColorObj = theme.BorderFocusedWindow()
+		borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
 	default:
-		borderColorObj = theme.BorderUnfocused()
+		borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
 	}
 
 	windowIndex := -1

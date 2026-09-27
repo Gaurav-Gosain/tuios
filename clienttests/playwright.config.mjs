@@ -45,8 +45,9 @@ export const APPEARANCE_BASE_URL = `http://127.0.0.1:${APPEARANCE_PORT}`;
 // (GetSocketPath joins it with tuios/tuios.sock), so leaving it out attached
 // every run to the developer's live session: whatever their real windows held
 // was what the tests read back, and whatever the tests typed stayed there.
-// TUIOS_SOCKET is not read by anything, only exported into a pane, so it never
-// isolated anything. It is also what keeps the two servers here apart: same
+// TUIOS_SOCKET does not select a daemon: it is exported into a pane to report
+// the daemon that runs it, and a command only checks that it names a live
+// one. It never isolated anything. It is also what keeps the two servers here apart: same
 // binary, same machine, different socket.
 //
 // The trees live under the system temp dir rather than anywhere deeper: the

@@ -50,9 +50,9 @@ func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupR
 	t.Setenv("SHELL", "/bin/sh")
 	t.Setenv("PS1", "$ ")
 
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prev })
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prev })
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})
 	if err := d.Start(); err != nil {

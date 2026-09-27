@@ -1683,9 +1683,17 @@ Response:
   "layout_mode": "bsp",
   "width": 120,
   "height": 40,
-  "tui_attached": true
+  "tui_attached": true,
+  "host_focus": "focused"
 }}
 ```
+
+`host_focus` is whether the person can be looking at the session. Each TUI
+client asks its terminal for focus events (DECSET 1004) and reports every
+change to the daemon. It is `focused` when any attached client's terminal has
+focus, `unfocused` when every attached client's terminal reported losing it,
+and `unknown` when no client is attached or a terminal never reports focus. A
+daemon that predates the field omits it.
 
 `tiling_mode` says only whether tiling is on (`tiling` or `floating`) and keeps
 doing so, because callers already dispatch on those two values. `layout_mode`
@@ -3384,7 +3392,7 @@ Wire compatibility: new verbs. An older daemon answers `unknown_verb`.
 
 Hold a pane's permission prompt until the person answers it in the Inbox.
 `tuios agent-hook` calls it; a script has little reason to. It is for a harness
-that takes a decision back from its hook: Claude Code's `PermissionRequest`
+that takes a decision back from its hook: Claude Code's and Qwen Code's `PermissionRequest`
 hook, and opencode or Kilo through the plugin tuios installs. The call does not
 answer until the person answers with `reply-approval` or the hold ends, and it
 is opt in: nothing is held unless `[agents.approvals]` in the config names the

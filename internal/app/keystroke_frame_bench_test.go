@@ -113,9 +113,9 @@ func tiledKeystrokeOS(tb testing.TB, n, cols, rows int) *OS {
 // BenchmarkKeystrokeFrameTiled is BenchmarkKeystrokeFrame on the default
 // layout, where the divider overlay is part of every frame.
 func BenchmarkKeystrokeFrameTiled(b *testing.B) {
-	orig := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	b.Cleanup(func() { config.Global.AnimationsEnabled = orig })
+	orig := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	b.Cleanup(func() { config.Global.Motion = orig })
 	for _, n := range []int{2, 4, 9} {
 		b.Run(fmt.Sprintf("panes-%d", n), func(b *testing.B) {
 			m := tiledKeystrokeOS(b, n, realCols, realRows)

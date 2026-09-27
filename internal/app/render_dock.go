@@ -74,6 +74,13 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	if lc == "" && rc == "" {
 		return pill
 	}
+	// At 16 colours the fill is the terminal's own ground, so there is no
+	// colour for a cap to take: drawn in the default ink it would read as a
+	// bracket round the label. The caps become blanks of the same width, so
+	// the strip's geometry and its hit boxes do not change with the depth.
+	if overlay.IsNoColor(ground) {
+		return strings.Repeat(" ", lipgloss.Width(lc)) + pill + strings.Repeat(" ", lipgloss.Width(rc))
+	}
 	caps := lipgloss.NewStyle().Foreground(ground)
 	return caps.Render(lc) + pill + caps.Render(rc)
 }
@@ -93,7 +100,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		return ""
 	}
 
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 	y := m.GetDockbarContentYPosition()
 	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
@@ -162,7 +169,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 func (m *OS) renderDockString() (string, int) {
 	m.ensureDockPlan()
 	layout := m.CalculateDockLayout()
-	pal := theme.GroundUI()
+	pal := m.groundUI()
 
 	sysInfoStyle := lipgloss.NewStyle().
 		Foreground(pal.FgMute).
@@ -486,7 +493,7 @@ func (m *OS) renderDockString() (string, int) {
 	// width-only key served the old hairline until the next resize. The colour
 	// follows the theme. Styling with a width wraps the whole row by grapheme,
 	// which was close to half of what the dock cost per frame.
-	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), theme.RailRule()
+	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), m.railRule()
 	if m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar || m.cachedSeparatorColor != ruleColor {
 		m.cachedSeparator = lipgloss.NewStyle().
 			Width(renderWidth).

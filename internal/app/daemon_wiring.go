@@ -32,6 +32,12 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	if client == nil {
 		return
 	}
+	// A new connection starts with nothing said about focus. A client that
+	// replaces a lost one already knows, so it says so at once.
+	if m.hostFocus != hostFocusUnknown {
+		focused := m.hostFocus == hostFocusIn
+		go func() { _ = client.ReportHostFocus(focused) }()
+	}
 	// A verb the daemon routed to this client, applied in Update. Without this
 	// set-option, send-keys and refresh-dock timed out against a served client
 	// while the daemon still reported one attached.

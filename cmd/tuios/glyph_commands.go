@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // glyphSetDetail is the described set as list-glyphs reports it.
@@ -72,6 +74,12 @@ func runListGlyphs(sessionName, setName string, jsonOutput bool) error {
 		fmt.Fprintf(w, " (%s)", res.Source)
 	}
 	fmt.Fprintf(w, "\nglyphs dir: %s\n", res.GlyphsDir)
+	// What a client started in this terminal would pick on its own. It is
+	// answered here, in the terminal the command runs in, because that is the
+	// terminal the question is about; the daemon's environment is not.
+	if env, why := config.DetectGlyphEnv(os.Getenv); why != "" {
+		fmt.Fprintf(w, "this terminal: %s glyphs, because %s (a glyph set or --ascii-only overrides it)\n", env, why)
+	}
 	for _, p := range res.Problems {
 		fmt.Fprintf(w, "problem: %s\n", p)
 	}

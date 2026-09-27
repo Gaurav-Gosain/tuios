@@ -160,6 +160,10 @@ func runE2E(m *testing.M) int {
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.
 	sweepShortRuntimeRoots()
+	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
+	// names the person's daemon, and tuiosCLI passes the environment on. The
+	// commands would dial it to check it; the suite has no business there.
+	_ = os.Unsetenv("TUIOS_SOCKET")
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
@@ -227,6 +231,10 @@ type startOpts struct {
 	// logPath, when set, receives the path of the raw PTY log, for a test
 	// that reads what tuios printed after the TUI gave the screen back.
 	logPath *string
+	// wrap runs tuios under another program: argv is wrap followed by the
+	// tuios command line. The host colour tests put a stand-in host terminal
+	// there (testdata/hostterm).
+	wrap []string
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -337,7 +345,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		cols, rows = 120, 40
 	}
 
-	argv := append([]string{tuiosBin}, o.args...)
+	argv := append(append(append([]string{}, o.wrap...), tuiosBin), o.args...)
 	// Animations make frames non-deterministic without testing anything these
 	// assertions care about.
 	if !o.animations {

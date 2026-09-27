@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -514,8 +515,12 @@ func handleDebugShowkeys(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.Settings.AnimationsEnabled = !o.Settings.AnimationsEnabled
-	toggleNotify(o, "Animations", o.Settings.AnimationsEnabled)
+	level := config.MotionFull
+	if o.Settings.AnimationsOn() {
+		level = config.MotionNone
+	}
+	_ = o.SetMotion(level)
+	toggleNotify(o, "Animations", o.Settings.AnimationsOn())
 	return o, nil
 }
 

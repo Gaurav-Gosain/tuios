@@ -68,7 +68,7 @@ func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
 	if !policy.Alerts(to) {
 		return
 	}
-	if policy.SuppressFocused && m.GetFocusedWindow() == w {
+	if policy.SuppressFocused && m.GetFocusedWindow() == w && m.HostLooking() {
 		return
 	}
 	if policy.Quiet(time.Now()) {
@@ -109,7 +109,7 @@ func (m *OS) flushDueAgentAlerts(now time.Time) {
 		if w == nil || w.AgentState != p.to {
 			continue
 		}
-		if policy.SuppressFocused && m.GetFocusedWindow() == w {
+		if policy.SuppressFocused && m.GetFocusedWindow() == w && m.HostLooking() {
 			continue
 		}
 		m.fireAgentAlert(w, p.from, p.to, policy)

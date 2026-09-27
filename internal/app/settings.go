@@ -357,6 +357,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
 			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),
+			opt("appearance.modal_dim"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),
@@ -468,7 +469,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	behavior := settingsCategory{
 		Name: "Behavior",
 		Items: m.resolveRows([]settingsRow{
-			opt("appearance.animations_enabled"),
+			opt("appearance.motion"),
 			opt("appearance.confirm_quit"),
 			opt("appearance.whichkey_enabled"),
 			opt("appearance.whichkey_position"),

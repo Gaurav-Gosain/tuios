@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // TestRestoreAnimationStartsOnTheDrawnEntry checks that a restore animation
 // starts from the entry the dock drew for the window, on the row the dock
@@ -11,7 +15,7 @@ func TestRestoreAnimationStartsOnTheDrawnEntry(t *testing.T) {
 		t.Run(pos, func(t *testing.T) {
 			m := dockCrowdedOS(t, 120, 1, 2)
 			m.Settings.DockbarPosition = pos
-			m.Settings.AnimationsEnabled = true
+			m.Settings.Motion = config.MotionFull
 			m.Settings.AnimationsSuppressed = false
 
 			// Draw the dock once so its entry rectangles are recorded, as

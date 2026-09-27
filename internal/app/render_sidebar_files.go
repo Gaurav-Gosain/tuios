@@ -1,7 +1,6 @@
 package app
 
 import (
-	"image/color"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -224,10 +223,7 @@ func sidebarFilesEmptyRow(cw int, pal overlay.Palette) string {
 // with no colour and no icon at all. The icon in the glyph column is the layer
 // on top of it, not instead of it.
 func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sidebarRowState) string {
-	var bg color.Color
-	if st.lit() {
-		bg = pal.Surface
-	}
+	bg := sidebarRowBg(st, pal)
 
 	if row.Note {
 		ink := pal.FgMute
@@ -267,7 +263,7 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp, &m.Settings)
 	glyphInk := ink
 	if mark.Hex != "" {
-		glyphInk = theme.FileIconInkOn(mark.Hex, sidebarGroundOr(bg))
+		glyphInk = theme.FileIconInkOn(mark.Hex, m.sidebarGroundOr(bg))
 	}
 	glyph := sidebarStyle(bg, glyphInk).Render(mark.Glyph)
 	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, sidebarNameAvail(cw, 0)))

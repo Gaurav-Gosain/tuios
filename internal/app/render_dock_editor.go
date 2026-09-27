@@ -60,7 +60,7 @@ func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	start := m.DockEditorScroll
 	end := min(start+visible, len(rows))
 	for i := start; i < end; i++ {
-		lines = append(lines, m.dockEditorLine(rows[i], i == m.DockEditorSelected, pal, width))
+		lines = append(lines, pal.Row(m.dockEditorLine(rows[i], i == m.DockEditorSelected, pal, width), width, overlay.RowState{Cursor: i == m.DockEditorSelected, Focused: true}, pal.Surface))
 	}
 	for shown := end - start; shown < visible; shown++ {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -113,7 +113,7 @@ func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palett
 	nameColor := pal.FgDim
 	marker := "  "
 	if selected {
-		bg = pal.RowSel
+		bg = pal.Ground(overlay.RowState{Cursor: true, Focused: true}, bg)
 		nameColor = pal.Fg
 		marker = "› "
 	}

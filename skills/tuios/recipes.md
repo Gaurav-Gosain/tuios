@@ -59,8 +59,8 @@ answer=$(tuios ask-human 'Drop the v1 endpoint?' -o drop -o keep --timeout 90000
 
 ## Approvals without going to the pane
 
-To answer Claude Code's, opencode's or Kilo's permission prompts from the
-Inbox with `1` (once), `2` (always) or `3` (deny), the person adds this to
+To answer Claude Code's, Qwen Code's, opencode's or Kilo's permission prompts
+from the Inbox with `1` (once), `2` (always) or `3` (deny), the person adds this to
 config.toml and installs the integration:
 
 ```toml
@@ -201,7 +201,9 @@ quiet_hours = "23:00-07:00"
 
 `[notifications.agent.states]` decides which states alert (`needs_input`,
 `errored` and `done` by default), and `settle_seconds` drops a state the pane
-left quickly. The hook sends the pane's name and state, not its message, since
+left quickly. `suppress_focused` holds back only while the person can be
+looking: once every attached client's terminal has reported losing focus, the
+shown pane alerts too. The hook sends the pane's name and state, not its message, since
 the message leaves your machine. The daemon reads `[hooks]` when it starts, so
 this applies from the next daemon start; `tuios list-hooks` shows whether it
 ran and what it returned.

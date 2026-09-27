@@ -223,9 +223,9 @@ func TestTheStackRatioRoundTripsThroughSessionState(t *testing.T) {
 // or the field from BuildSessionState, and the peer holds no stack ratio and
 // retiles the stacked panes to equal halves.
 func TestAPeerAdoptsAStackResize(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prev })
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prev })
 
 	r := newRig(t, 3)
 	r.m.AutoTiling = true
