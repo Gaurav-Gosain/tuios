@@ -1,10 +1,12 @@
 package vt
 
 import (
+	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -180,5 +182,49 @@ func layoutKeyCases() []struct {
 		{"right ctrl under all keys", KeyPressEvent{Code: KeyRightCtrl, Mod: ModCtrl}, allKeys, "\x1b[57448;5u"},
 		// A base key equal to the code is not repeated.
 		{"base equal to code is left out", KeyPressEvent{Code: 'a', BaseCode: 'a', Mod: ModCtrl}, alternate, "\x1b[97;5u"},
+	}
+}
+
+// TestKittyFunctionalKeysKeepTheirNumbers round-trips every functional key the
+// protocol numbers (CapsLock at 57358 through ISO Level 5 Shift at 57454): the
+// host's report goes through the same decoder tuios reads it with, and the pane
+// must be handed the same number. Before, these left as ultraviolet's private
+// codes, so keypad Enter reached the pane as \x1b[1114126u. 57364-57375 are
+// skipped: they decode as F1-F12, which the protocol spells in legacy form.
+func TestKittyFunctionalKeysKeepTheirNumbers(t *testing.T) {
+	var d uv.EventDecoder
+	for num := 57358; num <= 57454; num++ {
+		if num >= 57364 && num <= 57375 {
+			continue
+		}
+		host := fmt.Sprintf("\x1b[%du", num)
+		_, ev := d.Decode([]byte(host))
+		key, ok := ev.(KeyPressEvent)
+		if !ok {
+			t.Fatalf("%q decoded as %T, want a key press", host, ev)
+		}
+		if got := EncodeKeyCSIu(key, ansi.KittyReportAllKeysAsEscapeCodes); got != host {
+			t.Errorf("%s: host sent %q, pane got %q", key.String(), host, got)
+		}
+		release := fmt.Sprintf("\x1b[%d;1:3u", num)
+		if got := EncodeKeyReleaseCSIu(key, ansi.KittyReportAllKeysAsEscapeCodes|ansi.KittyReportEventTypes); got != release {
+			t.Errorf("%s release: got %q, want %q", key.String(), got, release)
+		}
+	}
+}
+
+// TestKittyModifierKeysNeedReportAllKeys pins that a modifier pressed alone is
+// reported only under report-all-keys, as the protocol says, while keypad keys
+// are reported under disambiguate alone.
+func TestKittyModifierKeysNeedReportAllKeys(t *testing.T) {
+	shift := KeyPressEvent{Code: KeyLeftShift}
+	if got := EncodeKeyCSIu(shift, ansi.KittyDisambiguateEscapeCodes); got != "" {
+		t.Errorf("left shift under disambiguate: got %q, want nothing", got)
+	}
+	if got := EncodeKeyReleaseCSIu(shift, ansi.KittyDisambiguateEscapeCodes|ansi.KittyReportEventTypes); got != "" {
+		t.Errorf("left shift release without report-all-keys: got %q, want nothing", got)
+	}
+	if got := EncodeKeyCSIu(KeyPressEvent{Code: KeyKpEnter}, ansi.KittyDisambiguateEscapeCodes); got != "\x1b[57414u" {
+		t.Errorf("keypad enter under disambiguate: got %q, want %q", got, "\x1b[57414u")
 	}
 }

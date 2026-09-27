@@ -79,7 +79,7 @@ var functionKeyMap = map[rune][]byte{
 // The applicationCursorKeys parameter indicates whether DECCKM mode is enabled,
 // which determines whether arrow keys send SS3 (ESC O) or CSI (ESC [) sequences.
 func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []byte {
-	key := msg.Key()
+	key := legacyKey(msg.Key())
 
 	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
 	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
@@ -189,6 +189,11 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 			return []byte{0x1b, 'O', 'F'}
 		}
 		return []byte{0x1b, '[', 'F'}
+	case tea.KeyBegin:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'E'}
+		}
+		return []byte{0x1b, '[', 'E'}
 	}
 
 	// Handle special keys (no modifiers) using lookup table
@@ -229,12 +234,80 @@ func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
 			// Insert modifier parameter: ESC[1;{mod}{letter}
 			result := make([]byte, 0, 8)
 			result = append(result, 0x1b, '[', '1', ';', byte('0'+modParam))
-			result = append(result, cursorSeq[len(cursorSeq)-1]) // Last character (A,B,C,D,H,F)
+			result = append(result, cursorSeq[len(cursorSeq)-1]) // Last character (A,B,C,D,H,F,E)
 			return result
 		}
 	}
 
+	// Insert, Delete, PgUp and PgDn carry the modifier as a second parameter
+	// (Ctrl+Delete is ESC[3;5~). Without this they fell through to the plain
+	// sequence, so the modifier was silently dropped.
+	if num, ok := tildeKeyNumbers[key.Code]; ok {
+		if modParam := getModParam(mod); modParam > 1 {
+			return buildCSISequence(num, modParam)
+		}
+	}
+
 	return []byte{}
+}
+
+var tildeKeyNumbers = map[rune]int{
+	tea.KeyInsert: 2,
+	tea.KeyDelete: 3,
+	tea.KeyPgUp:   5,
+	tea.KeyPgDown: 6,
+}
+
+// legacyKey folds the keys that have no legacy encoding of their own onto the
+// key a legacy terminal sends for them. The host reports the keypad, and F13
+// and up, as distinct keys (the kitty protocol does, and so does SS3 under
+// DECKPAM), but a pane without the kitty protocol can only be told what an
+// xterm would have said: a keypad digit is the digit, keypad Enter is CR,
+// keypad navigation with NumLock off is the navigation key. Left unfolded,
+// these had no bytes at all and the keypress vanished.
+func legacyKey(key tea.Key) tea.Key {
+	if code, ok := keypadLegacyCodes[key.Code]; ok {
+		key.Code = code
+		return key
+	}
+	// xterm's terminfo spells F13-F24 as Shift+F1-F12, F25-F36 as Ctrl,
+	// F37-F48 as Ctrl+Shift, F49-F60 as Alt and F61-F63 as Alt+Shift.
+	if key.Code >= tea.KeyF13 && key.Code <= tea.KeyF63 {
+		n := key.Code - tea.KeyF1
+		key.Code = tea.KeyF1 + n%12
+		key.Mod |= [...]tea.KeyMod{
+			0,
+			tea.ModShift,
+			tea.ModCtrl,
+			tea.ModCtrl | tea.ModShift,
+			tea.ModAlt,
+			tea.ModAlt | tea.ModShift,
+		}[n/12]
+	}
+	return key
+}
+
+// keypadLegacyCodes maps each keypad key to the key it stands for. Keypad
+// Enter becomes CR rather than DECKPAM's ESC O M: kitty and Ghostty send CR,
+// xterm-kitty's terminfo defines no kent at all, and zsh binds no ESC O M out
+// of the box, so CR is the spelling every shell in a pane already reads.
+var keypadLegacyCodes = map[rune]rune{
+	tea.KeyKp0: '0', tea.KeyKp1: '1', tea.KeyKp2: '2', tea.KeyKp3: '3', tea.KeyKp4: '4',
+	tea.KeyKp5: '5', tea.KeyKp6: '6', tea.KeyKp7: '7', tea.KeyKp8: '8', tea.KeyKp9: '9',
+	tea.KeyKpEqual: '=', tea.KeyKpMultiply: '*', tea.KeyKpPlus: '+', tea.KeyKpComma: ',',
+	tea.KeyKpMinus: '-', tea.KeyKpDecimal: '.', tea.KeyKpDivide: '/', tea.KeyKpSep: ',',
+	tea.KeyKpEnter:  tea.KeyEnter,
+	tea.KeyKpUp:     tea.KeyUp,
+	tea.KeyKpDown:   tea.KeyDown,
+	tea.KeyKpLeft:   tea.KeyLeft,
+	tea.KeyKpRight:  tea.KeyRight,
+	tea.KeyKpHome:   tea.KeyHome,
+	tea.KeyKpEnd:    tea.KeyEnd,
+	tea.KeyKpPgUp:   tea.KeyPgUp,
+	tea.KeyKpPgDown: tea.KeyPgDown,
+	tea.KeyKpInsert: tea.KeyInsert,
+	tea.KeyKpDelete: tea.KeyDelete,
+	tea.KeyKpBegin:  tea.KeyBegin,
 }
 
 // getModParam calculates modifier parameter for CSI sequences
@@ -272,6 +345,8 @@ func getCursorSequence(code rune) []byte {
 		return []byte{0x1b, '[', 'H'}
 	case tea.KeyEnd:
 		return []byte{0x1b, '[', 'F'}
+	case tea.KeyBegin:
+		return []byte{0x1b, '[', 'E'}
 	}
 	return nil
 }
