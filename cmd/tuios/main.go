@@ -775,9 +775,9 @@ and nothing is sent.
 --repeat sends the whole sequence that many times. The command prints where the
 keys went: "sent 5 keys to window docs (d6b97fe4)".
 
-Window targeting (-w): the full id, the index list-windows prints, a unique id
-prefix, or the exact window name. A name set with --name or new-window wins
-over a program's title. An ambiguous target is an error that lists the windows
+Window targeting (-w), tried in this order: the full id, the index
+list-windows prints, the exact window name, then a unique id prefix. A name set
+with --name or new-window wins over a program's title. An ambiguous target is an error that lists the windows
 it matched.`,
 		Example: `  # Scroll the pager in the window named docs
   tuios send-keys -w docs Down
