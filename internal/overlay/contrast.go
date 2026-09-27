@@ -165,11 +165,35 @@ func readableOwned(c, bg color.Color) color.Color {
 // zone: a pure green reads 0.55 perceived against a 0.6 cut and so was given the
 // light ink, which measures 1.32:1 on it. Taking whichever ink measures better
 // has no miss zone to fall into.
+//
+// A ground that is one of the sixteen slots is measured as xterm's default
+// for that slot. The user's palette decides what the slot really is, and the
+// xterm colours keep the roles terminal palettes keep: a yellow, cyan or green
+// slot is light and wants the dark ink in nearly every theme. Measured as the
+// dim VGA values instead, a yellow slot took the light ink, which the renderer
+// writes as slot 15, and a light theme paints slot 15 close to its own ground.
 func ContrastText(bg color.Color) color.Color {
+	bg = slotAsXTerm(bg)
 	if ContrastRatio(charmtone.Butter, bg) >= ContrastRatio(charmtone.Pepper, bg) {
 		return charmtone.Butter
 	}
 	return charmtone.Pepper
+}
+
+// xtermSlots are xterm's default colours for the sixteen slots.
+var xtermSlots = [16]color.RGBA{
+	{0x00, 0x00, 0x00, 0xff}, {0xcd, 0x00, 0x00, 0xff}, {0x00, 0xcd, 0x00, 0xff}, {0xcd, 0xcd, 0x00, 0xff},
+	{0x00, 0x00, 0xee, 0xff}, {0xcd, 0x00, 0xcd, 0xff}, {0x00, 0xcd, 0xcd, 0xff}, {0xe5, 0xe5, 0xe5, 0xff},
+	{0x7f, 0x7f, 0x7f, 0xff}, {0xff, 0x00, 0x00, 0xff}, {0x00, 0xff, 0x00, 0xff}, {0xff, 0xff, 0x00, 0xff},
+	{0x5c, 0x5c, 0xff, 0xff}, {0xff, 0x00, 0xff, 0xff}, {0x00, 0xff, 0xff, 0xff}, {0xff, 0xff, 0xff, 0xff},
+}
+
+// slotAsXTerm is c, or xterm's default colour for c when c is a slot.
+func slotAsXTerm(c color.Color) color.Color {
+	if b, ok := c.(ansi.BasicColor); ok && int(b) < len(xtermSlots) {
+		return xtermSlots[b]
+	}
+	return c
 }
 
 // delinearize is the inverse of linearize: it puts the sRGB transfer curve

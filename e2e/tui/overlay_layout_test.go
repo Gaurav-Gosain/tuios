@@ -156,6 +156,7 @@ func TestOverlayLayouts(t *testing.T) {
 			checkWhichKey(t, term, run.cols >= 120)
 			if strings.HasSuffix(run.name, "-16") {
 				checkWhichKeyFramed(t, term)
+				checkSlotInk(t, term)
 			}
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "which-key", "+Workspace")
@@ -343,6 +344,44 @@ func checkWhichKey(t *testing.T, term *tuitest.Terminal, wide bool) {
 	}
 	if !shared {
 		t.Errorf("no two which-key headings share a row: the sections are not in columns\n%s", term.Snapshot())
+	}
+}
+
+// lightSlots are the slots that are light in xterm's defaults and in nearly
+// every theme's palette.
+var lightSlots = map[uint8]bool{2: true, 3: true, 6: true, 7: true, 10: true, 11: true, 14: true, 15: true}
+
+// checkSlotInk fails on text in a light slot drawn on a light slot's ground at
+// 16 colours. Neither colour is known to tuios there, so a chip on a light slot
+// has to take the dark ink: the PREFIX badge on slot 3 took slot 15, which a
+// light theme paints close to its own ground.
+//
+// How this could pass wrongly: the badge could be missing from the frame, so
+// the check first requires a cell of "PREFIX" on a slot ground.
+func checkSlotInk(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	s := term.Screen()
+	row := rowWith(s, "PREFIX")
+	if row < 0 {
+		t.Fatalf("no PREFIX badge on screen\n%s", term.Snapshot())
+	}
+	col := runeCol(s.Line(row), "PREFIX")
+	if c := s.Cell(col, row); c.Bg.Kind != tuitest.ColorIndexed || c.Bg.Index >= 16 {
+		t.Fatalf("the PREFIX badge's ground is %+v, want a slot at 16 colours\n%s", c.Bg, term.SnapshotStyled())
+	}
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			c := s.Cell(x, y)
+			if c.Content == "" || c.Content == " " || c.Reverse {
+				continue
+			}
+			if c.Bg.Kind == tuitest.ColorIndexed && lightSlots[c.Bg.Index] &&
+				c.Fg.Kind == tuitest.ColorIndexed && lightSlots[c.Fg.Index] {
+				t.Fatalf("%q at (%d,%d) is slot %d on slot %d: light ink on a light ground\n%s",
+					c.Content, x, y, c.Fg.Index, c.Bg.Index, term.SnapshotStyled())
+			}
+		}
 	}
 }
 
