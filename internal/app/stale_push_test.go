@@ -224,13 +224,13 @@ func settlePanes(t *testing.T, r *rig, p *peer, ex *exchange, want int) {
 	for {
 		ex.n = 0
 		ex.settle(200, 50*time.Millisecond)
-		_, queued := ex.take()
+		queued := ex.queued()
 		if !queued && len(tiledPanes(r.m)) == want && len(tiledPanes(p.m)) == want {
 			// Both clients have the set. Let whatever answer they owe the daemon
 			// for placing it come back and be applied before anything is read.
 			ex.n = 0
 			ex.settle(200, 100*time.Millisecond)
-			if _, queued := ex.take(); !queued {
+			if !ex.queued() {
 				return
 			}
 		}

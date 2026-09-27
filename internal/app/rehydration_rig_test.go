@@ -72,6 +72,29 @@ func ownSocket(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 }
 
+// rigShell is the shell every rig pane runs: dash where the machine has one, and
+// /bin/sh otherwise.
+//
+// Not /bin/sh on macOS, which is bash 3.2. Its SIGWINCH handler calls malloc, so
+// a resize that lands while the shell is inside malloc deadlocks it on its own
+// allocator lock, libplatform aborts it ("Trying to recursively lock an
+// os_unfair_lock", EXC_BREAKPOINT) and the kernel kills it with SIGKILL. A new
+// pane is resized several times in its first milliseconds (every client
+// announces its own layout), so under load about one rig shell in several
+// thousand died that way a few milliseconds after it started. The daemon then
+// keeps the dead pane's last emulator size while the clients go on laying it
+// out, and the convergence harness reported that as the daemon running a shell
+// at a size no client draws. The crash reports are in
+// ~/Library/Logs/DiagnosticReports/bash-*.ips with app.test as the parent.
+// dash does not handle SIGWINCH at all, and is what /bin/sh is on Debian and
+// Ubuntu, so the rig behaves the same on both.
+func rigShell() string {
+	if _, err := os.Stat("/bin/dash"); err == nil {
+		return "/bin/dash"
+	}
+	return "/bin/sh"
+}
+
 // newRig brings up a daemon, creates a session with panes windows, and attaches
 // a client OS to it by the attach path. The returned rig is at route "first
 // attach" with every pane subscribed.
@@ -88,7 +111,7 @@ func newRigSized(t *testing.T, panes, cols, rows int, opts ...func(*rig)) *rig {
 	// A predictable shell keeps the pane's own output out of the comparison's
 	// way; the oracle is daemon-versus-client, so any prompt appears on both
 	// sides, but a shell that draws its own banner makes a failure unreadable.
-	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("SHELL", rigShell())
 	t.Setenv("PS1", "$ ")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

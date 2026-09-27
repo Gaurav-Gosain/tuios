@@ -115,7 +115,7 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 	deadline := time.Now().Add(rigWait)
 	for {
 		ex.settle(400, 50*time.Millisecond)
-		_, queued := ex.take()
+		queued := ex.queued()
 		if !queued &&
 			r.m.SharedBorders == p.m.SharedBorders && r.m.PaneGap == p.m.PaneGap &&
 			contentSizes(r.m) == contentSizes(p.m) {

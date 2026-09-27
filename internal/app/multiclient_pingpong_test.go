@@ -53,6 +53,20 @@ func (e *exchange) take() (func(), bool) {
 	return f, true
 }
 
+// queued reports whether a broadcast is waiting, without taking it.
+//
+// The settle loops used to ask with take, which answers the question by
+// removing the broadcast it found and throwing it away. A broadcast that
+// arrived after the quiet period and before the check was lost that way,
+// and the client it was meant for never heard it: a peer's workspace switch
+// or a session resize simply did not happen on one client, which the
+// convergence harness then reported as the fleet disagreeing.
+func (e *exchange) queued() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.q) > 0
+}
+
 // route wires one client's incoming broadcasts into one OS: the state pushes a
 // peer makes, and the size the daemon settles on. Both are what the program
 // loop does with them.
@@ -122,7 +136,7 @@ func (e *exchange) settleBox(r *rig, p *peer) {
 	for {
 		e.settle(200, 50*time.Millisecond)
 		local, remote := r.client.SessionLayoutReserve(), p.c.SessionLayoutReserve()
-		_, queued := e.take()
+		queued := e.queued()
 		if queued == false && local == remote &&
 			r.m.SessionReserve == local && p.m.SessionReserve == remote {
 			e.n = 0

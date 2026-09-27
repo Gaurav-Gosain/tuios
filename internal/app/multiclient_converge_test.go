@@ -291,9 +291,17 @@ func newFleet(t *testing.T, seed uint64) *fleet {
 	// The control connection records the daemon's state for the oracle. It is
 	// never a sync's source, so it is sent every broadcast, and what the daemon
 	// broadcasts is the merged state it holds.
+	//
+	// The newest copy is kept, not the last to arrive. The daemon sends from
+	// more than one goroutine and two copies can arrive swapped, which a
+	// client handles by dropping the older one (TUIClient.AcceptState); the
+	// oracle has to do the same or it measures the fleet against a state the
+	// session has already left.
 	f.r.ctl.OnStateSync(func(state *session.SessionState, _, _ string) {
 		f.mu.Lock()
-		f.daemonState = state
+		if f.daemonState == nil || state.SnapshotSeq == 0 || state.SnapshotSeq > f.daemonState.SnapshotSeq {
+			f.daemonState = state
+		}
 		f.mu.Unlock()
 	})
 
@@ -718,7 +726,7 @@ func (f *fleet) settle(what string) {
 			f.fail(what, fmt.Sprintf("the fleet was still trading state after %d deliveries", n))
 		}
 		last = f.diverged()
-		if _, queued := f.ex.take(); !queued && last == "" {
+		if !f.ex.queued() && last == "" {
 			return
 		}
 		if time.Now().After(deadline) {
