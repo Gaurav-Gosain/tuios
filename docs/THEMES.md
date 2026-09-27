@@ -230,7 +230,7 @@ uses.
 |---|---|---|
 | truecolor | `COLORTERM=truecolor` or `24bit`, or a terminal known to have it (kitty, ghostty, wezterm, alacritty, foot) | The designed ramp, as described above. |
 | 256 | `TERM` ends in `256color` and there is no `COLORTERM`: Apple Terminal, mosh, tmux without `Tc` | The neutral ramp is set by hand on the xterm grey ramp (232 to 255), so no panel or selected row turns navy. The accent and status colours step to their nearest palette entry, and every ink is measured against the grey it is actually drawn on. |
-| 16 | `TERM=xterm`, `TERM=linux`, `NO_COLOR` | No grounds are painted: panels use your terminal's own background and frame themselves with a thin line. Text is your terminal's own foreground, quiet text is bright black, colours are your palette's slots (the accent is bright blue, keys bright cyan), the selected row is reverse video, and a title chip is reverse video in the accent. |
+| 16 | `TERM=xterm`, `TERM=linux`, `NO_COLOR` | No grounds are painted: panels use your terminal's own background and frame themselves with a thin line. Text is your terminal's own foreground, quiet text is bright black, colours are your palette's slots (the accent is bright blue, keys bright cyan), the selected row is reverse video, a title chip is reverse video in the accent, and a workspace tab on the dock has no fill, so it drops its rounded ends. Text on a coloured chip takes the dark ink on your yellow, green and cyan slots and the light ink on the others. |
 
 With a theme loaded, the 16-colour chrome still uses slot numbers, so it takes
 its colours from whatever palette your terminal is set to; set the terminal to
