@@ -3437,7 +3437,7 @@ Manage saved layout templates.
 - `tuios layout list`: List all saved layout templates
 - `tuios layout delete <name>`: Delete a saved layout template
 - `tuios layout dir`: Print the layout templates directory path
-- `tuios layout export <name>`: Export a layout template as JSON
+- `tuios layout export <name>`: Print a layout template as a tape script
 
 #### `tuios layout list`
 
@@ -3474,7 +3474,14 @@ tuios layout dir
 
 #### `tuios layout export`
 
-Export a saved layout template as JSON for sharing or backup.
+Print a saved layout template as a tape script on stdout. The script turns
+tiling on or off as the layout had it, opens one window per saved window,
+renames each window that had a name, and types the `cd` and startup command
+each window was saved with. Run it with `tuios tape play` or, against a
+running session, `tuios tape exec`.
+
+The template itself is a JSON file in the directory `tuios layout dir` prints;
+copy that file to share the layout as it is stored.
 
 **Usage:**
 ```bash
@@ -3483,7 +3490,8 @@ tuios layout export <name>
 
 **Example:**
 ```bash
-tuios layout export dev-layout
+tuios layout export dev-layout > dev-layout.tape
+tuios tape play dev-layout.tape
 ```
 
 ---
