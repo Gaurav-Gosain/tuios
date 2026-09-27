@@ -25,9 +25,14 @@
     "want": {"state": "working", "agent_session_id": "ses_1"}
   },
   {
+    "name": "session.status retry with its reason",
+    "payload": {"hook_event_name": "session.status", "session_id": "ses_1", "status": "retry", "retry_message": "Rate limited by Anthropic"},
+    "want": {"state": "working", "message": "retrying: Rate limited by Anthropic", "agent_session_id": "ses_1"}
+  },
+  {
     "name": "session.status idle",
     "payload": {"hook_event_name": "session.status", "session_id": "ses_1", "status": "idle"},
-    "skip": "left to session.idle"
+    "want": {"state": "done", "if_state": "working,needs_input", "agent_session_id": "ses_1"}
   },
   {
     "name": "permission.asked",
@@ -62,7 +67,7 @@
   {
     "name": "session.idle",
     "payload": {"hook_event_name": "session.idle", "session_id": "ses_1"},
-    "want": {"state": "done", "agent_session_id": "ses_1"}
+    "want": {"state": "done", "if_state": "working,needs_input", "agent_session_id": "ses_1"}
   },
   {
     "name": "session.error",

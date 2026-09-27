@@ -91,7 +91,9 @@ func TestEveryInstalledEventHasAFixture(t *testing.T) {
 			}
 		}
 		for _, ev := range target.Events {
-			if !reported[ev.Name] {
+			// Copilot registers notification and its payload names it
+			// Notification, so the name is compared without case.
+			if !reported[ev.Name] && !reported[strings.ToUpper(ev.Name[:1])+ev.Name[1:]] {
 				t.Errorf("%s registers %s, and no fixture for it reports a state", target.ID, ev.Name)
 			}
 		}

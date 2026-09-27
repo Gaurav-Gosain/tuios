@@ -85,10 +85,10 @@ This is what the hooks tuios integration install writes run. The harness
 hands its hook payload on stdin (or, for the Codex notify command, as the last
 argument). The event comes from the payload, or from the event argument when
 the payload does not name it. Supported harnesses: claude-code, codex,
-gemini-cli, opencode, amp, kilo, kimi and pi, which report the pane's state;
-and antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes,
-qoder and qwen, which report only the conversation id (set-agent-session) and
-leave the state to the pane's screen rules.
+copilot, cursor-agent, gemini-cli, opencode, amp, kilo, kimi, pi and qwen,
+which report the pane's state; and antigravity, crush, devin, droid, grok,
+hermes and qoder, which report only the conversation id (set-agent-session)
+and leave the state to the pane's screen rules.
 
 The pane is found from --window, then TUIOS_PANE_ID, then the process's
 controlling terminal, then its parent processes, so a harness or sandbox
@@ -117,10 +117,10 @@ CLI gets an empty JSON object), and gives up after 500ms when the daemon is
 slow or gone. Use --explain to see on stderr what it decided and why.
 
 The one exception is a permission prompt the Inbox may answer. When
-[agents.approvals] in the config names the harness (claude-code, opencode or
-kilo), the hook for Claude Code's PermissionRequest, or for opencode's
-permission.asked, waits after its report for the person to answer the Inbox
-item, for up to hold_seconds (120 by default). A Claude Code plan
+[agents.approvals] in the config names the harness (claude-code, opencode,
+kilo or qwen), the hook for Claude Code's or Qwen Code's PermissionRequest, or
+for opencode's permission.asked, waits after its report for the person to
+answer the Inbox item, for up to hold_seconds (120 by default). A Claude Code plan
 (ExitPlanMode) is held the same way unless hold_plans is false. It then prints
 the harness's own decision. It prints nothing, and the harness asks in its pane as before,
 when the wait ends without an answer, when approvals are off, when the daemon

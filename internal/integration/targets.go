@@ -234,16 +234,21 @@ var targets = []*Target{
 	{
 		// Version 2 offers permission requests to the Inbox and sends the
 		// person's reply back to opencode. Version 3 feeds the model and the
-		// session's cost to the pane's agent metadata.
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 3, Reports: ReportsState,
+		// session's cost to the pane's agent metadata. Version 4 ends a turn
+		// on session.status idle, which replaces the deprecated session.idle,
+		// and says why a retry is waiting.
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 4, Reports: ReportsState,
 		Source:    "https://opencode.ai/docs/plugins/ (global plugins load from ~/.config/opencode/plugins)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
 		format:    ownedFile{render: renderTemplate(openCodePluginTemplate)},
 	},
 	{
-		ID: Amp, Name: "Amp", Binary: "amp", Version: 1, Reports: ReportsState,
-		Source:    "https://ampcode.com/manual/plugin-api (TypeScript plugins run by Bun from ~/.config/amp/plugins; session.start, agent.start, agent.end)",
+		// Version 2 reports a question asked with ask_user_choice as
+		// needs_input, when its tool.call answer cannot change what Amp
+		// permits.
+		ID: Amp, Name: "Amp", Binary: "amp", Version: 2, Reports: ReportsState,
+		Source:    "https://ampcode.com/manual/plugin-api (TypeScript plugins run by Bun from ~/.config/amp/plugins; session.start, agent.start, agent.end, tool.call, tool.result)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("amp") },
 		File:      filepath.Join("plugins", "tuios-agent-state.ts"),
 		format:    ownedFile{render: renderTemplate(ampPluginTemplate)},
@@ -257,14 +262,20 @@ var targets = []*Target{
 		Events:    []HookEvent{{"PreInvocation", 5}},
 	},
 	{
-		ID: Copilot, Name: "GitHub Copilot CLI", Binary: "copilot", Version: 1, Reports: ReportsSession,
-		Source:    "https://docs.github.com/en/copilot/reference/hooks-configuration (every ~/.copilot/hooks/*.json is loaded; version 1, command hooks with bash, powershell and timeoutSec)",
+		// Version 2 reports the pane's state from the whole turn, where
+		// version 1 named the conversation only (hook_copilot.go).
+		ID: Copilot, Name: "GitHub Copilot CLI", Binary: "copilot", Version: 2, Reports: ReportsState,
+		Source:    "https://docs.github.com/en/copilot/reference/hooks-reference (every ~/.copilot/hooks/*.json is loaded; version 1, command hooks with bash, powershell and timeoutSec; PascalCase event names get snake_case payloads)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("COPILOT_HOME", ".copilot") },
 		File:      filepath.Join("hooks", "tuios.json"),
 		format: ownedFile{render: renderJSON(map[string]any{"version": 1}, func(cmd string, ev HookEvent) any {
 			return map[string]any{"type": "command", "bash": cmd, "powershell": powershellCommand(cmd), "timeoutSec": ev.Timeout}
 		})},
-		Events: []HookEvent{{"SessionStart", 5}},
+		Events: []HookEvent{
+			{"SessionStart", 5}, {"UserPromptSubmit", 5}, {"PreToolUse", 5},
+			{"PostToolUse", 5}, {"PostToolUseFailure", 5}, {"notification", 5},
+			{"Stop", 5}, {"ErrorOccurred", 5}, {"SessionEnd", 5},
+		},
 	},
 	{
 		ID: Crush, Name: "Crush", Binary: "crush", Version: 1, Reports: ReportsSession,
@@ -277,14 +288,19 @@ var targets = []*Target{
 		Events: []HookEvent{{"PreToolUse", 5}},
 	},
 	{
-		ID: CursorAgent, Name: "Cursor Agent", Binary: "cursor-agent", Version: 1, Reports: ReportsSession,
-		Source:    "https://cursor.com/docs/hooks (~/.cursor/hooks.json, version 1, each event a list of {command})",
+		// Version 2 reports the pane's state from the turn, where version 1
+		// named the conversation only (hook_cursor.go).
+		ID: CursorAgent, Name: "Cursor Agent", Binary: "cursor-agent", Version: 2, Reports: ReportsState,
+		Source:    "https://cursor.com/docs/hooks (~/.cursor/hooks.json, version 1, each event a list of {command}; permission hooks block on an empty answer, so none is registered)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("CURSOR_CONFIG_DIR", ".cursor") },
 		File:      "hooks.json",
 		format: flatHooks{version1: true, entry: func(cmd string, _ HookEvent) map[string]any {
 			return map[string]any{"command": cmd}
 		}},
-		Events: []HookEvent{{"sessionStart", 0}},
+		Events: []HookEvent{
+			{"sessionStart", 0}, {"beforeSubmitPrompt", 0}, {"postToolUse", 0},
+			{"postToolUseFailure", 0}, {"stop", 0}, {"sessionEnd", 0},
+		},
 	},
 	{
 		ID: Devin, Name: "Devin CLI", Binary: "devin", Version: 1, Reports: ReportsSession,
@@ -343,8 +359,9 @@ var targets = []*Target{
 	},
 	{
 		// Version 2: the opencode plugin it shares offers permission requests
-		// to the Inbox. Version 3: it feeds the model and cost.
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 3, Reports: ReportsState,
+		// to the Inbox. Version 3: it feeds the model and cost. Version 4: it
+		// ends a turn on session.status idle.
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 4, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),
@@ -364,7 +381,9 @@ var targets = []*Target{
 		},
 	},
 	{
-		ID: Pi, Name: "Pi", Binary: "pi", Version: 1, Reports: ReportsState,
+		// Version 2 reports a blocking prompt (ui_prompt_start) as
+		// needs_input and its answer (ui_prompt_end) as the end of the block.
+		ID: Pi, Name: "Pi", Binary: "pi", Version: 2, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
 		File:      filepath.Join("extensions", "tuios-agent-state.ts"),
@@ -379,12 +398,25 @@ var targets = []*Target{
 		Events:    []HookEvent{{"SessionStart", 5}},
 	},
 	{
-		ID: Qwen, Name: "Qwen Code", Binary: "qwen", Version: 1, Reports: ReportsSession,
-		Source:    "herdr src/integration/targets.rs install_qwen (~/.qwen/settings.json hooks, Gemini CLI's shape, matcher *, timeout in milliseconds)",
+		// Version 2 reports the pane's state from the whole turn, where
+		// version 1 named the conversation only, and lets the Inbox answer a
+		// permission prompt (hook_qwen.go). Qwen Code reads a command hook's
+		// timeout of 1000 or more as milliseconds and a smaller one as
+		// seconds, where older releases read every value as milliseconds, so
+		// every timeout here is written as 1000 or more to mean the same to
+		// both. PermissionRequest gets 310 seconds, past the daemon's longest
+		// hold of 300, like Claude Code's.
+		ID: Qwen, Name: "Qwen Code", Binary: "qwen", Version: 2, Reports: ReportsState,
+		Source:    "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md (~/.qwen/settings.json hooks in Claude Code's nested shape, matcher *, a timeout of 1000 or more read as milliseconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("QWEN_HOME", ".qwen") },
 		File:      "settings.json",
 		format:    nestedHooks{matcher: "*"},
-		Events:    []HookEvent{{"SessionStart", 5000}},
+		Events: []HookEvent{
+			{"SessionStart", 5000}, {"UserPromptSubmit", 5000}, {"PreToolUse", 5000},
+			{"PermissionRequest", ApprovalHookTimeout * 1000}, {"PostToolUse", 5000},
+			{"PostToolUseFailure", 5000}, {"PermissionDenied", 5000}, {"Notification", 5000},
+			{"Stop", 5000}, {"StopFailure", 5000}, {"SessionEnd", 5000},
+		},
 	},
 }
 

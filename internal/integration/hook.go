@@ -262,6 +262,12 @@ func Translate(harnessName string, in Input) Decision {
 		return translateKimi(in, p)
 	case Pi:
 		return translatePi(in, p)
+	case Qwen:
+		return translateQwen(in, p)
+	case Copilot:
+		return translateCopilot(in, p)
+	case CursorAgent:
+		return translateCursor(in, p)
 	default:
 		return translateIdentity(id, in, p)
 	}

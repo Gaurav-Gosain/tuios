@@ -39,7 +39,7 @@ type AgentsConfig struct {
 // the wait ends with no answer the harness shows its own prompt as before.
 type ApprovalsConfig struct {
 	// Enabled lists the harnesses whose approvals the Inbox may answer, by
-	// harness id or alias (claude, claude-code, opencode, kilo). Empty, the
+	// harness id or alias (claude, claude-code, opencode, kilo, qwen). Empty, the
 	// default, turns the feature off.
 	Enabled []string `toml:"enabled,omitempty"`
 	// HoldSeconds is how long a hook waits for an answer before it gives the

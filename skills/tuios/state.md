@@ -84,9 +84,9 @@ tuios integration status                 # installed, current, and what it repor
 tuios doctor agents                      # also lists agent panes missing theirs
 ```
 
-Claude Code, Codex, Gemini CLI, opencode, Kilo, Amp, Kimi and Pi report the
-pane's state. Antigravity, Copilot, Crush, Cursor Agent, Devin, Droid, Grok,
-Hermes, Qoder and Qwen report only the conversation id, so the pane can be
+Claude Code, Codex, Copilot, Cursor Agent, Gemini CLI, opencode, Kilo, Amp,
+Kimi, Pi and Qwen report the pane's state. Antigravity, Crush, Devin, Droid,
+Grok, Hermes and Qoder report only the conversation id, so the pane can be
 resumed, and their state keeps coming from screen rules.
 
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook

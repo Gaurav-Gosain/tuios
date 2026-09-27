@@ -1,13 +1,88 @@
 [
   {
     "name": "SessionStart",
-    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1", "source": "startup", "cwd": "/src"},
-    "want": {"session_only": true, "agent_session_id": "qw-1"}
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1", "source": "startup", "cwd": "/src", "transcript_path": "/tmp/qw-1.jsonl"},
+    "want": {"state": "idle", "agent_session_id": "qw-1", "transcript_path": "/tmp/qw-1.jsonl"}
   },
   {
     "name": "SessionStart on resume",
     "payload": {"hook_event_name": "SessionStart", "session_id": "qw-2", "source": "resume"},
-    "want": {"session_only": true, "agent_session_id": "qw-2"}
+    "want": {"state": "idle", "agent_session_id": "qw-2"}
+  },
+  {
+    "name": "SessionStart after compaction is mid-turn",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1", "source": "compact"},
+    "skip": "compaction"
+  },
+  {
+    "name": "UserPromptSubmit",
+    "payload": {"hook_event_name": "UserPromptSubmit", "session_id": "qw-1", "prompt": "fix the build"},
+    "want": {"state": "working", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PreToolUse",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "qw-1", "tool_name": "run_shell_command", "tool_input": {"command": "go test ./...", "is_background": false}},
+    "want": {"state": "working", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PermissionRequest",
+    "payload": {"hook_event_name": "PermissionRequest", "session_id": "qw-1", "permission_mode": "default", "tool_name": "run_shell_command", "tool_input": {"command": "git push", "is_background": false}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve run_shell_command: git push", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PermissionRequest for a question",
+    "payload": {"hook_event_name": "PermissionRequest", "session_id": "qw-1", "tool_name": "ask_user_question", "tool_input": {"questions": [{"question": "Which database?", "header": "Database", "options": []}]}},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which database?", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PostToolUse",
+    "payload": {"hook_event_name": "PostToolUse", "session_id": "qw-1", "tool_name": "run_shell_command"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PostToolUseFailure",
+    "payload": {"hook_event_name": "PostToolUseFailure", "session_id": "qw-1", "tool_name": "run_shell_command", "error": "exit 1"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "PermissionDenied",
+    "payload": {"hook_event_name": "PermissionDenied", "session_id": "qw-1", "tool_name": "run_shell_command", "reason": "classifier_blocked"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "a permission prompt notification",
+    "payload": {"hook_event_name": "Notification", "session_id": "qw-1", "message": "Qwen Code needs your permission", "notification_type": "permission_prompt"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Qwen Code needs your permission", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "an idle prompt notification",
+    "payload": {"hook_event_name": "Notification", "session_id": "qw-1", "message": "waiting", "notification_type": "idle_prompt"},
+    "want": {"state": "idle", "if_state": "working,unknown", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "an auth notification",
+    "payload": {"hook_event_name": "Notification", "session_id": "qw-1", "notification_type": "auth_success"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Stop",
+    "payload": {"hook_event_name": "Stop", "session_id": "qw-1", "stop_hook_active": false, "last_assistant_message": "The build passes now.\nDetails follow."},
+    "want": {"state": "done", "message": "The build passes now.", "agent_session_id": "qw-1", "activity": {"event": "turn_end", "text": "The build passes now."}}
+  },
+  {
+    "name": "StopFailure",
+    "payload": {"hook_event_name": "StopFailure", "session_id": "qw-1", "error": "rate_limit", "error_details": "429"},
+    "want": {"state": "errored", "message": "stopped on rate_limit", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"hook_event_name": "SessionEnd", "session_id": "qw-1", "reason": "prompt_input_exit"},
+    "want": {"state": "none", "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "a subagent's event",
+    "payload": {"hook_event_name": "Stop", "session_id": "qw-1", "agent_id": "sub-1"},
+    "skip": "subagent"
   },
   {
     "name": "a Gemini CLI hook in the same pane is foreign",

@@ -14,7 +14,7 @@ import (
 
 // TestOpenCodePluginFeedsUsage runs the rendered opencode plugin under node,
 // with a stand-in tuios that records each run, and feeds it opencode's
-// message.updated and session.idle events. It checks the plugin runs
+// message.updated, session.idle and session.status events. It checks the plugin runs
 // agent-statusline with the model and the sum of its assistant messages'
 // cost, only when either changed, once more at the end of the turn, and
 // never for a subagent's session.
@@ -55,6 +55,8 @@ func TestOpenCodePluginFeedsUsage(t *testing.T) {
 		// A cost of the wrong type is left out.
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m3", "sessionID": "ses_1", "role": "assistant", "modelID": "claude-sonnet-4-6", "cost": "lots"}}},
 		{"type": "session.idle", "properties": map[string]any{"sessionID": "ses_1"}},
+		// opencode ends a turn with both events; the second sends nothing.
+		{"type": "session.status", "properties": map[string]any{"sessionID": "ses_1", "status": map[string]any{"type": "idle"}}},
 	}
 	evJSON, _ := json.Marshal(events)
 	code := `import { TuiosAgentState } from ` + jsString(plugin) + `;
@@ -85,9 +87,9 @@ for (const event of ` + string(evJSON) + `) {
 	time.Sleep(200 * time.Millisecond)
 	got = readCalls(t, calls, "agent-statusline")
 	want := []string{
-		"agent-statusline opencode --integration 3\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.1}`,
-		"agent-statusline opencode --integration 3\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
-		"agent-statusline opencode --integration 3 --turn-end\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
+		"agent-statusline opencode --integration 4\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.1}`,
+		"agent-statusline opencode --integration 4\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
+		"agent-statusline opencode --integration 4 --turn-end\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
 	}
 	sort.Strings(got)
 	sort.Strings(want)
