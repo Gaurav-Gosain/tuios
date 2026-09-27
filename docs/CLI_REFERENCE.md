@@ -2493,7 +2493,8 @@ attached       true
 named          2=review
 ```
 
-The `display name`, `accent` and `named` lines appear only when those are set.
+The `display name`, `accent` and `named` lines appear only when those are set,
+and `host focus` only while a client is attached.
 
 **JSON Output Structure:**
 ```json
@@ -2502,6 +2503,7 @@ The `display name`, `accent` and `named` lines appear only when those are set.
   "current_workspace": 1,
   "display_name": "",
   "height": 40,
+  "host_focus": "focused",
   "layout_mode": "bsp",
   "master_ratio": 0.5,
   "message": "command executed",
@@ -2537,6 +2539,7 @@ The `display name`, `accent` and `named` lines appear only when those are set.
 | `mode` | Always `unknown`. The input mode belongs to the attached client, which the daemon does not ask |
 | `width`, `height` | The session's size in cells |
 | `tui_attached` | Whether a client is attached |
+| `host_focus` | Whether the person can be looking at the session, from the focus events of the attached clients' terminals: `focused` when any client's terminal has focus, `unfocused` when every one reported losing it, `unknown` when none is attached or a terminal never reports focus |
 
 The theme is not listed here. It is a session option: read it with
 `tuios get-config appearance.theme`.

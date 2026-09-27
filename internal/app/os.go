@@ -822,6 +822,9 @@ type OS struct {
 	// held for one key to see whether it starts the screenshot chord. Nil when
 	// nothing is held. See routeOverlayScreenshot in internal/input.
 	OverlayLeader *tea.KeyPressMsg
+	// hostFocus is whether the host terminal has focus, from its focus
+	// events. See host_focus.go.
+	hostFocus hostFocusState
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle

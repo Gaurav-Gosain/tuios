@@ -62,7 +62,9 @@ type AgentAlertsConfig struct {
 	SettleSeconds *int `toml:"settle_seconds"`
 
 	// SuppressFocused drops alerts for the pane the user is already looking at,
-	// which is what tuios did before any of this was configurable. Set it false
+	// which is what tuios did before any of this was configurable. A pane is
+	// looked at while it is focused and the host terminal has not reported
+	// losing focus (DECSET 1004 focus events). Set it false
 	// to be told anyway, on the grounds that a pane being on screen is not
 	// evidence anyone read it. Default: true.
 	SuppressFocused *bool `toml:"suppress_focused"`

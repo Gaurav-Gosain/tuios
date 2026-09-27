@@ -156,6 +156,7 @@ func (d *Daemon) verbSessionInfo(_ *connState, params json.RawMessage) (any, *ve
 	hasClient := d.findTUIClient(sess.ID) != nil
 	data := buildSessionInfoData(sess, sess.GetState(), hasClient)
 	data["type"] = "session_info"
+	data["host_focus"] = d.sessionHostFocus(sess.ID)
 	return data, nil
 }
 

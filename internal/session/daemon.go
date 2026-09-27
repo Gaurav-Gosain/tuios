@@ -451,6 +451,11 @@ type connState struct {
 	// stored as verified_human; see verifyHumanNonce. Guarded by mu.
 	humanNonce string
 
+	// hostFocus is what this client last said about its host terminal's
+	// focus: focusUnknown until it says anything. Guarded by mu. See
+	// client_focus.go.
+	hostFocus hostFocus
+
 	// Client terminal dimensions (for multi-client size calculation)
 	width  int
 	height int
@@ -1489,6 +1494,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleCreatePTY(cs, msg)
 	case MsgReadDir:
 		return d.handleReadDir(cs, msg)
+	case MsgClientFocus:
+		return d.handleClientFocus(cs, msg)
 	case MsgClosePTY:
 		return d.handleClosePTY(cs, msg)
 	case MsgUpdateState:

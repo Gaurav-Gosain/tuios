@@ -111,6 +111,11 @@ const (
 	// strictly less than that.
 	MsgReadDir
 	MsgDirListing
+	// MsgClientFocus reports whether the host terminal of a TUI client has
+	// focus, from the terminal's focus events (DECSET 1004). A client sends it
+	// only to a daemon whose welcome set ClientFocus, so an older daemon never
+	// receives a type it would refuse. See client_focus.go.
+	MsgClientFocus
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -165,6 +170,9 @@ type WelcomePayload struct {
 	// Protocol is the wire protocol version the daemon speaks. Zero means a
 	// daemon that predates the field; see HelloPayload.Protocol.
 	Protocol int `json:"protocol,omitempty"`
+	// ClientFocus says the daemon reads MsgClientFocus. gob leaves it false
+	// from a daemon that predates it, and the client then sends none.
+	ClientFocus bool `json:"client_focus,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.
