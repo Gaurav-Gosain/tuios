@@ -2,6 +2,8 @@ package overlay
 
 import (
 	"image/color"
+	"math"
+	"sync"
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
@@ -96,6 +98,11 @@ func isNoColor(c color.Color) bool {
 	return false
 }
 
+// IsNoColor reports whether c is the terminal's default colour, for code
+// outside this package that writes its own sequences and has to leave such a
+// colour unset.
+func IsNoColor(c color.Color) bool { return isNoColor(c) }
+
 // terminalOwned reports whether the terminal decides what c looks like: the
 // default colour or one of the sixteen slots. tuios cannot measure such a
 // colour, because the RGB it would measure is the xterm default and not what
@@ -130,12 +137,16 @@ func Shown(c color.Color) color.Color {
 
 // To256 places c on the xterm 256-colour palette the way the chrome wants it:
 // a colour with little chroma goes to the nearest entry on the grey ramp by
-// luminance, and anything else to the nearest entry colorprofile picks.
+// luminance, and anything else to the entry nearest it in OKLab.
 //
 // colorprofile picks between the colour cube and the grey ramp by perceptual
 // distance, and a grey with a slight blue cast, which is what the charmtone
 // neutrals are, wins a blue cube entry: charmtone BBQ became index 17, navy.
 // Deciding greys by chroma first is what keeps a neutral neutral.
+//
+// colorprofile is not used for the colours either: it places some saturated
+// colours on the grey ramp. Catppuccin Latte's red, #d20f38, becomes 241, a
+// mid grey, so a removed line's number at 256 colours was grey.
 func To256(c color.Color) color.Color {
 	if isNoColor(c) {
 		return c
@@ -147,7 +158,33 @@ func To256(c color.Color) color.Color {
 	if okChroma(c) < greyChroma {
 		return nearestGrey(c)
 	}
-	return colorprofile.ANSI256.Convert(c)
+	return nearest256(c)
+}
+
+// xterm256Lab is entries 16 to 255 of the xterm palette in OKLab. It is
+// built on first use rather than at package initialisation, because toLab
+// reads a table oklab.go's init fills, and that runs after this file's
+// variables are set.
+var xterm256Lab = sync.OnceValue(func() (t [240]lab) {
+	for i := range t {
+		t[i] = toLab(ansi.IndexedColor(uint8(16 + i))) // #nosec G115 -- i is within [0, 239].
+	}
+	return t
+})
+
+// nearest256 is the entry from 16 to 255 nearest c in OKLab. The sixteen
+// below 16 are left out because the terminal's palette decides them.
+func nearest256(c color.Color) color.Color {
+	v := toLab(c)
+	best, bestD := 0, math.Inf(1)
+	table := xterm256Lab()
+	for i, e := range table {
+		dl, da, db := v.l-e.l, v.a-e.a, v.b-e.b
+		if d := dl*dl + da*da + db*db; d < bestD {
+			best, bestD = i, d
+		}
+	}
+	return ansi.IndexedColor(uint8(16 + best)) // #nosec G115 -- best is within [0, 239].
 }
 
 // greyChroma is the OKLab chroma below which a colour is placed on the grey

@@ -91,18 +91,13 @@ func newReviewLook(g ground) *reviewLook {
 		syntax = diffview.SyntaxFromANSI(slots)
 	}
 	l := &reviewLook{pal: pal}
-	// The diff theme blends and measures its tints, so it is given colours it
-	// can measure. At 16 colours the chrome ground and ink are the terminal's
-	// own and have no RGB, so the diff is built on the pane's concrete ground and
-	// the frame writer steps its tints down as it did before.
-	dvGround, dvFg := ground, pal.Fg
-	if pal.Depth == overlay.Depth16 {
-		dvGround = solidColor(theme.TerminalBg())
-		dvFg = overlay.ContrastText(dvGround)
-	}
+	// The diff theme is built for the depth: tints in truecolor, fixed palette
+	// entries at 256 colours, and at 16, where the ground and ink are the
+	// terminal's own, no grounds at all (see diffview.Theme).
 	l.dv = diffview.NewTheme(diffview.Palette{
-		Ground: dvGround,
-		Fg:     dvFg,
+		Depth:  pal.Depth,
+		Ground: ground,
+		Fg:     pal.Fg,
 		Accent: pal.Accent,
 		Add:    pal.Success,
 		Delete: pal.Warn,
