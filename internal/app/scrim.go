@@ -1,6 +1,8 @@
 package app
 
 import (
+	"image/color"
+
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -37,6 +39,12 @@ import (
 // few dozen blends and no allocations. At 16 colours no blend can be drawn, so
 // the text goes faint instead and the grounds, which are the terminal's own,
 // stay as they are.
+//
+// On a light ground it carries toward the ground instead (see scrimToward).
+// Toward black, 30% turned a near-white screen a mid grey behind a light
+// panel, which read as a dirty screen rather than a quiet one. Toward the
+// ground the screen behind keeps its light and its text fades into it, which is
+// the veil a light interface draws behind a sheet.
 
 // modalOverlay is one overlay the screen is dimmed behind and that fades in.
 type modalOverlay struct {
@@ -128,6 +136,7 @@ func (m *OS) applyScrim(canvas *frameCanvas) {
 	faintOnly := theme.Depth() == overlay.Depth16
 	s := &m.motion.scrim
 	if !faintOnly {
+		s.setToward(m.scrimToward())
 		s.syncGround()
 		s.syncLevels(dim)
 		s.run.have = false
@@ -165,4 +174,20 @@ func (m *OS) applyScrim(canvas *frameCanvas) {
 func faintIsInvisible(cell *uv.Cell) bool {
 	return cell.Content == " " && isNilColor(cell.Style.Bg) &&
 		cell.Style.Attrs&uv.AttrReverse == 0 && cell.Style.Underline == 0
+}
+
+// scrimToward is the colour the scrim carries the screen toward: the ground
+// when it is light, the theme's background or, with no theme, the host
+// terminal's own when it has said, and nil, which is black, on a dark one.
+func (m *OS) scrimToward() color.Color {
+	if t := theme.Current(); t != nil {
+		if theme.GroundIsLight(t.Bg) {
+			return t.Bg
+		}
+		return nil
+	}
+	if m.host.bg != nil && m.host.light {
+		return m.host.bg
+	}
+	return nil
 }

@@ -63,7 +63,20 @@ func Structure(bg color.Color) color.Color {
 			hi = mid
 		}
 	}
-	return MixColors(ink, bg, hi)
+	if CurrentDepth() != Depth256 {
+		return MixColors(ink, bg, hi)
+	}
+	// At 256 colours the ink is a palette entry, and the one nearest the blend
+	// can sit well short of the target: on a pale yellow ground the terminal's
+	// own step down drew a scope column at 1.5:1. The entry is picked here, by
+	// the same rule as every other token, and walked toward the text end until
+	// it reaches the target as it will be shown.
+	for t := hi; t >= 0; t -= 1.0 / 64 {
+		if q := To256(MixColors(ink, bg, t)); ContrastRatio(q, bg) >= StructureTarget*0.95 {
+			return q
+		}
+	}
+	return To256(ink)
 }
 
 // linearize undoes the sRGB transfer curve for one channel, which is what makes

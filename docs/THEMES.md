@@ -190,6 +190,17 @@ stays legible over any terminal content. That ramp is four greys at fixed
 spacing (canvas, panel, surface, card), and the spacing is what makes a panel
 read as raised and a chip as inset.
 
+On a light theme the ramp is built from the theme's background instead: the
+background is the canvas, a dialog's surface sits one small step below it, the
+cursor row one ramp step below that, and inset cards above it. The text tiers
+are measured on it the same way, and the accent, the key colour and the status
+colours are carried toward dark ink only as far as they need to read on it
+(4.5:1). So a dialog on a light theme is a light panel, not a dark slab. The
+screen behind a modal panel fades toward the theme's background rather than
+darkening, since 30% toward black turns a near-white screen a mid grey. A
+theme that names its own ramp keeps it, and at 16 colours the panels paint no
+ground at all, as below.
+
 `surface` moves the whole ramp. Name it and the other three steps are derived
 at the same spacing, and the three text tiers (primary, secondary, quiet) are
 re-derived against it at the contrast ratios the constant palette has. The
@@ -296,8 +307,9 @@ pointer are underlined.
   colour picker, seeded on the colour the border is currently drawn in; clearing
   one there unsets the override and hands the border back to the theme.
 - **The chrome's neutrals do not follow the sixteen.** Dialogs and the
-  which-key popup draw on a constant grey ramp regardless of the active theme,
-  by design; `chrome.surface` is the knob that moves it.
+  which-key popup draw on a constant grey ramp on a dark theme, and on a ramp
+  built from the background on a light one, whatever the sixteen are;
+  `chrome.surface` is the knob that moves it.
 
 ## Related Documentation
 

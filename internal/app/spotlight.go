@@ -415,9 +415,17 @@ func (s *cellShade) buildRun(fg, bg color.Color, level uint8) {
 	} else {
 		r.outFg, r.outFaint = fg, !s.noFaint
 	}
-	if s.dimmable(bg) {
+	switch {
+	case isNilColor(r.inBg) && !isNilColor(s.toward) && !isNilColor(s.groundBg) &&
+		packColor8(s.toward) == packColor8(s.groundBg):
+		// Carried toward the ground it already shows, a cell with no ground
+		// of its own keeps none. Spelling the ground out would give it the
+		// theme's background as the depth quantises it, which at 256 colours
+		// is a different colour from the one the host paints the rest with.
+		r.outBg = r.inBg
+	case s.dimmable(bg):
 		r.outBg = s.blendCached(bg, level, t)
-	} else {
+	default:
 		r.outBg = bg
 	}
 }

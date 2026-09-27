@@ -120,6 +120,8 @@ var chromeRamp = struct {
 // Chrome is intentionally kept on a constant neutral ramp (like a real window
 // manager keeps its chrome constant) so overlays stay legible over any terminal
 // content, while a themed session still tints its tabs, selection and badges.
+// On a light theme the ramp is built from the theme's background instead, so
+// a dialog is a light panel on a light screen (see lightDialogChrome).
 // A theme that names a chrome Surface moves the ramp, and the ink tiers move
 // with it: every ink was chosen against the ground it is written on, so
 // opening the ground up without re-deriving the inks would trade off-accent
@@ -249,6 +251,21 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		}
 	}
 
+	// A light theme's chrome is light. The constant ramp is a dark one, and on
+	// a light theme every dialog, the palette, which-key, settings, the Inbox
+	// and help stood as a dark slab on a light screen. The dialogs take a
+	// ramp built from the theme's background the way the rail and the dock's
+	// is (see GroundUI), with the ink tiers measured on it. A theme that names
+	// its own ramp has chosen already, and at 16 colours the ground is the
+	// terminal's.
+	light := false
+	if t := Current(); t != nil && !customRamp && d != overlay.Depth16 && GroundIsLight(t.Bg) {
+		light = true
+		c := lightDialogChrome(t.Bg)
+		p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
+		p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+	}
+
 	switch d {
 	case overlay.Depth16:
 		// The theme's own sixteen, by slot, so the terminal paints them from
@@ -262,7 +279,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		// bright black, the one slot every palette makes a quiet grey.
 		p.Fg, p.FgDim, p.FgMute = overlay.NoColor, overlay.NoColor, overlay.Slot(8)
 	case overlay.Depth256:
-		if !customRamp {
+		if !customRamp && !light {
 			// Set by hand on the grey ramp. Stepping the charmtone neutrals
 			// down one at a time put the panel band and the cursor row on
 			// index 17, navy, because BBQ's slight blue cast wins the colour
@@ -275,8 +292,48 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		p.Warn, p.Success = overlay.To256(p.Warn), overlay.To256(p.Success)
 		p.Info, p.Warning = overlay.To256(p.Info), overlay.To256(p.Warning)
 	}
+	if light {
+		liftOnLight(&p, d)
+	}
 
 	return overlay.Derive(p)
+}
+
+// lightDialogStep is how far a dialog's surface sits below a light ground, as
+// a contrast ratio. The rail's band steps by the dark ramp's canvas spacing,
+// 1.44:1, which on a near-white ground is a mid grey: right for a thin band,
+// and a grey slab when it fills a panel the size of the palette. A dialog
+// is raised off the screen by its edge and by the scrim, so it takes a
+// smaller step and stays a light surface.
+const lightDialogStep = 1.2
+
+// lightDialogChrome is the ramp and ink tiers of a dialog on a light ground:
+// the ground as the canvas, the surface one small step below it, the cursor
+// row one ramp step below that, and the inset card above the surface.
+func lightDialogChrome(ground color.Color) Chrome {
+	c := Chrome{Canvas: ground, Surface: overlay.Darker(ground, lightDialogStep)}
+	c.deriveRamp()
+	return c
+}
+
+// liftOnLight holds the palette's coloured inks to the text floor on a light
+// surface. A theme's bright slots are picked to read on its own background in
+// a terminal, where they are mostly marks and highlights; on the chrome they
+// are key names, headers, the title chip and status words, and a light
+// theme's bright cyan or yellow measures under 2:1 on a pale grey. Each is
+// carried toward the surface's text end only as far as it has to go, so the
+// hue survives, and at 256 colours the result is stepped to the palette entry
+// the terminal will draw.
+func liftOnLight(p *overlay.Palette, d overlay.Depth) {
+	grounds := []color.Color{p.Surface, p.Panel}
+	for _, ink := range []*color.Color{&p.Accent, &p.AccentBright, &p.Selected, &p.Warn, &p.Success, &p.Info, &p.Warning} {
+		for _, g := range grounds {
+			*ink = overlay.ReadableAt(*ink, g, ContrastFloor)
+		}
+		if d == overlay.Depth256 {
+			*ink = overlay.To256(*ink)
+		}
+	}
 }
 
 // GroundUI is UI for chrome written straight on the terminal's own

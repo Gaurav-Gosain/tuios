@@ -225,7 +225,7 @@ func (m *OS) applyFade(canvas *frameCanvas, id string, bounds image.Rectangle, n
 // setToward points the shade at a new colour, dropping every blend made
 // toward the old one.
 func (s *cellShade) setToward(c color.Color) {
-	if s.toward != nil && packColor8(s.toward) == packColor8(c) {
+	if isNilColor(s.toward) == isNilColor(c) && (isNilColor(c) || packColor8(s.toward) == packColor8(c)) {
 		return
 	}
 	s.toward = c
