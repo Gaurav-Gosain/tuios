@@ -171,7 +171,8 @@ func chromeClient(t *testing.T, r chromeRun) (*tuitest.Terminal, string) {
 //     the keys, the selection and the muted ink are all measured;
 //   - on the dark look: the panel's ground is dark, as it was;
 //   - the palette: its match count is on the search line, right-aligned and
-//     quieter than a command's name, and on no row of the list;
+//     quieter than a command's name, and on no row of the list, and its
+//     cursor row has a ground of its own;
 //   - the dim behind a modal: on a light theme it keeps the screen's ground
 //     where it was and fades the text into it; on the dark look it still
 //     turns the text down.
@@ -443,6 +444,11 @@ func checkPaletteCount(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, c
 	if !colour {
 		return
 	}
+	// The cursor row has a ground of its own. On a tinted light surface at
+	// 256 colours the step to it landed on the surface's own entry.
+	if sel, ground := s.Cell(p.ruleStart, p.selRow).Bg, s.Cell(p.ruleStart, p.searchRow).Bg; sel == ground {
+		t.Errorf("palette: the selected row's ground %+v is the panel's own\n%s", sel, term.SnapshotStyled())
+	}
 	count, name := s.Cell(end, countRow), s.Cell(p.ruleStart+2, p.selRow+1)
 	host := shot.XTermPalette()
 	bg := cellColour(count.Bg, host, host.BG)
@@ -528,4 +534,56 @@ func structureInk(fg, bg color.Color, depth string) bool {
 	ar, ag, ab, _ := fg.RGBA()
 	br, bgc, bb, _ := ink.RGBA()
 	return ar>>8 == br>>8 && ag>>8 == bgc>>8 && ab>>8 == bb>>8
+}
+
+// TestReviewLooksOnALightTheme opens the review overlay, which draws on the
+// dialog palette, under catppuccin_latte at each depth and saves it, and
+// holds its file list to a light ground at 256 colours and truecolor. With
+// TUIOS_E2E_QA set it also runs at 80x24 and on the dark look.
+//
+// How this could pass wrongly: the ground could be read off a pane rather
+// than the overlay. It is read under the file list's "README", which only
+// the review draws.
+func TestReviewLooksOnALightTheme(t *testing.T) {
+	var runs []chromeRun
+	for _, d := range chromeDepths {
+		runs = append(runs, chromeRun{lookLatte, d, 120, 40})
+	}
+	if os.Getenv("TUIOS_E2E_QA") != "" {
+		for _, d := range chromeDepths {
+			runs = append(runs, chromeRun{lookLatte, d, 80, 24}, chromeRun{lookDark, d, 120, 40}, chromeRun{lookDark, d, 80, 24})
+		}
+	}
+	for _, run := range runs {
+		t.Run(run.name(), func(t *testing.T) {
+			base, repo := fanFixture(t)
+			useShippedLooks(base)
+			if run.look.theme != "" {
+				writeConfig(t, base, "[appearance]\ntheme = \""+run.look.theme+"\"\n")
+			}
+			session := reviewFan(t, base, repo, "fx")
+			term := attachIn(t, base, session, startOpts{cols: run.cols, rows: run.rows, shippedLooks: true, env: run.depth.env})
+			sendKeys(t, term, tuitest.Ctrl('b'), "v")
+			waitScreen(t, term, "the review never opened", "M README", "close")
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("the review never settled: %v", err)
+			}
+			s := term.Screen()
+			dir := artifactDir(t)
+			host := hostPalette(t, run.look.theme)
+			saveArtifact(t, term, dir, "review")
+			savePNG(t, s, host, dir, "review")
+			if run.depth.name == "16" {
+				return
+			}
+			row, col, ok := textAt(s, "README", 0)
+			if !ok {
+				t.Fatalf("no file row\n%s", term.Snapshot())
+			}
+			g := cellColour(s.Cell(col, row+1).Bg, host, host.BG)
+			if isLight(g) != run.look.light {
+				t.Errorf("the review's ground %v is light=%v under the %s look\n%s", g, isLight(g), run.look.name, term.Snapshot())
+			}
+		})
+	}
 }
