@@ -56,12 +56,26 @@ jobs:
             ./scripts/ghostty-lib.sh "$t"
           done
 
+      # A tag with hand-written notes at docs/release-notes/<tag>.md publishes
+      # them as the release body. Without one, GoReleaser's grouped changelog
+      # is the body, as before.
+      - name: Pick the release notes
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -f "docs/release-notes/${TAG}.md" ]; then
+            echo "args=release --clean --release-notes docs/release-notes/${TAG}.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=release --clean" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: ${{ steps.notes.outputs.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
@@ -103,15 +117,27 @@ jobs:
           set -eu
           version="${GITHUB_REF_NAME#v}"
           ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.builtBy=goreleaser"
-          for pair in arm64:aarch64-macos amd64:x86_64-macos; do
-            arch="${pair%%:*}"
-            target="${pair#*:}"
+          # The archive names follow .goreleaser.yml's name_template, which
+          # spells amd64 as x86_64. tuios update and the install script look
+          # assets up by that name, so the two must not differ.
+          for triple in arm64:arm64:aarch64-macos amd64:x86_64:x86_64-macos; do
+            arch="${triple%%:*}"
+            rest="${triple#*:}"
+            label="${rest%%:*}"
+            target="${rest#*:}"
             ./scripts/ghostty-lib.sh "$target"
             CGO_ENABLED=1 GOARCH="$arch" \
               CC="$PWD/scripts/zigcc/$target" \
               PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig" \
               go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
-            tar czf "tuios-ghostty_${version}_Darwin_${arch}.tar.gz" tuios README.md LICENSE*
+            tar czf "tuios-ghostty_${version}_Darwin_${label}.tar.gz" tuios README.md LICENSE*
             rm tuios
           done
-          gh release upload "${GITHUB_REF_NAME}" tuios-ghostty_*.tar.gz --clobber
+          # GoReleaser wrote checksums.txt before these archives existed. tuios
+          # update refuses an archive checksums.txt does not list, so their
+          # digests are appended and the file replaced.
+          gh release download "${GITHUB_REF_NAME}" --pattern checksums.txt --clobber
+          grep -v 'tuios-ghostty_.*_Darwin_' checksums.txt > checksums.new || true
+          shasum -a 256 tuios-ghostty_*_Darwin_*.tar.gz >> checksums.new
+          mv checksums.new checksums.txt
+          gh release upload "${GITHUB_REF_NAME}" tuios-ghostty_*.tar.gz checksums.txt --clobber

@@ -277,77 +277,8 @@ release:
   draft: false
   prerelease: auto
   mode: replace
-  header: |
-    ## TUIOS {{ .Tag }} Release
-
-    A terminal-based window manager with tmux-style keybindings.
-
-    ### What's New
-
-    **tuios-web** is now released as a separate binary! This provides better security isolation
-    by separating the web server functionality from the main TUIOS binary.
-
-    ### Installation
-
-    #### TUIOS (Terminal Window Manager)
-
-    **Quick Install (Linux/macOS):**
-    ```bash
-    curl -sSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
-    ```
-
-    **Homebrew (macOS/Linux):**
-    ```bash
-    brew install tuios
-    ```
-
-    **Arch Linux (AUR):**
-    ```bash
-    # Using yay
-    yay -S tuios-bin
-
-    # Using paru
-    paru -S tuios-bin
-    ```
-
-    **Nix:**
-    ```bash
-    # Run directly
-    nix run github:Gaurav-Gosain/tuios#tuios
-
-    # Or add to your configuration
-    nix-shell -p tuios
-    ```
-
-    **Go Install:**
-    ```bash
-    go install github.com/Gaurav-Gosain/tuios/cmd/tuios@{{ .Tag }}
-    ```
-
-    #### tuios-web (Web Terminal Server)
-
-    **Homebrew (macOS/Linux):**
-    ```bash
-    brew tap Gaurav-Gosain/tap
-    brew install tuios-web
-    ```
-
-    **Arch Linux (AUR):**
-    ```bash
-    # Using yay
-    yay -S tuios-web-bin
-
-    # Using paru
-    paru -S tuios-web-bin
-    ```
-
-    **Go Install:**
-    ```bash
-    go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@{{ .Tag }}
-    ```
-
-    **Manual Download:**
-    Download the appropriate `tuios_*` or `tuios-web_*` archive for your platform below, extract it, and run.
+  # The body is docs/release-notes/<tag>.md when that file exists (see
+  # .github/workflows/release.yml), and the install instructions live there.
   footer: |
     ---
 
