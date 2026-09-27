@@ -4,6 +4,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -20,6 +21,18 @@ func readWinsize(t *testing.T, p *PTY) *unix.Winsize {
 		t.Fatalf("TIOCGWINSZ: %v", err)
 	}
 	return ws
+}
+
+// settledWinsize is readWinsize once no resize is held back. A resize inside
+// a burst reaches the kernel when the burst's quiet period ends (see
+// pty_winsize.go), and this reads the size the guest is left at.
+func settledWinsize(t *testing.T, p *PTY) *unix.Winsize {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for p.winsizeHeld.Load() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	return readWinsize(t, p)
 }
 
 // A resize carries the pixel size in the same winsize as the cells, so a
@@ -45,7 +58,7 @@ func TestPTYResizeKeepsThePixelSize(t *testing.T) {
 	if err := pty.Resize(50, 10); err != nil {
 		t.Fatalf("Resize: %v", err)
 	}
-	ws = readWinsize(t, pty)
+	ws = settledWinsize(t, pty)
 	if ws.Col != 50 || ws.Row != 10 {
 		t.Fatalf("after Resize winsize is %dx%d cells, want 50x10", ws.Col, ws.Row)
 	}
@@ -58,7 +71,7 @@ func TestPTYResizeKeepsThePixelSize(t *testing.T) {
 	if err := pty.UpdatePixelDimensions(10, 20); err != nil {
 		t.Fatalf("UpdatePixelDimensions: %v", err)
 	}
-	ws = readWinsize(t, pty)
+	ws = settledWinsize(t, pty)
 	if ws.Xpixel != 500 || ws.Ypixel != 200 {
 		t.Errorf("after a cell size change the pixel size is %dx%d, want 500x200", ws.Xpixel, ws.Ypixel)
 	}

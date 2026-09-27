@@ -155,7 +155,7 @@ BSP tree and the layout mode.
 | Session exists afterwards | Yes | Yes, restored on daemon start | Yes, restored on daemon start | Yes, restored on daemon start |
 | Window structure | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
 | Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
-| Working directories | Yes | Yes, on Linux (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
+| Working directories | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
 | Screen contents | Yes | No | No | No |
 | Scrollback | Yes | No | No | No |
 | Running programs (vim, tail, a build) | Yes | No | No | No |
@@ -602,10 +602,12 @@ a pane that set its own `XDG_RUNTIME_DIR`), the command runs against the daemon
 
 - **Screen contents and scrollback never survive the daemon.** They are held in
   the daemon's memory, not on disk. Only a detach preserves them.
-- **Working directory capture is Linux-only.** The daemon reads
-  `/proc/<pid>/cwd` to learn where each shell is. On platforms without procfs the
-  read fails and restoration falls back to spawning the shell in its default
-  directory. Everything else about the restore is unaffected.
+- **Working directory capture needs Linux or macOS.** The daemon reads where
+  each shell is from the process itself: `/proc/<pid>/cwd` on Linux, and
+  `proc_pidinfo` (libproc) on macOS, which needs no cgo. On other platforms
+  (Windows, the BSDs) the read has no answer and restoration falls back to
+  spawning the shell in its default directory. Everything else about the
+  restore is unaffected.
 - **A crash loses the last couple of seconds of structural change, and up to 30
   seconds of working-directory drift.** Structural changes are saved within a
   couple of seconds; the directory each shell is sitting in is captured on the
