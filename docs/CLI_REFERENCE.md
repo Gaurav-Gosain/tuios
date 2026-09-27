@@ -2684,6 +2684,16 @@ These commands have no section of their own here. Each one's `--help` lists
 its flags and examples, and `tuios --skill` shows how an agent in a pane uses
 them.
 
+**Sessions:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios resurrect [session-name]` | List the sessions saved on disk, or restore one and attach (also `tuios restore`) |
+
+Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
+`ls` to `list-sessions`, `resurrect` to `restore`, `hosts remove` to `rm`, and
+`keybinds` to `keys` or `kb`.
+
 **Windows and workspaces:**
 
 | Command | What it does |
@@ -2708,9 +2718,9 @@ them.
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
-| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
-| `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
-| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
+| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise. `--subject` gives it a one-line subject (at most 120 characters), `--reply-to ID` joins that message's thread, and `--attach PATH` (absolute, repeatable, at most 8) attaches files |
+| `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek. `--unread` shows only unread messages, `--peek` reads without marking anything read, and `--notices` includes the session-wide notices |
+| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row. `--settle MS` (2000) is the silence that counts as finished for a pane that reports no state; `--allow-blocked` types at a target on `needs_input`, answering its prompt |
 | `tuios queue <text>` | Leave a message for an agent that is typed as a prompt when it comes to rest, never over a prompt it waits on and never twice. `queue ls` lists what waits, `queue rm ID` or `queue rm --all -w PANE` drops it. See [`tuios queue`](#tuios-queue) |
 | `tuios review [SESSION]` | Show what the agent in a pane changed against its base, with the notes left on it. `review note FILE:LINE TEXT` leaves one, `review notes` lists them, `review send` sends the unsent ones to the agent as one queued message. See [`tuios review`](#tuios-review) |
 | `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |
@@ -2754,10 +2764,10 @@ there.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values |
+| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values. `--section NAME` lists one group, such as `sidebar` or `dock` |
 | `tuios list-options --search <query>` | The options matching a fuzzy query on path, value or description, best first, as the settings page searches |
 | `tuios get-config <path>` | Read a configuration option from a running session |
-| `tuios list-themes [theme]` | List the themes, and describe one |
+| `tuios list-themes [theme]` | List the themes, and describe one. `--filter TEXT` lists only the ids that contain it, such as `gruvbox` |
 | `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
 | `tuios list-glyphs [set]` | List the glyph sets, and describe one |
 | `tuios logs` | View daemon logs |
@@ -3912,8 +3922,8 @@ tuios list-verbs --json          # for scripting
 
 - `0`: Success
 - `1`: Error (configuration error, network error, file not found, etc.)
-- `2`: `tuios ask-human` waited out its `--timeout` with no answer. The
-  question stays in the Inbox
+- `2`: `tuios ask-human` returned before an answer, because of `--no-wait` or
+  because `--timeout` ran out. The question stays in the Inbox
 - `3`: The command needed a daemon and found none running. `tuios ls` lists the
   sessions saved on disk instead, so a script can tell a stopped daemon from a
   running one with no sessions, which exits `0`
@@ -3936,9 +3946,9 @@ tuios --version
 
 **Output:**
 ```
-tuios version v0.0.24 [pure-Go backend]
+tuios version 0.8.0 [pure-Go backend]
 Commit: a1b2c3d
-Built: 2025-01-15T10:30:00Z
+Built: 2026-09-27T10:30:00Z
 By: goreleaser
 ```
 

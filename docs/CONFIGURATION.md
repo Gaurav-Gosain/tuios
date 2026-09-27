@@ -134,7 +134,7 @@ asks in its pane after all: 120 when unset, kept between 10 and 300.
 
 The daemon reads the table when it starts and again when the file changes; a
 change applies to the next prompt. Like `[dock]` and `[hosts]`, it is not in
-`list-options` and `set-option` cannot change it. Turning it on gives no
+`list-options` and `tuios set-config` cannot change it. Turning it on gives no
 program the power to answer: only you, at an attached client, can. It also
 needs version 2 of the integration:
 run `tuios integration install claude-code` (or `opencode`, `kilo`) again after
@@ -146,7 +146,7 @@ a prompt is held, answered and handed back.
 These tables configure the agent review, triage, reply and approval work,
 which is built. Every value has a default, so a file without them behaves as
 the defaults say. Like `[agents.approvals]`, they are
-file-plane config: not in `list-options`, and `set-option` cannot change
+file-plane config: not in `list-options`, and `tuios set-config` cannot change
 them, so a pane cannot switch a risk rule off through tuios.
 
 ```toml
@@ -264,7 +264,7 @@ prompts for you.
 
 The daemon reads the table when it starts and again when the file changes; a
 change reaches every pane on the default at its next call. Like
-`[agents.approvals]`, it is not in `list-options` and `set-option` cannot
+`[agents.approvals]`, it is not in `list-options` and `tuios set-config` cannot
 change it, so no pane can loosen it.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
 
