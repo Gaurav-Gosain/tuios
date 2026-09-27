@@ -95,6 +95,52 @@ download_file() {
     fi
 }
 
+# Print the sha256 of a file, with whichever tool this system has.
+sha256_of() {
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    elif command -v sha256 &> /dev/null; then
+        sha256 -q "$1"
+    else
+        return 1
+    fi
+}
+
+# Check the archive against the release's checksums.txt. A release without the
+# file, or an archive it does not list, stops the install: the archive is
+# about to be run, and an unchecked download is the one thing not to run.
+verify_checksum() {
+    ARCHIVE=$1
+    NAME=$2
+    SUMS="$TMP_DIR/checksums.txt"
+
+    if ! download_file "https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt" "$SUMS"; then
+        print_error "Failed to download checksums.txt for ${VERSION}"
+        exit 1
+    fi
+
+    EXPECTED=$(awk -v name="$NAME" '$2 == name { print $1 }' "$SUMS")
+    if [ -z "$EXPECTED" ]; then
+        print_error "checksums.txt does not list $NAME"
+        exit 1
+    fi
+
+    if ! ACTUAL=$(sha256_of "$ARCHIVE"); then
+        print_warning "No sha256sum, shasum or sha256 found, so the download was not verified"
+        return 0
+    fi
+
+    if [ "$EXPECTED" != "$ACTUAL" ]; then
+        print_error "Checksum mismatch for $NAME"
+        print_info "Expected: $EXPECTED"
+        print_info "Got:      $ACTUAL"
+        exit 1
+    fi
+    print_success "Checksum verified"
+}
+
 # Main installation
 main() {
     print_info "Installing tuios-web (Web Terminal Server)..."
@@ -148,6 +194,8 @@ main() {
         exit 1
     fi
     print_success "Downloaded successfully"
+
+    verify_checksum "$TMP_DIR/$ARCHIVE_NAME" "$ARCHIVE_NAME"
 
     # Extract archive
     print_info "Extracting archive..."
