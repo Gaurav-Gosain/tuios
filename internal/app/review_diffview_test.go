@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/review"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // The benchmark here pins the cost of the diff drawing: a frame of the largest
@@ -94,5 +96,43 @@ func BenchmarkReviewFrame(b *testing.B) {
 				m.ReviewEdge(false)
 			}
 		})
+	}
+}
+
+// BenchmarkReviewFrameDepth is BenchmarkReviewFrame's first and cached frames
+// at each colour depth: the diff theme is built per depth, and a frame at 256
+// and 16 colours has to cost what a truecolor one does.
+func BenchmarkReviewFrameDepth(b *testing.B) {
+	prev := theme.ColorProfile()
+	defer theme.SetColorProfile(prev)
+	for _, depth := range []struct {
+		name    string
+		profile colorprofile.Profile
+	}{{"truecolor", colorprofile.TrueColor}, {"256", colorprofile.ANSI256}, {"16", colorprofile.ANSI}} {
+		theme.SetColorProfile(depth.profile)
+		for _, split := range []bool{false, true} {
+			layout := "unified"
+			if split {
+				layout = "split"
+			}
+			b.Run(depth.name+"/"+layout+"/first", func(b *testing.B) {
+				m := bigReview(b)
+				m.review.split = split
+				b.ResetTimer()
+				for range b.N {
+					m.review.hunks, m.review.look = nil, nil
+					m.renderReview()
+				}
+			})
+			b.Run(depth.name+"/"+layout+"/cached", func(b *testing.B) {
+				m := bigReview(b)
+				m.review.split = split
+				m.renderReview()
+				b.ResetTimer()
+				for range b.N {
+					m.renderReview()
+				}
+			})
+		}
 	}
 }
