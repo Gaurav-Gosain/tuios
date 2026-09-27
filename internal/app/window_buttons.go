@@ -275,15 +275,6 @@ func placeWindowButtons(hits []WindowButtonRect, window *terminal.Window, pillSt
 	return out
 }
 
-// macOS traffic-light colours, as the maintainer asked for them. They are only
-// a starting point: readableDot carries whichever of them misses the floor
-// against the ground it lands on.
-var (
-	windowDotClose    = lipgloss.Color("#ff5f57")
-	windowDotMinimize = lipgloss.Color("#febc2e")
-	windowDotZoom     = lipgloss.Color("#28c840")
-)
-
 // windowDotMinContrast is the floor a dot has to clear against the ground it is
 // drawn on: WCAG 2.1 SC 1.4.11, which asks 3:1 of a control that carries its
 // meaning as a shape rather than as text. It is below theme.ContrastFloor for
@@ -314,14 +305,19 @@ func readableDot(c, ground color.Color) color.Color {
 }
 
 // windowDotColor returns the traffic-light colour for one action.
+//
+// They are the macOS traffic-light colours, as the maintainer asked for them
+// (see theme.WindowDots). They are only a starting point: readableDot carries
+// whichever of them misses the floor against the ground it lands on.
 func windowDotColor(action WindowButtonAction) color.Color {
+	closeDot, minimise, zoom := theme.WindowDots()
 	switch action {
 	case WindowButtonClose:
-		return windowDotClose
+		return closeDot
 	case WindowButtonMinimize:
-		return windowDotMinimize
+		return minimise
 	default:
-		return windowDotZoom
+		return zoom
 	}
 }
 

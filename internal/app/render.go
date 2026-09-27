@@ -178,7 +178,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			borderColorObj = theme.BorderFocusedWindow()
 		case isMultifocused:
 			// Multifocused windows get a distinct border color (yellow/orange)
-			borderColorObj = lipgloss.Color("3")
+			borderColorObj = theme.BorderMultifocus()
 		case tinted:
 			borderColorObj = quietTint
 		default:

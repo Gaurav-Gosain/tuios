@@ -103,7 +103,7 @@ const (
 //
 // Boxed once at package level. Assigning a color.RGBA into a color.Color per
 // cell is the line that used to cost 8,000 allocations a frame.
-var spotlightDark color.Color = color.RGBA{A: 0xFF}
+var spotlightDark = theme.SpotlightShade()
 
 // spotBlendKey names one cached blend: a source colour and which of the 16
 // levels it is carried to. Those two are the whole input, because every cell is

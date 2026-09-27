@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -182,23 +183,23 @@ func renderShowkeysFrom(recentKeys []KeyEvent, s *config.Settings) string {
 
 	// Use a muted but slightly more colorful background
 	// #3a3a5e is a nice muted purple-blue, warmer than the pure dark gray
-	keyBgColor := lipgloss.Color("#3a3a5e")
-	pillColor := lipgloss.Color("#3a3a5e")
+	keyBgColor, keyFgColor := theme.ShowkeysKey()
+	pillColor := keyBgColor
 
 	// Accent color for the leader key (bright cyan for visibility)
-	leaderKeyBgColor := lipgloss.Color("#00d9ff")
-	leaderKeyPillColor := lipgloss.Color("#00d9ff")
+	leaderKeyBgColor, leaderKeyFgColor := theme.ShowkeysLeader()
+	leaderKeyPillColor := leaderKeyBgColor
 
 	// Style for individual key pills: background with text
 	keyPillStyle := lipgloss.NewStyle().
 		Background(keyBgColor).
-		Foreground(lipgloss.Color("#ffffff")).
+		Foreground(keyFgColor).
 		Bold(true)
 
 	// Style for leader key pills
 	leaderKeyPillStyle := lipgloss.NewStyle().
 		Background(leaderKeyBgColor).
-		Foreground(lipgloss.Color("#000000")).
+		Foreground(leaderKeyFgColor).
 		Bold(true)
 
 	// Style for the pill characters (Powerline semicircles)
