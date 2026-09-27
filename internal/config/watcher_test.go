@@ -181,22 +181,50 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 // rename, the create and the write land within milliseconds. Reloading per
 // event parses the file three times, and one of those reads a half-written
 // file.
+//
+// What the watcher calls one save is a run of events with no gap of a whole
+// debounce in it, so the burst has to be one by that definition before the test
+// can hold the watcher to it. The debounce is armed by the first event, which
+// comes after the first write starts, so a burst that is over within one
+// debounce of its start is read only once it is complete, and every later
+// reload finds the same content and is dropped. That is a guarantee, and it is
+// the one asserted. A burst that took longer did not happen the way a save
+// happens: the writer was descheduled between two writes (a sleep of 25 ms
+// once came back after more than 200 ms on a loaded CI runner), and two
+// reloads for two bursts is the watcher working. Such a run is measured, not
+// asserted, and the burst is written again on a fresh watcher.
 func TestWatcherCollapsesOneSaveIntoOneReload(t *testing.T) {
-	path, reports := startWatcher(t, watcherBase)
+	const attempts = 5
+	for attempt := 1; attempt <= attempts; attempt++ {
+		path, reports := startWatcher(t, watcherBase)
 
-	for i := range 6 {
-		body := watcherBase + "\n[debug]\nshow_key_events = " +
-			map[bool]string{true: "true", false: "false"}[i%2 == 0] + "\n"
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatalf("write %d: %v", i, err)
+		start := time.Now()
+		for i := range 6 {
+			body := watcherBase + "\n[debug]\nshow_key_events = " +
+				map[bool]string{true: "true", false: "false"}[i%2 == 0] + "\n"
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatalf("write %d: %v", i, err)
+			}
+			time.Sleep(configDebounce / 20)
 		}
-		time.Sleep(configDebounce / 8)
-	}
+		if span := time.Since(start); span >= configDebounce {
+			t.Logf("attempt %d: the burst took %v, not one save by the watcher's definition; writing it again", attempt, span)
+			continue
+		}
 
-	if got := nextReport(t, reports, "a burst of writes"); got.err != nil {
-		t.Fatalf("the burst was reported as an error: %v", got.err)
+		got := nextReport(t, reports, "a burst of writes")
+		if got.err != nil {
+			t.Fatalf("the burst was reported as an error: %v", got.err)
+		}
+		// The last write says true (i = 4) then false (i = 5): the one reload
+		// has to be of the finished file, not of some write along the way.
+		if got.cfg.Debug.ShowKeyEvents {
+			t.Error("the reload read the file before the burst was over")
+		}
+		noReport(t, reports, "a second reload for the same burst")
+		return
 	}
-	noReport(t, reports, "a second reload for the same burst")
+	t.Skipf("the writer could not finish a burst within %v in %d attempts; the machine is too loaded to test this", configDebounce, attempts)
 }
 
 // TestReloadFillsEverySection is the bug that would have shipped with the live
