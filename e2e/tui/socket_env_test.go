@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // TUIOS_SOCKET is what a pane is told about the daemon that runs it. It never
@@ -54,12 +57,84 @@ func hasName(names []string, want string) bool {
 	return false
 }
 
+// TestSocketEnvRefusalKeepsThePathWholeOnATerminal is the same refusal read
+// by a person at a terminal narrower than the path. The error box used to cut
+// the path at the box's width, ".../XDG_RUNTIME_DIR/fres" on one line and
+// "h.sock" on the next, so it could not be copied back out, and a pipe got the
+// same box because the renderer did not see through the writer it was handed.
+//
+// How this could pass wrongly: the path might fit the box and never be cut,
+// so the test refuses to run with a path that fits; and the command might not
+// see a terminal at all and print the bare text, so the box's header is
+// required in the output. The bytes are read as tuios wrote them, before the
+// terminal soft-wraps anything, so a line break inside the path is one tuios
+// put there.
+//
+// Negative control: with RenderErrorText returning style.Render(s), the
+// path's bytes are split by a newline and this fails.
+func TestSocketEnvRefusalKeepsThePathWholeOnATerminal(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	// The runtime directory can be a short stand-in (see xdgDir), so the path
+	// is made long on purpose. The hyphens are there because a hyphen is a
+	// place a word wrapper will break a word.
+	const cols = 60
+	fresh := filepath.Join(base, "a-directory-named-past-the-width-of-the-box", "fresh.sock")
+	if len(fresh) <= cols-4 {
+		t.Fatalf("the path %q fits the %d column box, so nothing here could cut it", fresh, cols-4)
+	}
+
+	var raw syncBuffer
+	term := startIn(t, base, startOpts{
+		cols: cols, rows: 30,
+		args: []string{"new", "stray", "--detach"},
+		env:  []string{"TUIOS_SOCKET=" + fresh},
+		out:  &raw,
+		// --no-animations is a flag of the interface, not of `new`.
+		animations: true,
+	})
+	code, err := term.WaitExit(15 * time.Second)
+	if err != nil {
+		t.Fatalf("the refused command did not exit: %v\n%s", err, term.Snapshot())
+	}
+	out := ansi.Strip(raw.String())
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "refusal-on-a-terminal.txt"), []byte(out), 0o644); err != nil {
+		t.Errorf("save the output: %v", err)
+	}
+	if code == 0 {
+		t.Errorf("a command with TUIOS_SOCKET naming no daemon ran:\n%s", out)
+	}
+	if !strings.Contains(out, "ERROR") {
+		t.Fatalf("the refusal was not rendered as a terminal error, so this checked nothing:\n%s", out)
+	}
+	if !strings.Contains(out, fresh) {
+		t.Errorf("the refusal on a terminal cut the path %q:\n%s", fresh, out)
+	}
+	// Only the path's own line may run past the terminal. lipgloss pads every
+	// line of a block to its widest, so a whole path must not drag the rest of
+	// the message past the edge, where each line wraps onto a blank row.
+	for line := range strings.SplitSeq(out, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if !strings.Contains(line, fresh) && ansi.StringWidth(line) > cols {
+			t.Errorf("a line of the refusal is %d columns on a %d column terminal: %q", ansi.StringWidth(line), cols, line)
+		}
+	}
+	if hasName(sessionNames(t, base), "stray") {
+		t.Errorf("the refused command still created its session")
+	}
+}
+
 // TestSocketEnvNamingNoDaemonIsRefused is the incident: TUIOS_SOCKET set to a
 // path with no daemon, and a command that would otherwise have gone to the
 // daemon XDG_RUNTIME_DIR names.
 //
-// Negative control: with the check's call cut from GetSocketPath, the command
-// succeeds and the session lands in the daemon under base.
+// Negative controls: with the check's call cut from GetSocketPath, the command
+// succeeds and the session lands in the daemon under base. With
+// isTerminalWriter checking the colorprofile.Writer itself rather than the
+// file under it, the piped refusal is drawn in the error box and this fails.
 func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -80,6 +155,11 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the refusal does not say %q:\n%s", want, out)
 		}
+	}
+	// The output is a pipe, so it gets the bare text. It used to get the
+	// terminal's box, wrapped at 80 columns, which cut a long path in two.
+	if strings.Contains(out, "ERROR") {
+		t.Errorf("the refusal to a pipe was drawn as a terminal error box:\n%s", out)
 	}
 	// A command that only reads, over the verb protocol, is refused the same
 	// way rather than reading the other daemon.

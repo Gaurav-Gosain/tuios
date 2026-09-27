@@ -105,7 +105,16 @@ func exitStatus(err error) int {
 // printed with its line structure intact, because the whole value of the
 // what/why/fix layout is lost when it is reflowed into one paragraph; every
 // other error falls through to fang's styled default.
+//
+// Off a terminal every error is printed as its bare text, with no header, box
+// or wrapping, so piped output and CI logs stay parseable and a path in the
+// message stays on one line.
 func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
+	if !isTerminalWriter(w) {
+		_, _ = fmt.Fprintln(w, err.Error())
+		return
+	}
+
 	var diag *diagnosticError
 	var mismatch *session.ProtocolMismatchError
 	if !errors.As(err, &diag) && !errors.As(err, &mismatch) {
@@ -113,18 +122,24 @@ func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
 		return
 	}
 
-	// Match fang's default behavior for a non-tty: no styling, no decoration,
-	// so piped output and CI logs stay parseable.
-	if f, ok := w.(interface{ Fd() uintptr }); ok && !term.IsTerminal(int(f.Fd())) {
-		_, _ = fmt.Fprintln(w, err.Error())
-		return
-	}
-
 	_, _ = fmt.Fprintln(w, styles.ErrorHeader.String())
 	for line := range strings.SplitSeq(err.Error(), "\n") {
-		_, _ = fmt.Fprintln(w, styles.ErrorText.UnsetTransform().Render(line))
+		_, _ = fmt.Fprintln(w, fang.RenderErrorText(styles.ErrorText.UnsetTransform(), line))
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// isTerminalWriter reports whether w ends at a terminal. The CLI hands the
+// renderer a colorprofile.Writer, which strips colour for a pipe but does not
+// expose the file under it, so it is unwrapped first. Checking the wrapper
+// itself found no file descriptor and styled every piped error as though it
+// were going to a terminal.
+func isTerminalWriter(w io.Writer) bool {
+	if cw, ok := w.(*colorprofile.Writer); ok {
+		w = cw.Forward
+	}
+	f, ok := w.(interface{ Fd() uintptr })
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // errorStyles builds the styles the error renderer needs without asking the

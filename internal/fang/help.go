@@ -118,7 +118,7 @@ func DefaultErrorHandler(w io.Writer, styles Styles, err error) {
 		}
 	}
 	_, _ = fmt.Fprintln(w, styles.ErrorHeader.String())
-	_, _ = fmt.Fprintln(w, styles.ErrorText.Render(err.Error()+"."))
+	_, _ = fmt.Fprintln(w, RenderErrorText(styles.ErrorText, err.Error()+"."))
 	_, _ = fmt.Fprintln(w)
 	if isUsageError(err) {
 		_, _ = fmt.Fprintln(w, lipgloss.JoinHorizontal(
