@@ -227,7 +227,7 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 - **Ultraviolet** (`github.com/charmbracelet/ultraviolet`): Terminal emulation base
 - **Cobra** (`github.com/spf13/cobra`): CLI commands
 - **xpty** (`github.com/charmbracelet/x/xpty`): Cross-platform PTY
-- **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`): Alternative VT emulation backend; `scripts/install.sh` builds it (see `docs/ghostty-vt.md`)
+- **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`): Alternative VT emulation backend; `scripts/install.sh ghostty` builds it (see `docs/ghostty-vt.md`)
 - **sip** (`github.com/Gaurav-Gosain/sip`): WebGL terminal serving for `tuios-web`
 
 > **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
