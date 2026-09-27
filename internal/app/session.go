@@ -473,6 +473,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	if state == nil {
 		return nil
 	}
+	// A state older than one already applied, or handed out before the daemon
+	// had this client's newest push, is older than what this client shows.
+	// Applying it would undo a change here that every other client keeps. See
+	// TUIClient.AcceptState.
+	if m.DaemonClient != nil && !m.DaemonClient.AcceptState(state) {
+		return nil
+	}
 	fromPeer := sourceID != ""
 
 	// The daemon now holds what arrived here, which is not necessarily what

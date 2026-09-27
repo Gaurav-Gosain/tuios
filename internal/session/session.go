@@ -458,6 +458,36 @@ type SessionState struct {
 	// mutations. Zero means a client that predates state versioning; its syncs
 	// are taken at face value, as they were before.
 	BaseVersion int `json:"base_version,omitempty"`
+	// PushOrigin and PushSeq name the push that carries this state: which
+	// client connection sent it, and how many pushes that connection had sent
+	// to this session counting this one. TUIClient.UpdateState stamps them and
+	// the daemon consumes them; a state the daemon hands out never carries
+	// them. See PushSeen.
+	PushOrigin string `json:"-"`
+	PushSeq    uint64 `json:"-"`
+	// PushSeen is, for each client connection attached to the session, the
+	// newest of its pushes the daemon had merged when it handed this state out.
+	// It is what lets a client tell a broadcast built before its own last push
+	// from one built after it. Without that a client that pushed while a
+	// peer's broadcast was on its way to it applied the broadcast afterwards,
+	// took the peer's older view over its own newer one, and was never told
+	// otherwise: the daemon held the client's push, sent it to everyone else,
+	// and a client is never sent its own push back. Two clients were left
+	// showing a pane zoomed and not zoomed for good. See
+	// TUIClient.PredatesOwnPush. Wire only: it is about connections, which do
+	// not survive a restart, so it is never saved.
+	PushSeen map[string]uint64 `json:"-"`
+	// SnapshotSeq numbers the copies of the state the session hands out, in
+	// the order they were taken. A copy is taken under the state lock and sent
+	// after it is released, and the daemon sends from more than one goroutine
+	// (a client's push is answered from its connection, a daemon-side change
+	// from wherever it was made), so two copies can reach a client in the
+	// opposite order to the one they were taken in. The client applying the
+	// older one last went back to a state the session had left: a window the
+	// daemon had just opened disappeared from it. A client drops any copy
+	// numbered below one it has already applied. Zero is a daemon that does
+	// not number them. Wire only, like PushSeen.
+	SnapshotSeq uint64 `json:"-"`
 	// Options is a daemon-owned key/value store for session options set through
 	// the JSON verb protocol (set-option / get-option). It is additive: older
 	// clients and older on-disk state simply omit it. Keys are advisory names;
@@ -869,6 +899,14 @@ type Session struct {
 	state            *SessionState
 	stopResurrection func() // Stops periodic resurrection saving
 	stateMu          sync.RWMutex
+	// snapSeq is the last SnapshotSeq handed out.
+	snapSeq atomic.Uint64
+	// pushSeen is what every snapshot's PushSeen is copied from, guarded by
+	// stateMu. It is kept beside the state rather than in it so that nothing
+	// that replaces the state wholesale (a restore, a verb) can lose it: a
+	// client whose entry went missing would take every broadcast for one that
+	// predates its own push until it next pushed.
+	pushSeen map[string]uint64
 
 	// stateDirty is set by every change to the session's structure and consumed
 	// by the resurrection saver, which is how a new window reaches disk in a
@@ -1799,6 +1837,10 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceHasCustom != nil {
 		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)
 	}
+	stateCopy.PushSeen = maps.Clone(s.pushSeen)
+	// Taken under the state lock, so a copy with a higher number shows the
+	// state at least as late as one with a lower number.
+	stateCopy.SnapshotSeq = s.snapSeq.Add(1)
 	// WorkspaceTrees, WindowToBSPID, PaneGeometry and ScrollStrip are left
 	// aliased on purpose: the daemon only ever replaces those whole, never
 	// writes into what they point at, so a snapshot that shares them is reading
@@ -1954,6 +1996,36 @@ func (s *Session) UpdateState(state *SessionState) bool {
 	return s.UpdateStateFrom(state, true)
 }
 
+// NotePush records that the push numbered seq from the client connection origin
+// has reached the session, so every state handed out from here on says so in
+// PushSeen. It is recorded whether or not the push is then accepted: a client
+// counts every push it sent, and a refused one that was never counted here
+// would leave it taking every later broadcast for an older one.
+func (s *Session) NotePush(origin string, seq uint64) {
+	if origin == "" || seq == 0 {
+		return
+	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.pushSeen == nil {
+		s.pushSeen = make(map[string]uint64)
+	}
+	if seq > s.pushSeen[origin] {
+		s.pushSeen[origin] = seq
+	}
+}
+
+// ForgetPush drops a client connection's entry from the push table once it has
+// left the session, so the table holds the clients that are here.
+func (s *Session) ForgetPush(origin string) {
+	if origin == "" {
+		return
+	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	delete(s.pushSeen, origin)
+}
+
 // UpdateStateFrom is UpdateState for a push from a client that may or may not
 // be the person. seen false keeps the push from marking the focused window's
 // finished turn seen: a client running inside a pane is an agent looking, and
@@ -1961,6 +2033,10 @@ func (s *Session) UpdateState(state *SessionState) bool {
 func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
+
+	// The push's name has been recorded by NotePush, and the table it goes into
+	// lives beside the state, not in it.
+	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
 
 	accepted := true
 	prev := s.state

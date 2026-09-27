@@ -319,6 +319,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	// client letting all of them go, so nothing may be left claiming a position.
 	cs.ptyResume = make(map[string]int64)
 	cs.mu.Unlock()
+	d.forgetPushes(cs, sessionID)
 
 	// Notify other clients that this client left
 	d.notifyClientLeft(sessionID, clientID)
@@ -573,6 +574,18 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgPTYClosed, &ClosePTYPayload{PTYID: payload.PTYID})
 }
 
+// forgetPushes drops a leaving connection's entry from its session's push
+// table. See SessionState.PushSeen.
+func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
+	cs.mu.Lock()
+	origin := cs.pushOrigin
+	cs.pushOrigin = ""
+	cs.mu.Unlock()
+	if session := d.manager.GetSessionByID(sessionID); session != nil {
+		session.ForgetPush(origin)
+	}
+}
+
 func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
@@ -586,6 +599,23 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	var state SessionState
 	if err := msg.ParsePayload(&state); err != nil {
 		return fmt.Errorf("invalid state payload: %w", err)
+	}
+	// Counted before anything can refuse or rewrite the push: the client
+	// counts every push it sends, and PushSeen has to agree with it. See
+	// SessionState.PushSeen. A name longer than any client makes is not one,
+	// and is not let into a table every state carries.
+	if state.PushOrigin != "" && len(state.PushOrigin) <= maxPushOriginLen {
+		cs.mu.Lock()
+		prev := cs.pushOrigin
+		cs.pushOrigin = state.PushOrigin
+		cs.mu.Unlock()
+		// One entry per connection: a client names its pushes afresh only on
+		// attach, and a connection that kept changing the name must not grow
+		// the table every state carries.
+		if prev != "" && prev != state.PushOrigin {
+			session.ForgetPush(prev)
+		}
+		session.NotePush(state.PushOrigin, state.PushSeq)
 	}
 	// Before anything that walks the layout trees by recursion (the merge,
 	// the fingerprint, the save, the rebroadcast) sees them. See

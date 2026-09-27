@@ -258,3 +258,7 @@ func checkResultData(data map[string]any) error {
 	}
 	return nil
 }
+
+// maxPushOriginLen bounds the name a state push carries (SessionState.PushOrigin).
+// A client makes a 24-character one; anything longer is not recorded.
+const maxPushOriginLen = 64

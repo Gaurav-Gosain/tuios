@@ -332,6 +332,11 @@ type connState struct {
 	bcastNext uint64     // the next ticket handed out
 	bcastDone uint64     // broadcasts written so far
 
+	// pushOrigin is the name this connection's state pushes carry (see
+	// SessionState.PushOrigin), guarded by mu. It is remembered so the
+	// session's push table can drop the entry when the client leaves.
+	pushOrigin string
+
 	// mu guards the mutable per-connection fields below (sessionID, width,
 	// height, isTUIClient, ptySubscriptions). These are written on this
 	// connection's own goroutine and read from other goroutines (PTY exit
@@ -1351,6 +1356,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 
 		// Unsubscribe from all PTYs
 		if sessionID != "" {
+			d.forgetPushes(cs, sessionID)
 			if session := d.manager.GetSessionByID(sessionID); session != nil {
 				for _, ptyID := range subs {
 					if pty := session.GetPTY(ptyID); pty != nil {

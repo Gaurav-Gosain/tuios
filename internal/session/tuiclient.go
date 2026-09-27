@@ -2,6 +2,8 @@ package session
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -56,6 +58,18 @@ type TUIClient struct {
 	// store the reply as verified_human. Empty before an attach and after one
 	// to a daemon that issues none.
 	humanNonce atomic.Pointer[string]
+
+	// pushOrigin names this client's state pushes to the session it is
+	// attached to, and pushSeq counts the ones sent there. Both start over on
+	// every attach, so a count from the last session is never measured against
+	// this one's table. pushMu makes numbering a push and sending it one step,
+	// so the numbers go out in order. See SessionState.PushSeen.
+	pushMu     sync.Mutex
+	pushOrigin atomic.Pointer[string]
+	pushSeq    atomic.Uint64
+	// appliedSeq is the SnapshotSeq of the newest session state this client
+	// has applied. See AcceptState.
+	appliedSeq atomic.Uint64
 
 	// Cached session listing from the daemon, including each session's window
 	// summaries once fetched. Seeded name-only from the welcome message and kept
@@ -360,6 +374,8 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.humanNonce.Store(&payload.HumanNonce)
+		c.startPushes()
+		c.appliedSeq.Store(stateSeq(payload.State))
 		if err := validateSessionState(payload.State); err != nil {
 			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
 		}
@@ -547,6 +563,8 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.humanNonce.Store(&payload.HumanNonce)
+		c.startPushes()
+		c.appliedSeq.Store(stateSeq(payload.State))
 		if err := validateSessionState(payload.State); err != nil {
 			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
 		}
@@ -971,8 +989,15 @@ func (c *TUIClient) SendIntent(commandType string, args ...string) error {
 	return c.send(msg)
 }
 
-// UpdateState sends a state update to the daemon.
+// UpdateState sends a state update to the daemon. It stamps the push's name on
+// state (PushOrigin and PushSeq), which the daemon reads and drops.
 func (c *TUIClient) UpdateState(state *SessionState) error {
+	c.pushMu.Lock()
+	defer c.pushMu.Unlock()
+	seq := c.pushSeq.Load() + 1
+	if origin := c.pushOrigin.Load(); origin != nil {
+		state.PushOrigin, state.PushSeq = *origin, seq
+	}
 	msg, err := NewMessage(MsgUpdateState, state)
 	if err != nil {
 		return err
@@ -983,7 +1008,90 @@ func (c *TUIClient) UpdateState(state *SessionState) error {
 	if len(msg.Payload) > maxStateUpdateBytes {
 		return &FrameTooLargeError{Type: MsgUpdateState, Size: uint32(len(msg.Payload)) + 2, Limit: uint32(maxStateUpdateBytes) + 2}
 	}
-	return c.send(msg)
+	if err := c.send(msg); err != nil {
+		return err
+	}
+	// Counted only once it is on the wire. A push that never left cannot be
+	// counted by the daemon, and a count it can never reach would have this
+	// client refuse every state it is sent.
+	c.pushSeq.Store(seq)
+	return nil
+}
+
+// startPushes gives this client a fresh name for its pushes and starts their
+// count over. It runs on every attach: the count is measured against the
+// attached session's table, and that table has never heard this name.
+func (c *TUIClient) startPushes() {
+	var raw [12]byte
+	origin := ""
+	if _, err := rand.Read(raw[:]); err == nil {
+		origin = hex.EncodeToString(raw[:])
+	}
+	c.pushMu.Lock()
+	defer c.pushMu.Unlock()
+	c.pushOrigin.Store(&origin)
+	c.pushSeq.Store(0)
+}
+
+// AcceptState reports whether a session state that arrived from the daemon
+// should be applied, and when it should, records it as the newest applied. A
+// state is refused when it is older than one already applied (see
+// SessionState.SnapshotSeq) or when it predates this client's own last push
+// (see PredatesOwnPush). Either way the client already shows something newer.
+// Call it where the state is applied, not where it is received: what matters
+// is the order the client applies states and makes pushes in.
+func (c *TUIClient) AcceptState(state *SessionState) bool {
+	if state == nil {
+		return false
+	}
+	if seq := state.SnapshotSeq; seq != 0 && seq < c.appliedSeq.Load() {
+		return false
+	}
+	if c.PredatesOwnPush(state) {
+		return false
+	}
+	if seq := state.SnapshotSeq; seq > c.appliedSeq.Load() {
+		c.appliedSeq.Store(seq)
+	}
+	return true
+}
+
+// stateSeq is a state's SnapshotSeq, zero for no state.
+func stateSeq(state *SessionState) uint64 {
+	if state == nil {
+		return 0
+	}
+	return state.SnapshotSeq
+}
+
+// PredatesOwnPush reports whether state was handed out by the daemon before it
+// had merged this client's newest push.
+//
+// Such a state is older than what this client is showing, and applying it
+// would put the client back to where it was before its own last change. The
+// daemon has the push and has sent it to every other client; the one client it
+// never sends a push back to is the one that made it, so nothing would ever put
+// this client right. That is how a pane stayed zoomed on two clients and not
+// on the third: the third unzoomed it while a peer's broadcast was on its way,
+// and applied the broadcast after.
+//
+// It is safe to drop such a state because the push that is newer than it
+// reaches the daemon after it: either that push is taken as sent, which is
+// what this client is showing, or it is reconciled against something this
+// client has not seen, and the reconciled state is sent back to this client
+// with the push counted.
+//
+// A state with no push table is from a daemon that keeps none, and is taken as
+// it always was.
+func (c *TUIClient) PredatesOwnPush(state *SessionState) bool {
+	if state == nil || state.PushSeen == nil {
+		return false
+	}
+	origin := c.pushOrigin.Load()
+	if origin == nil || *origin == "" {
+		return false
+	}
+	return state.PushSeen[*origin] < c.pushSeq.Load()
 }
 
 // KillSession terminates the currently attached session.
