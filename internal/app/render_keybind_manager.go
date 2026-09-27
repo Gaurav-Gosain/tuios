@@ -209,9 +209,8 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 		shown++
 	}
 	if count == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).
-			Render("  "+m.keybindEmptyMessage()))
-		shown++
+		lines = append(lines, overlay.Empty{Message: m.keybindEmptyMessage(), Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
+		shown = visible
 	}
 	for shown < visible {
 		lines = append(lines, overlay.Style(bg).Render(" "))

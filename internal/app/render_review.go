@@ -648,7 +648,7 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	if d.Truncated {
 		dim("cut at the limits")
 	}
-	if r.loading {
+	if r.loading && overlay.ShowLoading(r.loadingSince, time.Now()) {
 		dim("reading")
 	}
 	return segs

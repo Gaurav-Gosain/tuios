@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -87,7 +88,9 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 
 	start, end := 0, 0
 	if len(filtered) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render(m.launcherEmptyLine()))
+		if msg := m.launcherEmptyLine(); msg != "" {
+			lines = append(lines, overlay.Empty{Message: msg, Hint: overlay.Hint{Key: "esc", Label: "close"}}.Lines(width, visible, bg, pal)...)
+		}
 		for len(lines) < visible+3 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
@@ -162,11 +165,17 @@ func (m *OS) LauncherVisibleIcons() []string {
 // launcherEmptyLine says why the list is empty, which is two different things.
 // Before the first scan lands there is nothing to match against yet, and saying
 // "no program matches" then is simply wrong.
+//
+// The scan is a loading state, so it is only said once the scan has run past
+// the loading delay; before that the list is blank.
 func (m *OS) launcherEmptyLine() string {
 	if len(m.LauncherItems) == 0 {
-		return "  Scanning for programs…"
+		if !overlay.ShowLoading(m.LauncherOpenedAt, time.Now()) {
+			return ""
+		}
+		return "Scanning for programs" + overlay.Ellipsis()
 	}
-	return "  No program matches"
+	return "No program matches"
 }
 
 // launcherRow renders one program row: an icon's worth of reserved blanks, the

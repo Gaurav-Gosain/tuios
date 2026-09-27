@@ -48,6 +48,9 @@ type inboxPeek struct {
 	Item session.AttentionItem
 	// Loading is true while a read is out.
 	Loading bool
+	// LoadingSince is when the read went out; the peek says it is reading
+	// only once the read has run past overlay.LoadingDelay.
+	LoadingSince time.Time
 	// Peek is the last read, nil until one arrives.
 	Peek *session.PromptPeek
 	// Sending is true while an answer is out.
@@ -175,6 +178,7 @@ func (m *OS) inboxPeekRead() tea.Cmd {
 		return nil
 	}
 	p.Loading = true
+	p.LoadingSince = time.Now()
 	p.Err = ""
 	call, gen := m.inboxCaller(), p.gen
 	params := map[string]any{"session": p.Item.Session, "window": p.Item.Window}

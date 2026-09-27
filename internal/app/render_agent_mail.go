@@ -21,6 +21,11 @@ const agentMailWidth = 66
 // show. The screen height cuts it down like every other panel.
 const agentMailRows = 16
 
+// agentMailEmptyRows is the height of the empty mailbox's body: the rows its
+// list would have, so opening it empty and then receiving mail does not
+// resize the panel.
+const agentMailEmptyRows = 10
+
 // agentMailEmptyLines is the empty state: what this is, and what makes
 // something appear here. It is shared with the test that pins it.
 var agentMailEmptyLines = []string{
@@ -82,6 +87,7 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	threads := m.agentMailThreads()
+	now := time.Now()
 	if len(threads) == 0 && !st.Loading {
 		lines := agentMailEmptyLines
 		if st.Inbox != "" {
@@ -90,12 +96,12 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		if st.Error != "" {
 			lines = append(append([]string{}, lines...), "", st.Error)
 		}
-		return m.simpleOverlayPanel(title, lines, []overlay.Hint{{Key: "esc", Label: "close"}})
+		close := overlay.Hint{Key: "esc", Label: "close"}
+		return m.emptyPanel(title, agentMailWidth, agentMailEmptyRows, lines[0], lines[1:], close, []overlay.Hint{close})
 	}
 	if len(threads) > 0 {
 		st.Selected = clampInt(st.Selected, 0, len(threads)-1)
 	}
-	now := time.Now()
 	return m.renderListOverlay(listOverlay{
 		Title:      title,
 		Width:      agentMailWidth,
@@ -104,6 +110,7 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		Selected:   st.Selected,
 		Scroll:     &st.Scroll,
 		EmptyMsg:   "Reading mail",
+		Pending:    st.Loading && !overlay.ShowLoading(st.LoadingSince, now),
 		Hints:      m.keyHints(config.ActionMailOpen, "open", config.ActionMailBack, "close"),
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			return m.agentMailThreadRow(threads[i], selected, rowBg, pal, width, now)
