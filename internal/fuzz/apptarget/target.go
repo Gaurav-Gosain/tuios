@@ -64,15 +64,16 @@ type announcedSize struct {
 // setting table and the sidebar and border actions rather than over what a given
 // run happens to touch.
 type configSnapshot struct {
-	shared, anim, ascii, sessionColors bool
-	sidebarOn                          bool
-	borderStyle, dockPos, sidebarPos   string
-	sidebarWidth                       int
+	shared, ascii, sessionColors     bool
+	anim                             string
+	sidebarOn                        bool
+	borderStyle, dockPos, sidebarPos string
+	sidebarWidth                     int
 }
 
 func snapshotConfig() configSnapshot {
 	return configSnapshot{
-		shared: config.Global.SharedBorders, anim: config.Global.AnimationsEnabled,
+		shared: config.Global.SharedBorders, anim: config.Global.Motion,
 		ascii: config.Global.UseASCIIOnly, sessionColors: config.Global.SessionColors,
 		sidebarOn: config.Global.SidebarEnabled, borderStyle: config.Global.BorderStyle,
 		dockPos: config.Global.DockbarPosition, sidebarPos: config.Global.SidebarPosition,
@@ -81,7 +82,7 @@ func snapshotConfig() configSnapshot {
 }
 
 func (c configSnapshot) restore() {
-	config.Global.SharedBorders, config.Global.AnimationsEnabled = c.shared, c.anim
+	config.Global.SharedBorders, config.Global.Motion = c.shared, c.anim
 	config.Global.UseASCIIOnly, config.Global.SessionColors = c.ascii, c.sessionColors
 	config.Global.SidebarEnabled, config.Global.BorderStyle = c.sidebarOn, c.borderStyle
 	config.Global.DockbarPosition, config.Global.SidebarPosition = c.dockPos, c.sidebarPos
@@ -112,7 +113,7 @@ func (t *Target) Reset() error {
 	t.releaseWindows()
 	t.saved.restore()
 
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	config.Global.SharedBorders = false
 	config.Global.UseASCIIOnly = false
 	config.Global.BorderStyle = "rounded"

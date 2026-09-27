@@ -16,9 +16,9 @@ import (
 // sidebar globals must be set before calling.
 func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode string) *OS {
 	t.Helper()
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	m := &OS{
 		Settings:             config.Global,

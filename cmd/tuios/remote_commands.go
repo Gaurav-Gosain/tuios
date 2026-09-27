@@ -2295,6 +2295,8 @@ func getConfigValueCompletions(path, _ string) []string {
 		return []string{"rounded", "normal", "thick", "double", "hidden", "block", "ascii"}
 	case "animations", "appearance.animations_enabled", "animations_enabled":
 		return []string{"true", "false", "toggle", "on", "off"}
+	case "motion", "appearance.motion":
+		return config.MotionLevels
 	case "hide_window_buttons", "appearance.hide_window_buttons":
 		return []string{"true", "false"}
 	case "window_button_style", "appearance.window_button_style":

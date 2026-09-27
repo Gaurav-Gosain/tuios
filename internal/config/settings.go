@@ -65,13 +65,24 @@ type Settings struct {
 	// NerdFontsOff.
 	NoNerdFont bool
 
-	// AnimationsEnabled controls whether UI animations are enabled
-	// Set via --no-animations flag or appearance.animations_enabled config
-	AnimationsEnabled bool
+	// Motion is how much the UI animates: MotionNone, MotionBasic or
+	// MotionFull. Set via appearance.motion, or --no-animations for none.
+	// Read it through MotionAllows, which also honours AnimationsSuppressed.
+	Motion string
+
+	// NoAnimationsFlag records --no-animations, so re-applying the config at
+	// runtime keeps the level at none until something sets the level itself
+	// (OS.SetMotion).
+	NoAnimationsFlag bool
 
 	// AnimationsSuppressed is set to true temporarily to disable animations
-	// (e.g., during remote command processing). This takes precedence over AnimationsEnabled.
+	// (e.g., during remote command processing). This takes precedence over
+	// Motion.
 	AnimationsSuppressed bool
+
+	// ModalDim is the percent the screen behind a modal overlay is darkened
+	// by. Zero turns it off. Set via appearance.modal_dim.
+	ModalDim int
 
 	// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown
 	// every time, regardless of whether there are active foreground processes.
@@ -619,7 +630,8 @@ func DefaultSettings() Settings {
 		NotificationErrorSticky:     true,
 		NormalFPS:                   60,
 		UseASCIIOnly:                false,
-		AnimationsEnabled:           true,
+		Motion:                      MotionFull,
+		ModalDim:                    ModalDimDefault,
 		AnimationsSuppressed:        false,
 		AlwaysConfirmQuit:           false,
 		WhichKeyEnabled:             true,

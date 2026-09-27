@@ -24,14 +24,14 @@ func transitionOS(t *testing.T, n int, shared, bsp bool) *OS {
 	t.Helper()
 	restoreTransitionConfig(t)
 	config.Global.SharedBorders = shared
-	config.Global.AnimationsEnabled = true
+	config.Global.Motion = config.MotionFull
 
 	return newTransitionOS(t, n, bsp)
 }
 
 func restoreTransitionConfig(t *testing.T) {
 	t.Helper()
-	shared, anim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	shared, anim := config.Global.SharedBorders, config.Global.Motion
 	dock, style, ascii := config.Global.DockbarPosition, config.Global.BorderStyle, config.Global.UseASCIIOnly
 	// The dividers meet the dock's hairline, and the ASCII set draws every
 	// junction as "+", so both are part of the shape these tests read.
@@ -39,7 +39,7 @@ func restoreTransitionConfig(t *testing.T) {
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	t.Cleanup(func() {
-		config.Global.SharedBorders, config.Global.AnimationsEnabled = shared, anim
+		config.Global.SharedBorders, config.Global.Motion = shared, anim
 		config.Global.DockbarPosition, config.Global.BorderStyle, config.Global.UseASCIIOnly = dock, style, ascii
 	})
 }

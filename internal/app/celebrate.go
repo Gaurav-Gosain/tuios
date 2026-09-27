@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -148,7 +149,8 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 	if width <= 0 || height <= 0 {
 		return nil
 	}
-	if !m.Settings.AnimationsEnabled || m.Settings.AnimationsSuppressed {
+	// Confetti is decoration, so it flies only at the full level.
+	if !m.Settings.MotionAllows(config.MotionFull) {
 		opts.Still = true
 	}
 	x = clampInt(x, 0, width-1)

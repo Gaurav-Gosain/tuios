@@ -42,7 +42,7 @@ func newTour(t *testing.T) *tour {
 	t.Helper()
 	cfg := Config()
 	seed := config.AppearanceFrom(cfg, config.Overrides{})
-	seed.AnimationsEnabled = false
+	seed.Motion = config.MotionNone
 	o := app.NewOS(app.OSOptions{
 		KeybindRegistry: config.NewKeybindRegistry(cfg),
 		UserConfig:      cfg,

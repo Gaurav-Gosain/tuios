@@ -98,9 +98,9 @@ func (h *openAnimHarness) newestWindowAnim(t *testing.T, anims []*ui.Animation) 
 // middle one, so a new pane read as flying in from the corner and shrinking.
 // It must instead grow outward from inside the tile it is about to fill.
 func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = true
-	defer func() { config.Global.AnimationsEnabled = prev }()
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionFull
+	defer func() { config.Global.Motion = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 
@@ -148,9 +148,9 @@ func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
 //
 // So the echo must move nothing at all, and must not arm a fresh animation.
 func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = true
-	defer func() { config.Global.AnimationsEnabled = prev }()
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionFull
+	defer func() { config.Global.Motion = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 	h.createWindow(t)
@@ -233,9 +233,9 @@ func TestOpenStartRectFloor(t *testing.T) {
 // outright, so opening a pane under master-stack was a jump cut while the same
 // pane under BSP bloomed into place.
 func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = true
-	defer func() { config.Global.AnimationsEnabled = prev }()
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionFull
+	defer func() { config.Global.Motion = prev }()
 
 	h := newOpenAnimHarnessWithLayout(120, 40, false)
 
@@ -267,9 +267,9 @@ func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
 // that moved nothing, or the layout would be in motion whenever anything at all
 // happened.
 func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
-	prev := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = true
-	defer func() { config.Global.AnimationsEnabled = prev }()
+	prev := config.Global.Motion
+	config.Global.Motion = config.MotionFull
+	defer func() { config.Global.Motion = prev }()
 
 	h := newOpenAnimHarnessWithLayout(120, 40, false)
 	for i := 1; i <= 3; i++ {

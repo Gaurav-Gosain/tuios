@@ -140,9 +140,9 @@ func arrangeCustom(t *testing.T, a *OS) {
 // would leave every pane at its old size for the length of the test.
 func noAnimations(t *testing.T) {
 	t.Helper()
-	prev := config.Global.AnimationsEnabled
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prev })
-	config.Global.AnimationsEnabled = false
+	prev := config.Global.Motion
+	t.Cleanup(func() { config.Global.Motion = prev })
+	config.Global.Motion = config.MotionNone
 }
 
 // TestACustomLayoutSurvivesAPeersFirstVisit is the two client case the field

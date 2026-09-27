@@ -12,20 +12,19 @@ import (
 // `tuios --no-animations` starting with animations on). NewOS must now use the
 // passed-in config without mutating any appearance package global.
 func TestNewOS_DoesNotClobberAppearanceGlobals(t *testing.T) {
-	original := config.Global.AnimationsEnabled
-	defer func() { config.Global.AnimationsEnabled = original }()
+	original := config.Global.Motion
+	defer func() { config.Global.Motion = original }()
 
 	// Simulate a CLI flag having forced animations off at startup.
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 
 	// A user config that enables animations, as it would be on disk.
-	enabled := true
 	cfg := config.DefaultConfig()
-	cfg.Appearance.AnimationsEnabled = &enabled
+	cfg.Appearance.Motion = config.MotionFull
 
 	os := NewOS(OSOptions{UserConfig: cfg})
 
-	if os.Settings.AnimationsEnabled {
+	if os.Settings.Motion != config.MotionNone {
 		t.Error("NewOS must not re-apply config appearance and re-enable animations")
 	}
 	if os.UserConfig != cfg {

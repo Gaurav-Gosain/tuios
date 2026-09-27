@@ -103,9 +103,9 @@ func newScrollingFleet(t *testing.T, panes, cols, rows int) *scrollingFleet {
 // which is the case a shared offset has to be safe under.
 func newScrollingFleetSized(t *testing.T, panes, aCols, aRows, bCols, bRows int) *scrollingFleet {
 	t.Helper()
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = prevAnim })
 
 	r := newRigSized(t, panes, aCols, aRows)
 	ex := &exchange{t: t}

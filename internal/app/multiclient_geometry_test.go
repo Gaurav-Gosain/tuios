@@ -68,11 +68,11 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *exchange) {
 	t.Helper()
 	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
-	prevAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
+	prevAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
 	t.Cleanup(func() {
 		config.Global.SharedBorders, config.Global.PaneGap = prevShared, prevGap
-		config.Global.AnimationsEnabled = prevAnim
+		config.Global.Motion = prevAnim
 	})
 
 	localG.install()

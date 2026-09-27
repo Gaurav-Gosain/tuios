@@ -66,7 +66,8 @@ var settingLabels = map[string]string{
 	"appearance.scroll_column_max":      "Column width cap",
 	"appearance.niri_click_reveals":     "Click reveals column",
 	"appearance.niri_hover_reveals":     "Hover reveals column",
-	"appearance.animations_enabled":     "Animations",
+	"appearance.motion":                 "Motion",
+	"appearance.modal_dim":              "Dim behind panels",
 	"appearance.confirm_quit":           "Confirm quit",
 	"appearance.session_colors":         "Session colors",
 	"appearance.session_border":         "Session border",
@@ -165,6 +166,7 @@ var settingSteps = map[string]int{
 	"appearance.scrollback_lines": 1000,
 	"appearance.zoom_max_width":   10,
 	"appearance.dim_unfocused":    5,
+	"appearance.modal_dim":        5,
 	"appearance.sidebar.width":    2,
 }
 

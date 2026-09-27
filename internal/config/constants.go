@@ -421,18 +421,20 @@ func (s *Settings) GetScrollColumnMax() int {
 }
 
 // GetAnimationDuration returns the animation duration for standard operations.
-// Returns 0 if animations are disabled or suppressed, causing instant transitions.
+// Returns 0 when the motion level is none or animations are suppressed, so
+// the transition is instant.
 func (s *Settings) GetAnimationDuration() time.Duration {
-	if !s.AnimationsEnabled || s.AnimationsSuppressed {
+	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
 	return DefaultAnimationDuration
 }
 
 // GetFastAnimationDuration returns the animation duration for fast operations.
-// Returns 0 if animations are disabled or suppressed, causing instant transitions.
+// Returns 0 when the motion level is none or animations are suppressed, so
+// the transition is instant.
 func (s *Settings) GetFastAnimationDuration() time.Duration {
-	if !s.AnimationsEnabled || s.AnimationsSuppressed {
+	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
 	return FastAnimationDuration

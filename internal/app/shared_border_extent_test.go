@@ -30,11 +30,11 @@ func extentOS(t *testing.T, n int, dock, sidebar string) *OS {
 // extentOSStyled is the same session drawn in a given border style.
 func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS {
 	t.Helper()
-	shared, anim, ascii := config.Global.SharedBorders, config.Global.AnimationsEnabled, config.Global.UseASCIIOnly
+	shared, anim, ascii := config.Global.SharedBorders, config.Global.Motion, config.Global.UseASCIIOnly
 	style, dockPos := config.Global.BorderStyle, config.Global.DockbarPosition
 	sidebarOn, sidebarPos := config.Global.SidebarEnabled, config.Global.SidebarPosition
 	config.Global.SharedBorders = true
-	config.Global.AnimationsEnabled = false
+	config.Global.Motion = config.MotionNone
 	config.Global.UseASCIIOnly = false
 	config.Global.BorderStyle = borderStyle
 	config.Global.DockbarPosition = dock
@@ -43,7 +43,7 @@ func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS 
 		config.Global.SidebarPosition = sidebar
 	}
 	t.Cleanup(func() {
-		config.Global.SharedBorders, config.Global.AnimationsEnabled, config.Global.UseASCIIOnly = shared, anim, ascii
+		config.Global.SharedBorders, config.Global.Motion, config.Global.UseASCIIOnly = shared, anim, ascii
 		config.Global.BorderStyle, config.Global.DockbarPosition = style, dockPos
 		config.Global.SidebarEnabled, config.Global.SidebarPosition = sidebarOn, sidebarPos
 	})

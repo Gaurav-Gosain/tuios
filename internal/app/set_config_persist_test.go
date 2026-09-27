@@ -59,11 +59,11 @@ func TestToggleAnimationsSurvivesTheNextSet(t *testing.T) {
 	m := &OS{Settings: config.Global, UserConfig: config.DefaultConfig()}
 	config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
 
-	before := m.Settings.AnimationsEnabled
+	before := m.Settings.Motion
 	if err := m.SetConfig("appearance.animations_enabled", "toggle"); err != nil {
 		t.Fatalf("toggle = %v", err)
 	}
-	toggled := m.Settings.AnimationsEnabled
+	toggled := m.Settings.Motion
 	if toggled == before {
 		t.Fatalf("toggle did not change anything (still %v)", toggled)
 	}
@@ -71,7 +71,7 @@ func TestToggleAnimationsSurvivesTheNextSet(t *testing.T) {
 	if err := m.SetConfig("appearance.sidebar.width", "30"); err != nil {
 		t.Fatalf("second SetConfig = %v", err)
 	}
-	if m.Settings.AnimationsEnabled != toggled {
-		t.Errorf("a later set reverted animations to %v, want %v still", m.Settings.AnimationsEnabled, toggled)
+	if m.Settings.Motion != toggled {
+		t.Errorf("a later set reverted animations to %v, want %v still", m.Settings.Motion, toggled)
 	}
 }

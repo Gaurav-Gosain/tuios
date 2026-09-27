@@ -114,7 +114,8 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 		s.ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
 	}
 	if overrides.NoAnimations {
-		s.AnimationsEnabled = false
+		s.NoAnimationsFlag = true
+		s.Motion = MotionNone
 	}
 	if overrides.ConfirmQuit {
 		s.AlwaysConfirmQuit = true

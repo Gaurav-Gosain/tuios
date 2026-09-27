@@ -155,9 +155,9 @@ func dividerCells(m *OS) []layout.Rect {
 // pane holding a marker that starts in its own first column.
 func gapTestOS(t *testing.T, n int) *OS {
 	t.Helper()
-	origAnim := config.Global.AnimationsEnabled
-	config.Global.AnimationsEnabled = false
-	t.Cleanup(func() { config.Global.AnimationsEnabled = origAnim })
+	origAnim := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	t.Cleanup(func() { config.Global.Motion = origAnim })
 
 	m := &OS{
 		Settings: config.Global,

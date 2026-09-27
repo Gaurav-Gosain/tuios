@@ -23,11 +23,11 @@ import (
 // like and is the state that arms the deferral the transition test exercises.
 func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	t.Helper()
-	origShared, origAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	origShared, origAnim := config.Global.SharedBorders, config.Global.Motion
 	origStyle, origASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
 	origSidebar := config.Global.SidebarEnabled
 	config.Global.SharedBorders = shared
-	config.Global.AnimationsEnabled = animations
+	config.Global.SetAnimationsOn(animations)
 	// Other tests in this package mutate the style, and the ASCII set draws every
 	// corner as "+", which would hide a pane box among the separator glyphs.
 	config.Global.BorderStyle = "rounded"
@@ -35,7 +35,7 @@ func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	config.Global.SidebarEnabled = false
 	t.Cleanup(func() {
 		config.Global.SharedBorders = origShared
-		config.Global.AnimationsEnabled = origAnim
+		config.Global.Motion = origAnim
 		config.Global.BorderStyle = origStyle
 		config.Global.UseASCIIOnly = origASCII
 		config.Global.SidebarEnabled = origSidebar
