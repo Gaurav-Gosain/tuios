@@ -51,8 +51,9 @@ type grid struct {
 	// wrap holds, for each row, whether the row's text carries on to the
 	// next row because autowrap moved it there. A line that ended with a
 	// newline, however long it was, leaves it false. It moves with the row
-	// wherever the row moves, and a blank or a fill that reaches the row's
-	// last column clears it, since the text that wrapped is gone.
+	// wherever the row moves. A blank or a fill that reaches the row's last
+	// column clears it, since the text that wrapped is gone, and so do DCH
+	// and ECH, which ghostty clears it on too.
 	wrap []bool
 }
 
