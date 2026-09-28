@@ -178,20 +178,16 @@ type linkCellRef struct{ X, Y int }
 // own: hovering the first half offered to open a truncated address, and the
 // second half was not a link at all.
 //
-// The rows are joined when the row above is full, meaning its last column holds
-// something other than a space. That is what a soft wrap leaves behind and what
-// a line ending does not: a program that ends a line ends it where the text
-// ends, which is almost never the last column exactly. The emulator does not
-// record a wrap flag, so this is the signal available, and it is wrong only for
-// a line that happens to fill the pane to its last cell and ends a URL exactly
-// there, which is the same case a wrap produces.
+// The rows are joined when the emulator says the row above wrapped onto this
+// one (see paneRowWraps). A line that fills the pane and then ends is not
+// joined to the next, however full its last column is.
 func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 	h := window.ContentHeight()
 
 	// Walk up to the first row of the wrapped line, then collect it and every
 	// row the wrap carried it onto.
 	top := y
-	for top > 0 && top > y-linkWrapRows && paneRowIsFull(window, top-1, maxX) {
+	for top > 0 && top > y-linkWrapRows && paneRowWraps(window, top-1) {
 		top--
 	}
 
@@ -213,8 +209,8 @@ func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 			refs = append(refs, linkCellRef{X: col, Y: row})
 			byteAt = append(byteAt, base+off)
 		}
-		// The line ends here unless this row is full, which is the wrap.
-		if !paneRowIsFull(window, row, maxX) {
+		// The line ends here unless the emulator wrapped this row.
+		if !paneRowWraps(window, row) {
 			break
 		}
 	}
@@ -250,17 +246,28 @@ func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 	}, true
 }
 
-// paneRowIsFull reports whether the row's last column holds something other
-// than a space, which is what a soft wrap leaves and a line ending does not.
+// paneRowWraps reports whether viewport row y carries on to row y+1 because
+// the emulator wrapped it, as opposed to a line that filled the row and then
+// ended. It asks the emulator, which records every soft wrap, rather than
+// reading a full last column as a wrap: a line exactly as wide as the pane
+// followed by a newline fills the row the same way, and joining it to the
+// next line made one address out of two.
 //
 // The caller must hold the window's I/O read lock.
-func paneRowIsFull(window *terminal.Window, y, maxX int) bool {
-	if y < 0 || maxX <= 0 {
+func paneRowWraps(window *terminal.Window, y int) bool {
+	if window.Terminal == nil || y < 0 {
 		return false
 	}
-	text, _ := paneRowText(window, y, maxX)
-	trimmed := strings.TrimRight(text, " ")
-	return trimmed != "" && len(trimmed) == len(text)
+	if offset := window.ScrollbackOffset; offset > 0 {
+		if y < offset {
+			idx := window.ScrollbackLen() - offset + y
+			wrapped, known := window.Terminal.ScrollbackSoftWrapped(idx)
+			return known && wrapped
+		}
+		y -= offset
+	}
+	wrapped, known := window.Terminal.RowSoftWrapped(y)
+	return known && wrapped
 }
 
 // paneCellAt reads one viewport cell, from the scrollback ring when the pane is
