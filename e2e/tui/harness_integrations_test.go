@@ -507,7 +507,7 @@ func TestPluginsReportBlockingPrompts(t *testing.T) {
 			{"session_start", map[string]any{"type": "session_start", "idle": true}, "idle", false},
 			{"agent_start", map[string]any{"type": "agent_start", "idle": false}, "working", false},
 			{"agent_end continuing", map[string]any{"type": "agent_end", "event": map[string]any{"willContinue": true}}, "working", true},
-			{"subagent agent_end", map[string]any{"type": "agent_end", "agentKind": "subagent"}, "working", true},
+			{"subagent agent_end", map[string]any{"type": "agent_end", "agentKind": "sub"}, "working", true},
 			{"print agent_end", map[string]any{"type": "agent_end", "mode": "print"}, "working", true},
 			{"tool_approval_requested", map[string]any{"type": "tool_approval_requested", "event": map[string]any{"toolName": "exec", "reason": "Allow build?"}}, "needs_input", false},
 			{"tool_approval_resolved", map[string]any{"type": "tool_approval_resolved"}, "working", false},
@@ -534,17 +534,36 @@ func TestPluginsReportBlockingPrompts(t *testing.T) {
 			}
 			win := windowID(t, base, "e2e-agent", tc.harness)
 			d := startPlugin(t, base, tc.harness, "e2e-agent", win)
-			if tc.harness == "omp" {
-				dir := filepath.Join(base, "plugin-home-omp", ".omp", "agent")
-				env := []string{"HOME=" + filepath.Join(base, "plugin-home-omp"), "PI_CODING_AGENT_DIR=" + dir}
-				for _, args := range [][]string{{"integration", "install", "pi"}, {"integration", "install", "--all"}} {
-					out, err := tuiosCLIEnv(t, base, env, args...)
+			if tc.harness == "pi" || tc.harness == "omp" {
+				home := filepath.Join(base, "plugin-home-"+tc.harness)
+				dir := filepath.Join(home, "."+tc.harness, "agent")
+				env := []string{"HOME=" + home, "PI_CODING_AGENT_DIR=" + dir, "CLAUDE_CONFIG_DIR=", "CODEX_HOME="}
+				if tc.harness == "omp" {
+					out, err := tuiosCLIEnv(t, base, env, "integration", "install", "pi")
 					if err == nil || !strings.Contains(out, "agent directory") {
-						t.Fatalf("%v should refuse competing Pi extension in OMP directory: %v\n%s", args, err, out)
+						t.Fatalf("install pi should refuse OMP's agent directory: %v\n%s", err, out)
 					}
-					if _, err := os.Stat(filepath.Join(dir, "extensions", "tuios-agent-state.ts")); !os.IsNotExist(err) {
-						t.Fatalf("%v left a Pi extension in OMP's agent directory: %v", args, err)
+				}
+				mustMkdir(filepath.Join(home, ".claude"))
+				mustMkdir(filepath.Join(home, ".codex"))
+				out, err := tuiosCLIEnv(t, base, env, "integration", "install", "--all", "--command", tuiosBin)
+				if err != nil {
+					t.Fatalf("install --all with PI_CODING_AGENT_DIR: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "Skipped pi and omp: PI_CODING_AGENT_DIR is set. Install the one you use by name.") {
+					t.Fatalf("install --all did not name the skipped integrations:\n%s", out)
+				}
+				for _, path := range []string{filepath.Join(home, ".claude", "settings.json"), filepath.Join(home, ".codex", "hooks.json")} {
+					if _, err := os.Stat(path); err != nil {
+						t.Fatalf("install --all did not install %s: %v\n%s", path, err, out)
 					}
+				}
+				foreignFile := "tuios-omp-agent-state.ts"
+				if tc.harness == "omp" {
+					foreignFile = "tuios-agent-state.ts"
+				}
+				if _, err := os.Stat(filepath.Join(dir, "extensions", foreignFile)); !os.IsNotExist(err) {
+					t.Fatalf("install --all left the other harness's extension in %s: %v", dir, err)
 				}
 			}
 			for _, s := range tc.steps {

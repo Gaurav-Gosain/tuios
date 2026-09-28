@@ -2267,7 +2267,7 @@ status` and `tuios doctor agents` say which each one is.
 | Amp | state | `plugins/tuios-agent-state.ts` in `~/.config/amp` (or `$XDG_CONFIG_HOME/amp`) | [plugin API](https://ampcode.com/manual/plugin-api) |
 | Kimi Code CLI | state | `[[hooks]]` tables between two marker comments at the end of `~/.kimi-code/config.toml` (or `$KIMI_CODE_HOME`); needs 0.14.0 or newer | [hooks](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html) |
 | Pi | state | `extensions/tuios-agent-state.ts` in `~/.pi/agent` (or `$PI_CODING_AGENT_DIR`) | herdr's Pi extension, and Pi's extension events |
-| oh-my-pi (`omp`) | state | `extensions/tuios-omp-agent-state.ts` in `~/.omp/agent` (or `$PI_CODING_AGENT_DIR`); needs omp 18.3.2 or newer | [extension discovery](https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md) and [event API](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/extensibility/extensions/types.ts) |
+| oh-my-pi (`omp`) | state | `extensions/tuios-omp-agent-state.ts` in `~/.omp/agent` (or `$PI_CODING_AGENT_DIR`). Needs omp 18.3.2 or newer. | [extension discovery](https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md) and [event API](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/extensibility/extensions/types.ts) |
 | GitHub Copilot CLI | state | `hooks/tuios.json` in `~/.copilot` (or `$COPILOT_HOME`), a file of its own | [hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference) |
 | Cursor Agent | state | hooks in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
 | Qwen Code | state | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | [hooks](https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md) |
@@ -2279,14 +2279,16 @@ status` and `tuios doctor agents` say which each one is.
 | Hermes Agent | session | a plugin in `plugins/tuios-agent-state/` under `~/.hermes` (or `$HERMES_HOME`), and `tuios-agent-state` in `plugins.enabled` in its `config.yaml` | herdr's Hermes plugin |
 | Qoder CLI | session | `hooks` in `~/.qoder/settings.json` (or `$QODER_CONFIG_DIR`) | [hooks](https://docs.qoder.com/zh/cli/hooks) |
 
-OMP profiles use their own agent directory (`~/.omp/profiles/<name>/agent`);
-set `PI_CODING_AGENT_DIR` to that directory when installing for a profile.
-Pi reads the same environment variable, so `integration install --all` refuses
-it rather than installing both extensions in one directory. An explicit
-install also refuses a directory identified as the other harness's. If an
-earlier install left Pi's extension in an OMP profile, run
-`tuios integration uninstall pi` with that `PI_CODING_AGENT_DIR` before
-installing omp.
+OMP profiles use their own agent directory (`~/.omp/profiles/<name>/agent`).
+Set `PI_CODING_AGENT_DIR` to that directory when installing for a profile.
+Pi reads the same environment variable. `integration install --all` skips
+both Pi and omp and installs the other harnesses when this variable is set.
+Install the one you use by name. An explicit install refuses a directory
+identified as the other harness's. If an earlier install left Pi's extension
+in an OMP profile, run `tuios integration uninstall pi` with that
+`PI_CODING_AGENT_DIR` before installing omp. The 18.3.2 minimum is for
+`ctx.agent.kind`, which distinguishes the main agent from subagents. Process
+detection was measured on omp 18.4.2.
 
 Five recognised harnesses have no integration, and `tuios doctor agents` names
 them with the reason: aider (its one hook, `notifications-command`, replaces the
