@@ -8,6 +8,8 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+`[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

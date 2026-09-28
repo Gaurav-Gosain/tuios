@@ -41,6 +41,12 @@ line feed, and `meta` leaves those keys out), `[dock]`, `[hooks]`, `[hosts]`, `[
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 
+Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
+addresses in the focused pane, and a typed label copies one. `hints.builtins`,
+`hints.alphabet`, `hints.open` and `hints.dim` are options. `hints.patterns`
+is a list of Go regular expressions in the file. It is for the person at the
+keyboard: to read a pane, use `capture-pane`.
+
 ## Ricing: the four surfaces
 
 | Surface | What it decides | How to set it |
