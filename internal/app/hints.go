@@ -381,8 +381,31 @@ func (m *OS) openHint(window *terminal.Window, match hintMatch) tea.Cmd {
 }
 
 // hintRemoteShells are the programs whose pane shows another machine's files
-// even though the pane itself runs here.
-var hintRemoteShells = []string{"ssh", "mosh", "mosh-client", "et", "telnet"}
+// even though the pane itself runs here: remote shells, and the tools that
+// open a shell in a container or a cluster. kitten is kitty's, whose ssh
+// kitten is the common case; docker, kubectl and podman are refused whatever
+// they are doing, because their exec is the one that matters and the name is
+// all tuios can see.
+var hintRemoteShells = []string{
+	"ssh", "autossh", "mosh", "mosh-client", "et", "telnet", "tsh", "kitten",
+	"docker", "kubectl", "podman",
+}
+
+// hintForeground is the name of the program running in the pane in front of
+// its shell, or "" when the shell itself has the terminal. A daemon session
+// reports it; a standalone pane is asked through its terminal.
+func hintForeground(window *terminal.Window) string {
+	if window.ForegroundCmd != "" {
+		return window.ForegroundCmd
+	}
+	if window.HasForegroundProcess() {
+		if name := window.ForegroundCommand(); name != "" {
+			return name
+		}
+		return "a program"
+	}
+	return ""
+}
 
 // hintFileBlocked says why a file named in the pane may not be opened on this
 // machine, or "" when it may.
@@ -394,7 +417,7 @@ func (m *OS) hintFileBlocked(window *terminal.Window) string {
 		return "This session runs on another machine."
 	case m.IsRemoteClient():
 		return "A remote client can not open files."
-	case slices.Contains(hintRemoteShells, window.ForegroundCmd):
+	case slices.Contains(hintRemoteShells, hintForeground(window)):
 		return "The pane shows another machine."
 	}
 	if host, ok := hintCwdHost(window.Cwd); ok && host != "" && !isLocalHost(host) {
@@ -432,6 +455,14 @@ func hintLocalPath(window *terminal.Window, text string) (string, string) {
 	}
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path), ""
+	}
+	// A relative path is relative to where the program that printed it
+	// runs. The folder tuios knows is the one the shell last reported, which
+	// is that program's only while the shell itself has the terminal: a
+	// program in front of it may have changed folder, or be a remote shell
+	// or a container that no name list can cover.
+	if fg := hintForeground(window); fg != "" {
+		return "", "The pane runs " + fg + ", so its folder is not known."
 	}
 	// The directory the shell last reported wins. When it names another
 	// machine there is no local directory to fall back to: the process
