@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -321,13 +322,57 @@ type pluginDriver struct {
 	ready chan struct{}
 }
 
+// pluginLoadDeadline is a failsafe, not a budget. The driver says when the
+// plugin has loaded, and the wait ends there; this only bounds a driver that
+// hangs without exiting.
+const pluginLoadDeadline = 60 * time.Second
+
+var (
+	nodeOnce sync.Once
+	nodePath string
+	nodeErr  error
+)
+
+// realNode is the node binary itself, asked of node under the suite's own
+// environment, once.
+//
+// The node on PATH is often a version manager's shim (vite-plus, volta, asdf,
+// nvm's wrappers), and a shim keeps the runtime it hands out under HOME. Each
+// plugin runs with a HOME of its own, empty, so the shim installed a whole
+// Node into it before the plugin could load: about five seconds and 200 MB
+// per plugin on an idle machine, more under load, and the fixed wait for the
+// plugin ran out. process.execPath is the binary the shim ended up running,
+// which needs nothing from HOME.
+func realNode() (string, error) {
+	nodeOnce.Do(func() {
+		shim, err := exec.LookPath("node")
+		if err != nil {
+			nodeErr = err
+			return
+		}
+		out, err := exec.Command(shim, "-e", "process.stdout.write(process.execPath)").Output()
+		if err != nil {
+			nodeErr = fmt.Errorf("%s -e process.execPath: %w", shim, err)
+			return
+		}
+		nodePath = strings.TrimSpace(string(out))
+		if nodePath == "" {
+			nodePath = shim
+		}
+	})
+	return nodePath, nodeErr
+}
+
 // startPlugin renders harness's plugin with tuios integration install and
 // starts it under the driver script, which knows each harness's API shape.
 func startPlugin(t *testing.T, base, harness, session, window string) *pluginDriver {
 	t.Helper()
-	node, err := exec.LookPath("node")
-	if err != nil {
+	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")
+	}
+	node, err := realNode()
+	if err != nil {
+		t.Fatalf("find the node binary: %v", err)
 	}
 	home := filepath.Join(base, "plugin-home-"+harness)
 	env := []string{"HOME=" + home, "PI_CODING_AGENT_DIR=" + filepath.Join(home, ".pi", "agent")}
@@ -372,7 +417,11 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 		t.Fatalf("start node: %v", err)
 	}
 	d := &pluginDriver{cmd: cmd, stdin: stdin, ready: make(chan struct{})}
+	// closed is closed when node closes its stdout, which it does when it
+	// exits: a driver that dies before DRIVER-READY fails the wait at once.
+	closed := make(chan struct{})
 	go func() {
+		defer close(closed)
 		sc := bufio.NewScanner(stdout)
 		for sc.Scan() {
 			if sc.Text() == "DRIVER-READY" {
@@ -383,7 +432,7 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 	t.Cleanup(func() {
 		_ = stdin.Close()
 		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
+		go func() { <-closed; _ = cmd.Wait(); close(done) }()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -394,10 +443,19 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 			t.Logf("plugin driver stderr:\n%s", stderr.String())
 		}
 	})
+	start := time.Now()
 	select {
 	case <-d.ready:
-	case <-time.After(uiTimeout):
-		t.Fatalf("the %s plugin never loaded:\n%s", harness, stderr.String())
+		t.Logf("the %s plugin loaded in %v", harness, time.Since(start).Round(time.Millisecond))
+	case <-closed:
+		select {
+		case <-d.ready:
+			t.Fatalf("the %s plugin driver exited right after the plugin loaded:\n%s", harness, stderr.String())
+		default:
+		}
+		t.Fatalf("the %s plugin driver exited before the plugin loaded:\n%s", harness, stderr.String())
+	case <-time.After(pluginLoadDeadline):
+		t.Fatalf("the %s plugin did not load in %v:\n%s", harness, pluginLoadDeadline, stderr.String())
 	}
 	return d
 }

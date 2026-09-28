@@ -5,7 +5,8 @@
 //
 //   node plugindriver.mjs pi|amp|opencode <plugin file>
 //
-// It prints DRIVER-READY once the plugin is loaded. Each event line is
+// It prints DRIVER-READY once the plugin is loaded and has registered its
+// handlers, and the test waits for that line. Each event line is
 // {"type": <event name>, "event": <payload>, "idle": <bool>}; for opencode the
 // type is "event" and the payload is the bus event. The API shapes are the
 // ones the plugins are written against: Pi's pi.on(name, (event, ctx)) with
