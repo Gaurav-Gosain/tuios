@@ -139,7 +139,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if focusedWindow != nil {
 				// Use CSI u encoding if kitty keyboard is active
 				if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
-					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(paneMsg(msg, o)), focusedWindow.Terminal.KittyKeyboardFlags())
 					if len(encoded) > 0 {
 						o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 						_ = focusedWindow.SendInput([]byte(encoded))
@@ -235,17 +235,19 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
 		}
 
+		// The pane gets the key as the host sent it, on either encoding.
+		host := paneMsg(msg, o)
 		// When kitty keyboard protocol is active, encode as CSI u
 		var rawInput []byte
 		if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
-			encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+			encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(host), focusedWindow.Terminal.KittyKeyboardFlags())
 			if len(encoded) > 0 {
 				rawInput = []byte(encoded)
 			}
 		}
 		// Fall back to legacy encoding
 		if len(rawInput) == 0 {
-			rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+			rawInput = getRawKeyBytesWithMode(host, appCursorKeys)
 		}
 
 		if len(rawInput) > 0 {

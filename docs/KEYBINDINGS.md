@@ -301,7 +301,9 @@ typed.
 
 Latin layouts, such as AZERTY, QWERTZ or Dvorak, use the letters on their keys.
 A letter or a `ctrl` chord means the key that it types, not the US key at its
-position. A Latin letter with no binding does nothing.
+position. On Dvorak, the key that types `b` is the US `n` key, and `ctrl` with
+it is `ctrl+b`, the leader. The showkeys strip, the binding recorder and a
+tape spell the chord the same way. A Latin letter with no binding does nothing.
 
 This needs a terminal that sends the US-layout key through the Kitty keyboard
 protocol: Ghostty, kitty, WezTerm or foot. Other terminals send only the typed
