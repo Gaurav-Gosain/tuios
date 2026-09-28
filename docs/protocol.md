@@ -258,11 +258,11 @@ the rules below are the CLI's. The verbs on the wire do not change.
   each other machine's entry in `hosts` carries `"untrusted": true`. The
   `local` entry does not.
 - `tuios capture-pane` takes `--json`. Its plain output from another machine
-  is fenced as untrusted content, as mail is. Control characters, bidi
-  controls and zero-width characters are removed. With `--ansi` or
-  `--resolved`, SGR sequences (`CSI ... m`) are kept and every other escape
-  (OSC, DCS, cursor moves, modes) is removed. A local capture prints as
-  before.
+  is fenced as untrusted content, as mail is, with `│ ` before every line.
+  Control characters, bidi controls and zero-width characters are removed.
+  With `--ansi` or `--resolved`, SGR sequences (`CSI ... m`) are kept and
+  every other escape (OSC, DCS, cursor moves, modes) is removed. A local
+  capture prints as before.
 - `tuios send-agent-message --attach PATH` to another machine first asks that
   machine for its session's stash root with `stash-list`. A path under that
   root passes through as written. Every other path must be a regular file on

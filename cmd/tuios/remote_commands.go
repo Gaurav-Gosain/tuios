@@ -623,8 +623,9 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved
 }
 
 // printCapture writes a capture-pane result. A capture from this machine is
-// the content as it is. A capture from host is fenced, with control and
-// invisible format characters removed (hostPlainText). keepEscapes says the
+// the content as it is. A capture from host is fenced with
+// session.UntrustedFence, with control and invisible format characters
+// removed (plainText). keepEscapes says the
 // caller asked for escape codes, and then SGR alone is kept (hostStyledText).
 func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEscapes bool) error {
 	var res struct {
@@ -641,13 +642,13 @@ func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEsc
 	if window != "" {
 		who = "pane " + plainLine(window) + " on " + plainLine(host)
 	}
-	content := hostPlainText(res.Content)
+	content := plainText(res.Content)
 	if keepEscapes {
 		content = hostStyledText(res.Content)
 	}
-	fmt.Fprintf(w, untrustedOpen+"\n", who)
-	fmt.Fprintln(w, strings.TrimRight(content, "\n"))
-	fmt.Fprintln(w, untrustedClose)
+	// The gutter on every line keeps a line the far pane printed, the close
+	// line included, inside the fence.
+	fmt.Fprintln(w, session.UntrustedFence(who, strings.TrimRight(content, "\n")))
 	return nil
 }
 

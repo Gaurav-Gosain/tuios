@@ -56,8 +56,8 @@ func UntrustedFence(who, body string) string {
 }
 
 // InvisibleFormatRune reports whether r is a zero-width or bidirectional
-// formatting character: U+200B to U+200F, U+202A to U+202E, U+2060 to U+2069
-// and U+FEFF. They draw nothing, and a bidi override reorders what follows it,
+// formatting character: U+200B to U+200F, U+202A to U+202E, U+2060 to U+2069,
+// U+061C (the Arabic letter mark) and U+FEFF. They draw nothing, and a bidi override reorders what follows it,
 // so a name or a body holding one can read as something it is not. Every
 // place that prints another program's text drops them.
 func InvisibleFormatRune(r rune) bool {
@@ -68,7 +68,7 @@ func InvisibleFormatRune(r rune) bool {
 		return true
 	case r >= 0x2060 && r <= 0x2069:
 		return true
-	case r == 0xfeff:
+	case r == 0xfeff, r == 0x061c:
 		return true
 	}
 	return false
