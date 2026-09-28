@@ -98,9 +98,16 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 
 	// The identity is shown only when a display name is hiding it, so an
 	// unrenamed session reads exactly as it always has.
+	// A session on another machine is named by its name there, not by its rail
+	// identity, and the label says which machine it is on.
+	title, name := item.Title, item.ID
+	if item.Host != "" {
+		name = remoteSessionName(item)
+		title += " @ " + item.Host
+	}
 	identity := ""
-	if item.Title != item.ID {
-		identity = " (" + printableTitle(item.ID) + ")"
+	if item.Title != name {
+		identity = " (" + printableTitle(name) + ")"
 	}
 
 	// The switcher wears the rail's identity mark in the rail's colour, so the
@@ -119,7 +126,7 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 		labelColor = pal.Fg
 	}
 	left := mark + overlay.Style(rowBg).Foreground(labelColor).Bold(selected).
-		Render(overlay.Truncate(printableTitle(item.Title), avail))
+		Render(overlay.Truncate(printableTitle(title), avail))
 	if identity != "" {
 		left += overlay.Style(rowBg).Foreground(pal.FgMute).Render(identity)
 	}

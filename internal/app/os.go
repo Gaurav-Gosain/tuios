@@ -504,6 +504,10 @@ type OS struct {
 	// to AttachedHost drops and cannot be got back, or "" when the client
 	// started on the host.
 	hostReturn string
+	// sessionSwitchHook, when set, replaces the connection work of
+	// switchSession. Tests set it to see which machine and name a surface
+	// asked for without a daemon on either end. Nil in production.
+	sessionSwitchHook func(host, name string) error
 	// hostReconnect is the attempt to get a dropped link back, nil when there
 	// is nothing to get back. See host_reconnect.go.
 	hostReconnect *hostReconnect

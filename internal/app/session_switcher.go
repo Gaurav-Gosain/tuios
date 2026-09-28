@@ -68,7 +68,24 @@ func (m *OS) OpenSessionSwitcher() {
 	m.SessionSwitcherQuery = ""
 	m.SessionSwitcherSelected = 0
 	m.SessionSwitcherScroll = 0
-	m.SessionSwitcherItems = m.BuildSessionTree().Sessions
+	m.SessionSwitcherItems = m.sessionSwitcherItems()
+}
+
+// sessionSwitcherItems is the tree's session list without the machines'
+// headers. A header is a group in the rail, not a session: listed here it read
+// as a session called "local" whose Enter asked the daemon for a session named
+// "\x00host/local" (#196). The sessions under each machine stay, and switching
+// to one crosses to its machine through OpenSessionNode.
+func (m *OS) sessionSwitcherItems() []sessiontree.Node {
+	sessions := m.BuildSessionTree().Sessions
+	out := make([]sessiontree.Node, 0, len(sessions))
+	for _, n := range sessions {
+		if n.Kind == sessiontree.KindHost {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // SessionSwitcherTarget returns the session the switcher's selection points at,

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // A session on another machine, attached by this client.
@@ -179,4 +180,119 @@ func hostAttachRefusal(host string, err error) string {
 		return shake.Error() + " Run 'tuios attach --host " + host + " NAME --ssh' to open it over ssh instead."
 	}
 	return err.Error()
+}
+
+// Switching sessions by where they live.
+//
+// A session is addressed by two things: the machine that holds it and its name
+// on that machine's daemon. The tree the rail, the switcher and the palette
+// read carries both, but a row under another machine's group folds them into
+// a rail identity (hostNodeID(host)+":"+name), which is no session's name.
+// Handing that identity to SwitchToSession asks the daemon the client is
+// connected to right now for a session literally called "\x00host/local:home".
+// That was #196: from a remote session the switcher could not get back here,
+// and from here it could not reach a remote session.
+//
+// Every switch that starts from a tree row or a rail hit goes through
+// switchSession, which picks the connection first and the session second.
+
+// errNotASession is what a machine's header answers when asked to be switched
+// to. It is a group, not a place.
+var errNotASession = errors.New("not a session")
+
+// hostUnavailableError is a switch aimed at a machine whose link is not up.
+// Nothing was attempted, so it is reported as a warning.
+type hostUnavailableError struct{ host string }
+
+func (e *hostUnavailableError) Error() string { return e.host + " is unavailable" }
+
+// hostSwitchError is a switch the other machine refused. Its message is the
+// sentence hostAttachRefusal builds, and it is shown as it is.
+type hostSwitchError struct{ msg string }
+
+func (e *hostSwitchError) Error() string { return e.msg }
+
+// sessionNodeTarget splits a session tree node into the machine that holds it
+// and its name there. host is "" for a session on the attached machine, which
+// is reached over the current connection. ok is false for a node that is not
+// a session: a machine's header or a repository group.
+func sessionNodeTarget(n sessiontree.Node) (host, name string, ok bool) {
+	if n.Kind != sessiontree.KindSession {
+		return "", "", false
+	}
+	if n.Host != "" {
+		name = remoteSessionName(n)
+		return n.Host, name, name != ""
+	}
+	return "", n.ID, n.ID != ""
+}
+
+// switchSession attaches the session name on host. An empty host, or the
+// machine the client is already attached to, switches over the current
+// connection. Any other host, this machine included while the client is away,
+// replaces the connection.
+func (m *OS) switchSession(host, name string) error {
+	if host == m.attachedMachine() {
+		host = ""
+	}
+	if host != "" && !m.hostIsUp(host) {
+		return &hostUnavailableError{host: host}
+	}
+	if m.sessionSwitchHook != nil {
+		return m.sessionSwitchHook(host, name)
+	}
+	if host == "" {
+		return m.SwitchToSession(name)
+	}
+	if err := m.SwitchToHostSession(host, name, false); err != nil {
+		return &hostSwitchError{msg: hostAttachRefusal(host, err)}
+	}
+	return nil
+}
+
+// openSession is switchSession for a surface: it reports a failure itself and
+// says whether the client is now on the session.
+func (m *OS) openSession(host, name string) bool {
+	err := m.switchSession(host, name)
+	if err == nil {
+		return true
+	}
+	m.reportSwitchFailure(err)
+	return false
+}
+
+// OpenSessionNode switches to the session a tree node names, on whichever
+// machine holds it, and reports a failure itself. The switcher and the
+// palette reach openSession through it.
+func (m *OS) OpenSessionNode(n sessiontree.Node) bool {
+	host, name, ok := sessionNodeTarget(n)
+	if !ok {
+		m.reportSwitchFailure(errNotASession)
+		return false
+	}
+	return m.openSession(host, name)
+}
+
+// SetSessionSwitchHookForTest makes switchSession hand the machine and name it
+// resolved to fn instead of connecting. Tests outside this package use it to
+// see where a surface sends a switch. Production code never calls it.
+func (m *OS) SetSessionSwitchHookForTest(fn func(host, name string) error) {
+	m.sessionSwitchHook = fn
+}
+
+// reportSwitchFailure shows why a switch did not happen.
+func (m *OS) reportSwitchFailure(err error) {
+	if unavailable, ok := errors.AsType[*hostUnavailableError](err); ok {
+		m.ShowNotification(unavailable.Error(), "warning", m.Settings.NotificationWarningDuration)
+		return
+	}
+	if refused, ok := errors.AsType[*hostSwitchError](err); ok {
+		m.ShowNotification(refused.Error(), "error", m.Settings.NotificationDuration*3)
+		return
+	}
+	if errors.Is(err, errNotASession) {
+		m.ShowNotification("Select a session under the machine name", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 }

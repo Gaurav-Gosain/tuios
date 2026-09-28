@@ -48,11 +48,11 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if selected.IsCurrent {
 				o.ShowNotification("Already on this session", "info", o.Settings.NotificationDuration)
 			} else {
-				// The switch is made by identity: Title is a label and may be
-				// a display name that addresses nothing.
-				if err := o.SwitchToSession(selected.ID); err != nil {
-					o.ShowNotification("Switch failed: "+err.Error(), "error", o.Settings.NotificationDuration*2)
-				}
+				// The switch is made by the node, which knows the machine
+				// and the name: Title is a label and may be a display name
+				// that addresses nothing, and the ID of a row under another
+				// machine is a rail identity that no daemon holds (#196).
+				o.OpenSessionNode(selected)
 			}
 		} else if o.SessionSwitcherQuery != "" {
 			// No matching session: create new one with the typed name
@@ -85,6 +85,12 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// Renames the label, never the identity: the session keeps the name it
 		// is addressed, persisted and detached by.
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
+			if selected.Host != "" {
+				// Renames go to the daemon this client is connected to,
+				// which does not hold another machine's session.
+				o.ShowNotification("Switch to this session to rename it", "info", o.Settings.NotificationDuration)
+				return o, nil
+			}
 			o.BeginRenameSession(selected.ID)
 		}
 		return o, nil
@@ -92,7 +98,10 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	case "ctrl+d":
 		// Request delete confirmation for the selected session
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
-			if selected.IsCurrent {
+			if selected.Host != "" {
+				// The kill goes to this client's daemon too, for the same reason.
+				o.ShowNotification("Switch to this machine to delete this session", "info", o.Settings.NotificationDuration)
+			} else if selected.IsCurrent {
 				o.ShowNotification("Cannot delete the current session", "warning", o.Settings.NotificationDuration)
 			} else {
 				o.SessionSwitcherConfirmDelete = selected.ID
