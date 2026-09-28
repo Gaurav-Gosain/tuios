@@ -383,7 +383,7 @@ func (m *OS) renderDockString() (string, int) {
 	case inCopyMode:
 		// Take the longest help tier that fits; the copy-mode keys are worth a
 		// dock's width but not worth spilling off the end of it.
-		tiers := copyModeHelpTiers(focusedWindow.CopyMode.State)
+		tiers := m.copyModeHelp(focusedWindow)
 		for i, tier := range tiers {
 			rightInfo = renderCopyModeHelp(tier, pal)
 			if lipgloss.Width(rightInfo) <= rightWidth || i == len(tiers)-1 {

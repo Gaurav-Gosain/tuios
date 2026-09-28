@@ -890,10 +890,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+[",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
-					focusedWindow.EnterCopyMode()
-					m.ShowNotification("Copy mode (hjkl, q to exit)", "info", s.NotificationDuration*2)
-				}
+				m.EnterCopyModeFocused()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Multi copy mode",
+			Shortcut: "prefix+[ with multifocus",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EnterMultiCopyMode()
 				return m, nil
 			},
 		},

@@ -562,6 +562,12 @@ type OS struct {
 	// nil. It is dropped the moment it has run its course, so an idle client
 	// holds nothing. See copy_flash.go.
 	copyFlash *copyFlash
+	// copyFlashMore is the sweeps over the other panes of a multi copy mode
+	// yank. They share copyFlash's clock and mean nothing while it is nil.
+	copyFlashMore []copyFlash
+
+	// MultiCopy is multi copy mode while it is on, or nil. See multicopy.go.
+	MultiCopy *MultiCopy
 
 	// hints is hints mode while it is open, or nil. See hints.go.
 	hints *hintsState
@@ -1627,6 +1633,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	m.NextBSPWindowID = 1
 	m.Animations = nil
 	m.MultifocusSet = nil
+	m.MultiCopy = nil
 	// Default to workspace 1, not 0: a brand-new target session has no windows,
 	// so RestoreFromState (which repairs the workspace) never runs, and any
 	// window then created would land on workspace 0, which SwitchToWorkspace

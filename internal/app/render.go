@@ -176,6 +176,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			borderColorObj = tint
 		case isFocused:
 			borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
+		case m.MultiCopyParked(window.ID):
+			// A pane multi copy mode's search found nothing in drops the
+			// multifocus colour: it is out of the selection until a search
+			// finds something in it.
+			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
 		case isMultifocused:
 			// Multifocused windows get a distinct border color (yellow/orange)
 			borderColorObj = theme.BorderMultifocus()

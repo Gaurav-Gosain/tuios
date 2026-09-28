@@ -643,6 +643,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, searchLayer)
 	}
 
+	if l := m.multiCopySaveLayer(); l != nil {
+		layers = append(layers, l)
+	}
+
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
 		m.CleanupExpiredKeys(3 * time.Second)
 		if len(m.RecentKeys) > 0 {
