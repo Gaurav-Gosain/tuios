@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/google/uuid"
 )
@@ -531,6 +532,16 @@ func newWindowErr(err error, sess *Session, ws int) *verbError {
 	// window, and its fallback hint says the target matched nothing and lists
 	// the windows that exist, which on a link failure is advice about the
 	// wrong problem printed under a message about the right one.
+	//
+	// A link that is down has a code of its own, so a caller can say the
+	// machine is unavailable instead of printing the link's state word.
+	if down, ok := errors.AsType[*federation.UnreachableError](err); ok {
+		msg := down.Host + " is unavailable."
+		if down.Reason != "" {
+			msg += " " + down.Reason
+		}
+		return newVerbError(ErrVerbHostUnreachable, msg)
+	}
 	if msg := err.Error(); strings.Contains(msg, "tuios on ") || strings.Contains(msg, "host ") {
 		return newVerbError(ErrVerbInternal, msg)
 	}
