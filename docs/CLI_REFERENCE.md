@@ -61,7 +61,10 @@ paru -S tuios-bin
 ### Nix
 
 ```bash
-# Run directly
+# Run a release (put the tag after the repo name)
+nix run github:Gaurav-Gosain/tuios/v0.8.0#tuios
+
+# Run the newest commit on main
 nix run github:Gaurav-Gosain/tuios#tuios
 
 # Or add to your configuration

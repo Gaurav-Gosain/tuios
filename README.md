@@ -74,8 +74,12 @@ yay -S tuios-bin
 
 **Nix:**
 ```bash
-nix run github:Gaurav-Gosain/tuios#tuios
+nix run github:Gaurav-Gosain/tuios/v0.8.0#tuios   # a release
+nix run github:Gaurav-Gosain/tuios#tuios          # the latest main
+nix run nixpkgs#tuios                             # the nixpkgs package
 ```
+
+Put a release tag after the repo name to build that release. Without a tag, Nix builds the newest commit on `main`.
 
 ### Other Methods
 
