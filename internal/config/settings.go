@@ -314,6 +314,9 @@ type Settings struct {
 	CopyFlashColor string
 	// CopyFlashStyle is the shape the sweep takes. One of CopyFlashStyles.
 	CopyFlashStyle string
+	// MultiCopyFormat is the format multi copy mode starts in: one of
+	// MultiCopyFormats.
+	MultiCopyFormat string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
@@ -687,6 +690,7 @@ func DefaultSettings() Settings {
 		CopyFlashMs:                 CopyFlashMsDefault,
 		CopyFlashColor:              DefaultCopyFlashColor,
 		CopyFlashStyle:              DefaultCopyFlashStyle,
+		MultiCopyFormat:             MultiCopyFormatPlain,
 		HideScrollbar:               false,
 		WindowTitlePosition:         DefaultWindowTitlePosition,
 		WindowTitleFormat:           "",

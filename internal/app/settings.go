@@ -452,6 +452,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.selection.flash_ms"),
 			opt("appearance.selection.flash_style"),
 			opt("appearance.selection.flash_color"),
+			opt("appearance.selection.multi_format"),
 			opt("hints.builtins"),
 			opt("hints.alphabet"),
 			opt("hints.open"),
