@@ -1,0 +1,504 @@
+package tuie2e
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
+)
+
+// Hints mode, driven through a real PTY: open it with the leader and F, read
+// the labels off the host's own grid at the cells the matches are on, type
+// one, and check what left the process on the clipboard (OSC 52) and what the
+// pane looks like afterwards.
+//
+// How these could pass wrongly, written down first:
+//   - A label could be read off a cell the shell coloured. Shell output here is
+//     plain, so a cell with a ground of its own and bold text on it is the
+//     label and nothing else.
+//   - The clipboard could hold the text from an earlier copy. Every assertion
+//     counts only the writes made after the label was typed, and requires
+//     exactly one.
+//   - The pane could look normal because hints never opened. Each test first
+//     waits for the labels, and only then for them to go.
+//   - A wrapped URL could copy as its first half and still "work". The test
+//     compares the whole address.
+//
+// Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md): a build
+// without the hints action (the one line in registerPrefixHandlers removed)
+// fails every test here at the wait for the labels; rowIsFull returning false
+// fails the wrapped URL test on the clipboard; and dropping the
+// fixHintsWideCells call fails the wide character test on the row layout.
+
+// hintsLine is printed in the pane. It holds a URL, a path with a line
+// number, a short hash and an IPv4 address, separated by spaces.
+const (
+	hintsURL  = "https://example.com/hint-e2e"
+	hintsPath = "/tmp/hint-e2e/main.go:12"
+	hintsSHA  = "deadbee42"
+	hintsIP   = "10.20.30.40"
+)
+
+// hintsAlphabet is the shipped label alphabet.
+const hintsAlphabet = "asdfghjkl"
+
+// startHints starts a client with one shell in terminal mode, standalone or
+// attached to a daemon session, with config written to the client's config
+// file first.
+func startHints(t *testing.T, daemon bool, config string, out *lockedBuffer) *tuitest.Terminal {
+	t.Helper()
+	base := t.TempDir()
+	if config != "" {
+		writeConfig(t, base, config)
+	}
+	opts := startOpts{}
+	if out != nil {
+		opts.out = out
+	}
+	if !daemon {
+		term := startIn(t, base, opts)
+		waitBoot(t, term)
+		newWindow(t, term)
+		enterTerminalMode(t, term)
+		return term
+	}
+	killDaemon(t, base)
+	if o, err := tuiosCLI(t, base, "new", "e2e-hints", "--detach"); err != nil {
+		t.Fatalf("create session: %v\n%s", err, o)
+	}
+	opts.args = []string{"attach", "e2e-hints"}
+	term := startIn(t, base, opts)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	enterTerminalMode(t, term)
+	return term
+}
+
+// openHints presses the leader and F.
+func openHints(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if err := term.SendKeys(tuitest.Ctrl('b'), "F"); err != nil {
+		t.Fatalf("send leader F: %v", err)
+	}
+}
+
+// isHintLabelCell reports whether a cell is drawn as a hint label: a letter
+// of the alphabet, bold, on a ground of its own.
+func isHintLabelCell(c tuitest.Cell) bool {
+	return c.Bold && c.Bg.Kind != tuitest.ColorDefault &&
+		len(c.Content) == 1 && strings.Contains(hintsAlphabet, c.Content)
+}
+
+// hintLabelAt reads the label drawn from (col, row) rightwards, or "".
+func hintLabelAt(s tuitest.Screen, col, row int) string {
+	cols, _ := s.Size()
+	first := s.Cell(col, row)
+	if !isHintLabelCell(first) {
+		return ""
+	}
+	var b strings.Builder
+	for c := col; c < cols && c < col+3; c++ {
+		cell := s.Cell(c, row)
+		if !isHintLabelCell(cell) || cell.Bg != first.Bg {
+			break
+		}
+		b.WriteString(cell.Content)
+	}
+	return b.String()
+}
+
+// waitHintLabel waits for a label on the first cell of want, which must be on
+// the screen at (col, row), and returns it.
+func waitHintLabel(t *testing.T, term *tuitest.Terminal, col, row int, want string) string {
+	t.Helper()
+	var label string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		label = hintLabelAt(s, col, row)
+		return label != ""
+	}, uiTimeout); err != nil {
+		t.Fatalf("no hint label on %q at (%d,%d): %v\n%s", want, col, row, err, term.Snapshot())
+	}
+	return label
+}
+
+// findLastOnGrid is findOnGrid for the last occurrence, which for a line a
+// shell printed is the output rather than the command that printed it.
+func findLastOnGrid(s tuitest.Screen, want string) (col, row int, ok bool) {
+	cols, rows := s.Size()
+	for r := rows - 1; r >= 0; r-- {
+		for c := range cols {
+			if gridMatchesAt(s, c, r, want) {
+				return c, r, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// hintsNoLabels reports whether no cell on the screen is drawn as a label.
+func hintsNoLabels(s tuitest.Screen) bool {
+	cols, rows := s.Size()
+	for r := range rows {
+		for c := range cols {
+			if isHintLabelCell(s.Cell(c, r)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// printHintsLine prints the four matches on one line and returns where each
+// starts in the output row.
+func printHintsLine(t *testing.T, term *tuitest.Terminal) map[string][2]int {
+	t.Helper()
+	line := strings.Join([]string{hintsURL, hintsPath, hintsSHA, hintsIP}, " ")
+	runInShell(t, term, "printf '%s\\n' '"+line+"' ; echo HINTS-READY", "HINTS-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+	at := map[string][2]int{}
+	for _, want := range []string{hintsURL, hintsPath, hintsSHA, hintsIP} {
+		c, r, ok := findLastOnGrid(s, want)
+		if !ok {
+			t.Fatalf("%q is not on screen:\n%s", want, term.Snapshot())
+		}
+		at[want] = [2]int{c, r}
+	}
+	return at
+}
+
+// TestHintCopiesTheMatch opens hints, checks a label is drawn on each of the
+// four matches, types the label of each in turn and checks the clipboard gets
+// exactly that text, once, and that the pane is drawn as it was afterwards.
+// Standalone and against a daemon session, which is how tuios ships.
+func TestHintCopiesTheMatch(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
+			out := &lockedBuffer{}
+			term := startHints(t, daemon, "", out)
+			at := printHintsLine(t, term)
+			before := term.Screen()
+
+			for i, want := range []string{hintsURL, hintsPath, hintsSHA, hintsIP} {
+				openHints(t, term)
+				pos := at[want]
+				label := waitHintLabel(t, term, pos[0], pos[1], want)
+				frame := term.Screen()
+
+				// Every match has a label, and no two share one.
+				seen := map[string]string{}
+				for _, other := range []string{hintsURL, hintsPath, hintsSHA, hintsIP} {
+					p := at[other]
+					l := hintLabelAt(frame, p[0], p[1])
+					if l == "" {
+						t.Fatalf("%q has no label while hints are open:\n%s", other, term.Snapshot())
+					}
+					if prev, dup := seen[l]; dup {
+						t.Fatalf("%q and %q share the label %q", prev, other, l)
+					}
+					seen[l] = other
+				}
+				// The text around the matches is dimmed: plain output that
+				// matches nothing no longer draws in the default ink.
+				if c, r, ok := findLastOnGrid(frame, "HINTS-READY"); !ok {
+					t.Errorf("the marker line is gone while hints are open:\n%s", term.Snapshot())
+				} else if cell := frame.Cell(c, r); cell.Fg.Kind == tuitest.ColorDefault && !cell.Faint {
+					t.Errorf("the text around the matches is not dimmed: %+v", cell)
+				}
+				// The rest of the match is lit and keeps its text.
+				if tail := len(want) - 1; !gridMatchesAt(frame, pos[0]+len(label), pos[1], want[len(label):]) {
+					t.Errorf("the match text after the label changed; want %q from column %d:\n%s",
+						want[len(label):], pos[0]+len(label), term.Snapshot())
+				} else if !frame.Cell(pos[0]+tail, pos[1]).Bold {
+					t.Errorf("the end of %q is not lit", want)
+				}
+				if i == 0 {
+					saveArtifact(t, term, artifactDir(t), "hints-open")
+					t.Logf("hints open, labels %v:\n%s", seen, term.Snapshot())
+				}
+
+				from := len(clipboardWrites(out))
+				if err := term.SendKeys(label); err != nil {
+					t.Fatalf("type label %q: %v", label, err)
+				}
+				waitClipboardSequence(t, term, out, from, want)
+
+				// Back to normal: no label anywhere, and the match text where
+				// it was.
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					return hintsNoLabels(s) && gridMatchesAt(s, pos[0], pos[1], want)
+				}, uiTimeout); err != nil {
+					t.Fatalf("the pane did not go back to normal after the copy: %v\n%s", err, term.Snapshot())
+				}
+			}
+			after := term.Screen()
+			for _, want := range []string{hintsURL, hintsPath, hintsSHA, hintsIP} {
+				p := at[want]
+				if a, b := after.Cell(p[0], p[1]), before.Cell(p[0], p[1]); a.Bg != b.Bg || a.Bold != b.Bold {
+					t.Errorf("%q still draws differently after hints closed: %+v, was %+v", want, a, b)
+				}
+			}
+			saveArtifact(t, term, artifactDir(t), "hints-closed")
+			alive(t, term, "after copying with hints")
+		})
+	}
+}
+
+// TestHintShiftTypesTheMatch types a label with Shift, which copies the match
+// and types it into the pane: here, after a half-typed echo, which the shell
+// then runs.
+func TestHintShiftTypesTheMatch(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "", out)
+	at := printHintsLine(t, term)
+
+	// A command waiting for its argument.
+	if err := term.SendKeys("echo TYPED-"); err != nil {
+		t.Fatalf("type the command: %v", err)
+	}
+	if err := term.WaitForText("$ echo TYPED-", uiTimeout); err != nil {
+		t.Fatalf("the command never reached the prompt: %v\n%s", err, term.Snapshot())
+	}
+
+	openHints(t, term)
+	pos := at[hintsSHA]
+	label := waitHintLabel(t, term, pos[0], pos[1], hintsSHA)
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(strings.ToUpper(label)); err != nil {
+		t.Fatalf("type %q: %v", strings.ToUpper(label), err)
+	}
+	waitClipboardSequence(t, term, out, from, hintsSHA)
+
+	// The hash is at the prompt, typed and not run.
+	if err := term.WaitForText("$ echo TYPED-"+hintsSHA, uiTimeout); err != nil {
+		t.Fatalf("the match was not typed at the prompt: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-typed")
+
+	// The shell took it as typed input.
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("run the command: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, ok := findLastOnGrid(s, "TYPED-"+hintsSHA)
+		return ok && strings.Count(s.Text(), "TYPED-"+hintsSHA) >= 2
+	}, shellTimeout); err != nil {
+		t.Fatalf("the shell did not run the typed match: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after typing a match with hints")
+}
+
+// TestHintEscClosesWithoutCopying opens hints, presses esc, and checks nothing
+// was copied, the labels are gone, and the next key reaches the shell again.
+func TestHintEscClosesWithoutCopying(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "", out)
+	at := printHintsLine(t, term)
+	from := len(clipboardWrites(out))
+
+	openHints(t, term)
+	pos := at[hintsURL]
+	waitHintLabel(t, term, pos[0], pos[1], hintsURL)
+
+	// A letter that starts no label is dropped, not typed into the pane.
+	if err := term.SendKeys("z"); err != nil {
+		t.Fatalf("send z: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return hintsNoLabels(s) && gridMatchesAt(s, pos[0], pos[1], hintsURL)
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc did not close hints: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(clipboardSettle)
+	if got := clipboardSince(out, from); len(got) != 0 {
+		t.Fatalf("esc copied something: %q", got)
+	}
+	if strings.Contains(term.Screen().Text(), "$ z") {
+		t.Fatalf("a key pressed while hints were open reached the shell:\n%s", term.Snapshot())
+	}
+	runInShell(t, term, "echo AFTER-ESC-OK", "AFTER-ESC-OK", shellTimeout)
+	alive(t, term, "after closing hints with esc")
+}
+
+// TestHintWrappedURLCopiesWhole prints a URL longer than the pane is wide, so
+// the pane wraps it, and checks the label copies the whole address.
+func TestHintWrappedURLCopiesWhole(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "", out)
+
+	var parts []string
+	for i := 1; i <= 18; i++ {
+		parts = append(parts, fmt.Sprintf("segment%d", i))
+	}
+	url := "https://example.com/" + strings.Join(parts, "-")
+	// The command builds the URL, so the only full copy on screen is the
+	// output. Its first piece is unique to it.
+	cmd := "printf 'https://example.com/%s\\n' $(printf 'segment%d-' $(seq 1 17))segment18; echo WRAP-READY"
+	runInShell(t, term, cmd, "WRAP-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	head := "https://example.com/segment1-segment2"
+	col, row, ok := findOnGrid(term.Screen(), head)
+	if !ok {
+		t.Fatalf("the URL is not on screen:\n%s", term.Snapshot())
+	}
+	cols, _ := term.Screen().Size()
+	if col+len(url) <= cols {
+		t.Fatalf("the URL (%d chars from column %d) fits on one %d-column row, so it did not wrap", len(url), col, cols)
+	}
+
+	openHints(t, term)
+	label := waitHintLabel(t, term, col, row, url)
+	// The part on the next row is lit as part of the same match.
+	if s := term.Screen(); !s.Cell(1, row+1).Bold {
+		t.Errorf("the wrapped half of the URL is not lit:\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-wrapped")
+
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(label); err != nil {
+		t.Fatalf("type %q: %v", label, err)
+	}
+	waitClipboardSequence(t, term, out, from, url)
+	alive(t, term, "after copying a wrapped URL")
+}
+
+// TestHintCustomPattern adds a pattern in [hints] and checks its match gets a
+// label and copies whole, ahead of the number built-in that covers part of it.
+func TestHintCustomPattern(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "[hints]\npatterns = ['TICKET-\\d+']\n", out)
+
+	runInShell(t, term, "echo see TICKET-4242 now; echo CUSTOM-READY", "CUSTOM-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	col, row, ok := findLastOnGrid(term.Screen(), "TICKET-4242")
+	if !ok {
+		t.Fatalf("the ticket is not on screen:\n%s", term.Snapshot())
+	}
+
+	openHints(t, term)
+	label := waitHintLabel(t, term, col, row, "TICKET-4242")
+	// The number inside the ticket has no label of its own.
+	if l := hintLabelAt(term.Screen(), col+len("TICKET-"), row); l != "" {
+		t.Errorf("the number inside the ticket got its own label %q", l)
+	}
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(label); err != nil {
+		t.Fatalf("type %q: %v", label, err)
+	}
+	waitClipboardSequence(t, term, out, from, "TICKET-4242")
+	alive(t, term, "after copying a custom match")
+}
+
+// TestHintCtrlOpensAPath opens a path with Ctrl and its label. A path opens in
+// a new pane running $EDITOR, the way a file link does; here the editor is
+// tail, so the file's text on screen is the proof it opened.
+func TestHintCtrlOpensAPath(t *testing.T) {
+	out := &lockedBuffer{}
+	base := t.TempDir()
+	dir := t.TempDir()
+	file := dir + "/opened.txt"
+	if err := os.WriteFile(file, []byte("OPENED-BY-HINTS\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	term := startIn(t, base, startOpts{out: out, env: []string{"EDITOR=tail -f"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo "+file+"; echo OPEN-READY", "OPEN-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	col, row, ok := findLastOnGrid(term.Screen(), file)
+	if !ok {
+		t.Fatalf("the path is not on screen:\n%s", term.Snapshot())
+	}
+
+	openHints(t, term)
+	label := waitHintLabel(t, term, col, row, file)
+	keys := make([]any, 0, len(label))
+	for _, r := range label {
+		keys = append(keys, tuitest.Ctrl(r))
+	}
+	if err := term.SendKeys(keys...); err != nil {
+		t.Fatalf("type ctrl+%s: %v", label, err)
+	}
+	waitWindowCount(t, term, 2, "opening the path in a new pane")
+	if err := term.WaitForText("OPENED-BY-HINTS", shellTimeout); err != nil {
+		t.Fatalf("the file did not open in the editor pane: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-opened")
+	alive(t, term, "after opening a path with hints")
+}
+
+// TestHintWideCharacters puts matches after wide glyphs and a label on top of
+// one. The label must sit on the match's first cell, and a label written over
+// half of a wide glyph must not push the rest of the row over.
+func TestHintWideCharacters(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "[hints]\npatterns = ['漢字-\\d+']\n", out)
+
+	const wideURL = "https://example.com/wide-e2e"
+	runInShell(t, term, "echo 日本語 "+wideURL+" 漢字-42 tail-marker; echo WIDE-READY", "WIDE-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	before := term.Screen()
+	ucol, row, ok := findLastOnGrid(before, wideURL)
+	if !ok {
+		t.Fatalf("the URL is not on screen:\n%s", term.Snapshot())
+	}
+	tcol, trow, ok := findLastOnGrid(before, "tail-marker")
+	if !ok || trow != row {
+		t.Fatalf("the marker is not on the URL's row:\n%s", term.Snapshot())
+	}
+	// The ticket starts two cells after the URL: a space, then the wide glyph.
+	kcol := ucol + len(wideURL) + 1
+	if c := before.Cell(kcol, row); c.Content != "漢" || c.Width != 2 {
+		t.Fatalf("expected the wide glyph at column %d, got %+v", kcol, c)
+	}
+
+	openHints(t, term)
+	urlLabel := waitHintLabel(t, term, ucol, row, wideURL)
+	wideLabel := waitHintLabel(t, term, kcol, row, "漢字-42")
+	frame := term.Screen()
+	// Everything after the label on the wide glyph is where it was.
+	if !gridMatchesAt(frame, tcol, row, "tail-marker") {
+		t.Fatalf("the label on the wide glyph moved the rest of the row:\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-wide")
+
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(wideLabel); err != nil {
+		t.Fatalf("type %q: %v", wideLabel, err)
+	}
+	waitClipboardSequence(t, term, out, from, "漢字-42")
+
+	openHints(t, term)
+	waitHintLabel(t, term, ucol, row, wideURL)
+	from = len(clipboardWrites(out))
+	if err := term.SendKeys(urlLabel); err != nil {
+		t.Fatalf("type %q: %v", urlLabel, err)
+	}
+	waitClipboardSequence(t, term, out, from, wideURL)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		c := s.Cell(kcol, row)
+		return hintsNoLabels(s) && c.Content == "漢" && c.Width == 2
+	}, uiTimeout); err != nil {
+		t.Fatalf("the wide glyph did not come back after hints closed: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after hints over wide glyphs")
+}
