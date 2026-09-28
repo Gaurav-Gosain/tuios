@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -208,5 +209,32 @@ func TestLinkHoverDoesNotJoinTwoLines(t *testing.T) {
 		if link.Y0 != probe.y || link.Y1 != probe.y {
 			t.Errorf("row %d: the run spans rows %d to %d, want one row", probe.y, link.Y0, link.Y1)
 		}
+	}
+}
+
+// TestLinkHoverDoesNotJoinAFullLineToTheNext is the case a full last column
+// cannot tell from a wrap: a line exactly as wide as the pane, ended with a
+// newline, then a line that starts with text a URL could carry on into. The
+// two are two lines, and the URL on the first must not take the second.
+//
+// Negative control: joining on a full last column, as this did before the
+// emulator recorded wraps, resolves the URL with "tail/more" glued on.
+func TestLinkHoverDoesNotJoinAFullLineToTheNext(t *testing.T) {
+	const grid = 58 // the test window's content width
+	head := "go https://example.com/"
+	first := head + strings.Repeat("a", grid-len(head))
+	_, win := linkTestOS(t, first+"\r\ntail/more\r\n")
+	if w := win.Terminal.Width(); w != grid {
+		t.Fatalf("the grid is %d columns, the test assumes %d", w, grid)
+	}
+	link, ok := resolvePaneLink(win, len(head)+2, 0, &config.Global)
+	if !ok {
+		t.Fatal("no link resolved")
+	}
+	if want := first[3:]; link.URL != want {
+		t.Errorf("resolved %q, want %q", link.URL, want)
+	}
+	if link.Y1 != 0 {
+		t.Errorf("the run ends on row %d, want row 0", link.Y1)
 	}
 }
