@@ -436,6 +436,9 @@ type OS struct {
 	layerCells     map[string]*cellLayer
 	composeGen     uint64
 	composeScratch []composedLayer
+	// railFit is the rail's row budget scratch, reused by every row the rail
+	// draws. See railScratch.
+	railFit railScratch
 	// groundCache is each surface's resolved background and the setting and
 	// theme it was resolved from. paneContentRects is each pane layer's
 	// content rectangle on this frame, in screen cells, filled only while the
