@@ -133,23 +133,13 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Check for prefix key in terminal mode
 	if isLeaderKey(msg, &o.Settings) {
-		// If prefix is already active, send the leader key to terminal
+		// Leader twice sends the leader itself to the pane, as tmux does with
+		// prefix prefix. It is encoded like any forwarded key: CSI u for a
+		// kitty pane, legacy bytes otherwise. A leader with no legacy encoding
+		// is dropped rather than replaced with some other key.
 		if o.PrefixActive {
 			o.PrefixActive = false
-			if focusedWindow != nil {
-				// Use CSI u encoding if kitty keyboard is active
-				if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
-					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(paneMsg(msg, o)), focusedWindow.Terminal.KittyKeyboardFlags())
-					if len(encoded) > 0 {
-						o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
-						_ = focusedWindow.SendInput([]byte(encoded))
-						return o, nil
-					}
-				}
-				// Legacy: send raw Ctrl+B byte
-				o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
-				_ = focusedWindow.SendInput([]byte{0x02})
-			}
+			forwardKeyToFocusedWindow(msg, o)
 			return o, nil
 		}
 		// Activate prefix mode

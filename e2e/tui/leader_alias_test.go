@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -46,5 +47,44 @@ func TestLeaderSpelledWithOptAliasStartsThePrefix(t *testing.T) {
 
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("close the prefix menu: %v", err)
+	}
+}
+
+// TestLeaderTwiceSendsTheLeaderToThePane is issue #213. Pressing the leader
+// twice in terminal mode must send the leader itself to the pane. It sent
+// Ctrl+B (0x02) whatever the leader was.
+//
+// The pane runs a one-byte reader that prints the byte it gets in hex. The
+// markers are split with "" so the typed command cannot satisfy the waits.
+//
+// Negative control: restore the hardcoded 0x02 in HandleTerminalModeKey and
+// this fails with GOT:02 on screen.
+func TestLeaderTwiceSendsTheLeaderToThePane(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[keybindings]\nleader_key = \"ctrl+a\"\n")
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ready-$((4+5))", "ready-9", shellTimeout)
+
+	reader := `sh -c 'stty raw -echo; echo RE""AD; b=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d " \n"); stty sane; echo G""OT:$b'`
+	runInShell(t, term, reader, "READ", shellTimeout)
+
+	if err := term.SendKeys(tuitest.Ctrl('a')); err != nil {
+		t.Fatalf("send the first Ctrl+A: %v", err)
+	}
+	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
+		t.Fatalf("Ctrl+A did not start the prefix chord with leader_key = ctrl+a: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('a')); err != nil {
+		t.Fatalf("send the second Ctrl+A: %v", err)
+	}
+	if err := term.WaitForText("GOT:", shellTimeout); err != nil {
+		t.Fatalf("the reader got no byte after the leader twice: %v\n%s", err, term.Snapshot())
+	}
+	if !strings.Contains(term.Screen().Text(), "GOT:01") {
+		t.Fatalf("the pane did not get Ctrl+A (01) after the leader twice:\n%s", term.Snapshot())
 	}
 }
