@@ -395,9 +395,14 @@ func itoa(n int) string {
 }
 
 // readAs returns the canonical spelling of key when it differs from what the
-// user wrote by more than case, and "" when it does not.
+// user wrote by more than case, and "" when it does not. A key the validator
+// rejects on this platform gets "" too: opt+f12 on Linux is not read as
+// anything, and the doctor lists it as a key tuios cannot read.
 func readAs(key string) string {
 	trimmed := strings.TrimSpace(key)
+	if ok, _ := (&KeyNormalizer{isMacOS: macOSHost}).ValidateKey(trimmed); !ok {
+		return ""
+	}
 	canonical := CanonicalKey(trimmed)
 	if canonical == trimmed || canonical == strings.ToLower(trimmed) {
 		return ""

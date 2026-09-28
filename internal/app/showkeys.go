@@ -239,7 +239,7 @@ func renderShowkeysFrom(recentKeys []KeyEvent, s *config.Settings) string {
 		}
 
 		// Check if this is the leader key
-		isLeaderKey := config.IsLeaderPress(normalizedKeyCombination, s.LeaderKey)
+		isLeaderKey := config.IsLeaderPress(config.CanonicalKey(normalizedKeyCombination), s.LeaderKey)
 
 		// Create pill-style element using Powerline semicircles: ▌ key ▐
 		var left, content, right string
