@@ -50,6 +50,9 @@ type Scrollback struct {
 	tail int
 	// full is set once tail has caught up with head.
 	full bool
+	// wraps holds, per ring slot, whether the line carried on to the next
+	// one by autowrap. It is indexed like lines and grown with it.
+	wraps []bool
 	// onTrim is called when the ring overwrites its oldest line. The
 	// argument is the number of lines dropped.
 	onTrim func(int)
@@ -231,6 +234,7 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 
 	if sb.full {
 		sb.lines[sb.tail] = buf
+		sb.wraps[sb.tail] = false
 	} else {
 		if len(sb.lines) == cap(sb.lines) {
 			grown := make([][]byte, len(sb.lines), min(sb.maxLines, max(2*cap(sb.lines), 64)))
@@ -238,6 +242,7 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 			sb.lines = grown
 		}
 		sb.lines = append(sb.lines, buf)
+		sb.wraps = append(sb.wraps, false)
 	}
 
 	sb.tail = (sb.tail + 1) % sb.maxLines
@@ -497,6 +502,25 @@ func (sb *Scrollback) unpackColor(v uint32) color.Color {
 	return nil
 }
 
+// markNewestWrapped records whether the line pushed last carried on to the
+// next line by autowrap.
+func (sb *Scrollback) markNewestWrapped(wrapped bool) {
+	if sb.Len() == 0 {
+		return
+	}
+	sb.wraps[(sb.tail-1+sb.maxLines)%sb.maxLines] = wrapped
+}
+
+// LineWrapped reports whether the line at index, oldest first, carried on to
+// the next line by autowrap. The last line of the ring carries on to the
+// screen's first row.
+func (sb *Scrollback) LineWrapped(index int) bool {
+	if index < 0 || index >= sb.Len() {
+		return false
+	}
+	return sb.wraps[sb.slot(index)]
+}
+
 // Len returns the number of lines in the ring.
 func (sb *Scrollback) Len() int {
 	if sb.full {
@@ -694,6 +718,7 @@ func (sb *Scrollback) Clear() {
 	sb.tail = 0
 	sb.full = false
 	sb.lines = nil
+	sb.wraps = nil
 	sb.gen++
 	if sb.onTrim != nil && count > 0 {
 		sb.onTrim(count)
@@ -798,15 +823,19 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	oldLen := sb.Len()
 	newLen := min(oldLen, maxLines)
 	var newLines [][]byte
+	var newWraps []bool
 	if newLen > 0 {
 		newLines = make([][]byte, newLen)
+		newWraps = make([]bool, newLen)
 	}
 	startIndex := oldLen - newLen // drop the oldest when shrinking
 	for i := range newLen {
 		newLines[i] = sb.lines[sb.slot(startIndex+i)]
+		newWraps[i] = sb.wraps[sb.slot(startIndex+i)]
 	}
 
 	sb.lines = newLines
+	sb.wraps = newWraps
 	sb.maxLines = maxLines
 	sb.head = 0
 	sb.tail = newLen % maxLines

@@ -628,6 +628,7 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 		// moves cursor down similar to [Terminal.linefeed] except it doesn't
 		// respects [ansi.LNM] mode.
 		// This will reset the phantom state i.e. pending wrap state.
+		e.noteSoftWrap(left, right)
 		e.index()
 		_, y = e.scr.CursorPosition()
 		x = left
@@ -688,6 +689,7 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 			return printConsumed
 		}
 		e.scr.SetCell(x, y, nil)
+		e.noteSoftWrap(left, right)
 		e.index()
 		_, y = e.scr.CursorPosition()
 		x = left

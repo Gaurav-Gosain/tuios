@@ -48,6 +48,12 @@ type grid struct {
 	// blanks: at 207 columns a 10-character line cost 22 KB of cell reads and
 	// writes. With the extent they stop where the text does.
 	ext []int
+	// wrap holds, for each row, whether the row's text carries on to the
+	// next row because autowrap moved it there. A line that ended with a
+	// newline, however long it was, leaves it false. It moves with the row
+	// wherever the row moves, and a blank or a fill that reaches the row's
+	// last column clears it, since the text that wrapped is gone.
+	wrap []bool
 }
 
 // gridBlank is the cell CellAt returns for a column of a row that has not
@@ -57,7 +63,7 @@ type grid struct {
 var gridBlank = uv.EmptyCell
 
 func newGrid(width, height int) *grid {
-	return &grid{rows: make([]uv.Line, height), ext: make([]int, height), width: width}
+	return &grid{rows: make([]uv.Line, height), ext: make([]int, height), wrap: make([]bool, height), width: width}
 }
 
 // raiseExt records that row y may hold something other than a blank up to
@@ -180,14 +186,19 @@ func (g *grid) Resize(width, height int) {
 		for y := range g.ext {
 			g.ext[y] = min(g.ext[y], width)
 		}
+		// Rows are cut or padded, not reflowed, so a row that wrapped at
+		// the old width does not wrap at the new one.
+		clear(g.wrap)
 	}
 	if height > len(g.rows) {
 		g.ext = append(g.ext, make([]int, height-len(g.rows))...)
+		g.wrap = append(g.wrap, make([]bool, height-len(g.rows))...)
 		g.rows = append(g.rows, make([]uv.Line, height-len(g.rows))...)
 	} else if height < len(g.rows) {
 		clear(g.rows[height:])
 		g.rows = g.rows[:height]
 		g.ext = g.ext[:height]
+		g.wrap = g.wrap[:height]
 	}
 }
 
@@ -199,6 +210,19 @@ func (g *grid) Clear() {
 			row[x] = uv.EmptyCell
 		}
 		g.ext[y] = 0
+	}
+	clear(g.wrap)
+}
+
+// SoftWrapped reports whether row y carries on to row y+1 by autowrap.
+func (g *grid) SoftWrapped(y int) bool {
+	return y >= 0 && y < len(g.wrap) && g.wrap[y]
+}
+
+// setSoftWrapped records whether row y carries on to row y+1 by autowrap.
+func (g *grid) setSoftWrapped(y int, wrapped bool) {
+	if y >= 0 && y < len(g.wrap) {
+		g.wrap[y] = wrapped
 	}
 }
 
@@ -220,6 +244,12 @@ func (g *grid) ClearArea(area uv.Rectangle) {
 // also stops at the row's extent, past which every cell is blank already.
 // ED and EL reach here for every frame most full-screen programs draw.
 func (g *grid) FillArea(c *uv.Cell, area uv.Rectangle) {
+	// A fill that reaches the last column replaces the text that wrapped.
+	if area.Max.X >= g.width && area.Min.X < g.width {
+		for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.wrap); y++ {
+			g.wrap[y] = false
+		}
+	}
 	blank := isBlankFill(c)
 	if c != nil && c.Width > 1 {
 		// A wide fill steps by its width. No emulator path fills with one.
@@ -277,6 +307,7 @@ func (g *grid) fullWidth(area uv.Rectangle) bool {
 // A blank fill writes only up to each row's extent: past it the row is blank
 // already.
 func (g *grid) blankRows(y, end int, c *uv.Cell) {
+	clear(g.wrap[y:end])
 	if isBlankFill(c) {
 		for i := y; i < end; i++ {
 			row := g.rows[i]
@@ -412,6 +443,10 @@ func (g *grid) rotateExt(y, end, mid int) {
 	slices.Reverse(g.ext[y:mid])
 	slices.Reverse(g.ext[mid:end])
 	slices.Reverse(g.ext[y:end])
+	// The wrap flags travel with their rows the same way.
+	slices.Reverse(g.wrap[y:mid])
+	slices.Reverse(g.wrap[mid:end])
+	slices.Reverse(g.wrap[y:end])
 }
 
 // anyRow reports whether any of rows y to end-1 has been written.
