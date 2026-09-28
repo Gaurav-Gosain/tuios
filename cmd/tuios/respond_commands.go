@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Peek and respond on the command line: read the prompt an agent is blocked
@@ -81,11 +82,13 @@ func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 		fmt.Fprintf(w, "%s. Look at the pane with: tuios capture-pane -w %s\n", capitalFirst(plainLine(p.Reason)), shortWindowID(p.Window))
 		return nil
 	}
-	fmt.Fprintf(w, untrustedOpen+"\n", who)
-	for _, l := range p.Lines {
-		fmt.Fprintln(w, plainLine(l))
+	// Each screen line is kept to one line, then fenced behind the gutter,
+	// so a line on the pane cannot pass for the close.
+	lines := make([]string, len(p.Lines))
+	for i, l := range p.Lines {
+		lines[i] = plainLine(l)
 	}
-	fmt.Fprintln(w, untrustedClose)
+	fmt.Fprintln(w, session.UntrustedFence(who, strings.Join(lines, "\n")))
 	if len(p.Options) > 0 {
 		fmt.Fprintln(w, "Options:")
 		for _, o := range p.Options {
