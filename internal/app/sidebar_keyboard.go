@@ -572,6 +572,12 @@ func (m *OS) SidebarNewSession() {
 		return
 	}
 	m.clearSidebarReturn() // the new session is where the user asked to end up
+	if m.AttachedHost != "" {
+		// The connection goes to another machine, and a create sent over it
+		// would make the session there.
+		m.makeSessionHere(false)
+		return
+	}
 	// Creating a session is a daemon round trip, and this runs on the Update
 	// goroutine. Doing it inline parked input, rendering and socket draining for
 	// as long as the daemon took, made worse by the background session poll
@@ -598,6 +604,13 @@ func (m *OS) SidebarNewGlobalSession() {
 		return
 	}
 	m.clearSidebarReturn()
+	if m.AttachedHost != "" {
+		// The global group is this machine's. From a session on another
+		// machine the create goes to this machine's daemon, not over the
+		// connection to that machine.
+		m.makeSessionHere(true)
+		return
+	}
 	name := m.nextGlobalSessionName()
 	client, ch := m.DaemonClient, m.sessionCreateChan()
 	w, h := m.GetContentWidth(), m.GetUsableHeight()

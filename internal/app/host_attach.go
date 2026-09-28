@@ -33,6 +33,31 @@ import (
 // else. Once it has succeeded the old connection is closed silently: its
 // session keeps running where it is.
 func (m *OS) SwitchToHostSession(host, name string, create bool) error {
+	return m.switchToHostSession(host, name, create, false)
+}
+
+// makeSessionHere makes a session on this machine's daemon and attaches it.
+// With global set it is a global session, and its first pane is asked for at
+// once, the way SessionCreatedMsg does it for one made from here.
+//
+// It is for a client attached to a session on another machine. That client's
+// connection goes to the other machine's daemon, so a create sent over it
+// makes the session there, and "this machine" in the picker would mean
+// whichever machine the client last switched to.
+func (m *OS) makeSessionHere(global bool) {
+	if err := m.switchToHostSession(federation.LocalHostName, "", true, global); err != nil {
+		m.ShowNotification("Could not make a session on this machine: "+err.Error(),
+			"error", m.Settings.NotificationDuration*2)
+		return
+	}
+	m.applyStartupTiling()
+	m.sidebarFollowSession = m.SessionName
+	if global {
+		m.NewWindowHere()
+	}
+}
+
+func (m *OS) switchToHostSession(host, name string, create, global bool) error {
 	if m.DaemonClient == nil {
 		return fmt.Errorf("not in daemon mode")
 	}
@@ -58,7 +83,21 @@ func (m *OS) SwitchToHostSession(host, name string, create bool) error {
 		return err
 	}
 	if name == "" && create {
-		name = freeSessionName(client.AvailableSessionNames())
+		if global {
+			name = freeGlobalSessionName(client.AvailableSessionNames())
+		} else {
+			name = freeSessionName(client.AvailableSessionNames())
+		}
+	}
+	if global {
+		// A global session is made empty and marked by the daemon, which an
+		// attach that creates does not do. So it is made first and attached
+		// as an existing session.
+		if err := client.CreateGlobalSession(name, width, height); err != nil {
+			_ = client.Close()
+			return err
+		}
+		create = false
 	}
 	state, err := client.AttachSession(name, create, width, height)
 	if err != nil {

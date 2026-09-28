@@ -1624,6 +1624,15 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 
 	if state == nil || len(state.Windows) == 0 {
 		m.adoptEmptySessionVersion(state)
+		// The labels are the session's, and RestoreFromState, which adopts
+		// them for a session with windows, does not run for one without. The
+		// global mark matters most: a new global session is empty, and with
+		// the mark of the session just left its first pane was made on this
+		// machine without the picker, or a plain session asked for one.
+		if state == nil {
+			state = &session.SessionState{}
+		}
+		m.adoptSessionLabels(state)
 		return
 	}
 

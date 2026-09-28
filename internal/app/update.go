@@ -1292,7 +1292,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// again whatever it was doing, because the daemon with no hosts, which
 		// stopped it, may now have one; the answer says whether to keep going.
 		m.federationPolling = true
-		return m, refreshFederationCmd()
+		// The push came off the client event channel, which is read one
+		// event at a time, so the listener is armed again here. Without it the
+		// first host push was the last event this client heard: every later
+		// link change waited for the minute backstop poll, and in that minute
+		// the picker offered machines that were down and refused ones that
+		// were up.
+		return m, tea.Batch(refreshFederationCmd(), ListenForClientEvents(m.ClientEventChan))
 
 	case HostTestDoneMsg:
 		// Storing the results is the whole handler. The ssh children ran in the

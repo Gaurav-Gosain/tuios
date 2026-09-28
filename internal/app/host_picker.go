@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -51,6 +52,15 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 		Detail: "local",
 		Up:     true,
 	}}
+	// The rows name machines the way this machine's daemon does. A window is
+	// made by the daemon that holds the session, and a session on another
+	// machine has no link back here that this client knows of, so this
+	// machine is listed and cannot be chosen. A session always can: it is
+	// made on this machine's own daemon wherever the client is.
+	if m.HostPickerPurpose == HostPickerNewWindow && m.AttachedHost != "" {
+		items[0].Up = false
+		items[0].Detail = "not from " + m.AttachedHost
+	}
 	// A global session is the answer to the same question, and the only place
 	// the question is asked, so it is a row here rather than a second control
 	// somewhere else. It is offered first because a session that will hold
@@ -226,10 +236,27 @@ type NewWindowOnHostMsg struct {
 // A machine that is not up is refused here rather than attempted, because the
 // attempt is a link dial with a timeout on the end of it and the answer is
 // already known.
+//
+// The row names a machine as this machine's daemon knows it, and the window
+// is made by the daemon that holds the session, which is another machine's
+// while the client is attached there. So the row is turned into a request to
+// that daemon here: the machine it holds is a plain window on it, and any
+// other machine is a window it opens over its own link.
+//
+// Whether the machine is up is asked again here. The list is a snapshot from
+// when the picker opened, and a link that dropped since then would otherwise
+// be dialled with a timeout on the end of it.
 func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 	m.ShowHostPicker = false
 	m.HostPickerQuery = ""
-	if !item.Up {
+	attached := m.AttachedHost // "" is this machine
+	if item.Name == "" && attached != "" {
+		m.CancelPendingSplit()
+		m.ShowNotification(attached+" cannot open a pane on this machine. Open it from a session on this machine",
+			"warning", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	if !item.Up || (item.Name != "" && !m.hostIsUp(item.Name)) {
 		// The window is not being made, so a split waiting for it is not
 		// happening either.
 		m.CancelPendingSplit()
@@ -237,7 +264,8 @@ func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 			m.Settings.NotificationWarningDuration)
 		return nil
 	}
-	if item.Name == "" {
+	if item.Name == attached {
+		// The machine that holds the session: an ordinary window there.
 		_ = m.CreateNewWindow()
 		return nil
 	}
@@ -260,10 +288,16 @@ func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 // Nothing here adds the window. The daemon creates it and pushes the session
 // state, and this client adopts it the way it adopts a window any other client
 // made. This only reports the failure, which is the half no push can carry.
+//
+// The call goes to the daemon that holds the session: this machine's, or the
+// attached machine's through the link. It used to go to this machine's daemon
+// always, so from a session on another machine the window was made in a
+// session of the same name here, or not at all.
 func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 	name := m.SessionName
+	dial := m.sessionDaemonDialer()
 	return func() tea.Msg {
-		client, err := session.DialVerbClient()
+		client, err := dial()
 		if err != nil {
 			return NewWindowOnHostMsg{Host: host, Err: err}
 		}
@@ -277,6 +311,23 @@ func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 	}
 }
 
+// sessionDaemonDialer opens a verb connection to the daemon that holds the
+// attached session: this machine's directly, or another machine's through the
+// link. It is read on the UI goroutine and called off it.
+func (m *OS) sessionDaemonDialer() func() (*session.VerbClient, error) {
+	host, build := m.AttachedHost, ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	return func() (*session.VerbClient, error) {
+		if host == "" {
+			return session.DialVerbClient()
+		}
+		c, _, err := session.DialVerbClientThroughHost(host, build)
+		return c, err
+	}
+}
+
 // newWindowOnHostTimeout covers the far daemon spawning a process over a link
 // that is already up, plus the room the open itself is given.
 const newWindowOnHostTimeout = 30 * time.Second
@@ -284,20 +335,28 @@ const newWindowOnHostTimeout = 30 * time.Second
 // ApplyNewWindowOnHost reports what came back. Success says nothing: the window
 // appearing is the answer, and a notification on top of it would be noise.
 func (m *OS) ApplyNewWindowOnHost(msg NewWindowOnHostMsg) {
+	// A link that went down after the pick says so in its own words, which
+	// already name the machine.
+	var call *session.VerbCallError
+	if errors.As(msg.Err, &call) && call.Code == session.ErrVerbHostUnreachable {
+		m.ShowNotification(call.Message, "warning", m.Settings.NotificationWarningDuration)
+		return
+	}
 	if msg.Err != nil {
 		m.ShowNotification("Could not open a window on "+msg.Host+": "+msg.Err.Error(),
 			"error", m.Settings.NotificationDuration*3)
 	}
 }
 
-// hostPickerActivate opens a window on the machine on row idx, for a click.
-// The keyboard path reaches the same place through ChooseHostForNewWindow.
+// hostPickerActivate runs row idx, for a click. It goes through ChooseHost,
+// as enter does, so a click in the session picker makes a session. It used to
+// make a window whatever the picker was open for.
 func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	filtered := FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery)
 	if idx < 0 || idx >= len(filtered) {
 		return nil
 	}
-	return m.ChooseHostForNewWindow(filtered[idx])
+	return m.ChooseHost(filtered[idx])
 }
 
 // GlobalSessionName is the session that holds panes from more than one
@@ -315,11 +374,17 @@ const GlobalSessionName = "global"
 // "global", then "global-2" and up. The first one keeps the bare name because
 // most people will only ever have one.
 func (m *OS) nextGlobalSessionName() string {
+	if m.DaemonClient == nil {
+		return freeGlobalSessionName(nil)
+	}
+	return freeGlobalSessionName(m.DaemonClient.AvailableSessionNames())
+}
+
+// freeGlobalSessionName is the first global session name not in names.
+func freeGlobalSessionName(names []string) string {
 	taken := map[string]bool{}
-	if m.DaemonClient != nil {
-		for _, n := range m.DaemonClient.AvailableSessionNames() {
-			taken[n] = true
-		}
+	for _, n := range names {
+		taken[n] = true
 	}
 	if !taken[GlobalSessionName] {
 		return GlobalSessionName
