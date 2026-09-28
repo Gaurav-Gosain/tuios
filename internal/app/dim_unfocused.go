@@ -35,10 +35,6 @@ import (
 // below only stops a pane from being erased outright, where there would be
 // nothing left to tell the setting had worked.
 
-// dimBlend is the fraction of the way to the ground an unfocused cell is
-// carried, for the configured percentage.
-func dimBlend(s *config.Settings) float64 { return float64(s.DimUnfocused) / 100 }
-
 // paneDim is the dim that applies to one pane this frame: the configured
 // amount for an unfocused pane, and none for the focused one.
 //
