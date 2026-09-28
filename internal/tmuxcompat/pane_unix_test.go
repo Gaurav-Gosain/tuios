@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func runHolderIfAsked() {
 			beforeReply = func() { time.Sleep(d) }
 		}
 		if gate := os.Getenv(exitGateEnvKey); gate != "" {
-			afterExit = func() { exitGate(gate) }
+			afterExit = func(waiting *atomic.Int32) { exitGate(gate, waiting) }
 		}
 		os.Exit(RunPane(PaneOptions{
 			Dir:     os.Getenv("TMUXCOMPAT_TEST_DIR"),
@@ -51,19 +52,15 @@ const (
 	exitGateEnvKey   = "TMUXCOMPAT_TEST_EXIT_GATE"
 )
 
-// exitGate holds a holder whose command has ended until the test has sent a
-// request: it writes <dir>/exited, waits for <dir>/sent, then gives the
-// request a moment to reach the holder's queue.
-func exitGate(dir string) {
+// exitGate holds a holder whose command has ended until a request waits on
+// its queue: it writes <dir>/exited, then waits until waiting is above zero.
+// The deadline is only a failsafe for a test that never sends.
+func exitGate(dir string, waiting *atomic.Int32) {
 	_ = os.WriteFile(filepath.Join(dir, "exited"), []byte("1"), 0o600)
 	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(filepath.Join(dir, "sent")); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	for waiting.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
 	}
-	time.Sleep(300 * time.Millisecond)
 }
 
 // shortDir is a temporary directory with a short path: a unix socket path is
@@ -204,9 +201,6 @@ func TestHolderAnswersARequestWaitingAtExit(t *testing.T) {
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 	respawned := filepath.Join(dir, "respawned")
 	if _, err := conn.Write([]byte(`{"window":"` + window + `","command":["touch ` + respawned + `"]}` + "\n")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "sent"), []byte("1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reply, err := bufio.NewReader(conn).ReadString('\n')
