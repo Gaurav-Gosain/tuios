@@ -74,7 +74,7 @@ type GlyphSet struct {
 	Border *BorderGlyphs `json:"border,omitempty"`
 
 	// The window controls. One cell each: the renderer pads them into the
-	// three- and four-cell buttons the title bar's hit rectangles are measured
+	// two-cell buttons the title bar's hit rectangles are measured
 	// against, so a set cannot move a button out from under the pointer.
 	Close     string `json:"close,omitempty"`
 	Maximize  string `json:"maximize,omitempty"`
