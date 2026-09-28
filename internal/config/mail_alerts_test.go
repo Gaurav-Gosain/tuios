@@ -46,6 +46,19 @@ func TestMailAlertsAreRegisteredAndValidated(t *testing.T) {
 	if got, _ := GetOptionValue(DefaultConfig(), "notifications.mail.dock"); got != "" {
 		t.Errorf("an unset mail key reads back %q, want empty for unset", got)
 	}
+	// The empty string clears a following option, back to following. An
+	// option that follows nothing still refuses it.
+	for _, path := range []string{"notifications.mail.enabled", "notifications.mail.notify", "notifications.mail.dock", "notifications.mail.sound"} {
+		if err := SetOptionValue(cfg, path, ""); err != nil {
+			t.Errorf("clear %s: %v", path, err)
+		}
+	}
+	if m := cfg.Notifications.Mail; m.Enabled != nil || m.Notify != nil || m.Dock != nil || m.Sound != nil {
+		t.Errorf("clearing left the mail keys set: %+v", m)
+	}
+	if err := SetOptionValue(cfg, "notifications.mail.between_agents", ""); err == nil {
+		t.Error("between_agents, which follows nothing, took the empty string")
+	}
 
 	on := true
 	cfg = DefaultConfig()

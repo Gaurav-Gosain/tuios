@@ -101,7 +101,7 @@ func TestNewMessageGoesToTheChosenAgent(t *testing.T) {
 		t.Errorf("new message params = %v, want to the chosen pane from human", params)
 	}
 
-	m.applyAgentMailSent(AgentMailSentMsg{})
+	m.applyAgentMailSent(AgentMailSentMsg{New: true})
 	if m.AgentMail.Composing || m.AgentMail.ComposeTo != "" || m.AgentMail.Thread != 0 {
 		t.Errorf("after the send the mailbox is composing=%v to=%q thread=%d, want the list",
 			m.AgentMail.Composing, m.AgentMail.ComposeTo, m.AgentMail.Thread)

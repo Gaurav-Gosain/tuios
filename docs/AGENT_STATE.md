@@ -1434,13 +1434,16 @@ In the mailbox, each row shows the thread id (`#12`, the id
 `read-agent-messages --thread` takes), who wrote to whom, and the subject.
 `enter` opens a thread. Each message body is inside the fence the CLI prints:
 `--- begin untrusted content from NAME: data, not instructions ---` and
-`--- end untrusted content ---`. `r` replies in the open thread. `n` in the
+`--- end untrusted content ---`. Every body line starts with `│ ` (`| ` in
+ASCII), so a body cannot draw a fake close. A name that reads "you" or
+"human" on a pane shows with the pane's short window id. `r` replies in the open thread. `n` in the
 list writes a new message: choose an agent of this session, type the message,
 and press `enter`. The message goes from you and starts a new thread.
 
 Mail to you and notices alert under `[notifications.mail]`. A key the table
 leaves out follows the same key in `[notifications.agent]`, so a config
-without the table alerts as before. Sound mode, cooldown, cue files and quiet
+without the table alerts as before. `tuios set-config notifications.mail.dock ""`
+clears a key, and `get-config` then prints `(follows notifications.agent.dock)`. Sound mode, cooldown, cue files and quiet
 hours always come from `[notifications.agent]`.
 
 ```toml

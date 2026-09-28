@@ -60,9 +60,12 @@ type AgentMailLoadedMsg struct {
 	Err      error
 }
 
-// AgentMailSentMsg is the outcome of a reply the person sent.
+// AgentMailSentMsg is the outcome of a reply or a new message the person
+// sent. New is true for a new message. It rides on the result because the
+// line it was typed on may be closed by the time the daemon answers.
 type AgentMailSentMsg struct {
 	Err error
+	New bool
 }
 
 // AgentMailMarkedMsg is the outcome of marking the person's mail read. It
@@ -81,9 +84,17 @@ type AgentMailState struct {
 	// Gen counts changes to the mirror, so the rail's render cache can tell one
 	// state from the next without comparing them.
 	Gen uint64
-	// SeenID is the newest message id the person has had on screen. A thread
-	// with a newer message is marked new in the list.
+	// SeenID is the newest message id the person has had on screen with the
+	// whole list in view, which is how the mailbox is left when it closes.
+	// A thread with a newer message is marked new in the list, unless Seen
+	// holds that message.
 	SeenID uint64
+	// Seen holds the messages newer than SeenID that the person has had on
+	// screen one thread at a time: a thread opened, or a message the person
+	// wrote. They are kept by id, not by raising SeenID, because SeenID is a
+	// high-water mark and raising it would mark older messages in other
+	// threads seen too.
+	Seen map[uint64]bool
 	// Inbox narrows the list to threads touching one window, when the overlay
 	// was opened from that window's row. Empty lists every thread.
 	Inbox string
@@ -185,7 +196,7 @@ func agentMailName(id, label string, recipient bool) string {
 	case id == session.AgentInboxHuman:
 		return "you"
 	case label != "":
-		return printableTitle(label)
+		return agentMailNotThePerson(id, printableTitle(label))
 	case id != "":
 		return shortWindowLabel(id)
 	case recipient:
@@ -193,6 +204,24 @@ func agentMailName(id, label string, recipient bool) string {
 	default:
 		return "someone"
 	}
+}
+
+// agentMailNotThePerson keeps a pane from being drawn as the person. A label
+// that reads "you" or "human", in any case, on anything but the person's own
+// inbox gets the short window id after it, since "you" is how the mailbox
+// names the person and a pane can set its title to anything.
+func agentMailNotThePerson(id, name string) string {
+	if id == session.AgentInboxHuman {
+		return name
+	}
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "you", "human":
+		if id == "" {
+			return name + " (not you)"
+		}
+		return name + " (" + shortWindowLabel(id) + ")"
+	}
+	return name
 }
 
 // shortWindowLabel is the first eight characters of a window id, which is how
@@ -284,13 +313,13 @@ func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	// What the person wrote is not news to the person. A claim to be the
 	// person is, since something else wrote it.
 	if msg.From == session.AgentInboxHuman && !msg.ClaimedHuman {
-		st.SeenID = max(st.SeenID, msg.ID)
+		m.agentMailSee(msg.ID)
 	}
 
 	// A message the overlay is already showing needs no announcement, and the
 	// view follows it.
 	if m.ShowAgentMail && st.Thread == msg.ThreadID {
-		st.SeenID = max(st.SeenID, msg.ID)
+		m.agentMailSee(msg.ID)
 		st.Scroll = agentMailBottom
 		return
 	}
@@ -442,10 +471,27 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	st.ComposeTo = ""
 	st.Thread = thread
 	st.Scroll = agentMailBottom
-	for _, mm := range m.agentMailThreadMessages(thread) {
-		st.SeenID = max(st.SeenID, mm.ID)
-	}
+	m.agentMailSeeThread(thread)
 	return m.agentMailMarkRead(thread)
+}
+
+// agentMailSee records one message as seen, without touching any other.
+func (m *OS) agentMailSee(id uint64) {
+	st := &m.AgentMail
+	if id <= st.SeenID {
+		return
+	}
+	if st.Seen == nil {
+		st.Seen = map[uint64]bool{}
+	}
+	st.Seen[id] = true
+}
+
+// agentMailSeeThread records every message in one thread as seen.
+func (m *OS) agentMailSeeThread(thread uint64) {
+	for _, mm := range m.agentMailThreadMessages(thread) {
+		m.agentMailSee(mm.ID)
+	}
 }
 
 // CloseAgentMail hides the mailbox. Everything on screen counts as seen.
@@ -454,6 +500,8 @@ func (m *OS) CloseAgentMail() {
 	if n := len(st.Messages); n > 0 {
 		st.SeenID = max(st.SeenID, st.Messages[n-1].ID)
 	}
+	// Everything up to the high-water mark is seen now, so the set is empty.
+	st.Seen = nil
 	m.ShowAgentMail = false
 	st.Composing = false
 	st.Draft = ""
@@ -562,7 +610,7 @@ func (m *OS) agentMailThreads() []agentMailThread {
 		if mm.Kind == "message" && mm.To == session.AgentInboxHuman && mm.ReadAt == 0 {
 			th.Unread = true
 		}
-		if mm.ID > st.SeenID {
+		if mm.ID > st.SeenID && !st.Seen[mm.ID] {
 			th.New = true
 		}
 	}
@@ -637,7 +685,7 @@ func (m *OS) AgentMailOpenSelected() tea.Cmd {
 	st.Thread = threads[st.Selected].ID
 	st.Scroll = agentMailBottom
 	st.Error = ""
-	st.SeenID = max(st.SeenID, threads[st.Selected].LastID)
+	m.agentMailSeeThread(st.Thread)
 	return m.agentMailMarkRead(st.Thread)
 }
 
@@ -790,6 +838,12 @@ func (m *OS) AgentMailStartNew() bool {
 	}
 	st.Picking = true
 	st.PickSelected = 0
+	// A mailbox opened for one pane starts the list on that pane.
+	for i, w := range m.agentMailComposeTargets() {
+		if w.ID == st.Inbox {
+			st.PickSelected = i
+		}
+	}
 	st.Error = ""
 	return true
 }
@@ -827,6 +881,7 @@ func (m *OS) AgentMailType(text string) {
 	}
 	m.noteDraftTouched()
 	m.AgentMail.Draft += text
+	m.AgentMail.Error = ""
 }
 
 // AgentMailBackspace removes the last rune of the draft.
@@ -864,7 +919,11 @@ func (m *OS) agentMailReplyNonce(attach string) string {
 func (m *OS) AgentMailSendReply() tea.Cmd {
 	st := &m.AgentMail
 	text := strings.TrimSpace(st.Draft)
-	if !st.Composing || text == "" || st.Sending {
+	if !st.Composing || st.Sending {
+		return nil
+	}
+	if text == "" {
+		st.Error = "Type a message first."
 		return nil
 	}
 	// A new message goes to the chosen pane and answers nothing, so the
@@ -899,11 +958,12 @@ func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string
 	return func() tea.Msg {
 		client, err := dial()
 		if err != nil {
-			return AgentMailSentMsg{Err: err}
+			return AgentMailSentMsg{Err: err, New: replyTo == 0}
 		}
 		defer func() { _ = client.Close() }()
 		_, err = client.Call("send-agent-message", agentMailReplyParams(remote, sessionName, inbox, replyTo, text, nonce))
-		return AgentMailSentMsg{Err: err}
+		// A reply always answers a message, so no reply_to is a new message.
+		return AgentMailSentMsg{Err: err, New: replyTo == 0}
 	}
 }
 
@@ -936,13 +996,13 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 	st.Sending = false
 	if msg.Err != nil {
 		what := "The reply"
-		if st.ComposeTo != "" {
+		if msg.New {
 			what = "The message"
 		}
 		st.Error = what + " did not send. " + msg.Err.Error()
 		return
 	}
-	if st.ComposeTo != "" {
+	if msg.New && st.ComposeTo != "" {
 		// A new message starts the newest thread, which is the top row.
 		st.Selected = 0
 		st.Scroll = 0

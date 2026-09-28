@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -37,7 +38,9 @@ func sanitizeNotifyText(s string) string {
 		case '\n', '\r', '\t':
 			b.WriteRune(' ')
 		default:
-			if r < 0x20 {
+			// Zero-width and bidi formatting characters would let the text
+			// read as something other than what it holds.
+			if r < 0x20 || session.InvisibleFormatRune(r) {
 				continue
 			}
 			b.WriteRune(r)

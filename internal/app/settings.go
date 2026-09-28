@@ -92,6 +92,12 @@ type settingItem struct {
 	// spelling, and differsFromDefault compares that with the registry
 	// default. Without it these rows never showed the changed dot.
 	differs func(m *OS) bool
+	// reset puts a hand-written row back to its default, for a row whose
+	// default is not a value its control can write: a mail alert row goes
+	// back to following the agent row by clearing its key. resetShown is how
+	// the default reads in the row's note.
+	reset      func(m *OS)
+	resetShown string
 }
 
 // settingsCategory groups related settings under a tab.
@@ -839,8 +845,10 @@ func (m *OS) mailAlertItem(path, label, desc string, get func(config.MailAlertPo
 		func() bool { return get(m.mailAlertPolicy()) },
 		func(m *OS, v bool) { m.setOption(path, strconv.FormatBool(v)) })
 	// Changed means the mail key is set, so the row no longer follows the
-	// agent row.
+	// agent row. Reset clears the key, and the row follows it again.
 	item.differs = func(m *OS) bool { return m.optionValue(path) != "" }
+	item.reset = func(m *OS) { m.setOption(path, "") }
+	item.resetShown = "the agent row"
 	return item
 }
 
