@@ -563,6 +563,9 @@ type OS struct {
 	// holds nothing. See copy_flash.go.
 	copyFlash *copyFlash
 
+	// hints is hints mode while it is open, or nil. See hints.go.
+	hints *hintsState
+
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See
 	// ArmPrefixRepeat.

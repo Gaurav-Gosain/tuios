@@ -310,6 +310,9 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 			scrimmed = true
 		}
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
+		if m.hints != nil {
+			m.applyHints(canvas, cl.layer.GetID(), &grounds)
+		}
 		switch id := cl.layer.GetID(); {
 		case fading:
 			m.applyFade(canvas, id, cl.bounds, now)

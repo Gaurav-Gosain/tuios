@@ -198,6 +198,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 
 	validateDock(cfg, result)
+	validateHints(cfg, result)
 
 	return result
 }

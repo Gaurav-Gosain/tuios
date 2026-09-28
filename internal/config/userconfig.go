@@ -34,6 +34,9 @@ type UserConfig struct {
 	// screen and dims the rest. Client-local appearance, like the theme. See
 	// spotlight.go.
 	Spotlight SpotlightConfig `toml:"spotlight"`
+	// Hints is the [hints] table: what hints mode labels on a pane. See
+	// hints.go.
+	Hints HintsConfig `toml:"hints"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -717,6 +720,7 @@ func DefaultConfig() *UserConfig {
 		Screenshot:  defaultScreenshotConfig(),
 		Screensaver: defaultScreensaverConfig(),
 		Spotlight:   defaultSpotlightConfig(),
+		Hints:       defaultHintsConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -905,6 +909,9 @@ func DefaultConfig() *UserConfig {
 				// prefix stays armed so O O O walks back through them.
 				"prefix_review":        {"v"},
 				"prefix_next_finished": {"O"},
+				// F, as in tmux-fingers. f is free too, and is left free so
+				// a slip on Shift does nothing rather than something else.
+				"hints": {"F"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -1484,6 +1491,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	fillMissingScreenshot(&cfg, defaultCfg)
 	fillMissingScreensaver(&cfg, defaultCfg)
 	fillMissingSpotlight(&cfg, defaultCfg)
+	fillMissingHints(&cfg, defaultCfg)
 	return &cfg, nil
 }
 

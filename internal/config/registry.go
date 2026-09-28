@@ -579,6 +579,7 @@ var ActionDescriptions = map[string]string{
 	"copy_selection":  "Copy selection to clipboard",
 	"paste_clipboard": "Paste from clipboard",
 	"clear_selection": "Clear the text selection",
+	"hints":           "Label the text on the pane to copy it",
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",

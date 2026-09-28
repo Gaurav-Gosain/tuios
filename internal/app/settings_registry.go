@@ -84,6 +84,10 @@ var settingLabels = map[string]string{
 	"debug.show_key_events":             "Show keys",
 	"daemon.log_level":                  "Log level",
 	"tape.auto_review":                  "Auto-open review",
+	"hints.builtins":                    "Hint patterns",
+	"hints.alphabet":                    "Hint letters",
+	"hints.open":                        "Ctrl opens a hint",
+	"hints.dim":                         "Dim around hints",
 
 	"appearance.sidebar.sections":             "Sections",
 	"appearance.sidebar.file_icons":           "File icons",
@@ -147,6 +151,7 @@ var settingPlaceholders = map[string]string{
 	"dock.clock.format":                    "15:04",
 	"appearance.preferred_shell":           "/bin/bash",
 	"appearance.word_characters":           "@-./_~?&=%+#",
+	"hints.builtins":                       "url,path,sha,ip",
 	"notifications.agent.command":          "notify-send {state} {title}",
 	"notifications.agent.quiet_hours":      "22:00-08:00",
 }
@@ -168,6 +173,7 @@ var settingSteps = map[string]int{
 	"appearance.zoom_max_width":   10,
 	"appearance.dim_unfocused":    5,
 	"appearance.modal_dim":        5,
+	"hints.dim":                   5,
 	"appearance.sidebar.width":    2,
 }
 

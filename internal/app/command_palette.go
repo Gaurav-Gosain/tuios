@@ -809,6 +809,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Hints: label text on the pane to copy it",
+			Shortcut: "prefix+F",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenHints()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Toggle show keys",
 			Shortcut: "prefix+D k",
 			Category: "Session",
