@@ -511,6 +511,15 @@ func (sb *Scrollback) markNewestWrapped(wrapped bool) {
 	sb.wraps[(sb.tail-1+sb.maxLines)%sb.maxLines] = wrapped
 }
 
+// setWrapped records whether the line at index, oldest first, carried on to
+// the next line by autowrap. An index outside the ring is ignored.
+func (sb *Scrollback) setWrapped(index int, wrapped bool) {
+	if index < 0 || index >= sb.Len() {
+		return
+	}
+	sb.wraps[sb.slot(index)] = wrapped
+}
+
 // LineWrapped reports whether the line at index, oldest first, carried on to
 // the next line by autowrap. The last line of the ring carries on to the
 // screen's first row.

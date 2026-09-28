@@ -63,6 +63,30 @@ func (e *Emulator) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	return sb.LineWrapped(index), true
 }
 
+// RestoreSoftWraps sets the soft-wrap flags a snapshot carries. See
+// Terminal.RestoreSoftWraps.
+func (e *Emulator) RestoreSoftWraps(screen, history []bool) {
+	buf := e.scr.buf
+	for y := range buf.Height() {
+		buf.setSoftWrapped(y, y < len(screen) && screen[y])
+	}
+	if main := &e.scrs[0]; main != e.scr {
+		clear(main.buf.wrap)
+	}
+	sb := e.scrs[0].Scrollback()
+	if sb == nil || sb.Len() == 0 {
+		return
+	}
+	if len(history) == 0 {
+		sb.setWrapped(sb.Len()-1, false)
+		return
+	}
+	base := sb.Len() - len(history)
+	for i, w := range history {
+		sb.setWrapped(base+i, w)
+	}
+}
+
 // horizontalTabSet sets a horizontal tab stop at the current cursor position.
 func (e *Emulator) horizontalTabSet() {
 	x, _ := e.scr.CursorPosition()

@@ -38,6 +38,12 @@ type ghosttyRestore struct {
 	penLink          uv.Link
 	hasPen           bool
 	kittyKbdStack    []int
+	// screenWraps and historyWraps are the soft-wrap flags the snapshot
+	// carries (see RestoreSoftWraps). The library keeps a wrap flag only for
+	// a row it wrapped itself, so the synthesis reproduces each one by
+	// typing the row out to the edge and letting the next row carry on.
+	screenWraps  []bool
+	historyWraps []bool
 }
 
 func (t *GhosttyTerminal) pendingRestore() *ghosttyRestore {
@@ -115,9 +121,19 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		seq.WriteString("\x1bc")
 	}
 
-	// Scrollback replays as printed lines pushed off the top.
+	// Scrollback replays as printed lines pushed off the top. A line that
+	// wrapped is typed out to the edge with no newline, so the next line
+	// carries on from it and the library records the wrap itself. The last
+	// line cannot carry on into the screen, which is painted separately, so
+	// its wrap is not reproduced and it reads as ending.
 	if len(r.scrollback) > 0 {
-		for _, line := range r.scrollback {
+		off := len(r.historyWraps) - len(r.scrollback)
+		for i, line := range r.scrollback {
+			if i < len(r.scrollback)-1 && off+i >= 0 && r.historyWraps[off+i] {
+				appendStyledLine(&seq, padLine(line, t.width))
+				seq.WriteString("\x1b[0m")
+				continue
+			}
 			appendStyledLine(&seq, trimTrailingBlanks(line))
 			seq.WriteString("\x1b[0m\r\n")
 		}
@@ -130,14 +146,19 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		seq.WriteString("\x1b[2J\x1b[H")
 	}
 
-	// Main screen cells.
-	appendGridPaint(&seq, r.grids[0], t.width, t.height)
+	// Main screen cells. The snapshot's wrap flags are the active screen's,
+	// so they go with the main screen only while it is the active one.
+	altActive := r.hasAltScreen && r.altScreen
+	var mainWraps []bool
+	if !altActive {
+		mainWraps = r.screenWraps
+	}
+	appendGridPaint(&seq, r.grids[0], t.width, t.height, mainWraps)
 
 	// The alternate screen switches on before its cells paint, so region,
 	// pen and cursor below land on the screen the snapshot took them from.
 	// The switch also ends the shadow's view of the main screen, so the
 	// stream so far is applied and the main shadow captured first.
-	altActive := r.hasAltScreen && r.altScreen
 	if altActive {
 		t.term.VTWrite(seq.Bytes())
 		seq.Reset()
@@ -149,7 +170,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 			t.mainSbLen = int(n)
 		}
 		seq.WriteString("\x1b[?1049h\x1b[2J\x1b[H")
-		appendGridPaint(&seq, r.grids[1], t.width, t.height)
+		appendGridPaint(&seq, r.grids[1], t.width, t.height, r.screenWraps)
 	}
 
 	// Charsets.
@@ -299,22 +320,28 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 }
 
 // appendGridPaint paints buffered cells row by row with minimal style churn.
-func appendGridPaint(seq *bytes.Buffer, grid map[[2]int]*uv.Cell, width, height int) {
+// A row wraps says wrapped is typed out to the edge, and the row after it is
+// typed straight on without a cursor move, so the library wraps it and keeps
+// the flag. The last row cannot wrap, since that would scroll the screen.
+func appendGridPaint(seq *bytes.Buffer, grid map[[2]int]*uv.Cell, width, height int, wraps []bool) {
 	if len(grid) == 0 {
 		return
 	}
+	carrying := false
 	for y := 0; y < height; y++ {
-		rowHas := false
-		for x := 0; x < width; x++ {
+		wrapped := y < len(wraps) && wraps[y] && y < height-1
+		rowHas := wrapped || carrying
+		for x := 0; x < width && !rowHas; x++ {
 			if _, ok := grid[[2]int{x, y}]; ok {
 				rowHas = true
-				break
 			}
 		}
 		if !rowHas {
 			continue
 		}
-		fmt.Fprintf(seq, "\x1b[%d;1H", y+1)
+		if !carrying {
+			fmt.Fprintf(seq, "\x1b[%d;1H", y+1)
+		}
 		line := make(uv.Line, width)
 		for x := 0; x < width; x++ {
 			if c, ok := grid[[2]int{x, y}]; ok && c != nil {
@@ -323,9 +350,28 @@ func appendGridPaint(seq *bytes.Buffer, grid map[[2]int]*uv.Cell, width, height 
 				line[x] = uv.Cell{Content: " ", Width: 1}
 			}
 		}
-		appendStyledLine(seq, trimTrailingBlanks(line))
+		if wrapped {
+			appendStyledLine(seq, line)
+		} else {
+			appendStyledLine(seq, trimTrailingBlanks(line))
+		}
 		seq.WriteString("\x1b[0m")
+		carrying = wrapped
 	}
+}
+
+// padLine is line cut or padded with blanks to exactly width cells, for a row
+// that has to be typed out to the edge.
+func padLine(line uv.Line, width int) uv.Line {
+	if len(line) >= width {
+		return line[:width]
+	}
+	out := make(uv.Line, width)
+	copy(out, line)
+	for x := len(line); x < width; x++ {
+		out[x] = uv.Cell{Content: " ", Width: 1}
+	}
+	return out
 }
 
 // appendStyledLine emits one line's cells with SGR changes only at style

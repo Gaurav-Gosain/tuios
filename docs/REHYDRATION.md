@@ -306,6 +306,19 @@ Two things had to be true for that rule to hold, and neither was:
   (`GetTerminalStatePacked`), and `TestDirectPackMatchesPack` holds that to the
   same bytes as `GetTerminalState` followed by `Pack`.
   `TestWireCarriesTheWholeCell` runs every shape under both forms.
+- **The soft-wrap flags are carried.** `ScreenWraps` and `ScrollbackWraps` are
+  one bit per row: the active screen's rows, and the history rows the snapshot
+  sends, in order. A set bit says the emulator wrapped that row onto the next;
+  a row that is merely full ended with a newline. Writing cells does not touch
+  the flags, so a pane whose emulator survived a workspace switch kept the
+  flags of what its rows showed before, and hints and the link hover joined a
+  row the snapshot ended to the row under it. `ApplyTerminalState` sets them
+  last, through `RestoreSoftWraps`. A daemon from before the fields sends
+  neither, which reads as no row wrapped. The ghostty backend reproduces each
+  flag by typing the row out to the edge in its restore synthesis; the one it
+  cannot reproduce is the newest history row carrying on into the screen,
+  which it reads as ending. `TestApplyTerminalStateClearsStaleWraps` and
+  `TestApplyTerminalStateCarriesWraps` run on both backends.
 
 ## A resize is a point in the stream
 

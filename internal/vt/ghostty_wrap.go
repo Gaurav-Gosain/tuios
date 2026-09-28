@@ -52,3 +52,15 @@ func ghosttyRowWrap(term *gh.Terminal, p gh.Point) bool {
 	wrapped, err := row.Wrap()
 	return err == nil && wrapped
 }
+
+// RestoreSoftWraps buffers the snapshot's soft-wrap flags for the restore
+// synthesis, which reproduces them (see ghosttyRestore). The library clears a
+// screen row's flag when the synthesis erases the screen, so a row the
+// snapshot does not mark reads as ending, as the interface asks.
+func (t *GhosttyTerminal) RestoreSoftWraps(screen, history []bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	r := t.pendingRestore()
+	r.screenWraps = append([]bool(nil), screen...)
+	r.historyWraps = append([]bool(nil), history...)
+}

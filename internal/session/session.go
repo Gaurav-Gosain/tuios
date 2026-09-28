@@ -3018,7 +3018,19 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 	} else {
 		stateCells(t, state, colors, first, end)
 	}
+	screen := make([]bool, state.Height)
+	for y := range screen {
+		screen[y], _ = t.RowSoftWrapped(y)
+	}
+	state.ScreenWraps = wrapBits(screen)
 	return state
+}
+
+// historyWrap is the soft-wrap flag of scrollback row i, appended to flags
+// by the capture loops as they send each row, so bit n is the n-th row sent.
+func historyWrap(t vt.Terminal, flags []bool, i int) []bool {
+	w, _ := t.ScrollbackSoftWrapped(i)
+	return append(flags, w)
 }
 
 // scrollbackWindow returns the scrollback rows [first, end) a snapshot carries.
@@ -3082,11 +3094,14 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 	// merely starts a new array.
 	state.Scrollback = make([][]CellState, 0)
 	var pool []CellState
+	var wraps []bool
+	defer func() { state.ScrollbackWraps = wrapBits(wraps) }()
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
+		wraps = historyWrap(t, wraps, i)
 		if cap(pool) < len(line) {
 			pool = make([]CellState, max(len(line), width*(end-i)))
 		}
@@ -3126,11 +3141,13 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 	state.PackedScreen = grid(t.CellAt)
 
 	b := newPackedRows((end - first) * 32)
+	var wraps []bool
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
+		wraps = historyWrap(t, wraps, i)
 		if cap(row) < len(line) {
 			row = make([]CellState, len(line))
 		}
@@ -3141,6 +3158,7 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 		b.add(p, r)
 	}
 	state.PackedScrollback = b.blob()
+	state.ScrollbackWraps = wrapBits(wraps)
 
 	if state.IsAltScreen {
 		state.PackedMain = grid(t.MainCellAt)
@@ -3308,6 +3326,17 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// vim was open across a switch came back correct and went blank the moment
 	// vim exited, because the buffer underneath had nothing in it.
 	grid(state.PackedMain, t.SetMainCell)
+
+	// The soft-wrap flags, last, because writing cells does not touch them.
+	// A surviving emulator's rows held flags for what they showed before, and
+	// left in place they joined a row the snapshot ends with a newline to the
+	// row under it, which made one link out of two. The history flags cover
+	// every row sent, the ones this emulator already held included, which is
+	// what lines them up with the end of its history.
+	t.RestoreSoftWraps(
+		wrapFlags(state.ScreenWraps, state.Height),
+		wrapFlags(state.ScrollbackWraps, packedRowCount(state.PackedScrollback)),
+	)
 }
 
 // wireStyle is one entry of a snapshot's style table, resolved for the
@@ -3511,6 +3540,45 @@ type TerminalState struct {
 	PackedScreen     []byte       `json:"packed_screen,omitempty"`
 	PackedScrollback []byte       `json:"packed_scrollback,omitempty"`
 	PackedMain       []byte       `json:"packed_main,omitempty"`
+
+	// ScreenWraps and ScrollbackWraps are the soft-wrap flags, one bit per
+	// row (bit i of byte i/8, low bit first): the active screen's rows, and
+	// the scrollback rows this snapshot carries, in the order it carries
+	// them. A set bit says the row carries on to the next one because the
+	// emulator wrapped it, where a row that is merely full ended with a
+	// newline. A peer from before these fields sends neither, which reads as
+	// no row wrapped: the safe answer, since a wrongly joined row glues two
+	// lines into one link. See vt.Terminal.RestoreSoftWraps.
+	ScreenWraps     []byte `json:"screen_wraps,omitempty"`
+	ScrollbackWraps []byte `json:"scrollback_wraps,omitempty"`
+}
+
+// wrapBits packs soft-wrap flags into the wire's bitset, or nil when none is
+// set.
+func wrapBits(flags []bool) []byte {
+	var out []byte
+	for i, f := range flags {
+		if !f {
+			continue
+		}
+		if out == nil {
+			out = make([]byte, (len(flags)+7)/8)
+		}
+		out[i/8] |= 1 << (i % 8)
+	}
+	return out
+}
+
+// wrapFlags unpacks n flags from the wire's bitset. Bits past the end of the
+// set read as false.
+func wrapFlags(bits []byte, n int) []bool {
+	out := make([]bool, max(n, 0))
+	for i := range out {
+		if i/8 < len(bits) {
+			out[i] = bits[i/8]&(1<<(i%8)) != 0
+		}
+	}
+	return out
 }
 
 // CellState represents a single terminal cell with full styling information.
