@@ -489,7 +489,7 @@ func (m *OS) keybindDetail(selected int) string {
 	detail.WriteString(b.Desc + ". Bound in [" + b.Section + "]. ctrl+d unbinds it; ctrl+x takes " +
 		b.Key + " off every action.")
 	for _, s := range rep.Swallowed {
-		if strings.EqualFold(s.Key, b.Key) {
+		if config.SameKey(s.Key, b.Key) {
 			detail.WriteString(" Terminal mode takes this key, so the program in the pane never sees it.")
 			break
 		}

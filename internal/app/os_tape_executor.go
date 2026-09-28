@@ -1277,7 +1277,10 @@ func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 			if leaderKey == "" {
 				leaderKey = "ctrl+b"
 			}
-			msg := m.parseKeyToMessage(leaderKey)
+			// The leader comes from config.toml, where option+ and command+
+			// are accepted too. The canonical spelling only uses the names
+			// parseKeyToMessage reads.
+			msg := m.parseKeyToMessage(config.CanonicalKey(leaderKey))
 			msgs = append(msgs, msg)
 			continue
 		}

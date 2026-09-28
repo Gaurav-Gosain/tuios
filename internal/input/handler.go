@@ -497,9 +497,11 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 }
 
-// isLeaderKey reports whether a key press is the configured leader.
+// isLeaderKey reports whether a key press is the configured leader. The leader
+// is matched through the same normalizer as the binding tables, so a leader
+// spelled opt+f12 fires on the alt+f12 the terminal sends.
 func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings) bool {
-	return strings.EqualFold(msg.String(), s.LeaderKey)
+	return config.IsLeaderPress(msg.String(), s.LeaderKey)
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation

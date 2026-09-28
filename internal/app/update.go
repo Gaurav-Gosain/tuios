@@ -1426,7 +1426,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if handler == nil {
 			return m, tea.Batch(shakeCmd, m.armScreensaver())
 		}
-		newModel, cmd := handler(msg, m)
+		newModel, cmd := handler(m.fixHostKeyMods(msg), m)
 		if shakeCmd != nil {
 			cmd = tea.Batch(cmd, shakeCmd)
 		}

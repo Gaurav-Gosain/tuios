@@ -6,6 +6,20 @@ Every binding lives in one of the 23 sections under `[keybindings]` in `config.t
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## Modifier spellings
+
+A key in `config.toml` can spell a modifier in more than one way. tuios reads each spelling as the same key.
+
+| Write | tuios reads it as | Where |
+|---|---|---|
+| `opt+`, `option+` | `alt+` | macOS only |
+| `cmd+`, `command+` | `super+` | all platforms |
+| `control+` | `ctrl+` | all platforms |
+
+The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`. This applies to `leader_key`, to every binding table, and to `tuios keybinds explain`, `free` and `unbind`. `tuios keybinds explain opt+f12` shows `opt+f12 (tuios reads it as alt+f12)`. `tuios keybinds doctor` lists each key that tuios cannot read.
+
+A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
+
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,

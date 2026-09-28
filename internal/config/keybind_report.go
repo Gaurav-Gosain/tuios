@@ -191,6 +191,9 @@ func (r *KeybindRegistry) Collisions() []Collision {
 // one of those is how a user ends up rebinding the wrong one.
 type KeyFate struct {
 	Key string `json:"key"`
+	// ReadAs is the spelling tuios matches the key in, when it differs from
+	// Key by more than case: opt+f12 is read as alt+f12.
+	ReadAs string `json:"read_as,omitempty"`
 	// Acts is every scope the key does something in.
 	Acts []Binding `json:"acts"`
 	// SwallowedInTerminal is set when the key does not reach the pane's program
@@ -208,7 +211,7 @@ type KeyFate struct {
 // Fate returns everything tuios knows about one key.
 func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 	want := lookupForm(key)
-	fate := KeyFate{Key: key}
+	fate := KeyFate{Key: key, ReadAs: readAs(key)}
 
 	for _, b := range r.Bindings() {
 		if !b.Unbound && lookupForm(b.Key) == want {
@@ -228,7 +231,7 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 		break
 	}
 
-	fate.Ambiguity = AmbiguityVerdict(key, facts.HostDisambiguates)
+	fate.Ambiguity = AmbiguityVerdict(want, facts.HostDisambiguates)
 
 	// Only the curated table is consulted here, and only for a key tuios keeps
 	// from the pane: a key that is forwarded costs the guest nothing whoever
@@ -267,6 +270,11 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 // sees cannot drift apart.
 type KeybindReport struct {
 	Leader string `json:"leader"`
+	// LeaderReadAs is the spelling tuios matches the leader in, when it
+	// differs from Leader by more than case.
+	LeaderReadAs string `json:"leader_read_as,omitempty"`
+	// KeyProblems are the keys in config.toml that tuios cannot read.
+	KeyProblems []KeyProblem `json:"key_problems"`
 	// EvidenceNote is the report explaining its own tiers. It ships inside the
 	// payload because a consumer that only ever sees the JSON has nowhere else
 	// to learn that one third of it is a curated list.
@@ -310,6 +318,8 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 		Collisions:   r.Collisions(),
 		Swallowed:    r.TerminalModeSwallowed(),
 		GuestClashes: r.GuestClashes(facts.Command),
+		LeaderReadAs: readAs(leader),
+		KeyProblems:  r.KeyProblems(),
 	}
 
 	seen := map[string]bool{}
@@ -342,6 +352,9 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 // Summary is the one line a report leads with.
 func (rep KeybindReport) Summary() string {
 	var parts []string
+	if n := len(rep.KeyProblems); n > 0 {
+		parts = append(parts, plural(n, "key tuios cannot read", "keys tuios cannot read"))
+	}
 	if n := len(rep.Collisions); n > 0 {
 		parts = append(parts, plural(n, "key claimed twice", "keys claimed twice"))
 	}
@@ -379,4 +392,65 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(buf[i:])
+}
+
+// readAs returns the canonical spelling of key when it differs from what the
+// user wrote by more than case, and "" when it does not.
+func readAs(key string) string {
+	trimmed := strings.TrimSpace(key)
+	canonical := CanonicalKey(trimmed)
+	if canonical == trimmed || canonical == strings.ToLower(trimmed) {
+		return ""
+	}
+	return canonical
+}
+
+// KeyProblem is one key in config.toml that tuios cannot read, so it never
+// matches a key press.
+type KeyProblem struct {
+	// Section is the config table, or "keybindings" for the leader.
+	Section string `json:"section"`
+	// Action is the action the key is bound to, or "leader_key".
+	Action string `json:"action"`
+	Key    string `json:"key"`
+	// Problem is what is wrong, in the validator's words.
+	Problem  string   `json:"problem"`
+	Evidence Evidence `json:"evidence"`
+}
+
+// KeyProblems returns every key in the leader and the binding tables that the
+// validator rejects. Such a key is loaded but no key press ever matches it, so
+// without this the only sign of it is a binding that does nothing.
+func (r *KeybindRegistry) KeyProblems() []KeyProblem {
+	kb := &r.config.Keybindings
+	normalizer := &KeyNormalizer{isMacOS: macOSHost}
+	var out []KeyProblem
+	check := func(section, action, key string) {
+		if strings.TrimSpace(key) == "" {
+			return
+		}
+		if ok, msg := normalizer.ValidateKey(key); !ok {
+			out = append(out, KeyProblem{
+				Section: section, Action: action, Key: key,
+				Problem: msg, Evidence: EvidenceCertain,
+			})
+		}
+	}
+	if kb.LeaderKey != "" {
+		check("keybindings", "leader_key", kb.LeaderKey)
+	}
+	for _, name := range SectionNames() {
+		section := kb.section(name)
+		actions := make([]string, 0, len(section))
+		for action := range section {
+			actions = append(actions, action)
+		}
+		sort.Strings(actions)
+		for _, action := range actions {
+			for _, key := range section[action] {
+				check(name, action, key)
+			}
+		}
+	}
+	return out
 }

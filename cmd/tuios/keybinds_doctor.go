@@ -25,9 +25,11 @@ import (
 func keybindsDoctor(asJSON bool, guest string) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
+		// A config the validator rejects is still the one to report on: the
+		// keys it cannot read are the finding. Only a file that does not
+		// parse at all falls back to the defaults.
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		fmt.Fprintln(os.Stderr, "Using default keybindings...")
-		userConfig = config.DefaultConfig()
+		userConfig = loadKeybindConfig()
 	}
 	registry := config.NewKeybindRegistry(userConfig)
 	report := registry.Report(config.PaneFacts{Command: guest})
@@ -50,7 +52,19 @@ func keybindsDoctor(asJSON bool, guest string) error {
 // it is a curated list.
 func printKeybindReport(rep config.KeybindReport) {
 	fmt.Printf("tuios keybinds: %s\n", rep.Summary())
-	fmt.Printf("leader: %s\n", rep.Leader)
+	if rep.LeaderReadAs != "" {
+		fmt.Printf("leader: %s (tuios reads it as %s)\n", rep.Leader, rep.LeaderReadAs)
+	} else {
+		fmt.Printf("leader: %s\n", rep.Leader)
+	}
+
+	if len(rep.KeyProblems) > 0 {
+		fmt.Printf("\nKEYS TUIOS CANNOT READ (%s)\n", config.EvidenceCertain)
+		fmt.Println("  No key press matches these keys. Correct them in config.toml.")
+		for _, p := range rep.KeyProblems {
+			fmt.Printf("  %-22s %s [%s.%s]\n", p.Key, p.Problem, p.Section, p.Action)
+		}
+	}
 
 	fmt.Println("\nEVIDENCE")
 	for _, tier := range []config.Evidence{config.EvidenceCertain, config.EvidenceObserved, config.EvidenceReference} {
@@ -140,7 +154,11 @@ func keybindsExplain(key string, asJSON bool, guest string) error {
 		return enc.Encode(fate)
 	}
 
-	fmt.Printf("%s\n", fate.Key)
+	if fate.ReadAs != "" {
+		fmt.Printf("%s (tuios reads it as %s)\n", fate.Key, fate.ReadAs)
+	} else {
+		fmt.Printf("%s\n", fate.Key)
+	}
 	if fate.Free {
 		fmt.Println("  free: nothing in tuios claims it, and the pane receives it")
 	}

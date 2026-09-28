@@ -310,7 +310,7 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	// Appended rather than replacing, so recording a second key for an action
 	// adds an alternative instead of silently dropping the one that was there.
 	for _, existing := range target[action] {
-		if strings.EqualFold(existing, key) {
+		if config.SameKey(existing, key) {
 			// An "info" with no duration never reaches the screen at all
 			// (notificationLifetime drops it), so this said nothing. It is a
 			// refusal, which is a warning.

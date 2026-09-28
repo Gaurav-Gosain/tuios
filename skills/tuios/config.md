@@ -251,8 +251,15 @@ tuios keybinds doctor --guest nvim
 and `reference` ones from a list of common programs' defaults (a hint, never a
 fact about the person's config). `collisions` are keys bound twice in one scope;
 `terminal_mode_swallowed` is every key that never reaches a pane's program.
-Ctrl+I and Tab, Ctrl+M and Enter, and Ctrl+[ and Esc are the same byte unless
-the terminal disambiguates them.
+`key_problems` lists every key in config.toml that tuios cannot read. Ctrl+I and
+Tab, Ctrl+M and Enter, and Ctrl+[ and Esc are the same byte unless the terminal
+disambiguates them.
+
+A modifier has more than one spelling. `opt+` and `option+` mean `alt+` (macOS
+only), `cmd+` and `command+` mean `super+`, and `control+` means `ctrl+`. The
+leader, every binding table, `explain`, `free` and `unbind` read all spellings
+as one key. `explain` and `doctor` show the spelling tuios matches, for example
+`opt+f12 (tuios reads it as alt+f12)`.
 
 ```sh
 tuios keybinds unbind close_window w   # one key off one action

@@ -13,6 +13,8 @@ const (
 	ModAlt   = uv.ModAlt
 	ModCtrl  = uv.ModCtrl
 	ModMeta  = uv.ModMeta
+	ModHyper = uv.ModHyper
+	ModSuper = uv.ModSuper
 )
 
 // KeyPressEvent represents a key press event.

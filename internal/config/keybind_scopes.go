@@ -424,14 +424,11 @@ func (r *KeybindRegistry) Bindings() []Binding {
 	return out
 }
 
-// lookupForm is the shape lookupKey compares a key in: single letters keep
-// their case, everything else is lowercased.
+// lookupForm is the shape two key spellings are compared in by the report,
+// explain, free and unbind: CanonicalKey, so opt+f12, option+f12 and alt+f12
+// are one key there as they are to a key press.
 func lookupForm(key string) string {
-	key = strings.TrimSpace(key)
-	if isSingleRuneLetter(key) {
-		return key
-	}
-	return strings.ToLower(key)
+	return CanonicalKey(key)
 }
 
 // describeAction is the human sentence for an action, falling back to the
