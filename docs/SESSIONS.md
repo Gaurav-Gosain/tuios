@@ -564,6 +564,15 @@ tuios chooses rather than the program running in it, so they are settings. A
 text colour left empty keeps the colour the program wrote, and tints only the
 background behind it.
 
+`multi_format` is the format that multi copy mode starts with: `plain`,
+`markdown` or `json`. Multi copy mode copies the selection of each pane in the
+multifocus set. See [Multi copy mode](LAYOUT_MODES.md#multi-copy-mode).
+
+```toml
+[appearance.selection]
+multi_format = "plain"
+```
+
 The scrollback browser draws from the same two places: the theme for its
 chrome, and these settings for its search and selection, so a match there and
 a match in a pane are the same colour.

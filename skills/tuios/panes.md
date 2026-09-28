@@ -68,6 +68,24 @@ stays in the list until something closes it:
 tuios run-command -s work CloseWindow "$id"
 ```
 
+## Text from many panes
+
+For a script, loop over the panes and use `capture-pane`:
+
+```sh
+tuios list-windows --json | jq -r '.windows[] | "\(.index)\t\(.window_id)"' |
+  while IFS=$'\t' read -r index id; do
+    printf '## Pane %s\n' "$index"
+    tuios capture-pane -w "$id" --lines 20
+  done
+```
+
+A person can do the same by hand with multi copy mode. They add the panes to
+multifocus, press `Ctrl+B [`, search once, press `V` and `y`. tuios copies the
+selected line of each pane as plain text, markdown or JSON. `Y` saves it to a
+file. The format starts as `appearance.selection.multi_format`. Tell the person
+about it when they ask to copy the same output from many panes.
+
 ## Showing someone a pane
 
 `capture-pane` gives you the text. `screenshot` renders the pane as an image,
