@@ -14,11 +14,28 @@ label to copy the text. It works like tmux-fingers and the kitty hints kitten.
 | the label with `Shift`, such as `A` | Copy the text and type it into the pane |
 | the label with `Ctrl`, such as `Ctrl+A` | Open a URL or a path |
 | `backspace` | Remove the last letter you typed |
-| `esc`, `Ctrl+C` | Close hints mode |
+| `esc`, or the leader key | Close hints mode |
 | `q` | Close hints mode, when `q` is not a label letter |
+| `Ctrl+C`, `Ctrl+G` | Close hints mode, when `c` or `g` is not a label letter |
 
 The nearest text to the cursor gets the shortest label. The same text gets the
 same label every time it shows. A key that starts no label does nothing.
+
+When `c` or `g` is a label letter, `Ctrl+C` and `Ctrl+G` open that label like
+any other `Ctrl` and label. `g` is in the default letters, so `Ctrl+G` opens
+the label `g`. Use `esc` to close. The leader key always closes hints mode,
+also when it is `Ctrl` and a label letter.
+
+Hints mode keeps all input from the pane while the labels show. tuios drops a
+paste, and it drops a key release and a mouse move over the pane. A mouse
+click or the mouse wheel closes hints mode first and then works as usual.
+Hints mode also closes when its pane closes, when the focus moves to a
+different pane, and when you change the workspace.
+
+`Shift` and a label types the text. A terminal that reports Caps Lock (the
+kitty keyboard protocol) lets tuios read an upper case letter from Caps Lock
+as a plain label letter. In a terminal that does not report Caps Lock, turn
+Caps Lock off before you type a label.
 
 The copy uses the same path as a mouse copy. tuios writes the clipboard with
 OSC 52, and on a local client also with the system clipboard tool.
@@ -41,9 +58,16 @@ You can also open hints mode from the command palette: search for `hints`.
 | `email` | `ops@example.com` |
 | `id` | `pod/web-1`, `deployment.apps/web`, pod names, `sha256:` digests |
 
+`path` and `email` accept letters in all scripts, with accents and
+combining marks. The other built-in patterns use only ASCII.
+
 Hints mode reads only the text on the screen. If you scroll the pane back, it
 reads the lines you scrolled to. A URL that wraps onto the next row is one
-match.
+match. tuios joins two rows only when the terminal wrapped the text. A line
+that fills the row and then ends is not joined to the next line. Both
+terminal backends record the wrap. A row that tuios restored from a saved
+session, for example after you attach again, has no wrap record, so tuios
+reads it as a line that ends.
 
 ## Open
 
@@ -51,10 +75,19 @@ match.
 
 - A URL opens in your browser. A remote client (`tuios ssh`, the web client)
   copies the URL. It cannot open a browser on your machine.
-- A path opens in a new pane with `$EDITOR`. tuios removes a `:line:col` at
-  the end. A relative path starts in the pane's directory. A pane on another
-  machine copies the path.
+- A path or a `file://` URL opens in a new pane with `$EDITOR`. tuios removes
+  a `:line:col` at the end. A relative path starts in the pane's directory.
 - Other text is copied.
+
+tuios opens a file only when the file is on this machine. It copies the path
+and tells you why in these cases:
+
+- The pane runs on another machine.
+- The session runs on another machine (`tuios attach` to a host).
+- The client is remote (`tuios ssh`, the web client).
+- The pane runs `ssh`, `mosh` or `et`.
+- The shell reported a folder on another machine.
+- The path is relative and tuios does not know the pane's folder.
 
 tuios never gives the text to a shell. It gives the text to the opener as one
 argument. Only `http`, `https`, `mailto`, `ftp` and `ftps` URLs open.
@@ -86,7 +119,10 @@ that pattern.
 the settings page (Selection tab) and work with `tuios set-config`.
 `hints.patterns` is a list, so you set it in the file.
 
-To use a different key, bind the `hints` action:
+If your config already binds `F` in `[keybindings.prefix_mode]` to a
+different action, tuios keeps your binding and gives `hints` no key.
+`tuios keybinds doctor` tells you this. To use a different key, bind the
+`hints` action:
 
 ```toml
 [keybindings.prefix_mode]
