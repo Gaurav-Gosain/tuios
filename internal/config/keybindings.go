@@ -141,6 +141,11 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("|/\\", "Split vertical"),
 		kb("R", "Rotate split"),
 		kb("=", "Equalize splits"),
+		// Hints label the focused pane's text. The row is here rather than
+		// under Tools because Tools shares a column with Menus in the narrow
+		// layout, and one row more there made the panel the tallest column
+		// at 80x24, where it reached the pane's bottom border.
+		kb("F", "Hints"),
 	}}
 	sessions := KeybindingGroup{Title: "Sessions", Bindings: []Keybinding{
 		kb("(/)", "Prev/next session"),
@@ -178,7 +183,6 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb(",", "Settings"),
 		kb("k", "Keybindings"),
 		kb("C", "Screenshot"),
-		kb("F", "Hints"),
 		kb("j", "Newest message"),
 		kb("?", "Help"),
 	}}
