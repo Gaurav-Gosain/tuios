@@ -929,6 +929,10 @@ type Session struct {
 	// client whose entry went missing would take every broadcast for one that
 	// predates its own push until it next pushed.
 	pushSeen map[string]uint64
+	// focusMovedVersion is the Version of the last daemon mutation that moved
+	// the focus or the workspace, guarded by stateMu. A stale push built at or
+	// after it keeps its own focus. See keepClientFocus.
+	focusMovedVersion int
 
 	// stateDirty is set by every change to the session's structure and consumed
 	// by the resurrection saver, which is how a new window reaches disk in a
@@ -2072,7 +2076,13 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	prev := s.state
 	if prev != nil {
 		if state.BaseVersion != 0 && state.BaseVersion < prev.Version {
+			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
+			if state.BaseVersion >= s.focusMovedVersion {
+				// No daemon mutation the client missed moved the focus, so
+				// the focus in the push is the person's latest move.
+				keepClientFocus(state, mine)
+			}
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
@@ -2129,6 +2139,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	defer s.stateMu.Unlock()
 
 	before := snapshotLifecycle(s.state)
+	focusBefore := focusViewOf(s.state)
 	if err := fn(s.state); err != nil {
 		return nil, err
 	}
@@ -2139,6 +2150,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
+	if !focusBefore.sameFocus(focusViewOf(s.state)) {
+		s.focusMovedVersion = s.state.Version
+	}
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil

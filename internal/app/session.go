@@ -1107,7 +1107,12 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
 	w.AgentStateAt = ws.AgentStateAt
+	prevSeq := w.AgentCompletionSeq
 	w.AgentCompletionSeq = ws.CompletionSeq
+	if string(ws.AgentState) == w.AgentState && ws.CompletionSeq > prevSeq {
+		// A whole turn fell between two snapshots. See noteAgentTurnWithin.
+		m.noteAgentTurnWithin(w)
+	}
 	// Last, and it adopts AgentState itself: an alert raised from here reads the
 	// message and harness above, which have to be the ones that arrived with the
 	// state rather than the ones it replaced.
