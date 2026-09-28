@@ -500,6 +500,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// would close the loop.
 	m.applyingPeerSync = true
 	m.syncAnswerOwed = false
+	m.turnsWithinSync = nil
 	defer func() {
 		m.applyingPeerSync = false
 		if m.syncAnswerOwed {
@@ -667,6 +668,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		focusAfter = m.Windows[m.FocusedWindow].ID
 	}
 	focusChanged := focusAfter != focusBefore
+
+	// The folded turns, now that the focus is the one this sync names.
+	for _, w := range m.turnsWithinSync {
+		if m.windowByID(w.ID) == w {
+			m.noteAgentTurnWithin(w)
+		}
+	}
+	m.turnsWithinSync = nil
 
 	// Terminal mode with nothing focused is a dead end: keystrokes have no
 	// terminal to reach. Closing is the daemon's job, so the drop back to window
@@ -1111,7 +1120,12 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentCompletionSeq = ws.CompletionSeq
 	if string(ws.AgentState) == w.AgentState && ws.CompletionSeq > prevSeq {
 		// A whole turn fell between two snapshots. See noteAgentTurnWithin.
-		m.noteAgentTurnWithin(w)
+		// Inside a sync it waits for the sync's focus. See turnsWithinSync.
+		if m.applyingPeerSync {
+			m.turnsWithinSync = append(m.turnsWithinSync, w)
+		} else {
+			m.noteAgentTurnWithin(w)
+		}
 	}
 	// Last, and it adopts AgentState itself: an alert raised from here reads the
 	// message and harness above, which have to be the ones that arrived with the

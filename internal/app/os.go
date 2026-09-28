@@ -686,6 +686,11 @@ type OS struct {
 	// placed. That is an answer to a question, not an echo of a layout, so it is
 	// sent once, after the sync has been applied and the guard is down.
 	syncAnswerOwed bool
+	// turnsWithinSync holds the panes whose finished turn a sync folded away
+	// (see noteAgentTurnWithin), until the sync has adopted its focus. The
+	// windows are updated before the focus, and a turn has to be judged by
+	// the focus the same sync names.
+	turnsWithinSync []*terminal.Window
 	// daemonWindowIntent is set from the moment this client asks the daemon to
 	// open or close a window until it learns what the daemon did. While it is
 	// set this client does not know the session's window set, so the snapshot it
