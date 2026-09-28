@@ -170,6 +170,14 @@ func layoutKeyCases() []struct {
 		{"ctrl chord with alternate keys carries the base key", ctrlSha, alternate, "\x1b[1096::105;5u"},
 		{"plain key with all flags carries the base key", sha, ansi.KittyAllFlags, "\x1b[1096::105;1;1096u"},
 		{"shifted key with all flags carries both", shiftSha, ansi.KittyAllFlags, "\x1b[1096:1064:105;2;1064u"},
+		// Caps Lock and Num Lock change the text, not the chord, so the key is
+		// still text.
+		{"numlock letter is text", KeyPressEvent{Code: 'a', Text: "a", Mod: ModNumLock}, disambiguate, ""},
+		{"capslock non-ascii letter is text", KeyPressEvent{Code: 'ш', BaseCode: 'i', Text: "Ш", Mod: ModCapsLock}, disambiguate, ""},
+		{"capslock shifted letter is text", KeyPressEvent{Code: 'a', Text: "a", Mod: ModCapsLock | ModShift}, disambiguate, ""},
+		// Modifier keys go out under their kitty codes.
+		{"left shift under all keys", KeyPressEvent{Code: KeyLeftShift, Mod: ModShift}, allKeys, "\x1b[57441;2u"},
+		{"right ctrl under all keys", KeyPressEvent{Code: KeyRightCtrl, Mod: ModCtrl}, allKeys, "\x1b[57448;5u"},
 		// A base key equal to the code is not repeated.
 		{"base equal to code is left out", KeyPressEvent{Code: 'a', BaseCode: 'a', Mod: ModCtrl}, alternate, "\x1b[97;5u"},
 	}

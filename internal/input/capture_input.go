@@ -17,7 +17,7 @@ import (
 // HandleCaptureKey answers every key while capture mode is up. Nothing falls
 // through: a mode that owns the screen owns the keyboard.
 func HandleCaptureKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch msg.String() {
+	switch commandKey(msg) {
 	case "esc", "ctrl+c", "q":
 		o.EndCapture()
 		return o, nil
@@ -46,7 +46,7 @@ func HandleCaptureKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // key here is one the panel's footer offers, and the footer only offers what
 // works on this client.
 func HandleScreenshotPreviewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch msg.String() {
+	switch commandKey(msg) {
 	case "enter", "q":
 		o.CloseScreenshotPreview(false)
 		return o, nil

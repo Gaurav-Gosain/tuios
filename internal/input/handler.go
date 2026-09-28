@@ -4,6 +4,7 @@
 package input
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"time"
 
@@ -242,8 +243,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// A modifier pressed on its own arrives as a key while tuios asks for every
 	// key as an escape code. Holding Shift for the key after the leader must
-	// not end the prefix, so it goes nowhere while tuios reads keys itself.
-	if isModifierKeyPress(msg) && o.KeysGoToBindings() {
+	// not end the prefix, so it goes nowhere while tuios reads keys itself. The
+	// host can also still be in that mode for a moment after a pane has the
+	// keyboard back, so a pane only gets one when it asked for every key.
+	if isModifierKeyPress(msg) &&
+		(o.KeysGoToBindings() || o.PaneKeyboardFlags()&ansi.KittyReportAllKeysAsEscapeCodes == 0) {
 		return o, nil
 	}
 
@@ -379,14 +383,19 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// quit): it must swallow keys so a keystroke meant for the dialog never leaks
 	// to the shell or a window-manager binding.
 	if o.ShowTapeReview {
-		if o.HandleTapeReviewInput(msg.String()) {
+		if o.HandleTapeReviewInput(commandKey(msg)) {
 			return o, nil
 		}
 	}
 
 	// Handle tape manager overlay (high priority, intercepts keys when shown)
 	if o.ShowTapeManager {
-		if o.HandleTapeManagerInput(msg.String()) {
+		// A name being typed takes the character typed.
+		key := commandKey(msg)
+		if o.TapeManager != nil && o.TapeManager.Mode == app.TapeManagerNaming {
+			key = msg.String()
+		}
+		if o.HandleTapeManagerInput(key) {
 			return o, nil
 		}
 		// Key not handled by tape manager, fall through

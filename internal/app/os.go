@@ -703,6 +703,9 @@ type OS struct {
 	// with, so tuios knows what it actually got rather than what it asked for.
 	// Zero means the terminal never answered, which is not the same as a refusal.
 	KeyboardFlags int
+	// hostGrantedAllKeys is set once the host has answered with report-all-keys
+	// in effect. See AllKeysPending.
+	hostGrantedAllKeys bool
 	// hold is the momentary window-management mode (see hold_mode.go).
 	hold holdMode
 	// optionAdviceShown keeps the macOS Option advice to once per run.

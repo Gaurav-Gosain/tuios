@@ -364,7 +364,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	}
 
 	switch key.Code {
-	case tea.KeyEnter:
+	case tea.KeyEnter, tea.KeyKpEnter:
 		cm.State = terminal.CopyModeNormal
 		matchInfo := ""
 		if len(cm.SearchMatches) > 0 {

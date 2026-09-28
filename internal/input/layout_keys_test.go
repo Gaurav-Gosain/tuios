@@ -149,3 +149,97 @@ func TestBaseLayoutKeyDrivesCopyMode(t *testing.T) {
 		t.Fatalf("о on the J key left the copy cursor on row %d, want 1", w.CopyMode.CursorY)
 	}
 }
+
+// A Latin layout's own letters keep their meaning. With report-all keys on,
+// every plain letter carries its US-position key, and reading an unbound one
+// by position ran the binding there: AZERTY "a" is on the US q key (quit), and
+// Dvorak puts "'" on q, "p" on r (rename) and "y" on t (tiling).
+func TestLatinLayoutLetterDoesNotRunUSPositionBinding(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.KeyPressMsg
+	}{
+		{"azerty a", tea.KeyPressMsg{Code: 'a', BaseCode: 'q', Text: "a"}},
+		{"dvorak quote", tea.KeyPressMsg{Code: '\'', BaseCode: 'q', Text: "'"}},
+		{"dvorak p", tea.KeyPressMsg{Code: 'p', BaseCode: 'r', Text: "p"}},
+		{"dvorak y", tea.KeyPressMsg{Code: 'y', BaseCode: 't', Text: "y"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := twoPaneWM(t)
+			o.AutoTiling = false
+			if got := lookupAction(tc.msg, o.KeybindRegistry.GetAction); got != "" {
+				t.Fatalf("%q resolves to %q, want nothing", tc.msg.Text, got)
+			}
+			o, _ = HandleKeyPress(tc.msg, o)
+			if o.ShowQuitMenu || o.Renaming() || o.AutoTiling {
+				t.Fatalf("%q ran a binding (quit %v, rename %v, tiling %v)",
+					tc.msg.Text, o.ShowQuitMenu, o.Renaming(), o.AutoTiling)
+			}
+		})
+	}
+}
+
+// A key that beat the switch to report-all keys arrives as bare text with no
+// base-layout key. After the leader it is dropped, not typed into the pane.
+func TestLeaderDropsLayoutKeyThatBeatTheFlags(t *testing.T) {
+	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 29})
+	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 5})
+	o = leader(o, tea.KeyPressMsg{Code: 'ш', Text: "ш"})
+	if len(pty.got) != 0 {
+		t.Fatalf("the pane got %q for a ш typed before the host switched", pty.got)
+	}
+	if o.PrefixActive {
+		t.Fatal("the prefix is still pending")
+	}
+}
+
+// A host that never granted report-all keys keeps the old behaviour: the
+// unbound key after the leader goes to the pane.
+func TestLeaderForwardsLayoutKeyWhenHostNeverSwitches(t *testing.T) {
+	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 5})
+	_ = leader(o, tea.KeyPressMsg{Code: 'ш', Text: "ш"})
+	if got := string(pty.got); got != "ш" {
+		t.Fatalf("the pane got %q, want %q", got, "ш")
+	}
+}
+
+// A bare Shift press goes to a pane only when the pane asked for every key,
+// and then under its kitty code.
+func TestModifierPressReachesOnlyAnAllKeysPane(t *testing.T) {
+	shift := tea.KeyPressMsg{Code: tea.KeyLeftShift, Mod: tea.ModShift}
+
+	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+	_, _ = o.Windows[0].Terminal.Write([]byte("\x1b[>1u"))
+	_, _ = HandleKeyPress(shift, o)
+	if len(pty.got) != 0 {
+		t.Fatalf("a disambiguate-only pane got %q for a bare Shift", pty.got)
+	}
+
+	o, pty = osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+	_, _ = o.Windows[0].Terminal.Write([]byte("\x1b[>9u"))
+	_, _ = HandleKeyPress(shift, o)
+	if got := string(pty.got); got != "\x1b[57441;2u" {
+		t.Fatalf("an all-keys pane got %q for a bare Shift, want %q", got, "\x1b[57441;2u")
+	}
+}
+
+// The shifted key survives the decoder writing the base key over it, with
+// Ctrl held as well.
+func TestShiftedCodeIsRebuilt(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.Key
+		want rune
+	}{
+		{"shift", tea.Key{Code: 'ш', ShiftedCode: 'i', BaseCode: 'i', Text: "Ш", Mod: tea.ModShift}, 'Ш'},
+		{"ctrl+shift", tea.Key{Code: 'ш', ShiftedCode: 'i', BaseCode: 'i', Mod: tea.ModShift | tea.ModCtrl}, 'Ш'},
+		{"no shift", tea.Key{Code: 'ш', ShiftedCode: 'i', BaseCode: 'i', Text: "ш"}, 0},
+		{"real shifted key", tea.Key{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: tea.ModShift}, 'X'},
+	} {
+		if got := shiftedCode(tc.key); got != tc.want {
+			t.Errorf("%s: shifted code %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
