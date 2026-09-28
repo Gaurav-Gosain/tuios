@@ -139,6 +139,18 @@ func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd,
 	return c, nil
 }
 
+// errPaneEnded answers a respawn request that waited while the pane's
+// command ended.
+var errPaneEnded = errors.New("the pane's command ended")
+
+// Test hooks, nil in production. beforeReply runs just before the holder
+// writes a respawn reply. afterExit runs when the pane's command has ended,
+// before the holder answers the requests still waiting.
+var (
+	beforeReply func()
+	afterExit   func()
+)
+
 type respawnCall struct {
 	req RespawnRequest
 	// reply writes the answer to the requester and returns once it is
@@ -218,6 +230,23 @@ func RunPane(o PaneOptions) int {
 	for {
 		select {
 		case code := <-done:
+			if afterExit != nil {
+				afterExit()
+			}
+			// A request can be waiting for this loop when the command ends.
+			// Stop taking new ones, then answer each waiting one, so its
+			// requester reads why and not a bare EOF.
+			if ln != nil {
+				_ = ln.Close()
+			}
+			for drained := false; !drained; {
+				select {
+				case call := <-calls:
+					call.reply(errPaneEnded)
+				default:
+					drained = true
+				}
+			}
 			return code
 		case s := <-sigs:
 			if sig, ok := s.(syscall.Signal); ok {
@@ -298,6 +327,9 @@ func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall) {
 			// writes, so respawn-pane reads EOF although the respawn ran.
 			replied := make(chan struct{})
 			calls <- respawnCall{req: req, reply: func(err error) {
+				if beforeReply != nil {
+					beforeReply()
+				}
 				writeReply(conn, err)
 				close(replied)
 			}}

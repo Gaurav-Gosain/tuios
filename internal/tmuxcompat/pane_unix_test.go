@@ -27,6 +27,12 @@ func runHolderIfAsked() {
 		if c := os.Getenv("TMUXCOMPAT_TEST_CMD"); c != "" {
 			cmd = strings.Split(c, "\x1f")
 		}
+		if d, err := time.ParseDuration(os.Getenv(replyDelayEnvKey)); err == nil {
+			beforeReply = func() { time.Sleep(d) }
+		}
+		if gate := os.Getenv(exitGateEnvKey); gate != "" {
+			afterExit = func() { exitGate(gate) }
+		}
 		os.Exit(RunPane(PaneOptions{
 			Dir:     os.Getenv("TMUXCOMPAT_TEST_DIR"),
 			Window:  os.Getenv("TUIOS_PANE_ID"),
@@ -35,6 +41,29 @@ func runHolderIfAsked() {
 			Shell:   "/bin/sh",
 		}))
 	}
+}
+
+// Hooks for a holder child. replyDelayEnvKey holds a duration the holder
+// sleeps before it writes each respawn reply. exitGateEnvKey names a
+// directory for exitGate.
+const (
+	replyDelayEnvKey = "TMUXCOMPAT_TEST_REPLY_DELAY"
+	exitGateEnvKey   = "TMUXCOMPAT_TEST_EXIT_GATE"
+)
+
+// exitGate holds a holder whose command has ended until the test has sent a
+// request: it writes <dir>/exited, waits for <dir>/sent, then gives the
+// request a moment to reach the holder's queue.
+func exitGate(dir string) {
+	_ = os.WriteFile(filepath.Join(dir, "exited"), []byte("1"), 0o600)
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(filepath.Join(dir, "sent")); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond)
 }
 
 // shortDir is a temporary directory with a short path: a unix socket path is
@@ -51,8 +80,14 @@ func shortDir(t *testing.T) string {
 
 func startHolder(t *testing.T, dir, window string, cmd ...string) (*exec.Cmd, chan error) {
 	t.Helper()
+	return startHolderEnv(t, dir, window, nil, cmd...)
+}
+
+// startHolderEnv is startHolder with extra KEY=VALUE for the holder itself.
+func startHolderEnv(t *testing.T, dir, window string, env []string, cmd ...string) (*exec.Cmd, chan error) {
+	t.Helper()
 	c := exec.Command(os.Args[0], "-test.run=^$")
-	c.Env = append(os.Environ(),
+	c.Env = append(append(os.Environ(), env...),
 		holderEnvKey+"=1",
 		"TMUXCOMPAT_TEST_DIR="+dir,
 		"TMUXCOMPAT_TEST_CMD="+strings.Join(cmd, "\x1f"),
@@ -127,6 +162,70 @@ func TestHolderRespawnsInPlace(t *testing.T) {
 	}
 	if _, err := os.Stat(paneSocket(dir, window)); !os.IsNotExist(err) {
 		t.Errorf("the holder left its socket behind: %v", err)
+	}
+}
+
+// TestHolderAnswersARespawnToAnInstantCommand respawns to a command that ends
+// at once, with the reply held back a moment. The holder must write the reply
+// before it exits with that command, or respawn-pane reads EOF although the
+// respawn ran.
+func TestHolderAnswersARespawnToAnInstantCommand(t *testing.T) {
+	dir := shortDir(t)
+	window := "win-instant"
+	marker := filepath.Join(dir, "up")
+	_, done := startHolderEnv(t, dir, window, []string{replyDelayEnvKey + "=500ms"}, "echo up > "+marker+"; exec sleep 60")
+	waitFile(t, marker)
+	if err := RequestRespawn(dir, window, RespawnRequest{Command: []string{"true"}}); err != nil {
+		t.Fatalf("RequestRespawn: %v", err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("the holder exited with %v, want the new command's status 0", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the holder kept running after its command ended")
+	}
+}
+
+// TestHolderAnswersARequestWaitingAtExit sends a respawn request while the
+// pane's command has just ended. The holder must answer it with the reason
+// before it exits, not leave the requester to read EOF, and must not run it.
+func TestHolderAnswersARequestWaitingAtExit(t *testing.T) {
+	dir := shortDir(t)
+	window := "win-ended"
+	_, done := startHolderEnv(t, dir, window, []string{exitGateEnvKey + "=" + dir}, "true")
+	waitFile(t, filepath.Join(dir, "exited"))
+	conn, err := net.Dial("unix", paneSocket(dir, window))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	respawned := filepath.Join(dir, "respawned")
+	if _, err := conn.Write([]byte(`{"window":"` + window + `","command":["touch ` + respawned + `"]}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sent"), []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reply, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("the holder did not answer: %v", err)
+	}
+	if !strings.Contains(reply, `"ok":false`) || !strings.Contains(reply, errPaneEnded.Error()) {
+		t.Errorf("reply = %q, want a refusal saying the pane's command ended", reply)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("the holder exited with %v, want its command's status 0", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the holder kept running after its command ended")
+	}
+	if _, err := os.Stat(respawned); err == nil {
+		t.Error("the request ran after the pane's command ended")
 	}
 }
 
