@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -2423,7 +2424,7 @@ func yieldTakenDefaults(section string, target, defaults map[string][]string) []
 		}
 		for _, key := range defaults[action] {
 			for other, keys := range target {
-				if other == action || !slices.Contains(keys, key) {
+				if other == action || !slices.ContainsFunc(keys, func(k string) bool { return sameKeyPress(k, key) }) {
 					continue
 				}
 				out = append(out, YieldedDefault{Section: section, Action: action, Key: key, TakenBy: other})
@@ -2434,6 +2435,26 @@ func yieldTakenDefaults(section string, target, defaults map[string][]string) []
 		return cmp.Compare(a.Action+"\x00"+a.Key, b.Action+"\x00"+b.Key)
 	})
 	return out
+}
+
+// sameKeyPress reports whether two binding spellings name the same key press:
+// the same once canonical (modifier aliases and order), or one the shifted
+// spelling of the other, the way the registry matches them. F, shift+f and
+// shift+F are one press.
+func sameKeyPress(a, b string) bool {
+	sa, sb := keySpellings(a), keySpellings(b)
+	for _, x := range sa {
+		if slices.Contains(sb, x) {
+			return true
+		}
+	}
+	return false
+}
+
+// keySpellings is a key's canonical spelling and its shift aliases.
+func keySpellings(key string) []string {
+	c := CanonicalKey(key)
+	return append([]string{c}, shiftAliases(c, strings.ToLower(c))...)
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {
