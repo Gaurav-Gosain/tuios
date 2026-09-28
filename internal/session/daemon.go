@@ -19,12 +19,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/google/uuid"
 )
 
 // Daemon manages the persistent TUIOS server process.
 // It owns PTYs and stores session state. Clients run the TUI.
 type Daemon struct {
-	manager  *Manager
+	manager *Manager
+	// instance names this daemon run, fresh on every start. hello reports
+	// it, and a hub records it for each host, so a client attached to a
+	// session on another machine can tell which of that machine's hosts is
+	// the daemon it came from. A host name cannot: each machine names the
+	// others in its own [hosts] table.
+	instance string
 	listener net.Listener
 	// linkListener is the second socket, the one `tuios stdio-proxy` dials
 	// for a connection that arrived over another machine's link. Every
@@ -603,6 +610,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 
 	d := &Daemon{
 		manager:            NewManager(),
+		instance:           uuid.NewString(),
 		ctx:                ctx,
 		cancel:             cancel,
 		clients:            make(map[string]*connState),

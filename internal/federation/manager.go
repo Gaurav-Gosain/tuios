@@ -111,6 +111,10 @@ type HostReport struct {
 	Protocol      int    `json:"protocol,omitempty"`
 	MinProtocol   int    `json:"min_protocol,omitempty"`
 	PID           int    `json:"pid,omitempty"`
+	// Instance is the far daemon's run, as its hello named it. Two reports
+	// with one instance are one daemon, whatever each table calls it. Empty
+	// for a daemon too old to say, and while the link has not come up.
+	Instance string `json:"instance,omitempty"`
 	// Command is the tuios binary the link runs on the host: the configured
 	// command, or the path the link found on its last dial that reached one.
 	// Empty until a dial has reached one.
