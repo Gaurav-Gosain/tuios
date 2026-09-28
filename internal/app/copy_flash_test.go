@@ -486,3 +486,164 @@ func TestMotionNoneDrawsNoSweep(t *testing.T) {
 		t.Error("a copy with motion basic recorded no sweep")
 	}
 }
+
+// flashPane is a live pane of short lines with history above the screen. Two
+// lines end in a wide character: one lands in the scrollback and one on the
+// screen. It returns the window and the text of every line, oldest first,
+// indexed by the absolute row the copy region uses.
+func flashPane(t *testing.T, id string) (*terminal.Window, []string) {
+	t.Helper()
+	win := newTestWindow(t, id, 40, 10)
+	rows := win.Terminal.Height()
+	n := rows + 5
+	lines := make([]string, n)
+	for k := range lines {
+		lines[k] = strings.Repeat("a", k%7+1)
+	}
+	lines[3] = "ab世"
+	lines[n-2] = "cd世"
+	win.LockIO()
+	_, _ = win.Terminal.Write([]byte(strings.Join(lines, "\r\n")))
+	win.UnlockIO()
+	if got := win.ScrollbackLen(); got != n-rows {
+		t.Fatalf("setup: %d lines on a %d-row screen left %d in the scrollback, want %d", n, rows, got, n-rows)
+	}
+	return win, lines
+}
+
+// wantTextEnd is the last column a line's text covers, counting the one wide
+// character these lines use as two.
+func wantTextEnd(line string) int {
+	w := 0
+	for _, r := range line {
+		if r == '世' {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w - 1
+}
+
+// TestPaneRowTextEndReadsTheRowTheFrameDraws. Scrolled back, the top rows of
+// the view are scrollback lines and the rest are the screen shifted down, so
+// the row where the two meet is the one an off-by-one gets wrong. A wide
+// character at the end of a line counts to its second column.
+//
+// Negative control: reading screen row y instead of y-offset on a scrolled
+// view fails every screen row below the seam, and returning the lead column
+// of a wide character fails the two rows that end in one.
+func TestPaneRowTextEndReadsTheRowTheFrameDraws(t *testing.T) {
+	win, lines := flashPane(t, "flash-ends-01")
+	sb := win.ScrollbackLen()
+	maxY, maxX := win.Terminal.Height(), win.Terminal.Width()
+	for _, offset := range []int{0, 2, sb} {
+		win.ScrollbackOffset = offset
+		for y := range maxY {
+			abs := sb - offset + y
+			where := "screen"
+			switch {
+			case y < offset:
+				where = "scrollback"
+			case y == offset && offset > 0:
+				where = "seam"
+			}
+			got := paneRowTextEnd(win, win.Terminal, y, maxX, sb)
+			if want := wantTextEnd(lines[abs]); got != want {
+				t.Errorf("offset %d, row %d (%s, %q): text ends at %d, want %d", offset, y, where, lines[abs], got, want)
+			}
+		}
+	}
+}
+
+// TestTheSweptRegionStopsWhereEachRowsTextEnds is the renderer's half: the
+// grid copyFlashGrid hands the cell loop marks every copied row from its
+// first column to its text end and no further, across the scrollback, the
+// seam and the screen.
+//
+// Negative control: passing nil for textEnd in copyFlashGrid marks every row
+// to column maxX-1 and fails here.
+func TestTheSweptRegionStopsWhereEachRowsTextEnds(t *testing.T) {
+	win, lines := flashPane(t, "flash-clamp-01")
+	m := newTestOS(win)
+	m.Settings.CopyFlash, m.Settings.CopyFlashMs = true, config.CopyFlashMsDefault
+	sb := win.ScrollbackLen()
+	maxY, maxX := win.Terminal.Height(), win.Terminal.Width()
+	win.ScrollbackOffset = 3
+	top := sb - win.ScrollbackOffset
+	// Whole rows, from two scrollback rows to two screen rows past the seam.
+	first, last := top+1, top+win.ScrollbackOffset+2
+	m.copyFlash = &copyFlash{
+		WindowID: win.ID, At: time.Now(),
+		Start: terminal.Position{X: 0, Y: first},
+		End:   terminal.Position{X: maxX - 1, Y: last},
+	}
+
+	grid, _ := m.copyFlashGrid(win, win.Terminal, sb, maxY, maxX)
+	if grid == nil {
+		t.Fatal("a copied region on screen produced no grid")
+	}
+	defer pool.PutHighlightGrid(grid)
+	for y := range maxY {
+		abs := top + y
+		wantEnd := -1
+		if abs >= first && abs <= last {
+			wantEnd = wantTextEnd(lines[abs])
+		}
+		gotEnd := -1
+		for x := range maxX {
+			if grid.Get(y, x) {
+				if x != gotEnd+1 {
+					t.Errorf("row %d: the marked cells have a gap before column %d", y, x)
+				}
+				gotEnd = x
+			}
+		}
+		if gotEnd != wantEnd {
+			t.Errorf("row %d (%q): marked to column %d, want %d", y, lines[abs], gotEnd, wantEnd)
+		}
+	}
+}
+
+// TestASweepWithNothingToLightEnds. A copy of blank rows, or a block that has
+// scrolled out of view, leaves nothing to light. The sweep ends on the frame
+// that finds that, so the motion clock stops rather than drawing nothing at
+// the frame rate until the time runs out.
+//
+// Negative control: returning without clearing copyFlash in copyFlashGrid
+// fails both cases.
+func TestASweepWithNothingToLightEnds(t *testing.T) {
+	for _, blank := range []bool{false, true} {
+		t.Run(map[bool]string{false: "out of view", true: "blank rows"}[blank], func(t *testing.T) {
+			var win *terminal.Window
+			var start, end terminal.Position
+			if blank {
+				// Rows below the prompt of a pane that has hardly been used.
+				win = newTestWindow(t, "flash-blank-01", 40, 10)
+				start, end = terminal.Position{X: 0, Y: 2}, terminal.Position{X: 39, Y: 4}
+			} else {
+				// The oldest scrollback rows, with the view at the bottom.
+				win, _ = flashPane(t, "flash-gone-01")
+				start, end = terminal.Position{X: 0, Y: 0}, terminal.Position{X: 39, Y: 1}
+			}
+			m := newTestOS(win)
+			m.Settings.CopyFlash, m.Settings.CopyFlashMs = true, config.CopyFlashMsDefault
+			m.copyFlash = &copyFlash{WindowID: win.ID, At: time.Now(), Start: start, End: end}
+			if m.motionInterval() == 0 {
+				t.Fatal("ASSERTION: a running sweep does not hold the motion clock")
+			}
+
+			maxY, maxX := win.Terminal.Height(), win.Terminal.Width()
+			if grid, _ := m.copyFlashGrid(win, win.Terminal, win.ScrollbackLen(), maxY, maxX); grid != nil {
+				pool.PutHighlightGrid(grid)
+				t.Fatal("an empty region produced a grid to light")
+			}
+			if m.copyFlash != nil {
+				t.Error("the sweep kept running with nothing to light")
+			}
+			if got := m.motionInterval(); got != 0 {
+				t.Errorf("the motion clock still runs every %v", got)
+			}
+		})
+	}
+}

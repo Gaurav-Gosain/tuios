@@ -583,7 +583,7 @@ var optionSpecs = []Option{
 
 	{
 		Path: "appearance.selection.flash", Type: OptionBool, Section: "selection",
-		Description: "Sweep a band of light over text that was just copied. Motion none turns it off.",
+		Description: "Sweep a band of light over text that was just copied. Set motion to none to turn it off.",
 		Default:     "true",
 	},
 	{

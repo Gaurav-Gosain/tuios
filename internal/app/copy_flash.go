@@ -472,10 +472,51 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 	}
 }
 
+// copyFlashGrid is the swept region of one pane as this frame draws it, and
+// the band of light over it. The grid is nil when there is nothing to light,
+// and the caller puts a non-nil grid back in the pool.
+//
+// Its region is built exactly the way the visual selection's is, from the
+// same absolute coordinates, because it is the same region: the sweep covers
+// the cells that were taken. It outlives the selection, which a copy usually
+// clears, which is why the coordinates were written down at the copy rather
+// than read from the pane now.
+//
+// Each row is clamped to where its text ends before the block is measured.
+// The band is sized to the block, so a block measured over whole rows sent
+// the light across the empty right half of the pane: on a selection of many
+// short lines it was over the text for the first few frames and then crossed
+// nothing.
+//
+// A region with nothing in it ends the sweep here. That is a copy of blank
+// rows, or a block that has scrolled out of view, and a sweep kept running
+// over it would hold the motion clock at the frame rate to draw nothing.
+func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackLen, maxY, maxX int) (*pool.HighlightGrid, copyFlashBand) {
+	progress, ok := m.copyFlashProgress(window.ID)
+	if !ok || m.copyFlash == nil {
+		return nil, copyFlashBand{}
+	}
+	grid := pool.GetHighlightGrid()
+	grid.Init(maxY, maxX)
+	textEnd := func(y int) int {
+		return paneRowTextEnd(window, screen, y, maxX, scrollbackLen)
+	}
+	fillPaneRegion(grid, m.copyFlash.Start, m.copyFlash.End,
+		scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
+	box, ok := copyFlashBoxOf(grid, maxY, maxX)
+	if !ok {
+		pool.PutHighlightGrid(grid)
+		m.copyFlash = nil
+		return nil, copyFlashBand{}
+	}
+	return grid, m.copyFlashBandFor(progress, box)
+}
+
 // paneRowTextEnd is the last column on row y of the pane's view that holds
-// text, or -1 when the row is blank. The view is the one the frame draws:
-// scrolled back, the top rows are scrollback lines and the rest are the
-// screen shifted down.
+// text, or -1 when the row is blank. A wide character counts to its last
+// column, so the block measured from it covers the whole glyph. The view is
+// the one the frame draws: scrolled back, the top rows are scrollback lines
+// and the rest are the screen shifted down.
 func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbackLen int) int {
 	blank := func(c *uv.Cell) bool {
 		return c == nil || c.Width == 0 || c.Content == "" || c.Content == " "
@@ -489,7 +530,7 @@ func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbac
 		line := window.ScrollbackLine(idx)
 		for i := min(len(line), maxX) - 1; i >= 0; i-- {
 			if !blank(&line[i]) {
-				return i
+				return min(i+line[i].Width, maxX) - 1
 			}
 		}
 		return -1
@@ -499,8 +540,8 @@ func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbac
 		screenY = y - offset
 	}
 	for i := maxX - 1; i >= 0; i-- {
-		if !blank(screen.CellAt(i, screenY)) {
-			return i
+		if c := screen.CellAt(i, screenY); !blank(c) {
+			return min(i+c.Width, maxX) - 1
 		}
 	}
 	return -1
