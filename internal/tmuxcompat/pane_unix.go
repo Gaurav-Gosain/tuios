@@ -140,7 +140,9 @@ func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd,
 }
 
 type respawnCall struct {
-	req   RespawnRequest
+	req RespawnRequest
+	// reply writes the answer to the requester and returns once it is
+	// written, so the holder may exit right after it.
 	reply func(error)
 }
 
@@ -289,9 +291,17 @@ func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall) {
 				writeReply(conn, fmt.Errorf("this holder runs window %s, not %s", window, req.Window))
 				return
 			}
-			result := make(chan error, 1)
-			calls <- respawnCall{req: req, reply: func(err error) { result <- err }}
-			writeReply(conn, <-result)
+			// The holder writes the reply itself, before it goes on. Handing
+			// the result back to this goroutine would race the holder's
+			// exit: a new command that ends at once (a quick printf) makes
+			// RunPane return, and the process exits before this goroutine
+			// writes, so respawn-pane reads EOF although the respawn ran.
+			replied := make(chan struct{})
+			calls <- respawnCall{req: req, reply: func(err error) {
+				writeReply(conn, err)
+				close(replied)
+			}}
+			<-replied
 		}()
 	}
 }
