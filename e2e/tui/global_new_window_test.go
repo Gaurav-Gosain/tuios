@@ -76,6 +76,25 @@ func writeMachinesConfig(t *testing.T, base string, hosts []string) {
 	}
 }
 
+// writeHostAddrs writes a [hosts] table of name to address.
+func writeHostAddrs(t *testing.T, base string, hosts map[string]string) {
+	t.Helper()
+	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	var body strings.Builder
+	for name, addr := range hosts {
+		body.WriteString("[hosts." + name + "]\n")
+		body.WriteString("addr = \"" + addr + "\"\n")
+		body.WriteString("command = \"" + tuiosBin + "\"\n")
+		body.WriteString("connect_timeout = 5\n\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body.String()), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+}
+
 // globalFleet is this machine and two others, each with its own daemon.
 type globalFleet struct {
 	here, alpha, beta string
@@ -90,10 +109,19 @@ type globalFleet struct {
 // session on alpha can hold a pane on beta.
 func startGlobalFleet(t *testing.T) *globalFleet {
 	t.Helper()
+	return startGlobalFleetWith(t, map[string]string{"beta": "someone@betabox"})
+}
+
+// startGlobalFleetWith is startGlobalFleet with alpha's own [hosts] table
+// given, name to address. someone@herebox is this machine, so alpha can name
+// this machine whatever a test needs.
+func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string) *globalFleet {
+	t.Helper()
 	f := &globalFleet{here: t.TempDir(), alpha: remoteMachine(t), beta: remoteMachine(t)}
 	ssh := writeFakeSSHMulti(t, f.here, map[string]string{
 		"someone@alphabox": f.alpha,
 		"someone@betabox":  f.beta,
+		"someone@herebox":  f.here,
 	})
 	f.env = []string{"TUIOS_SSH=" + ssh}
 	f.machine = map[string]string{
@@ -101,7 +129,7 @@ func startGlobalFleet(t *testing.T) *globalFleet {
 		filepath.Base(f.alpha): "alpha",
 		filepath.Base(f.beta):  "beta",
 	}
-	writeMachinesConfig(t, f.alpha, []string{"beta"})
+	writeHostAddrs(t, f.alpha, alphaHosts)
 	for _, r := range []string{f.beta, f.alpha} {
 		if out, err := tuiosCLIEnv(t, r, f.env, "new", "far", "--detach"); err != nil {
 			t.Fatalf("start a far daemon: %v\n%s", err, out)
@@ -238,21 +266,34 @@ func choosePickerRow(t *testing.T, term *tuitest.Terminal, title, label string, 
 	}, uiTimeout); err != nil {
 		t.Fatalf("the machine picker never opened: %v\n%s", err, term.Snapshot())
 	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, found := findPickerRow(s, title, label)
+		return found && !strings.Contains(s.Text(), " loading ")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the picker never listed %q: %v\n%s", label, err, term.Snapshot())
+	}
 	if click {
 		r, c := pickerRowAt(t, term, title, label)
 		clickAt(t, term, c, r, 1)
 		return
 	}
-	for range i {
+	// The cursor goes down to the row by its label, the way a person finds
+	// it, rather than by its place: the rows differ between builds and
+	// between the machines the client is attached to. The start is the top.
+	_ = i
+	if err := term.SendKeys(tuitest.Home); err != nil {
+		t.Fatal(err)
+	}
+	onLabel := func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "› "+label+" ") }
+	for range 12 {
+		if term.WaitFor(onLabel, 300*time.Millisecond) == nil {
+			break
+		}
 		if err := term.SendKeys(tuitest.Down); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The cursor is on the row before enter goes, so the pick is the row the
-	// test means.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "› "+label)
-	}, uiTimeout); err != nil {
+	if err := term.WaitFor(onLabel, uiTimeout); err != nil {
 		t.Fatalf("the cursor never reached %q: %v\n%s", label, err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
@@ -265,7 +306,15 @@ func choosePickerRow(t *testing.T, term *tuitest.Terminal, title, label string, 
 // is not clicked.
 func pickerRowAt(t *testing.T, term *tuitest.Terminal, title, label string) (row, col int) {
 	t.Helper()
-	s := term.Screen()
+	if r, c, ok := findPickerRow(term.Screen(), title, label); ok {
+		return r, c
+	}
+	t.Fatalf("no picker row %q on screen:\n%s", label, term.Snapshot())
+	return 0, 0
+}
+
+// findPickerRow is pickerRowAt that reports a missing row instead of failing.
+func findPickerRow(s tuitest.Screen, title, label string) (row, col int, ok bool) {
 	_, rows := s.Size()
 	titleRow, titleCol := -1, 0
 	for r := range rows {
@@ -290,13 +339,12 @@ func pickerRowAt(t *testing.T, term *tuitest.Terminal, title, label string) (row
 			}
 			col := len([]rune(line[:from+b]))
 			if col >= titleCol-2 && col <= titleCol+4 {
-				return r, col + 1
+				return r, col + 1, true
 			}
 			from += b + len(label)
 		}
 	}
-	t.Fatalf("no picker row %q on screen:\n%s", label, term.Snapshot())
-	return 0, 0
+	return 0, 0, false
 }
 
 // pickerOpen reports whether the picker titled title is on screen. The
