@@ -235,6 +235,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionPeekType, "Prompt: type an answer")
 	inbox(config.ActionMailReply, "Mailbox: reply in the open thread")
 	inbox(config.ActionMailFocusPane, "Mailbox: go to the pane that last wrote")
+	inbox(config.ActionMailNew, "Mailbox: write a new message to an agent")
 	// The review overlay's own keys, which are not bindings, like the
 	// scrollback browser's. See review_input.go.
 	add([]string{"] [", "} {"}, "Review: next or previous hunk, next or previous file")

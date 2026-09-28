@@ -124,6 +124,7 @@ var settingLabels = map[string]string{
 	"notifications.agent.states.done":            "Alert when it finishes",
 	"notifications.agent.states.needs_input":     "Alert when it waits for you",
 	"notifications.agent.states.errored":         "Alert when it fails",
+	"notifications.mail.between_agents":          "Mail between agents alerts",
 }
 
 // settingInverted are the bool options whose row reads as the positive. The

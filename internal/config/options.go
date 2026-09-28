@@ -852,6 +852,34 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [notifications.mail]. Default is empty for the four keys that follow
+	// [notifications.agent] when unset: the value in force is that table's.
+	{
+		Path: "notifications.mail.enabled", Type: OptionBool, Section: "notifications",
+		Description: "Turn mail alerts on or off. Unset follows notifications.agent.enabled.",
+		Default:     "",
+	},
+	{
+		Path: "notifications.mail.notify", Type: OptionBool, Section: "notifications",
+		Description: "Send a desktop notification for mail. Unset follows notifications.agent.notify.",
+		Default:     "",
+	},
+	{
+		Path: "notifications.mail.sound", Type: OptionBool, Section: "notifications",
+		Description: "Make a mail alert audible. Unset follows notifications.agent.sound.",
+		Default:     "",
+	},
+	{
+		Path: "notifications.mail.dock", Type: OptionBool, Section: "notifications",
+		Description: "Show a mail alert in the dock. Unset follows notifications.agent.dock.",
+		Default:     "",
+	},
+	{
+		Path: "notifications.mail.between_agents", Type: OptionBool, Section: "notifications",
+		Description: "Alert on a message from one agent to another agent too",
+		Default:     "false",
+	},
+
 	// [tape]
 	{
 		Path: "tape.autorun", Type: OptionString, Section: "tape",

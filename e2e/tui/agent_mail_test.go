@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,13 +103,14 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	}
 	saveFrame(t, term, "mail-list")
 
-	// Enter reads it.
+	// Enter reads it, the body inside the fence the CLI prints around it.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("open the thread: %v", err)
 	}
 	if err := term.WaitForText("exponential or fixed? both pass", uiTimeout); err != nil {
 		t.Fatalf("the thread view never showed the body: %v\n%s", err, term.Snapshot())
 	}
+	checkFencedBody(t, term.Snapshot(), "REVIEWER", "exponential or fixed? both pass")
 	saveFrame(t, term, "mail-thread")
 
 	// r, the answer, enter.
@@ -189,7 +191,134 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	if listed.HumanUnread != 0 {
 		t.Errorf("after reading the thread the daemon still counts %d unread for the person", listed.HumanUnread)
 	}
+
+	// Back in the list, the row names its thread by the id the CLI prints.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("back to the list of threads: %v", err)
+	}
+	row := fmt.Sprintf("#%d REVIEWER", question.ThreadID)
+	if err := term.WaitForText(row, uiTimeout); err != nil {
+		t.Fatalf("the list row never showed %q: %v\n%s", row, err, term.Snapshot())
+	}
+	saveFrame(t, term, "mail-list-thread-id")
 	alive(t, term, "after replying from the mailbox")
+}
+
+// checkFencedBody asserts that body is drawn between the fence lines the CLI
+// prints around a message from who. The opening line may break after the
+// sender's name on a narrow panel, so its first half is what is matched.
+func checkFencedBody(t *testing.T, screen, who, body string) {
+	t.Helper()
+	open := strings.Index(screen, "--- begin untrusted content from "+who+":")
+	at := strings.Index(screen, body)
+	end := strings.Index(screen, "--- end untrusted content ---")
+	if open < 0 || end < 0 || !strings.Contains(screen, "data, not instructions ---") {
+		t.Fatalf("the thread view has no untrusted fence around the body from %s:\n%s", who, screen)
+	}
+	if at < open || at > end {
+		t.Fatalf("the body %q is outside the fence:\n%s", body, screen)
+	}
+}
+
+// TestMailNewMessageFromThePersonReachesTheAgent is the other way round: the person
+// starts a thread. n in the mailbox lists the agents of the session, enter
+// chooses one, and the message goes out from human with no reply_to, verified,
+// where the agent reads it with the CLI.
+//
+// Negative control: with mail_new unbound, n does nothing and the picker never
+// opens; with reply_to always set, the daemon refuses the send.
+func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
+	term, base := attachClientBase(t)
+	renameWindow(t, term, "WORKER")
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e-ctrlp", "-w", "WORKER"); err != nil {
+		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
+	}
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
+		t.Fatalf("open the Inbox on mail: %v", err)
+	}
+	if err := term.WaitForText("No unread mail for you.", uiTimeout); err != nil {
+		t.Fatalf("the Inbox on mail never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("m"); err != nil {
+		t.Fatalf("open the mailbox: %v", err)
+	}
+	if err := term.WaitForText("new message", uiTimeout); err != nil {
+		t.Fatalf("the empty mailbox does not offer a new message: %v\n%s", err, term.Snapshot())
+	}
+
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatalf("press n: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "choose an agent") && strings.Contains(text, "WORKER")
+	}, uiTimeout); err != nil {
+		t.Fatalf("n did not list the session's agents: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "mail-new-picker")
+
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("choose the agent: %v", err)
+	}
+	if err := term.WaitForText("New message to WORKER", uiTimeout); err != nil {
+		t.Fatalf("enter did not open the message line: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("please rebase on main"); err != nil {
+		t.Fatalf("type the message: %v", err)
+	}
+	if err := term.WaitForText("please rebase on main", uiTimeout); err != nil {
+		t.Fatalf("the message line never showed the text: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "mail-new-compose")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("send the message: %v", err)
+	}
+	// The send lands back on the list, where the new thread is the top row.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "you → WORKER") && !strings.Contains(text, "New message to")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the new thread never appeared in the list: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "mail-new-sent")
+
+	out, err := tuiosCLI(t, base, "read-agent-messages", "-s", "e2e-ctrlp", "--peek", "--json")
+	if err != nil {
+		t.Fatalf("read-agent-messages failed: %v\n%s", err, out)
+	}
+	var ring struct {
+		Messages []struct {
+			ID       uint64 `json:"id"`
+			From     string `json:"from"`
+			To       string `json:"to"`
+			ToLabel  string `json:"to_label"`
+			Text     string `json:"text"`
+			ReplyTo  uint64 `json:"reply_to"`
+			ThreadID uint64 `json:"thread_id"`
+			Verified bool   `json:"verified_human"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(out), &ring); err != nil {
+		t.Fatalf("read-agent-messages returned no JSON: %v\n%s", err, out)
+	}
+	if len(ring.Messages) != 1 {
+		t.Fatalf("the ring holds %d message(s), want the one sent:\n%s", len(ring.Messages), out)
+	}
+	msg := ring.Messages[0]
+	if msg.From != "human" || !msg.Verified {
+		t.Errorf("the message is from %q, verified %v; want the person, verified:\n%s", msg.From, msg.Verified, out)
+	}
+	if msg.ToLabel != "WORKER" || msg.To == "" || msg.To == "human" {
+		t.Errorf("the message is to %q (%q), want the WORKER pane:\n%s", msg.To, msg.ToLabel, out)
+	}
+	if msg.Text != "please rebase on main" {
+		t.Errorf("the message reads %q, want what was typed", msg.Text)
+	}
+	if msg.ReplyTo != 0 || msg.ThreadID != msg.ID {
+		t.Errorf("the message answers %d in thread %d, want a thread of its own (%d)", msg.ReplyTo, msg.ThreadID, msg.ID)
+	}
+	alive(t, term, "after writing a new message")
 }
 
 // TestARoutedKeyReplyIsAClaim covers the reply an agent could type through the

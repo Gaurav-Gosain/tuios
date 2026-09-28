@@ -75,6 +75,11 @@ type NotificationsConfig struct {
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
 	Agent AgentAlertsConfig `toml:"agent"`
+
+	// Mail is the [notifications.mail] table: what happens when agent mail
+	// arrives for the person. A key it leaves out follows the same key in
+	// Agent. See mail_alerts.go.
+	Mail MailAlertsConfig `toml:"mail"`
 }
 
 // DebugConfig holds diagnostic settings. These are off by default so a normal
@@ -1111,6 +1116,7 @@ const (
 	ActionMailOpen      = "mail_open"
 	ActionMailReply     = "mail_reply"
 	ActionMailFocusPane = "mail_focus_pane"
+	ActionMailNew       = "mail_new"
 	ActionMailBack      = "mail_back"
 )
 
@@ -1190,6 +1196,7 @@ func getDefaultMailKeybinds() map[string][]string {
 		ActionMailOpen:      {"enter"},
 		ActionMailReply:     {"r"},
 		ActionMailFocusPane: {"o"},
+		ActionMailNew:       {"n"},
 		ActionMailBack:      {"esc", "q"},
 	}
 }

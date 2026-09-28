@@ -115,6 +115,10 @@ pane, and that reads back `"claimed_human": true` and is fenced `UNVERIFIED`.
 Trust only a verified reply as the person's answer. `ask-agent -w human` is
 refused with `no_keyboard`.
 
+The person can also write to you first. A message from `human` with no
+`reply_to` starts a new thread. Read it with `read-agent-messages` on your own
+inbox, and reply with `--reply-to` its id.
+
 ## Reading a prompt another agent is blocked on
 
 ```sh

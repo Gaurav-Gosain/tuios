@@ -9,8 +9,10 @@ import (
 // handleAgentMailInput handles keyboard input while the mailbox is open. Two
 // views: the list of threads, where enter opens one, and the open thread,
 // where r opens the reply line, o goes to the pane that last spoke, and esc
-// steps back to the list. While the reply line is open every printable key is
-// text, enter sends, and esc drops the draft.
+// steps back to the list. n in the list opens a picker of the session's
+// agents, and enter there opens the line for a new message to that agent.
+// While a reply or message line is open every printable key is text, enter
+// sends, and esc drops the draft.
 func handleAgentMailInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 
@@ -46,11 +48,14 @@ func handleAgentMailInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.AgentMailBack()
 	case config.ActionMailOpen:
 		if o.AgentMail.Thread == 0 {
+			// While the agent picker is open, this chooses the agent.
 			return o, o.AgentMailOpenSelected()
 		}
 		o.AgentMailStartReply()
 	case config.ActionMailReply:
 		o.AgentMailStartReply()
+	case config.ActionMailNew:
+		o.AgentMailStartNew()
 	case config.ActionMailFocusPane:
 		o.AgentMailFocusPane()
 	case config.ActionMailUp:
