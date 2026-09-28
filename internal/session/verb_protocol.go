@@ -182,6 +182,9 @@ type verbParam struct {
 	Description string   `json:"description"`
 	Accepted    []string `json:"accepted,omitempty"` // closed value set, when there is one
 	Default     string   `json:"default,omitempty"`
+	// Nullable says the field can be null as well as its type. Only a
+	// returned field sets it: a parameter is omitted rather than sent null.
+	Nullable bool `json:"nullable,omitempty"`
 }
 
 // verbEntry pairs a handler with the documentation list-verbs reports: a
@@ -207,16 +210,16 @@ type verbDoc struct {
 	Examples    []string    `json:"examples,omitempty"`
 }
 
-// sessionParam is the session selector shared by nearly every verb.
 // identityReturn, confidenceReturn and evidenceAgeReturn are the three
 // detection fields get-agent-state, explain-agent-detect and list-agents share,
 // declared once so the three verbs describe them in the same words.
 var (
 	identityReturn    = verbParam{Name: "identity", Type: "string", Description: "What named the agent: report (the harness named itself), manifest (a manifest rule matched the process), list (a name list matched the process) or hint (TUIOS_AGENT in the process environment). Empty when nothing named it.", Accepted: []string{"report", "manifest", "list", "hint", ""}}
 	confidenceReturn  = verbParam{Name: "confidence", Type: "string", Description: "How sure the identity is: certain for report, strong for manifest, list and hint, none when nothing named the agent.", Accepted: []string{"certain", "strong", "none"}}
-	evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Description: "Milliseconds since the last evidence about the state arrived: a report, a detector change or the silence timer. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
+	evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Nullable: true, Description: "Milliseconds since the last evidence about the state arrived. For a state the agent or a rule reported, that is the report. For a state the detector or the silence timer inferred (source detect or stall), it is the later of that and the pane's last output. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
 )
 
+// sessionParam is the session selector shared by nearly every verb.
 var sessionParam = verbParam{
 	Name:        "session",
 	Type:        "string",
@@ -1422,6 +1425,12 @@ func init() {
 				{Name: "running", Type: "bool", Description: "Whether a foreground process could be read."},
 				{Name: "matched", Type: "bool", Description: "Whether the process read now matches an agent."},
 				{Name: "matched_rule", Type: "string", Description: "With matched: the predicate that matched."},
+				{Name: "matched_harness", Type: "string", Description: "With matched: the harness the match names, empty for a name-list match."},
+				{Name: "matched_via", Type: "[]string", Description: "With matched: the wrappers the detector read through to find the agent, outermost first. Empty when the foreground process itself matched."},
+				{Name: "name_list", Type: "string", Description: "The name-list rule the process matches, when one does."},
+				{Name: "note", Type: "string", Description: "A caveat on the verdict, such as a name-list match that names no harness."},
+				{Name: "reason", Type: "string", Description: "With running false: why no process could be read."},
+				{Name: "group", Type: "[]object", Description: "The processes read behind a wrapper: pid, depth, comm, argv, exe and matched for each."},
 				{Name: "process", Type: "object", Description: "What the detector read: comm, argv and executable."},
 				{Name: "manifests", Type: "[]object", Description: "Each manifest and what its rules made of the process."},
 				{Name: "ignored", Type: "[]string", Description: "Words that look like an agent's name and did not count, each with the reason."},

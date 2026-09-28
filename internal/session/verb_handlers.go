@@ -1252,7 +1252,7 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"confidence": claim.identity.confidence(),
 		// evidence_age_ms is how old the newest evidence behind state is, so
 		// a consumer can tell a fresh answer from a stale one.
-		"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, d.evidenceNow()),
+		"evidence_age_ms": evidenceAgeMS(sess.evidenceStamp(w, claim), d.evidenceNow()),
 		// needs_you is the one question a person asks of a pane, answered as a
 		// bool so a consumer does not have to know which states mean it.
 		"needs_you": w.AgentState.NeedsYou(),
@@ -1329,7 +1329,7 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 		"auto_detected":   claim.auto,
 		"identity":        string(claim.identity),
 		"confidence":      claim.identity.confidence(),
-		"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, d.evidenceNow()),
+		"evidence_age_ms": evidenceAgeMS(sess.evidenceStamp(w, claim), d.evidenceNow()),
 		"needs_you":       w.AgentState.NeedsYou(),
 		"activity":        w.AgentState.Activity(),
 		"running":         false,

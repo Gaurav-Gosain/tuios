@@ -1250,6 +1250,8 @@ Pass a `verb` param to describe only that verb. Each parameter carries its
 a JSON object such as `set-agent-meta`'s `tokens`), `description`, and
 optionally `required`, `accepted`, and `default`. The `accepted` lists are the
 same lists the handlers enforce, so they cannot drift from the implementation.
+A verb's `returns` use the same shape. A returned field that can be `null` as
+well as its type carries `"nullable": true`, as `evidence_age_ms` does.
 
 From the shell, `tuios list-verbs` and `tuios list-verbs --json` render the same
 catalog.

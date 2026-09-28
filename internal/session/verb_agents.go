@@ -254,7 +254,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// identity is the tier confidence is read from: report, manifest,
 			// list or hint, empty when nothing named the agent.
 			"identity":        string(claim.identity),
-			"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, time.Unix(0, now)),
+			"evidence_age_ms": evidenceAgeMS(sess.evidenceStamp(w, claim), time.Unix(0, now)),
 			// completion_seq counts the pane's finished turns, and
 			// finished_unread says the latest one has not been in front of
 			// anybody: no attached client has pushed state with the pane
