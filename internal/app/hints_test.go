@@ -77,6 +77,23 @@ func TestHintsDoNotOpenAnotherMachinesFile(t *testing.T) {
 			func(m *OS, w *terminal.Window) { m.RemoteClient = true }, "remote client"},
 		{"a path in a pane running ssh", file,
 			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "ssh" }, "another machine"},
+		{"a path in a pane running kitty's ssh kitten", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "kitten" }, "another machine"},
+		{"a path in a pane running autossh", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "autossh" }, "another machine"},
+		{"a path in a pane running tsh", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "tsh" }, "another machine"},
+		{"a path in a pane running docker exec", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "docker" }, "another machine"},
+		{"a path in a pane running kubectl exec", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "kubectl" }, "another machine"},
+		{"a path in a pane running podman exec", file,
+			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "podman" }, "another machine"},
+		{"a relative path while a program runs in front of the shell", "notes/todo.md",
+			func(m *OS, w *terminal.Window) {
+				w.Cwd = "file://localhost/srv/app"
+				w.ForegroundCmd = "make"
+			}, "folder is not known"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -65,9 +65,12 @@ Hints mode reads only the text on the screen. If you scroll the pane back, it
 reads the lines you scrolled to. A URL that wraps onto the next row is one
 match. tuios joins two rows only when the terminal wrapped the text. A line
 that fills the row and then ends is not joined to the next line. Both
-terminal backends record the wrap. A row that tuios restored from a saved
-session, for example after you attach again, has no wrap record, so tuios
-reads it as a line that ends.
+terminal backends record the wrap, and the record goes with the text when
+you attach again or change the workspace. On the ghostty backend, the wrap
+from the newest history row into the first screen row is not restored, so
+tuios reads that row as a line that ends. A daemon from before this change
+sends no wrap record, and tuios then reads every restored row as a line
+that ends.
 
 ## Open
 
@@ -85,8 +88,11 @@ and tells you why in these cases:
 - The pane runs on another machine.
 - The session runs on another machine (`tuios attach` to a host).
 - The client is remote (`tuios ssh`, the web client).
-- The pane runs `ssh`, `mosh` or `et`.
+- The pane runs `ssh`, `autossh`, `mosh`, `et`, `telnet`, `tsh`, `kitten`
+  (for example `kitten ssh`), `docker`, `kubectl` or `podman`.
 - The shell reported a folder on another machine.
+- The path is relative and a program runs in front of the shell. tuios knows
+  only the folder the shell reported, and the program can be somewhere else.
 - The path is relative and tuios does not know the pane's folder.
 
 tuios never gives the text to a shell. It gives the text to the opener as one
