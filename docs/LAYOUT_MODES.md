@@ -34,7 +34,7 @@ the nine workspaces keeps its own.
 
 ### Settings
 
-Four settings shape the tiling, and all four are in the settings page
+Five settings shape the tiling, and all five are in the settings page
 (`Ctrl+B ,`) as well as in `config.toml`:
 
 | Setting | What it does |
@@ -43,11 +43,13 @@ Four settings shape the tiling, and all four are in the settings page
 | `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (10-90). The `<` and `>` keys, the percentage resizes and a mouse drag on the divider move it for the workspace you are on, and every client attached to the session follows. A workspace nobody has moved it on starts at this setting. |
 | `appearance.scroll_column_width` | A column's width in the scrolling layout, as a percent of the screen (20-90). |
 | `appearance.gap` | Cells of empty ground between neighbouring panes, in every mode. |
+| `appearance.outer_gap` | Cells of empty ground between the panes and the screen edge, the dock and the rail, in every mode. The default is 0. |
 
-`appearance.gap`, `appearance.master_ratio`, `appearance.scroll_column_width`
-and `appearance.shared_borders` decide how many cells a pane gets, so they are
-settled across a session rather than kept per client: change one on any client
-and every client attached to that session follows. The purely visual settings
+`appearance.gap`, `appearance.outer_gap`, `appearance.master_ratio`,
+`appearance.scroll_column_width` and `appearance.shared_borders` decide how
+many cells a pane gets, so they are settled across a session rather than kept
+per client: change one on any client and every client attached to that session
+follows. The purely visual settings
 (theme, border style, glyphs, title position, dimming) stay per client.
 
 ### Resizing a pane by percentage

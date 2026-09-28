@@ -273,16 +273,72 @@ func (m *OS) ClampWindowsToView() {
 	}
 }
 
-// GetTopMargin returns the margin at the top (reserved space for the dockbar
-// when positioned at "top").
-func (m *OS) GetTopMargin() int {
+// The pane region and the chrome region.
+//
+// The chrome region is the screen less the chrome the session reserves: the
+// dock's rows and the rail's columns. The pane region is the chrome region
+// inset on every side by the outer gap (appearance.outer_gap). The four margin
+// getters below (GetTopMargin, GetBottomMargin, GetLeftMargin,
+// GetRightMargin) and the two extents (GetContentWidth, GetUsableHeight)
+// describe the pane region, and they are the one place it is computed: the
+// tilers, floating placement and snap, zoom, the scrolling strip, popups, the
+// splash, overlay placement and every mouse hit test that clamps against the
+// region read them, so they all follow the gap without knowing it exists.
+//
+// Only the chrome itself reads the chrome region, through the chrome* helpers:
+// the rail spans the full height between the dock and the screen edge whatever
+// the gap, and a divider joins the dock's or the rail's rule only when no gap
+// separates the two.
+
+// chromeTop is the first row below the chrome at the top of the screen.
+func (m *OS) chromeTop() int {
 	return m.clampReserve(m.paneReserve().Top, m.GetRenderHeight())
 }
 
-// GetBottomMargin returns the rows reserved below the panes: the dock when it
-// sits at the bottom, or whatever more a peer client reserves there.
-func (m *OS) GetBottomMargin() int {
+// chromeBottom is the rows the chrome takes at the bottom of the screen.
+func (m *OS) chromeBottom() int {
 	return m.clampReserve(m.paneReserve().Bottom, m.GetRenderHeight())
+}
+
+// chromeLeft is the columns the chrome takes at the left of the screen.
+func (m *OS) chromeLeft() int {
+	return m.clampReserve(m.paneReserve().Left, m.GetRenderWidth())
+}
+
+// chromeRight is the columns the chrome takes at the right of the screen.
+func (m *OS) chromeRight() int {
+	return m.clampReserve(m.paneReserve().Right, m.GetRenderWidth())
+}
+
+// chromeHeight is the rows between the chrome at the top and the bottom: the
+// height the rail is drawn at.
+func (m *OS) chromeHeight() int {
+	return max(m.GetRenderHeight()-m.chromeTop()-m.chromeBottom(), 0)
+}
+
+// outerGapRows is the outer gap above and below the panes, cut down on a
+// screen too short to carry it. See config.OuterGapFit.
+func (m *OS) outerGapRows() int {
+	return config.OuterGapFit(m.OuterGap, m.chromeHeight(), config.DefaultWindowHeight)
+}
+
+// outerGapCols is outerGapRows for the gap left and right of the panes.
+func (m *OS) outerGapCols() int {
+	free := max(m.GetRenderWidth()-m.chromeLeft()-m.chromeRight(), 0)
+	return config.OuterGapFit(m.OuterGap, free, config.DefaultWindowWidth)
+}
+
+// GetTopMargin returns the first row of the pane region: the dock's rows when
+// it sits at the top, plus the outer gap.
+func (m *OS) GetTopMargin() int {
+	return m.chromeTop() + m.outerGapRows()
+}
+
+// GetBottomMargin returns the rows below the pane region: the dock when it
+// sits at the bottom, or whatever more a peer client reserves there, plus the
+// outer gap.
+func (m *OS) GetBottomMargin() int {
+	return m.chromeBottom() + m.outerGapRows()
 }
 
 // GetDockbarContentYPosition returns the Y position of the dockbar
@@ -463,16 +519,16 @@ func (m *OS) paneReserve() session.LayoutReserve {
 
 // GetLeftMargin returns the columns reserved on the left before any pane is
 // placed: the session's agreed chrome reserve, never less than this client's own
-// sidebar. The rail itself still draws at GetSidebarWidth; any agreed columns
-// beyond it are left blank.
+// sidebar, plus the outer gap. The rail itself still draws at GetSidebarWidth;
+// any agreed columns beyond it are left blank.
 func (m *OS) GetLeftMargin() int {
-	return m.clampReserve(m.paneReserve().Left, m.GetRenderWidth())
+	return m.chromeLeft() + m.outerGapCols()
 }
 
 // GetRightMargin returns the columns reserved on the right, on the same terms as
 // GetLeftMargin.
 func (m *OS) GetRightMargin() int {
-	return m.clampReserve(m.paneReserve().Right, m.GetRenderWidth())
+	return m.chromeRight() + m.outerGapCols()
 }
 
 // clampReserve keeps a reserve from eating the screen it is measured against. A

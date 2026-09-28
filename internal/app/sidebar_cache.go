@@ -123,8 +123,8 @@ func (m *OS) sidebarSignature() uint64 {
 
 	// Geometry and layout knobs.
 	mixI(m.GetSidebarWidth())
-	mixI(m.GetUsableHeight())
-	mixI(m.GetTopMargin())
+	mixI(m.chromeHeight())
+	mixI(m.chromeTop())
 	mixI(m.GetRenderWidth())
 	mixS(m.Settings.SidebarPosition)
 	// The layout: which sections are stacked, in what order, with what share,

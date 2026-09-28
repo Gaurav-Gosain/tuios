@@ -485,11 +485,21 @@ type Settings struct {
 	// panes: i3's inner gap, and about the only spacing a terminal window manager
 	// can honestly offer.
 	//
-	// Inner only. An outer gap would have to inset the content region, which the
-	// sidebar's width, the dock's height, every overlay's placement and every mouse
-	// hit test are measured against, so a margin the sidebar already draws one of
-	// would cost a move of the whole frame.
+	// Inner only. The space between the panes and the edge of their region is
+	// OuterGap.
 	PaneGap int
+
+	// OuterGap is the cells of empty space kept between the panes and whatever
+	// closes the region they tile in: the screen edge, the dock's rule and the
+	// rail's edge. i3's outer gap. Zero, the default, is the layout tuios always
+	// had, with the panes' borders against the edge. One count serves rows and
+	// columns, as PaneGap does.
+	//
+	// It insets the pane region only (OS.GetLeftMargin and the rest), so the
+	// tiler, floating placement, zoom, the strip and every hit test measured
+	// against that region follow it. The rail measures from the chrome region
+	// and keeps its full height. See OS.chromeTop.
+	OuterGap int
 
 	// MasterRatioPercent is how much of the screen the master pane takes in the
 	// master-stack layout, as a percent. It is the value a new session starts at;

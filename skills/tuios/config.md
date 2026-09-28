@@ -47,7 +47,7 @@ daemon runs needs `tuios kill-server` to take effect.
 |---|---|---|
 | **Colour** | the twenty terminal colours, the accents, the borders | `appearance.theme`, `list-themes` |
 | **Shape** | the characters the chrome is drawn with | `appearance.glyphs`, `list-glyphs` |
-| **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
+| **Spacing** | ground between panes, ground around the panes, padding inside overlay panels | `appearance.gap`, `appearance.outer_gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
 The options `list-options` prints are scalars, and spacing and composition are
@@ -114,11 +114,17 @@ which is the one thing to check after writing a set.
 
 ```sh
 tuios set-config appearance.gap 2
+tuios set-config appearance.outer_gap 1
 tuios set-config appearance.panel_padding 4
 tuios set-config appearance.dim_unfocused 40
 tuios set-config appearance.clock_format "Mon 3:04PM"
 tuios set-config appearance.window_title_format "{index}: {title}"
 ```
+
+`gap` is the space between two panes. `outer_gap` (0 to 8, default 0) is the
+space between the panes and the screen edge, the dock and the rail. At 0 the pane
+borders touch them. Space outside the tuios screen is your terminal's own
+padding. Change it in the terminal's config.
 
 `dim_unfocused` (0 to 90) quiets the content of unfocused panes. It reaches only
 cells a program coloured itself unless a theme is set.

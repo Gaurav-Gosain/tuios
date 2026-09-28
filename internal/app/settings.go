@@ -158,6 +158,10 @@ func (m *OS) adoptConfigPaneGeometry() {
 		m.lastConfigPaneGap = m.Settings.PaneGap
 		m.PaneGap = m.Settings.PaneGap
 	}
+	if m.Settings.OuterGap != m.lastConfigOuterGap {
+		m.lastConfigOuterGap = m.Settings.OuterGap
+		m.OuterGap = m.Settings.OuterGap
+	}
 	if m.Settings.ScrollColumnWidth != m.lastConfigScrollWidth {
 		m.lastConfigScrollWidth = m.Settings.ScrollColumnWidth
 		m.ScrollColumnWidth = m.Settings.ScrollColumnWidth
@@ -350,6 +354,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.border_focused_color"),
 			opt("appearance.border_unfocused_color"),
 			custom("appearance.gap", m.paneGapItem()),
+			custom("appearance.outer_gap", m.outerGapItem()),
 			// Hand-written for the reason sharedBordersItem is: both are session
 			// state and a row reading the config would show a value the layout
 			// is not using.

@@ -233,9 +233,11 @@ func NewOS(opts OSOptions) *OS {
 		// across the session by state sync; see the field comment in os.go.
 		SharedBorders:           seed.SharedBorders,
 		PaneGap:                 seed.PaneGap,
+		OuterGap:                seed.OuterGap,
 		ScrollColumnWidth:       seed.ScrollColumnWidth,
 		lastConfigSharedBorders: seed.SharedBorders,
 		lastConfigPaneGap:       seed.PaneGap,
+		lastConfigOuterGap:      seed.OuterGap,
 		lastConfigScrollWidth:   seed.ScrollColumnWidth,
 	}
 

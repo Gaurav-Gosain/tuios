@@ -324,6 +324,11 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: PaneGapMax,
 	},
 	{
+		Path: "appearance.outer_gap", Type: OptionInt, Section: "appearance",
+		Description: "Cells of empty ground kept between the panes and the screen edge, the dock and the rail",
+		Default:     "0", Min: 0, Max: OuterGapMax,
+	},
+	{
 		Path: "appearance.master_ratio", Type: OptionInt, Section: "appearance",
 		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
 		Default:     strconv.Itoa(MasterRatioDefault), Min: MasterRatioMin, Max: MasterRatioMax,

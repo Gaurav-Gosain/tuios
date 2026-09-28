@@ -26,11 +26,13 @@ import (
 type clientGlobals struct {
 	shared bool
 	gap    int
+	outer  int
 }
 
 func (g clientGlobals) install() {
 	config.Global.SharedBorders = g.shared
 	config.Global.PaneGap = g.gap
+	config.Global.OuterGap = g.outer
 }
 
 // routeSide is exchange.route with one side's globals installed before each of
@@ -67,11 +69,17 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 // adopted, and the exchange quiet.
 func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
+	return geometryRigSized(t, localG, peerG, holderCols, holderRows)
+}
+
+// geometryRigSized is geometryRig with the peer's terminal at its own size.
+func geometryRigSized(t *testing.T, localG, peerG clientGlobals, peerCols, peerRows int) (*rig, *peer, *exchange) {
+	t.Helper()
+	prevShared, prevGap, prevOuter := config.Global.SharedBorders, config.Global.PaneGap, config.Global.OuterGap
 	prevAnim := config.Global.Motion
 	config.Global.Motion = config.MotionNone
 	t.Cleanup(func() {
-		config.Global.SharedBorders, config.Global.PaneGap = prevShared, prevGap
+		config.Global.SharedBorders, config.Global.PaneGap, config.Global.OuterGap = prevShared, prevGap, prevOuter
 		config.Global.Motion = prevAnim
 	})
 
@@ -83,7 +91,7 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	r.m.SyncStateToDaemon()
 
 	peerG.install()
-	p := joinPeerOS(t, r, holderCols, holderRows)
+	p := joinPeerOS(t, r, peerCols, peerRows)
 	p.m.AutoTiling = true
 
 	ex := &exchange{t: t}
@@ -118,6 +126,7 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 		queued := ex.queued()
 		if !queued &&
 			r.m.SharedBorders == p.m.SharedBorders && r.m.PaneGap == p.m.PaneGap &&
+			r.m.OuterGap == p.m.OuterGap &&
 			contentSizes(r.m) == contentSizes(p.m) {
 			return
 		}

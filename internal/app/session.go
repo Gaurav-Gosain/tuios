@@ -185,6 +185,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	state.PaneGeometry = &session.PaneGeometryState{
 		SharedBorders:     m.SharedBorders,
 		PaneGap:           m.PaneGap,
+		OuterGap:          m.OuterGap,
 		ScrollColumnWidth: m.ScrollColumnWidth,
 	}
 	// Where the strip is scrolled to, on the workspace this state names. Shared

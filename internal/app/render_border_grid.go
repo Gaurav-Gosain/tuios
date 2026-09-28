@@ -298,21 +298,33 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	if !m.Settings.BorderJoinsChromeRules() {
 		return r
 	}
-	switch m.Settings.DockbarPosition {
-	case "hidden":
-	case "top":
-		r.top = bounds.Y - 1
-	default:
-		r.bottom = bounds.Y + bounds.H
+	// An outer gap puts empty ground between the panes and every rule, and a
+	// divider reaching across it to the rule would be a line through the gap.
+	// The divider stops at the region's edge, as it does at the screen's.
+	if m.outerGapRows() == 0 {
+		switch m.Settings.DockbarPosition {
+		case "hidden":
+		case "top":
+			r.top = bounds.Y - 1
+		default:
+			r.bottom = bounds.Y + bounds.H
+		}
 	}
-	if m.GetLeftMargin() > 0 {
+	if m.railRuleLeft() {
 		r.left = bounds.X - 1
 	}
-	if m.GetRightMargin() > 0 {
+	if m.railRuleRight() {
 		r.right = bounds.X + bounds.W
 	}
 	return r
 }
+
+// railRuleLeft reports whether the column just left of the pane region is a
+// chrome rule a divider can meet: the rail's edge, with no outer gap between.
+func (m *OS) railRuleLeft() bool { return m.chromeLeft() > 0 && m.outerGapCols() == 0 }
+
+// railRuleRight is railRuleLeft for the right side.
+func (m *OS) railRuleRight() bool { return m.chromeRight() > 0 && m.outerGapCols() == 0 }
 
 // cell is one cell of the divider grid: which axes run through it, and whether
 // it is the cell where a divider meets a chrome rule. A nil receiver is an empty
@@ -798,8 +810,8 @@ func (m *OS) focusPerimeter(bounds layout.Rect) borderPerimeter {
 		clipTop:    max(win.Y-1, bounds.Y),
 		clipBottom: min(win.Y+win.Height, bounds.Y+bounds.H-1),
 
-		capLeft:  m.GetLeftMargin() == 0 || win.X-1 >= bounds.X,
-		capRight: m.GetRightMargin() == 0 || win.X+win.Width < bounds.X+bounds.W,
+		capLeft:  !m.railRuleLeft() || win.X-1 >= bounds.X,
+		capRight: !m.railRuleRight() || win.X+win.Width < bounds.X+bounds.W,
 	}
 }
 

@@ -554,6 +554,23 @@ func (s *Settings) FormatWorkspaceTab(name string, index int) string {
 // being spacing.
 const PaneGapMax = 8
 
+// OuterGapMax caps appearance.outer_gap for the reason PaneGapMax caps the
+// inner gap. The layout also shrinks the outer gap on a screen too small to
+// carry it; see OuterGapFit.
+const OuterGapMax = 8
+
+// OuterGapFit is the outer gap one side actually gets: the configured gap, cut
+// down so the panes keep at least floor cells between the two gaps. free is the
+// extent the panes have before any gap, the screen less the chrome. A screen
+// too small to carry the gap gets less of it rather than panes squeezed to
+// nothing.
+func OuterGapFit(gap, free, floor int) int {
+	if gap <= 0 {
+		return 0
+	}
+	return min(gap, OuterGapMax, max((free-floor)/2, 0))
+}
+
 // The tiling schemes, under the names they travel by: in [startup] layout, in
 // session state, and in the command palette. They live here rather than in the
 // package that implements them because the option registry has to publish the

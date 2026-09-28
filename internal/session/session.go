@@ -598,6 +598,11 @@ type PaneGeometryState struct {
 	// PaneGap is the cells of empty ground the tiler keeps between
 	// neighbouring panes.
 	PaneGap int `json:"pane_gap,omitempty"`
+	// OuterGap is the cells of empty ground kept between the panes and the
+	// edge of the region they tile in. A peer too old to send it sends zero,
+	// which is also the only gap that peer can lay out, so adopting the zero
+	// keeps the two clients' rectangles equal.
+	OuterGap int `json:"outer_gap,omitempty"`
 	// ScrollColumnWidth is how wide a column is in the scrolling layout, as a
 	// percent of the screen, before anything resizes it. It decides every
 	// column's cell width in that layout and so belongs here rather than in a

@@ -90,8 +90,8 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 	if w <= 0 {
 		return false
 	}
-	topMargin := m.GetTopMargin()
-	if y < topMargin || y >= topMargin+m.GetUsableHeight() {
+	topMargin := m.chromeTop()
+	if y < topMargin || y >= topMargin+m.chromeHeight() {
 		return false
 	}
 	sidebarX := 0

@@ -61,6 +61,7 @@ var settingLabels = map[string]string{
 	"appearance.whichkey_position":      "Which-key position",
 	"appearance.wrap_lists":             "Wrap lists at the ends",
 	"appearance.gap":                    "Pane gap",
+	"appearance.outer_gap":              "Outer gap",
 	"appearance.niri_reverse_scroll":    "Reverse scroll",
 	"appearance.niri_scroll_cells":      "Strip scroll step",
 	"appearance.scroll_column_max":      "Column width cap",

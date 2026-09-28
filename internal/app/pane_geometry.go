@@ -43,6 +43,16 @@ func (m *OS) SetPaneGapSetting(v int) {
 	m.applyAppearanceLive(true)
 }
 
+// SetOuterGapSetting is SetSharedBordersSetting for the outer gap.
+func (m *OS) SetOuterGapSetting(v int) {
+	v = clampInt(v, 0, config.OuterGapMax)
+	m.OuterGap = v
+	m.Settings.OuterGap = v
+	m.lastConfigOuterGap = v
+	m.setAppearance(func(a *config.AppearanceConfig) { a.OuterGap = v })
+	m.applyAppearanceLive(true)
+}
+
 // SetMasterRatioSetting is SetSharedBordersSetting for the master pane's share
 // of the screen, taken as a percent. The model keeps the fraction the tilers
 // want; the config and the settings row speak percent, which is what a person
@@ -110,9 +120,10 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 		return false
 	}
 	pg := state.PaneGeometry
-	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap
+	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap || m.OuterGap != pg.OuterGap
 	m.SharedBorders = pg.SharedBorders
 	m.PaneGap = pg.PaneGap
+	m.OuterGap = pg.OuterGap
 	// Zero is a peer that has not said (state written before the field existed)
 	// and leaves this client on its own configured width, which is the
 	// pre-existing behaviour and the rule a nil PaneGeometry already follows.
@@ -159,6 +170,24 @@ func (m *OS) paneGapItem() settingItem {
 		// No gauge. The gap is a count of cells over a range of eight, so the
 		// number is already the whole story and a bar beside it only says the
 		// same thing less exactly.
+	}
+}
+
+// outerGapItem is the settings row for the outer gap, hand-written for the
+// same reason as paneGapItem.
+func (m *OS) outerGapItem() settingItem {
+	return settingItem{
+		Label:   settingLabel("appearance.outer_gap"),
+		Desc:    registryDescription("appearance.outer_gap"),
+		Control: controlInt,
+		value:   func(m *OS) string { return strconv.Itoa(m.OuterGap) },
+		adjust: func(m *OS, dir int) {
+			m.SetOuterGapSetting(m.OuterGap + dir)
+		},
+		setNum:  func(m *OS, v int) { m.SetOuterGapSetting(v) },
+		numMin:  0,
+		numMax:  config.OuterGapMax,
+		differs: differsFromDefault("appearance.outer_gap", func(m *OS) string { return strconv.Itoa(m.OuterGap) }),
 	}
 }
 

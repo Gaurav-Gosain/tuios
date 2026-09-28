@@ -643,6 +643,9 @@ type OS struct {
 	// rectangles.
 	SharedBorders bool
 	PaneGap       int
+	// OuterGap is the cells kept between the panes and the edge of their
+	// region. Session state for the reason PaneGap is: it moves rectangles.
+	OuterGap int
 	// ScrollColumnWidth is a column's width in the scrolling layout, as a
 	// percent of the screen, before anything resizes it. Session state for the
 	// same reason the two above are: it is what every column's cell width is
@@ -655,6 +658,7 @@ type OS struct {
 	// adoptConfigPaneGeometry.
 	lastConfigSharedBorders bool
 	lastConfigPaneGap       int
+	lastConfigOuterGap      int
 	lastConfigScrollWidth   int
 
 	// SessionReserve is the chrome reserve every client attached to this

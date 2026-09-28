@@ -34,6 +34,7 @@ var liveAppearanceCases = []liveAppearanceCase{
 	{path: "appearance.border_style", value: "thick", restore: "rounded", changesFrame: true},
 	{path: "appearance.window_title_position", value: "hidden", restore: "top", changesFrame: true},
 	{path: "appearance.shared_borders", value: "true", restore: "false", changesFrame: true},
+	{path: "appearance.outer_gap", value: "2", restore: "0", changesFrame: true},
 	{path: "appearance.motion", value: "none", restore: "full"},
 	{path: "appearance.glyphs", value: "unicode", restore: "default", changesFrame: true},
 	{path: "appearance.zen_mode", value: "always", restore: "disabled", changesFrame: true},

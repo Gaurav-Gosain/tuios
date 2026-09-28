@@ -247,6 +247,7 @@ type AppearanceConfig struct {
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
+	OuterGap               int    `toml:"outer_gap"`                 // Cells of empty space kept between the panes and the screen edge, the dock and the rail (default: 0)
 	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
 	// because that is what a settings stepper and a CLI argument can carry: the
 	// option registry holds ints, and "50" is a value a person types. The model
@@ -1559,6 +1560,7 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.Gap > PaneGapMax {
 		cfg.Appearance.Gap = PaneGapMax
 	}
+	cfg.Appearance.OuterGap = min(max(cfg.Appearance.OuterGap, 0), OuterGapMax)
 	// Zero is "not written", which is the common case, so it falls back to the
 	// default rather than being clamped up to the floor: a config that never
 	// mentioned the master ratio must not read as one that asked for the
@@ -1859,6 +1861,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ShowClock = cfg.Appearance.ShowClock
 	s.ClockFormat = cfg.Appearance.ClockFormat
 	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	s.OuterGap = min(max(cfg.Appearance.OuterGap, 0), OuterGapMax)
 	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
 	s.ZoomSize = clampPercent(cfg.Appearance.ZoomSize, ZoomSizeMin, ZoomSizeMax, ZoomSizeDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
