@@ -239,7 +239,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 		return reportVerbError(explainVerbError("list-host-sessions", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResult(markHostRows(raw), jsonOutput)
 	}
 
 	var res struct {
@@ -343,7 +343,7 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 		return reportVerbError(explainVerbError("list-host-agents", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResult(markHostRows(raw), jsonOutput)
 	}
 
 	var res struct {

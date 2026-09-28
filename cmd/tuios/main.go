@@ -845,7 +845,8 @@ Use --last-command to read only what the last finished command printed. It
 needs a shell that marks its commands with OSC 133, and it is plain text.
 
 A capture from a session on another machine (-s host:session) is fenced as
-untrusted content. With --json the result carries host and "untrusted": true.`,
+untrusted content. With --ansi or --resolved, only colour and style codes are
+kept from it. With --json the result carries host and "untrusted": true.`,
 		Example: `  # Capture focused window
   tuios capture-pane
 
@@ -2514,7 +2515,8 @@ thread from the id you named, and the answer says the parent is gone.
 
 To a session on another machine (-s host:session), --attach puts each file
 from this machine in that session's stash first and attaches the stored path.
-A file is capped at 8 MB. A path that names no file here is sent as it is.
+A file is capped at 8 MB. A path already in that session's stash is attached
+as it is.
 
 --select sends one message to every agent pane a selector matches, in every
 session. It never sends on its own: the panes are listed first, and the message

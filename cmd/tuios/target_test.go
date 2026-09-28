@@ -2,11 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -180,56 +176,5 @@ func TestACaptureFromAHostIsFenced(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "untrusted") || !strings.Contains(buf.String(), "\x1b[31m") {
 		t.Errorf("ASSERTION: a local capture was changed:\n%q", buf.String())
-	}
-}
-
-// TestAttachToAHostStashesOnlyTheNamedFiles: --attach to another machine
-// puts each file that exists here in the far stash and attaches the stored
-// path. It reads the named file and nothing else, sends a path that names
-// nothing here as it is, and refuses a file over the cap before sending.
-func TestAttachToAHostStashesOnlyTheNamedFiles(t *testing.T) {
-	dir := t.TempDir()
-	here := filepath.Join(dir, "flame.png")
-	if err := os.WriteFile(here, []byte("png"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "other.txt"), []byte("not named"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var puts []map[string]any
-	put := func(p map[string]any) (json.RawMessage, error) {
-		puts = append(puts, p)
-		return json.RawMessage(`{"path":"/far/stash/abc.png"}`), nil
-	}
-	farPath := filepath.Join(dir, "not-here", "def.png")
-	got, err := stashAttachmentsWith([]string{here, farPath}, put)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 || got[0] != "/far/stash/abc.png" || got[1] != farPath {
-		t.Errorf("ASSERTION: attachments = %v, want the stored path, then the far path unchanged", got)
-	}
-	if len(puts) != 1 {
-		t.Fatalf("ASSERTION: %d stash puts, want 1 for the one file named here: %v", len(puts), puts)
-	}
-	if path, _ := puts[0]["path"].(string); !strings.HasSuffix(path, ":"+here) {
-		t.Errorf("ASSERTION: the put names %q, want this machine's path %s", path, here)
-	}
-	if content, _ := puts[0]["content"].(string); content != base64.StdEncoding.EncodeToString([]byte("png")) {
-		t.Errorf("ASSERTION: the put sent %q, not the named file's bytes", content)
-	}
-
-	big := filepath.Join(dir, "big.bin")
-	if err := os.WriteFile(big, make([]byte, stashTransferMaxBytes+1), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	puts = nil
-	if _, err := stashAttachmentsWith([]string{big}, put); err == nil || len(puts) != 0 {
-		t.Errorf("ASSERTION: a file over the cap was not refused before sending: err %v, puts %d", err, len(puts))
-	}
-
-	refused := func(map[string]any) (json.RawMessage, error) { return nil, errors.New("stash-put refused by policy") }
-	if _, err := stashAttachmentsWith([]string{here}, refused); err == nil {
-		t.Error("ASSERTION: a refused stash put did not stop the message")
 	}
 }

@@ -139,12 +139,24 @@ func printVerbResult(raw json.RawMessage, jsonOutput bool) error {
 
 // reportVerbError renders a failed verb call, honoring --json by printing a
 // {success:false,error} object and exiting non-zero.
+//
+// An error another machine answered carries host and untrusted, as a result
+// from there does.
 func reportVerbError(err error, jsonOutput bool) error {
 	if jsonOutput {
-		outputJSON(map[string]any{"success": false, "error": err.Error()})
+		outputJSON(verbErrorJSON(err))
 		os.Exit(1)
 	}
 	return err
+}
+
+// verbErrorJSON is the object reportVerbError prints for err under --json.
+func verbErrorJSON(err error) map[string]any {
+	out := map[string]any{"success": false, "error": err.Error()}
+	if h, ok := errors.AsType[*hostError](err); ok {
+		markUntrusted(out, h.host)
+	}
+	return out
 }
 
 // runSendKeys sends keystrokes to a running TUIOS session over the verb
@@ -611,8 +623,9 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved
 }
 
 // printCapture writes a capture-pane result. A capture from this machine is
-// the content as it is. A capture from host is fenced, and control
-// characters are removed unless keepEscapes says the caller asked for them.
+// the content as it is. A capture from host is fenced, with control and
+// invisible format characters removed (hostPlainText). keepEscapes says the
+// caller asked for escape codes, and then SGR alone is kept (hostStyledText).
 func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEscapes bool) error {
 	var res struct {
 		Content string `json:"content"`
@@ -628,9 +641,9 @@ func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEsc
 	if window != "" {
 		who = "pane " + plainLine(window) + " on " + plainLine(host)
 	}
-	content := res.Content
-	if !keepEscapes {
-		content = plainText(content)
+	content := hostPlainText(res.Content)
+	if keepEscapes {
+		content = hostStyledText(res.Content)
 	}
 	fmt.Fprintf(w, untrustedOpen+"\n", who)
 	fmt.Fprintln(w, strings.TrimRight(content, "\n"))
