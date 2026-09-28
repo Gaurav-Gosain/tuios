@@ -31,7 +31,8 @@ const (
 
 // plainText strips control characters from text another program wrote, so a
 // body that carries an escape sequence cannot reach the terminal this prints
-// to. Newlines and tabs stay: they are layout, and the fence around the body
+// to. Zero-width and bidi formatting characters go too: they would let a body
+// read as something other than what it holds. Newlines and tabs stay: they are layout, and the fence around the body
 // is what says the layout is the sender's.
 func plainText(s string) string {
 	var b strings.Builder
@@ -41,6 +42,7 @@ func plainText(s string) string {
 		case r == '\n' || r == '\t':
 			b.WriteRune(r)
 		case r < 0x20 || (r >= 0x7f && r < 0xa0):
+		case session.InvisibleFormatRune(r):
 		default:
 			b.WriteRune(r)
 		}
@@ -485,9 +487,7 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 			}
 			fmt.Fprintln(w, line)
 		}
-		fmt.Fprintf(w, untrustedOpen+"\n", who)
-		fmt.Fprintln(w, strings.TrimRight(plainText(m.Text), "\n"))
-		fmt.Fprintln(w, untrustedClose)
+		fmt.Fprintln(w, session.UntrustedFence(who, strings.TrimRight(plainText(m.Text), "\n")))
 	}
 
 	where := ""

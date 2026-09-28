@@ -164,7 +164,9 @@ func (m *OS) renderAgentMailPicker() (string, overlay.Geometry, []overlayRowHit)
 			if selected {
 				labelColor = pal.Fg
 			}
-			left := overlay.Style(rowBg).Foreground(labelColor).Render(m.agentMailWindowName(w.ID))
+			// The short id tells apart two panes with the same title.
+			left := overlay.Style(rowBg).Foreground(labelColor).Render(m.agentMailWindowName(w.ID)) +
+				overlay.Style(rowBg).Foreground(pal.FgMute).Render("  "+shortWindowLabel(w.ID))
 			return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
 		},
 	})
@@ -236,7 +238,7 @@ func (m *OS) agentMailWindowName(windowID string) string {
 	}
 	if w := m.windowByID(windowID); w != nil {
 		if name := printableTitle(m.railTitleShown(w)); name != "" {
-			return name
+			return agentMailNotThePerson(windowID, name)
 		}
 	}
 	return shortWindowLabel(windowID)
@@ -288,11 +290,35 @@ func agentMailFenceOpen(who string, width int) []string {
 	if lipgloss.Width(line) <= width {
 		return []string{line}
 	}
-	head, tail, ok := strings.Cut(line, ": ")
+	// Cut on the known suffix, not the first ": ": the name is the sender's
+	// and can hold ": " itself.
+	head, ok := strings.CutSuffix(line, session.UntrustedOpenSuffix)
 	if !ok {
 		return wrapPlain(line, width)
 	}
-	return append(wrapPlain(head+":", width), wrapPlain(tail, width)...)
+	return append(wrapPlain(head+":", width), wrapPlain(strings.TrimPrefix(session.UntrustedOpenSuffix, ": "), width)...)
+}
+
+// agentMailGutter is the mark every body line starts with, in the glyph set
+// the client draws in.
+func agentMailGutter() string {
+	if overlay.UseASCII() {
+		return session.UntrustedGutterASCII
+	}
+	return session.UntrustedGutter
+}
+
+// agentMailFenceBody is a message body as the lines drawn after the gutter,
+// each at most width minus the gutter wide. A line the panel wraps keeps the
+// gutter on every part, so no part of the body starts a screen line the way a
+// line outside the fence does.
+func agentMailFenceBody(body string, width int) []string {
+	avail := max(width-lipgloss.Width(agentMailGutter()), 1)
+	var out []string
+	for _, raw := range session.UntrustedBodyLines(body, "") {
+		out = append(out, wrapPlain(printableTitle(raw), avail)...)
+	}
+	return out
 }
 
 // agentMailThreadLabel is how a thread id reads on screen: "#12", the way
@@ -362,10 +388,9 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		for _, l := range agentMailFenceOpen(agentMailSender(mm), width-2) {
 			lines = append(lines, mute.Render("  "+l))
 		}
-		for raw := range strings.SplitSeq(body, "\n") {
-			for _, l := range wrapPlain(printableTitle(raw), width-2) {
-				lines = append(lines, dim.Render("  "+l))
-			}
+		gutter := agentMailGutter()
+		for _, l := range agentMailFenceBody(body, width-2) {
+			lines = append(lines, mute.Render("  "+gutter)+dim.Render(l))
 		}
 		lines = append(lines, mute.Render("  "+session.UntrustedClose))
 		if mm.Kind == "ask" && mm.SettledBy != "" {

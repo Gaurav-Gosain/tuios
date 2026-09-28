@@ -63,6 +63,19 @@ type Option struct {
 	// where the far end is a place you would actually put the value, which is
 	// the only case where seeing how far along it sits tells you anything.
 	Percent bool `json:"percent,omitempty"`
+	// Follows names the option whose value this one takes while it is unset.
+	// Such an option takes the empty string as a value, which clears it, so
+	// it can go back to following once it has been set.
+	Follows string `json:"follows,omitempty"`
+}
+
+// UnsetText is how a reader is told an option is unset and what it follows,
+// for an option with Follows. Empty for any other option.
+func (o Option) UnsetText() string {
+	if o.Follows == "" {
+		return ""
+	}
+	return "(follows " + o.Follows + ")"
 }
 
 // The three types an option can carry. A config value crosses the protocol as a
@@ -857,26 +870,26 @@ var optionSpecs = []Option{
 	{
 		Path: "notifications.mail.enabled", Type: OptionBool, Section: "notifications",
 		Description: "Turn mail alerts on or off. Unset follows notifications.agent.enabled.",
-		Default:     "",
+		Default:     "", Follows: "notifications.agent.enabled",
 	},
 	{
 		Path: "notifications.mail.notify", Type: OptionBool, Section: "notifications",
 		Description: "Send a desktop notification for mail. Unset follows notifications.agent.notify.",
-		Default:     "",
+		Default:     "", Follows: "notifications.agent.notify",
 	},
 	{
 		Path: "notifications.mail.sound", Type: OptionBool, Section: "notifications",
 		Description: "Make a mail alert audible. Unset follows notifications.agent.sound.",
-		Default:     "",
+		Default:     "", Follows: "notifications.agent.sound",
 	},
 	{
 		Path: "notifications.mail.dock", Type: OptionBool, Section: "notifications",
 		Description: "Show a mail alert in the dock. Unset follows notifications.agent.dock.",
-		Default:     "",
+		Default:     "", Follows: "notifications.agent.dock",
 	},
 	{
 		Path: "notifications.mail.between_agents", Type: OptionBool, Section: "notifications",
-		Description: "Alert on a message from one agent to another agent too",
+		Description: "Alert on a message from one agent to another agent too.",
 		Default:     "false",
 	},
 
@@ -1147,6 +1160,12 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {
 		return fmt.Errorf("unknown config option %q", path)
+	}
+	// An option that follows another clears on the empty string, back to
+	// following it.
+	if opt.Follows != "" && strings.TrimSpace(value) == "" && field.Kind() == reflect.Pointer {
+		field.SetZero()
+		return nil
 	}
 
 	switch opt.Type {

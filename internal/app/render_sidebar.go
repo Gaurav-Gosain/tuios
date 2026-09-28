@@ -579,6 +579,11 @@ func printableRune(r rune, ascii bool) bool {
 	case r < 0x20 || (r >= 0x7f && r < 0xa0):
 		// C0/C1 controls.
 		return false
+	case session.InvisibleFormatRune(r):
+		// Zero-width and bidi formatting characters draw nothing, and an
+		// override reorders what follows it, so a name holding one reads as
+		// something it is not.
+		return false
 	case r >= 0xe000 && r <= 0xf8ff:
 		// BMP private use area.
 		return false

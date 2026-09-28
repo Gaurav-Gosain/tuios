@@ -91,7 +91,15 @@ func (m *OS) settingDiffers(item settingItem) bool {
 // the default is and the key that goes back to it.
 func (m *OS) settingsDefaultNote(item settingItem) string {
 	// A hand-written row carries the dot but has no reset: writing its path
-	// back would leave the state it moves beside the config behind.
+	// back would leave the state it moves beside the config behind. The
+	// exception is a row that says how it resets.
+	if item.reset != nil && m.settingDiffers(item) {
+		key := "backspace"
+		if m.settingsSearch.open {
+			key = "delete"
+		}
+		return "Default " + item.resetShown + ", " + key + " resets."
+	}
 	if !item.derived || !m.settingDiffers(item) {
 		return ""
 	}
@@ -126,6 +134,17 @@ func (m *OS) SettingsResetSelected() tea.Cmd {
 	item, ok := m.settingsSelectedItem()
 	if !ok {
 		return nil
+	}
+	if item.reset != nil {
+		if !m.settingDiffers(item) {
+			m.ShowNotification(item.Label+" is already at its default.", "info", m.Settings.NotificationDuration)
+			return nil
+		}
+		before := m.optionValue(item.Path)
+		item.reset(m)
+		m.settingsUndo = append(m.settingsUndo, settingsUndoEntry{path: item.Path, label: item.Label, before: before})
+		m.ShowNotification(item.Label+" follows "+item.resetShown+" again. ctrl+z undoes it.", "info", m.Settings.NotificationDuration)
+		return m.persistSettings()
 	}
 	def, shown, derived := m.settingDefault(item)
 	switch {

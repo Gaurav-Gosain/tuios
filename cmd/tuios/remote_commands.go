@@ -1093,8 +1093,19 @@ func runGetConfig(sessionName, path string, jsonOutput bool) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Println(res.Value)
+	fmt.Println(getConfigText(path, res.Value))
 	return nil
+}
+
+// getConfigText is what get-config prints for value at path. An unset option
+// that follows another says so, since an empty line reads as no value at all.
+func getConfigText(path, value string) string {
+	if value == "" {
+		if o, ok := config.LookupOption(path); ok && o.Follows != "" {
+			return o.UnsetText()
+		}
+	}
+	return value
 }
 
 // runSetAgentState reports a pane's agent state to the daemon over the verb
