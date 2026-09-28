@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -60,19 +61,64 @@ func TestSwitcherEnterReachesThisMachineFromARemoteSession(t *testing.T) {
 	}
 }
 
+// TestSwitcherEnterOnATypedLabelSwitchesAndCreatesNothing: typing the label a
+// remote row shows and pressing Enter switches to that row. Before, the label
+// matched nothing, and Enter created a local session named "home @ local".
+//
+// Negative control: filtering on Title and ID only sends the typed label down
+// the create path, the hook sees nothing, and this fails.
+func TestSwitcherEnterOnATypedLabelSwitchesAndCreatesNothing(t *testing.T) {
+	o := switcherAwayOS()
+	calls := recordSwitchesOn(o)
+
+	for _, r := range "home @ local" {
+		text := string(r)
+		code := r
+		if r == ' ' {
+			code = tea.KeySpace
+		}
+		handleSessionSwitcherInput(tea.KeyPressMsg{Code: code, Text: text}, o)
+	}
+	if o.SessionSwitcherQuery != "home @ local" {
+		t.Fatalf("the query is %q, want the typed label", o.SessionSwitcherQuery)
+	}
+	handleSessionSwitcherInput(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
+
+	if len(*calls) != 1 || (*calls)[0] != (switched{"local", "home"}) {
+		t.Fatalf("ASSERTION: enter on the typed label sent %+v, want local/home", *calls)
+	}
+	for _, n := range o.Notifications {
+		if strings.Contains(n.Message, "Create") {
+			t.Errorf("ASSERTION: enter on a remote row's label tried to create a session: %q", n.Message)
+		}
+	}
+}
+
 // TestSwitcherKeepsRemoteRowsOutOfRenameAndDelete: rename and delete go to
 // the daemon this client is connected to, which does not hold the session.
 func TestSwitcherKeepsRemoteRowsOutOfRenameAndDelete(t *testing.T) {
 	o := switcherAwayOS()
 	o.SessionSwitcherSelected = 1
+	last := func() string {
+		if len(o.Notifications) == 0 {
+			return ""
+		}
+		return o.Notifications[len(o.Notifications)-1].Message
+	}
 
 	handleSessionSwitcherInput(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, o)
 	if o.SessionSwitcherConfirmDelete != "" {
 		t.Errorf("ASSERTION: ctrl+d asked to delete another machine's session %q", o.SessionSwitcherConfirmDelete)
 	}
+	if got := last(); got != "Switch to local to delete this session" {
+		t.Errorf("ASSERTION: ctrl+d said %q", got)
+	}
 
 	handleSessionSwitcherInput(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}, o)
 	if o.Renaming() {
 		t.Errorf("ASSERTION: ctrl+r began renaming another machine's session")
+	}
+	if got := last(); got != "Switch to local to rename this session" {
+		t.Errorf("ASSERTION: ctrl+r said %q", got)
 	}
 }
