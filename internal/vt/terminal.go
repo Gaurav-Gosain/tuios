@@ -77,6 +77,15 @@ type Terminal interface {
 	// treat the row as ending.
 	RowSoftWrapped(y int) (wrapped, known bool)
 	ScrollbackSoftWrapped(index int) (wrapped, known bool)
+	// RestoreSoftWraps sets the soft-wrap flags a snapshot carries, after
+	// its cells are written: screen is one flag per row of the active screen,
+	// and history one per row of the newest history rows, oldest first,
+	// aligned to the end of the history. A row with no flag given reads as
+	// ending, so a nil screen clears every screen row, and a nil history
+	// clears the newest history row, the one that could carry on into a
+	// screen the snapshot replaced. The screen under an active alternate
+	// screen is cleared too: its flags do not travel.
+	RestoreSoftWraps(screen, history []bool)
 
 	// Scrollback.
 	ScrollbackLen() int
