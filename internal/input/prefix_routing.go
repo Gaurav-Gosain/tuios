@@ -72,6 +72,14 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Mode == app.TerminalMode {
+		// The leader asked the host for every key as an escape code. A
+		// non-ASCII key that still came as bare text beat that switch, so its
+		// base-layout key is missing and the key it was meant as is unknown.
+		// It was typed after the leader, so it is dropped, not typed into the
+		// pane.
+		if o.AllKeysPending() && isLayoutTextWithoutBase(msg) {
+			return o, nil
+		}
 		forwardKeyToFocusedWindow(msg, o)
 	}
 	return o, nil

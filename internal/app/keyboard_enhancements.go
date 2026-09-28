@@ -86,7 +86,8 @@ func (m *OS) KeysGoToBindings() bool {
 	}
 	if m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() ||
 		m.ReviewOpen() || m.Renaming() || m.CaptureActive() ||
-		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager {
+		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager ||
+		m.ShowLogs || m.ShowCacheStats {
 		return true
 	}
 	window := m.GetFocusedWindow()
@@ -108,4 +109,21 @@ func (m *OS) PaneKeyboardFlags() int {
 func (m *OS) NoteKeyboardEnhancements(msg tea.KeyboardEnhancementsMsg) {
 	m.KeyboardFlags = msg.Flags
 	m.KeyboardEnhancementsEnabled = msg.SupportsKeyDisambiguation()
+	if msg.Flags&ansi.KittyReportAllKeysAsEscapeCodes != 0 {
+		m.hostGrantedAllKeys = true
+	}
+}
+
+// AllKeysPending reports whether tuios has asked the host for every key as an
+// escape code and the host has not yet said it switched.
+//
+// Bubble Tea queries the flags (CSI ? u) after every change, and the answer
+// marks the moment the change took effect. A key typed right after the leader
+// can beat it, over ssh often, and then a "ш" arrives as bare text with no
+// base-layout key behind it. The caller drops such a key rather than type it
+// into the pane. It is only ever true for a host that has granted report-all
+// keys before, so a terminal that never answers, or never grants the flag,
+// keeps the old behaviour.
+func (m *OS) AllKeysPending() bool {
+	return m.hostGrantedAllKeys && m.KeyboardFlags&ansi.KittyReportAllKeysAsEscapeCodes == 0
 }

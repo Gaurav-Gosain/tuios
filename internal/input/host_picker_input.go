@@ -11,7 +11,7 @@ import (
 func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	filtered := app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery)
 
-	switch msg.String() {
+	switch commandKey(msg) {
 	case "esc", "ctrl+c":
 		o.CloseHostPicker()
 		return o, nil
@@ -26,7 +26,7 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ChooseHost(filtered[o.HostPickerSelected])
 
 	}
-	if listKey(msg.String(), false, listPage, o.HostPickerMove) {
+	if listKey(commandKey(msg), false, listPage, o.HostPickerMove) {
 		return o, nil
 	}
 

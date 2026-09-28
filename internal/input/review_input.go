@@ -50,6 +50,8 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+	// Past the editor the keys are commands. See commandKey.
+	key = commandKey(msg)
 	if o.ReviewConfirming() {
 		return o, o.ReviewCompareConfirm(key == "y" || key == "Y")
 	}

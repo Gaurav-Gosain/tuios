@@ -8,6 +8,7 @@ package input
 
 import (
 	"runtime"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -356,14 +357,19 @@ func vtKeyFromBubbletea(msg tea.KeyPressMsg) vt.KeyPressEvent {
 // shiftedCode is the key's shifted code as the host reported it. The decoder
 // that parses CSI code:shifted:base u also writes the base key into the shifted
 // field, so a key that carries a base-layout key has the base key there. The
-// real shifted key is then the text the key typed, when Shift was held and it
-// typed one character.
+// real shifted key is then rebuilt when Shift was held: the capital of a
+// letter, whatever else was held (Ctrl+Shift+ш carries no text), or else the
+// one character the key typed. A shifted symbol under Ctrl or Alt has no text
+// to rebuild it from, so it goes without.
 func shiftedCode(key tea.Key) rune {
 	if key.BaseCode == 0 || key.ShiftedCode != key.BaseCode {
 		return key.ShiftedCode
 	}
 	if key.Mod&tea.ModShift == 0 {
 		return 0
+	}
+	if up := unicode.ToUpper(key.Code); up != key.Code {
+		return up
 	}
 	if r := []rune(key.Text); len(r) == 1 && r[0] != key.Code {
 		return r[0]

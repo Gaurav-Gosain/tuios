@@ -13,10 +13,10 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	// how every other list overlay works. This used to carry a hardcoded twelve
 	// rows of its own, so on any screen not showing twelve the list scrolled at
 	// the wrong time or not at all.
-	if listKey(msg.String(), false, listPage, o.AggregateViewMove) {
+	if listKey(commandKey(msg), false, listPage, o.AggregateViewMove) {
 		return o, nil
 	}
-	switch msg.String() {
+	switch commandKey(msg) {
 	case "esc", "ctrl+c":
 		o.ShowAggregateView = false
 		o.AggregateViewQuery = ""

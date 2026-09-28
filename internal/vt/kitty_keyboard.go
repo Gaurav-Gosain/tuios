@@ -203,19 +203,22 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	// Don't encode basic printable characters without modifiers
 	// (unless report-all-keys flag is set)
 	if flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
-		if key.Mod == 0 && code >= 0x20 && code < 0x7f {
+		// Caps Lock and Num Lock change the text, not the chord: NumLock+a is
+		// still text, and CapsLock+ш types Ш as text.
+		mods := key.Mod &^ (ModCapsLock | ModNumLock)
+		if mods == 0 && code >= 0x20 && code < 0x7f {
 			return ""
 		}
 		// The same for a key that types a non-ASCII character, such as "ш" on
 		// a Ukrainian layout: text is sent as text. Only report-all-keys turns
 		// a plain text key into an escape code.
-		if key.Mod == 0 && key.Text != "" && unicode.IsPrint(key.Code) {
+		if mods == 0 && key.Text != "" && unicode.IsPrint(key.Code) {
 			return ""
 		}
 		// For Shift+printable that produces different text (e.g., Shift+a → 'A'),
 		// the kitty spec says to send the text directly, not CSI u.
 		// Only use CSI u when there are other modifiers (Ctrl, Alt) besides Shift.
-		if key.Text != "" && key.Mod == 1 { // Shift only (ModShift = 1)
+		if key.Text != "" && mods == ModShift {
 			return ""
 		}
 	}
@@ -374,7 +377,34 @@ func kittyKeyForm(code rune) csiuForm {
 	case KeyF12:
 		return csiuForm{24, '~'}
 	}
+	if n, ok := kittyModifierKeyCodes[code]; ok {
+		return csiuForm{n, 'u'}
+	}
 	return csiuForm{int(code), 'u'}
+}
+
+// kittyModifierKeyCodes are the kitty protocol's codes for the modifier and
+// lock keys, which a terminal reports as keys of their own in report-all-keys
+// mode. The decoder turns them into its own key codes, which are not what a
+// pane expects on the wire.
+var kittyModifierKeyCodes = map[rune]int{
+	KeyCapsLock:       57358,
+	KeyScrollLock:     57359,
+	KeyNumLock:        57360,
+	KeyLeftShift:      57441,
+	KeyLeftCtrl:       57442,
+	KeyLeftAlt:        57443,
+	KeyLeftSuper:      57444,
+	KeyLeftHyper:      57445,
+	KeyLeftMeta:       57446,
+	KeyRightShift:     57447,
+	KeyRightCtrl:      57448,
+	KeyRightAlt:       57449,
+	KeyRightSuper:     57450,
+	KeyRightHyper:     57451,
+	KeyRightMeta:      57452,
+	KeyIsoLevel3Shift: 57453,
+	KeyIsoLevel5Shift: 57454,
 }
 
 // encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.

@@ -26,6 +26,10 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //     OS composed, with the Alt bit set or (without the Kitty protocol) missing
 //     entirely.
 func bindingKeys(msg tea.KeyPressMsg) []string {
+	// Keystroke() and String() spell a key from its base-layout code when it
+	// has one. That code only stands in for the key where usesBaseLayout says
+	// so; otherwise an unbound AZERTY "a" ran the binding on US q.
+	msg = producedKey(msg)
 	key := msg.String()
 	keys := []string{key}
 	if stroke := msg.Keystroke(); stroke != key {
