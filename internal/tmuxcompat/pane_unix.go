@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -145,10 +146,11 @@ var errPaneEnded = errors.New("the pane's command ended")
 
 // Test hooks, nil in production. beforeReply runs just before the holder
 // writes a respawn reply. afterExit runs when the pane's command has ended,
-// before the holder answers the requests still waiting.
+// before the holder answers the requests still waiting. It gets the count of
+// those requests.
 var (
 	beforeReply func()
-	afterExit   func()
+	afterExit   func(waiting *atomic.Int32)
 )
 
 type respawnCall struct {
@@ -179,6 +181,9 @@ func RunPane(o PaneOptions) int {
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM)
 
 	calls := make(chan respawnCall)
+	// waiting counts the requests committed to a send on calls that this
+	// loop has not received yet. Each one is certain to arrive.
+	var waiting atomic.Int32
 	var ln net.Listener
 	// The socket is opened only in a directory that is the user's alone: a
 	// directory anyone else can write to would let them take its place.
@@ -209,7 +214,7 @@ func RunPane(o PaneOptions) int {
 					_ = ln.Close()
 					_ = os.Remove(sock)
 				}()
-				go acceptRespawns(ln, o.Window, calls)
+				go acceptRespawns(ln, o.Window, calls, &waiting)
 			}
 		}
 	}
@@ -231,21 +236,19 @@ func RunPane(o PaneOptions) int {
 		select {
 		case code := <-done:
 			if afterExit != nil {
-				afterExit()
+				afterExit(&waiting)
 			}
 			// A request can be waiting for this loop when the command ends.
 			// Stop taking new ones, then answer each waiting one, so its
-			// requester reads why and not a bare EOF.
+			// requester reads why and not a bare EOF. The receive blocks
+			// only for a request already committed to its send.
 			if ln != nil {
 				_ = ln.Close()
 			}
-			for drained := false; !drained; {
-				select {
-				case call := <-calls:
-					call.reply(errPaneEnded)
-				default:
-					drained = true
-				}
+			for waiting.Load() > 0 {
+				call := <-calls
+				waiting.Add(-1)
+				call.reply(errPaneEnded)
 			}
 			return code
 		case s := <-sigs:
@@ -253,6 +256,7 @@ func RunPane(o PaneOptions) int {
 				_ = syscall.Kill(-child.Process.Pid, sig)
 			}
 		case call := <-calls:
+			waiting.Add(-1)
 			cmd := call.req.Command
 			if len(cmd) == 0 {
 				cmd = first
@@ -298,7 +302,8 @@ func exitCode(c *exec.Cmd) int {
 }
 
 // acceptRespawns reads one request per connection and hands it to the holder.
-func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall) {
+// It adds one to waiting before each send on calls.
+func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall, waiting *atomic.Int32) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -326,6 +331,7 @@ func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall) {
 			// RunPane return, and the process exits before this goroutine
 			// writes, so respawn-pane reads EOF although the respawn ran.
 			replied := make(chan struct{})
+			waiting.Add(1)
 			calls <- respawnCall{req: req, reply: func(err error) {
 				if beforeReply != nil {
 					beforeReply()
