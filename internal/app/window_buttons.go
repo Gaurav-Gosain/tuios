@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -194,8 +195,21 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 	return pill.String(), hits
 }
 
-// windowPillPieces is the original filled pill: black glyphs on the border
-// colour, capped with powerline half circles, minimize then zoom then close.
+// windowPillPieces is the filled pill: dark glyphs on the border colour, capped
+// with powerline half circles.
+//
+// The layout matches the dots: one cell of padding after the opening cap, then
+// each control as its mark plus the one cell after it. Every cell between the
+// caps belongs to a control except that lead-in, so the pill is as narrow as
+// three one-cell marks allow and a press between two marks still lands on one.
+// It used to pad each mark into a " x " button and give minimize an extra
+// lead-in cell, which left two blank cells between neighbours and three
+// between the opening cap and the first mark.
+//
+// The order is mirrored by the end the pill sits on, so close is always the
+// control at the outer corner: close, zoom, minimize on the left, where macOS
+// puts close first, and minimize, zoom, close on the right, where Windows and
+// most Linux desktops put it last.
 func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []windowButtonPiece {
 	pillCap := lipgloss.NewStyle().Foreground(col).Render
 	// badgeStyle rather than a fixed black: the pill is filled with the border
@@ -203,17 +217,27 @@ func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []wind
 	// 1.40:1 on the worst of them.
 	glyph := badgeStyle(col).Render
 
+	type control struct {
+		action WindowButtonAction
+		mark   string
+	}
+	controls := []control{{WindowButtonMinimize, s.GetWindowButtonMinimizeMark()}}
+	if windowButtonsHaveZoom(isTiling, s) {
+		controls = append(controls, control{WindowButtonZoom, s.GetWindowButtonMaximizeMark()})
+	}
+	controls = append(controls, control{WindowButtonClose, s.GetWindowButtonCloseMark()})
+	if s.WindowButtonPosition == config.WindowButtonPositionLeft {
+		slices.Reverse(controls)
+	}
+
 	pieces := []windowButtonPiece{
 		{WindowButtonNone, pillCap(s.GetWindowPillLeft())},
-		{WindowButtonMinimize, glyph(s.GetWindowButtonMinimize())},
+		{WindowButtonNone, glyph(" ")},
 	}
-	if windowButtonsHaveZoom(isTiling, s) {
-		pieces = append(pieces, windowButtonPiece{WindowButtonZoom, glyph(s.GetWindowButtonMaximize())})
+	for _, c := range controls {
+		pieces = append(pieces, windowButtonPiece{c.action, glyph(c.mark + " ")})
 	}
-	return append(pieces,
-		windowButtonPiece{WindowButtonClose, glyph(s.GetWindowButtonClose())},
-		windowButtonPiece{WindowButtonNone, pillCap(s.GetWindowPillRight())},
-	)
+	return append(pieces, windowButtonPiece{WindowButtonNone, pillCap(s.GetWindowPillRight())})
 }
 
 // windowDotPieces is the macOS traffic light: three unlabelled discs in red,

@@ -803,13 +803,8 @@ const (
 	WindowButtonClose = " " + WindowButtonCloseMark + " "
 	// WindowButtonMaximizeMark is the maximize mark.
 	WindowButtonMaximizeMark = "□" // U+25A1
-	// WindowButtonMaximize is that mark padded into the three-cell button.
-	WindowButtonMaximize = " " + WindowButtonMaximizeMark + " "
-	// WindowButtonMinimizeMark is the minimize mark. It leads the pill, so its
-	// button carries an extra cell of lead-in rather than a symmetric pad.
+	// WindowButtonMinimizeMark is the minimize mark.
 	WindowButtonMinimizeMark = "-"
-	// WindowButtonMinimize is the four-cell minimize button.
-	WindowButtonMinimize = "  " + WindowButtonMinimizeMark + " "
 	// WindowButtonDot is the disc the dots style draws each control as.
 	//
 	// U+25CF BLACK CIRCLE, which JetBrainsMono Nerd Font covers and draws at an
@@ -1179,20 +1174,6 @@ func (s *Settings) GetWindowButtonMaximizeMark() string {
 func (s *Settings) GetWindowButtonMinimizeMark() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Minimize },
 		WindowButtonMinimizeMark, WindowButtonMinimizeMark)
-}
-
-// GetWindowButtonClose returns the three-cell close button.
-func (s *Settings) GetWindowButtonClose() string { return " " + s.GetWindowButtonCloseMark() + " " }
-
-// GetWindowButtonMaximize returns the three-cell maximize button.
-func (s *Settings) GetWindowButtonMaximize() string {
-	return " " + s.GetWindowButtonMaximizeMark() + " "
-}
-
-// GetWindowButtonMinimize returns the four-cell minimize button, which leads the
-// pill and so carries the extra cell of lead-in.
-func (s *Settings) GetWindowButtonMinimize() string {
-	return "  " + s.GetWindowButtonMinimizeMark() + " "
 }
 
 // GetWindowButtonDot returns the appropriate dots-style disc character
