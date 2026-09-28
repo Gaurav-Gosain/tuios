@@ -3,53 +3,24 @@ package main
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Text another machine wrote reaches this terminal from a capture of a pane
 // there. A terminal acts on escape sequences, and a sequence can do far more
 // than colour text: OSC 52 writes the clipboard, OSC 8 hides a link target,
 // a cursor move overwrites what was printed before it, including the fence.
-// Bidi and zero-width characters make text read differently from what it is.
-
-// invisibleRune reports the format characters that change how text reads
-// without showing themselves: zero-width spaces and joiners, the word joiner
-// and invisible operators, the byte order mark, and the bidi embeddings,
-// overrides, isolates and marks.
-func invisibleRune(r rune) bool {
-	switch {
-	case r >= 0x200B && r <= 0x200F, // zero-width space, non-joiner, joiner, LRM, RLM
-		r >= 0x202A && r <= 0x202E, // bidi embeddings and overrides
-		r >= 0x2060 && r <= 0x2064, // word joiner, invisible operators
-		r >= 0x2066 && r <= 0x2069, // bidi isolates
-		r == 0x061C,                // Arabic letter mark
-		r == 0xFEFF:                // zero-width no-break space
-		return true
-	}
-	return false
-}
-
-// hostPlainText is plainText for text from another machine: control
-// characters and invisible format characters removed, newlines and tabs kept.
-func hostPlainText(s string) string {
-	return stripInvisible(plainText(s))
-}
-
-// stripInvisible removes the characters invisibleRune names.
-func stripInvisible(s string) string {
-	return strings.Map(func(r rune) rune {
-		if invisibleRune(r) {
-			return -1
-		}
-		return r
-	}, s)
-}
+// Bidi and zero-width characters make text read differently from what it is:
+// plainText drops them, with session.InvisibleFormatRune, and so does
+// hostStyledText.
 
 // hostStyledText is for a capture from another machine that asked for escape
 // codes (--ansi, --resolved). It keeps SGR sequences (CSI ... m), which only
 // colour and style text, and removes every other sequence: OSC, DCS, SOS, PM
 // and APC strings, every other CSI (cursor moves, erases, modes), and the
 // two-byte escapes. Other control characters and invisible format characters
-// are removed as hostPlainText removes them.
+// are removed as plainText removes them.
 func hostStyledText(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -80,7 +51,7 @@ func hostStyledText(s string) string {
 				continue
 			case r == '\n' || r == '\t':
 				b.WriteRune(r)
-			case r < 0x20 || (r >= 0x7f && r < 0xa0) || invisibleRune(r):
+			case r < 0x20 || (r >= 0x7f && r < 0xa0) || session.InvisibleFormatRune(r):
 			case r == utf8.RuneError && size == 1:
 			default:
 				b.WriteString(s[i : i+size])
