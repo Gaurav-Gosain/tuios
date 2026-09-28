@@ -30,9 +30,11 @@ func railAgentRow(m *OS, lines []string, windowID string) string {
 }
 
 // TestSidebarAgentPrefixYieldsInOrder pins the ladder a narrowing row walks
-// down. The session goes before the agent because the gutter already marks a
-// pane that is somewhere else, and the whole prefix goes before a cell of the
-// pane name does. The E2E test TestNarrowRailKeepsTheAgentNameBeforeItsHarness
+// down, on the budget the row draws with. The session goes before the agent
+// because the gutter already marks a pane that is somewhere else, and the
+// whole prefix goes before a cell of the pane name does. A prefix token that
+// does not fit is passed over, so the session comes back when the agent is
+// too wide for the row and the session alone is not. The E2E test TestNarrowRailKeepsTheAgentNameBeforeItsHarness
 // covers the harness half on screen; the session half is only reached on a
 // pane from another session, which that test does not draw.
 func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
@@ -50,15 +52,19 @@ func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 		{17, "api/claude/"}, // both fit exactly: 11 cells and the 6 of the name
 		{16, "claude/"},     // the session yields first
 		{13, "claude/"},     // the agent fits exactly beside the whole name
-		{12, ""},            // and yields before a cell of the name goes
+		{12, "api/"},        // the agent no longer fits, and the shorter session does
+		{10, "api/"},        // the session fits exactly beside the whole name
+		{9, ""},             // and yields before a cell of the name goes
+		{6, ""},
 		{1, ""},
 	} {
-		run, w := m.sidebarAgentPrefixRun(tokens, lipgloss.NewStyle(), tc.avail, nameW, theme.UI())
+		keep, room := railRowFit(nameW, railNameKeep(nameW), sidebarAgentBudget(tokens, nil, "", "", sidebarAgentSep()), tc.avail)
+		run := m.sidebarAgentPrefixRun(tokens, keep[:len(tokens)], lipgloss.NewStyle(), theme.UI())
 		if got := ansi.Strip(run); got != tc.want {
 			t.Errorf("prefix at avail=%d = %q, want %q", tc.avail, got, tc.want)
 		}
-		if want := lipgloss.Width(tc.want); w != want {
-			t.Errorf("prefix at avail=%d reports width %d, want %d", tc.avail, w, want)
+		if want := tc.avail - lipgloss.Width(tc.want); room != want {
+			t.Errorf("prefix at avail=%d leaves the name %d cells, want %d", tc.avail, room, want)
 		}
 	}
 }

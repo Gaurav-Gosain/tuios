@@ -320,3 +320,72 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 	saveFrame(t, term, "hier-after-menu-moved")
 	alive(t, term, "after the machine menu")
 }
+
+// TestTheNarrowRailNamesAMachineWhole is issue 181 on a real client. The rail
+// used to cut the name and keep the word beside it, so a 16-column rail read
+// "wo… offline" and named no machine at all. It now budgets the row: the name
+// is drawn whole and the word gives way.
+//
+// Both halves are here. On the narrow rail the machine is named and the word
+// is gone. On a rail with room for both, the same row carries both, which is
+// what says the word gave way to the width rather than being dropped for good.
+//
+// A machine that is not answering still says so on the narrow rail, in the ink
+// it and its rows are muted with. The name cell is read for that, so a rail
+// that kept the name by giving up the fact fails here.
+func TestTheNarrowRailNamesAMachineWhole(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		width     int
+		wantWord  bool
+		frameName string
+	}{
+		{"narrow", railNarrowWidth, false, "rail-narrow-machine-name"},
+		{"wide", 28, true, "rail-wide-machine-name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			remote := remoteMachine(t)
+			ssh := writeFakeSSHTo(t, base, remote)
+			writeHierarchyConfig(t, base, tuiosBin, tuiosBin, tc.width)
+			env := []string{"TUIOS_SSH=" + ssh}
+			// A daemon on the far side, so oci answers.
+			if out, err := tuiosCLI(t, remote, "new", "session-0", "--detach"); err != nil {
+				t.Fatalf("create the far session: %v\n%s", err, out)
+			}
+
+			term := startIn(t, base, startOpts{args: []string{"new", "tuios"}, env: env})
+			waitBoot(t, term)
+			toggleSidebarViaPalette(t, term)
+
+			// Both machines named, and the link to oci up: until it is, oci
+			// is muted too, and the ink check below would read nothing.
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				down, up := railRowOf(s, hostOpen+" wo"), railRowOf(s, hostOpen+" oci")
+				if down < 0 || up < 0 {
+					return false
+				}
+				// "wo", so a rail that cuts the name is read here and fails below.
+				return s.Cell(nameColOf(s, down, "wo"), down).Fg != s.Cell(nameColOf(s, up, "oci"), up).Fg
+			}, uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: the rail never named both machines, one of them muted as not answering: %v\n%s", err, term.Snapshot())
+			}
+			saveFrame(t, term, tc.frameName)
+
+			s := term.Screen()
+			row := railRowOf(s, hostOpen+" wo")
+			line := railLine(s, row)
+			if strings.Contains(line, "…") || strings.Contains(line, "wo…") {
+				t.Fatalf("ASSERTION: the rail cut the machine's name at width %d: %q\n%s",
+					tc.width, line, term.Snapshot())
+			}
+			if got := strings.Contains(line, "offline"); got != tc.wantWord {
+				t.Fatalf("ASSERTION: the row at width %d says offline = %v, want %v: %q\n%s",
+					tc.width, got, tc.wantWord, line, term.Snapshot())
+			}
+			// The row still says the machine is down without the word: the wait
+			// above held until it was drawn in the muted ink and oci was not.
+			alive(t, term, "after the budgeted machine header")
+		})
+	}
+}

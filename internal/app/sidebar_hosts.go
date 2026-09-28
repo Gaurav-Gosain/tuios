@@ -881,6 +881,7 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	blocked, worst := m.hostAttention(node.Host)
 
 	right, rightW := "", 0
+	budgeted := false
 	switch {
 	case !up:
 		// A host that is not up says why, in the slot the add control would take.
@@ -894,13 +895,13 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 			// On a narrow rail, the shipped 24 columns among them, the count
 			// goes on alone rather than taking the machine's name: a header
 			// that names no machine heads nothing.
-			nameW := min(lipgloss.Width(printableTitle(node.Title)), sidebarHostTagFloor)
-			if sidebarNameAvail(cw, lipgloss.Width(label)) < nameW {
+			if keep, _ := railRowFitRight(lipgloss.Width(printableTitle(node.Title)), lipgloss.Width(label), sidebarNameAvail(cw, 0)); !keep {
 				label = queued
 			}
 		}
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
+		budgeted = true
 	case blocked > 0:
 		// How many of this machine's sessions want a person, in the strip
 		// badge's language. It outranks both the session count and the add
@@ -953,8 +954,24 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	// No bold. The rail spends its one bold voice on a row that wants a human,
 	// and a heading wearing the same weight as an alarm is what made that voice
 	// stop meaning anything.
-	name := sidebarStyle(rowBg, ink).Render(
-		overlay.Truncate(printableTitle(node.Title), sidebarNameAvail(cw, rightW)))
+	//
+	// The word saying why a machine is not answering goes through the row's
+	// budget, see railRowFit: a rail too narrow for the name and the word
+	// keeps the name and drops the word, because "wo… offline" names no
+	// machine at all, and the muted ink still says the machine is down. The
+	// other figures are drawn whatever they cost the name: the alarm outranks
+	// a label, a shut group's count is the only sign the fold is not empty,
+	// and the add control's click span is worked out before this row is drawn.
+	title := printableTitle(node.Title)
+	nameRoom := sidebarNameAvail(cw, rightW)
+	if budgeted {
+		keepFigure, room := railRowFitRight(lipgloss.Width(title), rightW, sidebarNameAvail(cw, 0))
+		nameRoom = room
+		if !keepFigure {
+			right = ""
+		}
+	}
+	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
 	// A folded group hides the session row that wears the focus mark, so the
 	// header takes it: the fold must not make the attached session vanish from
 	// the rail without a trace.
@@ -994,8 +1011,12 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 		ink = pal.Fg
 	}
 	indent := m.sidebarRowIndent()
-	name := sidebarStyle(rowBg, ink).Render(
-		overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
+	title := printableTitle(node.Title)
+	keepCount, nameRoom := railRowFitRight(lipgloss.Width(title), rightW, sidebarNameAvailIn(cw, 0, indent))
+	if !keepCount {
+		right = ""
+	}
+	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
 	gutter := sidebarStyle(rowBg, nil).Render(" ")
 	// The same glyph a session on this machine wears, from the same function.
 	// The sessions section answers "who needs me", and a row that answered it
