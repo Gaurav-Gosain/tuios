@@ -61,6 +61,15 @@ An empty list says why it is empty in the middle of the panel, with the one key
 worth pressing next under it. A list that is still loading draws nothing for
 its first half second, so a fast load never flashes a "reading" line.
 
+## Hints
+
+`Ctrl+B F` puts a short label on each URL, path, hash, address and number in
+the focused pane. Type a label to copy the text. Type it with `Shift` to copy
+the text and type it into the pane. Type it with `Ctrl` to open a URL or a
+path. `esc` closes. See [HINTS.md](HINTS.md) for the patterns and the
+`[hints]` settings. The action is `hints`, so you can bind it to a different
+key.
+
 ## Screenshots over a panel
 
 `Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the
