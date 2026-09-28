@@ -225,10 +225,20 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		if key.Text != "" && mods == ModShift {
 			return ""
 		}
+		// A keypad key that types text is text too: keypad 1 with NumLock on
+		// is "1". Its code is one of ultraviolet's private ones, which the
+		// printable-code test above cannot see, so it is named here. Only the
+		// keypad keys that type nothing are CSI u under disambiguate.
+		if key.Text != "" && mods&^ModShift == 0 && isKittyKeypadKey(key.Code) {
+			return ""
+		}
 	}
 
 	// Map special keys to their CSI u key codes
-	form := kittyKeyForm(key.Code)
+	form, ok := kittyKeyForm(key.Code)
+	if !ok {
+		return ""
+	}
 	code = form.num
 	if form.final != 'u' {
 		return encodeFormCSIu(form, key.Mod)
@@ -323,71 +333,80 @@ type csiuForm struct {
 
 // kittyKeyForm returns the CSI u spelling of a key code. Anything not named
 // here is its own code terminated by 'u', which is what the protocol says for
-// every ordinary character.
-func kittyKeyForm(code rune) csiuForm {
+// every ordinary character. ok is false for one of ultraviolet's private codes
+// the protocol has no number for (F36 and up, say): putting the private code on
+// the wire names a key no application knows, so the caller leaves it to the
+// legacy encoder instead.
+func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	switch code {
 	case KeyEnter:
-		return csiuForm{13, 'u'}
+		return csiuForm{13, 'u'}, true
 	case KeyTab:
-		return csiuForm{9, 'u'}
+		return csiuForm{9, 'u'}, true
 	case KeyBackspace:
-		return csiuForm{127, 'u'}
+		return csiuForm{127, 'u'}, true
 	case KeyEscape:
-		return csiuForm{27, 'u'}
+		return csiuForm{27, 'u'}, true
 	case KeySpace:
-		return csiuForm{32, 'u'}
+		return csiuForm{32, 'u'}, true
 	case KeyUp:
-		return csiuForm{1, 'A'}
+		return csiuForm{1, 'A'}, true
 	case KeyDown:
-		return csiuForm{1, 'B'}
+		return csiuForm{1, 'B'}, true
 	case KeyRight:
-		return csiuForm{1, 'C'}
+		return csiuForm{1, 'C'}, true
 	case KeyLeft:
-		return csiuForm{1, 'D'}
+		return csiuForm{1, 'D'}, true
 	case KeyHome:
-		return csiuForm{1, 'H'}
+		return csiuForm{1, 'H'}, true
 	case KeyEnd:
-		return csiuForm{1, 'F'}
+		return csiuForm{1, 'F'}, true
 	case KeyF1:
-		return csiuForm{1, 'P'}
+		return csiuForm{1, 'P'}, true
 	case KeyF2:
-		return csiuForm{1, 'Q'}
+		return csiuForm{1, 'Q'}, true
 	case KeyF3:
-		return csiuForm{1, 'R'}
+		return csiuForm{1, 'R'}, true
 	case KeyF4:
-		return csiuForm{1, 'S'}
+		return csiuForm{1, 'S'}, true
 	case KeyInsert:
-		return csiuForm{2, '~'}
+		return csiuForm{2, '~'}, true
 	case KeyDelete:
-		return csiuForm{3, '~'}
+		return csiuForm{3, '~'}, true
 	case KeyPgUp:
-		return csiuForm{5, '~'}
+		return csiuForm{5, '~'}, true
 	case KeyPgDown:
-		return csiuForm{6, '~'}
+		return csiuForm{6, '~'}, true
 	case KeyF5:
-		return csiuForm{15, '~'}
+		return csiuForm{15, '~'}, true
 	case KeyF6:
-		return csiuForm{17, '~'}
+		return csiuForm{17, '~'}, true
 	case KeyF7:
-		return csiuForm{18, '~'}
+		return csiuForm{18, '~'}, true
 	case KeyF8:
-		return csiuForm{19, '~'}
+		return csiuForm{19, '~'}, true
 	case KeyF9:
-		return csiuForm{20, '~'}
+		return csiuForm{20, '~'}, true
 	case KeyF10:
-		return csiuForm{21, '~'}
+		return csiuForm{21, '~'}, true
 	case KeyF11:
-		return csiuForm{23, '~'}
+		return csiuForm{23, '~'}, true
 	case KeyF12:
-		return csiuForm{24, '~'}
+		return csiuForm{24, '~'}, true
+	case KeyBegin:
+		// KP_BEGIN in the protocol's table: the legacy CSI E, like the arrows.
+		return csiuForm{1, 'E'}, true
 	}
 	if n, ok := kittyModifierKeyCodes[code]; ok {
-		return csiuForm{n, 'u'}
+		return csiuForm{n, 'u'}, true
 	}
 	if num, ok := kittyFunctionalKeys[code]; ok {
-		return csiuForm{num, 'u'}
+		return csiuForm{num, 'u'}, true
 	}
-	return csiuForm{int(code), 'u'}
+	if code > unicode.MaxRune {
+		return csiuForm{}, false
+	}
+	return csiuForm{int(code), 'u'}, true
 }
 
 // kittyModifierKeyCodes are the kitty protocol's codes for the modifier and
@@ -430,6 +449,9 @@ var kittyFunctionalKeys = func() map[rune]int {
 		KeyKpSep: 57416, KeyKpLeft: 57417, KeyKpRight: 57418, KeyKpUp: 57419,
 		KeyKpDown: 57420, KeyKpPgUp: 57421, KeyKpPgDown: 57422, KeyKpHome: 57423,
 		KeyKpEnd: 57424, KeyKpInsert: 57425, KeyKpDelete: 57426, KeyKpBegin: 57427,
+		// The protocol has no keypad comma; KP_SEPARATOR is the same key on
+		// the layouts that have one.
+		KeyKpComma: 57416,
 	}
 	// These blocks are declared in the protocol's own order, so they range.
 	blocks := []struct {
@@ -449,9 +471,22 @@ var kittyFunctionalKeys = func() map[rune]int {
 }()
 
 // isKittyModifierKey reports whether code is a modifier pressed on its own,
-// which the protocol reports only under the report-all-keys flag.
+// which the protocol reports only under the report-all-keys flag. The lock keys
+// count, as they do in kitty's own is_modifier_key: without them every CapsLock
+// press reached a disambiguate pane as \x1b[57358u.
 func isKittyModifierKey(code rune) bool {
+	switch code {
+	case KeyCapsLock, KeyScrollLock, KeyNumLock:
+		return true
+	}
 	return code >= KeyLeftShift && code <= KeyIsoLevel5Shift
+}
+
+// isKittyKeypadKey reports whether code is one of the keypad keys the protocol
+// numbers 57399 (KP_0) through 57427 (KP_BEGIN).
+func isKittyKeypadKey(code rune) bool {
+	num, ok := kittyFunctionalKeys[code]
+	return ok && num >= 57399 && num <= 57427
 }
 
 // encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.
@@ -485,7 +520,10 @@ func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
 	if isKittyModifierKey(key.Code) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
 		return ""
 	}
-	form := kittyKeyForm(key.Code)
+	form, ok := kittyKeyForm(key.Code)
+	if !ok {
+		return ""
+	}
 	return fmt.Sprintf("\x1b[%d;%d:3%c", form.num, kittyModParam(key.Mod), form.final)
 }
 
