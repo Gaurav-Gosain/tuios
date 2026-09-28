@@ -51,12 +51,17 @@ func TestPacedCoalescerStillEmitsAfterTheFloodStops(t *testing.T) {
 		}
 	})
 
+	// lastWrite is read just before the final write is queued. Reading it
+	// after the loop's sleep instead put it up to a scheduler delay past that
+	// write, and a signal the final chunk raised at once, which is the right
+	// behaviour, then looked like one that came before it.
+	var lastWrite time.Time
 	deadline := time.Now().Add(300 * time.Millisecond)
 	for time.Now().Before(deadline) {
+		lastWrite = time.Now()
 		w.WriteOutputAsync([]byte("flood "))
 		time.Sleep(time.Millisecond)
 	}
-	lastWrite := time.Now()
 
 	// The trailing signal has to land within one interval of the last write,
 	// plus room for the output writer to get to that final chunk.
