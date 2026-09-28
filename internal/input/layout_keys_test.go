@@ -144,7 +144,7 @@ func TestBaseLayoutKeyDrivesCopyMode(t *testing.T) {
 		t.Skip("copy mode did not start on the test pane")
 	}
 	w.CopyMode.CursorY = 0
-	o, _ = HandleKeyPress(ukr('о', 'j'), o)
+	_, _ = HandleKeyPress(ukr('о', 'j'), o)
 	if w.CopyMode.CursorY != 1 {
 		t.Fatalf("о on the J key left the copy cursor on row %d, want 1", w.CopyMode.CursorY)
 	}
