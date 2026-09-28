@@ -68,6 +68,9 @@ func TestFindBuiltins(t *testing.T) {
 		{"git status without a slash", "\tnew file:   README.md", []string{"diff:README.md"}},
 		{"a/ in prose is a path", "and a/b testing", []string{"path:a/b"}},
 		{"url wins over the path in it", "https://example.com/some/path", []string{"url:https://example.com/some/path"}},
+		{"a path with non-Latin names", "open ~/文档/café.md now", []string{"path:~/文档/café.md"}},
+		{"a path with a combining mark", "cat /tmp/café/menu.txt", []string{"path:/tmp/café/menu.txt"}},
+		{"an address with an accented name", "to josé.garcía@example.es.", []string{"email:josé.garcía@example.es"}},
 		{"several on one row", "https://x.org /tmp/a.go:3 deadbee1 10.0.0.1",
 			[]string{"url:https://x.org", "path:/tmp/a.go:3", "sha:deadbee1", "ip:10.0.0.1"}},
 	}

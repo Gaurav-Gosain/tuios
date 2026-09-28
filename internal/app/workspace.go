@@ -32,6 +32,8 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if workspace == m.CurrentWorkspace {
 		return
 	}
+	// The labels are on a pane of the workspace being left.
+	m.CloseHints()
 
 	// Record workspace switch for tape recording
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {

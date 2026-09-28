@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 )
@@ -77,6 +78,18 @@ func (h HintsConfig) DimPercent() int {
 // LabelAlphabet is the effective alphabet.
 func (h HintsConfig) LabelAlphabet() string { return hints.NormalizeAlphabet(h.Alphabet) }
 
+// droppedAlphabet is every character of an alphabet that labels cannot use:
+// anything but a to z (upper case counts as its lower case letter).
+func droppedAlphabet(a string) string {
+	var b strings.Builder
+	for _, r := range a {
+		if l := unicode.ToLower(r); l < 'a' || l > 'z' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // validateHints warns about a built-in name nobody knows, a pattern that does
 // not compile, and an alphabet that falls back to the default. Each is
 // skipped at run time, so without a warning a typo would look like hints mode
@@ -100,12 +113,23 @@ func validateHints(cfg *UserConfig, result *ValidationResult) {
 			})
 		}
 	}
-	if a := strings.TrimSpace(h.Alphabet); a != "" && hints.NormalizeAlphabet(a) == hints.DefaultAlphabet &&
-		!strings.EqualFold(a, hints.DefaultAlphabet) {
+	a := strings.TrimSpace(h.Alphabet)
+	switch {
+	case a == "":
+	case hints.NormalizeAlphabet(a) == hints.DefaultAlphabet && !strings.EqualFold(a, hints.DefaultAlphabet):
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "hints",
 			Key:     "alphabet",
 			Message: fmt.Sprintf("The alphabet %q has fewer than two letters a to z. Hints mode uses %q.", a, hints.DefaultAlphabet),
 		})
+	default:
+		if dropped := droppedAlphabet(a); dropped != "" {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: "hints",
+				Key:   "alphabet",
+				Message: fmt.Sprintf("Labels use only the letters a to z. Hints mode does not use %q from the alphabet. It uses %q.",
+					dropped, hints.NormalizeAlphabet(a)),
+			})
+		}
 	}
 }
