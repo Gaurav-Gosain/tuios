@@ -358,3 +358,60 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 		incoming.WorkspaceFocus = maps.Clone(canonical.WorkspaceFocus)
 	}
 }
+
+// focusView is the part of a state that says what the person is looking at:
+// the focused window, the workspace, each workspace's focus, and the strip
+// offset that is only meaningful beside the workspace.
+type focusView struct {
+	window    string
+	workspace int
+	perWS     map[int]string
+	strip     *ScrollStripState
+}
+
+func focusViewOf(s *SessionState) focusView {
+	if s == nil {
+		return focusView{}
+	}
+	return focusView{
+		window:    s.FocusedWindowID,
+		workspace: s.CurrentWorkspace,
+		perWS:     maps.Clone(s.WorkspaceFocus),
+		strip:     s.ScrollStrip,
+	}
+}
+
+// sameFocus reports whether two views name the same focus. The strip offset is
+// left out: scrolling is not a move of the focus.
+func (f focusView) sameFocus(g focusView) bool {
+	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS)
+}
+
+// keepClientFocus puts a stale push's own focus back after reconcileStale took
+// the daemon's. It is for a push whose snapshot predates some daemon mutation
+// but not any that moved the focus: then the focus in it is the person's own
+// latest move, and canonical's is the one they just left. Taking canonical's
+// there snapped the focus back whenever an agent reported a state between a
+// keypress and its push, and the reconcile reply carried the old focus to the
+// client.
+//
+// The push's focus is kept only when its window survived the merge on the
+// workspace the push names. Otherwise the daemon's stands.
+func keepClientFocus(incoming *SessionState, mine focusView) {
+	if mine.window != "" {
+		found := false
+		for i := range incoming.Windows {
+			if w := &incoming.Windows[i]; w.ID == mine.window {
+				found = w.Workspace == mine.workspace
+				break
+			}
+		}
+		if !found {
+			return
+		}
+	}
+	incoming.FocusedWindowID = mine.window
+	incoming.CurrentWorkspace = mine.workspace
+	incoming.WorkspaceFocus = mine.perWS
+	incoming.ScrollStrip = mine.strip
+}

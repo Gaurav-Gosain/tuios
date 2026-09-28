@@ -157,6 +157,10 @@ func TestAgentsHeaderShowsBlockedAndDone(t *testing.T) {
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("select the first pane: %v", err)
 	}
+	// The daemon hears of the focus from the client, so once it names REVIEW
+	// the client has moved off BUILD. A BUILD turn that lands before that
+	// finishes in front of the user and is rightly seen.
+	waitForFocusedPane(t, base, "e2e", "REVIEW")
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e", "-w", "BUILD"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 	}
@@ -170,6 +174,33 @@ func TestAgentsHeaderShowsBlockedAndDone(t *testing.T) {
 		t.Fatalf("the agents header never counted the blocked and done panes: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "167-header-count")
+}
+
+// waitForFocusedPane polls list-windows until the daemon reports the pane
+// named name as the focused one.
+func waitForFocusedPane(t *testing.T, base, session, name string) {
+	t.Helper()
+	var last string
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", session)
+		last = out
+		var list struct {
+			Windows []struct {
+				Display string `json:"display_name"`
+				Focused bool   `json:"focused"`
+			} `json:"windows"`
+		}
+		if err == nil && json.Unmarshal([]byte(out), &list) == nil {
+			for _, w := range list.Windows {
+				if w.Focused && w.Display == name {
+					return
+				}
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the daemon never reported %s as the focused pane; last list-windows:\n%s", name, last)
 }
 
 // TestAgentRowTokenTakesColourFromAValueRule (issue 175): a config rule on

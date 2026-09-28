@@ -98,6 +98,28 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	m.considerAgentAlert(w, from, to)
 }
 
+// noteAgentTurnWithin handles a sync that finished a turn and left the pane in
+// the state it already had. The daemon sends snapshots, not transitions, so a
+// done pane that goes working and then done again between two of them arrives
+// as done to done, and noteAgentState sees no change. The finished turn shows
+// only as CompletionSeq moving. Without this the seen bit from the first done
+// survived, and the second finish never read as unread. The caller has already
+// adopted the new CompletionSeq.
+func (m *OS) noteAgentTurnWithin(w *terminal.Window) {
+	if w == nil {
+		return
+	}
+	if m.GetFocusedWindow() == w {
+		// Finished under the user's own eyes, as in noteAgentState.
+		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
+		return
+	}
+	if w.AgentState == "done" && m.SidebarAgentSeen[w.ID] {
+		delete(m.SidebarAgentSeen, w.ID)
+		m.saveSidebarState()
+	}
+}
+
 // markFocusedAgentSeen clears the unread bit of the window being focused, which
 // is every route into a pane (click, rail, palette, notification jump) since
 // they all land in FocusWindow.
