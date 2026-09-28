@@ -302,6 +302,16 @@ This needs a terminal that sends the US-layout key through the Kitty keyboard
 protocol: Ghostty, kitty, WezTerm or foot. Other terminals send only the typed
 character. With those, switch to a Latin layout for tuios commands.
 
+In window mode tuios tells the terminal to send every key as a code. tuios
+resets this when it stops. If tuios cannot stop correctly, the terminal can
+stay in this mode. This occurs when you use `kill -9` on tuios, or when an ssh
+connection drops. The shell then shows codes such as `[97u` when you type. To
+reset the terminal, run this command or close the tab:
+
+```sh
+printf '\033[=0;1u'
+```
+
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an
