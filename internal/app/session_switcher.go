@@ -104,16 +104,56 @@ func (m *OS) SessionSwitcherTarget(idx int) (sessiontree.Node, bool) {
 // case-insensitively on the label and on the identity name behind it. Both are
 // matched because a renamed session is still found by what it is called on the
 // command line, and an unrenamed one has only the identity to match.
+//
+// A row on another machine is matched on what the switcher shows for it: its
+// title, its name on that machine, the machine, and the "name @ host" label.
+// Never on its ID, which is a rail identity ("\x00host/build:api"): matching
+// that made "host", "/" or ":" list every remote row, and made the label the
+// row shows match nothing, so Enter created a local session named after it.
+//
+// A row whose label or name equals the query goes first, so typing a row's
+// label exactly selects that row even when a longer label also contains it.
 func FilterSessionItems(items []sessiontree.Node, query string) []sessiontree.Node {
 	if query == "" {
 		return items
 	}
 	q := strings.ToLower(query)
-	var filtered []sessiontree.Node
+	var exact, partial []sessiontree.Node
 	for _, item := range items {
-		if strings.Contains(strings.ToLower(item.Title), q) || strings.Contains(strings.ToLower(item.ID), q) {
-			filtered = append(filtered, item)
+		keys := sessionSwitcherKeys(item)
+		hit, same := false, false
+		for _, k := range keys {
+			k = strings.ToLower(k)
+			if k == q {
+				same = true
+			}
+			if strings.Contains(k, q) {
+				hit = true
+			}
+		}
+		switch {
+		case same:
+			exact = append(exact, item)
+		case hit:
+			partial = append(partial, item)
 		}
 	}
-	return filtered
+	return append(exact, partial...)
+}
+
+// sessionSwitcherKeys is what a switcher row can be found by.
+func sessionSwitcherKeys(item sessiontree.Node) []string {
+	if item.Host == "" {
+		return []string{item.Title, item.ID}
+	}
+	return []string{item.Title, remoteSessionName(item), item.Host, sessionSwitcherLabel(item)}
+}
+
+// sessionSwitcherLabel is the label a switcher row shows: the session's title,
+// and for a session on another machine, "title @ host".
+func sessionSwitcherLabel(item sessiontree.Node) string {
+	if item.Host == "" {
+		return item.Title
+	}
+	return item.Title + " @ " + item.Host
 }

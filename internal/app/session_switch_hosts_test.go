@@ -157,7 +157,7 @@ func TestSwitcherToADownHostSaysUnavailable(t *testing.T) {
 }
 
 // TestOpenSessionNodeRefusesAMachineHeader: a header is not a session, so
-// asking to open one opens nothing and says what to pick instead.
+// asking to open one opens nothing and reaches no daemon.
 func TestOpenSessionNodeRefusesAMachineHeader(t *testing.T) {
 	m := hostsOS(t, true)
 	calls := recordSwitches(m)
@@ -255,4 +255,113 @@ func TestSwitcherRowNamesTheMachine(t *testing.T) {
 	if strings.Contains(plain, "host/") {
 		t.Errorf("ASSERTION: the row shows the rail identity: %q", plain)
 	}
+}
+
+// TestSwitcherSearchFindsTheShownLabel: typing the label a remote row shows
+// finds that row, and Enter on it switches to it. Matching only the title and
+// the rail identity found nothing for "api @ build", and Enter then created a
+// local session with that name.
+//
+// Negative control: matching item.Title and item.ID only, as before, leaves
+// the filtered list empty and this fails.
+func TestSwitcherSearchFindsTheShownLabel(t *testing.T) {
+	m := hostsOS(t, false)
+	calls := recordSwitches(m)
+	m.SessionSwitcherItems = m.sessionSwitcherItems()
+
+	for _, q := range []string{"api @ build", "API @ BUILD", "build"} {
+		got := FilterSessionItems(m.SessionSwitcherItems, q)
+		if len(got) != 1 || got[0].Title != "api" || got[0].Host != "build" {
+			t.Fatalf("ASSERTION: %q found %+v, want only api on build", q, got)
+		}
+	}
+
+	m.SessionSwitcherQuery = "api @ build"
+	m.sessionSwitcherActivate(0)
+	wantOneSwitch(t, *calls, switchCall{"build", "api"})
+}
+
+// TestSwitcherSearchIgnoresTheRailIdentity: the hidden rail identity is not
+// something a person typed, so its pieces must not match every remote row.
+func TestSwitcherSearchIgnoresTheRailIdentity(t *testing.T) {
+	m := hostsOS(t, false)
+	items := m.sessionSwitcherItems()
+	for _, q := range []string{"host", "/", ":", "\x00"} {
+		for _, n := range FilterSessionItems(items, q) {
+			if n.Host != "" {
+				t.Errorf("ASSERTION: %q matched the remote row %q through its rail identity", q, n.Title)
+			}
+		}
+	}
+}
+
+// TestSwitcherSearchPutsAnExactLabelFirst: when one label contains another,
+// typing the shorter one exactly selects its row, not the longer one listed
+// before it.
+func TestSwitcherSearchPutsAnExactLabelFirst(t *testing.T) {
+	items := []sessiontree.Node{
+		{Kind: sessiontree.KindSession, ID: hostNodeID("buildbox") + ":api", Title: "api", Host: "buildbox"},
+		{Kind: sessiontree.KindSession, ID: hostNodeID("build") + ":api", Title: "api", Host: "build"},
+	}
+	got := FilterSessionItems(items, "api @ build")
+	if len(got) != 2 || got[0].Host != "build" {
+		t.Fatalf("ASSERTION: the exact label is not first: %+v", got)
+	}
+}
+
+// TestSwitcherHintsDropRenameAndDeleteOnARemoteRow: the footer offers only
+// what the selected row can do.
+func TestSwitcherHintsDropRenameAndDeleteOnARemoteRow(t *testing.T) {
+	m := hostsOS(t, false)
+	items := m.sessionSwitcherItems()
+	keys := func(sel int) string {
+		var out []string
+		for _, h := range sessionSwitcherHints(items, sel) {
+			out = append(out, h.Key)
+		}
+		return strings.Join(out, " ")
+	}
+	local, remote := switcherIndexIn(t, items, "home"), switcherIndexIn(t, items, "api")
+	if k := keys(local); !strings.Contains(k, "ctrl+r") || !strings.Contains(k, "ctrl+d") {
+		t.Errorf("ASSERTION: a local row lost its rename and delete hints: %q", k)
+	}
+	if k := keys(remote); strings.Contains(k, "ctrl+r") || strings.Contains(k, "ctrl+d") {
+		t.Errorf("ASSERTION: a remote row offers rename or delete: %q", k)
+	}
+}
+
+// TestSwitcherMutesADownHostsRows: a row under a machine that is not up is
+// drawn muted and without its agent glyph, as the rail draws it.
+func TestSwitcherMutesADownHostsRows(t *testing.T) {
+	m := hostsOS(t, false)
+	m.Settings = config.Global
+	node := sessiontree.Node{Kind: sessiontree.KindSession, ID: hostNodeID("build") + ":api",
+		Title: "api", Host: "build", WindowCount: 1, AgentState: "needs_input"}
+	pal := theme.UI()
+
+	up := m.sessionSwitcherRow(node, false, nil, pal, 58)
+	m.FederationHosts[1].Status = string(federation.StatusReconnecting)
+	down := m.sessionSwitcherRow(node, false, nil, pal, 58)
+
+	glyph := agentStateIndicator(sidebarGlyphState(node.AgentState, false))
+	if glyph == "" || !strings.Contains(ansi.Strip(up), glyph) {
+		t.Fatalf("the up row has no agent glyph %q to lose, so this proves nothing: %q", glyph, ansi.Strip(up))
+	}
+	if strings.Contains(ansi.Strip(down), glyph) {
+		t.Errorf("ASSERTION: a down host's row still wears its agent glyph: %q", ansi.Strip(down))
+	}
+	if up == down {
+		t.Errorf("ASSERTION: a down host's row is drawn the same as an up host's")
+	}
+}
+
+func switcherIndexIn(t *testing.T, items []sessiontree.Node, title string) int {
+	t.Helper()
+	for i, n := range items {
+		if n.Title == title {
+			return i
+		}
+	}
+	t.Fatalf("no row %q in %+v", title, items)
+	return -1
 }

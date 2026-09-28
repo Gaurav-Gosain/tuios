@@ -196,10 +196,6 @@ func hostAttachRefusal(host string, err error) string {
 // Every switch that starts from a tree row or a rail hit goes through
 // switchSession, which picks the connection first and the session second.
 
-// errNotASession is what a machine's header answers when asked to be switched
-// to. It is a group, not a place.
-var errNotASession = errors.New("not a session")
-
 // hostUnavailableError is a switch aimed at a machine whose link is not up.
 // Nothing was attempted, so it is reported as a warning.
 type hostUnavailableError struct{ host string }
@@ -263,11 +259,11 @@ func (m *OS) openSession(host, name string) bool {
 
 // OpenSessionNode switches to the session a tree node names, on whichever
 // machine holds it, and reports a failure itself. The switcher and the
-// palette reach openSession through it.
+// palette reach openSession through it. A node that is not a session opens
+// nothing; no surface lists one, since the switcher drops machine headers.
 func (m *OS) OpenSessionNode(n sessiontree.Node) bool {
 	host, name, ok := sessionNodeTarget(n)
 	if !ok {
-		m.reportSwitchFailure(errNotASession)
 		return false
 	}
 	return m.openSession(host, name)
@@ -288,10 +284,6 @@ func (m *OS) reportSwitchFailure(err error) {
 	}
 	if refused, ok := errors.AsType[*hostSwitchError](err); ok {
 		m.ShowNotification(refused.Error(), "error", m.Settings.NotificationDuration*3)
-		return
-	}
-	if errors.Is(err, errNotASession) {
-		m.ShowNotification("Select a session under the machine name", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
