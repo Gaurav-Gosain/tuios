@@ -26,7 +26,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tuios itself does one thing with one: end a hold. No binding acts on a
 		// release, because acting on a release as well as a press would run every
 		// binding twice. What is left goes to a pane that asked for releases.
-		if o.ReleaseHoldKey(tea.KeyPressMsg(msg.Key())) {
+		if o.ReleaseHoldKey(readKey(tea.KeyPressMsg(msg.Key()))) {
 			result, cmd = o, nil
 			break
 		}
@@ -224,6 +224,11 @@ func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Keep the key as the host sent it for the pane, and read it the rest of
+	// the way by the key the layout produced (see readKey).
+	o.NoteHostKey(msg)
+	msg = readKey(msg)
+
 	// Capture the keypress for the showkeys overlay when it is enabled. This is
 	// the earliest shared point in the input path, before any mode routing or
 	// handler can consume the key, so the overlay reflects keys in both

@@ -195,9 +195,11 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 		return
 	}
 
+	// The pane gets the key as the host sent it, on either encoding.
+	host := paneMsg(msg, o)
 	var rawInput []byte
 	if focused.Terminal != nil && focused.Terminal.KittyKeyboardFlags() != 0 {
-		if encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focused.Terminal.KittyKeyboardFlags()); encoded != "" {
+		if encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(host), focused.Terminal.KittyKeyboardFlags()); encoded != "" {
 			rawInput = []byte(encoded)
 		}
 	}
@@ -206,7 +208,7 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 		if focused.Terminal != nil {
 			appCursorKeys = focused.Terminal.ApplicationCursorKeys()
 		}
-		rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+		rawInput = getRawKeyBytesWithMode(host, appCursorKeys)
 	}
 	if len(rawInput) > 0 {
 		o.NotePaneKeyDown(msg.Code, focused.ID)

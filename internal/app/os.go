@@ -710,6 +710,8 @@ type OS struct {
 	// pane's window ID, so its release goes to the same pane and the release
 	// of a key tuios kept for itself goes nowhere. See NotePaneKeyDown.
 	paneKeysDown map[rune]string
+	// hostKey is the last key press as the host terminal sent it. See NoteHostKey.
+	hostKey tea.KeyPressMsg
 	// hold is the momentary window-management mode (see hold_mode.go).
 	hold holdMode
 	// optionAdviceShown keeps the macOS Option advice to once per run.

@@ -265,7 +265,8 @@ On a layout for a non-Latin script, bindings match the physical key. A key that
 types `ш` on a Ukrainian layout runs the binding on `i`, the US key at the same
 position, unless `ш` has a binding of its own. This needs Ghostty, kitty,
 WezTerm or foot. Latin layouts (AZERTY, QWERTZ, Dvorak) match the key that is
-typed.
+typed, with or without `ctrl`: Dvorak `ctrl+b` is the leader, and showkeys and
+the recorder name it `ctrl+b`.
 `keybinds explain` checks the key as written, so give it the Latin key.
 
 ```sh

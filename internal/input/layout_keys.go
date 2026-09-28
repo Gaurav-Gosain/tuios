@@ -64,6 +64,20 @@ func producedKey(msg tea.KeyPressMsg) tea.KeyPressMsg {
 	return msg
 }
 
+// readKey is msg as tuios reads it: spelled by the key the layout produced.
+// Bubble Tea spells a chord from its base-layout key when the terminal sent
+// one, so on any Latin layout other than US a Ctrl or Alt chord read as the
+// US key at its position wherever msg.String() was compared. Taking that key
+// off here, once, makes every reader agree with the bindings. It stays where
+// usesBaseLayout lets it stand in for a non-Latin key, and on a key reported
+// as its own base. The pane still gets the key the host sent; see paneMsg.
+func readKey(msg tea.KeyPressMsg) tea.KeyPressMsg {
+	if msg.BaseCode == 0 || msg.BaseCode == msg.Code || usesBaseLayout(msg) {
+		return msg
+	}
+	return producedKey(msg)
+}
+
 // isLayoutTextWithoutBase reports whether msg is a non-ASCII character typed
 // with no modifier but Shift, and carries no base-layout key.
 func isLayoutTextWithoutBase(msg tea.KeyPressMsg) bool {
