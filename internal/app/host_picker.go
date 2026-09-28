@@ -41,26 +41,28 @@ type HostPickerItem struct {
 	// on a machine. It is not a machine, and Name is empty for it, which is
 	// why it needs a mark of its own rather than a reserved name.
 	Global bool
+	// Pending marks the placeholder row shown while the attached machine's
+	// host list is on its way. It is not a machine and cannot be chosen.
+	Pending bool
 }
 
 // buildHostPickerItems is this machine followed by every configured one, in the
 // order the rail lists them, so the picker and the rail agree.
+//
+// A window is made by the daemon that holds the session, so while the client
+// is attached to another machine the window rows are that machine's hosts, by
+// its names. See host_picker_attached.go. A session is always made on this
+// machine's daemon, so the session rows are this machine's.
 func (m *OS) buildHostPickerItems() []HostPickerItem {
+	if m.HostPickerPurpose == HostPickerNewWindow && m.AttachedHost != "" {
+		return m.attachedWindowItems()
+	}
 	items := []HostPickerItem{{
 		Name:   "",
 		Label:  "this machine",
 		Detail: "local",
 		Up:     true,
 	}}
-	// The rows name machines the way this machine's daemon does. A window is
-	// made by the daemon that holds the session, and a session on another
-	// machine has no link back here that this client knows of, so this
-	// machine is listed and cannot be chosen. A session always can: it is
-	// made on this machine's own daemon wherever the client is.
-	if m.HostPickerPurpose == HostPickerNewWindow && m.AttachedHost != "" {
-		items[0].Up = false
-		items[0].Detail = "not from " + m.AttachedHost
-	}
 	// A global session is the answer to the same question, and the only place
 	// the question is asked, so it is a row here rather than a second control
 	// somewhere else. It is offered first because a session that will hold
@@ -131,6 +133,10 @@ func (m *OS) OpenHostPicker() {
 		return
 	}
 	m.HostPickerPurpose = HostPickerNewWindow
+	// From another machine the rows come from that machine's daemon. What
+	// is held is shown at once, and the fresh list fills in a picker that
+	// was still waiting for one.
+	m.refreshAttachedHosts()
 	m.HostPickerItems = m.buildHostPickerItems()
 	if len(m.HostPickerItems) <= 1 {
 		// Only this machine. Offering a list of one is a dialog that asks a
@@ -140,7 +146,7 @@ func (m *OS) OpenHostPicker() {
 		return
 	}
 	m.HostPickerQuery = ""
-	m.HostPickerSelected = 0
+	m.HostPickerSelected = FirstPickableHostRow(m.HostPickerItems)
 	m.HostPickerScroll = 0
 	m.ShowHostPicker = true
 }
@@ -178,7 +184,7 @@ func (m *OS) OpenNewSessionPicker() {
 	m.HostPickerItems = m.buildHostPickerItems()
 
 	m.HostPickerQuery = ""
-	m.HostPickerSelected = 0
+	m.HostPickerSelected = FirstPickableHostRow(m.HostPickerItems)
 	m.HostPickerScroll = 0
 	m.ShowHostPicker = true
 }
@@ -237,26 +243,23 @@ type NewWindowOnHostMsg struct {
 // attempt is a link dial with a timeout on the end of it and the answer is
 // already known.
 //
-// The row names a machine as this machine's daemon knows it, and the window
-// is made by the daemon that holds the session, which is another machine's
-// while the client is attached there. So the row is turned into a request to
-// that daemon here: the machine it holds is a plain window on it, and any
-// other machine is a window it opens over its own link.
+// A row's Name is the machine as the daemon that holds the session names it,
+// and "" is that daemon's own machine: this one, or the one the client is
+// attached to. See buildHostPickerItems.
 //
-// Whether the machine is up is asked again here. The list is a snapshot from
-// when the picker opened, and a link that dropped since then would otherwise
-// be dialled with a timeout on the end of it.
+// Whether the machine is up is asked again here, of the same daemon's link.
+// The list is a snapshot from when the picker opened, and a link that dropped
+// since then would otherwise be dialled with a timeout on the end of it.
 func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 	m.ShowHostPicker = false
 	m.HostPickerQuery = ""
-	attached := m.AttachedHost // "" is this machine
-	if item.Name == "" && attached != "" {
+	if item.Pending {
 		m.CancelPendingSplit()
-		m.ShowNotification(attached+" cannot open a pane on this machine. Open it from a session on this machine",
-			"warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification("The list of machines is still loading. Try again", "info",
+			m.Settings.NotificationDuration)
 		return nil
 	}
-	if !item.Up || (item.Name != "" && !m.hostIsUp(item.Name)) {
+	if !item.Up || (item.Name != "" && !m.windowHostUp(item.Name)) {
 		// The window is not being made, so a split waiting for it is not
 		// happening either.
 		m.CancelPendingSplit()
@@ -264,12 +267,21 @@ func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 			m.Settings.NotificationWarningDuration)
 		return nil
 	}
-	if item.Name == attached {
+	if item.Name == "" {
 		// The machine that holds the session: an ordinary window there.
 		_ = m.CreateNewWindow()
 		return nil
 	}
 	return m.newWindowOnHostCmd(item.Name)
+}
+
+// windowHostUp reports whether the daemon that holds the session has its link
+// to name up: this machine's, or the attached machine's by its newest view.
+func (m *OS) windowHostUp(name string) bool {
+	if m.AttachedHost == "" {
+		return m.hostIsUp(name)
+	}
+	return m.attachedHostUp(name)
 }
 
 // newWindowOnHostCmd asks the daemon for a window on host, off the UI
@@ -450,6 +462,16 @@ func (m *OS) newWindowShouldPickHost() bool {
 	}
 	if !m.inGlobalSession() {
 		return false
+	}
+	if m.AttachedHost != "" {
+		// The choice is the attached daemon's. Until its list is in, the
+		// picker is shown and fills in when it lands.
+		n, known := m.attachedReachable()
+		if !known {
+			m.refreshAttachedHosts()
+			return true
+		}
+		return n > 1
 	}
 	// A global session with nothing to reach but this machine has no choice in
 	// it, and a picker with one row is a question with one answer.

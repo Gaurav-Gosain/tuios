@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -47,6 +48,12 @@ type SessionCreatedMsg struct {
 	// picker is opened once the switch has landed.
 	Global bool
 	Err    error
+	// Client and State are set when the session was made on this machine's
+	// daemon from a client attached elsewhere (makeSessionHere). The
+	// connection is already open and attached, so the handler adopts it
+	// rather than switching over the current one.
+	Client *session.TUIClient
+	State  *session.SessionState
 }
 
 // SessionKilledMsg carries the result of killing a session this client is not
@@ -291,6 +298,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
 		ListenForSessionCreate(m.sessionCreateChan()),
+		ListenForAttachedHosts(m.attachedHostsChan()),
 		ListenForSessionKill(m.sessionKillChan()),
 		ListenForNotification(m.ensureNotificationChan()),
 		ListenForCwdChange(m.ensureCwdChangeChan()),
@@ -1135,13 +1143,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = !changed
 		return m, ListenForDockComponents(m.dockEngine.Updates())
 
+	case AttachedHostsMsg:
+		m.applyAttachedHosts(msg)
+		return m, ListenForAttachedHosts(m.attachedHostsChan())
+
 	case SessionCreatedMsg:
 		cmd := ListenForSessionCreate(m.sessionCreateChan())
 		if msg.Err != nil {
 			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		if err := m.SwitchToSession(msg.Name); err != nil {
+		if msg.Client != nil {
+			m.adoptHostClient(msg.Client, msg.State, federation.LocalHostName)
+		} else if err := m.SwitchToSession(msg.Name); err != nil {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
