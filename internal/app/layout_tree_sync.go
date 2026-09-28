@@ -165,7 +165,7 @@ func (m *OS) sendTreeOps() bool {
 			leaves = make(map[int]string)
 			collectLeaves(tree.Root, name, leaves)
 		}
-		if err := m.DaemonClient.SendLayoutTree(ws, tree, leaves, m.DaemonStateVersion); err != nil {
+		if err := m.DaemonClient.SendLayoutTree(ws, tree, leaves); err != nil {
 			m.LogError("Failed to send the layout of workspace %d to the daemon: %v", ws, err)
 			return false
 		}

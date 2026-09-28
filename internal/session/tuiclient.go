@@ -160,6 +160,8 @@ type TUIClient struct {
 	// treeOps says the daemon's welcome offered MsgLayoutTree. See
 	// LayoutTreeOps.
 	treeOps atomic.Bool
+	// attachGen counts attaches. See AttachGeneration.
+	attachGen atomic.Uint64
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -1090,18 +1092,18 @@ func (c *TUIClient) LayoutTreeOps() bool {
 
 // SendLayoutTree sends one workspace's tree to the daemon as an op. leaves names
 // the window each leaf number in tree stands for; nil tree says the workspace
-// has none. base is the daemon Version this client last applied.
+// has none.
 //
 // The op is numbered in the same sequence as the state pushes, so every state
 // the daemon handed out before it landed reads as predating this client's own
 // push and is dropped (see PredatesOwnPush). That is what keeps a drag smooth:
 // the answers to the earlier steps of the drag arrive while later steps are in
 // flight, and none of them may put the divider back.
-func (c *TUIClient) SendLayoutTree(ws int, tree *SerializedBSPTree, leaves map[int]string, base int) error {
+func (c *TUIClient) SendLayoutTree(ws int, tree *SerializedBSPTree, leaves map[int]string) error {
 	c.pushMu.Lock()
 	defer c.pushMu.Unlock()
 	seq := c.pushSeq.Load() + 1
-	p := &LayoutTreePayload{PushSeq: seq, BaseVersion: base, Workspace: ws, Tree: tree, Leaves: leaves}
+	p := &LayoutTreePayload{PushSeq: seq, Workspace: ws, Tree: tree, Leaves: leaves}
 	if origin := c.pushOrigin.Load(); origin != nil {
 		p.PushOrigin = *origin
 	}
@@ -1132,6 +1134,18 @@ func (c *TUIClient) startPushes() {
 	defer c.pushMu.Unlock()
 	c.pushOrigin.Store(&origin)
 	c.pushSeq.Store(0)
+	c.attachGen.Add(1)
+}
+
+// AttachGeneration counts this client's attaches. SnapshotSeq numbers are the
+// attached session's own and start over in another session or after a daemon
+// restart, both of which take a new attach, so two snapshots are comparable by
+// SnapshotSeq only when they arrived under the same generation.
+func (c *TUIClient) AttachGeneration() uint64 {
+	if c == nil {
+		return 0
+	}
+	return c.attachGen.Load()
 }
 
 // AcceptState reports whether a session state that arrived from the daemon

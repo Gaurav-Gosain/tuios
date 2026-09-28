@@ -158,6 +158,9 @@ type StateSyncMsg struct {
 	State       *session.SessionState
 	TriggerType string
 	SourceID    string
+	// Attach is the client's attach generation when the state arrived. See
+	// TUIClient.AttachGeneration and QueueStateSync.
+	Attach uint64
 }
 
 // ClientJoinedMsg is sent when another client joins the session.
