@@ -75,6 +75,12 @@ func TestRailRowFit(t *testing.T) {
 			keep: []bool{false, true}, room: 7,
 		},
 		{
+			// A plain token here would come back: 3 cells beside the whole name.
+			name:  "context is never passed over",
+			nameW: 6, tokens: []railToken{{Cost: 3, Whole: true}, {Cost: 7, Whole: true}}, avail: 12,
+			keep: []bool{false, false}, room: 12,
+		},
+		{
 			name:  "the right-hand slot pays its inset once",
 			nameW: 4, tokens: []railToken{{Cost: 3, Right: true}, {Cost: 2, Right: true}}, avail: 10,
 			keep: []bool{true, true}, room: 4,

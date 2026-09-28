@@ -407,8 +407,10 @@ func sidebarAgentSep() string {
 // beside it. A prefix token costs its text and the "/" after it, and is kept
 // only while the whole name fits beside it. A token after the name costs its
 // text and the separator in front of it.
-func sidebarAgentBudget(prefix, after []sidebarAgentToken, label, mail, sep string) []railToken {
-	tokens := make([]railToken, 0, len(prefix)+len(after)+2)
+//
+// It appends to dst, which may be nil, and returns the list.
+func sidebarAgentBudget(dst []railToken, prefix, after []sidebarAgentToken, label, mail, sep string) []railToken {
+	tokens := dst[:0]
 	for _, tk := range prefix {
 		tokens = append(tokens, railToken{Cost: lipgloss.Width(tk.Text) + 1, Whole: true})
 	}
@@ -418,6 +420,56 @@ func sidebarAgentBudget(prefix, after []sidebarAgentToken, label, mail, sep stri
 	return append(tokens,
 		railToken{Cost: sidebarFigureCost(label), Right: true},
 		railToken{Cost: sidebarFigureCost(mail), Right: true})
+}
+
+// sidebarAgentFit lays out an agent row's identity line: the name, the tokens
+// around it, the figure at the right edge and the mail count, in avail cells.
+// label is the elapsed time, and queued the forms of the queued-message figure
+// that takes its place when messages wait, longest first.
+//
+// The queued figure is picked inside the budget. The longest form that keeps
+// every token the row would draw without it wins, so a row reads
+// "deploy-the-api-… 2q · working" rather than dropping the state to spell out
+// "2 queued". When every form costs a token, the longest form the budget
+// keeps at all wins, and when none is kept the elapsed time stays.
+//
+// It reports the figure it drew, which tokens the row keeps in
+// sidebarAgentBudget's order, and the cells the name may take. The answer is
+// written into s, so it holds until the next row is fitted.
+func sidebarAgentFit(s *railScratch, prefix, after []sidebarAgentToken, nameW int, label string, queued []string, mail, sep string, avail int) (figure string, keep []bool, nameRoom int) {
+	fit := func(figure string) ([]bool, int) {
+		s.tokens = sidebarAgentBudget(s.tokens, prefix, after, figure, mail, sep)
+		s.keep, nameRoom = railRowFitInto(s.keep, nameW, railNameKeep(nameW), s.tokens, avail)
+		return s.keep, nameRoom
+	}
+	labelAt := len(prefix) + len(after)
+	figure = label
+	kept := ""
+	for _, q := range queued {
+		keep, _ := fit(q)
+		if !keep[labelAt] {
+			continue
+		}
+		if kept == "" {
+			kept = q
+		}
+		all := true
+		for i, tk := range s.tokens {
+			if tk.Cost > 0 && !tk.Whole && !keep[i] {
+				all = false
+				break
+			}
+		}
+		if all {
+			kept = q
+			break
+		}
+	}
+	if kept != "" {
+		figure = kept
+	}
+	keep, nameRoom = fit(figure)
+	return figure, keep, nameRoom
 }
 
 // sidebarAgentRun draws the tokens the row's budget kept after the name, each

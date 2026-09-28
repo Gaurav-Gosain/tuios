@@ -2386,15 +2386,17 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	if !grouped && variant == sidebarVariantFull {
 		b = printableTitle(node.Branch)
 	}
-	tokens := []railToken{{Whole: true}}
+	s := &m.railFit
+	s.tokens = append(s.tokens[:0], railToken{Whole: true})
 	if b != "" {
-		tokens[0].Cost = 1 + lipgloss.Width(b)
+		s.tokens[0].Cost = 1 + lipgloss.Width(b)
 	}
 	for _, f := range figures {
-		tokens = append(tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
+		s.tokens = append(s.tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
 	}
 	titleW := lipgloss.Width(title)
-	keep, avail := railRowFit(titleW, railNameKeep(titleW), tokens, sidebarNameAvailIn(cw, 0, indent))
+	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent))
+	s.keep = keep
 	branch := ""
 	if keep[0] {
 		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
@@ -2684,11 +2686,13 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 	// Each token is charged the separator in front of it, and the first one
 	// drawn has none, so the line has that separator's cells to spare. The
 	// tokens give way from the end of the line.
-	budget := make([]railToken, len(head))
-	for i, tk := range head {
-		budget[len(head)-1-i] = railToken{Cost: lipgloss.Width(tk.Text) + sepW}
+	s := &m.railFit
+	s.tokens = s.tokens[:0]
+	for i := len(head) - 1; i >= 0; i-- {
+		s.tokens = append(s.tokens, railToken{Cost: lipgloss.Width(head[i].Text) + sepW})
 	}
-	keep, room := railRowFit(0, 0, budget, avail+sepW)
+	keep, room := railRowFitInto(s.keep, 0, 0, s.tokens, avail+sepW)
+	s.keep = keep
 	// What is left for the sentence, after the separator in front of it.
 	room -= sepW
 	var b strings.Builder
@@ -2702,10 +2706,15 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 		b.WriteString(m.sidebarTokenStyle(quiet, tk, pal).Render(tk.Text))
 	}
 	if last.Text != "" && (room >= 2 || (b.Len() == 0 && room >= 1)) {
-		if b.Len() > 0 {
-			b.WriteString(quiet.Render(sep))
+		// A sentence that opens on a wide character can be cut to its
+		// ellipsis alone, and "claude · …" says nothing the line did not say
+		// without it.
+		if cut := overlay.Truncate(last.Text, room); cut != "" && cut != overlay.Ellipsis() {
+			if b.Len() > 0 {
+				b.WriteString(quiet.Render(sep))
+			}
+			b.WriteString(m.sidebarTokenStyle(quiet, last, pal).Render(cut))
 		}
-		b.WriteString(m.sidebarTokenStyle(quiet, last, pal).Render(overlay.Truncate(last.Text, room)))
 	}
 	return b.String()
 }
@@ -2768,17 +2777,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	//
 	// The name is what the row is, so the figure gives way to it: on a narrow
 	// rail "1 queued" left "a…" of an agent called agent. It shortens to "1q"
-	// and then goes, rather than cut the name below a readable length.
-	//
-	// The prefix in front of the name is not counted: it gives way before any
-	// of the name does, so it never stands between the name and its keep.
+	// and then goes, rather than cut the name below a readable length. Which
+	// form is drawn is the row budget's choice, see sidebarAgentFit.
+	var queued []string
 	if e.Queued > 0 {
-		for _, queued := range m.sidebarAgentQueuedFigures(e) {
-			if sidebarNameAvail(cw, lipgloss.Width(queued)) >= railNameKeep(lipgloss.Width(name)) {
-				label = queued
-				break
-			}
-		}
+		queued = m.sidebarAgentQueuedFigures(e)
 	}
 	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
 	// thing about an agent that nothing on its screen shows.
@@ -2806,7 +2809,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// while nothing else on the row says which agent it is.
 	sep := sidebarAgentSep()
 	nameW := lipgloss.Width(name)
-	keep, nameRoom := railRowFit(nameW, railNameKeep(nameW), sidebarAgentBudget(plan.Prefix, plan.After, label, mail, sep), sidebarNameAvail(cw, 0))
+	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvail(cw, 0))
 	labelAt, mailAt := len(plan.Prefix)+len(plan.After), len(plan.Prefix)+len(plan.After)+1
 	nameRoom = max(nameRoom, 1)
 	shown := m.sidebarAgentPrefixRun(plan.Prefix, keep[:len(plan.Prefix)], quiet, pal)

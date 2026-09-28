@@ -859,6 +859,54 @@ func hostDownLabel(status string, lastOK int64, now time.Time) string {
 	return label
 }
 
+// hostDownMark is the figure a machine that is not answering keeps when the
+// rail has no room for the word saying why. Without it a narrow rail drew the
+// header of a machine that is down like the header of one that is up, and
+// only the ink told them apart.
+func hostDownMark() string {
+	if overlay.UseASCII() {
+		return "x"
+	}
+	return "✕"
+}
+
+// hostDownFigure is the right-hand figure of the header of a machine that is
+// not answering, and the cells its name may take beside it.
+//
+// The figure is the longest form the row's budget keeps beside the name (see
+// railRowFit): mail waiting for the machine and why it is down, "3 queued,
+// offline", then the mail alone, "3 queued", or the word alone, "offline". A
+// rail too narrow for any of them keeps the name, because "wo… offline" names
+// no machine at all. It still draws the last form outside the budget, at the
+// name's cost: the mail count when there is mail, since it is the one thing on
+// the row that changes when the link is back, and hostDownMark when there is
+// none, so the row still says the machine is down without its colour.
+func hostDownFigure(node sessiontree.Node, nameW, cw int) (figure string, nameRoom int) {
+	label := hostDownLabel(node.HostStatus, node.HostLastOK, time.Now())
+	forms := []string{label}
+	last := hostDownMark()
+	switch federation.Status(node.HostStatus) {
+	case federation.StatusConnecting, federation.StatusReconnecting:
+		// On its way up, not down: the mark would say the wrong thing.
+		last = ""
+	}
+	if node.HostQueued > 0 {
+		queued := strconv.Itoa(node.HostQueued) + " queued"
+		forms = []string{queued + ", " + label, queued}
+		last = queued
+	}
+	avail := sidebarNameAvail(cw, 0)
+	for _, f := range forms {
+		if keep, room := railRowFitRight(nameW, lipgloss.Width(f), avail); keep {
+			return f, room
+		}
+	}
+	if last == "" {
+		return "", max(avail, 1)
+	}
+	return last, sidebarNameAvail(cw, lipgloss.Width(last))
+}
+
 // sidebarHostRow draws a machine's group header.
 //
 //	▾ local                +
@@ -880,28 +928,18 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 
 	blocked, worst := m.hostAttention(node.Host)
 
+	title := printableTitle(node.Title)
 	right, rightW := "", 0
-	budgeted := false
+	// The name's room when the figure is drawn whatever it costs the name.
+	nameRoom := 0
 	switch {
 	case !up:
 		// A host that is not up says why, in the slot the add control would take.
-		// An unreachable machine has nothing to add a session to.
-		label := hostDownLabel(node.HostStatus, node.HostLastOK, time.Now())
-		// Mail waiting here for the machine is said first, in words: it is
-		// the one thing on the row that will change when the link is back.
-		if node.HostQueued > 0 {
-			queued := strconv.Itoa(node.HostQueued) + " queued"
-			label = queued + ", " + label
-			// On a narrow rail, the shipped 24 columns among them, the count
-			// goes on alone rather than taking the machine's name: a header
-			// that names no machine heads nothing.
-			if keep, _ := railRowFitRight(lipgloss.Width(printableTitle(node.Title)), lipgloss.Width(label), sidebarNameAvail(cw, 0)); !keep {
-				label = queued
-			}
-		}
+		// An unreachable machine has nothing to add a session to. See
+		// hostDownFigure for how the word gives way on a narrow rail.
+		var label string
+		label, nameRoom = hostDownFigure(node, lipgloss.Width(title), cw)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
-		rightW = lipgloss.Width(label)
-		budgeted = true
 	case blocked > 0:
 		// How many of this machine's sessions want a person, in the strip
 		// badge's language. It outranks both the session count and the add
@@ -956,20 +994,12 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	// stop meaning anything.
 	//
 	// The word saying why a machine is not answering goes through the row's
-	// budget, see railRowFit: a rail too narrow for the name and the word
-	// keeps the name and drops the word, because "wo… offline" names no
-	// machine at all, and the muted ink still says the machine is down. The
-	// other figures are drawn whatever they cost the name: the alarm outranks
-	// a label, a shut group's count is the only sign the fold is not empty,
-	// and the add control's click span is worked out before this row is drawn.
-	title := printableTitle(node.Title)
-	nameRoom := sidebarNameAvail(cw, rightW)
-	if budgeted {
-		keepFigure, room := railRowFitRight(lipgloss.Width(title), rightW, sidebarNameAvail(cw, 0))
-		nameRoom = room
-		if !keepFigure {
-			right = ""
-		}
+	// budget, see hostDownFigure. The other figures are drawn whatever they
+	// cost the name: the alarm outranks a label, a shut group's count is the
+	// only sign the fold is not empty, and the add control's click span is
+	// worked out before this row is drawn.
+	if up {
+		nameRoom = sidebarNameAvail(cw, rightW)
 	}
 	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
 	// A folded group hides the session row that wears the focus mark, so the

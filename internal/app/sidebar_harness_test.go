@@ -32,9 +32,10 @@ func railAgentRow(m *OS, lines []string, windowID string) string {
 // TestSidebarAgentPrefixYieldsInOrder pins the ladder a narrowing row walks
 // down, on the budget the row draws with. The session goes before the agent
 // because the gutter already marks a pane that is somewhere else, and the
-// whole prefix goes before a cell of the pane name does. A prefix token that
-// does not fit is passed over, so the session comes back when the agent is
-// too wide for the row and the session alone is not. The E2E test TestNarrowRailKeepsTheAgentNameBeforeItsHarness
+// whole prefix goes before a cell of the pane name does. Once the agent goes
+// the session goes with it, even where the session alone would fit:
+// "api/deploy" reads as a harness called api. The E2E test
+// TestNarrowRailKeepsTheAgentNameBeforeItsHarness
 // covers the harness half on screen; the session half is only reached on a
 // pane from another session, which that test does not draw.
 func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
@@ -52,13 +53,12 @@ func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 		{17, "api/claude/"}, // both fit exactly: 11 cells and the 6 of the name
 		{16, "claude/"},     // the session yields first
 		{13, "claude/"},     // the agent fits exactly beside the whole name
-		{12, "api/"},        // the agent no longer fits, and the shorter session does
-		{10, "api/"},        // the session fits exactly beside the whole name
-		{9, ""},             // and yields before a cell of the name goes
+		{12, ""},            // and yields before a cell of the name goes
+		{10, ""},            // the session alone would fit, and still goes with the agent
 		{6, ""},
 		{1, ""},
 	} {
-		keep, room := railRowFit(nameW, railNameKeep(nameW), sidebarAgentBudget(tokens, nil, "", "", sidebarAgentSep()), tc.avail)
+		keep, room := railRowFit(nameW, railNameKeep(nameW), sidebarAgentBudget(nil, tokens, nil, "", "", sidebarAgentSep()), tc.avail)
 		run := m.sidebarAgentPrefixRun(tokens, keep[:len(tokens)], lipgloss.NewStyle(), theme.UI())
 		if got := ansi.Strip(run); got != tc.want {
 			t.Errorf("prefix at avail=%d = %q, want %q", tc.avail, got, tc.want)
