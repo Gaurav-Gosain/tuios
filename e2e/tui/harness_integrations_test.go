@@ -350,11 +350,14 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 	abs, _ := filepath.Abs(driver)
 	cmd := exec.Command(node, abs, harness, file)
 	cmd.Dir = workDirIn(t, base)
-	cmd.Env = append(os.Environ(), env...)
-	cmd.Env = append(cmd.Env, "TUIOS_ENV=1", "TUIOS_SESSION="+session, "TUIOS_PANE_ID="+window)
+	cmd.Env = os.Environ()
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
+	// After the isolation keys, so this plugin's own HOME wins over the
+	// suite's.
+	cmd.Env = append(cmd.Env, env...)
+	cmd.Env = append(cmd.Env, "TUIOS_ENV=1", "TUIOS_SESSION="+session, "TUIOS_PANE_ID="+window)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
