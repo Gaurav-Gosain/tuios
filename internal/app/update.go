@@ -1185,7 +1185,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The switcher lists a snapshot, so the row of a session that no longer
 		// exists would sit there until the overlay was reopened.
 		if m.ShowSessionSwitcher {
-			m.SessionSwitcherItems = m.BuildSessionTree().Sessions
+			m.SessionSwitcherItems = m.sessionSwitcherItems()
 			if m.SessionSwitcherSelected >= len(m.SessionSwitcherItems) && m.SessionSwitcherSelected > 0 {
 				m.SessionSwitcherSelected--
 			}

@@ -473,8 +473,10 @@ func (m *OS) sessionSwitcherActivate(idx int) {
 	}
 	if selected.IsCurrent {
 		m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
-	} else if err := m.SwitchToSession(selected.ID); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
+	} else {
+		// By node, never by ID: a row under another machine carries a rail
+		// identity for an ID, and OpenSessionNode picks the connection. See #196.
+		m.OpenSessionNode(selected)
 	}
 	m.closeOverlay("session")
 }

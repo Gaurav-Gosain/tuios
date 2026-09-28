@@ -60,7 +60,7 @@ func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 // client's or another client's) shows up in the list it was made from.
 func (m *OS) refreshSwitcherItems() {
 	if m.ShowSessionSwitcher {
-		m.SessionSwitcherItems = m.BuildSessionTree().Sessions
+		m.SessionSwitcherItems = m.sessionSwitcherItems()
 	}
 	if m.ShowWorkspaceSwitcher {
 		m.WorkspaceSwitcherItems = m.buildWorkspaceItems()

@@ -237,9 +237,8 @@ func (m *OS) CycleSession(delta int) {
 		m.ShowNotification("No other sessions", "info", m.Settings.NotificationDuration)
 		return
 	}
-	if err := m.SwitchToSession(target); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
-	}
+	// railNeighbourSession cycles the attached machine's sessions only.
+	m.openSession("", target)
 }
 
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
@@ -333,9 +332,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 					return m, nil
 				}
 				m.sidebarLeaveForJump()
-				if err := m.SwitchToSession(sessionName); err != nil {
-					m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
-				}
+				m.openSession("", sessionName)
 				return m, nil
 			},
 		})
@@ -356,8 +353,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					if !isCurrent {
-						if err := m.SwitchToSession(sessionName); err != nil {
-							m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
+						if !m.openSession("", sessionName) {
 							return m, nil
 						}
 					}

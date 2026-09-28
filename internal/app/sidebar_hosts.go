@@ -783,13 +783,11 @@ func (m *OS) drawHostRow(
 // SwitchToHostSession.
 func (m *OS) openRemoteSession(host, sessionName string) {
 	if !m.hostIsUp(host) {
-		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
+		m.reportSwitchFailure(&hostUnavailableError{host: host})
 		return
 	}
 	m.clearSidebarReturn() // opening the session is where the user asked to end up
-	if err := m.SwitchToHostSession(host, sessionName, false); err != nil {
-		m.ShowNotification(hostAttachRefusal(host, err), "error", m.Settings.NotificationDuration*3)
-	}
+	m.openSession(host, sessionName)
 }
 
 // createRemoteSession creates a session on another machine and attaches it in

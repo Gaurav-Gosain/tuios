@@ -614,9 +614,9 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 		return
 	}
 	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
-	if err := m.SwitchToSession(sessionID); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
-	}
+	// A session row is always on the attached machine: rows under another
+	// machine are sidebarRowHostSession hits and go through openRemoteSession.
+	m.openSession("", sessionID)
 }
 
 // sidebarFocusWindow focuses the window a window row points at, switching session
@@ -657,8 +657,7 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	}
 	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
-		if err := m.SwitchToSession(hit.SessionID); err != nil {
-			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
+		if !m.openSession("", hit.SessionID) {
 			return -1, false
 		}
 	}
