@@ -75,9 +75,9 @@ the person passes it on. A host bounds unread mail from links at 32 messages and
 32 notices per session (`rate_limited`).
 
 A file crosses through the stash, capped at 8 MB. `--attach` with a file on
-this machine puts it in the host's stash and attaches the stored path. Only the
-files you name are sent. A path that names no file here is sent as it is, and
-the host accepts it only when it is in that host's stash:
+this machine puts it in the host's stash, attaches the stored path, and prints
+`Sent NAME to HOST's stash.` on stderr. Only the files you name are sent. A path
+already in that session's stash on the host is attached as it is:
 
 ```sh
 tuios send-agent-message -s build:api -w review --attach /tmp/flame.png 'the hot path is in decode'

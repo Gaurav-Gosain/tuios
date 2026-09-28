@@ -359,10 +359,21 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 	}
 
 	// The stored path is attachable in a message on build, which is the
-	// one kind of attachment a message from another machine may carry.
+	// one kind of attachment a message from another machine may carry. It
+	// is under build's stash root, so it passes through as written and
+	// nothing is sent. Both daemons share this machine's filesystem, so the
+	// stored file is made unreadable here first: a CLI that decided by
+	// reading the path here would fail on it, or send it again.
+	if err := os.Chmod(stored, 0); err != nil {
+		t.Fatal(err)
+	}
 	out, err = tuiosCLIEnv(t, base, env, "send-agent-message", "-s", "build:far", "--attach", stored, "here is the flame graph")
+	_ = os.Chmod(stored, 0o600)
 	if err != nil {
 		t.Fatalf("ASSERTION: the stashed path could not be attached on build: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "Sent ") {
+		t.Fatalf("ASSERTION: a path in build's stash was sent again instead of passed through:\n%s", out)
 	}
 	// One step: --attach with a file here stashes it on build itself and
 	// attaches the stored path. The message on build must name a file in
@@ -372,8 +383,12 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 	if err := os.WriteFile(src2, want2, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := tuiosCLIEnv(t, base, env, "send-agent-message", "-s", "build:far", "--attach", src2, "and a path from here"); err != nil {
+	out, err = tuiosCLIEnv(t, base, env, "send-agent-message", "-s", "build:far", "--attach", src2, "and a path from here")
+	if err != nil {
 		t.Fatalf("ASSERTION: --attach with a file here did not reach build in one step: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Sent trace.txt to build's stash.") {
+		t.Errorf("ASSERTION: the send did not say it sent the file:\n%s", out)
 	}
 	ringOut, err := tuiosCLI(t, remote, "read-agent-messages", "-s", "far", "--peek", "--json")
 	if err != nil {
@@ -390,11 +405,17 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 	if err := json.Unmarshal([]byte(ringOut), &ring); err != nil {
 		t.Fatalf("build's ring does not parse: %v\n%s", err, ringOut)
 	}
-	attached := ""
+	attached, passed := "", ""
 	for _, m := range ring.Messages {
 		if m.Text == "and a path from here" && len(m.Attachments) == 1 {
 			attached = m.Attachments[0].Path
 		}
+		if m.Text == "here is the flame graph" && len(m.Attachments) == 1 {
+			passed = m.Attachments[0].Path
+		}
+	}
+	if passed != stored {
+		t.Fatalf("ASSERTION: the passed-through attachment on build is %q, want %q:\n%s", passed, stored, ringOut)
 	}
 	if attached == "" || attached == src2 || !strings.HasPrefix(attached, xdgDir(remote, "XDG_RUNTIME_DIR")) {
 		t.Fatalf("ASSERTION: the one-step attachment on build is %q, want a path in build's stash:\n%s", attached, ringOut)
@@ -402,10 +423,10 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 	if got, err := os.ReadFile(attached); err != nil || string(got) != string(want2) {
 		t.Fatalf("ASSERTION: the stashed attachment on build does not hold the bytes sent: %v %q", err, got)
 	}
-	// A path that names nothing here goes as it is, and build still refuses
-	// a path outside its stash.
+	// A path outside build's stash that is no file here is refused before
+	// anything is sent.
 	if out, err := tuiosCLIEnv(t, base, env, "send-agent-message", "-s", "build:far", "--attach", filepath.Join(base, "no-such-file"), "a path nobody stashed"); err == nil {
-		t.Fatalf("ASSERTION: build accepted an attachment outside its stash:\n%s", out)
+		t.Fatalf("ASSERTION: an attachment that is neither in build's stash nor a file here was accepted:\n%s", out)
 	}
 
 	// And back: the bytes come here under a path this machine can open.

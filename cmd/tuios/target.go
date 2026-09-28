@@ -117,21 +117,36 @@ func (t *verbTarget) params(p map[string]any) map[string]any {
 
 // explain names the host a failed verb ran on, on top of the daemon's own
 // hint. On this machine it is explainVerbError unchanged.
+//
+// An error from another machine is returned as a *hostError, so the JSON
+// form of it says which host answered and that its words are untrusted.
 func (t *verbTarget) explain(verb string, err error) error {
 	if t.host == "" {
 		return explainVerbError(verb, err)
 	}
 	var call *session.VerbCallError
 	if errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
-		return fmt.Errorf("tuios on %s is too old for %s. Upgrade tuios on %s", t.host, verb, t.host)
+		return &hostError{host: t.host, err: fmt.Errorf("tuios on %s is too old for %s. Upgrade tuios on %s", t.host, verb, t.host)}
 	}
 	explained := explainVerbError(verb, err)
 	if d, ok := errors.AsType[*diagnosticError](explained); ok {
 		d.What = "On " + t.host + ": " + d.What
-		return d
+		return &hostError{host: t.host, err: d}
 	}
-	return fmt.Errorf("tuios on %s: %w", t.host, explained)
+	return &hostError{host: t.host, err: fmt.Errorf("tuios on %s: %w", t.host, explained)}
 }
+
+// hostError is a verb failure another machine answered. Its message is that
+// machine's word, so reportVerbError marks the JSON form with the host and
+// untrusted, as a result from there is marked. It prints and unwraps as the
+// error it carries.
+type hostError struct {
+	host string
+	err  error
+}
+
+func (e *hostError) Error() string { return e.err.Error() }
+func (e *hostError) Unwrap() error { return e.err }
 
 // on is the suffix a line of human output carries when the answer came from
 // another machine: " on build", or nothing.
@@ -156,8 +171,44 @@ func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return raw
 	}
-	fields["host"] = t.host
+	markUntrusted(fields, t.host)
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+// markUntrusted marks a JSON object as another machine's word: host names
+// the machine, and untrusted is the JSON form of the fence the text output
+// puts around content from there.
+func markUntrusted(fields map[string]any, host string) {
+	fields["host"] = host
 	fields["untrusted"] = true
+}
+
+// markHostRows marks each far host's entry in an aggregated listing
+// (list-host-sessions, list-host-agents) untrusted. This machine's own entry,
+// under federation.LocalHostName, is left as it is. A result that does not
+// have the expected shape is returned unchanged.
+func markHostRows(raw json.RawMessage) json.RawMessage {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return raw
+	}
+	hosts, ok := fields["hosts"].([]any)
+	if !ok {
+		return raw
+	}
+	for _, h := range hosts {
+		entry, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, _ := entry["host"].(string); name != "" && name != federation.LocalHostName {
+			entry["untrusted"] = true
+		}
+	}
 	out, err := json.Marshal(fields)
 	if err != nil {
 		return raw

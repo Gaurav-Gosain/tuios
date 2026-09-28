@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -189,19 +189,34 @@ func runStashPut(sessionName, path string, jsonOutput bool) error {
 }
 
 // stashAttachments turns the --attach paths of a message to another machine
-// into paths that machine can open. Each path that names a file here is put
-// in the far session's stash, exactly as `tuios stash put -s host:session`
-// would put it, and the stored path takes its place. A path that names
-// nothing here is passed on as it is: it is already a path on the far side,
-// most often one a stash put there printed, and the far daemon decides
-// whether it may be attached.
+// into paths that machine can open.
+//
+// The far daemon names its session's stash root, and a path under that root
+// is already a file there: it passes through unchanged, and the far daemon
+// decides whether it may be attached. Every other path must be a file on this
+// machine. It is put in the far session's stash, exactly as `tuios stash put
+// -s host:session` would put it, the stored path takes its place, and one
+// line on notes says so. The decision is made from the far root and never
+// from whether the path happens to exist here, which a far path can do on a
+// machine that shares a filesystem layout, and which can fail for reasons
+// that say nothing about the far side (EACCES, ENOTDIR).
 //
 // Only the paths the caller named are read, one file each. The 8 MB cap is
 // readForTransfer's, checked before a byte is sent, and the far daemon still
-// applies its link policy to every stash-put, so a link that may not use the
-// stash refuses the message before it is sent.
-func stashAttachments(t *verbTarget, paths []string) ([]string, error) {
-	return stashAttachmentsWith(paths, func(params map[string]any) (json.RawMessage, error) {
+// applies its link policy to stash-list and every stash-put, so a link that
+// may not use the stash refuses the message before it is sent.
+func stashAttachments(t *verbTarget, paths []string, notes io.Writer) ([]string, error) {
+	raw, err := t.client.Call("stash-list", t.params(map[string]any{}))
+	if err != nil {
+		return nil, t.explain("stash-list", err)
+	}
+	var listing struct {
+		Dir string `json:"dir"`
+	}
+	if err := json.Unmarshal(raw, &listing); err != nil {
+		return nil, fmt.Errorf("failed to parse the stash listing from %s: %w", t.host, err)
+	}
+	return stashAttachmentsWith(paths, listing.Dir, t.host, notes, func(params map[string]any) (json.RawMessage, error) {
 		raw, err := t.client.Call("stash-put", t.params(params))
 		if err != nil {
 			return nil, t.explain("stash-put", err)
@@ -210,12 +225,13 @@ func stashAttachments(t *verbTarget, paths []string) ([]string, error) {
 	})
 }
 
-// stashAttachmentsWith is stashAttachments with the stash-put call passed
-// in, so the choice of which paths to send is testable without a daemon.
-func stashAttachmentsWith(paths []string, put func(map[string]any) (json.RawMessage, error)) ([]string, error) {
+// stashAttachmentsWith is stashAttachments with the far stash root and the
+// stash-put call passed in, so the choice of which paths to send is testable
+// without a daemon.
+func stashAttachmentsWith(paths []string, farRoot, host string, notes io.Writer, put func(map[string]any) (json.RawMessage, error)) ([]string, error) {
 	out := make([]string, 0, len(paths))
 	for _, path := range paths {
-		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		if underDir(path, farRoot) {
 			out = append(out, path)
 			continue
 		}
@@ -234,15 +250,32 @@ func stashAttachmentsWith(paths []string, put func(map[string]any) (json.RawMess
 		if err := json.Unmarshal(raw, &res); err != nil || res.Path == "" {
 			return nil, fmt.Errorf("the stash put for %s returned no stored path", path)
 		}
+		fmt.Fprintf(notes, "Sent %s to %s's stash.\n", plainLine(filepath.Base(path)), plainLine(host))
 		out = append(out, res.Path)
 	}
 	return out, nil
 }
 
+// underDir reports whether path is inside dir, not dir itself. Both are
+// cleaned first, so "dir/../x" is not inside. An empty dir holds nothing.
+func underDir(path, dir string) bool {
+	if dir == "" || !filepath.IsAbs(path) {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // readForTransfer reads a file here for a put on another machine, refusing one
 // over the transfer cap before a byte of it is sent.
+//
+// The file is opened once, and the checks and the read are made on what was
+// opened, so the path cannot be swapped for another file between them. It is
+// opened non-blocking, so a FIFO with no writer is refused instead of waiting
+// forever. The read stops one byte past the cap, so a file that grows after
+// the size check is refused rather than read without bound.
 func readForTransfer(path string) (string, error) {
-	info, err := os.Stat(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", &diagnosticError{
 			What:  fmt.Sprintf("Cannot read %s: %v.", path, err),
@@ -251,17 +284,38 @@ func readForTransfer(path string) (string, error) {
 			Err:   err,
 		}
 	}
-	if info.IsDir() || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a regular file. The stash stores one file at a time", path)
-	}
-	if info.Size() > stashTransferMaxBytes {
-		return "", fmt.Errorf("%s is %d bytes. A file sent to another machine is capped at %d MB", path, info.Size(), stashTransferMaxBytes>>20)
-	}
-	data, err := os.ReadFile(path)
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
 	if err != nil {
 		return "", fmt.Errorf("cannot read %s: %w", path, err)
 	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not a regular file. The stash stores one file at a time", path)
+	}
+	if info.Size() > stashTransferMaxBytes {
+		return "", transferTooLarge(path, info.Size())
+	}
+	if afterTransferStat != nil {
+		afterTransferStat(f)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, stashTransferMaxBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	if len(data) > stashTransferMaxBytes {
+		return "", transferTooLarge(path, int64(len(data)))
+	}
 	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// afterTransferStat runs between the size check and the read. Tests use it to
+// grow a file in that gap. It is nil outside tests.
+var afterTransferStat func(*os.File)
+
+// transferTooLarge is the refusal for a file over the transfer cap. size is
+// what was seen, which for a growing file is only a lower bound.
+func transferTooLarge(path string, size int64) error {
+	return fmt.Errorf("%s is at least %d bytes. A file sent to another machine is capped at %d MB", path, size, stashTransferMaxBytes>>20)
 }
 
 // runStashGet copies a stashed file out of a session store to a path here.
@@ -295,11 +349,22 @@ func runStashGet(sessionName, stored, out string, jsonOutput bool) error {
 		return fmt.Errorf("cannot write %s: %w", out, err)
 	}
 	if jsonOutput {
-		outputJSON(map[string]any{"success": true, "message": "file copied", "path": out, "bytes": len(data), "host": t.host, "stored": stored})
+		outputJSON(stashGetJSON(out, len(data), t.host, stored))
 		return nil
 	}
 	printStashGet(os.Stdout, os.Stderr, out, int64(len(data)), t.on())
 	return nil
+}
+
+// stashGetJSON is the --json result of stash get. A file from another machine
+// is marked untrusted: its bytes and the name they were saved under came from
+// there.
+func stashGetJSON(path string, size int, host, stored string) map[string]any {
+	res := map[string]any{"success": true, "message": "file copied", "path": path, "bytes": size, "host": host, "stored": stored}
+	if host != "" {
+		markUntrusted(res, host)
+	}
+	return res
 }
 
 // printStashGet prints the written path to out and the size note to notes, so

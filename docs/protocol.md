@@ -251,20 +251,27 @@ the rules below are the CLI's. The verbs on the wire do not change.
 - Every `--json` result from another machine carries `host` and
   `"untrusted": true`. It used to carry `host` only. This covers
   `list-windows`, `capture-pane`, `wait-for`, `list-agents`,
-  `send-agent-message`, `ask-agent` and every other verb that prints its
-  result with `--json`.
+  `send-agent-message`, `ask-agent`, `stash get` and every other verb that
+  prints its result with `--json`. A `--json` error another machine answered
+  carries them too.
+- In `tuios ls --all-hosts --json` and `tuios list-agents --all-hosts --json`,
+  each other machine's entry in `hosts` carries `"untrusted": true`. The
+  `local` entry does not.
 - `tuios capture-pane` takes `--json`. Its plain output from another machine
-  is fenced as untrusted content, as mail is, and control characters are
-  removed from it unless `--ansi` or `--resolved` asked for escape codes. A
-  local capture prints as before.
-- `tuios send-agent-message --attach FILE` to another machine calls
-  `stash-put` there for each named path that is a file on this machine, and
-  attaches the stored path. A file over 8 MB is refused before it is sent. A
-  path that names no file here is sent as written, and the far daemon accepts
-  it only when it is in that session's stash. The far daemon checks its link
-  policy (`mail`) on each `stash-put`, so a link without it refuses the
-  message before it is sent. A message queued for a host whose link is down
-  keeps its paths as written.
+  is fenced as untrusted content, as mail is. Control characters, bidi
+  controls and zero-width characters are removed. With `--ansi` or
+  `--resolved`, SGR sequences (`CSI ... m`) are kept and every other escape
+  (OSC, DCS, cursor moves, modes) is removed. A local capture prints as
+  before.
+- `tuios send-agent-message --attach PATH` to another machine first asks that
+  machine for its session's stash root with `stash-list`. A path under that
+  root passes through as written. Every other path must be a regular file on
+  this machine: it is put in the far stash with `stash-put`, the stored path
+  is attached, and one line on stderr says so ("Sent notes.txt to build's
+  stash."). A file over 8 MB is refused before it is sent. The far daemon
+  checks its link policy (`mail`) on `stash-list` and each `stash-put`, so a
+  link without it refuses the message before it is sent. A message queued for
+  a host whose link is down keeps its paths as written.
 
 **An agent on `needs_input` or `unknown` is not ready to be asked.** The
 states that count as ready are now `idle`, `done`, `errored` and `none`. They
