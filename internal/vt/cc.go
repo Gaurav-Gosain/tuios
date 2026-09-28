@@ -34,6 +34,35 @@ func (e *Emulator) index() {
 	e.atPhantom = false
 }
 
+// noteSoftWrap records that the cursor's row carries on to the next row,
+// because autowrap is about to move the cursor there. A wrap inside left and
+// right margins is not a whole row carrying on, so it is not recorded.
+func (e *Emulator) noteSoftWrap(left, right int) {
+	if left != 0 || right != e.scr.Width() {
+		return
+	}
+	_, y := e.scr.CursorPosition()
+	e.scr.buf.setSoftWrapped(y, true)
+}
+
+// RowSoftWrapped reports whether row y of the active screen carries on to
+// row y+1 because autowrap moved the text there, rather than because the
+// program wrote a newline. known is always true for this backend.
+func (e *Emulator) RowSoftWrapped(y int) (wrapped, known bool) {
+	return e.scr.buf.SoftWrapped(y), true
+}
+
+// ScrollbackSoftWrapped reports whether scrollback line index (oldest first)
+// carries on to the next line by autowrap. The newest line carries on to the
+// screen's first row. known is always true for this backend.
+func (e *Emulator) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
+	sb := e.scrs[0].Scrollback()
+	if sb == nil {
+		return false, true
+	}
+	return sb.LineWrapped(index), true
+}
+
 // horizontalTabSet sets a horizontal tab stop at the current cursor position.
 func (e *Emulator) horizontalTabSet() {
 	x, _ := e.scr.CursorPosition()

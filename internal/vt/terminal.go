@@ -69,6 +69,15 @@ type Terminal interface {
 	ApplicationCursorKeys() bool
 	BracketedPasteEnabled() bool
 
+	// Soft wraps. RowSoftWrapped reports whether a row of the active screen
+	// carries on to the next row because autowrap moved the text there, as
+	// opposed to a line that happens to fill the row and then ends.
+	// ScrollbackSoftWrapped is the same for a history line, oldest first.
+	// known is false where the backend cannot tell, and a caller must then
+	// treat the row as ending.
+	RowSoftWrapped(y int) (wrapped, known bool)
+	ScrollbackSoftWrapped(index int) (wrapped, known bool)
+
 	// Scrollback.
 	ScrollbackLen() int
 	ScrollbackLine(index int) uv.Line
