@@ -57,7 +57,9 @@ type Handshake struct {
 	MinProtocol   int    `json:"min_protocol"`
 	DaemonVersion string `json:"daemon_version"`
 	PID           int    `json:"pid"`
-	Sessions      int    `json:"sessions"`
+	// Instance names the far daemon's run. See HostReport.Instance.
+	Instance string `json:"instance"`
+	Sessions int    `json:"sessions"`
 }
 
 // link is one host's supervised connection. Exactly one supervisor goroutine
@@ -168,6 +170,7 @@ func (l *link) report() HostReport {
 		Protocol:      l.shake.Protocol,
 		MinProtocol:   l.shake.MinProtocol,
 		PID:           l.shake.PID,
+		Instance:      l.shake.Instance,
 		Sessions:      l.shake.Sessions,
 		Command:       l.command,
 		Drops:         l.drops,

@@ -2250,6 +2250,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"min_protocol":   MinVerbProtocolVersion,
 		"daemon_version": d.version,
 		"pid":            os.Getpid(),
+		"instance":       d.instance,
 		"sessions":       len(d.manager.ListSessions()),
 		// link_policy says this daemon holds links to a policy, so a proxy
 		// must reach it on a link socket and never on this one. See
