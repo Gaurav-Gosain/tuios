@@ -157,6 +157,9 @@ type TUIClient struct {
 	focusSupported bool
 	hostFocus      atomic.Int32
 	focusMu        sync.Mutex
+	// treeOps says the daemon's welcome offered MsgLayoutTree. See
+	// LayoutTreeOps.
+	treeOps atomic.Bool
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -326,6 +329,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// turn a note into an outage.
 	c.noteDaemonBuild(version, welcome.Version)
 	c.focusSupported = welcome.ClientFocus
+	c.treeOps.Store(welcome.LayoutTreeOps)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -1073,6 +1077,44 @@ func (c *TUIClient) UpdateState(state *SessionState) error {
 	// Counted only once it is on the wire. A push that never left cannot be
 	// counted by the daemon, and a count it can never reach would have this
 	// client refuse every state it is sent.
+	c.pushSeq.Store(seq)
+	return nil
+}
+
+// LayoutTreeOps reports whether the daemon takes BSP trees as ops
+// (SendLayoutTree). When it does not, the trees travel in the state push, as
+// they did before the op existed.
+func (c *TUIClient) LayoutTreeOps() bool {
+	return c != nil && c.treeOps.Load()
+}
+
+// SendLayoutTree sends one workspace's tree to the daemon as an op. leaves names
+// the window each leaf number in tree stands for; nil tree says the workspace
+// has none. base is the daemon Version this client last applied.
+//
+// The op is numbered in the same sequence as the state pushes, so every state
+// the daemon handed out before it landed reads as predating this client's own
+// push and is dropped (see PredatesOwnPush). That is what keeps a drag smooth:
+// the answers to the earlier steps of the drag arrive while later steps are in
+// flight, and none of them may put the divider back.
+func (c *TUIClient) SendLayoutTree(ws int, tree *SerializedBSPTree, leaves map[int]string, base int) error {
+	c.pushMu.Lock()
+	defer c.pushMu.Unlock()
+	seq := c.pushSeq.Load() + 1
+	p := &LayoutTreePayload{PushSeq: seq, BaseVersion: base, Workspace: ws, Tree: tree, Leaves: leaves}
+	if origin := c.pushOrigin.Load(); origin != nil {
+		p.PushOrigin = *origin
+	}
+	msg, err := NewMessage(MsgLayoutTree, p)
+	if err != nil {
+		return err
+	}
+	if len(msg.Payload) > maxStateUpdateBytes {
+		return &FrameTooLargeError{Type: MsgLayoutTree, Size: uint32(len(msg.Payload)) + 2, Limit: uint32(maxStateUpdateBytes) + 2}
+	}
+	if err := c.send(msg); err != nil {
+		return err
+	}
 	c.pushSeq.Store(seq)
 	return nil
 }

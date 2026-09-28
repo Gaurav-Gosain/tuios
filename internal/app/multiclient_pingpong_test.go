@@ -197,6 +197,14 @@ func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()
+	// The tree the tiling built is sent as an op, and its answer comes back to
+	// this client as well as to any peer. Both happen before the peer joins, so
+	// the peer is handed the tree at attach and every delivery counted below
+	// is a state push.
+	ex := &exchange{t: t}
+	r.m.SyncStateToDaemon()
+	ex.route(r.client, r.m, "local")
+	ex.settle(10, 200*time.Millisecond)
 	p := joinPeerOS(t, r, holderCols, holderRows)
 	p.m.AutoTiling = true
 
@@ -207,9 +215,8 @@ func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 	p.m.EffectiveWidth = holderCols - 24
 	p.m.TileAllWindows()
 
-	ex := &exchange{t: t}
-	ex.route(r.client, r.m, "local")
 	ex.route(p.c, p.m, "peer")
+	ex.n = 0
 	return r, p, ex
 }
 

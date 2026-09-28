@@ -1555,6 +1555,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleClosePTY(cs, msg)
 	case MsgUpdateState:
 		return d.handleUpdateState(cs, msg)
+	case MsgLayoutTree:
+		return d.handleLayoutTree(cs, msg)
 	case MsgSubscribePTY:
 		return d.handleSubscribePTY(cs, msg)
 	case MsgUnsubscribePTY:
