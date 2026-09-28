@@ -36,7 +36,7 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if changed, _ := editFilterQuery(msg, &o.HostPickerQuery, true); changed {
 		// The list changes with the query, so the cursor goes back to the top
 		// rather than staying on a row that may no longer be there.
-		o.HostPickerSelected = 0
+		o.HostPickerSelected = app.FirstPickableHostRow(app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery))
 	}
 	return o, nil
 }

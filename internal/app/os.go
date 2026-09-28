@@ -993,6 +993,12 @@ type OS struct {
 	// cursor while somebody is typing: a link coming up mid-search would
 	// otherwise change what Enter means.
 	HostPickerItems []HostPickerItem
+	// attachedHosts is the attached machine's own host list, for the window
+	// picker while the client is on another machine. See
+	// host_picker_attached.go.
+	attachedHosts       attachedHostView
+	attachedHostsLoaded bool
+	attachedHostsCh     chan AttachedHostsMsg
 
 	// Layout picker overlay
 	ShowLayoutPicker bool

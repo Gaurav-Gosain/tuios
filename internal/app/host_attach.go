@@ -33,31 +33,6 @@ import (
 // else. Once it has succeeded the old connection is closed silently: its
 // session keeps running where it is.
 func (m *OS) SwitchToHostSession(host, name string, create bool) error {
-	return m.switchToHostSession(host, name, create, false)
-}
-
-// makeSessionHere makes a session on this machine's daemon and attaches it.
-// With global set it is a global session, and its first pane is asked for at
-// once, the way SessionCreatedMsg does it for one made from here.
-//
-// It is for a client attached to a session on another machine. That client's
-// connection goes to the other machine's daemon, so a create sent over it
-// makes the session there, and "this machine" in the picker would mean
-// whichever machine the client last switched to.
-func (m *OS) makeSessionHere(global bool) {
-	if err := m.switchToHostSession(federation.LocalHostName, "", true, global); err != nil {
-		m.ShowNotification("Could not make a session on this machine: "+err.Error(),
-			"error", m.Settings.NotificationDuration*2)
-		return
-	}
-	m.applyStartupTiling()
-	m.sidebarFollowSession = m.SessionName
-	if global {
-		m.NewWindowHere()
-	}
-}
-
-func (m *OS) switchToHostSession(host, name string, create, global bool) error {
 	if m.DaemonClient == nil {
 		return fmt.Errorf("not in daemon mode")
 	}
@@ -67,48 +42,84 @@ func (m *OS) switchToHostSession(host, name string, create, global bool) error {
 	if host == m.AttachedHost && name != "" && !create {
 		return m.SwitchToSession(name)
 	}
-
-	client := session.NewTUIClient()
-	client.SetOwnLayoutReserve(m.DaemonClient.OwnLayoutReserve())
-	version := m.DaemonClient.ClientVersion()
-	width, height := m.Width, m.Height
-	caps := m.clientCapabilities()
-	var err error
-	if host == federation.LocalHostName {
-		err = client.ConnectWithCapabilities(version, width, height, caps)
-	} else {
-		_, err = client.ConnectThroughHost(host, version, width, height, caps)
-	}
+	d := m.hostDialFor(host, name, create, false)
+	client, state, err := d.open()
 	if err != nil {
 		return err
 	}
+	m.adoptHostClient(client, state, host)
+	return nil
+}
+
+// hostDial is everything opening a session on a machine needs from the model,
+// taken on the UI goroutine so open can run off it.
+type hostDial struct {
+	host, name     string
+	create, global bool
+	reserve        session.LayoutReserve
+	version        string
+	width, height  int
+	caps           *session.ClientCapabilities
+}
+
+func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
+	return hostDial{
+		host: host, name: name, create: create, global: global,
+		reserve: m.DaemonClient.OwnLayoutReserve(),
+		version: m.DaemonClient.ClientVersion(),
+		width:   m.Width, height: m.Height,
+		caps: m.clientCapabilities(),
+	}
+}
+
+// open connects to the machine's daemon and takes the attach. It touches no
+// model state, so it may run on any goroutine. With create and no name it
+// picks a free name there, and with global the session is a global one.
+func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
+	client := session.NewTUIClient()
+	client.SetOwnLayoutReserve(d.reserve)
+	var err error
+	if d.host == federation.LocalHostName {
+		err = client.ConnectWithCapabilities(d.version, d.width, d.height, d.caps)
+	} else {
+		_, err = client.ConnectThroughHost(d.host, d.version, d.width, d.height, d.caps)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	name, create := d.name, d.create
 	if name == "" && create {
-		if global {
+		if d.global {
 			name = freeGlobalSessionName(client.AvailableSessionNames())
 		} else {
 			name = freeSessionName(client.AvailableSessionNames())
 		}
 	}
-	if global {
+	if d.global {
 		// A global session is made empty and marked by the daemon, which an
 		// attach that creates does not do. So it is made first and attached
 		// as an existing session.
-		if err := client.CreateGlobalSession(name, width, height); err != nil {
+		if err := client.CreateGlobalSession(name, d.width, d.height); err != nil {
 			_ = client.Close()
-			return err
+			return nil, nil, err
 		}
 		create = false
 	}
-	state, err := client.AttachSession(name, create, width, height)
+	state, err := client.AttachSession(name, create, d.width, d.height)
 	if err != nil {
 		_ = client.Close()
-		if host == federation.LocalHostName {
-			return fmt.Errorf("could not attach %q on this machine: %w", name, err)
+		if d.host == federation.LocalHostName {
+			return nil, nil, fmt.Errorf("could not attach %q on this machine: %w", name, err)
 		}
-		return fmt.Errorf("tuios on %s could not attach %q: %w", host, name, err)
+		return nil, nil, fmt.Errorf("tuios on %s could not attach %q: %w", d.host, name, err)
 	}
 	client.StartReadLoop()
+	return client, state, nil
+}
 
+// adoptHostClient is the UI half of a switch across machines: the model takes
+// the connection open made.
+func (m *OS) adoptHostClient(client *session.TUIClient, state *session.SessionState, host string) {
 	previousHost, previousSession := m.AttachedHost, m.SessionName
 	m.adoptClient(client, state, host)
 	if host != federation.LocalHostName && previousHost == "" {
@@ -119,7 +130,31 @@ func (m *OS) switchToHostSession(host, name string, create, global bool) error {
 		m.hostReturn = ""
 	}
 	m.LogInfo("Attached %q on %s", m.SessionName, host)
-	return nil
+}
+
+// makeSessionHere makes a session on this machine's daemon and attaches it.
+// With global set it is a global session.
+//
+// It is for a client attached to a session on another machine. That client's
+// connection goes to the other machine's daemon, so a create sent over it
+// makes the session there, and "this machine" in the picker would mean
+// whichever machine the client last switched to.
+//
+// The connect, create and attach run on a goroutine, as SidebarNewSession's
+// create does, so a slow daemon does not stop input and drawing. The result
+// comes back as a SessionCreatedMsg carrying the new connection, and the
+// handler adopts it there.
+func (m *OS) makeSessionHere(global bool) {
+	d := m.hostDialFor(federation.LocalHostName, "", true, global)
+	ch := m.sessionCreateChan()
+	go func() {
+		client, state, err := d.open()
+		msg := SessionCreatedMsg{Global: global, Err: err, Client: client, State: state}
+		if client != nil {
+			msg.Name = client.SessionName()
+		}
+		ch <- msg
+	}()
 }
 
 // adoptClient makes client the connection this model drives, tearing the old
@@ -148,6 +183,10 @@ func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState,
 	if host == federation.LocalHostName {
 		m.AttachedHost = ""
 	}
+	// The host list belongs to the machine left behind. The new machine's is
+	// read now, so a window picker opened next has it.
+	m.attachedHosts, m.attachedHostsLoaded = attachedHostView{}, false
+	m.refreshAttachedHosts()
 	m.SessionName = client.SessionName()
 	m.rebuildForSessionOn(state, savedWidth, savedHeight)
 	m.SyncDockContext()
