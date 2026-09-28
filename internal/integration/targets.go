@@ -577,7 +577,7 @@ func (t *Target) Install(env Env, tuios string) (Result, error) {
 	// OMP's directory even when someone asks to install Pi. A second
 	// extension there would load in the wrong harness and could pin the
 	// pane at working, so refuse evidence of the other owner before writing.
-	if env.env("PI_CODING_AGENT_DIR") != "" && (t.ID == Pi || t.ID == OMP) {
+	if strings.TrimSpace(env.env("PI_CODING_AGENT_DIR")) != "" && (t.ID == Pi || t.ID == OMP) {
 		other := Pi
 		foreignDir := filepath.Join(env.Home, ".pi") + string(os.PathSeparator)
 		if t.ID == Pi {
@@ -590,7 +590,7 @@ func (t *Target) Install(env Env, tuios string) (Result, error) {
 		_, ompConfigErr := os.Stat(filepath.Join(dir, "config.yml"))
 		if owner == other || strings.HasPrefix(filepath.Clean(dir)+string(os.PathSeparator), foreignDir) ||
 			foreignErr == nil || (t.ID == Pi && ompConfigErr == nil) {
-			return res, fmt.Errorf("%s is %s's agent directory; refusing to install %s there. Unset PI_CODING_AGENT_DIR or choose the intended agent directory", dir, foreign.Name, t.Name)
+			return res, fmt.Errorf("%s is %s's agent directory. Refusing to install %s there. Unset PI_CODING_AGENT_DIR or choose the intended agent directory", dir, foreign.Name, t.Name)
 		}
 	}
 	plans, err := t.plan(env, tuios, true)

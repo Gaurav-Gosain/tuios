@@ -49,7 +49,7 @@ export default function (pi) {
   if (process.env.TUIOS_ENV !== "1" && !process.env.TUIOS_AGENT) return;
   const mainTUI = (ctx) => ctx?.mode === "tui" && ctx?.agent?.kind === "main";
   pi.on("session_start", (_event, ctx) => {
-    if (mainTUI(ctx)) report("session_start", ctx, { busy: ctx.isIdle() === false });
+    if (mainTUI(ctx)) report("session_start", ctx, { busy: ctx?.isIdle?.() === false });
   });
   pi.on("agent_start", (_event, ctx) => {
     if (mainTUI(ctx)) report("agent_start", ctx);

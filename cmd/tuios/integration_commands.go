@@ -20,11 +20,12 @@ func integrationTargets(env integration.Env, args []string, all, onlyPresent boo
 		if len(args) > 0 {
 			return nil, errors.New("pass harness names or --all, not both")
 		}
-		if onlyPresent && env.Getenv != nil && strings.TrimSpace(env.Getenv("PI_CODING_AGENT_DIR")) != "" {
-			return nil, errors.New("PI_CODING_AGENT_DIR points Pi and omp at the same agent directory; install the intended harness explicitly instead of --all")
-		}
+		skipSharedDir := onlyPresent && env.Getenv != nil && strings.TrimSpace(env.Getenv("PI_CODING_AGENT_DIR")) != ""
 		var out []*integration.Target
 		for _, t := range integration.Targets() {
+			if skipSharedDir && (t.ID == integration.Pi || t.ID == integration.OMP) {
+				continue
+			}
 			if onlyPresent {
 				if fi, err := os.Stat(t.ConfigDir(env)); err != nil || !fi.IsDir() {
 					continue
@@ -96,9 +97,9 @@ func newIntegrationInstallCommand() *cobra.Command {
 		Short: "Write tuios's hook entries into a harness's configuration",
 		Long: `Write tuios's hook entries into a harness's configuration.
 
-Pi and omp both read PI_CODING_AGENT_DIR. When it is set, --all refuses to
-install either extension implicitly; name the intended harness explicitly.
-Installing one into a directory identified as the other's also refuses.
+Pi and omp both read PI_CODING_AGENT_DIR. When it is set, --all skips those
+two integrations and installs other harnesses. Install the one you use by
+name. Installing one into a directory identified as the other's also refuses.
 
 With --mcp, also register tuios mcp as an MCP server named tuios, for the
 harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.
@@ -125,6 +126,10 @@ stays as it was. Uninstall puts your command back.`,
 			if err != nil {
 				return err
 			}
+			skipSharedDir := all && env.Getenv != nil && strings.TrimSpace(env.Getenv("PI_CODING_AGENT_DIR")) != ""
+			if skipSharedDir {
+				fmt.Println("Skipped pi and omp: PI_CODING_AGENT_DIR is set. Install the one you use by name.")
+			}
 			if mcpWrite {
 				mcp = true
 			}
@@ -146,7 +151,11 @@ stays as it was. Uninstall puts your command back.`,
 				}
 			}
 			if len(targets) == 0 {
-				fmt.Println("No supported harness has a configuration directory here. Run the harness once, then install.")
+				if skipSharedDir {
+					fmt.Println("No other supported harness has a configuration directory here. Run the harness once, then install.")
+				} else {
+					fmt.Println("No supported harness has a configuration directory here. Run the harness once, then install.")
+				}
 				return nil
 			}
 			var failed []string
