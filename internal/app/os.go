@@ -706,6 +706,10 @@ type OS struct {
 	// hostGrantedAllKeys is set once the host has answered with report-all-keys
 	// in effect. See AllKeysPending.
 	hostGrantedAllKeys bool
+	// paneKeysDown maps the code of each key press that went to a pane to that
+	// pane's window ID, so its release goes to the same pane and the release
+	// of a key tuios kept for itself goes nowhere. See NotePaneKeyDown.
+	paneKeysDown map[rune]string
 	// hold is the momentary window-management mode (see hold_mode.go).
 	hold holdMode
 	// optionAdviceShown keeps the macOS Option advice to once per run.

@@ -1,6 +1,7 @@
 package input
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,8 +28,10 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //     entirely.
 func bindingKeys(msg tea.KeyPressMsg) []string {
 	// Keystroke() and String() spell a key from its base-layout code when it
-	// has one. That code only stands in for the key where usesBaseLayout says
-	// so; otherwise an unbound AZERTY "a" ran the binding on US q.
+	// has one. The key produced is tried first, spelled without it, and the
+	// base-layout key last and only where usesBaseLayout allows it. Otherwise
+	// German Ctrl+Z matched only ctrl+y, and an unbound AZERTY "a" ran quit.
+	orig := msg
 	msg = producedKey(msg)
 	key := msg.String()
 	keys := []string{key}
@@ -50,6 +53,9 @@ func bindingKeys(msg tea.KeyPressMsg) []string {
 		}
 		keys = append(keys, chord)
 	}
+	if base, ok := baseLayoutKey(orig); ok && !slices.Contains(keys, base) {
+		keys = append(keys, base)
+	}
 	return keys
 }
 
@@ -60,12 +66,6 @@ func lookupAction(msg tea.KeyPressMsg, get func(string) string) string {
 		if action := get(key); action != "" {
 			return action
 		}
-	}
-	// The base-layout key, last: only when nothing the key produced is bound.
-	// Keystroke() above already names it for a chord; this adds the plain and
-	// shifted letter spellings. See layout_keys.go.
-	if base, ok := baseLayoutKey(msg); ok {
-		return get(base)
 	}
 	return ""
 }

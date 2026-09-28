@@ -76,8 +76,9 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// non-ASCII key that still came as bare text beat that switch, so its
 		// base-layout key is missing and the key it was meant as is unknown.
 		// It was typed after the leader, so it is dropped, not typed into the
-		// pane.
+		// pane, and the prefix stays pending so the key can be typed again.
 		if o.AllKeysPending() && isLayoutTextWithoutBase(msg) {
+			o.PrefixActive = true
 			return o, nil
 		}
 		forwardKeyToFocusedWindow(msg, o)
@@ -208,6 +209,7 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 		rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
 	}
 	if len(rawInput) > 0 {
+		o.NotePaneKeyDown(msg.Code, focused.ID)
 		_ = focused.SendInput(rawInput)
 	}
 }

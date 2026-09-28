@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // forwardKeyReleaseToFocused passes a key release on to the focused pane when
@@ -18,15 +19,25 @@ import (
 // The gate is terminal mode, the same one bracketed paste passes through, so a
 // release struck while an overlay or window management has the keyboard is
 // dropped rather than delivered to a pane that never saw the press.
+//
+// A release goes only to the pane its press went to. The press of a key tuios
+// kept (the leader, a prefix command, a key an overlay took) never reached the
+// pane, so neither does its release. A modifier key's release also needs a pane
+// that asked for every key, the only mode in which a modifier is a key at all.
 func forwardKeyReleaseToFocused(msg tea.KeyReleaseMsg, o *app.OS) bool {
-	if o.Mode != app.TerminalMode {
+	pressedIn, pressed := o.TakePaneKeyDown(msg.Code)
+	if o.Mode != app.TerminalMode || !pressed {
 		return false
 	}
 	window := o.GetFocusedWindow()
-	if window == nil || window.Terminal == nil {
+	if window == nil || window.Terminal == nil || window.ID != pressedIn {
 		return false
 	}
-	encoded := vt.EncodeKeyReleaseCSIu(vtKeyFromBubbletea(tea.KeyPressMsg(msg.Key())), window.Terminal.KittyKeyboardFlags())
+	flags := window.Terminal.KittyKeyboardFlags()
+	if isModifierKeyPress(tea.KeyPressMsg(msg.Key())) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
+		return false
+	}
+	encoded := vt.EncodeKeyReleaseCSIu(vtKeyFromBubbletea(tea.KeyPressMsg(msg.Key())), flags)
 	if encoded == "" {
 		return false
 	}

@@ -41,31 +41,26 @@ func baseLayoutKey(msg tea.KeyPressMsg) (string, bool) {
 
 // usesBaseLayout reports whether a binding may match msg through its
 // base-layout key. It needs a base-layout key that differs from the key
-// produced, and one of two things: the key produced is not ASCII, or the key
-// carries Ctrl, Alt or Super.
+// produced, and a produced key outside ASCII and outside the Latin script.
 //
-// A plain ASCII key keeps its own meaning. On AZERTY the key that types "a"
-// sits where US has q, and on Dvorak "'" sits there too. Reading those keys by
-// position would run quit when the user typed a letter that has no binding. A
-// Latin layout's labels are its bindings, so only a key that no ASCII binding
-// can name (a Cyrillic letter, say) goes by position. A chord goes by position
-// on every layout, the way other programs read Ctrl shortcuts.
+// A Latin layout keeps its own keys, with or without Ctrl. On AZERTY the key
+// that types "a" sits where US has q, German ß sits on "-", French é on "2",
+// and Dvorak's Ctrl+X is where US has Ctrl+B. Reading those by position ran
+// quit, split a pane, jumped to window 2, and took an editor's C-x for the
+// leader. The labels on a Latin keyboard are what its user binds, so only a
+// script no binding is spelled in (Cyrillic, Greek, Hebrew, Arabic and the
+// rest) goes by position.
 func usesBaseLayout(msg tea.KeyPressMsg) bool {
 	if msg.BaseCode == 0 || msg.BaseCode == msg.Code {
 		return false
 	}
-	if msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) != 0 {
-		return true
-	}
-	return msg.Code >= 0x80 && unicode.IsPrint(msg.Code)
+	return msg.Code >= 0x80 && unicode.IsPrint(msg.Code) && !unicode.Is(unicode.Latin, msg.Code)
 }
 
-// producedKey is msg without its base-layout key when a binding may not match
-// through it, so its Keystroke() spells the key it produced.
+// producedKey is msg without its base-layout key, so String() and Keystroke()
+// spell the key it produced rather than the US key at its position.
 func producedKey(msg tea.KeyPressMsg) tea.KeyPressMsg {
-	if !usesBaseLayout(msg) {
-		msg.BaseCode = 0
-	}
+	msg.BaseCode = 0
 	return msg
 }
 
@@ -76,7 +71,7 @@ func isLayoutTextWithoutBase(msg tea.KeyPressMsg) bool {
 		return false
 	}
 	r := chordRune(msg)
-	return r >= 0x80 && unicode.IsPrint(r)
+	return r >= 0x80 && unicode.IsPrint(r) && !unicode.Is(unicode.Latin, r)
 }
 
 // commandKey is the key a panel with fixed ASCII keys (the quit menu, copy
@@ -85,8 +80,7 @@ func isLayoutTextWithoutBase(msg tea.KeyPressMsg) bool {
 // a non-ASCII character, so the base-layout key is the only one that can mean
 // anything. Do not use it where the key is typed as text.
 func commandKey(msg tea.KeyPressMsg) string {
-	msg = producedKey(msg)
-	key := msg.String()
+	key := producedKey(msg).String()
 	if isASCII(key) {
 		return key
 	}

@@ -141,11 +141,13 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
 					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
 					if len(encoded) > 0 {
+						o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 						_ = focusedWindow.SendInput([]byte(encoded))
 						return o, nil
 					}
 				}
 				// Legacy: send raw Ctrl+B byte
+				o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 				_ = focusedWindow.SendInput([]byte{0x02})
 			}
 			return o, nil
@@ -253,6 +255,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// shell, so tapes replayed prefix chords and stray characters.
 			recordTerminalKey(o, msg)
 			o.NotePaneKey()
+			o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
 				o.Mode = app.WindowManagementMode
