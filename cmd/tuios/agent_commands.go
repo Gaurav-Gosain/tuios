@@ -256,6 +256,13 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		params["reply_to"] = replyTo
 	}
 	if len(attachments) > 0 {
+		if t.host != "" {
+			// A path here means nothing there, so each file here goes into
+			// the far session's stash first and its stored path is attached.
+			if attachments, err = stashAttachments(t, attachments); err != nil {
+				return reportVerbError(err, jsonOutput)
+			}
+		}
 		params["attachments"] = attachments
 	}
 

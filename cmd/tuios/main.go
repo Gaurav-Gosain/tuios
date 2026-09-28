@@ -828,6 +828,7 @@ it matched.`,
 	var capturePanePalette []string
 	var capturePaneLines int
 	var capturePaneLastCommand bool
+	var capturePaneJSON bool
 	capturePaneCmd := &cobra.Command{
 		Use:   "capture-pane",
 		Short: "Capture the content of a pane",
@@ -841,7 +842,10 @@ Use --ansi to preserve ANSI escape codes (colors, styles).
 Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
 --palette (16 hex colours of your theme, xterm defaults otherwise).
 Use --last-command to read only what the last finished command printed. It
-needs a shell that marks its commands with OSC 133, and it is plain text.`,
+needs a shell that marks its commands with OSC 133, and it is plain text.
+
+A capture from a session on another machine (-s host:session) is fenced as
+untrusted content. With --json the result carries host and "untrusted": true.`,
 		Example: `  # Capture focused window
   tuios capture-pane
 
@@ -861,9 +865,12 @@ needs a shell that marks its commands with OSC 133, and it is plain text.`,
   tuios capture-pane -w editor --scrollback > pane.txt
 
   # What the last command in the build pane printed, and nothing else
-  tuios capture-pane -w build --last-command`,
+  tuios capture-pane -w build --last-command
+
+  # Read pane 0 of session api on host build, as JSON
+  tuios capture-pane -w build:api:0 --json`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines, capturePaneLastCommand)
+			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines, capturePaneLastCommand, capturePaneJSON)
 		},
 	}
 	capturePaneCmd.Flags().BoolVar(&capturePaneLastCommand, "last-command", false, "Capture only what the last finished command printed (needs OSC 133 shell integration)")
@@ -874,6 +881,7 @@ needs a shell that marks its commands with OSC 133, and it is plain text.`,
 	capturePaneCmd.Flags().BoolVar(&capturePaneResolved, "resolved", false, "Rewrite ANSI index colours to 24-bit RGB")
 	capturePaneCmd.Flags().StringSliceVar(&capturePanePalette, "palette", nil, "16 hex colours (#rrggbb) to resolve against (default: xterm)")
 	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
+	capturePaneCmd.Flags().BoolVar(&capturePaneJSON, "json", false, "Output result as JSON")
 	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// screenshot command
@@ -2504,6 +2512,10 @@ back undeliverable rather than being handed to whatever pane takes its name.
 A reply to a message the ring has already dropped is still stored. It starts its
 thread from the id you named, and the answer says the parent is gone.
 
+To a session on another machine (-s host:session), --attach puts each file
+from this machine in that session's stash first and attaches the stored path.
+A file is capped at 8 MB. A path that names no file here is sent as it is.
+
 --select sends one message to every agent pane a selector matches, in every
 session. It never sends on its own: the panes are listed first, and the message
 goes out when you say yes, with --yes, or with --confirm and the token
@@ -2516,6 +2528,9 @@ list-agents printed for the same selector.`,
 
   # Hand another agent an image the queue will not copy
   tuios send-agent-message -w review --attach /tmp/flame.png 'the hot path is in decode'
+
+  # Send a file from this machine to an agent on host build
+  tuios send-agent-message -s build:api -w review --attach /tmp/flame.png 'the hot path is in decode'
 
   # Answer message 12, which puts this in the same thread
   tuios send-agent-message -w build --from "$TUIOS_PANE_ID" --reply-to 12 'retested, still green'

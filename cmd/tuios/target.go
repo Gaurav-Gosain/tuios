@@ -143,8 +143,11 @@ func (t *verbTarget) on() string {
 }
 
 // result adds the host to a verb result that came from another machine, so
-// the JSON a script reads says where it came from. A local result is
-// returned as it is.
+// the JSON a script reads says where it came from, and marks it untrusted.
+// Everything in it is that machine's word: a window title, a pane's content,
+// a matched line. untrusted is the JSON form of the fence the human output
+// puts around content, so a program reading the JSON is told the same thing
+// an agent reading the text is. A local result is returned as it is.
 func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 	if t.host == "" {
 		return raw
@@ -154,6 +157,7 @@ func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 		return raw
 	}
 	fields["host"] = t.host
+	fields["untrusted"] = true
 	out, err := json.Marshal(fields)
 	if err != nil {
 		return raw

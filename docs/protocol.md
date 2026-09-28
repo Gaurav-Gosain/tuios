@@ -242,6 +242,30 @@ for existing callers:
   no nonce the far daemon would honour survives the wait. `host` is refused
   over a link and dropped from a hosted pane's report channel.
 
+**A result from another machine is marked untrusted.** The CLI reaches a
+session on another machine with a host-qualified target (`-s HOST:SESSION`,
+`-w HOST:SESSION:WINDOW`) through `open-host-connection`, and speaks that
+machine's own verbs. The daemon relays the bytes and decodes none of them, so
+the rules below are the CLI's. The verbs on the wire do not change.
+
+- Every `--json` result from another machine carries `host` and
+  `"untrusted": true`. It used to carry `host` only. This covers
+  `list-windows`, `capture-pane`, `wait-for`, `list-agents`,
+  `send-agent-message`, `ask-agent` and every other verb that prints its
+  result with `--json`.
+- `tuios capture-pane` takes `--json`. Its plain output from another machine
+  is fenced as untrusted content, as mail is, and control characters are
+  removed from it unless `--ansi` or `--resolved` asked for escape codes. A
+  local capture prints as before.
+- `tuios send-agent-message --attach FILE` to another machine calls
+  `stash-put` there for each named path that is a file on this machine, and
+  attaches the stored path. A file over 8 MB is refused before it is sent. A
+  path that names no file here is sent as written, and the far daemon accepts
+  it only when it is in that session's stash. The far daemon checks its link
+  policy (`mail`) on each `stash-put`, so a link without it refuses the
+  message before it is sent. A message queued for a host whose link is down
+  keeps its paths as written.
+
 **An agent on `needs_input` or `unknown` is not ready to be asked.** The
 states that count as ready are now `idle`, `done`, `errored` and `none`. They
 used to include `needs_input` and `unknown` as well. `fan` types its first
@@ -1287,7 +1311,7 @@ catalog.
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
-| `host_unreachable` | The host is configured and is not answering. Nothing was queued; only `send-agent-message` with `host` keeps a message for a host that is down, and it answers `queued` instead of this. A write to a window on another machine whose link is being restored also answers it. |
+| `host_unreachable` | The host is configured and is not answering: its link is down, or the far side does not reply. Nothing was queued; only `send-agent-message` with `host` keeps a message for a host that is down, and it answers `queued` instead of this. A write to a window on another machine whose link is being restored also answers it. |
 | `host_refused` | The host's link is up and cannot take another connection. |
 | `unknown_pane` | This daemon is not running a pane with that id. |
 | `internal` | An unexpected server side failure. |
