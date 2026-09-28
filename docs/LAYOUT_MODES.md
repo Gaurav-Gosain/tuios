@@ -251,9 +251,9 @@ moves all of them together.
 To start it, add two or more panes to the multifocus set and focus one of them.
 Then press `Ctrl+B [`, the copy mode key. When the focused pane is in the set,
 this key starts multi copy mode. When the focused pane is not in the set, or
-the set is empty, the key starts copy mode on one pane as before. The palette
-entry "Multi copy mode" also starts it. When multifocus is on, the `Ctrl+B`
-menu shows "Multi copy mode (N panes)" on the `[` line.
+the set is empty, the key starts copy mode on one pane as before. When
+multifocus is on, the palette entry "Multi copy mode" also starts it, and the `Ctrl+B` menu shows
+"Multi copy (N)" on the `[` line.
 
 The dock shows `MULTI 3`, where 3 is the number of panes. After a search, it
 shows `MULTI 2/3`: the search found text in 2 of the 3 panes.
@@ -268,6 +268,7 @@ shows `MULTI 2/3`: the search found text in 2 of the 3 panes.
 | `y` | Copy the selection of each pane to the clipboard, as one block |
 | `Y` | Save the selection of each pane to a file |
 | `Tab` | Change the format: plain, markdown, json |
+| `Shift+Up` / `Shift+Down` | Scroll every pane one line |
 
 A pane where the search finds no text loses the multifocus border color. With
 a theme, the pane is also dimmed. It keeps its cursor. It does not take motions or selections until
@@ -292,10 +293,16 @@ The format starts as the value of `appearance.selection.multi_format` (default
 
 `Y` opens a prompt at the bottom of the focused pane. The default path is
 `~/tuios-copy-<date>-<time>.<ext>`, with `txt`, `md` or `json` for the format.
-Edit the path and press `Enter` to save, or press `Esc` to cancel. tuios does
-not write over a file that exists. The dock shows the path of the file it
-wrote. In the browser client and over SSH, the file is on the machine that
-runs tuios.
+Type or paste a path. Press `Enter` to save, or press `Esc` to cancel.
+
+- A relative path starts in the directory of the focused pane, when its shell
+  reports one. Otherwise it starts in your home directory. The line above the
+  prompt shows the full path.
+- tuios does not write over a file that exists. It tells you when the folder
+  does not exist or when the path is a folder.
+- The dock shows the path of the file it wrote. In the browser client and over
+  SSH, the file is on the machine that runs tuios, and the dock names that
+  machine.
 
 A pane title can come from a remote shell. In the markdown and json formats,
 tuios removes control, bidirectional and zero-width characters from the title
@@ -306,6 +313,10 @@ Limits:
 - Soft-wrapped lines are joined by a width estimate, the same as copy mode on
   one pane.
 - Multi copy mode ends when focus moves to a pane that is not in it.
+- A pane that you minimize or move to another workspace leaves multi copy mode.
+- The clipboard gets the copy through OSC 52. Some terminals cut a long OSC 52
+  copy. Above 100 KB, the dock tells you. Use `Y` to save a large copy to a
+  file.
 
 ## Related Documentation
 
