@@ -532,6 +532,9 @@ type SelectionConfig struct {
 	// horizontal or vertical. Which one reads best depends on what is usually
 	// copied, so it is a choice rather than a constant.
 	FlashStyle string `toml:"flash_style,omitempty"`
+	// MultiFormat is the format multi copy mode yanks in until the format
+	// key changes it: plain, markdown or json.
+	MultiFormat string `toml:"multi_format,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -696,6 +699,7 @@ func DefaultConfig() *UserConfig {
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
 				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
 				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
+				MultiFormat: MultiCopyFormatPlain,
 			},
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
@@ -1865,6 +1869,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.Selection.FlashStyle != "" {
 		s.CopyFlashStyle = cfg.Appearance.Selection.FlashStyle
+	}
+	if slices.Contains(MultiCopyFormats, cfg.Appearance.Selection.MultiFormat) {
+		s.MultiCopyFormat = cfg.Appearance.Selection.MultiFormat
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

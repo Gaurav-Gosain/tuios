@@ -1419,3 +1419,18 @@ var CopyFlashStyles = []string{
 	CopyFlashDiagonal, CopyFlashDiagonalReverse,
 	CopyFlashHorizontal, CopyFlashVertical,
 }
+
+// The formats multi copy mode can yank in: appearance.selection.multi_format.
+// Plain adds nothing, so it is the default: output that already carries its
+// own identifier (a hostname on every line) needs no wrapping.
+const (
+	MultiCopyFormatPlain    = "plain"
+	MultiCopyFormatMarkdown = "markdown"
+	MultiCopyFormatJSON     = "json"
+)
+
+// MultiCopyFormats is every value appearance.selection.multi_format takes, in
+// the order the format key in multi copy mode cycles through them.
+var MultiCopyFormats = []string{
+	MultiCopyFormatPlain, MultiCopyFormatMarkdown, MultiCopyFormatJSON,
+}

@@ -616,6 +616,11 @@ var optionSpecs = []Option{
 		Description: "The light the copy sweep is made of",
 		Default:     DefaultCopyFlashColor, Color: true,
 	},
+	{
+		Path: "appearance.selection.multi_format", Type: OptionString, Section: "selection",
+		Description: "The format multi copy mode yanks in: plain, markdown or json",
+		Accepted:    MultiCopyFormats, Default: MultiCopyFormatPlain,
+	},
 
 	// [appearance.sidebar]
 	{
