@@ -69,7 +69,16 @@ var (
 )
 
 // maxStreams caps concurrent streams on one link.
-const maxStreams = 32
+//
+// It is sized for panes, which are what hold streams for a long time. A pane
+// on another machine holds two (its terminal and its report channel), and the
+// link also carries the control stream, the fleet stream and every attach. At
+// 32 the sixteenth pane on one machine was refused, across every session this
+// daemon holds, and in a global session that read as a machine that had
+// stopped making terminals. 256 leaves room for over a hundred panes per
+// machine. An idle stream costs a map entry and a channel, so the bound still
+// does its job of stopping a peer from opening streams without end.
+const maxStreams = 256
 
 // Stream ids are split between the two ends of a link: the side that dials
 // allocates odd ids, the side that answers allocates even ones. This is the
