@@ -51,7 +51,7 @@ func TestAStyledCaptureFromAHostKeepsOnlySGR(t *testing.T) {
 		if out[i+1] != '[' || !ok || final != 'm' || !sgrParams(out[i+2:i+2+n-1]) {
 			t.Fatalf("ASSERTION: a non-SGR escape survived at %d:\n%q", i, out)
 		}
-		if strings.Index(out[i+1:], "\x1b") < 0 {
+		if !strings.Contains(out[i+1:], "\x1b") {
 			break
 		}
 	}
