@@ -24,6 +24,9 @@ func (e *Emulator) eraseCharacter(n int) {
 	}
 	rect := uv.Rect(x, y, n, 1)
 	e.scr.FillArea(e.scr.blankCell(), rect)
+	// Erasing any of the row ends it where it wraps, as ghostty has it: the
+	// row's wrap flag goes whether or not the erase reached the last column.
+	e.scr.buf.setSoftWrapped(y, false)
 	e.atPhantom = false
 	// ECH does not move the cursor.
 }

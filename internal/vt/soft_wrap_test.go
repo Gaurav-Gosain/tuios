@@ -19,6 +19,14 @@ func TestSoftWrapFlag(t *testing.T) {
 		{"a wide glyph pushed off the edge wraps", "012345678漢x", []bool{true, false}},
 		{"two wraps in one line", "0123456789abcdefghijKL", []bool{true, true, false}},
 		{"erasing the row drops the wrap", "0123456789abc\x1b[1;1H\x1b[2K", []bool{false, false}},
+		// The rest pin what ghostty does, so the two backends agree.
+		{"erasing to the end drops the wrap", "0123456789abc\x1b[1;5H\x1b[K", []bool{false, false}},
+		{"erasing to the start keeps the wrap", "0123456789abc\x1b[1;5H\x1b[1K", []bool{true, false}},
+		{"DCH drops the wrap", "0123456789abc\x1b[1;3H\x1b[2P", []bool{false, false}},
+		{"ECH short of the end drops the wrap", "0123456789abc\x1b[1;2H\x1b[2X", []bool{false, false}},
+		{"ECH to the end drops the wrap", "0123456789abc\x1b[1;5H\x1b[20X", []bool{false, false}},
+		{"ICH keeps the wrap", "0123456789abc\x1b[1;3H\x1b[2@", []bool{true, false}},
+		{"writing over the row keeps the wrap", "0123456789abc\x1b[1;10Hz", []bool{true, false}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

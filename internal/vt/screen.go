@@ -370,6 +370,9 @@ func (s *Screen) DeleteCell(n int) {
 		putBlank(line, i, blank)
 	}
 	repairWide(line)
+	// The text that wrapped has been pulled off the row's end. ghostty
+	// clears the row's wrap flag on DCH as well.
+	s.buf.setSoftWrapped(y, false)
 }
 
 // shiftBounds validates a cell shift at (x, y) and returns the row it operates
