@@ -67,7 +67,7 @@ func walkScalarPaths(t *testing.T, structType reflect.Type, prefix string) []str
 	for i := range structType.NumField() {
 		field := structType.Field(i)
 		name := tomlFieldName(field)
-		if name == "" {
+		if name == "" || name == "-" { // "-" is a field toml never reads or writes
 			continue
 		}
 		path := name

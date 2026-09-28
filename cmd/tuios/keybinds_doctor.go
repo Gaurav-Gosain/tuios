@@ -129,6 +129,16 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
+	if len(rep.Yielded) > 0 {
+		fmt.Printf("\nNEW ACTIONS WITH NO KEY (%s)\n", config.EvidenceCertain)
+		fmt.Println("  The default key of a new action is already yours for another action.")
+		fmt.Println("  tuios kept your binding and left the new action without a key.")
+		for _, y := range rep.Yielded {
+			fmt.Printf("  %-22s %s runs %s. To use %s, bind it to a free key in [keybindings.%s].\n",
+				y.Action, y.Key, y.TakenBy, y.Action, y.Section)
+		}
+	}
+
 	if len(rep.Ambiguous) > 0 {
 		fmt.Printf("\nKEYS A TERMINAL MAY NOT DISTINGUISH (%s)\n", config.EvidenceCertain)
 		for _, a := range rep.Ambiguous {

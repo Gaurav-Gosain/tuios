@@ -286,6 +286,9 @@ type KeybindReport struct {
 	Swallowed    []Swallow           `json:"terminal_mode_swallowed"`
 	GuestClashes []GuestClash        `json:"guest_clashes"`
 	Ambiguous    []AmbiguousBinding  `json:"ambiguous_bindings"`
+	// Yielded are new default bindings tuios left off because the key was
+	// already bound to another action in the same table.
+	Yielded []YieldedDefault `json:"yielded_defaults,omitempty"`
 }
 
 // AmbiguousBinding is a binding whose key is half of a pair the terminal cannot
@@ -313,6 +316,7 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 			EvidenceReference: "A fixed list of what these programs bind by default. Nothing was detected. If you rebound the program, this entry is wrong for you.",
 		},
 		Pane:         facts,
+		Yielded:      r.config.YieldedDefaults,
 		Observations: facts.Observations(),
 		Bindings:     r.Bindings(),
 		Collisions:   r.Collisions(),
