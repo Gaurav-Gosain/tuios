@@ -516,8 +516,17 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // isLeaderKey reports whether a key press is the configured leader. The leader
 // is matched through the same normalizer as the binding tables, so a leader
 // spelled opt+f12 fires on the alt+f12 the terminal sends.
+//
+// The key produced is matched first. Dvorak's Ctrl+X sits where US has Ctrl+B,
+// and reading it by position took an editor's C-x for the leader. The US key
+// at the same position only counts for a non-Latin key (see usesBaseLayout),
+// so Ctrl+и on a Ukrainian layout is still Ctrl+B.
 func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings) bool {
-	return config.IsLeaderPress(msg.String(), s.LeaderKey)
+	if config.IsLeaderPress(producedKey(msg).String(), s.LeaderKey) {
+		return true
+	}
+	base, ok := baseLayoutKey(msg)
+	return ok && config.IsLeaderPress(base, s.LeaderKey)
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation

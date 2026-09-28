@@ -189,8 +189,15 @@ func TestLeaderDropsLayoutKeyThatBeatTheFlags(t *testing.T) {
 	if len(pty.got) != 0 {
 		t.Fatalf("the pane got %q for a ш typed before the host switched", pty.got)
 	}
-	if o.PrefixActive {
-		t.Fatal("the prefix is still pending")
+	// The prefix stays pending, so the key can be typed again once the host
+	// has switched and reports its base-layout key.
+	if !o.PrefixActive {
+		t.Fatal("the dropped key ended the prefix")
+	}
+	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 29})
+	o, _ = HandleKeyPress(ukr('ш', 'i'), o)
+	if !o.ShowInbox {
+		t.Fatal("ш typed again after the switch did not open the Inbox")
 	}
 }
 

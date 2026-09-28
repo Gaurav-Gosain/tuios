@@ -31,6 +31,10 @@ func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, ms
 		win.Pty = pty
 	}
 	o := &app.OS{Settings: config.Global, Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	// The press comes first, as it does from a keyboard. Only what the release
+	// sends is returned.
+	HandleInput(tea.KeyPressMsg(msg.Key()), o)
+	got, pty.got = nil, nil
 	HandleInput(msg, o)
 	if daemon {
 		return string(got)
@@ -57,7 +61,14 @@ func TestForwardKeyReleaseToPane(t *testing.T) {
 	}{
 		{"letter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, "\x1b[97;1:3u"},
 		{"letter, daemon", pushEventTypes, app.TerminalMode, true, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, "\x1b[97;1:3u"},
-		{"ctrl+letter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'b', Mod: tea.ModCtrl}, "\x1b[98;5:3u"},
+		{"ctrl+letter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Mod: tea.ModCtrl}, "\x1b[97;5:3u"},
+		// tuios kept the leader's press, so the pane never saw b go down and
+		// must not see it come up.
+		{"leader", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'b', Mod: tea.ModCtrl}, ""},
+		// A modifier is a key of its own only to a pane that asked for every
+		// key. CSI >3u asked for releases but not that.
+		{"shift, events only", "\x1b[>3u", app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyLeftShift}, ""},
+		{"shift, all keys", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyLeftShift}, "\x1b[57441;1:3u"},
 		{"enter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyEnter}, "\x1b[13;1:3u"},
 		{"up arrow", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyUp}, "\x1b[1;1:3A"},
 		{"delete", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyDelete}, "\x1b[3;1:3~"},
