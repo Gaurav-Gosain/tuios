@@ -437,3 +437,37 @@ func TestUnclaimedPaneReportsNoSource(t *testing.T) {
 		}
 	}
 }
+
+// TestAskingThePersonIsRefusedWithNoKeyboard: human is an inbox with no pane,
+// so ask-agent -w human has nothing to type into. It is refused with
+// no_keyboard, the hint names the way that works (mail to human, then a wait
+// on the asker's own inbox), and nothing reaches the ring.
+func TestAskingThePersonIsRefusedWithNoKeyboard(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	twoWindowSession(t, d, "askhuman")
+	c := dialVerb(t, sp)
+
+	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"askhuman","window":"human","text":"which retry policy?"}}`)
+	if code := errCode(t, resp); code != ErrVerbNoKeyboard {
+		t.Fatalf("code = %q, want %q", code, ErrVerbNoKeyboard)
+	}
+	e := resp["error"].(map[string]any)
+	if msg, _ := e["message"].(string); !strings.Contains(msg, "human has no pane") {
+		t.Errorf("message = %q, want it to say human has no pane", msg)
+	}
+	hint, _ := e["hint"].(map[string]any)
+	if hint == nil || hint["param"] != "window" {
+		t.Fatalf("the refusal did not name window: %v", e)
+	}
+	if cmd, _ := hint["command"].(string); !strings.Contains(cmd, "send-agent-message -w human") {
+		t.Errorf("hint command = %q, want send-agent-message -w human", cmd)
+	}
+	if detail, _ := hint["detail"].(string); !strings.Contains(detail, "wait-for agent-message on your own inbox") {
+		t.Errorf("hint detail = %q, want the wait on the asker's own inbox", detail)
+	}
+
+	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"askhuman","peek":true}}`))
+	if n, _ := read["messages"].([]any); len(n) != 0 {
+		t.Errorf("a refused ask left a record in the ring: %v", read)
+	}
+}
