@@ -143,7 +143,8 @@ tuios.WithHideWindowButtons(true)
 ### WithWindowButtonStyle(style string)
 
 How the window controls are drawn: `"pill"` (glyphs on a filled pill) or
-`"dots"` (macOS traffic lights, which name themselves on hover). See
+`"dots"` (macOS traffic lights, which name themselves on hover). On the left,
+the pill puts close at the outer corner: close, zoom, minimize. See
 [the configuration reference](https://tuios.dev/docs/configuration).
 
 ```go

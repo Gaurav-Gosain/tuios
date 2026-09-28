@@ -1440,6 +1440,13 @@ Inside the Inbox:
 | `f` | Show one kind, then the next, then all of them. |
 | `/` | Type a selector that narrows the list, such as `harness:codex needs:you` or `session:api-fan-*`: the syntax of [Selectors](#selectors). `enter` applies it and an empty line clears it; `esc` closes the line and keeps what was in force. While the line is open every key is text. The selector stays until you change it, and the title says it in words, `[select harness:codex]`, so a narrowed Inbox never reads as an empty one. It works with `f`. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
+| `esc` / `q` | Close. |
+
+These are the default keys. Every one but the digits can be rebound under
+`[keybindings.inbox]`, `[keybindings.inbox_peek]` and `[keybindings.mail]`
+(see [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox)), and the footers name the key
+the config binds. The footer lists only the keys that act on the selected row,
+the one that answers it first.
 
 In the mailbox, each row shows the thread id (`#12`, the id
 `read-agent-messages --thread` takes), who wrote to whom, and the subject.
@@ -1450,12 +1457,17 @@ ASCII), so a body cannot draw a fake close. A name that reads "you" or
 "human" on a pane shows with the pane's short window id. `r` replies in the open thread. `n` in the
 list writes a new message: choose an agent of this session, type the message,
 and press `enter`. The message goes from you and starts a new thread.
+`read-agent-messages`, an `ask-agent` reply and `peek-prompt` print the same
+fence with the same gutter.
 
 Mail to you and notices alert under `[notifications.mail]`. A key the table
 leaves out follows the same key in `[notifications.agent]`, so a config
 without the table alerts as before. `tuios set-config notifications.mail.dock ""`
 clears a key, and `get-config` then prints `(follows notifications.agent.dock)`. Sound mode, cooldown, cue files and quiet
-hours always come from `[notifications.agent]`.
+hours always come from `[notifications.agent]`. `between_agents` is off by
+default, and a message between two agents then counts only on the rail row of
+the agent that gets it. The validator warns when `between_agents` is on and mail
+alerts are off.
 
 ```toml
 [notifications.mail]
@@ -1465,13 +1477,6 @@ dock = true            # dock message, click opens the thread; unset: notificati
 sound = false          # unset: notifications.agent.sound
 between_agents = false # alert on a message from one agent to another too
 ```
-| `esc` / `q` | Close. |
-
-These are the default keys. Every one but the digits can be rebound under
-`[keybindings.inbox]`, `[keybindings.inbox_peek]` and `[keybindings.mail]`
-(see [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox)), and the footers name the key
-the config binds. The footer lists only the keys that act on the selected row,
-the one that answers it first.
 
 Rows are grouped under headings in words, Approvals, Questions, Mail, Errored,
 Resume, Done, each with its count, and oldest first inside a group. Questions
@@ -1563,7 +1568,10 @@ When a host's link drops, its rows stay, drawn in the muted ink, with
 they raise no alert, are not counted, are skipped by `o`, and enter on one says
 the machine cannot be reached rather than trying. The rail keeps the host's
 sessions under its header the same way, muted with no agent glyph, and the
-header says `seen 3m ago` where it used to say `offline`. A host that answers
+header says `seen 3m ago` where it used to say `offline`. On a narrow rail the
+header keeps the mail count (`3 queued`) when mail waits for the machine, and
+otherwise a `✕` mark (`x` in ASCII), so a down machine never reads like one
+that is up. A machine that is connecting gets no mark. A host that answers
 and refuses keeps its reason (`no daemon`, `no tuios`, `version`). When the
 link comes back the stream resumes where it stopped and the marks clear.
 
@@ -3206,10 +3214,13 @@ Two things are worth knowing here rather than there. The notification is an
 in-band escape sequence written into the same stream the interface is drawn
 through, so it reaches whatever terminal is in front of you even when the session
 is on another machine; a desktop notification raised by tuios would appear on the
-host running the daemon, which under `tuios ssh` is not where you are. The same
-is true of the audio cue, which is played by the client through a system audio
-player, so over `tuios ssh` it comes out of your laptop rather than the host. And
-alerts are raised by an attached client, so a session nobody is attached to
+host running the daemon, which under `tuios ssh` is not where you are. The
+audio cue is different. The client plays it through a system audio player on
+the machine where the client runs. Under `tuios ssh` and `tuios-web`, the
+client runs on the server, so the cue plays there and not where you sit, and
+tuios says so in a config warning when the client starts. Set `sound_mode = "bell"` to ring your own
+terminal instead. With `tuios attach --host`, the client runs on your machine,
+so the cue plays there. And alerts are raised by an attached client, so a session nobody is attached to
 announces nothing unless some client is attached to another session on the same
 daemon: that client hears about it through the Inbox (see
 [The Inbox](#the-inbox)). With no client attached anywhere, the daemon-side
@@ -3220,7 +3231,7 @@ For the attached session, alerts come from the state sync as they always have.
 For every other session on the same daemon, they come from the Inbox's
 `attention` events and follow the same policy: `needs_input` governs approval
 and question items, `errored` errored items, `done` finished items, and mail
-alerts whenever alerts are on. The settle window, quiet hours and the sound
+follows `[notifications.mail]` (see [The Inbox](#the-inbox)). The settle window, quiet hours and the sound
 cooldown apply as usual. A burst of items arriving together, which is what a
 fan of agents produces, is one dock message ("5 agents need you in fan-1,
 fan-2, fan-3 and 2 more"), one notification and one sound. A single item's dock
