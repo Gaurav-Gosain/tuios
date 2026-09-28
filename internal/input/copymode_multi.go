@@ -33,19 +33,6 @@ var parkedCopyKeys = map[string]bool{
 	"q": true, "esc": true, "i": true,
 }
 
-// multiCopyLead is the pane whose state decides what a key means.
-func multiCopyLead(o *app.OS, windows []*terminal.Window, focused *terminal.Window) *terminal.Window {
-	if !o.MultiCopyParked(focused.ID) {
-		return focused
-	}
-	for _, w := range windows {
-		if w.InCopyMode() && !o.MultiCopyParked(w.ID) {
-			return w
-		}
-	}
-	return focused
-}
-
 func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window) (*app.OS, tea.Cmd) {
 	mc := o.MultiCopy
 	if mc.Save != nil {
@@ -53,15 +40,26 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	}
 
 	windows := o.MultiCopyWindows()
-	lead := multiCopyLead(o, windows, focused)
+	lead := o.MultiCopyLead(focused)
 	lcm := lead.CopyMode
 	leadState := lcm.State
 	k := commandKey(msg)
+	allParked := o.MultiCopyAllParked()
 
 	// The keys that act once for the whole set. A search being typed and a
-	// pending f/t character take every key as text, so they are left alone.
-	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch && lcm.PendingCount == 0 {
+	// pending f/t character take every key as text, so they are left alone. A
+	// count typed before them means nothing to them and is dropped in every
+	// pane: "1y" is a yank of every selection, not a count handed to one pane.
+	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch {
 		inVisual := leadState == terminal.CopyModeVisualChar || leadState == terminal.CopyModeVisualLine
+		wholeSet := k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
+		if wholeSet {
+			for _, w := range windows {
+				if w.CopyMode != nil {
+					w.CopyMode.PendingCount = 0
+				}
+			}
+		}
 		switch {
 		case k == "tab":
 			o.CycleMultiCopyFormat()
@@ -86,7 +84,9 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 		if !w.InCopyMode() {
 			continue
 		}
-		if w != lead && o.MultiCopyParked(w.ID) {
+		// A parked pane takes only the parked keys. When the search matched no
+		// pane at all, that holds for the lead too: nothing may move or select.
+		if o.MultiCopyParked(w.ID) && (w != lead || allParked) {
 			takes := leadState == terminal.CopyModeSearch ||
 				(leadState == terminal.CopyModeNormal && parkedCopyKeys[k])
 			if !takes {

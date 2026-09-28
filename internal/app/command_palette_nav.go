@@ -30,6 +30,10 @@ func (m *OS) rebuildPaletteItems() {
 	if !m.reviewSupported() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteReviewName })
 	}
+	// Multi copy mode needs a multifocus set, so it is offered only with one.
+	if len(m.MultifocusSet) == 0 {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteMultiCopyName })
+	}
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems)+len(m.PaletteSettingItems))
 	items = append(items, static...)

@@ -46,7 +46,11 @@ func (m *OS) copyModeHelp(focused *terminal.Window) [][]overlay.Hint {
 			{{Key: overlay.EnterKey(), Label: "save"}, format, {Key: "esc", Label: "cancel"}},
 		}
 	}
+	// The lead's state is what the keys mean, so it is what the help says.
 	state := focused.CopyMode.State
+	if lead := m.MultiCopyLead(focused); lead != nil && lead.CopyMode != nil {
+		state = lead.CopyMode.State
+	}
 	if state == terminal.CopyModeSearch {
 		return copyModeHelpTiers(state)
 	}
@@ -69,9 +73,11 @@ func (m *OS) copyModeHelp(focused *terminal.Window) [][]overlay.Hint {
 	}
 }
 
-// multiCopySaveLayer draws the save prompt over the bottom row of the focused
-// pane, where copy mode's search prompt sits: the path being typed, and under
-// it the reason the last save failed, if it did.
+// multiCopySaveLayer draws the save prompt at the bottom of the focused pane,
+// where copy mode's search prompt sits. It is two rows: above, the full path
+// the text names (so a relative or ~ path is never a guess) or the reason the
+// last save failed; below, the path being typed. Each row is cut to the pane's
+// width so it never runs over the next pane.
 func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 	mc := m.MultiCopy
 	fw := m.GetFocusedWindow()
@@ -80,17 +86,38 @@ func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 	}
 	pal := theme.UI()
 	bg := pal.Surface
-	body := overlay.Style(bg).Foreground(pal.FgMute).Render("Save to: ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(mc.Save.Path) +
-		overlay.Cursor(" ", bg, pal.Fg)
-	if mc.Save.Err != "" {
-		body += overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("  " + mc.Save.Err)
-	}
-	pad := overlay.Style(bg).Render(" ")
 	off := fw.BorderOffset()
-	return lipgloss.NewLayer(pad + body + pad).
+	width := max(fw.Width-2*off-2, 12)
+
+	var info string
+	switch full, err := m.MultiCopySaveResolved(); {
+	case mc.Save.Err != "":
+		info = overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).
+			Render(overlay.Truncate(mc.Save.Err, width-2))
+	case err == nil:
+		info = overlay.Style(bg).Foreground(pal.FgMute).
+			Render(overlay.Truncate("File: "+full, width-2))
+	}
+	// The typed text keeps its end in view: that is where the cursor is.
+	path := mc.Save.Path
+	room := width - 2 - len("Save to: ") - 1
+	if r := []rune(path); len(r) > room && room > 1 {
+		path = "…" + string(r[len(r)-room+1:])
+	}
+	input := overlay.Style(bg).Foreground(pal.FgMute).Render("Save to: ") +
+		overlay.Style(bg).Foreground(pal.Fg).Render(path) +
+		overlay.Cursor(" ", bg, pal.Fg)
+
+	pad := overlay.Style(bg).Render(" ")
+	body := pad + input + pad
+	y := fw.Y + fw.Height - off - 1
+	if info != "" {
+		body = pad + info + pad + "\n" + body
+		y--
+	}
+	return lipgloss.NewLayer(body).
 		X(fw.X + off + 1).
-		Y(fw.Y + fw.Height - off - 1).
+		Y(y).
 		Z(config.ZIndexHelp + 1).
 		ID("multi-copy-save")
 }
