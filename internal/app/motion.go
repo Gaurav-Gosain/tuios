@@ -15,7 +15,8 @@ import (
 
 // Motion is the decorative animation the frame carries on top of what it
 // shows: an overlay fading in as it opens, and the shimmer on a working
-// agent's row. Both are appearance.motion = full only.
+// agent's row. Both are appearance.motion = full only. The clock also carries
+// the copy sweep (copy_flash.go), which runs at basic and full.
 //
 // It has its own clock rather than riding the maintenance tick. The tick runs
 // at the frame rate whenever anything periodic is live and falls to ten a
@@ -93,6 +94,11 @@ func (m *OS) motionInterval() time.Duration {
 	if m.motion.fading > 0 {
 		return config.OverlayFadeFrame
 	}
+	// A copy sweep, at the fade's rate: it crosses the block in under half a
+	// second, and at the maintenance tick's idle rate that was four frames.
+	if m.copyFlash != nil {
+		return config.OverlayFadeFrame
+	}
 	if m.shimmerActive() {
 		return config.ShimmerFrame
 	}
@@ -111,7 +117,11 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 		return
 	}
 	m.motion.ticking = false
-	need := m.motion.fading > 0 || m.shimmerActive()
+	// Marks the swept pane, so it draws rather than serving its cached frame,
+	// and asks for one last frame when the sweep has just ended so its light
+	// does not stay on the screen.
+	flash := m.markCopyFlashPane()
+	need := m.motion.fading > 0 || m.shimmerActive() || flash
 	if m.motion.fading > 0 {
 		m.retireFades(time.Now())
 	}

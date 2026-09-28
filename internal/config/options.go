@@ -202,7 +202,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.motion", Type: OptionString, Section: "appearance",
-		Description: "How much moves: none, basic (window slides), or full (also overlay fades and the working-agent shimmer)",
+		Description: "How much moves: none, basic (window slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
 		Accepted:    MotionLevels, Default: MotionFull,
 	},
 	{
@@ -583,7 +583,7 @@ var optionSpecs = []Option{
 
 	{
 		Path: "appearance.selection.flash", Type: OptionBool, Section: "selection",
-		Description: "Sweep a band of light over text that was just copied",
+		Description: "Sweep a band of light over text that was just copied. Motion none turns it off.",
 		Default:     "true",
 	},
 	{

@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // The mark a copy leaves behind: a band of light that crosses what was copied,
@@ -52,6 +53,12 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 	if window == nil || !m.Settings.CopyFlash || m.copyFlashDuration() <= 0 {
 		return
 	}
+	// appearance.motion = none draws every change in one frame, and a sweep is
+	// nothing but frames. The selection and the dock message still say what
+	// was copied.
+	if !m.Settings.MotionAllows(config.MotionBasic) {
+		return
+	}
 	if !window.HasSelection() || window.CopyMode == nil {
 		return
 	}
@@ -61,22 +68,24 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 	}
 	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
 	// Nothing in the pane changed, so nothing else is going to ask for a
-	// frame. The first one is asked for here and the work tick keeps them
-	// coming while the sweep runs; see tickNeedsWork.
+	// frame. The first one is asked for here and the motion clock keeps them
+	// coming while the sweep runs; see motionInterval.
 	window.ContentDirty = true
 }
 
-// markCopyFlashPane asks the pane a sweep is crossing to draw another frame.
+// markCopyFlashPane asks the pane a sweep is crossing to draw another frame,
+// and reports whether there was a sweep to draw for, including one that has
+// just this moment ended.
 //
-// It is called from the maintenance tick, and it is what makes the sweep move
-// at all. A pane is drawn from its cached frame unless something marks it, a
+// It is called on every frame of the motion clock, and it is what makes the
+// sweep move at all. A pane is drawn from its cached frame unless something marks it, a
 // copy changes nothing in the pane, and nothing else was marking it, so the
 // light was computed every tick and painted into a frame that was thrown away.
 // One frame reached the screen: the one the copy itself asked for, which is
 // the frame where the light has not arrived yet.
-func (m *OS) markCopyFlashPane() {
+func (m *OS) markCopyFlashPane() bool {
 	if m.copyFlash == nil {
-		return
+		return false
 	}
 	id := m.copyFlash.WindowID
 	// Asked whether it is still running or has just this moment stopped, and
@@ -92,6 +101,7 @@ func (m *OS) markCopyFlashPane() {
 	if w := m.windowByID(id); w != nil {
 		w.ContentDirty = true
 	}
+	return true
 }
 
 // CancelCopyFlash drops a sweep that is still running, and asks its pane for
@@ -420,8 +430,11 @@ func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, boo
 // It is the mapping copy mode's visual selection does, lifted out so the copy
 // sweep covers exactly the same cells rather than a second implementation of
 // the same arithmetic that could disagree with it.
+//
+// textEnd, when given, is the last column holding text on a row of the view,
+// or -1 for a blank row, and no cell past it is marked.
 func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
-	scrollbackLen, scrollbackOffset, maxY, maxX int,
+	scrollbackLen, scrollbackOffset, maxY, maxX int, textEnd func(y int) int,
 ) {
 	if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
 		start, end = end, start
@@ -450,10 +463,47 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 		if absY == end.Y {
 			endX = end.X
 		}
+		if textEnd != nil {
+			endX = min(endX, textEnd(viewportY))
+		}
 		for x := startX; x <= endX && x < maxX; x++ {
 			grid.Set(viewportY, x)
 		}
 	}
+}
+
+// paneRowTextEnd is the last column on row y of the pane's view that holds
+// text, or -1 when the row is blank. The view is the one the frame draws:
+// scrolled back, the top rows are scrollback lines and the rest are the
+// screen shifted down.
+func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbackLen int) int {
+	blank := func(c *uv.Cell) bool {
+		return c == nil || c.Width == 0 || c.Content == "" || c.Content == " "
+	}
+	offset := window.ScrollbackOffset
+	if offset > 0 && y < offset {
+		idx := scrollbackLen - offset + y
+		if idx < 0 || idx >= scrollbackLen {
+			return -1
+		}
+		line := window.ScrollbackLine(idx)
+		for i := min(len(line), maxX) - 1; i >= 0; i-- {
+			if !blank(&line[i]) {
+				return i
+			}
+		}
+		return -1
+	}
+	screenY := y
+	if offset > 0 {
+		screenY = y - offset
+	}
+	for i := maxX - 1; i >= 0; i-- {
+		if !blank(screen.CellAt(i, screenY)) {
+			return i
+		}
+	}
+	return -1
 }
 
 // copyFlashReach is the share of the pane's width the glow spans, as a
