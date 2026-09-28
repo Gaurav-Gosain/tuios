@@ -152,64 +152,92 @@ func TestTheSessionPickerMakesTheSessionWhereItWasAskedFor(t *testing.T) {
 // TestAPaneInAGlobalSessionOnAnotherMachineRunsOnThePickedMachine is the
 // window picker in a global session that alpha holds. alpha's row is the
 // session's own machine, and beta's is a machine alpha reaches over its own
-// link. This machine is one alpha has no link to, so that row must say so.
+// link. alpha has no link to this machine, so no row may say this machine.
 func TestAPaneInAGlobalSessionOnAnotherMachineRunsOnThePickedMachine(t *testing.T) {
 	f := startGlobalFleet(t)
+	remoteGlobalPicks(t, f, "beta",
+		[]string{"alpha", "beta"}, []string{"alpha", "beta"}, []string{"this machine"})
+}
+
+// TestFromAlphaThisMachineIsAlphasBeta: alpha's [hosts] table calls this
+// machine "beta". This machine's table has its own beta, a different
+// machine. A pick of beta by this machine's name used to go to alpha as
+// "beta" and run the pane here, with no error. The rows are alpha's now, and
+// alpha's beta is shown as this machine.
+func TestFromAlphaThisMachineIsAlphasBeta(t *testing.T) {
+	f := startGlobalFleetWith(t, map[string]string{"beta": "someone@herebox"})
+	remoteGlobalPicks(t, f, "beta",
+		[]string{"alpha", "this machine"}, []string{"alpha", "here"}, []string{"beta"})
+}
+
+// TestFromAlphaAHostOnlyThisMachineKnowsIsNotOffered: alpha has no entry for
+// beta, which this machine knows. A pick of beta from alpha's session used to
+// be sent to alpha, which refused it or, worse, knew another beta. alpha
+// names this machine "home", and that is shown as this machine.
+func TestFromAlphaAHostOnlyThisMachineKnowsIsNotOffered(t *testing.T) {
+	f := startGlobalFleetWith(t, map[string]string{"home": "someone@herebox"})
+	remoteGlobalPicks(t, f, "home",
+		[]string{"alpha", "this machine"}, []string{"alpha", "here"}, []string{"beta", "home"})
+}
+
+// remoteGlobalPicks makes a global session on alpha, attaches it from this
+// machine, and picks each row many times by every path. wants[i] is the
+// daemon rows[i] must run on. absent are rows the picker must not show.
+// alphaLink is a host alpha must report up before the picks start.
+func remoteGlobalPicks(t *testing.T, f *globalFleet, alphaLink string, rows, wants, absent []string) {
+	t.Helper()
 	if out, err := tuiosCLIEnv(t, f.alpha, f.env, "new", "global", "--global"); err != nil {
 		t.Fatalf("create alpha's global session: %v\n%s", err, out)
 	}
-	waitForHostListing(t, f.alpha, func(s string) bool { return hostLineUp(s, "beta") },
-		"alpha never reported beta up")
+	waitForHostListing(t, f.alpha, func(s string) bool { return hostLineUp(s, alphaLink) },
+		"alpha never reported "+alphaLink+" up")
 	term := attachOnAlpha(t, f, "global")
 
-	rows := []string{"this machine", "alpha", "beta"}
 	loops := pickLoops(24)
 	var wrong []string
 	for i := range loops {
 		path := newWindowPaths[i%len(newWindowPaths)]
-		// this machine is picked less often: it makes nothing, so it tells
-		// less on each pick.
-		row := 1 + (i/len(newWindowPaths))%2
-		if i%4 == 3 {
-			row = 0
-		}
-		click := (i/(2*len(newWindowPaths)))%2 == 1
+		row := (i / len(newWindowPaths)) % len(rows)
+		click := (i/(len(rows)*len(newWindowPaths)))%2 == 1
 		how := pickHow(i, path.name, rows[row], click)
 		t.Logf("%s", how)
 
-		alphaBefore := sessionWindowHosts(t, f.alpha, f.env, "global")
-		hereBefore := daemonSessionNames(t, f.here, f.env)
+		before := sessionWindowHosts(t, f.alpha, f.env, "global")
 		path.open(t, term)
 		choosePickerRow(t, term, pickerWindowTitle, rows[row], row, click)
 		waitPickerClosed(t, term, pickerWindowTitle)
-
-		if row == 0 {
-			if err := term.WaitForText("alpha cannot open a pane on this machine", uiTimeout); err != nil {
-				wrong = append(wrong, how+": no notice said this machine cannot be reached from alpha")
-			}
-			if id, _, ok := waitNewWindow(t, f.alpha, f.env, "global", alphaBefore, 2*time.Second); ok {
-				wrong = append(wrong, fmt.Sprintf("%s: a pane was made on %s", how, f.paneMachine(t, f.alpha, "global", id)))
-			}
-			if n, ok := newSessionName(t, f.here, f.env, hereBefore, 100*time.Millisecond); ok {
-				wrong = append(wrong, fmt.Sprintf("%s: a session %q was made on this machine", how, n))
-			}
-			continue
-		}
-		id, host, ok := waitNewWindow(t, f.alpha, f.env, "global", alphaBefore, 20*time.Second)
+		id, host, ok := waitNewWindow(t, f.alpha, f.env, "global", before, 20*time.Second)
 		if !ok {
 			t.Logf("%s: no pane:\n%s", how, term.Snapshot())
 			wrong = append(wrong, how+": no pane appeared in alpha's global session")
 			continue
 		}
-		if got := f.paneMachine(t, f.alpha, "global", id); got != rows[row] {
+		if got := f.paneMachine(t, f.alpha, "global", id); got != wants[row] {
 			wrong = append(wrong, fmt.Sprintf("%s: the pane runs on %s (recorded host %q)", how, got, host))
 		}
 	}
+
+	// The rows this session cannot use are not on offer.
+	newWindowPaths[0].open(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, found := findPickerRow(s, pickerWindowTitle, rows[len(rows)-1])
+		return found && !strings.Contains(s.Text(), " loading ")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the picker never listed its rows: %v\n%s", err, term.Snapshot())
+	}
+	for _, label := range absent {
+		if _, _, found := findPickerRow(term.Screen(), pickerWindowTitle, label); found {
+			wrong = append(wrong, fmt.Sprintf("the picker offers %q from alpha", label))
+		}
+	}
+	shown := term.Snapshot()
+	_ = term.SendKeys(tuitest.Esc)
+
 	if len(wrong) > 0 {
 		t.Fatalf("ASSERTION: %d of %d picks went wrong:\n%s\n%s",
-			len(wrong), loops, strings.Join(wrong, "\n"), term.Snapshot())
+			len(wrong), loops, strings.Join(wrong, "\n"), shown)
 	}
-	t.Logf("%d of %d picks landed on the picked machine", loops, loops)
+	t.Logf("%d of %d picks landed on the picked machine, and the picker read:\n%s", loops, loops, shown)
 }
 
 // TestAPickOfAHostWhoseLinkIsDownSaysSo opens the picker while beta is up,
