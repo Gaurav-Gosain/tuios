@@ -29,7 +29,7 @@ import (
 //
 // Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md): a build
 // without the hints action (the one line in registerPrefixHandlers removed)
-// fails every test here at the wait for the labels; rowIsFull returning false
+// fails every test here at the wait for the labels; rowWraps returning false
 // fails the wrapped URL test on the clipboard; and dropping the
 // fixHintsWideCells call fails the wide character test on the row layout.
 
@@ -50,6 +50,14 @@ const hintsAlphabet = "asdfghjkl"
 // file first.
 func startHints(t *testing.T, daemon bool, config string, out *lockedBuffer) *tuitest.Terminal {
 	t.Helper()
+	term, _ := startHintsIn(t, daemon, config, out)
+	return term
+}
+
+// startHintsIn is startHints that also returns the isolation root, for a test
+// that drives the session from the CLI as well.
+func startHintsIn(t *testing.T, daemon bool, config string, out *lockedBuffer) (*tuitest.Terminal, string) {
+	t.Helper()
 	base := t.TempDir()
 	if config != "" {
 		writeConfig(t, base, config)
@@ -63,7 +71,7 @@ func startHints(t *testing.T, daemon bool, config string, out *lockedBuffer) *tu
 		waitBoot(t, term)
 		newWindow(t, term)
 		enterTerminalMode(t, term)
-		return term
+		return term, base
 	}
 	killDaemon(t, base)
 	if o, err := tuiosCLI(t, base, "new", "e2e-hints", "--detach"); err != nil {
@@ -76,7 +84,7 @@ func startHints(t *testing.T, daemon bool, config string, out *lockedBuffer) *tu
 	}
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
-	return term
+	return term, base
 }
 
 // openHints presses the leader and F.
@@ -501,4 +509,158 @@ func TestHintWideCharacters(t *testing.T) {
 		t.Fatalf("the wide glyph did not come back after hints closed: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after hints over wide glyphs")
+}
+
+// waitHintsUp waits for a label on the URL printHintsLine printed.
+func waitHintsUp(t *testing.T, term *tuitest.Terminal, at map[string][2]int) {
+	t.Helper()
+	p := at[hintsURL]
+	waitHintLabel(t, term, p[0], p[1], hintsURL)
+}
+
+// waitHintsGone waits until no label is drawn anywhere.
+func waitHintsGone(t *testing.T, term *tuitest.Terminal, why string) {
+	t.Helper()
+	if err := term.WaitFor(hintsNoLabels, uiTimeout); err != nil {
+		t.Fatalf("hints stayed on screen %s: %v\n%s", why, err, term.Snapshot())
+	}
+}
+
+// TestHintsCloseWhenTheirPaneExits opens hints over a pane whose shell exits a
+// moment later. Hints must go with the pane, and the next keys must reach the
+// window manager: before this, hints stayed open on a pane that was gone, so
+// every key after it was taken as a label letter and dropped.
+func TestHintsCloseWhenTheirPaneExits(t *testing.T) {
+	term := startHints(t, false, "", nil)
+	at := printHintsLine(t, term)
+	if err := term.SendKeys("sleep 2; exit", tuitest.Enter); err != nil {
+		t.Fatalf("type the exit: %v", err)
+	}
+	openHints(t, term)
+	waitHintsUp(t, term, at)
+
+	waitWindowCount(t, term, 0, "the pane exiting under hints")
+	waitHintsGone(t, term, "after their pane exited")
+
+	// The keys are the window manager's again: a new pane opens and its
+	// shell runs a command.
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo AFTER-EXIT-OK", "AFTER-EXIT-OK", shellTimeout)
+	alive(t, term, "after hints outlived nothing")
+}
+
+// TestHintsCloseOnWorkspaceSwitch switches the workspace from the CLI while
+// hints are open. Coming back shows the pane as it is, and keys reach its
+// shell.
+func TestHintsCloseOnWorkspaceSwitch(t *testing.T) {
+	term, base := startHintsIn(t, true, "", nil)
+	at := printHintsLine(t, term)
+	openHints(t, term)
+	waitHintsUp(t, term, at)
+
+	if out, err := tuiosCLI(t, base, "select-workspace", "2"); err != nil {
+		t.Fatalf("select workspace 2: %v\n%s", err, out)
+	}
+	waitHintsGone(t, term, "after the workspace changed")
+	if out, err := tuiosCLI(t, base, "select-workspace", "1"); err != nil {
+		t.Fatalf("select workspace 1: %v\n%s", err, out)
+	}
+	p := at[hintsURL]
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return hintsNoLabels(s) && gridMatchesAt(s, p[0], p[1], hintsURL)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the pane did not come back without labels: %v\n%s", err, term.Snapshot())
+	}
+	runInShell(t, term, "echo AFTER-SWITCH-OK", "AFTER-SWITCH-OK", shellTimeout)
+	alive(t, term, "after a workspace switch under hints")
+}
+
+// TestHintsDropAPasteAndCloseOnWheel pastes while hints are open, which must
+// not reach the shell, and turns the wheel, which closes hints.
+func TestHintsDropAPasteAndCloseOnWheel(t *testing.T) {
+	term := startHints(t, false, "", nil)
+	at := printHintsLine(t, term)
+
+	openHints(t, term)
+	waitHintsUp(t, term, at)
+	const pasted = "PASTED-UNDER-HINTS"
+	if err := term.Type("\x1b[200~" + pasted + "\x1b[201~"); err != nil {
+		t.Fatalf("send a bracketed paste: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if hintsNoLabels(term.Screen()) {
+		t.Fatalf("a paste closed hints:\n%s", term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	waitHintsGone(t, term, "after esc")
+	runInShell(t, term, "echo AFTER-PASTE-OK", "AFTER-PASTE-OK", shellTimeout)
+	if strings.Contains(term.Screen().Text(), pasted) {
+		t.Fatalf("the paste reached the shell under hints:\n%s", term.Snapshot())
+	}
+
+	at = printHintsLineAt(t, term)
+	openHints(t, term)
+	waitHintsUp(t, term, at)
+	p := at[hintsURL]
+	wheelAt(t, term, p[0]+2, p[1], tuitest.MouseWheelUp, 1)
+	waitHintsGone(t, term, "after the wheel")
+	alive(t, term, "after a wheel under hints")
+}
+
+// printHintsLineAt finds the matches printHintsLine printed, on the screen as
+// it is now.
+func printHintsLineAt(t *testing.T, term *tuitest.Terminal) map[string][2]int {
+	t.Helper()
+	s := term.Screen()
+	at := map[string][2]int{}
+	for _, want := range []string{hintsURL, hintsPath, hintsSHA, hintsIP} {
+		c, r, ok := findLastOnGrid(s, want)
+		if !ok {
+			t.Fatalf("%q is not on screen:\n%s", want, term.Snapshot())
+		}
+		at[want] = [2]int{c, r}
+	}
+	return at
+}
+
+// TestHintFullLineDoesNotJoinTheNext prints a URL that fills its row exactly
+// and ends with a newline, then a line that a URL could carry on into. A full
+// last column looks the same as a wrap, so only the emulator's own record of
+// the wrap can tell them apart, and the label must copy the first line alone.
+//
+// Negative control: joining rows on a full last column, as hints did first,
+// copies the URL with "tail/more" glued to its end.
+func TestHintFullLineDoesNotJoinTheNext(t *testing.T) {
+	out := &lockedBuffer{}
+	term := startHints(t, false, "", out)
+	cols, _ := term.Screen().Size()
+	// The pane's content is the screen less its two border columns.
+	width := cols - 2
+	const scheme = "https://example.com/"
+	url := scheme + strings.Repeat("0", width-len(scheme))
+	cmd := fmt.Sprintf("printf '%s%%0%dd\\ntail/more\\n' 0; echo FULL-READY", scheme, width-len(scheme))
+	runInShell(t, term, cmd, "FULL-READY", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	col, row, ok := findLastOnGrid(term.Screen(), url)
+	if !ok || col+len(url) != cols-1 {
+		t.Fatalf("the URL does not fill its row exactly (column %d, %d chars, %d columns):\n%s",
+			col, len(url), cols, term.Snapshot())
+	}
+	if !gridMatchesAt(term.Screen(), 1, row+1, "tail/more") {
+		t.Fatalf("the next line is not right under the URL:\n%s", term.Snapshot())
+	}
+
+	openHints(t, term)
+	label := waitHintLabel(t, term, col, row, url)
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(label); err != nil {
+		t.Fatalf("type %q: %v", label, err)
+	}
+	waitClipboardSequence(t, term, out, from, url)
+	alive(t, term, "after a full line under hints")
 }
