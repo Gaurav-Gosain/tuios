@@ -43,6 +43,18 @@ func (m *OS) keyboardEnhancements() tea.KeyboardEnhancements {
 			enhancements.ReportAssociatedText = true
 		}
 	}
+	// Alternate-key reporting only adds the base key to a key the terminal
+	// already sends as an escape code, and a plain letter is sent as text. So
+	// with a Ukrainian layout the I key after the leader arrives as a bare "ш"
+	// with nothing behind it, and no binding can answer. While tuios itself
+	// reads the next key (window mode, a prefix, the rail, an overlay), every
+	// key is asked for as an escape code, with its text alongside so a field
+	// being typed into still gets the character. A pane with the keyboard is
+	// left as it was: it gets text as text.
+	if m.KeysGoToBindings() {
+		enhancements.ReportAllKeysAsEscapeCodes = true
+		enhancements.ReportAssociatedText = true
+	}
 	if !m.HoldModeAvailable() {
 		return enhancements
 	}
@@ -57,6 +69,28 @@ func (m *OS) keyboardEnhancements() tea.KeyboardEnhancements {
 		enhancements.ReportAssociatedText = true
 	}
 	return enhancements
+}
+
+// KeysGoToBindings reports whether the next key is matched against tuios
+// bindings rather than typed into the focused pane. It is true everywhere but
+// terminal mode with nothing in front of the pane: no prefix pending or about to
+// repeat, no rail focus, no overlay and no copy mode.
+func (m *OS) KeysGoToBindings() bool {
+	if m.Mode != TerminalMode {
+		return true
+	}
+	if m.PrefixActive || m.WorkspacePrefixActive || m.MinimizePrefixActive ||
+		m.TilingPrefixActive || m.DebugPrefixActive || m.TapePrefixActive ||
+		m.LayoutPrefixActive || m.PrefixRepeatLive() {
+		return true
+	}
+	if m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+		m.ReviewOpen() || m.Renaming() || m.CaptureActive() ||
+		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager {
+		return true
+	}
+	window := m.GetFocusedWindow()
+	return window == nil || window.InCopyMode()
 }
 
 // PaneKeyboardFlags returns the kitty keyboard protocol flags the focused pane

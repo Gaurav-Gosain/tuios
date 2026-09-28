@@ -78,6 +78,9 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 		return
 	}
+	// The pending search above takes the typed character. A command key falls
+	// back to the base-layout key. See commandKey.
+	keyStr = commandKey(msg)
 
 	// Handle digit keys for count prefix (1-9, 0 only if already has count)
 	if len(keyStr) == 1 && keyStr[0] >= '0' && keyStr[0] <= '9' {
@@ -420,6 +423,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 		return
 	}
+	keyStr = commandKey(msg)
 
 	// Handle digit keys for count prefix in visual mode
 	if len(keyStr) == 1 && keyStr[0] >= '0' && keyStr[0] <= '9' {

@@ -57,6 +57,12 @@ func lookupAction(msg tea.KeyPressMsg, get func(string) string) string {
 			return action
 		}
 	}
+	// The base-layout key, last: only when nothing the key produced is bound.
+	// Keystroke() above already names it for a chord; this adds the plain and
+	// shifted letter spellings. See layout_keys.go.
+	if base, ok := baseLayoutKey(msg); ok {
+		return get(base)
+	}
 	return ""
 }
 

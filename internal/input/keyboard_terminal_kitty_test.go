@@ -80,7 +80,9 @@ func TestForwardKittyKeyboardPane(t *testing.T) {
 		legacy string // expected bytes to a pane with no kitty keyboard flags
 	}{
 		{"plain letter", tea.KeyPressMsg{Code: 'a', Text: "a"}, "\x1b[97;1;97u", "a"},
-		{"capital letter", tea.KeyPressMsg{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: tea.ModShift}, "\x1b[120;2;88u", "X"},
+		// CSI >31u includes alternate keys, so the shifted key rides in the key
+		// field, as kitty sends it.
+		{"capital letter", tea.KeyPressMsg{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: tea.ModShift}, "\x1b[120:88;2;88u", "X"},
 		{"enter", tea.KeyPressMsg{Code: tea.KeyEnter}, "\x1b[13u", "\r"},
 		{"backspace", tea.KeyPressMsg{Code: tea.KeyBackspace}, "\x1b[127u", "\x7f"},
 		{"up arrow", tea.KeyPressMsg{Code: tea.KeyUp}, "\x1b[A", "\x1b[A"},

@@ -240,6 +240,13 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	msg = o.StripHoldModifier(msg)
 
+	// A modifier pressed on its own arrives as a key while tuios asks for every
+	// key as an escape code. Holding Shift for the key after the leader must
+	// not end the prefix, so it goes nowhere while tuios reads keys itself.
+	if isModifierKeyPress(msg) && o.KeysGoToBindings() {
+		return o, nil
+	}
+
 	// A chord that only resolved because tuios recognised the character macOS
 	// composed out of it is proof the Option key is not being sent as Alt.
 	if chord, ok := macOptionChord(msg); ok && chord != msg.Keystroke() {
@@ -520,7 +527,7 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleLogViewerKey handles keyboard input when the log viewer overlay is active.
 // This is shared between terminal mode and window management mode.
 func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	key := msg.String()
+	key := commandKey(msg)
 
 	// Close log viewer with q or esc
 	if key == "q" || key == "esc" {

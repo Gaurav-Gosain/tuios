@@ -92,6 +92,13 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 			return []byte{0x1b, '[', 'Z'}
 		}
 
+		// A Ctrl chord on a non-Latin layout (Ctrl+с on a Ukrainian one) has
+		// no control code of its own. Terminals use the base-layout key for
+		// it, so Ctrl+с is still Ctrl+C to the shell.
+		if actualMod&tea.ModCtrl != 0 && key.Code >= 0x80 && key.BaseCode > 0x20 && key.BaseCode < 0x7f {
+			key.Code = key.BaseCode
+		}
+
 		// Handle Ctrl+letter combinations (standard control codes)
 		if actualMod&tea.ModCtrl != 0 {
 			// Special Ctrl key combinations
@@ -340,8 +347,26 @@ func vtKeyFromBubbletea(msg tea.KeyPressMsg) vt.KeyPressEvent {
 		Code:        key.Code,
 		Text:        key.Text,
 		Mod:         vt.KeyMod(key.Mod),
-		ShiftedCode: key.ShiftedCode,
+		ShiftedCode: shiftedCode(key),
 		BaseCode:    key.BaseCode,
 		IsRepeat:    key.IsRepeat,
 	}
+}
+
+// shiftedCode is the key's shifted code as the host reported it. The decoder
+// that parses CSI code:shifted:base u also writes the base key into the shifted
+// field, so a key that carries a base-layout key has the base key there. The
+// real shifted key is then the text the key typed, when Shift was held and it
+// typed one character.
+func shiftedCode(key tea.Key) rune {
+	if key.BaseCode == 0 || key.ShiftedCode != key.BaseCode {
+		return key.ShiftedCode
+	}
+	if key.Mod&tea.ModShift == 0 {
+		return 0
+	}
+	if r := []rune(key.Text); len(r) == 1 && r[0] != key.Code {
+		return r[0]
+	}
+	return 0
 }
