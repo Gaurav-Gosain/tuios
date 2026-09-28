@@ -24,6 +24,7 @@ var optionWalkSkips = map[string]string{
 	"hosts":                        "a map of host name to its address, which no single settable path can spell",
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
+	"hints.patterns":               "a list of regular expressions, which a value arriving as one string cannot spell",
 	"agents":                       "file-plane config the daemon reads from the file, like [hosts]: which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
 }
 
@@ -173,7 +174,7 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 	sections := []string{
 		"appearance", "sidebar", "dock", "scrollbar", "selection",
 		"startup", "daemon", "notifications", "tape", "debug",
-		"screenshot", "screensaver", "spotlight",
+		"screenshot", "screensaver", "spotlight", "hints",
 	}
 	for _, opt := range optionSpecs {
 		if opt.Description == "" {

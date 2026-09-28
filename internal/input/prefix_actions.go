@@ -63,6 +63,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
 	d.Register("prefix_quit", handlePrefixQuit)
+	d.Register("hints", handleOpenHints)
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.

@@ -178,6 +178,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb(",", "Settings"),
 		kb("k", "Keybindings"),
 		kb("C", "Screenshot"),
+		kb("F", "Hints"),
 		kb("j", "Newest message"),
 		kb("?", "Help"),
 	}}

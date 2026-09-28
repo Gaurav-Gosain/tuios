@@ -707,6 +707,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.spotlight.on {
 		return nil, false
 	}
+	// Hints mode is a canvas pass too (hints_render.go), for as long as the
+	// labels are up.
+	if m.hints != nil {
+		return nil, false
+	}
 	// The celebration is a pass over the canvas too, for the second or so it
 	// is on screen.
 	if m.celebration.active() {

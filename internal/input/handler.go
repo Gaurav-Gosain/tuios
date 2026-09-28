@@ -37,6 +37,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// A click ends hints mode. The labels name the screen as it was when
+		// they were drawn, and a click is about to change it.
+		o.CloseHints()
 		// Capture mode is a gesture over the whole screen, the review
 		// included, so it is asked first.
 		if o.CaptureActive() {
@@ -313,6 +316,13 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// underneath may answer for it.
 	if o.ShowSessionClose {
 		return handleSessionCloseInput(msg, o)
+	}
+
+	// Hints mode owns the keyboard while it is open: a letter is part of a
+	// label, and nothing typed while the labels are up may reach the pane or
+	// a binding. See hints_input.go.
+	if o.HintsOpen() {
+		return handleHintsKey(msg, o)
 	}
 
 	// Handle the quit menu (highest priority, works in any mode)

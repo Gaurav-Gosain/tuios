@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -1028,6 +1029,30 @@ var optionSpecs = []Option{
 		Path: "spotlight.shake", Type: OptionBool, Section: "spotlight",
 		Description: "Move the mouse left and right fast to turn the beam on and off. A shake does not move the beam. The follow setting decides where it goes",
 		Default:     "false",
+	},
+
+	// [hints]. Read each time hints mode opens. hints.patterns is a list and
+	// is set in the file only, like [keybindings].
+	{
+		Path: "hints.builtins", Type: OptionString, Section: "hints",
+		Description: "Built-in patterns hints mode looks for: all, none, or names such as url,path,sha",
+		Default:     HintsDefaultBuiltins,
+	},
+	{
+		Path: "hints.alphabet", Type: OptionString, Section: "hints",
+		Description: "Letters the hint labels are made of, easiest first",
+		Default:     hints.DefaultAlphabet,
+	},
+	{
+		Path: "hints.open", Type: OptionBool, Section: "hints",
+		Description: "Ctrl and a label opens the URL or path. It does not open on a remote client",
+		Default:     "true",
+	},
+	{
+		Path: "hints.dim", Type: OptionInt, Section: "hints",
+		Description: "Percent of its light the text around the hints loses",
+		Default:     "60", Min: HintsMinDim, Max: HintsMaxDim,
+		Percent: true,
 	},
 }
 
