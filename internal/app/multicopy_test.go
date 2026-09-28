@@ -134,7 +134,7 @@ func TestPrefixMenuNamesMultiCopyMode(t *testing.T) {
 		t.Errorf("without multifocus the menu says %q", got)
 	}
 	m.MultifocusSet = map[string]bool{"wa": true, "wb": true}
-	if got := describe(); got != "Multi copy mode (2 panes)" {
-		t.Errorf("with multifocus the menu says %q, want Multi copy mode (2 panes)", got)
+	if got := describe(); got != "Multi copy (2)" {
+		t.Errorf("with multifocus the menu says %q, want Multi copy (2)", got)
 	}
 }

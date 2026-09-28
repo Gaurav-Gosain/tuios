@@ -895,7 +895,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Multi copy mode",
+			Name:     paletteMultiCopyName,
 			Shortcut: "prefix+[ with multifocus",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

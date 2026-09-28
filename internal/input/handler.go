@@ -18,6 +18,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	var result tea.Model
 	var cmd tea.Cmd
 
+	// Whatever this message did (a click that moved focus, a key that
+	// minimised a pane or switched workspace), multi copy mode is brought in
+	// line with it afterwards. See SettleMultiCopy.
+	defer o.SettleMultiCopy()
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)
@@ -130,6 +135,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// method's commit that arrives as one, is not a label, and nothing
 		// typed while the labels are up may reach the pane.
 		if o.HintsOpen() {
+			return o, nil
+		}
+		// The multi copy save prompt takes a paste as its path, with line
+		// breaks and control characters removed. It must never reach a shell:
+		// a pasted path ending in a newline would run as a command.
+		if o.MultiCopy != nil && o.MultiCopy.Save != nil {
+			o.MultiCopySaveType(msg.Content)
 			return o, nil
 		}
 		// The review's line takes a paste as one line; with no line open

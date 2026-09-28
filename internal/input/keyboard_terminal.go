@@ -92,6 +92,19 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.NoteAction(scroll)
 			// One line per press, the way it has always been, but through the
 			// same viewport helpers the wheel uses.
+			// In multi copy mode the scroll moves every pane of the set, the
+			// way every other copy-mode key does. The panes stay in copy mode
+			// at the bottom: the mode is held, not implicit.
+			if o.MultiCopy.Has(focusedWindow.ID) {
+				for _, w := range o.MultiCopyWindows() {
+					if scroll == "terminal_scroll_up" {
+						scrollCopyModeUpBy(w, 1)
+					} else {
+						scrollCopyModeDownBy(w, 1)
+					}
+				}
+				return o, nil
+			}
 			if scroll == "terminal_scroll_up" {
 				if !focusedWindow.InCopyMode() && focusedWindow.ScrollbackLen() > 0 {
 					focusedWindow.EnterCopyModeImplicit()

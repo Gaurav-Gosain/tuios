@@ -77,7 +77,7 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		if multiOK {
 			for i := range g.Bindings {
 				if g.Bindings[i].Key == "[" {
-					g.Bindings[i].Description = fmt.Sprintf("Multi copy mode (%d panes)", multi)
+					g.Bindings[i].Description = fmt.Sprintf("Multi copy (%d)", multi)
 				}
 			}
 		}

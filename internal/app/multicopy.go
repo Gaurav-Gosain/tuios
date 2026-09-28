@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -28,9 +30,16 @@ import (
 // handling lives in the input package (copymode_multi.go); this file owns the
 // set of panes, the format, and where the yank goes.
 
+// paletteMultiCopyName is the palette entry that starts multi copy mode.
+const paletteMultiCopyName = "Multi copy mode"
+
 // multiCopyParkedDim is how far, in percent, a parked pane is dimmed toward
 // its ground.
 const multiCopyParkedDim = 45
+
+// multiCopyLargeYank is the size, in bytes, past which a yank warns that the
+// terminal may cut the OSC 52 write.
+const multiCopyLargeYank = 100 * 1024
 
 // MultiCopy is multi copy mode's state.
 type MultiCopy struct {
@@ -163,33 +172,98 @@ func (m *OS) ExitMultiCopyMode() {
 	}
 }
 
-// SettleMultiCopy ends multi copy mode when the focused pane has left it: focus
-// moved to a pane outside the mode, or the focused pane left copy mode some
-// other way (a click, a scroll to the bottom). The other panes would otherwise
-// stay in copy mode with nothing driving them. It is called before a key is
-// routed.
+// SettleMultiCopy keeps multi copy mode honest after anything the person did.
+//
+// A pane that was minimised or moved to another workspace is off screen, so it
+// leaves the mode: it leaves copy mode and its id goes. Driving or yanking a
+// pane the person cannot see is the one thing the mode must not do.
+//
+// The whole mode ends when the focused pane has left it: focus moved to a pane
+// outside the mode, or the focused pane left copy mode some other way (a
+// click, a scroll to the bottom). The other panes would otherwise stay in copy
+// mode with nothing driving them.
+//
+// It runs after every input message (key, mouse, paste) and before a key is
+// routed to copy mode.
 func (m *OS) SettleMultiCopy() {
-	if m.MultiCopy == nil {
+	mc := m.MultiCopy
+	if mc == nil {
 		return
 	}
+	kept := mc.IDs[:0]
+	for _, id := range mc.IDs {
+		w := m.windowByID(id)
+		if w == nil {
+			continue
+		}
+		if !m.multiCopyOnScreen(w) {
+			if w.InCopyMode() {
+				w.ExitCopyMode()
+			}
+			w.InvalidateCache()
+			delete(mc.Parked, id)
+			continue
+		}
+		kept = append(kept, id)
+	}
+	mc.IDs = kept
 	fw := m.GetFocusedWindow()
-	if fw == nil || !m.MultiCopy.Has(fw.ID) || !fw.InCopyMode() || fw.InImplicitCopyMode() {
+	if fw == nil || !mc.Has(fw.ID) || !fw.InCopyMode() || fw.InImplicitCopyMode() {
 		m.ExitMultiCopyMode()
 	}
 }
 
-// MultiCopyWindows is the panes of the mode that still exist, in order.
+// multiCopyOnScreen reports whether a pane can take part in the mode: it is on
+// the current workspace and not minimised.
+func (m *OS) multiCopyOnScreen(w *terminal.Window) bool {
+	return w.Workspace == m.CurrentWorkspace && !w.Minimized
+}
+
+// MultiCopyWindows is the panes of the mode that exist and are on screen, in
+// order. It changes nothing, so the render path may ask; SettleMultiCopy is
+// what takes a pane out.
 func (m *OS) MultiCopyWindows() []*terminal.Window {
 	if m.MultiCopy == nil {
 		return nil
 	}
 	out := make([]*terminal.Window, 0, len(m.MultiCopy.IDs))
 	for _, id := range m.MultiCopy.IDs {
-		if w := m.windowByID(id); w != nil {
+		if w := m.windowByID(id); w != nil && m.multiCopyOnScreen(w) {
 			out = append(out, w)
 		}
 	}
 	return out
+}
+
+// MultiCopyLead is the pane whose state decides what a key means in multi copy
+// mode: the focused pane, unless the last search found nothing in it, in which
+// case the first pane the search did find something in. With every pane
+// parked, it is the focused pane.
+func (m *OS) MultiCopyLead(focused *terminal.Window) *terminal.Window {
+	if focused == nil || !m.MultiCopyParked(focused.ID) {
+		return focused
+	}
+	for _, w := range m.MultiCopyWindows() {
+		if w.InCopyMode() && !m.MultiCopyParked(w.ID) {
+			return w
+		}
+	}
+	return focused
+}
+
+// MultiCopyAllParked reports whether the last search found nothing in any
+// pane of the mode.
+func (m *OS) MultiCopyAllParked() bool {
+	ws := m.MultiCopyWindows()
+	if len(ws) == 0 {
+		return false
+	}
+	for _, w := range ws {
+		if !m.MultiCopyParked(w.ID) {
+			return false
+		}
+	}
+	return true
 }
 
 // MultiCopyParked reports whether the pane is parked: the last search in multi
@@ -296,7 +370,13 @@ func (m *OS) YankMultiCopy(panes []MultiCopyPane, skipped int) tea.Cmd {
 	if skipped > 0 {
 		msg += fmt.Sprintf(" %s had no selection.", paneCount(skipped))
 	}
-	m.ShowNotification(msg, "success", m.Settings.NotificationDuration)
+	if len(text) > multiCopyLargeYank {
+		// OSC 52 carries the text base64 encoded in one escape sequence, and
+		// many terminals cut a long one short or drop it.
+		m.ShowNotification(msg+" The copy is large. Your terminal may cut it.", "warning", 2*m.Settings.NotificationDuration)
+	} else {
+		m.ShowNotification(msg, "success", m.Settings.NotificationDuration)
+	}
 	return m.clipboardWriteCmd(text)
 }
 
@@ -357,33 +437,111 @@ func homeRelative(p string) string {
 	return p
 }
 
+// MultiCopySaveType adds text to the save prompt's path. A paste arrives
+// here: control characters and line breaks are removed, so a pasted path with
+// a newline stays a path and never reaches a shell.
+func (m *OS) MultiCopySaveType(text string) {
+	if m.MultiCopy == nil || m.MultiCopy.Save == nil {
+		return
+	}
+	var b strings.Builder
+	for _, r := range text {
+		if unicode.IsControl(r) || session.InvisibleFormatRune(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	m.MultiCopy.Save.Path += b.String()
+	m.MultiCopy.Save.Err = ""
+}
+
+// multiCopySaveBase is the directory a relative save path is taken from: the
+// focused pane's working directory when its shell reported one on this
+// machine (OSC 7), and the home directory otherwise. The tuios process's own
+// directory means nothing to the person typing the path.
+func (m *OS) multiCopySaveBase() string {
+	if fw := m.GetFocusedWindow(); fw != nil && fw.Cwd != "" && filepath.IsAbs(fw.Cwd) {
+		return fw.Cwd
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return ""
+}
+
+// MultiCopySaveResolved is the full path the save prompt's text names. The
+// prompt shows it, so a relative path is never a guess.
+func (m *OS) MultiCopySaveResolved() (string, error) {
+	if m.MultiCopy == nil || m.MultiCopy.Save == nil {
+		return "", errors.New("no save prompt")
+	}
+	raw := strings.TrimSpace(m.MultiCopy.Save.Path)
+	if raw == "" {
+		return "", errors.New("empty path")
+	}
+	path, err := expandHome(raw)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(path) {
+		base := m.multiCopySaveBase()
+		if base == "" {
+			return "", errors.New("no base directory")
+		}
+		path = filepath.Join(base, path)
+	}
+	return filepath.Clean(path), nil
+}
+
+// multiCopySaveHost is " on <machine>" when the person is not at the machine
+// the file is written on (an SSH or browser client), and empty otherwise.
+func (m *OS) multiCopySaveHost() string {
+	if !m.RemoteClient || m.SSHIsLoopback {
+		return ""
+	}
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return ""
+	}
+	return " on " + host
+}
+
 // CommitMultiCopySave writes the captured panes to the prompt's path in the
 // current format. It never overwrites a file: a path that exists keeps the
-// prompt open with a message, so the person can type another. It reports
-// whether the file was written.
+// prompt open with a message, so the person can type another. A write that
+// fails removes what it wrote, so the retry is not refused. It reports whether
+// the file was written.
 func (m *OS) CommitMultiCopySave() bool {
 	mc := m.MultiCopy
 	if mc == nil || mc.Save == nil {
 		return false
 	}
 	s := mc.Save
-	raw := strings.TrimSpace(s.Path)
-	if raw == "" {
+	if strings.TrimSpace(s.Path) == "" {
 		s.Err = "Type a path."
 		return false
 	}
-	path, err := expandHome(raw)
+	path, err := m.MultiCopySaveResolved()
 	if err != nil {
 		s.Err = "Cannot find the home directory. Type a full path."
 		return false
 	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		s.Err = homeRelative(path) + " is a folder. Type a file name."
+		return false
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		s.Err = "The folder " + homeRelative(dir) + " does not exist."
+		return false
+	}
+	f, err := multiCopyCreate(path)
 	switch {
 	case errors.Is(err, fs.ErrExist):
 		s.Err = "A file is already at this path. Type a different path."
+		return false
+	case errors.Is(err, fs.ErrPermission):
+		s.Err = "You cannot write to " + homeRelative(dir) + "."
 		return false
 	case err != nil:
 		s.Err = "Cannot save: " + err.Error()
@@ -393,11 +551,26 @@ func (m *OS) CommitMultiCopySave() bool {
 	_, werr := f.WriteString(text)
 	cerr := f.Close()
 	if werr != nil || cerr != nil {
+		// The file is new (O_EXCL), so it is ours to remove. Leaving the
+		// partial file would make the retry fail as "a file is already here".
+		_ = os.Remove(path)
 		s.Err = "Cannot save: " + errors.Join(werr, cerr).Error()
 		return false
 	}
 	mc.Save = nil
-	m.ShowNotification(fmt.Sprintf("Saved to %s (%s, %s)", homeRelative(path), paneCount(len(s.Panes)), mc.Format),
+	m.ShowNotification(fmt.Sprintf("Saved to %s%s (%s, %s).", homeRelative(path), m.multiCopySaveHost(), paneCount(len(s.Panes)), mc.Format),
 		"success", 2*m.Settings.NotificationDuration)
 	return true
+}
+
+// multiCopyFile is what a save writes to. It is an interface so a test can
+// make the write fail part way.
+type multiCopyFile interface {
+	WriteString(string) (int, error)
+	Close() error
+}
+
+// multiCopyCreate creates the save file. It never opens one that exists.
+var multiCopyCreate = func(path string) (multiCopyFile, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 }
