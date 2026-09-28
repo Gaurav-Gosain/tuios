@@ -470,12 +470,6 @@ func (m *OS) tickNeedsWork() bool {
 		len(m.pendingAgentAlerts) > 0 || m.spotlightMotionPending {
 		return true
 	}
-	// The band of light crossing text that was just copied. It is drawn from
-	// the clock rather than stepped, so it needs frames while it runs and
-	// nothing at all once it has finished; the check drops it when it has.
-	if m.CopyFlashActive() {
-		return true
-	}
 	// A gesture's announcement hold that nothing is holding any more. The sweep
 	// below is what ends it, and a hold the idle diet slept through is exactly
 	// the stranded hold this has to catch: one bool, then one comparison.
@@ -920,14 +914,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, IdleTickCmd()
 		}
 		m.tickStats.Work++
-
-		// The pane a copy sweep is crossing. Nothing in it has changed, so
-		// nothing else marks it, and a pane that is not marked is drawn from
-		// its cached frame: the light was computed every tick and painted into
-		// a frame that was thrown away. Without this the sweep shows exactly
-		// one frame, the one the copy itself asked for, which is the frame
-		// where the light has not arrived yet.
-		m.markCopyFlashPane()
 
 		// Agent alerts whose settle window has closed. Done before the window
 		// sweep below so an alert about a pane that exited this tick is dropped

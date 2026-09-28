@@ -326,7 +326,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// one pane the pointer is over, and only while it is over a link.
 	linkRun, hasLinkRun := m.linkHoverFor(window)
 
-	if !isFocused && dim == 0 && !hasLinkRun && window.CopyMode == nil && window.ScrollbackOffset == 0 {
+	// A pane a copy sweep is crossing stays off it too: the emulator's renderer
+	// has no light in it.
+	if !isFocused && !flashing && dim == 0 && !hasLinkRun && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		cols, rows := 0, 0
 		if gridFillsEveryRow(screen, screen.Width(), screen.Height()) {
@@ -346,7 +348,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Keyed on the dim like the check at the top, and for a sharper reason:
 	// this one is only reached once that check has already failed, so with an
 	// unkeyed test it fired exactly on the mismatch the key exists to catch.
-	if window.ScrollbackOffset > 0 && cacheUsable && !window.ContentDirty {
+	if window.ScrollbackOffset > 0 && cacheUsable && !window.ContentDirty && !flashing {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
@@ -513,8 +515,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		flashGrid = pool.GetHighlightGrid()
 		flashGrid.Init(maxY, maxX)
 		defer pool.PutHighlightGrid(flashGrid)
+		// Clamped to where the text ends on each row, before the block is
+		// measured. The band is sized to the block, so a block measured over
+		// whole rows sent the light across the empty right half of the pane:
+		// on a selection of many short lines it was over the text for the
+		// first few frames and then crossed nothing.
+		textEnd := func(y int) int {
+			return paneRowTextEnd(window, screen, y, maxX, scrollbackLen)
+		}
 		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
-			scrollbackLen, window.ScrollbackOffset, maxY, maxX)
+			scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
 		if box, ok := copyFlashBoxOf(flashGrid, maxY, maxX); ok {
 			flashBand = m.copyFlashBandFor(progress, box)
 		} else {
@@ -748,11 +758,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// The copy sweep, ahead of the ordinary cell path and behind
 			// every mark: a selection or a search match still shows as what
 			// it is while the light crosses it.
-			// Only as far as the text goes on this row, which is the same
-			// clamp the pane's own selection uses below. Without it the
-			// highlight ran to the edge of the pane on every row, so a
-			// selection of one short line was painted as a full-width block.
-			if flashGrid != nil && flashGrid.Get(y, x) && x <= lineEndX {
+			// The grid already stops where the text ends on each row (see
+			// paneRowTextEnd), so a selection of one short line is not
+			// painted as a full-width block.
+			if flashGrid != nil && flashGrid.Get(y, x) {
 				// A cell holding a character has its text lit as well as its
 				// ground, so the sweep passes over the words rather than
 				// behind them.

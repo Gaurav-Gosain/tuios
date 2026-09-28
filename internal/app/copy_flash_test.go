@@ -24,6 +24,7 @@ func flashOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.Settings.CopyFlash = true
+	m.Settings.Motion = config.MotionFull
 	m.Settings.CopyFlashMs = config.CopyFlashMsDefault
 	m.Settings.CopyFlashColor = config.DefaultCopyFlashColor
 	return m
@@ -379,7 +380,7 @@ func TestTheSweepMeasuresTheBlock(t *testing.T) {
 	// One row, so the block's bounds are that row's bounds. A selection over
 	// several rows reaches column zero on every row after the first, which is
 	// what a selection is, so its left edge is zero and says nothing.
-	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60)
+	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60, nil)
 
 	box, ok := copyFlashBoxOf(g, 4, 60)
 	if !ok {
@@ -402,5 +403,86 @@ func TestAnEmptyRegionIsNotSwept(t *testing.T) {
 
 	if _, ok := copyFlashBoxOf(g, 4, 60); ok {
 		t.Error("an empty region measured as a block to sweep")
+	}
+}
+
+// TestAWholeRowSelectionIsSweptOverItsText. A selection over several lines
+// covers every row to the pane's edge, and the block used to be measured
+// from that, so on short lines the band spent most of its run crossing empty
+// cells. The rows are clamped to where their text ends first.
+//
+// Negative control: passing nil for textEnd measures the block to column 59
+// and fails here.
+func TestAWholeRowSelectionIsSweptOverItsText(t *testing.T) {
+	g := pool.GetHighlightGrid()
+	defer pool.PutHighlightGrid(g)
+	g.Init(4, 60)
+	ends := []int{11, 11, -1, 11}
+	fillPaneRegion(g, terminal.Position{X: 0, Y: 0}, terminal.Position{X: 59, Y: 3}, 0, 0, 4, 60,
+		func(y int) int { return ends[y] })
+
+	box, ok := copyFlashBoxOf(g, 4, 60)
+	if !ok {
+		t.Fatal("the marked region measured as nothing")
+	}
+	if box.left != 0 || box.right != 11 {
+		t.Errorf("the block spans columns %d to %d, want 0 to 11", box.left, box.right)
+	}
+	if g.HasRow(2) {
+		t.Error("a blank row was marked for the sweep")
+	}
+}
+
+// TestTheSweepRunsOnTheMotionClock. The sweep used to be drawn only when the
+// maintenance tick happened to compose a frame, and after the dock message
+// stopped composing one per tick that was four frames a second. A running
+// sweep now keeps the motion clock at the frame rate, and each of its frames
+// marks the pane and draws.
+//
+// Negative control: dropping the copyFlash term from motionInterval fails the
+// first check, and dropping the flash term from handleMotionFrame the second.
+func TestTheSweepRunsOnTheMotionClock(t *testing.T) {
+	m := flashOS(t)
+	w := selectedWindow()
+	m.Windows = []*terminal.Window{w}
+	m.NoteCopyFlash(w)
+
+	if got := m.motionInterval(); got != config.OverlayFadeFrame {
+		t.Fatalf("a running sweep asks the motion clock for a frame every %v, want %v", got, config.OverlayFadeFrame)
+	}
+	w.ContentDirty = false
+	m.renderSkipped = true
+	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
+	if m.renderSkipped || !w.ContentDirty {
+		t.Errorf("a motion frame during the sweep did not draw the pane (skipped=%v, dirty=%v)",
+			m.renderSkipped, w.ContentDirty)
+	}
+
+	// The frame after the sweep ends draws once more, without the light, and
+	// then the clock stops.
+	m.copyFlash.At = time.Now().Add(-time.Hour)
+	m.renderSkipped = true
+	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
+	if m.renderSkipped {
+		t.Error("the frame that ends the sweep was skipped, so its light stays on the screen")
+	}
+	if got := m.motionInterval(); got != 0 {
+		t.Errorf("the motion clock still runs every %v after the sweep", got)
+	}
+}
+
+// TestMotionNoneDrawsNoSweep. appearance.motion = none draws every change in
+// one frame, and the sweep is nothing but frames.
+func TestMotionNoneDrawsNoSweep(t *testing.T) {
+	m := flashOS(t)
+	m.Settings.Motion = config.MotionNone
+	m.NoteCopyFlash(selectedWindow())
+	if m.copyFlash != nil {
+		t.Error("a copy with motion none recorded a sweep")
+	}
+	m.Settings.Motion = config.MotionBasic
+	m.NoteCopyFlash(selectedWindow())
+	if m.copyFlash == nil {
+		t.Error("a copy with motion basic recorded no sweep")
 	}
 }
