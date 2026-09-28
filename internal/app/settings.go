@@ -506,6 +506,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 	if m.agentAlertsOpen() {
 		alertRows = append(alertRows, agentAlertRows...)
+		alertRows = append(alertRows, m.mailAlertRows()...)
 	}
 	notifications := settingsCategory{
 		Name:  "Alerts",
@@ -808,6 +809,41 @@ var agentAlertRows = []settingsRow{
 	opt("notifications.agent.states.errored"),
 }
 
+// mailAlertRows are the Alerts tab's rows for [notifications.mail], after the
+// agent rows. Four of them are hand-written: a key left out follows the same
+// key in [notifications.agent], and a derived toggle would show the registry
+// default instead of the value in force. These show the value in force, and a
+// change writes the mail key, which from then on stands on its own.
+func (m *OS) mailAlertRows() []settingsRow {
+	return []settingsRow{
+		custom("notifications.mail.enabled", m.mailAlertItem("notifications.mail.enabled", "Mail alerts",
+			"Alert when an agent writes to you or sends a notice.",
+			func(p config.MailAlertPolicy) bool { return p.Enabled })),
+		custom("notifications.mail.notify", m.mailAlertItem("notifications.mail.notify", "Mail alert on the desktop",
+			"Send a desktop notification for mail.",
+			func(p config.MailAlertPolicy) bool { return p.Notify })),
+		custom("notifications.mail.dock", m.mailAlertItem("notifications.mail.dock", "Mail alert in the dock",
+			"Show mail in the dock. Click it to open the thread.",
+			func(p config.MailAlertPolicy) bool { return p.Dock })),
+		custom("notifications.mail.sound", m.mailAlertItem("notifications.mail.sound", "Mail alert sound",
+			"Make a mail alert audible. The agent sound settings say how.",
+			func(p config.MailAlertPolicy) bool { return p.Sound })),
+		opt("notifications.mail.between_agents"),
+	}
+}
+
+// mailAlertItem is one hand-written [notifications.mail] toggle. It shows
+// the value in force and writes the mail key.
+func (m *OS) mailAlertItem(path, label, desc string, get func(config.MailAlertPolicy) bool) settingItem {
+	item := boolItem(label, desc+" Unset follows the agent row.",
+		func() bool { return get(m.mailAlertPolicy()) },
+		func(m *OS, v bool) { m.setOption(path, strconv.FormatBool(v)) })
+	// Changed means the mail key is set, so the row no longer follows the
+	// agent row.
+	item.differs = func(m *OS) bool { return m.optionValue(path) != "" }
+	return item
+}
+
 // agentAlertsOpen reports whether the Alerts tab shows its agent rows: as
 // the person last set the heading row, and otherwise once an agent has been
 // seen.
@@ -829,7 +865,7 @@ func (m *OS) agentAlertsGroupItem() settingItem {
 			if m.agentAlertsOpen() {
 				return "shown"
 			}
-			return strconv.Itoa(len(agentAlertRows)) + " hidden"
+			return strconv.Itoa(len(agentAlertRows)+len(m.mailAlertRows())) + " hidden"
 		},
 		adjust: func(m *OS, _ int) {
 			open := !m.agentAlertsOpen()

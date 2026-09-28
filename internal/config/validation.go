@@ -289,6 +289,17 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 			Message: "a negative wait is not a thing; falling back to the default",
 		})
 	}
+
+	// A mail key left out follows [notifications.agent], so the only
+	// contradiction is inside the mail table once its switch is resolved.
+	mail := ResolveMailAlerts(&cfg.Notifications.Mail, ResolveAgentAlerts(agent))
+	if !mail.Enabled && mail.BetweenAgents {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "notifications.mail",
+			Key:     "between_agents",
+			Message: "mail alerts are off, so between_agents does nothing. Set notifications.mail.enabled = true to use it.",
+		})
+	}
 }
 
 // validateAppearanceEnums warns when an enum appearance option holds a value

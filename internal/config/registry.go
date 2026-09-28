@@ -455,6 +455,7 @@ var ActionDescriptions = map[string]string{
 	"mail_open":           "Mailbox: open the thread, or reply in an open one",
 	"mail_reply":          "Mailbox: reply in the open thread",
 	"mail_focus_pane":     "Mailbox: go to the pane that last wrote",
+	"mail_new":            "Mailbox: write a new message to an agent",
 	"mail_back":           "Mailbox: back, or close",
 
 	// The rail's reorder actions. They are here for the machine header's menu,

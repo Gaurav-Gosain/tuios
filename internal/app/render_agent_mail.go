@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"strconv"
 	"strings"
@@ -77,6 +78,12 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 	if st.Thread != 0 {
 		return m.renderAgentMailThread()
 	}
+	if st.Picking {
+		return m.renderAgentMailPicker()
+	}
+	if st.Composing && st.ComposeTo != "" {
+		return m.renderAgentMailCompose()
+	}
 
 	title := "Mail"
 	if st.Inbox != "" {
@@ -97,7 +104,8 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 			lines = append(append([]string{}, lines...), "", st.Error)
 		}
 		close := overlay.Hint{Key: "esc", Label: "close"}
-		return m.emptyPanel(title, agentMailWidth, agentMailEmptyRows, lines[0], lines[1:], close, []overlay.Hint{close})
+		hints := append(m.keyHints(config.ActionMailNew, "new message"), close)
+		return m.emptyPanel(title, agentMailWidth, agentMailEmptyRows, lines[0], lines[1:], close, hints)
 	}
 	if len(threads) > 0 {
 		st.Selected = clampInt(st.Selected, 0, len(threads)-1)
@@ -111,11 +119,114 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		EmptyMsg:   "Reading mail",
 		Pending:    st.Loading && !overlay.ShowLoading(st.LoadingSince, now),
-		Hints:      m.keyHints(config.ActionMailOpen, "open", config.ActionMailBack, "close"),
+		Hints:      m.keyHints(config.ActionMailOpen, "open", config.ActionMailNew, "new", config.ActionMailBack, "close"),
+		DetailFor:  m.agentMailErrorLines,
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			return m.agentMailThreadRow(threads[i], selected, rowBg, pal, width, now)
 		},
 	})
+}
+
+// agentMailErrorLines is the last failure, under the list of threads.
+func (m *OS) agentMailErrorLines(width int) []string {
+	if m.AgentMail.Error == "" {
+		return nil
+	}
+	pal := theme.UI()
+	var out []string
+	for _, l := range wrapPlain(m.AgentMail.Error, max(width, 1)) {
+		out = append(out, overlay.Style(pal.Surface).Foreground(pal.Warn).Render(l))
+	}
+	return out
+}
+
+// renderAgentMailPicker lists the agents of this session a new message can
+// go to. Enter chooses one and opens the message line.
+func (m *OS) renderAgentMailPicker() (string, overlay.Geometry, []overlayRowHit) {
+	st := &m.AgentMail
+	targets := m.agentMailComposeTargets()
+	if len(targets) > 0 {
+		st.PickSelected = clampInt(st.PickSelected, 0, len(targets)-1)
+	}
+	return m.renderListOverlay(listOverlay{
+		Title:      "New message: choose an agent",
+		Width:      agentMailWidth,
+		MaxVisible: 10,
+		Count:      len(targets),
+		Selected:   st.PickSelected,
+		Scroll:     &st.PickScroll,
+		EmptyMsg:   "No agent runs in this session.",
+		Hints:      m.keyHints(config.ActionMailOpen, "write", config.ActionMailBack, "back"),
+		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
+			w := targets[i]
+			right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(w.AgentState)
+			labelColor := pal.FgDim
+			if selected {
+				labelColor = pal.Fg
+			}
+			left := overlay.Style(rowBg).Foreground(labelColor).Render(m.agentMailWindowName(w.ID))
+			return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
+		},
+	})
+}
+
+// renderAgentMailCompose draws the message line for a new message to one
+// agent. The message starts a thread of its own.
+func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit) {
+	st := &m.AgentMail
+	pal := theme.UI()
+	bg := pal.Surface
+	width := m.panelWidth(agentMailWidth)
+	mute := overlay.Style(bg).Foreground(pal.FgMute)
+	name := m.agentMailWindowName(st.ComposeTo)
+
+	lines := []string{
+		mute.Render(overlay.Truncate("  The message goes to "+name+" from you, in a new thread.", width)),
+		mute.Render(overlay.Truncate("  "+name+" reads it with read-agent-messages.", width)),
+	}
+	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
+	extra := 2
+	if st.Error != "" {
+		extra++
+	}
+	rows, hints := m.panelBody(len(lines)+1, extra, width, nil, hints)
+	body := append([]string{}, lines[:min(len(lines), rows)]...)
+	for len(body) < rows {
+		body = append(body, "")
+	}
+	body = append(body, overlay.Rule(width, bg, pal), m.agentMailPromptLine("message: ", width))
+	if st.Error != "" {
+		body = append(body, overlay.Style(bg).Foreground(pal.Warn).Render(overlay.Truncate(st.Error, width)))
+	}
+	panel := overlay.Panel{
+		Title: overlay.Truncate("New message to "+name, max(width-4, 4)),
+		Width: width,
+		Body:  strings.Join(body, "\n"),
+		Hints: hints,
+	}
+	content, geo := panel.Render(pal)
+	return content, geo, nil
+}
+
+// agentMailPromptLine is the line a draft is typed on: the prompt, the end of
+// the draft that fits, and the cursor. The prompt says when the draft is being
+// sent, and when keys from outside the keyboard touched it.
+func (m *OS) agentMailPromptLine(prompt string, width int) string {
+	st := &m.AgentMail
+	pal := theme.UI()
+	bg := pal.Surface
+	if st.Sending {
+		prompt = "sending: "
+	}
+	// Said in words, not only in colour: a draft that keys routed from
+	// outside touched is sent as a claim, not as the person's answer.
+	if st.DraftAutomated {
+		prompt = "automated " + prompt
+	}
+	return overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
+		overlay.Style(bg).Foreground(pal.FgMute).Render(prompt) +
+		overlay.Style(bg).Foreground(pal.Fg).Render(agentMailDraftTail(st.Draft, width-lipgloss.Width(prompt)-4)) +
+		overlay.Cursor(" ", bg, pal.Fg)
 }
 
 // agentMailWindowName is what to call a window the overlay was opened for.
@@ -149,8 +260,11 @@ func (m *OS) agentMailThreadRow(th agentMailThread, selected bool, rowBg color.C
 	if th.Link {
 		glyph = agentMailLinkGlyph() + " "
 	}
+	// The thread id is the one the CLI prints and takes (read-agent-messages
+	// --thread), so the person can name a conversation to an agent.
+	id := agentMailThreadLabel(th.ID) + " "
 
-	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)
+	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-lipgloss.Width(id)-4, 1)
 	whoW := min(lipgloss.Width(who), avail)
 	subjectW := max(avail-whoW-2, 0)
 
@@ -158,12 +272,33 @@ func (m *OS) agentMailThreadRow(th agentMailThread, selected bool, rowBg color.C
 	if selected || th.Unread {
 		labelColor = pal.Fg
 	}
-	left := overlay.Style(rowBg).Foreground(pal.FgMute).Render(glyph) +
+	left := overlay.Style(rowBg).Foreground(pal.FgMute).Render(glyph+id) +
 		overlay.Style(rowBg).Foreground(labelColor).Bold(th.Unread).Render(overlay.Truncate(who, whoW))
 	if subjectW >= 2 && th.Subject != "" {
 		left += overlay.Style(rowBg).Foreground(pal.FgDim).Render("  " + overlay.Truncate(th.Subject, subjectW))
 	}
 	return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
+}
+
+// agentMailFenceOpen is the fence's opening line for a body from who, fitted
+// to width. A line too long breaks after the sender's name, so each half still
+// reads as a whole: who wrote it, then what it is.
+func agentMailFenceOpen(who string, width int) []string {
+	line := fmt.Sprintf(session.UntrustedOpen, who)
+	if lipgloss.Width(line) <= width {
+		return []string{line}
+	}
+	head, tail, ok := strings.Cut(line, ": ")
+	if !ok {
+		return wrapPlain(line, width)
+	}
+	return append(wrapPlain(head+":", width), wrapPlain(tail, width)...)
+}
+
+// agentMailThreadLabel is how a thread id reads on screen: "#12", the way
+// read-agent-messages prints it.
+func agentMailThreadLabel(id uint64) string {
+	return "#" + strconv.FormatUint(id, 10)
 }
 
 // renderAgentMailThread draws one conversation oldest first, each message
@@ -190,7 +325,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 	title := "Mail"
 	for i, mm := range msgs {
 		if i == 0 {
-			title = "Mail: " + agentMailSummary(mm)
+			title = "Mail " + agentMailThreadLabel(st.Thread) + ": " + agentMailSummary(mm)
 		}
 		if i > 0 {
 			lines = append(lines, "")
@@ -221,11 +356,18 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		if mm.Kind == "ask" && body == "" {
 			body = "(the pane printed nothing)"
 		}
+		// The body sits inside the fence the CLI prints, so the person reads
+		// the same frame an agent reading the same mail does: what is inside
+		// was written by another program.
+		for _, l := range agentMailFenceOpen(agentMailSender(mm), width-2) {
+			lines = append(lines, mute.Render("  "+l))
+		}
 		for raw := range strings.SplitSeq(body, "\n") {
 			for _, l := range wrapPlain(printableTitle(raw), width-2) {
 				lines = append(lines, dim.Render("  "+l))
 			}
 		}
+		lines = append(lines, mute.Render("  "+session.UntrustedClose))
 		if mm.Kind == "ask" && mm.SettledBy != "" {
 			lines = append(lines, mute.Render("  settled by "+mm.SettledBy))
 		}
@@ -266,20 +408,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		body = append(body, "")
 	}
 	if st.Composing {
-		prompt := "reply: "
-		if st.Sending {
-			prompt = "sending: "
-		}
-		// Said in words, not only in colour: a reply that keys routed from
-		// outside touched is sent as a claim, not as the person's answer.
-		if st.DraftAutomated {
-			prompt = "automated " + prompt
-		}
-		body = append(body, overlay.Rule(width, bg, pal),
-			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
-				mute.Render(prompt)+
-				overlay.Style(bg).Foreground(pal.Fg).Render(agentMailDraftTail(st.Draft, width-lipgloss.Width(prompt)-4))+
-				overlay.Cursor(" ", bg, pal.Fg))
+		body = append(body, overlay.Rule(width, bg, pal), m.agentMailPromptLine("reply: ", width))
 	}
 	if st.Error != "" {
 		body = append(body, overlay.Style(bg).Foreground(pal.Warn).Render(overlay.Truncate(st.Error, width)))

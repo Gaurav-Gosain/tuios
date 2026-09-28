@@ -9,8 +9,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The agent mailbox on the client. The daemon owns the ring (see
@@ -112,6 +114,14 @@ type AgentMailState struct {
 	LoadingSince time.Time
 	// Sending is true between enter on a reply and the daemon answering.
 	Sending bool
+	// Picking is true while the list of agents a new message can go to is
+	// open. PickSelected is its cursor.
+	Picking      bool
+	PickSelected int
+	PickScroll   int
+	// ComposeTo is the window a new message goes to, while the draft is a
+	// new message rather than a reply. Empty while the draft is a reply.
+	ComposeTo string
 }
 
 // agentMailThread is one conversation as the list draws it.
@@ -271,6 +281,12 @@ func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	sort.SliceStable(st.Messages, func(a, b int) bool { return st.Messages[a].ID < st.Messages[b].ID })
 	m.agentMailChanged()
 
+	// What the person wrote is not news to the person. A claim to be the
+	// person is, since something else wrote it.
+	if msg.From == session.AgentInboxHuman && !msg.ClaimedHuman {
+		st.SeenID = max(st.SeenID, msg.ID)
+	}
+
 	// A message the overlay is already showing needs no announcement, and the
 	// view follows it.
 	if m.ShowAgentMail && st.Thread == msg.ThreadID {
@@ -287,22 +303,34 @@ func (m *OS) agentMailChanged() {
 	m.sidebarCache.invalidate()
 }
 
+// mailAlertPolicy resolves the [notifications.mail] policy over the agent
+// one, per call for the reason agentAlertPolicy is.
+func (m *OS) mailAlertPolicy() config.MailAlertPolicy {
+	agent := m.agentAlertPolicy()
+	if m.UserConfig == nil {
+		return config.ResolveMailAlerts(nil, agent)
+	}
+	return config.ResolveMailAlerts(&m.UserConfig.Notifications.Mail, agent)
+}
+
 // considerMailAlert decides whether a message earns an alert. Mail to the
 // person and a notice to the session do: they are the two things an agent can
 // say that are meant for a human to hear. A message between two agents is
-// their business and only counts against the recipient's row on the rail. The
-// person's own reply comes back as a push too, and is not news.
+// their business and only counts against the recipient's row on the rail,
+// unless notifications.mail.between_agents asks for it. The person's own reply
+// comes back as a push too, and is not news.
 func (m *OS) considerMailAlert(msg session.AgentMessage) {
 	if msg.From == session.AgentInboxHuman {
 		return
 	}
+	policy := m.mailAlertPolicy()
 	switch {
 	case msg.Kind == "message" && msg.To == session.AgentInboxHuman:
 	case msg.Kind == "notice":
+	case msg.Kind == "message" && policy.BetweenAgents:
 	default:
 		return
 	}
-	policy := m.agentAlertPolicy()
 	if !policy.Enabled || policy.Quiet(time.Now()) {
 		return
 	}
@@ -355,6 +383,8 @@ func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
 	st.DraftAutomated = false
 	st.Error = ""
 	st.Sending = false
+	st.Picking = false
+	st.ComposeTo = ""
 	return m.agentMailLoad()
 }
 
@@ -408,6 +438,8 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	st.DraftAutomated = false
 	st.Error = ""
 	st.Sending = false
+	st.Picking = false
+	st.ComposeTo = ""
 	st.Thread = thread
 	st.Scroll = agentMailBottom
 	for _, mm := range m.agentMailThreadMessages(thread) {
@@ -427,6 +459,8 @@ func (m *OS) CloseAgentMail() {
 	st.Draft = ""
 	st.DraftAutomated = false
 	st.Error = ""
+	st.Picking = false
+	st.ComposeTo = ""
 }
 
 // resetAgentMail forgets the mirror, on a session switch: the ring is per
@@ -554,6 +588,12 @@ func (m *OS) agentMailThreadMessages(thread uint64) []session.AgentMessage {
 // AgentMailMove moves the list cursor, or scrolls the open thread by lines.
 func (m *OS) AgentMailMove(delta int) {
 	st := &m.AgentMail
+	if st.Picking {
+		if n := len(m.agentMailComposeTargets()); n > 0 {
+			st.PickSelected = m.listStep(st.PickSelected, delta, n)
+		}
+		return
+	}
 	if st.Thread != 0 {
 		st.Scroll = max(st.Scroll+delta, 0)
 		return
@@ -568,6 +608,12 @@ func (m *OS) AgentMailMove(delta int) {
 
 // AgentMailSelect puts the list cursor on row idx.
 func (m *OS) AgentMailSelect(idx int) {
+	if m.AgentMail.Picking {
+		if n := len(m.agentMailComposeTargets()); n > 0 {
+			m.AgentMail.PickSelected = clampInt(idx, 0, n-1)
+		}
+		return
+	}
 	n := len(m.agentMailThreads())
 	if n == 0 {
 		return
@@ -580,6 +626,10 @@ func (m *OS) AgentMailSelect(idx int) {
 // read. It returns nil when there was nothing to open.
 func (m *OS) AgentMailOpenSelected() tea.Cmd {
 	st := &m.AgentMail
+	if st.Picking {
+		m.AgentMailPick()
+		return nil
+	}
 	threads := m.agentMailThreads()
 	if st.Selected < 0 || st.Selected >= len(threads) {
 		return nil
@@ -635,6 +685,10 @@ func agentMailMarkCmd(dial agentMailDial, sessionName string, thread uint64) tea
 // when the list is already showing.
 func (m *OS) AgentMailBack() {
 	st := &m.AgentMail
+	if st.Picking {
+		st.Picking = false
+		return
+	}
 	if st.Thread == 0 {
 		m.CloseAgentMail()
 		return
@@ -703,6 +757,59 @@ func (m *OS) AgentMailCancelReply() {
 	m.AgentMail.Composing = false
 	m.AgentMail.Draft = ""
 	m.AgentMail.DraftAutomated = false
+	m.AgentMail.ComposeTo = ""
+}
+
+// agentMailComposeTargets are the panes a new message can go to: the windows
+// of this session that run an agent, in window order. The mailbox is the
+// session's, so a pane in another session is not an address here.
+func (m *OS) agentMailComposeTargets() []*terminal.Window {
+	var out []*terminal.Window
+	for _, w := range m.Windows {
+		if w != nil && w.AgentState != "" {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// AgentMailStartNew opens the list of agents a new message can go to. It
+// works from the list of threads only, and reports whether the list opened.
+// With no agent in the session it says so and opens nothing.
+func (m *OS) AgentMailStartNew() bool {
+	st := &m.AgentMail
+	if st.Thread != 0 || st.Composing || st.Picking || st.Sending {
+		return false
+	}
+	if !m.IsDaemonSession || m.DaemonClient == nil {
+		return false
+	}
+	if len(m.agentMailComposeTargets()) == 0 {
+		st.Error = "No agent runs in this session. Start an agent in a pane, then write to it."
+		return false
+	}
+	st.Picking = true
+	st.PickSelected = 0
+	st.Error = ""
+	return true
+}
+
+// AgentMailPick chooses the agent under the picker's cursor and opens the
+// message line for it.
+func (m *OS) AgentMailPick() bool {
+	st := &m.AgentMail
+	targets := m.agentMailComposeTargets()
+	if !st.Picking || len(targets) == 0 {
+		return false
+	}
+	w := targets[clampInt(st.PickSelected, 0, len(targets)-1)]
+	st.Picking = false
+	st.ComposeTo = w.ID
+	st.Composing = true
+	st.Draft = ""
+	st.Error = ""
+	st.DraftAutomated = m.ProcessingRemoteKeys
+	return true
 }
 
 // noteDraftTouched marks the draft automated when the key that touched it
@@ -760,7 +867,12 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	if !st.Composing || text == "" || st.Sending {
 		return nil
 	}
-	inbox, replyTo, ok := m.agentMailReplyTarget()
+	// A new message goes to the chosen pane and answers nothing, so the
+	// daemon starts a thread with it.
+	inbox, replyTo, ok := st.ComposeTo, uint64(0), st.ComposeTo != ""
+	if !ok {
+		inbox, replyTo, ok = m.agentMailReplyTarget()
+	}
 	if !ok {
 		return nil
 	}
@@ -798,10 +910,12 @@ func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string
 // agentMailReplyParams is the send-agent-message request a reply makes.
 func agentMailReplyParams(remote bool, sessionName, inbox string, replyTo uint64, text, nonce string) map[string]any {
 	params := map[string]any{
-		"session":  sessionName,
-		"text":     text,
-		"reply_to": replyTo,
-		"from":     session.AgentInboxHuman,
+		"session": sessionName,
+		"text":    text,
+		"from":    session.AgentInboxHuman,
+	}
+	if replyTo != 0 {
+		params["reply_to"] = replyTo
 	}
 	if remote {
 		params["from_host"] = thisMachineName()
@@ -821,12 +935,22 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 	st := &m.AgentMail
 	st.Sending = false
 	if msg.Err != nil {
-		st.Error = "The reply did not send. " + msg.Err.Error()
+		what := "The reply"
+		if st.ComposeTo != "" {
+			what = "The message"
+		}
+		st.Error = what + " did not send. " + msg.Err.Error()
 		return
+	}
+	if st.ComposeTo != "" {
+		// A new message starts the newest thread, which is the top row.
+		st.Selected = 0
+		st.Scroll = 0
 	}
 	st.Composing = false
 	st.Draft = ""
 	st.DraftAutomated = false
+	st.ComposeTo = ""
 }
 
 // AgentMailFocusPane closes the mailbox and focuses the pane that last spoke in

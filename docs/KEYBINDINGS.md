@@ -126,6 +126,12 @@ answers it first: `space answer` on an approval or a question, `r reply` on
 mail and on a finished or errored item, `y resume` on a resume row. It offers `m mailbox` on a mail row, though
 `m` works on every row.
 
+In the mailbox: `j` and `k` move, `enter` opens a thread, `n` writes a new
+message, `esc` closes. `n` opens a list of the agents in this session. Choose
+one with `enter`, type the message, and press `enter` to send it. In an open
+thread, `r` replies, `o` goes to the pane that last wrote, and `esc` goes back
+to the list.
+
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
 approves and does not ask again, `d` denies, `tab` types an answer, `r` reads
 the prompt again, `enter` goes to the pane, `esc` goes back to the list. A
@@ -141,10 +147,12 @@ These keys are in three sections of their own, rebindable like any other:
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
-`mail_page_up`, `mail_open`, `mail_reply`, `mail_focus_pane`, `mail_back`).
+`mail_page_up`, `mail_open`, `mail_reply`, `mail_focus_pane`, `mail_new`,
+`mail_back`).
 The footers name whatever key the config binds. The digits `1` to `9` are not
 bindings: they pick an answer by the number the prompt shows. The selector
-line and the reply and answer lines take text, so every key there is typed.
+line and the reply, message and answer lines take text, so every key there is
+typed.
 
 ```toml
 [keybindings.inbox]
