@@ -1250,6 +1250,9 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// and a pane nothing has named has none.
 		"identity":   string(claim.identity),
 		"confidence": claim.identity.confidence(),
+		// evidence_age_ms is how old the newest evidence behind state is, so
+		// a consumer can tell a fresh answer from a stale one.
+		"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, d.evidenceNow()),
 		// needs_you is the one question a person asks of a pane, answered as a
 		// bool so a consumer does not have to know which states mean it.
 		"needs_you": w.AgentState.NeedsYou(),
@@ -1318,18 +1321,19 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 	}
 
 	out := map[string]any{
-		"type":          "agent_detect",
-		"window_id":     w.ID,
-		"state":         w.AgentState.Name(),
-		"source":        source,
-		"harness_id":    w.AgentHarness,
-		"auto_detected": claim.auto,
-		"identity":      string(claim.identity),
-		"confidence":    claim.identity.confidence(),
-		"needs_you":     w.AgentState.NeedsYou(),
-		"activity":      w.AgentState.Activity(),
-		"running":       false,
-		"matched":       false,
+		"type":            "agent_detect",
+		"window_id":       w.ID,
+		"state":           w.AgentState.Name(),
+		"source":          source,
+		"harness_id":      w.AgentHarness,
+		"auto_detected":   claim.auto,
+		"identity":        string(claim.identity),
+		"confidence":      claim.identity.confidence(),
+		"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, d.evidenceNow()),
+		"needs_you":       w.AgentState.NeedsYou(),
+		"activity":        w.AgentState.Activity(),
+		"running":         false,
+		"matched":         false,
 	}
 	var evidence []string
 	if claim.identity == identityReport && claim.harness != "" {

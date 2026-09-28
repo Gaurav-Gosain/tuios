@@ -367,8 +367,8 @@ a strong verdict, because nothing is added.
 For state, the source says how much to trust it: a `report` or a `transcript`
 is the agent's own account, `osc` is a sequence it emitted, `screen` is a rule
 reading its display, `detect` is the detector assuming `working` from presence,
-and `stall` is a timer. For identity, `get-agent-state` reports `identity` and
-`confidence`:
+and `stall` is a timer. For identity, `get-agent-state`, `list-agents` and
+`explain-agent-detect` report `identity` and `confidence`:
 
 | `identity`  | `confidence` | Meaning                                              |
 | ----------- | ------------ | ---------------------------------------------------- |
@@ -380,6 +380,13 @@ and `stall` is a timer. For identity, `get-agent-state` reports `identity` and
 
 A screen rule never names a harness, and a word inside an argument never counts
 at all, so there is no `weak` tier: evidence that weak creates no claim.
+
+The same three verbs report `evidence_age_ms`: the milliseconds since the last
+evidence about the state arrived. A report, a detector change and the silence
+timer each reset it. A title or screen look that reads back the claim it
+already holds does not, so a spinner left in a title ages like silence. It is
+`null` on a pane nothing has set a state on. Confidence says how the state was
+learned, and the age says how long ago.
 
 ### Attribution outlives a report
 

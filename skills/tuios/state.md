@@ -147,8 +147,10 @@ like an agent's name and was not counted. `explain-agent-screen` shows the
 screen tail as the rules read it and which rule fired or why each did not.
 
 Process detection can never say `needs_input`, and a screen rule is a guess.
-Your own report outranks both, and `confidence` in `get-agent-state` says which
-one named the pane. A file in `~/.config/tuios/harnesses` (or
+Your own report outranks both, and `identity` and `confidence` in
+`get-agent-state` and `list-agents` say which one named the pane.
+`evidence_age_ms` says how many milliseconds ago the last evidence about the
+state arrived. A file in `~/.config/tuios/harnesses` (or
 `$TUIOS_HARNESS_DIR`) with a bundled harness's id replaces that manifest whole;
 `tuios doctor agents` lists the files in force and the ones that failed.
 
@@ -177,8 +179,8 @@ tuios get-agent-state -s work -w build --json
 ```
 
 ```json
-{"activity":"working","confidence":"certain","harness_id":"claude-code","identity":"report",
- "message":"running the test suite","needs_you":false,"source":"report","state":"working",
+{"activity":"working","confidence":"certain","evidence_age_ms":1240,"harness_id":"claude-code",
+ "identity":"report","message":"running the test suite","needs_you":false,"source":"report","state":"working",
  "success":true,"window_id":"739bc078-7522-4a37-bb9b-e5140e918666"}
 ```
 
