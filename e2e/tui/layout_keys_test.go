@@ -67,8 +67,10 @@ func TestNonLatinKeyTypesIntoPane(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ready-$((3+4))", "ready-7", shellTimeout)
 
-	// x, ш as an escape code, ш as text, y. ш is d1 88 in UTF-8.
-	if err := term.SendKeys("printf %s x", tuitest.Key(kittyUkrSha), "шy | od -An -tx1", tuitest.Enter); err != nil {
+	// x, ш as an escape code, ш as text, y. ш is d1 88 in UTF-8. The bytes
+	// are squeezed to single spaces: BSD od on macOS puts two between them,
+	// GNU od one.
+	if err := term.SendKeys("printf %s x", tuitest.Key(kittyUkrSha), "шy | od -An -tx1 | tr -s ' '", tuitest.Enter); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}
 	if err := term.WaitForText("78 d1 88 d1 88 79", shellTimeout); err != nil {
