@@ -595,7 +595,9 @@ type leaderSet struct {
 var leaderCache atomic.Pointer[leaderSet]
 
 // IsLeaderPress reports whether pressed, a key event's string, is the leader
-// key spelled as leader in config.toml. The leader goes through the same
+// key spelled as leader in config.toml. pressed must be in the canonical form a
+// key event has (see CanonicalKey); it is not normalized here, because this
+// runs on every key press. The leader goes through the same
 // normalizer as every binding table, so opt+f12 and option+f12 match the
 // alt+f12 a terminal sends, and on macOS opt+1 also matches the ¡ that Option
 // composes. An empty leader means the default.
@@ -611,11 +613,8 @@ func IsLeaderPress(pressed, leader string) bool {
 		}
 		leaderCache.Store(set)
 	}
-	// A key event is already spelled the canonical way, so the exact string
-	// hits for the leader and a miss costs one map read. The canonical form is
-	// the fallback for a caller that builds the string itself.
-	if set.keys[pressed] {
-		return true
-	}
-	return set.keys[lookupForm(pressed)]
+	// A key event is already spelled the canonical way, so it is compared as
+	// it is and a miss costs one map read with no allocation. A caller that
+	// builds the string itself passes it through CanonicalKey first.
+	return set.keys[pressed]
 }

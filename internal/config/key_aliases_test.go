@@ -95,6 +95,9 @@ func TestLeaderAliasMatchesTheKeyEvent(t *testing.T) {
 		if !config.IsLeaderPress("ctrl+b", "") {
 			t.Error("an empty leader does not mean the default ctrl+b")
 		}
+		if config.IsLeaderPress("b", "B") {
+			t.Error("leader B matches b")
+		}
 	})
 }
 
@@ -188,6 +191,24 @@ func TestDoctorNamesTheLeaderSpellingAndBadKeys(t *testing.T) {
 		}
 		if len(rep.KeyProblems) != 0 {
 			t.Errorf("doctor finds problems in a valid config: %+v", rep.KeyProblems)
+		}
+	})
+	t.Run("linux does not read opt", func(t *testing.T) {
+		// opt+ is valid only on macOS. The doctor and explain must not say
+		// tuios reads it as alt+f12 while also listing it as unreadable.
+		restore := config.ForceMacOSHost(false)
+		defer restore()
+		cfg := config.DefaultConfig()
+		cfg.Keybindings.LeaderKey = "opt+f12"
+		reg := config.NewKeybindRegistry(cfg)
+		if got := reg.Report(config.PaneFacts{}).LeaderReadAs; got != "" {
+			t.Errorf("doctor on Linux reads the leader opt+f12 as %q, want no note", got)
+		}
+		if got := reg.Fate("opt+f12", config.PaneFacts{}).ReadAs; got != "" {
+			t.Errorf("explain opt+f12 on Linux reads as %q, want no note", got)
+		}
+		if got := reg.Fate("cmd+f12", config.PaneFacts{}).ReadAs; got != "super+f12" {
+			t.Errorf("explain cmd+f12 on Linux reads as %q, want super+f12", got)
 		}
 	})
 	t.Run("unreadable", func(t *testing.T) {
