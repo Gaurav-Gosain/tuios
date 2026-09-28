@@ -401,59 +401,55 @@ func sidebarAgentSep() string {
 	return " · "
 }
 
-// sidebarAgentRun draws a run of tokens joined by sep, dropping tokens from
-// the end until the run fits in avail cells, and reports what it took. A run
-// that fits nothing draws nothing. Each token is styled on its own, so a rule
-// on one of them cannot ink its neighbour.
-func (m *OS) sidebarAgentRun(tokens []sidebarAgentToken, sep string, baseFor func(sidebarAgentToken) lipgloss.Style, sepStyle lipgloss.Style, avail int, pal overlay.Palette) (string, int) {
-	for len(tokens) > 0 {
-		w := 0
-		for i, tk := range tokens {
-			if i > 0 {
-				w += lipgloss.Width(sep)
-			}
-			w += lipgloss.Width(tk.Text)
-		}
-		if w <= avail {
-			var b strings.Builder
-			for i, tk := range tokens {
-				if i > 0 {
-					b.WriteString(sepStyle.Render(sep))
-				}
-				b.WriteString(m.sidebarTokenStyle(baseFor(tk), tk, pal).Render(tk.Text))
-			}
-			return b.String(), w
-		}
-		tokens = tokens[:len(tokens)-1]
+// sidebarAgentBudget is what each token of an agent row's identity line
+// costs, in the order the row gives them way, for railRowFit: the prefix, the
+// tokens after the name, then the figure at the right edge and the mail count
+// beside it. A prefix token costs its text and the "/" after it, and is kept
+// only while the whole name fits beside it. A token after the name costs its
+// text and the separator in front of it.
+func sidebarAgentBudget(prefix, after []sidebarAgentToken, label, mail, sep string) []railToken {
+	tokens := make([]railToken, 0, len(prefix)+len(after)+2)
+	for _, tk := range prefix {
+		tokens = append(tokens, railToken{Cost: lipgloss.Width(tk.Text) + 1, Whole: true})
 	}
-	return "", 0
+	for _, tk := range after {
+		tokens = append(tokens, railToken{Cost: lipgloss.Width(sep) + lipgloss.Width(tk.Text)})
+	}
+	return append(tokens,
+		railToken{Cost: sidebarFigureCost(label), Right: true},
+		railToken{Cost: sidebarFigureCost(mail), Right: true})
 }
 
-// sidebarAgentPrefixRun is the prefix in front of the name: the tokens joined
-// with "/" and a trailing "/", giving way from the front, whole tokens at a
-// time, before a cell of the name goes. nameW is the width of the whole name,
-// and a prefix is drawn only when it and the whole name fit in avail together.
-// The name is what a person scans the rail for, so on a narrow rail it reads
-// "deploy-api" rather than "claude/depl...". The session goes first because the
-// row's gutter already carries a tint for a pane that is somewhere else, while
-// nothing else on the row says which agent it is.
-func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, base lipgloss.Style, avail, nameW int, pal overlay.Palette) (string, int) {
-	for len(tokens) > 0 {
-		w := 0
-		for _, tk := range tokens {
-			w += lipgloss.Width(tk.Text) + 1
+// sidebarAgentRun draws the tokens the row's budget kept after the name, each
+// led by sep. See railRowFit. Each token is styled on its own, so a rule on
+// one of them cannot ink its neighbour, and each is drawn whole, so a rule
+// always inks the value the person reads.
+func (m *OS) sidebarAgentRun(tokens []sidebarAgentToken, keep []bool, sep string, baseFor func(sidebarAgentToken) lipgloss.Style, sepStyle lipgloss.Style, pal overlay.Palette) string {
+	var b strings.Builder
+	for i, tk := range tokens {
+		if !keep[i] {
+			continue
 		}
-		if w+nameW <= avail {
-			var b strings.Builder
-			for _, tk := range tokens {
-				b.WriteString(m.sidebarTokenStyle(base, tk, pal).Render(tk.Text))
-				b.WriteString(base.Render("/"))
-			}
-			return b.String(), w
-		}
-		tokens = tokens[1:]
+		b.WriteString(sepStyle.Render(sep))
+		b.WriteString(m.sidebarTokenStyle(baseFor(tk), tk, pal).Render(tk.Text))
 	}
-	return "", 0
+	return b.String()
+}
+
+// sidebarAgentPrefixRun draws the prefix in front of the name: the tokens the
+// row's budget kept, each with the "/" that joins it to what follows. The
+// budget keeps a prefix token only while the whole name fits beside it, so on
+// a narrow rail the row reads "deploy" rather than "claude/depl…".
+func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, keep []bool, base lipgloss.Style, pal overlay.Palette) string {
+	var b strings.Builder
+	for i, tk := range tokens {
+		if !keep[i] {
+			continue
+		}
+		b.WriteString(m.sidebarTokenStyle(base, tk, pal).Render(tk.Text))
+		b.WriteString(base.Render("/"))
+	}
+	return b.String()
 }
 
 // sidebarAgentRowSpec is the spec in force, for callers outside the render.

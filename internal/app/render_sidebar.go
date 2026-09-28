@@ -2334,33 +2334,21 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal, &m.Settings)
 	}
 
-	right, rightW := "", 0
-	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
-		countStr := strconv.Itoa(node.WindowCount)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
-		rightW = lipgloss.Width(countStr)
-	}
-	// A worktree session whose directory has been removed says so in the same
-	// slot, for the same reason: the session still runs and the place it ran
-	// in is not there any more.
-	if node.Worktree != nil && node.Worktree.Gone && variant == sidebarVariantFull {
-		tag := sidebarWorktreeGoneTag
-		if rightW > 0 {
-			tag += " "
-		}
-		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + right
-		rightW += lipgloss.Width(tag)
-	}
-	// The restored tag rides the right slot, dim, and only where there is room
-	// for a word: it says the layout came back without its processes, which is
-	// worth a column or two off the name until someone attaches and it goes.
+	// The right-hand slot, in the order it is drawn. The restored tag says the
+	// layout came back without its processes, which is worth a column or two
+	// off the name until someone attaches and it goes. A worktree session whose
+	// directory has been removed says so in the same slot, for the same reason:
+	// the session still runs and the place it ran in is not there any more. The
+	// window count is last, so it is the figure that survives.
+	var figures [3]string
 	if node.Restored && variant == sidebarVariantFull {
-		tag := sidebarRestoredTag
-		if rightW > 0 {
-			tag += " "
-		}
-		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + right
-		rightW += lipgloss.Width(tag)
+		figures[0] = sidebarRestoredTag
+	}
+	if node.Worktree != nil && node.Worktree.Gone && variant == sidebarVariantFull {
+		figures[1] = sidebarWorktreeGoneTag
+	}
+	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
+		figures[2] = strconv.Itoa(node.WindowCount)
 	}
 
 	// A session name takes the brightest ink the rail has, and keeps it. It is
@@ -2382,7 +2370,6 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	fg := pal.Fg
 	title := printableTitle(node.Title)
 	indent := m.sidebarRowIndent()
-	avail := sidebarNameAvailIn(cw, rightW, indent)
 	// A worktree session is named by its branch under its repository's row,
 	// behind the mark that says whether the group goes on below it. The branch
 	// is the whole label there, so nothing rides after it.
@@ -2392,16 +2379,29 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	}
 	// The branch rides after the name in muted ink, and only when the two fit
 	// together: a name that has to scroll wants every column, and a branch
-	// with its name cut from under it says nothing.
-	branch := ""
-	if b := printableTitle(node.Branch); b != "" && !grouped && variant == sidebarVariantFull {
-		if need := lipgloss.Width(title) + 1 + lipgloss.Width(b); need <= avail {
-			branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
-			avail -= 1 + lipgloss.Width(b)
-		}
+	// with its name cut from under it says nothing. So it is context for the
+	// name in the row's budget, see railRowFit, and the figures on the right
+	// are offered their cells before it.
+	b := ""
+	if !grouped && variant == sidebarVariantFull {
+		b = printableTitle(node.Branch)
 	}
+	tokens := []railToken{{Whole: true}}
+	if b != "" {
+		tokens[0].Cost = 1 + lipgloss.Width(b)
+	}
+	for _, f := range figures {
+		tokens = append(tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
+	}
+	titleW := lipgloss.Width(title)
+	keep, avail := railRowFit(titleW, railNameKeep(titleW), tokens, sidebarNameAvailIn(cw, 0, indent))
+	branch := ""
+	if keep[0] {
+		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
+	}
+	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-		Render(m.sidebarMarquee("s:"+node.ID, title, avail, st.Cursor)) + branch
+		Render(m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)) + branch
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
@@ -2613,17 +2613,6 @@ func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overl
 // keeps before the tokens between the need word and the message give way.
 const sidebarNoteAskFloor = 12
 
-// sidebarAgentNameFloor is the fewest cells of an agent's name a figure on its
-// row may leave it. A name is read by its start, and eight cells is the start of
-// every generated name ("Terminal") and the whole of most chosen ones.
-const sidebarAgentNameFloor = 8
-
-// sidebarAgentNameKeep is the cells a row owes a name: all of a short one, and
-// sidebarAgentNameFloor of a long one plus the cell its ellipsis takes.
-func sidebarAgentNameKeep(name string) int {
-	return min(lipgloss.Width(name), sidebarAgentNameFloor+1)
-}
-
 // sidebarNoteKeepAsk is the note line of a row that needs you, cut so the
 // message keeps room. On every other row the message is the first thing to go,
 // because which agent a row is stays true at any width. On a row that needs
@@ -2674,43 +2663,63 @@ func sidebarNoteKeepLast(tokens []sidebarAgentToken, avail int, last string, dro
 	}
 }
 
-// sidebarAgentNoteText draws the note line's tokens in avail cells. The last
-// token is cut before any earlier one is dropped, so a long message loses its
-// tail while the harness in front of it stays whole; below two cells of it the
-// line is better off spending everything on what comes first.
+// sidebarAgentNoteText draws the note line's tokens in avail cells, on the
+// rail's row budget (see railRowFit). A sentence at the end of the line, the
+// message or what the agent is doing now, is cut before any token in front of
+// it is dropped, so a long message loses its tail while the harness in front
+// of it stays whole; below two cells of it the line is better off spending
+// everything on what comes first. Every other token is a value, and is kept
+// whole or dropped from the end, so a rule on it always inks the value on
+// screen: "ctx 91%" in the warning ink never reads "c…".
 func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Style, avail int, pal overlay.Palette) string {
-	sep := sidebarAgentSep()
-	for len(tokens) > 0 {
-		head := tokens[:len(tokens)-1]
-		last := tokens[len(tokens)-1]
-		headW := 0
-		for i, tk := range head {
-			if i > 0 {
-				headW += lipgloss.Width(sep)
-			}
-			headW += lipgloss.Width(tk.Text)
-		}
-		room := avail - headW
-		if len(head) > 0 {
-			room -= lipgloss.Width(sep)
-		}
-		if room >= 2 || (len(head) == 0 && room >= 1) {
-			var b strings.Builder
-			for i, tk := range head {
-				if i > 0 {
-					b.WriteString(quiet.Render(sep))
-				}
-				b.WriteString(m.sidebarTokenStyle(quiet, tk, pal).Render(tk.Text))
-			}
-			if len(head) > 0 {
-				b.WriteString(quiet.Render(sep))
-			}
-			b.WriteString(m.sidebarTokenStyle(quiet, last, pal).Render(overlay.Truncate(last.Text, room)))
-			return b.String()
-		}
-		tokens = head
+	if len(tokens) == 0 {
+		return ""
 	}
-	return ""
+	sep := sidebarAgentSep()
+	sepW := lipgloss.Width(sep)
+	head, last := tokens, sidebarAgentToken{}
+	if tail := tokens[len(tokens)-1]; sidebarNoteSentence(tail.Name) {
+		head, last = tokens[:len(tokens)-1], tail
+	}
+	// Each token is charged the separator in front of it, and the first one
+	// drawn has none, so the line has that separator's cells to spare. The
+	// tokens give way from the end of the line.
+	budget := make([]railToken, len(head))
+	for i, tk := range head {
+		budget[len(head)-1-i] = railToken{Cost: lipgloss.Width(tk.Text) + sepW}
+	}
+	keep, room := railRowFit(0, 0, budget, avail+sepW)
+	// What is left for the sentence, after the separator in front of it.
+	room -= sepW
+	var b strings.Builder
+	for i, tk := range head {
+		if !keep[len(head)-1-i] {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString(quiet.Render(sep))
+		}
+		b.WriteString(m.sidebarTokenStyle(quiet, tk, pal).Render(tk.Text))
+	}
+	if last.Text != "" && (room >= 2 || (b.Len() == 0 && room >= 1)) {
+		if b.Len() > 0 {
+			b.WriteString(quiet.Render(sep))
+		}
+		b.WriteString(m.sidebarTokenStyle(quiet, last, pal).Render(overlay.Truncate(last.Text, room)))
+	}
+	return b.String()
+}
+
+// sidebarNoteSentence reports the note tokens that are a sentence rather than
+// a value: the pane's message, what the agent is doing now, and the prompt it
+// was given. A sentence can lose its tail and still say something, so it is
+// the one token on the note line that is cut.
+func sidebarNoteSentence(name string) bool {
+	switch name {
+	case "message", "now", "prompt":
+		return true
+	}
+	return false
 }
 
 // sidebarAgentRow renders the identity line of one row of the agents section:
@@ -2753,7 +2762,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// glyph, colour and sort position already say which state it is, while the
 	// duration is the part nothing else carries. A pane waiting twenty minutes
 	// on input reads very differently from one that just asked.
-	label, labelW := plan.Right.Text, lipgloss.Width(plan.Right.Text)
+	label := plan.Right.Text
 	// Messages waiting to be typed to the agent take the elapsed time's
 	// place. See inbox_reply.go.
 	//
@@ -2765,24 +2774,19 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// of the name does, so it never stands between the name and its keep.
 	if e.Queued > 0 {
 		for _, queued := range m.sidebarAgentQueuedFigures(e) {
-			if sidebarNameAvail(cw, lipgloss.Width(queued)) >= sidebarAgentNameKeep(name) {
-				label, labelW = queued, lipgloss.Width(queued)
+			if sidebarNameAvail(cw, lipgloss.Width(queued)) >= railNameKeep(lipgloss.Width(name)) {
+				label = queued
 				break
 			}
 		}
 	}
 	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
 	// thing about an agent that nothing on its screen shows.
-	mail, mailW := "", 0
+	mail := ""
 	if n := m.agentMailUnreadFor(e.WindowID); n > 0 {
 		mail = sidebarMailGlyph() + " " + strconv.Itoa(n)
-		mailW = lipgloss.Width(mail)
-		if labelW > 0 {
-			mailW++ // the gap between the two figures
-		}
 	}
 
-	avail := sidebarNameAvail(cw, labelW+mailW)
 	nameStyle := sidebarStyle(rowBg, fg)
 	timeFg := pal.FgMute
 	if sidebarAttention(e.State) {
@@ -2792,14 +2796,21 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		timeFg = sidebarStateColor(e.State, e.DoneSeen, pal)
 	}
 	quiet := sidebarStyle(rowBg, pal.FgMute)
-	// The tokens after the name give way before the prefix does, and the
-	// prefix before a cell of the name: the name is the answer, the rest is
-	// context, and the state token is the one thing after the name that
-	// carries its own colour. So the prefix is sized against the whole name
-	// first, and the tokens after it get what is left.
+	// One budget for the whole row, see railRowFit. The tokens after the name
+	// and the figures at the right edge survive from the right against the
+	// name's keep, so a long name cannot take the cells of the state beside
+	// it. The prefix is context for the name: it is kept only while the whole
+	// name fits beside it, so the rail reads "deploy" rather than
+	// "claude/depl…". The session gives way before the harness, because the
+	// row's gutter already carries a tint for a pane that is somewhere else,
+	// while nothing else on the row says which agent it is.
+	sep := sidebarAgentSep()
 	nameW := lipgloss.Width(name)
-	shown, shownW := m.sidebarAgentPrefixRun(plan.Prefix, quiet, avail, nameW, pal)
-	after, afterW := "", 0
+	keep, nameRoom := railRowFit(nameW, railNameKeep(nameW), sidebarAgentBudget(plan.Prefix, plan.After, label, mail, sep), sidebarNameAvail(cw, 0))
+	labelAt, mailAt := len(plan.Prefix)+len(plan.After), len(plan.Prefix)+len(plan.After)+1
+	nameRoom = max(nameRoom, 1)
+	shown := m.sidebarAgentPrefixRun(plan.Prefix, keep[:len(plan.Prefix)], quiet, pal)
+	after := ""
 	if len(plan.After) > 0 {
 		baseFor := func(tk sidebarAgentToken) lipgloss.Style {
 			if tk.Name == "state" {
@@ -2807,12 +2818,13 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 			}
 			return quiet
 		}
-		after, afterW = m.sidebarAgentRun(plan.After, sidebarAgentSep(), baseFor, quiet,
-			max(avail-shownW-nameW-lipgloss.Width(sidebarAgentSep()), 0), pal)
-		if after != "" {
-			after = quiet.Render(sidebarAgentSep()) + after
-			afterW += lipgloss.Width(sidebarAgentSep())
-		}
+		after = m.sidebarAgentRun(plan.After, keep[len(plan.Prefix):labelAt], sep, baseFor, quiet, pal)
+	}
+	if !keep[labelAt] {
+		label = ""
+	}
+	if !keep[mailAt] {
+		mail = ""
 	}
 	right := ""
 	if label != "" {
@@ -2841,7 +2853,6 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	if e.Focused && m.GetSidebarWidth() <= sidebarCompactWidth && sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
 		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, m.rowGround(rowBg)), rowBg, pal, &m.Settings)
 	}
-	nameRoom := max(avail-shownW-afterW, 1)
 	body := shown +
 		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
 		after
