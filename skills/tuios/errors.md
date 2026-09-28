@@ -47,7 +47,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `confirm_required` | A write by selector. The hint lists the panes and a token; check them, then call again with `--confirm`. |
 | `protocol_mismatch` | The caller's protocol version is outside what this daemon accepts. Use a matching tuios. |
 | `unknown_host` | No host by that name. Names are matched exactly and never guessed. |
-| `host_unreachable` | The host is not answering. Nothing was queued except mail. `tuios hosts` says why. |
+| `host_unreachable` | The host is not answering: its link is down or does not answer. Nothing was queued except mail. `tuios hosts` says why. |
 | `host_refused` | The link is up and cannot take another connection. Close one. |
 | `unknown_pane` | A pane id on the far machine is gone. Drop it. |
 | `not_worktree`, `worktree_dirty`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |

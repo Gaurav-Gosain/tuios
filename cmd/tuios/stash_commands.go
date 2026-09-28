@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -184,6 +186,57 @@ func runStashPut(sessionName, path string, jsonOutput bool) error {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	return printStashPut(os.Stdout, os.Stderr, raw)
+}
+
+// stashAttachments turns the --attach paths of a message to another machine
+// into paths that machine can open. Each path that names a file here is put
+// in the far session's stash, exactly as `tuios stash put -s host:session`
+// would put it, and the stored path takes its place. A path that names
+// nothing here is passed on as it is: it is already a path on the far side,
+// most often one a stash put there printed, and the far daemon decides
+// whether it may be attached.
+//
+// Only the paths the caller named are read, one file each. The 8 MB cap is
+// readForTransfer's, checked before a byte is sent, and the far daemon still
+// applies its link policy to every stash-put, so a link that may not use the
+// stash refuses the message before it is sent.
+func stashAttachments(t *verbTarget, paths []string) ([]string, error) {
+	return stashAttachmentsWith(paths, func(params map[string]any) (json.RawMessage, error) {
+		raw, err := t.client.Call("stash-put", t.params(params))
+		if err != nil {
+			return nil, t.explain("stash-put", err)
+		}
+		return raw, nil
+	})
+}
+
+// stashAttachmentsWith is stashAttachments with the stash-put call passed
+// in, so the choice of which paths to send is testable without a daemon.
+func stashAttachmentsWith(paths []string, put func(map[string]any) (json.RawMessage, error)) ([]string, error) {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			out = append(out, path)
+			continue
+		}
+		content, err := readForTransfer(path)
+		if err != nil {
+			return nil, err
+		}
+		abs, _ := filepath.Abs(path)
+		raw, err := put(map[string]any{"path": thisMachine() + ":" + abs, "content": content})
+		if err != nil {
+			return nil, err
+		}
+		var res struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil || res.Path == "" {
+			return nil, fmt.Errorf("the stash put for %s returned no stored path", path)
+		}
+		out = append(out, res.Path)
+	}
+	return out, nil
 }
 
 // readForTransfer reads a file here for a put on another machine, refusing one

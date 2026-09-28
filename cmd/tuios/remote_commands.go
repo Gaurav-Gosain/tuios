@@ -575,7 +575,11 @@ func runSendText(sessionName, windowTarget, text string) error {
 // runCapturePane captures the content of a pane and prints to stdout. lines
 // keeps only the last N lines when positive, which is what bounds a capture of a
 // long scrollback to something a caller can actually read.
-func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int, lastCommand bool) error {
+//
+// A capture from another machine is fenced as untrusted content, like mail,
+// because it is text a program there wrote. Control characters are removed
+// from it unless the caller asked for escape codes with --ansi or --resolved.
+func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int, lastCommand, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
@@ -598,16 +602,39 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved
 	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
 	if err != nil {
-		return t.explain("capture-pane", err)
+		return reportVerbError(t.explain("capture-pane", err), jsonOutput)
 	}
+	if jsonOutput {
+		return printVerbResultOn(t, raw, jsonOutput)
+	}
+	return printCapture(os.Stdout, raw, t.host, t.window, ansi || resolved)
+}
 
+// printCapture writes a capture-pane result. A capture from this machine is
+// the content as it is. A capture from host is fenced, and control
+// characters are removed unless keepEscapes says the caller asked for them.
+func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEscapes bool) error {
 	var res struct {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Print(res.Content)
+	if host == "" {
+		fmt.Fprint(w, res.Content)
+		return nil
+	}
+	who := "the focused pane on " + plainLine(host)
+	if window != "" {
+		who = "pane " + plainLine(window) + " on " + plainLine(host)
+	}
+	content := res.Content
+	if !keepEscapes {
+		content = plainText(content)
+	}
+	fmt.Fprintf(w, untrustedOpen+"\n", who)
+	fmt.Fprintln(w, strings.TrimRight(content, "\n"))
+	fmt.Fprintln(w, untrustedClose)
 	return nil
 }
 
@@ -1443,15 +1470,15 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		if res.ExitCode != nil {
 			status = fmt.Sprintf("exit %d", *res.ExitCode)
 		}
-		fmt.Printf("%s matched on %s%s: %s, %s\n", res.Condition, res.Window, t.on(), status, plainLine(res.Cmdline))
+		fmt.Printf("%s matched on %s%s: %s, %s\n", res.Condition, plainLine(res.Window), t.on(), status, plainLine(res.Cmdline))
 		return nil
 	}
 	if res.Window != "" && anySession && res.Session != "" {
-		fmt.Printf("%s matched on %s in session %s%s\n", res.Condition, res.Window, res.Session, t.on())
+		fmt.Printf("%s matched on %s in session %s%s\n", res.Condition, plainLine(res.Window), plainLine(res.Session), t.on())
 		return nil
 	}
 	if res.Window != "" {
-		fmt.Printf("%s matched on %s%s\n", res.Condition, res.Window, t.on())
+		fmt.Printf("%s matched on %s%s\n", res.Condition, plainLine(res.Window), t.on())
 		return nil
 	}
 	fmt.Printf("%s matched%s\n", res.Condition, t.on())
