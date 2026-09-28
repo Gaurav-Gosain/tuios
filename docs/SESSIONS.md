@@ -119,6 +119,13 @@ to the highlighted session, `Ctrl+D` to delete one (with a confirmation prompt,
 and never the session you are currently on). If your query matches no existing
 session, `Enter` creates a session with that name and switches to it.
 
+With remote hosts in `[hosts]`, the switcher also lists the sessions on your
+other machines. A remote session shows as `name @ host`, and the filter
+matches that text. `Enter` switches to it, and back again, in either
+direction. The rail, the palette and session cycling switch across machines
+the same way. Rename and delete work only on sessions on the machine you are
+on.
+
 Switching is not the same as detaching and reattaching: the client tears down
 its view of the current session and builds a view of the target, in place. The
 session you left keeps running.

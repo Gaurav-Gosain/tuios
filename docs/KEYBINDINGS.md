@@ -4,6 +4,11 @@ The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindi
 
 Every binding lives in one of the 23 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
+To send the leader to the program in the pane, press it two times in terminal
+mode. The pane gets the leader that `leader_key` names, such as `ctrl+a`,
+encoded as the pane expects: CSI u for a pane using the Kitty keyboard
+protocol, legacy bytes otherwise. A leader with no legacy encoding is dropped.
+
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
 ## Modifier spellings
@@ -326,6 +331,22 @@ reset the terminal, run this command or close the tab:
 ```sh
 printf '\033[=0;1u'
 ```
+
+## Keys sent to a pane
+
+In terminal mode, tuios sends these keys to the program in the pane:
+
+- The keypad keys, with Num Lock on or off. Keypad `Enter` sends Enter.
+- `Begin`, the centre key of the keypad with Num Lock off.
+- F13 and higher. A program on the legacy encoding gets them in the form
+  xterm sends.
+- `Insert`, `Delete`, `PageUp` and `PageDown` with their modifiers.
+  `ctrl+Delete` stays `ctrl+Delete`.
+
+A program on the Kitty keyboard protocol gets each key with the number the
+protocol gives it. A key the protocol has no number for goes in its legacy
+form. Caps Lock, Num Lock and a modifier key pressed alone reach that program
+only when it asks for every key.
 
 ## macOS
 
