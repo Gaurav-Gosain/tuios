@@ -30,17 +30,24 @@ import (
 // that says what it broke and a why line.
 const vtgenReproDir = "testdata/vtgen-repros"
 
+// budgetPasses is how many passes of the oracles a script with a time budget
+// gets before the budget fails it. Only a pass over the budget is repeated.
+const budgetPasses = 3
+
 // vtgenRepro is one pinned script.
 type vtgenRepro struct {
 	// Why says what the script broke and which commit fixed it.
 	Why string `json:"why"`
 	// SplitSeed is the seed the split-write oracles cut the bytes with.
 	SplitSeed uint64 `json:"split_seed"`
-	// BudgetMS, when set, is how long all the oracles together may take. It
-	// pins a performance fix, so it is set well above the fixed time and well
-	// below the time the bug took. The race detector multiplies the time by
-	// more than any margin a budget can keep, so an instrumented build skips
-	// it and relies on BudgetAllocMB.
+	// BudgetMS, when set, is how long one pass of all the oracles may take.
+	// It is a coarse catch for a blowup the allocation budget cannot see, so
+	// it is set hundreds of times above the fixed time and well below the time
+	// the bug took. A busy runner can stall one pass for longer than that, so
+	// a pass over the budget is timed again, and the check fails only when
+	// the fastest of budgetPasses passes is over. The race detector multiplies
+	// the time by more than any margin a budget can keep, so an instrumented
+	// build skips it and relies on BudgetAllocMB.
 	BudgetMS int `json:"budget_ms,omitempty"`
 	// BudgetAllocMB, when set, is how many megabytes all the oracles together
 	// may allocate. Unlike the time it does not move with the machine, its
@@ -83,11 +90,7 @@ func TestVTGenRepros(t *testing.T) {
 			if len(r.Script) == 0 || r.Why == "" {
 				t.Fatalf("%s: a pinned script needs steps and a why", f)
 			}
-			var before, after runtime.MemStats
-			runtime.GC()
-			runtime.ReadMemStats(&before)
-			start := time.Now()
-			for _, o := range []struct {
+			oracles := []struct {
 				name string
 				run  func() string
 			}{
@@ -95,18 +98,36 @@ func TestVTGenRepros(t *testing.T) {
 				{"invariants, split", func() string { return replaySplit(r.Script, r.SplitSeed) }},
 				{"split equivalence", func() string { return splitEquivalence(r.Script, r.SplitSeed) }},
 				{"render round trip", func() string { return renderRoundTrip(r.Script) }},
-			} {
+			}
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			start := time.Now()
+			for _, o := range oracles {
 				if broken := o.run(); broken != "" {
 					t.Errorf("%s (%s): %s\n\n%s", o.name, r.Why, broken, r.Script)
 				}
 			}
 			took := time.Since(start)
 			runtime.ReadMemStats(&after)
-			if r.BudgetMS > 0 && !raceEnabled && took > time.Duration(r.BudgetMS)*time.Millisecond {
-				t.Errorf("the oracles took %s, over the %dms budget (%s)", took, r.BudgetMS, r.Why)
-			}
 			if mb := (after.TotalAlloc - before.TotalAlloc) >> 20; r.BudgetAllocMB > 0 && mb > r.BudgetAllocMB {
 				t.Errorf("the oracles allocated %d MB, over the %d MB budget (%s)", mb, r.BudgetAllocMB, r.Why)
+			}
+			if r.BudgetMS > 0 && !raceEnabled {
+				budget := time.Duration(r.BudgetMS) * time.Millisecond
+				passes := 1
+				// Load stalls one pass, not every pass: time it again and keep
+				// the fastest, so only a real blowup stays over the budget.
+				for ; passes < budgetPasses && took > budget; passes++ {
+					start := time.Now()
+					for _, o := range oracles {
+						o.run()
+					}
+					took = min(took, time.Since(start))
+				}
+				if took > budget {
+					t.Errorf("the fastest of %d passes of the oracles took %s, over the %dms budget (%s)", passes, took, r.BudgetMS, r.Why)
+				}
 			}
 		})
 	}
