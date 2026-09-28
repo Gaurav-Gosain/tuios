@@ -534,11 +534,12 @@ For a script or an agent, `tuios hosts tailnet --json` gives every machine with
 Copying is the one gesture in a terminal with no result to look at: the text
 does not change, and the selection usually disappears. So a copy sweeps a band
 of light across the cells that were taken, once, and then it is gone.
+Set `appearance.motion` to `none` to turn the sweep off.
 
 ```toml
 [appearance.selection]
 flash = true
-flash_ms = 550
+flash_ms = 420
 flash_color = "#FFF3C4"
 # diagonal, diagonal-reverse, horizontal, vertical
 flash_style = "diagonal"

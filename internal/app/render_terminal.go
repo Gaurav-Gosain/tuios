@@ -342,20 +342,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return rendered
 	}
 
-	// Fast path for scrollback mode: content is static at a given scroll
-	// position, so reuse the cache if the offset hasn't changed.
-	//
-	// Keyed on the dim like the check at the top, and for a sharper reason:
-	// this one is only reached once that check has already failed, so with an
-	// unkeyed test it fired exactly on the mismatch the key exists to catch.
-	if window.ScrollbackOffset > 0 && cacheUsable && !window.ContentDirty && !flashing {
-		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
-		if renderTraceEnabled {
-			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
-		}
-		return window.CachedContent
-	}
-
 	cursor := screen.CursorPosition()
 	cursorX := cursor.X
 	cursorY := cursor.Y
@@ -501,37 +487,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	// The band of light crossing text that was just copied, if there is one.
-	//
-	// Its region is built exactly the way the visual selection's is, from the
-	// same absolute coordinates, because it is the same region: the sweep
-	// covers the cells that were taken. It outlives the selection, which a
-	// copy usually clears, which is why the coordinates were written down at
-	// the copy rather than read from the pane now.
-	var (
-		flashGrid *pool.HighlightGrid
-		flashBand copyFlashBand
-	)
-	if progress, ok := m.copyFlashProgress(window.ID); ok && m.copyFlash != nil {
-		flashGrid = pool.GetHighlightGrid()
-		flashGrid.Init(maxY, maxX)
+	// See copyFlashGrid.
+	flashGrid, flashBand := m.copyFlashGrid(window, screen, scrollbackLen, maxY, maxX)
+	if flashGrid != nil {
 		defer pool.PutHighlightGrid(flashGrid)
-		// Clamped to where the text ends on each row, before the block is
-		// measured. The band is sized to the block, so a block measured over
-		// whole rows sent the light across the empty right half of the pane:
-		// on a selection of many short lines it was over the text for the
-		// first few frames and then crossed nothing.
-		textEnd := func(y int) int {
-			return paneRowTextEnd(window, screen, y, maxX, scrollbackLen)
-		}
-		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
-			scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
-		if box, ok := copyFlashBoxOf(flashGrid, maxY, maxX); ok {
-			flashBand = m.copyFlashBandFor(progress, box)
-		} else {
-			// The copied region has scrolled out of view, so there is nothing
-			// to light.
-			flashGrid = nil
-		}
 	}
 
 	// The dim and the ground it carries toward, resolved once for the pane
