@@ -20,6 +20,9 @@ func integrationTargets(env integration.Env, args []string, all, onlyPresent boo
 		if len(args) > 0 {
 			return nil, errors.New("pass harness names or --all, not both")
 		}
+		if onlyPresent && env.Getenv != nil && strings.TrimSpace(env.Getenv("PI_CODING_AGENT_DIR")) != "" {
+			return nil, errors.New("PI_CODING_AGENT_DIR points Pi and omp at the same agent directory; install the intended harness explicitly instead of --all")
+		}
 		var out []*integration.Target
 		for _, t := range integration.Targets() {
 			if onlyPresent {
@@ -61,11 +64,11 @@ Claude Code, Gemini CLI, Qwen Code, Qoder CLI, Droid and Devin CLI's
 settings, Codex's hooks.json, Crush's crush.json, Cursor's hooks.json,
 a named block in Antigravity CLI's hooks.json, [[hooks]] tables in Kimi
 Code CLI's config.toml, a hook file of tuios's own in GitHub Copilot CLI and
-Grok CLI's hooks directories, and a plugin for opencode, Kilo, Amp, Pi and
-Hermes Agent (which is also turned on in its config.yaml).
+Grok CLI's hooks directories, and a plugin for opencode, Kilo, Amp, Pi,
+oh-my-pi and Hermes Agent (which is also turned on in its config.yaml).
 
 Claude Code, Codex, GitHub Copilot CLI, Cursor Agent, Gemini CLI, opencode,
-Kilo, Amp, Kimi, Pi and Qwen Code report the pane's state. The rest report
+Kilo, Amp, Kimi, Pi, oh-my-pi and Qwen Code report the pane's state. The rest report
 only the conversation id, so a pane can be resumed, and leave the state to the
 pane's screen rules: their hooks miss events a state needs, and a state from a
 hook outranks every screen rule.
@@ -92,6 +95,10 @@ func newIntegrationInstallCommand() *cobra.Command {
 		Use:   "install [harness...]",
 		Short: "Write tuios's hook entries into a harness's configuration",
 		Long: `Write tuios's hook entries into a harness's configuration.
+
+Pi and omp both read PI_CODING_AGENT_DIR. When it is set, --all refuses to
+install either extension implicitly; name the intended harness explicitly.
+Installing one into a directory identified as the other's also refuses.
 
 With --mcp, also register tuios mcp as an MCP server named tuios, for the
 harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.

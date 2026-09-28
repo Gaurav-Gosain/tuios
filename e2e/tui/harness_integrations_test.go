@@ -381,6 +381,11 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 	case "pi":
 		mustMkdir(filepath.Join(home, ".pi", "agent"))
 		file = filepath.Join(home, ".pi", "agent", "extensions", "tuios-agent-state.ts")
+	case "omp":
+		dir := filepath.Join(home, ".omp", "agent")
+		env[1] = "PI_CODING_AGENT_DIR=" + dir
+		mustMkdir(dir)
+		file = filepath.Join(dir, "extensions", "tuios-omp-agent-state.ts")
 	case "amp":
 		mustMkdir(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "amp"))
 		file = filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "amp", "plugins", "tuios-agent-state.ts")
@@ -469,68 +474,103 @@ func (d *pluginDriver) emit(t *testing.T, event map[string]any) {
 	}
 }
 
-// TestPluginsReportBlockingPrompts loads the real Pi, Amp and opencode
+// TestPluginsReportBlockingPrompts loads the real Pi, OMP, Amp and opencode
 // plugins under node, each against a stand-in for its harness's plugin API,
 // and plays the events the harness emits around a prompt that waits on the
-// person: Pi's ui_prompt_start and ui_prompt_end, Amp's ask_user_choice tool
-// call and result, and the end of an opencode turn announced only by
-// session.status idle. The pane goes to needs_input with the prompt's text,
-// back to working when it is answered, and to done at the end of the turn.
+// person. The pane goes to needs_input with the prompt's text, back to
+// working when it is answered, and to done at the end of the turn.
 //
-// Negative controls: with the ui_prompt_start handler taken out of the Pi
-// extension, or the tool.call handler out of the Amp plugin, the pane never
-// leaves working and the needs_input wait fails. With the session.status idle
-// case taken out of translateOpenCode, the opencode turn never reads done.
+// Negative controls: without Pi's ui_prompt_start or Amp's tool.call handler,
+// the pane never leaves working; without translateOpenCode's session.status
+// idle case, opencode never reaches done. OMP ignores continuing turns,
+// subagent events, and print-mode events instead of changing the main pane.
 func TestPluginsReportBlockingPrompts(t *testing.T) {
 	term, base := agentSessions(t)
 	type step struct {
-		name  string
-		event map[string]any
-		state string
+		name      string
+		event     map[string]any
+		state     string
+		unchanged bool
 	}
 	cases := []struct {
 		harness string
 		steps   []step
 	}{
 		{"pi", []step{
-			{"session_start", map[string]any{"type": "session_start", "idle": true}, "idle"},
-			{"agent_start", map[string]any{"type": "agent_start", "idle": false}, "working"},
-			{"ui_prompt_start confirm", map[string]any{"type": "ui_prompt_start", "idle": false, "event": map[string]any{"reason": "ui_prompt", "kind": "confirm", "title": "Allow rm -rf build?"}}, "needs_input"},
-			{"ui_prompt_end", map[string]any{"type": "ui_prompt_end", "idle": false, "event": map[string]any{"reason": "ui_prompt", "kind": "confirm"}}, "working"},
-			{"agent_settled", map[string]any{"type": "agent_settled", "idle": true}, "done"},
+			{"session_start", map[string]any{"type": "session_start", "idle": true}, "idle", false},
+			{"agent_start", map[string]any{"type": "agent_start", "idle": false}, "working", false},
+			{"ui_prompt_start confirm", map[string]any{"type": "ui_prompt_start", "idle": false, "event": map[string]any{"reason": "ui_prompt", "kind": "confirm", "title": "Allow rm -rf build?"}}, "needs_input", false},
+			{"ui_prompt_end", map[string]any{"type": "ui_prompt_end", "idle": false, "event": map[string]any{"reason": "ui_prompt", "kind": "confirm"}}, "working", false},
+			{"agent_settled", map[string]any{"type": "agent_settled", "idle": true}, "done", false},
+		}},
+		{"omp", []step{
+			{"session_start", map[string]any{"type": "session_start", "idle": true}, "idle", false},
+			{"agent_start", map[string]any{"type": "agent_start", "idle": false}, "working", false},
+			{"agent_end continuing", map[string]any{"type": "agent_end", "event": map[string]any{"willContinue": true}}, "working", true},
+			{"subagent agent_end", map[string]any{"type": "agent_end", "agentKind": "subagent"}, "working", true},
+			{"print agent_end", map[string]any{"type": "agent_end", "mode": "print"}, "working", true},
+			{"tool_approval_requested", map[string]any{"type": "tool_approval_requested", "event": map[string]any{"toolName": "exec", "reason": "Allow build?"}}, "needs_input", false},
+			{"tool_approval_resolved", map[string]any{"type": "tool_approval_resolved"}, "working", false},
+			{"agent_end", map[string]any{"type": "agent_end", "event": map[string]any{"willContinue": false}}, "done", false},
 		}},
 		{"amp", []step{
-			{"session.start", map[string]any{"type": "session.start", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}}}, ""},
-			{"agent.start", map[string]any{"type": "agent.start", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}}}, "working"},
-			{"tool.call ask_user_choice", map[string]any{"type": "tool.call", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "toolUseID": "toolu_1", "tool": "ask_user_choice", "input": map[string]any{"question": "Which approach?", "options": []string{"a", "b"}}}}, "needs_input"},
-			{"tool.result ask_user_choice", map[string]any{"type": "tool.result", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "toolUseID": "toolu_1", "tool": "ask_user_choice", "status": "done"}}, "working"},
-			{"agent.end done", map[string]any{"type": "agent.end", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "status": "done"}}, "done"},
+			{"session.start", map[string]any{"type": "session.start", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}}}, "", false},
+			{"agent.start", map[string]any{"type": "agent.start", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}}}, "working", false},
+			{"tool.call ask_user_choice", map[string]any{"type": "tool.call", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "toolUseID": "toolu_1", "tool": "ask_user_choice", "input": map[string]any{"question": "Which approach?", "options": []string{"a", "b"}}}}, "needs_input", false},
+			{"tool.result ask_user_choice", map[string]any{"type": "tool.result", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "toolUseID": "toolu_1", "tool": "ask_user_choice", "status": "done"}}, "working", false},
+			{"agent.end done", map[string]any{"type": "agent.end", "event": map[string]any{"thread": map[string]any{"id": "T-e2e"}, "status": "done"}}, "done", false},
 		}},
 		{"opencode", []step{
-			{"session.created", map[string]any{"type": "event", "event": map[string]any{"type": "session.created", "properties": map[string]any{"info": map[string]any{"id": "ses_e2e"}}}}, "idle"},
-			{"session.status busy", map[string]any{"type": "event", "event": map[string]any{"type": "session.status", "properties": map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "busy"}}}}, "working"},
-			{"session.status idle", map[string]any{"type": "event", "event": map[string]any{"type": "session.status", "properties": map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "idle"}}}}, "done"},
+			{"session.created", map[string]any{"type": "event", "event": map[string]any{"type": "session.created", "properties": map[string]any{"info": map[string]any{"id": "ses_e2e"}}}}, "idle", false},
+			{"session.status busy", map[string]any{"type": "event", "event": map[string]any{"type": "session.status", "properties": map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "busy"}}}}, "working", false},
+			{"session.status idle", map[string]any{"type": "event", "event": map[string]any{"type": "session.status", "properties": map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "idle"}}}}, "done", false},
 		}},
 	}
 	for _, tc := range cases {
-		log := &stateLog{name: "plugin-prompts-" + tc.harness}
-		if out, err := tuiosCLI(t, base, "new-window", tc.harness, "-s", "e2e-agent", "--no-focus"); err != nil {
-			t.Fatalf("new-window: %v\n%s", err, out)
-		}
-		win := windowID(t, base, "e2e-agent", tc.harness)
-		d := startPlugin(t, base, tc.harness, "e2e-agent", win)
-		for _, s := range tc.steps {
-			d.emit(t, s.event)
-			if s.state == "" {
-				time.Sleep(300 * time.Millisecond)
-				continue
+		t.Run(tc.harness, func(t *testing.T) {
+			log := &stateLog{name: "plugin-prompts-" + tc.harness}
+			if out, err := tuiosCLI(t, base, "new-window", tc.harness, "-s", "e2e-agent", "--no-focus"); err != nil {
+				t.Fatalf("new-window: %v\n%s", err, out)
 			}
-			st := waitAgentState(t, base, "e2e-agent", win, s.state, tc.harness, log, tc.harness+" "+s.name)
-			if s.state == "needs_input" && st.Message == "" {
-				t.Fatalf("%s: the pane blocked with no message", tc.harness)
+			win := windowID(t, base, "e2e-agent", tc.harness)
+			d := startPlugin(t, base, tc.harness, "e2e-agent", win)
+			if tc.harness == "omp" {
+				dir := filepath.Join(base, "plugin-home-omp", ".omp", "agent")
+				env := []string{"HOME=" + filepath.Join(base, "plugin-home-omp"), "PI_CODING_AGENT_DIR=" + dir}
+				for _, args := range [][]string{{"integration", "install", "pi"}, {"integration", "install", "--all"}} {
+					out, err := tuiosCLIEnv(t, base, env, args...)
+					if err == nil || !strings.Contains(out, "agent directory") {
+						t.Fatalf("%v should refuse competing Pi extension in OMP directory: %v\n%s", args, err, out)
+					}
+					if _, err := os.Stat(filepath.Join(dir, "extensions", "tuios-agent-state.ts")); !os.IsNotExist(err) {
+						t.Fatalf("%v left a Pi extension in OMP's agent directory: %v", args, err)
+					}
+				}
 			}
-		}
-		log.save(t)
+			for _, s := range tc.steps {
+				d.emit(t, s.event)
+				if s.state == "" {
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+				if s.unchanged {
+					time.Sleep(300 * time.Millisecond)
+				}
+				st := waitAgentState(t, base, "e2e-agent", win, s.state, tc.harness, log, tc.harness+" "+s.name)
+				if s.state == "needs_input" && st.Message == "" {
+					t.Fatalf("%s: the pane blocked with no message", tc.harness)
+				}
+				if tc.harness == "omp" {
+					if st.AgentSession != "omp-e2e" {
+						t.Fatalf("%s: got session %q, want omp-e2e", s.name, st.AgentSession)
+					}
+					if s.state == "needs_input" && st.Message != "Allow build?" {
+						t.Fatalf("%s: got approval message %q", s.name, st.Message)
+					}
+				}
+			}
+			log.save(t)
+		})
 	}
 	saveFrame(t, term, "plugin-prompts-done")
 	alive(t, term, "after the plugins' prompts")

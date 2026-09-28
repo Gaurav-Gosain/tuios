@@ -85,7 +85,7 @@ This is what the hooks tuios integration install writes run. The harness
 hands its hook payload on stdin (or, for the Codex notify command, as the last
 argument). The event comes from the payload, or from the event argument when
 the payload does not name it. Supported harnesses: claude-code, codex,
-copilot, cursor-agent, gemini-cli, opencode, amp, kilo, kimi, pi and qwen,
+copilot, cursor-agent, gemini-cli, opencode, amp, kilo, kimi, omp, pi and qwen,
 which report the pane's state; and antigravity, crush, devin, droid, grok,
 hermes and qoder, which report only the conversation id (set-agent-session)
 and leave the state to the pane's screen rules.

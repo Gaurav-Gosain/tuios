@@ -36,6 +36,7 @@ const (
 	Kilo        = "kilo"
 	Kimi        = "kimi"
 	Pi          = "pi"
+	OMP         = "omp"
 	Qoder       = "qoder"
 	Qwen        = "qwen"
 )
@@ -74,6 +75,8 @@ var harnessAliases = map[string]string{
 	"kimi-cli":        Kimi,
 	"kimi-code":       Kimi,
 	"pi":              Pi,
+	"omp":             OMP,
+	"oh-my-pi":        OMP,
 	"qoder":           Qoder,
 	"qodercli":        Qoder,
 	"qwen":            Qwen,
@@ -92,7 +95,7 @@ func HarnessIDs() []string {
 	return []string{
 		ClaudeCode, Codex, GeminiCLI, OpenCode,
 		Amp, Antigravity, Copilot, Crush, CursorAgent, Devin, Droid, Grok,
-		Hermes, Kilo, Kimi, Pi, Qoder, Qwen,
+		Hermes, Kilo, Kimi, OMP, Pi, Qoder, Qwen,
 	}
 }
 
@@ -103,7 +106,7 @@ func HarnessIDs() []string {
 var ManifestIDs = []string{
 	"aider", "amp", "antigravity", "claude-code", "cline", "codex", "copilot",
 	"crush", "cursor-agent", "devin", "droid", "gemini-cli", "goose", "grok",
-	"hermes", "kilo", "kimi", "kiro", "maki", "opencode", "pi", "qoder", "qwen",
+	"hermes", "kilo", "kimi", "kiro", "maki", "omp", "opencode", "pi", "qoder", "qwen",
 }
 
 // hintOwner resolves a TUIOS_AGENT value to a harness id: an alias this
@@ -262,6 +265,8 @@ func Translate(harnessName string, in Input) Decision {
 		return translateKimi(in, p)
 	case Pi:
 		return translatePi(in, p)
+	case OMP:
+		return translateOMP(in, p)
 	case Qwen:
 		return translateQwen(in, p)
 	case Copilot:
