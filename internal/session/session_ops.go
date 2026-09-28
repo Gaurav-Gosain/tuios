@@ -352,6 +352,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		// to work in later does not pull the user out of what they are doing.
 		state.WorkspaceFocus[workspace] = windowID
 		if opts.Focus {
+			s.markFocusIntentLocked()
 			state.FocusedWindowID = windowID
 			state.CurrentWorkspace = workspace
 		}
@@ -418,6 +419,7 @@ func (s *Session) FocusDaemonWindow(target string) error {
 			return err
 		}
 		win := state.Windows[idx]
+		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
 		state.CurrentWorkspace = win.Workspace
 		if state.WorkspaceFocus == nil {
@@ -458,6 +460,7 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 		}
 		next := ((current+step)%len(order) + len(order)) % len(order)
 		win := state.Windows[order[next]]
+		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
 		if state.WorkspaceFocus == nil {
 			state.WorkspaceFocus = make(map[int]string)
@@ -564,6 +567,7 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		if ws < 1 || ws > state.workspaceBound() {
 			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
+		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws
 		if state.WorkspaceFocus != nil {
 			if focus, ok := state.WorkspaceFocus[ws]; ok {

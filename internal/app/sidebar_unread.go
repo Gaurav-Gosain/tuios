@@ -105,19 +105,27 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 // only as CompletionSeq moving. Without this the seen bit from the first done
 // survived, and the second finish never read as unread. The caller has already
 // adopted the new CompletionSeq.
+//
+// It does what noteAgentState does for a working-to-rest transition: the
+// unread bit is set again, a turn under the user's own eyes is seen, and the
+// alert policy hears of the finish.
 func (m *OS) noteAgentTurnWithin(w *terminal.Window) {
 	if w == nil {
 		return
 	}
+	m.noteAgentsSeen()
 	if m.GetFocusedWindow() == w {
 		// Finished under the user's own eyes, as in noteAgentState.
+		if w.AgentState == "done" {
+			m.markAgentSeen(w.ID)
+		}
 		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
-		return
-	}
-	if w.AgentState == "done" && m.SidebarAgentSeen[w.ID] {
+	} else if m.SidebarAgentSeen[w.ID] {
+		// The pane left done and came back, which clears the bit.
 		delete(m.SidebarAgentSeen, w.ID)
 		m.saveSidebarState()
 	}
+	m.considerAgentAlert(w, "working", w.AgentState)
 }
 
 // markFocusedAgentSeen clears the unread bit of the window being focused, which

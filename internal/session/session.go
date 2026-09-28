@@ -930,9 +930,19 @@ type Session struct {
 	// predates its own push until it next pushed.
 	pushSeen map[string]uint64
 	// focusMovedVersion is the Version of the last daemon mutation that moved
-	// the focus or the workspace, guarded by stateMu. A stale push built at or
-	// after it keeps its own focus. See keepClientFocus.
+	// the focus or the workspace, or that a focus verb made, guarded by
+	// stateMu. A stale push built at or after it keeps its own focus. See
+	// keepClientFocus.
 	focusMovedVersion int
+	// clientFocusMoved is, by push origin, the Version at which that client's
+	// last push moved the focus, guarded by stateMu. A push never advances
+	// Version, so a move by one client is invisible to focusMovedVersion, and a
+	// stale push from another client built at that version may predate it.
+	clientFocusMoved map[string]int
+	// focusIntent is set by a focus verb inside mutateState, so the mutation
+	// counts as a focus move even when the focus it names is the one already
+	// held: the verb is a later intent than any push in flight.
+	focusIntent bool
 
 	// stateDirty is set by every change to the session's structure and consumed
 	// by the resurrection saver, which is how a new window reaches disk in a
@@ -2058,6 +2068,7 @@ func (s *Session) ForgetPush(origin string) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	delete(s.pushSeen, origin)
+	delete(s.clientFocusMoved, origin)
 }
 
 // UpdateStateFrom is UpdateState for a push from a client that may or may not
@@ -2069,7 +2080,9 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	defer s.stateMu.Unlock()
 
 	// The push's name has been recorded by NotePush, and the table it goes into
-	// lives beside the state, not in it.
+	// lives beside the state, not in it. The origin is also what tells one
+	// client's focus move from another's, below.
+	origin := state.PushOrigin
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
 
 	accepted := true
@@ -2078,9 +2091,9 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 		if state.BaseVersion != 0 && state.BaseVersion < prev.Version {
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
-			if state.BaseVersion >= s.focusMovedVersion {
-				// No daemon mutation the client missed moved the focus, so
-				// the focus in the push is the person's latest move.
+			if s.pushOwnsFocusLocked(origin, state.BaseVersion) {
+				// Nothing the client missed moved the focus, so the focus in
+				// the push is the person's latest move.
 				keepClientFocus(state, mine)
 			}
 			accepted = false
@@ -2094,6 +2107,12 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	state.BaseVersion = 0
 
 	before := snapshotLifecycle(prev)
+	if prev != nil && !focusViewOf(prev).sameFocus(focusViewOf(state)) {
+		if s.clientFocusMoved == nil {
+			s.clientFocusMoved = make(map[string]int)
+		}
+		s.clientFocusMoved[origin] = state.Version
+	}
 	s.state = state
 	// A client pushing state with a pane focused has that pane in front of
 	// its user, so whatever it finished has been seen.
@@ -2110,6 +2129,29 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return accepted
+}
+
+// pushOwnsFocusLocked reports whether a stale push from origin, built at base,
+// may keep its own focus: no daemon move and no other client's move of the
+// focus landed at or after base. Such a move may postdate the push, and the
+// push would undo it. The origin's own earlier moves do not count: the push
+// is newer than they are. The caller holds stateMu.
+func (s *Session) pushOwnsFocusLocked(origin string, base int) bool {
+	if base < s.focusMovedVersion {
+		return false
+	}
+	for o, v := range s.clientFocusMoved {
+		if o != origin && v >= base {
+			return false
+		}
+	}
+	return true
+}
+
+// markFocusIntentLocked records, from inside a mutateState function, that the
+// mutation is an explicit focus request. See focusIntent.
+func (s *Session) markFocusIntentLocked() {
+	s.focusIntent = true
 }
 
 // mutateState runs fn against the canonical state under the state lock, raises
@@ -2140,7 +2182,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 
 	before := snapshotLifecycle(s.state)
 	focusBefore := focusViewOf(s.state)
+	s.focusIntent = false
 	if err := fn(s.state); err != nil {
+		s.focusIntent = false
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
@@ -2150,9 +2194,10 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
-	if !focusBefore.sameFocus(focusViewOf(s.state)) {
+	if s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state)) {
 		s.focusMovedVersion = s.state.Version
 	}
+	s.focusIntent = false
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil
