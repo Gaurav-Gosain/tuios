@@ -50,7 +50,7 @@ func TestMultiCopySavePromptTakesThePaste(t *testing.T) {
 	mcPress(o, "V", "Y")
 	o.Mode = app.TerminalMode
 	o.MultiCopy.Save.Path = ""
-	HandleInput(tea.PasteMsg{Content: "~/rack\x1b[31m‮.md\r\n"}, o)
+	HandleInput(tea.PasteMsg{Content: "~/rack\x1b[31m\u202e.md\r\n"}, o)
 	if o.MultiCopy == nil || o.MultiCopy.Save == nil {
 		t.Fatal("the paste closed the save prompt")
 	}
