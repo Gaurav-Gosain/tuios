@@ -1,0 +1,42 @@
+[
+  {
+    "name": "session_start",
+    "payload": {"hook_event_name": "session_start", "session_id": "omp-1", "transcript_path": "/home/u/.omp/agent/sessions/omp-1.jsonl", "busy": false},
+    "want": {"state": "idle", "agent_session_id": "omp-1", "transcript_path": "/home/u/.omp/agent/sessions/omp-1.jsonl"}
+  },
+  {
+    "name": "session_start during a reload",
+    "payload": {"hook_event_name": "session_start", "session_id": "omp-1", "busy": true},
+    "want": {"state": "working", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "agent_start",
+    "payload": {"hook_event_name": "agent_start", "session_id": "omp-1"},
+    "want": {"state": "working", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "agent_end",
+    "payload": {"hook_event_name": "agent_end", "session_id": "omp-1"},
+    "want": {"state": "done", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "tool_approval_requested",
+    "payload": {"hook_event_name": "tool_approval_requested", "session_id": "omp-1", "tool_name": "bash", "reason": "Run build?"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Run build?", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "tool_approval_requested without reason",
+    "payload": {"hook_event_name": "tool_approval_requested", "session_id": "omp-1", "tool_name": "edit"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve edit", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "tool_approval_resolved",
+    "payload": {"hook_event_name": "tool_approval_resolved", "session_id": "omp-1", "approved": false},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "omp-1"}
+  },
+  {
+    "name": "unknown event",
+    "payload": {"hook_event_name": "tool_call", "session_id": "omp-1"},
+    "skip": "event not mapped"
+  }
+]

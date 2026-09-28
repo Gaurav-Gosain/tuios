@@ -130,6 +130,24 @@ func translateKimi(in Input, p fields) Decision {
 	}
 }
 
+// piTurnStart maps the two events Pi and OMP share.
+func piTurnStart(id, event string, p fields) (Decision, bool) {
+	r := Report{SessionID: p.str("session_id")}
+	switch event {
+	case "session_start":
+		r.State = "idle"
+		if busy, _ := p["busy"].(bool); busy {
+			r.State = "working"
+		}
+		r.TranscriptPath = p.str("transcript_path")
+	case "agent_start":
+		r.State = "working"
+	default:
+		return Decision{}, false
+	}
+	return send(id, event, r), true
+}
+
 // The Pi event map. Pi loads TypeScript extensions from
 // ~/.pi/agent/extensions (PI_CODING_AGENT_DIR overrides the agent directory).
 // The extension tuios installs (assets/pi/tuios-agent-state.ts) listens to
@@ -157,16 +175,11 @@ func translateKimi(in Input, p fields) Decision {
 // because the extension says whether Pi is idle.
 func translatePi(in Input, p fields) Decision {
 	event := eventName(in, p)
+	if d, ok := piTurnStart(Pi, event, p); ok {
+		return d
+	}
 	r := Report{SessionID: p.str("session_id")}
 	switch event {
-	case "session_start":
-		r.State = "idle"
-		if busy, _ := p["busy"].(bool); busy {
-			r.State = "working"
-		}
-		r.TranscriptPath = p.str("transcript_path")
-	case "agent_start":
-		r.State = "working"
 	case "agent_settled":
 		r.State = "done"
 	case "ui_prompt_start":
@@ -189,4 +202,35 @@ func translatePi(in Input, p fields) Decision {
 		return skip(Pi, event, "event not mapped")
 	}
 	return send(Pi, event, r)
+}
+
+// OMP shares Pi's session and start events, but not its completion or UI
+// prompt events. Its native approval dialog emits its own request and
+// resolution events; other extension UI dialogs have no hook event.
+func translateOMP(in Input, p fields) Decision {
+	event := eventName(in, p)
+	if d, ok := piTurnStart(OMP, event, p); ok {
+		return d
+	}
+	r := Report{SessionID: p.str("session_id")}
+	switch event {
+	case "agent_end":
+		r.State = "done"
+	case "tool_approval_requested":
+		r.State, r.Kind = "needs_input", "approval"
+		r.Message = Clip(p.str("reason"))
+		if r.Message == "" {
+			r.Message = "approve a tool call"
+			if tool := Clip(p.str("tool_name")); tool != "" {
+				r.Message = "approve " + tool
+			}
+		}
+	case "tool_approval_resolved":
+		r.State, r.IfState = "working", claudeClearsBlock
+	case "":
+		return skip(OMP, event, "the payload names no event")
+	default:
+		return skip(OMP, event, "event not mapped")
+	}
+	return send(OMP, event, r)
 }

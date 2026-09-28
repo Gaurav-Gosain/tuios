@@ -1,0 +1,25 @@
+schema_version = 1
+id             = "omp"
+display_name   = "oh-my-pi"
+priority       = 60
+
+# Measured on omp 18.4.2: comm and argv[0] are "omp", and the executable is
+# ~/.local/bin/omp. A short name requires its binary or a JS runtime behind
+# it. A Node launch can instead identify the published package by its path.
+# Pi's unscoped "pi-coding-agent" argv_path also matches OMP's scoped npm
+# package. OMP must win that overlap explicitly, not via an id-sort tie.
+[detect]
+comm      = ["omp"]
+argv0     = ["omp"]
+argv_path = ["@oh-my-pi/pi-coding-agent"]
+
+[detect.require]
+exe_base = ["omp", "node", "nodejs", "bun", "deno"]
+
+# No screen rules: OMP's rendering differs from Pi and has not been measured
+# for a stable bottom-of-pane state marker. The installed extension reports
+# turn state and native tool approvals instead.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

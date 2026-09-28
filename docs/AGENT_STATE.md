@@ -2193,7 +2193,7 @@ since the conversation is on that machine.
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
-tuios can work out by looking. tuios wires eighteen of them itself:
+tuios can work out by looking. tuios wires nineteen of them itself:
 
 ```sh
 tuios integration install claude-code   # any harness below, or --all
@@ -2202,8 +2202,8 @@ tuios integration uninstall codex
 tuios doctor agents                     # PATH, install state, and panes missing theirs
 ```
 
-An integration reports one of two things. Eleven report the pane's **state**:
-their hooks cover the whole turn, from the prompt through approvals to the end.
+An integration reports one of two things. Twelve report the pane's **state**:
+their hooks cover turn boundaries and the blocking prompts they expose.
 The other seven report only the **session**: the harness's own id for the
 conversation, stored on the pane with `set-agent-session` so it can be resumed,
 while the pane's state keeps coming from the manifest's screen and title rules.
@@ -2223,6 +2223,7 @@ status` and `tuios doctor agents` say which each one is.
 | Amp | state | `plugins/tuios-agent-state.ts` in `~/.config/amp` (or `$XDG_CONFIG_HOME/amp`) | [plugin API](https://ampcode.com/manual/plugin-api) |
 | Kimi Code CLI | state | `[[hooks]]` tables between two marker comments at the end of `~/.kimi-code/config.toml` (or `$KIMI_CODE_HOME`); needs 0.14.0 or newer | [hooks](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html) |
 | Pi | state | `extensions/tuios-agent-state.ts` in `~/.pi/agent` (or `$PI_CODING_AGENT_DIR`) | herdr's Pi extension, and Pi's extension events |
+| oh-my-pi (`omp`) | state | `extensions/tuios-omp-agent-state.ts` in `~/.omp/agent` (or `$PI_CODING_AGENT_DIR`); needs omp 18.3.2 or newer | [extension discovery](https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md) and [event API](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/extensibility/extensions/types.ts) |
 | GitHub Copilot CLI | state | `hooks/tuios.json` in `~/.copilot` (or `$COPILOT_HOME`), a file of its own | [hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference) |
 | Cursor Agent | state | hooks in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
 | Qwen Code | state | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | [hooks](https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md) |
@@ -2233,6 +2234,15 @@ status` and `tuios doctor agents` say which each one is.
 | Grok CLI | session | `hooks/tuios.json` in `~/.grok` (or `$GROK_HOME`), a file of its own | herdr's Grok installer |
 | Hermes Agent | session | a plugin in `plugins/tuios-agent-state/` under `~/.hermes` (or `$HERMES_HOME`), and `tuios-agent-state` in `plugins.enabled` in its `config.yaml` | herdr's Hermes plugin |
 | Qoder CLI | session | `hooks` in `~/.qoder/settings.json` (or `$QODER_CONFIG_DIR`) | [hooks](https://docs.qoder.com/zh/cli/hooks) |
+
+OMP profiles use their own agent directory (`~/.omp/profiles/<name>/agent`);
+set `PI_CODING_AGENT_DIR` to that directory when installing for a profile.
+Pi reads the same environment variable, so `integration install --all` refuses
+it rather than installing both extensions in one directory. An explicit
+install also refuses a directory identified as the other harness's. If an
+earlier install left Pi's extension in an OMP profile, run
+`tuios integration uninstall pi` with that `PI_CODING_AGENT_DIR` before
+installing omp.
 
 Five recognised harnesses have no integration, and `tuios doctor agents` names
 them with the reason: aider (its one hook, `notifications-command`, replaces the
@@ -2441,7 +2451,12 @@ and Amp's approval prompts come from its screen rules. The Pi extension maps
 shows: the start is `needs_input`, kind `approval` for a confirm and `question`
 for a choice, a line of input, an editor or a custom prompt, with the prompt's
 title; the end is `working` from `needs_input`, or `idle` when no turn is
-running.
+running. oh-my-pi uses the same session and start mapping, but `agent_end`
+marks `done` only when no automatic continuation is scheduled. Its
+`tool_approval_requested` and `tool_approval_resolved` events report
+`needs_input` and return to `working`. OMP does not emit Pi's UI-prompt events;
+extension dialogs have no hook-backed state report. The extension filters out
+subagents and non-TUI runs.
 
 Qwen Code maps like Claude Code: `SessionStart` to `idle` (not after
 compaction), `UserPromptSubmit` and `PreToolUse` to `working`,
@@ -2588,11 +2603,11 @@ Harnesses run some hooks synchronously, `PreToolUse` and `PermissionRequest`
 among them. `tuios agent-hook` exits 0 whatever happens, prints nothing a
 harness could read as an answer (Gemini CLI and Antigravity CLI, which parse
 stdout, get `{}`), and gives up after 500 ms (`--timeout`) when the daemon is
-slow, restarting or gone. The opencode, Kilo, Amp and Pi plugins run it in a
-child process they do not wait on, so they never hold their harness up; the
-Hermes plugin waits for it, on session start only, for at most two seconds. A session report goes only
-to a daemon whose `list-verbs` has `set-agent-session`; an older daemon gets
-nothing, and `--explain` says so.
+slow, restarting or gone. The opencode, Kilo, Amp, Pi and oh-my-pi plugins
+run it in a child process they do not wait on, so they never hold their harness
+up. The Hermes plugin waits for it, on session start only, for at most two
+seconds. A session report goes only to a daemon whose `list-verbs` has
+`set-agent-session`; an older daemon gets nothing, and `--explain` says so.
 
 A daemon keeps running across a tuios upgrade, so a new hook talking to an
 older daemon is the ordinary case right after one. Such a daemon does not

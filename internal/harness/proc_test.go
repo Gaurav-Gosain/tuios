@@ -97,6 +97,16 @@ func TestIdentify(t *testing.T) {
 		{"a static binary called pi", ProcInfo{Comm: "pi", Argv: []string{"pi"},
 			Exe: "/usr/local/bin/pi"}, ""},
 		{"pi with no readable executable", ProcInfo{Comm: "pi", Argv: []string{"pi"}}, ""},
+		// Measured: omp 18.4.2 is a native executable, not Pi's Node process.
+		{"omp native", ProcInfo{Comm: "omp", Argv: []string{"omp"},
+			Exe: "/home/u/.local/bin/omp"}, "omp"},
+		{"omp launched from a Node shim", ProcInfo{Comm: "omp", Argv: []string{"omp"},
+			Exe: "/home/u/node/bin/node"}, "omp"},
+		{"omp npm script", ProcInfo{Comm: "node", Argv: []string{"node", "/n/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"},
+			Exe: "/usr/bin/node"}, "omp"},
+		{"omp without an executable", ProcInfo{Comm: "omp", Argv: []string{"omp"}}, ""},
+		{"omp script mentioned as an argument", ProcInfo{Comm: "node", Argv: []string{"node", "/usr/bin/node", "/n/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"},
+			Exe: "/usr/bin/node"}, ""},
 
 		{"editor in an opencode checkout", ProcInfo{Comm: "tail", Exe: "/usr/bin/tail",
 			Argv: []string{"tail", "-f", "/home/u/dev/opencode/main.go"}}, ""},

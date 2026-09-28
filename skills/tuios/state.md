@@ -76,7 +76,7 @@ reads the log of panes in its own session and fan group.
 
 ## Wire it to your harness once
 
-For eighteen harnesses tuios writes the hooks for you:
+For nineteen harnesses tuios writes the hooks for you:
 
 ```sh
 tuios integration install claude-code    # or any other harness, or --all
@@ -85,7 +85,7 @@ tuios doctor agents                      # also lists agent panes missing theirs
 ```
 
 Claude Code, Codex, Copilot, Cursor Agent, Gemini CLI, opencode, Kilo, Amp,
-Kimi, Pi and Qwen report the pane's state. Antigravity, Crush, Devin, Droid,
+Kimi, Pi, oh-my-pi (`omp`) and Qwen report the pane's state. Antigravity, Crush, Devin, Droid,
 Grok, Hermes and Qoder report only the conversation id, so the pane can be
 resumed, and their state keeps coming from screen rules. Crush started
 directly in a pane (`tuios new-window NAME crush`, `start-agent crush`) also
@@ -132,7 +132,7 @@ notification is published on `subscribe` as a `notification` event.
 
 ## Detection
 
-Without a report, tuios recognises 23 agent CLIs by their foreground process
+Without a report, tuios recognises 24 agent CLIs by their foreground process
 (through shells, interpreters and launchers such as `npx`), and by screen and
 title rules. The set comes from manifest files and a user can add their own, so
 ask rather than assume:

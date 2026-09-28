@@ -25,6 +25,9 @@ var ampPluginTemplate string
 //go:embed assets/pi/tuios-agent-state.ts
 var piExtensionTemplate string
 
+//go:embed assets/omp/tuios-omp-agent-state.ts
+var ompExtensionTemplate string
+
 //go:embed assets/hermes/__init__.py
 var hermesPluginTemplate string
 
@@ -390,6 +393,15 @@ var targets = []*Target{
 		format:    ownedFile{render: renderTemplate(piExtensionTemplate)},
 	},
 	{
+		// OMP uses Pi's extension shape but its own directory and lifecycle
+		// events. A Pi install must not be overwritten by an OMP install.
+		ID: OMP, Name: "oh-my-pi", Binary: "omp", Version: 1, Reports: ReportsState,
+		Source:    "https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md (TypeScript extensions load from ~/.omp/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
+		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".omp", "agent") },
+		File:      filepath.Join("extensions", "tuios-omp-agent-state.ts"),
+		format:    ownedFile{render: renderTemplate(ompExtensionTemplate)},
+	},
+	{
 		ID: Qoder, Name: "Qoder CLI", Binary: "qodercli", Version: 1, Reports: ReportsSession,
 		Source:    "https://docs.qoder.com/zh/cli/hooks (~/.qoder/settings.json hooks in Claude Code's shape, matcher *, timeout in seconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("QODER_CONFIG_DIR", ".qoder") },
@@ -560,6 +572,26 @@ func (t *Target) Install(env Env, tuios string) (Result, error) {
 	res := Result{Harness: t.ID, Path: t.Path(env)}
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, dir, t.Name)
+	}
+	// Both Pi and OMP honour this variable. Inside an OMP profile it names
+	// OMP's directory even when someone asks to install Pi. A second
+	// extension there would load in the wrong harness and could pin the
+	// pane at working, so refuse evidence of the other owner before writing.
+	if env.env("PI_CODING_AGENT_DIR") != "" && (t.ID == Pi || t.ID == OMP) {
+		other := Pi
+		foreignDir := filepath.Join(env.Home, ".pi") + string(os.PathSeparator)
+		if t.ID == Pi {
+			other = OMP
+			foreignDir = filepath.Join(env.Home, ".omp") + string(os.PathSeparator)
+		}
+		foreign, _ := LookupTarget(other)
+		_, foreignErr := os.Stat(foreign.Path(env))
+		owner, _ := Canonical(env.env(AgentHintEnv))
+		_, ompConfigErr := os.Stat(filepath.Join(dir, "config.yml"))
+		if owner == other || strings.HasPrefix(filepath.Clean(dir)+string(os.PathSeparator), foreignDir) ||
+			foreignErr == nil || (t.ID == Pi && ompConfigErr == nil) {
+			return res, fmt.Errorf("%s is %s's agent directory; refusing to install %s there. Unset PI_CODING_AGENT_DIR or choose the intended agent directory", dir, foreign.Name, t.Name)
+		}
 	}
 	plans, err := t.plan(env, tuios, true)
 	if err != nil {
