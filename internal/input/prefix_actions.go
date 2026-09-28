@@ -328,10 +328,9 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if focused := o.GetFocusedWindow(); focused != nil {
-		focused.EnterCopyMode()
-		o.ShowNotification("Copy mode (hjkl, q to exit)", "info", 2*o.Settings.NotificationDuration)
-	}
+	// Multi copy mode when the focused pane is in a multifocus set of two or
+	// more panes; plain copy mode otherwise. See EnterCopyModeFocused.
+	o.EnterCopyModeFocused()
 	return o, nil
 }
 

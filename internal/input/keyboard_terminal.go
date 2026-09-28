@@ -121,6 +121,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// A multi copy mode whose focused pane has left it has nothing driving
+	// the other panes: end it before the key is routed.
+	o.SettleMultiCopy()
+
 	// Handle copy mode (vim-style scrollback/selection)
 	if focusedWindow.InCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		return HandleCopyModeKey(msg, o, focusedWindow)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -67,10 +68,80 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 		start, end = end, start
 	}
 	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
+	m.copyFlashMore = nil
 	// Nothing in the pane changed, so nothing else is going to ask for a
 	// frame. The first one is asked for here and the motion clock keeps them
 	// coming while the sweep runs; see motionInterval.
 	window.ContentDirty = true
+}
+
+// NoteCopyFlashMany records one copy taken from several panes at once, the
+// multi copy mode yank, so the same sweep crosses each pane's selection. Panes
+// without a selection are skipped. The sweeps share one clock and end
+// together.
+func (m *OS) NoteCopyFlashMany(windows []*terminal.Window) {
+	var noted []copyFlash
+	for _, w := range windows {
+		m.NoteCopyFlash(w)
+		if m.copyFlash != nil && m.copyFlash.WindowID == w.ID {
+			noted = append(noted, *m.copyFlash)
+		}
+	}
+	if len(noted) == 0 {
+		return
+	}
+	at := noted[len(noted)-1].At
+	for i := range noted {
+		noted[i].At = at
+	}
+	m.copyFlash = &noted[0]
+	m.copyFlashMore = noted[1:]
+}
+
+// copyFlashFor is the sweep crossing the pane with this id, or nil.
+func (m *OS) copyFlashFor(id string) *copyFlash {
+	if m.copyFlash == nil {
+		return nil
+	}
+	if m.copyFlash.WindowID == id {
+		return m.copyFlash
+	}
+	for i := range m.copyFlashMore {
+		if m.copyFlashMore[i].WindowID == id {
+			return &m.copyFlashMore[i]
+		}
+	}
+	return nil
+}
+
+// copyFlashIDs is every pane a sweep is crossing.
+func (m *OS) copyFlashIDs() []string {
+	if m.copyFlash == nil {
+		return nil
+	}
+	ids := []string{m.copyFlash.WindowID}
+	for _, f := range m.copyFlashMore {
+		ids = append(ids, f.WindowID)
+	}
+	return ids
+}
+
+// dropCopyFlash ends the sweep over one pane and leaves the others running.
+func (m *OS) dropCopyFlash(id string) {
+	if m.copyFlash == nil {
+		return
+	}
+	if m.copyFlash.WindowID != id {
+		m.copyFlashMore = slices.DeleteFunc(m.copyFlashMore, func(f copyFlash) bool { return f.WindowID == id })
+		return
+	}
+	if len(m.copyFlashMore) == 0 {
+		m.copyFlash = nil
+		return
+	}
+	next := m.copyFlashMore[0]
+	m.copyFlash = &next
+	m.copyFlashMore = m.copyFlashMore[1:]
 }
 
 // markCopyFlashPane asks the pane a sweep is crossing to draw another frame,
@@ -87,7 +158,7 @@ func (m *OS) markCopyFlashPane() bool {
 	if m.copyFlash == nil {
 		return false
 	}
-	id := m.copyFlash.WindowID
+	ids := m.copyFlashIDs()
 	// Asked whether it is still running or has just this moment stopped, and
 	// the pane is marked either way.
 	//
@@ -98,8 +169,10 @@ func (m *OS) markCopyFlashPane() bool {
 	// stuck behind it. The tick that finds the sweep finished is the one that
 	// asks for the frame without it.
 	m.CopyFlashActive()
-	if w := m.windowByID(id); w != nil {
-		w.ContentDirty = true
+	for _, id := range ids {
+		if w := m.windowByID(id); w != nil {
+			w.ContentDirty = true
+		}
 	}
 	return true
 }
@@ -116,10 +189,13 @@ func (m *OS) CancelCopyFlash() {
 	if m.copyFlash == nil {
 		return
 	}
-	id := m.copyFlash.WindowID
+	ids := m.copyFlashIDs()
 	m.copyFlash = nil
-	if w := m.windowByID(id); w != nil {
-		w.ContentDirty = true
+	m.copyFlashMore = nil
+	for _, id := range ids {
+		if w := m.windowByID(id); w != nil {
+			w.ContentDirty = true
+		}
 	}
 }
 
@@ -143,7 +219,7 @@ func (m *OS) copyFlashProgress(windowID string) (float64, bool) {
 		m.copyFlash = nil
 		return 0, false
 	}
-	if m.copyFlash.WindowID != windowID {
+	if m.copyFlashFor(windowID) == nil {
 		return 0, false
 	}
 	return float64(elapsed) / float64(total), true
@@ -493,7 +569,8 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 // over it would hold the motion clock at the frame rate to draw nothing.
 func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackLen, maxY, maxX int) (*pool.HighlightGrid, copyFlashBand) {
 	progress, ok := m.copyFlashProgress(window.ID)
-	if !ok || m.copyFlash == nil {
+	fl := m.copyFlashFor(window.ID)
+	if !ok || fl == nil {
 		return nil, copyFlashBand{}
 	}
 	grid := pool.GetHighlightGrid()
@@ -501,12 +578,12 @@ func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackL
 	textEnd := func(y int) int {
 		return paneRowTextEnd(window, screen, y, maxX, scrollbackLen)
 	}
-	fillPaneRegion(grid, m.copyFlash.Start, m.copyFlash.End,
+	fillPaneRegion(grid, fl.Start, fl.End,
 		scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
 	box, ok := copyFlashBoxOf(grid, maxY, maxX)
 	if !ok {
 		pool.PutHighlightGrid(grid)
-		m.copyFlash = nil
+		m.dropCopyFlash(window.ID)
 		return nil, copyFlashBand{}
 	}
 	return grid, m.copyFlashBandFor(progress, box)

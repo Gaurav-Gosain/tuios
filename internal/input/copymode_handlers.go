@@ -30,24 +30,32 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 	// RLockIO away from the recursive read-lock deadlock, because a queued
 	// LockIO writer starves any later reader on a sync.RWMutex and the handler
 	// would be waiting on a lock it is itself holding.
-	cm := window.CopyMode
+	// Multi copy mode drives every pane of the multifocus set with this key.
+	// See copymode_multi.go.
+	if o.MultiCopy.Has(window.ID) {
+		return handleMultiCopyKey(msg, o, window)
+	}
+
 	fx := &copyModeEffects{}
-
-	func() {
-		window.RLockIO()
-		defer window.RUnlockIO()
-
-		switch cm.State {
-		case terminal.CopyModeSearch:
-			handleSearchInput(msg, cm, window, fx, &o.Settings)
-		case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine:
-			handleVisualInput(msg, cm, window, fx, &o.Settings)
-		case terminal.CopyModeNormal:
-			handleNormalInput(msg, cm, window, fx, &o.Settings)
-		}
-	}()
-
+	dispatchCopyModeKey(msg, window, fx, &o.Settings)
 	return fx.apply(o, window)
+}
+
+// dispatchCopyModeKey runs one copy-mode key against one pane, under that
+// pane's I/O read lock, and records what it wants done in fx.
+func dispatchCopyModeKey(msg tea.KeyPressMsg, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
+	cm := window.CopyMode
+	window.RLockIO()
+	defer window.RUnlockIO()
+
+	switch cm.State {
+	case terminal.CopyModeSearch:
+		handleSearchInput(msg, cm, window, fx, s)
+	case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine:
+		handleVisualInput(msg, cm, window, fx, s)
+	case terminal.CopyModeNormal:
+		handleNormalInput(msg, cm, window, fx, s)
+	}
 }
 
 // handleNormalInput handles keys in normal navigation mode

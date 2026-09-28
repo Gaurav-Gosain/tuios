@@ -568,12 +568,18 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		// go, and the pill is the only place that says so.
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
 		modeLabel = m.Settings.GetDockModeIconWindow() + " HOLD"
+	case focusedWindow != nil && m.MultiCopy.Has(focusedWindow.ID):
+		// Multi copy mode is held from either mode, so it names itself in
+		// both: how many panes it drives, and after a search how many matched.
+		modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
+		modeLabel, _ = m.multiCopyPill()
 	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {
 			// Copy mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
 			modeInfo.CursorPos = fmt.Sprintf("%d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
 			modeLabel = " " + modeInfo.CursorPos + " "
+
 		} else {
 			// Terminal mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorTerminal())
@@ -772,7 +778,7 @@ func (m *OS) calculateDockRightWidth() int {
 		// longest variant rather than guessing at it, so a terminal with room
 		// for it reserves exactly enough and one without falls to a shorter
 		// line instead of being one cell short of the full one.
-		tiers := copyModeHelpTiers(focusedWindow.CopyMode.State)
+		tiers := m.copyModeHelp(focusedWindow)
 		if len(tiers) == 0 {
 			return 0
 		}

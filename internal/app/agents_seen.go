@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"slices"
@@ -68,8 +69,18 @@ func (m *OS) noteAgentsSeen() {
 func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 	groups := config.GetPrefixKeybindingGroups("", m.IsDaemonSession)
 	seen, review := m.agentsSeen(), m.reviewSupported()
+	// With multifocus on, the copy-mode key enters multi copy mode, and the
+	// menu says so: this is where a multifocus user finds out it exists.
+	multi, multiOK := m.MultiCopyEligible()
 	out := groups[:0]
 	for _, g := range groups {
+		if multiOK {
+			for i := range g.Bindings {
+				if g.Bindings[i].Key == "[" {
+					g.Bindings[i].Description = fmt.Sprintf("Multi copy mode (%d panes)", multi)
+				}
+			}
+		}
 		if !seen {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentPrefixKeybinding)
 		}

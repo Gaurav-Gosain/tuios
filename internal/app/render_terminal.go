@@ -192,6 +192,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// The dim this frame wants, which is also what the cached frame has to have
 	// been drawn at for the cache to be usable.
 	dim := paneDim(isFocused, &m.Settings)
+	// A pane the last multi copy mode search found nothing in is dimmed, so
+	// the panes that will take part in the selection stand out.
+	if m.MultiCopyParked(window.ID) {
+		dim = max(dim, multiCopyParkedDim)
+	}
 
 	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
 
@@ -200,7 +205,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// content, so the frame it holds is still perfectly valid and still
 	// perfectly wrong: it was drawn before the light arrived. While the sweep
 	// runs this pane draws every frame, and the frames it draws are not kept.
-	flashing := m.copyFlash != nil && m.copyFlash.WindowID == window.ID && m.CopyFlashActive()
+	flashing := m.copyFlashFor(window.ID) != nil && m.CopyFlashActive()
 
 	if !flashing && (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
@@ -505,7 +510,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	)
 	if dim > 0 {
 		if dimFg, dimBg = m.paneDimGround(); dimBg != nil {
-			dimT = dimBlend(&m.Settings)
+			dimT = float64(dim) / 100
 		}
 	}
 
