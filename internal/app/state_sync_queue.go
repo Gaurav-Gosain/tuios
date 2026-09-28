@@ -3,8 +3,9 @@ package app
 // QueueStateSync hands a state snapshot from the daemon read loop to the Update
 // loop, together with where it came from: the daemon itself, or the peer whose
 // push it is. ApplyStateSync reads the origin to tell a peer's tiling topology,
-// which is news, from an echo of this client's own. When the channel is full it displaces the oldest queued snapshot rather
-// than discarding the new one, and reports that it did so.
+// which is news, from an echo of this client's own. When the channel is full
+// it keeps the newer of the two snapshots, by the order they were taken, and
+// reports that it displaced one.
 //
 // Every message here is a whole snapshot, so losing an intermediate costs
 // nothing and losing the newest costs everything: the client goes on rendering a
@@ -33,7 +34,17 @@ func (m *OS) QueueStateSync(sync StateSyncMsg) (displaced bool) {
 	default:
 	}
 	select {
-	case <-m.StateSyncChan:
+	case queued := <-m.StateSyncChan:
+		// Newest means newest taken, not newest read. The daemon writes to one
+		// client from more than one goroutine (a peer's broadcast goes out
+		// from the peer's connection, a reply from this one's), so a snapshot
+		// taken earlier can be read later. Displacing by arrival threw away
+		// the reply to this client's own push for an older broadcast, which
+		// AcceptState then refused as predating that push, and the client was
+		// left with nothing to apply until the session next changed.
+		if queued.State != nil && sync.State.SnapshotSeq != 0 && queued.State.SnapshotSeq > sync.State.SnapshotSeq {
+			sync = queued
+		}
 	default:
 	}
 	select {
