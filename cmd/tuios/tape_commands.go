@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -80,12 +78,9 @@ func runTapeInteractive(tapeFile string) error {
 
 	p := tea.NewProgram(initialOS, app.ProgramOptions()...)
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		p.Send(tea.QuitMsg{})
-	}()
+	// A quit the event loop cannot carry out still has to end the process;
+	// finish runs once the cleanup below is done. See armSignalQuit.
+	finish := armSignalQuit(p)
 
 	finalModel, err := p.Run()
 
@@ -104,6 +99,7 @@ func runTapeInteractive(tapeFile string) error {
 	fmt.Print("\033[0m")
 	fmt.Print("\r\n")
 	_ = os.Stdout.Sync()
+	finish()
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)
