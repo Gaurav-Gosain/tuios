@@ -189,6 +189,10 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	if state != nil {
 		m.DaemonStateVersion = state.Version
 	}
+	// The session holds no tree this client has heard of, so whatever tree it
+	// builds from here on is news.
+	m.treeSeen = nil
+	m.treeDerived = nil
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays

@@ -685,6 +685,14 @@ type OS struct {
 	// client, and syncedFPSet says whether there is one. See SyncStateToDaemon.
 	syncedFP    uint64
 	syncedFPSet bool
+	// treeSeen keys, by workspace, the BSP tree the session was last known to
+	// hold: the one this client last sent as an op or last took from the
+	// daemon. See layout_tree_sync.go.
+	treeSeen map[int]string
+	// treeDerived keys, by workspace, a tree this client reworked while
+	// applying a state, which it shows and does not send. See
+	// layout_tree_sync.go.
+	treeDerived map[int]string
 
 	// applyingPeerSync is set while ApplyStateSync is folding a state that came
 	// from somewhere else into this client. It is what makes a sync loop

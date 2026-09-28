@@ -59,6 +59,18 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}
+	// The BSP trees are written by ops (see layout_tree.go), and a client that
+	// sends them that way leaves them out of its push. So a push without trees
+	// is saying nothing about them, and the session keeps its own, with the
+	// numbering the trees' leaves are read through. A push that does carry
+	// trees is from a client too old to send ops, and it is taken as sent, which
+	// is what every daemon did before: its trees and its numbering replace the
+	// session's together, so the two still agree.
+	if incoming.WorkspaceTrees == nil {
+		incoming.WorkspaceTrees = canonical.WorkspaceTrees
+		incoming.WindowToBSPID = canonical.WindowToBSPID
+		incoming.NextBSPWindowID = canonical.NextBSPWindowID
+	}
 	// The agreed pane geometry is written by every current client on every
 	// push, so nil means a client that predates the field, and letting it wipe
 	// the agreement would put the session back where the field started: every

@@ -939,6 +939,11 @@ type Session struct {
 	// Version, so a move by one client is invisible to focusMovedVersion, and a
 	// stale push from another client built at that version may predate it.
 	clientFocusMoved map[string]int
+	// opVersions names, by Version, the client connection whose op made that
+	// mutation, and treeChanged names, by workspace, the op that last changed
+	// that workspace's tree. Both guarded by stateMu. See layout_tree.go.
+	opVersions  map[int]string
+	treeChanged map[int]treeChange
 	// focusIntent is set by a focus verb inside mutateState, so the mutation
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
@@ -2023,7 +2028,8 @@ func (s *Session) ResurrectionState() *SessionState {
 // incoming snapshot carries the daemon Version the client last saw. When that
 // version is current the client has seen everything the daemon did and its
 // snapshot is taken as sent. When it is behind, the client built its snapshot
-// before a daemon-side mutation it has never seen, and the fields the daemon
+// before a daemon-side mutation it has never seen (a layout op the same client
+// sent does not count: see missedMutationLocked), and the fields the daemon
 // owns are restored on top of it rather than being silently undone. Fields no
 // client ever sets (Options, Cwd, ResurrectionVersion) are carried over either
 // way.
@@ -2088,7 +2094,7 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	accepted := true
 	prev := s.state
 	if prev != nil {
-		if state.BaseVersion != 0 && state.BaseVersion < prev.Version {
+		if state.BaseVersion != 0 && s.missedMutationLocked(origin, state.BaseVersion, prev.Version) {
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
 			if s.pushOwnsFocusLocked(origin, state.BaseVersion) {
@@ -2189,6 +2195,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
 	clearNowAtRestLocked(before, s.state)
+	pruneDeadLeaves(s.state)
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
 	// is what advances the version. A client that pushes a snapshot built before
 	// this point is reconciled by UpdateState rather than winning by arriving

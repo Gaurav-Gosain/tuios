@@ -9,16 +9,18 @@ import (
 
 // A BSP tree is built by a client and needed by every client on the session:
 // it is what the dividers between shared-border panes are read from, and it is
-// what the next retile lays the panes out from. The daemon never builds one; it
-// stores whichever a client last pushed and hands it on.
+// what the next retile lays the panes out from. The daemon never builds one; a
+// client sends it as an op and the daemon applies it (layout_tree_sync.go).
 //
 // This test holds two full clients on one session and watches what one
 // client's tree does to the other's.
 //
-// NEGATIVE CONTROL: adoptTopology answering true for every sync, so the echo
-// gate is gone: TestAPeerKeepsItsOwnTreeAgainstADaemonEcho fails saying a
+// NEGATIVE CONTROL: the unsentTree check cut from adoptSessionTrees, so a
+// change this client has not sent yet no longer outranks a state from the
+// daemon: TestAPeerKeepsItsOwnTreeAgainstADaemonEcho fails saying a
 // same-version echo from the daemon replaced the stacked tree with the
-// side-by-side one.
+// side-by-side one. Against a daemon too old for ops the adoptTopology gate
+// in ApplyStateSyncFrom does the same job.
 
 // treeShape renders a client's tree for the current workspace with the panes
 // named by their PTYs rather than by int IDs, so two clients' trees can be

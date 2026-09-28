@@ -383,6 +383,9 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			}
 		}
 	}
+	// The trees just taken are the session's, so none of them is news to send
+	// back. See layout_tree_sync.go.
+	m.noteSessionTrees()
 
 	// A client joining a scrolling session starts where the session is looking,
 	// not at the left end of the strip. The strip is built here rather than left
@@ -501,6 +504,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.applyingPeerSync = true
 	m.syncAnswerOwed = false
 	m.turnsWithinSync = nil
+	// The trees are held to the same rule: a tree this sync reworks is a local
+	// display decision unless the sync owes an answer. See treeDerived.
+	treeOps := m.treeOpsOn()
+	var unsentBefore map[int]bool
+	if treeOps {
+		unsentBefore = m.unsentTrees()
+	}
 	defer func() {
 		m.applyingPeerSync = false
 		if m.syncAnswerOwed {
@@ -509,6 +519,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			// answer that goes out is the settled one rather than a rectangle
 			// from the middle of the fold.
 			m.SyncStateToDaemon()
+		}
+		if treeOps {
+			m.noteDerivedTrees(unsentBefore)
+			// What is left unsent is a change the user made, or a tree for a
+			// workspace the session holds none for. Neither is an argument
+			// with the state just applied, so neither waits for the next key.
+			m.sendTreeOps()
 		}
 	}()
 
@@ -602,32 +619,30 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		}
 	}
 
-	// The BSP tree, the window->int-ID map and the split scheme are computed by
-	// clients, never by the daemon's own mutations (AddDaemonWindow and friends do
-	// not touch them). The daemon only stores what a client last synced and echoes
-	// it back. So a state the daemon sends on its own account that is not strictly
-	// newer than the one this client already applied carries this client's own
-	// tiling state, often lagging a mutation this client has since made: the
-	// reconcile answer to a push that raced a daemon-side window creation is the
-	// usual case. Adopting that echo wipes the fresh tree and reassigns int IDs,
-	// which rebuilds the whole layout from scratch and drops a forced split
-	// direction (ctrl+b | / -). Version counts daemon-side mutations only, so it
-	// is the right gate for those: adopt tiling topology from the daemon only when
-	// it has advanced past what this client last saw.
+	// Against a daemon that takes the BSP trees as ops, the trees need no gate
+	// here: see adoptSessionTrees. What follows is for the scrolling columns,
+	// which are still pushed whole (they become an op of their own next), and
+	// for the trees against a daemon too old to take ops.
+	//
+	// Those are computed by clients, never by the daemon's own mutations. The
+	// daemon only stores what a client last synced and echoes it back. So a
+	// state the daemon sends on its own account that is not strictly newer than
+	// the one this client already applied carries this client's own layout,
+	// often lagging a change this client has since made: the reconcile answer
+	// to a push that raced a daemon-side window creation is the usual case.
+	// Adopting that echo wipes the fresh layout. Version counts daemon-side
+	// mutations only, so it is the right gate for those: adopt from the daemon
+	// only when it has advanced past what this client last saw.
 	//
 	// A peer's push is the other source, and Version says nothing about it: a
-	// client push never advances Version, by design, so the tree a peer built
-	// arrives at the version this client already holds. The broadcast never comes
-	// back to its sender, so a state named as a peer's is by construction another
-	// client's tree and never an echo of this one's. It is adopted. Without that a
-	// peer that watched tiling turn on held the rectangles and no tree, drew a box
-	// around every borderless pane, and built a tree of its own on its first
-	// retile that disagreed with the one it was sent.
+	// client push never advances Version, by design, so what a peer built
+	// arrives at the version this client already holds. The broadcast never
+	// comes back to its sender, so a state named as a peer's is by construction
+	// another client's layout and never an echo of this one's. It is adopted.
 	//
-	// What this does not settle: two clients reshaping the tree inside one round
-	// trip of each other, where the later push wins. That is the regime every
-	// client-written session field is in, and the end state for all of them is
-	// the same: the write becomes an op the daemon applies and versions.
+	// What this does not settle: two clients changing it inside one round trip
+	// of each other, where the later push wins. The trees left that regime by
+	// becoming an op; the columns leave it the same way.
 	newerState := state.Version > m.DaemonStateVersion
 	adoptTopology := newerState || fromPeer
 
@@ -695,14 +710,19 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		}
 	}
 
-	// Update BSP state. Adopt the window->int-ID map on the same terms as the
-	// tree it keys (see adoptTopology), and even then merge rather than replace:
+	// Update BSP state. Against a daemon too old for tree ops, adopt the
+	// window->int-ID map on the same terms as the tree it keys (see
+	// adoptTopology), and even then merge rather than replace:
 	// a window this client has already mapped keeps its int ID, so a stale echo
 	// that omits it (or an already applied one) cannot strip the mapping and
 	// force GetWindowIntID to hand out a fresh number. A churned int ID orphans
 	// the window's node in the tree, which TileAllWindows then rebuilds from
 	// scratch with the spiral scheme, discarding any forced split direction.
-	if adoptTopology && state.WindowToBSPID != nil {
+	//
+	// With tree ops the session's numbering is never taken: adoptSessionTrees
+	// reads each leaf through it to a window ID and gives the window this
+	// client's own number.
+	if !treeOps && adoptTopology && state.WindowToBSPID != nil {
 		if m.WindowToBSPID == nil {
 			m.WindowToBSPID = make(map[string]int, len(state.WindowToBSPID))
 		}
@@ -732,10 +752,21 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// agrees on rather than the ones this client walked in with.
 	geometryChanged := m.adoptPaneGeometry(state)
 
-	// Update BSP trees, from a strictly newer daemon state or from a peer, so a
+	// Update BSP trees. With tree ops, from every state that got this far:
+	// AcceptState has already dropped any built before this client's own ops
+	// landed, and adoptSessionTrees keeps a change not yet sent. Against an
+	// older daemon, from a strictly newer daemon state or from a peer, so a
 	// lagging echo of this client's own tree cannot clobber the one it just
 	// computed (see adoptTopology above).
-	if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
+	treeRetile := false
+	if treeOps {
+		// A tree replaced on the workspace on screen is laid out again below
+		// when the BSP layout is the one drawing it. The custom-layout flag
+		// does not hold this back the way it holds back workspaceRetile: a
+		// BSP resize sets the flag, but it moves the tree, and the tree it
+		// moved is the one that just arrived.
+		treeRetile = m.adoptSessionTrees(state) && m.UseBSPLayout && !m.UseScrollingLayout
+	} else if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 		for ws, serialized := range state.WorkspaceTrees {
 			if serialized != nil {
@@ -953,7 +984,8 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.settleBorderMode(m.CurrentWorkspace)
 		}
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
-			(geometryChanged || workspaceRetile || zoomRetile || m.tiledLayoutStale()) {
+			(geometryChanged || workspaceRetile || zoomRetile || treeRetile || m.tiledLayoutStale() ||
+				(treeOps && m.bspRectsOffTree())) {
 			m.TileAllWindows()
 		}
 	})
@@ -1962,6 +1994,19 @@ func (m *OS) SyncStateToDaemon() {
 	}
 
 	state := m.BuildSessionState()
+	// A daemon that takes the trees as ops is sent them that way, ahead of the
+	// push, and the push leaves them out: a push without trees says nothing
+	// about them. The numbering goes with them, because it is only this
+	// client's, and it means nothing to the session without them. An op that
+	// cannot be sent leaves the push unsent too, because the socket is gone.
+	if m.treeOpsOn() {
+		if !m.sendTreeOps() {
+			return
+		}
+		state.WorkspaceTrees = nil
+		state.WindowToBSPID = nil
+		state.NextBSPWindowID = 0
+	}
 	fp := session.StateFingerprint(state)
 	if m.syncedFPSet && m.syncedFP == fp {
 		return

@@ -101,7 +101,7 @@ const maxFrameBytes = 16 * 1024 * 1024
 // the payload plus the type and codec bytes.
 func daemonFrameLimit(t MessageType) uint32 {
 	switch t {
-	case MsgUpdateState:
+	case MsgUpdateState, MsgLayoutTree:
 		return uint32(maxStateUpdateBytes) + 2
 	case MsgCommandResult:
 		return uint32(maxCommandResultBytes) + 2
