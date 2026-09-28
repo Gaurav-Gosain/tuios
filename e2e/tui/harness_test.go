@@ -267,6 +267,14 @@ var xdgKeys = []string{
 	// failing for reasons that had nothing to do with the change under test,
 	// and it left CI as the only honest signal.
 	"XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
+	// HOME, which is not an XDG key but is read the same way. The harness
+	// integrations install into and look for files under the home (~/.claude,
+	// ~/.codex and the rest), and tuios counts an installed integration as a
+	// sign that agents run here. With the real home, a developer who had
+	// installed one saw the suite behave as if an agent had been seen, and
+	// the tests of what shows before the first agent failed on that machine
+	// alone.
+	"HOME",
 }
 
 // startIn spawns tuios against an explicit isolation root, so two clients can
