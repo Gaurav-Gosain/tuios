@@ -27,10 +27,13 @@ import (
 //
 // The op is the whole tree of one workspace rather than an edit, because every
 // tree mutation in the client already ends in a tree, and there are a dozen of
-// them. Two ops built from the same tree are a real conflict, and the daemon
-// settles it by version: an op built before another client's op on the same
-// workspace landed is refused, and the sender is sent the tree that won. It
-// adopts it, and the next change it makes is built on it.
+// them. Two ops on one workspace are settled by the order they reach the
+// daemon: the later one stands. Nothing is refused. The daemon sends every
+// applied op to every client, the sender included, and a client drops any
+// state built before its own last op landed (see PushSeen), so every client
+// ends on the tree of whichever op landed last. An earlier design refused an
+// op built on an older tree than another client's; a drag then lost every
+// step after the first conflict, because each step carried the same old base.
 //
 // Leaves are named by window ID on the wire. The integers in a tree are each
 // client's own (GetWindowIntID hands them out locally), so an op carries the
@@ -47,10 +50,7 @@ type LayoutTreePayload struct {
 	// holds an older tree than the one on its screen. See PushSeen.
 	PushOrigin string
 	PushSeq    uint64
-	// BaseVersion is the daemon Version the client had applied when it built
-	// the tree. See Session.ApplyLayoutTree.
-	BaseVersion int
-	Workspace   int
+	Workspace  int
 	// Tree is the workspace's tree, with the leaves numbered as the client
 	// numbers them. Nil means the workspace has no tree.
 	Tree *SerializedBSPTree
@@ -58,30 +58,14 @@ type LayoutTreePayload struct {
 	Leaves map[int]string
 }
 
-// errLayoutTreeStale refuses an op built before another client's op on the same
-// workspace landed.
-var errLayoutTreeStale = errors.New("layout tree op predates a newer tree")
-
 // errLayoutTreeSame refuses an op that would not change the tree, so it does
 // not advance Version and wake every client for nothing.
 var errLayoutTreeSame = errors.New("layout tree op changes nothing")
 
-// treeChange records the op that last changed one workspace's tree.
-type treeChange struct {
-	version int
-	origin  string
-}
-
 // ApplyLayoutTree applies one client's tree for one workspace. It reports
-// whether the tree was applied; false with a nil error means it was refused as
-// stale or as a no-op, and the caller answers the sender with the session's
-// state so it converges on the tree that stands.
-//
-// An op is stale when another client's op changed the tree of the same
-// workspace after the version the op was built from. The sender's own earlier
-// ops never make it stale: a drag sends one op per step, each built on the
-// previous one, faster than the answers come back. An op with no origin cannot
-// be told from another client's, so it is held to the stricter rule.
+// whether the tree was applied; false with a nil error means the op changed
+// nothing, and the caller answers the sender with the session's state so the
+// sender still hears that its op landed.
 func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 	if p == nil {
 		return false, nil
@@ -90,9 +74,6 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		if p.Workspace < 0 || p.Workspace > state.workspaceBound() {
 			return fmt.Errorf("workspace %d is out of range", p.Workspace)
 		}
-		if c, ok := s.treeChanged[p.Workspace]; ok && c.version > p.BaseVersion && (c.origin != p.PushOrigin || p.PushOrigin == "") {
-			return errLayoutTreeStale
-		}
 		trees, ids, next, changed := placeTree(state, p.Workspace, p.Tree, p.Leaves)
 		if !changed {
 			return errLayoutTreeSame
@@ -100,15 +81,11 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		state.WorkspaceTrees, state.WindowToBSPID, state.NextBSPWindowID = trees, ids, next
 		// mutateStateLocked advances Version by one once this returns, so the
 		// op's version is the next one.
-		s.noteOwnMutationLocked(state.Version+1, p.PushOrigin)
-		if s.treeChanged == nil {
-			s.treeChanged = make(map[int]treeChange)
-		}
-		s.treeChanged[p.Workspace] = treeChange{state.Version + 1, p.PushOrigin}
+		s.noteTreeOpLocked(state.Version + 1)
 		return nil
 	})
 	switch {
-	case errors.Is(err, errLayoutTreeStale), errors.Is(err, errLayoutTreeSame):
+	case errors.Is(err, errLayoutTreeSame):
 		return false, nil
 	case err != nil:
 		return false, err
@@ -317,40 +294,37 @@ func SessionTreeNames(state *SessionState) func(int) string {
 	return sessionLeafNames(state.WindowToBSPID)
 }
 
-// noteOwnMutationLocked records that the mutation which will carry version was
-// made by the client connection origin. A push from that client built before it
-// is not stale on its account: the client made the change and already shows
-// it. See missedMutationLocked. The caller holds stateMu.
-func (s *Session) noteOwnMutationLocked(version int, origin string) {
-	if origin == "" {
-		return
-	}
-	if s.opVersions == nil {
-		s.opVersions = make(map[int]string)
-	}
-	s.opVersions[version] = origin
-	delete(s.opVersions, version-maxOwnMutations)
+// noteTreeOpLocked records that the mutation which will carry version was a
+// tree op. A tree op changes the trees and nothing else, and a push from a
+// client that sends ops carries no trees, so a push built before a tree op
+// has missed nothing it could undo. See missedMutationLocked. The caller holds
+// stateMu.
+func (s *Session) noteTreeOpLocked(version int) {
+	s.treeOpVersions[version%len(s.treeOpVersions)] = version
 }
 
-// maxOwnMutations bounds the record noteOwnMutationLocked keeps. A push built
-// further back than this is read as stale, which is the safe answer.
-const maxOwnMutations = 1024
-
-// missedMutationLocked reports whether a push from origin built at base
-// predates a mutation that origin did not make itself. That is what stale
-// means: the client has not seen something the daemon did. Its own ops do not
-// count, or every push after a tree op would be reconciled as stale until the
-// op's answer came back, and a window move pushed in that gap would be undone.
-// The caller holds stateMu.
-func (s *Session) missedMutationLocked(origin string, base, current int) bool {
+// missedMutationLocked reports whether a push built at base predates a
+// mutation other than a tree op. That is what stale means: the client has not
+// seen something the daemon did that its push could undo.
+//
+// Tree ops do not count, whoever sent them. Counting them made every push
+// built before a peer's resize stale, and the reconcile then took Minimized,
+// Workspace and CustomName from the daemon, which undid a minimise, a move or
+// a rename the pushing client had just made. A push from a client too old to
+// send ops does carry trees, and it is taken as sent whether or not it is
+// stale, so skipping tree ops changes nothing for it.
+//
+// Versions further back than the record reaches read as missed, which is the
+// safe answer. The caller holds stateMu.
+func (s *Session) missedMutationLocked(base, current int) bool {
 	if base >= current {
 		return false
 	}
-	if origin == "" || current-base > maxOwnMutations {
+	if current-base > len(s.treeOpVersions) {
 		return true
 	}
 	for v := base + 1; v <= current; v++ {
-		if s.opVersions[v] != origin {
+		if s.treeOpVersions[v%len(s.treeOpVersions)] != v {
 			return true
 		}
 	}
@@ -358,9 +332,10 @@ func (s *Session) missedMutationLocked(origin string, base, current int) bool {
 }
 
 // handleLayoutTree applies a client's tree op. An op that is applied reaches
-// every client, its sender included, through the state sink. One that is
-// refused is answered to its sender alone with the state that stands, so the
-// sender never keeps showing a tree the session did not take.
+// every client, its sender included, through the state sink. One that changes
+// nothing, or that is malformed, is answered to its sender alone with the state
+// that stands, so the sender still hears that its op landed and never keeps
+// showing a tree the session did not take.
 func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
@@ -374,9 +349,6 @@ func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid layout tree payload: %w", err)
 	}
 	d.notePush(cs, session, p.PushOrigin, p.PushSeq)
-	if p.PushOrigin != "" && len(p.PushOrigin) > maxPushOriginLen {
-		p.PushOrigin = ""
-	}
 	nodes := 0
 	var err error
 	if p.Tree != nil {

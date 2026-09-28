@@ -42,7 +42,12 @@ func (m *OS) QueueStateSync(sync StateSyncMsg) (displaced bool) {
 		// the reply to this client's own push for an older broadcast, which
 		// AcceptState then refused as predating that push, and the client was
 		// left with nothing to apply until the session next changed.
-		if queued.State != nil && sync.State.SnapshotSeq != 0 && queued.State.SnapshotSeq > sync.State.SnapshotSeq {
+		//
+		// The numbers are one session's, in one daemon run, so they are only
+		// compared within one attach. Across a session switch or a daemon
+		// restart the one that arrived later wins, as it did before.
+		if queued.State != nil && queued.Attach == sync.Attach && queued.State.Name == sync.State.Name &&
+			sync.State.SnapshotSeq != 0 && queued.State.SnapshotSeq > sync.State.SnapshotSeq {
 			sync = queued
 		}
 	default:

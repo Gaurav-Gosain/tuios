@@ -61,7 +61,7 @@ func TestLayoutTreeOpIsVersionedAndRenumbered(t *testing.T) {
 	sess, a, b := treeSession(t)
 	v := sess.GetState().Version
 
-	op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: v, Workspace: 1,
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree:   bspTree(bspSplit(1, 0.3, bspLeaf(7), bspLeaf(9))),
 		Leaves: map[int]string{7: a, 9: b}}
 	if !applyTree(t, sess, op) {
@@ -76,7 +76,7 @@ func TestLayoutTreeOpIsVersionedAndRenumbered(t *testing.T) {
 	}
 	ids := st.WindowToBSPID
 
-	other := &LayoutTreePayload{PushOrigin: "two", BaseVersion: v + 1, Workspace: 1,
+	other := &LayoutTreePayload{PushOrigin: "two", Workspace: 1,
 		Tree:   bspTree(bspSplit(2, 0.6, bspLeaf(1), bspLeaf(2))),
 		Leaves: map[int]string{1: b, 2: a}}
 	if !applyTree(t, sess, other) {
@@ -91,41 +91,28 @@ func TestLayoutTreeOpIsVersionedAndRenumbered(t *testing.T) {
 	}
 }
 
-// TestLayoutTreeOpBuiltOnAnOlderTreeIsRefused: two clients reshape one tree
-// from the same starting point. The first op to land stands. The second is
-// refused without advancing Version, and once its client has seen the first,
-// its next op lands.
-func TestLayoutTreeOpBuiltOnAnOlderTreeIsRefused(t *testing.T) {
+// TestLayoutTreeOpsLandInArrivalOrder: two clients reshape one tree from the
+// same starting point. Nothing is refused. The later op stands, and each op
+// advances Version, so every client is sent the result.
+func TestLayoutTreeOpsLandInArrivalOrder(t *testing.T) {
 	sess, a, b := treeSession(t)
 	v := sess.GetState().Version
 
-	first := &LayoutTreePayload{PushOrigin: "one", BaseVersion: v, Workspace: 1,
+	first := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
-	second := &LayoutTreePayload{PushOrigin: "two", BaseVersion: v, Workspace: 1,
+	second := &LayoutTreePayload{PushOrigin: "two", Workspace: 1,
 		Tree: bspTree(bspSplit(2, 0.7, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	if !applyTree(t, sess, first) {
-		t.Fatal("the first op was refused")
+		t.Fatal("the first op was not applied")
 	}
-	if applyTree(t, sess, second) {
-		t.Fatal("an op built before another client's op on the same tree was applied")
-	}
-	if got := sess.GetState().Version; got != v+1 {
-		t.Fatalf("a refused op moved Version to %d", got)
-	}
-	if got, want := sessionTreeKey(sess, 1), opKey(first); got != want {
-		t.Fatalf("session tree %q, want the first op's %q", got, want)
-	}
-
-	// Another workspace is not in conflict.
-	elsewhere := *second
-	elsewhere.Workspace = 2
-	if !applyTree(t, sess, &elsewhere) {
-		t.Fatal("an op on another workspace was refused")
-	}
-
-	second.BaseVersion = sess.GetState().Version
 	if !applyTree(t, sess, second) {
-		t.Fatal("an op built on the current tree was refused")
+		t.Fatal("the second op was not applied")
+	}
+	if got := sess.GetState().Version; got != v+2 {
+		t.Fatalf("Version = %d after two ops, want %d", got, v+2)
+	}
+	if got, want := sessionTreeKey(sess, 1), opKey(second); got != want {
+		t.Fatalf("session tree %q, want the later op's %q", got, want)
 	}
 }
 
@@ -134,9 +121,8 @@ func TestLayoutTreeOpBuiltOnAnOlderTreeIsRefused(t *testing.T) {
 // next one stale.
 func TestLayoutTreeOpsFromOneClientStack(t *testing.T) {
 	sess, a, b := treeSession(t)
-	v := sess.GetState().Version
 	for i, ratio := range []float64{0.4, 0.45, 0.5, 0.55} {
-		op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: v, Workspace: 1,
+		op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 			Tree: bspTree(bspSplit(1, ratio, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 		if !applyTree(t, sess, op) {
 			t.Fatalf("step %d of the drag was refused", i)
@@ -151,7 +137,7 @@ func TestLayoutTreeOpsFromOneClientStack(t *testing.T) {
 // the session holds does not advance Version, so it wakes no client.
 func TestLayoutTreeOpThatChangesNothingIsNotApplied(t *testing.T) {
 	sess, a, b := treeSession(t)
-	op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: sess.GetState().Version, Workspace: 1,
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, op)
 	v := sess.GetState().Version
@@ -166,34 +152,56 @@ func TestLayoutTreeOpThatChangesNothingIsNotApplied(t *testing.T) {
 	}
 }
 
-// TestPushAfterOwnTreeOpIsCurrent: a client sends a tree op and, before the
-// answer is back, pushes a window move built on the version it had. The push is
-// not stale on account of its own op, so the move stands. A push from another
-// client built at that version is stale.
+// TestPushAfterATreeOpIsCurrent: a tree op lands, from this client or a peer,
+// and a push built before it arrives. The op changed only the trees, and the
+// push carries none, so the push is current: the window move and the minimise
+// in it stand. A push built before a mutation that is not a tree op is still
+// stale.
 //
-// Negative control: with the plain version comparison back in UpdateStateFrom,
-// the push is reconciled and the window returns to workspace 1.
-func TestPushAfterOwnTreeOpIsCurrent(t *testing.T) {
+// Negative control: with tree ops counted as missed mutations again (the
+// plain BaseVersion < Version test, or counting only the pusher's own ops),
+// the peer's push is reconciled and the window comes back from workspace 2.
+func TestPushAfterATreeOpIsCurrent(t *testing.T) {
 	sess, a, b := treeSession(t)
-	push := clientSnapshot(sess)
-	other := clientSnapshot(sess)
+	own := clientSnapshot(sess)
 
-	op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: push.BaseVersion, Workspace: 1,
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, op)
 
-	push.PushOrigin = "one"
-	windowByID(t, push, b).Workspace = 2
-	if !sess.UpdateState(push) {
+	own.PushOrigin = "one"
+	windowByID(t, own, b).Workspace = 2
+	if !sess.UpdateState(own) {
 		t.Error("a push was read as stale on account of its own client's tree op")
 	}
 	if w := windowByID(t, sess.GetState(), b); w == nil || w.Workspace != 2 {
 		t.Fatalf("the window move was undone: %+v", w)
 	}
 
-	other.PushOrigin = "two"
-	if sess.UpdateState(other) {
-		t.Error("a push that never saw another client's tree op was taken as current")
+	peer := clientSnapshot(sess) // built before the next op
+	op.Tree = bspTree(bspSplit(2, 0.6, bspLeaf(1), bspLeaf(2)))
+	op.PushOrigin = "one"
+	applyTree(t, sess, op)
+	peer.PushOrigin = "two"
+	windowByID(t, peer, a).Minimized = true
+	if !sess.UpdateState(peer) {
+		t.Error("a push was read as stale on account of a peer's tree op")
+	}
+	got := sess.GetState()
+	if w := windowByID(t, got, a); w == nil || !w.Minimized {
+		t.Fatalf("the minimise was undone by a peer's tree op: %+v", w)
+	}
+	if w := windowByID(t, got, b); w == nil || w.Workspace != 2 {
+		t.Fatalf("the earlier move was lost: %+v", w)
+	}
+
+	stale := clientSnapshot(sess)
+	stale.PushOrigin = "two"
+	if err := sess.RenameDaemonWindow(a, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if sess.UpdateState(stale) {
+		t.Error("a push built before a rename was taken as current")
 	}
 }
 
@@ -202,7 +210,7 @@ func TestPushAfterOwnTreeOpIsCurrent(t *testing.T) {
 // from a client too old for ops carries trees, and they are taken as sent.
 func TestPushWithoutTreesKeepsTheSessionsTrees(t *testing.T) {
 	sess, a, b := treeSession(t)
-	op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: sess.GetState().Version, Workspace: 1,
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, op)
 	want := sessionTreeKey(sess, 1)
@@ -229,7 +237,7 @@ func TestPushWithoutTreesKeepsTheSessionsTrees(t *testing.T) {
 // is not handed a leaf it cannot lay out.
 func TestClosedWindowLeavesTheSessionsTree(t *testing.T) {
 	sess, a, b := treeSession(t)
-	op := &LayoutTreePayload{PushOrigin: "one", BaseVersion: sess.GetState().Version, Workspace: 1,
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, op)
 	if _, err := sess.CloseDaemonWindow(a); err != nil {
@@ -240,7 +248,7 @@ func TestClosedWindowLeavesTheSessionsTree(t *testing.T) {
 	}
 
 	// A leaf for a window the session does not hold is left out of an op too.
-	stale := &LayoutTreePayload{PushOrigin: "one", BaseVersion: sess.GetState().Version, Workspace: 1,
+	stale := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(2, 0.4, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, stale)
 	if got := sessionTreeKey(sess, 1); got != "0/0.5 "+b {
