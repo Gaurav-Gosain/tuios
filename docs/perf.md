@@ -2131,11 +2131,16 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,000,000 | 26,681,504 |
+| linux/amd64 | 25,182,370 | 26,400,000 (raised at 26,001,570) | 26,681,504 |
 | darwin/arm64 | 23,834,594 | 24,600,000 | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
-before the size cuts, so undoing those cuts fails the job. A Go 1.27 toolchain
+before the size cuts, so undoing those cuts fails the job.
+
+The linux/amd64 budget went from 26,000,000 to 26,400,000 when hints mode,
+mail compose, the host fence and multi copy mode brought the build to
+26,001,570 bytes (Go 1.26.6). The new budget is still below the size before the
+size cuts, so undoing those cuts still fails the job. A Go 1.27 toolchain
 builds binaries up to about 120 KB larger than 1.26.6, which is inside the room.
 
 To raise a budget, do it on purpose in its own commit: run
