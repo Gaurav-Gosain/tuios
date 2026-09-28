@@ -291,12 +291,17 @@ confirmation refuse it. See
 
 ## Other keyboard layouts
 
-Bindings work with any keyboard layout. When no binding matches the character a
-key types, tuios uses the key at the same position on a US layout. With a
-Ukrainian layout, the key that types `ш` is the US `i` key, so `ctrl+b` then
-that key opens the Inbox. A binding on the typed character wins, so you can
-still bind `ш` yourself. Text that you type into a pane, a rename or a search
-stays the character that you typed.
+Bindings work with layouts for non-Latin scripts, such as Cyrillic, Greek,
+Hebrew or Arabic. When no binding matches the character a key types, tuios uses
+the key at the same position on a US layout. With a Ukrainian layout, the key
+that types `ш` is the US `i` key, so `ctrl+b` then that key opens the Inbox. A
+binding on the typed character wins, so you can still bind `ш` yourself. Text
+that you type into a pane, a rename or a search stays the character that you
+typed.
+
+Latin layouts, such as AZERTY, QWERTZ or Dvorak, use the letters on their keys.
+A letter or a `ctrl` chord means the key that it types, not the US key at its
+position. A Latin letter with no binding does nothing.
 
 This needs a terminal that sends the US-layout key through the Kitty keyboard
 protocol: Ghostty, kitty, WezTerm or foot. Other terminals send only the typed
