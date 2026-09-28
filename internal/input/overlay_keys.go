@@ -73,6 +73,9 @@ func closeHelp(o *app.OS) {
 //     searching, so a search can contain it.
 func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
+	if !o.HelpSearchMode {
+		key = commandKey(msg)
+	}
 
 	switch key {
 	case "esc":
@@ -144,7 +147,7 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // open: q, esc or c close it, r resets the counters, and every other key is
 // swallowed.
 func handleCacheStatsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch msg.String() {
+	switch commandKey(msg) {
 	case "q", "esc", "c":
 		o.ShowCacheStats = false
 	case "r":

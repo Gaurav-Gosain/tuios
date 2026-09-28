@@ -107,8 +107,11 @@ func TestEncodeKeyCSIu(t *testing.T) {
 
 		{"plain letter carries its text (flags 31)", KeyPressEvent{Code: 'a', Text: "a"}, all, "\x1b[97;1;97u"},
 		{"plain letter carries its text (flags 27)", KeyPressEvent{Code: 'a', Text: "a"}, focus, "\x1b[97;1;97u"},
-		{"shifted letter reports the shifted text, base code", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, all, "\x1b[120;2;88u"},
-		{"shifted symbol reports the shifted text", KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift}, all, "\x1b[59;2;58u"},
+		// Flags 31 include alternate keys, so the shifted key rides in the key
+		// field the way kitty sends it: CSI 97:65;2u for shift+a.
+		{"shifted letter reports the shifted key and text", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, all, "\x1b[120:88;2;88u"},
+		{"shifted symbol reports the shifted key and text", KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift}, all, "\x1b[59:58;2;58u"},
+		{"shifted letter without alternate keys", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, focus, "\x1b[120;2;88u"},
 		{"space reports its text", KeyPressEvent{Code: KeySpace, Text: " "}, all, "\x1b[32;1;32u"},
 		{"non-ascii text is reported by code point", KeyPressEvent{Code: 'e', Text: "é"}, all, "\x1b[101;1;233u"},
 		{"enter has no associated text", KeyPressEvent{Code: KeyEnter}, all, "\x1b[13u"},
@@ -123,6 +126,7 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		// plain letter still goes as legacy text (empty CSI-u result).
 		{"no associated text without the flag", KeyPressEvent{Code: 'a', Text: "a"}, disambiguate, ""},
 	}
+	tests = append(tests, layoutKeyCases()...)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -130,5 +134,43 @@ func TestEncodeKeyCSIu(t *testing.T) {
 				t.Errorf("EncodeKeyCSIu(%+v, %d) = %q, want %q", tt.key, tt.flags, got, tt.expected)
 			}
 		})
+	}
+}
+
+// layoutKeyCases pin what a pane gets for a key on a non-Latin layout: "ш" is
+// the I key on a Ukrainian layout, so tuios holds the base-layout key 'i' (105)
+// for it once the host reports alternate keys. Only a pane that asked for
+// alternate keys may see that base key.
+func layoutKeyCases() []struct {
+	name     string
+	key      KeyPressEvent
+	flags    int
+	expected string
+} {
+	const disambiguate = ansi.KittyDisambiguateEscapeCodes
+	const alternate = ansi.KittyDisambiguateEscapeCodes | ansi.KittyReportAlternateKeys
+	const allKeys = ansi.KittyDisambiguateEscapeCodes | ansi.KittyReportAllKeysAsEscapeCodes
+	sha := KeyPressEvent{Code: 'ш', BaseCode: 'i', Text: "ш"}
+	ctrlSha := KeyPressEvent{Code: 'ш', BaseCode: 'i', Mod: ModCtrl}
+	shiftSha := KeyPressEvent{Code: 'ш', ShiftedCode: 'Ш', BaseCode: 'i', Text: "Ш", Mod: ModShift}
+	return []struct {
+		name     string
+		key      KeyPressEvent
+		flags    int
+		expected string
+	}{
+		// Text is sent as text under disambiguate, ASCII or not.
+		{"non-ascii letter is text with disambiguate", sha, disambiguate, ""},
+		{"non-ascii letter is text with alternate keys", sha, alternate, ""},
+		// A pane that did not ask for alternate keys never sees the base key.
+		{"ctrl chord without alternate keys has no base key", ctrlSha, disambiguate, "\x1b[1096;5u"},
+		{"plain key in report-all mode has no base key", sha, allKeys, "\x1b[1096u"},
+		// A pane that asked gets it, with the shifted key empty when Shift is
+		// not held.
+		{"ctrl chord with alternate keys carries the base key", ctrlSha, alternate, "\x1b[1096::105;5u"},
+		{"plain key with all flags carries the base key", sha, ansi.KittyAllFlags, "\x1b[1096::105;1;1096u"},
+		{"shifted key with all flags carries both", shiftSha, ansi.KittyAllFlags, "\x1b[1096:1064:105;2;1064u"},
+		// A base key equal to the code is not repeated.
+		{"base equal to code is left out", KeyPressEvent{Code: 'a', BaseCode: 'a', Mod: ModCtrl}, alternate, "\x1b[97;5u"},
 	}
 }

@@ -154,23 +154,46 @@ func TestHoldKeyIsInertWhenUnbound(t *testing.T) {
 // ask the host for alternate-key reporting, which is what carries the key behind
 // a composed or non-US-layout character; nothing else can turn one back into the
 // chord the user struck.
+//
+// Window mode reads keys against bindings, so it also asks for every key as an
+// escape code with its text alongside (CSI = 29 ; 1 u): alternate keys only
+// reach a key the host already sends as an escape code. Terminal mode gives the
+// pane text as text again (CSI = 5 ; 1 u). See TestLeaderAsksForLayoutKeys.
 func TestKeyboardEnhancementsAreRequested(t *testing.T) {
 	out := &syncBuffer{}
 	base := t.TempDir()
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, out: out})
 	waitBoot(t, term)
 
-	// CSI = 5 ; 1 u: disambiguate (1) plus alternate keys (4), set exactly.
-	const want = "\x1b[=5;1u"
+	// Disambiguate (1), alternate keys (4), all keys (8), associated text (16).
+	waitForRequest(t, term, out, 0, kittyWindowModeFlags)
+
+	newWindow(t, term)
+	mark := len(out.String())
+	enterTerminalMode(t, term)
+	// Disambiguate (1) plus alternate keys (4), set exactly.
+	waitForRequest(t, term, out, mark, kittyPaneFlags)
+}
+
+const (
+	// kittyWindowModeFlags is the host request while tuios reads keys itself.
+	kittyWindowModeFlags = "\x1b[=29;1u"
+	// kittyPaneFlags is the host request while a pane has the keyboard.
+	kittyPaneFlags = "\x1b[=5;1u"
+)
+
+// waitForRequest waits until tuios has written want to its terminal at or after
+// byte offset from.
+func waitForRequest(t *testing.T, term *tuitest.Terminal, out *syncBuffer, from int, want string) {
+	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
-		if strings.Contains(out.String(), want) {
+		if strings.Contains(out.String()[from:], want) {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("tuios never asked the terminal for alternate-key reporting (%q)\n%s",
-		want, term.Snapshot())
+	t.Fatalf("tuios never asked the terminal for %q\n%s", want, term.Snapshot())
 }
 
 // syncBuffer collects the raw bytes tuios writes to its terminal. The harness

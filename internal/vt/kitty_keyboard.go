@@ -206,6 +206,12 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		if key.Mod == 0 && code >= 0x20 && code < 0x7f {
 			return ""
 		}
+		// The same for a key that types a non-ASCII character, such as "ш" on
+		// a Ukrainian layout: text is sent as text. Only report-all-keys turns
+		// a plain text key into an escape code.
+		if key.Mod == 0 && key.Text != "" && unicode.IsPrint(key.Code) {
+			return ""
+		}
 		// For Shift+printable that produces different text (e.g., Shift+a → 'A'),
 		// the kitty spec says to send the text directly, not CSI u.
 		// Only use CSI u when there are other modifiers (Ctrl, Alt) besides Shift.
@@ -232,15 +238,46 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	// non-ASCII text is dropped. The field is a colon-separated list of the
 	// produced text's Unicode code points; see the kitty keyboard protocol.
 	modParam := kittyModParam(key.Mod)
+	keyField := strconv.Itoa(code)
+	if flags&ansi.KittyReportAlternateKeys != 0 {
+		keyField = kittyAlternateKeys(code, key)
+	}
 	if flags&ansi.KittyReportAssociatedKeys != 0 {
 		if text := kittyAssociatedText(key.Text); text != "" {
-			return fmt.Sprintf("\x1b[%d;%d;%su", code, modParam, text)
+			return fmt.Sprintf("\x1b[%s;%d;%su", keyField, modParam, text)
 		}
 	}
 	if modParam > 1 {
-		return fmt.Sprintf("\x1b[%d;%du", code, modParam)
+		return fmt.Sprintf("\x1b[%s;%du", keyField, modParam)
 	}
-	return fmt.Sprintf("\x1b[%du", code)
+	return fmt.Sprintf("\x1b[%su", keyField)
+}
+
+// kittyAlternateKeys renders the key field for a pane that asked for alternate
+// keys: code[:shifted[:base]]. The shifted key is only there with Shift held,
+// and the base-layout key (the US-layout key at the same position) only when it
+// differs from the code. A pane that did not ask gets the bare code, so the
+// alternate keys tuios asks the host for never reach it.
+func kittyAlternateKeys(code int, key KeyPressEvent) string {
+	field := strconv.Itoa(code)
+	shifted := 0
+	if key.Mod&ModShift != 0 && key.ShiftedCode != 0 && int(key.ShiftedCode) != code {
+		shifted = int(key.ShiftedCode)
+	}
+	base := 0
+	if key.BaseCode != 0 && int(key.BaseCode) != code {
+		base = int(key.BaseCode)
+	}
+	if shifted != 0 {
+		field += ":" + strconv.Itoa(shifted)
+	}
+	if base != 0 {
+		if shifted == 0 {
+			field += ":"
+		}
+		field += ":" + strconv.Itoa(base)
+	}
+	return field
 }
 
 // kittyAssociatedText renders a key's produced text as the colon-separated
