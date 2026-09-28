@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
@@ -9,9 +10,10 @@ import (
 // findMatches runs the matcher over the copied view and labels what it
 // finds.
 //
-// The view is read as lines rather than rows. A row whose last column is
-// full is taken to wrap onto the next one, so a URL the pane broke across two
-// rows is one line of text to the matcher and one match on the screen. Each
+// The view is read as lines rather than rows. A row the emulator wrapped onto
+// the next one is joined to it, so a URL the pane broke across two rows is one
+// line of text to the matcher and one match on the screen. A line that only
+// happens to fill the row is not joined. Each
 // cell's text goes into the line once, so a wide glyph is one character there
 // and two columns on the screen, and every byte of the line knows which cell
 // drew it.
@@ -36,7 +38,7 @@ func (s *hintsState) findMatches(matcher *hints.Matcher, cursor hintCell) {
 				b.WriteString(c.Content)
 			}
 			rows++
-			full := s.rowIsFull(next)
+			full := s.rowWraps(next)
 			next++
 			if !full || rows >= hintsWrapRows {
 				break
@@ -44,11 +46,12 @@ func (s *hintsState) findMatches(matcher *hints.Matcher, cursor hintCell) {
 		}
 		text := b.String()
 		for _, found := range matcher.Find(text) {
+			// offs rises with the line, so the match's first cell is a
+			// binary search away and its cells follow it in order.
 			var cells []hintCell
-			for i, off := range offs {
-				if off >= found.Start && off < found.End {
-					cells = append(cells, refs[i])
-				}
+			first, _ := slices.BinarySearch(offs, found.Start)
+			for i := first; i < len(offs) && offs[i] < found.End; i++ {
+				cells = append(cells, refs[i])
 			}
 			if len(cells) == 0 {
 				continue

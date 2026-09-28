@@ -215,6 +215,10 @@ func (m *OS) FocusWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		return m
 	}
+	// The labels name the pane that had focus.
+	if m.hints != nil && m.Windows[i].ID != m.hints.windowID {
+		m.CloseHints()
+	}
 
 	// Ahead of the already-focused early return: focusing IS the look, whether
 	// or not it moves focus.
@@ -743,6 +747,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	m.Windows = slices.Delete(m.Windows, i, i+1)
+	m.closeStaleHints()
 
 	// Explicitly clear the deleted window pointer to help GC
 	deletedWindow = nil

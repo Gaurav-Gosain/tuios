@@ -309,7 +309,15 @@ const kubeKinds = `pods?|po|deployments?|deploy|services?|svc|nodes?|no|jobs?|cr
 	`roles?|rolebindings?|clusterroles?|clusterrolebindings?|networkpolicies|netpol`
 
 // pathSeg is one component of a path: no spaces, no colon, no quote.
-const pathSeg = `[\w.@+~%=-]+`
+//
+// \w in Go is ASCII only, so a letter class stands in for it: a path or an
+// address with an accented or non-Latin name, or a letter written with a
+// combining mark, keeps the whole name rather than stopping at the first
+// such letter.
+const pathSeg = `[\p{L}\p{M}\p{N}_.@+~%=-]+`
+
+// wordChars is \w with every script's letters, marks and digits.
+const wordChars = `\p{L}\p{M}\p{N}_`
 
 // builtinPatterns is every built-in rule. The order is the tie-break when two
 // claims are the same length, so the more specific kind comes first.
@@ -343,7 +351,7 @@ var builtinPatterns = []pattern{
 	},
 	{
 		kind: Email,
-		re:   regexp.MustCompile(`\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b`),
+		re:   regexp.MustCompile(`[` + wordChars + `.+-]+@[` + wordChars + `-]+(?:\.[` + wordChars + `-]+)+`),
 	},
 	{
 		// A Kubernetes resource as kubectl names it: kind/name, with an

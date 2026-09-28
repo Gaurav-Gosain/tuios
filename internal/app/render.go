@@ -640,6 +640,11 @@ func (m *OS) composeFrame() string {
 		m.OverlayHits = m.OverlayHits[:0]
 		return m.screensaver.frame
 	}
+	// Hints mode whose pane went away, left the screen or lost focus ends
+	// here, before the fast path is judged. Its pass only runs when its pane
+	// is drawn, so a pane that is not drawn would otherwise hold hints open,
+	// and the fast path off, for good.
+	m.closeStaleHints()
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
 		// The fast path draws no rail, so no working row is on screen and the
 		// shimmer's clock must not go on asking for frames.

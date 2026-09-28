@@ -30,6 +30,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = o, nil
 			break
 		}
+		// Hints mode owns the keyboard, releases included: the release of a
+		// label letter is not the pane's to see.
+		if o.HintsOpen() {
+			return o, nil
+		}
 		forwardKeyReleaseToFocused(msg, o)
 		return o, nil
 	case tea.PasteStartMsg:
@@ -57,6 +62,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		// The labels cover the pane, so motion over it is not the pane's.
+		if o.HintsOpen() {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			// Motion never syncs to the daemon, the same as the browser's.
 			return handleCaptureMouseMotion(msg, o)
@@ -86,6 +95,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
+		// A wheel scrolls the pane out from under the labels, so it ends
+		// hints mode and then scrolls as usual.
+		o.CloseHints()
 		if o.ReviewOpen() {
 			switch msg.Button {
 			case tea.MouseWheelUp:
@@ -114,6 +126,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			o.InboxReplyType(strings.Join(strings.Fields(msg.Content), " "))
 			return o, nil
 		}
+		// Hints mode takes labels one key at a time. A paste, or an input
+		// method's commit that arrives as one, is not a label, and nothing
+		// typed while the labels are up may reach the pane.
+		if o.HintsOpen() {
+			return o, nil
+		}
 		// The review's line takes a paste as one line; with no line open
 		// the overlay drops it, since nothing under it may receive it.
 		if o.ReviewOpen() {
@@ -132,8 +150,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// The terminal answered, so the pending query's timeout is disarmed
 		// whatever mode this client is in.
 		o.NotePasteArrived()
-		// Only handle paste in terminal mode
-		if o.Mode == app.TerminalMode {
+		// Only handle paste in terminal mode, and never into a pane under
+		// hints mode.
+		if o.Mode == app.TerminalMode && !o.HintsOpen() {
 			o.ClipboardContent = msg.Content
 			handleClipboardPaste(o)
 		}

@@ -3,11 +3,14 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -75,6 +78,9 @@ type hintsState struct {
 	w, h int
 	// cells is the copy of the pane's view, row by row.
 	cells [][]uv.Cell
+	// wraps says, per row, whether the emulator wrapped the row onto the
+	// next one. See paneRowWraps.
+	wraps []bool
 	// matches is every match, in reading order.
 	matches []hintMatch
 	// owner maps a cell (y*w+x) to its match index, or -1.
@@ -98,8 +104,42 @@ type hintsState struct {
 	noticeID string
 }
 
-// HintsOpen reports whether hints mode is open.
-func (m *OS) HintsOpen() bool { return m.hints != nil }
+// HintsOpen reports whether hints mode is open on a pane that is still there,
+// on screen and focused. Hints mode on any other pane is closed first, so a
+// caller that routes on this never sends a key to labels nobody can see.
+func (m *OS) HintsOpen() bool {
+	m.closeStaleHints()
+	return m.hints != nil
+}
+
+// HintsTyped is the start of a label typed so far.
+func (m *OS) HintsTyped() string {
+	if m.hints == nil {
+		return ""
+	}
+	return m.hints.typed
+}
+
+// HintLabels maps each match's text to its label, for tests and for anything
+// that needs to say what is on screen without reading cells.
+func (m *OS) HintLabels() map[string]string {
+	if m.hints == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m.hints.matches))
+	for _, h := range m.hints.matches {
+		out[h.text] = h.label
+	}
+	return out
+}
+
+// closeStaleHints closes hints mode when its pane is gone, hidden, resized or
+// no longer focused.
+func (m *OS) closeStaleHints() {
+	if m.hints != nil && m.hintsWindow() == nil {
+		m.CloseHints()
+	}
+}
 
 // hintsConfig is the [hints] section in force.
 func (m *OS) hintsConfig() config.HintsConfig {
@@ -254,7 +294,7 @@ func (m *OS) runHint(window *terminal.Window, match hintMatch, action HintAction
 			m.ShowNotification("Copied the text. Could not type it into the pane.", "warning", m.Settings.NotificationDuration)
 			return cmd
 		}
-		m.ShowNotification(fmt.Sprintf("Copied %d chars and typed them into the pane", len(match.text)), "success", m.Settings.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("Copied %d chars and typed them into the pane", hintChars(match.text)), "success", m.Settings.NotificationDuration)
 		return cmd
 	case HintOpen:
 		return m.openHint(window, match)
@@ -270,7 +310,7 @@ func (m *OS) copyHint(window *terminal.Window, match hintMatch, note string) tea
 	m.CancelPendingCopy()
 	m.noteHintFlash(window, match)
 	if note == "" {
-		note = fmt.Sprintf("Copied %d chars", len(match.text))
+		note = fmt.Sprintf("Copied %d chars", hintChars(match.text))
 	}
 	m.ShowNotification(note, "success", m.Settings.NotificationDuration)
 	return m.clipboardWriteCmd(match.text)
@@ -299,59 +339,116 @@ func (m *OS) noteHintFlash(window *terminal.Window, match hintMatch) {
 
 // openHint opens a URL or a path and copies anything else.
 //
-// A URL goes through OpenLink, which holds the scheme list and knows a remote
-// client cannot open anything for its viewer. A path is opened only when the
-// pane runs on this machine, because on any other machine the same path names
-// somebody else's file.
+// A web address goes through OpenLink, which holds the scheme list and knows a
+// remote client cannot open anything for its viewer. A file (a path, or a
+// file:// address) is opened only when every machine involved is this one:
+// the pane, the session, the client and the directory the pane is in. On any
+// other machine the same path names somebody else's file, and opening a local
+// file of the same name would show the wrong thing. Each refusal copies the
+// text and says why.
 func (m *OS) openHint(window *terminal.Window, match hintMatch) tea.Cmd {
 	if !m.hintsConfig().OpenEnabled() {
-		return m.copyHint(window, match, fmt.Sprintf("Opening is off. Copied %d chars", len(match.text)))
+		return m.copyHint(window, match, fmt.Sprintf("Opening is off. Copied %d chars", hintChars(match.text)))
 	}
 	switch match.kind {
 	case hints.URL:
-		m.CancelPendingCopy()
-		return m.OpenLink(match.text)
-	case hints.Path, hints.Diff:
-		if window.Host != "" {
-			return m.copyHint(window, match, "The pane runs on another machine. Copied the path")
+		if !strings.HasPrefix(strings.ToLower(match.text), "file:") {
+			m.CancelPendingCopy()
+			return m.OpenLink(match.text)
 		}
-		path, ok := hintLocalPath(window, match.text)
+		if why := m.hintFileBlocked(window); why != "" {
+			return m.copyHint(window, match, why+" Copied the link")
+		}
+		path, ok := linkFilePath(match.text)
 		if !ok {
-			return m.copyHint(window, match, "The pane's folder is not known. Copied the path")
+			return m.copyHint(window, match, "The link names a file on another machine. Copied the link")
+		}
+		m.CancelPendingCopy()
+		return m.openLocalPath(path, match.text)
+	case hints.Path, hints.Diff:
+		if why := m.hintFileBlocked(window); why != "" {
+			return m.copyHint(window, match, why+" Copied the path")
+		}
+		path, why := hintLocalPath(window, match.text)
+		if why != "" {
+			return m.copyHint(window, match, why+" Copied the path")
 		}
 		m.CancelPendingCopy()
 		return m.openLocalPath(path, path)
 	default:
-		return m.copyHint(window, match, fmt.Sprintf("tuios opens only links and paths. Copied %d chars", len(match.text)))
+		return m.copyHint(window, match, fmt.Sprintf("tuios opens only links and paths. Copied %d chars", hintChars(match.text)))
 	}
+}
+
+// hintRemoteShells are the programs whose pane shows another machine's files
+// even though the pane itself runs here.
+var hintRemoteShells = []string{"ssh", "mosh", "mosh-client", "et", "telnet"}
+
+// hintFileBlocked says why a file named in the pane may not be opened on this
+// machine, or "" when it may.
+func (m *OS) hintFileBlocked(window *terminal.Window) string {
+	switch {
+	case window.Host != "":
+		return "The pane runs on another machine."
+	case m.AttachedHost != "":
+		return "This session runs on another machine."
+	case m.IsRemoteClient():
+		return "A remote client can not open files."
+	case slices.Contains(hintRemoteShells, window.ForegroundCmd):
+		return "The pane shows another machine."
+	}
+	if host, ok := hintCwdHost(window.Cwd); ok && host != "" && !isLocalHost(host) {
+		return "The pane's folder is on another machine."
+	}
+	return ""
+}
+
+// hintCwdHost is the host an OSC 7 directory names, and whether it names one
+// at all. A bare path names no host.
+func hintCwdHost(cwd string) (string, bool) {
+	if !strings.HasPrefix(cwd, "file://") {
+		return "", false
+	}
+	u, err := url.Parse(cwd)
+	if err != nil {
+		return "", false
+	}
+	return u.Hostname(), true
 }
 
 // hintLocalPath turns a path match into an absolute path on this machine: the
 // :line:col a compiler prints is dropped, ~ is the home directory, and a
-// relative path is taken from the pane's working directory. It reports false
-// when the path is relative and the pane's directory is not known.
-func hintLocalPath(window *terminal.Window, text string) (string, bool) {
+// relative path is taken from the pane's working directory. It says why when
+// the path cannot be placed: a relative path with no known directory, or a
+// directory the shell reported on another machine.
+func hintLocalPath(window *terminal.Window, text string) (string, string) {
 	path := stripLineCol(text)
 	if rest, ok := strings.CutPrefix(path, "~"); ok && (rest == "" || rest[0] == '/') {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", false
+			return "", "The home folder is not known."
 		}
 		path = filepath.Join(home, rest)
 	}
 	if filepath.IsAbs(path) {
-		return filepath.Clean(path), true
+		return filepath.Clean(path), ""
 	}
-	dir := ""
-	if cwd, ok := localCwdPath(window.Cwd); ok {
-		dir = cwd
-	} else if cwd := window.CWD(); cwd != "" {
-		dir = cwd
+	// The directory the shell last reported wins. When it names another
+	// machine there is no local directory to fall back to: the process
+	// directory is this machine's, and the path is not.
+	if window.Cwd != "" {
+		if host, ok := hintCwdHost(window.Cwd); ok && host != "" && !isLocalHost(host) {
+			return "", "The pane's folder is on another machine."
+		}
+		if cwd, ok := localCwdPath(window.Cwd); ok {
+			return filepath.Join(cwd, path), ""
+		}
+		return "", "The pane's folder is not known."
 	}
-	if dir == "" {
-		return "", false
+	if cwd := window.CWD(); cwd != "" {
+		return filepath.Join(cwd, path), ""
 	}
-	return filepath.Join(dir, path), true
+	return "", "The pane's folder is not known."
 }
 
 // stripLineCol drops a trailing :line or :line:col.
@@ -378,6 +475,7 @@ func snapshotHints(window *terminal.Window) *hintsState {
 		w:        window.ContentWidth(),
 		h:        h,
 		cells:    make([][]uv.Cell, h),
+		wraps:    make([]bool, h),
 	}
 	blank := uv.Cell{Content: " ", Width: 1}
 	for y := range h {
@@ -401,6 +499,7 @@ func snapshotHints(window *terminal.Window) *hintsState {
 			}
 		}
 		state.cells[y] = row
+		state.wraps[y] = paneRowWraps(window, y)
 	}
 	return state
 }
@@ -419,20 +518,17 @@ func hintsCursor(window *terminal.Window, state *hintsState) hintCell {
 }
 
 // hintsWrapRows bounds how many rows one wrapped line may join, like the link
-// hover's bound. A screen of solid text is not one line.
+// hover's bound.
 const hintsWrapRows = 16
 
-// rowIsFull reports whether a row's last column holds something other than a
-// space, which is what a soft wrap leaves and a line ending does not. It is
-// the same test the link hover uses; the emulator records no wrap flag.
-func (s *hintsState) rowIsFull(y int) bool {
-	if y < 0 || y >= s.h || s.w == 0 {
-		return false
-	}
-	last := s.cells[y][s.w-1]
-	if last.Content == "" && last.Width == 0 {
-		// The tail of a wide glyph: the glyph fills the last column.
-		return true
-	}
-	return last.Content != "" && last.Content != " "
+// rowWraps reports whether row y carries on to row y+1 because the emulator
+// wrapped it. The flag was read when the copy was taken; a full last column
+// on its own is never taken for a wrap.
+func (s *hintsState) rowWraps(y int) bool {
+	return y >= 0 && y < len(s.wraps) && s.wraps[y]
 }
+
+// hintChars counts the characters a person sees in text, which is what the
+// dock message reports: a path of accented or CJK names is fewer characters
+// than it is bytes.
+func hintChars(text string) int { return utf8.RuneCountInString(text) }
