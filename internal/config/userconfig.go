@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"log"
 	"os"
@@ -37,6 +38,11 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
+
+	// YieldedDefaults are the new default bindings left off because the key
+	// was already the user's for another action in the same table. It is
+	// worked out on load and never written. See yieldingDefaults.
+	YieldedDefaults []YieldedDefault `toml:"-"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -2344,7 +2350,12 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.System, defaultCfg.Keybindings.System)
 	fillMapDefaults(cfg.Keybindings.Navigation, defaultCfg.Keybindings.Navigation)
 	fillMapDefaults(cfg.Keybindings.RestoreMinimized, defaultCfg.Keybindings.RestoreMinimized)
+	cfg.YieldedDefaults = append(cfg.YieldedDefaults[:0],
+		yieldTakenDefaults("prefix_mode", cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)...)
 	fillMapDefaults(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
+	for _, y := range cfg.YieldedDefaults {
+		delete(cfg.Keybindings.PrefixMode, y.Action)
+	}
 	fillMapDefaults(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
@@ -2378,6 +2389,51 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		dropStaleDuplicateKeys(section.target, section.defaults)
 	}
+}
+
+// yieldingDefaults are the actions whose default key arrived after users could
+// already have bound that key themselves. Filled in as usual, such a default
+// would take the key from the user's own binding: dropStaleDuplicateKeys
+// hands a contested key to the action that owns it by default. So when the
+// key is already bound to another action in the same table, the new action is
+// left unbound instead, and keybinds doctor says so.
+var yieldingDefaults = map[string]bool{
+	"hints": true,
+}
+
+// YieldedDefault is one new default binding left off because its key was
+// taken.
+type YieldedDefault struct {
+	Section string `json:"section"`
+	Action  string `json:"action"`
+	Key     string `json:"key"`
+	TakenBy string `json:"taken_by"`
+}
+
+// yieldTakenDefaults finds each yielding action the user's table does not
+// name whose default key another action in the table already holds. The
+// caller removes those actions again after fillMapDefaults, so they are
+// neither bound nor written into the file: the check runs on every load, and
+// freeing the key brings the default back.
+func yieldTakenDefaults(section string, target, defaults map[string][]string) []YieldedDefault {
+	var out []YieldedDefault
+	for action := range yieldingDefaults {
+		if _, named := target[action]; named {
+			continue
+		}
+		for _, key := range defaults[action] {
+			for other, keys := range target {
+				if other == action || !slices.Contains(keys, key) {
+					continue
+				}
+				out = append(out, YieldedDefault{Section: section, Action: action, Key: key, TakenBy: other})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b YieldedDefault) int {
+		return cmp.Compare(a.Action+"\x00"+a.Key, b.Action+"\x00"+b.Key)
+	})
+	return out
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {
