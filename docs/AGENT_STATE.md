@@ -384,7 +384,11 @@ at all, so there is no `weak` tier: evidence that weak creates no claim.
 The same three verbs report `evidence_age_ms`: the milliseconds since the last
 evidence about the state arrived. A report, a detector change and the silence
 timer each reset it. A title or screen look that reads back the claim it
-already holds does not, so a spinner left in a title ages like silence. It is
+already holds does not, so a spinner left in a title ages like silence. For a
+state the detector or the silence timer inferred (`source` `detect` or
+`stall`), output from the pane also counts, as it does for the silence timer:
+a pane that keeps printing reads fresh. A state the agent reported keeps the
+age of its report. It is
 `null` on a pane nothing has set a state on. Confidence says how the state was
 learned, and the age says how long ago.
 
