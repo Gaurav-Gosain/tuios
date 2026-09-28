@@ -152,6 +152,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 
 ### Scrollback & Copy Mode
 - **Vim-Style Copy Mode**: Navigate 10,000-line scrollback with hjkl, search with `/`, yank with `y`
+- **Multi Copy Mode**: Copy mode on every pane of the multifocus set at once. Search once, select with `v`/`V` in each pane, and yank all selections as plain text, markdown or JSON, to the clipboard or a file ([docs](docs/LAYOUT_MODES.md#multi-copy-mode))
 - **Mouse Wheel Scrollback**: The wheel scrolls history with no mode entered; typing or reaching the bottom returns to live output
 - **Interactive Scrollbar**: Click or drag the right border to jump to scroll position
 - **Selection Auto-Scroll**: Drag selection above/below pane to scroll

@@ -13,6 +13,7 @@ view and multifocus. This document covers all of them.
 - [Scrolling Layout](#scrolling-layout)
 - [Aggregate View](#aggregate-view)
 - [Multifocus](#multifocus)
+  - [Multi copy mode](#multi-copy-mode)
 
 ## The Three Layout Modes
 
@@ -239,6 +240,72 @@ Limitations:
   removes it from the set.
 - **No key.** There is no default keybinding for either palette command; use
   `Ctrl+Shift+Click` or the palette.
+
+### Multi copy mode
+
+Multi copy mode is copy mode on every pane of the multifocus set at the same
+time. Use it to search the output of many panes once and copy the same part
+from each pane. Each pane has its own cursor and its own selection. Each key
+moves all of them together.
+
+To start it, add two or more panes to the multifocus set and focus one of them.
+Then press `Ctrl+B [`, the copy mode key. When the focused pane is in the set,
+this key starts multi copy mode. When the focused pane is not in the set, or
+the set is empty, the key starts copy mode on one pane as before. The palette
+entry "Multi copy mode" also starts it. When multifocus is on, the `Ctrl+B`
+menu shows "Multi copy mode (N panes)" on the `[` line.
+
+The dock shows `MULTI 3`, where 3 is the number of panes. After a search, it
+shows `MULTI 2/3`: the search found text in 2 of the 3 panes.
+
+| Key | Action |
+|---|---|
+| `h j k l`, `w b e`, `g G`, and the other copy mode motions | Move the cursor in every pane |
+| `/` or `?`, then text, then `Enter` | Search every pane. Each pane goes to its own match |
+| `n` / `N` | Go to the next or previous match in each pane |
+| `v` / `V` | Start a character or line selection in every pane that has a match |
+| `Esc` | End the selection. A second `Esc`, or `q`, leaves copy mode in every pane |
+| `y` | Copy the selection of each pane to the clipboard, as one block |
+| `Y` | Save the selection of each pane to a file |
+| `Tab` | Change the format: plain, markdown, json |
+
+A pane where the search finds no text loses the multifocus border color. With
+a theme, the pane is also dimmed. It keeps its cursor. It does not take motions or selections until
+a later search finds text in it. `Ctrl+L` clears the search.
+
+`y` copies only the text that is selected in each pane. A pane without a
+selection adds nothing. The panes are in window order.
+
+The formats:
+
+- **plain**: The selected lines of each pane, one pane after the other. Each
+  pane ends with a newline. Nothing is added. Use it when each line already
+  names its host.
+- **markdown**: For each pane, a `## Pane N: title` heading and the lines in a
+  fenced code block.
+- **json**: An array with one object for each pane:
+  `{"pane": N, "window_id": "...", "title": "...", "lines": ["..."]}`. The pane
+  number is the index that `tuios list-windows --json` shows.
+
+The format starts as the value of `appearance.selection.multi_format` (default
+`plain`). `Tab` changes it until you leave multi copy mode.
+
+`Y` opens a prompt at the bottom of the focused pane. The default path is
+`~/tuios-copy-<date>-<time>.<ext>`, with `txt`, `md` or `json` for the format.
+Edit the path and press `Enter` to save, or press `Esc` to cancel. tuios does
+not write over a file that exists. The dock shows the path of the file it
+wrote. In the browser client and over SSH, the file is on the machine that
+runs tuios.
+
+A pane title can come from a remote shell. In the markdown and json formats,
+tuios removes control, bidirectional and zero-width characters from the title
+and limits it to 200 characters.
+
+Limits:
+
+- Soft-wrapped lines are joined by a width estimate, the same as copy mode on
+  one pane.
+- Multi copy mode ends when focus moves to a pane that is not in it.
 
 ## Related Documentation
 
