@@ -208,6 +208,15 @@ type verbDoc struct {
 }
 
 // sessionParam is the session selector shared by nearly every verb.
+// identityReturn, confidenceReturn and evidenceAgeReturn are the three
+// detection fields get-agent-state, explain-agent-detect and list-agents share,
+// declared once so the three verbs describe them in the same words.
+var (
+	identityReturn    = verbParam{Name: "identity", Type: "string", Description: "What named the agent: report (the harness named itself), manifest (a manifest rule matched the process), list (a name list matched the process) or hint (TUIOS_AGENT in the process environment). Empty when nothing named it.", Accepted: []string{"report", "manifest", "list", "hint", ""}}
+	confidenceReturn  = verbParam{Name: "confidence", Type: "string", Description: "How sure the identity is: certain for report, strong for manifest, list and hint, none when nothing named the agent.", Accepted: []string{"certain", "strong", "none"}}
+	evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Description: "Milliseconds since the last evidence about the state arrived: a report, a detector change or the silence timer. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
+)
+
 var sessionParam = verbParam{
 	Name:        "session",
 	Type:        "string",
@@ -1338,8 +1347,26 @@ func init() {
 		"get-agent-state": {
 			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, which source and harness it came from, how confident the harness attribution is, whether the pane needs a person, whether ask-agent would type at it now (ready), and for a pane on needs_input whether it waits on an approval or a question (blocked_by).",
 			params:      []verbParam{sessionParam, windowParam},
-			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
-			handler:     (*Daemon).verbGetAgentState,
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window the state is read from."},
+				{Name: "state", Type: "string", Description: "The agent state the pane shows.", Accepted: AgentStateNames},
+				{Name: "message", Type: "string", Description: "The message the state was reported with, empty when none."},
+				{Name: "agent_state_at", Type: "int", Description: "When the state was last set, in Unix nanoseconds. 0 when nothing ever set one."},
+				{Name: "source", Type: "string", Description: "The source that owns the state: report, transcript, osc, screen, detect or stall."},
+				{Name: "harness_id", Type: "string", Description: "The harness the source named, empty when none did."},
+				identityReturn,
+				confidenceReturn,
+				evidenceAgeReturn,
+				{Name: "needs_you", Type: "bool", Description: "Whether the state asks for a person: true for needs_input and errored."},
+				{Name: "activity", Type: "string", Description: "The state in one word: working, waiting, resting, unknown or none."},
+				{Name: "ready", Type: "bool", Description: "Whether ask-agent would type at the pane now."},
+				{Name: "blocked_by", Type: "string", Description: "approval or question for a pane on needs_input, empty otherwise."},
+				{Name: "agent_session_id", Type: "string", Description: "The harness's own conversation id, empty until a hook reports one."},
+				{Name: "meta", Type: "object", Description: "The set-agent-meta keys, key to value."},
+				{Name: "queued", Type: "int", Description: "How many messages wait in the pane's delivery queue."},
+			},
+			examples: []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
+			handler:  (*Daemon).verbGetAgentState,
 		},
 		"resolve-pane": {
 			description: "Name the pane a process runs in, from its terminal session id and its ancestor pids. It is how a hook reporter finds its pane when the harness or a sandbox wrapper scrubbed TUIOS_PANE_ID from the environment. Only panes on this daemon's own machine are matched.",
@@ -1381,6 +1408,24 @@ func init() {
 		"explain-agent-detect": {
 			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
 			params:      []verbParam{sessionParam, windowParam},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window explained."},
+				{Name: "verdict", Type: "string", Description: "One sentence: whether the pane runs an agent, and which."},
+				{Name: "evidence", Type: "[]string", Description: "The facts the verdict rests on, one sentence each."},
+				{Name: "state", Type: "string", Description: "The agent state the pane shows.", Accepted: AgentStateNames},
+				{Name: "source", Type: "string", Description: "The source that owns the state, empty for a pane nothing has claimed."},
+				{Name: "harness_id", Type: "string", Description: "The harness the pane shows, empty when none is named."},
+				{Name: "auto_detected", Type: "bool", Description: "Whether the foreground detector promoted the pane."},
+				identityReturn,
+				confidenceReturn,
+				evidenceAgeReturn,
+				{Name: "running", Type: "bool", Description: "Whether a foreground process could be read."},
+				{Name: "matched", Type: "bool", Description: "Whether the process read now matches an agent."},
+				{Name: "matched_rule", Type: "string", Description: "With matched: the predicate that matched."},
+				{Name: "process", Type: "object", Description: "What the detector read: comm, argv and executable."},
+				{Name: "manifests", Type: "[]object", Description: "Each manifest and what its rules made of the process."},
+				{Name: "ignored", Type: "[]string", Description: "Words that look like an agent's name and did not count, each with the reason."},
+			},
 			examples: []string{
 				`{"id":1,"verb":"explain-agent-detect","params":{"session":"work","window":"build"}}`,
 			},
@@ -1437,7 +1482,7 @@ func init() {
 				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps only the panes it matches, in every session unless session is also given. The answer then carries the confirm token a write by the same selector takes."},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group, protocol, queued. queued is how many messages wait in the pane's delivery queue. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, identity, evidence_age_ms, completion_seq, finished_unread, agent_session_id, meta, group, protocol, queued. queued is how many messages wait in the pane's delivery queue. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane. identity, confidence and evidence_age_ms are as get-agent-state reports them."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
 				{Name: "confirm", Type: "string", Description: "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},

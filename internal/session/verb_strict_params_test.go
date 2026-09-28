@@ -84,8 +84,7 @@ func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
 				"session-info", "list-windows", "close-window", "resize", "kill-session",
 				"send-keys", "send-text", "capture-pane", "wait-for",
 				"set-session-name", "set-session-accent", "set-workspace-name",
-				"set-workspace-order", "set-agent-state", "get-agent-state",
-				"explain-agent-detect", "explain-agent-screen":
+				"set-workspace-order", "set-agent-state", "explain-agent-screen":
 				// Verbs that predate the returns field. They are documented in the
 				// skill and their shapes are pinned by their own tests; listing them
 				// here keeps the guard honest about what is not covered yet rather

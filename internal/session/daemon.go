@@ -233,6 +233,10 @@ type Daemon struct {
 	// CLI. It merges the built-in agent binary names with any the user added.
 	agentMatcher agentMatcher
 
+	// evidenceClock is the time the detection verbs measure evidence_age_ms
+	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
+	evidenceClock func() time.Time
+
 	// transcriptWatcher is the one filesystem notification the transcript source
 	// runs on, shared by every session. Nil when the kernel would not give the
 	// daemon one, in which case every join reads on its pane's own output

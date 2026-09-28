@@ -140,7 +140,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 	}
 
 	unread := d.agents.unreadCounts(sess.Name)
-	agents := d.agentRows(sess, p.All, unread, time.Now().UnixNano(), sel)
+	agents := d.agentRows(sess, p.All, unread, d.evidenceNow().UnixNano(), sel)
 
 	out := map[string]any{
 		"type":    "agent_list",
@@ -187,7 +187,7 @@ func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noTo
 func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
-	now := time.Now().UnixNano()
+	now := d.evidenceNow().UnixNano()
 	agents := make([]map[string]any, 0, len(sessions))
 	humanUnread := 0
 	for _, sess := range sessions {
@@ -251,6 +251,10 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"blocked_by":     agentBlockedBy(w),
 			"needs_you":      w.AgentState.NeedsYou(),
 			"confidence":     claim.identity.confidence(),
+			// identity is the tier confidence is read from: report, manifest,
+			// list or hint, empty when nothing named the agent.
+			"identity":        string(claim.identity),
+			"evidence_age_ms": evidenceAgeMS(w.AgentStateAt, time.Unix(0, now)),
 			// completion_seq counts the pane's finished turns, and
 			// finished_unread says the latest one has not been in front of
 			// anybody: no attached client has pushed state with the pane
