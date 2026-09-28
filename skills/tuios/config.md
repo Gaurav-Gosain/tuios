@@ -261,6 +261,11 @@ leader, every binding table, `explain`, `free` and `unbind` read all spellings
 as one key. `explain` and `doctor` show the spelling tuios matches, for example
 `opt+f12 (tuios reads it as alt+f12)`.
 
+Bindings match the physical key on any layout. A key that types `ш` on a
+Ukrainian layout runs the binding on `i`, the US key at the same position,
+unless `ш` has a binding of its own. This needs Ghostty, kitty, WezTerm or foot.
+`keybinds explain` checks the key as written, so give it the Latin key.
+
 ```sh
 tuios keybinds unbind close_window w   # one key off one action
 tuios keybinds free alt+left           # hand the key back to the pane

@@ -289,6 +289,19 @@ you: a note it typed is not saved, and `S`, `x`, `V` and the keep
 confirmation refuse it. See
 [Reviewing an agent's changes](AGENT_STATE.md#reviewing-an-agents-changes).
 
+## Other keyboard layouts
+
+Bindings work with any keyboard layout. When no binding matches the character a
+key types, tuios uses the key at the same position on a US layout. With a
+Ukrainian layout, the key that types `ш` is the US `i` key, so `ctrl+b` then
+that key opens the Inbox. A binding on the typed character wins, so you can
+still bind `ш` yourself. Text that you type into a pane, a rename or a search
+stays the character that you typed.
+
+This needs a terminal that sends the US-layout key through the Kitty keyboard
+protocol: Ghostty, kitty, WezTerm or foot. Other terminals send only the typed
+character. With those, switch to a Latin layout for tuios commands.
+
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an
