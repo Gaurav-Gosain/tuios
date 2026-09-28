@@ -82,7 +82,7 @@ func TestFormatMultiCopyJSON(t *testing.T) {
 // A remote shell sets the title. Nothing in it may break out of the header or
 // the string it is printed in, or hide what it says.
 func TestFormatMultiCopyUntrustedTitles(t *testing.T) {
-	evil := "node-07\n\n```\n# injected\x1b]52;c;ZXZpbA==\x07 ‮gnp.exe​⁦x⁩\x00\"quoted\"\\"
+	evil := "node-07\n\n```\n# injected\x1b]52;c;ZXZpbA==\x07 \u202egnp.exe\u200b\u2066x\u2069\x00\"quoted\"\\"
 	panes := []MultiCopyPane{{Index: 7, WindowID: "w-e", Title: evil, Lines: []string{"ok"}}}
 
 	md := FormatMultiCopy(config.MultiCopyFormatMarkdown, panes)
@@ -93,7 +93,7 @@ func TestFormatMultiCopyUntrustedTitles(t *testing.T) {
 	if rest != "\n```\nok\n```\n" {
 		t.Errorf("the title changed the document after its header:\n%q", md)
 	}
-	for _, bad := range []string{"\x1b", "\x07", "\x00", "‮", "​", "⁦", "⁩"} {
+	for _, bad := range []string{"\x1b", "\x07", "\x00", "\u202e", "\u200b", "\u2066", "\u2069"} {
 		if strings.Contains(md, bad) {
 			t.Errorf("markdown keeps %q from the title", bad)
 		}
@@ -111,7 +111,7 @@ func TestFormatMultiCopyUntrustedTitles(t *testing.T) {
 		t.Fatalf("a hostile title changed the JSON's shape: %s", js)
 	}
 	title := back[0].Title
-	if strings.ContainsAny(title, "\n\x1b\x07\x00‮​⁦⁩") {
+	if strings.ContainsAny(title, "\n\x1b\x07\x00\u202e\u200b\u2066\u2069") {
 		t.Errorf("json title keeps control or invisible characters: %q", title)
 	}
 	if !strings.Contains(title, `"quoted"\`) || !strings.HasPrefix(title, "node-07") {
