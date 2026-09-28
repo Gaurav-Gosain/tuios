@@ -196,6 +196,20 @@ func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeou
 	if jsonOutput {
 		return printVerbResult(raw, true)
 	}
+	failed, err := printSelectReplies(os.Stdout, raw)
+	if err != nil {
+		return err
+	}
+	if failed > 0 {
+		return &statusError{code: 1}
+	}
+	return nil
+}
+
+// printSelectReplies prints the replies of an ask-agent over a selector, each
+// fenced as untrusted with every line behind the gutter, and returns how many
+// panes were not asked or failed.
+func printSelectReplies(w io.Writer, raw json.RawMessage) (int, error) {
 	var res struct {
 		Replies []struct {
 			selectedRow
@@ -208,21 +222,16 @@ func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeou
 		Failed   int `json:"failed"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+		return 0, fmt.Errorf("failed to parse response: %w", err)
 	}
 	for _, r := range res.Replies {
 		if !r.OK {
-			fmt.Printf("%s was not asked: %s\n\n", r.who(), r.failure())
+			fmt.Fprintf(w, "%s was not asked: %s\n\n", r.who(), r.failure())
 			continue
 		}
-		fmt.Printf(untrustedOpen+"\n", r.who())
-		fmt.Println(strings.TrimRight(plainText(r.Reply), "\n"))
-		fmt.Println(untrustedClose)
-		fmt.Printf("settled by %s; now reports %s\n\n", plainLine(r.SettledBy), plainLine(r.State))
+		fmt.Fprintln(w, session.UntrustedFence(r.who(), strings.TrimRight(plainText(r.Reply), "\n")))
+		fmt.Fprintf(w, "settled by %s; now reports %s\n\n", plainLine(r.SettledBy), plainLine(r.State))
 	}
-	fmt.Printf("%d answered, %d not asked or failed.\n", res.Answered, res.Failed)
-	if res.Failed > 0 {
-		return &statusError{code: 1}
-	}
-	return nil
+	fmt.Fprintf(w, "%d answered, %d not asked or failed.\n", res.Answered, res.Failed)
+	return res.Failed, nil
 }
