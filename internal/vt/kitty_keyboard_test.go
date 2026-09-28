@@ -228,3 +228,108 @@ func TestKittyModifierKeysNeedReportAllKeys(t *testing.T) {
 		t.Errorf("keypad enter under disambiguate: got %q, want %q", got, "\x1b[57414u")
 	}
 }
+
+// TestKittyLockKeysNeedReportAllKeys pins that CapsLock, ScrollLock and NumLock
+// are modifiers to the protocol, as in kitty's is_modifier_key: a disambiguate
+// pane is not told they were pressed. Before, every CapsLock press reached it
+// as \x1b[57358u.
+func TestKittyLockKeysNeedReportAllKeys(t *testing.T) {
+	for _, code := range []rune{KeyCapsLock, KeyScrollLock, KeyNumLock} {
+		key := KeyPressEvent{Code: code}
+		if got := EncodeKeyCSIu(key, ansi.KittyDisambiguateEscapeCodes); got != "" {
+			t.Errorf("%s under disambiguate: got %q, want nothing", key.String(), got)
+		}
+		if got := EncodeKeyReleaseCSIu(key, ansi.KittyDisambiguateEscapeCodes|ansi.KittyReportEventTypes); got != "" {
+			t.Errorf("%s release without report-all-keys: got %q, want nothing", key.String(), got)
+		}
+	}
+}
+
+// TestKittyBeginKeepsItsLegacyForm round-trips Begin, the key the host sends as
+// \x1b[E (keypad 5 with NumLock off on most layouts). The protocol spells
+// KP_BEGIN as "1 E", like the arrows; before, it fell through to ultraviolet's
+// private code and left as \x1b[1114117u.
+func TestKittyBeginKeepsItsLegacyForm(t *testing.T) {
+	var d uv.EventDecoder
+	_, ev := d.Decode([]byte("\x1b[E"))
+	key, ok := ev.(KeyPressEvent)
+	if !ok || key.Code != KeyBegin {
+		t.Fatalf("\\x1b[E decoded as %#v, want Begin", ev)
+	}
+	const disambiguate = ansi.KittyDisambiguateEscapeCodes
+	if got := EncodeKeyCSIu(key, disambiguate); got != "\x1b[E" {
+		t.Errorf("begin: got %q, want %q", got, "\x1b[E")
+	}
+	key.Mod = ModCtrl
+	if got := EncodeKeyCSIu(key, disambiguate); got != "\x1b[1;5E" {
+		t.Errorf("ctrl+begin: got %q, want %q", got, "\x1b[1;5E")
+	}
+	if got := EncodeKeyReleaseCSIu(key, disambiguate|ansi.KittyReportEventTypes); got != "\x1b[1;5:3E" {
+		t.Errorf("ctrl+begin release: got %q, want %q", got, "\x1b[1;5:3E")
+	}
+}
+
+// TestKittyUnnumberedPrivateKeysFallBack pins that a key the protocol has no
+// number for is left to the legacy encoder instead of going out as
+// ultraviolet's private code. F36 and up are past the protocol's F35; the
+// keypad comma borrows KP_SEPARATOR's number.
+func TestKittyUnnumberedPrivateKeysFallBack(t *testing.T) {
+	const all = ansi.KittyReportAllKeysAsEscapeCodes | ansi.KittyReportEventTypes
+	for code := KeyF36; code <= KeyF63; code++ {
+		key := KeyPressEvent{Code: code, Mod: ModCtrl}
+		if got := EncodeKeyCSIu(key, all); got != "" {
+			t.Errorf("%s: got %q, want the legacy fallback", key.String(), got)
+		}
+		if got := EncodeKeyReleaseCSIu(key, all); got != "" {
+			t.Errorf("%s release: got %q, want nothing", key.String(), got)
+		}
+	}
+	comma := KeyPressEvent{Code: KeyKpComma, Mod: ModCtrl}
+	if got := EncodeKeyCSIu(comma, ansi.KittyDisambiguateEscapeCodes); got != "\x1b[57416;5u" {
+		t.Errorf("ctrl+keypad comma: got %q, want %q", got, "\x1b[57416;5u")
+	}
+}
+
+// TestKittyTextUnderDisambiguate pins that a key producing text is sent as that
+// text under disambiguate, which reports only non-text keys, and text keys with
+// Ctrl, Alt or Super, with CSI u. The events come from the decoder, so they
+// carry what a real host report does: kitty sends keypad 1 with NumLock on as
+// \x1b[57400;129u, and the NumLock bit must not count as a modifier.
+func TestKittyTextUnderDisambiguate(t *testing.T) {
+	const disambiguate = ansi.KittyDisambiguateEscapeCodes
+	const allKeys = ansi.KittyReportAllKeysAsEscapeCodes
+	tests := []struct {
+		name  string
+		host  string
+		flags int
+		want  string
+	}{
+		{"keypad 1, numlock on", "\x1b[57400;129u", disambiguate, ""},
+		{"keypad 1, no lock", "\x1b[57400u", disambiguate, ""},
+		{"shift+keypad plus", "\x1b[57413;2u", disambiguate, ""},
+		{"ctrl+keypad 1 is still CSI u", "\x1b[57400;133u", disambiguate, "\x1b[57400;5u"},
+		{"keypad enter has no text", "\x1b[57414;129u", disambiguate, "\x1b[57414u"},
+		{"keypad 1 under report-all-keys", "\x1b[57400;129u", allKeys, "\x1b[57400u"},
+		// The same rule for every text key, not just the keypad: the lock
+		// bits come along from a report-all-keys host and must not count.
+		{"a, numlock on", "\x1b[97;129u", disambiguate, ""},
+		{"a, capslock on", "\x1b[97;65u", disambiguate, ""},
+		{"ctrl+a, numlock on is still CSI u", "\x1b[97;133u", disambiguate, "\x1b[97;5u"},
+		{"non-ascii text", "\x1b[233u", disambiguate, ""},
+		{"alt+non-ascii is still CSI u", "\x1b[233;3u", disambiguate, "\x1b[233;3u"},
+		{"enter, numlock on, is still its key code", "\x1b[13;129u", disambiguate, "\x1b[13u"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var d uv.EventDecoder
+			_, ev := d.Decode([]byte(tt.host))
+			key, ok := ev.(KeyPressEvent)
+			if !ok {
+				t.Fatalf("%q decoded as %T, want a key press", tt.host, ev)
+			}
+			if got := EncodeKeyCSIu(key, tt.flags); got != tt.want {
+				t.Errorf("host %q (text %q, mod %v): got %q, want %q", tt.host, key.Text, key.Mod, got, tt.want)
+			}
+		})
+	}
+}
