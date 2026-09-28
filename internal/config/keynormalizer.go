@@ -3,6 +3,7 @@ package config
 import (
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 )
@@ -34,6 +35,103 @@ func isSingleRuneLetter(s string) bool {
 	}
 	r, _ := utf8.DecodeRuneInString(s)
 	return unicode.IsLetter(r)
+}
+
+// modifierAliases maps every modifier spelling tuios accepts in config.toml to
+// the name Bubble Tea gives the modifier in a key event. opt and option are the
+// macOS names for Alt, cmd and command the macOS names for Super.
+var modifierAliases = map[string]string{
+	"ctrl": "ctrl", "control": "ctrl",
+	"alt": "alt", "opt": "alt", "option": "alt",
+	"shift": "shift",
+	"meta":  "meta",
+	"hyper": "hyper",
+	"super": "super", "cmd": "super", "command": "super",
+}
+
+// modifierOrder is the order Bubble Tea writes modifiers in a key event's
+// string (ultraviolet's Key.Keystroke). A binding spelled in any other order
+// has to be put in this one, or "shift+ctrl+x" never equals the "ctrl+shift+x"
+// a key press produces.
+var modifierOrder = []string{"ctrl", "alt", "shift", "meta", "hyper", "super"}
+
+// splitKeyChord splits a lowercased chord into its modifiers and its base key.
+// A trailing "++" is the plus key itself, so "ctrl++" is ctrl and "+". ok is
+// false when a modifier or the base is empty ("ctrl+", "ctrl++x").
+func splitKeyChord(lower string) (mods []string, base string, ok bool) {
+	if lower == "+" {
+		return nil, "+", true
+	}
+	var rest string
+	if strings.HasSuffix(lower, "++") {
+		base, rest = "+", strings.TrimSuffix(lower, "++")
+	} else {
+		i := strings.LastIndex(lower, "+")
+		if i < 0 {
+			return nil, lower, true
+		}
+		base, rest = lower[i+1:], lower[:i]
+	}
+	if base == "" || rest == "" {
+		return nil, "", false
+	}
+	mods = strings.Split(rest, "+")
+	for _, m := range mods {
+		if m == "" {
+			return nil, "", false
+		}
+	}
+	return mods, base, true
+}
+
+// CanonicalKey is the one spelling of a key that tuios compares against a key
+// event. Every key that comes from config.toml or from a command line goes
+// through it before it is matched: the leader, every binding table, and the
+// argument of `tuios keybinds explain`, `free` and `unbind`.
+//
+// A single letter keeps its case (m and M are different keys). Anything else
+// is lowercased, each modifier alias becomes the name Bubble Tea uses
+// (opt+f12 and option+f12 become alt+f12, cmd+v becomes super+v, control+b
+// becomes ctrl+b), a repeated modifier is dropped, and the modifiers are put
+// in Bubble Tea's order. A chord with a modifier tuios does not know, or with
+// an empty part, comes back lowercased and otherwise untouched, so the
+// validator can still name what is wrong with it.
+func CanonicalKey(key string) string {
+	key = strings.TrimSpace(key)
+	if isSingleRuneLetter(key) {
+		return key
+	}
+	lower := strings.ToLower(key)
+	if !strings.Contains(lower, "+") || lower == "+" {
+		return lower
+	}
+	mods, base, ok := splitKeyChord(lower)
+	if !ok {
+		return lower
+	}
+	have := make(map[string]bool, len(mods))
+	for _, m := range mods {
+		name, known := modifierAliases[m]
+		if !known {
+			return lower
+		}
+		have[name] = true
+	}
+	var sb strings.Builder
+	sb.Grow(len(lower))
+	for _, name := range modifierOrder {
+		if have[name] {
+			sb.WriteString(name)
+			sb.WriteByte('+')
+		}
+	}
+	sb.WriteString(base)
+	return sb.String()
+}
+
+// SameKey reports whether two key spellings name the same key press.
+func SameKey(a, b string) bool {
+	return a == b || CanonicalKey(a) == CanonicalKey(b)
 }
 
 // optionToAltReplacer converts opt/option to alt for consistent key naming
@@ -287,8 +385,16 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	// Always include the normalized version
 	result := []string{normalized}
 
+	// The canonical spelling is the one a key event produces: opt+f12 arrives
+	// as alt+f12, cmd+v as super+v, shift+ctrl+x as ctrl+shift+x. On macOS the
+	// Option branch below also adds the alt+ form, but only for a chord that
+	// starts with opt+, and never for the other aliases or another order.
+	canonical := CanonicalKey(key)
+	result = append(result, canonical)
+
 	// Accept both spellings of a shifted key, on every platform.
 	result = append(result, shiftAliases(key, keyLower)...)
+	result = append(result, shiftAliases(canonical, strings.ToLower(canonical))...)
 
 	// On macOS, expand opt+N and option+N to unicode and alt+N
 	if kn.isMacOS {
@@ -411,13 +517,15 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 			}
 		}
 
-		// Check for duplicate modifiers
+		// Check for duplicate modifiers. Aliases count as the modifier they
+		// stand for, so alt+opt+x names Alt twice.
 		modSet := make(map[string]bool)
 		for _, mod := range modifiers {
-			if modSet[mod] {
+			name := modifierAliases[mod]
+			if modSet[name] {
 				return false, "duplicate modifier: " + mod
 			}
-			modSet[mod] = true
+			modSet[name] = true
 		}
 	}
 
@@ -463,14 +571,51 @@ var validSpecialKeys = map[string]bool{
 // terminals. Super only reaches a terminal that has negotiated the Kitty
 // keyboard protocol, but the input path has always acted on super+v and
 // shift+super+v for the host paste, so rejecting it would make the working
-// default unwritable the moment it became a binding. opt and option are valid
+// default unwritable the moment it became a binding. control is an alias for
+// ctrl and cmd and command are aliases for super. opt and option are valid
 // only on macOS.
 func validModifier(mod string, isMacOS bool) bool {
 	switch mod {
-	case "ctrl", "alt", "shift", "super":
+	case "ctrl", "control", "alt", "shift", "super", "cmd", "command":
 		return true
 	case "opt", "option":
 		return isMacOS
 	}
 	return false
+}
+
+// leaderSet is the expanded form of one leader spelling, cached so the input
+// path does not run the normalizer on every key press.
+type leaderSet struct {
+	leader string
+	macOS  bool
+	keys   map[string]bool
+}
+
+var leaderCache atomic.Pointer[leaderSet]
+
+// IsLeaderPress reports whether pressed, a key event's string, is the leader
+// key spelled as leader in config.toml. The leader goes through the same
+// normalizer as every binding table, so opt+f12 and option+f12 match the
+// alt+f12 a terminal sends, and on macOS opt+1 also matches the ¡ that Option
+// composes. An empty leader means the default.
+func IsLeaderPress(pressed, leader string) bool {
+	if leader == "" {
+		leader = DefaultLeaderKey
+	}
+	set := leaderCache.Load()
+	if set == nil || set.leader != leader || set.macOS != macOSHost {
+		set = &leaderSet{leader: leader, macOS: macOSHost, keys: map[string]bool{}}
+		for _, k := range (&KeyNormalizer{isMacOS: macOSHost}).NormalizeKey(leader) {
+			set.keys[lookupForm(k)] = true
+		}
+		leaderCache.Store(set)
+	}
+	// A key event is already spelled the canonical way, so the exact string
+	// hits for the leader and a miss costs one map read. The canonical form is
+	// the fallback for a caller that builds the string itself.
+	if set.keys[pressed] {
+		return true
+	}
+	return set.keys[lookupForm(pressed)]
 }

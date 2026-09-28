@@ -151,7 +151,9 @@ type keySpec struct {
 // anything sip has no encoding for, so the caller drops the button rather than
 // shipping one that sends nothing.
 func resolveKey(combo string) (keySpec, bool) {
-	parsed, err := tape.ParseKeyCombo(combo)
+	// A binding from config.toml may spell Alt as opt+ or option+. The tape
+	// parser reads only the names CanonicalKey writes.
+	parsed, err := tape.ParseKeyCombo(config.CanonicalKey(combo))
 	if err != nil {
 		return keySpec{}, false
 	}
