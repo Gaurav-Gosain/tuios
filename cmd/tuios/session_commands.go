@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -436,12 +434,12 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// writer every frame and every graphics sequence serialize on.
 	p := tea.NewProgram(initialOS, append(app.ProgramOptions(), tea.WithOutput(prw))...)
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		p.Send(tea.QuitMsg{})
-	}()
+	// A quit the event loop cannot carry out still has to end the process: a
+	// force-killed ssh client leaves a pty nobody drains, and the frame write
+	// that fills it is what wedges the loop. finish runs once the cleanup
+	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
+	// armSignalQuit.
+	finish := armSignalQuit(p)
 
 	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
@@ -477,6 +475,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	_ = client.Close()
 
 	terminal.ResetTerminal()
+	finish()
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)
