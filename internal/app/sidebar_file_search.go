@@ -3,16 +3,21 @@ package app
 import (
 	"path/filepath"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Search is bounded so a large or remote tree cannot keep the picker waiting.
+// When the time is up, the results found so far are shown as partial.
 const (
 	fileSearchMaxDirs  = 1500
 	fileSearchMaxFiles = 5000
+	fileSearchBudget   = 2500 * time.Millisecond
 )
+
+var fileSearchSkipDirs = map[string]bool{".git": true, "node_modules": true, ".venv": true, "target": true}
 
 type fileSearchMsg struct {
 	Gen       uint64
@@ -57,7 +62,8 @@ func (m *OS) OpenFileSearch() tea.Cmd {
 func scanSidebarFiles(root, origin string, client *session.TUIClient, host string, gen uint64, cancel *atomic.Bool) fileSearchMsg {
 	msg := fileSearchMsg{Gen: gen, Root: root, Origin: origin}
 	queue := []string{root}
-	for scanned := 0; len(queue) > 0 && len(msg.Paths) < fileSearchMaxFiles && scanned < fileSearchMaxDirs && !cancel.Load(); scanned++ {
+	deadline := time.Now().Add(fileSearchBudget)
+	for scanned := 0; len(queue) > 0 && len(msg.Paths) < fileSearchMaxFiles && scanned < fileSearchMaxDirs && !cancel.Load() && time.Now().Before(deadline); scanned++ {
 		dir := queue[0]
 		queue = queue[1:]
 		var entries []fileEntry
@@ -99,7 +105,7 @@ func scanSidebarFiles(root, origin string, client *session.TUIClient, host strin
 		for _, e := range entries {
 			path := filepath.Join(dir, e.Name)
 			if e.Dir {
-				if e.Name != ".git" {
+				if !fileSearchSkipDirs[e.Name] {
 					if len(queue) < fileSearchMaxDirs {
 						queue = append(queue, path)
 					} else {
