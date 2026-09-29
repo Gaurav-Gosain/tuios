@@ -1230,6 +1230,9 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 	if !ok || it.Kind != session.AttentionAsk || it.RequestID == "" {
 		return nil
 	}
+	if m.refuseRemoteAnswer("An answer") {
+		return nil
+	}
 	if n < 1 || n > len(it.Options) {
 		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "info", m.Settings.NotificationDuration)
 		return nil
@@ -1330,6 +1333,9 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if m.refuseRemoteAnswer("An answer") {
+		return nil
+	}
 	if !inboxHeld(it) {
 		m.ShowNotification("1, 2 and 3 answer an approval the Inbox is holding. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
@@ -1352,6 +1358,19 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	return m.inboxReplyCmd(it, decision)
+}
+
+// refuseRemoteAnswer refuses a key that send-keys typed when that key would
+// act as the person: answer a held approval or a question, or pass on held
+// mail. send-keys with no window hands its keys to this client, and an agent
+// in a pane can call it. what names the act, as the start of a sentence.
+func (m *OS) refuseRemoteAnswer(what string) bool {
+	if !m.ProcessingRemoteKeys {
+		return false
+	}
+	m.Inbox.approvals.armed = inboxArmed{}
+	m.ShowNotification(what+" that send-keys typed is not sent: only keys from your keyboard act for you", "error", m.Settings.NotificationDuration)
+	return true
 }
 
 // inboxAnswerSettle is how long a held approval must have been on screen, as
@@ -1696,6 +1715,9 @@ func (m *OS) InboxRelease() tea.Cmd {
 	}
 	if it.HeldID == 0 {
 		m.ShowNotification("p passes on mail another machine sent an agent here, held for you. This item holds none.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if m.refuseRemoteAnswer("A release") {
 		return nil
 	}
 	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {

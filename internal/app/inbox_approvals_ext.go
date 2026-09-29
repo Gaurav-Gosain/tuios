@@ -154,6 +154,10 @@ func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, boo
 // press of an allow on a risky item, or an allow of a plan whose end has not
 // been on screen.
 func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop bool) {
+	// A key send-keys typed neither answers nor arms a second press.
+	if m.refuseRemoteAnswer("An answer") {
+		return true
+	}
 	if decision == session.ApprovalDeny || decision == session.ApprovalAsk {
 		return false
 	}
