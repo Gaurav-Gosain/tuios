@@ -266,3 +266,63 @@ func TestAnOpenPaneCannotReachAPromptThroughTheClient(t *testing.T) {
 	}
 	alive(t, term, "after a pane's PREFIX was refused")
 }
+
+// TestAWideningReloadSaysItWaits: a change to config.toml that gives panes
+// more, such as strict to open, waits for tuios config apply. The person sees
+// that in the Inbox, and tuios config apply says what it changed.
+//
+// Negative control: with noteConfigWaiting cut from applyUserConfig, the
+// Inbox never shows the waiting change.
+func TestAWideningReloadSaysItWaits(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	cfg := configPathIn(base)
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	strict := "[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\"]\n"
+	if err := os.WriteFile(cfg, []byte(strict), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new", "e2e-wait", "--detach"); err != nil {
+		t.Fatalf("create detached session: %v: %s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-wait"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	data, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveConfigLikeAnEditor(t, base, strings.Replace(string(data), `mode = "strict"`, `mode = "open"`, 1))
+
+	deadline := time.Now().Add(configWatchTimeout)
+	var out string
+	for time.Now().Before(deadline) {
+		out, _ = tuiosCLI(t, base, "pane-grants")
+		if strings.Contains(out, "tuios config apply") {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !strings.Contains(out, "Mode strict") || !strings.Contains(out, "tuios config apply") {
+		t.Fatalf("a reload to open did not wait: %s", out)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "change waits") && strings.Contains(text, "Run tuios config apply")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the Inbox does not say the change waits: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "config-change-waits")
+
+	out, err = tuiosCLI(t, base, "config", "apply")
+	if err != nil || !strings.Contains(out, "mode open") || !strings.Contains(out, "Before: mode strict") {
+		t.Fatalf("tuios config apply did not say what it changed: %v\n%s", err, out)
+	}
+	alive(t, term, "after the change was applied")
+}
