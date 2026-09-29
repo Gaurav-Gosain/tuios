@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	gh "go.mitchellh.com/libghostty"
 )
 
@@ -161,6 +162,44 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		t.observeEraseDisplay(params)
 	case final == 'h' && prefix == '?', final == 'l' && prefix == '?':
 		t.observeDecMode(params, final == 'h')
+	case final == 'n' && prefix == '?' && inter == 0:
+		t.answerDecStatusReport(params)
+	}
+}
+
+// answerDecStatusReport answers the DEC private DSR queries that libghostty
+// drops: CSI ? 5 n (operating status) and CSI ? 6 n (DECXCPR). The pure
+// emulator answers both, and xterm does too, so a guest that probes with the
+// private form would otherwise wait out its timeout on this backend only.
+// libghostty still answers the ANSI forms CSI 5 n and CSI 6 n itself.
+//
+// Earlier bytes of the chunk flush first. That settles the cursor, and it
+// puts libghostty's replies to earlier queries in the pipe ahead of this one.
+func (t *GhosttyTerminal) answerDecStatusReport(params []byte) {
+	n, ok := csiFirstParam(params)
+	if !ok || t.closed.Load() {
+		return
+	}
+	switch n {
+	case 5:
+		t.scanner.flushOut()
+		_, _ = t.pipe.Write([]byte(ansi.DeviceStatusReport(ansi.DECStatusReport(0))))
+	case 6:
+		t.scanner.flushOut()
+		x, errX := t.term.CursorX()
+		y, errY := t.term.CursorY()
+		if errX != nil || errY != nil {
+			return
+		}
+		col, line := int(x), int(y)
+		// Under DECOM the report is relative to the margins, the way
+		// libghostty answers CSI 6 n and the pure emulator answers both.
+		if on, _ := t.term.Mode(gh.ModeOrigin); on {
+			col -= t.scrollRegion.Min.X
+			line -= t.scrollRegion.Min.Y
+		}
+		// No page number, as xterm at the VT220 level this pane claims in DA1.
+		_, _ = t.pipe.Write([]byte(ansi.ExtendedCursorPositionReport(line+1, col+1, 0)))
 	}
 }
 
