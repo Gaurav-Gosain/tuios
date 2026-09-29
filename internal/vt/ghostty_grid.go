@@ -309,7 +309,7 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 		}
 		if dc.link {
 			if uri := t.hyperlinkAt(x, y); uri != "" {
-				out.Link = uv.Link{URL: uri}
+				out.Link = uv.Link{URL: StripControls(uri)}
 			}
 		}
 		buf.SetCell(x, y, out)

@@ -164,7 +164,7 @@ func (t *GhosttyTerminal) readHistoryLineLocked(src *gh.Terminal, index int) uv.
 		}
 		if dc.link {
 			if uri, err := ref.HyperlinkURI(); err == nil && uri != "" {
-				out.Link = uv.Link{URL: uri}
+				out.Link = uv.Link{URL: StripControls(uri)}
 			}
 		}
 		line[x] = out
