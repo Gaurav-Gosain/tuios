@@ -3,6 +3,8 @@ package app
 import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // The composed frame's cells becoming the string bubbletea takes.
@@ -145,7 +147,9 @@ func (r *frameRenderer) renderLine(out []byte, l uv.Line) []byte {
 			link = uv.Link{}
 		}
 		if c.Link != link {
-			out = append(out, ansi.SetHyperlink(c.Link.URL, c.Link.Params)...)
+			// Stripped again here because the cell may come from a backend
+			// other than the vt emulator, and this goes to the host as is.
+			out = append(out, ansi.SetHyperlink(vt.StripControls(c.Link.URL), vt.StripControls(c.Link.Params))...)
 			link = c.Link
 		}
 

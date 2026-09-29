@@ -342,6 +342,11 @@ type OS struct {
 	// for why an unanswered query has to time out.
 	pastePending bool
 	pasteSeq     uint64
+	// pasteAskedAt is when the last clipboard query went out, zero when no
+	// query waits for its answer. It outlives pastePending: the timeout only
+	// says nothing came back yet, and a terminal that asks the user first
+	// (Ghostty does) answers later. See ClaimPasteReply.
+	pasteAskedAt time.Time
 
 	// Performance optimization caches
 	cachedSeparator      string      // Cached dock separator, styled

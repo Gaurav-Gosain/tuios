@@ -138,6 +138,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// The terminal answered, so the pending query's timeout is disarmed
 		// whatever mode this client is in.
 		o.NotePasteArrived()
+		// A reply that answers no query of tuios is dropped: a pane can make
+		// the host terminal send one, and it must not be typed for it. This
+		// comes before any overlay can take the text.
+		if !o.ClaimPasteReply() {
+			return o, nil
+		}
 		// An overlay takes the paste the same way it takes a terminal paste.
 		// Only handle paste in terminal mode.
 		if pasteTakenByOverlay(o, msg.Content) {

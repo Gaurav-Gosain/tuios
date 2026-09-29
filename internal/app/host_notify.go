@@ -29,24 +29,7 @@ const notifyTextLimit = 200
 // containing ESC could terminate the sequence and have the rest of it
 // interpreted as commands by the user's terminal.
 func sanitizeNotifyText(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		switch r {
-		case 0x1b, 0x07, 0x9c: // ESC, BEL, ST: would end or restart the sequence
-			continue
-		case '\n', '\r', '\t':
-			b.WriteRune(' ')
-		default:
-			// Zero-width and bidi formatting characters would let the text
-			// read as something other than what it holds.
-			if r < 0x20 || session.InvisibleFormatRune(r) {
-				continue
-			}
-			b.WriteRune(r)
-		}
-	}
-	out := strings.TrimSpace(b.String())
+	out := notifyPlainText(s)
 	if len(out) > notifyTextLimit {
 		// Back off to a rune boundary so a cut multi-byte character does not
 		// reach the terminal as a lone continuation byte.
@@ -57,6 +40,38 @@ func sanitizeNotifyText(s string) string {
 		out = strings.TrimSpace(out)
 	}
 	return guardNumericOSCPrefix(out)
+}
+
+// notifyPlainText is s with every control character removed and line breaks
+// and tabs turned into spaces, trimmed. It is the part of sanitizeNotifyText
+// that applies to any text a pane hands in, before it reaches the dock or the
+// host terminal.
+//
+// ESC, BEL and ST would end or restart the sequence the text is carried in.
+// The other C1 controls go too, since a terminal in 8-bit mode reads 0x9b as
+// CSI. A byte that is not valid UTF-8 is dropped rather than passed on.
+func notifyPlainText(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		switch {
+		case r == utf8.RuneError && size == 1:
+			continue
+		case r == '\n' || r == '\r' || r == '\t':
+			b.WriteRune(' ')
+		case r < 0x20, r >= 0x7f && r <= 0x9f:
+			continue
+		case session.InvisibleFormatRune(r):
+			// Zero-width and bidi formatting characters would let the text
+			// read as something other than what it holds.
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // guardNumericOSCPrefix keeps an OSC 9 payload from being read as a command.

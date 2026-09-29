@@ -48,6 +48,7 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	}
 	m.pasteSeq++
 	m.pastePending = true
+	m.pasteAskedAt = time.Now()
 	seq := m.pasteSeq
 
 	// A terminal that never answers the OSC 52 read is asked natively instead,
@@ -75,10 +76,29 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	)
 }
 
+// hostPasteReplyWindow is how long after a clipboard query tuios still takes
+// the answer as the reply to it. It is long because a terminal can ask the
+// user before it answers.
+const hostPasteReplyWindow = time.Minute
+
 // NotePasteArrived records that the terminal answered, which disarms the
 // timeout. Called from the clipboard message handler.
 func (m *OS) NotePasteArrived() {
 	m.pastePending = false
+}
+
+// ClaimPasteReply reports whether a clipboard reply answers a query tuios
+// sent, and uses that query up, so one query pastes at most once.
+//
+// A reply that answers nothing must not be pasted. The host terminal sends a
+// clipboard reply to whoever asked, and tuios is not the only one who can ask:
+// a pane can print its own OSC 52 query, or a sequence that makes the terminal
+// answer one, and the reply then arrives here as if the user had pressed the
+// paste key. Typed into the focused pane, it would run.
+func (m *OS) ClaimPasteReply() bool {
+	asked := m.pasteAskedAt
+	m.pasteAskedAt = time.Time{}
+	return !asked.IsZero() && time.Since(asked) <= hostPasteReplyWindow
 }
 
 // pasteTimedOut reports whether msg belongs to a query that is still waiting,

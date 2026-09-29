@@ -1,13 +1,11 @@
 package app
 
 import (
-	"strings"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // Rate limits for guest-driven notifications. A guest that spams OSC 9 or BEL
@@ -94,8 +92,12 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		lastNotify = time.Now()
 		mu.Unlock()
 
-		title = strings.TrimSpace(title)
-		body = strings.TrimSpace(body)
+		// The text is whatever the pane printed, and OSC 99 with e=1 decodes
+		// it from base64, so it can hold ESC, BEL and C1 controls. Those are
+		// removed before it reaches the dock or the host terminal, where they
+		// would run as sequences of their own.
+		title = notifyPlainText(title)
+		body = notifyPlainText(body)
 
 		message := body
 		switch {
@@ -121,7 +123,9 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 			if hostText == "" {
 				hostText = title
 			}
-			m.KittyPassthrough.WriteToHost([]byte(ansi.Notify(hostText)))
+			if seq := hostNotifySequence(hostText, outerNone); len(seq) > 0 {
+				m.KittyPassthrough.WriteToHost(seq)
+			}
 		}
 	}
 

@@ -239,7 +239,9 @@ func (e *Emulator) handleTextSizing(data []byte) {
 	if e.textSizingFunc != nil {
 		var rawOSC []byte
 		rawOSC = append(rawOSC, "\x1b]"...)
-		rawOSC = append(rawOSC, data...)
+		// The sequence is replayed to the host terminal as is, so it is
+		// rebuilt without the control characters the parser let through.
+		rawOSC = append(rawOSC, StripControls(string(data))...)
 		rawOSC = append(rawOSC, '\a')
 		e.textSizingFunc(rawOSC, curX, curY, scale, textRunes)
 	}
@@ -392,8 +394,39 @@ func (e *Emulator) handleHyperlink(cmd int, data []byte) {
 		return
 	}
 
-	e.scr.cur.Link.Params = string(parts[1])
-	e.scr.cur.Link.URL = string(parts[2])
+	e.scr.cur.Link.Params = StripControls(string(parts[1]))
+	e.scr.cur.Link.URL = StripControls(string(parts[2]))
+}
+
+// StripControls returns s without C0 controls, DEL, C1 controls (as raw bytes
+// or UTF-8 encoded) and bytes that are not valid UTF-8.
+//
+// A link's address and parameters are written back out to the host terminal
+// inside its own OSC 8 when the frame is drawn. The parser already ends the
+// sequence at ESC and BEL, but a raw 0x9c is ST to a terminal that reads 8-bit
+// controls, and none of these belong in a link.
+func StripControls(s string) string {
+	clean := true
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c >= 0x7f {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		if (r == utf8.RuneError && size == 1) || r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // handleNotify9 handles OSC 9 (iTerm2 desktop notification): "9;<msg>".
