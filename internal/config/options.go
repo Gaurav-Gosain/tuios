@@ -68,6 +68,9 @@ type Option struct {
 	// Such an option takes the empty string as a value, which clears it, so
 	// it can go back to following once it has been set.
 	Follows string `json:"follows,omitempty"`
+	// BoxSize marks a string option whose value is a size in cells (60) or
+	// percent (80%), read by ParseBoxSize. An empty value means the default.
+	BoxSize bool `json:"box_size,omitempty"`
 }
 
 // UnsetText is how a reader is told an option is unset and what it follows,
@@ -1120,6 +1123,23 @@ var optionSpecs = []Option{
 		Description: "The hints key labels every pane on the workspace, not only the focused pane",
 		Default:     "false",
 	},
+
+	// [scratch]. Read each time toggle_scratch shows the popup.
+	{
+		Path: "scratch.session", Type: OptionString, Section: "scratch",
+		Description: "Session the scratch key shows in a popup. tuios creates it the first time",
+		Default:     ScratchDefaultSession,
+	},
+	{
+		Path: "scratch.width", Type: OptionString, Section: "scratch",
+		Description: "Width of the scratch popup, in cells (60) or percent (80%)",
+		Default:     ScratchDefaultWidth, BoxSize: true,
+	},
+	{
+		Path: "scratch.height", Type: OptionString, Section: "scratch",
+		Description: "Height of the scratch popup, in cells (20) or percent (80%)",
+		Default:     ScratchDefaultHeight, BoxSize: true,
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller
@@ -1190,6 +1210,11 @@ func (o Option) checkValue(value string) error {
 		// this call rather than on the next restart.
 		return fmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
 			"or write %s.json in the glyphs directory first", o.Path, value, value)
+	}
+	if o.BoxSize && strings.TrimSpace(value) != "" {
+		if _, _, err := ParseBoxSize(value); err != nil {
+			return fmt.Errorf("%s: %w", o.Path, err)
+		}
 	}
 	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
 		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))

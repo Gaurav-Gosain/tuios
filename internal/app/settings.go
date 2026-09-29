@@ -581,6 +581,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.agent_autodetect"),
 			opt("daemon.agent_detect_seconds"),
 			opt("daemon.resume_agents"),
+			opt("scratch.session"),
+			opt("scratch.width"),
+			opt("scratch.height"),
 		}),
 	}
 

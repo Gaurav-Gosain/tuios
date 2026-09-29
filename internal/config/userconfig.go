@@ -39,6 +39,9 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
+	// Scratch is the [scratch] table: the session toggle_scratch shows in a
+	// popup, and the popup's size. See scratch.go.
+	Scratch ScratchConfig `toml:"scratch"`
 
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
@@ -740,6 +743,7 @@ func DefaultConfig() *UserConfig {
 		Screensaver: defaultScreensaverConfig(),
 		Spotlight:   defaultSpotlightConfig(),
 		Hints:       defaultHintsConfig(),
+		Scratch:     defaultScratchConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -931,6 +935,9 @@ func DefaultConfig() *UserConfig {
 				// F, as in tmux-fingers. f is free too, and is left free so
 				// a slip on Shift does nothing rather than something else.
 				"hints": {"F"},
+				// g shows or hides the scratch session in a popup. It was
+				// free here, and f is kept free for the reason above.
+				"toggle_scratch": {"g"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -1516,6 +1523,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	fillMissingScreensaver(&cfg, defaultCfg)
 	fillMissingSpotlight(&cfg, defaultCfg)
 	fillMissingHints(&cfg, defaultCfg)
+	fillMissingScratch(&cfg, defaultCfg)
 	return &cfg, nil
 }
 
@@ -2434,7 +2442,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 // key is already bound to another action in the same table, the new action is
 // left unbound instead, and keybinds doctor says so.
 var yieldingDefaults = map[string]bool{
-	"hints": true,
+	"hints":          true,
+	"toggle_scratch": true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,

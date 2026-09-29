@@ -152,6 +152,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("S", "Sessions"),
 		kb("W", "Workspaces"),
 		kb("X", "Close session"),
+		kb("g", "Scratch session"),
 	}}
 	modes := KeybindingGroup{Title: "Modes"}
 	// In daemon mode d detaches and Esc leaves for window mode; in local mode

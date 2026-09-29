@@ -1722,6 +1722,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// to start in terminal mode, enter it now that there is a focused
 				// window to type into.
 				m.maybeEnterPendingTerminalMode()
+				// A scratch popup that arrives takes the keyboard.
+				m.maybeFocusScratch()
 
 				// Show notifications for significant changes
 				newWindowCount := len(m.Windows)
@@ -1752,6 +1754,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		// Continue listening for more state syncs
 		return m, ListenForStateSync(m.StateSyncChan)
+
+	case ScratchOpenedMsg:
+		m.handleScratchOpened(msg)
+		return m, nil
 
 	case RenameAppliedMsg:
 		if msg.Err != nil {

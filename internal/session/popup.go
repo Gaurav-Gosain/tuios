@@ -1,9 +1,9 @@
 package session
 
 import (
-	"fmt"
-	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // A popup is a floating pane that runs one command and closes when the command
@@ -32,25 +32,7 @@ const (
 // in. An empty spec is not a value and is reported as such, so a caller can tell
 // "the user said nothing" from "the user said 0".
 func ParsePopupSize(spec string) (value int, percent bool, err error) {
-	text := strings.TrimSpace(spec)
-	if text == "" {
-		return 0, false, fmt.Errorf("size is empty")
-	}
-	if rest, ok := strings.CutSuffix(text, "%"); ok {
-		percent = true
-		text = strings.TrimSpace(rest)
-	}
-	value, err = strconv.Atoi(text)
-	if err != nil {
-		return 0, percent, fmt.Errorf("%q is not a number of cells or a percentage, e.g. 60 or 60%%", spec)
-	}
-	if value <= 0 {
-		return 0, percent, fmt.Errorf("%q is not a size, ask for at least 1", spec)
-	}
-	if percent && value > 100 {
-		return 0, percent, fmt.Errorf("%q is more than the whole region, ask for 100%% or less", spec)
-	}
-	return value, percent, nil
+	return config.ParseBoxSize(spec)
 }
 
 // ValidatePopupSize reports why a size spec cannot be used, or nil. An empty

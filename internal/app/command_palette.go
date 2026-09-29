@@ -826,6 +826,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Scratch: show or hide the scratch session",
+			Shortcut: "prefix+g",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ToggleScratch()
+			},
+		},
+		{
 			Name:     "Hints: label text on all panes to copy it",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
