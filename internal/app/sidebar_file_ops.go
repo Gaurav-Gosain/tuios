@@ -1,15 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -314,8 +315,8 @@ type fileEditMsg struct {
 	Err   error
 }
 
-// SidebarFileEdit opens the selected text file in the configured terminal editor.
-// Inspection runs off the update loop; folders keep their navigation action.
+// SidebarFileEdit opens the selected text file in the configured terminal
+// editor. Folders keep their navigation action.
 func (m *OS) SidebarFileEdit() tea.Cmd {
 	if !m.filesOn() || m.FileViewSpoofed() {
 		if m.FileViewSpoofed() {
@@ -351,8 +352,8 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 			n, err := file.Read(sample[:])
 			if err != nil && err != io.EOF {
 				msg.Err = fmt.Errorf("could not read the file: %w", err)
-			} else if n > 0 && !strings.HasPrefix(http.DetectContentType(sample[:n]), "text/") {
-				msg.Err = fmt.Errorf("That file is not a text file.")
+			} else if n > 0 && !looksLikeText(sample[:n]) {
+				msg.Err = fmt.Errorf("that file is not a text file")
 			} else {
 				msg.Argv, msg.Err = shlex.Split(editor, true)
 				if msg.Err != nil || len(msg.Argv) == 0 {
@@ -364,6 +365,18 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 		}
 		return msg
 	}
+}
+
+func looksLikeText(sample []byte) bool {
+	if bytes.IndexByte(sample, 0) >= 0 {
+		return false
+	}
+	for cut := 0; cut < utf8.UTFMax && cut < len(sample); cut++ {
+		if utf8.Valid(sample[:len(sample)-cut]) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {

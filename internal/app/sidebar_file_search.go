@@ -8,9 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Search is bounded so a large or remote tree cannot keep the picker waiting
-// indefinitely. Directories are visited breadth-first, keeping nearby files
-// useful even when a dependency tree is large.
+// Search is bounded so a large or remote tree cannot keep the picker waiting.
 const (
 	fileSearchMaxDirs  = 1500
 	fileSearchMaxFiles = 5000
@@ -101,7 +99,6 @@ func scanSidebarFiles(root, origin string, client *session.TUIClient, host strin
 		for _, e := range entries {
 			path := filepath.Join(dir, e.Name)
 			if e.Dir {
-				// The repository's own Git metadata is not part of its files.
 				if e.Name != ".git" {
 					if len(queue) < fileSearchMaxDirs {
 						queue = append(queue, path)
