@@ -164,11 +164,45 @@ func TestSidebarCdRefusesAQuoteInTheFolder(t *testing.T) {
 	if lastMessage(m) != cdRefusedMessage {
 		t.Fatalf("dock = %q, want the refusal", lastMessage(m))
 	}
-	// A plain folder is still typed.
+	// A plain folder is not typed either: a daemon pane has no local PTY, so
+	// tuios cannot see its shell at a prompt, whatever it reports.
 	m.sendCdToOrigin("/tmp/plain dir")
-	if got := typed.String(); got != "cd '/tmp/plain dir'\r" {
-		t.Fatalf("typed %q for a plain folder", got)
+	if got := typed.String(); got != "" {
+		t.Fatalf("typed %q into a pane tuios cannot see", got)
 	}
+	if lastMessage(m) != cdUnseenMessage {
+		t.Fatalf("dock = %q, want the unseen-pane message", lastMessage(m))
+	}
+}
+
+// A shell tuios spawned, at its prompt, gets the sidebar's cd.
+func TestSidebarCdMovesALocalShellAtItsPrompt(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	w, err := terminal.NewWindow("local-cd", "t", 0, 0, 40, 10, 0, make(chan string, 4), make(chan struct{}, 1), 100)
+	if err != nil {
+		t.Skipf("cannot spawn a shell: %v", err)
+	}
+	t.Cleanup(w.Close)
+	m := layoutOS(w)
+	m.filesView.Origin = w.ID
+	dir := t.TempDir()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !w.ShellAtPrompt() {
+		if time.Now().After(deadline) {
+			t.Skip("the shell never took the terminal")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	m.sendCdToOrigin(dir)
+	for time.Now().Before(deadline) {
+		if got, ok := terminal.ShellCWD(w.ShellPgid); ok && sameDir(got, dir) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, _ := terminal.ShellCWD(w.ShellPgid)
+	t.Fatalf("the shell is in %q, want %q", got, dir)
 }
 
 // The tape export writes no cd for such a folder either.

@@ -800,6 +800,13 @@ func (m *OS) sendCdToOrigin(dir string) {
 		m.ShowNotification(cdRefusedMessage, "warning", m.Settings.NotificationDuration)
 		return
 	}
+	// The foreground command a daemon pane reports can be empty or stale, so
+	// it is not proof of a prompt. tuios types only where it can see the
+	// shell hold the terminal, the rule layout load uses.
+	if !window.ShellAtPrompt() {
+		m.ShowNotification(cdUnseenMessage, "warning", m.Settings.NotificationDuration)
+		return
+	}
 	if err := window.SendInput([]byte(line + "\r")); err != nil {
 		m.LogError("Failed to send cd to window %s: %v", window.ID, err)
 		m.ShowNotification("Could not write to that pane.", "error", m.Settings.NotificationDuration)
@@ -868,6 +875,10 @@ func shellQuote(s string) string {
 
 // cdRefusedMessage is what the dock says when cdLine refuses a folder.
 const cdRefusedMessage = "tuios did not type a cd. The folder name holds a quote, a backslash or a control character."
+
+// cdUnseenMessage is what the dock says when tuios cannot see that a pane's
+// shell is at its prompt.
+const cdUnseenMessage = "tuios did not type a cd. It can not see that the shell in that pane is at a prompt."
 
 // cdLine is the cd command tuios types to move a shell to dir, or false when
 // dir must not be typed at all.
