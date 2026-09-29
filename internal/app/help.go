@@ -50,7 +50,8 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 		{
 			Name: "Layout",
 			Bindings: generateCategoryBindings(registry, "Layout", []string{
-				"snap_left", "snap_right", "snap_fullscreen", "unsnap",
+				"snap_left", "snap_right", "focus_up", "focus_down",
+				"snap_fullscreen", "unsnap",
 				"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4",
 			}),
 		},

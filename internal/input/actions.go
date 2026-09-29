@@ -107,6 +107,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Layout actions
 	d.Register("snap_left", handleSnapLeft)
 	d.Register("snap_right", handleSnapRight)
+	d.Register("focus_up", handleTerminalFocusDirection("up"))
+	d.Register("focus_down", handleTerminalFocusDirection("down"))
 	d.Register("snap_fullscreen", handleSnapFullscreen)
 	d.Register("unsnap", handleUnsnap)
 	d.Register("snap_corner_1", makeSnapCornerHandler(app.SnapTopLeft))

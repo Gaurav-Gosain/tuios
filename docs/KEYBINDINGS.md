@@ -25,6 +25,23 @@ The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`.
 
 A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
 
+## Moving focus
+
+Four keys move focus to the window in a direction. Each key has a binding in window mode, in terminal mode, and after the prefix.
+
+| Direction | Window mode | Terminal mode | After `ctrl+b` |
+|---|---|---|---|
+| Left | `h` | `alt+left` | `left` |
+| Down | `j` | `alt+down` | `down` |
+| Up | `k` | `alt+up` | `up` |
+| Right | `l` | `alt+right` | `right` |
+
+Focus goes to the nearest window that lies in that direction and faces the focused window. At the edge of a tiled layout, focus stays where it is. With tiling off, a window that does not face the focused window can also get focus.
+
+With tiling off, `h` and `l` snap the focused window to the left or right half of the screen. `j` and `k` always move focus. The actions are `snap_left`, `snap_right`, `focus_down` and `focus_up` in `[keybindings.layout]`.
+
+In the scrolling layout, left and right move between columns. Up and down move between the windows in one column.
+
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,

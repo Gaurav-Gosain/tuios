@@ -520,6 +520,8 @@ var ActionDescriptions = map[string]string{
 	// Layout
 	"snap_left":                 "Snap or focus left",
 	"snap_right":                "Snap or focus right",
+	"focus_up":                  "Focus the window above",
+	"focus_down":                "Focus the window below",
 	"snap_fullscreen":           "Fullscreen",
 	"unsnap":                    "Unsnap",
 	"snap_corner_1":             "Snap to top-left",
