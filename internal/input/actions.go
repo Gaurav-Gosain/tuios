@@ -1060,7 +1060,7 @@ func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleOpenFileSearch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.OpenFileSearch()
+	return o, o.OpenFileSearch(false)
 }
 
 // handleOpenLauncher opens the app launcher.

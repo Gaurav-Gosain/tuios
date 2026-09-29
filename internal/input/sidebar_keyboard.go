@@ -141,7 +141,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.OpenCommandPalette()
 	case sidebarActFileSearch:
 		o.NoteAction(action)
-		return o, o.OpenFileSearch()
+		return o, o.OpenFileSearch(true)
 	case sidebarActAgentFilter:
 		o.SidebarCycleAgentsFilter()
 	case sidebarActAgentSort:

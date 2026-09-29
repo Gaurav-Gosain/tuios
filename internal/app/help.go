@@ -440,7 +440,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("agents_filter", "Agents: all sessions, or this one"),
 		row("agents_sort", "Agents: needs you, priority, or recency"),
-		row("file_search", "Files: search below the focused pane's directory"),
+		row("file_search", "Files: search below the folder the sidebar shows"),
 		row("mail", "Open the mailbox, for the pane under the cursor"),
 		row("palette", "Find a pane in any session, or filter by @state"),
 		row("narrow", "Collapse the rail. On the divider: split down"),

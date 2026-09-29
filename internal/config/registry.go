@@ -395,7 +395,7 @@ func (r *KeybindRegistry) GetConfig() *UserConfig {
 
 // ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
-	"file_search": "Search files below the focused pane's directory",
+	"file_search": "Search files below the folder the sidebar shows",
 	// The rail's files section. They act only while the cursor is on a row of
 	// the listing, which is why three of them share a key with a rail binding
 	// above and neither loses it.
