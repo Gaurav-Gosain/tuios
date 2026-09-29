@@ -79,13 +79,15 @@ func TestHelperSocketCaller(t *testing.T) {
 		}
 		result = "nonce:" + c.HumanNonce()
 		_ = c.Close()
-	case "attach":
+	case "attach", "attach-served", "attach-force":
 		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
 		if err != nil {
 			result = "dial: " + err.Error()
 			break
 		}
 		c := NewTUIClient()
+		c.Served = os.Getenv(helperModeEnv) == "attach-served"
+		c.AllowNested = os.Getenv(helperModeEnv) == "attach-force"
 		c.conn = conn
 		if err := c.handshake("test", 80, 24, nil); err != nil {
 			result = "handshake: " + err.Error()

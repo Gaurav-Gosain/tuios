@@ -3,9 +3,15 @@
 package session
 
 import (
+	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
 // TestAttachFromOwnPaneIsRefused is #235 at the daemon: a client in a pane of
@@ -59,6 +65,88 @@ func TestAttachFromPaneToOtherSessionIsAllowed(t *testing.T) {
 	runInPane(t, d, sess, b, helperCommand(t, sp, out, "attach", "there"))
 	if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
 		t.Errorf("an attach from a pane to another session got %q, want it attached", got)
+	}
+}
+
+// TestServedAndForcedAttachFromOwnPaneAreAllowed covers the two ways past the
+// refusal: a served client (tuios-web, the SSH server) takes its size from a
+// remote viewer, and a forced attach asked for it.
+func TestServedAndForcedAttachFromOwnPaneAreAllowed(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	sess, _, b := twoWindowSession(t, d, "pass")
+	for _, mode := range []string{"attach-served", "attach-force"} {
+		t.Run(mode, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			runInPane(t, d, sess, b, helperCommand(t, sp, out, mode, "pass"))
+			if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
+				t.Errorf("a %s from the session's own pane got %q, want it attached", mode, got)
+			}
+		})
+	}
+}
+
+// startHelperOnOwnTerminal starts the helper from this test process, outside
+// every pane, on a PTY of its own, with env added to its environment.
+func startHelperOnOwnTerminal(t *testing.T, sp, mode, args string, env ...string) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	pty, cmd, err := ptyspawn.Spawn(80, 24, func() *exec.Cmd {
+		c := exec.Command(exe, "-test.run=^TestHelperSocketCaller$")
+		c.Env = append(os.Environ(), helperSockEnv+"="+sp, helperOutEnv+"="+out,
+			helperModeEnv+"="+mode, helperArgsEnv+"="+args)
+		c.Env = append(c.Env, env...)
+		return c
+	}, nil)
+	if err != nil {
+		t.Fatalf("spawn the helper: %v", err)
+	}
+	go func() { _, _ = io.Copy(io.Discard, pty) }()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		_ = pty.Close()
+	})
+	return waitHelper(t, out)
+}
+
+// TestStalePaneEnvOnOwnTerminalIsAllowed is the lockout the review found: a
+// GUI terminal or a tmux server started from a pane inherits the pane's
+// variables, and a tuios attach from it runs on a terminal of its own. That
+// is not nested, and must attach.
+func TestStalePaneEnvOnOwnTerminalIsAllowed(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	_, _, b := twoWindowSession(t, d, "stale")
+	got := startHelperOnOwnTerminal(t, sp, "attach", "stale",
+		"TUIOS_SESSION=stale", "TUIOS_PANE_ID="+b, "TUIOS_WINDOW_ID="+b, "TUIOS_SOCKET="+sp)
+	if !strings.HasPrefix(got, "nonce:") {
+		t.Errorf("an attach with a pane's variables from a terminal of its own got %q, want it attached", got)
+	}
+}
+
+// TestDetachedPaneProcessWithoutTerminalIsRefused is the other side: a process
+// with no terminal is placed by its environment, and one that names a pane of
+// the session is refused.
+func TestDetachedPaneProcessWithoutTerminalIsRefused(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	_, _, b := twoWindowSession(t, d, "orphan")
+	out := filepath.Join(t.TempDir(), "out")
+	// sh starts the helper in the background and exits, and setsid leaves it
+	// with no controlling terminal.
+	cmd := exec.Command("/bin/sh", "-c", helperCommand(t, sp, out, "attach", "orphan")+" &")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Env = append(os.Environ(), "TUIOS_PANE_ID="+b, helperDetachEnv+"=1")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("sh: %v", err)
+	}
+	if got := waitHelper(t, out); !strings.Contains(got, `You are inside session "orphan"`) {
+		t.Errorf("a process with no terminal and a pane's id got %q, want the refusal", got)
 	}
 }
 

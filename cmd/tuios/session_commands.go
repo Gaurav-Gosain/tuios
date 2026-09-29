@@ -26,8 +26,11 @@ import (
 func runAttach(sessionName string, createIfMissing bool) error {
 	// First of all, because the refusal is the whole answer: a client in a pane
 	// of the session it asks for sizes the session by its own pane (#235).
-	if err := session.CheckNestedAttach(sessionName); err != nil {
-		return &diagnosticError{What: err.Error(), Err: err}
+	if !nestedAllowed() {
+		if err := session.CheckNestedAttach(sessionName); err != nil {
+			nested, _ := session.AsNestedAttach(err)
+			return explainNestedAttach(nested, nil)
+		}
 	}
 
 	// Check the terminal before anything else: a session that cannot be
@@ -266,6 +269,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 
 	log.Printf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
+	client.AllowNested = nestedAllowed()
 	// The real host size, asked for here rather than left at a placeholder.
 	//
 	// The session's size is the minimum over its attached clients, and this is
@@ -302,7 +306,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		names := client.AvailableSessionNames()
 		_ = client.Close()
 		if nested, ok := session.AsNestedAttach(err); ok {
-			return &diagnosticError{What: nested.Error(), Err: err}
+			return explainNestedAttach(nested, names)
 		}
 		if host != "" {
 			return explainMissingHostSession(host, sessionName, names, err)

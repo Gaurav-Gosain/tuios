@@ -163,6 +163,13 @@ func TestNestedBareTuiosIsRefused(t *testing.T) {
 	outer, base := nestedSetup(t)
 	// The trailing flag marks this client's command line for the process scan.
 	assertRefused(t, outer, base, tuiosBin+" --no-animations", "--no-animations")
+	// A bare tuios asked for nothing in particular, so it is told what it can
+	// do instead. The message wraps in the pane, so it is read with the
+	// borders and the spaces taken out.
+	flat := strings.Join(strings.Fields(strings.ReplaceAll(outer.Screen().Text(), "│", "")), "")
+	if !strings.Contains(flat, "tuiosnewNAME") || strings.Contains(flat, "Attachingto") {
+		t.Errorf("a bare tuios in a pane did not get the bare message\n%s", outer.Snapshot())
+	}
 }
 
 // TestNestedAttachIsRefused is the same with the session named, and with the
@@ -237,18 +244,17 @@ func buildUnplaced(t *testing.T) string {
 // nested client the daemon cannot find, as through ssh to the same machine.
 // The attach goes through and the session shrinks, but it stops at the floor
 // and settles: no 1x1, no endless resize, no CPU spin.
-func TestUnplacedNestedClientDoesNotCollapseTheSession(t *testing.T) {
-	unplaced := buildUnplaced(t)
-	outer, base := nestedSetup(t)
+// assertAttachedAndSettled runs cmd in the pane, which starts a nested client
+// the daemon lets through, and checks that the session shrinks no further than
+// the floor, stops resizing, and that the client does not spin.
+func assertAttachedAndSettled(t *testing.T, outer *tuitest.Terminal, base, cmd, marker string) {
+	t.Helper()
 	if w, h := waitSessionSize(t, base); w < 100 || h < 30 {
 		t.Fatalf("the session never reached the client's size: %dx%d", w, h)
 	}
-
-	const marker = "--no-animations"
-	if err := outer.SendKeys(unplaced+" -- "+tuiosBin+" attach "+nestSession+" "+marker, tuitest.Enter); err != nil {
+	if err := outer.SendKeys(cmd, tuitest.Enter); err != nil {
 		t.Fatalf("type the nested attach: %v", err)
 	}
-	// The daemon cannot place it, so it is attached.
 	deadline := time.Now().Add(bootTimeout)
 	var pids []int
 	for time.Now().Before(deadline) {
@@ -262,7 +268,10 @@ func TestUnplacedNestedClientDoesNotCollapseTheSession(t *testing.T) {
 	}
 
 	// Let the shrink run its course, then check that it stopped.
-	time.Sleep(4 * time.Second)
+	time.Sleep(6 * time.Second)
+	if strings.Contains(outer.Snapshot(), "You are inside session") {
+		t.Fatalf("the attach was refused\n%s", outer.Snapshot())
+	}
 	w1, h1 := sessionSize(t, base, nestSession)
 	before, ok := cpuTicks(pids[0])
 	if !ok {
@@ -282,5 +291,41 @@ func TestUnplacedNestedClientDoesNotCollapseTheSession(t *testing.T) {
 	if used := after - before; used > 60 {
 		t.Errorf("the nested client used %d ticks of CPU in 2s; the loop in #235 used about 145%%", used)
 	}
-	alive(t, outer, "with an unplaced nested client")
+	alive(t, outer, "with a nested client")
+}
+
+// TestUnplacedNestedClientDoesNotCollapseTheSession is the guard for the
+// nested client the daemon cannot find, as through ssh to the same machine.
+// The attach goes through and the session shrinks, but it stops at the floor
+// and settles: no 1x1, no endless resize, no CPU spin.
+func TestUnplacedNestedClientDoesNotCollapseTheSession(t *testing.T) {
+	unplaced := buildUnplaced(t)
+	outer, base := nestedSetup(t)
+	const marker = "--no-animations"
+	assertAttachedAndSettled(t, outer, base, unplaced+" -- "+tuiosBin+" attach "+nestSession+" "+marker, marker)
+}
+
+// TestForcedNestedAttachSettles is tuios attach --force from the session's own
+// pane: the person asked for it, so it attaches, and the floor stops the loop.
+func TestForcedNestedAttachSettles(t *testing.T) {
+	outer, base := nestedSetup(t)
+	const marker = "--no-animations"
+	assertAttachedAndSettled(t, outer, base, tuiosBin+" attach --force "+nestSession+" "+marker, marker)
+}
+
+// TestNestedAttachOnOwnTerminalAttaches is a client in the pane that runs on a
+// terminal of its own, with the pane's variables still set: setsid and script
+// give it one. Its terminal is not the pane's, so it is let through, the same
+// as a terminal emulator or a tmux server started from a pane.
+func TestNestedAttachOnOwnTerminalAttaches(t *testing.T) {
+	if _, err := exec.LookPath("script"); err != nil {
+		t.Skip("script is not installed")
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("setsid is not installed")
+	}
+	outer, base := nestedSetup(t)
+	const marker = "--no-animations"
+	cmd := "setsid -f script -qfec '" + tuiosBin + " attach " + nestSession + " " + marker + "' /dev/null"
+	assertAttachedAndSettled(t, outer, base, cmd, marker)
 }

@@ -185,6 +185,13 @@ type AttachPayload struct {
 	// LayoutReserve. A client that sends none reserves nothing, which is what an
 	// older client means and what a client with no chrome means.
 	Reserve LayoutReserve `json:"reserve,omitempty"`
+	// Served marks a client that serves a remote viewer (tuios-web, the SSH
+	// server). Its size is the viewer's, not its own terminal's, so it is not
+	// refused for running in a pane of the session. See nested_attach.go.
+	Served bool `json:"served,omitempty"`
+	// AllowNested lets the attach through from a pane of its own session, as
+	// tuios attach --force asks.
+	AllowNested bool `json:"allow_nested,omitempty"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the
@@ -398,6 +405,11 @@ type ResizePayload struct {
 type ErrorPayload struct {
 	Code    int    `json:"code"`    // Error code
 	Message string `json:"message"` // Human-readable error
+	// Session and Unnamed come with ErrCodeNestedAttach: the session the
+	// caller runs in, and whether its attach named no session, so a client can
+	// word the refusal for where it is shown.
+	Session string `json:"session,omitempty"`
+	Unnamed bool   `json:"unnamed,omitempty"`
 }
 
 // PTY-related payloads
