@@ -139,6 +139,9 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// actually relocates the user drops it on the way out.
 		o.NoteAction(action)
 		return o, o.OpenCommandPalette()
+	case sidebarActFileSearch:
+		o.NoteAction(action)
+		return o, o.OpenFileSearch()
 	case sidebarActAgentFilter:
 		o.SidebarCycleAgentsFilter()
 	case sidebarActAgentSort:
@@ -224,6 +227,8 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 	switch action {
 	case sidebarActFileOpen:
 		return o.SidebarFileOpen()
+	case sidebarActFileEdit:
+		return o.SidebarFileEdit()
 	case sidebarActFileCreate:
 		o.SidebarFileCreate()
 	case sidebarActFileRename:

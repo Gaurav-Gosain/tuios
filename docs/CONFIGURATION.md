@@ -1,5 +1,21 @@
 # Configuration
 
+## Sidebar file editor
+
+Settings, Sidebar, File editor sets `appearance.sidebar.editor`, the terminal
+editor command used by `Shift+Enter` on a text file. For example:
+
+```toml
+[appearance.sidebar]
+editor = "micro"
+```
+
+Other terminal editors and arguments work too, such as `nano` or `vim -f`.
+Quote executable paths or arguments containing spaces. The command is parsed
+as arguments without a shell, and the selected file's absolute path is appended.
+An empty value uses `$EDITOR`, then `$VISUAL`, then `vi`. The first 512 bytes
+are checked for text content; binary and special files are refused.
+
 The configuration reference lives on the docs site: https://tuios.dev/docs/configuration
 
 It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `scrollbar`, dock, and window-button options, `[notifications.agent]`, `[notifications.mail]` (see [AGENT_STATE.md](AGENT_STATE.md#the-inbox)), all 23 `[keybindings]` sections, `[daemon]`, `[startup]`, `[tape]`, `[screenshot]`, `[hooks]`, and `[debug]`, along with what hot-reloads and what needs a restart.

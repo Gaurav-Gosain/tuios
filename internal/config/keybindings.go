@@ -169,6 +169,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("s", "Scrollback browser"),
 		kb("b", "Toggle sidebar"),
 		kb("e", "Focus sidebar"),
+		kb("f", "Search files"),
 	)
 	menus := KeybindingGroup{Title: "Menus", Bindings: []Keybinding{
 		sub("w", "Workspace"),

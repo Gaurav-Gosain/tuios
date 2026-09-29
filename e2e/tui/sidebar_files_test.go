@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -150,4 +151,173 @@ func findFooterFiles(s tuitest.Screen) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// TestSidebarFileEditor checks the persisted settings field, folder navigation,
+// binary refusal and the editor's argv on standalone and daemon panes.
+func TestSidebarFileEditor(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
+			dir := fileViewFixture(t)
+			folder := filepath.Join(dir, "alpha")
+			name := "note $(touch injected).txt"
+			for name, data := range map[string][]byte{
+				name: []byte("editable text\n"), "binary.bin": {0, 1, 2},
+			} {
+				if err := os.WriteFile(filepath.Join(folder, name), data, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			editor := filepath.Join(t.TempDir(), "test editor")
+			if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf 'EDITOR_ARG:%s\\n' \"$1\"\nprintf 'EDITOR_FILE:%s\\n' \"$(basename \"$2\")\"\nsleep 60\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			term, base := start(t, startOpts{daemonDefault: daemon, cols: 160, rows: 40})
+			waitBoot(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 1, "opening a shell")
+			openSettings(t, term)
+			if err := term.SendKeys("/", "file editor"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("File editor", uiTimeout); err != nil {
+				t.Fatalf("editor setting missing: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Tab); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return selectedSettingsRow(s, "File editor") != "" && !strings.Contains(s.Text(), "matches")
+			}, uiTimeout); err != nil {
+				t.Fatalf("could not reach the Sidebar editor row: %v\n%s", err, term.Snapshot())
+			}
+			command := "'" + editor + "' --test"
+			if err := term.SendKeys(tuitest.Enter, command, tuitest.Enter); err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+			deadline := time.Now().Add(uiTimeout)
+			for {
+				data, err := os.ReadFile(configPath)
+				if err == nil && strings.Contains(string(data), "test editor") {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("editor setting not persisted: %v\n%s", err, data)
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "File editor")
+			}, uiTimeout); err != nil {
+				t.Fatalf("settings did not close: %v\n%s", err, term.Snapshot())
+			}
+			enterTerminalMode(t, term)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\listed\\n' \"$PWD\"", "listed", uiTimeout)
+			leaveTerminalMode(t, term)
+			toggleSidebarViaPalette(t, term)
+			waitForAll(t, term, uiTimeout, "folder listing", "alpha/", "brief.txt")
+			if err := term.SendKeys("s"); err != nil {
+				t.Fatal(err)
+			}
+			col, row, _ := findOnGrid(term.Screen(), "alpha/")
+			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			waitForAll(t, term, uiTimeout, "folder navigation", "binary.bin", "note $(touch")
+			col, row, _ = findOnGrid(term.Screen(), "binary.bin")
+			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			if err := term.SendKeys(tuitest.Enter); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("Copied the path.", uiTimeout); err != nil {
+				t.Fatalf("Enter changed its navigation action: %v\n%s", err, term.Snapshot())
+			}
+			// CSI-u carries Shift+Enter distinctly from plain Enter.
+			if err := term.SendKeys("\x1b[13;2u"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("That file is not a text file.", uiTimeout); err != nil {
+				t.Fatalf("binary file was not refused: %v\n%s", err, term.Snapshot())
+			}
+			waitWindowCount(t, term, 1, "refusing a binary file")
+			col, row, _ = findOnGrid(term.Screen(), "note $(touch")
+			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			if err := term.SendKeys("\x1b[13;2u"); err != nil {
+				t.Fatal(err)
+			}
+			waitForAll(t, term, uiTimeout, "editor invocation", "EDITOR_ARG:--test", "EDITOR_FILE:"+name)
+			waitWindowCount(t, term, 2, "opening the editor")
+			if _, err := os.Stat(filepath.Join(folder, "injected")); !os.IsNotExist(err) {
+				t.Fatalf("file name was executed through a shell: %v", err)
+			}
+			saveArtifact(t, term, artifactDir(t), "editor-open")
+			alive(t, term, "after opening the configured editor")
+		})
+	}
+}
+
+// TestSidebarFileSearch follows a result into its parent folder and leaves the
+// result selected for the existing edit action.
+func TestSidebarFileSearch(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
+			dir := fileViewFixture(t)
+			if err := os.WriteFile(filepath.Join(dir, "alpha", "needle.txt"), []byte("found\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			editor := filepath.Join(t.TempDir(), "editor")
+			if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf 'FOUND_FILE:%s\\n' \"$(basename \"$1\")\"\nsleep 60\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			term, _ := start(t, startOpts{daemonDefault: daemon, env: []string{"EDITOR=" + editor}})
+			waitBoot(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 1, "opening a shell")
+			enterTerminalMode(t, term)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\listed\\n' \"$PWD\"", "listed", uiTimeout)
+			if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("Search files", uiTimeout); err != nil {
+				t.Fatalf("file search did not open: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys("needle.txt"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("alpha/needle.txt", uiTimeout); err != nil {
+				t.Fatalf("nested file was not found: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Enter); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(s.Text(), "files") && strings.Contains(s.Text(), "needle.txt") && strings.Contains(s.Text(), "/alpha") && !strings.Contains(s.Text(), "Search files")
+			}, uiTimeout); err != nil {
+				t.Fatalf("selection did not navigate the sidebar: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Ctrl('f')); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("Search files", uiTimeout); err != nil {
+				t.Fatalf("sidebar shortcut did not open search: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Esc); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "Search files")
+			}, uiTimeout); err != nil {
+				t.Fatalf("file search did not close: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys("\x1b[13;2u"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("FOUND_FILE:needle.txt", uiTimeout); err != nil {
+				t.Fatalf("selected result was not editable: %v\n%s", err, term.Snapshot())
+			}
+			saveArtifact(t, term, artifactDir(t), "file-search-result")
+		})
+	}
 }

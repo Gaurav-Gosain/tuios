@@ -165,6 +165,8 @@ type Settings struct {
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick string
+	// SidebarEditor is the terminal editor command; empty uses the environment.
+	SidebarEditor string
 
 	// SidebarFileActions lets the files section create, rename, delete, copy,
 	// cut and paste. On leaves the listing exactly as it was until a key is

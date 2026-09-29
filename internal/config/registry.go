@@ -395,6 +395,7 @@ func (r *KeybindRegistry) GetConfig() *UserConfig {
 
 // ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
+	"file_search": "Search files below the focused pane's directory",
 	// The rail's files section. They act only while the cursor is on a row of
 	// the listing, which is why three of them share a key with a rail binding
 	// above and neither loses it.
@@ -406,6 +407,7 @@ var ActionDescriptions = map[string]string{
 	"file_cut":            "Files: cut this file",
 	"file_paste":          "Files: paste into this folder",
 	"file_open":           "Files: open this folder, or copy this file's path",
+	"file_edit":           "Files: edit this text file in a new pane",
 
 	// The Inbox, the prompt open over it, and the mailbox. Each acts only
 	// while its overlay is up.

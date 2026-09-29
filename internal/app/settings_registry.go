@@ -43,6 +43,7 @@ func custom(covers string, item settingItem) settingsRow {
 // settingLabels overrides the label derived from a path's last segment, for the
 // paths where the derived one reads worse than the name the row has always had.
 var settingLabels = map[string]string{
+	"appearance.sidebar.editor":         "File editor",
 	"appearance.dockbar_position":       "Dock position",
 	"appearance.glyphs":                 "Glyph set",
 	"appearance.hide_clock":             "Clock in the badge",
@@ -148,6 +149,7 @@ var settingInverted = map[string]bool{
 // settingPlaceholders are the examples shown on a text row's description line,
 // where the registry description alone does not say what a value looks like.
 var settingPlaceholders = map[string]string{
+	"appearance.sidebar.editor":            "micro, nano, or vim -f",
 	"appearance.window_title_format":       "{index}: {title}",
 	"appearance.dock_workspace_tab_format": "{index}: {name}",
 	"appearance.sidebar.sections":          "sessions:25,terminals,files:25,agents:34",
@@ -163,6 +165,7 @@ var settingPlaceholders = map[string]string{
 // settingUnset is what a text row shows when nothing is set: what happens
 // instead, in the row's own terms.
 var settingUnset = map[string]string{
+	"appearance.sidebar.editor":            "($EDITOR / $VISUAL / vi)",
 	"appearance.window_title_format":       "(raw title)",
 	"appearance.dock_workspace_tab_format": "(name only)",
 	"appearance.preferred_shell":           "(auto-detect)",

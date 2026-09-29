@@ -46,6 +46,9 @@ func (m *OS) rebuildPaletteItems() {
 // filteredPaletteItems returns the command palette entries matching the current
 // query.
 func (m *OS) filteredPaletteItems() []CommandPaletteItem {
+	if m.fileSearch {
+		return matchPaletteItems(m.allPaletteItems(), m.CommandPaletteQuery)
+	}
 	return FilterCommandPalette(m.allPaletteItems(), m.CommandPaletteQuery)
 }
 
@@ -58,6 +61,10 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 	m.CommandPaletteQuery = ""
 	m.CommandPaletteSelected = 0
 	m.CommandPaletteScroll = 0
+	if m.fileSearch {
+		m.PaletteItems = []CommandPaletteItem{}
+		return nil
+	}
 	m.PaletteSessionItems = getSessionPaletteItems(m)
 	// Built here for the same reason as the session entries: once per open, not
 	// once per frame. This one is a pass over the config rather than a daemon
@@ -82,7 +89,7 @@ func (m *OS) PaletteMove(delta int) {
 	_, visible, _ := m.paletteLayout()
 	// The scroll counts list rows, headers included, so it is kept against the
 	// rows the renderer lays out rather than against the commands alone.
-	lines := paletteLines(filtered, paletteGrouped(m.CommandPaletteQuery))
+	lines := paletteLines(filtered, paletteGrouped(m.CommandPaletteQuery) && !m.fileSearch)
 	m.CommandPaletteScroll = paletteScroll(m.CommandPaletteScroll, lines, m.CommandPaletteSelected, visible)
 }
 
@@ -95,6 +102,13 @@ func (m *OS) PalettePageRows() int {
 // CloseCommandPalette hides the palette and resets its state.
 func (m *OS) CloseCommandPalette() {
 	m.ShowCommandPalette = false
+	if m.fileSearch {
+		if m.fileSearchCancel != nil {
+			m.fileSearchCancel.Store(true)
+		}
+		m.fileSearch = false
+		m.fileSearchGen++
+	}
 	m.CommandPaletteQuery = ""
 	m.CommandPaletteSelected = 0
 	m.CommandPaletteScroll = 0
@@ -138,7 +152,11 @@ func (m *OS) ActivateCommandPalette() tea.Cmd {
 		// silence and cannot be told from the key not being bound. The query is
 		// what the user is part way through typing, so it stays and so does the
 		// panel.
-		m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
+		if m.fileSearch {
+			m.ShowNotification("No file matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
+		} else {
+			m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
+		}
 		return nil
 	}
 	action := filtered[m.CommandPaletteSelected].Action
