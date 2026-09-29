@@ -342,10 +342,23 @@ it does not name a session. To show a different session in the pane, name
 that session. To attach the same session, open a new terminal outside tuios.
 To attach anyway, use `--force` or set `TUIOS_ALLOW_NESTED=1`.
 
-The check looks at the terminal. A client that runs on a terminal of its own
-attaches, even when it has the pane's variables. Examples are a terminal
-window or a tmux server started from a pane. Each pane gets
-`TUIOS_PANE_TTY`, the path of its terminal, for this check.
+The same refusal applies when the session would show itself through a
+chain. For example, session A shows session B in a pane, and a pane of B
+then attaches A.
+
+tuios finds the pane in these ways:
+
+- The client runs on the pane's terminal, or under the pane's shell.
+- The client has the pane's `TUIOS_` variables. A terminal window started
+  from a pane keeps them, so an attach from that window is also refused.
+  Use `--force` there.
+- The client's output reaches the pane. This finds `script`, and ssh from
+  the pane to the same machine or to the tuios SSH server.
+
+tuios cannot find a client behind tmux or mosh in a pane. These redraw
+the screen and do not pass the output through. Such an attach goes
+through, and the session shrinks to 20x6. It stays at 20x6 until the
+inner client exits. A forced attach also stays at 20x6 or more.
 
 ### `tuios ls`
 
