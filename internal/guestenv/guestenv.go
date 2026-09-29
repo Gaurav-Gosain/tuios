@@ -131,7 +131,7 @@ var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID",
 	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
 	"TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN", "TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED",
-	"TUIOS_RESTORED",
+	"TUIOS_PANE_TTY", "TUIOS_RESTORED",
 }
 
 // WithoutHostMultiplexer returns env with every assignment of the variables

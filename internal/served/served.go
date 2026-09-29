@@ -64,7 +64,9 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// be seen in the pane instead. A browser never feeds a pane, so the web
 	// server writes none.
 	if w, ok := any(opts.SSHSession).(io.Writer); ok && w != nil {
-		client.SetNestProbe(session.WriteNestProbe(w))
+		if term, _ := app.SSHClientTerm(opts.SSHSession); session.NestProbeSafe(term) {
+			client.SetNestProbe(session.WriteNestProbe(w))
+		}
 	}
 	if err := client.ConnectWithCapabilities(version, opts.Width, opts.Height, caps); err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)

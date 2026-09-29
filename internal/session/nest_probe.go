@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,6 +47,21 @@ const nestProbeWindow = 200 * time.Millisecond
 
 // nestSightingTTL is how long a sighting is kept for an attach to claim it.
 const nestSightingTTL = 30 * time.Second
+
+// NestProbeSafe reports whether a terminal with this TERM ignores the probe.
+// Terminals that parse OSC drop an OSC number they do not know without
+// drawing it: xterm, kitty, ghostty, alacritty, wezterm, iTerm2,
+// Terminal.app, Windows Terminal, and tmux and screen as outer terminals. The
+// Linux console does not parse OSC and would print the text, and a dumb or
+// hardware VT terminal may do the same, so those get no probe.
+func NestProbeSafe(term string) bool {
+	switch {
+	case term == "", term == "dumb", term == "linux", strings.HasPrefix(term, "linux-"),
+		strings.HasPrefix(term, "vt"), strings.HasPrefix(term, "cons"):
+		return false
+	}
+	return true
+}
 
 // NewNestProbe returns a fresh nonce and the probe sequence that carries it.
 func NewNestProbe() (nonce string, seq []byte) {
