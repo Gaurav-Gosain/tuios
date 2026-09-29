@@ -587,6 +587,10 @@ var ActionDescriptions = map[string]string{
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
 
+	// Copy mode search (no default keybinding)
+	ActionCopyModeSearchForward:  "Enter copy mode and search forward",
+	ActionCopyModeSearchBackward: "Enter copy mode and search backward",
+
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",
 	"rename_session":    "Rename the session the menu was opened on",

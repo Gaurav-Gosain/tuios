@@ -423,6 +423,10 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// them where they want them (issue #232).
 	"toggle_multifocus_active": "palette row, user binding",
 	"toggle_multifocus_all":    "palette row, user binding",
+	// tmux's "copy-mode \; send-keys ?" as one action. The palette reaches
+	// them too.
+	"copy_mode_search_forward":  "user binding and palette row",
+	"copy_mode_search_backward": "user binding and palette row",
 	// "," is open_settings, so this half of the master resize ships unbound.
 	"resize_master_shrink_left": "user binding",
 

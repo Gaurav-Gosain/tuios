@@ -903,6 +903,24 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// No Shortcut: copy_mode_search_forward has no default binding.
+			Name:     "Copy mode: search forward",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EnterCopyModeSearch(false)
+				return m, nil
+			},
+		},
+		{
+			// No Shortcut: copy_mode_search_backward has no default binding.
+			Name:     "Copy mode: search backward",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EnterCopyModeSearch(true)
+				return m, nil
+			},
+		},
+		{
 			Name:     paletteMultiCopyName,
 			Shortcut: "prefix+[ with multifocus",
 			Category: "Session",
