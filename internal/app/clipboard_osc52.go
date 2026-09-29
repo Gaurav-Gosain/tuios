@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -32,6 +33,7 @@ import (
 // pane that writes fifty times raises one message, not fifty.
 type clipboardAsk struct {
 	seq      uint64
+	version  uint64
 	text     string
 	windowID string
 	// raised is when the ask last put a message on the dock. A pane whose
@@ -57,14 +59,49 @@ func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 	default:
 		// focused, and anything unknown, which is treated as the default.
 		if fw := m.GetFocusedWindow(); fw != nil && fw.ID == msg.WindowID {
-			m.ShowNotificationFrom(
-				fmt.Sprintf("%s copied %d characters to the clipboard.", m.clipboardPaneName(msg.WindowID), len([]rune(msg.Text))),
-				"info", m.Settings.NotificationDuration, NotifTarget{WindowID: msg.WindowID})
+			m.noteFocusedCopy(msg)
 			return tea.SetClipboard(msg.Text)
 		}
 	}
 	m.askClipboardWrite(msg)
 	return nil
+}
+
+// noteFocusedCopy says on the dock that the focused pane set the clipboard,
+// when the text is of the kind that runs something if pasted: it holds a line
+// break or a control character. A one-line yank, which is most of what an
+// editor copies, says nothing. Each pane has one such line, updated in place,
+// so a pane that copies often does not push other messages off the dock.
+func (m *OS) noteFocusedCopy(msg ClipboardSetMsg) {
+	if !strings.ContainsFunc(msg.Text, func(r rune) bool {
+		return (r < 0x20 && r != '\t') || r == 0x7f || (r >= 0x80 && r <= 0x9f)
+	}) {
+		return
+	}
+	lines := strings.Count(strings.TrimRight(msg.Text, "\n"), "\n") + 1
+	preview := []rune(notifyPlainText(msg.Text))
+	quoted := string(preview)
+	if len(preview) > clipboardPreviewLen {
+		quoted = string(preview[:clipboardPreviewLen]) + "..."
+	}
+	text := fmt.Sprintf("%s copied %d lines to the clipboard: %q.", m.clipboardPaneName(msg.WindowID), lines, quoted)
+	if id := m.clipboardCopyNotes[msg.WindowID]; id != "" {
+		for i := range m.Notifications {
+			if m.Notifications[i].ID == id {
+				m.Notifications[i].Message = text
+				m.Notifications[i].StartTime = time.Now()
+				return
+			}
+		}
+	}
+	before := len(m.Notifications)
+	m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration, NotifTarget{WindowID: msg.WindowID})
+	if n := len(m.Notifications); n > 0 && (n > before || m.Notifications[n-1].Message == text) {
+		if m.clipboardCopyNotes == nil {
+			m.clipboardCopyNotes = make(map[string]string)
+		}
+		m.clipboardCopyNotes[msg.WindowID] = m.Notifications[n-1].ID
+	}
 }
 
 // askClipboardWrite records a pane's write as waiting and shows, or updates,
@@ -85,13 +122,23 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 		ask = &clipboardAsk{seq: m.clipboardAskSeq, windowID: msg.WindowID}
 		m.clipboardAsks[msg.WindowID] = ask
 	}
+	changed := ask.text != msg.Text && ask.version > 0
+	if ask.text != msg.Text || ask.version == 0 {
+		ask.version++
+	}
 	ask.text = msg.Text
 	text := m.clipboardAskText(ask)
+	if changed {
+		text = "The text changed. " + text
+	}
 
-	// The pane's message is still up: the newest text replaces it in place.
+	// The pane's message is still up: the newest text replaces it in place,
+	// and its target moves to the new version. A click aimed at the old text
+	// then no longer matches what was drawn, and is dropped.
 	for i := range m.Notifications {
 		if t := m.Notifications[i].Target; t != nil && t.ClipboardAsk == ask.seq {
 			m.Notifications[i].Message = text
+			m.Notifications[i].Target = &NotifTarget{ClipboardAsk: ask.seq, ClipboardVersion: ask.version}
 			return
 		}
 	}
@@ -99,7 +146,7 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 		return
 	}
 	ask.raised = time.Now()
-	m.ShowNotificationFrom(text, "warning", 2*m.Settings.NotificationDuration, NotifTarget{ClipboardAsk: ask.seq})
+	m.ShowNotificationFrom(text, "warning", 2*m.Settings.NotificationDuration, NotifTarget{ClipboardAsk: ask.seq, ClipboardVersion: ask.version})
 }
 
 // clipboardAskText is the dock message for an ask.
@@ -130,7 +177,9 @@ func (m *OS) clipboardPaneName(windowID string) string {
 }
 
 // allowClipboardAsk lets the waiting write with this number through.
-func (m *OS) allowClipboardAsk(seq uint64) {
+// version is the text version the activated message showed. An ask whose text
+// has changed since is not allowed.
+func (m *OS) allowClipboardAsk(seq, version uint64) {
 	var ask *clipboardAsk
 	for _, a := range m.clipboardAsks {
 		if a.seq == seq {
@@ -140,6 +189,10 @@ func (m *OS) allowClipboardAsk(seq uint64) {
 	}
 	if ask == nil {
 		m.ShowNotification("That clipboard request is no longer open.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if ask.version != version {
+		m.ShowNotification("The text changed. Check the new request, then click it again.", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	delete(m.clipboardAsks, ask.windowID)

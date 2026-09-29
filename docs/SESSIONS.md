@@ -591,8 +591,13 @@ also carry OSC 52, for example a file that a program prints.
 |---|---|
 | `off` | The host clipboard does not change. |
 | `ask` | The dock shows a message. Click the message to copy the text. |
-| `focused` | The focused pane copies, and the dock says so. Other panes ask. This is the default. |
+| `focused` | The focused pane copies. Other panes ask. This is the default. |
 | `on` | Every pane copies. |
+
+When the focused pane copies text with a line break or a control character,
+the dock shows one line for that pane. A one-line copy shows nothing. A click
+on an ask copies only the text that the dock showed. If the text changes
+first, click the new message.
 
 In each mode, the pane keeps its own copy. The program reads it back with an
 OSC 52 query.

@@ -421,6 +421,9 @@ func (m *OS) renderDockString() (string, int) {
 		DismissX0: notifX0 + rightWidth - notif.DismissW,
 		Y:         m.GetDockbarContentYPosition(),
 	}
+	if hasNotif && len(m.Notifications) > 0 {
+		m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
+	}
 
 	// The entries' screen columns, now that the spacer in front of them is known.
 	// Recorded from the geometry this pass drew, so a click hit-tests the bar the

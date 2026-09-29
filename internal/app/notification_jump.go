@@ -27,6 +27,11 @@ type notifHitZones struct {
 	// span. DismissX0 opens the right-hand zone (the counter, the esc affordance
 	// and the bare trailing columns). All absolute.
 	X0, X1, DismissX0, Y int
+	// Drawn is the message the block showed, as it was on that frame. A click
+	// acts on this message only if it is still the one on top and still says
+	// the same thing: a clipboard ask whose text changed after the frame must
+	// not be allowed by a click aimed at the old text.
+	Drawn Notification
 }
 
 // notifTargetedIndex is the newest message carrying a target, or -1. Activation
@@ -66,7 +71,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	// A message that asks to let a pane set the clipboard is answered, not
 	// followed.
 	if t.ClipboardAsk != 0 {
-		m.allowClipboardAsk(t.ClipboardAsk)
+		m.allowClipboardAsk(t.ClipboardAsk, t.ClipboardVersion)
 		return
 	}
 	// A message about mail lands on the thread, where the reply is, rather than
@@ -144,12 +149,43 @@ func (m *OS) NotificationClick(x, y int) bool {
 		m.dismissVisibleNotification()
 		return true
 	}
-	if n := len(m.Notifications); n > 0 {
-		visible := m.Notifications[n-1]
-		m.Notifications = m.Notifications[:n-1]
-		if visible.Target != nil {
-			m.jumpToNotifTarget(*visible.Target)
-		}
-	}
+	m.clickVisibleNotification()
 	return true
+}
+
+// clickVisibleNotification activates the message on top of the dock, if it is
+// the message the last frame drew. A message that changed since then is left
+// as it is, and the next frame shows the new text.
+func (m *OS) clickVisibleNotification() {
+	n := len(m.Notifications)
+	if n == 0 {
+		return
+	}
+	visible := m.Notifications[n-1]
+	if !sameDrawnNotification(visible, m.notifHit.Drawn) {
+		return
+	}
+	m.Notifications = m.Notifications[:n-1]
+	if visible.Target != nil {
+		m.jumpToNotifTarget(*visible.Target)
+	}
+}
+
+// sameDrawnNotification reports whether a is the message b was drawn from,
+// with the same text and the same target.
+func sameDrawnNotification(a, b Notification) bool {
+	if a.ID != b.ID || a.Message != b.Message || (a.Target == nil) != (b.Target == nil) {
+		return false
+	}
+	return a.Target == nil || *a.Target == *b.Target
+}
+
+// drawnCopy is n with its target copied, so a later change to the live
+// message's target does not change the record of what was drawn.
+func (m *OS) drawnCopy(n Notification) Notification {
+	if n.Target != nil {
+		t := *n.Target
+		n.Target = &t
+	}
+	return n
 }

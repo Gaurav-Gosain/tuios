@@ -1455,7 +1455,7 @@ var CopyEntries = []string{CopyEntryCursor, CopyEntryCenter}
 // ignores these writes by default, but that breaks the yank in an editor over
 // ssh, which is what OSC 52 is mostly for, and that yank always comes from the
 // pane the user is typing in. So the default lets the focused pane write, and
-// says so on the dock each time. A write from any other pane waits for the
+// says so on the dock when the text holds a line break or a control character. A write from any other pane waits for the
 // user to allow it, which is what ask does for every pane.
 //
 // Whatever the mode, the pane keeps its own copy, so the program that set it

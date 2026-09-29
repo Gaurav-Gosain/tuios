@@ -350,9 +350,12 @@ type OS struct {
 	// clipboardAsk is the pane clipboard write waiting for the user, and
 	// clipboardApproved the one the user allowed and not yet sent. See
 	// clipboard_osc52.go.
-	clipboardAsks     map[string]*clipboardAsk
-	clipboardAskSeq   uint64
-	clipboardApproved *string
+	clipboardAsks map[string]*clipboardAsk
+	// clipboardCopyNotes is the dock message id each pane's "copied" line
+	// has, so the line is updated in place.
+	clipboardCopyNotes map[string]string
+	clipboardAskSeq    uint64
+	clipboardApproved  *string
 
 	// Performance optimization caches
 	cachedSeparator      string      // Cached dock separator, styled
@@ -1544,6 +1547,10 @@ type NotifTarget struct {
 	// ClipboardAsk, when set, names a pane's clipboard write that waits for
 	// the user: activating the message allows it. See clipboard_osc52.go.
 	ClipboardAsk uint64
+	// ClipboardVersion counts the changes to that ask's text. It is part of
+	// the target, so a message drawn with one text is not the same message as
+	// one holding another. See clickVisibleNotification.
+	ClipboardVersion uint64
 }
 
 // LogMessage represents a log entry with timestamp and level.

