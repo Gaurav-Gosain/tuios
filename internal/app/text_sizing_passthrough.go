@@ -114,14 +114,23 @@ func eraseAt(buf *[]byte, x, y, cols, rows int) {
 }
 
 // emitOSC66 writes CUP + OSC 66 at a screen position.
-// contentEndX is the right edge of the window's content area (exclusive, 0-based).
-func emitOSC66(buf *[]byte, x, y, scale, scaledWidth, contentEndX int, rawOSC []byte) {
+// contentTopY and contentEndX bound the window's content area: contentTopY is
+// its first row and contentEndX its right edge (exclusive), both 0-based.
+//
+// Every cell this writes goes straight to the host, behind the renderer's
+// back, so the renderer never learns it has to repaint what was there. A write
+// outside the content area therefore stays on screen until something else on
+// that row changes. The row above the first content row is the pane's title
+// bar, and erasing it there is what broke opencode's border: opencode probes
+// for text sizing with an OSC 66 at the top left of its screen on start-up.
+func emitOSC66(buf *[]byte, x, y, scale, scaledWidth, contentTopY, contentEndX int, rawOSC []byte) {
 	*buf = append(*buf, "\x1b7"...)
 	*buf = append(*buf, fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)...)
 	*buf = append(*buf, rawOSC...)
 	// Erase from end of scaled text to end of content area (NOT end of line,
 	// which would destroy window borders and other UI elements).
-	// Also erase the row above to clean up wrapped command text.
+	// Also erase the row above to clean up wrapped command text, when that row
+	// is still inside the content area.
 	eraseWidth := contentEndX - (x + scaledWidth)
 	if eraseWidth > 0 {
 		spaces := make([]byte, eraseWidth)
@@ -134,7 +143,7 @@ func emitOSC66(buf *[]byte, x, y, scale, scaledWidth, contentEndX int, rawOSC []
 			*buf = append(*buf, spaces...)
 		}
 		// Erase on the row above (command text wrapping area)
-		if y > 0 {
+		if y > 0 && y-1 >= contentTopY {
 			*buf = append(*buf, fmt.Sprintf("\x1b[%d;%dH", y, x+scaledWidth+1)...)
 			*buf = append(*buf, spaces...)
 		}
@@ -224,8 +233,9 @@ func (m *OS) RefreshTextSizing() {
 				eraseAt(&m.TextSizingState.pendingOutput, p.PlacedAtX, p.PlacedAtY, eraseCols, p.Scale)
 			}
 
+			contentTopY := w.Y + borderOff
 			contentEndX := w.X + borderOff + contentWidth
-			emitOSC66(&m.TextSizingState.pendingOutput, hostX, hostY, p.Scale, scaledWidth, contentEndX, p.RawOSC)
+			emitOSC66(&m.TextSizingState.pendingOutput, hostX, hostY, p.Scale, scaledWidth, contentTopY, contentEndX, p.RawOSC)
 			p.PlacedAtX = hostX
 			p.PlacedAtY = hostY
 			p.IsPlaced = true
