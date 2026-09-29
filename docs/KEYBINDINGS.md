@@ -92,6 +92,48 @@ path. `esc` closes. See [HINTS.md](HINTS.md) for the patterns and the
 `[hints]` settings. The action is `hints`, so you can bind it to a different
 key.
 
+## Copy mode
+
+`Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the
+terminal cursor, which is usually the prompt line. tmux does the same. To start
+in the middle row, set `appearance.selection.copy_entry` to `center`.
+
+| Key | Action |
+| --- | --- |
+| `/` | Search forward, down to the newest output |
+| `?` | Search backward, up into the scrollback |
+| `n` | Go to the next match in the direction of the last search |
+| `N` | Go to the next match in the opposite direction |
+| `Esc` in the search prompt | Cancel the search and move the cursor back |
+
+The prompt shows `/` or `?` to show the direction. The search starts at the
+copy cursor. When no match is found in that direction, the search continues
+from the other end of the buffer. `n` and `N` start at the copy cursor, so they
+find the nearest match after you move the cursor.
+
+Two actions start copy mode and open the search prompt with one key:
+
+| Action | Key |
+| --- | --- |
+| `copy_mode_search_forward` | None |
+| `copy_mode_search_backward` | None |
+
+They are the same as tmux `bind-key b copy-mode \; send-keys ?`. They have no
+default key. Bind one in any section. This example uses `Ctrl+B /`:
+
+```toml
+[keybindings.prefix_mode]
+copy_mode_search_backward = ["/"]
+```
+
+The command palette also has the entries "Copy mode: search forward" and
+"Copy mode: search backward". If the pane is already in copy mode, the action
+opens the prompt and does not move the cursor. In multi copy mode, the prompt
+opens in each pane of the mode.
+
+tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
+because a key from `send-keys` does not go to copy mode.
+
 ## Screenshots over a panel
 
 `Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the
