@@ -574,7 +574,8 @@ type SidebarConfig struct {
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
-	// Editor is the terminal editor command for files; empty uses $EDITOR, $VISUAL or vi.
+	// Editor is the terminal editor command for files (default: $EDITOR,
+	// $VISUAL or vi).
 	Editor string `toml:"editor"`
 	// FileActions lets the files section create, rename, delete, copy, cut and
 	// paste (default: true).
@@ -931,8 +932,7 @@ func DefaultConfig() *UserConfig {
 				// prefix stays armed so O O O walks back through them.
 				"prefix_review":        {"v"},
 				"prefix_next_finished": {"O"},
-				// F, as in tmux-fingers. f searches files; both are
-				// non-destructive if Shift is missed.
+				// F, as in tmux-fingers. f searches files.
 				"hints": {"F"},
 			},
 			WindowPrefix: map[string][]string{
