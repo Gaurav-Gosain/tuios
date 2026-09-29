@@ -3452,6 +3452,15 @@ with `send-text`, `send-keys`, `run`, `ask-agent` or `queue-prompt`:
   `respond` is for. `ask-agent` without `allow_blocked` keeps its own refusal,
   `agent_blocked`.
 
+The second rule holds a pane with `admin` too, which is every pane under the
+default open mode, for `send-text`, `send-keys`, `run` and `ask-agent`.
+`admin` does not include `respond`, so one agent cannot answer another
+agent's permission prompt by typing `1` and Enter into it. The person answers
+it, or gives the typing pane `respond`. A pane with `admin` is not pinned to
+the focused pane: its `send-keys` with no window still goes through the
+attached client, and the focused pane is checked. `queue-prompt` types only
+into a pane at rest, so it is not held to this rule.
+
 A call with no window means the focused pane, and it is pinned to that pane
 when it is checked, so a focus change cannot send it elsewhere. Both rules are
 checked again right before the text is written. A pane's own pane is always
@@ -3478,7 +3487,9 @@ Under `mode = "open"`, which is the default, a pane given no grants holds
 Under `mode = "strict"` it holds the `grants` list, `read`, `write` and `fan`
 when the list is not set. A mode tuios does not know is read as strict and an
 unknown grant is dropped, so a typo never turns the protection off. A change
-to the table reaches every pane on the default at its next call.
+to the table that gives less reaches every pane on the default at its next
+call. A change that gives more applies after a daemon restart, since a process
+in a pane can write config.toml. `tuios pane-grants` says when one waits.
 
 A pane can never give more than it holds. A pane without `admin` that starts
 an agent without `--grants` gives it its own grants, a pane can change only

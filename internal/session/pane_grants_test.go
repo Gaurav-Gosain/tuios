@@ -87,7 +87,9 @@ func TestPermissionsConfigFailsTowardStrict(t *testing.T) {
 }
 
 // TestPermissionsReachTheDaemonAndFollowTheFile: the table is read at start
-// by every starter, and a change to the file reaches panes on the default.
+// by every starter, and a change to the file that narrows reaches panes on
+// the default. One that widens waits for a restart
+// (TestAPermissionReloadOnlyTightens).
 func TestPermissionsReachTheDaemonAndFollowTheFile(t *testing.T) {
 	uc := &config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read"}}}}
 	cfg := DaemonConfigFromUser(uc)
@@ -100,8 +102,8 @@ func TestPermissionsReachTheDaemonAndFollowTheFile(t *testing.T) {
 		t.Errorf("after the reload a pane on the default holds %v (explicit %v), want read", g, explicit)
 	}
 	d.onConfigReload(&config.UserConfig{}, nil)
-	if g, _ := d.manager.grants.effective(a1); g != GrantAdmin {
-		t.Errorf("after the table was removed a pane holds %v, want admin", g)
+	if g, _ := d.manager.grants.effective(a1); g != GrantRead {
+		t.Errorf("after the table was removed a pane holds %v, want read until a restart", g)
 	}
 }
 

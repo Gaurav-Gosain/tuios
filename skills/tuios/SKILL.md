@@ -62,9 +62,11 @@ tuios pane-grants
 ```
 
 ```
-Pane 98db8226 in session work holds read, write, fan (the default of [agents.permissions], mode strict).
+Pane 98db8226 in session work holds admin (the default of [agents.permissions], mode open).
 ```
 
+Mode `open` is the default, and there a pane holds `admin`. Under mode `strict`
+a pane holds `read`, `write` and `fan` unless the person set other grants.
 The grants are `read`, `write`, `fan`, `respond` and `admin`. A call your grants
 do not cover fails with `forbidden`, does nothing, and names the grant it
 needed. That is the person's decision about your pane: do the work inside what

@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
 	"regexp"
 	"strings"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // What a machine linked to this one may do here.
@@ -239,6 +241,9 @@ func (d *Daemon) checkLinkVerb(cs *connState, verb string) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
 	}
+	if verr := d.linkFromPane(cs); verr != nil {
+		return verr
+	}
 	caps, known := verbCapabilities[verb]
 	if !known {
 		return linkForbidden(d, cs, verb, nil, "this verb has no link policy, so it is refused over a link")
@@ -251,11 +256,51 @@ func (d *Daemon) checkLinkMessage(cs *connState, t MessageType) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
 	}
+	if verr := d.linkFromPane(cs); verr != nil {
+		return verr
+	}
 	caps, known := msgCapabilities[t]
 	if !known {
 		return linkForbidden(d, cs, fmt.Sprintf("message %d", t), nil, "this message has no link policy, so it is refused over a link")
 	}
 	return d.checkLinkCaps(cs, fmt.Sprintf("message %d", t), caps)
+}
+
+// linkFromPane refuses a link connection dialled from inside a pane of this
+// daemon. The link sockets are for the link proxy, which ssh starts outside
+// every pane. A connection on them is held to the link policy and not to pane
+// grants (checkGrants), so a process in a pane that dialled one itself would
+// step out of its grants. It is refused whatever it asks, the same test
+// mayActAsHuman applies on the link-human socket.
+func (d *Daemon) linkFromPane(cs *connState) *verbError {
+	if !d.connFromPane(cs) || underLinkTransport(cs.peerPID) {
+		return nil
+	}
+	return hintedVerbError(ErrVerbForbidden, "the link socket is for the link proxy, and this caller runs inside a pane of this daemon", &VerbHint{
+		Verb:    "pane-grants",
+		Command: "tuios pane-grants",
+		Detail:  "Nothing was done. Use the daemon's own socket, where the pane's grants apply.",
+	})
+}
+
+// underLinkTransport reports whether pid runs under a link transport this
+// daemon started: the proxy of a link that loops back to this machine, run by
+// the daemon's own ssh child rather than by sshd. The ancestry test counts it
+// as inside a pane, since the daemon is its ancestor. A process in a pane
+// cannot move under that child.
+func underLinkTransport(pid int) bool {
+	self := os.Getpid()
+	for cur, depth := pid, 0; depth < paneOriginMaxDepth && cur > 1 && cur != self; depth++ {
+		if federation.IsTransportPID(cur) {
+			return true
+		}
+		ppid, _, ok := readProcLineage(cur)
+		if !ok {
+			return false
+		}
+		cur = ppid
+	}
+	return false
 }
 
 // checkLinkCaps checks caps against the peer's policy.

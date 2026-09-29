@@ -124,9 +124,6 @@ func TestCancelQueuedOwnership(t *testing.T) {
 	if len(entries) != 3 || entries[0]["by"] != queueByHuman || entries[1]["by"] != queueByShell || entries[2]["by"] != a {
 		t.Fatalf("list-queued = %v, want by human, shell and pane a", entries)
 	}
-	// A bad nonce is refused, not taken as the shell.
-	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "human_nonce": "0123456789abcdef0123456789abcdef"}), ErrVerbNotHuman, "a nonce that does not verify")
-
 	// The pane may not drop the person's or the shell's, and drops its own.
 	wantForbidden(t, "a pane dropping the person's entry", callP(pane, t, "cancel-queued", map[string]any{"session": "work", "id": byPerson["id"]}))
 	wantForbidden(t, "a pane dropping the shell's entry", callP(pane, t, "cancel-queued", map[string]any{"session": "work", "id": byShell["id"]}))
@@ -137,6 +134,11 @@ func TestCancelQueuedOwnership(t *testing.T) {
 	// Nor may it name itself as another sender.
 	wantForbidden(t, "a pane queueing as another window", callP(pane, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "from": b}))
 	d.setApprovalPeer(nil)
+
+	// A bad nonce is refused, not taken as the shell. It is sent once c is
+	// placed outside every pane again: a typing call is placed, and the
+	// placement is kept for the connection.
+	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "human_nonce": "0123456789abcdef0123456789abcdef"}), ErrVerbNotHuman, "a nonce that does not verify")
 
 	// A shell may not drop the person's entry, and may drop its own.
 	wantForbidden(t, "a shell dropping the person's entry", callP(c, t, "cancel-queued", map[string]any{"session": "work", "id": byPerson["id"]}))

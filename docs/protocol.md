@@ -1573,6 +1573,12 @@ target pane:
 `respond` is not held to the first rule: the `respond` grant is the person's
 consent to answer prompts on the panes in the pane's reach.
 
+A pane that holds `admin` is held to the second rule for `send-text`,
+`send-keys`, `run` and `ask-agent`: into another pane on `needs_input` it is
+`forbidden` unless it also holds `respond`. Its call is not pinned, and its
+`send-keys` with no window still goes through the attached client after the
+focused pane is checked.
+
 How a connection is placed in a pane, strongest first:
 
 1. The kernel's record of the peer's pid (`SO_PEERCRED`, `LOCAL_PEERPID`),
@@ -1588,6 +1594,12 @@ How a connection is placed in a pane, strongest first:
    does this on every connection it opens from a pane. The token is the
    `restrict-connection` token: an HMAC of the window id under a key picked at
    daemon start, so it names one pane and cannot be made for another.
+
+A connection on a link socket whose process runs inside a pane of this
+daemon is refused with `forbidden` for every verb and message: those sockets
+are for the link proxy. A process whose record cannot be read, for example one
+that exited after it connected, is held to the `grants` list of
+`[agents.permissions]` in no session.
 
 A connection over a link is held to that link's policy instead (see
 [What a linked machine may do here](#what-a-linked-machine-may-do-here)), and

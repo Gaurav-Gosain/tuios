@@ -317,8 +317,11 @@ warnings, and both fail toward less. `admin` never includes `respond`, and no
 default gives it, so listing `respond` here is how you let every pane answer
 prompts for you.
 
-The daemon reads the table when it starts and again when the file changes; a
-change reaches every pane on the default at its next call. Like
+The daemon reads the table when it starts and again when the file changes. A
+change that gives panes less reaches every pane on the default at its next
+call. A change that gives more, such as `strict` to `open`, applies only after
+a daemon restart (`tuios kill-server`), because a process in a pane can write
+config.toml. Until then the daemon logs it, and `tuios pane-grants` says so. Like
 `[agents.approvals]`, it is not in `list-options` and `tuios set-config` cannot
 change it, so no pane can loosen it.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.

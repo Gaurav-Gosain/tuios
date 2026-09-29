@@ -2,6 +2,9 @@ package session
 
 import (
 	"encoding/json"
+	"log"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -184,6 +187,9 @@ type paneGrantTable struct {
 	panes    map[string]paneGrantEntry
 	explicit int
 	policy   atomic.Pointer[panePolicy]
+	// restartNeeded is set when a config reload widened the default and
+	// only what it narrowed was applied (reloadPanePermissions).
+	restartNeeded atomic.Bool
 }
 
 func newPaneGrantTable() *paneGrantTable {
@@ -217,6 +223,17 @@ func (t *paneGrantTable) defaults() Grants {
 		return p.grants
 	}
 	return GrantAdmin
+}
+
+// strictDefaults is what a pane given nothing holds under strict: the grants
+// list of [agents.permissions], whatever the mode.
+func (t *paneGrantTable) strictDefaults() Grants {
+	if t != nil {
+		if p := t.policy.Load(); p != nil {
+			return p.grants
+		}
+	}
+	return grantsFromNames(config.DefaultStrictGrants)
 }
 
 // mayMatter reports whether any pane holds less than admin, which is when a
@@ -351,6 +368,45 @@ func (s *Session) recordedGrants(windowID string) *Grants {
 // SetPanePermissions replaces [agents.permissions] for every pane.
 func (m *Manager) SetPanePermissions(r config.ResolvedPermissions) {
 	m.grants.setPolicy(r)
+	m.grants.restartNeeded.Store(false)
+}
+
+// policyDefaults is what a pane given nothing holds under r.
+func policyDefaults(r config.ResolvedPermissions) Grants {
+	if !r.Strict {
+		return GrantAdmin
+	}
+	return grantsFromNames(r.Grants)
+}
+
+// reloadPanePermissions applies [agents.permissions] read again from a
+// changed config file. Only what narrows the default applies now.
+//
+// The file is the user's, and a process in a pane runs as the user, so it can
+// write the file. If a reload could widen the default, a pane held to strict
+// could set mode = "open" and hold admin at its next call. So a reload that
+// widens the default, in whole or in part, applies only what it takes away,
+// and the rest waits for the daemon to restart, when the file is read as the
+// person left it. A confirmation from an attached client is not asked for:
+// a pane that holds admin can send keys to that client, so a confirmation
+// there proves nothing a restart does not.
+func (d *Daemon) reloadPanePermissions(r config.ResolvedPermissions) {
+	t := d.manager.grants
+	cur, want := t.defaults(), policyDefaults(r)
+	if cur.Covers(want) {
+		// Nothing widens: the new default holds nothing the one in force
+		// does not.
+		t.setPolicy(r)
+		t.restartNeeded.Store(false)
+		return
+	}
+	kept := cur.expand() & want.expand()
+	if !kept.Has(GrantAdmin) {
+		kept &^= GrantAdmin
+	}
+	t.setPolicy(config.ResolvedPermissions{Strict: true, Grants: kept.Names()})
+	t.restartNeeded.Store(true)
+	log.Printf("The new [agents.permissions] gives panes more than before. Panes on the default now hold %s. The rest applies after a daemon restart (tuios kill-server).", kept.String())
 }
 
 // PanePermissionsFromConfig reads [agents.permissions].
@@ -464,6 +520,14 @@ func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 		if id := d.hostedPaneOfPeer(cs); id != "" {
 			return &paneAuth{window: "hosted:" + id, via: "pid", grants: d.manager.grants.defaults(), hosted: true}
 		}
+		if d.unreadablePanePeer(cs) {
+			// The pane tests count the caller as inside a pane, and its
+			// process can no longer be read, so no pane can be found for
+			// it. A process that connects, hands the socket to a child and
+			// exits looks like this. It is held to the strict default in
+			// no session, which reaches only the verbs every pane may call.
+			return &paneAuth{window: unplacedWindow, via: "pid", grants: d.manager.grants.strictDefaults()}
+		}
 		return nil
 	}
 	table := d.manager.grants
@@ -477,6 +541,20 @@ func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 		}
 	}
 	return &paneAuth{window: window, session: session, via: via, grants: g, explicit: explicit}
+}
+
+// unplacedWindow names the pane of a caller whose process cannot be read.
+const unplacedWindow = "unknown"
+
+// unreadablePanePeer reports whether the caller on cs is counted as inside a
+// pane and its process cannot be read now. Such a caller cannot be placed in a
+// pane, and must not be passed as the person for that.
+func (d *Daemon) unreadablePanePeer(cs *connState) bool {
+	if cs == nil || cs.peerPID <= 0 || cs.peerPID == os.Getpid() || !d.connFromPane(cs) {
+		return false
+	}
+	_, _, ok := readProcLineage(cs.peerPID)
+	return !ok
 }
 
 // placePaneWindow finds the pane the caller on cs runs in, "" for none. A
@@ -553,7 +631,10 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return params, nil
 	}
-	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() {
+	// Under open with no pane given grants every pane holds admin, and only a
+	// typing verb has anything to check: whether it answers another pane's
+	// prompt (holdTypingTarget).
+	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !typingVerbs[verb] {
 		return params, nil
 	}
 	pa := d.paneAuthority(cs)
@@ -562,14 +643,17 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		return params, nil
 	}
 	cs.paneView.Store(pa)
-	if pa.grants.Has(GrantAdmin) {
-		return params, nil
-	}
-	kind := grantKind(verb)
 	deny := func(why string) *verbError {
 		LogBasic("Pane %s (%s) refused %s: %s", shortWindowID(pa.window), pa.grants.String(), verb, why)
 		return grantForbidden(verb, pa, why)
 	}
+	if pa.grants.Has(GrantAdmin) {
+		if typingVerbs[verb] {
+			return d.holdTypingTarget(verb, pa, params, deny)
+		}
+		return params, nil
+	}
+	kind := grantKind(verb)
 	if pa.hosted {
 		// A report as the hosted pane is sent on to the machine that owns
 		// its window, which holds it to that pane (forwardHostedCall, which
@@ -713,8 +797,18 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 	// ask-agent refuses a pane on needs_input itself, with agent_blocked, and
 	// checks again right before it types. Only allow_blocked takes it past.
 	blockedChecked := verb == "ask-agent" && !allowBlocked
+	if pa.grants.Has(GrantAdmin) && (verb == "queue-prompt" || verb == "send-review") {
+		// The queue types only into a pane at rest (agentReady), never into
+		// a prompt, so queuing for a pane on a prompt answers nothing.
+		blockedChecked = true
+	}
 	if why := d.typingRefusal(pa, target, blockedChecked); why != "" {
 		return nil, deny(why)
+	}
+	if pa.grants.Has(GrantAdmin) {
+		// A pane holding admin is only checked, not pinned: with no window,
+		// its send-keys still goes through the attached client.
+		return params, nil
 	}
 	raw, _ := json.Marshal(target.ID)
 	m["window"] = raw
@@ -731,12 +825,17 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 // pa does not, and, unless blockedChecked says the verb checks this itself,
 // only when that pane is not waiting on a prompt or pa holds respond, since
 // keys typed into a prompt answer it.
+//
+// The prompt rule holds a pane with admin too. Admin is what every pane holds
+// under the default open mode, and admin does not imply respond: without the
+// rule one agent could answer another agent's permission prompt by typing
+// "1" and Enter into it. The person answers it, or gives respond.
 func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked bool) string {
 	if target.ID == pa.window {
 		return ""
 	}
 	held, _ := d.manager.grants.effective(target.ID)
-	if !pa.grants.Covers(held) {
+	if !pa.grants.Has(GrantAdmin) && !pa.grants.Covers(held) {
 		return "window " + shortWindowID(target.ID) + " holds " + held.String() + ", more than this pane holds, and what is typed there runs with that. " +
 			"A pane types only into panes that hold nothing it does not"
 	}
@@ -749,16 +848,28 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 // recheckTyping repeats the target check right before a typing verb writes,
 // for the caller whose checked call this is: the target may have come to a
 // prompt, or been given more, since checkGrants ran. It returns nil for a
-// caller held to nothing new and for a pane holding admin.
+// caller held to nothing new. A window of "" is the focused one.
 func (d *Daemon) recheckTyping(cs *connState, verb string, sess *Session, windowID string) *verbError {
 	if cs == nil {
 		return nil
 	}
 	pa := cs.paneView.Load()
-	if pa == nil || pa.grants.Has(GrantAdmin) {
+	if pa == nil {
 		return nil
 	}
-	target, ok := findWindowState(sess.GetState(), windowID)
+	state := sess.GetState()
+	if windowID == "" {
+		if !pa.grants.Has(GrantAdmin) {
+			// checkGrants pinned the window of a pane without admin.
+			return nil
+		}
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return nil
+		}
+		windowID = id
+	}
+	target, ok := findWindowState(state, windowID)
 	if !ok {
 		return nil
 	}
@@ -888,11 +999,25 @@ func (d *Daemon) verbPaneGrants(cs *connState, params json.RawMessage) (any, *ve
 	var p struct {
 		PaneID    string `json:"pane_id"`
 		PaneToken string `json:"pane_token"`
+		PeerPID   *int   `json:"peer_pid"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.PaneID != "" || p.PaneToken != "" {
+	if p.PeerPID != nil {
+		// Another process asked about: the holder of a tmux shim pane asks
+		// for the process on its socket, which does not go through the
+		// daemon. It is placed exactly as a connection from it would be.
+		switch {
+		case cs != nil && (cs.viaLink || cs.paneOnly):
+			return nil, hintedVerbError(ErrVerbForbidden, "peer_pid is answered only on the machine that runs the process", &VerbHint{Param: "peer_pid"})
+		case p.PaneID != "" || p.PaneToken != "":
+			return nil, invalidParam("peer_pid", "pass peer_pid or pane_id and pane_token, not both")
+		case *p.PeerPID <= 0:
+			return nil, invalidParam("peer_pid", "peer_pid must be a process id above 0")
+		}
+		cs = &connState{clientID: "peer " + strconv.Itoa(*p.PeerPID), peerPID: *p.PeerPID}
+	} else if p.PaneID != "" || p.PaneToken != "" {
 		if cs.viaLink || cs.paneOnly {
 			return nil, hintedVerbError(ErrVerbForbidden, "a pane token is good only on the machine that runs the pane", &VerbHint{Param: "pane_token"})
 		}
@@ -914,6 +1039,10 @@ func (d *Daemon) verbPaneGrants(cs *connState, params json.RawMessage) (any, *ve
 		"type":           "pane_grants",
 		"mode":           d.permissionMode(),
 		"default_grants": d.manager.grants.defaults().Names(),
+	}
+	if d.manager.grants.restartNeeded.Load() {
+		out["restart_needed"] = true
+		out["restart_note"] = "config.toml gives panes more than they hold now. That part applies after a daemon restart."
 	}
 	pa := d.paneAuthority(cs)
 	if pa == nil {

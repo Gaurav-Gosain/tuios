@@ -154,12 +154,44 @@ func CommandDialer(name string, args ...string) Dialer {
 		if err := cmd.Start(); err != nil {
 			return nil, fmt.Errorf("could not run %s: %w", name, err)
 		}
+		pid := cmd.Process.Pid
+		addTransportPID(pid)
 		go func() {
 			t.exitErr = cmd.Wait()
+			removeTransportPID(pid)
 			close(t.done)
 		}()
 		return t, nil
 	}
+}
+
+// transportPIDs are the pids of the link transports this process started and
+// has not reaped yet: the ssh children, or the command a test runs instead.
+var (
+	transportMu   sync.Mutex
+	transportPIDs = map[int]bool{}
+)
+
+func addTransportPID(pid int) {
+	transportMu.Lock()
+	transportPIDs[pid] = true
+	transportMu.Unlock()
+}
+
+func removeTransportPID(pid int) {
+	transportMu.Lock()
+	delete(transportPIDs, pid)
+	transportMu.Unlock()
+}
+
+// IsTransportPID reports whether pid is a link transport this process started
+// and that is still running. The daemon uses it to tell the proxy of a link
+// that loops back to it, which runs under that transport, from a process in
+// one of its panes.
+func IsTransportPID(pid int) bool {
+	transportMu.Lock()
+	defer transportMu.Unlock()
+	return transportPIDs[pid]
 }
 
 // diagnosticLimit bounds captured stderr. The far side is untrusted and stderr

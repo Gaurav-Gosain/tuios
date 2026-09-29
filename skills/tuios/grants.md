@@ -29,9 +29,11 @@ what you hold. So `tuios agent-hook` works in every pane.
 
 What you type into a pane runs with that pane's grants. So without `admin`,
 typing into any pane but your own (`send-text`, `send-keys`, `run`,
-`ask-agent`, `queue`) is refused when the target holds a grant you do not, and
-when the target is on `needs_input` unless you hold `respond`, because keys
-typed there answer its prompt. A message you queue is checked against your
+`ask-agent`, `queue`) is refused when the target holds a grant you do not.
+Typing into another pane on `needs_input` is refused unless you hold
+`respond`, with `admin` too, because keys typed there answer its prompt.
+A permission prompt is for the person. `queue` waits until the pane is at rest,
+so it is not refused for this. A message you queue is checked against your
 grants again when it is typed, and dropped if they no longer cover the
 target. Your keys always go to the target's terminal, never to the
 window manager.
@@ -58,7 +60,9 @@ without `admin`, a call that names no session means your own session.
 - Or `tuios set-pane-grants` later.
 - Or else the default of `[agents.permissions]` in config.toml: `admin` under
   `mode = "open"` (the default), and the `grants` list under `mode = "strict"`
-  (`read`, `write` and `fan` when unset).
+  (`read`, `write` and `fan` when unset). A change to the file that gives
+  panes less applies at once. A change that gives more applies after a daemon
+  restart.
 
 A pane can never give more than it holds. A pane without `admin` that starts an
 agent without `--grants` gives it its own grants. A pane changes only its own

@@ -290,9 +290,11 @@ func init() {
 			params: []verbParam{
 				{Name: "pane_id", Type: "string", Description: "The caller's pane, normally $TUIOS_PANE_ID. Used only when the kernel places the caller in no pane, and then only with the matching pane_token. When the kernel places the caller, a different pane_id is refused."},
 				{Name: "pane_token", Type: "string", Description: "The pane's $TUIOS_PANE_TOKEN, which proves pane_id. It is good for one pane of one daemon start."},
+				{Name: "peer_pid", Type: "int", Description: "Answer for the process with this pid instead of the caller, placed the way a caller is. The tmux shim's pane holder asks this for the process on its own socket before it replaces the pane's command. Not with pane_id or pane_token, and refused over a link."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "bool", Description: "Whether the caller runs in a pane of this daemon. When false, no pane grants apply to it: the person's own CLI and client keep full rights."},
+				{Name: "restart_needed", Type: "bool", Description: "True when config.toml gives panes more than they hold now. A reload applies only what narrows [agents.permissions]; the rest applies after a daemon restart."},
 				{Name: "window", Type: "string", Description: "The caller's pane."},
 				{Name: "session", Type: "string", Description: "The session of the caller's pane."},
 				{Name: "via", Type: "string", Description: "How the pane was found: pid from the kernel, env from the process's TUIOS_PANE_ID while the pane was being created, token from pane_token.", Accepted: []string{"pid", "env", "token"}},
