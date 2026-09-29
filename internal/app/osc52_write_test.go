@@ -93,7 +93,35 @@ func TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard(t *testing.T) {
 	}
 }
 
-// A write that waits is allowed by activating its message, and only then.
+// clickAsk activates the dock message that asks for windowID's write, the way
+// a click on it does, and returns the write it allowed.
+func clickAsk(t *testing.T, m *OS, windowID string) []string {
+	t.Helper()
+	ask := m.clipboardAsks[windowID]
+	if ask == nil {
+		t.Fatalf("no ask is open for %s", windowID)
+	}
+	for _, n := range m.Notifications {
+		if n.Target != nil && n.Target.ClipboardAsk == ask.seq {
+			m.jumpToNotifTarget(*n.Target)
+			return clipboardWrites(m.ClipboardApprovalCmd())
+		}
+	}
+	t.Fatalf("the ask for %s has no dock message", windowID)
+	return nil
+}
+
+func askMessages(m *OS) int {
+	n := 0
+	for _, msg := range m.Notifications {
+		if msg.Target != nil && msg.Target.ClipboardAsk != 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// A write that waits is allowed by a click on its message, and only then.
 func TestOSC52WriteThatAsksIsAllowedFromItsMessage(t *testing.T) {
 	m, wins := osc52Harness(t, config.OSC52WriteAsk)
 
@@ -106,14 +134,80 @@ func TestOSC52WriteThatAsksIsAllowedFromItsMessage(t *testing.T) {
 	if cmd := m.ClipboardApprovalCmd(); cmd != nil {
 		t.Fatalf("a write went out with no approval: %q", clipboardWrites(cmd))
 	}
-	if !m.JumpToNotification() {
-		t.Fatal("the waiting write's message could not be activated")
-	}
-	if got := clipboardWrites(m.ClipboardApprovalCmd()); len(got) != 1 || got[0] != "asked" {
+	if got := clickAsk(t, m, wins[0].ID); len(got) != 1 || got[0] != "asked" {
 		t.Fatalf("approved write = %q, want %q", got, "asked")
 	}
 	if cmd := m.ClipboardApprovalCmd(); cmd != nil {
 		t.Fatal("one approval wrote the clipboard twice")
+	}
+}
+
+// The key that jumps to the newest message must not allow a clipboard write:
+// it is pressed from habit.
+func TestJumpKeyDoesNotAllowAClipboardWrite(t *testing.T) {
+	m, wins := osc52Harness(t, "")
+
+	paneSetsClipboard(t, m, wins[1], "rm -rf ~\n")
+	m.JumpToNotification()
+	if got := clipboardWrites(m.ClipboardApprovalCmd()); len(got) != 0 {
+		t.Fatalf("the jump key allowed a background pane's clipboard write: %q", got)
+	}
+}
+
+// The ask names the pane by the user's name for it or its number, never by
+// the title the pane set itself, and shows what it would copy.
+func TestClipboardAskNamesThePaneNotItsOwnTitle(t *testing.T) {
+	m, wins := osc52Harness(t, "")
+	wins[1].WriteOutput([]byte("\x1b]2;Pane 1\x07"))
+
+	paneSetsClipboard(t, m, wins[1], "echo \x1b[31mhello\nworld")
+
+	msg := lastMessage(m)
+	if !strings.HasPrefix(msg, "Pane 2 ") {
+		t.Fatalf("ask = %q, want it to name the pane by its number", msg)
+	}
+	if !strings.Contains(msg, "echo [31mhello world") {
+		t.Fatalf("ask = %q, want a cleaned preview of the text", msg)
+	}
+}
+
+// An ask from one pane does not replace another pane's open ask.
+func TestClipboardAsksFromTwoPanesStayOpen(t *testing.T) {
+	m, wins := osc52Harness(t, config.OSC52WriteAsk)
+
+	paneSetsClipboard(t, m, wins[0], "first")
+	paneSetsClipboard(t, m, wins[1], "second")
+
+	if got := clickAsk(t, m, wins[0].ID); len(got) != 1 || got[0] != "first" {
+		t.Fatalf("the first pane's ask = %q, want %q", got, "first")
+	}
+	if got := clickAsk(t, m, wins[1].ID); len(got) != 1 || got[0] != "second" {
+		t.Fatalf("the second pane's ask = %q, want %q", got, "second")
+	}
+}
+
+// A pane that writes the clipboard many times raises one message, which
+// carries the newest text, and pushes no other message off the dock.
+func TestClipboardAskFloodKeepsOneMessage(t *testing.T) {
+	m, wins := osc52Harness(t, "")
+	m.ShowNotification("a real message", "info", m.Settings.NotificationDuration)
+
+	for i := range 50 {
+		paneSetsClipboard(t, m, wins[1], fmt.Sprintf("write %d", i))
+	}
+
+	if n := askMessages(m); n != 1 {
+		t.Fatalf("50 writes raised %d ask messages, want 1", n)
+	}
+	found := false
+	for _, n := range m.Notifications {
+		found = found || n.Message == "a real message"
+	}
+	if !found {
+		t.Fatal("the flood pushed the real message off the dock")
+	}
+	if got := clickAsk(t, m, wins[1].ID); len(got) != 1 || got[0] != "write 49" {
+		t.Fatalf("allowed write = %q, want the newest", got)
 	}
 }
 

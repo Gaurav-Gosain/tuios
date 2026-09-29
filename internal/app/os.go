@@ -350,7 +350,7 @@ type OS struct {
 	// clipboardAsk is the pane clipboard write waiting for the user, and
 	// clipboardApproved the one the user allowed and not yet sent. See
 	// clipboard_osc52.go.
-	clipboardAsk      *clipboardAsk
+	clipboardAsks     map[string]*clipboardAsk
 	clipboardAskSeq   uint64
 	clipboardApproved *string
 
