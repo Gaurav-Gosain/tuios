@@ -2065,11 +2065,20 @@ func (s *Session) UpdateState(state *SessionState) bool {
 // counts every push it sent, and a refused one that was never counted here
 // would leave it taking every later broadcast for an older one.
 func (s *Session) NotePush(origin string, seq uint64) {
-	if origin == "" || seq == 0 {
-		return
-	}
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
+	s.notePushLocked(origin, seq)
+}
+
+// notePushLocked is NotePush for a caller that holds stateMu. A push or an op
+// that changes the state is counted here, inside the same critical section as
+// the change, so no snapshot can say the daemon has seen push k while showing
+// the state from before it. A client that trusted such a snapshot took an old
+// tree over the op it had just sent.
+func (s *Session) notePushLocked(origin string, seq uint64) {
+	if origin == "" || seq == 0 || len(origin) > maxPushOriginLen {
+		return
+	}
 	if s.pushSeen == nil {
 		s.pushSeen = make(map[string]uint64)
 	}
@@ -2108,11 +2117,15 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	// The push's name has been recorded by NotePush, and the table it goes into
-	// lives beside the state, not in it. The origin is also what tells one
-	// client's focus move from another's, below.
+	// The push is counted here, with the change it makes. The table it goes
+	// into lives beside the state, not in it. The origin is also what tells
+	// one client's focus move from another's, below.
 	origin := state.PushOrigin
+	s.notePushLocked(origin, state.PushSeq)
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
+	// Read before the merge, which fills in the session's trees for a push
+	// that left them out.
+	carriesTrees := state.WorkspaceTrees != nil
 
 	accepted = true
 	prev := s.state
@@ -2133,6 +2146,18 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// snapshot carries it forward unchanged: the client is not telling the
 		// daemon anything the daemon did not already know.
 		state.Version = prev.Version
+		// Except for one thing. A push from a client too old for tree ops
+		// carries its trees, and when they change the session's trees that is
+		// a tree op in all but name. It is counted as one, so a current
+		// client whose push was built before it reads as behind and is sent
+		// the tree (see missedPeerTreeLocked). Without this a current client
+		// that dropped the older client's broadcast, because its own op was
+		// still in flight, kept its own tree for good while the session held
+		// the other one.
+		if carriesTrees && treesDiffer(prev, state) {
+			state.Version = prev.Version + 1
+			s.noteTreeOpLocked(state.Version, origin)
+		}
 	}
 	state.BaseVersion = 0
 

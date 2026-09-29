@@ -281,7 +281,13 @@ func (m *OS) adoptSessionTrees(state *session.SessionState) (replacedOnScreen bo
 	for _, ws := range slices.Sorted(maps.Keys(workspaces)) {
 		name := m.localLeafNames()
 		local := session.TreeKey(wireTree(m.WorkspaceTrees[ws]), name)
-		if m.unsentTree(ws, local) {
+		// A change this client has not sent outranks the state, except a tree
+		// it built while the session held none for the workspace. That one is
+		// most often a default tree a retile made on attach, and once the
+		// session has a tree of its own, sending the default back would throw
+		// away whatever another client did. The session's tree wins; a real
+		// first change that raced it loses to the one that landed first.
+		if m.unsentTree(ws, local) && (m.treeSeen[ws] != "" || state.WorkspaceTrees[ws] == nil) {
 			continue // this client's own change, on its way to the daemon
 		}
 		delete(m.treeDerived, ws)
