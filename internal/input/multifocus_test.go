@@ -126,16 +126,81 @@ func TestMultifocusPasteInterceptedByPrompts(t *testing.T) {
 	})
 }
 
-// A focused pane in copy mode does not broadcast typing, and a paste from it
-// must not reach the shells of the other panes in the set either.
-func TestMultifocusPasteNotBroadcastFromCopyMode(t *testing.T) {
+// A wheel scroll leaves the focused pane in implicit copy mode. A paste ends
+// the scroll the way a typed key does and reaches every pane in the set.
+func TestMultifocusPasteEndsScroll(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.Msg
+		want [3]string
+	}{
+		{"terminal paste", tea.PasteMsg{Content: "x"}, [3]string{"\x1b[200~x\x1b[201~", "x", ""}},
+		{"clipboard paste", tea.ClipboardMsg{Content: "x", Selection: 'c'}, [3]string{"\x1b[200~x\x1b[201~", "x", ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o, sent := multifocusHarness(t)
+			w := o.Windows[0]
+			for range 60 {
+				_, _ = w.Terminal.Write([]byte("line\r\n"))
+			}
+			w.EnterCopyModeImplicit()
+			scrollCopyModeUpBy(w, 5)
+			if !w.InImplicitCopyMode() {
+				t.Fatal("setup: the focused pane is not in implicit copy mode")
+			}
+
+			_, _ = HandleInput(tc.msg, o)
+
+			if w.InCopyMode() || w.ScrollbackOffset != 0 {
+				t.Errorf("after the paste the pane is still scrolled (copy mode %v, offset %d)", w.InCopyMode(), w.ScrollbackOffset)
+			}
+			for i, want := range tc.want {
+				if got := sent[i].String(); got != want {
+					t.Errorf("pane %d got %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}
+
+// In real copy mode keys are motions. A paste is dropped: it must not reach
+// the focused pane's shell under the copy-mode view, nor the set.
+func TestMultifocusPasteDroppedInCopyMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.Msg
+	}{
+		{"terminal paste", tea.PasteMsg{Content: "x"}},
+		{"clipboard paste", tea.ClipboardMsg{Content: "x", Selection: 'c'}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o, sent := multifocusHarness(t)
+			o.Windows[0].EnterCopyMode()
+
+			_, _ = HandleInput(tc.msg, o)
+
+			for i, s := range sent {
+				if s.Len() != 0 {
+					t.Errorf("pane %d got %q from a paste in copy mode, want nothing", i, s.String())
+				}
+			}
+			if !o.Windows[0].InCopyMode() {
+				t.Error("the paste ended copy mode, want it kept")
+			}
+		})
+	}
+}
+
+// The paste key's clipboard read passes the same prompts a terminal paste
+// does, so the save prompt takes it before any pane.
+func TestMultifocusClipboardPasteInterceptedByPrompts(t *testing.T) {
 	o, sent := multifocusHarness(t)
-	o.Windows[0].EnterCopyMode()
-
-	_, _ = HandleInput(tea.PasteMsg{Content: "x"}, o)
-
-	if got := sent[1].String(); got != "" {
-		t.Errorf("multifocus pane got %q from a paste in copy mode, want nothing", got)
+	o.MultiCopy = &app.MultiCopy{Save: &app.MultiCopySave{}}
+	_, _ = HandleInput(tea.ClipboardMsg{Content: "/tmp/x\n", Selection: 'c'}, o)
+	for i, s := range sent {
+		if s.Len() != 0 {
+			t.Errorf("pane %d got %q while the save prompt was open", i, s.String())
+		}
 	}
 }
 

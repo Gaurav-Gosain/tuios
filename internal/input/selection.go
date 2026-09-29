@@ -23,19 +23,20 @@ import (
 // SendInput() is used rather than writing to the emulator's internal pipe,
 // which in daemon mode is drained by StartDaemonResponseReader() so the data
 // would never reach the PTY; SendInput() routes through DaemonWriteFunc.
-// Returns false when there is no focused window or the write to it fails. A
-// failed write to another window in the set is not reported, as with keys.
+// Returns false when there is no focused window, the focused window is in copy
+// mode, or the write to it fails. A failed write to another window in the set is
+// not reported, as with keys.
 func forwardPasteToFocused(o *app.OS, text string) bool {
 	focusedWindow := o.GetFocusedWindow()
 	if focusedWindow == nil {
 		return false
 	}
+	if pasteBlockedByCopyMode(focusedWindow) {
+		return false
+	}
 
 	ok := sendPaste(focusedWindow, text) == nil
-	// A focused pane in copy mode takes keys as motions, so typing is not
-	// broadcast from it, and neither is a paste. In multi copy mode every pane
-	// of the set is in copy mode, and a paste must not reach their shells.
-	if len(o.MultifocusSet) > 0 && !focusedWindow.InCopyMode() {
+	if len(o.MultifocusSet) > 0 {
 		for idx, w := range o.Windows {
 			if idx != o.FocusedWindow && o.MultifocusSet[w.ID] {
 				_ = sendPaste(w, text)
@@ -43,6 +44,24 @@ func forwardPasteToFocused(o *app.OS, text string) bool {
 		}
 	}
 	return ok
+}
+
+// pasteBlockedByCopyMode prepares the focused window for a paste and reports
+// whether copy mode must drop it.
+//
+// A scroll gesture leaves the pane in an implicit copy mode. A paste, like a
+// typed key (see HandleTerminalModeKey), means the reading is over: snap back
+// to live output and let the paste through, to this pane and to the set.
+//
+// Real copy mode, plain or multi, takes keys as motions. A paste is not a
+// motion, and it must not reach the shell under the copy-mode view: in multi
+// copy mode every pane of the set is in copy mode, and a paste would land in
+// all of their shells unseen. So the paste is dropped.
+func pasteBlockedByCopyMode(w *terminal.Window) bool {
+	if w.InImplicitCopyMode() {
+		w.ExitCopyMode()
+	}
+	return w.InCopyMode()
 }
 
 // sendPaste writes text to one window's PTY, in bracketed-paste markers when
@@ -66,6 +85,11 @@ func handleClipboardPaste(o *app.OS) {
 
 	if o.ClipboardContent == "" {
 		o.ShowNotification("Clipboard is empty", "warning", o.Settings.NotificationDuration)
+		return
+	}
+
+	if o.GetFocusedWindow().CopyModeVisible() {
+		o.ShowNotification("Cannot paste in copy mode. Exit copy mode first.", "warning", o.Settings.NotificationDuration)
 		return
 	}
 
