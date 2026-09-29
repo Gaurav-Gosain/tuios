@@ -29,6 +29,10 @@ type HintsConfig struct {
 	// Dim is the percent of its light the text around the matches loses
 	// (default: 60).
 	Dim int `toml:"dim"`
+	// AllPanes makes the hints action label every pane the workspace shows,
+	// as hints_all_panes does, instead of the focused pane only
+	// (default: false).
+	AllPanes bool `toml:"all_panes"`
 }
 
 // Hints defaults and bounds, one source for DefaultConfig, the registry and

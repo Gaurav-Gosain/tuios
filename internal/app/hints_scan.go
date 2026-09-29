@@ -7,8 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 )
 
-// findMatches runs the matcher over the copied view and labels what it
-// finds.
+// find runs the matcher over the copied view and returns what it finds, in
+// reading order, with no labels yet.
 //
 // The view is read as lines rather than rows. A row the emulator wrapped onto
 // the next one is joined to it, so a URL the pane broke across two rows is one
@@ -17,9 +17,8 @@ import (
 // cell's text goes into the line once, so a wide glyph is one character there
 // and two columns on the screen, and every byte of the line knows which cell
 // drew it.
-func (s *hintsState) findMatches(matcher *hints.Matcher, cursor hintCell) {
-	s.matches = nil
-	var targets []hints.Target
+func (s *hintsPane) find(matcher *hints.Matcher) []hintMatch {
+	var out []hintMatch
 	var b strings.Builder
 	var refs []hintCell
 	var offs []int
@@ -56,48 +55,52 @@ func (s *hintsState) findMatches(matcher *hints.Matcher, cursor hintCell) {
 			if len(cells) == 0 {
 				continue
 			}
-			s.matches = append(s.matches, hintMatch{
+			out = append(out, hintMatch{
 				text:  text[found.Start:found.End],
 				kind:  found.Kind,
 				cells: cells,
 			})
-			targets = append(targets, hints.Target{
-				Text:     text[found.Start:found.End],
-				Distance: hintDistance(cells[0], cursor, s.w),
-			})
 		}
 		y = next
 	}
+	return out
+}
 
+// label gives every match its label, one target per match in the same
+// order, and marks on each pane the cells the matches and labels cover.
+func (s *hintsState) label(targets []hints.Target) {
 	labels := hints.Assign(targets, s.alphabet)
-	s.owner = make([]int, s.w*s.h)
-	for i := range s.owner {
-		s.owner[i] = -1
+	for _, p := range s.panes {
+		p.owner = make([]int, p.w*p.h)
+		for i := range p.owner {
+			p.owner[i] = -1
+		}
+		p.labelRune = make(map[int]rune)
+		p.labelOf = make(map[int]int)
 	}
-	s.labelRune = make(map[int]rune)
-	s.labelOf = make(map[int]int)
 	for i := range s.matches {
 		match := &s.matches[i]
+		p := s.panes[match.pane]
 		match.label = labels[i]
 		for _, c := range match.cells {
-			s.owner[c.y*s.w+c.x] = i
+			p.owner[c.y*p.w+c.x] = i
 		}
 		// The label covers the start of the match, as it does in
 		// tmux-fingers and kitty. At the end of a row with too little room it
 		// moves left, so it is never cut off.
 		start := match.cells[0]
 		n := len(match.label)
-		if start.x+n > s.w {
-			start.x = max(s.w-n, 0)
+		if start.x+n > p.w {
+			start.x = max(p.w-n, 0)
 		}
 		match.labelAt = start
 		for j, r := range match.label {
 			x := start.x + j
-			if x >= s.w {
+			if x >= p.w {
 				break
 			}
-			s.labelRune[start.y*s.w+x] = r
-			s.labelOf[start.y*s.w+x] = i
+			p.labelRune[start.y*p.w+x] = r
+			p.labelOf[start.y*p.w+x] = i
 		}
 	}
 }

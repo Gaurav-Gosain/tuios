@@ -92,6 +92,12 @@ path. `esc` closes. See [HINTS.md](HINTS.md) for the patterns and the
 `[hints]` settings. The action is `hints`, so you can bind it to a different
 key.
 
+The `hints_all_panes` action puts labels on all panes that the workspace
+shows. The focused pane gets the shortest labels. `Shift` and a label types
+the text into the focused pane. This action has no default key. Bind it, or
+run it from the command palette. Set `hints.all_panes = true` to make
+`Ctrl+B F` do the same.
+
 ## Copy mode
 
 `Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the

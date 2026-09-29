@@ -664,3 +664,88 @@ func TestHintFullLineDoesNotJoinTheNext(t *testing.T) {
 	waitClipboardSequence(t, term, out, from, url)
 	alive(t, term, "after a full line under hints")
 }
+
+// TestHintsAllPanesLabelEveryPane is issue #248 on the real render path: two
+// tiled panes under shared borders, hints.all_panes on, and the leader and F
+// pressed in the left pane. Both panes show labels. The UUID in the right pane
+// is typed with Shift, and it lands at the prompt of the left pane, the pane
+// the person is in, and on the clipboard.
+//
+// How this could pass wrongly: the UUID could be typed into the right pane and
+// still be on screen. The check reads the column it lands in, which must be in
+// the left half. The label on the right pane could be a stale cell. The frame
+// is read only after a label shows on both panes, and the pane is checked for
+// no labels after the label is typed.
+func TestHintsAllPanesLabelEveryPane(t *testing.T) {
+	out := &lockedBuffer{}
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\nshared_borders = true\n\n[hints]\nall_panes = true\n")
+	term := startIn(t, base, startOpts{out: out, cols: 140, rows: 36})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+
+	// The right pane, focused after the second new pane, prints the UUID. The
+	// command builds it, so the only whole copy on screen is the output.
+	const uuid = "30c0acf5-8dd0-48f2-8d86-cf0aae99aa4a"
+	enterTerminalMode(t, term)
+	runInShell(t, term, "printf '30c0acf5-8dd0-%s\\n' 48f2-8d86-cf0aae99aa4a; echo RIGHT-READY", "RIGHT-READY", shellTimeout)
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys("h"); err != nil {
+		t.Fatalf("focus the left pane: %v", err)
+	}
+	time.Sleep(insertGuard)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "printf 'deadbee%s\\n' 42; echo LEFT-READY", "LEFT-READY", shellTimeout)
+	if err := term.SendKeys("echo TYPED-"); err != nil {
+		t.Fatalf("type the command: %v", err)
+	}
+	if err := term.WaitForText("$ echo TYPED-", uiTimeout); err != nil {
+		t.Fatalf("the command never reached the prompt: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	s := term.Screen()
+	cols, _ := s.Size()
+	ucol, urow, ok := findLastOnGrid(s, uuid)
+	if !ok || ucol < cols/2 {
+		t.Fatalf("the UUID is not in the right pane (column %d of %d):\n%s", ucol, cols, term.Snapshot())
+	}
+	scol, srow, ok := findLastOnGrid(s, hintsSHA)
+	if !ok || scol >= cols/2 {
+		t.Fatalf("the hash is not in the left pane (column %d of %d):\n%s", scol, cols, term.Snapshot())
+	}
+
+	openHints(t, term)
+	uLabel := waitHintLabel(t, term, ucol, urow, uuid)
+	sLabel := waitHintLabel(t, term, scol, srow, hintsSHA)
+	if uLabel == sLabel {
+		t.Fatalf("the two panes share the label %q", uLabel)
+	}
+	if len(sLabel) > len(uLabel) {
+		t.Errorf("the focused pane has a longer label (%q) than the other pane (%q)", sLabel, uLabel)
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes")
+	t.Logf("labels: focused pane %q, other pane %q:\n%s", sLabel, uLabel, term.Snapshot())
+
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(strings.ToUpper(uLabel)); err != nil {
+		t.Fatalf("type %q: %v", strings.ToUpper(uLabel), err)
+	}
+	waitClipboardSequence(t, term, out, from, uuid)
+	var tcol int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		c, _, ok := findLastOnGrid(s, "TYPED-"+uuid)
+		tcol = c
+		return ok && hintsNoLabels(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the UUID was not typed at a prompt: %v\n%s", err, term.Snapshot())
+	}
+	if tcol >= cols/2 {
+		t.Fatalf("the UUID was typed into the right pane (column %d), not the focused left pane:\n%s", tcol, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes-typed")
+	alive(t, term, "after hints on all panes")
+}

@@ -202,7 +202,7 @@ func TestAssign(t *testing.T) {
 	}
 
 	// Ties keep the order the texts were seen in.
-	got = Assign([]Target{{"x", 2}, {"y", 2}, {"z", 1}}, "ab")
+	got = Assign([]Target{{Text: "x", Distance: 2}, {Text: "y", Distance: 2}, {Text: "z", Distance: 1}}, "ab")
 	if !slices.Equal(got, []string{"a", "ba", "b"}) && !slices.Equal(got, []string{"ba", "bb", "a"}) {
 		t.Errorf("Assign with ties = %q", got)
 	}
