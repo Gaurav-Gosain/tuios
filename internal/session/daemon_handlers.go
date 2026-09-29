@@ -80,6 +80,21 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var session *Session
 	var err error
 
+	// A client in a pane of the session it asks for would size the session
+	// by its own pane: see nested_attach.go. A link connection's peer is the
+	// proxy, not the client, so it is not placed.
+	var inside *Session
+	var insideWhy string
+	if !cs.viaLink {
+		inside, insideWhy = d.paneSession(cs.peerPID)
+	}
+	if inside != nil && payload.SessionName == "" {
+		// Which session an unnamed attach lands on is the daemon's choice, and
+		// from a pane it is usually the pane's own. Asking for a name is
+		// clearer than refusing only some of the time.
+		return d.refuseNestedAttach(cs, inside, insideWhy, true)
+	}
+
 	if payload.SessionName == "" {
 		session, err = d.manager.GetDefaultSession(cfg, payload.Width, payload.Height)
 	} else if payload.CreateNew {
@@ -93,6 +108,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to get/create session: %w", err)
+	}
+	if inside != nil && session.ID == inside.ID {
+		return d.refuseNestedAttach(cs, inside, insideWhy, false)
 	}
 
 	// Record what the attaching client's host terminal can display so shells

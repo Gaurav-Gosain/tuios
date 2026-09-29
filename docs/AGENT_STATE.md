@@ -3411,7 +3411,8 @@ A client started inside a tuios pane of the same daemon, a nested `tuios
 attach`, or `tuios-web` or the SSH server started from a pane, counts as inside
 a pane: its mail replies are refused with `forbidden`, its reads of the
 mailbox do not mark mail read, and its Inbox cannot dismiss an item. Start
-those from a terminal outside tuios.
+those from a terminal outside tuios. A nested `tuios attach` to the session
+that holds its pane is refused.
 
 ## What a pane may do
 
