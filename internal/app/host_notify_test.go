@@ -80,7 +80,7 @@ func TestNotifyPayloadIsCappedOnARuneBoundary(t *testing.T) {
 // Tag characters and Hangul fillers draw nothing, so text holding them reads
 // as something other than what it is.
 func TestNotifyTextDropsInvisibleCharacters(t *testing.T) {
-	in := "ok\U000E0041\U000E007Fᅟᅠㅤﾠdone"
+	in := "ok\U000E0041\U000E007F\u115F\u1160\u3164\uFFA0done"
 	if got := notifyPlainText(in); got != "okdone" {
 		t.Fatalf("notifyPlainText(%q) = %q, want %q", in, got, "okdone")
 	}
@@ -89,11 +89,11 @@ func TestNotifyTextDropsInvisibleCharacters(t *testing.T) {
 // The zero-width joiner builds one emoji from several. Stripping it turned a
 // family into three people.
 func TestNotifyTextKeepsTheZeroWidthJoiner(t *testing.T) {
-	family := "\U0001F468‍\U0001F469‍\U0001F467 done"
+	family := "\U0001F468\u200D\U0001F469\u200D\U0001F467 done"
 	if got := notifyPlainText(family); got != family {
 		t.Fatalf("notifyPlainText(%q) = %q, want it unchanged", family, got)
 	}
-	if got := notifyPlainText("a​b‮c"); got != "abc" {
+	if got := notifyPlainText("a\u200Bb\u202Ec"); got != "abc" {
 		t.Fatalf("notifyPlainText kept a zero-width space or a bidi override: %q", got)
 	}
 }
