@@ -62,7 +62,7 @@ func TestSubmitPromptWritesExactBytes(t *testing.T) {
 		{"raw", false, "does the retry path look right?", []string{"does the retry path look right?", "\r"}},
 		{"trailing newline dropped", true, "hello\n", []string{"\x1b[200~hello\x1b[201~", "\r"}},
 		{"trailing crlf dropped", false, "hello\r\n", []string{"hello", "\r"}},
-		{"paste end in the text cannot close the paste", true, "a\x1b[201~b\x1b[200~c", []string{"\x1b[200~abc\x1b[201~", "\r"}},
+		{"paste end in the text cannot close the paste", true, "a\x1b[201~b\x1b[200~c", []string{"\x1b[200~a[201~b[200~c\x1b[201~", "\r"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pane := &recordingPane{bracketed: tc.bracketed}

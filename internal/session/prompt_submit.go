@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+
 	"context"
 	"fmt"
 	"strings"
@@ -181,8 +183,10 @@ func submitPromptStamped(ctx context.Context, pane promptPane, text string, in h
 func promptBody(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
-	text = strings.ReplaceAll(text, bracketedPasteEnd, "")
-	text = strings.ReplaceAll(text, bracketedPasteStart, "")
+	// Removing the delimiters as strings is not enough: removing one can join
+	// the text around it into a new one. Dropping every ESC leaves nothing to
+	// rebuild a delimiter from. It is the sanitizing every paste gets.
+	text = vt.SanitizePaste(text)
 	return strings.TrimRight(text, "\n")
 }
 
