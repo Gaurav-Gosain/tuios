@@ -76,9 +76,11 @@ type KittyPassthrough struct {
 
 	// syncProbes and held keep a guest's output inside an open synchronized
 	// update aside until the update closes; see kitty_sync_hold.go.
-	syncProbes   map[string]func() (open bool, serial uint64)
-	held         map[string]*heldUpdate
-	heldBytes    int
+	syncProbes map[string]func() (open bool, serial uint64)
+	held       map[string]*heldUpdate
+	heldBytes  int
+	// heldGeom is each window's tuios-owned geometry at the last refresh.
+	heldGeom     map[string]paneGeom
 	guestCapture bool
 	captureStart int
 	// syncHoldLimit and clock replace vt.SyncMaxHold and time.Now in tests.

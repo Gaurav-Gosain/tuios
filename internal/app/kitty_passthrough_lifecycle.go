@@ -57,6 +57,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.releaseHeld(windowID)
 	delete(kp.held, windowID)
 	delete(kp.syncProbes, windowID)
+	delete(kp.heldGeom, windowID)
 
 	if !kp.enabled {
 		return

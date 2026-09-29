@@ -56,6 +56,9 @@ type heldUpdate struct {
 	serial uint64
 	since  time.Time
 	buf    []byte
+	// ids and scanned cache the image ids buf names, up to scanned bytes.
+	ids     map[uint32]bool
+	scanned int
 	// bypass is set when the window stops being held for the rest of this
 	// update: after a direct write, the time limit, or the size limit.
 	bypass bool
@@ -219,37 +222,58 @@ func (kp *KittyPassthrough) releaseDueHeld(refreshing bool) {
 // held frame names that image. Such a placement shows the frame's new data or
 // position and belongs to it. A placement the frame does not touch only
 // follows tuios moving or uncovering the pane, and goes out at once.
+//
+// When tuios has also moved the pane (tuiosMoved), the placement goes out at
+// once as well as into the frame: the host moves the image it already has
+// now, and places the frame's new data again after its transmit. tuios's own
+// moves are never held behind a guest's frame.
 // Callers hold kp.mu.
-func (kp *KittyPassthrough) holdTail(windowID string, hostID uint32, start int) {
+func (kp *KittyPassthrough) holdTail(windowID string, hostID uint32, start int, tuiosMoved bool) {
 	h := kp.held[windowID]
-	if h == nil || h.bypass || start >= len(kp.pendingOutput) || !heldNames(h.buf, hostID) {
+	if h == nil || h.bypass || start >= len(kp.pendingOutput) || !h.names(hostID) {
 		return
 	}
 	h.buf = append(h.buf, kp.pendingOutput[start:]...)
 	kp.heldBytes += len(kp.pendingOutput) - start
+	if tuiosMoved {
+		// tuios moved the pane: the image the host has goes to the new place
+		// now, and the copy above places the frame's data after it.
+		return
+	}
 	kp.pendingOutput = kp.pendingOutput[:start]
 }
 
-// heldNames reports whether any kitty command in buf names host image id.
-func heldNames(buf []byte, hostID uint32) bool {
-	var id [16]byte
-	want := strconv.AppendUint(append(id[:0], "i="...), uint64(hostID), 10)
-	for len(buf) > 0 {
+// names reports whether any kitty command the frame holds names host image
+// id. The ids are collected as the frame grows, so each held byte is scanned
+// once however many images the refresh pass asks about.
+func (h *heldUpdate) names(hostID uint32) bool {
+	if h.scanned > len(h.buf) {
+		h.ids, h.scanned = nil, 0
+	}
+	for buf := h.buf[h.scanned:]; ; {
 		i := bytes.Index(buf, []byte("\x1b_G"))
 		if i < 0 {
-			return false
+			break
 		}
 		buf = buf[i+3:]
 		end := bytes.IndexAny(buf, ";\x1b")
 		if end < 0 {
-			end = len(buf)
+			break
 		}
-		if hasKittyKey(buf[:end], want) {
-			return true
+		for field := range bytes.SplitSeq(buf[:end], []byte{','}) {
+			if v, ok := bytes.CutPrefix(field, []byte("i=")); ok {
+				if id, err := strconv.ParseUint(string(v), 10, 32); err == nil {
+					if h.ids == nil {
+						h.ids = make(map[uint32]bool)
+					}
+					h.ids[uint32(id)] = true
+				}
+			}
 		}
 		buf = buf[end:]
+		h.scanned = len(h.buf) - len(buf)
 	}
-	return false
+	return h.ids[hostID]
 }
 
 // dropHeldPlacements takes every placement of a host image out of what the
@@ -263,6 +287,7 @@ func (kp *KittyPassthrough) dropHeldPlacements(hostID uint32) {
 		}
 		before := len(h.buf)
 		h.buf = stripKittyPlacements(h.buf, hostID)
+		h.ids, h.scanned = nil, 0
 		kp.heldBytes -= before - len(h.buf)
 	}
 }
@@ -333,4 +358,16 @@ func (kp *KittyPassthrough) now() time.Time {
 		return kp.clock()
 	}
 	return time.Now()
+}
+
+// paneGeom is the part of a window's position that tuios, not the guest,
+// changes.
+type paneGeom struct {
+	x, y, w, h, cw, ch, scroll, z, lx, ly, lw, lh, sw, sh int
+	visible                                               bool
+}
+
+func geomOf(i *WindowPositionInfo) paneGeom {
+	return paneGeom{i.WindowX, i.WindowY, i.Width, i.Height, i.ContentWidth, i.ContentHeight,
+		i.ScrollOffset, i.WindowZ, i.LayoutX, i.LayoutY, i.LayoutW, i.LayoutH, i.ScreenWidth, i.ScreenHeight, i.Visible}
 }
