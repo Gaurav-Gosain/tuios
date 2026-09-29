@@ -28,22 +28,31 @@ type fileSearchMsg struct {
 	Err       string
 }
 
-// OpenFileSearch searches below the focused pane's directory and shows results
-// in the existing palette. The filesystem walk runs off the Update goroutine.
-func (m *OS) OpenFileSearch() tea.Cmd {
+// OpenFileSearch searches below the focused pane's directory, or below the
+// folder the sidebar shows when fromSidebar is set. It shows the results in the
+// existing palette. The filesystem walk runs off the Update goroutine.
+func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
 	if m.learnOff(learnNoteFiles) {
 		return nil
 	}
 	window := m.GetFocusedWindow()
-	if window == nil || paneDir(window) == "" {
-		m.ShowNotification("No pane directory to search.", "info", m.Settings.NotificationDuration)
-		return nil
+	var root, origin string
+	if fromSidebar && m.filesOn() && m.filesView.Dir != "" {
+		root, origin = m.filesView.Dir, m.filesView.Origin
+		if origin == "" && window != nil {
+			origin = window.ID
+		}
+	} else {
+		if window == nil || paneDir(window) == "" {
+			m.ShowNotification("No pane directory to search.", "info", m.Settings.NotificationDuration)
+			return nil
+		}
+		root, origin = paneDir(window), window.ID
 	}
 	if m.FileViewSpoofed() {
 		m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	root, origin := paneDir(window), window.ID
 	client, host := m.DaemonClient, m.AttachedHost
 	m.fileSearch = true
 	m.fileSearchGen++
