@@ -573,6 +573,16 @@ multifocus set. See [Multi copy mode](LAYOUT_MODES.md#multi-copy-mode).
 multi_format = "plain"
 ```
 
+`copy_entry` sets where the copy cursor starts when copy mode starts. `cursor`
+is the terminal cursor, usually the prompt line, as in tmux. `center` is the
+first column of the middle row. In multi copy mode, each pane starts at its own
+cursor. See [Copy mode](KEYBINDINGS.md#copy-mode) for the search keys.
+
+```toml
+[appearance.selection]
+copy_entry = "cursor"
+```
+
 The scrollback browser draws from the same two places: the theme for its
 chrome, and these settings for its search and selection, so a match there and
 a match in a pane are the same colour.

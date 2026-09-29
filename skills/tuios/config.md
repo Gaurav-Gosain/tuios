@@ -284,3 +284,22 @@ Both write an empty list on an action that runs out of keys. In config.toml an
 action set to `[]` stays empty, while an action left out is filled from the
 defaults. `free` cannot take the leader key or the keys the input path reads
 directly.
+
+### Copy mode for a tmux user
+
+Copy mode starts with its cursor on the terminal cursor, usually the prompt
+line. `appearance.selection.copy_entry = "center"` starts it on the middle row.
+In copy mode, `/` searches down and `?` searches up. `n` repeats the last search
+in its direction, and `N` goes the other way.
+
+tmux `bind-key b copy-mode \; send-keys ?` is one action in tuios:
+`copy_mode_search_backward`. `copy_mode_search_forward` opens `/`. Neither
+action has a default key. Add the binding to config.toml:
+
+```toml
+[keybindings.prefix_mode]
+copy_mode_search_backward = ["/"]
+```
+
+tuios cannot put two actions on one key. `tuios send-keys` cannot drive copy
+mode, because copy mode ignores remote keys.
