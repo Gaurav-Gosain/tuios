@@ -63,6 +63,10 @@ func notifyPlainText(s string) string {
 			b.WriteRune(' ')
 		case r < 0x20, r >= 0x7f && r <= 0x9f:
 			continue
+		case r == 0x200c || r == 0x200d:
+			// The zero-width joiner and non-joiner build emoji sequences and
+			// shape some scripts. They reorder nothing, so they stay.
+			b.WriteRune(r)
 		case session.InvisibleFormatRune(r):
 			// Zero-width and bidi formatting characters would let the text
 			// read as something other than what it holds.

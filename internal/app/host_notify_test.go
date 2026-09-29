@@ -85,3 +85,15 @@ func TestNotifyTextDropsInvisibleCharacters(t *testing.T) {
 		t.Fatalf("notifyPlainText(%q) = %q, want %q", in, got, "okdone")
 	}
 }
+
+// The zero-width joiner builds one emoji from several. Stripping it turned a
+// family into three people.
+func TestNotifyTextKeepsTheZeroWidthJoiner(t *testing.T) {
+	family := "\U0001F468‍\U0001F469‍\U0001F467 done"
+	if got := notifyPlainText(family); got != family {
+		t.Fatalf("notifyPlainText(%q) = %q, want it unchanged", family, got)
+	}
+	if got := notifyPlainText("a​b‮c"); got != "abc" {
+		t.Fatalf("notifyPlainText kept a zero-width space or a bidi override: %q", got)
+	}
+}
