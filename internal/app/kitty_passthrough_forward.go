@@ -80,7 +80,10 @@ func (kp *KittyPassthrough) ForwardCommand(
 		log.Printf("[KP] ForwardCommand action=%c enabled=%v inline=%v imageID=%d more=%v dataLen=%d",
 			cmd.Action, kp.enabled, kp.inlineGraphics, cmd.ImageID, cmd.More, len(cmd.Data))
 	}
-	kp.noteGuestSync(windowID)
+	// What this command queues is held while the guest is inside a
+	// synchronized update; see kitty_sync_hold.go.
+	kp.beginGuestCapture()
+	defer kp.endGuestCapture(windowID)
 
 	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
 		cmd.Action, kp.enabled, cmd.ImageID, windowID[:min(8, len(windowID))], windowX, windowY, contentCols, contentRows, cursorX, cursorY, scrollbackLen, isAltScreen)
@@ -775,6 +778,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// takes it at entry). Route the write through writeHostSequence so it
 		// serializes against WriteToHost/asyncFrameWriter/flushToHost via hostMu
 		// (kp.mu outer, hostMu inner) and cannot tear their sync triples.
+		// This write skips the queue, so what the window holds goes first.
+		kp.unholdWindow(windowID)
 		if visible {
 			var posCmd []byte
 			posCmd = append(posCmd, syncBegin...)
@@ -1068,6 +1073,9 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 
 		// Enqueue the payload only; the writer resolves the placement geometry
 		// under kp.mu when the frame is actually written.
+		// The async writer skips the queue, so what the window holds goes
+		// first.
+		kp.unholdWindow(windowID)
 		job := &remoteVideoJob{
 			windowID:    windowID,
 			hostID:      hostID,
@@ -1116,13 +1124,20 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	if reusingID {
 		// Video frame: send asynchronously so the VT callback and render
 		// loop stay responsive. Drop frames if the writer is backed up
-		// (channel full) to prevent unbounded lag.
+		// (channel full) to prevent unbounded lag. The writer skips the
+		// queue, so what the window holds goes first.
+		kp.unholdWindow(windowID)
 		select {
 		case kp.asyncFrameCh <- asyncFrame{data: frameData}:
 		default:
 			// Previous frame still in flight, drop this one.
 			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
 		}
+	} else if kp.pendingGraphicsFull() {
+		// The same bound as the direct path: an empty queue takes an image
+		// of any size, and a backed-up one does not take another.
+		kittyPassthroughLog("forwardFileTransmitInline: dropping a %d byte bitmap, %d bytes already queued",
+			len(frameData), kp.pendingGraphicsBytes())
 	} else {
 		// First frame / static image: go through pendingOutput so
 		// RefreshAllPlacements can attach the a=p in the same flush.

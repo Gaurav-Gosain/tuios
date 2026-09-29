@@ -173,13 +173,14 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	// Update thread-safe mode caches read from the render goroutine.
 	e.updateMouseModeCache()
 	if mode == ansi.ModeSynchronizedOutput {
+		// Only an update opened from reset starts the hold clock. A guest
+		// repeating 2026h inside one update does not extend it, the same
+		// as the ghostty backend.
 		if setting.IsSet() && !e.cachedSyncOutput.Load() {
 			e.syncOpens.Add(1)
-		}
-		e.cachedSyncOutput.Store(setting.IsSet())
-		if setting.IsSet() {
 			e.syncSetAtNanos.Store(time.Now().UnixNano())
 		}
+		e.cachedSyncOutput.Store(setting.IsSet())
 	}
 	if mode == ansi.ModeAutoWrap {
 		e.cachedAutoWrap.Store(setting.IsSet())

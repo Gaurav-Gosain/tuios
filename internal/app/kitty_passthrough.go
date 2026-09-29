@@ -74,10 +74,16 @@ type KittyPassthrough struct {
 	nextHostID    uint32
 	pendingOutput []byte
 
-	// syncProbes and syncMarks hold back the part of pendingOutput that
-	// belongs to a guest's open synchronized update; see kitty_sync_hold.go.
-	syncProbes map[string]func() (open bool, serial uint64)
-	syncMarks  map[string]guestSyncMark
+	// syncProbes and held keep a guest's output inside an open synchronized
+	// update aside until the update closes; see kitty_sync_hold.go.
+	syncProbes   map[string]func() (open bool, serial uint64)
+	held         map[string]*heldUpdate
+	heldBytes    int
+	guestCapture bool
+	captureStart int
+	// syncHoldLimit and clock replace vt.SyncMaxHold and time.Now in tests.
+	syncHoldLimit time.Duration
+	clock         func() time.Time
 
 	// lastFrameHash is the CRC32 of the last bitmap sent per (windowID,
 	// hostImageID) remote video stream. A browser re-sends identical frames
@@ -755,7 +761,7 @@ func (kp *KittyPassthrough) IsEnabled() bool {
 func (kp *KittyPassthrough) FlushPending() []byte {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
-	return kp.takeReleasable()
+	return kp.takePending()
 }
 
 // Synchronized output mode 2026 (supported by Kitty, Ghostty, WezTerm, etc.)
@@ -788,7 +794,7 @@ const maxPendingGraphicsBytes = 8 * 1024 * 1024
 // pendingGraphicsFull reports whether the queue for the host has grown past
 // what the render loop is keeping up with. Callers hold kp.mu.
 func (kp *KittyPassthrough) pendingGraphicsFull() bool {
-	return len(kp.pendingOutput) > maxPendingGraphicsBytes
+	return kp.pendingGraphicsBytes() > maxPendingGraphicsBytes
 }
 
 // flushToHost writes any pending output immediately to the host terminal,
@@ -796,22 +802,24 @@ func (kp *KittyPassthrough) pendingGraphicsFull() bool {
 // Must be called while kp.mu is already held; the host write funnels through
 // writeHostSequence, which takes hostMu (kp.mu outer, hostMu inner).
 //
-// A guest's open synchronized update stays queued; see kitty_sync_hold.go.
+// A guest's open synchronized update stays held; see kitty_sync_hold.go.
 func (kp *KittyPassthrough) flushToHost() {
-	if len(kp.pendingOutput) == 0 || kp.hostOut == nil {
+	if kp.hostOut == nil {
 		return
 	}
-	cut := kp.releasableLen()
-	if cut == 0 {
+	kp.releaseDueHeld()
+	if len(kp.pendingOutput) == 0 {
 		return
 	}
-	kp.writeHostSequence(syncBegin, kp.pendingOutput[:cut], syncEnd)
-	if cut < len(kp.pendingOutput) {
-		kp.dropReleased(cut)
-		return
-	}
+	kp.writeHostSequence(syncBegin, kp.pendingOutput, syncEnd)
 	kp.pendingOutput = releaseScratch(kp.pendingOutput)
-	kp.shiftSyncMarks(cut)
+	kp.captureStart = 0
+}
+
+// pendingGraphicsBytes is what is queued for the host, held updates included.
+// Callers hold kp.mu.
+func (kp *KittyPassthrough) pendingGraphicsBytes() int {
+	return len(kp.pendingOutput) + kp.heldBytes
 }
 
 // HostImageID reports the id the host knows a window's guest image by. It is

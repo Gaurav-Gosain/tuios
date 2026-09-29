@@ -52,8 +52,11 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	// A closed window's open update never closes, so stop holding for it.
-	kp.forgetGuestSync(windowID)
+	// A closed window's open update never closes. What it held goes ahead
+	// of the deletes below.
+	kp.releaseHeld(windowID)
+	delete(kp.held, windowID)
+	delete(kp.syncProbes, windowID)
 
 	if !kp.enabled {
 		return
@@ -114,8 +117,9 @@ func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
-	// A clear inside a guest's frame deletes as part of that frame.
-	kp.noteGuestSync(windowID)
+	// A clear inside a guest's update deletes as part of that update.
+	kp.beginGuestCapture()
+	defer kp.endGuestCapture(windowID)
 
 	kittyPassthroughLog("ClearWindow: winID=%s enabled=%v, %d placements to delete",
 		windowID[:min(8, len(windowID))], kp.enabled, len(kp.placements[windowID]))

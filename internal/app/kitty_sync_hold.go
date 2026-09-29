@@ -1,6 +1,12 @@
 package app
 
-import "bytes"
+import (
+	"bytes"
+	"strconv"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
 
 // A guest that animates an image replaces it every frame, and says so with
 // commands that only make sense together: delete the old image, transmit the
@@ -11,34 +17,53 @@ import "bytes"
 // The commands reach the passthrough one at a time as the pane's emulator
 // parses them, and the render loop drains the queue whenever it ticks. A tick
 // that fell between the delete and the placement used to ship the delete on
-// its own, inside tuios's own synchronized update, so the host presented an
-// empty pane until the next tick carried the new bitmap. At video rates that
-// is a flicker, and with enough ticks landing there the image is gone more
-// often than it is shown.
+// its own, so the host presented the pane without its image until a later
+// tick carried the next placement. At video rates that is a flicker.
 //
-// So the queue is released only up to the start of the oldest update that is
-// still open. Everything after it stays queued, in order, until the guest
-// closes that update or the emulator stops honouring it (syncMaxHold in the
-// vt package). Positions in the queue rather than per-window buffers keep the
-// host seeing commands in the order they were produced, including the
-// refresh pass's re-placements and other windows' output that land in
-// between.
+// So what a guest sends inside an open update is kept aside, per window,
+// until the guest closes that update. Only that window waits:
+//
+//   - Other windows' output and tuios's own commands stay in pendingOutput
+//     and go out on the next drain as before.
+//   - When tuios hides a placement of a held window, the hide goes out at
+//     once and the held placements of that image are taken out, so a release
+//     cannot show it again. The refresh pass re-places it once it is visible
+//     and the window is no longer held.
+//   - A write that bypasses the queue for a window (the video paths) first
+//     releases what that window holds, and the rest of that update is not
+//     held, so the direct write cannot overtake a held delete.
+//   - A hold ends after vt.SyncMaxHold whatever the guest says, and a window
+//     whose held bytes pass heldWindowMaxBytes, or a total past
+//     heldTotalMaxBytes, is released early. Every captured command emits whole
+//     kitty sequences (chunked transmissions are joined before they are
+//     emitted), so a release never splits a transmission.
 
-// guestSyncMark is where in pendingOutput a window's open synchronized update
-// began, and the serial of that update.
-type guestSyncMark struct {
+const (
+	// heldWindowMaxBytes bounds what one window may hold.
+	heldWindowMaxBytes = maxPendingGraphicsBytes
+	// heldTotalMaxBytes bounds what all windows together may hold.
+	heldTotalMaxBytes = 4 * maxPendingGraphicsBytes
+)
+
+// heldUpdate is what one window's guest has sent inside its open update.
+type heldUpdate struct {
 	serial uint64
-	at     int
+	since  time.Time
+	buf    []byte
+	// bypass is set when the window stops being held for the rest of this
+	// update: after a direct write, the time limit, or the size limit.
+	bypass bool
 }
 
 // SetGuestSyncProbe tells the passthrough how to ask whether a window's guest
-// has an open synchronized update. A nil probe forgets the window.
+// has an open synchronized update. A nil probe forgets the window and
+// releases what it held.
 func (kp *KittyPassthrough) SetGuestSyncProbe(windowID string, probe func() (open bool, serial uint64)) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 	if probe == nil {
+		kp.releaseHeld(windowID)
 		delete(kp.syncProbes, windowID)
-		delete(kp.syncMarks, windowID)
 		return
 	}
 	if kp.syncProbes == nil {
@@ -47,88 +72,219 @@ func (kp *KittyPassthrough) SetGuestSyncProbe(windowID string, probe func() (ope
 	kp.syncProbes[windowID] = probe
 }
 
-// forgetGuestSync drops a window's probe and mark, releasing what it held.
-// Callers hold kp.mu.
-func (kp *KittyPassthrough) forgetGuestSync(windowID string) {
-	delete(kp.syncProbes, windowID)
-	delete(kp.syncMarks, windowID)
+// beginGuestCapture starts collecting what a window's guest adds to
+// pendingOutput. Callers hold kp.mu and call endGuestCapture after.
+func (kp *KittyPassthrough) beginGuestCapture() {
+	kp.guestCapture = true
+	kp.captureStart = len(kp.pendingOutput)
 }
 
-// noteGuestSync is called before a window's guest adds to pendingOutput. If
-// the guest is inside a synchronized update that has not queued anything yet,
-// this records where its output starts. Callers hold kp.mu.
-func (kp *KittyPassthrough) noteGuestSync(windowID string) {
-	probe := kp.syncProbes[windowID]
-	if probe == nil {
-		return
+// endGuestCapture moves what the guest added since beginGuestCapture into
+// the window's held update when the guest is inside one. Callers hold kp.mu.
+func (kp *KittyPassthrough) endGuestCapture(windowID string) {
+	kp.guestCapture = false
+	start := min(kp.captureStart, len(kp.pendingOutput))
+	kp.captureStart = 0
+
+	h := kp.held[windowID]
+	open, serial := false, uint64(0)
+	if probe := kp.syncProbes[windowID]; probe != nil {
+		open, serial = probe()
 	}
-	open, serial := probe()
+	if h != nil && (!open || h.serial != serial) {
+		// The update h belongs to has closed, so it is complete. It goes
+		// ahead of what this command added.
+		h.bypass = false
+		tail := bytes.Clone(kp.pendingOutput[start:])
+		kp.pendingOutput = kp.pendingOutput[:start]
+		kp.releaseHeld(windowID)
+		delete(kp.held, windowID)
+		start = len(kp.pendingOutput)
+		kp.pendingOutput = append(kp.pendingOutput, tail...)
+		h = nil
+	}
 	if !open {
-		delete(kp.syncMarks, windowID)
 		return
 	}
-	if mark, ok := kp.syncMarks[windowID]; ok && mark.serial == serial {
+	if h == nil {
+		if kp.held == nil {
+			kp.held = make(map[string]*heldUpdate)
+		}
+		h = &heldUpdate{serial: serial, since: kp.now()}
+		kp.held[windowID] = h
+	}
+	if h.bypass || start == len(kp.pendingOutput) {
 		return
 	}
-	// A different serial means the update the old mark belonged to has
-	// closed, so what it held is complete and may go.
-	if kp.syncMarks == nil {
-		kp.syncMarks = make(map[string]guestSyncMark)
+	h.buf = append(h.buf, kp.pendingOutput[start:]...)
+	kp.heldBytes += len(kp.pendingOutput) - start
+	kp.pendingOutput = kp.pendingOutput[:start]
+
+	if len(h.buf) > heldWindowMaxBytes {
+		kittyPassthroughLog("sync hold: window %s holds %d bytes, releasing early", windowID, len(h.buf))
+		kp.releaseHeld(windowID)
+		h.bypass = true
 	}
-	kp.syncMarks[windowID] = guestSyncMark{serial: serial, at: len(kp.pendingOutput)}
+	for kp.heldBytes > heldTotalMaxBytes {
+		kp.releaseLargestHeld()
+	}
 }
 
-// releasableLen is how much of pendingOutput may go to the host now: all of
-// it, or up to the start of the oldest synchronized update still open. Marks
-// whose update has closed are dropped. Callers hold kp.mu.
-func (kp *KittyPassthrough) releasableLen() int {
-	cut := len(kp.pendingOutput)
-	for id, mark := range kp.syncMarks {
-		probe := kp.syncProbes[id]
-		if probe == nil {
-			delete(kp.syncMarks, id)
-			continue
-		}
-		if open, serial := probe(); !open || serial != mark.serial {
-			delete(kp.syncMarks, id)
-			continue
-		}
-		cut = min(cut, mark.at)
-	}
-	return cut
+// holding reports whether a window's guest output is being held now.
+// Callers hold kp.mu.
+func (kp *KittyPassthrough) holding(windowID string) bool {
+	h := kp.held[windowID]
+	return h != nil && !h.bypass
 }
 
-// takeReleasable removes and returns the part of pendingOutput that may go to
-// the host now. The returned slice is the caller's. Callers hold kp.mu.
-func (kp *KittyPassthrough) takeReleasable() []byte {
-	cut := kp.releasableLen()
-	if cut == 0 {
-		return nil
+// releaseHeld appends what a window holds to pendingOutput. The entry stays,
+// so a window released early is not held again for the same update.
+// Callers hold kp.mu.
+func (kp *KittyPassthrough) releaseHeld(windowID string) {
+	h := kp.held[windowID]
+	if h == nil {
+		return
 	}
-	if cut == len(kp.pendingOutput) {
-		out := kp.pendingOutput
-		kp.pendingOutput = nil
-		kp.shiftSyncMarks(cut)
-		return out
+	kp.pendingOutput = append(kp.pendingOutput, h.buf...)
+	kp.heldBytes -= len(h.buf)
+	h.buf = nil
+	if !h.bypass {
+		delete(kp.held, windowID)
 	}
-	out := bytes.Clone(kp.pendingOutput[:cut])
-	kp.dropReleased(cut)
+}
+
+// releaseLargestHeld releases the window holding the most, and stops holding
+// it for the rest of its update. Callers hold kp.mu.
+func (kp *KittyPassthrough) releaseLargestHeld() {
+	var id string
+	most := -1
+	for w, h := range kp.held {
+		if len(h.buf) > most {
+			id, most = w, len(h.buf)
+		}
+	}
+	if most <= 0 {
+		kp.heldBytes = 0
+		return
+	}
+	kp.releaseHeld(id)
+	kp.held[id].bypass = true
+}
+
+// unholdWindow releases what a window holds, sends the queue now, and stops
+// holding that window for the rest of its update. It is called before a
+// write that goes to the host without the queue. Callers hold kp.mu.
+func (kp *KittyPassthrough) unholdWindow(windowID string) {
+	h := kp.held[windowID]
+	if h == nil {
+		return
+	}
+	kp.releaseHeld(windowID)
+	h.bypass = true
+	kp.flushToHost()
+}
+
+// releaseDueHeld releases every window whose update has closed, changed or
+// run past the time limit. Callers hold kp.mu.
+func (kp *KittyPassthrough) releaseDueHeld() {
+	now := kp.now()
+	for id, h := range kp.held {
+		open, serial := false, uint64(0)
+		if probe := kp.syncProbes[id]; probe != nil {
+			open, serial = probe()
+		}
+		switch {
+		case !open || serial != h.serial:
+			h.bypass = false
+			kp.releaseHeld(id)
+			delete(kp.held, id)
+		case !h.bypass && now.Sub(h.since) >= kp.holdLimit():
+			kittyPassthroughLog("sync hold: window %s held past the limit, releasing", id)
+			kp.releaseHeld(id)
+			h.bypass = true
+		}
+	}
+}
+
+// dropHeldPlacements takes every placement of a host image out of what the
+// windows hold. tuios calls it when it hides that image itself, so a later
+// release does not show the image again. A placement taken out is undone by
+// the hide anyway, whichever order the host saw them in. Callers hold kp.mu.
+func (kp *KittyPassthrough) dropHeldPlacements(hostID uint32) {
+	for _, h := range kp.held {
+		if len(h.buf) == 0 {
+			continue
+		}
+		before := len(h.buf)
+		h.buf = stripKittyPlacements(h.buf, hostID)
+		kp.heldBytes -= before - len(h.buf)
+	}
+}
+
+// stripKittyPlacements removes the a=p commands naming a host image from buf,
+// in place.
+func stripKittyPlacements(buf []byte, hostID uint32) []byte {
+	var id [16]byte
+	want := strconv.AppendUint(append(id[:0], "i="...), uint64(hostID), 10)
+	out := buf[:0]
+	for len(buf) > 0 {
+		i := bytes.Index(buf, []byte("\x1b_G"))
+		if i < 0 {
+			out = append(out, buf...)
+			break
+		}
+		end := bytes.Index(buf[i:], []byte("\x1b\\"))
+		if end < 0 {
+			out = append(out, buf...)
+			break
+		}
+		end += i + 2
+		seq := buf[i:end]
+		ctl := seq[3:]
+		if semi := bytes.IndexByte(ctl, ';'); semi >= 0 {
+			ctl = ctl[:semi]
+		} else {
+			ctl = ctl[:len(ctl)-2]
+		}
+		out = append(out, buf[:i]...)
+		if !(hasKittyKey(ctl, []byte("a=p")) && hasKittyKey(ctl, want)) {
+			out = append(out, seq...)
+		}
+		buf = buf[end:]
+	}
 	return out
 }
 
-// dropReleased removes the first cut bytes of pendingOutput, which the caller
-// has sent, keeping the held rest. Callers hold kp.mu.
-func (kp *KittyPassthrough) dropReleased(cut int) {
-	n := copy(kp.pendingOutput, kp.pendingOutput[cut:])
-	kp.pendingOutput = kp.pendingOutput[:n]
-	kp.shiftSyncMarks(cut)
+// hasKittyKey reports whether a kitty control string has key=value kv.
+func hasKittyKey(ctl, kv []byte) bool {
+	for field := range bytes.SplitSeq(ctl, []byte{','}) {
+		if bytes.Equal(field, kv) {
+			return true
+		}
+	}
+	return false
 }
 
-// shiftSyncMarks moves every mark back by the cut bytes released ahead of
-// it. Callers hold kp.mu.
-func (kp *KittyPassthrough) shiftSyncMarks(cut int) {
-	for id, mark := range kp.syncMarks {
-		mark.at -= cut
-		kp.syncMarks[id] = mark
+// takePending releases what is due and hands over pendingOutput. Callers
+// hold kp.mu.
+func (kp *KittyPassthrough) takePending() []byte {
+	kp.releaseDueHeld()
+	out := kp.pendingOutput
+	kp.pendingOutput = nil
+	kp.captureStart = 0
+	return out
+}
+
+func (kp *KittyPassthrough) holdLimit() time.Duration {
+	if kp.syncHoldLimit > 0 {
+		return kp.syncHoldLimit
 	}
+	return vt.SyncMaxHold
+}
+
+func (kp *KittyPassthrough) now() time.Time {
+	if kp.clock != nil {
+		return kp.clock()
+	}
+	return time.Now()
 }
