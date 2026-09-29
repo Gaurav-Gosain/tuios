@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -295,5 +296,87 @@ func TestDirectVideoWriteDoesNotOvertakeHeldDelete(t *testing.T) {
 	}
 	if del < 0 || del > put {
 		t.Fatalf("the host saw %q: the direct frame overtook the held delete, so the delete removes it", hostActions(out))
+	}
+}
+
+// terminal-browser draws every frame as one synchronized update holding a
+// single a=T for the same image id and placement, read from a file. tuios
+// turns that into a transmit and a placement from the refresh pass. Kitty
+// removes an image's placements when the id is transmitted again, so the
+// transmit must never reach the host without the placement behind it.
+func TestHeldFrameGoesOutWithItsRefreshPlacement(t *testing.T) {
+	for _, medium := range []string{"file", "direct"} {
+		t.Run(medium, func(t *testing.T) {
+			h := newSyncHoldHarness(t)
+			a := h.pane("a", 0)
+			// Each frame differs, as a page being drawn does; an identical
+			// frame is not sent again at all.
+			dir := t.TempDir()
+			frame := func(n int) string {
+				pixels := bytes.Repeat([]byte{byte(n + 1)}, 16)
+				if medium == "direct" {
+					return "\x1b[H\x1b_Ga=T,f=32,s=2,v=2,i=1,p=1,C=1,q=2;" +
+						base64.StdEncoding.EncodeToString(pixels) + "\x1b\\"
+				}
+				path := fmt.Sprintf("%s/frame%d", dir, n)
+				if err := os.WriteFile(path, pixels, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return "\x1b[H\x1b_Ga=T,f=32,s=2,v=2,t=f,i=1,p=1,C=1,q=2;" +
+					base64.StdEncoding.EncodeToString([]byte(path)) + "\x1b\\"
+			}
+			a.write("\x1b[?2026h" + frame(0) + "\x1b[?2026l")
+			h.tick()
+			h.tick()
+			for n := range 3 {
+				a.write("\x1b[?2026h" + frame(n+1))
+				if got := hostActions(h.tick()); got != "" {
+					t.Fatalf("frame %d: a tick inside the update sent %q", n, got)
+				}
+				a.write("\x1b[?2026l")
+				if got := hostActions(h.tick()); got != "tp" {
+					t.Fatalf("frame %d: the closed update reached the host as %q, want the transmit and its placement together", n, got)
+				}
+			}
+		})
+	}
+}
+
+// A placement that only follows tuios moving the pane is tuios's own and goes
+// out at once, even while the pane's guest holds an update about another
+// image.
+func TestTuiosMoveOfAHeldPaneIsNotDelayed(t *testing.T) {
+	h := newSyncHoldHarness(t)
+	a := h.pane("a", 0)
+	a.write("\x1b[H\x1b_Ga=T,f=24,s=2,v=2,i=1,c=8,r=4,C=1,q=2;AAAAAAAAAAAAAAAA\x1b\\")
+	h.tick()
+
+	a.write("\x1b[?2026h\x1b_Ga=t,f=24,s=2,v=2,i=2,q=2;AAAAAAAAAAAAAAAA\x1b\\")
+	h.info["a"].WindowX = 3
+	if got := hostActions(h.tick()); got != "p" {
+		t.Fatalf("moving the pane sent %q while its guest held an update, want the placement at once", got)
+	}
+}
+
+// A whole update can arrive between the refresh pass and the drain of one
+// tick. The drain leaves it for the next pass, which sends it with the
+// placement it needs, instead of sending the transmit a tick early.
+func TestUpdateClosedAfterTheRefreshWaitsForItsPlacement(t *testing.T) {
+	h := newSyncHoldHarness(t)
+	a := h.pane("a", 0)
+	frame := func(n byte) string {
+		return "\x1b[H\x1b_Ga=T,f=32,s=2,v=2,i=1,p=1,C=1,q=2;" +
+			base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{n}, 16)) + "\x1b\\"
+	}
+	a.write("\x1b[?2026h" + frame(1) + "\x1b[?2026l")
+	h.tick()
+	h.tick()
+
+	a.write("\x1b[?2026h" + frame(2) + "\x1b[?2026l")
+	if got := hostActions(string(h.kp.FlushPending())); got != "" {
+		t.Fatalf("the drain after the refresh pass sent %q, want the frame kept for the next pass", got)
+	}
+	if got := hostActions(h.tick()); got != "tp" {
+		t.Fatalf("the next tick sent %q, want the transmit and its placement together", got)
 	}
 }
