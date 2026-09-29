@@ -14,22 +14,22 @@ To inspect your own effective bindings, use the binary rather than any document:
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, then select a file.
-`Enter` opens folders or copies a file's path; `Shift+Enter` opens a text file
-in a new pane running the editor chosen under Settings, Sidebar, File editor.
-Folders keep their navigation action and non-text files are refused.
-The binding is `file_edit` in `[keybindings.sidebar_files]`.
+`Enter` opens a folder or copies the path of a file. `Shift+Enter` opens a text
+file in a new pane. The pane runs the editor set under Settings, Sidebar, File
+editor. A folder keeps its navigation action. tuios does not edit a file that is
+not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 
-`Shift+Enter` needs a terminal that reports modified Enter, such as one using
-the Kitty keyboard protocol. On other terminals, rebind `file_edit` to a
-distinct key in the keybind manager or config file.
+`Shift+Enter` needs a terminal that reports modified Enter, such as one that
+uses the Kitty keyboard protocol. On other terminals, bind `file_edit` to a
+different key.
 
-`Ctrl+B f` searches file names recursively from the focused pane's directory,
-including while typing in a pane. `Ctrl+F` searches while the sidebar is
-focused. Type a name or relative path and press `Enter` to
-reveal the sidebar, show that file's folder and select the file. The search is
-bounded; its title says `partial` if it could not inspect the whole tree. The
-`file_search` action is rebindable in the keybind manager (`Ctrl+B k`) or in
-`config.toml`, for example:
+`Ctrl+B f` searches file names below the directory of the focused pane. It also
+works while you type in a pane. `Ctrl+F` searches while the sidebar has focus.
+Type a name or a relative path and press `Enter`. tuios shows the sidebar, opens
+the folder of that file and selects the file. The search has a limit, and its
+title says `partial` when tuios did not search the whole tree. You can rebind
+the actions in the keybind manager (`Ctrl+B k`) or in `config.toml`, for
+example:
 
 ```toml
 [keybindings.prefix_mode]

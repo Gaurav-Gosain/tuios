@@ -238,7 +238,7 @@ func TestSidebarFileEditor(t *testing.T) {
 			if err := term.SendKeys("\x1b[13;2u"); err != nil {
 				t.Fatal(err)
 			}
-			if err := term.WaitForText("That file is not a text file.", uiTimeout); err != nil {
+			if err := term.WaitForText("It is not a text file.", uiTimeout); err != nil {
 				t.Fatalf("binary file was not refused: %v\n%s", err, term.Snapshot())
 			}
 			waitWindowCount(t, term, 1, "refusing a binary file")

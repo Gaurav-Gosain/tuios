@@ -66,7 +66,7 @@ func scanSidebarFiles(root, origin string, client *session.TUIClient, host strin
 			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, true)
 			if err != nil || listing.Err != "" {
 				if dir == root {
-					msg.Err = "Could not search that folder."
+					msg.Err = "tuios could not search that folder."
 					return msg
 				}
 				msg.Truncated = true
@@ -78,7 +78,7 @@ func scanSidebarFiles(root, origin string, client *session.TUIClient, host strin
 			}
 		} else {
 			if host != "" {
-				msg.Err = "That machine could not search its files."
+				msg.Err = "tuios can not search files on that machine."
 				return msg
 			}
 			items, more, err := readDirFunc(dir, fileViewMaxEntries)

@@ -712,7 +712,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
-		Description: "Terminal editor command for Shift+Enter on a text file; empty uses $EDITOR, then $VISUAL, then vi. Arguments and quoted paths are supported.",
+		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
 		Default:     "",
 	},
 	{
