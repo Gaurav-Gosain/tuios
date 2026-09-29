@@ -1029,13 +1029,35 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 // (unknown_verb) holds no pane to anything, so both may respawn any pane, as
 // before. Any other failure refuses: the check fails closed.
 func (s *Shim) mayRespawn(target string) error {
-	raw, err := s.Caller.Call("pane-grants", map[string]any{})
+	return respawnGrantsAllow(s.Caller, map[string]any{}, target)
+}
+
+// RespawnAllowed is mayRespawn for the pane holder: it asks the daemon about
+// the process with peerPID, the one on the other end of the holder's socket,
+// rather than about the caller. A process that dials the socket directly
+// skips the shim, so the holder makes the check itself. With no pid (a
+// platform where the kernel does not give it) there is nothing to ask about,
+// and the shim's own check is the only one.
+func RespawnAllowed(c Caller, peerPID int, target string) error {
+	if peerPID <= 0 {
+		return nil
+	}
+	return respawnGrantsAllow(c, map[string]any{"peer_pid": peerPID}, target)
+}
+
+// respawnGrantsAllow asks pane-grants with params and decides whether the
+// process it answers for may respawn target. See mayRespawn.
+func respawnGrantsAllow(c Caller, params map[string]any, target string) error {
+	if c == nil {
+		return errors.New("could not read the caller's grants: no daemon connection")
+	}
+	raw, err := c.Call("pane-grants", params)
 	if err != nil {
 		var coded interface{ ErrorCode() string }
 		if errors.As(err, &coded) && coded.ErrorCode() == "unknown_verb" {
 			return nil
 		}
-		return fmt.Errorf("could not read this pane's grants: %w", err)
+		return fmt.Errorf("could not read the caller's grants: %w", err)
 	}
 	var pg struct {
 		Pane   bool     `json:"pane"`

@@ -214,7 +214,7 @@ func RunPane(o PaneOptions) int {
 					_ = ln.Close()
 					_ = os.Remove(sock)
 				}()
-				go acceptRespawns(ln, o.Window, calls, &waiting)
+				go acceptRespawns(ln, o.Window, o.Authorize, calls, &waiting)
 			}
 		}
 	}
@@ -302,8 +302,9 @@ func exitCode(c *exec.Cmd) int {
 }
 
 // acceptRespawns reads one request per connection and hands it to the holder.
-// It adds one to waiting before each send on calls.
-func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall, waiting *atomic.Int32) {
+// A request authorize refuses is answered with the refusal and never reaches
+// the holder. It adds one to waiting before each send on calls.
+func acceptRespawns(ln net.Listener, window string, authorize func(int) error, calls chan<- respawnCall, waiting *atomic.Int32) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -324,6 +325,12 @@ func acceptRespawns(ln net.Listener, window string, calls chan<- respawnCall, wa
 			if req.Window != window {
 				writeReply(conn, fmt.Errorf("this holder runs window %s, not %s", window, req.Window))
 				return
+			}
+			if authorize != nil {
+				if err := authorize(peerPID(conn)); err != nil {
+					writeReply(conn, err)
+					return
+				}
 			}
 			// The holder writes the reply itself, before it goes on. Handing
 			// the result back to this goroutine would race the holder's

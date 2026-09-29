@@ -4,6 +4,8 @@ package tmuxcompat
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -34,14 +36,47 @@ func runHolderIfAsked() {
 		if gate := os.Getenv(exitGateEnvKey); gate != "" {
 			afterExit = func(waiting *atomic.Int32) { exitGate(gate, waiting) }
 		}
+		var authorize func(int) error
+		if grants := os.Getenv(authGrantsEnvKey); grants != "" {
+			authorize = func(pid int) error {
+				return RespawnAllowed(&holderDaemon{grants: grants, log: os.Getenv(authLogEnvKey)}, pid, os.Getenv("TUIOS_PANE_ID"))
+			}
+		}
 		os.Exit(RunPane(PaneOptions{
-			Dir:     os.Getenv("TMUXCOMPAT_TEST_DIR"),
-			Window:  os.Getenv("TUIOS_PANE_ID"),
-			Command: cmd,
-			Env:     []string{"HOLDER_EXTRA=yes"},
-			Shell:   "/bin/sh",
+			Dir:       os.Getenv("TMUXCOMPAT_TEST_DIR"),
+			Window:    os.Getenv("TUIOS_PANE_ID"),
+			Command:   cmd,
+			Env:       []string{"HOLDER_EXTRA=yes"},
+			Shell:     "/bin/sh",
+			Authorize: authorize,
 		}))
 	}
+}
+
+// authGrantsEnvKey gives a holder child an Authorize that asks holderDaemon,
+// which places every caller in another pane holding these grants.
+// authLogEnvKey names a file where it writes the params it was asked with.
+const (
+	authGrantsEnvKey = "TMUXCOMPAT_TEST_AUTH_GRANTS"
+	authLogEnvKey    = "TMUXCOMPAT_TEST_AUTH_LOG"
+)
+
+// holderDaemon answers pane-grants as a daemon would for a process in
+// another pane that holds grants.
+type holderDaemon struct {
+	grants string
+	log    string
+}
+
+func (h *holderDaemon) Call(verb string, params any) (json.RawMessage, error) {
+	raw, _ := json.Marshal(params)
+	if h.log != "" {
+		_ = os.WriteFile(h.log, raw, 0o600)
+	}
+	if verb != "pane-grants" {
+		return nil, fmt.Errorf("unexpected verb %s", verb)
+	}
+	return json.Marshal(map[string]any{"pane": true, "window": "win-other", "grants": strings.Split(h.grants, ",")})
 }
 
 // Hooks for a holder child. replyDelayEnvKey holds a duration the holder
@@ -282,6 +317,76 @@ func TestHolderRefusesAnotherWindowsRequest(t *testing.T) {
 		t.Error("the holder ended on a refused request")
 	default:
 	}
+}
+
+// TestHolderAsksTheDaemonAboutTheCaller: respawn-pane checks the caller's
+// grants in the shim, but the holder's socket can be dialled directly. So the
+// holder asks the daemon about the process on its socket, by the pid the
+// kernel gives, and refuses a caller in another pane without admin. The
+// pane's command is left running.
+//
+// Negative control: with the authorize call cut from acceptRespawns, the
+// request from a pane holding read runs.
+func TestHolderAsksTheDaemonAboutTheCaller(t *testing.T) {
+	dir := shortDir(t)
+	marker := filepath.Join(dir, "ran")
+	asked := filepath.Join(dir, "asked")
+	respawned := filepath.Join(dir, "respawned")
+	_, done := startHolderEnv(t, dir, "win-held", []string{authGrantsEnvKey + "=read,write", authLogEnvKey + "=" + asked},
+		"echo up > "+marker+"; exec sleep 60")
+	waitFile(t, marker)
+
+	reply := sendRespawn(t, dir, "win-held", `{"window":"win-held","command":["touch `+respawned+`"]}`)
+	if !strings.Contains(reply, `"ok":false`) || !strings.Contains(reply, "admin grant") {
+		t.Fatalf("reply = %q, want a refusal naming the admin grant", reply)
+	}
+	var params map[string]any
+	if err := json.Unmarshal([]byte(waitFile(t, asked)), &params); err != nil {
+		t.Fatal(err)
+	}
+	if pid, _ := params["peer_pid"].(float64); int(pid) != os.Getpid() {
+		t.Errorf("the holder asked about %v, want this process, pid %d", params, os.Getpid())
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := os.Stat(respawned); err == nil {
+		t.Error("the refused request ran")
+	}
+	select {
+	case <-done:
+		t.Error("the holder ended on a refused request")
+	default:
+	}
+}
+
+// TestHolderRespawnsForAnAdminCaller: a caller the daemon says holds admin
+// is served.
+func TestHolderRespawnsForAnAdminCaller(t *testing.T) {
+	dir := shortDir(t)
+	marker := filepath.Join(dir, "ran")
+	respawned := filepath.Join(dir, "respawned")
+	startHolderEnv(t, dir, "win-adm", []string{authGrantsEnvKey + "=admin"}, "echo up > "+marker+"; exec sleep 60")
+	waitFile(t, marker)
+	reply := sendRespawn(t, dir, "win-adm", `{"window":"win-adm","command":["echo yes > `+respawned+`; exec sleep 60"]}`)
+	if !strings.Contains(reply, `"ok":true`) {
+		t.Fatalf("reply = %q, want the respawn served", reply)
+	}
+	waitFile(t, respawned)
+}
+
+// sendRespawn sends one request line to a holder and returns its reply.
+func sendRespawn(t *testing.T, dir, window, line string) string {
+	t.Helper()
+	conn, err := net.Dial("unix", paneSocket(dir, window))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	if _, err := conn.Write([]byte(line + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	reply, _ := bufio.NewReader(conn).ReadString('\n')
+	return reply
 }
 
 func TestEnsureDirClosesAnOpenDirectory(t *testing.T) {

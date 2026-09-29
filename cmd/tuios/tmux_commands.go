@@ -284,12 +284,22 @@ func newTmuxPaneCommand() *cobra.Command {
 			if dir == "" {
 				return errors.New("--dir is required")
 			}
+			window := os.Getenv("TUIOS_PANE_ID")
 			os.Exit(tmuxcompat.RunPane(tmuxcompat.PaneOptions{
 				Dir:     dir,
-				Window:  os.Getenv("TUIOS_PANE_ID"),
+				Window:  window,
 				Command: args,
 				Env:     env,
 				Shell:   os.Getenv("SHELL"),
+				// The holder's socket can be dialled without the shim, so the
+				// holder asks the daemon about the caller itself. A fresh
+				// connection each time: a request is rare, and a connection
+				// kept open could outlive a daemon restart.
+				Authorize: func(peerPID int) error {
+					caller := &lazyCaller{}
+					defer caller.close()
+					return tmuxcompat.RespawnAllowed(caller, peerPID, window)
+				},
 			}))
 			return nil
 		},
