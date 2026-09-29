@@ -122,7 +122,17 @@ func KittyAnimationVar(supported bool) string {
 // herdr pane. HERDR_SOCKET_PATH stays, since it names herdr's server and says
 // nothing about which pane a process is in; a pane tuios tells about its own
 // herdr protocol socket gets it replaced (see session.Manager.HerdrEnv).
-var hostMultiplexerVars = []string{"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"}
+//
+// An enclosing tuios is the same case. A daemon or a standalone tuios started
+// from a tuios pane inherits that pane's TUIOS_ variables, and its own panes
+// would name the outer pane, session and socket where they set none of their
+// own. The ones a pane sets for itself are set again after this filter.
+var hostMultiplexerVars = []string{
+	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID",
+	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
+	"TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN", "TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED",
+	"TUIOS_RESTORED",
+}
 
 // WithoutHostMultiplexer returns env with every assignment of the variables
 // in hostMultiplexerVars removed. The slice is filtered in place, so callers pass a copy
