@@ -1,12 +1,14 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/anmitsu/go-shlex"
 )
 
 // Which machine opens a link is the whole of this file, and it is the question
@@ -142,9 +144,13 @@ func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
 		return m.openDirectoryLink(path)
 	}
 
-	editor := linkEditor()
-	argv := append(strings.Fields(editor), path)
-	m.AddWindow(filepath.Base(path), argv...)
+	argv, err := editorArgv(m.Settings.SidebarEditor)
+	if err != nil {
+		m.LogError("Could not read the editor command: %v", err)
+		m.ShowNotification(editorCommandNote, "warning", m.Settings.NotificationDuration)
+		return nil
+	}
+	m.AddWindow(filepath.Base(path), append(argv, path)...)
 	m.ShowNotification("Opened the file in a new pane.", "success", m.Settings.NotificationDuration)
 	return nil
 }
@@ -167,10 +173,27 @@ func (m *OS) openDirectoryLink(path string) tea.Cmd {
 	return tea.SetClipboard(path)
 }
 
-// linkEditor is the argv the editor pane runs. $EDITOR then $VISUAL then vi, in
-// the order every other tool uses, and split on spaces so a value like
-// "code --wait" arrives as two arguments rather than as one file name with a
-// space in it.
+const editorCommandNote = "tuios can not read the File editor command. Change it in the sidebar settings."
+
+// editorArgv is the argv the editor pane runs. The File editor setting comes
+// first and $EDITOR, $VISUAL and vi follow. It is split the way a shell splits
+// words, so "code --wait" arrives as two arguments and a quoted path with a
+// space in it stays one. No shell runs it. Every path that opens a file in an
+// editor pane goes through here, so they all honour the setting and its quotes.
+func editorArgv(setting string) ([]string, error) {
+	editor := strings.TrimSpace(setting)
+	if editor == "" {
+		editor = linkEditor()
+	}
+	argv, err := shlex.Split(editor, true)
+	if err == nil && len(argv) == 0 {
+		err = errors.New("the editor command is empty")
+	}
+	return argv, err
+}
+
+// linkEditor is the editor command when the File editor setting is empty:
+// $EDITOR, then $VISUAL, then vi, in the order every other tool uses.
 func linkEditor() string {
 	for _, key := range []string{"EDITOR", "VISUAL"} {
 		if v := strings.TrimSpace(os.Getenv(key)); v != "" {

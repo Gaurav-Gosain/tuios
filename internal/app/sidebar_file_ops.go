@@ -7,14 +7,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
-	"github.com/anmitsu/go-shlex"
 )
 
 // # File actions on the rail
@@ -328,10 +326,7 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	editor := strings.TrimSpace(m.Settings.SidebarEditor)
-	if editor == "" {
-		editor = linkEditor()
-	}
+	editor := m.Settings.SidebarEditor
 	return func() tea.Msg {
 		return inspectEditTarget(path, editor)
 	}
@@ -363,9 +358,9 @@ func inspectEditTarget(path, editor string) fileEditMsg {
 	if n > 0 && !looksLikeText(sample[:n]) {
 		return msg.refuse("tuios can not edit that file. It is not a text file.", nil)
 	}
-	msg.Argv, err = shlex.Split(editor, true)
-	if err != nil || len(msg.Argv) == 0 {
-		return msg.refuse("tuios can not read the File editor command. Change it in the sidebar settings.", err)
+	msg.Argv, err = editorArgv(editor)
+	if err != nil {
+		return msg.refuse(editorCommandNote, err)
 	}
 	if _, err := exec.LookPath(msg.Argv[0]); err != nil {
 		return msg.refuse("tuios could not find the editor "+msg.Argv[0]+". Set the File editor in the sidebar settings.", err)
