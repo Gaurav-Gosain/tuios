@@ -1446,3 +1446,28 @@ const (
 
 // CopyEntries is every value appearance.selection.copy_entry takes.
 var CopyEntries = []string{CopyEntryCursor, CopyEntryCenter}
+
+// What happens when a program in a pane sets the clipboard with OSC 52:
+// appearance.selection.osc52_write.
+//
+// Any program's output can carry OSC 52, including a file an agent prints, so
+// the host clipboard is not handed to every pane. tmux goes further and
+// ignores these writes by default, but that breaks the yank in an editor over
+// ssh, which is what OSC 52 is mostly for, and that yank always comes from the
+// pane the user is typing in. So the default lets the focused pane write, and
+// says so on the dock each time. A write from any other pane waits for the
+// user to allow it, which is what ask does for every pane.
+//
+// Whatever the mode, the pane keeps its own copy, so the program that set it
+// reads it back with an OSC 52 query.
+const (
+	OSC52WriteOff     = "off"
+	OSC52WriteAsk     = "ask"
+	OSC52WriteFocused = "focused"
+	OSC52WriteOn      = "on"
+)
+
+// OSC52WriteModes is every value appearance.selection.osc52_write takes.
+var OSC52WriteModes = []string{
+	OSC52WriteOff, OSC52WriteAsk, OSC52WriteFocused, OSC52WriteOn,
+}

@@ -320,6 +320,9 @@ type Settings struct {
 	// CopyEntry is where copy mode puts its cursor on entry: one of
 	// CopyEntries.
 	CopyEntry string
+	// OSC52Write says what happens when a program in a pane sets the
+	// clipboard with OSC 52. One of OSC52WriteModes.
+	OSC52Write string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
@@ -700,6 +703,7 @@ func DefaultSettings() Settings {
 		CopyFlashStyle:              DefaultCopyFlashStyle,
 		MultiCopyFormat:             MultiCopyFormatPlain,
 		CopyEntry:                   CopyEntryCursor,
+		OSC52Write:                  OSC52WriteFocused,
 		HideScrollbar:               false,
 		WindowTitlePosition:         DefaultWindowTitlePosition,
 		WindowTitleFormat:           "",

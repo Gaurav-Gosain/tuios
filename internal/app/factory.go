@@ -341,7 +341,7 @@ func NewOS(opts OSOptions) *OS {
 	}
 
 	// Initialize clipboard channel for OSC 52 propagation
-	os.PendingClipboardSet = make(chan string, 1)
+	os.PendingClipboardSet = make(chan ClipboardSetMsg, 1)
 
 	// Initialize PTY subscription tracking for daemon sessions
 	if opts.IsDaemonSession {

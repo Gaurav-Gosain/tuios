@@ -631,6 +631,11 @@ var optionSpecs = []Option{
 		Description: "Where copy mode puts its cursor: on the terminal cursor or in the center",
 		Accepted:    CopyEntries, Default: CopyEntryCursor,
 	},
+	{
+		Path: "appearance.selection.osc52_write", Type: OptionString, Section: "selection",
+		Description: "What happens when a program in a pane sets the clipboard: off, ask, focused (the focused pane only, others ask) or on",
+		Accepted:    OSC52WriteModes, Default: OSC52WriteFocused,
+	},
 
 	// [appearance.sidebar]
 	{

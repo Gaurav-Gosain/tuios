@@ -82,10 +82,11 @@ func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 	if window == nil {
 		return
 	}
+	windowID := window.ID
 	window.ClipboardSetFunc = func(text string) {
 		if m.PendingClipboardSet != nil {
 			select {
-			case m.PendingClipboardSet <- text:
+			case m.PendingClipboardSet <- ClipboardSetMsg{Text: text, WindowID: windowID}:
 			default:
 				// Channel full, drop (non-blocking)
 			}

@@ -64,14 +64,12 @@ func pasteBlockedByCopyMode(w *terminal.Window) bool {
 	return w.InCopyMode()
 }
 
-// sendPaste writes text to one window's PTY, in bracketed-paste markers when
-// the app in that window has turned the mode on.
+// sendPaste pastes text into one window. It goes through Window.Paste, which
+// drops control characters, so a clipboard holding ESC[201~ cannot end the
+// bracketed paste early in any pane of the set and have the rest run as
+// typed input.
 func sendPaste(w *terminal.Window, text string) error {
-	pasteContent := text
-	if w.Terminal != nil && w.Terminal.BracketedPasteEnabled() {
-		pasteContent = "\x1b[200~" + pasteContent + "\x1b[201~"
-	}
-	return w.SendInput([]byte(pasteContent))
+	return w.Paste(text)
 }
 
 // handleClipboardPaste processes stored clipboard content and sends it to the focused

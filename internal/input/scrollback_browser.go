@@ -176,13 +176,9 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.ShowScrollbackBrowser = false
 		o.ScrollbackBrowser = nil
 
-		// Send text to terminal (with bracketed paste if supported)
-		data := []byte(text)
-		if focusedWindow.Terminal != nil && focusedWindow.Terminal.BracketedPasteEnabled() {
-			data = append([]byte("\x1b[200~"), data...)
-			data = append(data, []byte("\x1b[201~")...)
-		}
-		_ = focusedWindow.SendInput(data)
+		// Send the text as a paste. The line came from pane output, so it
+		// goes through the same sanitizing as any other paste.
+		_ = focusedWindow.Paste(text)
 		o.ShowNotification(
 			fmt.Sprintf("Pasted: %s", truncateForNotif(text, 30)),
 			"info", o.Settings.NotificationDuration,

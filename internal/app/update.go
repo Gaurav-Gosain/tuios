@@ -36,6 +36,9 @@ type WindowExitMsg struct {
 // ClipboardSetMsg carries clipboard content from a guest app (OSC 52) to bubbletea.
 type ClipboardSetMsg struct {
 	Text string
+	// WindowID is the pane that wrote it. Whether the write reaches the host
+	// clipboard can depend on whether that pane has the focus.
+	WindowID string
 }
 
 // SessionCreatedMsg carries the result of creating a detached session off the
@@ -93,8 +96,8 @@ func ListenForSessionCreate(ch chan SessionCreatedMsg) tea.Cmd {
 }
 
 // ListenForClipboardSet creates a command that listens for OSC 52 clipboard set events.
-func ListenForClipboardSet(ch chan string) tea.Cmd {
-	return listenOnce(ch, func(text string) tea.Msg { return ClipboardSetMsg{Text: text} })
+func ListenForClipboardSet(ch chan ClipboardSetMsg) tea.Cmd {
+	return listenOnce(ch, func(msg ClipboardSetMsg) tea.Msg { return msg })
 }
 
 // ScriptCommandMsg represents a command from a tape script to be executed.
@@ -1208,9 +1211,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case ClipboardSetMsg:
-		// Propagate clipboard from guest app to host terminal
+		// A pane set the clipboard. Whether the host clipboard gets it is
+		// appearance.selection.osc52_write's decision. See clipboard_osc52.go.
 		return m, tea.Batch(
-			tea.SetClipboard(msg.Text),
+			m.paneClipboardWrite(msg),
 			ListenForClipboardSet(m.PendingClipboardSet),
 		)
 

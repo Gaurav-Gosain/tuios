@@ -166,6 +166,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// Focus landing on a pane that finished turns while the person was
 	// away has the dock say what it did. A nil check when it did not.
 	cmd = tea.Batch(cmd, o.AgentRecapFetch())
+	// A click or a key may have allowed a pane's clipboard write.
+	cmd = tea.Batch(cmd, o.ClipboardApprovalCmd())
 
 	// Sync state to daemon after any input that might have changed state
 	// This ensures state persists across reconnects without explicit save

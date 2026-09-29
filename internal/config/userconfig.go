@@ -539,6 +539,9 @@ type SelectionConfig struct {
 	// CopyEntry is where copy mode puts its cursor when it starts: "cursor"
 	// (the terminal cursor, as tmux does) or "center" (the middle row).
 	CopyEntry string `toml:"copy_entry,omitempty"`
+	// OSC52Write says what happens when a program in a pane sets the
+	// clipboard with OSC 52: off, ask, focused or on. See OSC52WriteModes.
+	OSC52Write string `toml:"osc52_write,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -704,6 +707,7 @@ func DefaultConfig() *UserConfig {
 				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
 				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
 				MultiFormat: MultiCopyFormatPlain, CopyEntry: CopyEntryCursor,
+				OSC52Write: OSC52WriteFocused,
 			},
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
@@ -1884,6 +1888,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if slices.Contains(CopyEntries, cfg.Appearance.Selection.CopyEntry) {
 		s.CopyEntry = cfg.Appearance.Selection.CopyEntry
+	}
+	if slices.Contains(OSC52WriteModes, cfg.Appearance.Selection.OSC52Write) {
+		s.OSC52Write = cfg.Appearance.Selection.OSC52Write
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

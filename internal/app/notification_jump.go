@@ -60,6 +60,12 @@ func (m *OS) JumpToNotification() bool {
 // disagree about what "go there" means: FocusWindow already switches workspace,
 // and sidebarFocusWindow already switches session first.
 func (m *OS) jumpToNotifTarget(t NotifTarget) {
+	// A message that asks to let a pane set the clipboard is answered, not
+	// followed.
+	if t.ClipboardAsk != 0 {
+		m.allowClipboardAsk(t.ClipboardAsk)
+		return
+	}
 	// A message about mail lands on the thread, where the reply is, rather than
 	// on the pane that wrote. The marking read it may need is queued, since
 	// this runs inside handlers that return no command.

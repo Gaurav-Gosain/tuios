@@ -286,11 +286,9 @@ func (m *OS) runHint(window *terminal.Window, match hintMatch, action HintAction
 	switch action {
 	case HintType:
 		cmd := m.copyHint(window, match, "")
-		payload := match.text
-		if window.Terminal != nil && window.Terminal.BracketedPasteEnabled() {
-			payload = "\x1b[200~" + payload + "\x1b[201~"
-		}
-		if err := window.SendInput([]byte(payload)); err != nil {
+		// The match is pane output, so it is pasted with control
+		// characters removed, like any other paste.
+		if err := window.Paste(match.text); err != nil {
 			m.ShowNotification("Copied the text. Could not type it into the pane.", "warning", m.Settings.NotificationDuration)
 			return cmd
 		}

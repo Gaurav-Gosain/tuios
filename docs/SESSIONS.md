@@ -583,6 +583,29 @@ cursor. See [Copy mode](KEYBINDINGS.md#copy-mode) for the search keys.
 copy_entry = "cursor"
 ```
 
+`osc52_write` controls what happens when a program in a pane sets the
+clipboard with OSC 52. An editor uses OSC 52 to yank over ssh. Any output can
+also carry OSC 52, for example a file that a program prints.
+
+| Value | What happens |
+|---|---|
+| `off` | The host clipboard does not change. |
+| `ask` | The dock shows a message. Click the message to copy the text. |
+| `focused` | The focused pane copies, and the dock says so. Other panes ask. This is the default. |
+| `on` | Every pane copies. |
+
+In each mode, the pane keeps its own copy. The program reads it back with an
+OSC 52 query.
+
+```toml
+[appearance.selection]
+osc52_write = "focused"
+```
+
+A paste into a pane drops ESC and the other control characters from the text.
+Tabs and line breaks stay. Text that holds `ESC[201~` cannot end a bracketed
+paste early.
+
 The scrollback browser draws from the same two places: the theme for its
 chrome, and these settings for its search and selection, so a match there and
 a match in a pane are the same colour.

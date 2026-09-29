@@ -347,6 +347,12 @@ type OS struct {
 	// says nothing came back yet, and a terminal that asks the user first
 	// (Ghostty does) answers later. See ClaimPasteReply.
 	pasteAskedAt time.Time
+	// clipboardAsk is the pane clipboard write waiting for the user, and
+	// clipboardApproved the one the user allowed and not yet sent. See
+	// clipboard_osc52.go.
+	clipboardAsk      *clipboardAsk
+	clipboardAskSeq   uint64
+	clipboardApproved *string
 
 	// Performance optimization caches
 	cachedSeparator      string      // Cached dock separator, styled
@@ -837,7 +843,7 @@ type OS struct {
 	HookManager *hooks.Manager
 	// PendingClipboardSet receives clipboard content from guest apps via OSC 52.
 	// The bubbletea Update loop reads this and calls tea.SetClipboard().
-	PendingClipboardSet chan string
+	PendingClipboardSet chan ClipboardSetMsg
 	// PendingSessionCreate receives the outcome of a detached-session creation,
 	// which is a daemon round trip and must not run on the Update goroutine: it
 	// contends with the background session poll for the client's round-trip lock,
@@ -1535,6 +1541,9 @@ type NotifTarget struct {
 	// Thread, when set, is the mail thread the message is about: activating
 	// the message opens the mailbox on it rather than jumping to a pane.
 	Thread uint64
+	// ClipboardAsk, when set, names a pane's clipboard write that waits for
+	// the user: activating the message allows it. See clipboard_osc52.go.
+	ClipboardAsk uint64
 }
 
 // LogMessage represents a log entry with timestamp and level.
