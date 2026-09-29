@@ -103,13 +103,25 @@ func TestConform_CursorPositionReportUnderLeftMargin(t *testing.T) {
 }
 
 // TestConform_DeviceStatusReport covers the non-cursor half of DSR.
+//
+// DSR 5 asks whether the terminal is in working order, and CSI 0 n means yes
+// (VT510 reference manual, DSR-OS). The private marker in the report mirrors
+// the private marker in the request, so the two forms are answered in kind:
+// xterm does it with `reply.a_pintro = sp->private_function ? '?' : 0`
+// (charproc.c, CASE_DSR) and Ghostty writes the bare "\x1B[0n" for
+// .operating_status (stream_terminal.zig, deviceStatus). A guest that only
+// parses the bare form - ratatui-image's cap_parser waits for "[0n" - treats a
+// private-form answer as no answer at all.
 func TestConform_DeviceStatusReport(t *testing.T) {
-	// DSR 5 asks whether the terminal is in working order. CSI 0 n means yes
-	// (VT510 reference manual, DSR-OS). xterm answers with the private form
-	// CSI ? 0 n, which is what this emulator sends and what every guest
-	// accepts, so the case pins that rather than the bare ANSI form.
-	if got, want := reply(t, 80, 24, "\x1b[5n"), "\x1b[?0n"; got != want {
-		t.Errorf("DSR 5 replied %q, want %q", got, want)
+	for _, tc := range []struct{ name, in, want string }{
+		{"DSR 5", "\x1b[5n", "\x1b[0n"},
+		{"DSR 5, private", "\x1b[?5n", "\x1b[?0n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reply(t, 80, 24, tc.in); got != tc.want {
+				t.Errorf("%s replied %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

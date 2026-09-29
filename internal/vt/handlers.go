@@ -965,8 +965,17 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		switch n {
 		case 5: // Operating Status
 			// We're always ready ;)
+			// The bare form, because that is the reply to the bare query.
+			// xterm mirrors the private marker of the request (charproc.c,
+			// CASE_DSR: `reply.a_pintro = sp->private_function ? '?' : 0`)
+			// and Ghostty writes "\x1B[0n" for .operating_status
+			// (stream_terminal.zig, deviceStatus). A DECStatusReport here
+			// answers the standard query in the private form, which a guest
+			// parsing for "[0n" - what ratatui-image's cap_parser waits on -
+			// never matches, so its read loop parks in read(2) and the caller
+			// falls back to a capability the pane really has.
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
-			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
+			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.ANSIStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
 			line, col := e.reportedCursorPosition()
 			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(line, col))
@@ -984,6 +993,16 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		}
 
 		switch n {
+		case 5: // Operating Status, DEC private form
+			// The mirror image of the case above: xterm answers the private
+			// query with the private report, and DEC STD 070 lists `CSI ? Ps n`
+			// as a request of its own, so it is not one this terminal can
+			// decline. Ghostty declines it - the operating_status entry in its
+			// device_status.zig carries question = false, so reqFromInt(5, true)
+			// misses - but it answers the bare query correctly, which is the one
+			// every guest actually sends.
+			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
+			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
 			line, col := e.reportedCursorPosition()
 			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(line, col, 0)) // We don't support page numbers //nolint:errcheck
