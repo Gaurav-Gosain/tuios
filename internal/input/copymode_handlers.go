@@ -305,35 +305,29 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 
 	// Search
-	case "/":
-		cm.State = terminal.CopyModeSearch
-		cm.SearchQuery = ""
-		cm.SearchBackward = false
-		fx.ShowNotification("/", "info", 0) // Persistent until search complete
+	case "/", "?":
+		backward := keyStr == "?"
+		cm.BeginSearch(backward)
+		fx.ShowNotification(searchPrompt(backward), "info", 0) // Persistent until search complete
 		return
-	case "?":
-		cm.State = terminal.CopyModeSearch
-		cm.SearchQuery = ""
-		cm.SearchBackward = true
-		fx.ShowNotification("?", "info", 0) // Persistent until search complete
-		return
-	case "n":
-		// n goes forward for /, backward for ?
+	case "n", "N":
+		// n repeats the last search in its own direction, N in the opposite
+		// one: after ?, n goes up and N goes down, as in vim and tmux.
+		if len(cm.SearchMatches) == 0 {
+			break
+		}
+		backward := cm.SearchBackward
+		if keyStr == "N" {
+			backward = !backward
+		}
+		wrapped := false
 		for range count {
-			if cm.SearchBackward {
-				prevMatch(cm, window)
-			} else {
-				nextMatch(cm, window)
+			if stepMatch(cm, window, backward) {
+				wrapped = true
 			}
 		}
-	case "N":
-		// N goes backward for /, forward for ?
-		for range count {
-			if cm.SearchBackward {
-				nextMatch(cm, window)
-			} else {
-				prevMatch(cm, window)
-			}
+		if wrapped {
+			fx.ShowNotification(searchWrapMessage(backward), "info", s.NotificationDuration)
 		}
 	case "ctrl+l":
 		// Clear search highlighting (like vim's :noh)
@@ -365,11 +359,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
 	key := msg.Key()
 
-	// Determine search prefix based on direction
-	searchPrefix := "/"
-	if cm.SearchBackward {
-		searchPrefix = "?"
-	}
+	searchPrefix := searchPrompt(cm.SearchBackward)
 
 	switch key.Code {
 	case tea.KeyEnter, tea.KeyKpEnter:
@@ -380,9 +370,12 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
+		// Esc gives up the search: the cursor goes back to where the prompt
+		// opened, as it does in vim.
 		cm.State = terminal.CopyModeNormal
 		cm.SearchQuery = ""
 		cm.SearchMatches = nil
+		restoreSearchOrigin(cm, window)
 		fx.ShowNotification("", "info", 0)
 	case tea.KeyBackspace:
 		if len(cm.SearchQuery) > 0 {

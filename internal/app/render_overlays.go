@@ -617,7 +617,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// is for.
 		pal := theme.UI()
 		bg := pal.Surface
-		body := overlay.Style(bg).Foreground(pal.Fg).Render("/"+searchQuery) +
+		// The prompt names the direction the way vim and tmux do: / searches
+		// down, ? searches up.
+		prompt := "/"
+		if focusedWindow.CopyMode.SearchBackward {
+			prompt = "?"
+		}
+		body := overlay.Style(bg).Foreground(pal.Fg).Render(prompt+searchQuery) +
 			overlay.Cursor(" ", bg, pal.Fg)
 		switch {
 		case matchCount > 0:
