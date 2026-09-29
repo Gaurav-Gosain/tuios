@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -312,6 +311,7 @@ type fileEditMsg struct {
 	Path  string
 	Argv  []string
 	IsDir bool
+	Note  string
 	Err   error
 }
 
@@ -333,38 +333,49 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 		editor = linkEditor()
 	}
 	return func() tea.Msg {
-		msg := fileEditMsg{Path: path}
-		info, err := os.Stat(path)
-		if err != nil {
-			msg.Err = fmt.Errorf("could not inspect the file: %w", err)
-		} else if info.IsDir() {
-			msg.IsDir = true
-		} else if !info.Mode().IsRegular() {
-			msg.Err = fmt.Errorf("only regular text files can be edited")
-		} else {
-			file, err := os.Open(path)
-			if err != nil {
-				msg.Err = fmt.Errorf("could not read the file: %w", err)
-				return msg
-			}
-			defer file.Close()
-			var sample [512]byte
-			n, err := file.Read(sample[:])
-			if err != nil && err != io.EOF {
-				msg.Err = fmt.Errorf("could not read the file: %w", err)
-			} else if n > 0 && !looksLikeText(sample[:n]) {
-				msg.Err = fmt.Errorf("that file is not a text file")
-			} else {
-				msg.Argv, msg.Err = shlex.Split(editor, true)
-				if msg.Err != nil || len(msg.Argv) == 0 {
-					msg.Err = fmt.Errorf("check the File editor command in Sidebar settings")
-				} else if _, err := exec.LookPath(msg.Argv[0]); err != nil {
-					msg.Err = fmt.Errorf("editor %q is unavailable: %w", msg.Argv[0], err)
-				}
-			}
-		}
+		return inspectEditTarget(path, editor)
+	}
+}
+
+func inspectEditTarget(path, editor string) fileEditMsg {
+	msg := fileEditMsg{Path: path}
+	info, err := os.Stat(path)
+	if err != nil {
+		return msg.refuse("tuios could not read that file.", err)
+	}
+	if info.IsDir() {
+		msg.IsDir = true
 		return msg
 	}
+	if !info.Mode().IsRegular() {
+		return msg.refuse("tuios can edit only text files.", nil)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return msg.refuse("tuios could not read that file.", err)
+	}
+	defer file.Close()
+	var sample [512]byte
+	n, err := file.Read(sample[:])
+	if err != nil && err != io.EOF {
+		return msg.refuse("tuios could not read that file.", err)
+	}
+	if n > 0 && !looksLikeText(sample[:n]) {
+		return msg.refuse("tuios can not edit that file. It is not a text file.", nil)
+	}
+	msg.Argv, err = shlex.Split(editor, true)
+	if err != nil || len(msg.Argv) == 0 {
+		return msg.refuse("tuios can not read the File editor command. Change it in the sidebar settings.", err)
+	}
+	if _, err := exec.LookPath(msg.Argv[0]); err != nil {
+		return msg.refuse("tuios could not find the editor "+msg.Argv[0]+". Set the File editor in the sidebar settings.", err)
+	}
+	return msg
+}
+
+func (msg fileEditMsg) refuse(note string, err error) fileEditMsg {
+	msg.Note, msg.Err = note, err
+	return msg
 }
 
 func looksLikeText(sample []byte) bool {
@@ -380,8 +391,11 @@ func looksLikeText(sample []byte) bool {
 }
 
 func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
-	if msg.Err != nil {
-		m.ShowNotification(msg.Err.Error(), "warning", m.Settings.NotificationDuration)
+	if msg.Note != "" {
+		if msg.Err != nil {
+			m.LogError("Could not edit %s: %v", msg.Path, msg.Err)
+		}
+		m.ShowNotification(msg.Note, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if msg.IsDir {
@@ -390,7 +404,7 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	before := len(m.Windows)
 	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, msg.Path)...)
 	if !m.daemonWindowIntent && len(m.Windows) == before {
-		m.ShowNotification("Could not start the editor.", "error", m.Settings.NotificationDuration)
+		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.clearSidebarReturn()
