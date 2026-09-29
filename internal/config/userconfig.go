@@ -536,6 +536,9 @@ type SelectionConfig struct {
 	// MultiFormat is the format multi copy mode yanks in until the format
 	// key changes it: plain, markdown or json.
 	MultiFormat string `toml:"multi_format,omitempty"`
+	// CopyEntry is where copy mode puts its cursor when it starts: "cursor"
+	// (the terminal cursor, as tmux does) or "center" (the middle row).
+	CopyEntry string `toml:"copy_entry,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -700,7 +703,7 @@ func DefaultConfig() *UserConfig {
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
 				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
 				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
-				MultiFormat: MultiCopyFormatPlain,
+				MultiFormat: MultiCopyFormatPlain, CopyEntry: CopyEntryCursor,
 			},
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
@@ -1878,6 +1881,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if slices.Contains(MultiCopyFormats, cfg.Appearance.Selection.MultiFormat) {
 		s.MultiCopyFormat = cfg.Appearance.Selection.MultiFormat
+	}
+	if slices.Contains(CopyEntries, cfg.Appearance.Selection.CopyEntry) {
+		s.CopyEntry = cfg.Appearance.Selection.CopyEntry
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

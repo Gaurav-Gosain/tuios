@@ -317,6 +317,9 @@ type Settings struct {
 	// MultiCopyFormat is the format multi copy mode starts in: one of
 	// MultiCopyFormats.
 	MultiCopyFormat string
+	// CopyEntry is where copy mode puts its cursor on entry: one of
+	// CopyEntries.
+	CopyEntry string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
@@ -696,6 +699,7 @@ func DefaultSettings() Settings {
 		CopyFlashColor:              DefaultCopyFlashColor,
 		CopyFlashStyle:              DefaultCopyFlashStyle,
 		MultiCopyFormat:             MultiCopyFormatPlain,
+		CopyEntry:                   CopyEntryCursor,
 		HideScrollbar:               false,
 		WindowTitlePosition:         DefaultWindowTitlePosition,
 		WindowTitleFormat:           "",

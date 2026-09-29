@@ -62,18 +62,52 @@ func (w *Window) SetScrollbackMaxLines(maxLines int) {
 	}
 }
 
-// EnterCopyMode enters vim-style copy/scrollback mode.
-// This replaces both ScrollbackMode and SelectionMode with a unified vim interface.
+// EnterCopyMode enters vim-style copy/scrollback mode with the copy cursor on
+// the terminal cursor, clamped to the viewport. That is where tmux puts it, and
+// it is usually the prompt line, so a search starts from where the person was
+// typing rather than from an arbitrary row.
 func (w *Window) EnterCopyMode() {
+	x, y := w.copyEntryCursor()
+	w.enterCopyMode(x, y)
+}
+
+// EnterCopyModeCentered enters copy mode with the copy cursor at column 0 of
+// the middle row, the vim-style entry tuios used before the cursor entry. It is
+// what appearance.selection.copy_entry = "center" asks for.
+func (w *Window) EnterCopyModeCentered() {
+	w.enterCopyMode(0, w.ContentHeight()/2)
+}
+
+// copyEntryCursor is the terminal cursor clamped to the pane's content area.
+//
+// The lock is a try, not a wait, for the reason cursor rendering gives: a pane
+// in an output burst holds the exclusive side almost continuously, and entering
+// copy mode must not stall behind it. When the lock is busy the cursor the last
+// frame saw is used, which is at most a frame stale. The try also means a
+// caller that already holds the read lock cannot deadlock here.
+func (w *Window) copyEntryCursor() (int, int) {
+	pos := w.CachedCursor
+	if w.TryRLockIO() {
+		if w.Terminal != nil {
+			pos = w.Terminal.CursorPosition()
+		}
+		w.RUnlockIO()
+	}
+	maxX := max(w.ContentWidth()-1, 0)
+	maxY := max(w.ContentHeight()-1, 0)
+	return max(min(pos.X, maxX), 0), max(min(pos.Y, maxY), 0)
+}
+
+func (w *Window) enterCopyMode(x, y int) {
 	if w.CopyMode == nil {
 		w.CopyMode = &CopyMode{}
 	}
 
 	w.CopyMode.Active = true
 	w.CopyMode.State = CopyModeNormal
-	w.CopyMode.CursorX = 0
-	w.CopyMode.CursorY = w.Height / 2 // Start in MIDDLE (vim-style)
-	w.CopyMode.ScrollOffset = 0       // Start at live content
+	w.CopyMode.CursorX = x
+	w.CopyMode.CursorY = y
+	w.CopyMode.ScrollOffset = 0 // Start at live content
 	w.CopyMode.SearchQuery = ""
 	w.CopyMode.SearchMatches = nil
 	w.CopyMode.CurrentMatch = 0
@@ -92,9 +126,12 @@ func (w *Window) EnterCopyMode() {
 // scrollback on screen at all. Nothing about the session is announced and the
 // dock keeps showing terminal mode, so scrolling looks like scrolling.
 //
+// The cursor is hidden in an implicit session and the gesture places it, so
+// the entry row is the old middle row and no terminal lock is taken.
+//
 // See CopyMode.Implicit for what the flag changes.
 func (w *Window) EnterCopyModeImplicit() {
-	w.EnterCopyMode()
+	w.enterCopyMode(0, w.Height/2)
 	if w.CopyMode != nil {
 		w.CopyMode.Implicit = true
 	}

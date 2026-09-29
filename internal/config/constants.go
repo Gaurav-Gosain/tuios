@@ -1434,3 +1434,15 @@ const (
 var MultiCopyFormats = []string{
 	MultiCopyFormatPlain, MultiCopyFormatMarkdown, MultiCopyFormatJSON,
 }
+
+// Where copy mode puts its cursor on entry: appearance.selection.copy_entry.
+// The terminal cursor is the default because tmux does the same, and the
+// cursor is usually on the prompt line, which is where a search back through
+// the output wants to start.
+const (
+	CopyEntryCursor = "cursor"
+	CopyEntryCenter = "center"
+)
+
+// CopyEntries is every value appearance.selection.copy_entry takes.
+var CopyEntries = []string{CopyEntryCursor, CopyEntryCenter}

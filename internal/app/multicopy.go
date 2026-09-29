@@ -117,7 +117,7 @@ func (m *OS) EnterCopyModeFocused() {
 	}
 	if fw := m.GetFocusedWindow(); fw != nil {
 		m.ExitMultiCopyMode()
-		fw.EnterCopyMode()
+		m.enterCopyMode(fw)
 		m.ShowNotification("Copy mode (hjkl, q to exit)", "info", 2*m.Settings.NotificationDuration)
 	}
 }
@@ -146,7 +146,7 @@ func (m *OS) EnterMultiCopyMode() bool {
 		mc.Format = nextMultiCopyFormat("")
 	}
 	for _, w := range panes {
-		w.EnterCopyMode()
+		m.enterCopyMode(w)
 		mc.IDs = append(mc.IDs, w.ID)
 	}
 	m.MultiCopy = mc
