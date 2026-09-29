@@ -113,6 +113,7 @@ type GhosttyTerminal struct {
 	cachedAltScreen  atomic.Bool
 	cachedSyncOutput atomic.Bool
 	syncSetAtNanos   atomic.Int64
+	syncOpens        atomic.Uint64
 	cachedKittyFlags atomic.Int32
 	closed           atomic.Bool
 	// restorePending makes the lock-free getters flush a buffered restore
@@ -562,10 +563,7 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	}
 
 	sync, _ := t.term.Mode(gh.ModeSyncOutput)
-	if sync && !t.cachedSyncOutput.Load() {
-		t.syncSetAtNanos.Store(time.Now().UnixNano())
-	}
-	t.cachedSyncOutput.Store(sync)
+	t.noteSyncOutput(sync)
 
 	t.cachedKittyFlags.Store(int32(t.kittyKbd.CurrentFlags()))
 }
@@ -614,6 +612,22 @@ func (t *GhosttyTerminal) IsSyncActive() bool {
 		return false
 	}
 	return time.Now().UnixNano()-t.syncSetAtNanos.Load() < int64(syncMaxHold)
+}
+
+// SyncUpdate reports an open synchronized update and the serial naming it,
+// with the pure emulator's meaning.
+func (t *GhosttyTerminal) SyncUpdate() (open bool, serial uint64) {
+	return t.IsSyncActive(), t.syncOpens.Load()
+}
+
+// noteSyncOutput records the guest's synchronized-output mode. An update
+// opened from reset takes a new serial and a new hold deadline.
+func (t *GhosttyTerminal) noteSyncOutput(sync bool) {
+	if sync && !t.cachedSyncOutput.Load() {
+		t.syncSetAtNanos.Store(time.Now().UnixNano())
+		t.syncOpens.Add(1)
+	}
+	t.cachedSyncOutput.Store(sync)
 }
 
 // KittyKeyboardFlags returns the current kitty keyboard flags.

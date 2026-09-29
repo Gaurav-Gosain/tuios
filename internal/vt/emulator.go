@@ -99,6 +99,10 @@ type Emulator struct {
 	cachedInsertMode atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
+	// syncOpens counts the synchronized updates the guest has opened: it
+	// moves on a reset-to-set transition only, so a repeated 2026h inside one
+	// update keeps the serial of the update it extends. See SyncUpdate.
+	syncOpens atomic.Uint64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
 
@@ -1028,6 +1032,14 @@ func (e *Emulator) IsSyncActive() bool {
 		return false
 	}
 	return time.Now().UnixNano()-e.syncSetAtNanos.Load() < int64(syncMaxHold)
+}
+
+// SyncUpdate reports whether the guest has an open synchronized update, as
+// IsSyncActive does, and a serial that names that update. Two calls that both
+// report open with the same serial saw the same update; a different serial
+// means the one seen before has been closed and a new one opened. Thread-safe.
+func (e *Emulator) SyncUpdate() (open bool, serial uint64) {
+	return e.IsSyncActive(), e.syncOpens.Load()
 }
 
 // updateMouseModeCache recalculates the cached mouse mode flags.

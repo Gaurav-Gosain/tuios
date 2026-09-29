@@ -74,6 +74,11 @@ type KittyPassthrough struct {
 	nextHostID    uint32
 	pendingOutput []byte
 
+	// syncProbes and syncMarks hold back the part of pendingOutput that
+	// belongs to a guest's open synchronized update; see kitty_sync_hold.go.
+	syncProbes map[string]func() (open bool, serial uint64)
+	syncMarks  map[string]guestSyncMark
+
 	// lastFrameHash is the CRC32 of the last bitmap sent per (windowID,
 	// hostImageID) remote video stream. A browser re-sends identical frames
 	// while idle (only a cursor blink changes), so skipping an unchanged one
@@ -750,12 +755,7 @@ func (kp *KittyPassthrough) IsEnabled() bool {
 func (kp *KittyPassthrough) FlushPending() []byte {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
-	if len(kp.pendingOutput) == 0 {
-		return nil
-	}
-	out := kp.pendingOutput
-	kp.pendingOutput = nil
-	return out
+	return kp.takeReleasable()
 }
 
 // Synchronized output mode 2026 (supported by Kitty, Ghostty, WezTerm, etc.)
@@ -795,11 +795,23 @@ func (kp *KittyPassthrough) pendingGraphicsFull() bool {
 // wrapped in synchronized update sequences to prevent tearing/flickering.
 // Must be called while kp.mu is already held; the host write funnels through
 // writeHostSequence, which takes hostMu (kp.mu outer, hostMu inner).
+//
+// A guest's open synchronized update stays queued; see kitty_sync_hold.go.
 func (kp *KittyPassthrough) flushToHost() {
-	if len(kp.pendingOutput) > 0 && kp.hostOut != nil {
-		kp.writeHostSequence(syncBegin, kp.pendingOutput, syncEnd)
-		kp.pendingOutput = releaseScratch(kp.pendingOutput)
+	if len(kp.pendingOutput) == 0 || kp.hostOut == nil {
+		return
 	}
+	cut := kp.releasableLen()
+	if cut == 0 {
+		return
+	}
+	kp.writeHostSequence(syncBegin, kp.pendingOutput[:cut], syncEnd)
+	if cut < len(kp.pendingOutput) {
+		kp.dropReleased(cut)
+		return
+	}
+	kp.pendingOutput = releaseScratch(kp.pendingOutput)
+	kp.shiftSyncMarks(cut)
 }
 
 // HostImageID reports the id the host knows a window's guest image by. It is
