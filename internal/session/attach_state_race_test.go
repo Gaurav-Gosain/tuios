@@ -141,6 +141,15 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 		t.Fatal("the session already has shared borders, so the push below changes nothing")
 	}
 
+	// The hook below fires after an attach reply, and the first attach's
+	// handler goes on running after its reply reaches the test. Stored before
+	// that handler passes the hook, the hook ran on the first client's own
+	// connection goroutine: the push it sends waits behind the hook on that
+	// goroutine, so the daemon never applied it while the hook waited for it.
+	// The daemon serves one connection's messages in order, so a reply to a
+	// later request means the attach handler has returned.
+	waitForHandlerIdle(t, first)
+
 	// Ordered against the test the way the hook in the test above is.
 	hookDone := make(chan struct{})
 	var once sync.Once
@@ -212,6 +221,29 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 			if copies != 1 {
 				t.Fatalf("the client was sent the push %d times; a push reaches a peer once", copies)
 			}
+			return
+		}
+	}
+}
+
+// waitForHandlerIdle returns once the daemon has finished every message c sent
+// before it. It sends a list request and reads up to the reply, dropping what
+// comes first. c must not have a read loop running.
+func waitForHandlerIdle(t *testing.T, c *TUIClient) {
+	t.Helper()
+	msg, err := NewMessage(MsgList, nil)
+	if err != nil {
+		t.Fatalf("list message: %v", err)
+	}
+	if err := c.send(msg); err != nil {
+		t.Fatalf("send list: %v", err)
+	}
+	for {
+		resp, err := c.recv()
+		if err != nil {
+			t.Fatalf("wait for the list reply: %v", err)
+		}
+		if resp.Type == MsgSessionList {
 			return
 		}
 	}
