@@ -76,3 +76,12 @@ func TestNotifyPayloadIsCappedOnARuneBoundary(t *testing.T) {
 		}
 	}
 }
+
+// Tag characters and Hangul fillers draw nothing, so text holding them reads
+// as something other than what it is.
+func TestNotifyTextDropsInvisibleCharacters(t *testing.T) {
+	in := "ok\U000E0041\U000E007Fᅟᅠㅤﾠdone"
+	if got := notifyPlainText(in); got != "okdone" {
+		t.Fatalf("notifyPlainText(%q) = %q, want %q", in, got, "okdone")
+	}
+}

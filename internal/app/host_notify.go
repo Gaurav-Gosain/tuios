@@ -67,6 +67,12 @@ func notifyPlainText(s string) string {
 			// Zero-width and bidi formatting characters would let the text
 			// read as something other than what it holds.
 			continue
+		case r >= 0xe0000 && r <= 0xe007f:
+			// Tag characters draw nothing and can carry hidden text.
+			continue
+		case r == 0x115f, r == 0x1160, r == 0x3164, r == 0xffa0:
+			// Hangul fillers draw as blank space.
+			continue
 		default:
 			b.WriteRune(r)
 		}
