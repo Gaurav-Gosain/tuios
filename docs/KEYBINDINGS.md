@@ -29,7 +29,7 @@ A `super+` chord needs a terminal that sends the Super key. Most macOS terminals
 
 Four keys move focus to the window in a direction. Each key has a binding in window mode, in terminal mode, and after the prefix.
 
-| Direction | Window mode | Terminal mode | After `ctrl+b` |
+| Direction | Window mode | Terminal mode | After the prefix key |
 |---|---|---|---|
 | Left | `h` | `alt+left` | `left` |
 | Down | `j` | `alt+down` | `down` |
