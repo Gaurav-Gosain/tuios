@@ -125,31 +125,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
-		// While the Inbox's reply editor is open the paste is the reply's text,
-		// one line of it.
-		if o.InboxReplyOpen() {
-			o.InboxReplyType(strings.Join(strings.Fields(msg.Content), " "))
-			return o, nil
-		}
-		// Hints mode takes labels one key at a time. A paste, or an input
-		// method's commit that arrives as one, is not a label, and nothing
-		// typed while the labels are up may reach the pane.
-		if o.HintsOpen() {
-			return o, nil
-		}
-		// The multi copy save prompt takes a paste as its path, with line
-		// breaks and control characters removed. It must never reach a shell:
-		// a pasted path ending in a newline would run as a command.
-		if o.MultiCopy != nil && o.MultiCopy.Save != nil {
-			o.MultiCopySaveType(msg.Content)
-			return o, nil
-		}
-		// The review's line takes a paste as one line; with no line open
-		// the overlay drops it, since nothing under it may receive it.
-		if o.ReviewOpen() {
-			if o.ReviewEditing() {
-				o.ReviewEditorType(strings.Join(strings.Fields(msg.Content), " "))
-			}
+		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
 		}
 		if o.Mode == app.TerminalMode {
@@ -162,9 +138,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// The terminal answered, so the pending query's timeout is disarmed
 		// whatever mode this client is in.
 		o.NotePasteArrived()
-		// Only handle paste in terminal mode, and never into a pane under
-		// hints mode.
-		if o.Mode == app.TerminalMode && !o.HintsOpen() {
+		// An overlay takes the paste the same way it takes a terminal paste.
+		// Only handle paste in terminal mode.
+		if pasteTakenByOverlay(o, msg.Content) {
+			return o, nil
+		}
+		if o.Mode == app.TerminalMode {
 			o.ClipboardContent = msg.Content
 			handleClipboardPaste(o)
 		}
@@ -193,6 +172,41 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	}
 
 	return result, cmd
+}
+
+// pasteTakenByOverlay routes a paste to the overlay that owns input, if one
+// does, and reports whether the paste must go no further. It serves both the
+// terminal's bracketed paste (tea.PasteMsg) and the paste key's clipboard read
+// (tea.ClipboardMsg), so neither path can reach a pane the other protects.
+func pasteTakenByOverlay(o *app.OS, content string) bool {
+	// While the Inbox's reply editor is open the paste is the reply's text,
+	// one line of it.
+	if o.InboxReplyOpen() {
+		o.InboxReplyType(strings.Join(strings.Fields(content), " "))
+		return true
+	}
+	// Hints mode takes labels one key at a time. A paste, or an input
+	// method's commit that arrives as one, is not a label, and nothing
+	// typed while the labels are up may reach the pane.
+	if o.HintsOpen() {
+		return true
+	}
+	// The multi copy save prompt takes a paste as its path, with line
+	// breaks and control characters removed. It must never reach a shell:
+	// a pasted path ending in a newline would run as a command.
+	if o.MultiCopy != nil && o.MultiCopy.Save != nil {
+		o.MultiCopySaveType(content)
+		return true
+	}
+	// The review's line takes a paste as one line; with no line open
+	// the overlay drops it, since nothing under it may receive it.
+	if o.ReviewOpen() {
+		if o.ReviewEditing() {
+			o.ReviewEditorType(strings.Join(strings.Fields(content), " "))
+		}
+		return true
+	}
+	return false
 }
 
 // shouldShowQuitDialog checks if there are any terminals with active foreground processes
