@@ -8,23 +8,17 @@ import (
 
 	"github.com/adrg/xdg"
 
+	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 )
 
-// checkSSHAuth stops a bind that would hand a shell on this machine to anyone
-// who reaches the port, and answers with the commands that fix it.
+// checkSSHAuth stops a bind that has no authorized keys and no --no-auth, and
+// answers with the commands that fix it. Loopback is refused too: see
+// server.PlanSSHAuth.
 //
-// It is the SSH twin of checkTransportSecurity in cmd/tuios-web, and it is
-// deliberately the same shape. That command refuses a non-loopback bind with no
-// TLS and names --auto-tls, --cert or --insecure; this one refuses a
-// non-loopback bind with no keys and names an authorized_keys file or
-// --no-auth. Both share netutil.IsLoopbackHost, so neither can decide an
-// address is local while the other decides it is not.
-//
-// Nothing here asks a question first, for the reason the web command gives: a
-// prompt would make the same command do different things depending on whether
-// stdout is a terminal, and a server is started by unit files at least as often
-// as by hand.
+// Nothing here asks a question first: a prompt would make the same command do
+// different things depending on whether stdout is a terminal, and a server is
+// started by unit files at least as often as by hand.
 func checkSSHAuth(w io.Writer, f sshServerFlags) error {
 	_, err := server.PlanSSHAuth(f.host, f.authorizedKeys, f.noAuth)
 	if err == nil {
@@ -42,43 +36,40 @@ func checkSSHAuth(w io.Writer, f sshServerFlags) error {
 	// Printed here rather than carried in the error: fang reflows an error into
 	// a paragraph, which would run the commands together and leave nothing to
 	// copy.
+	who := "anyone who reaches port " + f.port
+	noAuthNote := "Only on a network you trust."
+	if netutil.IsLoopbackHost(f.host) {
+		who = "every user on this machine"
+		noAuthNote = "Every user on this machine can then open a shell as you."
+	}
 	fmt.Fprintf(w, `
-  %s is not this machine, and every connection to TUIOS gets a shell on this
-  machine. With no authentication that shell goes to anyone who reaches port
-  %s. So pick who you want to let in:
+  TUIOS found no authorized keys file, so it does not know who may connect.
+  Every connection gets a shell on this machine. With no authentication
+  that shell goes to %s. Pick one:
 
-  1. The holders of a public key you name. This is the normal answer.
+  1. Add your public key to the TUIOS keys file. This is the normal answer.
 
        mkdir -p %s
-       cat ~/.ssh/id_ed25519.pub >> %s
+       cat %s >> %s
        tuios ssh --host %s --port %s
 
-     TUIOS reads only %s.
-     To use ~/.ssh/authorized_keys, add --authorized-keys ~/.ssh/authorized_keys.
+  2. Use the keys that sshd accepts.
+
+       tuios ssh --host %s --port %s --authorized-keys ~/.ssh/authorized_keys
+
      TUIOS does not accept a key with options such as command=, from= or
-     restrict.
+     restrict. TUIOS does not apply the rules in sshd_config.
 
-  2. Yourself only, over a tunnel. TUIOS stays on this machine and no key
-     file is involved.
-
-       tuios ssh --port %s
-       ssh -L %s:localhost:%s <this-machine>
-
-     then run ssh -p %s localhost at the far end.
-
-  3. Anyone at all. Only on a network you trust.
+  3. Let every connection in. %s
 
        tuios ssh --host %s --port %s --no-auth
 
 `,
-		f.host,
-		f.port,
-		filepath.Dir(keyFile), keyFile,
+		who,
+		filepath.Dir(keyFile), server.PublicKeyHint(), keyFile,
 		f.host, f.port,
-		keyFile,
-		f.port,
-		f.port, f.port,
-		f.port,
+		f.host, f.port,
+		noAuthNote,
 		f.host, f.port)
 
 	return err

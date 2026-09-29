@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,9 +25,10 @@ func TestCheckSSHAuth(t *testing.T) {
 		flags   sshServerFlags
 		wantErr bool
 	}{
-		{"loopback needs nothing", sshServerFlags{host: "localhost", port: "2222"}, false},
+		{"loopback with no keys refuses", sshServerFlags{host: "localhost", port: "2222"}, true},
+		{"no-auth satisfies loopback", sshServerFlags{host: "localhost", port: "2222", noAuth: true}, false},
 		{"empty host listens on every interface and refuses", sshServerFlags{host: "", port: "2222"}, true},
-		{"127.0.0.1 needs nothing", sshServerFlags{host: "127.0.0.1", port: "2222"}, false},
+		{"127.0.0.1 with no keys refuses", sshServerFlags{host: "127.0.0.1", port: "2222"}, true},
 		{"LAN bind with no keys refuses", sshServerFlags{host: "192.168.1.31", port: "2222"}, true},
 		{"wildcard bind with no keys refuses", sshServerFlags{host: "0.0.0.0", port: "2222"}, true},
 		{"keys satisfy it", sshServerFlags{host: "192.168.1.31", port: "2222", authorizedKeys: keysFile}, false},
@@ -48,5 +50,24 @@ func TestCheckSSHAuth(t *testing.T) {
 				t.Fatalf("printed advice for a bind it accepted: %q", out.String())
 			}
 		})
+	}
+}
+
+// TestCheckSSHAuthOffersThreeWaysOut: a loopback bind with no keys file is
+// refused, and the refusal names the three ways to start.
+func TestCheckSSHAuthOffersThreeWaysOut(t *testing.T) {
+	var out bytes.Buffer
+	if err := checkSSHAuth(&out, sshServerFlags{host: "localhost", port: "2222"}); err == nil {
+		t.Fatal("a loopback bind with no keys file was served")
+	}
+	for _, want := range []string{
+		"authorized_keys\n",
+		"--authorized-keys ~/.ssh/authorized_keys",
+		"--no-auth",
+		"every user on this machine",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the refusal does not say %q:\n%s", want, out.String())
+		}
 	}
 }

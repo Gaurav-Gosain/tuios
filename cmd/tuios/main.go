@@ -203,13 +203,13 @@ Every connection gets a shell on this machine, so the server checks who is
 connecting. It reads public keys from ~/.config/tuios/authorized_keys. It does
 not read ~/.ssh/authorized_keys unless you name it with --authorized-keys.
 TUIOS does not accept a key with options such as command=, from= or restrict.
-A host outside this machine is refused until there are keys, or until you
-pass --no-auth.
+With no keys file, the server does not start, on localhost too, until you add
+keys, pass --authorized-keys, or pass --no-auth.
 
-To let your own key in:
+To let your own key in, use your public key file:
   mkdir -p ~/.config/tuios
   cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys`,
-		Example: `  # Start SSH server on default port
+		Example: `  # Start SSH server on default port (needs ~/.config/tuios/authorized_keys)
   tuios ssh
 
   # Start on custom port

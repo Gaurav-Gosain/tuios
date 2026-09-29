@@ -45,8 +45,8 @@ const ConfigAuthorizedKeys = "tuios/authorized_keys"
 // file they came from.
 //
 // A zero value means no file exists, which is not the same as a file holding
-// no keys. The first is "the user never configured this" and is allowed to run
-// unauthenticated on loopback; the second is a mistake and stops startup.
+// no keys. The first is "the user never configured this" and needs --no-auth
+// to run; the second is a mistake and stops startup.
 type AuthorizedKeys struct {
 	// Path is the file the keys were read from, empty when no candidate file
 	// exists. The handler re-reads this exact path rather than resolving the
@@ -72,16 +72,6 @@ func AuthorizedKeysCandidates(explicit string) []string {
 // defaultAuthorizedKeysPath is TUIOS's own keys file.
 func defaultAuthorizedKeysPath() string {
 	return filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)
-}
-
-// sshAuthorizedKeysPath is sshd's file for this user, or "" when the home
-// directory is unknown.
-func sshAuthorizedKeysPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".ssh", "authorized_keys")
 }
 
 // LoadAuthorizedKeys reads the first candidate file that exists.
@@ -230,12 +220,15 @@ func (p *SSHAuthPlan) Authenticated() bool { return p != nil && p.Keys.Enabled()
 // PlanSSHAuth decides how one bind authenticates, and refuses the bind that
 // cannot be served safely.
 //
-// It mirrors checkTransportSecurity in cmd/tuios-web, which refuses a
-// non-loopback bind that would carry keystrokes in clear text. Same shape, same
-// three outcomes: configured and allowed, loopback and allowed, non-loopback
-// and refused unless the operator opts out by hand. The two gates share
-// netutil.IsLoopbackHost so they cannot disagree about which address is on the
-// network.
+// Two outcomes: keys are configured and the bind is served, or nothing is
+// configured and the bind is refused unless the operator passes --no-auth.
+//
+// Loopback is refused too. It used to run with no authentication, and when
+// TUIOS stopped reading ~/.ssh/authorized_keys by itself, a user whose key
+// sat only there would have lost authentication in silence. Loopback is not
+// a boundary on a machine with other users either. TUIOS does not fall back
+// to ~/.ssh/authorized_keys for them: sshd_config can restrict those keys in
+// ways TUIOS cannot see.
 //
 // noAuth wins over a keys file, unlike --insecure in tuios-web, which a
 // certificate overrides. The reason is recovery: an operator locked out by a
@@ -253,11 +246,8 @@ func PlanSSHAuth(host, authorizedKeysPath string, noAuth bool) (*SSHAuthPlan, er
 	if keys.Enabled() {
 		return &SSHAuthPlan{Keys: keys}, nil
 	}
-	if !netutil.IsLoopbackHost(host) {
-		return nil, fmt.Errorf("%w on %s with no authentication: add a public key to %s, or pass --no-auth to accept it",
-			ErrNoSSHAuth, host, defaultAuthorizedKeysPath())
-	}
-	return &SSHAuthPlan{Warning: noAuthWarning(host, "TUIOS found no authorized keys file.")}, nil
+	return nil, fmt.Errorf("%w on %s: there is no %s. Add your public key to it, pass --authorized-keys, or pass --no-auth",
+		ErrNoSSHAuth, host, defaultAuthorizedKeysPath())
 }
 
 // noAuthWarning is the one loud line an unauthenticated server prints at
@@ -269,14 +259,23 @@ func noAuthWarning(host, why string) string {
 		who = "Anyone on this machine"
 	}
 	keyFile := defaultAuthorizedKeysPath()
-	msg := fmt.Sprintf("Warning: this SSH server does not check who connects. %s %s can open a shell as %s. To turn authentication on, add a public key to %s:\n  mkdir -p %s && cat ~/.ssh/id_ed25519.pub >> %s",
-		why, who, currentAccount(), keyFile, filepath.Dir(keyFile), keyFile)
-	if p := sshAuthorizedKeysPath(); p != "" {
-		if _, err := os.Stat(p); err == nil {
-			msg += fmt.Sprintf("\nTUIOS does not read %s by default. To use it, pass --authorized-keys %s.", p, p)
+	return fmt.Sprintf("Warning: this SSH server does not check who connects. %s %s can open a shell as %s. To turn authentication on, add a public key to %s:\n  mkdir -p %s && cat %s >> %s",
+		why, who, currentAccount(), keyFile, filepath.Dir(keyFile), PublicKeyHint(), keyFile)
+}
+
+// PublicKeyHint names a public key file of this user for the commands TUIOS
+// prints: the first of the usual ones that exists, or a placeholder.
+func PublicKeyHint() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "<your public key file>"
+	}
+	for _, name := range []string{"id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"} {
+		if _, err := os.Stat(filepath.Join(home, ".ssh", name)); err == nil {
+			return "~/.ssh/" + name
 		}
 	}
-	return msg
+	return "<your public key file>"
 }
 
 // currentAccount names the account a session's shells run as.

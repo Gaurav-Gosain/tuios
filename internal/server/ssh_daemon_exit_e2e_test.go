@@ -55,6 +55,7 @@ func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 			KeyPath:        filepath.Join(t.TempDir(), "host_key"),
 			DefaultSession: name,
 			Version:        "test",
+			NoAuth:         true, // this test is about daemon exit, not who may connect
 		})
 	}()
 	t.Cleanup(func() {

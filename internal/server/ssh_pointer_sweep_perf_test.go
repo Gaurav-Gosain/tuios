@@ -40,6 +40,7 @@ func TestPerfSSHPointerSweep(t *testing.T) {
 	go func() {
 		serveErr <- StartSSHServer(ctx, &SSHServerConfig{
 			Host: "127.0.0.1", Port: port, KeyPath: hostKey, Ephemeral: true, Version: "test",
+			NoAuth: true, // this test is about rendering, not who may connect
 		})
 	}()
 	t.Cleanup(func() {

@@ -192,10 +192,11 @@ func TestPlanSSHAuth(t *testing.T) {
 		wantErr           bool
 		wantAuthenticated bool
 	}{
-		{name: "loopback with no keys runs unauthenticated", host: "localhost"},
+		{name: "loopback with no keys refuses", host: "localhost", wantErr: true},
 		{name: "empty host listens on every interface and refuses", host: "", wantErr: true},
-		{name: "127.0.0.1 with no keys runs unauthenticated", host: "127.0.0.1"},
-		{name: "::1 with no keys runs unauthenticated", host: "::1"},
+		{name: "127.0.0.1 with no keys refuses", host: "127.0.0.1", wantErr: true},
+		{name: "::1 with no keys refuses", host: "::1", wantErr: true},
+		{name: "no-auth satisfies loopback", host: "127.0.0.1", noAuth: true},
 		{name: "LAN bind with no keys refuses", host: "192.168.1.31", wantErr: true},
 		{name: "wildcard bind with no keys refuses", host: "0.0.0.0", wantErr: true},
 		{name: "keys satisfy a LAN bind", host: "192.168.1.31", path: withKeys, wantAuthenticated: true},
@@ -232,47 +233,53 @@ func TestPlanSSHAuth(t *testing.T) {
 	}
 }
 
-// TestStartSSHServerRefusesNetworkBindWithNoKeys proves the refusal happens
-// before anything listens. A server that binds first and warns afterwards is
-// still an open port for as long as the operator takes to read.
-func TestStartSSHServerRefusesNetworkBindWithNoKeys(t *testing.T) {
-	port := freePort(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// TestStartSSHServerRefusesABindWithNoKeys proves the refusal happens before
+// anything listens, on a network bind and on loopback. A server that binds
+// first and warns afterwards is still an open port for as long as the operator
+// takes to read.
+func TestStartSSHServerRefusesABindWithNoKeys(t *testing.T) {
+	for _, host := range []string{"0.0.0.0", "127.0.0.1"} {
+		t.Run(host, func(t *testing.T) {
+			port := freePort(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- StartSSHServer(ctx, &SSHServerConfig{
-			Host:      "0.0.0.0",
-			Port:      port,
-			KeyPath:   filepath.Join(t.TempDir(), "host_key"),
-			Ephemeral: true,
-			Version:   "test",
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- StartSSHServer(ctx, &SSHServerConfig{
+					Host:      host,
+					Port:      port,
+					KeyPath:   filepath.Join(t.TempDir(), "host_key"),
+					Ephemeral: true,
+					Version:   "test",
+				})
+			}()
+
+			select {
+			case err := <-errCh:
+				if err == nil {
+					t.Fatalf("a bind on %s with no keys was served", host)
+				}
+				if !errors.Is(err, ErrNoSSHAuth) {
+					t.Fatalf("refused for the wrong reason: %v", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("the server did not refuse a bind on %s with no keys", host)
+			}
+
+			// And nothing is listening on the port it was asked for.
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), time.Second)
+			if err == nil {
+				_ = conn.Close()
+				t.Fatal("the refused bind left a listener behind")
+			}
 		})
-	}()
-
-	select {
-	case err := <-errCh:
-		if err == nil {
-			t.Fatal("a wildcard bind with no keys was served")
-		}
-		if !errors.Is(err, ErrNoSSHAuth) {
-			t.Fatalf("refused for the wrong reason: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the server did not refuse a wildcard bind with no keys")
-	}
-
-	// And nothing is listening on the port it was asked for.
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), time.Second)
-	if err == nil {
-		_ = conn.Close()
-		t.Fatal("the refused bind left a listener behind")
 	}
 }
 
 // startAuthenticatedServer starts the SSH server on loopback with keysFile as
-// its authorized keys, and returns the address once the port answers.
+// its authorized keys, and returns the address once the port answers. An empty
+// keysFile starts it with --no-auth, the only way to run with no keys.
 func startAuthenticatedServer(t *testing.T, keysFile string) string {
 	t.Helper()
 	port := freePort(t)
@@ -284,6 +291,7 @@ func startAuthenticatedServer(t *testing.T, keysFile string) string {
 			Port:               port,
 			KeyPath:            filepath.Join(t.TempDir(), "host_key"),
 			AuthorizedKeysPath: keysFile,
+			NoAuth:             keysFile == "",
 			Ephemeral:          true, // no daemon: keep the test self-contained
 			Version:            "test",
 		})
@@ -383,10 +391,9 @@ func TestSSHServerChecksTheKey(t *testing.T) {
 	})
 }
 
-// TestSSHServerWithNoKeysStillTakesAKeylessClient is the other half of the
-// promise: loopback with nothing configured keeps working, so the laptop user
-// who has never written a keys file still attaches with a bare ssh command.
-func TestSSHServerWithNoKeysStillTakesAKeylessClient(t *testing.T) {
+// TestSSHServerWithNoAuthTakesAKeylessClient: with --no-auth, a client that
+// offers no key still attaches with a bare ssh command.
+func TestSSHServerWithNoAuthTakesAKeylessClient(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping SSH integration test in short mode")
 	}
@@ -394,7 +401,7 @@ func TestSSHServerWithNoKeysStillTakesAKeylessClient(t *testing.T) {
 	addr := startAuthenticatedServer(t, "")
 	client, err := dialSSH(addr, nil)
 	if err != nil {
-		t.Fatalf("zero-config loopback attach broke: %v", err)
+		t.Fatalf("a --no-auth attach broke: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 	assertPaintsAFrame(t, client)

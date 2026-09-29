@@ -132,6 +132,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 			KeyPath:   hostKey,
 			Ephemeral: true,
 			Version:   "test",
+			NoAuth:    true, // this test is about the kitty path, not who may connect
 		})
 	}()
 	t.Cleanup(func() {

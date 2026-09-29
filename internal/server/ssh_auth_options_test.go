@@ -91,9 +91,10 @@ func TestNoSilentFallbackToSSHAuthorizedKeys(t *testing.T) {
 		t.Fatalf("TUIOS read %s without being asked to", keys.Path)
 	}
 
-	_, err = PlanSSHAuth("192.168.1.31", "", false)
-	if !errors.Is(err, ErrNoSSHAuth) {
-		t.Fatalf("a LAN bind with only ~/.ssh/authorized_keys was not refused: %v", err)
+	for _, host := range []string{"192.168.1.31", "127.0.0.1", "localhost"} {
+		if _, err := PlanSSHAuth(host, "", false); !errors.Is(err, ErrNoSSHAuth) {
+			t.Fatalf("a bind on %s with only ~/.ssh/authorized_keys was not refused: %v", host, err)
+		}
 	}
 
 	// Naming the file is the opt in.
