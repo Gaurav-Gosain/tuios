@@ -25,8 +25,8 @@ editor is missing or the file is not text. tuios can not edit a file that lists
 from a different machine than the one the session runs on.
 
 `Shift+Enter` needs a terminal that reports modified Enter, such as one that
-uses the Kitty keyboard protocol. On other terminals, bind `file_edit` to a
-different key.
+uses the Kitty keyboard protocol. On other terminals, use the Edit row in the
+context menu of a file, or bind `file_edit` to a different key.
 
 `Ctrl+B f` searches file names below the directory of the focused pane. It also
 works while you type in a pane. `Ctrl+F` searches while the sidebar has focus.
