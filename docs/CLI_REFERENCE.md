@@ -348,12 +348,14 @@ then attaches A.
 
 tuios finds the pane in these ways:
 
-- The client runs on the pane's terminal, or under the pane's shell.
-- The client has the pane's `TUIOS_` variables. A terminal window started
-  from a pane keeps them, so an attach from that window is also refused.
-  Use `--force` there.
+- The client runs on the pane's terminal.
 - The client's output reaches the pane. This finds `script`, and ssh from
   the pane to the same machine or to the tuios SSH server.
+- A client with no terminal runs under the pane's shell or has the pane's
+  `TUIOS_` variables.
+
+A terminal window started from a pane attaches. Its output does not reach
+the pane.
 
 tuios cannot find a client behind tmux or mosh in a pane. These redraw
 the screen and do not pass the output through. Such an attach goes
