@@ -307,8 +307,16 @@ func (s *Session) SetLayoutTreeOps(on bool) {
 	if same {
 		return
 	}
-	_ = s.mutateState(func(*SessionState) error {
+	_ = s.mutateState(func(state *SessionState) error {
 		s.treeOpsOff = !on
+		// Recorded as a tree op: it changes how trees travel and nothing a
+		// push carries, so a push built before it has missed nothing it could
+		// undo. Counted as a plain mutation, it made every push in flight
+		// stale, and the reconcile reverted a minimise, a move or a rename.
+		// With no origin it also reads as another client's tree op, so each
+		// client's next push is answered with the state, which is right: the
+		// trees are about to travel another way.
+		s.noteTreeOpLocked(state.Version+1, "")
 		return nil
 	})
 }

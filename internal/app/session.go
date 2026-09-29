@@ -725,7 +725,11 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// With tree ops the session's numbering is never taken: adoptSessionTrees
 	// reads each leaf through it to a window ID and gives the window this
 	// client's own number.
-	if !treeOps && adoptTopology && state.WindowToBSPID != nil {
+	//
+	// A current daemon with the ops off does not take this path either: the
+	// trees are read by window ID below (see adoptTreesByWindow).
+	gatedOff := !treeOps && m.DaemonClient != nil && m.DaemonClient.LayoutTreeOps()
+	if !treeOps && !gatedOff && adoptTopology && state.WindowToBSPID != nil {
 		if m.WindowToBSPID == nil {
 			m.WindowToBSPID = make(map[string]int, len(state.WindowToBSPID))
 		}
@@ -769,6 +773,10 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		// BSP resize sets the flag, but it moves the tree, and the tree it
 		// moved is the one that just arrived.
 		treeRetile = m.adoptSessionTrees(state) && m.UseBSPLayout && !m.UseScrollingLayout
+	} else if gatedOff {
+		if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
+			m.adoptTreesByWindow(state)
+		}
 	} else if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 		for ws, serialized := range state.WorkspaceTrees {

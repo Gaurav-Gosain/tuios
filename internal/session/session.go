@@ -961,6 +961,11 @@ type Session struct {
 	// treeOpsOff is set while a client too old for tree ops is attached.
 	// Guarded by stateMu. See SetLayoutTreeOps.
 	treeOpsOff bool
+	// treeOpsMu is held across working out whether the session's tree ops
+	// should be on and applying the answer, so two refreshes cannot apply
+	// their answers in the opposite order to the one they worked them out
+	// in. See Daemon.refreshTreeOps.
+	treeOpsMu sync.Mutex
 	// focusIntent is set by a focus verb inside mutateState, so the mutation
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
