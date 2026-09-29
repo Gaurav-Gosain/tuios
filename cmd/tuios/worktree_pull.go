@@ -222,14 +222,17 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 
 	patchNote := ""
 	if first.PatchBytes > 0 {
-		keep := filepath.Join(os.TempDir(), "tuios-pull-"+worktree.Slug(localBranch)+".patch")
 		patchPath := filepath.Join(tmp, "work.patch")
 		if err := os.WriteFile(patchPath, data[first.BundleBytes:], 0o600); err != nil {
 			return err
 		}
 		if err := worktree.ApplyPatch(made.Path, patchPath); err != nil {
-			_ = os.WriteFile(keep, data[first.BundleBytes:], 0o600)
-			patchNote = fmt.Sprintf("The uncommitted work did not apply (%v). It is kept at %s. Apply it with 'git apply %s' in %s.", err, keep, keep, made.Path)
+			keep, kerr := keepFailedPatch(localBranch, data[first.BundleBytes:])
+			if kerr != nil {
+				patchNote = fmt.Sprintf("The uncommitted work did not apply (%v), and TUIOS could not keep it (%v).", err, kerr)
+			} else {
+				patchNote = fmt.Sprintf("The uncommitted work did not apply (%v). It is kept at %s. Apply it with 'git apply %s' in %s.", err, keep, keep, made.Path)
+			}
 		}
 	}
 
@@ -333,4 +336,28 @@ func shortCommit(sha string) string {
 		return sha[:12]
 	}
 	return sha
+}
+
+// keepFailedPatch saves a patch that did not apply, so the user can apply it
+// by hand, and returns where it went.
+//
+// The name is random. The temporary directory is shared with every user on
+// the machine, and a fixed name there let another user make the file first,
+// then read the patch or change it before the user ran git apply on it.
+// os.CreateTemp opens the file with O_EXCL and mode 0600.
+func keepFailedPatch(branch string, patch []byte) (string, error) {
+	f, err := os.CreateTemp("", "tuios-pull-"+worktree.Slug(branch)+"-*.patch")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(patch); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
