@@ -41,6 +41,11 @@ type DisconnectHandler func(err error)
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
+	// Served and AllowNested are sent with every attach. Set them before the
+	// first one. See AttachPayload.
+	Served      bool
+	AllowNested bool
+
 	conn net.Conn
 	// br is the only reader of conn. A frame is read in three pieces, the
 	// length, the header and the payload, and reading them off the socket
@@ -358,6 +363,8 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		Width:       width,
 		Height:      height,
 		Reserve:     c.OwnLayoutReserve(),
+		Served:      c.Served,
+		AllowNested: c.AllowNested,
 	})
 	if err != nil {
 		return nil, err
@@ -393,7 +400,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
-		return nil, &attachRefused{msg: errPayload.Message, code: errPayload.Code}
+		return nil, refusalOf(errPayload)
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
@@ -407,6 +414,13 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 type attachRefused struct {
 	msg  string
 	code int
+	// session and unnamed come with ErrCodeNestedAttach. See ErrorPayload.
+	session string
+	unnamed bool
+}
+
+func refusalOf(p ErrorPayload) *attachRefused {
+	return &attachRefused{msg: p.Message, code: p.Code, session: p.Session, unnamed: p.Unnamed}
 }
 
 func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
@@ -554,6 +568,8 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
+		Served:      c.Served,
+		AllowNested: c.AllowNested,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)
@@ -584,7 +600,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
-		return nil, &attachRefused{msg: errPayload.Message, code: errPayload.Code}
+		return nil, refusalOf(errPayload)
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)

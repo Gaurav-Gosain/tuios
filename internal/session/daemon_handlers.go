@@ -82,10 +82,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// A client in a pane of the session it asks for would size the session
 	// by its own pane: see nested_attach.go. A link connection's peer is the
-	// proxy, not the client, so it is not placed.
+	// proxy, not the client, so it is not placed. A served client's size is its
+	// remote viewer's, and a forced attach asked to skip the check.
 	var inside *Session
 	var insideWhy string
-	if !cs.viaLink {
+	if !cs.viaLink && !payload.Served && !payload.AllowNested {
 		inside, insideWhy = d.paneSession(cs.peerPID)
 	}
 	if inside != nil && payload.SessionName == "" {

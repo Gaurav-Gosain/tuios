@@ -1427,7 +1427,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			s.onRemotePane(windowID, rp)
 		}
 	} else {
-		ptyInstance, cmd, err = ptyspawn.Spawn(width, height, func() *exec.Cmd {
+		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
 			var cmd *exec.Cmd
 			if len(command) > 0 {
 				cmd = exec.Command(command[0], command[1:]...)
@@ -1435,6 +1435,12 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnvFor(windowID, restored, extraEnv, command)
+			// The pane's terminal, so a tuios client can tell whether it runs
+			// on it or only inherited the pane's variables. See
+			// nested_attach.go.
+			if tty != "" {
+				cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
+			}
 			if stdout != nil {
 				cmd.Stdout = stdout
 			}

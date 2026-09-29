@@ -1544,6 +1544,14 @@ func createID() string {
 // recorded regardless of this flag.
 var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
 
+// nestedSwitchError is a switch the daemon refused because this client runs in
+// a pane of the target session. The client is back on its own session.
+type nestedSwitchError struct{ inside, target string }
+
+func (e *nestedSwitchError) Error() string {
+	return fmt.Sprintf("You are inside session %q. Switching this pane to %q would show tuios inside itself.", e.inside, e.target)
+}
+
 // SwitchToSession detaches from the current daemon session and attaches to another.
 // The connection to the daemon stays open. Only the session binding changes.
 //
@@ -1576,6 +1584,11 @@ func (m *OS) SwitchToSession(targetSession string) error {
 				m.SessionName = m.DaemonClient.SessionName()
 				m.rebuildForSession(rollback.State, savedWidth, savedHeight)
 				m.MarkAllDirty()
+			}
+			// This client runs in a pane of the target. The CLI's advice does
+			// not apply to a switch, so it is said here in the switch's terms.
+			if nested, ok := session.AsNestedAttach(err); ok && rollback.State != nil {
+				return &nestedSwitchError{inside: nested.Session, target: targetSession}
 			}
 			// Already says which session the client ended up on.
 			return err

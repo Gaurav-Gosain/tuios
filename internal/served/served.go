@@ -53,6 +53,10 @@ func NewModel(opts app.OSOptions, ov config.Overrides) *app.OS {
 // ephemeral session.
 func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *session.ClientCapabilities, pick func(available []string) string) (*app.OS, error) {
 	client := session.NewTUIClient()
+	// The size this client reports is the remote viewer's, not the size of
+	// the terminal this process runs in, so running in a pane of the session
+	// cannot start the resize loop and the daemon does not refuse it.
+	client.Served = true
 	if err := client.ConnectWithCapabilities(version, opts.Width, opts.Height, caps); err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}

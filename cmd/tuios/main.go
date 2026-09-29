@@ -530,6 +530,7 @@ the remote client. See 'tuios hosts --help'.`,
 	attachCmd.Flags().StringVar(&attachHost, "host", "", "Attach to a session on this host from the [hosts] table")
 	attachCmd.Flags().BoolVar(&attachSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
 	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
+	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
 	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool
