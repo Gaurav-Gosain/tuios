@@ -200,9 +200,15 @@ Session selection priority:
 Use --ephemeral for standalone sessions (legacy behavior).
 
 Every connection gets a shell on this machine, so the server checks who is
-connecting. It reads public keys from ~/.config/tuios/authorized_keys, and
-from ~/.ssh/authorized_keys when the first file is absent. A host outside this
-machine is refused until there are keys, or until you pass --no-auth.`,
+connecting. It reads public keys from ~/.config/tuios/authorized_keys. It does
+not read ~/.ssh/authorized_keys unless you name it with --authorized-keys.
+TUIOS does not accept a key with options such as command=, from= or restrict.
+A host outside this machine is refused until there are keys, or until you
+pass --no-auth.
+
+To let your own key in:
+  mkdir -p ~/.config/tuios
+  cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys`,
 		Example: `  # Start SSH server on default port
   tuios ssh
 
@@ -220,6 +226,9 @@ machine is refused until there are keys, or until you pass --no-auth.`,
 
   # Read the allowed public keys from somewhere else
   tuios ssh --authorized-keys /etc/tuios/authorized_keys
+
+  # Use the keys that sshd accepts (keys with options are not accepted)
+  tuios ssh --authorized-keys ~/.ssh/authorized_keys
 
   # Serve the network with no authentication (trusted networks only)
   tuios ssh --host 0.0.0.0 --no-auth`,
@@ -241,7 +250,7 @@ machine is refused until there are keys, or until you pass --no-auth.`,
 	sshCmd.Flags().StringVar(&sshKeyPath, "key-path", "", "Path to SSH host key (auto-generated if not specified)")
 	sshCmd.Flags().StringVar(&sshDefaultSession, "default-session", "", "Default session name for all connections")
 	sshCmd.Flags().BoolVar(&sshEphemeral, "ephemeral", false, "Run in ephemeral mode (standalone, no daemon)")
-	sshCmd.Flags().StringVar(&sshAuthorizedKeys, "authorized-keys", "", "Path to the public keys allowed to connect (default ~/.config/tuios/authorized_keys, then ~/.ssh/authorized_keys)")
+	sshCmd.Flags().StringVar(&sshAuthorizedKeys, "authorized-keys", "", "Path to the public keys allowed to connect (default ~/.config/tuios/authorized_keys). Keys with options are not accepted")
 	sshCmd.Flags().BoolVar(&sshNoAuth, "no-auth", false, "Give every connection a shell without checking who it is (trusted networks only)")
 
 	configCmd := &cobra.Command{

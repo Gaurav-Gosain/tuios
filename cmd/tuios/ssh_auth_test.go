@@ -25,7 +25,7 @@ func TestCheckSSHAuth(t *testing.T) {
 		wantErr bool
 	}{
 		{"loopback needs nothing", sshServerFlags{host: "localhost", port: "2222"}, false},
-		{"empty host is loopback", sshServerFlags{host: "", port: "2222"}, false},
+		{"empty host listens on every interface and refuses", sshServerFlags{host: "", port: "2222"}, true},
 		{"127.0.0.1 needs nothing", sshServerFlags{host: "127.0.0.1", port: "2222"}, false},
 		{"LAN bind with no keys refuses", sshServerFlags{host: "192.168.1.31", port: "2222"}, true},
 		{"wildcard bind with no keys refuses", sshServerFlags{host: "0.0.0.0", port: "2222"}, true},

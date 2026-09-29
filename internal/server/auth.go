@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"charm.land/ssh"
@@ -31,8 +32,13 @@ import (
 // keypair, so there is nothing new to store here and nothing to guess.
 
 // ConfigAuthorizedKeys is where TUIOS keeps its own list, relative to the XDG
-// config home. It is read before ~/.ssh/authorized_keys so a user can grant
-// TUIOS a narrower set than their sshd trusts.
+// config home.
+//
+// It is the only file read by default. ~/.ssh/authorized_keys used to be the
+// fallback, but that is sshd's file: its keys are often restricted with
+// command=, from= or restrict for backup jobs and deploy tools, and TUIOS
+// cannot apply those options. A key restricted there got a full session here.
+// That file is still usable, but only when --authorized-keys names it.
 const ConfigAuthorizedKeys = "tuios/authorized_keys"
 
 // AuthorizedKeys is the set of public keys that may open a session, and the
@@ -53,18 +59,29 @@ type AuthorizedKeys struct {
 // Enabled reports whether these keys turn authentication on.
 func (a *AuthorizedKeys) Enabled() bool { return a != nil && a.Path != "" }
 
-// AuthorizedKeysCandidates lists the files searched for public keys, in search
-// order. An explicit path is the only candidate: naming a file and being given
-// a different one is worse than being told the file is missing.
+// AuthorizedKeysCandidates lists the files searched for public keys: the
+// explicit path when one is given, otherwise TUIOS's own file. There is no
+// fallback to ~/.ssh/authorized_keys. See ConfigAuthorizedKeys.
 func AuthorizedKeysCandidates(explicit string) []string {
 	if explicit != "" {
 		return []string{explicit}
 	}
-	candidates := []string{filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)}
-	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates, filepath.Join(home, ".ssh", "authorized_keys"))
+	return []string{defaultAuthorizedKeysPath()}
+}
+
+// defaultAuthorizedKeysPath is TUIOS's own keys file.
+func defaultAuthorizedKeysPath() string {
+	return filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)
+}
+
+// sshAuthorizedKeysPath is sshd's file for this user, or "" when the home
+// directory is unknown.
+func sshAuthorizedKeysPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
 	}
-	return candidates
+	return filepath.Join(home, ".ssh", "authorized_keys")
 }
 
 // LoadAuthorizedKeys reads the first candidate file that exists.
@@ -92,12 +109,20 @@ func LoadAuthorizedKeys(explicit string) (*AuthorizedKeys, error) {
 		default:
 			return nil, fmt.Errorf("cannot read the authorized keys file %s: %w. Fix the file permissions, or move the file away", path, err)
 		}
-		keys, err := parseAuthorizedKeys(path, data)
+		keys, restricted, err := parseAuthorizedKeys(path, data)
 		if err != nil {
 			return nil, err
 		}
+		if len(keys) == 0 && len(restricted) > 0 {
+			return nil, fmt.Errorf("every key in %s has options (lines %s). TUIOS cannot apply options such as command=, from= or restrict, so it does not accept these keys. Add a key with no options, or name a different file with --authorized-keys",
+				path, joinLines(restricted))
+		}
 		if len(keys) == 0 {
 			return nil, fmt.Errorf("the authorized keys file %s holds no keys. Add a public key to it, or move the file away", path)
+		}
+		if len(restricted) > 0 {
+			log.Printf("[SSH] auth: TUIOS does not accept the keys with options in %s (lines %s). It cannot apply options such as command=, from= or restrict.",
+				path, joinLines(restricted))
 		}
 		return &AuthorizedKeys{Path: path, Keys: keys}, nil
 	}
@@ -111,20 +136,40 @@ func LoadAuthorizedKeys(explicit string) (*AuthorizedKeys, error) {
 // line, which is the wrong trade here: a typo in the one file that decides who
 // gets a shell should be reported while the operator is watching, not
 // discovered later as a key that never worked.
-func parseAuthorizedKeys(path string, data []byte) ([]ssh.PublicKey, error) {
-	var keys []ssh.PublicKey
+//
+// A key with options is left out of keys and its line number is returned in
+// restricted. The options (command=, from=, restrict, cert-authority,
+// no-pty and the rest) each narrow what sshd lets that key do, and TUIOS can
+// apply none of them: every session here is a full interactive TUIOS. Ignoring
+// the options would hand the key more than the file grants it, so the key is
+// not accepted at all. A cert-authority line names a CA, not a user key, and
+// accepting it as a user key would be wrong in a different way.
+func parseAuthorizedKeys(path string, data []byte) (keys []ssh.PublicKey, restricted []int, err error) {
 	for i, raw := range strings.Split(string(data), "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		key, _, options, _, err := ssh.ParseAuthorizedKey([]byte(line))
 		if err != nil {
-			return nil, fmt.Errorf("line %d of %s is not a public key: %w. Fix the line, or delete it", i+1, path, err)
+			return nil, nil, fmt.Errorf("line %d of %s is not a public key: %w. Fix the line, or delete it", i+1, path, err)
+		}
+		if len(options) > 0 {
+			restricted = append(restricted, i+1)
+			continue
 		}
 		keys = append(keys, key)
 	}
-	return keys, nil
+	return keys, restricted, nil
+}
+
+// joinLines formats line numbers for a message.
+func joinLines(lines []int) string {
+	parts := make([]string, len(lines))
+	for i, n := range lines {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // readAuthorizedKeysPath reads and parses one known file, for the auth handler.
@@ -133,7 +178,8 @@ func readAuthorizedKeysPath(path string) ([]ssh.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseAuthorizedKeys(path, data)
+	keys, _, err := parseAuthorizedKeys(path, data)
+	return keys, err
 }
 
 // publicKeyHandler admits a connection whose key is in the authorized keys
@@ -209,7 +255,7 @@ func PlanSSHAuth(host, authorizedKeysPath string, noAuth bool) (*SSHAuthPlan, er
 	}
 	if !netutil.IsLoopbackHost(host) {
 		return nil, fmt.Errorf("%w on %s with no authentication: add a public key to %s, or pass --no-auth to accept it",
-			ErrNoSSHAuth, host, filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys))
+			ErrNoSSHAuth, host, defaultAuthorizedKeysPath())
 	}
 	return &SSHAuthPlan{Warning: noAuthWarning(host, "TUIOS found no authorized keys file.")}, nil
 }
@@ -222,8 +268,15 @@ func noAuthWarning(host, why string) string {
 	if netutil.IsLoopbackHost(host) {
 		who = "Anyone on this machine"
 	}
-	return fmt.Sprintf("Warning: this SSH server does not check who connects. %s %s can open a shell as %s. Add a public key to %s to turn authentication on.",
-		why, who, currentAccount(), filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys))
+	keyFile := defaultAuthorizedKeysPath()
+	msg := fmt.Sprintf("Warning: this SSH server does not check who connects. %s %s can open a shell as %s. To turn authentication on, add a public key to %s:\n  mkdir -p %s && cat ~/.ssh/id_ed25519.pub >> %s",
+		why, who, currentAccount(), keyFile, filepath.Dir(keyFile), keyFile)
+	if p := sshAuthorizedKeysPath(); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			msg += fmt.Sprintf("\nTUIOS does not read %s by default. To use it, pass --authorized-keys %s.", p, p)
+		}
+	}
+	return msg
 }
 
 // currentAccount names the account a session's shells run as.

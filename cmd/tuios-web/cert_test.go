@@ -67,7 +67,7 @@ func TestCheckTransportSecurity(t *testing.T) {
 		wantErr bool
 	}{
 		{"loopback needs nothing", certFlags{host: "localhost"}, false},
-		{"empty host is loopback", certFlags{host: ""}, false},
+		{"empty host listens on every interface and refuses", certFlags{host: ""}, true},
 		{"127.0.0.1 needs nothing", certFlags{host: "127.0.0.1"}, false},
 		{"LAN bind in clear text refuses", certFlags{host: "192.168.1.31"}, true},
 		{"wildcard bind in clear text refuses", certFlags{host: "0.0.0.0"}, true},

@@ -142,9 +142,9 @@ func TestLoadAuthorizedKeys(t *testing.T) {
 	})
 }
 
-// TestAuthorizedKeysSearchOrder proves the two default locations, and which one
-// wins. TestMain has already pointed HOME and XDG_CONFIG_HOME at a throwaway
-// tree, so these are the real production paths and not a mock of them.
+// TestAuthorizedKeysSearchOrder proves the default location. TestMain has
+// already pointed HOME and XDG_CONFIG_HOME at a throwaway tree, so these are
+// the real production paths and not a mock of them.
 func TestAuthorizedKeysSearchOrder(t *testing.T) {
 	_, configLine := newTestKey(t)
 	_, sshLine := newTestKey(t)
@@ -156,24 +156,24 @@ func TestAuthorizedKeysSearchOrder(t *testing.T) {
 	sshPath := filepath.Join(home, ".ssh", "authorized_keys")
 	configPath := filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)
 
-	// ~/.ssh/authorized_keys alone is enough.
+	// ~/.ssh/authorized_keys alone turns nothing on.
 	writeFile(t, sshPath, sshLine, 0o600)
 	keys, err := LoadAuthorizedKeys("")
 	if err != nil {
 		t.Fatalf("load with only ~/.ssh: %v", err)
 	}
-	if keys.Path != sshPath {
-		t.Fatalf("want the ~/.ssh file, got %q", keys.Path)
+	if keys.Enabled() {
+		t.Fatalf("read %q without being asked to", keys.Path)
 	}
 
-	// The TUIOS file wins when both exist.
+	// The TUIOS file is read.
 	writeFile(t, configPath, configLine, 0o600)
 	keys, err = LoadAuthorizedKeys("")
 	if err != nil {
 		t.Fatalf("load with both files: %v", err)
 	}
 	if keys.Path != configPath {
-		t.Fatalf("want the tuios file to win, got %q", keys.Path)
+		t.Fatalf("want the tuios file, got %q", keys.Path)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestPlanSSHAuth(t *testing.T) {
 		wantAuthenticated bool
 	}{
 		{name: "loopback with no keys runs unauthenticated", host: "localhost"},
-		{name: "empty host is loopback", host: ""},
+		{name: "empty host listens on every interface and refuses", host: "", wantErr: true},
 		{name: "127.0.0.1 with no keys runs unauthenticated", host: "127.0.0.1"},
 		{name: "::1 with no keys runs unauthenticated", host: "::1"},
 		{name: "LAN bind with no keys refuses", host: "192.168.1.31", wantErr: true},

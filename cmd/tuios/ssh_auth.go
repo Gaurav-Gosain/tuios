@@ -53,9 +53,10 @@ func checkSSHAuth(w io.Writer, f sshServerFlags) error {
        cat ~/.ssh/id_ed25519.pub >> %s
        tuios ssh --host %s --port %s
 
-     TUIOS reads %s first. When that file
-     is absent it reads ~/.ssh/authorized_keys, so a machine that already
-     accepts your key over ssh needs no new file.
+     TUIOS reads only %s.
+     To use ~/.ssh/authorized_keys, add --authorized-keys ~/.ssh/authorized_keys.
+     TUIOS does not accept a key with options such as command=, from= or
+     restrict.
 
   2. Yourself only, over a tunnel. TUIOS stays on this machine and no key
      file is involved.

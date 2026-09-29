@@ -10,8 +10,11 @@ import "net"
 // text, and the SSH server refuses one with no authentication. They share this
 // one function because "is this address on the network" is the one question
 // they must agree on.
+//
+// An empty host is not loopback. The servers join it with the port into
+// ":port", which listens on every interface.
 func IsLoopbackHost(host string) bool {
-	if host == "" || host == "localhost" {
+	if host == "localhost" {
 		return true
 	}
 	if h, _, err := net.SplitHostPort(host); err == nil {
