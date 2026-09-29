@@ -17,8 +17,34 @@ func (d *Daemon) getSessionClientCount(sessionID string) int {
 	return count
 }
 
+// minClientWidth and minClientHeight are the smallest size a client counts as
+// in the session's size. A smaller client is counted at this size.
+//
+// It is the guard against the loop nested_attach.go describes, for the client
+// the daemon could not place in a pane. That client's size is the session's
+// less the chrome, so without a floor the minimum ratchets down to 1x1 and the
+// client redraws without end. With a floor the ratchet stops: the client
+// reports less than the floor, it counts as the floor, the session keeps the
+// size it already has, and nothing is broadcast. A value below the floor is
+// clamped rather than ignored, because ignoring it grows the session back,
+// which grows the pane, which lets the client count again: a loop that never
+// settles.
+//
+// The floor is well under the smallest terminal the client starts in (40x12,
+// see checkTerminalSize), so a real small client is not overruled by it.
+const (
+	minClientWidth  = 20
+	minClientHeight = 6
+)
+
+// clampClientSize applies the floor to one client's size.
+func clampClientSize(w, h int) (int, int) {
+	return max(w, minClientWidth), max(h, minClientHeight)
+}
+
 // calculateEffectiveSize returns the minimum dimensions across all clients in a session.
 // This is used for multi-client rendering where all clients need to see the same content.
+// Each client counts at no less than minClientWidth x minClientHeight.
 func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -37,6 +63,7 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 		if cw == 0 || ch == 0 {
 			continue
 		}
+		cw, ch = clampClientSize(cw, ch)
 		if first {
 			width, height = cw, ch
 			first = false

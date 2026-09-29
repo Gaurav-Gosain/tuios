@@ -177,13 +177,16 @@ func TestPeerPIDIsTheCaller(t *testing.T) {
 }
 
 // TestAPaneAttachIsIssuedNoNonce covers the route around the refusal: an agent
-// that attaches from its pane to get the nonce the person's replies carry.
+// that attaches from its pane to get the nonce the person's replies carry. The
+// attach is to another session, because an attach to the pane's own session is
+// refused outright (nested_attach.go).
 func TestAPaneAttachIsIssuedNoNonce(t *testing.T) {
 	skipWithoutPeerPID(t)
 	d, sp := startTestDaemon(t)
 	sess, _, b := twoWindowSession(t, d, "nonce")
+	makeSessionWithWindow(t, d, "nonce-other")
 	out := filepath.Join(t.TempDir(), "out")
-	runInPane(t, d, sess, b, helperCommand(t, sp, out, "attach", "nonce"))
+	runInPane(t, d, sess, b, helperCommand(t, sp, out, "attach", "nonce-other"))
 	if got := waitHelper(t, out); got != "nonce:" {
 		t.Errorf("an attach from a pane got %q, want no nonce", got)
 	}

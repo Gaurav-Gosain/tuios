@@ -336,6 +336,11 @@ tuios attach mysession --theme nord  # Attach with different theme
 tuios attach --host build api  # Attach the session api on the host build
 ```
 
+Inside a tuios pane, `tuios attach` refuses to attach the session that holds
+the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
+it does not name a session. To show a different session in the pane, name
+that session. To attach the same session, open a new terminal outside tuios.
+
 ### `tuios ls`
 
 List all TUIOS sessions.

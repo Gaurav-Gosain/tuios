@@ -393,7 +393,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
-		return nil, &attachRefused{msg: errPayload.Message}
+		return nil, &attachRefused{msg: errPayload.Message, code: errPayload.Code}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
@@ -404,7 +404,10 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 // to one that never got an answer at all. Only the first is worth a second round
 // trip: if the daemon is not replying, asking it again doubles the wait for an
 // answer that is not coming.
-type attachRefused struct{ msg string }
+type attachRefused struct {
+	msg  string
+	code int
+}
 
 func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
 
@@ -581,7 +584,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
-		return nil, &attachRefused{msg: errPayload.Message}
+		return nil, &attachRefused{msg: errPayload.Message, code: errPayload.Code}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)

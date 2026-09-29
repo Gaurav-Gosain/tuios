@@ -24,6 +24,12 @@ import (
 )
 
 func runAttach(sessionName string, createIfMissing bool) error {
+	// First of all, because the refusal is the whole answer: a client in a pane
+	// of the session it asks for sizes the session by its own pane (#235).
+	if err := session.CheckNestedAttach(sessionName); err != nil {
+		return &diagnosticError{What: err.Error(), Err: err}
+	}
+
 	// Check the terminal before anything else: a session that cannot be
 	// rendered is much harder to diagnose once the TUI has taken the screen.
 	if err := checkTerminal(); err != nil {
@@ -295,6 +301,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	if err != nil {
 		names := client.AvailableSessionNames()
 		_ = client.Close()
+		if nested, ok := session.AsNestedAttach(err); ok {
+			return &diagnosticError{What: nested.Error(), Err: err}
+		}
 		if host != "" {
 			return explainMissingHostSession(host, sessionName, names, err)
 		}
