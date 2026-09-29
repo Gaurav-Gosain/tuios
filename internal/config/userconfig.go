@@ -273,6 +273,7 @@ type AppearanceConfig struct {
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
+	DimMultifocus     bool   `toml:"dim_multifocus"`      // Dim the panes in the multifocus set too (default: false)
 	// The backgrounds tuios paints on cells that have none of their own. Each
 	// takes off, theme or #RRGGBB. background is the default for every
 	// surface; a surface's own key overrides it, and empty follows it. See
@@ -1893,6 +1894,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
+	s.DimMultifocus = cfg.Appearance.DimMultifocus
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it
 	// is read through the config globals the render path already goes to and

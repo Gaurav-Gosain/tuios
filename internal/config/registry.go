@@ -490,6 +490,10 @@ var ActionDescriptions = map[string]string{
 	"select_window_8":    "Select window 8",
 	"select_window_9":    "Select window 9",
 
+	// Multifocus. Neither action has a default key.
+	"toggle_multifocus_active": "Add or remove the focused pane from multifocus",
+	"toggle_multifocus_all":    "Add all panes on the workspace to multifocus, or clear it",
+
 	// Workspaces
 	"switch_workspace_1": "Switch to workspace 1",
 	"switch_workspace_2": "Switch to workspace 2",

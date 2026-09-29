@@ -501,6 +501,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Toggle multifocus on all panes",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleMultifocusAll()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Clear multifocus",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {

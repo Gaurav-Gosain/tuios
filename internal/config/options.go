@@ -400,6 +400,11 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: DimUnfocusedMax,
 		Percent: true,
 	},
+	{
+		Path: "appearance.dim_multifocus", Type: OptionBool, Section: "appearance",
+		Description: "Dim the panes in the multifocus set like other panes you are not in",
+		Default:     "false",
+	},
 	// The backgrounds. appearance.background is the default for every surface;
 	// each surface's own option overrides it, and empty follows it. See
 	// ResolveBackground.

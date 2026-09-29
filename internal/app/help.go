@@ -40,6 +40,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 				"terminal_focus_up", "terminal_focus_down",
 				"copy_selection", "focus_sidebar",
 				"next_session", "prev_session",
+				"toggle_multifocus_active", "toggle_multifocus_all",
 			}),
 		},
 		{

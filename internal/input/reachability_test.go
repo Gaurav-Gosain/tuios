@@ -418,6 +418,11 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"resize_height_20": "user binding",
 	"resize_height_30": "user binding",
 	"resize_height_40": "user binding",
+
+	// Multifocus toggles. The palette has a row for each, and a user binds
+	// them where they want them (issue #232).
+	"toggle_multifocus_active": "palette row, user binding",
+	"toggle_multifocus_all":    "palette row, user binding",
 	// "," is open_settings, so this half of the master resize ships unbound.
 	"resize_master_shrink_left": "user binding",
 

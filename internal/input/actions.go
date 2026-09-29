@@ -236,6 +236,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
 
+	// Multifocus actions (see multifocus_actions.go)
+	d.registerMultifocusHandlers()
+
 	// Tape manager actions
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
 	d.Register("stop_recording", handleStopRecording)
