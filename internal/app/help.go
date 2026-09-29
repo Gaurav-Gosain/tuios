@@ -528,7 +528,8 @@ func generateCopyModeBindings(s *config.Settings) []HelpBinding {
 		{Keys: []string{"0, ^, $"}, Description: "Line start/first/end", Category: "Copy Mode"},
 		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+u, ctrl+d"}, Description: "Half page up/down", Category: "Copy Mode"},
-		{Keys: []string{"/, ?, n, N"}, Description: "Search", Category: "Copy Mode"},
+		{Keys: []string{"/, ?"}, Description: "Search forward/backward", Category: "Copy Mode"},
+		{Keys: []string{"n, N"}, Description: "Repeat search/reverse", Category: "Copy Mode"},
 		{Keys: []string{"v, V"}, Description: "Visual char/line", Category: "Copy Mode"},
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
@@ -592,7 +593,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_workspace_switcher",
 		"prefix_toggle_sidebar", "prefix_explore",
 		"prefix_jump_notif", "prefix_mail", "prefix_inbox", "prefix_next_attention",
-		"hints",
+		"hints", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
 		// prefix_review and prefix_next_finished are listed only in the
 		// Agents section, which waits for an agent to have been seen.
 	}
