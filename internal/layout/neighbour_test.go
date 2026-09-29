@@ -2,6 +2,8 @@ package layout
 
 import (
 	"fmt"
+	"maps"
+	"math/rand"
 	"slices"
 	"testing"
 )
@@ -13,34 +15,21 @@ func (s Side) String() string {
 }
 
 // touching is every rectangle in rects that meets from along the side, with
-// at least two cells in common across it (one, for a pane one cell across). slack is how far apart the facing
-// edges may be: the gap between panes, plus one for a shared border.
+// at least one cell in common across it. slack is how far past from's edge the
+// facing edge may start: the gap between panes, plus one. A shared border puts
+// it one cell before from's edge, which also counts.
 func touching(from Rect, rects map[int]Rect, side Side, slack int) []int {
 	var out []int
 	for id, r := range rects {
 		if r == from {
 			continue
 		}
-		var near, far, overlap int
-		switch side {
-		case SideLeft:
-			near, far = r.X+r.W, from.X
-			overlap = min(r.Y+r.H, from.Y+from.H) - max(r.Y, from.Y)
-		case SideRight:
-			near, far = r.X, from.X+from.W
-			overlap = min(r.Y+r.H, from.Y+from.H) - max(r.Y, from.Y)
-		case SideUp:
-			near, far = r.Y+r.H, from.Y
-			overlap = min(r.X+r.W, from.X+from.W) - max(r.X, from.X)
-		case SideDown:
-			near, far = r.Y, from.Y+from.H
-			overlap = min(r.X+r.W, from.X+from.W) - max(r.X, from.X)
-		}
-		across := min(from.H, r.H)
-		if side == SideUp || side == SideDown {
-			across = min(from.W, r.W)
-		}
-		if abs(near-far) <= slack && overlap >= min(2, across) {
+		// Turned so that side is right: dist is how far r starts past from's
+		// right edge, negative when r starts before it.
+		f, c := towardRight(from, side), towardRight(r, side)
+		dist := c.X - (f.X + f.W)
+		overlap := min(c.Y+c.H, f.Y+f.H) - max(c.Y, f.Y)
+		if dist >= -1 && dist <= slack && overlap >= 1 {
 			out = append(out, id)
 		}
 	}
@@ -239,5 +228,80 @@ func TestNeighbourPrefersTheAlignedPane(t *testing.T) {
 	tied := []Rect{{X: 50, Y: 0, W: 50, H: 25}, {X: 50, Y: 25, W: 50, H: 25}}
 	if got := Neighbour(Rect{X: 0, Y: 0, W: 50, H: 50}, tied, SideRight, false); got != 0 {
 		t.Fatalf("right went to %d, want the earlier of two tied panes", got)
+	}
+}
+
+// A pane can meet its only neighbour on a side along a single row. That one
+// row is enough to step there. Both layouts come from the BSP tiler.
+func TestNeighbourAcrossASingleSharedRow(t *testing.T) {
+	// 200x60, gap 1: both panes on the right share one row with from.
+	from := Rect{X: 0, Y: 8, W: 92, H: 3}
+	right := []Rect{{X: 93, Y: 0, W: 107, H: 9}, {X: 93, Y: 10, W: 21, H: 20}}
+	if got := Neighbour(from, right, SideRight, false); got != 0 {
+		t.Fatalf("right went to %d, want 0 (centred nearest)", got)
+	}
+
+	// 81x23, gap 2: the pane on the left shares one row with from.
+	from = Rect{X: 27, Y: 12, W: 14, H: 3}
+	left := []Rect{{X: 0, Y: 14, W: 25, H: 9}}
+	if got := Neighbour(from, left, SideLeft, false); got != 0 {
+		t.Fatalf("left went to %d, want 0", got)
+	}
+}
+
+// At the same distance, a pane sharing two or more cells beats one sharing a
+// single cell, even when the thin one is centred closer.
+func TestNeighbourPrefersTheWiderOverlap(t *testing.T) {
+	from := Rect{X: 0, Y: 10, W: 50, H: 10}
+	cands := []Rect{
+		{X: 50, Y: 0, W: 50, H: 11},  // one row, centred closer
+		{X: 50, Y: 18, W: 50, H: 30}, // two rows
+	}
+	if got := Neighbour(from, cands, SideRight, false); got != 1 {
+		t.Fatalf("right went to %d, want 1 (two shared rows)", got)
+	}
+}
+
+// Random BSP trees from a fixed seed, with every split direction and ratio and
+// gaps up to 3. Layouts with a pane smaller than 4x3 are skipped: the tiler
+// leaves holes there, so no step is well defined.
+func TestNeighbourOnRandomBSPTrees(t *testing.T) {
+	r := rand.New(rand.NewSource(1))
+	var build func(n int, next *int) *TileNode
+	build = func(n int, next *int) *TileNode {
+		if n == 1 {
+			*next++
+			return NewLeafNode(*next)
+		}
+		k := 1 + r.Intn(n-1)
+		split := SplitVertical
+		if r.Intn(2) == 0 {
+			split = SplitHorizontal
+		}
+		ratio := 0.1 + r.Float64()*0.8
+		return NewInternalNode(split, ratio, build(k, next), build(n-k, next))
+	}
+	sizes := []Rect{{0, 0, 81, 23}, {0, 0, 160, 46}, {0, 0, 200, 60}, {0, 0, 37, 11}}
+	checked := 0
+	for range 20000 {
+		n := 2 + r.Intn(12)
+		bounds := sizes[r.Intn(len(sizes))]
+		gap := r.Intn(4)
+		next := 0
+		tree := &BSPTree{Root: build(n, &next)}
+		rects := tree.ApplyLayout(bounds, gap)
+		if len(rects) != n || slices.ContainsFunc(slices.Collect(maps.Values(rects)), func(p Rect) bool {
+			return p.W < 4 || p.H < 3
+		}) {
+			continue
+		}
+		checked++
+		checkEveryStep(t, rects, gap+1)
+		if t.Failed() {
+			t.Fatalf("%dx%d gap %d: %v", bounds.W, bounds.H, gap, rects)
+		}
+	}
+	if checked < 1000 {
+		t.Fatalf("only %d layouts checked, want at least 1000", checked)
 	}
 }
