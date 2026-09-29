@@ -57,6 +57,9 @@ func multifocusHarness(t *testing.T) (*app.OS, [3]*strings.Builder) {
 		Width:         80,
 		Height:        30,
 	}
+	// The clipboard replies these tests send answer a read the paste key
+	// made. A reply nobody asked for is dropped (see ClaimPasteReply).
+	_ = o.RequestHostPaste()
 	return o, sent
 }
 
@@ -312,5 +315,21 @@ func TestMultifocusActionsDescribed(t *testing.T) {
 		if !GetDispatcher().HasAction(a) {
 			t.Errorf("%s has no handler", a)
 		}
+	}
+}
+
+// A paste broadcast to the multifocus set is sanitized in every pane, so a
+// clipboard holding ESC[201~ cannot end the bracketed paste early in any of
+// them.
+func TestMultifocusPasteStripsTheBracketEndInEveryPane(t *testing.T) {
+	o, sent := multifocusHarness(t)
+
+	_, _ = HandleInput(tea.ClipboardMsg{Content: "a\x1b[201~b", Selection: 'c'}, o)
+
+	if got, want := sent[0].String(), "\x1b[200~a[201~b\x1b[201~"; got != want {
+		t.Errorf("focused pane got %q, want %q", got, want)
+	}
+	if got, want := sent[1].String(), "a[201~b"; got != want {
+		t.Errorf("multifocus pane got %q, want %q", got, want)
 	}
 }
