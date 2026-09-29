@@ -13,7 +13,7 @@ func TestWithoutHostMultiplexerDropsOuterTuiosPane(t *testing.T) {
 		"HOME=/home/u",
 		"TUIOS_SESSION=outer", "TUIOS_SOCKET=/run/outer.sock", "TUIOS_PANE_ID=w1",
 		"TUIOS_WINDOW_ID=w1", "TUIOS_PANE_TOKEN=t", "TUIOS_PANE_GRANTS=g",
-		"TUIOS_RESTORED=1", "TUIOS_SESSION_REMOTE=r", "TUIOS_PANE_HOSTED=1",
+		"TUIOS_RESTORED=1", "TUIOS_PANE_TTY=/dev/pts/9", "TUIOS_SESSION_REMOTE=r", "TUIOS_PANE_HOSTED=1",
 		"TUIOS_ENV=1", "TMUX=/tmp/tmux",
 	}
 	got := WithoutHostMultiplexer(slices.Clone(env))

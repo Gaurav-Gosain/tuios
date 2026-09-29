@@ -142,6 +142,11 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 	if status == "0" {
 		t.Errorf("the nested attach exited 0, want a failure status\n%s", outer.Snapshot())
 	}
+	// The refusal is the whole answer: no notice about the session's other
+	// clients, and none of the client's start-up log.
+	if text := outer.Screen().Text(); strings.Contains(text, "already has a client") || strings.Contains(text, "[CLIENT]") {
+		t.Errorf("the refusal came with other output\n%s", text)
+	}
 
 	if w, h := sessionSize(t, base, nestSession); w != w0 || h != h0 {
 		t.Errorf("session size changed from %dx%d to %dx%d", w0, h0, w, h)

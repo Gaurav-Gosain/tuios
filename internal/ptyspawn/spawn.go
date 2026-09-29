@@ -75,13 +75,24 @@ func newPty(width, height int) (xpty.Pty, error) {
 // On success the caller owns both returned values, including closing the PTY.
 // On failure nothing is left open.
 func Spawn(width, height int, build func() *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
+	return SpawnTTY(width, height, func(string) *exec.Cmd { return build() }, logf)
+}
+
+// SpawnTTY is Spawn with the path of the PTY's terminal passed to build, so
+// the command can be told which terminal it runs on. The path is empty when
+// the PTY has none, as on Windows and in the browser.
+func SpawnTTY(width, height int, build func(tty string) *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
 	for attempt := 1; ; attempt++ {
 		pty, err := newPty(width, height)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
 		}
 
-		cmd := build()
+		tty := ""
+		if named, ok := pty.(interface{ SlaveName() string }); ok {
+			tty = named.SlaveName()
+		}
+		cmd := build(tty)
 		configureCommand(cmd)
 
 		if err = StartProcess(pty, cmd); err == nil {

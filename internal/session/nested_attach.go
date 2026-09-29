@@ -21,13 +21,17 @@ import (
 //
 // So the daemon places every attaching client, and refuses it when it would
 // show a session inside itself. A client is placed in the session of a pane
-// when any of these holds:
+// by the first of these that applies:
 //
 //   - its controlling terminal is the pane's;
-//   - a pane's shell is one of its ancestors;
-//   - its environment names a pane of this daemon;
-//   - its nesting probe showed up in the pane's output (nest_probe.go), which
-//     catches ssh to this machine, script and other relays that pass bytes.
+//   - it has a terminal of its own: its nesting probe showed up in the pane's
+//     output (nest_probe.go). That is what makes the loop, so it is the whole
+//     answer. It catches script, ssh to this machine and other relays that
+//     pass bytes, and lets through a terminal window started from a pane,
+//     whose ancestry and variables point into the pane but whose output does
+//     not;
+//   - it has no terminal, so no probe: a pane's shell is one of its
+//     ancestors, or its environment names a pane of this daemon.
 //
 // It is refused when it is placed in the session it asks for, or in a session
 // that is itself shown, through a chain of clients, inside the one it asks
@@ -51,6 +55,11 @@ const ErrCodeNestedAttach = 11
 // AllowNestedEnv, set to 1, lets an attach through from a pane of its own
 // session, as tuios attach --force does.
 const AllowNestedEnv = "TUIOS_ALLOW_NESTED"
+
+// PaneTTYEnv is set in every local pane to the path of the pane's terminal,
+// so the client's own check can tell the pane's terminal from one it only
+// inherited the pane's variables into.
+const PaneTTYEnv = "TUIOS_PANE_TTY"
 
 // NestedAttachError is the refusal of an attach that would show a session
 // inside itself.
@@ -116,13 +125,16 @@ func NestedAllowedByEnv() bool { return os.Getenv(AllowNestedEnv) == "1" }
 func CheckNestedAttach(target string) error {
 	inside := os.Getenv("TUIOS_SESSION")
 	sock := os.Getenv(SocketEnv)
-	if inside == "" || sock == "" {
-		return nil
-	}
-	if os.Getenv("TUIOS_PANE_ID") == "" && os.Getenv("TUIOS_WINDOW_ID") == "" {
+	paneTTY := os.Getenv(PaneTTYEnv)
+	if inside == "" || sock == "" || paneTTY == "" {
 		return nil
 	}
 	if target != "" && target != inside {
+		return nil
+	}
+	// A terminal window started from the pane has the pane's variables and a
+	// terminal of its own. Only the pane's own terminal counts here.
+	if !stdinIsTerminal(paneTTY) {
 		return nil
 	}
 	path, err := GetSocketPath()
@@ -244,10 +256,14 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 		if sess := ttys[tty]; sess != nil {
 			return sess, paneOriginTTY
 		}
+		// A terminal of its own. Whether its output reaches a pane is what
+		// the probe answers, and it answers it for this client: script in a
+		// pane is caught there, and a terminal window started from a pane,
+		// whose ancestry and variables point into the pane, is let through.
+		return nil, ""
 	}
-	// A terminal of its own does not clear it: script, or a terminal emulator
-	// run from a pane, gives the client one, and its output still lands in the
-	// pane. The walk starts at pid itself, which is the shell when a pane runs
+	// No terminal, so no probe either: ancestry and variables are all there
+	// is. The walk starts at pid itself, which is the shell when a pane runs
 	// the client in place of its shell.
 	cur := pid
 	for range paneOriginMaxDepth {

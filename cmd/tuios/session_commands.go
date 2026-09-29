@@ -87,6 +87,11 @@ func reportSavedSessionsBeforeStart() int {
 	return len(names)
 }
 
+// attachNotices are what ensureAttachTarget found to say about the session.
+// They are printed once the daemon has accepted the attach, so a refused
+// attach leaves only its refusal on the screen.
+var attachNotices []string
+
 // ensureAttachTarget verifies the named session exists before the TUI starts,
 // so a typo produces a list of real names instead of an empty screen or a
 // silently created session. It is a no-op when no name was given (attach picks
@@ -119,13 +124,13 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 			// error, but the shared screen size surprises people who expect
 			// tmux's exclusive attach. Say so rather than letting them wonder
 			// why their window shrank.
-			fmt.Printf("Session %q already has a client attached. TUIOS shares the session and renders at the smallest client's size.\n", sessionName)
+			attachNotices = append(attachNotices, fmt.Sprintf("Session %q already has a client attached. TUIOS shares the session and renders at the smallest client's size.", sessionName))
 		}
 		// Said before the attach, because the attach itself clears the mark. This
 		// is the answer to "why is my session still here after I killed the
 		// daemon", at the moment the user is asking it.
 		if s.Restored {
-			fmt.Printf("Session %q was %s: %s.\n", sessionName, session.RestoredTag, session.RestoredNote)
+			attachNotices = append(attachNotices, fmt.Sprintf("Session %q was %s: %s.", sessionName, session.RestoredTag, session.RestoredNote))
 		}
 		return nil
 	}
@@ -231,6 +236,15 @@ func generateUniqueSessionName(existingNames []string) string {
 	}
 }
 
+// clientLogf logs a step of the client's start. The log goes to the terminal,
+// and an attach the daemon refuses leaves the terminal to the refusal, so
+// these steps are logged only when debugging is on.
+func clientLogf(format string, args ...any) {
+	if debugMode || os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		log.Printf(format, args...)
+	}
+}
+
 func runDaemonSession(sessionName string, createNew bool) error {
 	return runDaemonSessionOn("", sessionName, createNew)
 }
@@ -249,7 +263,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// Written first, so it has reached any pane it is going to reach by the
 	// time the attach arrives. See session/nest_probe.go.
 	var probe session.NestProbe
-	if host == "" {
+	if host == "" && session.NestProbeSafe(os.Getenv("TERM")) {
 		probe = session.WriteNestProbe(os.Stdout)
 	}
 
@@ -266,15 +280,15 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	log.Printf("[CLIENT] Detecting terminal capabilities...")
+	clientLogf("[CLIENT] Detecting terminal capabilities...")
 	hostCaps := app.GetHostCapabilities()
 
 	// Build client capabilities from detected host capabilities
 	clientCaps := app.ClientCapabilitiesOf(hostCaps)
-	log.Printf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
+	clientLogf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
 		clientCaps.CellWidth, clientCaps.CellHeight, clientCaps.KittyGraphics, clientCaps.SixelGraphics, clientCaps.TerminalName)
 
-	log.Printf("[CLIENT] Connecting to daemon...")
+	clientLogf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
 	client.AllowNested = nestedAllowed()
 	client.SetNestProbe(probe)
@@ -299,7 +313,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 			return explainHostConnectError(host, err)
 		}
 	}
-	log.Printf("[CLIENT] Connected to daemon")
+	clientLogf("[CLIENT] Connected to daemon")
 
 	if host != "" && sessionName == "" && createNew {
 		// The far side's daemon picks nothing on its own for an empty name,
@@ -308,7 +322,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		sessionName = generateUniqueSessionName(client.AvailableSessionNames())
 	}
 
-	log.Printf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
+	clientLogf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
 	state, err := client.AttachSession(sessionName, createNew, width, height)
 	if err != nil {
 		names := client.AvailableSessionNames()
@@ -329,9 +343,13 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 			Err:   err,
 		}
 	}
-	log.Printf("[CLIENT] Attached to session, got state")
+	clientLogf("[CLIENT] Attached to session, got state")
+	for _, notice := range attachNotices {
+		fmt.Println(notice)
+	}
+	attachNotices = nil
 
-	log.Printf("[CLIENT] Starting read loop")
+	clientLogf("[CLIENT] Starting read loop")
 	client.StartReadLoop()
 
 	prw := app.NewPostRenderWriter(os.Stdout)
