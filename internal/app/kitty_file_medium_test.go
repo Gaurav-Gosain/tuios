@@ -187,6 +187,16 @@ func TestKittyTmpdirAboveHomeIsIgnored(t *testing.T) {
 	t.Setenv("HOME", home)
 	secret := secretFile(t, home, "tty-graphics-protocol-key")
 
+	ssh := filepath.Join(home, ".ssh")
+	if err := os.Mkdir(ssh, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sshSecret := secretFile(t, ssh, "tty-graphics-protocol-id")
+	t.Setenv("TMPDIR", ssh)
+	sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, sshSecret))
+	if n := host.Total(); n != 0 {
+		t.Fatalf("TMPDIR=~/.ssh let a key through: %d bytes", n)
+	}
 	for _, tmpdir := range []string{"/", home, root} {
 		t.Setenv("TMPDIR", tmpdir)
 		sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, secret))
