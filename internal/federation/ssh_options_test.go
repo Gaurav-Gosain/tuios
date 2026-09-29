@@ -53,6 +53,13 @@ var refusedSSHOptions = [][]string{
 	{"-E", "/tmp/log"},
 	{"-o", "Port=22x"},
 	{"-o", "SendEnv A B"},
+	{"-o", "ForwardAgent=/run/user/1000/bus"},
+	{"-oForwardAgent=/tmp/sock"},
+	{"-J", "x,-Fc"},
+	{"-J", "a@-Fc"},
+	{"-o", "ProxyJump=a@-Fc"},
+	{"-o", "ProxyJump=x,-Fc"},
+	{"-J", "x,,y"},
 }
 
 // acceptedSSHOptions are what a host entry needs ssh_options for.
@@ -65,6 +72,8 @@ var acceptedSSHOptions = [][]string{
 	{"-o", "HostKeyAlias=build.example"},
 	{"-o", "User=me", "-l", "me", "-o", "HostName=[::1]"},
 	{"-4", "-A"},
+	{"-o", "ForwardAgent=yes"},
+	{"-J", "me@jump:2222,[::1]:22,other"},
 	{"-vo", "ServerAliveInterval=5"},
 }
 

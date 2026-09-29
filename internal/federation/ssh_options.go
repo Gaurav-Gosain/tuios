@@ -70,9 +70,27 @@ var sshNameOptions = map[string]bool{"hostkeyalias": true, "hostname": true, "us
 // sshPortValue is a port number.
 var sshPortValue = regexp.MustCompile(`^[0-9]{1,5}$`)
 
-// jumpPattern is a ProxyJump value that is only hosts: [user@]host[:port],
-// comma separated. It keeps a value ssh could read as an option out.
-var jumpPattern = regexp.MustCompile(`^[A-Za-z0-9_.\[\]][A-Za-z0-9_.@:,\[\]-]*$`)
+// jumpHopPattern is one ProxyJump hop: [user@]host[:port], with no part
+// starting with a dash. ssh runs a hop as another ssh, so a host part such as
+// -Fc would be read as an option there.
+var jumpHopPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*@)?(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$`)
+
+// validJump reports whether a ProxyJump value is only hosts, comma separated.
+func validJump(value string) bool {
+	if value == "" {
+		return false
+	}
+	for hop := range strings.SplitSeq(value, ",") {
+		if !jumpHopPattern.MatchString(hop) {
+			return false
+		}
+	}
+	return true
+}
+
+// sshYesNoOptions take only yes or no. ForwardAgent also takes a socket path,
+// which would relay any local unix socket to the far side.
+var sshYesNoOptions = map[string]bool{"forwardagent": true}
 
 // CheckSSHOptions reports the first entry in opts that is not a safe ssh
 // option written plainly.
@@ -113,7 +131,7 @@ func CheckSSHOptions(opts []string) error {
 func checkSSHFlagValue(flag byte, value string) error {
 	switch flag {
 	case 'J':
-		if !jumpPattern.MatchString(value) {
+		if !validJump(value) {
 			return fmt.Errorf("ssh_options: -J %q is not a list of hosts", value)
 		}
 	case 'o':
@@ -146,8 +164,12 @@ func checkSSHFlagValue(flag byte, value string) error {
 func checkSSHOptionValue(name, key, value string) error {
 	switch {
 	case key == "proxyjump":
-		if !jumpPattern.MatchString(value) {
+		if !validJump(value) {
 			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", value)
+		}
+	case sshYesNoOptions[key]:
+		if v := strings.ToLower(value); v != "yes" && v != "no" {
+			return fmt.Errorf("ssh_options: %s takes yes or no", name)
 		}
 	case key == "port":
 		if !sshPortValue.MatchString(value) {
