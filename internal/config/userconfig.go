@@ -2434,7 +2434,8 @@ func windowModeTables(cfg *UserConfig) map[string][]string {
 	for _, table := range []map[string][]string{
 		cfg.Keybindings.WindowManagement, cfg.Keybindings.Workspaces,
 		cfg.Keybindings.Layout, cfg.Keybindings.ModeControl,
-		cfg.Keybindings.System, cfg.Keybindings.RestoreMinimized,
+		cfg.Keybindings.System, cfg.Keybindings.Navigation,
+		cfg.Keybindings.RestoreMinimized,
 	} {
 		for action, keys := range table {
 			out[action] = append(out[action], keys...)

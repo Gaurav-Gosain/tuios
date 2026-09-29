@@ -21,6 +21,7 @@ func TestJKDefaultsYieldToAUserBinding(t *testing.T) {
 	for _, tc := range []struct{ section, body string }{
 		{"window_management", "[keybindings.window_management]\nnext_window = [\"j\"]\nprev_window = [\"k\"]\n"},
 		{"layout", "[keybindings.layout]\nswap_down = [\"j\"]\nswap_up = [\"k\"]\n"},
+		{"navigation", "[keybindings.navigation]\nnext_window = [\"j\"]\nprev_window = [\"k\"]\n"},
 	} {
 		t.Run(tc.section, func(t *testing.T) {
 			cfg, err := ParseUserConfig([]byte(tc.body))
