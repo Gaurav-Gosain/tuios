@@ -11,6 +11,34 @@ protocol, legacy bytes otherwise. A leader with no legacy encoding is dropped.
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## Editing sidebar files
+
+Focus the sidebar with `s` in window mode or `Ctrl+B e`, then select a file.
+`Enter` opens folders or copies a file's path; `Shift+Enter` opens a text file
+in a new pane running the editor chosen under Settings, Sidebar, File editor.
+Folders keep their navigation action and non-text files are refused.
+The binding is `file_edit` in `[keybindings.sidebar_files]`.
+
+`Shift+Enter` needs a terminal that reports modified Enter, such as one using
+the Kitty keyboard protocol. On other terminals, rebind `file_edit` to a
+distinct key in the keybind manager or config file.
+
+`Ctrl+B f` searches file names recursively from the focused pane's directory,
+including while typing in a pane. `Ctrl+F` searches while the sidebar is
+focused. Type a name or relative path and press `Enter` to
+reveal the sidebar, show that file's folder and select the file. The search is
+bounded; its title says `partial` if it could not inspect the whole tree. The
+`file_search` action is rebindable in the keybind manager (`Ctrl+B k`) or in
+`config.toml`, for example:
+
+```toml
+[keybindings.prefix_mode]
+file_search = ["f"]
+
+[keybindings.sidebar]
+file_search = ["ctrl+f"]
+```
+
 ## Modifier spellings
 
 A key in `config.toml` can spell a modifier in more than one way. tuios reads each spelling as the same key.

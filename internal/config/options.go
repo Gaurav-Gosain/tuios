@@ -711,6 +711,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
 	},
 	{
+		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
+		Description: "Terminal editor command for Shift+Enter on a text file; empty uses $EDITOR, then $VISUAL, then vi. Arguments and quoted paths are supported.",
+		Default:     "",
+	},
+	{
 		Path: "appearance.sidebar.file_actions", Type: OptionBool, Section: "sidebar",
 		Description: "Let the files section create, rename, delete, copy and paste",
 		Default:     "true",

@@ -35,6 +35,7 @@ const (
 	sidebarActNarrow      = "narrow"
 	sidebarActWiden       = "widen"
 	sidebarActPalette     = "palette"
+	sidebarActFileSearch  = "file_search"
 	sidebarActNewSession  = "new_session"
 	sidebarActNewWindow   = "new_window"
 	sidebarActRename      = "rename"
@@ -61,6 +62,7 @@ const (
 	// row needs one, and a menu row with no registry action behind it is a
 	// hardcoded key hint waiting to go stale.
 	sidebarActFileOpen = "file_open"
+	sidebarActFileEdit = "file_edit"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -216,7 +218,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	for _, action := range []string{
 		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
-		sidebarActFilePaste, sidebarActFileOpen,
+		sidebarActFilePaste, sidebarActFileOpen, sidebarActFileEdit,
 	} {
 		d.Register(action, makeSidebarFileHandler(action))
 	}
@@ -1055,6 +1057,10 @@ func handleStartScreensaver(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleOpenCommandPalette opens the command palette.
 func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenCommandPalette()
+}
+
+func handleOpenFileSearch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenFileSearch()
 }
 
 // handleOpenLauncher opens the app launcher.

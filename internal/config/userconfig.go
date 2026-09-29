@@ -574,6 +574,8 @@ type SidebarConfig struct {
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
+	// Editor is the terminal editor command for files; empty uses $EDITOR, $VISUAL or vi.
+	Editor string `toml:"editor"`
 	// FileActions lets the files section create, rename, delete, copy, cut and
 	// paste (default: true).
 	FileActions *bool `toml:"file_actions"`
@@ -905,6 +907,7 @@ func DefaultConfig() *UserConfig {
 				// is destructive either way.
 				"prefix_screenshot":         {"C"},
 				"prefix_command_palette":    {"P"},
+				"file_search":               {"f"},
 				"prefix_toggle_sidebar":     {"b"},
 				"prefix_session_switcher":   {"S"},
 				"prefix_workspace_switcher": {"W"},
@@ -928,8 +931,8 @@ func DefaultConfig() *UserConfig {
 				// prefix stays armed so O O O walks back through them.
 				"prefix_review":        {"v"},
 				"prefix_next_finished": {"O"},
-				// F, as in tmux-fingers. f is free too, and is left free so
-				// a slip on Shift does nothing rather than something else.
+				// F, as in tmux-fingers. f searches files; both are
+				// non-destructive if Shift is missed.
 				"hints": {"F"},
 			},
 			WindowPrefix: map[string][]string{
@@ -1067,6 +1070,7 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		// The rail lists; the palette searches. "/" is what searches everywhere
 		// else, and the rail is the one scope with nothing else to spend it on.
 		"palette":     {"/"},
+		"file_search": {"ctrl+f"},
 		"narrow":      {"<"},
 		"widen":       {">"},
 		"jump_1":      {"1"},
@@ -1261,6 +1265,7 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// already pressing. The files scope is consulted first, so on a listing
 		// row this answers and everywhere else activate does, unchanged.
 		"file_open": {"enter"},
+		"file_edit": {"shift+enter"},
 	}
 }
 
@@ -1765,6 +1770,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.FolderClick != "" {
 		s.SidebarFolderClick = sb.FolderClick
 	}
+	s.SidebarEditor = sb.Editor
 	if sb.FileActions != nil {
 		s.SidebarFileActions = *sb.FileActions
 	}

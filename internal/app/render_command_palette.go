@@ -131,8 +131,8 @@ func paletteMetaWidth(filtered []CommandPaletteItem, grouped bool, width int) in
 // row names its category in a quiet column on the right.
 func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.allPaletteItems()
-	filtered := FilterCommandPalette(items, m.CommandPaletteQuery)
-	grouped := paletteGrouped(m.CommandPaletteQuery)
+	filtered := m.filteredPaletteItems()
+	grouped := paletteGrouped(m.CommandPaletteQuery) && !m.fileSearch
 
 	pal := theme.UI()
 	bg := pal.Surface
@@ -161,7 +161,15 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		// row in the model. The action rows are hidden without the "#" token
 		// and the command rows are hidden with it, so a denominator that added
 		// both would say "65 of 289" over a list that can only ever hold 65.
-		count = fmt.Sprintf("%d of %d commands", len(filtered), paletteReachable(items, m.CommandPaletteQuery))
+		kind := "commands"
+		if m.fileSearch {
+			kind = "files"
+		}
+		total := paletteReachable(items, m.CommandPaletteQuery)
+		if m.fileSearch {
+			total = len(items)
+		}
+		count = fmt.Sprintf("%d of %d %s", len(filtered), total, kind)
 	}
 	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
 
@@ -169,10 +177,20 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	end := min(start+visible, len(list))
 	if len(filtered) == 0 {
 		empty := overlay.Empty{Message: "No matching commands", Hint: overlay.Hint{Key: "esc", Label: "close"}}
+		if m.fileSearch {
+			switch {
+			case m.fileSearchScanning:
+				empty.Message = "Searching files..."
+			case m.fileSearchErr != "":
+				empty.Message = m.fileSearchErr
+			default:
+				empty.Message = "No matching files"
+			}
+		}
 		// A "#" search that found nothing needs to say it was a search over
 		// actions. "No matching commands" under a token the user has just been
 		// taught reads as the token not working.
-		if keybinds, rest := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds {
+		if keybinds, rest := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds && !m.fileSearch {
 			empty.Message = keybindPaletteHint(rest)
 		}
 		// The empty state takes the rows the list would have, so the panel
@@ -198,6 +216,12 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
 		Hints: hints,
+	}
+	if m.fileSearch {
+		panel.Title = "Search files"
+		if m.fileSearchTruncated {
+			panel.Title = "Search files (partial)"
+		}
 	}
 	content, geo := panel.Render(pal)
 

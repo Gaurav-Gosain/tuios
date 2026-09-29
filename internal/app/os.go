@@ -892,6 +892,12 @@ type OS struct {
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle
 	// Command palette overlay
 	ShowCommandPalette     bool
+	fileSearch             bool
+	fileSearchGen          uint64
+	fileSearchCancel       *atomic.Bool
+	fileSearchScanning     bool
+	fileSearchTruncated    bool
+	fileSearchErr          string
 	CommandPaletteQuery    string
 	CommandPaletteSelected int
 	CommandPaletteScroll   int

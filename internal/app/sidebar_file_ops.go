@@ -1,14 +1,20 @@
 package app
 
 import (
+	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/anmitsu/go-shlex"
 )
 
 // # File actions on the rail
@@ -299,6 +305,88 @@ func (m *OS) SidebarFileOpen() tea.Cmd {
 		return m.fileViewUpFrom(t.Dir)
 	}
 	return m.fileViewOpen(t.Dir, t.Name, t.IsDir)
+}
+
+type fileEditMsg struct {
+	Path  string
+	Argv  []string
+	IsDir bool
+	Err   error
+}
+
+// SidebarFileEdit opens the selected text file in the configured terminal editor.
+// Inspection runs off the update loop; folders keep their navigation action.
+func (m *OS) SidebarFileEdit() tea.Cmd {
+	if !m.filesOn() || m.FileViewSpoofed() {
+		if m.FileViewSpoofed() {
+			m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
+		}
+		return nil
+	}
+	_, path, ok := m.fileActionTarget()
+	if !ok {
+		return nil
+	}
+	editor := strings.TrimSpace(m.Settings.SidebarEditor)
+	if editor == "" {
+		editor = linkEditor()
+	}
+	return func() tea.Msg {
+		msg := fileEditMsg{Path: path}
+		info, err := os.Stat(path)
+		if err != nil {
+			msg.Err = fmt.Errorf("could not inspect the file: %w", err)
+		} else if info.IsDir() {
+			msg.IsDir = true
+		} else if !info.Mode().IsRegular() {
+			msg.Err = fmt.Errorf("only regular text files can be edited")
+		} else {
+			file, err := os.Open(path)
+			if err != nil {
+				msg.Err = fmt.Errorf("could not read the file: %w", err)
+				return msg
+			}
+			defer file.Close()
+			var sample [512]byte
+			n, err := file.Read(sample[:])
+			if err != nil && err != io.EOF {
+				msg.Err = fmt.Errorf("could not read the file: %w", err)
+			} else if n > 0 && !strings.HasPrefix(http.DetectContentType(sample[:n]), "text/") {
+				msg.Err = fmt.Errorf("That file is not a text file.")
+			} else {
+				msg.Argv, msg.Err = shlex.Split(editor, true)
+				if msg.Err != nil || len(msg.Argv) == 0 {
+					msg.Err = fmt.Errorf("check the File editor command in Sidebar settings")
+				} else if _, err := exec.LookPath(msg.Argv[0]); err != nil {
+					msg.Err = fmt.Errorf("editor %q is unavailable: %w", msg.Argv[0], err)
+				}
+			}
+		}
+		return msg
+	}
+}
+
+func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
+	if msg.Err != nil {
+		m.ShowNotification(msg.Err.Error(), "warning", m.Settings.NotificationDuration)
+		return nil
+	}
+	if msg.IsDir {
+		return m.fileViewOpen(filepath.Dir(msg.Path), filepath.Base(msg.Path), true)
+	}
+	before := len(m.Windows)
+	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, msg.Path)...)
+	if !m.daemonWindowIntent && len(m.Windows) == before {
+		m.ShowNotification("Could not start the editor.", "error", m.Settings.NotificationDuration)
+		return nil
+	}
+	m.clearSidebarReturn()
+	m.ExitSidebarFocus()
+	m.pendingStartTerminalMode = true
+	if !m.daemonWindowIntent {
+		m.maybeEnterPendingTerminalMode()
+	}
+	return nil
 }
 
 // SidebarFileCopy puts the cursor row on the file clipboard for a copy.
