@@ -626,6 +626,11 @@ var optionSpecs = []Option{
 		Description: "The format multi copy mode yanks in: plain, markdown or json",
 		Accepted:    MultiCopyFormats, Default: MultiCopyFormatPlain,
 	},
+	{
+		Path: "appearance.selection.copy_entry", Type: OptionString, Section: "selection",
+		Description: "Where copy mode puts its cursor: on the terminal cursor or in the center",
+		Accepted:    CopyEntries, Default: CopyEntryCursor,
+	},
 
 	// [appearance.sidebar]
 	{
