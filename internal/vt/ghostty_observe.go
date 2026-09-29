@@ -267,6 +267,18 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 	case 66:
 		t.handleTextSizingOSC(payload)
 		return false
+	case 99:
+		// libghostty reports OSC 9 and OSC 777 through its desktop
+		// notification callback but has no OSC 99, so the kitty form is
+		// parsed here the way the pure emulator parses it.
+		if title, body, ok := parseNotify99(payload); ok {
+			t.queue(func(cb Callbacks) {
+				if cb.Notify != nil {
+					cb.Notify(title, body)
+				}
+			})
+		}
+		return false
 	case 133:
 		t.handleSemanticZoneOSC(payload)
 		return true

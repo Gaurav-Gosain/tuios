@@ -464,12 +464,21 @@ func (e *Emulator) handleNotify777(data []byte) bool {
 	return true
 }
 
-// handleNotify99 handles OSC 99 (kitty desktop notification):
+// handleNotify99 handles OSC 99 (kitty desktop notification).
+func (e *Emulator) handleNotify99(data []byte) bool {
+	if title, body, ok := parseNotify99(data); ok && e.cb.Notify != nil {
+		e.cb.Notify(title, body)
+	}
+	return true
+}
+
+// parseNotify99 parses an OSC 99 (kitty desktop notification) payload:
 // "99;<metadata>;<payload>". Metadata is a colon-separated list of key=val
 // pairs. This is a best-effort v1 parse: e=1 base64-decodes the payload,
 // p=title routes the payload as the title, and d=0 continuation chunks are
-// ignored rather than accumulated.
-func (e *Emulator) handleNotify99(data []byte) bool {
+// ignored rather than accumulated. ok is false for a chunk that raises no
+// notification. Both backends share it, because libghostty has no OSC 99.
+func parseNotify99(data []byte) (title, body string, ok bool) {
 	parts := strings.SplitN(string(data), ";", 3)
 	meta := map[string]string{}
 	if len(parts) >= 2 {
@@ -481,7 +490,7 @@ func (e *Emulator) handleNotify99(data []byte) bool {
 	}
 	// d=0 signals more chunks follow; skip continuation chunks best-effort.
 	if meta["d"] == "0" {
-		return true
+		return "", "", false
 	}
 	payload := ""
 	if len(parts) >= 3 {
@@ -492,12 +501,8 @@ func (e *Emulator) handleNotify99(data []byte) bool {
 			payload = string(decoded)
 		}
 	}
-	title, body := "", payload
 	if meta["p"] == "title" {
-		title, body = payload, ""
+		return payload, "", true
 	}
-	if e.cb.Notify != nil {
-		e.cb.Notify(title, body)
-	}
-	return true
+	return "", payload, true
 }
