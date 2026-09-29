@@ -79,6 +79,10 @@ type hintMatch struct {
 // hintsPane is the copy of one pane's view that hints mode labels.
 type hintsPane struct {
 	windowID string
+	// x and y are the pane's position when the copy was taken. The covers
+	// and the region were worked out for it, so a pane that moved closes
+	// hints mode.
+	x, y int
 	// w and h are the pane's content size when the copy was taken. A pane
 	// resized since is showing different text, and hints mode closes.
 	w, h int
@@ -206,19 +210,23 @@ func (m *OS) openHints(all bool) {
 		dim:      cfg.DimPercent(),
 	}
 	var targets []hints.Target
+	// hidden, per pane, reports whether a cell of the pane is off the
+	// screen: outside the content region, or under a pane drawn above it.
+	// The single-pane form labels the focused pane as it always has, and
+	// has none.
+	var hidden []func(hintCell) bool
 	for rank, w := range windows {
 		pane := snapshotHints(w)
+		pane.x, pane.y = w.X, w.Y
 		cursor := hintsCursor(w, pane)
-		var covers []image.Rectangle
+		var covered func(hintCell) bool
 		if all {
-			covers = m.hintsCovers(w)
+			covered = m.hintsHidden(w)
 		}
-		origin := paneContentRect(w).Min
+		hidden = append(hidden, covered)
 		for _, match := range pane.find(matcher) {
-			// A label under a pane drawn above this one cannot be seen, so
-			// it is not handed out.
 			at := match.cells[0]
-			if hintCovered(covers, image.Pt(origin.X+at.x, origin.Y+at.y)) {
+			if covered != nil && covered(at) {
 				continue
 			}
 			match.pane = len(state.panes)
@@ -236,6 +244,25 @@ func (m *OS) openHints(all bool) {
 		}
 		state.panes = append(state.panes, pane)
 	}
+	// A label must be whole on the screen. Its length is known only once the
+	// labels are handed out, so a match whose label would be partly hidden is
+	// dropped and the rest are labelled again. Each round drops at least one
+	// match, and fewer matches never need longer labels.
+	for len(state.matches) > 0 {
+		state.label(targets)
+		keep := 0
+		for i, match := range state.matches {
+			if h := hidden[match.pane]; h != nil && hintLabelHidden(match, state.panes[match.pane].w, h) {
+				continue
+			}
+			state.matches[keep], targets[keep] = state.matches[i], targets[i]
+			keep++
+		}
+		if keep == len(state.matches) {
+			break
+		}
+		state.matches, targets = state.matches[:keep], targets[:keep]
+	}
 	if len(state.matches) == 0 {
 		if all {
 			m.ShowNotification("Nothing to label in the panes on this workspace.", "info", m.Settings.NotificationDuration)
@@ -244,7 +271,6 @@ func (m *OS) openHints(all bool) {
 		}
 		return
 	}
-	state.label(targets)
 	m.hints = state
 	m.CancelCopyFlash()
 	// The keys are said while the labels are up and taken back when they go,
@@ -258,23 +284,20 @@ func (m *OS) openHints(all bool) {
 
 // hintsWindows is every pane the all-panes form labels: the focused pane
 // first, then each other pane the workspace shows, nearest the focused pane
-// first. A minimised pane is not shown, and neither is a pane behind a zoom
-// that fills the region.
+// first. It leaves out what the frame does not draw: a minimised pane, a pane
+// behind a zoom that fills the region, and a pane wholly outside the content
+// region (a column the scrolling layout has moved off the screen).
 func (m *OS) hintsWindows(focused *terminal.Window) []*terminal.Window {
-	zoomed := m.zoomedWindow()
-	if zoomed != nil && m.zoomUsesLayout(zoomed) {
-		// The layout is drawn around the zoomed pane, so the others show.
-		zoomed = nil
-	}
+	region := m.hintsRegion()
 	var others []*terminal.Window
 	for _, w := range m.Windows {
-		if w == nil || w == focused || w.Terminal == nil || w.Workspace != m.CurrentWorkspace || w.Minimized {
-			continue
-		}
-		if zoomed != nil && w != zoomed && !w.IsFloating {
+		if w == nil || w == focused || w.Terminal == nil || !m.hintsDrawn(w) {
 			continue
 		}
 		if w.ContentWidth() <= 0 || w.ContentHeight() <= 0 {
+			continue
+		}
+		if !paneContentRect(w).Overlaps(region) {
 			continue
 		}
 		others = append(others, w)
@@ -284,6 +307,24 @@ func (m *OS) hintsWindows(focused *terminal.Window) []*terminal.Window {
 		return hintsGap(c, hintsCenter(a)) - hintsGap(c, hintsCenter(b))
 	})
 	return append([]*terminal.Window{focused}, others...)
+}
+
+// hintsDrawn reports whether the frame draws w at all. It follows the skips
+// in the render loop: another workspace, minimised, or behind a zoomed pane
+// that fills the region (a popup is drawn over the zoom).
+func (m *OS) hintsDrawn(w *terminal.Window) bool {
+	if w.Workspace != m.CurrentWorkspace || w.Minimized {
+		return false
+	}
+	zoomed := m.zoomedWindow()
+	return zoomed == nil || w == zoomed || w.IsPopup || !m.zoomCoversRegion(zoomed)
+}
+
+// hintsRegion is the content region, where the frame draws panes. Anything
+// outside it is off the screen or under the dock or the rail.
+func (m *OS) hintsRegion() image.Rectangle {
+	left, top := m.GetLeftMargin(), m.GetTopMargin()
+	return image.Rect(left, top, left+m.GetContentWidth(), top+m.GetUsableHeight())
 }
 
 // hintsCenter is the middle of a pane's box.
@@ -298,17 +339,13 @@ func hintsGap(a, b image.Point) int {
 	return max(dx, -dx) + 2*max(dy, -dy)
 }
 
-// hintsCovers is the box of every pane drawn above w that can hide part of
-// it: a floating pane, a popup or a zoomed pane. Tiled panes share no cells
-// with each other.
+// hintsCovers is the box of every pane the frame draws above w, whatever
+// its kind. With tiling off, plain panes overlap too, stacked by their Z.
 func (m *OS) hintsCovers(w *terminal.Window) []image.Rectangle {
 	z := windowLayerZ(w, false)
 	var out []image.Rectangle
 	for _, o := range m.Windows {
-		if o == nil || o == w || o.Workspace != m.CurrentWorkspace || o.Minimized {
-			continue
-		}
-		if !o.IsFloating && !o.IsPopup && !o.Zoomed {
+		if o == nil || o == w || !m.hintsDrawn(o) {
 			continue
 		}
 		if windowLayerZ(o, false) <= z {
@@ -319,10 +356,36 @@ func (m *OS) hintsCovers(w *terminal.Window) []image.Rectangle {
 	return out
 }
 
-// hintCovered reports whether any of covers holds the screen cell p.
-func hintCovered(covers []image.Rectangle, p image.Point) bool {
-	for _, r := range covers {
-		if p.In(r) {
+// hintsHidden returns a test for a cell of w's content: true when the cell
+// is off the screen, which is outside the content region or under a pane
+// drawn above w.
+func (m *OS) hintsHidden(w *terminal.Window) func(hintCell) bool {
+	region := m.hintsRegion()
+	covers := m.hintsCovers(w)
+	origin := paneContentRect(w).Min
+	return func(c hintCell) bool {
+		p := image.Pt(origin.X+c.x, origin.Y+c.y)
+		if !p.In(region) {
+			return true
+		}
+		for _, r := range covers {
+			if p.In(r) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// hintLabelHidden reports whether any cell the match's label is drawn on is
+// hidden. The label is placed already (see hintsState.label).
+func hintLabelHidden(match hintMatch, width int, hidden func(hintCell) bool) bool {
+	for j := range len(match.label) {
+		c := hintCell{x: match.labelAt.x + j, y: match.labelAt.y}
+		if c.x >= width {
+			break
+		}
+		if hidden(c) {
 			return true
 		}
 	}
@@ -385,13 +448,15 @@ func (m *OS) hintsFocused() *terminal.Window {
 }
 
 // hintsPaneWindow is the pane p is a copy of, or nil when it is gone, on
-// another workspace, minimised or resized.
+// another workspace, minimised, moved or resized. Any pane in hints mode
+// that moves or resizes closes hints mode, a pane without focus too: the
+// labels and what hides them were worked out for the old layout.
 func (m *OS) hintsPaneWindow(p *hintsPane) *terminal.Window {
 	w := m.windowByID(p.windowID)
 	if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized {
 		return nil
 	}
-	if w.ContentWidth() != p.w || w.ContentHeight() != p.h {
+	if w.ContentWidth() != p.w || w.ContentHeight() != p.h || w.X != p.x || w.Y != p.y {
 		return nil
 	}
 	return w
@@ -456,11 +521,9 @@ func (m *OS) HintsPress(letter rune, action HintAction) tea.Cmd {
 	}
 	match := *hit
 	act := h.action
-	source := m.hintsPaneWindow(h.panes[match.pane])
+	// hintsFocused has checked every pane in hints mode is still there.
+	source := m.windowByID(h.panes[match.pane].windowID)
 	m.CloseHints()
-	if source == nil {
-		return nil
-	}
 	return m.runHint(focused, source, match, act)
 }
 

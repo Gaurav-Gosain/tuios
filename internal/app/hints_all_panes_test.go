@@ -26,6 +26,9 @@ func hintsTwoPaneOS(t *testing.T, left, right string) (*OS, *terminal.Window, *t
 	m.Windows = append(m.Windows, b)
 	m.CurrentWorkspace = 1
 	m.UserConfig = config.DefaultConfig()
+	m.Width, m.Height = 120, 30
+	// The panes sit in the content region, under the dock when it is on top.
+	a.Y, b.Y = m.GetTopMargin(), m.GetTopMargin()
 	return m, a, b
 }
 
@@ -120,6 +123,8 @@ func TestHintsAllPanesSkipPanesNotOnScreen(t *testing.T) {
 
 	// A zoom that fills the region hides every other pane.
 	a.Zoomed = true
+	a.X, a.Y = m.GetLeftMargin(), m.GetTopMargin()
+	a.Width, a.Height = m.GetContentWidth(), m.GetUsableHeight()
 	m.OpenHintsAllPanes()
 	if _, ok := m.HintLabels()["deadbee02"]; ok {
 		t.Error("a pane behind the zoomed pane has a label")
@@ -268,5 +273,86 @@ func TestHintsAllPanesDrawOnEveryPane(t *testing.T) {
 	}
 	if !seen["deadbee01"] || !seen["deadbee02"] {
 		t.Errorf("want a match on each pane, got %v", seen)
+	}
+}
+
+// With tiling off, plain panes overlap and the one with the higher Z is
+// drawn on top. A match under it gets no label, whatever kind of pane it is.
+func TestHintsAllPanesSkipTextUnderAPlainPane(t *testing.T) {
+	m, a, b := hintsTwoPaneOS(t, "focus deadbee01\r\n", "other deadbee02\r\n")
+	a.Z, b.Z = 0, 5
+	// b is a plain pane, not floating, over the left pane's hash.
+	b.X = a.X + 5
+	m.OpenHintsAllPanes()
+	if _, ok := m.HintLabels()["deadbee01"]; ok {
+		t.Errorf("a match under a pane with a higher Z has a label: %v", m.HintLabels())
+	}
+	if _, ok := m.HintLabels()["deadbee02"]; !ok {
+		t.Errorf("the pane on top has no label: %v", m.HintLabels())
+	}
+}
+
+// A pane outside the content region, such as a column the scrolling layout
+// moved off the screen, gets no label and takes no short label from a pane
+// that shows.
+func TestHintsAllPanesSkipPanesOffTheScreen(t *testing.T) {
+	m, _, _ := hintsTwoPaneOS(t, "focus deadbee01\r\n", "other deadbee02\r\n")
+	off := newTestWindow(t, "hintsF000001", 60, 12)
+	off.Workspace, off.X, off.Y = 1, 400, m.GetTopMargin()
+	off.WriteOutput([]byte("gone deadbee03\r\n"))
+	m.Windows = append(m.Windows, off)
+	m.OpenHintsAllPanes()
+	got := m.HintLabels()
+	if _, ok := got["deadbee03"]; ok {
+		t.Errorf("a pane off the screen has a label: %v", got)
+	}
+	for _, p := range m.hints.panes {
+		if p.windowID == off.ID {
+			t.Errorf("a pane off the screen is in hints mode")
+		}
+	}
+}
+
+// A label is whole on the screen or not there. With two letters, three
+// matches need a two-letter label. A floating pane that starts one column
+// after a match's first cell would cut that label in half, so the match is
+// dropped and the rest are labelled again.
+func TestHintsAllPanesLabelIsNeverCutByAPane(t *testing.T) {
+	m, a, _ := hintsTwoPaneOS(t, "deadbee01\r\ndeadbee02\r\ndeadbee03\r\n", "")
+	m.UserConfig.Hints.Alphabet = "ab"
+	float := newTestWindow(t, "hintsG000001", 20, 3)
+	float.Workspace, float.IsFloating = 1, true
+	// The top row holds the match furthest from the cursor, which gets the
+	// longest label. The pane starts on its second cell.
+	origin := paneContentRect(a).Min
+	float.X, float.Y = origin.X+1, origin.Y-1
+	m.Windows = append(m.Windows, float)
+	m.OpenHintsAllPanes()
+	if !m.HintsOpen() {
+		t.Fatal("hints did not open")
+	}
+	for _, match := range m.hints.matches {
+		p := m.hints.panes[match.pane]
+		w := m.windowByID(p.windowID)
+		if hintLabelHidden(match, p.w, m.hintsHidden(w)) {
+			t.Errorf("the label %q of %q is partly under a pane", match.label, match.text)
+		}
+	}
+	if len(m.hints.matches) == 0 {
+		t.Error("no match kept a label")
+	}
+}
+
+// A pane in hints mode that moves closes hints mode: the covers and the
+// region were worked out for where it was.
+func TestHintsAllPanesCloseWhenAPaneMoves(t *testing.T) {
+	m, _, b := hintsTwoPaneOS(t, "focus deadbee01\r\n", "other deadbee02\r\n")
+	m.OpenHintsAllPanes()
+	if !m.HintsOpen() {
+		t.Fatal("hints did not open")
+	}
+	b.X += 2
+	if m.HintsOpen() {
+		t.Error("hints stayed open after a pane moved")
 	}
 }
