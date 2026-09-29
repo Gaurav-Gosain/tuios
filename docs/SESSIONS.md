@@ -162,9 +162,17 @@ The session has the name `scratch`. tuios creates it the first time you press
 the key. It is an ordinary session: `tuios ls` shows it, and you can attach to
 it from a different terminal.
 
-The popup runs `tuios attach -c scratch`. When you hide the popup, tuios closes
-it, and that client detaches. The session does not stop. The next show opens a
-new popup on the workspace you are on.
+The popup runs `tuios attach` on the session. When you hide the popup, tuios
+closes it, and that client detaches. The session does not stop. The next show
+opens a new popup on the workspace you are on. The keyboard goes to the
+session's pane, in terminal mode.
+
+The popup belongs to the session you show it in, like every popup. Every
+client of that session shows it. When a different client of the session
+presses the key, the popup closes for all clients.
+
+If the attach in the popup fails, the popup shows the error. Press enter to
+close it.
 
 - The key works from inside the popup. tuios reads `Ctrl+B` before the popup
   gets it.
@@ -174,6 +182,10 @@ new popup on the workspace you are on.
   would show the session inside itself. The dock shows a message.
 - The popup needs a box of 22x8 cells or more. On a smaller screen the dock
   shows a message.
+- The session name cannot start with `-`, and it cannot have a `/`. The dock
+  shows a message when the name is not valid.
+- The key closes only its own popup. A popup that you open with
+  `tuios popup --name scratch` stays open.
 - The key works for sessions on this machine only.
 - When you detach, the popup stays open. It is there when you attach again.
 

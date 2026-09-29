@@ -311,10 +311,11 @@ status; `--capture-stdout` prints its standard output. A popup closed by hand
 exits 130. Capture is not on Windows.
 
 A person's `Ctrl+B g` (action `toggle_scratch`) is a popup of this kind. It
-runs `tuios attach -c scratch`, has the name of that session, and shows or
-hides the `scratch` session. Hiding closes the popup and leaves the session
-running. `[scratch]` sets the session name and the size. The session is an
-ordinary one, so address it with `-s scratch`, not through the popup.
+runs `tuios attach` on the `scratch` session and carries the `scratch` mark of
+the popup verb. The key closes only a popup with that mark. Hiding closes the
+popup and leaves the session running. `[scratch]` sets the session name and
+the size. The session is an ordinary one, so address it with `-s scratch`, not
+through the popup.
 
 ### The escape hatch
 

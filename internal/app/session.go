@@ -89,9 +89,10 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			// A popup is the same kind of intent again: the flag and the size
 			// the caller asked for are the session's, the box above is this
 			// client's and a peer declines it. See WindowState.Popup.
-			Popup:       w.IsPopup,
-			PopupWidth:  w.PopupWidth,
-			PopupHeight: w.PopupHeight,
+			Popup:        w.IsPopup,
+			PopupWidth:   w.PopupWidth,
+			PopupHeight:  w.PopupHeight,
+			ScratchPopup: w.IsScratchPopup,
 		}
 	}
 
@@ -1142,6 +1143,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// A popup is layout intent too. Its box is declined above for the reason the
 	// zoom box is, and applyPopupRects recomputes it here.
 	w.IsPopup = ws.Popup
+	w.IsScratchPopup = ws.ScratchPopup
 	w.PopupWidth = ws.PopupWidth
 	w.PopupHeight = ws.PopupHeight
 	w.PreZoomX = ws.PreZoomX
@@ -1263,6 +1265,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	// and the asked-for size are adopted, the box is recomputed. See
 	// WindowState.Popup.
 	window.IsPopup = ws.Popup
+	window.IsScratchPopup = ws.ScratchPopup
 	window.PopupWidth = ws.PopupWidth
 	window.PopupHeight = ws.PopupHeight
 	window.PreZoomX = ws.PreZoomX

@@ -71,6 +71,9 @@ type Option struct {
 	// BoxSize marks a string option whose value is a size in cells (60) or
 	// percent (80%), read by ParseBoxSize. An empty value means the default.
 	BoxSize bool `json:"box_size,omitempty"`
+	// ScratchName marks the string option whose value names the scratch
+	// session, checked by ScratchNameProblem. An empty value means the default.
+	ScratchName bool `json:"-"`
 }
 
 // UnsetText is how a reader is told an option is unset and what it follows,
@@ -1128,7 +1131,7 @@ var optionSpecs = []Option{
 	{
 		Path: "scratch.session", Type: OptionString, Section: "scratch",
 		Description: "Session the scratch key shows in a popup. tuios creates it the first time",
-		Default:     ScratchDefaultSession,
+		Default:     ScratchDefaultSession, ScratchName: true,
 	},
 	{
 		Path: "scratch.width", Type: OptionString, Section: "scratch",
@@ -1210,6 +1213,11 @@ func (o Option) checkValue(value string) error {
 		// this call rather than on the next restart.
 		return fmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
 			"or write %s.json in the glyphs directory first", o.Path, value, value)
+	}
+	if o.ScratchName {
+		if msg := ScratchNameProblem(value); msg != "" {
+			return fmt.Errorf("%s: %s", o.Path, msg)
+		}
 	}
 	if o.BoxSize && strings.TrimSpace(value) != "" {
 		if _, _, err := ParseBoxSize(value); err != nil {

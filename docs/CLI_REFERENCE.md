@@ -325,6 +325,7 @@ tuios attach [session-name] [flags]
 - `--host <name>`: Attach to a session on this host from the `[hosts]` table
 - `--ssh`: With `--host`, run ssh to the host and its own tuios instead of attaching here
 - `--hold`: After a failure, wait for enter before the command exits
+- `--terminal-mode`: Start in terminal mode, whatever `startup.start_in_terminal_mode` says
 - Same as `tuios new` (theme, ascii-only, etc.)
 
 **Examples:**
@@ -1247,7 +1248,7 @@ name alone. Some of them:
 | `dock_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the dock; empty follows `background` |
 | `appearance.sidebar.background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the rail; empty follows `background` |
 | `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
-| `scratch.session` | a session name | The session that `Ctrl+B g` shows in a popup (default `scratch`). tuios creates it the first time |
+| `scratch.session` | a session name | The session that `Ctrl+B g` shows in a popup (default `scratch`). tuios creates it the first time. The name cannot start with `-` |
 | `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch popup (default `80%`) |
 | `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch popup (default `80%`) |
 

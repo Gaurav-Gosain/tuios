@@ -402,6 +402,8 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		Wait          bool `json:"wait"`
 		CaptureStdout bool `json:"capture_stdout"`
 		Timeout       int  `json:"timeout"`
+		// Scratch marks the popup as the one toggle_scratch shows and hides.
+		Scratch bool `json:"scratch"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -454,15 +456,16 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	opts := NewWindowOptions{
-		Title:       p.Name,
-		Cwd:         p.Cwd,
-		Workspace:   p.Workspace,
-		Focus:       true,
-		Command:     p.Command,
-		Name:        p.Name,
-		Popup:       true,
-		PopupWidth:  p.Width,
-		PopupHeight: p.Height,
+		Title:        p.Name,
+		Cwd:          p.Cwd,
+		Workspace:    p.Workspace,
+		Focus:        true,
+		Command:      p.Command,
+		Name:         p.Name,
+		Popup:        true,
+		PopupWidth:   p.Width,
+		PopupHeight:  p.Height,
+		ScratchPopup: p.Scratch,
 	}
 	var capture *popupCapture
 	if p.CaptureStdout {

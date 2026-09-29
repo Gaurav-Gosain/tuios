@@ -1850,7 +1850,12 @@ none.
 Params: `command` (required argv), `session` (optional), `width` and `height`
 (optional, cells such as `"60"` or a share of the pane region such as `"60%"`,
 default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional),
-`wait`, `capture_stdout` and `timeout` (optional, below).
+`wait`, `capture_stdout` and `timeout` (optional, below), and `scratch`
+(optional). `scratch` marks the popup as the one the `toggle_scratch` key
+shows and hides. The key closes only a popup with this mark.
+
+The popup's command starts at the size the popup has on the screen: the size
+the caller asked for, in the session's pane region.
 
 With `wait` the call stays open until the command exits, and answers with
 `{"type": "popup_result", "window_id", "name", "exit_code"}`. `exit_code` is

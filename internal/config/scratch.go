@@ -142,19 +142,24 @@ func validateScratch(cfg *UserConfig, result *ValidationResult) {
 			})
 		}
 	}
-	if msg := scratchNameProblem(s.Session); msg != "" {
+	if msg := ScratchNameProblem(s.Session); msg != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: "scratch", Key: "session", Message: msg + " The scratch key cannot open it.",
 		})
 	}
 }
 
-// scratchNameProblem says why the daemon refuses a session name, or "". It
-// follows session.ValidateSessionName, which config cannot import.
-func scratchNameProblem(name string) string {
+// ScratchNameProblem says why a name cannot be the scratch session, or "".
+// It follows session.ValidateSessionName, which config cannot import, and
+// adds one rule: a name that starts with "-" reads as a flag on a command
+// line. ValidateSessionName does not refuse that, because a saved session of
+// such a name would then no longer restore.
+func ScratchNameProblem(name string) string {
 	switch {
 	case name == "":
 		return ""
+	case strings.HasPrefix(name, "-"):
+		return fmt.Sprintf("The session name %q starts with \"-\".", name)
 	case strings.TrimSpace(name) != name:
 		return fmt.Sprintf("The session name %q has spaces at the start or end.", name)
 	case name == "." || name == "..":
