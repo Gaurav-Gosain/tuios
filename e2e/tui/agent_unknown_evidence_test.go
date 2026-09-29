@@ -97,7 +97,9 @@ func TestUnknownStateDrawsItsMarkAndAgesItsEvidence(t *testing.T) {
 	first := make([]float64, len(reads))
 	for i, args := range reads {
 		first[i] = age(args...)
-		if limit := float64(time.Since(setAt).Milliseconds()); first[i] > limit {
+		// The daemon measures the age on the wall clock and this test on the
+		// monotonic clock. The two can drift by a millisecond, so allow one.
+		if limit := float64(time.Since(setAt).Milliseconds()) + 1; first[i] > limit {
 			t.Errorf("ASSERTION: %s reports evidence %vms old, older than the %vms since the report", args[0], first[i], limit)
 		}
 	}
