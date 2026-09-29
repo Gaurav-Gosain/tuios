@@ -46,9 +46,36 @@ func fixKittyLegacyMods(k tea.Key, hostKitty bool) tea.Key {
 func (m *OS) fixHostKeyMods(msg tea.Msg) tea.Msg {
 	switch k := msg.(type) {
 	case tea.KeyPressMsg:
-		return tea.KeyPressMsg(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled))
+		return tea.KeyPressMsg(fixKittyTextOnlyKey(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled)))
 	case tea.KeyReleaseMsg:
-		return tea.KeyReleaseMsg(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled))
+		return tea.KeyReleaseMsg(fixKittyTextOnlyKey(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled)))
 	}
 	return msg
+}
+
+// fixKittyTextOnlyKey turns a kitty text event with no key back into the text
+// it carries.
+//
+// With report-all-keys and associated text on, the kitty protocol sends text
+// that no key produced (an input method commit, composed text) as key number
+// 0: CSI 0 ; mods ; codepoints u. The decoder looks 0 up in its legacy table,
+// where it is NUL, so the text arrived as ctrl+space and a pane got a NUL or
+// CSI 32;5u instead of the characters typed. tuios asks for that mode while it
+// reads keys itself and while a hold key or a pane needs every key, so this is
+// how IME text reaches it then.
+//
+// A real Ctrl+Space carries no text, or a space, so any other text on a
+// ctrl+space can only have come from key 0.
+func fixKittyTextOnlyKey(k tea.Key) tea.Key {
+	if k.Code != tea.KeySpace || k.Mod&tea.ModCtrl == 0 || k.Text == "" || k.Text == " " {
+		return k
+	}
+	runes := []rune(k.Text)
+	if len(runes) == 1 {
+		k.Code = runes[0]
+	} else {
+		k.Code = tea.KeyExtended
+	}
+	k.Mod &^= tea.ModCtrl
+	return k
 }
