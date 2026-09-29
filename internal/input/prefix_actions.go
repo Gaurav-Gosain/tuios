@@ -139,18 +139,21 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 // edge of the layout there is no such pane and focus stays put; it does not
 // wrap.
 //
-// The scrolling layout is one strip of columns, where left and right are the
-// only directions and moving between columns is what focus means, so it answers
-// with its own navigation. Both branches move focus one pane in the direction
-// pressed, which is the whole of what the key claims to do.
+// The scrolling layout is one strip of columns, and left and right step along
+// it with its own navigation, which returns to the window a column was last on.
+// Up and down move inside a column of stacked windows, which is plain geometry.
+// Every branch moves focus one pane in the direction pressed, which is the
+// whole of what the key claims to do.
+//
+// The window-mode focus_up and focus_down actions (j and k by default) run
+// this same handler.
 func handleTerminalFocusDirection(dir string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusedWindow
-		if o.AutoTiling && o.UseScrollingLayout {
-			switch dir {
-			case "left":
+		if o.AutoTiling && o.UseScrollingLayout && (dir == "left" || dir == "right") {
+			if dir == "left" {
 				o.ScrollingFocusLeft()
-			case "right":
+			} else {
 				o.ScrollingFocusRight()
 			}
 			return afterFocusCommand(o, prev, focusEnterTargeted)

@@ -1042,28 +1042,17 @@ func (m *OS) focusTiledNeighbour(direction string) error {
 	return m.FocusDirection(direction)
 }
 
-// FocusDirection focuses a window in a direction (for BSP tiling).
+// FocusDirection focuses the nearest window in a direction, in any layout. See
+// layout.Neighbour for what counts as nearest.
 func (m *OS) FocusDirection(direction string) error {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 		return errNoFocusedWindow
 	}
-
-	focusedWindow := m.Windows[m.FocusedWindow]
-
-	var targetIndex int
-	switch direction {
-	case "left":
-		targetIndex = m.findWindowInDirection(focusedWindow, -1, 0)
-	case "right":
-		targetIndex = m.findWindowInDirection(focusedWindow, 1, 0)
-	case "up":
-		targetIndex = m.findWindowInDirection(focusedWindow, 0, -1)
-	case "down":
-		targetIndex = m.findWindowInDirection(focusedWindow, 0, 1)
-	default:
+	side, ok := layout.ParseSide(direction)
+	if !ok {
 		return fmt.Errorf("invalid direction: %s (use: left, right, up, down)", direction)
 	}
-
+	targetIndex := m.findWindowInDirection(m.Windows[m.FocusedWindow], side)
 	if targetIndex < 0 {
 		return fmt.Errorf("no window %s of the focused one", direction)
 	}
@@ -1419,69 +1408,25 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	}
 }
 
-// findWindowInDirection finds the nearest window in the specified direction.
-// dx, dy specify the direction (-1, 0, or 1 for each axis).
-func (m *OS) findWindowInDirection(from *terminal.Window, dx, dy int) int {
-	targetIndex := -1
-	minDistance := m.Width + m.Height // Start with max possible distance
-
+// findWindowInDirection is the index of the window focus moves to from from
+// toward side, or -1. It looks at the visible windows of the current workspace.
+// Floating windows need not line up, so with tiling off a window that lies that
+// way without facing from is still reachable.
+func (m *OS) findWindowInDirection(from *terminal.Window, side layout.Side) int {
+	var cands []layout.Rect
+	var index []int
 	for i, win := range m.Windows {
 		if win == from || win.Workspace != m.CurrentWorkspace || win.Minimized {
 			continue
 		}
-
-		// Check horizontal direction
-		if dx != 0 {
-			// dx > 0: look for windows to the right
-			// dx < 0: look for windows to the left
-			if dx > 0 && win.X >= from.X+from.Width-5 {
-				// Window is to the right, check vertical overlap
-				if win.Y < from.Y+from.Height && win.Y+win.Height > from.Y {
-					distance := win.X - (from.X + from.Width)
-					if distance < minDistance {
-						minDistance = distance
-						targetIndex = i
-					}
-				}
-			} else if dx < 0 && win.X+win.Width <= from.X+5 {
-				// Window is to the left, check vertical overlap
-				if win.Y < from.Y+from.Height && win.Y+win.Height > from.Y {
-					distance := from.X - (win.X + win.Width)
-					if distance < minDistance {
-						minDistance = distance
-						targetIndex = i
-					}
-				}
-			}
-		}
-
-		// Check vertical direction
-		if dy != 0 {
-			// dy > 0: look for windows below
-			// dy < 0: look for windows above
-			if dy > 0 && win.Y >= from.Y+from.Height-5 {
-				// Window is below, check horizontal overlap
-				if win.X < from.X+from.Width && win.X+win.Width > from.X {
-					distance := win.Y - (from.Y + from.Height)
-					if distance < minDistance {
-						minDistance = distance
-						targetIndex = i
-					}
-				}
-			} else if dy < 0 && win.Y+win.Height <= from.Y+5 {
-				// Window is above, check horizontal overlap
-				if win.X < from.X+from.Width && win.X+win.Width > from.X {
-					distance := from.Y - (win.Y + win.Height)
-					if distance < minDistance {
-						minDistance = distance
-						targetIndex = i
-					}
-				}
-			}
-		}
+		cands = append(cands, layout.Rect{X: win.X, Y: win.Y, W: win.Width, H: win.Height})
+		index = append(index, i)
 	}
-
-	return targetIndex
+	origin := layout.Rect{X: from.X, Y: from.Y, W: from.Width, H: from.Height}
+	if n := layout.Neighbour(origin, cands, side, !m.AutoTiling); n >= 0 {
+		return index[n]
+	}
+	return -1
 }
 
 // startScriptWaitRegex arms a WaitUntilRegex condition for tape playback. It

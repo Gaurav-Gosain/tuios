@@ -74,7 +74,8 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 		{
 			Title: "Layout",
 			Actions: []string{
-				"snap_left", "snap_right", "snap_fullscreen", "unsnap",
+				"snap_left", "snap_right", "focus_up", "focus_down",
+				"snap_fullscreen", "unsnap",
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
 			},
 		},

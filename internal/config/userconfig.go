@@ -1360,8 +1360,13 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 func getDefaultLayoutKeybinds() map[string][]string {
 	// Base layout keybindings (common to all platforms)
 	layout := map[string][]string{
-		"snap_left":       {"h"},
-		"snap_right":      {"l"},
+		"snap_left":  {"h"},
+		"snap_right": {"l"},
+		// j and k complete the vim row h and l start. Up and down have nothing
+		// to snap to, so these only move focus, tiled or floating. H, J, K, L
+		// swap the same ways and alt+h/j/k/l preselect there.
+		"focus_down":      {"j"},
+		"focus_up":        {"k"},
 		"snap_fullscreen": {"f"},
 		"unsnap":          {"u"},
 		// snap_corner_1 through _4 are deliberately absent here. The layout
@@ -2353,7 +2358,14 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// Fill in missing keys with defaults
 	fillMapDefaults(cfg.Keybindings.WindowManagement, defaultCfg.Keybindings.WindowManagement)
 	fillMapDefaults(cfg.Keybindings.Workspaces, defaultCfg.Keybindings.Workspaces)
+	// The layout table is one of several that make up the window-mode keymap,
+	// and it wins a key over window_management. So a new layout default yields
+	// to the user's own binding for its key in any of those tables.
+	layoutYield := yieldTakenDefaults("layout", windowModeTables(cfg), defaultCfg.Keybindings.Layout)
 	fillMapDefaults(cfg.Keybindings.Layout, defaultCfg.Keybindings.Layout)
+	for _, y := range layoutYield {
+		delete(cfg.Keybindings.Layout, y.Action)
+	}
 	fillMapDefaults(cfg.Keybindings.ModeControl, defaultCfg.Keybindings.ModeControl)
 	fillMapDefaults(cfg.Keybindings.System, defaultCfg.Keybindings.System)
 	fillMapDefaults(cfg.Keybindings.Navigation, defaultCfg.Keybindings.Navigation)
@@ -2364,6 +2376,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	for _, y := range cfg.YieldedDefaults {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
+	cfg.YieldedDefaults = append(cfg.YieldedDefaults, layoutYield...)
 	fillMapDefaults(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
@@ -2407,6 +2420,25 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 // left unbound instead, and keybinds doctor says so.
 var yieldingDefaults = map[string]bool{
 	"hints": true,
+	// j and k in window mode, new in the release after v0.8.0.
+	"focus_down": true,
+	"focus_up":   true,
+}
+
+// windowModeTables is every binding the user's config holds in the tables
+// that make up the window-mode keymap, in one map for yieldTakenDefaults.
+func windowModeTables(cfg *UserConfig) map[string][]string {
+	out := map[string][]string{}
+	for _, table := range []map[string][]string{
+		cfg.Keybindings.WindowManagement, cfg.Keybindings.Workspaces,
+		cfg.Keybindings.Layout, cfg.Keybindings.ModeControl,
+		cfg.Keybindings.System, cfg.Keybindings.RestoreMinimized,
+	} {
+		for action, keys := range table {
+			out[action] = append(out[action], keys...)
+		}
+	}
+	return out
 }
 
 // YieldedDefault is one new default binding left off because its key was

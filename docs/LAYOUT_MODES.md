@@ -97,6 +97,8 @@ moves focus to its left.
 | Input | Action |
 |---|---|
 | `Alt+Left` / `Alt+Right` (terminal mode) | Focus the column left/right |
+| `h` / `l` (window mode) | Focus the column left/right |
+| `j` / `k` (window mode), `Alt+Down` / `Alt+Up` (terminal mode) | Focus the window below/above in a column of stacked windows |
 | `Alt+P` / `Alt+N` | Focus the column left/right (these cycle windows in the other layout modes) |
 | `Opt+Shift+Tab` / `Opt+Tab` (macOS) | Focus the column left/right |
 | `Alt+Wheel` or `Shift+Wheel` | Scroll the viewport horizontally, one fifth of a screen per notch |
