@@ -164,6 +164,11 @@ type HelloPayload struct {
 	// gob ignores a field the peer does not know, so silence here is age, not
 	// disagreement.
 	Protocol int `json:"protocol,omitempty"`
+	// LayoutTreeOps says the client sends BSP trees as MsgLayoutTree ops. A
+	// client that predates the op leaves it false, and while such a client is
+	// attached to a session the daemon turns the ops off for every client
+	// there. See Session.SetLayoutTreeOps.
+	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

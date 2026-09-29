@@ -380,6 +380,9 @@ type connState struct {
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
+	// treeOps says the client's hello offered MsgLayoutTree. Set once, at
+	// hello. See Daemon.refreshTreeOps.
+	treeOps bool
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns

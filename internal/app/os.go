@@ -693,6 +693,9 @@ type OS struct {
 	// applying a state, which it shows and does not send. See
 	// layout_tree_sync.go.
 	treeDerived map[int]string
+	// sessionTreeOpsOff is set while the session has tree ops turned off. See
+	// treeOpsOn.
+	sessionTreeOpsOff bool
 
 	// applyingPeerSync is set while ApplyStateSync is folding a state that came
 	// from somewhere else into this client. It is what makes a sync loop

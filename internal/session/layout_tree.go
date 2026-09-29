@@ -296,6 +296,23 @@ func SessionTreeNames(state *SessionState) func(int) string {
 	return sessionLeafNames(state.WindowToBSPID)
 }
 
+// SetLayoutTreeOps turns the session's tree ops on or off. A change is a
+// mutation, so it advances Version and reaches every attached client in one
+// broadcast: every client switches between ops and trees-in-pushes at the
+// same version. Setting what is already in force does nothing.
+func (s *Session) SetLayoutTreeOps(on bool) {
+	s.stateMu.RLock()
+	same := s.treeOpsOff == !on
+	s.stateMu.RUnlock()
+	if same {
+		return
+	}
+	_ = s.mutateState(func(*SessionState) error {
+		s.treeOpsOff = !on
+		return nil
+	})
+}
+
 // noteTreeOpLocked records that the mutation which will carry version was a
 // tree op. A tree op changes the trees and nothing else, and a push from a
 // client that sends ops carries no trees, so a push built before a tree op
