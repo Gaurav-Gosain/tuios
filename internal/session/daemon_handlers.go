@@ -613,9 +613,11 @@ func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 	}
 }
 
-// notePush records a state push, or a layout op, from cs in the session's push
-// table. See SessionState.PushSeen.
-func (d *Daemon) notePush(cs *connState, session *Session, origin string, seq uint64) {
+// notePushOrigin records the name cs gives its pushes and layout ops. The
+// count itself is recorded by the session with the change it makes (see
+// notePushLocked), or by NotePush for a push that is refused. See
+// SessionState.PushSeen.
+func (d *Daemon) notePushOrigin(cs *connState, session *Session, origin string) {
 	if origin == "" || len(origin) > maxPushOriginLen {
 		return
 	}
@@ -629,7 +631,6 @@ func (d *Daemon) notePush(cs *connState, session *Session, origin string, seq ui
 	if prev != "" && prev != origin {
 		session.ForgetPush(prev)
 	}
-	session.NotePush(origin, seq)
 }
 
 func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
@@ -650,12 +651,14 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// counts every push it sends, and PushSeen has to agree with it. See
 	// SessionState.PushSeen. A name longer than any client makes is not one,
 	// and is not let into a table every state carries.
-	d.notePush(cs, session, state.PushOrigin, state.PushSeq)
+	d.notePushOrigin(cs, session, state.PushOrigin)
 	// Before anything that walks the layout trees by recursion (the merge,
 	// the fingerprint, the save, the rebroadcast) sees them. See
 	// wire_bounds.go.
 	if err := validateSessionState(&state); err != nil {
 		LogError("Refused a state update from %s: %v", cs.clientID, err)
+		// Counted all the same: the client counts every push it sends.
+		session.NotePush(state.PushOrigin, state.PushSeq)
 		return d.sendError(cs, ErrCodeInvalidMessage, "state update refused: "+err.Error())
 	}
 	clampPushedText(&state)

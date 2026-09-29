@@ -255,3 +255,70 @@ func TestClosedWindowLeavesTheSessionsTree(t *testing.T) {
 		t.Fatalf("an op put a closed window back in the tree: %q", got)
 	}
 }
+
+// TestOlderClientTreePushMakesACurrentPushBehind: client A sends a tree op and
+// then a push. A v0.8.0 client's push, which carries trees, lands between the
+// two, and A dropped its broadcast because A's op was still in flight. A's
+// push missed no tree op in the old sense, carries no trees, and was never
+// answered, so A kept its own tree for good. The older client's tree change
+// now counts as a tree op, and A's push reads as behind, so it is answered.
+//
+// Negative control: with the carriesTrees block cut from updateStateFrom, the
+// push is not behind and the check fails.
+func TestOlderClientTreePushMakesACurrentPushBehind(t *testing.T) {
+	sess, a, b := treeSession(t)
+	op := &LayoutTreePayload{PushOrigin: "A", PushSeq: 1, Workspace: 1,
+		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
+	applyTree(t, sess, op)
+	pushA := clientSnapshot(sess)
+	pushA.PushOrigin, pushA.PushSeq = "A", 2
+	pushA.WorkspaceTrees, pushA.WindowToBSPID, pushA.NextBSPWindowID = nil, nil, 0
+
+	legacy := clientSnapshot(sess)
+	legacy.PushOrigin, legacy.PushSeq = "B", 1
+	legacy.WorkspaceTrees = map[int]*SerializedBSPTree{1: bspTree(bspSplit(2, 0.8, bspLeaf(40), bspLeaf(41)))}
+	legacy.WindowToBSPID = map[string]int{a: 40, b: 41}
+	legacy.NextBSPWindowID = 42
+	if accepted, behind := sess.updateStateFrom(legacy, true); !accepted || behind {
+		t.Fatalf("the older client's push: accepted=%v behind=%v, want accepted and not behind", accepted, behind)
+	}
+	want := sessionTreeKey(sess, 1)
+
+	if accepted, behind := sess.updateStateFrom(pushA, true); !accepted || !behind {
+		t.Fatalf("A's push after the older client's tree change: accepted=%v behind=%v, want accepted and behind", accepted, behind)
+	}
+	if got := sessionTreeKey(sess, 1); got != want {
+		t.Fatalf("A's push without trees changed the session's tree to %q, want %q", got, want)
+	}
+
+	// A push built on the current version is not behind.
+	again := clientSnapshot(sess)
+	again.PushOrigin, again.PushSeq = "A", 3
+	again.WorkspaceTrees = nil
+	if _, behind := sess.updateStateFrom(again, true); behind {
+		t.Fatal("a push built on the current version read as behind")
+	}
+}
+
+// TestLayoutTreeOpIsCountedWithItsChange: the op's number reaches PushSeen in
+// the same snapshot that first holds the op's tree. A snapshot that said the
+// op was seen and still held the old tree let its sender adopt the old tree
+// over its own change.
+func TestLayoutTreeOpIsCountedWithItsChange(t *testing.T) {
+	sess, a, b := treeSession(t)
+	var published []*SessionState
+	sess.SetStateSink(func(st *SessionState) { published = append(published, st) })
+	op := &LayoutTreePayload{PushOrigin: "A", PushSeq: 7, Workspace: 1,
+		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
+	applyTree(t, sess, op)
+	if len(published) != 1 {
+		t.Fatalf("%d states published for one op, want 1", len(published))
+	}
+	st := published[0]
+	if st.PushSeen["A"] != 7 {
+		t.Fatalf("PushSeen[A] = %d in the op's state, want 7", st.PushSeen["A"])
+	}
+	if got, want := TreeKey(st.WorkspaceTrees[1], SessionTreeNames(st)), opKey(op); got != want {
+		t.Fatalf("the op's state holds %q, want %q", got, want)
+	}
+}

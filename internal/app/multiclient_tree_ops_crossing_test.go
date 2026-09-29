@@ -162,3 +162,31 @@ func TestFocusWhilePeerResizesStands(t *testing.T) {
 		t.Errorf("the focus was lost: want %s, got %s", shortID(id), shortID(got))
 	}
 }
+
+// TestDefaultTreeDoesNotReplaceThePeersTree: the peer built a default tree for
+// a workspace while the session held none for it, and has not sent it. This
+// client's op then gives the session a real tree. The peer takes that tree.
+// It must not keep its default one and send it back over the real one, which
+// is what put a drag back at 0.500 under load.
+//
+// Negative control: with the treeSeen check cut from adoptSessionTrees, the
+// peer keeps 0.500 and sends it, and both clients end there.
+func TestDefaultTreeDoesNotReplaceThePeersTree(t *testing.T) {
+	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
+	ws := p.m.CurrentWorkspace
+	// The peer as it is when it attached before the session had a tree.
+	delete(p.m.treeSeen, ws)
+	p.m.WorkspaceTrees[ws] = nil
+	p.m.TileAllWindows()
+	if got := rootRatio(p.m); got != 0.5 {
+		t.Fatalf("setup: the peer's rebuilt tree splits at %.3f, want the default 0.5", got)
+	}
+
+	r.m.ResizeFocusedWindowWidth(8)
+	r.m.SyncStateToDaemon()
+	want := rootRatio(r.m)
+	settleTrees(t, r, p, ex, "after the op")
+	if got := rootRatio(r.m); got != want {
+		t.Fatalf("the peer's default tree replaced the resize: split at %.3f, want %.3f", got, want)
+	}
+}

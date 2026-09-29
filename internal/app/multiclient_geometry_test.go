@@ -100,6 +100,12 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	p.m.TileAllWindows()
 	p.m.SyncDaemonPTYDimensions()
 	settleGeometry(t, r, p, ex)
+	// And one tree. The local client's first tree op can land after the peer
+	// attached, so the peer may start with no tree and build its own; a test
+	// that starts there is measuring the rig, not the change it makes.
+	settleUntil(t, ex, "both clients to hold one tree", func() bool {
+		return !ex.queued() && treeShape(r.m) != "<no tree>" && treeShape(r.m) == treeShape(p.m)
+	})
 	ex.n = 0
 	return r, p, ex
 }

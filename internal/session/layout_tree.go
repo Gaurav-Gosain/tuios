@@ -71,6 +71,8 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		return false, nil
 	}
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
+		// Counted with the change it makes. See notePushLocked.
+		s.notePushLocked(p.PushOrigin, p.PushSeq)
 		if p.Workspace < 0 || p.Workspace > state.workspaceBound() {
 			return fmt.Errorf("workspace %d is out of range", p.Workspace)
 		}
@@ -294,6 +296,23 @@ func SessionTreeNames(state *SessionState) func(int) string {
 	return sessionLeafNames(state.WindowToBSPID)
 }
 
+// treesDiffer reports whether two states hold different trees on any
+// workspace, reading each tree's leaves through its own state's numbering.
+func treesDiffer(a, b *SessionState) bool {
+	na, nb := SessionTreeNames(a), SessionTreeNames(b)
+	for ws, t := range a.WorkspaceTrees {
+		if TreeKey(t, na) != TreeKey(b.WorkspaceTrees[ws], nb) {
+			return true
+		}
+	}
+	for ws, t := range b.WorkspaceTrees {
+		if _, ok := a.WorkspaceTrees[ws]; !ok && TreeKey(t, nb) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // noteTreeOpLocked records that the mutation which will carry version was a
 // tree op. A tree op changes the trees and nothing else, and a push from a
 // client that sends ops carries no trees, so a push built before a tree op
@@ -376,7 +395,7 @@ func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	if err := msg.ParsePayload(&p); err != nil {
 		return fmt.Errorf("invalid layout tree payload: %w", err)
 	}
-	d.notePush(cs, session, p.PushOrigin, p.PushSeq)
+	d.notePushOrigin(cs, session, p.PushOrigin)
 	nodes := 0
 	var err error
 	if p.Tree != nil {
@@ -391,6 +410,8 @@ func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	}
 	if err != nil {
 		LogError("Refused a layout tree from %s: %v", cs.clientID, err)
+		// A refused op still counts: the client counted it when it sent it.
+		session.NotePush(p.PushOrigin, p.PushSeq)
 	}
 	if applied {
 		return nil
