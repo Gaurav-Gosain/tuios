@@ -132,16 +132,78 @@ func TestLoopbackRefusesAForeignHost(t *testing.T) {
 }
 
 // TestAllowHostAddsAName: a reverse proxy on this machine forwards its own
-// name in Host. --allow-host lets that name through.
+// name in Host. --allow-host lets that name through, and the password still
+// applies.
 func TestAllowHostAddsAName(t *testing.T) {
-	access, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "127.0.0.1", port: "7681", allowHosts: []string{"term.example"}})
+	file := filepath.Join(t.TempDir(), "pw")
+	if err := os.WriteFile(file, []byte("proxy-pw\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	access, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "127.0.0.1", port: "7681", passwordFile: file, allowHosts: []string{"term.example"}})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	port := startAccessServer(t, access)
 	h := "term.example:" + port
-	if code := upgrade(t, port, h, "http://"+h, ""); code != http.StatusSwitchingProtocols {
+	if code := upgrade(t, port, h, "http://"+h, "tuios:proxy-pw"); code != http.StatusSwitchingProtocols {
 		t.Fatalf("an allowed host was refused with %d", code)
+	}
+	if code := upgrade(t, port, h, "http://"+h, ""); code != http.StatusUnauthorized {
+		t.Fatalf("an allowed host with no password got %d, want 401", code)
+	}
+	other := "other.example:" + port
+	if code := upgrade(t, port, other, "http://"+other, "tuios:proxy-pw"); code == http.StatusSwitchingProtocols {
+		t.Fatal("a host that is not on the list got a session")
+	}
+}
+
+// TestAllowHostRules: --allow-host needs a password or --no-auth, works only
+// on a loopback bind, and takes a host name with no port.
+func TestAllowHostRules(t *testing.T) {
+	t.Setenv(webPasswordEnv, "")
+	for name, tc := range map[string]struct {
+		f    webAccessFlags
+		fail bool
+	}{
+		"no password":        {webAccessFlags{host: "localhost", allowHosts: []string{"term.example"}}, true},
+		"no-auth":            {webAccessFlags{host: "localhost", allowHosts: []string{"term.example"}, noAuth: true}, false},
+		"random password":    {webAccessFlags{host: "localhost", allowHosts: []string{"term.example"}, randomPassword: true}, false},
+		"with a port":        {webAccessFlags{host: "localhost", allowHosts: []string{"term.example:443"}, randomPassword: true}, true},
+		"a URL":              {webAccessFlags{host: "localhost", allowHosts: []string{"https://term.example"}, randomPassword: true}, true},
+		"on a network bind":  {webAccessFlags{host: "0.0.0.0", allowHosts: []string{"term.example"}, randomPassword: true}, true},
+		"an IPv6 literal ok": {webAccessFlags{host: "localhost", allowHosts: []string{"[fd00::1]"}, randomPassword: true}, false},
+	} {
+		_, err := planWebAccess(&bytes.Buffer{}, tc.f)
+		if tc.fail && err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+		if !tc.fail && err != nil {
+			t.Errorf("%s: refused: %v", name, err)
+		}
+	}
+}
+
+// TestNetworkBindHasNoHostCheck: on a network bind the password is the guard.
+// A LAN client that reaches the server by its address gets a session.
+func TestNetworkBindHasNoHostCheck(t *testing.T) {
+	a, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "0.0.0.0", port: "7681", randomPassword: true})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if a.hosts != nil {
+		t.Fatalf("a network bind checks the Host header against %v", a.hosts)
+	}
+}
+
+// TestLoopbackWithNoPasswordSaysOthersCanConnect: the one start line.
+func TestLoopbackWithNoPasswordSaysOthersCanConnect(t *testing.T) {
+	t.Setenv(webPasswordEnv, "")
+	var out bytes.Buffer
+	if _, err := planWebAccess(&out, webAccessFlags{host: "localhost"}); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if !strings.Contains(out.String(), "other users on this machine can connect") || !strings.Contains(out.String(), "--random-password") {
+		t.Fatalf("start line is %q", out.String())
 	}
 }
 
