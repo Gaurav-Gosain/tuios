@@ -217,7 +217,7 @@ hosts.
 |---|---|
 | `Ctrl+Shift+Click` on a window | Add or remove that window from the multifocus set |
 | Palette: "Toggle multifocus" or action `toggle_multifocus_active` | Add or remove the currently focused window |
-| Palette: "Toggle multifocus on all panes" or action `toggle_multifocus_all` | Add every visible window on the workspace. When all of them are in the set, empty the set |
+| Palette: "Toggle multifocus on all panes" or action `toggle_multifocus_all` | Add every visible window on the workspace. When all of them are in the set, remove them from the set. Windows on other workspaces stay in the set |
 | Palette: "Clear multifocus" | Empty the set |
 
 The two actions have no default key. To bind them, add them to a
@@ -240,6 +240,8 @@ While the set is non-empty and you are in **terminal mode**, every keystroke tha
 would go to the focused window's shell is also sent to each window in the set.
 A paste goes to each window in the set too. Each window gets the paste as a
 bracketed paste only when the program in that window turned bracketed paste on.
+A paste into a scrolled window returns it to live output first, as a typed key
+does. In copy mode TUIOS drops the paste.
 Keys handled by TUIOS itself (the leader key and its chords, overlays, workspace
 switches, copy mode) are not broadcast, because they never reach the forwarding
 path.
@@ -253,6 +255,7 @@ Limitations:
 - **It follows windows, not positions.** The set is keyed by window ID, so
   swapping panes around keeps the same windows selected. Closing a window
   removes it from the set.
+- **No popups.** A popup cannot join the set.
 - **No default key.** Bind `toggle_multifocus_active` and
   `toggle_multifocus_all` yourself, or use `Ctrl+Shift+Click` or the palette.
 

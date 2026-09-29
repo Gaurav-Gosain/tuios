@@ -204,6 +204,61 @@ func TestMultifocusClipboardPasteInterceptedByPrompts(t *testing.T) {
 	}
 }
 
+// toggle_multifocus_all works on the current workspace only. Members on other
+// workspaces do not stop it from filling the set, and a clear keeps them.
+func TestMultifocusToggleAllScopedToWorkspace(t *testing.T) {
+	o := osWithBindings(t, func(k *config.KeybindingsConfig) {
+		k.PrefixMode["toggle_multifocus_all"] = []string{"Y"}
+	})
+	ws := o.CurrentWorkspace
+	o.Windows = []*terminal.Window{
+		{ID: "a", Workspace: ws},
+		{ID: "other", Workspace: ws + 1},
+	}
+	o.FocusedWindow = 0
+	o.Mode = app.TerminalMode
+	o.MultifocusSet = map[string]bool{"other": true}
+
+	lastNote := func() string {
+		if len(o.Notifications) == 0 {
+			return ""
+		}
+		return o.Notifications[len(o.Notifications)-1].Message
+	}
+
+	o.PrefixActive = true
+	_, _ = HandlePrefixCommand(press("Y"), o)
+	if !o.MultifocusSet["a"] || !o.MultifocusSet["other"] {
+		t.Fatalf("after toggle_multifocus_all the set is %v, want a and other", o.MultifocusSet)
+	}
+	if got, want := lastNote(), "Multifocus: 1 window"; got != want {
+		t.Errorf("notification %q, want %q (panes on this workspace only)", got, want)
+	}
+
+	o.PrefixActive = true
+	_, _ = HandlePrefixCommand(press("Y"), o)
+	if o.MultifocusSet["a"] || !o.MultifocusSet["other"] {
+		t.Fatalf("after the second toggle the set is %v, want only other", o.MultifocusSet)
+	}
+}
+
+// A popup cannot join the set by toggle_multifocus_active, the same as
+// toggle_multifocus_all leaves it out.
+func TestMultifocusToggleActiveSkipsPopup(t *testing.T) {
+	o := osWithBindings(t, func(k *config.KeybindingsConfig) {
+		k.PrefixMode["toggle_multifocus_active"] = []string{"y"}
+	})
+	o.Windows = []*terminal.Window{{ID: "pop", Workspace: o.CurrentWorkspace, IsPopup: true}}
+	o.FocusedWindow = 0
+	o.Mode = app.TerminalMode
+
+	o.PrefixActive = true
+	_, _ = HandlePrefixCommand(press("y"), o)
+	if len(o.MultifocusSet) != 0 {
+		t.Fatalf("toggle_multifocus_active on a popup gave the set %v, want it empty", o.MultifocusSet)
+	}
+}
+
 // Issue #232: both toggles run from a key the user binds.
 func TestMultifocusToggleActionsByKey(t *testing.T) {
 	o := osWithBindings(t, func(k *config.KeybindingsConfig) {
