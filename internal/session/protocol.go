@@ -551,6 +551,10 @@ type ExecuteCommandPayload struct {
 	Args        []string `json:"args,omitempty"`         // Command arguments
 	TapeScript  string   `json:"tape_script,omitempty"`  // Raw tape script to execute (alternative to CommandType)
 	RequestID   string   `json:"request_id,omitempty"`   // Optional ID for matching responses
+	// Cwd is the directory a NewWindow starts its shell in. Empty keeps the
+	// default. An older daemon ignores it and the window starts where it
+	// would have before.
+	Cwd string `json:"cwd,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

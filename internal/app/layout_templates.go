@@ -129,7 +129,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		// directory at all and every window it restored opened wherever the
 		// daemon happened to be.
 		if w.Terminal != nil {
-			lw.WorkingDir = paneDir(w)
+			lw.WorkingDir = layoutPaneDir(w)
 		}
 
 		tmpl.Windows = append(tmpl.Windows, lw)
@@ -203,9 +203,19 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	// Assign existing windows to template slots
 	for i, tw := range templateSlots {
 		var win *terminal.Window
+		dir := layoutLoadDir(tw.WorkingDir)
 		if i < len(existingWindows) {
 			// Reuse existing window
 			win = existingWindows[i]
+			// An existing pane is moved with a typed cd, and only when its
+			// shell is at a prompt: into an editor or an agent the line would
+			// be keys or a prompt. The path is quoted for a POSIX shell, so
+			// nothing in it runs.
+			if dir != "" {
+				if _, ok := paneBusyReason(win); ok {
+					_ = win.SendInput([]byte("cd " + shellQuote(dir) + " && clear\n"))
+				}
+			}
 		} else {
 			// Need more windows than we have, so create new ones.
 			title := tw.CustomName
@@ -213,7 +223,8 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 				title = tw.Title
 			}
 			before := len(m.Windows)
-			m.AddWindow(title)
+			// A new pane starts in the directory, so nothing is typed.
+			m.AddWindowIn(dir, title)
 			// In a daemon session the window does not exist yet: the daemon is
 			// creating it and will push it back. Only take the new window when
 			// one actually appeared, or this would grab the last existing window
@@ -238,17 +249,6 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 
 		if tw.CustomName != "" {
 			win.CustomName = tw.CustomName
-		}
-
-		// If template specifies a working directory, cd to it
-		if tw.WorkingDir != "" {
-			if win.Pty != nil {
-				cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
-				_, _ = win.Pty.Write([]byte(cdCmd))
-			} else if win.DaemonWriteFunc != nil {
-				cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
-				_ = win.DaemonWriteFunc([]byte(cdCmd))
-			}
 		}
 
 		// If template specifies a startup command, run it (only for newly created windows)
@@ -350,8 +350,10 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 			// unquoted argument on them: an unquoted "my project" replayed as "my".
 			fmt.Fprintf(&sb, "RenameWindow %q\n", w.CustomName)
 		}
-		if w.WorkingDir != "" {
-			fmt.Fprintf(&sb, "Type cd %s\nEnter\n", w.WorkingDir)
+		if dir := layoutLoadDir(w.WorkingDir); dir != "" {
+			// Quoted twice: for the shell that runs the cd, then for the
+			// tape lexer that reads the Type line.
+			fmt.Fprintf(&sb, "Type %q\nEnter\n", "cd "+shellQuote(dir))
 		}
 		if w.Command != "" {
 			cmd := w.Command
@@ -364,4 +366,31 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 	}
 
 	return sb.String()
+}
+
+// layoutPaneDir is the directory a saved layout records for a pane.
+//
+// The pane's OSC 7 announcement is any text a program printed, so it is kept
+// only when the kernel does not contradict it. When the kernel reports the
+// shell somewhere else, that is the directory recorded. See cwdIsSpoofed.
+func layoutPaneDir(w *terminal.Window) string {
+	if w.Cwd != "" && w.ShellPgid > 0 && cwdIsSpoofed(w.ShellPgid, w.Cwd) {
+		dir, _ := terminal.ShellCWD(w.ShellPgid)
+		return dir
+	}
+	return paneDir(w)
+}
+
+// layoutLoadDir is the directory a layout entry may move a pane to, or "".
+// A template is a file anyone can edit, and an older tuios saved whatever a
+// pane announced, so the path is checked again when it is used: it must be
+// absolute and hold no control characters.
+func layoutLoadDir(dir string) string {
+	if dir == "" || !filepath.IsAbs(dir) {
+		return ""
+	}
+	if strings.ContainsFunc(dir, func(r rune) bool { return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
+		return ""
+	}
+	return dir
 }

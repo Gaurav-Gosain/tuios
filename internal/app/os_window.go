@@ -537,6 +537,13 @@ func (m *OS) QuitSession() {
 // name, so whichever side spawns the PTY is the side that execs and there is
 // no quoting and no pane to find afterwards.
 func (m *OS) AddWindow(name string, command ...string) *OS {
+	return m.AddWindowIn("", name, command...)
+}
+
+// AddWindowIn is AddWindow with the directory the pane's process starts in.
+// Empty keeps the default. The side that spawns the process sets it, so no cd
+// is typed into the pane afterwards.
+func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		var args []string
 		if name != "" || len(command) > 0 {
@@ -544,7 +551,7 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 			// positional: name first, argv after.
 			args = append([]string{name}, command...)
 		}
-		if err := m.DaemonClient.SendIntent("NewWindow", args...); err != nil {
+		if err := m.DaemonClient.SendIntentIn(dir, "NewWindow", args...); err != nil {
 			m.LogError("Failed to ask the daemon for a new window: %v", err)
 		} else {
 			// From here until the daemon says what it did, this client does not
@@ -562,7 +569,7 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 
 	x, y, width, height := m.NewWindowPlacement()
 
-	window, err := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
+	window, err := terminal.NewWindowIn(dir, newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
 	if err != nil {
 		m.LogError("Failed to create window %s: %v", title, err)
 		return m // Failed to create window

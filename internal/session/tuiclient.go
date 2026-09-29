@@ -1045,10 +1045,17 @@ func (c *TUIClient) NotifyTerminalSize(width, height int) error {
 // same news. A send error means the socket is gone, which the read loop is
 // already reporting as a disconnect.
 func (c *TUIClient) SendIntent(commandType string, args ...string) error {
+	return c.SendIntentIn("", commandType, args...)
+}
+
+// SendIntentIn is SendIntent with the directory a NewWindow starts in. The
+// daemon spawns the shell there, so nothing has to be typed into it.
+func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error {
 	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
 		SessionName: c.sessionName,
 		CommandType: commandType,
 		Args:        args,
+		Cwd:         cwd,
 	})
 	if err != nil {
 		return err

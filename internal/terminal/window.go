@@ -701,6 +701,17 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 // and the window closes when the program exits, the same way it does when a
 // shell does.
 func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
+	return NewWindowIn("", id, title, x, y, width, height, z, exitChan, ptyDataChan, scrollbackLines, command...)
+}
+
+// NewWindowIn is NewWindow with the directory the process starts in. An empty
+// dir, or one that is not a directory, keeps this process's own.
+func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
+	if dir != "" {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			dir = ""
+		}
+	}
 	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
@@ -735,6 +746,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		} else {
 			cmd = exec.Command(detectShell())
 		}
+		cmd.Dir = dir
 		cmd.Env = append(guestBaseEnv(),
 			"TERM="+termType,
 			"COLORTERM="+colorTerm,

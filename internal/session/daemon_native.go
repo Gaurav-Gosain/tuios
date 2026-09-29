@@ -42,6 +42,12 @@ func focusedWindowID(state *SessionState) (string, error) {
 // (for read verbs and NewWindow) or an error. Rendering-dependent verbs return
 // errNeedsClient.
 func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []string, onExit func(ptyID string)) (map[string]any, error) {
+	return d.executeDaemonCommandIn(sess, commandType, args, "", onExit)
+}
+
+// executeDaemonCommandIn is executeDaemonCommand with the directory a
+// NewWindow starts in. Other commands ignore cwd.
+func (d *Daemon) executeDaemonCommandIn(sess *Session, commandType string, args []string, cwd string, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
 		name := ""
@@ -57,7 +63,7 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 			command = args[1:]
 		}
 		win, err := sess.AddDaemonWindowWith(
-			NewWindowOptions{Focus: true, Command: command, Name: name}, onExit)
+			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd}, onExit)
 		if err != nil {
 			return nil, err
 		}
