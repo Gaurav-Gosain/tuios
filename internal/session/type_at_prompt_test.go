@@ -41,7 +41,7 @@ func TestTypeAtPromptTypesOnlyAtAShellPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	typed, err := tui.TypeAtPrompt(win.PTYID, "cd '"+dir+"'\n")
+	typed, err := tui.CdAtPrompt(win.PTYID, dir, false)
 	if err != nil || !typed {
 		t.Fatalf("TypeAtPrompt at a prompt = %v, %v; want typed", typed, err)
 	}
@@ -55,8 +55,8 @@ func TestTypeAtPromptTypesOnlyAtAShellPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitPrompt(t, "sleep to take the terminal", func() bool { return !shellAtPrompt(pty) })
-	typed, err = tui.TypeAtPrompt(win.PTYID, "cd /\n")
-	if err != nil || typed {
+	typed, err = tui.CdAtPrompt(win.PTYID, "/", false)
+	if typed {
 		t.Fatalf("TypeAtPrompt under a program = %v, %v; want not typed", typed, err)
 	}
 }
@@ -64,7 +64,7 @@ func TestTypeAtPromptTypesOnlyAtAShellPrompt(t *testing.T) {
 // A daemon that did not offer the request gets none, and nothing is typed.
 func TestTypeAtPromptFailsClosedOnAnOlderDaemon(t *testing.T) {
 	c := NewTUIClient()
-	if typed, err := c.TypeAtPrompt("pty", "cd /\n"); typed || err != ErrTypeAtPromptUnsupported {
+	if typed, err := c.CdAtPrompt("pty", "/", false); typed || err != ErrTypeAtPromptUnsupported {
 		t.Fatalf("TypeAtPrompt on an older daemon = %v, %v", typed, err)
 	}
 }

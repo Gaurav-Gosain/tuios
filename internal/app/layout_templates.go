@@ -215,13 +215,13 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 			// the line would be keys or a prompt. A pane it cannot see into (a
 			// daemon pane, or a platform that does not say) stays where it is.
 			if dir != "" {
-				line, ok := cdLine(dir)
+				_, ok := cdLine(dir)
 				_, idle := paneBusyReason(win)
 				switch {
 				case !ok:
 					refused++
 				case idle:
-					m.typeAtPrompt(win, line+" && clear\n", "")
+					m.cdAtPrompt(win, dir, true, "")
 				}
 			}
 		} else {
