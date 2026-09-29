@@ -131,6 +131,13 @@ The command palette also has the entries "Copy mode: search forward" and
 opens the prompt and does not move the cursor. In multi copy mode, the prompt
 opens in each pane of the mode.
 
+In copy mode, a key in the `global`, `terminal_mode` or `window_management`
+section starts the action. A key under the leader does not start it, because
+copy mode uses `Ctrl+B` for page up. In copy mode, `/` and `?` open the same
+prompts.
+
+When a search finds more than 1000 matches, the prompt shows `1000+`.
+
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 

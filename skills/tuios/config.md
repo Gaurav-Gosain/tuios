@@ -301,5 +301,8 @@ action has a default key. Add the binding to config.toml:
 copy_mode_search_backward = ["/"]
 ```
 
+A key under the leader does not work inside copy mode, because copy mode uses
+`Ctrl+B` for page up. A key in `global` or `terminal_mode` works in both.
+
 tuios cannot put two actions on one key. `tuios send-keys` cannot drive copy
 mode, because copy mode ignores remote keys.
