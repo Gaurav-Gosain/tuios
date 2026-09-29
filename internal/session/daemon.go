@@ -425,12 +425,11 @@ type connState struct {
 	// needs it. See mayActAsHuman.
 	fromPaneOnce sync.Once
 	fromPane     bool
-	// placementDone, placedIn and placedWhy cache placeClient: the session
+	// placedIn and placedWhy cache placeClient: the session
 	// whose pane shows this client, by ID, and which test said so. Guarded by
 	// mu. See nested_attach.go.
-	placementDone bool
-	placedIn      string
-	placedWhy     string
+	placedIn  string
+	placedWhy string
 	// paneOnly marks a call a pane on another machine sent through its report
 	// channel (hosted_calls.go). It is a pane by construction, whatever the
 	// pid says, so it can never act as the person.

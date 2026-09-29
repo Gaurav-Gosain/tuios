@@ -431,6 +431,13 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
+	// The daemon took this client off the session after the attach: its
+	// output turned out to reach a pane of the session. Said in the same words
+	// as the refusal an attach gets.
+	if reason == app.ExitNestedRefused {
+		return &diagnosticError{What: client.NestedRefusal()}
+	}
+
 	return reportSessionExit(exitSession, exitHost, reason, killed)
 }
 

@@ -96,6 +96,12 @@ func (m *OS) ExitNotice() string {
 			"A different client or a command removed it.\n" +
 			"Connect again to use one of the other sessions."
 
+	case ExitNestedRefused:
+		if m.DaemonClient != nil {
+			return m.DaemonClient.NestedRefusal()
+		}
+		return ""
+
 	case ExitDaemonLost:
 		return "tuios lost the connection to the daemon.\n" +
 			"The daemon stopped, or it failed.\n" +

@@ -38,12 +38,11 @@ const (
 	nestProbeMax    = len(nestProbePrefix) + nestNonceLen + len(nestProbeEnd)
 )
 
-// nestProbeWindow is how long after the probe was written the daemon waits for
-// it to show up in a pane before it concludes the client is not in one. A
-// relay passes it on in a few milliseconds. The client writes it before it
-// detects the terminal and dials, so most of the window has already passed
-// when the attach arrives.
-const nestProbeWindow = 200 * time.Millisecond
+// nestProbeWatch is how long after an attach the daemon keeps watching pane
+// output for the client's probe. The attach does not wait for it. A relay
+// passes the probe on in milliseconds, and ssh over a slow link in the time
+// of one trip, so two seconds covers both with room to spare.
+const nestProbeWatch = 2 * time.Second
 
 // nestSightingTTL is how long a sighting is kept for an attach to claim it.
 const nestSightingTTL = 30 * time.Second
@@ -72,10 +71,7 @@ func NewNestProbe() (nonce string, seq []byte) {
 }
 
 // NestProbe is a probe a client wrote to its terminal.
-type NestProbe struct {
-	nonce string
-	at    time.Time
-}
+type NestProbe struct{ nonce string }
 
 // WriteNestProbe writes a fresh probe to w, which must be the terminal the
 // client renders to. It is written as early as the client can, so the probe
@@ -85,34 +81,24 @@ func WriteNestProbe(w io.Writer) NestProbe {
 	if _, err := w.Write(seq); err != nil {
 		return NestProbe{}
 	}
-	return NestProbe{nonce: nonce, at: time.Now()}
+	return NestProbe{nonce: nonce}
 }
 
 // SetNestProbe records the probe on the client, so every attach sends it. Call
 // it before the first attach.
 func (c *TUIClient) SetNestProbe(p NestProbe) {
 	c.nestProbe = p.nonce
-	c.nestProbeAt = p.at
 }
 
-// nestProbeFields are the probe fields for an attach payload.
-func (c *TUIClient) nestProbeFields() (string, int) {
-	if c.nestProbe == "" {
-		return "", 0
-	}
-	return c.nestProbe, int(time.Since(c.nestProbeAt) / time.Millisecond)
-}
-
-// nestSightings records the pane sessions each probe was seen in. It is global
-// because a PTY does not hold its daemon, and a nonce is random, so two
-// daemons in one process (tests) cannot confuse each other's.
+// nestSightings records the pane session each probe was seen in, and the
+// watches waiting for a probe that was not seen by the time its client
+// attached. It is global because a PTY does not hold its daemon, and a nonce
+// is random, so two daemons in one process (tests) cannot confuse each other's.
 var nestSightings = struct {
 	sync.Mutex
-	seen map[string]nestSighting
-	cond *sync.Cond
-}{seen: make(map[string]nestSighting)}
-
-func init() { nestSightings.cond = sync.NewCond(&nestSightings.Mutex) }
+	seen    map[string]nestSighting
+	watches map[string]func(sessionID string)
+}{seen: make(map[string]nestSighting), watches: make(map[string]func(string))}
 
 type nestSighting struct {
 	sessionID string
@@ -146,6 +132,7 @@ func recordNestProbes(b []byte, sessionID string) {
 			return
 		}
 		nonce := string(b[:nestNonceLen])
+		b = b[nestNonceLen:]
 		now := time.Now()
 		nestSightings.Lock()
 		for k, s := range nestSightings.seen {
@@ -154,36 +141,58 @@ func recordNestProbes(b []byte, sessionID string) {
 			}
 		}
 		nestSightings.seen[nonce] = nestSighting{sessionID: sessionID, at: now}
-		nestSightings.cond.Broadcast()
+		watch := nestSightings.watches[nonce]
+		delete(nestSightings.watches, nonce)
 		nestSightings.Unlock()
-		b = b[nestNonceLen:]
+		if watch != nil {
+			// Off the pane's read loop: the watch detaches a client, which
+			// takes locks the read loop must not wait on.
+			go watch(sessionID)
+		}
 	}
 }
 
-// awaitNestProbe returns the session ID of the pane the probe nonce was seen
-// in, or "" when it was not seen. ageMs is how long ago the client wrote it.
-// It waits until the probe is nestProbeWindow old.
-func awaitNestProbe(nonce string, ageMs int) string {
+// seenNestProbe returns the session ID of the pane the probe nonce was seen
+// in, or "" when it has not been seen.
+func seenNestProbe(nonce string) string {
 	if nonce == "" {
 		return ""
 	}
-	deadline := time.Now().Add(nestProbeWindow - time.Duration(ageMs)*time.Millisecond)
-	// Wake the wait at the deadline even if no probe arrives.
-	timer := time.AfterFunc(time.Until(deadline), func() {
-		nestSightings.Lock()
-		nestSightings.cond.Broadcast()
-		nestSightings.Unlock()
-	})
-	defer timer.Stop()
 	nestSightings.Lock()
 	defer nestSightings.Unlock()
-	for {
-		if s, ok := nestSightings.seen[nonce]; ok {
-			return s.sessionID
-		}
-		if !time.Now().Before(deadline) {
-			return ""
-		}
-		nestSightings.cond.Wait()
+	return nestSightings.seen[nonce].sessionID
+}
+
+// watchNestProbe calls fn with the pane's session ID if the probe nonce shows
+// up within d. A probe can arrive after its client attached, over a slow ssh
+// link, so the attach is not held up waiting for it: the watch catches it
+// afterwards. A probe seen between the attach's check and this call is
+// answered at once.
+func watchNestProbe(nonce string, d time.Duration, fn func(sessionID string)) {
+	if nonce == "" {
+		return
 	}
+	nestSightings.Lock()
+	if s, ok := nestSightings.seen[nonce]; ok {
+		nestSightings.Unlock()
+		go fn(s.sessionID)
+		return
+	}
+	nestSightings.watches[nonce] = fn
+	nestSightings.Unlock()
+	time.AfterFunc(d, func() {
+		nestSightings.Lock()
+		delete(nestSightings.watches, nonce)
+		nestSightings.Unlock()
+	})
+}
+
+// NestedRefusal is the daemon's reason when it took this client off its
+// session after the attach, because the client's output reached a pane of the
+// session it shows. It is "" otherwise.
+func (c *TUIClient) NestedRefusal() string {
+	if r := c.nestedRefusal.Load(); r != nil {
+		return *r
+	}
+	return ""
 }

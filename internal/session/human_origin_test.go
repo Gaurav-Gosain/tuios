@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -31,6 +32,8 @@ const (
 	helperArgsEnv = "TUIOS_HELPER_ARGS"
 	// helperDetachEnv makes the helper wait until it has been reparented.
 	helperDetachEnv = "TUIOS_HELPER_DETACH"
+	// helperSizeEnv is the size an attaching helper reports, WxH.
+	helperSizeEnv = "TUIOS_HELPER_SIZE"
 )
 
 // ppidAtStart is the helper's parent when the binary started.
@@ -79,12 +82,17 @@ func TestHelperSocketCaller(t *testing.T) {
 		}
 		result = "nonce:" + c.HumanNonce()
 		_ = c.Close()
-	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold":
+	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold", "attach-late-probe":
 		mode := os.Getenv(helperModeEnv)
+		// The size the client attaches at, WxH, 80x24 when unset.
+		width, height := 80, 24
+		if size := os.Getenv(helperSizeEnv); size != "" {
+			_, _ = fmt.Sscanf(size, "%dx%d", &width, &height)
+		}
 		c := NewTUIClient()
 		c.Served = strings.HasPrefix(mode, "attach-served")
 		c.AllowNested = mode == "attach-force"
-		if strings.HasSuffix(mode, "-probe") {
+		if strings.HasSuffix(mode, "-probe") || mode == "attach-late-probe" {
 			// Written to this process's terminal, as a client writes it.
 			c.SetNestProbe(WriteNestProbe(os.Stdout))
 		}
@@ -94,15 +102,31 @@ func TestHelperSocketCaller(t *testing.T) {
 			break
 		}
 		c.conn = conn
-		if err := c.handshake("test", 80, 24, nil); err != nil {
+		if err := c.handshake("test", width, height, nil); err != nil {
 			result = "handshake: " + err.Error()
 			break
 		}
-		if _, err := c.AttachSession(os.Getenv(helperArgsEnv), false, 80, 24); err != nil {
+		if _, err := c.AttachSession(os.Getenv(helperArgsEnv), false, width, height); err != nil {
 			result = "attach: " + err.Error()
 			break
 		}
 		result = "nonce:" + c.HumanNonce()
+		if mode == "attach-late-probe" {
+			// Attached before the probe reached any pane. Report that, then
+			// wait to be taken off, and report the reason to out.ended.
+			ended := make(chan string, 1)
+			c.OnSessionEnded(func(_, reason string) { ended <- reason })
+			c.StartReadLoop()
+			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
+				_ = os.Rename(out+".tmp", out)
+			}
+			select {
+			case reason := <-ended:
+				_ = os.WriteFile(out+".ended", []byte(reason+"|"+c.NestedRefusal()), 0o600)
+			case <-time.After(time.Minute):
+			}
+			return
+		}
 		if mode == "attach-hold" {
 			// Stays attached, so a later attach sees this client in the
 			// chain. The pane closing with its daemon ends it.

@@ -145,17 +145,19 @@ func CheckNestedAttach(target string) error {
 }
 
 // placeClient returns the session whose pane shows the client on cs, or nil,
-// and which test said so. It is worked out once per connection: the process
-// and the terminal behind a connection do not change, and a probe is written
-// once. A link connection's peer is the proxy, so it is never placed.
+// and which test said so. A placement found once is kept for the connection:
+// the process and the terminal behind a connection do not change. A client
+// not placed yet is looked at again on its next attach, since its probe may
+// have been seen since. A link connection's peer is the proxy, so it is never
+// placed.
+//
+// It never waits: a probe that has not been seen yet is watched for after the
+// attach instead. See watchNestedAfterAttach.
 func (d *Daemon) placeClient(cs *connState, p *AttachPayload) (*Session, string) {
 	cs.mu.Lock()
-	done, placed, why := cs.placementDone, cs.placedIn, cs.placedWhy
+	placed, why := cs.placedIn, cs.placedWhy
 	cs.mu.Unlock()
-	if done {
-		if placed == "" {
-			return nil, ""
-		}
+	if placed != "" {
 		return d.manager.GetSessionByID(placed), why
 	}
 	var sess *Session
@@ -164,18 +166,59 @@ func (d *Daemon) placeClient(cs *connState, p *AttachPayload) (*Session, string)
 			sess, why = d.paneSession(cs.peerPID)
 		}
 		if sess == nil {
-			if id := awaitNestProbe(p.NestProbe, p.NestProbeAgeMs); id != "" {
-				sess, why = d.manager.GetSessionByID(id), "its output reaches a pane of this daemon"
+			if id := seenNestProbe(p.NestProbe); id != "" {
+				sess, why = d.manager.GetSessionByID(id), paneOriginProbe
 			}
 		}
 	}
-	cs.mu.Lock()
-	cs.placementDone = true
 	if sess != nil {
+		cs.mu.Lock()
 		cs.placedIn, cs.placedWhy = sess.ID, why
+		cs.mu.Unlock()
 	}
-	cs.mu.Unlock()
 	return sess, why
+}
+
+// paneOriginProbe is the reason for a client placed by its probe.
+const paneOriginProbe = "its output reaches a pane of this daemon"
+
+// watchNestedAfterAttach watches for the probe of a client that attached
+// before its probe reached any pane, and takes the client off the session if
+// the probe turns up in a pane that makes it nested. The attach itself does
+// not wait for this, so an attach that is not nested costs nothing. A forced
+// attach is placed but not taken off.
+func (d *Daemon) watchNestedAfterAttach(cs *connState, targetID, nonce string, forced bool) {
+	watchNestProbe(nonce, nestProbeWatch, func(paneSessionID string) {
+		cs.mu.Lock()
+		current := cs.sessionID
+		cs.placedIn, cs.placedWhy = paneSessionID, paneOriginProbe
+		cs.mu.Unlock()
+		if forced || current != targetID {
+			return
+		}
+		inside := d.manager.GetSessionByID(paneSessionID)
+		target := d.manager.GetSessionByID(current)
+		if inside == nil || target == nil || !d.shownInside(inside.ID, target.ID, cs.clientID) {
+			return
+		}
+		d.ejectNested(cs, inside, target)
+	})
+}
+
+// ejectNested takes a client off target because it turned out to show target
+// inside itself, and tells it why with the refusal an attach would have got.
+// The size it set is dropped with it, as for any client that leaves.
+func (d *Daemon) ejectNested(cs *connState, inside, target *Session) {
+	LogBasic("Detached client %s (pid %d) from session %s: %s, in session %s",
+		cs.clientID, cs.peerPID, target.Name, paneOriginProbe, inside.Name)
+	if !d.detachClient(cs) {
+		return
+	}
+	_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
+		SessionName: target.Name,
+		Reason:      nestedRefusalText(inside, target),
+		Nested:      true,
+	})
 }
 
 // shownInside reports whether session from is shown inside session to,
@@ -315,14 +358,23 @@ func (s *Session) holdsWindowID(id string) bool {
 	return false
 }
 
+// nestedRefusalText is the refusal for a client inside session inside that
+// asks for session target.
+func nestedRefusalText(inside, target *Session) string {
+	if target.ID != inside.ID {
+		return nestedChainMessage(inside.Name, target.Name)
+	}
+	return NestedAttachMessage(inside.Name, false)
+}
+
 // refuseNestedAttach sends the refusal for an attach that would show a session
 // inside itself. target is nil for an unnamed attach, and inside itself when
 // the client runs in a pane of the session it asks for.
 func (d *Daemon) refuseNestedAttach(cs *connState, inside, target *Session, why string) error {
 	unnamed := target == nil
-	msg := NestedAttachMessage(inside.Name, unnamed)
-	if target != nil && target.ID != inside.ID {
-		msg = nestedChainMessage(inside.Name, target.Name)
+	msg := NestedAttachMessage(inside.Name, true)
+	if !unnamed {
+		msg = nestedRefusalText(inside, target)
 	}
 	LogBasic("Refused attach from client %s (pid %d): it runs in a pane of session %s (%s)",
 		cs.clientID, cs.peerPID, inside.Name, why)

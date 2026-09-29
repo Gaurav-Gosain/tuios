@@ -246,6 +246,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		(*hook)()
 	}
 
+	// A probe that has not reached a pane yet may still: see nest_probe.go.
+	if inside == nil && !cs.viaLink {
+		d.watchNestedAfterAttach(cs, session.ID, payload.NestProbe, payload.AllowNested)
+	}
+
 	// The hardest thing that can have happened while the reply was being put
 	// together is the session going away underneath it. A client registers on
 	// the session at the top of this function and joins the broadcast set with
@@ -316,6 +321,16 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 }
 
 func (d *Daemon) handleDetach(cs *connState) error {
+	if !d.detachClient(cs) {
+		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+	}
+	return d.sendMessage(cs, MsgDetached, nil)
+}
+
+// detachClient takes the client on cs off its session: its subscriptions, its
+// size and its place in the session's broadcasts. It reports false when the
+// client was not attached.
+func (d *Daemon) detachClient(cs *connState) bool {
 	clientID := cs.clientID
 
 	// Snapshot the subscriptions and session, then clear the fields, all under
@@ -324,7 +339,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	sessionID := cs.sessionID
 	if sessionID == "" {
 		cs.mu.Unlock()
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return false
 	}
 	subs := make([]string, 0, len(cs.ptySubscriptions))
 	for ptyID := range cs.ptySubscriptions {
@@ -363,8 +378,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 
 	// Notify other clients that this client left
 	d.notifyClientLeft(sessionID, clientID)
-
-	return d.sendMessage(cs, MsgDetached, nil)
+	return true
 }
 
 func (d *Daemon) handleNew(cs *connState, msg *Message) error {

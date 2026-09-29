@@ -240,6 +240,10 @@ const (
 	// session on this machine to come back to. The session on the host keeps
 	// running.
 	ExitHostLost
+	// ExitNestedRefused means the daemon took this client off its session,
+	// because the client's output reached a pane of that session. The
+	// session keeps running.
+	ExitNestedRefused
 )
 
 // InputHandler is a function type that handles input messages.
@@ -1980,6 +1984,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// print an error.
 		if !m.QuitRequested {
 			m.ExitReason = ExitSessionKilled
+		}
+		// The session did not end: the daemon took this client off it for
+		// showing the session inside itself.
+		if m.DaemonClient != nil && m.DaemonClient.NestedRefusal() != "" {
+			m.ExitReason = ExitNestedRefused
 		}
 		return m, tea.Quit
 
