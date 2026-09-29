@@ -1493,6 +1493,9 @@ type OS struct {
 	// not arrived yet, and scratchPendingAt is when. See scratch.go.
 	scratchPending   string
 	scratchPendingAt time.Time
+	// layoutInstant places the next layout without animation. See
+	// applyStartupTiling and layoutAnimationDuration.
+	layoutInstant bool
 
 	// sessionUnarranged records that the session this client attached to had
 	// never been laid out by anybody: every window it carried was still marked

@@ -245,6 +245,18 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// the shell gets the inner content size, matching restoreSession.
 	ptyWidth := max(width-2, 1)
 	ptyHeight := max(height-2, 1)
+	// A popup starts at the box a client will give it, so its command reads
+	// its real size when it starts. A program that reads its size once and
+	// then acts on it (a nested tuios client, a pager) otherwise starts at
+	// the whole session's size and is told the real one only after a client
+	// has placed the popup.
+	//
+	// The window's box is the popup's box too: the daemon sizes a PTY by
+	// its window's box, and the session's box would undo this at once.
+	if opts.Popup {
+		ptyWidth, ptyHeight = popupContentSize(width, height, s.LayoutReserve(), opts.PopupWidth, opts.PopupHeight)
+		width, height = ptyWidth+2, ptyHeight+2
+	}
 
 	windowID := uuid.New().String()
 	if title == "" {

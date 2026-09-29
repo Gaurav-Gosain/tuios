@@ -293,7 +293,7 @@ func (m *OS) ApplyBSPLayout() {
 		// give a start to, and NewSnapAnimation lands the pane on the target in
 		// one step, so the geometry is left exactly as the un-animated path had
 		// it.
-		dur := m.Settings.GetAnimationDuration()
+		dur := m.layoutAnimationDuration()
 		if zoomRetile && !m.Settings.ZoomAnimation {
 			// The retile a zoom asked for, from somebody who does not want the
 			// zoom to slide.

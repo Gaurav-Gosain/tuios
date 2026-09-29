@@ -28,6 +28,16 @@ const (
 	KittyActionCompose       KittyGraphicsAction = 'c'
 )
 
+// IsKittyAnimationAction reports whether a is one of the frame edits: a=f,
+// a=a and a=c. A host either makes them or refuses them.
+func IsKittyAnimationAction(a KittyGraphicsAction) bool {
+	return a == KittyActionFrame || a == KittyActionAnimation || a == KittyActionCompose
+}
+
+// KittyAnimationRefusal is the answer to a frame edit the host cannot make.
+// A guest that gets it falls back to sending whole frames.
+const KittyAnimationRefusal = "ENOTSUPPORTED:host terminal does not support animation"
+
 type KittyGraphicsMedium byte
 
 const (

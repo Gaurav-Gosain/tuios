@@ -1098,6 +1098,9 @@ type Session struct {
 	// rather than behind a lock that callback could wait on. See
 	// kittyQueryResponse.
 	linkedViewer atomic.Bool
+	// kittyAnimation says the attached client's host edits image frames. Read
+	// from the VT callback, so it is atomic. See SetKittyAnimation.
+	kittyAnimation atomic.Bool
 	// fed is the link manager a window on another machine is opened over. It is
 	// nil unless the daemon installed one, and every reader checks. See
 	// remote_pane.go.
@@ -1118,6 +1121,16 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 	s.kittyGraphics = kitty
 	s.sixelGraphics = sixel
 }
+
+// SetKittyAnimation records whether the attached client's host edits image
+// frames. Like SetGraphicsCapabilities, the most recent attach wins.
+//
+// A frame edit the host cannot make is refused by the daemon, from the pane's
+// own emulator, so the refusal reaches the guest in the order the guest asked
+// its questions. A client used to refuse it, a round trip later: after the
+// daemon had answered DA1, which is where a probing guest stops reading. A
+// nested tuios then took the refusal for keys and typed it into its pane.
+func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
 
 // GraphicsCapabilities returns the recorded kitty and sixel support.
 func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
@@ -1581,6 +1594,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 				terminal.WriteResponse(response)
 			}
 			return
+		}
+		if response := kittyAnimationRefusal(cmd, remotePane, s.kittyAnimation.Load()); response != nil {
+			terminal.WriteResponse(response)
 		}
 	})
 

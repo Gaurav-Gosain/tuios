@@ -164,7 +164,7 @@ func (m *OS) tileAllWindows() {
 		// at full size, and a zoom cut between two arrangements. The two tilers
 		// answer the same question and there was no reason for them to answer
 		// it differently.
-		dur := m.Settings.GetAnimationDuration()
+		dur := m.layoutAnimationDuration()
 		if deferring {
 			// Mid-drag the layout is reapplied on every composed frame, so an
 			// animation started here would be discarded and restarted by the

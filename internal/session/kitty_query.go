@@ -57,3 +57,15 @@ func (s *Session) kittyQueryResponse(cmd *vt.KittyCommand, remotePane bool) []by
 func (s *Session) SetLinkedViewer(linked bool) {
 	s.linkedViewer.Store(linked)
 }
+
+// kittyAnimationRefusal is the daemon's answer to a frame edit (a=f, a=a,
+// a=c) when the attached client's host cannot make it, or nil. It is written
+// from the pane's emulator, so it reaches the guest in order with the answer
+// to everything the guest asked before and after it. See
+// Session.SetKittyAnimation. A pane on another machine is answered there.
+func kittyAnimationRefusal(cmd *vt.KittyCommand, remotePane, hostAnimates bool) []byte {
+	if remotePane || hostAnimates || !vt.IsKittyAnimationAction(cmd.Action) || cmd.Quiet >= 2 {
+		return nil
+	}
+	return vt.BuildKittyResponse(false, cmd.ImageID, vt.KittyAnimationRefusal)
+}

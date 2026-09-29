@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -354,4 +355,32 @@ func TestAPopupShowsOverAZoomedPane(t *testing.T) {
 	}
 	t.Logf("a popup over a zoomed pane:\n%s", term.Snapshot())
 	alive(t, term, "with a popup over a zoomed pane")
+}
+
+// TestPopupCommandStartsAtItsSize checks the first size a popup's command
+// reads. It has to be the size the popup keeps: a program that reads its
+// size once as it starts (a nested tuios client, a pager) otherwise lays
+// itself out for the whole session and is resized only after a client has
+// placed the popup.
+func TestPopupCommandStartsAtItsSize(t *testing.T) {
+	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "pop"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "first pane")
+
+	res := openPopup(t, base, "--width", "50%", "--height", "40%", "--",
+		"sh", "-c", "echo FIRST=$(stty size); sleep 1; echo LATER=$(stty size); sleep 120")
+	if err := term.WaitForText("LATER=", uiTimeout); err != nil {
+		t.Fatalf("the popup never printed its sizes: %v\n%s", err, term.Snapshot())
+	}
+	out, err := tuiosCLI(t, base, "capture-pane", "-s", "pop", "-w", res.WindowID)
+	if err != nil {
+		t.Fatalf("capture the popup: %v\n%s", err, out)
+	}
+	first := regexp.MustCompile(`FIRST=(\d+ \d+)`).FindStringSubmatch(out)
+	later := regexp.MustCompile(`LATER=(\d+ \d+)`).FindStringSubmatch(out)
+	if first == nil || later == nil || first[1] != later[1] {
+		t.Fatalf("the popup's command started at one size and was then given another:\n%s", out)
+	}
+	t.Logf("the popup's command read %s at start and after placement", first[1])
 }
