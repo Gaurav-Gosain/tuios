@@ -1,11 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 type textSizingPlacement struct {
@@ -79,8 +81,7 @@ func (m *OS) setupTextSizingPassthrough(window *terminal.Window) {
 
 		absLine := scrollbackLen + cursorY
 
-		oscCopy := make([]byte, len(rawOSC))
-		copy(oscCopy, rawOSC)
+		oscCopy := cleanOSC66(rawOSC)
 
 		sixelPassthroughLog("TextSizing ADD: winID=%s guestX=%d cursorY=%d scrollback=%d absLine=%d",
 			win.ID[:min(8, len(win.ID))], cursorX, cursorY, scrollbackLen, absLine)
@@ -281,4 +282,26 @@ func (m *OS) FlushTextSizing() {
 		return
 	}
 	m.WriteHost(buf)
+}
+
+// cleanOSC66 rebuilds a replayed OSC 66 with its body stripped of control
+// characters. The sequence goes to the host terminal as is, and its body is
+// text the pane printed. It is done here, once, because the ghostty backend
+// hands over the payload as the parser left it. The result is a new slice,
+// so the caller's buffer can be reused.
+func cleanOSC66(raw []byte) []byte {
+	body := raw
+	if bytes.HasPrefix(body, []byte("\x1b]")) {
+		body = body[2:]
+	}
+	switch {
+	case bytes.HasSuffix(body, []byte("\x1b\\")):
+		body = body[:len(body)-2]
+	case bytes.HasSuffix(body, []byte("\a")):
+		body = body[:len(body)-1]
+	}
+	out := make([]byte, 0, len(body)+3)
+	out = append(out, "\x1b]"...)
+	out = append(out, vt.StripControls(string(body))...)
+	return append(out, '\a')
 }
