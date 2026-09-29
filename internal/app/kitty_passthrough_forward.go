@@ -532,9 +532,12 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		return
 	}
 
-	filePath := cmd.FilePath
-	if cmd.Medium == vt.KittyMediumSharedMemory {
-		filePath = "/dev/shm/" + cmd.FilePath
+	// The path is whatever the pane printed. It is checked before anything
+	// opens, stats or forwards it. See kitty_file_medium.go.
+	filePath, ok := kp.kittyMediumPath(cmd)
+	if !ok {
+		kittyPassthroughLog("forwardFileTransmit: refusing medium=%c path=%q", cmd.Medium, cmd.FilePath)
+		return
 	}
 
 	kittyPassthroughLog("forwardFileTransmit: file=%s, andPlace=%v, medium=%c", filePath, andPlace, cmd.Medium)

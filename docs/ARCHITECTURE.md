@@ -766,15 +766,29 @@ the machine it was written on, so where it gets read decides whether it works.
   accepted, and each client handles the path as in standalone. Direct
   transmission is always accepted.
 
-Reading a guest's file is not a new privilege. The pane's process and tuios
-run as the same user on the same machine, so tuios reads nothing the guest
-could not read and send itself. What the read guards against is the file
-itself: only a regular file is read, up to the transmit cap, so `/dev/zero`, a
-FIFO or a device cannot hang or exhaust the process. A guest on another
-machine that asks is told not to send a path at all. One that sends a path
-without asking has it read on the wrong machine, where it names nothing or
-names one of the user's own files, and at worst that file is drawn, badly, on
-the user's own screen.
+A path is text the pane printed. Any output can carry one, for example a file
+that a program prints, so tuios checks the path before anything opens it. The
+checks follow the kitty graphics protocol:
+
+- A `t=s` name is one name in `/dev/shm`. A name with `/` in it (after one
+  leading `/`), `.` or `..` is refused.
+- A `t=f` or `t=t` path must be absolute.
+- Symlinks are followed, and the checks apply to where they lead. A `t=s` name
+  must stay in `/dev/shm`. Nothing in `/proc`, `/sys` or `/dev` is read, except
+  `/dev/shm`.
+- Only a regular file is read, up to the transmit cap. `/dev/zero`, a FIFO or a
+  device cannot hang or exhaust the process.
+
+When tuios reads the file itself and sends the bytes to a browser or an SSH
+client, the bytes leave the machine. There, a `t=f` or `t=t` path must also be
+in a temporary directory (`/tmp`, `/var/tmp`, `/dev/shm` or `$TMPDIR`). A key
+in the home directory is refused. A guest that asks first with `a=q` is told
+not to send a path at all, and streams the bytes.
+
+A guest on another machine that asks is told not to send a path at all. One
+that sends a path without asking has it read on the wrong machine, where it
+names nothing or names one of the user's own files. The checks above apply to
+that read too.
 
 ## Performance Characteristics
 
