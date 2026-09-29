@@ -51,7 +51,7 @@ func startPprofServer() {
 	}
 	runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
 	runtime.SetMutexProfileFraction(100)
-	ln, err := net.Listen("tcp", pprofAddr)
+	ln, err := listenPprof(pprofAddr)
 	if err != nil {
 		log.Printf("pprof server error: %v", err)
 		return
@@ -66,6 +66,18 @@ func startPprofServer() {
 			go servePprof(conn)
 		}
 	}()
+}
+
+// listenPprof opens the listener for --pprof.
+//
+// An address with no host, such as :6060, listens on 127.0.0.1 only. The
+// profiles have no authentication, and cmdline and the heap carry whatever the
+// process holds, so every interface is opt in: name 0.0.0.0 to get it.
+func listenPprof(addr string) (net.Listener, error) {
+	if host, port, err := net.SplitHostPort(addr); err == nil && host == "" {
+		addr = net.JoinHostPort("127.0.0.1", port)
+	}
+	return net.Listen("tcp", addr)
 }
 
 // servePprof answers one request on conn and closes it.
