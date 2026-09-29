@@ -25,10 +25,16 @@ import (
 //
 //   - Other windows' output and tuios's own commands stay in pendingOutput
 //     and go out on the next drain as before.
+//   - tuios turns a guest's a=T into a transmit and a placement that the
+//     refresh pass emits. For a held window that placement joins the held
+//     frame, behind its transmit, so the frame goes out with its placement.
+//     Re-transmitting an image id removes its placements on the host, so a
+//     transmit released without the placement shows an empty pane.
+//     Closed updates are released at the start of the refresh pass for the
+//     same reason: the placements it computes then follow them.
 //   - When tuios hides a placement of a held window, the hide goes out at
 //     once and the held placements of that image are taken out, so a release
-//     cannot show it again. The refresh pass re-places it once it is visible
-//     and the window is no longer held.
+//     cannot show it again.
 //   - A write that bypasses the queue for a window (the video paths) first
 //     releases what that window holds, and the rest of that update is not
 //     held, so the direct write cannot overtake a held delete.
@@ -130,13 +136,6 @@ func (kp *KittyPassthrough) endGuestCapture(windowID string) {
 	}
 }
 
-// holding reports whether a window's guest output is being held now.
-// Callers hold kp.mu.
-func (kp *KittyPassthrough) holding(windowID string) bool {
-	h := kp.held[windowID]
-	return h != nil && !h.bypass
-}
-
 // releaseHeld appends what a window holds to pendingOutput. The entry stays,
 // so a window released early is not held again for the same update.
 // Callers hold kp.mu.
@@ -186,7 +185,13 @@ func (kp *KittyPassthrough) unholdWindow(windowID string) {
 
 // releaseDueHeld releases every window whose update has closed, changed or
 // run past the time limit. Callers hold kp.mu.
-func (kp *KittyPassthrough) releaseDueHeld() {
+//
+// A closed update of a window with tracked placements is left for the refresh
+// pass unless refreshing is set: the refresh pass may owe that frame a
+// placement, and it releases the frame first and places after it. Releasing
+// it from a drain that follows the pass would send the frame a tick ahead of
+// its placement.
+func (kp *KittyPassthrough) releaseDueHeld(refreshing bool) {
 	now := kp.now()
 	for id, h := range kp.held {
 		open, serial := false, uint64(0)
@@ -194,6 +199,9 @@ func (kp *KittyPassthrough) releaseDueHeld() {
 			open, serial = probe()
 		}
 		switch {
+		case (!open || serial != h.serial) && !refreshing && len(kp.placements[id]) > 0 &&
+			now.Sub(h.since) < kp.holdLimit():
+			// The next refresh pass releases it.
 		case !open || serial != h.serial:
 			h.bypass = false
 			kp.releaseHeld(id)
@@ -204,6 +212,44 @@ func (kp *KittyPassthrough) releaseDueHeld() {
 			h.bypass = true
 		}
 	}
+}
+
+// holdTail moves what the refresh pass appended to pendingOutput since start,
+// the placement of one host image, into the window's held update when the
+// held frame names that image. Such a placement shows the frame's new data or
+// position and belongs to it. A placement the frame does not touch only
+// follows tuios moving or uncovering the pane, and goes out at once.
+// Callers hold kp.mu.
+func (kp *KittyPassthrough) holdTail(windowID string, hostID uint32, start int) {
+	h := kp.held[windowID]
+	if h == nil || h.bypass || start >= len(kp.pendingOutput) || !heldNames(h.buf, hostID) {
+		return
+	}
+	h.buf = append(h.buf, kp.pendingOutput[start:]...)
+	kp.heldBytes += len(kp.pendingOutput) - start
+	kp.pendingOutput = kp.pendingOutput[:start]
+}
+
+// heldNames reports whether any kitty command in buf names host image id.
+func heldNames(buf []byte, hostID uint32) bool {
+	var id [16]byte
+	want := strconv.AppendUint(append(id[:0], "i="...), uint64(hostID), 10)
+	for len(buf) > 0 {
+		i := bytes.Index(buf, []byte("\x1b_G"))
+		if i < 0 {
+			return false
+		}
+		buf = buf[i+3:]
+		end := bytes.IndexAny(buf, ";\x1b")
+		if end < 0 {
+			end = len(buf)
+		}
+		if hasKittyKey(buf[:end], want) {
+			return true
+		}
+		buf = buf[end:]
+	}
+	return false
 }
 
 // dropHeldPlacements takes every placement of a host image out of what the
@@ -268,7 +314,7 @@ func hasKittyKey(ctl, kv []byte) bool {
 // takePending releases what is due and hands over pendingOutput. Callers
 // hold kp.mu.
 func (kp *KittyPassthrough) takePending() []byte {
-	kp.releaseDueHeld()
+	kp.releaseDueHeld(false)
 	out := kp.pendingOutput
 	kp.pendingOutput = nil
 	kp.captureStart = 0

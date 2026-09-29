@@ -807,7 +807,7 @@ func (kp *KittyPassthrough) flushToHost() {
 	if kp.hostOut == nil {
 		return
 	}
-	kp.releaseDueHeld()
+	kp.releaseDueHeld(false)
 	if len(kp.pendingOutput) == 0 {
 		return
 	}

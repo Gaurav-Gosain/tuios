@@ -43,6 +43,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		return
 	}
 
+	// A frame whose update has closed is released before this pass, so the
+	// placements computed below follow it in the same drain.
+	kp.releaseDueHeld(true)
+
 	// Note: prior versions short-circuited this loop in web mode because
 	// xterm-addon-image could not update placements in place. sip now
 	// ships a custom kitty overlay (xterm-kitty-overlay.js) that renders
@@ -524,11 +528,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
-			} else if kp.holding(windowID) {
-				// The guest is inside a synchronized update and its image
-				// may not reach the host yet. Leave the record as it is, so
-				// the first pass after the update closes places it. See
-				// kitty_sync_hold.go.
 			} else {
 				// Re-place only if position/clipping changed. Real kitty
 				// and our sip overlay both treat a=p with the same (i, p)
@@ -549,7 +548,13 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					p.ClipLeft = clipLeft
 					p.MaxShowable = maxShowableRows
 					p.MaxShowableCols = maxShowableCols
+					// A held window's placement belongs to the frame
+					// the guest has not finished: it goes out with that
+					// frame, never ahead of it and never a tick after it.
+					// See kitty_sync_hold.go.
+					start := len(kp.pendingOutput)
 					kp.placeSlices(p)
+					kp.holdTail(windowID, hostID, start)
 				}
 				p.DataDirty = false
 				p.Hidden = false
