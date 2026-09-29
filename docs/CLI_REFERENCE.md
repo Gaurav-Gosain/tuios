@@ -340,6 +340,12 @@ Inside a tuios pane, `tuios attach` refuses to attach the session that holds
 the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
 it does not name a session. To show a different session in the pane, name
 that session. To attach the same session, open a new terminal outside tuios.
+To attach anyway, use `--force` or set `TUIOS_ALLOW_NESTED=1`.
+
+The check looks at the terminal. A client that runs on a terminal of its own
+attaches, even when it has the pane's variables. Examples are a terminal
+window or a tmux server started from a pane. Each pane gets
+`TUIOS_PANE_TTY`, the path of its terminal, for this check.
 
 ### `tuios ls`
 
