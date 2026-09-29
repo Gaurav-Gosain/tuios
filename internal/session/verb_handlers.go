@@ -615,6 +615,16 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		}
 	}
 
+	if paneTypesRaw(cs) && hasPrefixKey(parsed) {
+		// The prefix key drives the window manager through the attached
+		// client, and a pane's keys never go through the client.
+		return nil, hintedVerbError(ErrVerbForbidden, "send-keys with PREFIX is refused from a pane: a pane's keys go to a pane's terminal, never to the window manager", &VerbHint{
+			Param:   "keys",
+			Verb:    "focus-window",
+			Command: "tuios focus-window <window>",
+			Detail:  "Nothing was sent. Use the verbs for window-manager actions: focus-window, new-window, close-window, split-window or set-layout. Then send keys without PREFIX, with -w naming the pane.",
+		})
+	}
 	if p.Window == "" && paneTypesRaw(cs) {
 		// The keys go to the focused pane's terminal. Pin it now, so the
 		// pane checked is the pane written to.

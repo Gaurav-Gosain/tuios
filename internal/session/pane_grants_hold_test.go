@@ -534,8 +534,13 @@ func TestAPaneSendKeysNeverDrivesTheClient(t *testing.T) {
 	if got["sent_to"] == "client" {
 		t.Fatalf("an admin pane's send-keys went through the client: %v", got)
 	}
-	if resp := callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "PREFIX n"}); resp["error"] == nil {
-		t.Errorf("an admin pane's PREFIX was served: %v", resp)
+	resp := callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "PREFIX n"})
+	wantForbidden(t, "an admin pane's PREFIX", resp)
+	if e, _ := resp["error"].(map[string]any); e != nil {
+		msg := fmt.Sprint(e["message"], e["hint"])
+		if !strings.Contains(msg, "PREFIX is refused from a pane") || !strings.Contains(msg, "focus-window") {
+			t.Errorf("the PREFIX refusal %q does not say it is refused and what to use", msg)
+		}
 	}
 }
 
@@ -545,7 +550,8 @@ func TestAPaneSendKeysNeverDrivesTheClient(t *testing.T) {
 // keys is refused. One that does not is passed on.
 //
 // Negative control: with refuseTapeTyping cut from handleExecuteCommand, the
-// script goes to the client and no refusal comes back.
+// script goes to the client and no refusal comes back. With it cut from
+// verbRunCommand, the verb's Type goes to the client.
 func TestAPaneRunCommandCannotType(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
@@ -585,5 +591,52 @@ func TestAPaneRunCommandCannotType(t *testing.T) {
 		if res == nil || res.Success || !strings.Contains(res.Message, "respond grant") {
 			t.Errorf("run-command %+v from an admin pane = %+v, want a refusal naming the respond grant", p, res)
 		}
+	}
+	// The JSON verb runs the same tape commands through the client.
+	c := dialVerb(t, sp)
+	for _, params := range []map[string]any{
+		{"session": "a", "command": "Type", "args": []string{"1"}},
+		{"session": "a", "command": "Enter"},
+		{"session": "a", "command": "KeyCombo", "args": []string{"ctrl+b"}},
+	} {
+		resp := callP(c, t, "run-command", params)
+		wantForbidden(t, fmt.Sprint("run-command verb ", params["command"]), resp)
+		if e, _ := resp["error"].(map[string]any); e != nil && !strings.Contains(fmt.Sprint(e["message"]), "respond grant") {
+			t.Errorf("run-command verb refusal %v does not name the respond grant", e["message"])
+		}
+	}
+}
+
+// TestApplyingOneHostAppliesNothingElse: tuios hosts add applies its own
+// host. A widening another process wrote to config.toml, such as mode open,
+// is not applied with it. tuios config apply applies it and says so.
+//
+// Negative control: with apply-config ignoring host, the first call applies
+// mode open and the pane holds admin.
+func TestApplyingOneHostAppliesNothingElse(t *testing.T) {
+	t.Setenv("TUIOS_SSH", "/bin/false")
+	d, sp, a1, _, _ := scopeFixture(t)
+	setStrict(d, "read")
+	d.configPath = filepath.Join(t.TempDir(), "config.toml")
+	body := "[agents.permissions]\nmode = \"open\"\n\n[hosts.build]\naddr = \"build.invalid\"\n"
+	if err := os.WriteFile(d.configPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := dialVerb(t, sp)
+	got := result(t, callP(c, t, "apply-config", map[string]any{"host": "build"}))
+	if _, err := d.federation.Table().Lookup("build"); err != nil {
+		t.Errorf("apply-config with host did not add the host: %v", err)
+	}
+	if g, _ := d.manager.grants.effective(a1); g != GrantRead {
+		t.Fatalf("apply-config with host applied the permissions too: the pane holds %v", g)
+	}
+	if got["mode"] != "strict" {
+		t.Errorf("apply-config with host reports mode %v, want strict", got["mode"])
+	}
+
+	got = result(t, callP(c, t, "apply-config", nil))
+	changes := fmt.Sprint(got["changes"])
+	if got["mode"] != "open" || !strings.Contains(changes, "mode open") || !strings.Contains(changes, "Before: mode strict") {
+		t.Errorf("apply-config did not say the mode changed: %v", got)
 	}
 }

@@ -295,10 +295,11 @@ The daemon applies a change to the file at once only where it gives less. A chan
 				return err
 			}
 			defer func() { _ = client.Close() }()
-			if _, err := client.Call("apply-config", nil); err != nil {
+			raw, err := client.Call("apply-config", nil)
+			if err != nil {
 				return explainVerbError("apply-config", err)
 			}
-			fmt.Println("The daemon applied config.toml.")
+			fmt.Print(describeConfigApplied(raw))
 			return nil
 		},
 	}

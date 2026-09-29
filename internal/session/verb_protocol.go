@@ -335,11 +335,16 @@ func init() {
 		},
 		"apply-config": {
 			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
+			params: []verbParam{
+				{Name: "host", Type: "string", Description: "Apply only this host's entry, or its removal, and nothing else in the file. tuios hosts add sends it."},
+			},
 			returns: []verbParam{
 				{Name: "mode", Type: "string", Description: "[agents.permissions] mode now in force."},
 				{Name: "default_grants", Type: "[]string", Description: "What a pane started with no grants of its own holds now."},
+				{Name: "changes", Type: "[]string", Description: "What changed, one sentence each: the default grants, hosts added, removed or dialled another way, and link policies."},
+				{Name: "still_waiting", Type: "bool", Description: "True when config.toml still holds a change that waits, which happens when only one host was applied."},
 			},
-			examples: []string{`{"id":1,"verb":"apply-config"}`},
+			examples: []string{`{"id":1,"verb":"apply-config"}`, `{"id":1,"verb":"apply-config","params":{"host":"build"}}`},
 			handler:  (*Daemon).verbApplyConfig,
 		},
 		"list-verbs": {

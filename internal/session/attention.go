@@ -376,6 +376,12 @@ func attentionItemKey(it *AttentionItem) string {
 		return "outbox\x00" + it.ForHost
 	case AttentionAsk:
 		return "ask\x00" + it.Session + "\x00" + it.RequestID
+	case AttentionErrored:
+		if it.Session == "" && it.Window == "" {
+			// A notice about the daemon itself, such as config.toml,
+			// keyed by its name (noteConfigNotice).
+			return "notice\x00" + it.Name
+		}
 	}
 	return attentionKey(it.Kind, it.Session, it.Window, it.Thread)
 }

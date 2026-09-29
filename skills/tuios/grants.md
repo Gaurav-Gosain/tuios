@@ -63,7 +63,8 @@ without `admin`, a call that names no session means your own session.
 - Or else the default of `[agents.permissions]` in config.toml: `admin` under
   `mode = "open"` (the default), and the `grants` list under `mode = "strict"`
   (`read`, `write` and `fan` when unset). A change to the file that gives
-  panes less applies at once. A change that gives more waits for the person.
+  panes less applies at once. A change that gives more waits for the person,
+  who applies it with `tuios config apply` outside tuios.
 
 A pane can never give more than it holds. A pane without `admin` that starts an
 agent without `--grants` gives it its own grants. A pane changes only its own

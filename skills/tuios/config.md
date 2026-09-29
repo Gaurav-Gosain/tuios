@@ -41,6 +41,12 @@ line feed, and `meta` leaves those keys out), `[dock]`, `[hooks]`, `[hosts]`, `[
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 
+A change to `[agents.permissions]` or `[hosts]` that gives panes or other
+machines more waits for the person, and the Inbox says so. The person applies
+it with `tuios config apply` in a terminal outside tuios. From a pane that
+command is refused. Do not edit config.toml to widen what you hold: it waits
+for the person, and the change tells them what you did.
+
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
 addresses in the focused pane, and a typed label copies one. `hints.builtins`,
 `hints.alphabet`, `hints.open` and `hints.dim` are options. `hints.patterns`

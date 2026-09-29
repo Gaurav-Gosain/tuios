@@ -2,11 +2,16 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // What panes held on the default when the daemon last ran.
@@ -70,16 +75,37 @@ func (d *Daemon) checkGrantsSinceLastRun() {
 			if !was.Covers(policyDefaults(now)) {
 				d.grantsWidenedAtStart.Store(true)
 				log.Printf("%s Before: %s. Now: %s.", grantsWidenedNote, was.String(), policyDefaults(now).String())
-				d.attention.noteConfigNotice(grantsWidenedNote)
+				d.attention.noteConfigNotice(configWidenedNotice, grantsWidenedNote)
 			}
 		}
 	}
 	d.recordAppliedGrants(now)
 }
 
-// noteConfigNotice opens an Inbox item about config.toml, which the person
-// dismisses.
-func (a *attentionStore) noteConfigNotice(summary string) {
+// The Inbox items about config.toml, by name.
+const (
+	// configWidenedNotice says panes hold more than at the last run.
+	configWidenedNotice = "config.toml"
+	// configWaitsNotice says a change that gives more waits for the person.
+	configWaitsNotice = "config.toml change waits"
+)
+
+// configWaitsNote is the summary of the configWaitsNotice item.
+const configWaitsNote = "Run tuios config apply in a terminal outside tuios. The change gives panes or other machines more, so it waits for you."
+
+// closeConfigNotice closes the Inbox item about config.toml named name.
+func (a *attentionStore) closeConfigNotice(name string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.closeKeyLocked(attentionItemKey(&AttentionItem{Kind: AttentionErrored, Name: name}), AttentionClosedResolved)
+}
+
+// noteConfigNotice opens or updates the Inbox item about config.toml named
+// name, which the person dismisses.
+func (a *attentionStore) noteConfigNotice(name, summary string) {
 	if a == nil {
 		return
 	}
@@ -87,16 +113,21 @@ func (a *attentionStore) noteConfigNotice(summary string) {
 	defer a.mu.Unlock()
 	a.upsertLocked(AttentionItem{
 		Kind:    AttentionErrored,
-		Name:    "config.toml",
+		Name:    name,
 		Summary: attentionText(summary, attentionMaxSummary),
 	})
 }
 
-// verbApplyConfig applies config.toml in full, for the person. A file change
-// applies only what narrows (applyUserConfig); this is how the person applies
-// a change that widens without restarting the daemon.
+// verbApplyConfig applies config.toml for the person. A file change applies
+// only what narrows (applyUserConfig); this is how the person applies a change
+// that widens without restarting the daemon. With host it applies that one
+// host entry and nothing else, which is what tuios hosts add asks for: a
+// widening some other process wrote to the file is not applied with it.
 func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := decodeParams(params, &struct{}{}); verr != nil {
+	var p struct {
+		Host string `json:"host"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if !d.mayActAsHuman(cs) {
@@ -119,17 +150,126 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 		first := v.Errors[0]
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml has an error, so nothing was applied: ["+first.Field+"] "+first.Key+": "+first.Message)
 	}
-	d.applyUserConfig(cfg, true)
-	// The watcher compares each change with the file it last delivered.
-	// This file is in force now, so a change back from it must be delivered.
-	d.federationMu.Lock()
-	w := d.hostsWatcher
-	d.federationMu.Unlock()
-	w.MarkApplied(data)
-	log.Printf("config.toml was applied in full by the person")
-	return map[string]any{
+
+	before := d.configSnapshot()
+	if p.Host != "" {
+		if verr := d.applyOneHost(cfg, p.Host); verr != nil {
+			return nil, verr
+		}
+	} else {
+		d.applyUserConfig(cfg, true)
+		log.Printf("config.toml was applied in full by the person")
+	}
+	after := d.configSnapshot()
+	out := map[string]any{
 		"type":           "config_applied",
-		"mode":           d.permissionMode(),
-		"default_grants": d.manager.grants.defaults().Names(),
-	}, nil
+		"mode":           after.mode,
+		"default_grants": after.grants,
+		"changes":        describeConfigChanges(before, after),
+		"still_waiting":  d.configWaiting(),
+	}
+	if p.Host != "" {
+		out["host"] = p.Host
+	}
+	return out, nil
+}
+
+// applyOneHost applies the entry of one host from cfg, or its removal, and
+// nothing else.
+func (d *Daemon) applyOneHost(cfg *config.UserConfig, name string) *verbError {
+	if d.federation == nil {
+		return newVerbError(ErrVerbCommandFailed, "this daemon dials no hosts")
+	}
+	var want *federation.Host
+	for _, h := range HostsFromConfig(cfg) {
+		if strings.TrimSpace(h.Name) == name {
+			h := h
+			want = &h
+		}
+	}
+	cur := d.federation.Table()
+	hosts := make([]federation.Host, 0, cur.Len()+1)
+	for _, n := range cur.Names() {
+		if n == name {
+			continue
+		}
+		if h, err := cur.Lookup(n); err == nil {
+			hosts = append(hosts, h)
+		}
+	}
+	if want != nil {
+		hosts = append(hosts, *want)
+	}
+	d.ApplyHosts(hosts)
+	log.Printf("[FEDERATION] Host %s was applied by the person", name)
+	return nil
+}
+
+// configSnapshot is what apply-config reports a change of.
+type configSnapshot struct {
+	mode   string
+	grants []string
+	hosts  map[string]federation.Host
+	links  string
+}
+
+func (d *Daemon) configSnapshot() configSnapshot {
+	s := configSnapshot{mode: d.permissionMode(), grants: d.manager.grants.defaults().Names(), hosts: map[string]federation.Host{}}
+	if d.federation != nil {
+		t := d.federation.Table()
+		for _, n := range t.Names() {
+			if h, err := t.Lookup(n); err == nil {
+				s.hosts[n] = h
+			}
+		}
+	}
+	if t := d.linkPolicies.Load(); t != nil {
+		keys := make([]string, 0, len(*t))
+		for k := range *t {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		var b strings.Builder
+		for _, k := range keys {
+			p := config.LinkPolicyFor(*t, k)
+			fmt.Fprintf(&b, "%s:%v:%v:%v;", k, p.Allow, p.HoldMail, p.HostedGrace)
+		}
+		s.links = b.String()
+	}
+	return s
+}
+
+// describeConfigChanges says in words what changed between two snapshots.
+func describeConfigChanges(before, after configSnapshot) []string {
+	var out []string
+	if before.mode != after.mode || !slices.Equal(before.grants, after.grants) {
+		out = append(out, fmt.Sprintf("Panes on the default: mode %s, grants %s. Before: mode %s, grants %s.",
+			after.mode, grantWords(after.grants), before.mode, grantWords(before.grants)))
+	}
+	for _, n := range slices.Sorted(maps.Keys(after.hosts)) {
+		old, had := before.hosts[n]
+		switch {
+		case !had:
+			out = append(out, "Host "+n+" is added.")
+		case !federation.SameHost(old, after.hosts[n]):
+			out = append(out, "Host "+n+" dials another way now.")
+		}
+	}
+	for _, n := range slices.Sorted(maps.Keys(before.hosts)) {
+		if _, ok := after.hosts[n]; !ok {
+			out = append(out, "Host "+n+" is removed.")
+		}
+	}
+	if before.links != after.links {
+		out = append(out, "What other machines may do here changed.")
+	}
+	return out
+}
+
+// grantWords is a grant list for a sentence.
+func grantWords(names []string) string {
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }

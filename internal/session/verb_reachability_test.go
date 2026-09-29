@@ -57,6 +57,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture daemon reads no config file. The verb is proved in
 	// pane_grants_hold_test.go.
 	"apply-config#0":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},
+	"apply-config#1":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},
 	"list-dock-components#1": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"refresh-dock#0":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"refresh-dock#1":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},

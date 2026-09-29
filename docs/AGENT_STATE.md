@@ -3410,7 +3410,10 @@ Everything the person does from a client started outside tuios is unchanged.
 A client started inside a tuios pane of the same daemon, a nested `tuios
 attach`, or `tuios-web` or the SSH server started from a pane, counts as inside
 a pane: its mail replies are refused with `forbidden`, its reads of the
-mailbox do not mark mail read, and its Inbox cannot dismiss an item. Start
+mailbox do not mark mail read, its Inbox cannot dismiss an item, and it cannot
+type into another pane that waits on a prompt unless the pane it runs in holds
+`respond`. The daemon cannot tell a person at such a client from an agent that
+started one in a pseudo-terminal, which is the route this check closes. Start
 those from a terminal outside tuios. A nested `tuios attach` to the session
 that holds its pane is refused.
 

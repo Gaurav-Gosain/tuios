@@ -47,6 +47,7 @@ func (d *Daemon) startHostsWatch() {
 		// The settings page writes the config from a client that can share this
 		// process, and its write is the change this watcher exists to see.
 		DeliverSelfWrites: true,
+		DeliverUnchanged:  true,
 	})
 	if err != nil {
 		log.Printf("[FEDERATION] The daemon cannot watch the config file. A host change needs a restart: %v", err)
@@ -107,12 +108,24 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 		d.ApplyHosts(HostsFromConfig(cfg))
 		d.hostsWaiting.Store(false)
 		d.recordAppliedGrants(perms)
+		d.noteConfigWaiting()
 		return
 	}
 	d.reloadPanePermissions(perms)
 	policyWaits := d.reloadLinkPolicies(cfg.Hosts)
 	hostsWait := d.reloadHosts(HostsFromConfig(cfg))
 	d.hostsWaiting.Store(policyWaits || hostsWait)
+	d.noteConfigWaiting()
+}
+
+// noteConfigWaiting opens the Inbox item that says a change waits for the
+// person, or closes it when nothing waits.
+func (d *Daemon) noteConfigWaiting() {
+	if d.configWaiting() {
+		d.attention.noteConfigNotice(configWaitsNotice, configWaitsNote)
+		return
+	}
+	d.attention.closeConfigNotice(configWaitsNotice)
 }
 
 // configWaiting reports whether config.toml holds a change that widens what

@@ -507,7 +507,7 @@ func newWindowID(before map[string]bool, state *SessionState) string {
 // reachable by the name the keymap gives it. Prefer a verb where one exists,
 // because a verb reports what it changed and this reports only that the command
 // ran.
-func (d *Daemon) verbRunCommand(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
 		Command string   `json:"command"`
@@ -527,6 +527,16 @@ func (d *Daemon) verbRunCommand(_ *connState, params json.RawMessage) (any, *ver
 		return nil, invalidParam("command", unknownCommandMessage(p.Command))
 	}
 	p.Command = canonical
+	// The client runs the command in whatever pane is focused, as the
+	// person. A pane without respond may not type or press keys that way:
+	// see refuseTapeTyping, which the client protocol's run-command has too.
+	if why := d.refuseTapeTyping(cs, &ExecuteCommandPayload{CommandType: p.Command}); why != "" {
+		return nil, hintedVerbError(ErrVerbForbidden, "run-command "+p.Command+" is refused for this pane: "+why, &VerbHint{
+			Verb:    "send-keys",
+			Command: "tuios send-keys -w <window> <keys>",
+			Detail:  "Nothing was run. Name the pane to type into with send-keys or send-text.",
+		})
+	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr

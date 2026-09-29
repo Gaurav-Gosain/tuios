@@ -79,6 +79,12 @@ type WatcherOptions struct {
 	// client's save a self write and never see the [hosts] table it changed.
 	// The daemon writes no config of its own, so it has nothing to suppress.
 	DeliverSelfWrites bool
+	// DeliverUnchanged delivers a change even when the file says what was
+	// last delivered. The daemon sets it: it can apply part of the file by
+	// another path (tuios config apply), so what it last saw here is not
+	// what is in force, and an edit and its undo inside one debounce must
+	// still reach it.
+	DeliverUnchanged bool
 }
 
 // Watcher watches the config file for changes and triggers reloads.
@@ -133,19 +139,6 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 
 	go cw.run()
 	return cw, nil
-}
-
-// MarkApplied records data as the file in force, applied by a path other than
-// this watcher. A later change back to what the watcher saw before is then
-// delivered rather than dropped as unchanged.
-func (cw *Watcher) MarkApplied(data []byte) {
-	if cw == nil {
-		return
-	}
-	sum := sha256.Sum256(data)
-	cw.mu.Lock()
-	cw.lastHash = sum
-	cw.mu.Unlock()
 }
 
 // run drains the event channel and arms the debounce.
@@ -209,7 +202,7 @@ func (cw *Watcher) reload() {
 	}
 	sum := sha256.Sum256(data)
 	cw.mu.Lock()
-	same := sum == cw.lastHash
+	same := sum == cw.lastHash && !cw.opts.DeliverUnchanged
 	cw.mu.Unlock()
 	if same || (!cw.opts.DeliverSelfWrites && isSelfWrite(sum)) {
 		// Either the file says what is already in force, or tuios wrote it
