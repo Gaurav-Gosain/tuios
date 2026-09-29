@@ -50,7 +50,8 @@ The `hints_all_panes` action puts labels on all panes that the workspace
 shows. This includes tiled panes, floating panes and the focused pane.
 
 - tuios gives no label to text that you cannot see. This includes a
-  minimized pane, a pane behind a zoomed pane, and text under a floating pane.
+  minimized pane, a pane behind a zoomed pane, a pane off the screen, and
+  text under a different pane.
 - Each label is different on all panes.
 - The focused pane gets the shortest labels. The panes nearest to it get the
   next shortest labels.
@@ -61,7 +62,7 @@ shows. This includes tiled panes, floating panes and the focused pane.
   from a different pane.
 - `Ctrl` and a label opens the text from the pane that shows it. tuios uses
   that pane's folder and machine.
-- Hints mode closes when one of these panes closes or changes size.
+- Hints mode closes when one of these panes closes, moves or changes size.
 
 The action has no default key. Run it from the command palette, or bind it:
 

@@ -749,3 +749,123 @@ func TestHintsAllPanesLabelEveryPane(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "hints-all-panes-typed")
 	alive(t, term, "after hints on all panes")
 }
+
+// TestHintsAllPanesLabelOnlyWhatShows is the layout tuios starts in with
+// tiling off: plain panes that overlap, stacked by their Z. The second pane
+// covers part of the first, and part of the first pane's hashes with it. A
+// hash under the second pane must get no label, because typing a label
+// nobody can see would copy text nobody can see.
+//
+// The labels are handed out shortest first, and nine or fewer labels are
+// the first letters of the alphabet. So when every label is on screen, the
+// labels on screen are exactly the first n letters. A hidden label takes one
+// of those letters off the screen. The test also types the first letter
+// with no label on screen, which must copy nothing.
+func TestHintsAllPanesLabelOnlyWhatShows(t *testing.T) {
+	out := &lockedBuffer{}
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\ntiled = false\n\n[hints]\nall_panes = true\n")
+	term := startIn(t, base, startOpts{out: out, cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	if settledTiling(t, term) {
+		t.Fatalf("the session is tiled, so no pane covers another:\n%s", term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	// Six hashes, each further right and further down. The command holds no
+	// hash of its own.
+	runInShell(t, term, `clear; for i in 1 2 3 4 5 6; do printf "%*sdeadbee1$i\n" $((i*8)) ''; done; echo COVER-READY`,
+		"COVER-READY", shellTimeout)
+	leaveTerminalMode(t, term)
+	newWindow(t, term)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	// A new pane opens almost on top of the last one. Drag it by its title
+	// bar to the right and down, so it covers only the right part of the
+	// first pane.
+	// The second pane's top left corner is the lowest one on screen.
+	c2, r2, ok := 0, 0, false
+	scr := term.Screen()
+	scols, srows := scr.Size()
+	for r := range srows {
+		for c := range scols {
+			if scr.Cell(c, r).Content == "╭" {
+				c2, r2, ok = c, r, true
+			}
+		}
+	}
+	if !ok {
+		t.Fatalf("no title bar for the second pane:\n%s", term.Snapshot())
+	}
+	mouseDrag(t, term, c2+20, r2, c2+50, r2+2, tuitest.MouseLeft, 0)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled after the drag: %v", err)
+	}
+	var shown, hidden []string
+	for i := 1; i <= 6; i++ {
+		// A label covers the start of a hash, so the end of it is what
+		// says whether the hash shows.
+		hash := fmt.Sprintf("deadbee1%d", i)
+		if _, _, ok := findLastOnGrid(term.Screen(), hash[4:]); ok {
+			shown = append(shown, hash)
+		} else {
+			hidden = append(hidden, hash)
+		}
+	}
+	if len(hidden) == 0 || len(shown) == 0 {
+		t.Fatalf("the second pane must cover some hashes and not all (shown %v, hidden %v):\n%s",
+			shown, hidden, term.Snapshot())
+	}
+
+	openHints(t, term)
+	var labels map[string]bool
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		labels = map[string]bool{}
+		cols, rows := s.Size()
+		for r := range rows {
+			for c := range cols {
+				if l := hintLabelAt(s, c, r); l != "" && (c == 0 || !isHintLabelCell(s.Cell(c-1, r))) {
+					labels[l] = true
+				}
+			}
+		}
+		return len(labels) >= len(shown)
+	}, uiTimeout); err != nil {
+		t.Fatalf("hints never showed a label per visible hash: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes-covered")
+	t.Logf("labels on screen %v, hashes hidden %v:\n%s", labels, hidden, term.Snapshot())
+	n := len(labels)
+	if n > 8 {
+		t.Fatalf("the check needs fewer than nine labels, got %v", labels)
+	}
+	for _, r := range hintsAlphabet[:n] {
+		if !labels[string(r)] {
+			t.Errorf("the label %q is not on screen: a match nobody can see has it (labels %v)", string(r), labels)
+		}
+	}
+
+	// The first letter with no label on screen names no match. With a
+	// hidden label, it names the hidden match.
+	next := ""
+	for _, r := range hintsAlphabet {
+		if !labels[string(r)] {
+			next = string(r)
+			break
+		}
+	}
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(next); err != nil {
+		t.Fatalf("type %q: %v", next, err)
+	}
+	time.Sleep(clipboardSettle)
+	if got := clipboardSince(out, from); len(got) != 0 {
+		t.Fatalf("typing %q, which is on no label, copied %q", next, got)
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	waitHintsGone(t, term, "after esc")
+	alive(t, term, "after hints over overlapping panes")
+}
