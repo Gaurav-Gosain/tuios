@@ -141,7 +141,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// A reply that answers no query of tuios is dropped: a pane can make
 		// the host terminal send one, and it must not be typed for it. This
 		// comes before any overlay can take the text.
-		if !o.ClaimPasteReply() {
+		if !o.ClaimPasteReply(msg.Content) {
 			return o, nil
 		}
 		// An overlay takes the paste the same way it takes a terminal paste.

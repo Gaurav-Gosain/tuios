@@ -95,9 +95,15 @@ func (m *OS) NotePasteArrived() {
 // a pane can print its own OSC 52 query, or a sequence that makes the terminal
 // answer one, and the reply then arrives here as if the user had pressed the
 // paste key. Typed into the focused pane, it would run.
-func (m *OS) ClaimPasteReply() bool {
+//
+// An empty reply does not use the query up. It pastes nothing, and some
+// terminals answer at once with an empty clipboard before the real answer
+// arrives.
+func (m *OS) ClaimPasteReply(content string) bool {
 	asked := m.pasteAskedAt
-	m.pasteAskedAt = time.Time{}
+	if content != "" {
+		m.pasteAskedAt = time.Time{}
+	}
 	return !asked.IsZero() && time.Since(asked) <= hostPasteReplyWindow
 }
 
