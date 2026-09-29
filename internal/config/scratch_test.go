@@ -62,6 +62,7 @@ func TestScratchValidation(t *testing.T) {
 		{"short cells", ScratchConfig{Session: "s", Height: "5"}, "height of 8 cells or more"},
 		{"path in name", ScratchConfig{Session: "a/b"}, "path separator"},
 		{"space in name", ScratchConfig{Session: " s"}, "spaces at the start or end"},
+		{"name is a flag", ScratchConfig{Session: "-x"}, `starts with "-"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,6 +103,16 @@ func TestScratchSizeOptionIsChecked(t *testing.T) {
 	}
 	if err := SetOptionValue(cfg, "scratch.height", "tall"); err == nil {
 		t.Fatal("tall accepted")
+	}
+	// The session name gets the rule the popup gets: no name that reads as a
+	// flag, and none the daemon refuses.
+	for _, bad := range []string{"-x", "a/b", " s"} {
+		if err := SetOptionValue(cfg, "scratch.session", bad); err == nil {
+			t.Fatalf("scratch.session %q accepted", bad)
+		}
+	}
+	if err := SetOptionValue(cfg, "scratch.session", "notes"); err != nil {
+		t.Fatalf("notes refused: %v", err)
 	}
 }
 

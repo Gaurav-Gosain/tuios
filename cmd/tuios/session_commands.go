@@ -23,6 +23,11 @@ import (
 	"golang.org/x/term"
 )
 
+// attachTerminalMode is tuios attach --terminal-mode: the client starts in
+// terminal mode on the focused pane, whatever [startup] says and whether the
+// session is new or not. The scratch popup runs its attach with it.
+var attachTerminalMode bool
+
 func runAttach(sessionName string, createIfMissing bool) error {
 	// First of all, because the refusal is the whole answer: a client in a pane
 	// of the session it asks for sizes the session by its own pane (#235).
@@ -367,7 +372,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     client.SessionName(),
-		AttachedHost:    host,
+		// Only a local attach asks for it, and only with --terminal-mode.
+		StartInTerminalMode: host == "" && attachTerminalMode,
+		AttachedHost:        host,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
 		// and nothing can order their writes against a frame.

@@ -678,6 +678,12 @@ func (m *OS) applyStartupTiling() {
 // two apart is whether any client ever placed those windows: see
 // sessionUnarranged.
 func (m *OS) applyStartupPreferences() {
+	// Asked for on the command line, so it holds for a session that is
+	// already arranged too, and without a config.
+	if m.forceTerminalMode {
+		m.pendingStartTerminalMode = true
+		m.maybeEnterPendingTerminalMode()
+	}
 	if m.UserConfig == nil {
 		return
 	}

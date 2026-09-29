@@ -211,6 +211,11 @@ type WindowState struct {
 	// PopupDefaultWidth or PopupDefaultHeight.
 	PopupWidth  string `json:"popup_width,omitempty"`
 	PopupHeight string `json:"popup_height,omitempty"`
+	// ScratchPopup marks the popup toggle_scratch opened, so the toggle finds
+	// its own popup and never a popup the user opened with the same name. It
+	// is set at creation by the popup verb and, like Popup, is the daemon's:
+	// a push cannot set or clear it.
+	ScratchPopup bool `json:"scratch_popup,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory

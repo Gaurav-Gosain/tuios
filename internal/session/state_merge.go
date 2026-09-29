@@ -184,8 +184,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// Without this one client sync that omits them turns a popup back into an
 	// ordinary floating pane on every screen, which tiles it away.
 	type popup struct {
-		width  string
-		height string
+		width   string
+		height  string
+		scratch bool
 	}
 	popups := make(map[string]popup, len(canonical.Windows))
 	// The machine a window's process runs on is stamped once, when the daemon
@@ -220,7 +221,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			cwds[w.ID] = cwd
 		}
 		if w.Popup {
-			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight}
+			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.ScratchPopup}
 		}
 		if w.Host != "" {
 			hosts[w.ID] = w.Host
@@ -266,7 +267,11 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if c := completions[w.ID]; c > w.CompletionSeq {
 			w.CompletionSeq = c
 		}
-		if p, ok := popups[w.ID]; ok {
+		// Only the daemon marks the scratch popup, so a push can neither set
+		// the mark on another pane nor clear it.
+		p, ok := popups[w.ID]
+		w.ScratchPopup = ok && p.scratch
+		if ok {
 			w.Popup = true
 			w.IsFloating = true
 			w.PopupWidth = p.width

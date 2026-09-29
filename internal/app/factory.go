@@ -56,6 +56,9 @@ type OSOptions struct {
 
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
+	// StartInTerminalMode starts the client in terminal mode on the focused
+	// pane, whatever [startup] says and whether the session is new or not.
+	StartInTerminalMode bool
 
 	// NumWorkspaces sets the number of workspaces (default: 9).
 	NumWorkspaces int
@@ -201,6 +204,7 @@ func NewOS(opts OSOptions) *OS {
 		BrowserClient:     opts.BrowserClient,
 		LearnMode:         opts.LearnMode,
 		ShowKeys:          opts.ShowKeys,
+		forceTerminalMode: opts.StartInTerminalMode,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
 

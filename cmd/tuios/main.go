@@ -554,7 +554,10 @@ the remote client. See 'tuios hosts --help'.`,
 			if attachHost != "" {
 				return runAttachOnHost(attachHost, name, createIfMissing, attachHold, attachSSH)
 			}
-			return runAttach(name, createIfMissing)
+			// A failure is held on the screen with --hold for the reason a
+			// host attach holds it: a pane that runs this command closes when
+			// it exits, and the scratch popup is such a pane.
+			return holdAfter(runAttach(name, createIfMissing), attachHold)
 		},
 	}
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
@@ -562,6 +565,7 @@ the remote client. See 'tuios hosts --help'.`,
 	attachCmd.Flags().BoolVar(&attachSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
 	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
 	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
+	attachCmd.Flags().BoolVar(&attachTerminalMode, "terminal-mode", false, "Start in terminal mode, whatever startup.start_in_terminal_mode says")
 	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool

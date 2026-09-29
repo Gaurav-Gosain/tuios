@@ -207,6 +207,9 @@ type NewWindowOptions struct {
 	// See WindowState.PopupWidth. They mean nothing unless Popup is set.
 	PopupWidth  string
 	PopupHeight string
+	// ScratchPopup marks the popup as the one toggle_scratch shows. See
+	// WindowState.ScratchPopup. It means nothing unless Popup is set.
+	ScratchPopup bool
 	// stdout, when set, is the process's standard output in place of the PTY.
 	// See createPTY. It is unexported: only the popup verb's capture sets it.
 	stdout *os.File
@@ -348,10 +351,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			// A popup is always floating. The daemon marks it here rather than
 			// leaving the client to infer it, because every peer reads the float
 			// as layout intent and a peer that missed it tiles the popup away.
-			Popup:       opts.Popup,
-			IsFloating:  opts.Popup,
-			PopupWidth:  opts.PopupWidth,
-			PopupHeight: opts.PopupHeight,
+			Popup:        opts.Popup,
+			IsFloating:   opts.Popup,
+			PopupWidth:   opts.PopupWidth,
+			PopupHeight:  opts.PopupHeight,
+			ScratchPopup: opts.Popup && opts.ScratchPopup,
 		}
 		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {

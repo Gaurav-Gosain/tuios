@@ -312,9 +312,12 @@ type Window struct {
 	// "60" for cells, "60%" for a share of the pane region. The request is kept
 	// rather than the box it resolves to, because the box is this client's and
 	// the request is the session's. See session.WindowState.PopupWidth.
-	IsPopup     bool
-	PopupWidth  string
-	PopupHeight string
+	IsPopup bool
+	// IsScratchPopup marks the popup toggle_scratch opened. It is the
+	// session's, like IsPopup. See session.WindowState.ScratchPopup.
+	IsScratchPopup bool
+	PopupWidth     string
+	PopupHeight    string
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int
