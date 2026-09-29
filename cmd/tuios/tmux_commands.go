@@ -295,10 +295,10 @@ func newTmuxPaneCommand() *cobra.Command {
 				// holder asks the daemon about the caller itself. A fresh
 				// connection each time: a request is rare, and a connection
 				// kept open could outlive a daemon restart.
-				Authorize: func(peerPID int) error {
+				Authorize: func(peerPID int, peerStart uint64) error {
 					caller := &lazyCaller{}
 					defer caller.close()
-					return tmuxcompat.RespawnAllowed(caller, peerPID, window)
+					return tmuxcompat.RespawnAllowed(caller, peerPID, peerStart, window)
 				},
 			}))
 			return nil

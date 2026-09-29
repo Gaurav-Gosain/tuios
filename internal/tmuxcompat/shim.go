@@ -1029,7 +1029,7 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 // (unknown_verb) holds no pane to anything, so both may respawn any pane, as
 // before. Any other failure refuses: the check fails closed.
 func (s *Shim) mayRespawn(target string) error {
-	return respawnGrantsAllow(s.Caller, map[string]any{}, target)
+	return respawnGrantsAllow(s.Caller, map[string]any{}, 0, target)
 }
 
 // RespawnAllowed is mayRespawn for the pane holder: it asks the daemon about
@@ -1038,16 +1038,26 @@ func (s *Shim) mayRespawn(target string) error {
 // skips the shim, so the holder makes the check itself. With no pid (a
 // platform where the kernel does not give it) there is nothing to ask about,
 // and the shim's own check is the only one.
-func RespawnAllowed(c Caller, peerPID int, target string) error {
+//
+// peerStart is the process's start time, read when it connected. The daemon
+// answers a pid whose process has another start time as one that cannot be
+// read, so a caller that exits and has its pid reused is not judged as the
+// process that took the pid.
+func RespawnAllowed(c Caller, peerPID int, peerStart uint64, target string) error {
 	if peerPID <= 0 {
 		return nil
 	}
-	return respawnGrantsAllow(c, map[string]any{"peer_pid": peerPID}, target)
+	params := map[string]any{"peer_pid": peerPID}
+	if peerStart != 0 {
+		params["peer_start"] = peerStart
+	}
+	return respawnGrantsAllow(c, params, peerPID, target)
 }
 
 // respawnGrantsAllow asks pane-grants with params and decides whether the
-// process it answers for may respawn target. See mayRespawn.
-func respawnGrantsAllow(c Caller, params map[string]any, target string) error {
+// process it answers for may respawn target. See mayRespawn. peerPID is the
+// pid asked about, 0 when the caller asks about itself.
+func respawnGrantsAllow(c Caller, params map[string]any, peerPID int, target string) error {
 	if c == nil {
 		return errors.New("could not read the caller's grants: no daemon connection")
 	}
@@ -1060,15 +1070,25 @@ func respawnGrantsAllow(c Caller, params map[string]any, target string) error {
 		return fmt.Errorf("could not read the caller's grants: %w", err)
 	}
 	var pg struct {
-		Pane   bool     `json:"pane"`
-		Window string   `json:"window"`
-		Grants []string `json:"grants"`
+		Pane    bool     `json:"pane"`
+		Window  string   `json:"window"`
+		Grants  []string `json:"grants"`
+		Admin   bool     `json:"admin"`
+		PeerPID int      `json:"peer_pid"`
 	}
 	if err := json.Unmarshal(raw, &pg); err != nil {
 		return fmt.Errorf("read pane-grants: %w", err)
 	}
-	if !pg.Pane || slices.Contains(pg.Grants, "admin") || pg.Window == target {
+	if peerPID > 0 && pg.PeerPID != peerPID {
+		// A daemon that does not know peer_pid answers about the holder
+		// itself, which says nothing about the caller.
+		return errors.New("the daemon did not answer about the caller, so the respawn is refused. Restart the daemon (tuios kill-server) to run this build")
+	}
+	if !pg.Pane || pg.Admin || slices.Contains(pg.Grants, "admin") || (pg.Window != "" && pg.Window == target) {
 		return nil
+	}
+	if pg.Window == "" {
+		return errors.New("the caller runs in another pane without the admin grant, and replacing the process of another pane needs admin (see tuios pane-grants)")
 	}
 	return fmt.Errorf("pane %s holds %s, and replacing the process of another pane needs the admin grant (see tuios pane-grants)",
 		PaneID(pg.Window), strings.Join(pg.Grants, ","))

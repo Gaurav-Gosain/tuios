@@ -90,13 +90,13 @@ type PaneOptions struct {
 	Env []string
 	// Shell runs a pane with no command, as a login shell.
 	Shell string
-	// Authorize, when set, decides whether the process with peerPID may
-	// respawn this pane. The holder asks it for every request on its socket
+	// Authorize, when set, decides whether the process with peerPID, started
+	// at peerStart (0 when unknown), may respawn this pane. The holder asks it for every request on its socket
 	// before it acts, because a process can dial the socket directly and
 	// skip the check the shim makes (mayRespawn). peerPID is 0 where the
 	// kernel does not give it. The tuios tmux-pane command sets it to
 	// RespawnAllowed.
-	Authorize func(peerPID int) error
+	Authorize func(peerPID int, peerStart uint64) error
 }
 
 // paneEnv is the environment of a holder's processes: the holder's own, with

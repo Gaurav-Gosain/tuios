@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // The holder tests run RunPane in a child process: this test binary run
@@ -36,10 +38,11 @@ func runHolderIfAsked() {
 		if gate := os.Getenv(exitGateEnvKey); gate != "" {
 			afterExit = func(waiting *atomic.Int32) { exitGate(gate, waiting) }
 		}
-		var authorize func(int) error
+		var authorize func(int, uint64) error
 		if grants := os.Getenv(authGrantsEnvKey); grants != "" {
-			authorize = func(pid int) error {
-				return RespawnAllowed(&holderDaemon{grants: grants, log: os.Getenv(authLogEnvKey)}, pid, os.Getenv("TUIOS_PANE_ID"))
+			authorize = func(pid int, start uint64) error {
+				d := &holderDaemon{grants: grants, log: os.Getenv(authLogEnvKey), noEcho: os.Getenv(authNoEchoEnvKey) != ""}
+				return RespawnAllowed(d, pid, start, os.Getenv("TUIOS_PANE_ID"))
 			}
 		}
 		os.Exit(RunPane(PaneOptions{
@@ -56,9 +59,12 @@ func runHolderIfAsked() {
 // authGrantsEnvKey gives a holder child an Authorize that asks holderDaemon,
 // which places every caller in another pane holding these grants.
 // authLogEnvKey names a file where it writes the params it was asked with.
+// authNoEchoEnvKey makes holderDaemon answer as a daemon from before
+// peer_pid: about the holder itself, with no peer_pid in the answer.
 const (
 	authGrantsEnvKey = "TMUXCOMPAT_TEST_AUTH_GRANTS"
 	authLogEnvKey    = "TMUXCOMPAT_TEST_AUTH_LOG"
+	authNoEchoEnvKey = "TMUXCOMPAT_TEST_AUTH_NO_ECHO"
 )
 
 // holderDaemon answers pane-grants as a daemon would for a process in
@@ -66,6 +72,7 @@ const (
 type holderDaemon struct {
 	grants string
 	log    string
+	noEcho bool
 }
 
 func (h *holderDaemon) Call(verb string, params any) (json.RawMessage, error) {
@@ -76,7 +83,15 @@ func (h *holderDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	if verb != "pane-grants" {
 		return nil, fmt.Errorf("unexpected verb %s", verb)
 	}
-	return json.Marshal(map[string]any{"pane": true, "window": "win-other", "grants": strings.Split(h.grants, ",")})
+	if h.noEcho {
+		// The holder's own pane, which it may always respawn.
+		return json.Marshal(map[string]any{"pane": true, "window": os.Getenv("TUIOS_PANE_ID"), "grants": []string{"read"}})
+	}
+	var p struct {
+		PeerPID int `json:"peer_pid"`
+	}
+	_ = json.Unmarshal(raw, &p)
+	return json.Marshal(map[string]any{"pane": true, "window": "win-other", "grants": strings.Split(h.grants, ","), "peer_pid": p.PeerPID})
 }
 
 // Hooks for a holder child. replyDelayEnvKey holds a duration the holder
@@ -371,6 +386,54 @@ func TestHolderRespawnsForAnAdminCaller(t *testing.T) {
 		t.Fatalf("reply = %q, want the respawn served", reply)
 	}
 	waitFile(t, respawned)
+}
+
+// TestHolderRefusesADaemonThatIgnoresThePeer: a daemon from before peer_pid
+// answers pane-grants about the holder itself, which may always respawn its
+// own pane. The holder must not take that as an answer about the caller.
+//
+// Negative control: with the peer_pid echo check cut from respawnGrantsAllow,
+// the respawn runs.
+func TestHolderRefusesADaemonThatIgnoresThePeer(t *testing.T) {
+	dir := shortDir(t)
+	marker := filepath.Join(dir, "ran")
+	respawned := filepath.Join(dir, "respawned")
+	_, done := startHolderEnv(t, dir, "win-old", []string{authGrantsEnvKey + "=read", authNoEchoEnvKey + "=1"},
+		"echo up > "+marker+"; exec sleep 60")
+	waitFile(t, marker)
+	reply := sendRespawn(t, dir, "win-old", `{"window":"win-old","command":["touch `+respawned+`"]}`)
+	if !strings.Contains(reply, `"ok":false`) || !strings.Contains(reply, "did not answer about the caller") {
+		t.Fatalf("reply = %q, want a refusal", reply)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := os.Stat(respawned); err == nil {
+		t.Error("the refused request ran")
+	}
+	select {
+	case <-done:
+		t.Error("the holder ended on a refused request")
+	default:
+	}
+}
+
+// TestHolderSendsTheCallersStartTime: the holder pins the caller with its
+// start time, read when it connected, so the daemon can tell it from a later
+// process with the same pid.
+func TestHolderSendsTheCallersStartTime(t *testing.T) {
+	dir := shortDir(t)
+	marker := filepath.Join(dir, "ran")
+	asked := filepath.Join(dir, "asked")
+	startHolderEnv(t, dir, "win-st", []string{authGrantsEnvKey + "=read", authLogEnvKey + "=" + asked}, "echo up > "+marker+"; exec sleep 60")
+	waitFile(t, marker)
+	sendRespawn(t, dir, "win-st", `{"window":"win-st","command":["true"]}`)
+	var params map[string]any
+	if err := json.Unmarshal([]byte(waitFile(t, asked)), &params); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := procinfo.StartTime(os.Getpid())
+	if got, _ := params["peer_start"].(float64); want == 0 || uint64(got) != want {
+		t.Errorf("the holder sent peer_start %v, want %d", params["peer_start"], want)
+	}
 }
 
 // sendRespawn sends one request line to a holder and returns its reply.

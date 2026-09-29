@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"golang.org/x/term"
 )
 
@@ -304,12 +305,16 @@ func exitCode(c *exec.Cmd) int {
 // acceptRespawns reads one request per connection and hands it to the holder.
 // A request authorize refuses is answered with the refusal and never reaches
 // the holder. It adds one to waiting before each send on calls.
-func acceptRespawns(ln net.Listener, window string, authorize func(int) error, calls chan<- respawnCall, waiting *atomic.Int32) {
+func acceptRespawns(ln net.Listener, window string, authorize func(int, uint64) error, calls chan<- respawnCall, waiting *atomic.Int32) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
+		// Who connected, pinned before anything is read: the pid, and the
+		// start time that tells that process from a later one with its pid.
+		pid := procinfo.PeerPID(conn)
+		start, _ := procinfo.StartTime(pid)
 		go func() {
 			defer func() { _ = conn.Close() }()
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
@@ -327,7 +332,7 @@ func acceptRespawns(ln net.Listener, window string, authorize func(int) error, c
 				return
 			}
 			if authorize != nil {
-				if err := authorize(peerPID(conn)); err != nil {
+				if err := authorize(pid, start); err != nil {
 					writeReply(conn, err)
 					return
 				}
