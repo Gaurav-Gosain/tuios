@@ -3081,11 +3081,16 @@ unless you name that file with `--authorized-keys`.
 
 - With keys: only the holders of those keys connect. Add a key while the server
   runs and it works on the next connection.
-- With no keys on `localhost`: every connection is accepted and the server
-  prints one warning at startup. This keeps a single-user laptop working with
-  no setup.
-- With no keys on any other host: the server refuses to start and prints the
-  ways forward. Pass `--no-auth` to serve anyway, on a network you trust.
+- With no keys file: the server does not start, on `localhost` too. It prints
+  three ways to start: add your public key to
+  `~/.config/tuios/authorized_keys`, pass
+  `--authorized-keys ~/.ssh/authorized_keys`, or pass `--no-auth`.
+- With `--no-auth`: every connection is accepted and the server prints one
+  warning at startup. On `localhost`, every user on this machine can connect.
+  On any other host, use it only on a network you trust.
+
+TUIOS does not read `~/.ssh/authorized_keys` by itself. TUIOS does not apply
+the rules in `sshd_config` to those keys.
 
 A keys file that cannot be read, does not parse, or holds no key stops startup.
 Only an absent file means "no keys are configured".
@@ -3097,7 +3102,7 @@ that holds only keys with options stops startup. To let such a key in, add it
 again with no options to `~/.config/tuios/authorized_keys`.
 
 ```bash
-# Let one key in
+# Let one key in. Use your public key file, for example ~/.ssh/id_ed25519.pub
 mkdir -p ~/.config/tuios
 cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
 tuios ssh --host 0.0.0.0 --port 2222
@@ -3122,13 +3127,14 @@ the server operator's config file is never written from an SSH client.
 
 **Examples:**
 ```bash
-# Start SSH server on default port (daemon mode)
+# Start SSH server on default port (daemon mode). Needs
+# ~/.config/tuios/authorized_keys, --authorized-keys or --no-auth
 tuios ssh
 
 # Start on custom port
 tuios ssh --port 8022
 
-# Listen on all interfaces (needs an authorized_keys file, or --no-auth)
+# Listen on all interfaces
 tuios ssh --host 0.0.0.0 --port 2222
 
 # Read the allowed public keys from somewhere else
@@ -3200,10 +3206,10 @@ tuios-web [flags]
 - `--auto-tls`: Generate and serve a self-signed certificate (managed with `tuios-web cert`)
 - `--insecure`: Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
 - `--random-password`: Make a new password at start and print it
-- `--password-file <path>`: Read the password from the first line of this file. Only you must be able to read the file
+- `--password-file <path>`: Read the password from the first line of this file. The file must be yours, with mode 600 or 400
 - `--user <string>`: User name the browser must give with the password (default: "tuios")
 - `--no-auth`: Serve a non-loopback host with no password (trusted networks only)
-- `--allow-host <name>`: Also accept this host name in the Host header, for example the name of a reverse proxy. You can give it more than one time
+- `--allow-host <name>`: On a loopback `--host`, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or `--no-auth`. You can give it more than one time
 - `--touch <auto|on|off>`: Touch support and the on-screen key bar (default: auto-detect)
 - `--default-session <string>`: Default session name for all connections (creates shared session)
 - `--ephemeral`: Disable daemon mode (sessions don't persist)
@@ -3228,18 +3234,24 @@ connects. The browser asks for the user name and the password.
 - `--random-password`: tuios-web makes a new password at start and prints it
   with a URL that holds it.
 - `--password-file <path>`: tuios-web reads the password from the first line
-  of the file. The file must have mode 600.
+  of the file. The file must belong to you, with mode 600 or 400. tuios-web
+  does not check the file permissions on Windows.
 - `TUIOS_WEB_PASSWORD`: tuios-web reads the password from this environment
-  variable. It removes the variable before it starts panes.
+  variable. It does not pass the variable to panes. But your own processes
+  can still read it from `/proc`. Use `--password-file` instead.
 
 There is no flag that takes the password itself. Other users can see command
 line arguments in `ps`.
 
-- On `localhost`: the password is optional. With no password, anyone on this
-  machine can connect. tuios-web accepts a session only when the Host header
-  names this machine, such as `localhost` or `127.0.0.1`. This stops a web page
-  that points its own name at 127.0.0.1 (DNS rebinding). Use `--allow-host` to
-  add a name, for example the name of a reverse proxy on this machine.
+- On `localhost`: the password is optional. With no password, other users on
+  this machine can connect. tuios-web prints one line at start to say so. Use
+  `--random-password` to stop this. tuios-web accepts a session only when the
+  Host header names this machine, such as `localhost` or `127.0.0.1`. This
+  stops a web page that points its own name at 127.0.0.1 (DNS rebinding).
+- Behind a reverse proxy on this machine: use `--allow-host <name>` to accept
+  the proxy's host name. Give the name with no port. A proxied setup needs a
+  password, so `--allow-host` does not start without a password or
+  `--no-auth`. It works only with a loopback `--host`.
 - On any other host: tuios-web does not start without a password. TLS
   encrypts the connection, but it does not check who connects. Pass
   `--no-auth` to serve anyway, on a network you trust.
@@ -3275,6 +3287,7 @@ tuios-web --port 8080
 tuios-web --host 0.0.0.0 --port 7681 --auto-tls --random-password
 
 # Or bring your own certificate and keep the password in a file
+mkdir -p ~/.config/tuios
 (umask 077; head -c 18 /dev/urandom | base64 > ~/.config/tuios/web-password)
 tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem \
   --password-file ~/.config/tuios/web-password
@@ -3743,13 +3756,15 @@ tuios kill-server
 ### SSH Server Setup
 
 ```bash
+# Add your public key first. The server does not start without keys,
+# on localhost too. Use your public key file.
+mkdir -p ~/.config/tuios
+cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
+
 # Start SSH server on default port
 tuios ssh
 
-# Start on custom port with remote access. A host outside this machine
-# needs keys, so add one first.
-mkdir -p ~/.config/tuios
-cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
+# Start on custom port with remote access
 tuios ssh --host 0.0.0.0 --port 8022
 
 # Connect from another machine, with the matching private key

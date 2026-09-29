@@ -18,26 +18,42 @@ switcher reaches every session. Set a password to control who connects.
 # A new password at each start. tuios-web prints it.
 tuios-web --host 0.0.0.0 --auto-tls --random-password
 
-# A password in a file that only you can read
+# A fixed password in a file that only you can read (mode 600 or 400)
+mkdir -p ~/.config/tuios
 (umask 077; head -c 18 /dev/urandom | base64 > ~/.config/tuios/web-password)
 tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
-
-# A password in the environment
-TUIOS_WEB_PASSWORD=... tuios-web --host 0.0.0.0 --auto-tls
 ```
 
 - The browser asks for a user name and a password. The user name is `tuios`.
   Use `--user` to change it.
 - There is no flag that takes the password itself. Other users can see command
   line arguments in `ps`.
-- tuios-web removes `TUIOS_WEB_PASSWORD` from its environment before it starts
-  panes.
+- The password file must belong to you. Its mode must be 600 or 400.
+  tuios-web does not check the file permissions on Windows.
+- tuios-web also reads the password from `TUIOS_WEB_PASSWORD`. It does not
+  pass this variable to panes. But your own processes can still read it from
+  `/proc`. Use `--password-file` instead.
 - A host other than `localhost` needs a password. TLS encrypts the connection,
   but it does not check who connects. Use `--no-auth` only on a network you
   trust.
-- On `localhost`, the password is optional. tuios-web accepts a session only
-  when the Host header names this machine. This stops DNS rebinding. Use
-  `--allow-host <name>` to add a name, for example for a reverse proxy.
+- On `localhost`, the password is optional. With no password, other users on
+  this machine can connect, and tuios-web prints one line at start to say so.
+  Use `--random-password` to stop this.
+- On `localhost`, tuios-web accepts a session only when the Host header names
+  this machine. This stops DNS rebinding.
+
+### Behind a reverse proxy
+
+A reverse proxy on this machine sends its own host name. Use `--allow-host` to
+accept that name. Give the name with no port.
+
+```bash
+tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-password
+```
+
+- A proxied setup needs a password. The proxy lets the network in, so
+  `--allow-host` does not start without a password or `--no-auth`.
+- `--allow-host` works only with a loopback `--host`.
 - With a password, sessions use WebSocket. A WebTransport connection carries
   no password, so tuios-web refuses it and the browser falls back to
   WebSocket.
