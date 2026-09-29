@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -16,29 +16,41 @@ import (
 // test can assert the bytes a cd actually typed rather than that a function was
 // called. The window is a real daemon window, so SendInput takes the same path
 // it takes for an attached client.
-func cdProbe(t *testing.T, id string) (*terminal.Window, func() string) {
+func cdProbe(t *testing.T, id string) (*terminal.Window, func(want string) bool) {
 	t.Helper()
-	win := newTestWindow(t, id, 40, 10)
-	var mu sync.Mutex
-	var buf strings.Builder
-	win.DaemonWriteFunc = func(b []byte) error {
-		mu.Lock()
-		defer mu.Unlock()
-		buf.Write(b)
-		return nil
+	// A shell tuios spawned itself: the cd is typed only into a shell tuios
+	// can see at its prompt, which a daemon pane is not.
+	t.Setenv("SHELL", "/bin/sh")
+	win, err := terminal.NewWindow(id, "t", 0, 0, 40, 10, 0, make(chan string, 4), make(chan struct{}, 1), 100)
+	if err != nil {
+		t.Skipf("cannot spawn a shell: %v", err)
 	}
-	return win, func() string {
-		mu.Lock()
-		defer mu.Unlock()
-		return buf.String()
+	t.Cleanup(win.Close)
+	deadline := time.Now().Add(5 * time.Second)
+	for !win.ShellAtPrompt() {
+		if time.Now().After(deadline) {
+			t.Skip("the shell never took the terminal")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// inDir reports whether the shell reaches want within a short wait.
+	return win, func(want string) bool {
+		until := time.Now().Add(2 * time.Second)
+		for time.Now().Before(until) {
+			if got, ok := terminal.ShellCWD(win.ShellPgid); ok && sameDir(got, want) {
+				return true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return false
 	}
 }
 
 // TestFolderClickCanCdThePane is the option the maintainer asked for: a click
 // on a folder can walk the listing, tell the pane to cd there, or do both.
 //
-// The pane is a real one with a real PTY, so what is asserted is what the shell
-// actually received, not that a function was called.
+// The pane is a real one with a real PTY, so what is asserted is where the
+// shell actually went, not that a function was called.
 //
 // Negative controls, all three confirmed red: with the folder_click test
 // dropped from FileViewEnter so it always navigates, the cd and both cases see
@@ -58,7 +70,7 @@ func TestFolderClickCanCdThePane(t *testing.T) {
 			root := fileViewTree(t)
 			sub := filepath.Join(root, "apple")
 
-			win, typedInto := cdProbe(t, "aaaaaaaa1111")
+			win, inDir := cdProbe(t, "aaaaaaaa1111")
 			win.Cwd = root
 			m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 			m.filesView.Show = 1
@@ -83,12 +95,8 @@ func TestFolderClickCanCdThePane(t *testing.T) {
 				t.Errorf("%s moved the listing to %q with navigation off", tc.mode, got)
 			}
 
-			typed := typedInto()
-			if got := strings.Contains(typed, "cd "); got != tc.wantCd {
-				t.Errorf("%s typed %q into the pane; wanted a cd: %v", tc.mode, typed, tc.wantCd)
-			}
-			if tc.wantCd && !strings.Contains(typed, shellQuote(sub)) {
-				t.Errorf("%s typed %q, which does not name %q", tc.mode, typed, sub)
+			if got := inDir(sub); got != tc.wantCd {
+				t.Errorf("%s: the shell went to %q: %v, wanted a cd: %v", tc.mode, sub, got, tc.wantCd)
 			}
 		})
 	}
