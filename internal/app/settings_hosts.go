@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -336,6 +337,7 @@ func (m *OS) setHostAddr(name, addr string) {
 	// status column on this page would stay empty for ever.
 	m.federationPolling = true
 	delete(m.hostTests, name)
+	m.noteHostToApply(name)
 	m.ShowNotification("Host "+name+" now points at "+addr+".", "success", m.Settings.NotificationDuration)
 }
 
@@ -435,5 +437,42 @@ func (m *OS) applyHostTest(msg HostTestDoneMsg) {
 		m.ShowNotification("Every host answers.", "success", m.Settings.NotificationDuration)
 	default:
 		m.ShowNotification("Some hosts do not answer. Each row says why.", "warning", m.Settings.NotificationWarningDuration)
+	}
+}
+
+// noteHostToApply records a host the person changed at this client's keyboard,
+// for the save to apply. A change that send-keys typed is not recorded: it
+// waits for tuios config apply like any change a pane makes.
+func (m *OS) noteHostToApply(name string) {
+	if m.ProcessingRemoteKeys || slices.Contains(m.hostsToApply, name) {
+		return
+	}
+	m.hostsToApply = append(m.hostsToApply, name)
+}
+
+// HostApplyFailedMsg says the daemon did not apply a host the person
+// changed on the settings page.
+type HostApplyFailedMsg struct {
+	Host string
+	Err  error
+}
+
+// applyHostsCmd returns the calls that apply the recorded hosts, to run once
+// the file is written, and clears the record. Each call applies one host's
+// entry and nothing else in the file.
+func (m *OS) applyHostsCmd() func() tea.Msg {
+	hosts := m.hostsToApply
+	m.hostsToApply = nil
+	if len(hosts) == 0 || m.AttachedHost != "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
+		return nil
+	}
+	call := m.inboxCaller()
+	return func() tea.Msg {
+		for _, h := range hosts {
+			if _, err := call("apply-config", map[string]any{"host": h}, 5*time.Second); err != nil {
+				return HostApplyFailedMsg{Host: h, Err: err}
+			}
+		}
+		return nil
 	}
 }

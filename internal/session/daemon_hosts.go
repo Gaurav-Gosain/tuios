@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -237,6 +238,7 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 	d.federationMu.Lock()
 	d.federationProblems = texts
 	d.federationMu.Unlock()
+	d.noteHostProblems(texts)
 
 	if d.federation == nil {
 		return
@@ -320,4 +322,22 @@ func describeTableChange(c federation.TableChange) string {
 		parts = append(parts, "redialed "+strings.Join(c.Redialed, ", "))
 	}
 	return strings.Join(parts, "; ")
+}
+
+// hostProblemsNotice names the Inbox item about host entries that were ignored.
+const hostProblemsNotice = "config.toml hosts"
+
+// noteHostProblems opens the Inbox item that says which host entries were
+// ignored and why, or closes it when none was. A host dropped for an ssh
+// option that is refused is otherwise only in the log and in tuios hosts.
+func (d *Daemon) noteHostProblems(problems []string) {
+	if len(problems) == 0 {
+		d.attention.closeConfigNotice(hostProblemsNotice)
+		return
+	}
+	summary := "Fix [hosts] in config.toml. " + problems[0]
+	if len(problems) > 1 {
+		summary = fmt.Sprintf("Fix [hosts] in config.toml. tuios hosts lists %d problems. %s", len(problems), problems[0])
+	}
+	d.attention.noteConfigNotice(hostProblemsNotice, summary)
 }

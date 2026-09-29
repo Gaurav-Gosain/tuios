@@ -1,8 +1,11 @@
 package app
 
 import (
+	"encoding/json"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -125,5 +128,42 @@ func TestThePersonsKeyAnswersDuringASendKeysRun(t *testing.T) {
 	m.Update(RemoteKeyMsg{Key: tea.KeyPressMsg{Code: '1', Text: "1"}})
 	if answered != nil {
 		t.Error("a 1 from send-keys answered")
+	}
+}
+
+// TestAHostAddedInSettingsAppliesAtOnce: the daemon waits for the person on a
+// new host from a file change, and the settings page is the person. Its save
+// applies the host it changed, and only that host. A host that send-keys typed
+// into the page is not applied: it waits like any change a pane makes.
+//
+// Negative control: without applyHostsCmd in persistSettings, no apply-config
+// is sent.
+func TestAHostAddedInSettingsAppliesAtOnce(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	var calls []fakeCall
+	m.SetInboxVerbCaller(func(verb string, params map[string]any, _ time.Duration) (json.RawMessage, error) {
+		calls = append(calls, fakeCall{verb, params})
+		return json.RawMessage(`{}`), nil
+	}, func() string { return "nonce" })
+	m.UserConfig = config.DefaultConfig()
+	m.ConfigReadOnly = false
+
+	m.addHostFromRow("work work.invalid")
+	if cmd := m.persistSettings(); cmd != nil {
+		cmd()
+	}
+	if len(calls) != 1 || calls[0].verb != "apply-config" || calls[0].params["host"] != "work" {
+		t.Fatalf("the save sent %v, want apply-config for host work", calls)
+	}
+
+	calls = nil
+	m.ProcessingRemoteKeys = true
+	m.addHostFromRow("other other.invalid")
+	m.ProcessingRemoteKeys = false
+	if cmd := m.persistSettings(); cmd != nil {
+		cmd()
+	}
+	if len(calls) != 0 {
+		t.Errorf("a host that send-keys typed was applied: %v", calls)
 	}
 }

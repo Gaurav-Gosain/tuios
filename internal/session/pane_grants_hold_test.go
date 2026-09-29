@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
@@ -634,9 +635,45 @@ func TestApplyingOneHostAppliesNothingElse(t *testing.T) {
 		t.Errorf("apply-config with host reports mode %v, want strict", got["mode"])
 	}
 
+	if changes, _ := got["changes"].([]any); len(changes) != 1 || changes[0] != "Host build is added." {
+		t.Errorf("apply-config with host reports %v, want only the added host", got["changes"])
+	}
+
 	got = result(t, callP(c, t, "apply-config", nil))
 	changes := fmt.Sprint(got["changes"])
+	if list, _ := got["changes"].([]any); len(list) != 1 {
+		t.Errorf("apply-config reports %v, want only the mode change", got["changes"])
+	}
 	if got["mode"] != "open" || !strings.Contains(changes, "mode open") || !strings.Contains(changes, "Before: mode strict") {
 		t.Errorf("apply-config did not say the mode changed: %v", got)
+	}
+}
+
+// TestADroppedHostIsInTheInbox: a host whose ssh_options hold a refused
+// option is dropped. The person sees it in the Inbox, with the reason, and
+// the item closes when the entry is fixed.
+//
+// Negative control: with noteHostProblems cut from ApplyHosts, the Inbox has
+// no item.
+func TestADroppedHostIsInTheInbox(t *testing.T) {
+	t.Setenv("TUIOS_SSH", "/bin/false")
+	d, sp := startTestDaemon(t)
+	d.ApplyHosts([]federation.Host{{Name: "work", Addr: "work.invalid", SSHOptions: []string{"-o", "UserKnownHostsFile=/tmp/x"}}})
+	c := dialVerb(t, sp)
+	find := func() string {
+		items, _ := listAttention(t, c, `{}`)
+		for _, it := range items {
+			if it["name"] == hostProblemsNotice {
+				return fmt.Sprint(it["summary"])
+			}
+		}
+		return ""
+	}
+	if got := find(); !strings.Contains(got, "work") || !strings.Contains(got, "UserKnownHostsFile") || !strings.Contains(got, "config.toml") {
+		t.Fatalf("the Inbox item about the dropped host = %q, want the host, the option and what to do", got)
+	}
+	d.ApplyHosts([]federation.Host{{Name: "work", Addr: "work.invalid"}})
+	if got := find(); got != "" {
+		t.Errorf("the item stayed after the entry was fixed: %q", got)
 	}
 }

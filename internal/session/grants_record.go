@@ -210,7 +210,7 @@ type configSnapshot struct {
 	mode   string
 	grants []string
 	hosts  map[string]federation.Host
-	links  string
+	links  map[string]config.HostConfig
 }
 
 func (d *Daemon) configSnapshot() configSnapshot {
@@ -224,17 +224,7 @@ func (d *Daemon) configSnapshot() configSnapshot {
 		}
 	}
 	if t := d.linkPolicies.Load(); t != nil {
-		keys := make([]string, 0, len(*t))
-		for k := range *t {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		var b strings.Builder
-		for _, k := range keys {
-			p := config.LinkPolicyFor(*t, k)
-			fmt.Fprintf(&b, "%s:%v:%v:%v;", k, p.Allow, p.HoldMail, p.HostedGrace)
-		}
-		s.links = b.String()
+		s.links = *t
 	}
 	return s
 }
@@ -260,8 +250,29 @@ func describeConfigChanges(before, after configSnapshot) []string {
 			out = append(out, "Host "+n+" is removed.")
 		}
 	}
-	if before.links != after.links {
-		out = append(out, "What other machines may do here changed.")
+	// The policy each machine gets, compared machine by machine: a host
+	// entry with no policy of its own adds a key and changes nothing.
+	peers := map[string]bool{config.LinkPolicyDefaultName: true}
+	for k := range before.links {
+		peers[k] = true
+	}
+	for k := range after.links {
+		peers[k] = true
+	}
+	for _, k := range slices.Sorted(maps.Keys(peers)) {
+		peer := k
+		if k == config.LinkPolicyDefaultName {
+			peer = ""
+		}
+		was, now := config.LinkPolicyFor(before.links, peer), config.LinkPolicyFor(after.links, peer)
+		if slices.Equal(was.Allow, now.Allow) && was.HoldMail == now.HoldMail && was.HostedGrace == now.HostedGrace {
+			continue
+		}
+		who := "Machine " + k
+		if peer == "" {
+			who = "A machine with no table of its own"
+		}
+		out = append(out, fmt.Sprintf("%s may now do %s here. Before: %s.", who, grantWords(now.Allow), grantWords(was.Allow)))
 	}
 	return out
 }

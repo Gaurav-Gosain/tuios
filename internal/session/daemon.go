@@ -1005,6 +1005,8 @@ func (d *Daemon) Start() error {
 	// A default that widened while the daemon was down is said now, when
 	// the Inbox can show it.
 	d.checkGrantsSinceLastRun()
+	// A host entry dropped at start is said now, when the Inbox can show it.
+	d.noteHostProblems(d.configProblems())
 	// Mail still waiting for another machine comes back with its Inbox items,
 	// and goes when that machine's link comes up.
 	d.outbox.load(outboxPath())

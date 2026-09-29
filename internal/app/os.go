@@ -987,6 +987,10 @@ type OS struct {
 	// hostTestRunning is true while a link test is in flight, so the row cannot
 	// start a second one.
 	hostTestRunning bool
+	// hostsToApply are the hosts the person changed on the settings page
+	// since the last save. The daemon applies a file change that dials a
+	// new host only for the person, so the save asks it to (applyHostsCmd).
+	hostsToApply []string
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

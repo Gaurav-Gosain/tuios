@@ -239,9 +239,15 @@ func (m *OS) persistSettings() tea.Cmd {
 		m.ShowNotification("Could not save settings: "+err.Error(), "error", 0)
 		return nil
 	}
+	apply := m.applyHostsCmd()
 	return func() tea.Msg {
 		if err := write(); err != nil {
 			return settingsSaveFailedMsg{err: err}
+		}
+		// A host the person changed here applies now. The daemon's own
+		// reload of the file waits for the person on a new host.
+		if apply != nil {
+			return apply()
 		}
 		return nil
 	}

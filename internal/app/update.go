@@ -2059,6 +2059,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// them.
 		return m, m.LauncherIconWork()
 
+	case HostApplyFailedMsg:
+		m.ShowNotification("Host "+msg.Host+" is saved, but the daemon did not open it: "+msg.Err.Error()+". Run tuios config apply in a terminal outside tuios.", "warning", m.Settings.NotificationWarningDuration)
+		return m, nil
+
 	case settingsSaveFailedMsg:
 		// The write happens in a command now, so a failure has to come back here
 		// to be said out loud: the change is live either way, and the user needs
