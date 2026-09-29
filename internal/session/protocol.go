@@ -201,6 +201,11 @@ type WelcomePayload struct {
 	// TypeAtPrompt says the daemon answers MsgTypeAtPrompt. A client that
 	// does not see it types nothing into a daemon pane it cannot check.
 	TypeAtPrompt bool `json:"type_at_prompt,omitempty"`
+	// KittyAnimationRefusal says the daemon refuses a kitty frame edit in a
+	// pane itself when not every attached client's host can make it. A client
+	// that does not see it (a daemon that predates it) refuses the edit
+	// itself, as every client did before. See Daemon.refreshTreeOps.
+	KittyAnimationRefusal bool `json:"kitty_animation_refusal,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.
