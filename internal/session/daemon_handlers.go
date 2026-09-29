@@ -13,6 +13,9 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	}
 
 	cs.hello = &payload
+	cs.mu.Lock()
+	cs.treeOps = payload.LayoutTreeOps
+	cs.mu.Unlock()
 
 	// Refuse a client this daemon cannot serve before it can attach to anything.
 	if protocolMismatch(payload.Protocol) {
@@ -210,6 +213,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// already holds it, and this client does not: it holds the snapshot below.
 	// Dropped before the snapshot, every state that changes after the snapshot
 	// is broadcast, and so either reaches this client or marks it as missed.
+	// Whether the session's clients send their trees as ops, with this client
+	// counted. Settled before the snapshot, so the reply says what is in force.
+	d.refreshTreeOps(session.ID)
 	session.forgetBroadcast()
 	state := session.GetState()
 	if hook := attachSnapshotTaken.Load(); hook != nil {
@@ -640,6 +646,32 @@ func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		session.ForgetPush(origin)
 	}
+	// A client that leaves may have been the one holding the ops off.
+	d.refreshTreeOps(sessionID)
+}
+
+// refreshTreeOps turns the session's tree ops on while every TUI client
+// attached to it sends them, and off while any does not. A client too old for
+// ops sends its trees in its pushes and reads trees only from those, so a
+// current client beside it has to do the same, or the two keep two trees.
+// A client still attaching is counted: it is about to be handed a snapshot
+// that has to say what is in force.
+func (d *Daemon) refreshTreeOps(sessionID string) {
+	session := d.manager.GetSessionByID(sessionID)
+	if session == nil {
+		return
+	}
+	on := true
+	d.clientsMu.RLock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		if cs.sessionID == sessionID && cs.isTUIClient && !cs.treeOps {
+			on = false
+		}
+		cs.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
+	session.SetLayoutTreeOps(on)
 }
 
 // notePushOrigin records the name cs gives its pushes and layout ops. The

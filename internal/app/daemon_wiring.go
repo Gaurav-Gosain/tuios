@@ -193,6 +193,7 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	// builds from here on is news.
 	m.treeSeen = nil
 	m.treeDerived = nil
+	m.sessionTreeOpsOff = state != nil && !state.LayoutTreeOps
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays

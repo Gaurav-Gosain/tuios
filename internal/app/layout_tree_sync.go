@@ -40,8 +40,28 @@ import (
 
 // treeOpsOn reports whether this client sends its trees as ops. Against a
 // daemon that predates them it sends them in its pushes, as before.
+//
+// The session can turn them off too: it does while a client too old for them
+// is attached (see SessionState.LayoutTreeOps).
 func (m *OS) treeOpsOn() bool {
-	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.LayoutTreeOps()
+	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.LayoutTreeOps() && !m.sessionTreeOpsOff
+}
+
+// adoptTreeOpsFlag takes the session's word on whether tree ops are in force.
+// Switching them on starts the record of what the session holds from the trees
+// this client holds, so none of them reads as an unsent change: the session's
+// trees came from pushes while the ops were off, and the state that switches
+// them on carries those trees, which adoptSessionTrees then takes.
+func (m *OS) adoptTreeOpsFlag(state *session.SessionState) {
+	if state == nil {
+		return
+	}
+	wasOn := m.treeOpsOn()
+	m.sessionTreeOpsOff = !state.LayoutTreeOps
+	if !wasOn && m.treeOpsOn() {
+		m.treeSeen = m.treeKeys()
+		m.treeDerived = nil
+	}
 }
 
 // localLeafNames names this client's leaf numbers by window ID.

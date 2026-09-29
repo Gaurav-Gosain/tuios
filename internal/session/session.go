@@ -477,6 +477,14 @@ type SessionState struct {
 	// TUIClient.PredatesOwnPush. Wire only: it is about connections, which do
 	// not survive a restart, so it is never saved.
 	PushSeen map[string]uint64 `json:"-"`
+	// LayoutTreeOps says whether the session's clients send their BSP trees as
+	// ops (true) or inside their pushes, as before the op existed (false). The
+	// daemon turns the ops off while a client too old for them is attached
+	// and on again when it leaves, and it changes the flag as a mutation, so
+	// every client switches at one Version. A daemon that predates the ops
+	// never sets it; a client reads it only from a daemon whose welcome
+	// offered them. Wire only.
+	LayoutTreeOps bool `json:"-"`
 	// SnapshotSeq numbers the copies of the state the session hands out, in
 	// the order they were taken. A copy is taken under the state lock and sent
 	// after it is released, and the daemon sends from more than one goroutine
@@ -950,6 +958,9 @@ type Session struct {
 	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
 	// missedPeerTreeLocked.
 	treeOps [1024]treeOpRecord
+	// treeOpsOff is set while a client too old for tree ops is attached.
+	// Guarded by stateMu. See SetLayoutTreeOps.
+	treeOpsOff bool
 	// focusIntent is set by a focus verb inside mutateState, so the mutation
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
@@ -1900,6 +1911,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)
 	}
 	stateCopy.PushSeen = maps.Clone(s.pushSeen)
+	stateCopy.LayoutTreeOps = !s.treeOpsOff
 	// Taken under the state lock, so a copy with a higher number shows the
 	// state at least as late as one with a lower number.
 	stateCopy.SnapshotSeq = s.snapSeq.Add(1)

@@ -276,6 +276,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.TerminalName = caps.TerminalName
 	}
 
+	hello.LayoutTreeOps = true
+
 	// Send hello with capabilities
 	msg, err := NewMessage(MsgHello, hello)
 	if err != nil {
