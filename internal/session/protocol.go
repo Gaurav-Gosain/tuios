@@ -192,6 +192,11 @@ type AttachPayload struct {
 	// AllowNested lets the attach through from a pane of its own session, as
 	// tuios attach --force asks.
 	AllowNested bool `json:"allow_nested,omitempty"`
+	// NestProbe is the nonce of the probe the client wrote to its terminal,
+	// and NestProbeAgeMs how long before this attach it wrote it. See
+	// nest_probe.go.
+	NestProbe      string `json:"nest_probe,omitempty"`
+	NestProbeAgeMs int    `json:"nest_probe_age_ms,omitempty"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the

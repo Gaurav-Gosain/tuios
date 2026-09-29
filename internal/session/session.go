@@ -653,6 +653,12 @@ type paneIO interface {
 // PTY represents a daemon-managed pseudo-terminal.
 type PTY struct {
 	ID string
+	// sessionID is the session the pane belongs to, which a nesting probe
+	// seen in its output is recorded against. See nest_probe.go.
+	sessionID string
+	// probeTail is the end of the last output chunk, so a probe split across
+	// two reads is still seen. Only readOutput touches it.
+	probeTail []byte
 	// host is the machine the process is on, empty for this one. It is what
 	// tells the two halves of exit detection apart: a pane here has an
 	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.
@@ -1427,7 +1433,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			s.onRemotePane(windowID, rp)
 		}
 	} else {
-		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
+		ptyInstance, cmd, err = ptyspawn.Spawn(width, height, func() *exec.Cmd {
 			var cmd *exec.Cmd
 			if len(command) > 0 {
 				cmd = exec.Command(command[0], command[1:]...)
@@ -1435,12 +1441,6 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnvFor(windowID, restored, extraEnv, command)
-			// The pane's terminal, so a tuios client can tell whether it runs
-			// on it or only inherited the pane's variables. See
-			// nested_attach.go.
-			if tty != "" {
-				cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
-			}
 			if stdout != nil {
 				cmd.Stdout = stdout
 			}
@@ -1483,6 +1483,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	pty := &PTY{
 		ID:           id,
+		sessionID:    s.ID,
 		host:         host,
 		pty:          ptyInstance,
 		cmd:          cmd,
@@ -3924,6 +3925,10 @@ func (p *PTY) readOutput() {
 			// before anything reads or reorders it, so what lands in the file
 			// is what the program wrote.
 			p.rawLog.Write(data)
+
+			// A tuios client whose output lands in this pane announces
+			// itself with a probe. See nest_probe.go.
+			p.scanNestProbes(data)
 
 			// Held across all three steps so a resize taken under the same
 			// lock cannot land between two of them: the daemon's emulator and

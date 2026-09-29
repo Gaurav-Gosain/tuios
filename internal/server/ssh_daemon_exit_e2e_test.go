@@ -134,7 +134,9 @@ func (r *sshExitRun) waitForOutput(t *testing.T, d time.Duration, what string) {
 	t.Helper()
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		if len(r.text()) > 0 {
+		// A frame, not the nesting probe the server writes first: the probe
+		// is an OSC and holds no CSI, and a frame always does.
+		if strings.Contains(r.text(), "\x1b[") {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

@@ -9,6 +9,7 @@ package served
 
 import (
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -57,6 +58,14 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// the terminal this process runs in, so running in a pane of the session
 	// cannot start the resize loop and the daemon does not refuse it.
 	client.Served = true
+	// An SSH client could still run in a pane of the session it asks for: ssh
+	// from a pane into this server. Its process is the ssh client in that
+	// pane, which the daemon cannot see, so the probe goes down the channel to
+	// be seen in the pane instead. A browser never feeds a pane, so the web
+	// server writes none.
+	if w, ok := any(opts.SSHSession).(io.Writer); ok && w != nil {
+		client.SetNestProbe(session.WriteNestProbe(w))
+	}
 	if err := client.ConnectWithCapabilities(version, opts.Width, opts.Height, caps); err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}

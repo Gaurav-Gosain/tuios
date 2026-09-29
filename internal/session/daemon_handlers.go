@@ -80,20 +80,14 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var session *Session
 	var err error
 
-	// A client in a pane of the session it asks for would size the session
-	// by its own pane: see nested_attach.go. A link connection's peer is the
-	// proxy, not the client, so it is not placed. A served client's size is its
-	// remote viewer's, and a forced attach asked to skip the check.
-	var inside *Session
-	var insideWhy string
-	if !cs.viaLink && !payload.Served && !payload.AllowNested {
-		inside, insideWhy = d.paneSession(cs.peerPID)
-	}
-	if inside != nil && payload.SessionName == "" {
+	// Where this client's output lands: see nested_attach.go. A forced attach
+	// is placed too, so a chain through it is still seen, but not refused.
+	inside, insideWhy := d.placeClient(cs, &payload)
+	if inside != nil && payload.SessionName == "" && !payload.AllowNested {
 		// Which session an unnamed attach lands on is the daemon's choice, and
 		// from a pane it is usually the pane's own. Asking for a name is
 		// clearer than refusing only some of the time.
-		return d.refuseNestedAttach(cs, inside, insideWhy, true)
+		return d.refuseNestedAttach(cs, inside, nil, insideWhy)
 	}
 
 	if payload.SessionName == "" {
@@ -110,8 +104,10 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if err != nil {
 		return fmt.Errorf("failed to get/create session: %w", err)
 	}
-	if inside != nil && session.ID == inside.ID {
-		return d.refuseNestedAttach(cs, inside, insideWhy, false)
+	// Refused when the target is the client's own session, or is shown,
+	// through a chain of clients, inside it.
+	if inside != nil && !payload.AllowNested && d.shownInside(inside.ID, session.ID, cs.clientID) {
+		return d.refuseNestedAttach(cs, inside, session, insideWhy)
 	}
 
 	// Record what the attaching client's host terminal can display so shells

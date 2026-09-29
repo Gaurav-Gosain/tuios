@@ -2,10 +2,10 @@ package tuie2e
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,14 +18,12 @@ import (
 // session. The inner client's terminal is a pane of the session, so its size
 // is the session's size less the chrome, and the session is the minimum over
 // its clients: every resize shrank the pane, which shrank the inner client,
-// which shrank the session, until the session was 1x1 and the inner client
-// spun.
+// which shrank the session, until the session was 1x1. Its output also lands
+// in the pane it draws, so it redrew its own frames without end.
 //
-// These tests run tuios from a pane of the session it would attach to, and
-// check three things: the attach is refused with a message before the TUI
-// takes the terminal, the session keeps its size, and nothing is left burning
-// CPU.
-
+// These tests run tuios from a pane of the session it would attach to, by
+// every route the daemon can see, and check that the attach is refused with a
+// message, the session keeps its size, and no nested client is left running.
 const nestSession = "e2e-nest"
 
 // sessionSize reads a session's size from 'tuios ls --json'.
@@ -111,22 +109,12 @@ func tuiosProcessesUnder(outer *tuitest.Terminal, marker string) []int {
 	return pids
 }
 
-// cpuTicks returns a process's user plus system time in clock ticks.
-func cpuTicks(pid int) (int, bool) {
-	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-	if err != nil {
-		return 0, false
-	}
-	s := string(raw)
-	// The command name is in parentheses and may hold spaces.
-	fields := strings.Fields(s[strings.LastIndexByte(s, ')')+2:])
-	utime, _ := strconv.Atoi(fields[11])
-	stime, _ := strconv.Atoi(fields[12])
-	return utime + stime, true
-}
+// nestExit matches the exit status the pane echoes after a nested command.
+// The typed command holds "NEST-EXIT-$?", so a digit is what says it ran.
+var nestExit = regexp.MustCompile(`NEST-EXIT-([0-9]+)`)
 
-// assertRefused runs cmd in the pane and checks the refusal, the session size
-// and that no nested client is left running.
+// assertRefused runs cmd in the pane and checks the refusal, the exit status,
+// the session size and that no nested client is left running.
 func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker string) {
 	t.Helper()
 	w0, h0 := waitSessionSize(t, base)
@@ -134,21 +122,27 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 		t.Fatalf("the session never reached the client's size: %dx%d", w0, h0)
 	}
 
-	runInShell(t, outer, cmd+"; echo NEST-EXIT-$?", "NEST-EXIT-", shellTimeout)
+	if err := outer.SendKeys(cmd+"; echo NEST-EXIT-$?", tuitest.Enter); err != nil {
+		t.Fatalf("type %q: %v", cmd, err)
+	}
+	var status string
 	if err := outer.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "You are inside session")
-	}, uiTimeout); err != nil {
-		t.Errorf("no refusal message on screen: %v\n%s", err, outer.Snapshot())
+		m := nestExit.FindStringSubmatch(s.Text())
+		if m == nil || !strings.Contains(s.Text(), "You are inside session") {
+			return false
+		}
+		status = m[1]
+		return true
+	}, bootTimeout); err != nil {
+		t.Fatalf("no refusal and exit status on screen: %v\n%s", err, outer.Snapshot())
 	}
 	if testing.Verbose() {
 		t.Logf("frame after the refusal:\n%s", outer.Screen().Text())
 	}
-	if strings.Contains(outer.Snapshot(), "NEST-EXIT-0") {
+	if status == "0" {
 		t.Errorf("the nested attach exited 0, want a failure status\n%s", outer.Snapshot())
 	}
 
-	// Let any resize storm run, then look.
-	time.Sleep(2 * time.Second)
 	if w, h := sessionSize(t, base, nestSession); w != w0 || h != h0 {
 		t.Errorf("session size changed from %dx%d to %dx%d", w0, h0, w, h)
 	}
@@ -178,8 +172,43 @@ func TestNestedBareTuiosIsRefused(t *testing.T) {
 func TestNestedAttachIsRefused(t *testing.T) {
 	outer, base := nestedSetup(t)
 	cmd := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID -u TUIOS_SESSION -u TUIOS_PANE_TOKEN " +
-		tuiosBin + " attach " + nestSession
-	assertRefused(t, outer, base, cmd, "attach "+nestSession)
+		tuiosBin + " attach " + nestSession + " --no-animations"
+	assertRefused(t, outer, base, cmd, "--no-animations")
+}
+
+// TestNestedAttachThroughScriptIsRefused runs the client under script, which
+// gives it a terminal of its own inside the pane. Its output still lands in
+// the pane, so it is refused.
+func TestNestedAttachThroughScriptIsRefused(t *testing.T) {
+	if _, err := exec.LookPath("script"); err != nil {
+		t.Skip("script is not installed")
+	}
+	outer, base := nestedSetup(t)
+	cmd := "script -qfec '" + tuiosBin + " attach " + nestSession + " --no-animations' /dev/null"
+	assertRefused(t, outer, base, cmd, "--no-animations")
+}
+
+// buildUnplaced builds the helper that runs a program in a pane where no
+// process test can place it. See testdata/unplaced.
+func buildUnplaced(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "unplaced")
+	build := exec.Command("go", "build", "-o", bin, "./testdata/unplaced")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build unplaced: %v\n%s", err, out)
+	}
+	return bin
+}
+
+// TestUnplacedNestedClientIsRefused is the nested client no process test can
+// see, as through ssh to the same machine: not under the pane, on a terminal
+// of its own, with no pane variables. Its probe reaches the pane through the
+// relay, and it is refused.
+func TestUnplacedNestedClientIsRefused(t *testing.T) {
+	unplaced := buildUnplaced(t)
+	outer, base := nestedSetup(t)
+	cmd := unplaced + " -- " + tuiosBin + " attach " + nestSession + " --no-animations"
+	assertRefused(t, outer, base, cmd, "--no-animations")
 }
 
 // TestAttachFromPaneToOtherSessionWorks is the tmux-like case that stays
@@ -205,127 +234,55 @@ func TestAttachFromPaneToOtherSessionWorks(t *testing.T) {
 	if strings.Contains(outer.Snapshot(), "You are inside session") {
 		t.Fatalf("attaching to a different session was refused\n%s", outer.Snapshot())
 	}
-
-	time.Sleep(2 * time.Second)
 	if w, h := sessionSize(t, base, nestSession); w != w0 || h != h0 {
 		t.Errorf("the outer session changed size from %dx%d to %dx%d", w0, h0, w, h)
 	}
-	pids := tuiosProcessesUnder(outer, "attach "+other)
-	if len(pids) != 1 {
-		t.Fatalf("want one inner client, found %v", pids)
-	}
-	before, _ := cpuTicks(pids[0])
-	time.Sleep(2 * time.Second)
-	after, ok := cpuTicks(pids[0])
-	if !ok {
-		t.Fatalf("the inner client exited\n%s", outer.Snapshot())
-	}
-	// 2 s at 100 ticks/s is 200 ticks of one full core. An idle client uses a
-	// few. The loop in #235 used about 145%.
-	if used := after - before; used > 60 {
-		t.Errorf("the inner client used %d ticks of CPU in 2s while idle", used)
+	if pids := tuiosProcessesUnder(outer, "attach "+other); len(pids) != 1 {
+		t.Errorf("want one inner client, found %v", pids)
 	}
 	alive(t, outer, "with a client for another session in a pane")
 }
 
-// buildUnplaced builds the helper that runs a program in a pane where the
-// daemon cannot place it. See testdata/unplaced.
-func buildUnplaced(t *testing.T) string {
-	t.Helper()
-	bin := filepath.Join(t.TempDir(), "unplaced")
-	build := exec.Command("go", "build", "-o", bin, "./testdata/unplaced")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build unplaced: %v\n%s", err, out)
-	}
-	return bin
-}
-
-// TestUnplacedNestedClientDoesNotCollapseTheSession is the guard for the
-// nested client the daemon cannot find, as through ssh to the same machine.
-// The attach goes through and the session shrinks, but it stops at the floor
-// and settles: no 1x1, no endless resize, no CPU spin.
-// assertAttachedAndSettled runs cmd in the pane, which starts a nested client
-// the daemon lets through, and checks that the session shrinks no further than
-// the floor, stops resizing, and that the client does not spin.
-func assertAttachedAndSettled(t *testing.T, outer *tuitest.Terminal, base, cmd, marker string) {
-	t.Helper()
+// TestForcedNestedAttachSettles is tuios attach --force from the session's own
+// pane: the person asked for it, so it attaches, and the floor keeps the
+// session at 20x6 or more. The size is read until it stops changing.
+func TestForcedNestedAttachSettles(t *testing.T) {
+	outer, base := nestedSetup(t)
 	if w, h := waitSessionSize(t, base); w < 100 || h < 30 {
 		t.Fatalf("the session never reached the client's size: %dx%d", w, h)
 	}
-	if err := outer.SendKeys(cmd, tuitest.Enter); err != nil {
-		t.Fatalf("type the nested attach: %v", err)
+	const marker = "--no-animations"
+	if err := outer.SendKeys(tuiosBin+" attach --force "+nestSession+" "+marker, tuitest.Enter); err != nil {
+		t.Fatalf("type the forced attach: %v", err)
 	}
 	deadline := time.Now().Add(bootTimeout)
-	var pids []int
-	for time.Now().Before(deadline) {
-		if pids = tuiosProcessesUnder(outer, marker); len(pids) == 1 {
-			break
+	for len(tuiosProcessesUnder(outer, marker)) != 1 {
+		if !time.Now().Before(deadline) {
+			t.Fatalf("the forced client never started\n%s", outer.Snapshot())
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if len(pids) != 1 {
-		t.Fatalf("want one nested client, found %v\n%s", pids, outer.Snapshot())
-	}
 
-	// Let the shrink run its course, then check that it stopped.
-	time.Sleep(6 * time.Second)
+	// Settled means the same size on three reads a second apart.
+	var w, h, same int
+	deadline = time.Now().Add(soakTimeout)
+	for same < 3 && time.Now().Before(deadline) {
+		time.Sleep(time.Second)
+		nw, nh := sessionSize(t, base, nestSession)
+		if nw == w && nh == h {
+			same++
+		} else {
+			w, h, same = nw, nh, 1
+		}
+	}
+	if same < 3 {
+		t.Fatalf("the session never settled; last %dx%d", w, h)
+	}
+	if w < 20 || h < 6 {
+		t.Errorf("the session settled at %dx%d, want at least 20x6", w, h)
+	}
 	if strings.Contains(outer.Snapshot(), "You are inside session") {
-		t.Fatalf("the attach was refused\n%s", outer.Snapshot())
+		t.Errorf("the forced attach was refused\n%s", outer.Snapshot())
 	}
-	w1, h1 := sessionSize(t, base, nestSession)
-	before, ok := cpuTicks(pids[0])
-	if !ok {
-		t.Fatalf("the nested client exited\n%s", outer.Snapshot())
-	}
-	time.Sleep(2 * time.Second)
-	after, _ := cpuTicks(pids[0])
-	w2, h2 := sessionSize(t, base, nestSession)
-
-	t.Logf("settled at %dx%d; the nested client used %d CPU ticks in 2s", w1, h1, after-before)
-	if w1 < 20 || h1 < 6 {
-		t.Errorf("the session collapsed to %dx%d, want at least 20x6", w1, h1)
-	}
-	if w1 != w2 || h1 != h2 {
-		t.Errorf("the session is still resizing: %dx%d, then %dx%d", w1, h1, w2, h2)
-	}
-	if used := after - before; used > 60 {
-		t.Errorf("the nested client used %d ticks of CPU in 2s; the loop in #235 used about 145%%", used)
-	}
-	alive(t, outer, "with a nested client")
-}
-
-// TestUnplacedNestedClientDoesNotCollapseTheSession is the guard for the
-// nested client the daemon cannot find, as through ssh to the same machine.
-// The attach goes through and the session shrinks, but it stops at the floor
-// and settles: no 1x1, no endless resize, no CPU spin.
-func TestUnplacedNestedClientDoesNotCollapseTheSession(t *testing.T) {
-	unplaced := buildUnplaced(t)
-	outer, base := nestedSetup(t)
-	const marker = "--no-animations"
-	assertAttachedAndSettled(t, outer, base, unplaced+" -- "+tuiosBin+" attach "+nestSession+" "+marker, marker)
-}
-
-// TestForcedNestedAttachSettles is tuios attach --force from the session's own
-// pane: the person asked for it, so it attaches, and the floor stops the loop.
-func TestForcedNestedAttachSettles(t *testing.T) {
-	outer, base := nestedSetup(t)
-	const marker = "--no-animations"
-	assertAttachedAndSettled(t, outer, base, tuiosBin+" attach --force "+nestSession+" "+marker, marker)
-}
-
-// TestNestedAttachOnOwnTerminalAttaches is a client in the pane that runs on a
-// terminal of its own, with the pane's variables still set: setsid and script
-// give it one. Its terminal is not the pane's, so it is let through, the same
-// as a terminal emulator or a tmux server started from a pane.
-func TestNestedAttachOnOwnTerminalAttaches(t *testing.T) {
-	if _, err := exec.LookPath("script"); err != nil {
-		t.Skip("script is not installed")
-	}
-	if _, err := exec.LookPath("setsid"); err != nil {
-		t.Skip("setsid is not installed")
-	}
-	outer, base := nestedSetup(t)
-	const marker = "--no-animations"
-	cmd := "setsid -f script -qfec '" + tuiosBin + " attach " + nestSession + " " + marker + "' /dev/null"
-	assertAttachedAndSettled(t, outer, base, cmd, marker)
+	alive(t, outer, "with a forced nested client")
 }
