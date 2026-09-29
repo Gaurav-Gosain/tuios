@@ -108,7 +108,7 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 		return nil, fmt.Errorf("give one password source: --password-file, --random-password or %s", webPasswordEnv)
 	}
 	if sources == 1 && f.noAuth {
-		return nil, errors.New("--no-auth turns the password off. Remove --no-auth, or remove the password")
+		return nil, errors.New("a password and --no-auth do not go together. Remove --no-auth, or remove the password")
 	}
 
 	switch {
@@ -164,21 +164,21 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 // from the network, so --allow-host needs a password or --no-auth.
 func checkAllowHosts(f webAccessFlags, hasPassword bool) error {
 	if !isLoopbackHost(f.host) {
-		return fmt.Errorf("--allow-host works only with a loopback --host, such as localhost. %s is not loopback. Remove --allow-host", f.host)
+		return fmt.Errorf("the allowed host names work only with a loopback --host, such as localhost. %s is not loopback. Remove --allow-host", f.host)
 	}
 	for _, h := range f.allowHosts {
 		if h == "" {
-			return errors.New("--allow-host is empty. Give a host name, such as term.example.com")
+			return errors.New("an --allow-host value is empty. Give a host name, such as term.example.com")
 		}
 		if _, _, err := net.SplitHostPort(h); err == nil {
-			return fmt.Errorf("--allow-host %s has a port. Give the host name with no port", h)
+			return fmt.Errorf("the allowed host %s has a port. Give it to --allow-host with no port", h)
 		}
 		if strings.ContainsAny(h, "/:@") && net.ParseIP(strings.Trim(h, "[]")) == nil {
-			return fmt.Errorf("--allow-host %s is not a host name. Give the host name only, such as term.example.com", h)
+			return fmt.Errorf("the allowed host %s is not a host name. Give --allow-host a host name only, such as term.example.com", h)
 		}
 	}
 	if !hasPassword && !f.noAuth {
-		return errors.New("--allow-host needs a password, because a reverse proxy lets the network in. Add --random-password or --password-file, or add --no-auth")
+		return errors.New("a reverse proxy lets the network in, so --allow-host needs a password. Add --random-password or --password-file, or add --no-auth")
 	}
 	return nil
 }
