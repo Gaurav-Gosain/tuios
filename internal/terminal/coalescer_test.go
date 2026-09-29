@@ -27,24 +27,31 @@ func TestCoalescerEmitsQuietPaneImmediately(t *testing.T) {
 	}
 	t.Cleanup(w.Close)
 
-	// Long enough that any interval the coalescer runs at has elapsed, so this
-	// is the quiet-pane case rather than the tail of a burst.
-	time.Sleep(30 * time.Millisecond)
-	select {
-	case <-ptyData:
-	default:
-	}
+	// A shared CI runner can stall any single try for several milliseconds, so
+	// keep the best of a few tries. A lost leading edge costs a tick period on
+	// every try, so the best try still catches it.
+	best := time.Duration(1<<63 - 1)
+	for range 5 {
+		// Long enough that any interval the coalescer runs at has elapsed, so
+		// this is the quiet-pane case rather than the tail of a burst.
+		time.Sleep(30 * time.Millisecond)
+		select {
+		case <-ptyData:
+		default:
+		}
 
-	start := time.Now()
-	w.WriteOutputAsync([]byte("x"))
-	select {
-	case <-ptyData:
-	case <-time.After(2 * time.Second):
-		t.Fatal("a quiet pane's output never raised a render signal")
+		start := time.Now()
+		w.WriteOutputAsync([]byte("x"))
+		select {
+		case <-ptyData:
+		case <-time.After(2 * time.Second):
+			t.Fatal("a quiet pane's output never raised a render signal")
+		}
+		best = min(best, time.Since(start))
 	}
-	if waited := time.Since(start); waited > 4*time.Millisecond {
-		t.Errorf("quiet pane waited %v for its render signal; the leading edge is gone "+
-			"and every echoed keystroke is paying a tick period again", waited)
+	if best > 4*time.Millisecond {
+		t.Errorf("quiet pane waited %v for its render signal at best; the leading edge is gone "+
+			"and every echoed keystroke is paying a tick period again", best)
 	}
 }
 
