@@ -39,7 +39,7 @@ example:
 
 ```toml
 [keybindings.prefix_mode]
-file_search = ["f"]
+prefix_file_search = ["f"]
 
 [keybindings.sidebar]
 file_search = ["ctrl+f"]

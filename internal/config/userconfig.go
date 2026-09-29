@@ -912,7 +912,7 @@ func DefaultConfig() *UserConfig {
 				// is destructive either way.
 				"prefix_screenshot":         {"C"},
 				"prefix_command_palette":    {"P"},
-				"file_search":               {"f"},
+				"prefix_file_search":        {"f"},
 				"prefix_toggle_sidebar":     {"b"},
 				"prefix_session_switcher":   {"S"},
 				"prefix_workspace_switcher": {"W"},

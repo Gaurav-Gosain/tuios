@@ -645,6 +645,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_scrollback":         "Open the scrollback browser",
 	"prefix_screenshot":         "Take a screenshot",
 	"prefix_command_palette":    "Open the command palette",
+	"prefix_file_search":        "Search files below the focused pane's directory",
 	"prefix_toggle_sidebar":     "Toggle the session sidebar",
 	"prefix_explore":            "Focus/leave sidebar",
 	"prefix_jump_notif":         "Jump to newest message",

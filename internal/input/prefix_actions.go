@@ -49,7 +49,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_screenshot", handlePrefixScreenshot)
 	d.Register("prefix_help", handleToggleHelp)
 	d.Register("prefix_command_palette", handleOpenCommandPalette)
-	d.Register("file_search", handleOpenFileSearch)
+	d.Register("prefix_file_search", handleOpenFileSearch)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
