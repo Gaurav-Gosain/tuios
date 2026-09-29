@@ -326,3 +326,16 @@ func (w *Window) InvalidateCache() {
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
 }
+
+// LastContentRow is the bottom row of the content area, the lowest row a copy
+// mode cursor can sit on. It is ContentHeight()-1 and not Height-3: a
+// borderless tiled pane draws on every row of its Height.
+func (w *Window) LastContentRow() int {
+	return max(w.ContentHeight()-1, 0)
+}
+
+// LastContentCol is the rightmost column of the content area, the furthest a
+// copy mode cursor can go. See LastContentRow.
+func (w *Window) LastContentCol() int {
+	return max(w.ContentWidth()-1, 0)
+}

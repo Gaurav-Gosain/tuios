@@ -839,7 +839,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					} else if cm.ScrollOffset > 0 {
 						cm.ScrollOffset--
 						w.ScrollbackOffset = cm.ScrollOffset
-					} else if cm.CursorY < w.Height-3 {
+					} else if cm.CursorY < w.LastContentRow() {
 						cm.CursorY++
 					}
 				}

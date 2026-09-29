@@ -30,6 +30,14 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 	// RLockIO away from the recursive read-lock deadlock, because a queued
 	// LockIO writer starves any later reader on a sync.RWMutex and the handler
 	// would be waiting on a lock it is itself holding.
+	// A key bound to a copy mode search action opens the prompt from copy
+	// mode too. It is checked first, because copy mode otherwise takes every
+	// key. Neither action has a default key, so no copy-mode key is shadowed
+	// unless the person binds one of them to it.
+	if m, cmd, ok := copyModeSearchActionKey(msg, o, window); ok {
+		return m, cmd
+	}
+
 	// Multi copy mode drives every pane of the multifocus set with this key.
 	// See copymode_multi.go.
 	if o.MultiCopy.Has(window.ID) {
@@ -182,7 +190,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case "^":
 		cm.CursorX = 0 // Could be enhanced to skip leading whitespace
 	case "$":
-		cm.CursorX = max(0, window.Width-3) // Account for borders
+		cm.CursorX = window.LastContentCol()
 
 	// Navigation: page movement
 	case "ctrl+u":
@@ -248,7 +256,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.CursorY = window.Height / 2
 	case "L":
 		// Move to bottom of screen
-		cm.CursorY = window.Height - 3
+		cm.CursorY = window.LastContentRow()
 
 	// Navigation: paragraph movement
 	case "{":
@@ -307,7 +315,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	// Search
 	case "/", "?":
 		backward := keyStr == "?"
-		cm.BeginSearch(backward)
+		cm.BeginSearch(backward, window.ScrollbackLen())
 		fx.ShowNotification(searchPrompt(backward), "info", 0) // Persistent until search complete
 		return
 	case "n", "N":
@@ -366,7 +374,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.State = terminal.CopyModeNormal
 		matchInfo := ""
 		if len(cm.SearchMatches) > 0 {
-			matchInfo = fmt.Sprintf(" (%d matches)", len(cm.SearchMatches))
+			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches)))
 		}
 		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
@@ -557,7 +565,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.CursorX = 0
 		updateVisualEnd(cm, window)
 	case "$":
-		cm.CursorX = max(0, window.Width-3)
+		cm.CursorX = window.LastContentCol()
 		updateVisualEnd(cm, window)
 
 	// Page movement
@@ -598,7 +606,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.CursorY = window.Height / 2
 		updateVisualEnd(cm, window)
 	case "L":
-		cm.CursorY = window.Height - 3
+		cm.CursorY = window.LastContentRow()
 		updateVisualEnd(cm, window)
 
 	// Paragraph movement
