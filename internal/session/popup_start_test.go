@@ -1,8 +1,10 @@
 package session
 
 import (
+	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -72,4 +74,72 @@ func TestPopupStartsAtItsBox(t *testing.T) {
 	if win.Width != 60 || win.Height != 15 {
 		t.Errorf("the popup's window box is %dx%d, want 60x15", win.Width, win.Height)
 	}
+}
+
+// dialAnimationClient attaches a raw client whose hello says whether its
+// host makes kitty frame edits.
+func dialAnimationClient(t *testing.T, socketPath, session string, animates bool) *boundsClient {
+	t.Helper()
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	c := &boundsClient{conn: conn}
+	c.send(t, MsgHello, &HelloPayload{Version: "test", PreferredCodec: "gob", Protocol: ProtocolVersion,
+		LayoutTreeOps: true, KittyAnimation: animates})
+	var welcome WelcomePayload
+	if err := c.await(t, MsgWelcome).ParsePayload(&welcome); err != nil {
+		t.Fatalf("parse welcome: %v", err)
+	}
+	if !welcome.KittyAnimationRefusal {
+		t.Fatal("the welcome does not say the daemon refuses frame edits")
+	}
+	c.send(t, MsgAttach, &AttachPayload{SessionName: session, CreateNew: true, Width: 120, Height: 40})
+	c.await(t, MsgAttached)
+	return c
+}
+
+// waitAnimation waits for the session's frame-edit support to read want.
+func waitAnimation(t *testing.T, d *Daemon, session string, want bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s := d.manager.GetSession(session)
+		if s != nil && s.kittyAnimation.Load() == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: frame edits supported = %v, want %v", what, !want, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// The daemon refuses frame edits unless every attached client's host makes
+// them, and a client that leaves hands the answer back to the ones that
+// stay. A web client, then a kitty client, then the kitty client detaching,
+// leaves the web client with the refusal it needs.
+func TestKittyAnimationFollowsEveryAttachedClient(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+
+	web := dialAnimationClient(t, socketPath, "anim", false)
+	waitAnimation(t, d, "anim", false, "a web client alone")
+
+	kitty := dialAnimationClient(t, socketPath, "anim", true)
+	waitAnimation(t, d, "anim", false, "a kitty client beside a web client")
+
+	kitty.send(t, MsgDetach, struct{}{})
+	waitAnimation(t, d, "anim", false, "the web client after the kitty client detached")
+
+	web.send(t, MsgDetach, struct{}{})
+	waitAnimation(t, d, "anim", false, "no client attached")
+
+	alone := dialAnimationClient(t, socketPath, "anim", true)
+	waitAnimation(t, d, "anim", true, "a kitty client alone")
+	web2 := dialAnimationClient(t, socketPath, "anim", false)
+	waitAnimation(t, d, "anim", false, "a web client joining a kitty client")
+	_ = web2.conn.Close()
+	waitAnimation(t, d, "anim", true, "the kitty client after the web client disconnected")
+	_ = alone
 }

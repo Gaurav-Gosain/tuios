@@ -61,8 +61,9 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		Protocol:     ProtocolVersion,
 		ClientFocus:  true,
 		// See layout_tree.go.
-		LayoutTreeOps: true,
-		TypeAtPrompt:  true,
+		LayoutTreeOps:         true,
+		TypeAtPrompt:          true,
+		KittyAnimationRefusal: true,
 	})
 }
 
@@ -129,7 +130,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// guestenv.TermProgram). Without this the daemon's own environment decides,
 	// and image tools inside a window fall back to block art.
 	session.SetGraphicsCapabilities(cs.kittyGraphics, cs.sixelGraphics)
-	session.SetKittyAnimation(cs.kittyAnimation)
 
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea
@@ -675,6 +675,11 @@ func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 // current client beside it has to do the same, or the two keep two trees.
 // A client still attaching is counted: it is about to be handed a snapshot
 // that has to say what is in force.
+//
+// The same count settles whether the session's hosts make kitty frame edits:
+// only while every attached TUI client's host does, and never with none
+// attached. It runs on every attach, detach and disconnect, so a client that
+// leaves hands the answer back to the ones that stay. See SetKittyAnimation.
 func (d *Daemon) refreshTreeOps(sessionID string) {
 	session := d.manager.GetSessionByID(sessionID)
 	if session == nil {
@@ -686,15 +691,23 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	session.treeOpsMu.Lock()
 	defer session.treeOpsMu.Unlock()
 	on := true
+	animate, tuiClients := true, 0
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		if cs.sessionID == sessionID && cs.isTUIClient && !cs.treeOps {
-			on = false
+		if cs.sessionID == sessionID && cs.isTUIClient {
+			tuiClients++
+			if !cs.treeOps {
+				on = false
+			}
+			if !cs.kittyAnimation {
+				animate = false
+			}
 		}
 		cs.mu.Unlock()
 	}
 	d.clientsMu.RUnlock()
+	session.SetKittyAnimation(animate && tuiClients > 0)
 	if hook := treeOpsCounted.Load(); hook != nil {
 		(*hook)()
 	}

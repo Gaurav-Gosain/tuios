@@ -160,6 +160,9 @@ type TUIClient struct {
 	// treeOps says the daemon's welcome offered MsgLayoutTree. See
 	// LayoutTreeOps.
 	treeOps atomic.Bool
+	// daemonRefusesAnimation says the daemon's welcome offered
+	// KittyAnimationRefusal. See DaemonRefusesKittyAnimation.
+	daemonRefusesAnimation atomic.Bool
 	// attachGen counts attaches. See AttachGeneration.
 	attachGen atomic.Uint64
 	// typeAtPromptSupported says the daemon's welcome offered
@@ -342,6 +345,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.focusSupported = welcome.ClientFocus
 	c.treeOps.Store(welcome.LayoutTreeOps)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
+	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -1098,6 +1102,13 @@ func (c *TUIClient) UpdateState(state *SessionState) error {
 	// client refuse every state it is sent.
 	c.pushSeq.Store(seq)
 	return nil
+}
+
+// DaemonRefusesKittyAnimation reports whether the daemon answers a kitty frame
+// edit in a pane itself. When it does not (a daemon that predates it), the
+// client refuses an edit its host cannot make, as it did before.
+func (c *TUIClient) DaemonRefusesKittyAnimation() bool {
+	return c != nil && c.daemonRefusesAnimation.Load()
 }
 
 // LayoutTreeOps reports whether the daemon takes BSP trees as ops

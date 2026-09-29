@@ -1127,8 +1127,9 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 	s.sixelGraphics = sixel
 }
 
-// SetKittyAnimation records whether the attached client's host edits image
-// frames. Like SetGraphicsCapabilities, the most recent attach wins.
+// SetKittyAnimation records whether the hosts of the session's attached
+// clients make kitty frame edits: true only while every one of them does.
+// Daemon.refreshTreeOps counts it on every attach, detach and disconnect.
 //
 // A frame edit the host cannot make is refused by the daemon, from the pane's
 // own emulator, so the refusal reaches the guest in the order the guest asked
