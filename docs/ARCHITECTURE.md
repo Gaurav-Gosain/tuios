@@ -778,11 +778,14 @@ checks follow the kitty graphics protocol:
   `/dev/shm`.
 - Only a regular file is read, up to the transmit cap. `/dev/zero`, a FIFO or a
   device cannot hang or exhaust the process.
+- A `t=f` or `t=t` file must belong to the user tuios runs as.
+- A `t=t` file name must hold `tty-graphics-protocol`, as the spec asks.
 
 When tuios reads the file itself and sends the bytes to a browser or an SSH
 client, the bytes leave the machine. There, a `t=f` or `t=t` path must also be
 in a temporary directory (`/tmp`, `/var/tmp`, `/dev/shm` or `$TMPDIR`). A key
-in the home directory is refused. A guest that asks first with `a=q` is told
+in the home directory is refused. `$TMPDIR` is ignored when it is `/`, the home
+directory or a parent of it. A guest that asks first with `a=q` is told
 not to send a path at all, and streams the bytes.
 
 A guest on another machine that asks is told not to send a path at all. One

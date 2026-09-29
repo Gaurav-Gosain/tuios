@@ -78,6 +78,18 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 	if err != nil || !info.Mode().IsRegular() {
 		return "", false
 	}
+	if cmd.Medium != vt.KittyMediumSharedMemory {
+		// A file another user owns is not the pane's to show, even where the
+		// permissions let tuios read it.
+		if !ownedByMe(info) {
+			return "", false
+		}
+		// The kitty spec asks a t=t path to carry this text. Its clients
+		// always name their temporary files so.
+		if cmd.Medium == vt.KittyMediumTempFile && !strings.Contains(filepath.Base(resolved), kittyTempMarker) {
+			return "", false
+		}
+	}
 
 	if !kp.hostReadsFiles() && cmd.Medium != vt.KittyMediumSharedMemory && !kittyInTempDir(resolved) {
 		return "", false
@@ -99,10 +111,40 @@ func kittySensitivePath(path string) bool {
 	return false
 }
 
-// kittyTempDirs lists the temporary directories. A variable so a test, whose
-// home directory is itself a temporary one, can name a narrower set.
-var kittyTempDirs = func() []string {
-	return []string{"/tmp", "/dev/shm", "/var/tmp", os.TempDir()}
+// kittyTempMarker is the text the kitty spec asks for in a t=t file name.
+const kittyTempMarker = "tty-graphics-protocol"
+
+// kittyFixedTempDirs are the temporary directories on every unix. A variable
+// so a test, whose own home is under /tmp, can take them away.
+var kittyFixedTempDirs = []string{"/tmp", "/dev/shm", "/var/tmp"}
+
+// kittyTempDirs lists the temporary directories: the fixed ones and TMPDIR.
+// TMPDIR is ignored when it is /, the home directory or a parent of it, since
+// that would make every file of the user a temporary one.
+func kittyTempDirs() []string {
+	dirs := append([]string(nil), kittyFixedTempDirs...)
+	tmp := os.Getenv("TMPDIR")
+	if tmp == "" || !filepath.IsAbs(tmp) {
+		return dirs
+	}
+	tmp = filepath.Clean(tmp)
+	if tmp == "/" {
+		return dirs
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		home = filepath.Clean(home)
+		if r, err := filepath.EvalSymlinks(home); err == nil {
+			home = r
+		}
+		t := tmp
+		if r, err := filepath.EvalSymlinks(t); err == nil {
+			t = r
+		}
+		if t == home || strings.HasPrefix(home, strings.TrimSuffix(t, "/")+"/") {
+			return dirs
+		}
+	}
+	return append(dirs, tmp)
 }
 
 // kittyInTempDir reports whether path lies in a temporary directory: /tmp,

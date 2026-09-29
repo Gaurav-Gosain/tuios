@@ -86,9 +86,7 @@ func homeSecret(t *testing.T, name string) string {
 			t.Fatal(err)
 		}
 	}
-	prev := kittyTempDirs
-	kittyTempDirs = func() []string { return []string{tmp} }
-	t.Cleanup(func() { kittyTempDirs = prev })
+	useKittyTempDirs(t, tmp)
 	return secretFile(t, home, name)
 }
 
@@ -163,5 +161,82 @@ func TestKittyShmNameWithSlashIsNotForwarded(t *testing.T) {
 
 	if strings.Contains(host.String(), base64.StdEncoding.EncodeToString([]byte(name))) {
 		t.Fatal("a t=s name with ../ was forwarded to the host terminal")
+	}
+}
+
+// useKittyTempDirs makes dirs the only temporary directories for a test, and
+// clears TMPDIR.
+func useKittyTempDirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	prev := kittyFixedTempDirs
+	kittyFixedTempDirs = dirs
+	t.Cleanup(func() { kittyFixedTempDirs = prev })
+	t.Setenv("TMPDIR", "")
+}
+
+// A TMPDIR that is the home directory, or a parent of it, would make every
+// file of the user a temporary one. It is ignored.
+func TestKittyTmpdirAboveHomeIsIgnored(t *testing.T) {
+	kp, host := remoteKitty(t)
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	if err := os.Mkdir(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	useKittyTempDirs(t)
+	t.Setenv("HOME", home)
+	secret := secretFile(t, home, "tty-graphics-protocol-key")
+
+	for _, tmpdir := range []string{"/", home, root} {
+		t.Setenv("TMPDIR", tmpdir)
+		sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, secret))
+		if n := host.Total(); n != 0 {
+			t.Fatalf("TMPDIR=%s let a file in the home directory through: %d bytes", tmpdir, n)
+		}
+	}
+	// A TMPDIR beside the home directory still counts.
+	tmp := filepath.Join(root, "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", tmp)
+	sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, secretFile(t, tmp, "tty-graphics-protocol-ok")))
+	if host.Total() == 0 {
+		t.Fatal("a file in a real TMPDIR was refused")
+	}
+}
+
+// A file another user owns is refused, even in a temporary directory.
+func TestKittyFileOwnedByAnotherUserIsRefused(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root owns the file used here")
+	}
+	info, err := os.Stat("/etc/passwd")
+	if err != nil || ownedByMe(info) {
+		t.Skip("no file owned by another user to test with")
+	}
+	kp, host := remoteKitty(t)
+	useKittyTempDirs(t, "/etc")
+
+	sendKitty(kp, kittyFileCmd(vt.KittyMediumFile, "/etc/passwd"))
+
+	if n := host.Total(); n != 0 {
+		t.Fatalf("a file owned by another user sent %d bytes", n)
+	}
+}
+
+// A t=t name must carry the text the kitty spec asks for.
+func TestKittyTempFileWithoutTheMarkerIsRefused(t *testing.T) {
+	kp, host := remoteKitty(t)
+	dir, err := os.MkdirTemp("", "tuios-kitty-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, secretFile(t, dir, "frame.rgba")))
+
+	if n := host.Total(); n != 0 {
+		t.Fatalf("a t=t name without the marker sent %d bytes", n)
 	}
 }
