@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
@@ -181,6 +182,73 @@ func TestProbeRelayedIntoOwnPaneIsRefused(t *testing.T) {
 				t.Errorf("a client relayed into its own session's pane got %q, want the refusal", got)
 			}
 		})
+	}
+}
+
+// TestLateProbeDetachesTheClient is a probe that reaches the pane only after
+// its client attached, as over a slow ssh link. The attach did not wait for
+// it, so the client is attached and has shrunk the session. When the probe
+// shows up, the daemon takes the client off with the refusal, and the session
+// goes back to the size of the client that is left.
+func TestLateProbeDetachesTheClient(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	sess, _, b := twoWindowSession(t, d, "late")
+
+	// A client outside every pane, at 100x30.
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	bigOut := filepath.Join(t.TempDir(), "big")
+	big := exec.Command(exe, "-test.run=^TestHelperSocketCaller$")
+	big.Env = append(os.Environ(), helperSockEnv+"="+sp, helperOutEnv+"="+bigOut,
+		helperModeEnv+"=attach-hold", helperArgsEnv+"=late", helperSizeEnv+"=100x30")
+	if err := big.Start(); err != nil {
+		t.Fatalf("start the outer client: %v", err)
+	}
+	t.Cleanup(func() { _ = big.Process.Kill(); _, _ = big.Process.Wait() })
+	if got := waitHelper(t, bigOut); !strings.HasPrefix(got, "nonce:") {
+		t.Fatalf("the outer client got %q", got)
+	}
+
+	// The nested client attaches at 40x12 while its probe is still held back.
+	relay := relayIntoPane(t, d, sess, b)
+	out := filepath.Join(t.TempDir(), "out")
+	pty := spawnHelperOnOwnTerminal(t, sp, out, "attach-late-probe", "late", helperSizeEnv+"=40x12")
+	if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
+		t.Fatalf("the nested client was refused before its probe was seen: %q", got)
+	}
+	waitSize := func(w, h int, what string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			gw, gh := sess.Size()
+			if gw == w && gh == h {
+				return
+			}
+			if !time.Now().Before(deadline) {
+				t.Fatalf("%s: session is %dx%d, want %dx%d", what, gw, gh, w, h)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	waitSize(40, 12, "with the nested client attached")
+
+	// Now the probe reaches the pane.
+	go func() { _, _ = io.Copy(relay, pty) }()
+	deadline := time.Now().Add(5 * time.Second)
+	var ended []byte
+	for len(ended) == 0 && time.Now().Before(deadline) {
+		ended, _ = os.ReadFile(out + ".ended")
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(string(ended), `You are inside session "late"`) {
+		t.Fatalf("the nested client was not taken off with the refusal: %q", ended)
+	}
+	waitSize(100, 30, "after the nested client was taken off")
+	if n := d.getSessionClientCount(sess.ID); n != 1 {
+		t.Errorf("%d clients on the session, want the outer one alone", n)
 	}
 }
 

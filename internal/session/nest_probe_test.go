@@ -26,7 +26,7 @@ func TestNestProbeSplitAcrossReads(t *testing.T) {
 	cut := len(seq) / 2
 	p.scanNestProbes(append([]byte("before"), seq[:cut]...))
 	p.scanNestProbes(append(bytes.Clone(seq[cut:]), "after"...))
-	if got := awaitNestProbe(nonce, int(nestProbeWindow.Milliseconds())); got != "split-session" {
+	if got := seenNestProbe(nonce); got != "split-session" {
 		t.Errorf("a probe split across two reads was recorded against %q, want split-session", got)
 	}
 }

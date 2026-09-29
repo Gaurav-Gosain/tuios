@@ -350,7 +350,9 @@ tuios finds the pane in these ways:
 
 - The client runs on the pane's terminal.
 - The client's output reaches the pane. This finds `script`, and ssh from
-  the pane to the same machine or to the tuios SSH server.
+  the pane to the same machine or to the tuios SSH server. The attach does
+  not wait for this check. If tuios finds it in the first 2 seconds after
+  the attach, it detaches the client with the same message.
 - A client with no terminal runs under the pane's shell or has the pane's
   `TUIOS_` variables.
 

@@ -46,10 +46,12 @@ type TUIClient struct {
 	Served      bool
 	AllowNested bool
 
-	// nestProbe and nestProbeAt are the probe WriteNestProbe wrote. Set once,
+	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
-	nestProbe   string
-	nestProbeAt time.Time
+	nestProbe string
+	// nestedRefusal is the daemon's reason when it took this client off its
+	// session for showing the session inside itself. See NestedRefusal.
+	nestedRefusal atomic.Pointer[string]
 
 	conn net.Conn
 	// br is the only reader of conn. A frame is read in three pieces, the
@@ -362,17 +364,16 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 // AttachSession attaches to a session (creates if createNew is true).
 // Returns the session state for restoration.
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
-	probe, probeAge := c.nestProbeFields()
+	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName:    name,
-		CreateNew:      createNew,
-		Width:          width,
-		Height:         height,
-		Reserve:        c.OwnLayoutReserve(),
-		Served:         c.Served,
-		AllowNested:    c.AllowNested,
-		NestProbe:      probe,
-		NestProbeAgeMs: probeAge,
+		SessionName: name,
+		CreateNew:   createNew,
+		Width:       width,
+		Height:      height,
+		Reserve:     c.OwnLayoutReserve(),
+		Served:      c.Served,
+		AllowNested: c.AllowNested,
+		NestProbe:   probe,
 	})
 	if err != nil {
 		return nil, err
@@ -571,16 +572,15 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 // attachWhileReading performs the attach round trip through the read loop, for
 // the paths that run with the read loop already started.
 func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
-	probe, probeAge := c.nestProbeFields()
+	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName:    name,
-		CreateNew:      createNew,
-		Width:          width,
-		Height:         height,
-		Served:         c.Served,
-		AllowNested:    c.AllowNested,
-		NestProbe:      probe,
-		NestProbeAgeMs: probeAge,
+		SessionName: name,
+		CreateNew:   createNew,
+		Width:       width,
+		Height:      height,
+		Served:      c.Served,
+		AllowNested: c.AllowNested,
+		NestProbe:   probe,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)
@@ -1377,6 +1377,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		name := payload.SessionName
 		if name == "" {
 			name = c.SessionName()
+		}
+		if payload.Nested {
+			reason := payload.Reason
+			c.nestedRefusal.Store(&reason)
 		}
 		c.sessionEndedOnce.Do(func() {
 			c.multiClientMu.RLock()
