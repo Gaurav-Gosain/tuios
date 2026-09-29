@@ -322,11 +322,14 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 		}
 		return nil
 	}
-	_, path, ok := m.fileActionTarget()
+	name, path, ok := m.fileActionTarget()
 	if !ok {
 		return nil
 	}
 	editor := m.Settings.SidebarEditor
+	if otherHost := m.filesView.Host != ""; otherHost || m.AttachedHost != "" {
+		return m.handleFileEdit(remoteEditTarget(path, editor, m.fileTargetIsDir(name), otherHost))
+	}
 	return func() tea.Msg {
 		return inspectEditTarget(path, editor)
 	}
@@ -371,6 +374,33 @@ func inspectEditTarget(path, editor string) fileEditMsg {
 func (msg fileEditMsg) refuse(note string, err error) fileEditMsg {
 	msg.Note, msg.Err = note, err
 	return msg
+}
+
+func remoteEditTarget(path, editor string, isDir, otherHost bool) fileEditMsg {
+	msg := fileEditMsg{Path: path, IsDir: isDir}
+	if isDir {
+		return msg
+	}
+	if otherHost {
+		return msg.refuse("tuios can not edit files on another machine.", nil)
+	}
+	var err error
+	if msg.Argv, err = editorArgv(editor); err != nil {
+		return msg.refuse(editorCommandNote, err)
+	}
+	return msg
+}
+
+func (m *OS) fileTargetIsDir(name string) bool {
+	if t := m.menuFile; t.Active() && t.Name == name {
+		return t.IsDir
+	}
+	for _, e := range m.filesView.Entries {
+		if e.Name == name {
+			return e.Dir
+		}
+	}
+	return false
 }
 
 func looksLikeText(sample []byte) bool {

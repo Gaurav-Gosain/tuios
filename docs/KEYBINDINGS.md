@@ -19,6 +19,11 @@ file in a new pane. The pane runs the editor set under Settings, Sidebar, File
 editor. A folder keeps its navigation action. tuios does not edit a file that is
 not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 
+When the session runs on another machine, tuios does not check the file on your
+machine. The pane on that machine opens the file, and it shows the error if the
+editor is missing or the file is not text. tuios can not edit a file that lists
+from a different machine than the one the session runs on.
+
 `Shift+Enter` needs a terminal that reports modified Enter, such as one that
 uses the Kitty keyboard protocol. On other terminals, bind `file_edit` to a
 different key.
