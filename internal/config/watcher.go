@@ -135,6 +135,19 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 	return cw, nil
 }
 
+// MarkApplied records data as the file in force, applied by a path other than
+// this watcher. A later change back to what the watcher saw before is then
+// delivered rather than dropped as unchanged.
+func (cw *Watcher) MarkApplied(data []byte) {
+	if cw == nil {
+		return
+	}
+	sum := sha256.Sum256(data)
+	cw.mu.Lock()
+	cw.lastHash = sum
+	cw.mu.Unlock()
+}
+
 // run drains the event channel and arms the debounce.
 func (cw *Watcher) run() {
 	for {

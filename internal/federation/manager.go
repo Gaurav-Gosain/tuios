@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -338,6 +339,13 @@ func (m *Manager) SetTable(t *Table) TableChange {
 		<-s.done
 	}
 	return change
+}
+
+// SameHost reports whether two host entries would dial the same way, names
+// and addresses compared as the table keeps them.
+func SameHost(a, b Host) bool {
+	a.Addr, b.Addr = strings.TrimSpace(a.Addr), strings.TrimSpace(b.Addr)
+	return sameHost(a, b)
 }
 
 // sameHost reports whether two host entries would dial the same way. Only the

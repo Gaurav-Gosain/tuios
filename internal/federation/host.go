@@ -107,6 +107,10 @@ func NewTable(hosts []Host) (*Table, []error) {
 			problems = append(problems, fmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
 			continue
 		}
+		if err := CheckSSHOptions(h.SSHOptions); err != nil {
+			problems = append(problems, fmt.Errorf("host %q was ignored: %w", name, err))
+			continue
+		}
 		if _, dup := t.hosts[name]; dup {
 			problems = append(problems, fmt.Errorf("host %q was ignored, because the name is already used", name))
 			continue
