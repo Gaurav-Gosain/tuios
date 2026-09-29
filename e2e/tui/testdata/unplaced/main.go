@@ -65,8 +65,12 @@ func first(args []string) int {
 	}
 	_ = w.Close()
 	_ = cmd.Wait()
-	_, _ = io.Copy(io.Discard, r)
-	return 0
+	// The relay writes the program's exit status, one byte, before it exits.
+	status, _ := io.ReadAll(r)
+	if len(status) > 0 {
+		return int(status[0])
+	}
+	return 1
 }
 
 // middle starts the relay and exits at once, so the relay loses its parent.
@@ -104,7 +108,8 @@ func relay(args []string) int {
 		defer func() { _ = term.Restore(0, old) }()
 	}
 	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
-	go func() { _, _ = io.Copy(os.Stdout, ptmx) }()
+	copied := make(chan struct{})
+	go func() { _, _ = io.Copy(os.Stdout, ptmx); close(copied) }()
 	// The relay has no controlling terminal, so no SIGWINCH reaches it. The
 	// pane's size is polled instead.
 	go func() {
@@ -117,5 +122,15 @@ func relay(args []string) int {
 		}
 	}()
 	_ = cmd.Wait()
-	return 0
+	// What the program wrote last, such as a refusal, is still in the PTY.
+	select {
+	case <-copied:
+	case <-time.After(time.Second):
+	}
+	code := cmd.ProcessState.ExitCode()
+	if code < 0 {
+		code = 1
+	}
+	_, _ = os.NewFile(3, "done").Write([]byte{byte(code)})
+	return code
 }

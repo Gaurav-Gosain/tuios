@@ -79,15 +79,20 @@ func TestHelperSocketCaller(t *testing.T) {
 		}
 		result = "nonce:" + c.HumanNonce()
 		_ = c.Close()
-	case "attach", "attach-served", "attach-force":
+	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold":
+		mode := os.Getenv(helperModeEnv)
+		c := NewTUIClient()
+		c.Served = strings.HasPrefix(mode, "attach-served")
+		c.AllowNested = mode == "attach-force"
+		if strings.HasSuffix(mode, "-probe") {
+			// Written to this process's terminal, as a client writes it.
+			c.SetNestProbe(WriteNestProbe(os.Stdout))
+		}
 		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
 		if err != nil {
 			result = "dial: " + err.Error()
 			break
 		}
-		c := NewTUIClient()
-		c.Served = os.Getenv(helperModeEnv) == "attach-served"
-		c.AllowNested = os.Getenv(helperModeEnv) == "attach-force"
 		c.conn = conn
 		if err := c.handshake("test", 80, 24, nil); err != nil {
 			result = "handshake: " + err.Error()
@@ -98,6 +103,14 @@ func TestHelperSocketCaller(t *testing.T) {
 			break
 		}
 		result = "nonce:" + c.HumanNonce()
+		if mode == "attach-hold" {
+			// Stays attached, so a later attach sees this client in the
+			// chain. The pane closing with its daemon ends it.
+			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
+				_ = os.Rename(out+".tmp", out)
+			}
+			time.Sleep(time.Minute)
+		}
 		_ = c.Close()
 	default:
 		conn, err := net.DialTimeout("unix", sock, 3*time.Second)

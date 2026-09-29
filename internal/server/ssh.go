@@ -277,7 +277,14 @@ func tuiosSessionMiddleware() wish.Middleware {
 			}
 
 			out := &serialWriter{w: sess}
-			model := buildSessionModel(sess, out)
+			model, err := buildSessionModel(sess, out)
+			if err != nil {
+				// The daemon refused: this client would show the session
+				// inside itself. Say so and close, rather than fall back to a
+				// session the user did not ask for.
+				wish.Fatalln(sess, err.Error())
+				return
+			}
 
 			// MakeOptions wires input/output/env for the session. The shared
 			// list goes after it, because both carry a WithFilter and the
@@ -328,7 +335,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 // buildSessionModel creates a TUIOS instance for an SSH session. graphicsOut
 // is the serialized session writer that kitty/sixel APC sequences are routed
 // through; it must be the same writer the bubbletea program renders to.
-func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) *app.OS {
+func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (*app.OS, error) {
 	pty, _, _ := sshSession.Pty()
 
 	cfg := sshServerConfig
@@ -375,7 +382,7 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) *app.OS {
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if cfg.Ephemeral {
-		return served.NewModel(opts, cfg.Overrides)
+		return served.NewModel(opts, cfg.Overrides), nil
 	}
 
 	version := cfg.Version
@@ -391,10 +398,13 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) *app.OS {
 	daemonOpts.SessionName = determineSessionName(sshSession, cfg)
 	model, err := served.Attach(daemonOpts, cfg.Overrides, version, clientCaps, pickSSHSession)
 	if err != nil {
+		if nested, ok := session.AsNestedAttach(err); ok {
+			return nil, nested
+		}
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return served.NewModel(opts, cfg.Overrides)
+		return served.NewModel(opts, cfg.Overrides), nil
 	}
-	return model
+	return model, nil
 }
 
 // pickSSHSession is which session a connection with no name gets, and says

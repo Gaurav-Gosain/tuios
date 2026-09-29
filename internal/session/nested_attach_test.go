@@ -86,18 +86,23 @@ func TestServedAndForcedAttachFromOwnPaneAreAllowed(t *testing.T) {
 	}
 }
 
-// startHelperOnOwnTerminal starts the helper from this test process, outside
-// every pane, on a PTY of its own, with env added to its environment.
-func startHelperOnOwnTerminal(t *testing.T, sp, mode, args string, env ...string) string {
+// spawnHelperOnOwnTerminal starts the helper from this test process, outside
+// every pane, on a PTY of its own, with no TUIOS_ variables but env. It
+// returns the PTY, whose output is what the helper wrote to its terminal.
+func spawnHelperOnOwnTerminal(t *testing.T, sp, out, mode, args string, env ...string) io.Reader {
 	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatalf("os.Executable: %v", err)
 	}
-	out := filepath.Join(t.TempDir(), "out")
 	pty, cmd, err := ptyspawn.Spawn(80, 24, func() *exec.Cmd {
 		c := exec.Command(exe, "-test.run=^TestHelperSocketCaller$")
-		c.Env = append(os.Environ(), helperSockEnv+"="+sp, helperOutEnv+"="+out,
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "TUIOS_") {
+				c.Env = append(c.Env, kv)
+			}
+		}
+		c.Env = append(c.Env, helperSockEnv+"="+sp, helperOutEnv+"="+out,
 			helperModeEnv+"="+mode, helperArgsEnv+"="+args)
 		c.Env = append(c.Env, env...)
 		return c
@@ -105,27 +110,106 @@ func startHelperOnOwnTerminal(t *testing.T, sp, mode, args string, env ...string
 	if err != nil {
 		t.Fatalf("spawn the helper: %v", err)
 	}
-	go func() { _, _ = io.Copy(io.Discard, pty) }()
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 		_ = pty.Close()
 	})
-	return waitHelper(t, out)
+	return pty
 }
 
-// TestStalePaneEnvOnOwnTerminalIsAllowed is the lockout the review found: a
-// GUI terminal or a tmux server started from a pane inherits the pane's
-// variables, and a tuios attach from it runs on a terminal of its own. That
-// is not nested, and must attach.
-func TestStalePaneEnvOnOwnTerminalIsAllowed(t *testing.T) {
+// TestPaneEnvOnOwnTerminalIsRefused covers a client on a terminal of its own
+// whose environment names a pane of the session, as a terminal emulator or a
+// script run from the pane has. Its output lands in the pane, so it is
+// refused, and the refusal names --force for the person who means it.
+func TestPaneEnvOnOwnTerminalIsRefused(t *testing.T) {
 	skipWithoutPeerPID(t)
 	d, sp := startTestDaemon(t)
-	_, _, b := twoWindowSession(t, d, "stale")
-	got := startHelperOnOwnTerminal(t, sp, "attach", "stale",
-		"TUIOS_SESSION=stale", "TUIOS_PANE_ID="+b, "TUIOS_WINDOW_ID="+b, "TUIOS_SOCKET="+sp)
-	if !strings.HasPrefix(got, "nonce:") {
-		t.Errorf("an attach with a pane's variables from a terminal of its own got %q, want it attached", got)
+	_, _, b := twoWindowSession(t, d, "envtty")
+	out := filepath.Join(t.TempDir(), "out")
+	pty := spawnHelperOnOwnTerminal(t, sp, out, "attach", "envtty",
+		"TUIOS_SESSION=envtty", "TUIOS_PANE_ID="+b, "TUIOS_WINDOW_ID="+b, "TUIOS_SOCKET="+sp)
+	go func() { _, _ = io.Copy(io.Discard, pty) }()
+	got := waitHelper(t, out)
+	if !strings.Contains(got, `You are inside session "envtty"`) || !strings.Contains(got, "--force") {
+		t.Errorf("an attach with a pane's variables from a terminal of its own got %q, want the refusal naming --force", got)
+	}
+}
+
+// relayIntoPane copies what src writes into the given pane's output, as ssh
+// or a relay would: the pane runs cat on a fifo, and src is copied into it.
+func relayIntoPane(t *testing.T, d *Daemon, sess *Session, pane string, src io.Reader) {
+	t.Helper()
+	fifo := filepath.Join(t.TempDir(), "relay")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatalf("mkfifo: %v", err)
+	}
+	runInPane(t, d, sess, pane, "cat "+fifo)
+	go func() {
+		f, err := os.OpenFile(fifo, os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer func() { _ = f.Close() }()
+		_, _ = io.Copy(f, src)
+	}()
+}
+
+// TestProbeRelayedIntoOwnPaneIsRefused is the client no process test can
+// place: outside every pane, on a terminal of its own, with no pane
+// variables, whose output a relay copies into a pane of the session it asks
+// for. Its probe shows up in that pane, and it is refused. The served case is
+// the SSH server's client, whose probe travels down the ssh channel.
+func TestProbeRelayedIntoOwnPaneIsRefused(t *testing.T) {
+	skipWithoutPeerPID(t)
+	for _, mode := range []string{"attach-probe", "attach-served-probe"} {
+		t.Run(mode, func(t *testing.T) {
+			d, sp := startTestDaemon(t)
+			sess, _, b := twoWindowSession(t, d, "relay")
+			out := filepath.Join(t.TempDir(), "out")
+			pty := spawnHelperOnOwnTerminal(t, sp, out, mode, "relay")
+			relayIntoPane(t, d, sess, b, pty)
+			if got := waitHelper(t, out); !strings.Contains(got, `You are inside session "relay"`) {
+				t.Errorf("a client relayed into its own session's pane got %q, want the refusal", got)
+			}
+		})
+	}
+}
+
+// TestProbeRelayedIntoOtherSessionIsAllowed is the control: the same relay
+// into a pane of a different session is the ordinary use.
+func TestProbeRelayedIntoOtherSessionIsAllowed(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	sess, _, b := twoWindowSession(t, d, "carrier")
+	makeSessionWithWindow(t, d, "shown")
+	out := filepath.Join(t.TempDir(), "out")
+	pty := spawnHelperOnOwnTerminal(t, sp, out, "attach-probe", "shown")
+	relayIntoPane(t, d, sess, b, pty)
+	if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
+		t.Errorf("a client relayed into another session's pane got %q, want it attached", got)
+	}
+}
+
+// TestMutualNestingIsRefused is session A shown in a pane of B, then B shown
+// in a pane of A: each shrinks the other. The second attach is refused.
+func TestMutualNestingIsRefused(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	a, _, aPane := twoWindowSession(t, d, "mutual-a")
+	b, _, bPane := twoWindowSession(t, d, "mutual-b")
+
+	first := filepath.Join(t.TempDir(), "first")
+	runInPane(t, d, a, aPane, helperCommand(t, sp, first, "attach-hold", "mutual-b"))
+	if got := waitHelper(t, first); !strings.HasPrefix(got, "nonce:") {
+		t.Fatalf("B in a pane of A got %q, want it attached", got)
+	}
+
+	second := filepath.Join(t.TempDir(), "second")
+	runInPane(t, d, b, bPane, helperCommand(t, sp, second, "attach", "mutual-a"))
+	got := waitHelper(t, second)
+	if !strings.Contains(got, `is shown inside session "mutual-a"`) {
+		t.Errorf("A in a pane of B, with B already in a pane of A, got %q, want the refusal", got)
 	}
 }
 

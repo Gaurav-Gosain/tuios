@@ -46,6 +46,11 @@ type TUIClient struct {
 	Served      bool
 	AllowNested bool
 
+	// nestProbe and nestProbeAt are the probe WriteNestProbe wrote. Set once,
+	// before the first attach.
+	nestProbe   string
+	nestProbeAt time.Time
+
 	conn net.Conn
 	// br is the only reader of conn. A frame is read in three pieces, the
 	// length, the header and the payload, and reading them off the socket
@@ -357,14 +362,17 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 // AttachSession attaches to a session (creates if createNew is true).
 // Returns the session state for restoration.
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
+	probe, probeAge := c.nestProbeFields()
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName: name,
-		CreateNew:   createNew,
-		Width:       width,
-		Height:      height,
-		Reserve:     c.OwnLayoutReserve(),
-		Served:      c.Served,
-		AllowNested: c.AllowNested,
+		SessionName:    name,
+		CreateNew:      createNew,
+		Width:          width,
+		Height:         height,
+		Reserve:        c.OwnLayoutReserve(),
+		Served:         c.Served,
+		AllowNested:    c.AllowNested,
+		NestProbe:      probe,
+		NestProbeAgeMs: probeAge,
 	})
 	if err != nil {
 		return nil, err
@@ -563,13 +571,16 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 // attachWhileReading performs the attach round trip through the read loop, for
 // the paths that run with the read loop already started.
 func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
+	probe, probeAge := c.nestProbeFields()
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName: name,
-		CreateNew:   createNew,
-		Width:       width,
-		Height:      height,
-		Served:      c.Served,
-		AllowNested: c.AllowNested,
+		SessionName:    name,
+		CreateNew:      createNew,
+		Width:          width,
+		Height:         height,
+		Served:         c.Served,
+		AllowNested:    c.AllowNested,
+		NestProbe:      probe,
+		NestProbeAgeMs: probeAge,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)

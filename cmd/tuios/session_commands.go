@@ -246,6 +246,13 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		return err
 	}
 
+	// Written first, so it has reached any pane it is going to reach by the
+	// time the attach arrives. See session/nest_probe.go.
+	var probe session.NestProbe
+	if host == "" {
+		probe = session.WriteNestProbe(os.Stdout)
+	}
+
 	startPprofServer()
 
 	if debugMode {
@@ -270,6 +277,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	log.Printf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
 	client.AllowNested = nestedAllowed()
+	client.SetNestProbe(probe)
 	// The real host size, asked for here rather than left at a placeholder.
 	//
 	// The session's size is the minimum over its attached clients, and this is
