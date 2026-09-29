@@ -31,7 +31,8 @@ context menu of a file, or bind `file_edit` to a different key.
 `Ctrl+B f` searches file names below the directory of the focused pane. It also
 works while you type in a pane. `Ctrl+F` searches while the sidebar has focus.
 Type a name or a relative path and press `Enter`. tuios shows the sidebar, opens
-the folder of that file and selects the file. The search has a limit, and its
+the folder of that file and selects the file. The search skips `.git`,
+`node_modules`, `.venv` and `target`. It stops after about 2.5 seconds, and its
 title says `partial` when tuios did not search the whole tree. You can rebind
 the actions in the keybind manager (`Ctrl+B k`) or in `config.toml`, for
 example:
