@@ -296,23 +296,6 @@ func SessionTreeNames(state *SessionState) func(int) string {
 	return sessionLeafNames(state.WindowToBSPID)
 }
 
-// treesDiffer reports whether two states hold different trees on any
-// workspace, reading each tree's leaves through its own state's numbering.
-func treesDiffer(a, b *SessionState) bool {
-	na, nb := SessionTreeNames(a), SessionTreeNames(b)
-	for ws, t := range a.WorkspaceTrees {
-		if TreeKey(t, na) != TreeKey(b.WorkspaceTrees[ws], nb) {
-			return true
-		}
-	}
-	for ws, t := range b.WorkspaceTrees {
-		if _, ok := a.WorkspaceTrees[ws]; !ok && TreeKey(t, nb) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // noteTreeOpLocked records that the mutation which will carry version was a
 // tree op. A tree op changes the trees and nothing else, and a push from a
 // client that sends ops carries no trees, so a push built before a tree op

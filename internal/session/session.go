@@ -2123,9 +2123,6 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	origin := state.PushOrigin
 	s.notePushLocked(origin, state.PushSeq)
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
-	// Read before the merge, which fills in the session's trees for a push
-	// that left them out.
-	carriesTrees := state.WorkspaceTrees != nil
 
 	accepted = true
 	prev := s.state
@@ -2146,18 +2143,14 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// snapshot carries it forward unchanged: the client is not telling the
 		// daemon anything the daemon did not already know.
 		state.Version = prev.Version
-		// Except for one thing. A push from a client too old for tree ops
-		// carries its trees, and when they change the session's trees that is
-		// a tree op in all but name. It is counted as one, so a current
-		// client whose push was built before it reads as behind and is sent
-		// the tree (see missedPeerTreeLocked). Without this a current client
-		// that dropped the older client's broadcast, because its own op was
-		// still in flight, kept its own tree for good while the session held
-		// the other one.
-		if carriesTrees && treesDiffer(prev, state) {
-			state.Version = prev.Version + 1
-			s.noteTreeOpLocked(state.Version, origin)
-		}
+		// A push from a client too old for tree ops carries its trees and is
+		// taken as sent, without a version, as before. It is not answered to
+		// the other clients. Counting it as a tree op (a version, or a reply
+		// owed to every other client) was measured: with a v0.8.0 client the
+		// pair ended on different screens in 60 to 76 rounds of 150, against
+		// 0 without it, because the reply handed the current client the older
+		// client's tree after the older client had already taken the current
+		// one. A pair with a v0.8.0 client stays last-writer-wins.
 	}
 	state.BaseVersion = 0
 
