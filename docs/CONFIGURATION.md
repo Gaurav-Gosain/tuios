@@ -11,10 +11,11 @@ editor = "micro"
 ```
 
 Other terminal editors and arguments work too, such as `nano` or `vim -f`.
-Quote executable paths or arguments containing spaces. The command is parsed
-as arguments without a shell, and the selected file's absolute path is appended.
-An empty value uses `$EDITOR`, then `$VISUAL`, then `vi`. The first 512 bytes
-are checked for text content; binary and special files are refused.
+Quote a path or an argument that contains spaces. tuios splits the command into
+arguments and runs no shell. It adds the full path of the file at the end. If
+the value is empty, tuios uses `$EDITOR`, then `$VISUAL`, then `vi`. File links
+and hints open files with the same command. tuios reads the first 512 bytes of
+a file to check that it is text. It refuses binary files and special files.
 
 The configuration reference lives on the docs site: https://tuios.dev/docs/configuration
 
