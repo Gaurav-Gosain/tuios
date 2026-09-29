@@ -173,6 +173,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	// Update thread-safe mode caches read from the render goroutine.
 	e.updateMouseModeCache()
 	if mode == ansi.ModeSynchronizedOutput {
+		if setting.IsSet() && !e.cachedSyncOutput.Load() {
+			e.syncOpens.Add(1)
+		}
 		e.cachedSyncOutput.Store(setting.IsSet())
 		if setting.IsSet() {
 			e.syncSetAtNanos.Store(time.Now().UnixNano())

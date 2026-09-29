@@ -52,6 +52,9 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
+	// A closed window's open update never closes, so stop holding for it.
+	kp.forgetGuestSync(windowID)
+
 	if !kp.enabled {
 		return
 	}
@@ -111,6 +114,8 @@ func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
+	// A clear inside a guest's frame deletes as part of that frame.
+	kp.noteGuestSync(windowID)
 
 	kittyPassthroughLog("ClearWindow: winID=%s enabled=%v, %d placements to delete",
 		windowID[:min(8, len(windowID))], kp.enabled, len(kp.placements[windowID]))
@@ -171,6 +176,16 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		mode = vt.KittyPlaceholdersKeep
 	}
 	window.Terminal.SetKittyPlaceholderMode(mode)
+
+	// Hold what the guest sends inside a synchronized update until it closes
+	// the update, so the host never shows half a frame; see
+	// kitty_sync_hold.go.
+	kp.SetGuestSyncProbe(win.ID, func() (bool, uint64) {
+		if t := win.Terminal; t != nil {
+			return t.SyncUpdate()
+		}
+		return false, 0
+	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		// In daemon mode, the daemon's VT emulator responds to queries directly

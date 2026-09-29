@@ -59,6 +59,7 @@ type Terminal interface {
 	ActiveScreenIsAlt() bool
 	RestoreAltScreenMode(enabled bool)
 	IsSyncActive() bool
+	SyncUpdate() (open bool, serial uint64)
 	GetModes() map[int]bool
 	RestoreModes(modes map[int]bool)
 	ScrollRegion() uv.Rectangle

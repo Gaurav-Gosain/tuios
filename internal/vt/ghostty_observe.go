@@ -164,9 +164,10 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 	}
 }
 
-// observeDecMode watches DEC mode flips for the two the shadow layer acts
-// on: the alt-screen callback and the kitty/sixel state pairs follow modes
-// 47/1047/1049, exactly where the pure emulator fires cb.AltScreen.
+// observeDecMode watches DEC mode flips the shadow layer acts on: the
+// alt-screen callback and the kitty/sixel state pairs follow modes
+// 47/1047/1049, exactly where the pure emulator fires cb.AltScreen, and the
+// synchronized-output cache follows 2026.
 func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 	for _, part := range bytes.Split(params, []byte{';'}) {
 		n, ok := atoiBytes(part)
@@ -199,6 +200,13 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 					cb.AltScreen(set)
 				}
 			})
+		case 2026:
+			// Flipped mid-write for the same reason: the kitty passthrough
+			// asks whether a command belongs to an open update while this
+			// Write is still running, and a guest writes a whole frame,
+			// 2026h through 2026l, in one chunk. The end-of-write refresh
+			// reads the library's mode and agrees.
+			t.noteSyncOutput(set)
 		}
 	}
 }
