@@ -3456,10 +3456,15 @@ The second rule holds a pane with `admin` too, which is every pane under the
 default open mode, for `send-text`, `send-keys`, `run` and `ask-agent`.
 `admin` does not include `respond`, so one agent cannot answer another
 agent's permission prompt by typing `1` and Enter into it. The person answers
-it, or gives the typing pane `respond`. A pane with `admin` is not pinned to
-the focused pane: its `send-keys` with no window still goes through the
-attached client, and the focused pane is checked. `queue-prompt` types only
-into a pane at rest, so it is not held to this rule.
+it, or gives the typing pane `respond`. The same holds for input a pane with
+`admin` sends through the client protocol. `queue-prompt` types only into a
+pane at rest, so it is not held to this rule.
+
+A pane without `respond`, `admin` included, never types through the attached
+client. Its `send-keys` with no window goes to the focused pane's terminal, and
+`PREFIX` is refused, since the prefix key moves focus to another pane and
+opens the Inbox. Its `run-command` may not press keys or type (`Type`, `Enter`,
+the key commands, `KeyCombo`, `Source` and `LoadLayout`).
 
 A call with no window means the focused pane, and it is pinned to that pane
 when it is checked, so a focus change cannot send it elsewhere. Both rules are
@@ -3488,8 +3493,10 @@ Under `mode = "strict"` it holds the `grants` list, `read`, `write` and `fan`
 when the list is not set. A mode tuios does not know is read as strict and an
 unknown grant is dropped, so a typo never turns the protection off. A change
 to the table that gives less reaches every pane on the default at its next
-call. A change that gives more applies after a daemon restart, since a process
-in a pane can write config.toml. `tuios pane-grants` says when one waits.
+call. A change that gives more waits for `tuios config apply` from a terminal
+outside tuios, or a daemon restart, since a process in a pane can write
+config.toml. `tuios pane-grants` says when one waits, and a start that finds
+wider grants than the last run says so in the Inbox.
 
 A pane can never give more than it holds. A pane without `admin` that starts
 an agent without `--grants` gives it its own grants, a pane can change only

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -93,5 +95,35 @@ func TestInboxReleaseFromSendKeysPassesNothing(t *testing.T) {
 	}
 	if !strings.Contains(lastNote(m), "keyboard") {
 		t.Errorf("the refusal does not say only the keyboard passes mail on: %q", lastNote(m))
+	}
+}
+
+// TestThePersonsKeyAnswersDuringASendKeysRun: ProcessingRemoteKeys stays set
+// across the messages of one send-keys run. A key the person presses in
+// between is theirs, and answers.
+//
+// Negative control: without the isPersonInput branch in Update, the person's
+// 1 is refused as typed by send-keys.
+func TestThePersonsKeyAnswersDuringASendKeysRun(t *testing.T) {
+	m, _ := approvalsOS(t, heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny))
+	var answered tea.Cmd
+	prev := getInputHandler()
+	SetInputHandler(func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd) {
+		o.InboxKeyPressed("1")
+		answered = o.InboxNumber(1)
+		return o, nil
+	})
+	t.Cleanup(func() { SetInputHandler(prev) })
+	m.ProcessingRemoteKeys = true
+	m.Update(tea.KeyPressMsg{Code: '1', Text: "1"})
+	if answered == nil {
+		t.Fatalf("the person's 1 was refused during a send-keys run: %q", lastNote(m))
+	}
+	if !m.ProcessingRemoteKeys {
+		t.Error("the send-keys run lost its mark")
+	}
+	m.Update(RemoteKeyMsg{Key: tea.KeyPressMsg{Code: '1', Text: "1"}})
+	if answered != nil {
+		t.Error("a 1 from send-keys answered")
 	}
 }

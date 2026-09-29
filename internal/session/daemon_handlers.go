@@ -511,6 +511,10 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 	}
 
 	if ptyID != "" {
+		if why := d.refuseTypingInto(cs, session, ptyID); why != "" {
+			_ = d.sendError(cs, ErrCodeForbidden, "input is refused for this pane: "+why)
+			return nil
+		}
 		if pty := session.GetPTY(ptyID); pty != nil {
 			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
 			_, _ = pty.Write(data)

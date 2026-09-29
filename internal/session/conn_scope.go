@@ -103,6 +103,8 @@ var verbScopes = map[string]scopeKind{
 	// restricted caller.
 	"pane-grants":     scopeOpen,
 	"set-pane-grants": scopeDeny,
+	// apply-config is for the person, outside every pane.
+	"apply-config": scopeDeny,
 
 	"list-sessions":      scopeGlobal,
 	"list-attention":     scopeGlobal,

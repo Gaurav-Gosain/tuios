@@ -160,6 +160,9 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	if addr == "" {
 		return fmt.Errorf("host %q needs an address.\n%s", name, addrHelp())
 	}
+	if err := federation.CheckSSHOptions(flags.sshOptions); err != nil {
+		return fmt.Errorf("host %q was not added: %w", name, err)
+	}
 
 	existing, err := config.HostsInFile(path)
 	if err != nil {
@@ -193,7 +196,9 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	} else {
 		fmt.Printf("Host %s is added. Its address is %s.\n", name, addr)
 	}
-	fmt.Println("A running daemon opens the link now. No restart is needed.")
+	if applyConfigNow() {
+		fmt.Println("A running daemon opens the link now. No restart is needed.")
+	}
 	probeAddedHost(name)
 	return nil
 }
@@ -395,3 +400,24 @@ func completeConfiguredHosts(_ *cobra.Command, args []string, _ string) ([]strin
 	sort.Strings(names)
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
+
+// applyConfigNow asks a running daemon to apply config.toml in full, which is
+// how a change that gives more applies without a restart. It reports false
+// only when a running daemon kept the change for the person. With no daemon
+// running there is nothing to apply, and the next start reads the file.
+func applyConfigNow() bool {
+	client, err := dialVerb()
+	if err != nil {
+		return true
+	}
+	defer func() { _ = client.Close() }()
+	if _, err := client.Call("apply-config", nil); err != nil {
+		fmt.Println(configWaitsNote)
+		return false
+	}
+	return true
+}
+
+// configWaitsNote is what a command says when the daemon keeps a change for
+// the person.
+const configWaitsNote = "The running daemon applies this change after tuios config apply from a terminal outside tuios, or a daemon restart."

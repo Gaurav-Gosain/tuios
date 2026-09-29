@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -80,16 +81,130 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 		log.Printf("[FEDERATION] The config file has an error, so the hosts did not change: %v", err)
 		return
 	}
+	d.applyUserConfig(cfg, false)
+}
+
+// applyUserConfig applies what the daemon reads from config.toml while it
+// runs. The file is the user's, and a process in a pane runs as the user and
+// can write it. So from a file change (byPerson false) the parts that bound
+// panes and links apply only where they narrow: [agents.permissions], the
+// link policies of [hosts], and the hosts the daemon dials, since ssh runs
+// what a host entry or ~/.ssh/config says as the daemon's child. What widens
+// waits for tuios config apply from outside every pane (byPerson true), or a
+// daemon restart.
+func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
-	d.reloadPanePermissions(PanePermissionsFromConfig(cfg.Agents.Permissions))
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
-	// A policy change applies to the next call on every link, including links
-	// already open, so tightening it does not wait for a reconnect.
-	d.SetLinkPolicies(cfg.Hosts)
-	d.ApplyHosts(HostsFromConfig(cfg))
+	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
+	if byPerson {
+		d.manager.SetPanePermissions(perms)
+		// A policy change applies to the next call on every link, including
+		// links already open, so tightening it does not wait for a reconnect.
+		d.SetLinkPolicies(cfg.Hosts)
+		d.ApplyHosts(HostsFromConfig(cfg))
+		d.hostsWaiting.Store(false)
+		d.recordAppliedGrants(perms)
+		return
+	}
+	d.reloadPanePermissions(perms)
+	policyWaits := d.reloadLinkPolicies(cfg.Hosts)
+	hostsWait := d.reloadHosts(HostsFromConfig(cfg))
+	d.hostsWaiting.Store(policyWaits || hostsWait)
+}
+
+// configWaiting reports whether config.toml holds a change that widens what
+// panes or links may do and waits for tuios config apply or a restart.
+func (d *Daemon) configWaiting() bool {
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load()
+}
+
+// reloadHosts applies a changed host table only where it dials less: a host
+// that is gone is dropped, and a host that is new or dials another way waits.
+// The host keeps its current entry until then.
+func (d *Daemon) reloadHosts(hosts []federation.Host) (waits bool) {
+	if d.federation == nil {
+		d.ApplyHosts(hosts)
+		return false
+	}
+	cur := d.federation.Table()
+	keep := make([]federation.Host, 0, len(hosts))
+	var waiting []string
+	for _, h := range hosts {
+		old, err := cur.Lookup(strings.TrimSpace(h.Name))
+		switch {
+		case err != nil:
+			waiting = append(waiting, strings.TrimSpace(h.Name))
+		case !federation.SameHost(old, h):
+			waiting = append(waiting, old.Name)
+			keep = append(keep, old)
+		default:
+			keep = append(keep, h)
+		}
+	}
+	d.ApplyHosts(keep)
+	if len(waiting) == 0 {
+		return false
+	}
+	slices.Sort(waiting)
+	msg := "host " + strings.Join(waiting, ", ") + " changed in config.toml. The change applies after tuios config apply from outside tuios, or a daemon restart"
+	d.federationMu.Lock()
+	d.federationProblems = append(d.federationProblems, msg)
+	d.federationMu.Unlock()
+	log.Printf("[FEDERATION] %s", msg)
+	return true
+}
+
+// reloadLinkPolicies applies changed link policies only where they give a
+// machine less. For every machine the tables name, and for any other, the
+// policy in force becomes what both the old and the new table allow.
+func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bool) {
+	var cur linkPolicyTable
+	if t := d.linkPolicies.Load(); t != nil {
+		cur = *t
+	}
+	merged := make(map[string]config.HostConfig, len(cur)+len(next)+1)
+	widened := false
+	peers := map[string]bool{config.LinkPolicyDefaultName: true}
+	for k := range cur {
+		peers[k] = true
+	}
+	for k := range next {
+		peers[k] = true
+	}
+	for key := range peers {
+		peer := key
+		if key == config.LinkPolicyDefaultName {
+			peer = ""
+		}
+		was, now := config.LinkPolicyFor(cur, peer), config.LinkPolicyFor(next, peer)
+		allow := []string{}
+		for _, c := range now.Allow {
+			if was.Allows(c) {
+				allow = append(allow, c)
+			} else {
+				widened = true
+			}
+		}
+		hold := was.HoldMail || now.HoldMail
+		if was.HoldMail && !now.HoldMail {
+			widened = true
+		}
+		grace := min(was.HostedGrace, now.HostedGrace)
+		if now.HostedGrace > was.HostedGrace {
+			widened = true
+		}
+		h := next[key]
+		h.Allow, h.HoldMail, h.HostedGrace = allow, &hold, grace.String()
+		merged[key] = h
+	}
+	d.SetLinkPolicies(merged)
+	if widened {
+		log.Printf("[FEDERATION] A link policy in config.toml gives another machine more than before. That part applies after tuios config apply from outside tuios, or a daemon restart.")
+	}
+	return widened
 }
 
 // ApplyHosts swaps the daemon's host table for a new one and reconciles the

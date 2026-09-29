@@ -615,6 +615,13 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		}
 	}
 
+	if p.Window == "" && paneTypesRaw(cs) {
+		// The keys go to the focused pane's terminal. Pin it now, so the
+		// pane checked is the pane written to.
+		if id, err := focusedWindowID(sess.GetState()); err == nil {
+			p.Window = id
+		}
+	}
 	if verr := d.recheckTyping(cs, "send-keys", sess, p.Window); verr != nil {
 		return nil, verr
 	}

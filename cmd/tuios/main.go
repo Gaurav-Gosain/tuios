@@ -282,7 +282,28 @@ This will overwrite your existing configuration after confirmation.`,
 		},
 	}
 
-	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd)
+	configApplyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Apply config.toml to the running daemon now",
+		Long: `Apply config.toml to the running daemon now, including changes that give panes or other machines more.
+
+The daemon applies a change to the file at once only where it gives less. A change that gives more waits for this command or a daemon restart. Run it from a terminal outside tuios. It is refused from inside a pane.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			client, err := dialVerb()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = client.Close() }()
+			if _, err := client.Call("apply-config", nil); err != nil {
+				return explainVerbError("apply-config", err)
+			}
+			fmt.Println("The daemon applied config.toml.")
+			return nil
+		},
+	}
+
+	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd)
 
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",

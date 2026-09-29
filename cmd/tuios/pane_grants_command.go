@@ -130,6 +130,7 @@ func runPaneGrants(jsonOutput bool) error {
 		Mode          string   `json:"mode"`
 		DefaultGrants []string `json:"default_grants"`
 		RestartNeeded bool     `json:"restart_needed"`
+		WidenedNote   string   `json:"widened_note"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -138,12 +139,15 @@ func runPaneGrants(jsonOutput bool) error {
 	if res.RestartNeeded {
 		fmt.Println(restartNeededNote)
 	}
+	if res.WidenedNote != "" {
+		fmt.Println(plainLine(res.WidenedNote))
+	}
 	return nil
 }
 
 // restartNeededNote is what pane-grants adds when config.toml gives panes
 // more than the daemon applied.
-const restartNeededNote = "config.toml gives panes more than this. That change applies after a daemon restart (tuios kill-server)."
+const restartNeededNote = "config.toml gives panes or other machines more than this. That change applies after tuios config apply from a terminal outside tuios, or a daemon restart."
 
 // describePaneGrants is the text pane-grants prints.
 func describePaneGrants(pane bool, window, sess string, grants []string, explicit bool, mode string, defaults []string) string {

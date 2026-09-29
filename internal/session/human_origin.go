@@ -2,6 +2,8 @@ package session
 
 import (
 	"os"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Who may act as the person.
@@ -57,7 +59,34 @@ const (
 	paneOriginTTY        = "its terminal is a pane of this daemon"
 	paneOriginEnv        = "its environment is a pane's of this daemon"
 	paneOriginUnreadable = "its process could not be read"
+	paneOriginChanged    = "the process that connected has exited"
 )
+
+// pinPeer records the start time of the process on cs and places it, at
+// accept. Both are kernel facts about the process that connected, read before
+// it can hand the connection on and exit.
+func (d *Daemon) pinPeer(cs *connState) {
+	if cs == nil || cs.peerPID <= 0 || cs.peerPID == os.Getpid() {
+		return
+	}
+	cs.peerStart, cs.peerStartOK = procinfo.StartTime(cs.peerPID)
+	d.connFromPane(cs)
+}
+
+// peerChanged reports whether the process on cs is no longer the one that
+// connected: it cannot be read now, or its pid names a process with another
+// start time. A connection made in this process (the daemon itself) never
+// changes.
+func (d *Daemon) peerChanged(cs *connState) bool {
+	if cs == nil || cs.peerPID <= 0 || cs.peerPID == os.Getpid() {
+		return false
+	}
+	now, ok := procinfo.StartTime(cs.peerPID)
+	if !ok {
+		return true
+	}
+	return !cs.peerStartOK || now != cs.peerStart
+}
 
 // paneOrigin reports whether the process pid runs inside a pane of this
 // daemon, and which test said so. pid must be a known peer pid.
@@ -160,7 +189,10 @@ func (d *Daemon) connFromPane(cs *connState) bool {
 	}
 	cs.fromPaneOnce.Do(func() {
 		fromPane, why := d.paneOrigin(cs.peerPID)
-		cs.fromPane = fromPane
+		if !fromPane && d.peerChanged(cs) {
+			fromPane, why = true, paneOriginChanged
+		}
+		cs.fromPane, cs.fromPaneWhy = fromPane, why
 		if fromPane {
 			LogBasic("Client %s (pid %d) cannot act as the person: %s", cs.clientID, cs.peerPID, why)
 		}

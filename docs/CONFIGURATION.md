@@ -319,9 +319,12 @@ prompts for you.
 
 The daemon reads the table when it starts and again when the file changes. A
 change that gives panes less reaches every pane on the default at its next
-call. A change that gives more, such as `strict` to `open`, applies only after
-a daemon restart (`tuios kill-server`), because a process in a pane can write
-config.toml. Until then the daemon logs it, and `tuios pane-grants` says so. Like
+call. A change that gives more, such as `strict` to `open`, waits, because a
+process in a pane can write config.toml. Run `tuios config apply` from a
+terminal outside tuios to apply it, or restart the daemon. Until then the
+daemon logs it, and `tuios pane-grants` says so. When a start finds that
+panes hold more than at the last run, it says so in the log, in
+`tuios pane-grants` and in the Inbox. Like
 `[agents.approvals]`, it is not in `list-options` and `tuios set-config` cannot
 change it, so no pane can loosen it.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
@@ -383,7 +386,16 @@ Only a pinned name is a boundary: a key that may run any command can run a
 shell, and can claim any name. A table with a policy and no `addr` is not
 dialled and not listed by `tuios hosts`, and `[hosts."*"]` never is.
 
-The daemon follows the file, and a change applies to the next call on every
-link, including links already open. `tuios hosts add` on a known name keeps
-these fields. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
+The daemon follows the file. A change that gives a machine less applies to the
+next call on every link, including links already open. A change that gives a
+machine more, a new host, or a host that dials another way waits for
+`tuios config apply` from a terminal outside tuios, or a daemon restart.
+`tuios hosts add` applies its change that way, so from a pane it waits.
+`tuios hosts add` on a known name keeps these fields.
+
+`ssh_options` may not hold an option that makes ssh run a command or load
+code on this machine: `ProxyCommand`, `LocalCommand`, `PermitLocalCommand`,
+`KnownHostsCommand`, `PKCS11Provider`, `SecurityKeyProvider`, `Include`, `-F`
+or `-I`. `-J` and `ProxyJump` take host names only. A host that has one is
+ignored and reported. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
 the verb by verb table.

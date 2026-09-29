@@ -862,6 +862,10 @@ func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
 	if !d.connFromPane(cs) {
 		return false, ""
 	}
+	if d.peerChanged(cs) {
+		// The pid no longer names the process that connected.
+		return true, ""
+	}
 	pid := cs.peerPID
 	shells := d.localPaneShells()
 	chain := []int{pid}

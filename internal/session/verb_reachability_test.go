@@ -54,6 +54,9 @@ type exampleOutcome struct {
 var exampleOutcomes = map[string]exampleOutcome{
 	// A client-owned surface with no client attached.
 	"list-dock-components#0": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
+	// The fixture daemon reads no config file. The verb is proved in
+	// pane_grants_hold_test.go.
+	"apply-config#0":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},
 	"list-dock-components#1": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"refresh-dock#0":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"refresh-dock#1":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},

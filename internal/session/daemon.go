@@ -105,6 +105,13 @@ type Daemon struct {
 	hostsWatcher *config.Watcher
 	// configPath is the file hostsWatcher follows.
 	configPath string
+	// hostsWaiting is set when a config reload changed [hosts] in a way that
+	// dials more or gives a linked machine more, and only what narrows was
+	// applied (reloadHosts, reloadLinkPolicies).
+	hostsWaiting atomic.Bool
+	// grantsWidenedAtStart is set when panes on the default hold more at
+	// this start than at the last run (checkGrantsSinceLastRun).
+	grantsWidenedAtStart atomic.Bool
 
 	// hostedPanes are the panes this daemon runs on another machine's behalf,
 	// keyed by the id open-pane returned. They are held here rather than on a
@@ -433,6 +440,14 @@ type connState struct {
 	// mu. See nested_attach.go.
 	placedIn  string
 	placedWhy string
+	// fromPaneWhy is the paneOrigin reason for fromPane.
+	fromPaneWhy string
+	// peerStart is when the process peerPID named started, read at accept,
+	// and peerStartOK whether it could be read. Together with peerPID they
+	// pin one process: a pid reused after that process exits has another
+	// start time (peerChanged).
+	peerStart   uint64
+	peerStartOK bool
 	// paneOnly marks a call a pane on another machine sent through its report
 	// channel (hosted_calls.go). It is a pane by construction, whatever the
 	// pid says, so it can never act as the person.
@@ -987,6 +1002,9 @@ func (d *Daemon) Start() error {
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
 	d.attention.load(attentionPath(), d.attentionLive)
+	// A default that widened while the daemon was down is said now, when
+	// the Inbox can show it.
+	d.checkGrantsSinceLastRun()
 	// Mail still waiting for another machine comes back with its Inbox items,
 	// and goes when that machine's link comes up.
 	d.outbox.load(outboxPath())
@@ -1378,6 +1396,10 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		// which nothing the peer sends can change. See human_origin.go.
 		peerPID: peerPID(conn),
 	}
+	// Placed now, while the process that connected is the one the pid
+	// names. A process that hands the connection to another and exits
+	// leaves its pid free for reuse; see peerChanged.
+	d.pinPeer(cs)
 
 	if viaLink {
 		LogBasic("Client %s connected over a link", clientID)

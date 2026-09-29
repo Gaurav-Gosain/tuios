@@ -708,6 +708,14 @@ func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 // nil without allocating for a client whose rail has no files section.
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyScrollAnchors()
+	// ProcessingRemoteKeys stays set from the first key of a send-keys or
+	// tape run to its last, across messages. A key or click from the
+	// person's own terminal can arrive between two of them, and it is the
+	// person's: it must not be refused as one send-keys typed.
+	if m.ProcessingRemoteKeys && isPersonInput(msg) {
+		m.ProcessingRemoteKeys = false
+		defer func() { m.ProcessingRemoteKeys = true }()
+	}
 	model, cmd := m.handleMsg(msg)
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler
@@ -2434,4 +2442,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// isPersonInput reports whether msg came from the terminal the client runs
+// in: a key, a click or a paste. Keys send-keys types arrive as RemoteKeyMsg.
+func isPersonInput(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseReleaseMsg,
+		tea.MouseWheelMsg, tea.MouseMotionMsg, tea.PasteMsg:
+		return true
+	}
+	return false
 }

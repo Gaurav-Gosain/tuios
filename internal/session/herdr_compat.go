@@ -185,6 +185,7 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(herdrIOTimeout))
 	cs := &connState{conn: conn, peerPID: peerPID(conn)}
+	d.pinPeer(cs)
 	line, err := bufio.NewReaderSize(io.LimitReader(conn, herdrMaxRequest), 4096).ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return

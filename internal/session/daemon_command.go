@@ -88,6 +88,10 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found session %s (ID=%s)", session.Name, session.ID)
 
+	if why := d.refuseTapeTyping(cs, &payload); why != "" {
+		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
+	}
+
 	if payload.TapeScript == "" {
 		canonical, ok := resolveCommandName(payload.CommandType)
 		if !ok {

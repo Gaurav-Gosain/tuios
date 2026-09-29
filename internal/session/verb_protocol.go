@@ -290,7 +290,8 @@ func init() {
 			params: []verbParam{
 				{Name: "pane_id", Type: "string", Description: "The caller's pane, normally $TUIOS_PANE_ID. Used only when the kernel places the caller in no pane, and then only with the matching pane_token. When the kernel places the caller, a different pane_id is refused."},
 				{Name: "pane_token", Type: "string", Description: "The pane's $TUIOS_PANE_TOKEN, which proves pane_id. It is good for one pane of one daemon start."},
-				{Name: "peer_pid", Type: "int", Description: "Answer for the process with this pid instead of the caller, placed the way a caller is. The tmux shim's pane holder asks this for the process on its own socket before it replaces the pane's command. Not with pane_id or pane_token, and refused over a link."},
+				{Name: "peer_pid", Type: "int", Description: "Answer for the process with this pid instead of the caller, placed the way a caller is. The tmux shim's pane holder asks this for the process on its own socket before it replaces the pane's command. The answer echoes peer_pid. A pane without admin asking about a process in another pane is told only pane and admin. Not with pane_id or pane_token, and refused over a link."},
+				{Name: "peer_start", Type: "int", Description: "With peer_pid: the process's start time as the asker read it when the process connected. A process with another start time now is not the one that connected, and is answered as one that cannot be read."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "bool", Description: "Whether the caller runs in a pane of this daemon. When false, no pane grants apply to it: the person's own CLI and client keep full rights."},
@@ -331,6 +332,15 @@ func init() {
 				`{"id":1,"verb":"set-pane-grants","params":{"session":"work","window":"a1b2c3d4","reset":true}}`,
 			},
 			handler: (*Daemon).verbSetPaneGrants,
+		},
+		"apply-config": {
+			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "[agents.permissions] mode now in force."},
+				{Name: "default_grants", Type: "[]string", Description: "What a pane started with no grants of its own holds now."},
+			},
+			examples: []string{`{"id":1,"verb":"apply-config"}`},
+			handler:  (*Daemon).verbApplyConfig,
 		},
 		"list-verbs": {
 			description: "List every supported verb with its parameter schema and examples, plus the protocol version and error-code catalog.",

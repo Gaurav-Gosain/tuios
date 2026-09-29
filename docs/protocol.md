@@ -1574,10 +1574,11 @@ target pane:
 consent to answer prompts on the panes in the pane's reach.
 
 A pane that holds `admin` is held to the second rule for `send-text`,
-`send-keys`, `run` and `ask-agent`: into another pane on `needs_input` it is
-`forbidden` unless it also holds `respond`. Its call is not pinned, and its
-`send-keys` with no window still goes through the attached client after the
-focused pane is checked.
+`send-keys`, `run`, `ask-agent` and client protocol input: into another pane
+on `needs_input` it is `forbidden` unless it also holds `respond`. A pane
+without `respond`, `admin` included, never types through the attached client:
+`send-keys` with no window goes to the focused pane's terminal, `PREFIX` is
+refused, and `run-command` may not press keys or type.
 
 How a connection is placed in a pane, strongest first:
 
@@ -1595,11 +1596,17 @@ How a connection is placed in a pane, strongest first:
    `restrict-connection` token: an HMAC of the window id under a key picked at
    daemon start, so it names one pane and cannot be made for another.
 
+The daemon places a connection when it accepts it, and pins the process with
+its start time. A connection whose process has exited, or whose pid now names
+another process, is held to the `grants` list of `[agents.permissions]` in no
+session. So is a process the kernel places inside the daemon's panes and in
+none of them, such as a process the daemon starts outside every pane shell
+(a hook, git, or what ssh runs); under `open` it holds `admin`, as a pane on
+the default does. A process placed only by its environment is not held.
+
 A connection on a link socket whose process runs inside a pane of this
-daemon is refused with `forbidden` for every verb and message: those sockets
-are for the link proxy. A process whose record cannot be read, for example one
-that exited after it connected, is held to the `grants` list of
-`[agents.permissions]` in no session.
+daemon, or was started by the daemon, is refused with `forbidden` for every
+verb and message: those sockets are for the link proxy, which sshd starts.
 
 A connection over a link is held to that link's policy instead (see
 [What a linked machine may do here](#what-a-linked-machine-may-do-here)), and
