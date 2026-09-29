@@ -231,3 +231,38 @@ func TestTheShimHolderChecksTheCallersGrants(t *testing.T) {
 	}
 	alive(t, term, "after the holder refused a respawn")
 }
+
+// TestAnOpenPaneCannotReachAPromptThroughTheClient: send-keys with no window
+// used to go through the attached client, where PREFIX moves focus to the
+// next window. A pane could move focus to a sibling on a prompt and answer it
+// in one call. From a pane without respond the keys go to the focused pane's
+// terminal, and PREFIX is refused.
+//
+// Negative control: with paneTypesRaw back to holding only panes without
+// admin, NX_EXIT=0 appears and the sibling receives the 1.
+func TestAnOpenPaneCannotReachAPromptThroughTheClient(t *testing.T) {
+	term, base := attachClientBase(t)
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-ctrlp", "prompted", "--no-focus"); err != nil {
+		t.Fatalf("new-window failed: %v\n%s", err, out)
+	}
+	ids := grantWindowIDs(t, base, "e2e-ctrlp")
+	if len(ids) != 2 {
+		t.Fatalf("want two windows, got %v", ids)
+	}
+	sibling := ids[1]
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "-w", sibling, "needs_input", "--kind", "approval", "--message", "approve Bash: rm -rf build"); err != nil {
+		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
+	}
+	line := tuiosBin + " send-keys -s e2e-ctrlp 'PREFIX n 1 Enter'; echo NX_EXIT=$?\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", "-w", ids[0], line); err != nil {
+		t.Fatalf("send-text failed: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "NX_EXIT=1") }, uiTimeout); err != nil {
+		t.Fatalf("a pane's PREFIX sequence was not refused: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "open-pane-prefix-refused")
+	if focused := grantWindowIDs(t, base, "e2e-ctrlp")[0]; focused != ids[0] {
+		t.Errorf("focus moved to %s", focused)
+	}
+	alive(t, term, "after a pane's PREFIX was refused")
+}

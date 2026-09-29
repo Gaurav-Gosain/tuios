@@ -33,6 +33,14 @@ const hostPollActive = 5 * time.Second
 // somewhere. Nothing here reads the developer's ssh config, known_hosts or
 // agent, and no network connection is made.
 //
+// The link loops back to this test's own daemon. A daemon refuses a link
+// socket connection from a process it started (see linkFromPane in
+// internal/session), and a real loopback link is started by sshd, not by the
+// daemon. So the stand-in does not run the command itself: it relays its
+// stdio to startSSHRelay in the test process, which runs the command there.
+// Only the link's command goes there: an interactive session (--ssh) needs
+// the terminal and dials the daemon's own socket, so it runs as before.
+//
 // The command runs through `sh -c` on the joined words, which is what sshd
 // does on the far side: the command reaches a shell as one string and the
 // shell re-parses it. That is what lets the link's own probe for the tuios
@@ -52,6 +60,12 @@ func writeFakeSSH(t *testing.T, dir string) string {
 		"  esac\n" +
 		"done\n" +
 		"shift\n" + // the address
+		// The command runs under startSSHRelay, outside the daemon, the way
+		// sshd runs it outside the daemon on a real machine.
+		"case \"$*\" in\n" +
+		"  *stdio-proxy*) TUIOS_E2E_RELAY_CMD=\"$*\" exec env " + relaySockEnv + "=" + startSSHRelay(t) + " " + testBinary(t) + " -test.run='^$' ;;\n" +
+		"esac\n" +
+		// An interactive session (--ssh) needs the terminal, so it runs here.
 		"exec /bin/sh -c \"$*\"\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)

@@ -148,6 +148,7 @@ var tuiosBin string
 // than here. A build directory holds a linked tuios binary, and on a machine
 // where /tmp is a tmpfs each leaked one is memory that never comes back.
 func TestMain(m *testing.M) {
+	runRelayClientIfAsked()
 	os.Exit(runE2E(m))
 }
 
