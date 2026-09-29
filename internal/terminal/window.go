@@ -521,6 +521,11 @@ type CopyMode struct {
 	PendingGCount   bool          // Waiting for second 'g' in 'gg'
 	LastCommandTime time.Time     // For detecting 'gg' sequence
 
+	// SearchOrigin is where the cursor was when the search prompt opened.
+	// Each key typed into the prompt searches again from here, not from the
+	// match the previous key jumped to, and Esc puts the cursor back here.
+	SearchOrigin SearchOrigin
+
 	// Character search state (f/F/t/T commands)
 	PendingCharSearch  bool // Waiting for character after f/F/t/T
 	LastCharSearch     rune // Last searched character
@@ -541,6 +546,21 @@ type CopyMode struct {
 	// pressed. Copy mode entered on purpose (the prefix binding, the command
 	// palette) leaves this false and behaves exactly as it always has.
 	Implicit bool
+}
+
+// SearchOrigin is a copy-mode cursor position saved when a search prompt
+// opens: the cursor and the scroll offset of the view it was in.
+type SearchOrigin struct {
+	CursorX, CursorY, ScrollOffset int
+}
+
+// BeginSearch opens the search prompt: / when backward is false, ? when it is
+// true. The cursor position is saved as the origin the search runs from.
+func (cm *CopyMode) BeginSearch(backward bool) {
+	cm.State = CopyModeSearch
+	cm.SearchQuery = ""
+	cm.SearchBackward = backward
+	cm.SearchOrigin = SearchOrigin{CursorX: cm.CursorX, CursorY: cm.CursorY, ScrollOffset: cm.ScrollOffset}
 }
 
 // shortID trims an ID for a title or a log line. IDs reach this package from

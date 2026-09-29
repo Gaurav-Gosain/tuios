@@ -124,7 +124,7 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	if leadState == terminal.CopyModeSearch && lead.CopyMode.State == terminal.CopyModeNormal && lead.CopyMode.SearchQuery != "" {
 		matched, total := o.MultiCopyMatched()
 		leadFx.notifications = nil
-		leadFx.ShowNotification(fmt.Sprintf("/%s: found in %d of %d panes", lead.CopyMode.SearchQuery, matched, total),
+		leadFx.ShowNotification(fmt.Sprintf("%s%s: found in %d of %d panes", searchPrompt(lead.CopyMode.SearchBackward), lead.CopyMode.SearchQuery, matched, total),
 			"info", o.Settings.NotificationDuration)
 	}
 	return leadFx.apply(o, lead)
