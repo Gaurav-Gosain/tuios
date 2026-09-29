@@ -801,16 +801,9 @@ func (m *OS) sendCdToOrigin(dir string) {
 		return
 	}
 	// The foreground command a daemon pane reports can be empty or stale, so
-	// it is not proof of a prompt. tuios types only where it can see the
-	// shell hold the terminal, the rule layout load uses.
-	if !window.ShellAtPrompt() {
-		m.ShowNotification(cdUnseenMessage, "warning", m.Settings.NotificationDuration)
-		return
-	}
-	if err := window.SendInput([]byte(line + "\r")); err != nil {
-		m.LogError("Failed to send cd to window %s: %v", window.ID, err)
-		m.ShowNotification("Could not write to that pane.", "error", m.Settings.NotificationDuration)
-	}
+	// it is not proof of a prompt. tuios types only where the shell is seen
+	// to hold the terminal, the rule layout load uses.
+	m.typeAtPrompt(window, line+"\r", cdUnseenMessage)
 }
 
 // fileViewOriginWindow is the pane the listing is tied to, or nil.
@@ -875,6 +868,52 @@ func shellQuote(s string) string {
 
 // cdRefusedMessage is what the dock says when cdLine refuses a folder.
 const cdRefusedMessage = "tuios did not type a cd. The folder name holds a quote, a backslash or a control character."
+
+// typeAtPrompt types text into window only where its shell is seen at the
+// prompt, and otherwise shows refused on the dock (nothing when it is empty).
+//
+// A pane this client spawned is checked here, with the kernel. A daemon pane
+// has no PTY on this side, so the daemon, which owns it, checks and writes in
+// one step (session.TUIClient.TypeAtPrompt). It fails closed: no daemon, a
+// daemon too old to answer, or no answer at all types nothing. The daemon's
+// answer arrives off the Update goroutine, so a refusal reaches the dock
+// through the notification channel.
+func (m *OS) typeAtPrompt(window *terminal.Window, text, refused string) {
+	if !window.DaemonMode {
+		if !window.ShellAtPrompt() {
+			if refused != "" {
+				m.ShowNotification(refused, "warning", m.Settings.NotificationDuration)
+			}
+			return
+		}
+		if err := window.SendInput([]byte(text)); err != nil {
+			m.LogError("Failed to type into window %s: %v", window.ID, err)
+		}
+		return
+	}
+	client := m.DaemonClient
+	if client == nil || window.PTYID == "" {
+		if refused != "" {
+			m.ShowNotification(refused, "warning", m.Settings.NotificationDuration)
+		}
+		return
+	}
+	ch := m.ensureNotificationChan()
+	dur := m.Settings.NotificationDuration
+	ptyID, windowID := window.PTYID, window.ID
+	go func() {
+		// The error needs no report of its own: an older daemon and a
+		// daemon that found no prompt both mean the same thing here.
+		typed, _ := client.TypeAtPrompt(ptyID, text)
+		if typed || refused == "" {
+			return
+		}
+		select {
+		case ch <- NotificationMsg{Message: refused, Type: "warning", Duration: dur, WindowID: windowID}:
+		default:
+		}
+	}()
+}
 
 // cdUnseenMessage is what the dock says when tuios cannot see that a pane's
 // shell is at its prompt.

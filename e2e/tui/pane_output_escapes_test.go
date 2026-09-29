@@ -202,3 +202,91 @@ func TestLayoutWithSpoofedCwdRunsNothing(t *testing.T) {
 	}
 	alive(t, term, "after loading a layout")
 }
+
+// whereIs runs a check in the focused pane's shell and waits for its answer:
+// IN<NAME> when the shell is in a folder called name, NOT<NAME> when it is not.
+// The quotes keep the answer from appearing in the typed line itself.
+func whereIs(t *testing.T, term *tuitest.Terminal, name string) string {
+	t.Helper()
+	up := strings.ToUpper(name)
+	cmd := `case $PWD in */` + name + `) echo IN""` + up + `;; *) echo NOT""` + up + `;; esac`
+	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
+		t.Fatalf("type the check: %v", err)
+	}
+	var got string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		switch {
+		case strings.Contains(txt, "NOT"+up):
+			got = "NOT" + up
+		case strings.Contains(txt, "IN"+up):
+			got = "IN" + up
+		}
+		return got != ""
+	}, shellTimeout); err != nil {
+		t.Fatalf("the check never answered: %v\n%s", err, term.Snapshot())
+	}
+	return got
+}
+
+// In a daemon session, the default, a pane has no PTY on the client side. The
+// sidebar's folder click with folder_click = "cd" asks the daemon to type the
+// cd, and the daemon types it only when the pane's shell is at its prompt.
+func TestDaemonFolderClickCdOnlyAtAPrompt(t *testing.T) {
+	dir := fileViewFixture(t)
+	base := t.TempDir()
+	writeTapeConfigFile(t, base, "[appearance.sidebar]\nfolder_click = \"cd\"\n")
+	term := startIn(t, base, startOpts{args: []string{"new", "e2e-cd-here"}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && printf 'in-the-dir\\n'", "in-the-dir", uiTimeout)
+	runInShell(t, term, `printf '\033]7;file://%s\033\\marked\n' "$PWD"`, "marked", uiTimeout)
+	leaveTerminalMode(t, term)
+
+	toggleSidebarViaPalette(t, term)
+	if err := term.WaitForText("alpha/", uiTimeout); err != nil {
+		t.Fatalf("the files section never listed the folder: %v\n%s", err, term.Snapshot())
+	}
+	click := func(name string) {
+		t.Helper()
+		col, row, ok := findOnGrid(term.Screen(), name+"/")
+		if !ok {
+			t.Fatalf("no %s row to click:\n%s", name, term.Snapshot())
+		}
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	}
+
+	// At the prompt: the cd reaches the shell.
+	click("alpha")
+	time.Sleep(500 * time.Millisecond)
+	enterTerminalMode(t, term)
+	if got := whereIs(t, term, "alpha"); got != "INALPHA" {
+		t.Fatalf("a folder click at a daemon pane's prompt did not cd there:\n%s", term.Snapshot())
+	}
+	runInShell(t, term, "cd "+dir+" && clear && echo back''home", "backhome", uiTimeout)
+
+	// A program in the foreground: no cd, and the dock says why. The client
+	// may already know from the daemon's report that sleep runs there, or the
+	// daemon refuses when asked. Either way, nothing is typed.
+	if err := term.SendKeys("sleep 30", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	leaveTerminalMode(t, term)
+	click("zulu")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return strings.Contains(txt, "did not type a cd") || strings.Contains(txt, "running in that pane")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the dock did not say the cd was not typed: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	if err := term.SendKeys(tuitest.Key("\x03")); err != nil {
+		t.Fatal(err)
+	}
+	if got := whereIs(t, term, "zulu"); got != "NOTZULU" {
+		t.Fatalf("a folder click reached the shell under a program:\n%s", term.Snapshot())
+	}
+}

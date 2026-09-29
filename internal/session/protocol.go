@@ -120,6 +120,14 @@ const (
 	// it, as an op the daemon applies and versions. A client sends it only to
 	// a daemon whose welcome set LayoutTreeOps. See layout_tree.go.
 	MsgLayoutTree
+	// MsgTypeAtPrompt asks the daemon to write text to a pane only if the
+	// pane's shell holds the terminal, and MsgPromptTyped says whether it did.
+	// The daemon owns the PTY, so it is the one side that can see a daemon
+	// pane at its prompt, and checking and writing in one step leaves no gap
+	// for a program to start in between. A client sends it only to a daemon
+	// whose welcome set TypeAtPrompt. See type_at_prompt.go.
+	MsgTypeAtPrompt
+	MsgPromptTyped
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -186,6 +194,9 @@ type WelcomePayload struct {
 	// false (a daemon that predates it) keeps sending its trees inside its
 	// state pushes, which is what every client did before.
 	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
+	// TypeAtPrompt says the daemon answers MsgTypeAtPrompt. A client that
+	// does not see it types nothing into a daemon pane it cannot check.
+	TypeAtPrompt bool `json:"type_at_prompt,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.

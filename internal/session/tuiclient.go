@@ -162,6 +162,9 @@ type TUIClient struct {
 	treeOps atomic.Bool
 	// attachGen counts attaches. See AttachGeneration.
 	attachGen atomic.Uint64
+	// typeAtPromptSupported says the daemon's welcome offered
+	// MsgTypeAtPrompt. See TypeAtPrompt.
+	typeAtPromptSupported bool
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -334,6 +337,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.noteDaemonBuild(version, welcome.Version)
 	c.focusSupported = welcome.ClientFocus
 	c.treeOps.Store(welcome.LayoutTreeOps)
+	c.typeAtPromptSupported = welcome.TypeAtPrompt
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))

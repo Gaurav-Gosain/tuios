@@ -220,8 +220,8 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 				switch {
 				case !ok:
 					refused++
-				case idle && win.ShellAtPrompt():
-					_ = win.SendInput([]byte(line + " && clear\n"))
+				case idle:
+					m.typeAtPrompt(win, line+" && clear\n", "")
 				}
 			}
 		} else {

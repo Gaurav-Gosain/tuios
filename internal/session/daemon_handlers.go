@@ -61,6 +61,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		ClientFocus:  true,
 		// See layout_tree.go.
 		LayoutTreeOps: true,
+		TypeAtPrompt:  true,
 	})
 }
 
