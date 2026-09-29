@@ -137,7 +137,7 @@ tuios --standalone
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
 - `--cpuprofile <file>`: Write CPU profile to file
-- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as localhost:6060. Delta profiles (`?seconds=` on heap and the like) are not served; take two and compare them with `go tool pprof -diff_base`
+- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served; take two and compare them with `go tool pprof -diff_base`
 - `-h, --help`: Show help for tuios
 - `-v, --version`: Show version information
 
@@ -3069,15 +3069,15 @@ tuios ssh [flags]
 - `--key-path <string>`: Path to SSH host key (auto-generated if not specified)
 - `--default-session <string>`: Default session name for all connections
 - `--ephemeral`: Run in ephemeral mode (standalone, no daemon)
-- `--authorized-keys <string>`: Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`, then `~/.ssh/authorized_keys`)
+- `--authorized-keys <string>`: Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`). Keys with options are not accepted
 - `--no-auth`: Give every connection a shell without checking who it is (trusted networks only)
 
 **Who can connect:**
 
 Every connection gets a shell on the machine running the server, so the server
 checks who is connecting. It reads public keys from
-`~/.config/tuios/authorized_keys`, and from `~/.ssh/authorized_keys` when the
-first file is absent.
+`~/.config/tuios/authorized_keys`. It does not read `~/.ssh/authorized_keys`
+unless you name that file with `--authorized-keys`.
 
 - With keys: only the holders of those keys connect. Add a key while the server
   runs and it works on the next connection.
@@ -3090,11 +3090,20 @@ first file is absent.
 A keys file that cannot be read, does not parse, or holds no key stops startup.
 Only an absent file means "no keys are configured".
 
+TUIOS does not accept a key that has options, such as `command=`, `from=` or
+`restrict`. TUIOS cannot apply these options, and every session is a full
+TUIOS. The server writes the line numbers of these keys to its log. A file
+that holds only keys with options stops startup. To let such a key in, add it
+again with no options to `~/.config/tuios/authorized_keys`.
+
 ```bash
 # Let one key in
 mkdir -p ~/.config/tuios
 cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
 tuios ssh --host 0.0.0.0 --port 2222
+
+# Use the keys that sshd accepts
+tuios ssh --host 0.0.0.0 --authorized-keys ~/.ssh/authorized_keys
 ```
 
 The interface flags (`--theme`, `--border-style`, `--dockbar-position`,
@@ -3190,6 +3199,11 @@ tuios-web [flags]
 - `--key <path>`: TLS private key in PEM form (required with `--cert`)
 - `--auto-tls`: Generate and serve a self-signed certificate (managed with `tuios-web cert`)
 - `--insecure`: Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
+- `--random-password`: Make a new password at start and print it
+- `--password-file <path>`: Read the password from the first line of this file. Only you must be able to read the file
+- `--user <string>`: User name the browser must give with the password (default: "tuios")
+- `--no-auth`: Serve a non-loopback host with no password (trusted networks only)
+- `--allow-host <name>`: Also accept this host name in the Host header, for example the name of a reverse proxy. You can give it more than one time
 - `--touch <auto|on|off>`: Touch support and the on-screen key bar (default: auto-detect)
 - `--default-session <string>`: Default session name for all connections (creates shared session)
 - `--ephemeral`: Disable daemon mode (sessions don't persist)
@@ -3204,6 +3218,31 @@ tuios-web [flags]
 - `--scrollback-lines <int>`: Scrollback buffer size
 - `--no-animations`: Disable UI animations
 - `--debug`: Enable debug logging
+
+**Who can connect:**
+
+Every browser that opens tuios-web gets a shell on this machine, and the
+session switcher reaches every session. Set a password to control who
+connects. The browser asks for the user name and the password.
+
+- `--random-password`: tuios-web makes a new password at start and prints it
+  with a URL that holds it.
+- `--password-file <path>`: tuios-web reads the password from the first line
+  of the file. The file must have mode 600.
+- `TUIOS_WEB_PASSWORD`: tuios-web reads the password from this environment
+  variable. It removes the variable before it starts panes.
+
+There is no flag that takes the password itself. Other users can see command
+line arguments in `ps`.
+
+- On `localhost`: the password is optional. With no password, anyone on this
+  machine can connect. tuios-web accepts a session only when the Host header
+  names this machine, such as `localhost` or `127.0.0.1`. This stops a web page
+  that points its own name at 127.0.0.1 (DNS rebinding). Use `--allow-host` to
+  add a name, for example the name of a reverse proxy on this machine.
+- On any other host: tuios-web does not start without a password. TLS
+  encrypts the connection, but it does not check who connects. Pass
+  `--no-auth` to serve anyway, on a network you trust.
 
 **Subcommands:**
 - `tuios-web cert`: Show the status of the self-signed TLS certificate `--auto-tls` uses
@@ -3231,14 +3270,17 @@ tuios-web
 tuios-web --port 8080
 
 # Reach the server from a phone on the same network, over TLS with a
-# self-signed certificate tuios-web generates and keeps for you
-tuios-web --host 0.0.0.0 --port 7681 --auto-tls
+# self-signed certificate tuios-web generates and keeps for you, and a
+# password that tuios-web makes and prints
+tuios-web --host 0.0.0.0 --port 7681 --auto-tls --random-password
 
-# Or bring your own certificate
-tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem
+# Or bring your own certificate and keep the password in a file
+(umask 077; head -c 18 /dev/urandom | base64 > ~/.config/tuios/web-password)
+tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem \
+  --password-file ~/.config/tuios/web-password
 
-# Same, on a network you trust, with nothing encrypted
-tuios-web --host 0.0.0.0 --port 7681 --insecure
+# Same, on a network you trust, with nothing encrypted and no password
+tuios-web --host 0.0.0.0 --port 7681 --insecure --no-auth
 
 # Start in read-only mode (view only)
 tuios-web --read-only
@@ -3720,8 +3762,8 @@ ssh -p 8022 your-server-hostname
 # Start web terminal on default port
 tuios-web
 
-# Start on custom port with remote access
-tuios-web --host 0.0.0.0 --port 8080
+# Start on custom port with remote access, over TLS with a password
+tuios-web --host 0.0.0.0 --port 8080 --auto-tls --random-password
 
 # Open in browser
 open http://localhost:7681
@@ -3733,7 +3775,7 @@ tuios-web --read-only
 tuios-web --theme dracula --show-keys
 
 # Limit connections for production use
-tuios-web --max-connections 50 --host 0.0.0.0
+tuios-web --max-connections 50 --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
 ```
 
 ### Development & Debugging
