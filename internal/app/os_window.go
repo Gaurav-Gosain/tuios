@@ -95,11 +95,20 @@ func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 
 // ToggleMultifocus toggles a window in/out of the multifocus set.
 // When multiple windows are in the set, keystrokes are sent to all of them.
+//
+// A popup cannot join the set. It runs one command and closes, so it is not a
+// pane the user types at, and ToggleMultifocusAll leaves popups out for the
+// same reason. A popup already in the set can still leave it.
 func (m *OS) ToggleMultifocus(windowIndex int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}
-	windowID := m.Windows[windowIndex].ID
+	window := m.Windows[windowIndex]
+	windowID := window.ID
+	if window.IsPopup && !m.MultifocusSet[windowID] {
+		m.ShowNotification("Cannot add a popup to multifocus", "warning", m.Settings.NotificationDuration)
+		return
+	}
 	if m.MultifocusSet == nil {
 		m.MultifocusSet = make(map[string]bool)
 	}
@@ -111,15 +120,31 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 		m.ShowNotification("Multifocus: removed window", "info", m.Settings.NotificationDuration)
 	} else {
 		m.MultifocusSet[windowID] = true
-		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", m.Settings.NotificationDuration)
+		m.showMultifocusCount()
 	}
 	// Invalidate caches to show visual indicator on all affected windows
-	m.Windows[windowIndex].InvalidateCache()
+	window.InvalidateCache()
 	for _, w := range m.Windows {
 		if m.MultifocusSet[w.ID] {
 			w.InvalidateCache()
 		}
 	}
+}
+
+// showMultifocusCount shows how many panes of the current workspace are in
+// the multifocus set.
+func (m *OS) showMultifocusCount() {
+	n := 0
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && m.MultifocusSet[w.ID] {
+			n++
+		}
+	}
+	msg := fmt.Sprintf("Multifocus: %d windows", n)
+	if n == 1 {
+		msg = "Multifocus: 1 window"
+	}
+	m.ShowNotification(msg, "info", m.Settings.NotificationDuration)
 }
 
 // ClearMultifocus removes all windows from the multifocus set.
@@ -136,7 +161,8 @@ func (m *OS) ClearMultifocus() {
 }
 
 // ToggleMultifocusAll puts every visible pane on the current workspace in the
-// multifocus set. When all of them are in it already, it clears the set.
+// multifocus set. When all of them are in it already, it takes every pane of
+// the current workspace out of the set. Members on other workspaces stay.
 //
 // The panes are the ones the window cycle steps through: minimized panes and
 // popups are left out, since neither is a pane the user is typing at.
@@ -153,7 +179,16 @@ func (m *OS) ToggleMultifocusAll() {
 		}
 	}
 	if allIn {
-		m.ClearMultifocus()
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && m.MultifocusSet[w.ID] {
+				delete(m.MultifocusSet, w.ID)
+				w.InvalidateCache()
+			}
+		}
+		if len(m.MultifocusSet) == 0 {
+			m.MultifocusSet = nil
+		}
+		m.ShowNotification("Multifocus: cleared", "info", m.Settings.NotificationDuration)
 		return
 	}
 	if m.MultifocusSet == nil {
@@ -166,7 +201,7 @@ func (m *OS) ToggleMultifocusAll() {
 			w.InvalidateCache()
 		}
 	}
-	m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", m.Settings.NotificationDuration)
+	m.showMultifocusCount()
 }
 
 // MultifocusUndimmed reports whether the pane is in the multifocus set and
