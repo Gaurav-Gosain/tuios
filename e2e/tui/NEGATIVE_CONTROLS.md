@@ -71,8 +71,8 @@ a working negative control look like a broken one for half an hour.
 
 | Bug | Fix removed | How | Tests that fail | Verdict |
 | --- | --- | --- | --- | --- |
-| File search cannot open from a terminal pane through the leader shortcut | whole change | build `013957e3` and point `TUIOS_E2E_BIN` at it | `TestSidebarFileSearch/standalone` and `/daemon` (both time out waiting for `Search files`) | **caught** (2 of 2 run) |
-| Sidebar file search absent | whole feature | build `e0a860a4` before file search and point `TUIOS_E2E_BIN` at it | `TestSidebarFileSearch/standalone` and `/daemon` (both time out waiting for `Search files`) | **caught** (2 of 2 run) |
+| File search cannot open from a terminal pane through the leader shortcut | whole change | build main before the file search change and point `TUIOS_E2E_BIN` at it | `TestSidebarFileSearch/standalone` and `/daemon` (both time out waiting for `Search files`) | **caught** (2 of 2 run) |
+| Sidebar file search absent | whole feature | build main before the file search change and point `TUIOS_E2E_BIN` at it | `TestSidebarFileSearch/standalone` and `/daemon` (both time out waiting for `Search files`) | **caught** (2 of 2 run) |
 | Sidebar Shift+Enter never reaches the editor action | n/a, injected | keep the feature but clear the default `file_edit` binding in `internal/config/userconfig.go` | `TestSidebarFileEditor/standalone` and `/daemon` (both time out waiting for the binary-file refusal, before the positive editor assertion) | **caught** (2 of 2 run) |
 | Freeze: render path took the window I/O read lock twice | `6ca26b1` | revert `internal/app/render_terminal.go` hunk | `TestSustainedOutputKeepsRendering` (hangs at round 1/6), `TestSoakMixedActivity` (hangs at cycle 2/8) | **caught** |
 | Blank pane: `clipWindowContent` measured width from `lines[0]` | `b9f770b` | revert `internal/app/render_helpers.go` hunk | `TestAltScreenPaneSurvivesFocusSwitch`, `TestLeftmostTileWithBlankFirstLineIsNotDiscarded` | **caught** |
