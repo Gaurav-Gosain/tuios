@@ -52,24 +52,31 @@ func hostPayloads(s string) string {
 // e=1 carries its text base64 encoded, so it can hold ESC and BEL after
 // decoding. Those must not reach the host, or any output a pane prints can
 // write arbitrary sequences to the user's real terminal.
+//
+// OSC 9 and OSC 777 carry their text as it is. A raw ESC ends the OSC early,
+// and libghostty then drops it, so those cases carry C1 controls instead:
+// both emulators keep C1 bytes inside the OSC text, raw or UTF-8 encoded.
 func TestPaneNotificationCannotWriteEscapesToHost(t *testing.T) {
+	const (
+		evil = "done\x1b]52;c;cm0gLXJmIH4K\x07\x1b[2J\x9b31m"
+		// U+009B CSI, U+009D OSC and U+009C ST, first as raw bytes and then
+		// UTF-8 encoded.
+		evilC1 = "done\x9b31m\x9d52;c;cm0=\x9c\u009b2J\u009d52;c;cm0=\u009c"
+	)
+	b64 := func(p string) string { return base64.StdEncoding.EncodeToString([]byte(p)) }
 	for _, tc := range []struct {
 		name string
-		seq  func(payload string) string
+		seq  string
 	}{
-		{"osc99 e=1 body", func(p string) string {
-			return "\x1b]99;e=1;" + base64.StdEncoding.EncodeToString([]byte(p)) + "\x1b\\"
-		}},
-		{"osc99 e=1 title", func(p string) string {
-			return "\x1b]99;e=1:p=title;" + base64.StdEncoding.EncodeToString([]byte(p)) + "\x1b\\"
-		}},
-		{"osc9", func(p string) string { return "\x1b]9;" + p + "\x07" }},
-		{"osc777", func(p string) string { return "\x1b]777;notify;title;" + p + "\x07" }},
+		{"osc99 e=1 body", "\x1b]99;e=1;" + b64(evil) + "\x1b\\"},
+		{"osc99 e=1 title", "\x1b]99;e=1:p=title;" + b64(evil) + "\x1b\\"},
+		{"osc99 e=1 c1", "\x1b]99;e=1;" + b64(evilC1) + "\x1b\\"},
+		{"osc9", "\x1b]9;" + evilC1 + "\x07"},
+		{"osc777", "\x1b]777;notify;title;" + evilC1 + "\x07"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, win, host := notifyHarness(t)
-			evil := "done\x1b]52;c;cm0gLXJmIH4K\x07\x1b[2J\x9b31m"
-			win.WriteOutput([]byte(tc.seq(evil)))
+			win.WriteOutput([]byte(tc.seq))
 
 			got := hostPayloads(host.String())
 			if !strings.HasPrefix(got, "\x1b]9;") {
@@ -81,13 +88,13 @@ func TestPaneNotificationCannotWriteEscapesToHost(t *testing.T) {
 			if n := strings.Count(got, "\x07"); n != 1 {
 				t.Fatalf("host received %d BEL, want only the OSC 9 terminator: %q", n, got)
 			}
-			if strings.Contains(got, "\x9b") {
-				t.Fatalf("host received a C1 CSI: %q", got)
+			if hasC1(got) {
+				t.Fatalf("host received a C1 control: %q", got)
 			}
 
 			select {
 			case msg := <-m.PendingNotification:
-				if strings.ContainsAny(msg.Message, "\x1b\x07\x9b") {
+				if strings.ContainsAny(msg.Message, "\x1b\x07") || hasC1(msg.Message) {
 					t.Fatalf("the dock message carries control bytes: %q", msg.Message)
 				}
 			default:
@@ -95,4 +102,10 @@ func TestPaneNotificationCannotWriteEscapesToHost(t *testing.T) {
 			}
 		})
 	}
+}
+
+// hasC1 reports whether s holds a C1 CSI, OSC or ST byte. A byte search
+// catches both the raw byte and the second byte of its UTF-8 encoding.
+func hasC1(s string) bool {
+	return strings.IndexByte(s, 0x9b) >= 0 || strings.IndexByte(s, 0x9c) >= 0 || strings.IndexByte(s, 0x9d) >= 0
 }
