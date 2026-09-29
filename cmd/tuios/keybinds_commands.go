@@ -249,15 +249,9 @@ func findCustomizations(userCfg, defaultCfg *config.UserConfig) []Customization 
 		}
 	}
 
-	compareSections(userCfg.Keybindings.WindowManagement, defaultCfg.Keybindings.WindowManagement)
-	compareSections(userCfg.Keybindings.Workspaces, defaultCfg.Keybindings.Workspaces)
-	compareSections(userCfg.Keybindings.Layout, defaultCfg.Keybindings.Layout)
-	compareSections(userCfg.Keybindings.ModeControl, defaultCfg.Keybindings.ModeControl)
-	compareSections(userCfg.Keybindings.System, defaultCfg.Keybindings.System)
-	compareSections(userCfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
-	compareSections(userCfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
-	compareSections(userCfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
-	compareSections(userCfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
+	for _, name := range config.SectionNames() {
+		compareSections(userCfg.Keybindings.SectionFor(name), defaultCfg.Keybindings.SectionFor(name))
+	}
 
 	return customizations
 }
