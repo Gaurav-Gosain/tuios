@@ -380,3 +380,36 @@ func TestUpdateClosedAfterTheRefreshWaitsForItsPlacement(t *testing.T) {
 		t.Fatalf("the next tick sent %q, want the transmit and its placement together", got)
 	}
 }
+
+// tuios moving a pane goes to the host at once, even while the pane's guest
+// holds a frame that re-transmits the same image. When the frame closes, its
+// data is placed again at the new position.
+func TestTuiosMoveIsNotHeldBehindAFrameNamingTheImage(t *testing.T) {
+	h := newSyncHoldHarness(t)
+	a := h.pane("a", 0)
+	frame := func(n byte) string {
+		return "\x1b[H\x1b_Ga=T,f=32,s=2,v=2,i=1,p=1,C=1,q=2;" +
+			base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{n}, 16)) + "\x1b\\"
+	}
+	a.write("\x1b[?2026h" + frame(1) + "\x1b[?2026l")
+	h.tick()
+	h.tick()
+
+	a.write("\x1b[?2026h" + frame(2))
+	h.info["a"].WindowX = 3
+	out := h.tick()
+	if got := hostActions(out); got != "p" {
+		t.Fatalf("moving the pane sent %q while its guest held a frame, want the placement at once", got)
+	}
+	if !strings.Contains(out, "\x1b[1;4H") {
+		t.Fatalf("the placement did not go to the new column: %q", out)
+	}
+	a.write("\x1b[?2026l")
+	out = h.tick()
+	if got := hostActions(out); got != "tp" {
+		t.Fatalf("the closed frame reached the host as %q, want its transmit and a placement", got)
+	}
+	if !strings.Contains(out, "\x1b[1;4H") {
+		t.Fatalf("the frame was placed away from the new column: %q", out)
+	}
+}

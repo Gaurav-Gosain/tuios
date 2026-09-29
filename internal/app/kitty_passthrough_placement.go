@@ -254,6 +254,16 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 		info := allWindows[windowID]
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, info=%v, numPlacements=%d", windowID[:min(8, len(windowID))], info != nil, len(placements))
+		tuiosMoved := false
+		if info != nil {
+			g := geomOf(info)
+			if kp.heldGeom == nil {
+				kp.heldGeom = make(map[string]paneGeom)
+			}
+			prev, seen := kp.heldGeom[windowID]
+			tuiosMoved = seen && prev != g
+			kp.heldGeom[windowID] = g
+		}
 		if info == nil {
 			for _, p := range placements {
 				if !p.Hidden {
@@ -554,7 +564,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					// See kitty_sync_hold.go.
 					start := len(kp.pendingOutput)
 					kp.placeSlices(p)
-					kp.holdTail(windowID, hostID, start)
+					kp.holdTail(windowID, hostID, start, tuiosMoved)
 				}
 				p.DataDirty = false
 				p.Hidden = false
