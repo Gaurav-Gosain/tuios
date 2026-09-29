@@ -1489,6 +1489,10 @@ type OS struct {
 	// terminal mode is deferred until that window materializes through a state
 	// sync and can be focused.
 	pendingStartTerminalMode bool
+	// scratchPending is the scratch session whose popup was asked for and has
+	// not arrived yet, and scratchPendingAt is when. See scratch.go.
+	scratchPending   string
+	scratchPendingAt time.Time
 
 	// sessionUnarranged records that the session this client attached to had
 	// never been laid out by anybody: every window it carried was still marked

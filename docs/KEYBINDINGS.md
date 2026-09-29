@@ -98,6 +98,14 @@ the text into the focused pane. This action has no default key. Bind it, or
 run it from the command palette. Set `hints.all_panes = true` to make
 `Ctrl+B F` do the same.
 
+## Scratch session
+
+`Ctrl+B g` shows the `scratch` session in a popup over the layout. Press it
+again to hide the popup. The session keeps running between shows. The key
+works from inside the popup. The action is `toggle_scratch`, and `[scratch]`
+sets the session name and the popup size. See
+[SESSIONS.md](SESSIONS.md#the-scratch-session).
+
 ## Copy mode
 
 `Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the

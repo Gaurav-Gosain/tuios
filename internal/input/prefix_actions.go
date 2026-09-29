@@ -64,6 +64,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
 	d.Register("prefix_quit", handlePrefixQuit)
 	d.Register("hints", handleOpenHints)
+	d.Register("toggle_scratch", handleToggleScratch)
 	d.Register("hints_all_panes", handleOpenHintsAllPanes)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
@@ -592,4 +593,10 @@ func handleTerminalPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	leaveTerminalMode(o)
 	return o, nil
+}
+
+// handleToggleScratch shows the scratch session in a popup, or hides it. See
+// internal/app/scratch.go.
+func handleToggleScratch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.ToggleScratch()
 }

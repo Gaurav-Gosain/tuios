@@ -10,6 +10,8 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
+`[scratch]` sets the session that `Ctrl+B g` shows in a popup, and the popup size. See [SESSIONS.md](SESSIONS.md#the-scratch-session).
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

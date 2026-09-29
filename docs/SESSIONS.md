@@ -14,6 +14,7 @@ what does and does not come back after each kind of interruption.
 - [Local Sessions](#local-sessions)
 - [Daemon Sessions](#daemon-sessions)
 - [Attaching and Detaching](#attaching-and-detaching)
+- [The Scratch Session](#the-scratch-session)
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
@@ -150,6 +151,43 @@ A client that dies without detaching (its terminal is closed, the SSH connection
 drops, the process is killed) is equivalent to a detach as far as the session is
 concerned. The daemon notices the connection go away and keeps the session
 running. Nothing is lost, because nothing the session needs lived in the client.
+
+## The Scratch Session
+
+`Ctrl+B` `g` shows a session in a popup over the current layout. Press
+`Ctrl+B` `g` again to hide the popup. The session keeps running, so the next
+`Ctrl+B` `g` shows it as you left it. tmux-floax does the same for tmux.
+
+The session has the name `scratch`. tuios creates it the first time you press
+the key. It is an ordinary session: `tuios ls` shows it, and you can attach to
+it from a different terminal.
+
+The popup runs `tuios attach -c scratch`. When you hide the popup, tuios closes
+it, and that client detaches. The session does not stop. The next show opens a
+new popup on the workspace you are on.
+
+- The key works from inside the popup. tuios reads `Ctrl+B` before the popup
+  gets it.
+- To use a prefix key in the scratch session, press `Ctrl+B` two times. Then
+  press the key.
+- In the scratch session itself, the key does not open a popup. The popup
+  would show the session inside itself. The dock shows a message.
+- The popup needs a box of 22x8 cells or more. On a smaller screen the dock
+  shows a message.
+- The key works for sessions on this machine only.
+- When you detach, the popup stays open. It is there when you attach again.
+
+```toml
+[scratch]
+session = "scratch" # the session the popup shows
+width = "80%"       # cells (100) or percent (80%)
+height = "80%"
+```
+
+The action is `toggle_scratch`. To use a different key, bind the action in
+`[keybindings.prefix_mode]` or in a different section. If your config puts `g`
+on a different prefix action, `toggle_scratch` has no key.
+`tuios keybinds doctor` shows this.
 
 ## What Survives
 
