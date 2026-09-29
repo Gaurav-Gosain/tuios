@@ -526,7 +526,9 @@ type connState struct {
 	cellHeight    int
 	kittyGraphics bool
 	sixelGraphics bool
-	terminalName  string
+	// kittyAnimation is HelloPayload.KittyAnimation.
+	kittyAnimation bool
+	terminalName   string
 }
 
 // DaemonConfig holds configuration for starting the daemon.

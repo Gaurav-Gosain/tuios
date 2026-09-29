@@ -130,6 +130,9 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	if m.Settings.GetAnimationDuration() > 0 {
 		dur = m.Settings.GetAnimationDuration()
 	}
+	if m.layoutInstant {
+		dur = 0
+	}
 
 	// Asked once for the whole layout, as ApplyBSPLayout does, because it ends a
 	// stale deferral as a side effect. Skipping the deferral would announce a

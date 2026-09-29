@@ -650,6 +650,12 @@ func (m *OS) applyStartupTiling() {
 	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.AutoTiling {
 		return
 	}
+	// The first layout is placed, not animated. A pane that slides into its
+	// tile keeps its old size until the slide ends, and a shell that ran a
+	// command in that time read the old size: the scratch popup's first
+	// command saw half the popup.
+	m.layoutInstant = true
+	defer func() { m.layoutInstant = false }()
 	// The scheme before the switch: ToggleAutoTiling builds the layout the
 	// current mode asks for, so choosing the mode afterwards would build a BSP
 	// tree and then throw it away. An unset or unknown name leaves the mode

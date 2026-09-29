@@ -199,6 +199,11 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			return
 		}
 
+		// A frame edit in a daemon pane is refused, when it is, by the
+		// daemon: its answer is in order with the rest, and this one would
+		// come a round trip later. See session.Session.SetKittyAnimation.
+		answer := !(win.DaemonMode && vt.IsKittyAnimationAction(cmd.Action))
+
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
 		// This callback runs on the PTY-reader goroutine while the update loop
@@ -215,6 +220,9 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			scrollbackLen,
 			win.IsAltScreen(),
 			func(response []byte) {
+				if !answer {
+					return
+				}
 				kittyPassthroughLog("ptyInput callback: Pty=%v, DaemonWriteFunc=%v, response=%q", win.Pty != nil, win.DaemonWriteFunc != nil, response)
 				if win.Pty != nil {
 					_, _ = win.Pty.Write(response)

@@ -167,6 +167,10 @@ type HelloPayload struct {
 	KittyGraphics bool   `json:"kitty_graphics,omitempty"` // Kitty graphics protocol support
 	SixelGraphics bool   `json:"sixel_graphics,omitempty"` // Sixel graphics support
 	TerminalName  string `json:"terminal_name,omitempty"`  // Detected terminal (kitty, wezterm, etc.)
+	// KittyAnimation says the host terminal edits image frames (kitty a=f,
+	// a=a, a=c). Without it the daemon refuses those commands itself, in
+	// order with its other answers. See Session.SetKittyAnimation.
+	KittyAnimation bool `json:"kitty_animation,omitempty"`
 	// Protocol is the wire protocol version the client speaks. Zero means a
 	// client that predates the field, which is read as LegacyProtocolVersion:
 	// gob ignores a field the peer does not know, so silence here is age, not

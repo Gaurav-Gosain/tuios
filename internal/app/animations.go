@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -111,4 +113,13 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 		}
 	}
 	return m.GetRenderWidth() / 2, m.GetDockbarContentYPosition()
+}
+
+// layoutAnimationDuration is how long a tiler slides panes into a new layout:
+// the configured duration, or none while layoutInstant is set.
+func (m *OS) layoutAnimationDuration() time.Duration {
+	if m.layoutInstant {
+		return 0
+	}
+	return m.Settings.GetAnimationDuration()
 }

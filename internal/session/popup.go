@@ -74,3 +74,16 @@ func ResolvePopupSize(spec, fallback string, extent, floor int) int {
 	size = max(size, min(floor, extent))
 	return max(size, 1)
 }
+
+// popupContentSize is the size a popup's command gets before any client has
+// placed it: the box a client resolves (see popupRect in internal/app) less
+// the border, measured against the session's size less its agreed chrome
+// reserve. That is the content region every client lays panes out in, so the
+// placement that follows does not change the size.
+func popupContentSize(sessW, sessH int, r LayoutReserve, width, height string) (cols, rows int) {
+	regionW := max(sessW-r.Left-r.Right, 1)
+	regionH := max(sessH-r.Top-r.Bottom, 1)
+	boxW := ResolvePopupSize(width, PopupDefaultWidth, regionW, PopupMinWidth)
+	boxH := ResolvePopupSize(height, PopupDefaultHeight, regionH, PopupMinHeight)
+	return max(boxW-2, 1), max(boxH-2, 1)
+}

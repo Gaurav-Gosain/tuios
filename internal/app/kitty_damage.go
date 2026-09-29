@@ -182,8 +182,7 @@ func (kp *KittyPassthrough) emitBitmap(
 func (kp *KittyPassthrough) forwardAnimation(cmd *vt.KittyCommand, rawData []byte, windowID string, ptyInput func([]byte)) {
 	if !kp.hostCaps().KittyAnimation {
 		if ptyInput != nil && cmd.Quiet < 2 {
-			ptyInput(vt.BuildKittyResponse(false, cmd.ImageID,
-				"ENOTSUPPORTED:host terminal does not support animation"))
+			ptyInput(vt.BuildKittyResponse(false, cmd.ImageID, vt.KittyAnimationRefusal))
 		}
 		return
 	}

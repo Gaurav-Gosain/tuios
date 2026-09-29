@@ -232,6 +232,9 @@ func ClientCapabilitiesOf(caps *HostCapabilities) *session.ClientCapabilities {
 		KittyGraphics: caps.KittyGraphics,
 		SixelGraphics: caps.SixelGraphics,
 		TerminalName:  caps.TerminalName,
+		// The daemon answers a frame edit a host cannot make, so the
+		// refusal reaches the guest in order. See Session.SetKittyAnimation.
+		KittyAnimation: caps.KittyAnimation,
 	}
 }
 

@@ -631,13 +631,70 @@ func readTTYResponse(tty *os.File, timeout time.Duration, done func(string) bool
 		}
 		if n > 0 {
 			result.Write(buf[:n])
-			if done(result.String()) {
+			// Never stop inside a reply. A read can end in the middle of
+			// one, and the rest of it would then reach the program's input
+			// as plain keys: a nested tuios typed the tail of an outer
+			// tuios's late graphics reply into its pane's shell.
+			if done(result.String()) && !endsInsideSequence(result.String()) {
 				break
 			}
 		}
 	}
 
 	return result.String()
+}
+
+// endsInsideSequence reports whether s stops partway through an escape
+// sequence: a CSI without its final byte, or an APC, OSC, DCS, PM or SOS
+// string without its terminator.
+func endsInsideSequence(s string) bool {
+	const (
+		ground = iota
+		escape
+		csi
+		str    // APC, DCS, PM, SOS: ends at ST
+		oscStr // OSC: ends at ST or BEL
+		strEsc // ESC seen inside a string: \ ends it
+	)
+	state, inStr := ground, str
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch state {
+		case ground:
+			if c == 0x1b {
+				state = escape
+			}
+		case escape:
+			switch c {
+			case '[':
+				state = csi
+			case '_', 'P', '^', 'X':
+				state, inStr = str, str
+			case ']':
+				state, inStr = oscStr, oscStr
+			default:
+				state = ground
+			}
+		case csi:
+			if c >= 0x40 && c <= 0x7e {
+				state = ground
+			}
+		case str, oscStr:
+			switch {
+			case c == 0x1b:
+				state = strEsc
+			case c == 0x07 && state == oscStr:
+				state = ground
+			}
+		case strEsc:
+			if c == '\\' {
+				state = ground
+			} else {
+				state = inStr
+			}
+		}
+	}
+	return state != ground
 }
 
 func applyEnvironmentOverrides(caps *HostCapabilities) {
