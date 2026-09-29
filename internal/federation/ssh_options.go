@@ -10,36 +10,58 @@ import (
 // the user can write, a process in a pane included. ssh runs some options as
 // commands on this machine, as the daemon's child: ProxyCommand, LocalCommand,
 // KnownHostsCommand, a PKCS#11 or security key library, or a config file named
-// with -F that holds any of these. CheckSSHOptions refuses those, so a host
-// entry cannot make the daemon run a command. What ~/.ssh/config says is
-// ssh's own and is not checked here; a process ssh starts that way is still
-// held by pane grants (see session/pane_grants.go).
+// with -F that holds any of these. ssh reads an -o value its own way: it
+// unquotes the keyword, and splits it from the value at =, spaces, tabs, CR
+// and LF. A list of options to refuse would have to follow every spelling
+// that reading allows, so CheckSSHOptions takes the other way: it accepts only
+// flags and -o keywords known to be safe, written plainly. What
+// ~/.ssh/config says is ssh's own and is not checked here; a process ssh
+// starts that way is still held by pane grants (see session/pane_grants.go).
 
-// sshCommandOptions are the -o keywords, lower case, that run a command or
-// load code on this machine, or read more options from a file.
-var sshCommandOptions = map[string]bool{
-	"proxycommand":        true,
-	"localcommand":        true,
-	"permitlocalcommand":  true,
-	"knownhostscommand":   true,
-	"pkcs11provider":      true,
-	"securitykeyprovider": true,
-	"include":             true,
+// sshSafeFlags are the ssh flags that take no value and are accepted.
+const sshSafeFlags = "46AaCgKkNnqsTtvXxY"
+
+// sshSafeArgFlags are the ssh flags that take a value and are accepted. -o
+// and -J have their values checked further.
+const sshSafeArgFlags = "bBcDeiJlLmopRS"
+
+// sshSafeOptions are the -o keywords, lower case, that are accepted. None of
+// them runs a command or loads code on this machine.
+var sshSafeOptions = map[string]bool{
+	"addressfamily": true, "batchmode": true, "bindaddress": true, "bindinterface": true,
+	"canonicaldomains": true, "canonicalizefallbacklocal": true, "canonicalizehostname": true,
+	"canonicalizemaxdots": true, "casignaturealgorithms": true, "certificatefile": true,
+	"checkhostip": true, "ciphers": true, "clearallforwardings": true, "compression": true,
+	"connectionattempts": true, "connecttimeout": true, "controlmaster": true, "controlpath": true,
+	"controlpersist": true, "escapechar": true, "exitonforwardfailure": true, "fingerprinthash": true,
+	"forwardagent": true, "forwardx11": true, "forwardx11timeout": true, "forwardx11trusted": true,
+	"globalknownhostsfile": true, "gssapiauthentication": true, "gssapidelegatecredentials": true,
+	"hashknownhosts": true, "hostbasedacceptedalgorithms": true, "hostbasedauthentication": true,
+	"hostkeyalgorithms": true, "hostkeyalias": true, "hostname": true, "identitiesonly": true,
+	"identityagent": true, "identityfile": true, "ipqos": true, "kbdinteractiveauthentication": true,
+	"kexalgorithms": true, "loglevel": true, "macs": true, "nohostauthenticationforlocalhost": true,
+	"numberofpasswordprompts": true, "passwordauthentication": true, "port": true,
+	"preferredauthentications": true, "proxyjump": true, "pubkeyacceptedalgorithms": true,
+	"pubkeyacceptedkeytypes": true, "pubkeyauthentication": true, "rekeylimit": true,
+	"requesttty": true, "sendenv": true, "serveralivecountmax": true, "serveraliveinterval": true,
+	"setenv": true, "stricthostkeychecking": true, "tcpkeepalive": true, "updatehostkeys": true,
+	"user": true, "userknownhostsfile": true, "verifyhostkeydns": true, "visualhostkey": true,
 }
 
-// sshArgFlags are the ssh flags that take a value, from ssh(1).
-const sshArgFlags = "BbcDEeFIiJLlmOoPpQRSWw"
+// plainSSHOption is an -o value written plainly: a keyword of letters and
+// digits, then = or spaces, then a value with no quote, backslash or control
+// character. ssh reads such a value one way only.
+var plainSSHOption = regexp.MustCompile(`^([A-Za-z0-9]+)(?:=| +)([^\x00-\x1f\x7f"'\\]*)$`)
 
-// sshRefusedFlags run a command or load code: -F reads another config file,
-// -I loads a PKCS#11 library.
-const sshRefusedFlags = "FI"
+// plainSSHValue is a flag value with no quote, backslash or control character.
+var plainSSHValue = regexp.MustCompile(`^[^\x00-\x1f\x7f"'\\]*$`)
 
 // jumpPattern is a ProxyJump value that is only hosts: [user@]host[:port],
 // comma separated. It keeps a value ssh could read as an option out.
 var jumpPattern = regexp.MustCompile(`^[A-Za-z0-9_.\[\]][A-Za-z0-9_.@:,\[\]-]*$`)
 
-// CheckSSHOptions reports the first ssh option in opts that could run a
-// command on this machine, or an argument that is not an option.
+// CheckSSHOptions reports the first entry in opts that is not a safe ssh
+// option written plainly.
 func CheckSSHOptions(opts []string) error {
 	for i := 0; i < len(opts); i++ {
 		arg := opts[i]
@@ -50,8 +72,11 @@ func CheckSSHOptions(opts []string) error {
 		// value takes the rest of the argument, or the next argument.
 		for j := 1; j < len(arg); j++ {
 			flag := arg[j]
-			if !strings.ContainsRune(sshArgFlags, rune(flag)) {
+			if strings.IndexByte(sshSafeFlags, flag) >= 0 {
 				continue
+			}
+			if strings.IndexByte(sshSafeArgFlags, flag) < 0 {
+				return fmt.Errorf("ssh_options: -%c is not accepted here. Put it in ~/.ssh/config", flag)
 			}
 			value := arg[j+1:]
 			if value == "" {
@@ -61,7 +86,7 @@ func CheckSSHOptions(opts []string) error {
 				i++
 				value = opts[i]
 			}
-			if err := checkSSHFlag(flag, value); err != nil {
+			if err := checkSSHFlagValue(flag, value); err != nil {
 				return err
 			}
 			break
@@ -70,37 +95,29 @@ func CheckSSHOptions(opts []string) error {
 	return nil
 }
 
-// checkSSHFlag checks one flag and its value.
-func checkSSHFlag(flag byte, value string) error {
-	if strings.ContainsRune(sshRefusedFlags, rune(flag)) {
-		return fmt.Errorf("ssh_options: -%c is refused, because it can make ssh run code on this machine. Put it in ~/.ssh/config", flag)
-	}
+// checkSSHFlagValue checks the value of one flag.
+func checkSSHFlagValue(flag byte, value string) error {
 	switch flag {
 	case 'J':
 		if !jumpPattern.MatchString(value) {
 			return fmt.Errorf("ssh_options: -J %q is not a list of hosts", value)
 		}
 	case 'o':
-		key, rest := splitSSHOption(value)
-		if sshCommandOptions[key] {
-			return fmt.Errorf("ssh_options: %s is refused, because it makes ssh run a command on this machine. Put it in ~/.ssh/config", key)
+		m := plainSSHOption.FindStringSubmatch(value)
+		if m == nil {
+			return fmt.Errorf("ssh_options: -o %q is not written as Keyword=value with plain text", value)
 		}
-		if key == "proxyjump" && !jumpPattern.MatchString(rest) {
-			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", rest)
+		key := strings.ToLower(m[1])
+		if !sshSafeOptions[key] {
+			return fmt.Errorf("ssh_options: %s is not accepted here, because tuios cannot tell that it runs nothing on this machine. Put it in ~/.ssh/config", m[1])
+		}
+		if key == "proxyjump" && !jumpPattern.MatchString(strings.TrimSpace(m[2])) {
+			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", m[2])
+		}
+	default:
+		if !plainSSHValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: -%c %q has a quote, backslash or control character", flag, value)
 		}
 	}
 	return nil
-}
-
-// splitSSHOption splits an -o value, Key=value or Key value, and lower-cases
-// the key as ssh reads it.
-func splitSSHOption(s string) (key, value string) {
-	s = strings.TrimSpace(s)
-	end := strings.IndexAny(s, "= \t")
-	if end < 0 {
-		return strings.ToLower(s), ""
-	}
-	key = strings.ToLower(strings.TrimSpace(s[:end]))
-	value = strings.TrimLeft(s[end:], "= \t")
-	return key, strings.TrimSpace(value)
 }
