@@ -47,6 +47,12 @@ var (
 	webAutoTLS        bool
 	webInsecure       bool
 	webTouch          string
+	// Who may open a session. See access.go.
+	webUser           string
+	webPasswordFile   string
+	webRandomPassword bool
+	webNoAuth         bool
+	webAllowHosts     []string
 	// TUIOS forwarded flags
 	debugMode bool
 	// interfaceFlags is the same interface flag set `tuios` registers.
@@ -79,6 +85,9 @@ Server features:
   - HTTPS from a self-signed certificate tuios-web generates and keeps
     (--auto-tls), or from your own (--cert/--key). A bind to a LAN address
     requires one of them unless you opt into clear text with --insecure
+  - A password for every browser that connects. A bind to a LAN address
+    requires one (--random-password, --password-file or TUIOS_WEB_PASSWORD)
+    unless you pass --no-auth
   - Configurable host, port, read-only mode, and connection limits
   - All TUIOS flags forwarded to spawned instances (theme, show-keys, etc.)
   - Structured logging with charmbracelet/log
@@ -97,14 +106,18 @@ Client features:
   # Start on custom port
   tuios-web --port 8080
 
-  # Reach the server from a phone on the same network, over TLS
-  tuios-web --host 0.0.0.0 --auto-tls
+  # Reach the server from a phone on the same network, over TLS, with a
+  # password that tuios-web makes and prints
+  tuios-web --host 0.0.0.0 --auto-tls --random-password
 
-  # Same, from a certificate you already have
-  tuios-web --host 0.0.0.0 --cert cert.pem --key key.pem
+  # Same, with a certificate and a password you already have
+  tuios-web --host 0.0.0.0 --cert cert.pem --key key.pem --password-file ~/.config/tuios/web-password
 
-  # Same, on a network you trust, with nothing encrypted
-  tuios-web --host 0.0.0.0 --insecure
+  # Same, on a network you trust, with nothing encrypted and no password
+  tuios-web --host 0.0.0.0 --insecure --no-auth
+
+  # Behind a reverse proxy on this machine that sends its own host name
+  tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-password
 
   # Start with show-keys overlay
   tuios-web --show-keys
@@ -139,6 +152,11 @@ Client features:
 	rootCmd.Flags().StringVar(&webTLSKey, "key", "", "Path to the TLS private key in PEM form (required with --cert)")
 	rootCmd.Flags().BoolVar(&webAutoTLS, "auto-tls", false, "Serve HTTPS from a self-signed certificate tuios-web generates and keeps (see `tuios-web cert`)")
 	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
+	rootCmd.Flags().StringVar(&webUser, "user", defaultWebUser, "User name the browser must give with the password")
+	rootCmd.Flags().StringVar(&webPasswordFile, "password-file", "", "Read the password from the first line of this file. Only you must be able to read the file")
+	rootCmd.Flags().BoolVar(&webRandomPassword, "random-password", false, "Make a new password at start and print it")
+	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve a non-loopback host with no password. Anyone who reaches the port gets a shell (trusted networks only)")
+	rootCmd.Flags().StringSliceVar(&webAllowHosts, "allow-host", nil, "Also accept this host name in the Host header, for example the name of a reverse proxy (repeatable)")
 	registerCertFlags(rootCmd)
 	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")
 
@@ -171,12 +189,48 @@ func main() {
 	}
 }
 
+// accessFlags collects the command line that decides who may connect.
+func accessFlags() webAccessFlags {
+	return webAccessFlags{
+		host:           webHost,
+		port:           webPort,
+		tls:            webTLSCert != "" || webAutoTLS,
+		user:           webUser,
+		passwordFile:   webPasswordFile,
+		randomPassword: webRandomPassword,
+		noAuth:         webNoAuth,
+		allowHosts:     webAllowHosts,
+		tlsArgs:        tlsFlagsForMenu(),
+	}
+}
+
+// tlsFlagsForMenu is the TLS part of the command line, repeated in the
+// password refusal so a command copied from it keeps TLS.
+func tlsFlagsForMenu() string {
+	switch {
+	case webTLSCert != "":
+		return " --cert " + webTLSCert + " --key " + webTLSKey
+	case webAutoTLS:
+		return " --auto-tls"
+	case webInsecure:
+		return " --insecure"
+	}
+	return ""
+}
+
 func runWebServer() error {
-	// Refuse an unencrypted LAN bind before anything is started, so the user
-	// gets the answer instead of a daemon and a half-open port.
+	// Refuse a LAN bind with no password, then one in clear text, before
+	// anything is started, so the user gets the answer instead of a daemon
+	// and a half-open port. The password comes first: it is read and removed
+	// from the environment before the daemon starts, so no pane inherits it.
+	access, err := planWebAccess(os.Stderr, accessFlags())
+	if err != nil {
+		return err
+	}
 	if err := checkTransportSecurity(os.Stderr); err != nil {
 		return err
 	}
+	access.announcePassword(os.Stderr)
 
 	// Settle the keypair here too, for the same reason: generating it can
 	// fail, and a failure should not leave a daemon running behind it.
@@ -295,6 +349,7 @@ func runWebServer() error {
 	sipConfig.TLSCert = tlsCert
 	sipConfig.TLSKey = tlsKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
+	access.apply(&sipConfig)
 
 	// How the page looks. Read after the config file and the flags have both
 	// landed on the globals above, because that is when theme.Current() is the
@@ -510,6 +565,7 @@ func checkTransportSecurity(w io.Writer) error {
 	// Printed here rather than carried in the error: fang reflows an error
 	// into a paragraph, which would run the commands together and leave
 	// nothing to copy.
+	auth := authFlagsForMenu(accessFlags())
 	fmt.Fprintf(w, `
   %s is not this machine, and without TLS every keystroke you send it, and
   everything a shell prints back, crosses the network in clear text. So pick
@@ -517,7 +573,7 @@ func checkTransportSecurity(w io.Writer) error {
 
   1. Over HTTPS, from a certificate tuios-web generates and keeps.
 
-       tuios-web --host %s --port %s --auto-tls
+       tuios-web --host %s --port %s --auto-tls%s
 
      The certificate is self-signed, so every browser warns once per device.
      Accept the warning there. `+"`tuios-web cert info`"+` says what the warning
@@ -526,7 +582,7 @@ func checkTransportSecurity(w io.Writer) error {
   2. Over HTTPS, from a certificate you already have. One from your own CA,
      or a real one, never warns.
 
-       tuios-web --host %s --port %s --cert cert.pem --key key.pem
+       tuios-web --host %s --port %s --cert cert.pem --key key.pem%s
 
   3. Left on this machine, reached through SSH. No certificate involved.
 
@@ -536,15 +592,17 @@ func checkTransportSecurity(w io.Writer) error {
 
   4. In clear text. Only on a network you trust.
 
-       tuios-web --host %s --port %s --insecure
+       tuios-web --host %s --port %s --insecure%s
+
+  TLS encrypts the connection. The password decides who can connect.
 
 `,
 		webHost,
-		webHost, webPort,
-		webHost, webPort,
+		webHost, webPort, auth,
+		webHost, webPort, auth,
 		webPort, webPort,
 		webPort,
-		webHost, webPort)
+		webHost, webPort, auth)
 
 	return fmt.Errorf("refusing to serve %s in clear text: pass --auto-tls, or --cert and --key, or --insecure to accept it", webHost)
 }
