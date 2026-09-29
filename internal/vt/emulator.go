@@ -1023,6 +1023,10 @@ func (e *Emulator) HasAllMotionMode() bool {
 // there for the guest.
 const syncMaxHold = time.Second
 
+// SyncMaxHold is how long a synchronized update is honored. The kitty
+// passthrough holds a guest's graphics no longer than this.
+const SyncMaxHold = syncMaxHold
+
 // IsSyncActive reports whether the guest has an open synchronized update
 // (DEC private mode 2026): it has begun drawing a frame and does not want it
 // presented until it resets the mode. Thread-safe: reads from atomics updated on

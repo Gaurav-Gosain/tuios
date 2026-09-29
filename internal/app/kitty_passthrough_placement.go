@@ -513,6 +513,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				clipTop, clipBottom, clipLeft, maxShowableRows, maxShowableCols, newHostX, newHostY, anyPartVisible)
 
 			if !anyPartVisible {
+				// A held placement would show it after the update closes,
+				// whether or not the host shows it now.
+				kp.dropHeldPlacements(hostID)
 				// Send a delete only if the image was currently visible.
 				// deleteOnePlacement sends d=p (placement id, image id) so
 				// the image bytes stay in storage and a subsequent scroll
@@ -521,6 +524,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
+			} else if kp.holding(windowID) {
+				// The guest is inside a synchronized update and its image
+				// may not reach the host yet. Leave the record as it is, so
+				// the first pass after the update closes places it. See
+				// kitty_sync_hold.go.
 			} else {
 				// Re-place only if position/clipping changed. Real kitty
 				// and our sip overlay both treat a=p with the same (i, p)
@@ -646,6 +654,9 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 	defer kp.mu.Unlock()
 	for _, placements := range kp.placements {
 		for _, p := range placements {
+			// A held placement would show it again once its update
+			// closes; see kitty_sync_hold.go.
+			kp.dropHeldPlacements(p.HostImageID)
 			if !p.Hidden {
 				kp.deleteOnePlacement(p)
 				p.Hidden = true
@@ -657,6 +668,11 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 
 // deleteOnePlacement removes the image and all its placements from graphics memory.
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
+	if !kp.guestCapture {
+		// tuios is hiding this image itself; a held placement must not
+		// show it again. See kitty_sync_hold.go.
+		kp.dropHeldPlacements(p.HostImageID)
+	}
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
 	fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2\x1b\\", p.HostImageID)
