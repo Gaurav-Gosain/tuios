@@ -695,7 +695,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// is this client's own, and it is what the panes' emulators answer OSC 11
 	// and OSC 10 with. See report_colors.go.
 	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
-	accepted := session.UpdateStateFrom(&state, d.mayActAsHuman(cs))
+	accepted, behind := session.updateStateFrom(&state, d.mayActAsHuman(cs))
 	session.applyReportColors(reportBg, reportFg, reportPal)
 
 	// The merged state is a full copy of the session's, retitled from every
@@ -714,7 +714,12 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// what is canonical now is not what this client pushed. Send the merged state
 	// straight back: without it the client keeps rendering its stale view and
 	// pushes it again on the next sync.
-	if !accepted {
+	//
+	// A push that was accepted but built before a tree op it had not seen is
+	// answered the same way. The op's own broadcast reached this client before
+	// the push landed, so the client dropped it as older than the push, and
+	// nothing else would ever tell it about that tree.
+	if !accepted || behind {
 		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
 			State:       mergedState(),
 			TriggerType: "reconcile",

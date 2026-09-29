@@ -81,7 +81,7 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		state.WorkspaceTrees, state.WindowToBSPID, state.NextBSPWindowID = trees, ids, next
 		// mutateStateLocked advances Version by one once this returns, so the
 		// op's version is the next one.
-		s.noteTreeOpLocked(state.Version + 1)
+		s.noteTreeOpLocked(state.Version+1, p.PushOrigin)
 		return nil
 	})
 	switch {
@@ -299,8 +299,36 @@ func SessionTreeNames(state *SessionState) func(int) string {
 // client that sends ops carries no trees, so a push built before a tree op
 // has missed nothing it could undo. See missedMutationLocked. The caller holds
 // stateMu.
-func (s *Session) noteTreeOpLocked(version int) {
-	s.treeOpVersions[version%len(s.treeOpVersions)] = version
+func (s *Session) noteTreeOpLocked(version int, origin string) {
+	s.treeOps[version%len(s.treeOps)] = treeOpRecord{version, origin}
+}
+
+// treeOpRecord is one entry of Session.treeOps.
+type treeOpRecord struct {
+	version int
+	origin  string
+}
+
+// treeOpAt reports whether the mutation at version was a tree op, and who
+// sent it.
+func (s *Session) treeOpAt(version int) (string, bool) {
+	r := s.treeOps[version%len(s.treeOps)]
+	return r.origin, r.version == version
+}
+
+// missedPeerTreeLocked reports whether a push from origin built at base
+// predates a tree op another client sent. A tree op from origin itself does
+// not count: its tree is the one the client holds. The caller holds stateMu.
+func (s *Session) missedPeerTreeLocked(origin string, base, current int) bool {
+	if base >= current || current-base > len(s.treeOps) {
+		return false
+	}
+	for v := base + 1; v <= current; v++ {
+		if by, ok := s.treeOpAt(v); ok && (by != origin || origin == "") {
+			return true
+		}
+	}
+	return false
 }
 
 // missedMutationLocked reports whether a push built at base predates a
@@ -320,11 +348,11 @@ func (s *Session) missedMutationLocked(base, current int) bool {
 	if base >= current {
 		return false
 	}
-	if current-base > len(s.treeOpVersions) {
+	if current-base > len(s.treeOps) {
 		return true
 	}
 	for v := base + 1; v <= current; v++ {
-		if s.treeOpVersions[v%len(s.treeOpVersions)] != v {
+		if _, ok := s.treeOpAt(v); !ok {
 			return true
 		}
 	}

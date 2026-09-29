@@ -945,10 +945,11 @@ type Session struct {
 	// Version, so a move by one client is invisible to focusMovedVersion, and a
 	// stale push from another client built at that version may predate it.
 	clientFocusMoved map[string]int
-	// treeOpVersions holds the recent Versions that were tree ops, each at
-	// its version modulo the length, guarded by stateMu. A fixed ring, so it
-	// never grows. See missedMutationLocked.
-	treeOpVersions [1024]int
+	// treeOps holds the recent Versions that were tree ops, with the client
+	// connection that sent each, at its version modulo the length, guarded by
+	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
+	// missedPeerTreeLocked.
+	treeOps [1024]treeOpRecord
 	// focusIntent is set by a focus verb inside mutateState, so the mutation
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
@@ -2094,6 +2095,16 @@ func (s *Session) ForgetPush(origin string) {
 // finished turn seen: a client running inside a pane is an agent looking, and
 // finished_unread is about whether the person has. See human_origin.go.
 func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
+	accepted, _ := s.updateStateFrom(state, seen)
+	return accepted
+}
+
+// updateStateFrom is UpdateStateFrom that also reports whether the push was
+// built before a tree op another client sent. Such a push is accepted, because
+// it cannot undo a tree op (see missedMutationLocked). But the client that
+// sent it has not seen that tree, and a client is never sent its own push
+// back, so the caller answers it with the session's state.
+func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, behind bool) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -2103,9 +2114,10 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	origin := state.PushOrigin
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
 
-	accepted := true
+	accepted = true
 	prev := s.state
 	if prev != nil {
+		behind = state.BaseVersion != 0 && s.missedPeerTreeLocked(origin, state.BaseVersion, prev.Version)
 		if state.BaseVersion != 0 && s.missedMutationLocked(state.BaseVersion, prev.Version) {
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
@@ -2146,7 +2158,7 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	s.TouchActive()
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
-	return accepted
+	return accepted, behind
 }
 
 // pushOwnsFocusLocked reports whether a stale push from origin, built at base,
