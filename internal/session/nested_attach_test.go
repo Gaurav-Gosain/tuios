@@ -134,13 +134,35 @@ func TestTerminalWindowFromPaneIsAllowed(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	helper := helperCommand(t, sp, out, "attach-probe", "window")
 	runInPane(t, d, sess, b, "script -qfec "+shellQuote(helper)+" /dev/null >/dev/null 2>&1")
-	if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
+	if got := probeOutcome(t, out); got != "" {
 		t.Errorf("a client on its own terminal whose output does not reach the pane got %q, want it attached", got)
 	}
 }
 
 // shellQuote quotes s for sh.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// probeOutcome waits for a probe client to attach and, when it did, for the
+// watch after the attach to run its course. The daemon either refuses the
+// attach, when the probe was seen first, or takes the client off later, when
+// the probe arrived after it: which one depends on timing, and both are the
+// refusal. It returns the refusal or error, or "" when the client stayed
+// attached.
+func probeOutcome(t *testing.T, out string) string {
+	t.Helper()
+	got := waitHelper(t, out)
+	if !strings.HasPrefix(got, "nonce:") {
+		return got
+	}
+	deadline := time.Now().Add(nestProbeWatch + time.Second)
+	for time.Now().Before(deadline) {
+		if ended, err := os.ReadFile(out + ".ended"); err == nil && len(ended) > 0 {
+			return string(ended)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return ""
+}
 
 // relayIntoPane copies what src writes into the given pane's output, as ssh
 // or a relay would: the pane runs cat on a fifo, and src is copied into it.
@@ -178,7 +200,7 @@ func TestProbeRelayedIntoOwnPaneIsRefused(t *testing.T) {
 			relay := relayIntoPane(t, d, sess, b)
 			pty := spawnHelperOnOwnTerminal(t, sp, out, mode, "relay")
 			go func() { _, _ = io.Copy(relay, pty) }()
-			if got := waitHelper(t, out); !strings.Contains(got, `You are inside session "relay"`) {
+			if got := probeOutcome(t, out); !strings.Contains(got, `You are inside session "relay"`) {
 				t.Errorf("a client relayed into its own session's pane got %q, want the refusal", got)
 			}
 		})
@@ -263,7 +285,7 @@ func TestProbeRelayedIntoOtherSessionIsAllowed(t *testing.T) {
 	relay := relayIntoPane(t, d, sess, b)
 	pty := spawnHelperOnOwnTerminal(t, sp, out, "attach-probe", "shown")
 	go func() { _, _ = io.Copy(relay, pty) }()
-	if got := waitHelper(t, out); !strings.HasPrefix(got, "nonce:") {
+	if got := probeOutcome(t, out); got != "" {
 		t.Errorf("a client relayed into another session's pane got %q, want it attached", got)
 	}
 }

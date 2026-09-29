@@ -92,7 +92,7 @@ func TestHelperSocketCaller(t *testing.T) {
 		c := NewTUIClient()
 		c.Served = strings.HasPrefix(mode, "attach-served")
 		c.AllowNested = mode == "attach-force"
-		if strings.HasSuffix(mode, "-probe") || mode == "attach-late-probe" {
+		if strings.HasSuffix(mode, "-probe") {
 			// Written to this process's terminal, as a client writes it.
 			c.SetNestProbe(WriteNestProbe(os.Stdout))
 		}
@@ -111,9 +111,11 @@ func TestHelperSocketCaller(t *testing.T) {
 			break
 		}
 		result = "nonce:" + c.HumanNonce()
-		if mode == "attach-late-probe" {
-			// Attached before the probe reached any pane. Report that, then
-			// wait to be taken off, and report the reason to out.ended.
+		if strings.HasSuffix(mode, "-probe") {
+			// The daemon does not wait for the probe, so a client can attach
+			// before its probe reaches a pane and be taken off after. Report
+			// the attach, then wait to be taken off, and report the reason to
+			// out.ended.
 			ended := make(chan string, 1)
 			c.OnSessionEnded(func(_, reason string) { ended <- reason })
 			c.StartReadLoop()
