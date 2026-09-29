@@ -1,3 +1,0 @@
-#!/bin/sh
-# CC wrapper: goreleaser build env cannot carry per-target compiler flags.
-exec zig cc -target x86_64-macos "$@"

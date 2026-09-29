@@ -1,0 +1,42 @@
+# Temporary: proves the darwin ghostty link. No upload. Removed before merge.
+name: tmp-ghostty-darwin
+on:
+  push:
+    branches: [fix/ghostty-darwin-link]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - name: Build darwin ghostty binaries (same loop as release.yml)
+        run: |
+          set -eu
+          version=0.0.0-test
+          ldflags="-s -w -X main.version=${version}"
+          for triple in arm64:arm64:aarch64-macos amd64:x86_64:x86_64-macos; do
+            arch="${triple%%:*}"
+            rest="${triple#*:}"
+            label="${rest%%:*}"
+            target="${rest#*:}"
+            ./scripts/ghostty-lib.sh "$target"
+            CGO_ENABLED=1 GOARCH="$arch" CC=clang \
+              PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig" \
+              go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
+            file tuios
+            otool -L tuios
+            arch -"$label" ./tuios --version
+            tar czf "tuios-ghostty_${version}_Darwin_${label}.tar.gz" tuios README.md LICENSE*
+            rm tuios
+          done
+          ls -l tuios-ghostty_*.tar.gz

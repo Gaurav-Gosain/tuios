@@ -12,6 +12,10 @@ on:
       tag:
         description: Existing tag to release, for example v0.8.0
         required: true
+      ghostty_darwin_only:
+        description: Skip GoReleaser and add only the darwin ghostty archives
+        type: boolean
+        default: false
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
@@ -31,6 +35,9 @@ concurrency:
 
 jobs:
   goreleaser:
+    # A dispatch with ghostty_darwin_only set leaves the published release,
+    # the Homebrew tap and the AUR alone.
+    if: ${{ !inputs.ghostty_darwin_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -109,6 +116,8 @@ jobs:
   ghostty-darwin:
     runs-on: macos-14
     needs: goreleaser
+    # Runs after GoReleaser, or alone when a dispatch skipped it.
+    if: ${{ !cancelled() && (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') }}
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -143,16 +152,24 @@ jobs:
           # The archive names follow .goreleaser.yml's name_template, which
           # spells amd64 as x86_64. tuios update and the install script look
           # assets up by that name, so the two must not differ.
+          #
+          # Zig builds libghostty-vt, but Xcode's clang links the binary. zig cc
+          # has no macOS SDK, so the cgo link fails on the -lresolv that Go's
+          # net package asks for on darwin. clang finds the SDK itself, and Go
+          # passes it -arch for each GOARCH, so one runner links both arches.
+          # netgo would also avoid -lresolv, but it ignores the system
+          # resolver, which breaks VPN and split DNS for ssh host names.
           for triple in arm64:arm64:aarch64-macos amd64:x86_64:x86_64-macos; do
             arch="${triple%%:*}"
             rest="${triple#*:}"
             label="${rest%%:*}"
             target="${rest#*:}"
             ./scripts/ghostty-lib.sh "$target"
-            CGO_ENABLED=1 GOARCH="$arch" \
-              CC="$PWD/scripts/zigcc/$target" \
+            CGO_ENABLED=1 GOARCH="$arch" CC=clang \
               PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig" \
               go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
+            # The runner is arm64. Rosetta runs the x86_64 binary.
+            arch -"$label" ./tuios --version
             tar czf "tuios-ghostty_${version}_Darwin_${label}.tar.gz" tuios README.md LICENSE*
             rm tuios
           done
