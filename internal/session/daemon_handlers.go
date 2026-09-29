@@ -14,8 +14,15 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 
 	cs.hello = &payload
 	cs.mu.Lock()
+	changed := cs.treeOps != payload.LayoutTreeOps
 	cs.treeOps = payload.LayoutTreeOps
+	attachedTo := cs.sessionID
 	cs.mu.Unlock()
+	// A second hello on an attached connection can change what the client
+	// sends, and with it what the session can run.
+	if changed && attachedTo != "" {
+		d.refreshTreeOps(attachedTo)
+	}
 
 	// Refuse a client this daemon cannot serve before it can attach to anything.
 	if protocolMismatch(payload.Protocol) {
@@ -131,6 +138,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		}
 	}
 	cs.mu.Lock()
+	previousSession := cs.sessionID
 	cs.sessionID = session.ID
 	cs.width = payload.Width
 	cs.height = payload.Height
@@ -200,7 +208,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// is broadcast, and so either reaches this client or marks it as missed.
 	// Whether the session's clients send their trees as ops, with this client
 	// counted. Settled before the snapshot, so the reply says what is in force.
+	// A client that moved here without a detach no longer counts where it was.
 	d.refreshTreeOps(session.ID)
+	if previousSession != "" && previousSession != session.ID {
+		d.refreshTreeOps(previousSession)
+	}
 	session.forgetBroadcast()
 	state := session.GetState()
 	if hook := attachSnapshotTaken.Load(); hook != nil {
@@ -632,6 +644,11 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	if session == nil {
 		return
 	}
+	// Held from the count to the change. A detach that counted "no older
+	// client" and then applied it after an older client's attach had applied
+	// "off" left the ops on beside a client that cannot send them.
+	session.treeOpsMu.Lock()
+	defer session.treeOpsMu.Unlock()
 	on := true
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
@@ -642,8 +659,15 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 		cs.mu.Unlock()
 	}
 	d.clientsMu.RUnlock()
+	if hook := treeOpsCounted.Load(); hook != nil {
+		(*hook)()
+	}
 	session.SetLayoutTreeOps(on)
 }
+
+// treeOpsCounted runs in refreshTreeOps between the count and the change. It
+// is unset outside tests, which use it to widen that window on purpose.
+var treeOpsCounted atomic.Pointer[func()]
 
 // notePushOrigin records the name cs gives its pushes and layout ops. The
 // count itself is recorded by the session with the change it makes (see

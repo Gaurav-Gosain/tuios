@@ -254,6 +254,41 @@ func (m *OS) bspRectsOffTree() bool {
 	return false
 }
 
+// adoptTreesByWindow replaces this client's trees with a state's, on the terms
+// the trees used before the op existed (the whole set, from a newer state or a
+// peer), but with each leaf read through the state's numbering to a window ID
+// and then to this client's number. It is for a session whose ops are off
+// because an older client is attached. The trees then come from that client's
+// pushes, numbered its own way; taking them raw put panes in each other's
+// places on this client, since its own numbering is never replaced. The
+// daemon of this build always sends a state's numbering with its trees.
+func (m *OS) adoptTreesByWindow(state *session.SessionState) {
+	present := make(map[string]bool, len(m.Windows))
+	for _, w := range m.Windows {
+		present[w.ID] = true
+	}
+	name := session.SessionTreeNames(state)
+	toLocal := func(n int) (int, bool) {
+		id := name(n)
+		if id == "" || !present[id] {
+			return 0, false
+		}
+		return m.GetWindowIntID(id), true
+	}
+	m.WorkspaceTrees = make(map[int]*layout.BSPTree, len(state.WorkspaceTrees))
+	for ws, tree := range state.WorkspaceTrees {
+		wire := session.RemapTree(tree, toLocal)
+		if wire == nil {
+			continue
+		}
+		m.WorkspaceTrees[ws] = (&layout.SerializedBSPTree{
+			Root:         convertSessionBSPNode(wire.Root),
+			AutoScheme:   wire.AutoScheme,
+			DefaultRatio: wire.DefaultRatio,
+		}).Deserialize()
+	}
+}
+
 // adoptSessionTrees takes the session's trees from a state the daemon sent,
 // except where this client has a change of its own it has not sent yet.
 //
