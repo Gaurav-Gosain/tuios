@@ -79,7 +79,7 @@ func TestMultifocusToggleKeysAndPasteBroadcast(t *testing.T) {
 
 	// toggle_multifocus_active adds the focused pane, and again removes it.
 	leaderKey(t, term, "y")
-	mfWaitText(t, term, "Multifocus: 1 windows")
+	mfWaitText(t, term, "Multifocus: 1 window")
 	leaderKey(t, term, "y")
 	mfWaitText(t, term, "Multifocus: removed window")
 
