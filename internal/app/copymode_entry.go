@@ -44,7 +44,7 @@ func (m *OS) EnterCopyModeSearch(backward bool) {
 		if !w.InCopyMode() {
 			continue
 		}
-		w.CopyMode.BeginSearch(backward)
+		w.CopyMode.BeginSearch(backward, w.ScrollbackLenSync())
 		w.InvalidateCache()
 	}
 }

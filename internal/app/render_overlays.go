@@ -628,7 +628,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		switch {
 		case matchCount > 0:
 			body += overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).
-				Render(fmt.Sprintf(" [%d/%d]", currentMatch+1, matchCount))
+				Render(fmt.Sprintf(" [%d/%s]", currentMatch+1, terminal.SearchMatchCount(matchCount)))
 		case searchQuery != "":
 			body += overlay.Style(bg).Foreground(pal.FgMute).Render(" [0]")
 		}

@@ -33,7 +33,7 @@ func moveLeft(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 func moveRight(cm *terminal.CopyMode, window *terminal.Window) {
-	maxX := window.Width - 3
+	maxX := window.LastContentCol()
 	if cm.CursorX < maxX {
 		cm.CursorX++
 		// Skip continuation cells (Width=0) of wide characters
@@ -76,7 +76,7 @@ func moveDown(cm *terminal.CopyMode, window *terminal.Window) {
 		// Cursor at/below middle: scroll content instead (cursor stays in place)
 		cm.ScrollOffset--
 		window.ScrollbackOffset = cm.ScrollOffset
-	} else if cm.CursorY < window.Height-3 {
+	} else if cm.CursorY < window.LastContentRow() {
 		// At live content, cursor can move to bottom
 		cm.CursorY++
 	}
@@ -84,7 +84,7 @@ func moveDown(cm *terminal.CopyMode, window *terminal.Window) {
 
 // moveWordForward moves cursor to next word
 func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000 // Prevent infinite loops
 
 	// Get current character type
@@ -134,7 +134,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 
 // moveWordBackward moves cursor to previous word
 func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000
 
 	// Move left at least once to leave current position
@@ -219,7 +219,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 
 // moveWordEnd moves cursor to end of current word
 func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000
 
 	// Move right at least once to leave current position
@@ -286,7 +286,7 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 // moveWordForwardBig moves cursor to next WORD (whitespace-delimited)
 func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	// Like 'w' but treats any whitespace-delimited sequence as a word
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000
 
 	// Phase 1: Skip current WORD (any non-whitespace)
@@ -324,7 +324,7 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 // moveWordBackwardBig moves cursor to previous WORD (whitespace-delimited)
 func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	// Like 'b' but for WORDs
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000
 
 	// Move left at least once
@@ -388,7 +388,7 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 // moveWordEndBig moves cursor to end of current WORD
 func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 	// Like 'e' but for WORDs
-	maxWidth := window.Width - 3
+	maxWidth := window.LastContentCol()
 	maxIterations := 1000
 
 	// Move right at least once
@@ -489,7 +489,7 @@ func moveToTop(cm *terminal.CopyMode, window *terminal.Window) {
 func moveToBottom(cm *terminal.CopyMode, window *terminal.Window) {
 	cm.ScrollOffset = 0
 	window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
-	cm.CursorY = window.Height - 3
+	cm.CursorY = window.LastContentRow()
 	cm.CursorX = 0
 }
 
@@ -565,7 +565,7 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 
 		// Move down
-		if cm.CursorY < window.Height-3 {
+		if cm.CursorY < window.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
 			cm.ScrollOffset--
@@ -584,7 +584,7 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 
 		// Move down
-		if cm.CursorY < window.Height-3 {
+		if cm.CursorY < window.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
 			cm.ScrollOffset--
@@ -645,12 +645,12 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 		// Move in search direction
 		if direction > 0 {
 			// Moving forward
-			if cm.CursorX < window.Width-3 {
+			if cm.CursorX < window.LastContentCol() {
 				cm.CursorX++
 			} else {
 				// Wrap to next line
 				cm.CursorX = 0
-				if cm.CursorY < window.Height-3 {
+				if cm.CursorY < window.LastContentRow() {
 					cm.CursorY++
 				} else if cm.ScrollOffset > 0 {
 					cm.ScrollOffset--
@@ -665,7 +665,7 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 				cm.CursorX--
 			} else {
 				// Wrap to previous line
-				cm.CursorX = window.Width - 3
+				cm.CursorX = window.LastContentCol()
 				if cm.CursorY > 0 {
 					cm.CursorY--
 				} else if cm.ScrollOffset < window.ScrollbackLen() {

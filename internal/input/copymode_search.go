@@ -10,10 +10,9 @@ import (
 
 // Search-related functions for copy mode (/, ?, n, N, etc.)
 
-// maxSearchMatches bounds how many matches one search keeps. The renderer
-// walks every match on every frame, so the bound keeps a one-letter query over
-// a full scrollback cheap.
-const maxSearchMatches = 1000
+// maxSearchMatches bounds how many matches one search keeps. See
+// terminal.MaxSearchMatches.
+const maxSearchMatches = terminal.MaxSearchMatches
 
 // matchesOnLine finds every occurrence of query (already lower-cased when the
 // search ignores case) in one line's text, left to right. cells gives the
@@ -122,8 +121,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 // buffer. With no match the cursor goes back to the origin, as vim does.
 func jumpFromOrigin(cm *terminal.CopyMode, window *terminal.Window) {
 	o := cm.SearchOrigin
-	originAbsY := window.ScrollbackLen() - o.ScrollOffset + o.CursorY
-	idx, _ := searchFrom(cm.SearchMatches, originAbsY, o.CursorX, cm.SearchBackward)
+	idx, _ := searchFrom(cm.SearchMatches, o.Line, o.CursorX, cm.SearchBackward)
 	if idx < 0 {
 		restoreSearchOrigin(cm, window)
 		return
@@ -133,11 +131,19 @@ func jumpFromOrigin(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // restoreSearchOrigin puts the cursor and the view back where they were when
-// the search prompt opened.
+// the search prompt opened. The origin is an absolute line, so output that
+// arrived while the prompt was open does not move it. The cursor goes back to
+// the same viewport row when the scrollback allows it.
 func restoreSearchOrigin(cm *terminal.CopyMode, window *terminal.Window) {
 	o := cm.SearchOrigin
-	cm.CursorX, cm.CursorY, cm.ScrollOffset = o.CursorX, o.CursorY, o.ScrollOffset
-	window.ScrollbackOffset = o.ScrollOffset
+	sb := window.ScrollbackLen()
+	last := window.LastContentRow()
+	row := min(max(o.Row, 0), last)
+	offset := min(max(sb-o.Line+row, 0), sb)
+	cm.CursorX = o.CursorX
+	cm.CursorY = min(max(o.Line-sb+offset, 0), last)
+	cm.ScrollOffset = offset
+	window.ScrollbackOffset = offset
 }
 
 // searchFrom returns the index of the match a search from (absY, x) lands on.
@@ -201,7 +207,7 @@ func jumpToMatch(cm *terminal.CopyMode, window *terminal.Window, matchIdx int) {
 		screenLine := match.Line - scrollbackLen
 		cm.ScrollOffset = 0
 		window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
-		cm.CursorY = min(screenLine, window.Height-3)
+		cm.CursorY = min(screenLine, window.LastContentRow())
 	}
 
 	cm.CursorX = match.StartX

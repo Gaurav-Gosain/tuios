@@ -328,9 +328,199 @@ func TestCopyModeSearchLimitKeepsNewestMatches(t *testing.T) {
 	if n := len(w.CopyMode.SearchMatches); n != maxSearchMatches {
 		t.Errorf("the search kept %d matches, want %d", n, maxSearchMatches)
 	}
+	if msg := lastNotification(o); !strings.Contains(msg, fmt.Sprintf("%d+ matches", maxSearchMatches)) {
+		t.Errorf("a capped search says %q, want it to say %d+ matches", msg, maxSearchMatches)
+	}
 	for i := 1; i < len(w.CopyMode.SearchMatches); i++ {
 		if w.CopyMode.SearchMatches[i].Line <= w.CopyMode.SearchMatches[i-1].Line {
 			t.Fatalf("the matches are not in buffer order at %d", i)
 		}
+	}
+}
+
+// borderlessOS is entryOS with the pane borderless, as a tiled pane is with
+// shared_borders on: the content fills every row and column of the pane.
+func borderlessOS(t *testing.T, output string) (*app.OS, *terminal.Window) {
+	t.Helper()
+	w := multiPaneWindow(t, "cm-borderless", "shell")
+	w.Tiled = true
+	w.Resize(w.Width, w.Height)
+	if w.ContentHeight() != w.Height || w.Terminal.Height() != w.Height {
+		t.Fatalf("the borderless pane has content height %d and a %d-row grid, want %d",
+			w.ContentHeight(), w.Terminal.Height(), w.Height)
+	}
+	w.WriteOutput([]byte(output))
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, RemoteClient: true}
+	o.Windows = []*terminal.Window{w}
+	o.FocusedWindow = 0
+	return o, w
+}
+
+// In a borderless pane a match on the last two rows is drawn on its own row,
+// and n moves on from it instead of finding it again.
+func TestCopyModeBorderlessSearchReachesLastRows(t *testing.T) {
+	o, w := borderlessOS(t, numberedOutput(80))
+	o.EnterCopyModeFocused()
+	if got, want := w.CopyMode.CursorY, w.ContentHeight()-1; got != want {
+		t.Fatalf("copy mode starts on row %d, want the prompt on the last row %d", got, want)
+	}
+	typeCopyKeys(o, w, "?", "row 7", "enter")
+	if got := cursorLine(t, w); got != "row 79" {
+		t.Fatalf("?row 7 from the prompt lands on %q, want %q", got, "row 79")
+	}
+	if got, want := w.CopyMode.CursorY, w.ContentHeight()-2; got != want {
+		t.Errorf("the match is drawn on row %d, want row %d", got, want)
+	}
+	typeCopyKeys(o, w, "n")
+	if got := cursorLine(t, w); got != "row 78" {
+		t.Errorf("n after ? moves to %q, want %q", got, "row 78")
+	}
+	// / from above wraps down to the bottom rows as well.
+	typeCopyKeys(o, w, "/", "row 79", "enter")
+	if got := cursorLine(t, w); got != "row 79" {
+		t.Errorf("/row 79 lands on %q, want %q", got, "row 79")
+	}
+}
+
+// In a borderless pane j, G and L reach the last row, and k and j move
+// between the last rows.
+func TestCopyModeBorderlessMotionReachesLastRow(t *testing.T) {
+	o, w := borderlessOS(t, numberedOutput(80))
+	last := w.ContentHeight() - 1
+	o.EnterCopyModeFocused()
+	typeCopyKeys(o, w, "kkk", "jjjjj")
+	if w.CopyMode.CursorY != last || w.CopyMode.ScrollOffset != 0 {
+		t.Errorf("kkk then jjjjj ends on row %d (scroll %d), want the last row %d",
+			w.CopyMode.CursorY, w.CopyMode.ScrollOffset, last)
+	}
+	if got := cursorLine(t, w); got != "$" {
+		t.Errorf("the last row holds %q, want the prompt", got)
+	}
+	typeCopyKeys(o, w, "H", "L")
+	if w.CopyMode.CursorY != last {
+		t.Errorf("L moves to row %d, want %d", w.CopyMode.CursorY, last)
+	}
+	typeCopyKeys(o, w, "gg", "G")
+	if w.CopyMode.CursorY != last {
+		t.Errorf("G moves to row %d, want %d", w.CopyMode.CursorY, last)
+	}
+	typeCopyKeys(o, w, "$")
+	if got, want := w.CopyMode.CursorX, w.ContentWidth()-1; got != want {
+		t.Errorf("$ moves to column %d, want the last column %d", got, want)
+	}
+}
+
+// The search origin is a buffer line. Output that arrives while the prompt is
+// open scrolls the buffer, and Esc or a search from the origin still uses the
+// line the cursor was on.
+func TestCopyModeSearchOriginSurvivesOutput(t *testing.T) {
+	more := func(w *terminal.Window) {
+		var b strings.Builder
+		for i := range 30 {
+			fmt.Fprintf(&b, "new %02d\r\n", i)
+		}
+		w.WriteOutput([]byte(b.String()))
+	}
+	for _, tc := range []struct {
+		name string
+		keys []string
+		want string
+	}{
+		{"esc", []string{"esc"}, "row 04"},
+		{"no match", []string{"zzz"}, "row 04"},
+		{"match above the origin", []string{"row 0", "enter"}, "row 03"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o, w := entryOS(t, numberedOutput(80))
+			o.EnterCopyModeFocused()
+			typeCopyKeys(o, w, "gg", "5j")
+			if got := cursorLine(t, w); got != "row 04" {
+				t.Fatalf("gg 5j lands on %q, want %q", got, "row 04")
+			}
+			typeCopyKeys(o, w, "?")
+			more(w)
+			typeCopyKeys(o, w, tc.keys...)
+			if got := cursorLine(t, w); got != tc.want {
+				t.Errorf("after 30 new lines, %v lands on %q, want %q", tc.keys, got, tc.want)
+			}
+		})
+	}
+}
+
+// A new prompt drops the matches of the last search, so an empty query shows
+// none.
+func TestCopyModeNewSearchClearsOldMatches(t *testing.T) {
+	o, w := entryOS(t, numberedOutput(80))
+	o.EnterCopyModeFocused()
+	typeCopyKeys(o, w, "?", "row", "enter")
+	if len(w.CopyMode.SearchMatches) == 0 {
+		t.Fatal("?row found no matches")
+	}
+	typeCopyKeys(o, w, "?", "enter")
+	if n := len(w.CopyMode.SearchMatches); n != 0 {
+		t.Errorf("an empty search keeps %d matches of the last search", n)
+	}
+}
+
+// A key bound to a search action works while the pane is already in copy
+// mode. The key goes through HandleKeyPress, the path a real key takes, and
+// copy mode's own keys still work next to it.
+func TestCopyModeSearchActionKeyInCopyMode(t *testing.T) {
+	lines := make([]string, 60)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %02d", i)
+	}
+	for _, tc := range []struct {
+		name     string
+		mode     app.Mode
+		bind     func(*config.KeybindingsConfig)
+		key      tea.KeyPressMsg
+		backward bool
+	}{
+		{"global in window mode", app.WindowManagementMode, func(k *config.KeybindingsConfig) {
+			k.Global[config.ActionCopyModeSearchBackward] = []string{"alt+/"}
+		}, tea.KeyPressMsg{Code: '/', Mod: tea.ModAlt}, true},
+		{"terminal_mode in terminal mode", app.TerminalMode, func(k *config.KeybindingsConfig) {
+			k.TerminalMode[config.ActionCopyModeSearchForward] = []string{"alt+s"}
+		}, tea.KeyPressMsg{Code: 's', Mod: tea.ModAlt}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := osWithBindings(t, tc.bind)
+			w := multiPaneWindow(t, "cm-key", "shell", lines...)
+			w.Workspace = o.CurrentWorkspace
+			o.Windows = []*terminal.Window{w}
+			o.FocusedWindow = 0
+			o.Mode = tc.mode
+			o.EnterCopyModeFocused()
+			for _, k := range []string{"g", "g", "j"} {
+				HandleKeyPress(multiKey(k), o)
+			}
+			if w.CopyMode.CursorY != 1 || w.CopyMode.ScrollOffset == 0 {
+				t.Fatalf("gg j through HandleKeyPress left (y=%d, scroll=%d)",
+					w.CopyMode.CursorY, w.CopyMode.ScrollOffset)
+			}
+			y, scroll := w.CopyMode.CursorY, w.CopyMode.ScrollOffset
+			HandleKeyPress(tc.key, o)
+			cm := w.CopyMode
+			if cm.State != terminal.CopyModeSearch || cm.SearchBackward != tc.backward {
+				t.Fatalf("the bound key in copy mode left state %v backward=%v, want a search prompt with backward=%v",
+					cm.State, cm.SearchBackward, tc.backward)
+			}
+			if cm.CursorY != y || cm.ScrollOffset != scroll {
+				t.Errorf("the bound key moved the cursor to (y=%d, scroll=%d), want (y=%d, scroll=%d)",
+					cm.CursorY, cm.ScrollOffset, y, scroll)
+			}
+			for _, r := range "line 5" {
+				HandleKeyPress(multiKey(string(r)), o)
+			}
+			HandleKeyPress(multiKey("enter"), o)
+			want := "line 50"
+			if tc.backward {
+				want = "line 59" // nothing above line 01: wraps to the bottom
+			}
+			if got := cursorLine(t, w); got != want {
+				t.Errorf("the search lands on %q, want %q", got, want)
+			}
+		})
 	}
 }

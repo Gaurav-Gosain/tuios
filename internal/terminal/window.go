@@ -548,19 +548,46 @@ type CopyMode struct {
 	Implicit bool
 }
 
-// SearchOrigin is a copy-mode cursor position saved when a search prompt
-// opens: the cursor and the scroll offset of the view it was in.
+// MaxSearchMatches bounds how many matches one copy-mode search keeps. The
+// renderer walks every match on every frame, so the bound keeps a one-letter
+// query over a full scrollback cheap.
+const MaxSearchMatches = 1000
+
+// SearchMatchCount is the match count as the search prompt shows it: "1000+"
+// when the search stopped at MaxSearchMatches, so a capped count does not read
+// as the whole count.
+func SearchMatchCount(n int) string {
+	if n >= MaxSearchMatches {
+		return fmt.Sprintf("%d+", MaxSearchMatches)
+	}
+	return fmt.Sprint(n)
+}
+
+// SearchOrigin is the copy-mode cursor position saved when a search prompt
+// opens. Line is an absolute buffer line (scrollback first, then the screen),
+// not a scroll offset: a scroll offset counts from the bottom, so output that
+// arrives while the prompt is open would move it to another line. Row is the
+// viewport row the cursor was on, kept so a restore shows the same view.
 type SearchOrigin struct {
-	CursorX, CursorY, ScrollOffset int
+	CursorX, Row, Line int
 }
 
 // BeginSearch opens the search prompt: / when backward is false, ? when it is
 // true. The cursor position is saved as the origin the search runs from.
-func (cm *CopyMode) BeginSearch(backward bool) {
+// scrollbackLen is the pane's scrollback length now, to make the origin line
+// absolute. Matches from an earlier search are dropped, so an empty query
+// shows none.
+func (cm *CopyMode) BeginSearch(backward bool, scrollbackLen int) {
 	cm.State = CopyModeSearch
 	cm.SearchQuery = ""
 	cm.SearchBackward = backward
-	cm.SearchOrigin = SearchOrigin{CursorX: cm.CursorX, CursorY: cm.CursorY, ScrollOffset: cm.ScrollOffset}
+	cm.SearchMatches = nil
+	cm.CurrentMatch = 0
+	cm.SearchOrigin = SearchOrigin{
+		CursorX: cm.CursorX,
+		Row:     cm.CursorY,
+		Line:    scrollbackLen - cm.ScrollOffset + cm.CursorY,
+	}
 }
 
 // shortID trims an ID for a title or a log line. IDs reach this package from
