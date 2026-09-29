@@ -216,15 +216,30 @@ hosts.
 | Input | Action |
 |---|---|
 | `Ctrl+Shift+Click` on a window | Add or remove that window from the multifocus set |
-| Palette: "Toggle multifocus" | Add or remove the currently focused window |
+| Palette: "Toggle multifocus" or action `toggle_multifocus_active` | Add or remove the currently focused window |
+| Palette: "Toggle multifocus on all panes" or action `toggle_multifocus_all` | Add every visible window on the workspace. When all of them are in the set, empty the set |
 | Palette: "Clear multifocus" | Empty the set |
 
+The two actions have no default key. To bind them, add them to a
+`[keybindings]` section. For example, this puts them on `Ctrl+B y` and
+`Ctrl+B Y`:
+
+```toml
+[keybindings.prefix_mode]
+toggle_multifocus_active = ["y"]
+toggle_multifocus_all = ["Y"]
+```
+
 Windows in the set are drawn with a distinct border color so it is obvious which
-ones will receive your keystrokes. A notification reports the size of the set as
+ones will receive your keystrokes. With `appearance.dim_unfocused` on, the
+windows in the set are not dimmed. Set `appearance.dim_multifocus = true` to
+dim them like the other windows. A notification reports the size of the set as
 you change it.
 
 While the set is non-empty and you are in **terminal mode**, every keystroke that
 would go to the focused window's shell is also sent to each window in the set.
+A paste goes to each window in the set too. Each window gets the paste as a
+bracketed paste only when the program in that window turned bracketed paste on.
 Keys handled by TUIOS itself (the leader key and its chords, overlays, workspace
 switches, copy mode) are not broadcast, because they never reach the forwarding
 path.
@@ -238,8 +253,8 @@ Limitations:
 - **It follows windows, not positions.** The set is keyed by window ID, so
   swapping panes around keeps the same windows selected. Closing a window
   removes it from the set.
-- **No key.** There is no default keybinding for either palette command; use
-  `Ctrl+Shift+Click` or the palette.
+- **No default key.** Bind `toggle_multifocus_active` and
+  `toggle_multifocus_all` yourself, or use `Ctrl+Shift+Click` or the palette.
 
 ### Multi copy mode
 
