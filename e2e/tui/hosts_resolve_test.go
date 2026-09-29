@@ -35,7 +35,7 @@ func writeFakeSSHWithFarHome(t *testing.T, dir, home string) string {
 	}
 	path := filepath.Join(dir, "fake-ssh-far")
 	script := "#!/bin/sh\n" +
-		"while [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; *) break ;; esac; done\n" +
+		"while [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; --) shift; break ;; *) break ;; esac; done\n" +
 		"shift\n" + // the address
 		"export HOME=" + home + " PATH=" + shOnly + " SHELL=/bin/sh\n" +
 		"exec /bin/sh -c \"$*\"\n"

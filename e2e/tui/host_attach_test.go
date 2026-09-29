@@ -33,7 +33,7 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 	path := filepath.Join(dir, "fake-ssh-remote")
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
-	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    *) break ;;\n  esac\ndone\n")
+	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\n")
 	b.WriteString("shift\n") // the address
 	for _, key := range xdgKeys {
 		// Through xdgDir, so the far daemon's socket is short enough to bind

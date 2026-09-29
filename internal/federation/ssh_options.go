@@ -21,9 +21,10 @@ import (
 // sshSafeFlags are the ssh flags that take no value and are accepted.
 const sshSafeFlags = "46AaCgKkNnqsTtvXxY"
 
-// sshSafeArgFlags are the ssh flags that take a value and are accepted. -o
-// and -J have their values checked further.
-const sshSafeArgFlags = "bBcDeiJlLmopRS"
+// sshSafeArgFlags are the ssh flags that take a value and are accepted. -o,
+// -J, -l and -p have their values checked further. Flags that make ssh create
+// a file at a path they name (-S, -L, -R, -D with a socket, -E) are not here.
+const sshSafeArgFlags = "bBceiJlmop"
 
 // sshSafeOptions are the -o keywords, lower case, that are accepted. None of
 // them runs a command or loads code on this machine.
@@ -32,10 +33,9 @@ var sshSafeOptions = map[string]bool{
 	"canonicaldomains": true, "canonicalizefallbacklocal": true, "canonicalizehostname": true,
 	"canonicalizemaxdots": true, "casignaturealgorithms": true, "certificatefile": true,
 	"checkhostip": true, "ciphers": true, "clearallforwardings": true, "compression": true,
-	"connectionattempts": true, "connecttimeout": true, "controlmaster": true, "controlpath": true,
-	"controlpersist": true, "escapechar": true, "exitonforwardfailure": true, "fingerprinthash": true,
+	"connectionattempts": true, "connecttimeout": true, "escapechar": true, "exitonforwardfailure": true, "fingerprinthash": true,
 	"forwardagent": true, "forwardx11": true, "forwardx11timeout": true, "forwardx11trusted": true,
-	"globalknownhostsfile": true, "gssapiauthentication": true, "gssapidelegatecredentials": true,
+	"gssapiauthentication": true, "gssapidelegatecredentials": true,
 	"hashknownhosts": true, "hostbasedacceptedalgorithms": true, "hostbasedauthentication": true,
 	"hostkeyalgorithms": true, "hostkeyalias": true, "hostname": true, "identitiesonly": true,
 	"identityagent": true, "identityfile": true, "ipqos": true, "kbdinteractiveauthentication": true,
@@ -45,16 +45,30 @@ var sshSafeOptions = map[string]bool{
 	"pubkeyacceptedkeytypes": true, "pubkeyauthentication": true, "rekeylimit": true,
 	"requesttty": true, "sendenv": true, "serveralivecountmax": true, "serveraliveinterval": true,
 	"setenv": true, "stricthostkeychecking": true, "tcpkeepalive": true, "updatehostkeys": true,
-	"user": true, "userknownhostsfile": true, "verifyhostkeydns": true, "visualhostkey": true,
+	"user": true, "verifyhostkeydns": true, "visualhostkey": true,
 }
 
 // plainSSHOption is an -o value written plainly: a keyword of letters and
-// digits, then = or spaces, then a value with no quote, backslash or control
-// character. ssh reads such a value one way only.
-var plainSSHOption = regexp.MustCompile(`^([A-Za-z0-9]+)(?:=| +)([^\x00-\x1f\x7f"'\\]*)$`)
+// digits, then = or one space, then the value. The value is checked on its
+// own (checkSSHOptionValue).
+var plainSSHOption = regexp.MustCompile(`^([A-Za-z0-9]+)(?:=| )(.*)$`)
 
-// plainSSHValue is a flag value with no quote, backslash or control character.
-var plainSSHValue = regexp.MustCompile(`^[^\x00-\x1f\x7f"'\\]*$`)
+// plainSSHValue is a value as one plain token: letters, digits and the
+// punctuation paths, algorithm lists and addresses need. No space, quote,
+// backslash, control character or shell character such as ; { } $ ` |, so
+// a value ssh writes into a file (a host key alias in known_hosts, say) is
+// never a line a shell would run.
+var plainSSHValue = regexp.MustCompile(`^[A-Za-z0-9_.,:@+=/~%\[\]-]+$`)
+
+// sshNameValue is a host name, host key alias or user: letters, digits, dot,
+// dash, underscore, @, colon and brackets for IPv6, not starting with a dash.
+var sshNameValue = regexp.MustCompile(`^[A-Za-z0-9_.@:\[\]][A-Za-z0-9_.@:\[\]-]*$`)
+
+// sshNameOptions are the -o keywords whose value is a name (sshNameValue).
+var sshNameOptions = map[string]bool{"hostkeyalias": true, "hostname": true, "user": true}
+
+// sshPortValue is a port number.
+var sshPortValue = regexp.MustCompile(`^[0-9]{1,5}$`)
 
 // jumpPattern is a ProxyJump value that is only hosts: [user@]host[:port],
 // comma separated. It keeps a value ssh could read as an option out.
@@ -109,14 +123,43 @@ func checkSSHFlagValue(flag byte, value string) error {
 		}
 		key := strings.ToLower(m[1])
 		if !sshSafeOptions[key] {
-			return fmt.Errorf("ssh_options: %s is not accepted here, because tuios cannot tell that it runs nothing on this machine. Put it in ~/.ssh/config", m[1])
+			return fmt.Errorf("ssh_options: %s is refused, because it can run code or write files here. Put it in ~/.ssh/config", m[1])
 		}
-		if key == "proxyjump" && !jumpPattern.MatchString(strings.TrimSpace(m[2])) {
-			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", m[2])
+		return checkSSHOptionValue(m[1], key, m[2])
+	case 'l':
+		if !sshNameValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: -l %q is not a user name", value)
+		}
+	case 'p':
+		if !sshPortValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: -p %q is not a port", value)
 		}
 	default:
 		if !plainSSHValue.MatchString(value) {
-			return fmt.Errorf("ssh_options: -%c %q has a quote, backslash or control character", flag, value)
+			return fmt.Errorf("ssh_options: -%c %q is not one plain value", flag, value)
+		}
+	}
+	return nil
+}
+
+// checkSSHOptionValue checks the value of an accepted -o keyword.
+func checkSSHOptionValue(name, key, value string) error {
+	switch {
+	case key == "proxyjump":
+		if !jumpPattern.MatchString(value) {
+			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", value)
+		}
+	case key == "port":
+		if !sshPortValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: Port %q is not a port", value)
+		}
+	case sshNameOptions[key]:
+		if !sshNameValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: %s %q is not a plain name: use letters, digits, dot, dash, underscore, @ and colon", name, value)
+		}
+	default:
+		if !plainSSHValue.MatchString(value) {
+			return fmt.Errorf("ssh_options: %s %q is not one plain value", name, value)
 		}
 	}
 	return nil

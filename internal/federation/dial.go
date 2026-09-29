@@ -81,7 +81,9 @@ func linkArgs(h Host) []string {
 	// side's login shell re-parses them, so what is sent is what that
 	// shell reads. See remote.go for what it says when no command is
 	// configured.
-	return append(args, h.Addr, h.remoteCommand(true, "stdio-proxy"))
+	// -- ends ssh's options. Without it ssh reads options after the host
+	// name as well, so a command starting with a dash would be one.
+	return append(args, "--", h.Addr, h.remoteCommand(true, "stdio-proxy"))
 }
 
 // The keepalive settings.

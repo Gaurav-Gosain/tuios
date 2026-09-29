@@ -289,7 +289,7 @@ func newFarMachine(t *testing.T) *farMachine {
 		t.Fatalf("symlink sh: %v", err)
 	}
 	script := "#!/bin/sh\n" +
-		"while [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; *) break ;; esac; done\n" +
+		"while [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; --) shift; break ;; *) break ;; esac; done\n" +
 		"shift\n" + // the address
 		"if [ -e " + f.down + " ]; then echo 'ssh: connect to host buildbox port 22: No route to host' >&2; exit 255; fi\n" +
 		// The extra entry is read before the PATH narrows, while cat can

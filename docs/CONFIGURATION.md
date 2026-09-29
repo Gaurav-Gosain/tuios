@@ -393,9 +393,13 @@ machine more, a new host, or a host that dials another way waits for
 `tuios hosts add` applies its change that way, so from a pane it waits.
 `tuios hosts add` on a known name keeps these fields.
 
-`ssh_options` may not hold an option that makes ssh run a command or load
-code on this machine: `ProxyCommand`, `LocalCommand`, `PermitLocalCommand`,
-`KnownHostsCommand`, `PKCS11Provider`, `SecurityKeyProvider`, `Include`, `-F`
-or `-I`. `-J` and `ProxyJump` take host names only. A host that has one is
-ignored and reported. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
+`ssh_options` takes only options that cannot run code or write files on this
+machine, each written as `-o Keyword=value` with one plain value: for example
+`-p`, `-i`, `-l`, `-J`, `Port`, `User`, `HostName`, `HostKeyAlias`,
+`IdentityFile`, `StrictHostKeyChecking`, the `ServerAlive` options and the
+algorithm lists. `ProxyCommand`, `LocalCommand`, the known hosts files,
+`ControlPath`, socket forwards, `-F` and the like are refused. `-J` and
+`ProxyJump` take host names only. `addr` and `command` may not start with a
+dash. A host with a refused entry is ignored, and `tuios hosts` and the Inbox
+name the reason. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
 the verb by verb table.

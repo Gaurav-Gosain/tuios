@@ -161,6 +161,9 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	if addr == "" {
 		return fmt.Errorf("host %q needs an address.\n%s", name, addrHelp())
 	}
+	if strings.HasPrefix(strings.TrimSpace(addr), "-") || strings.HasPrefix(strings.TrimSpace(flags.command), "-") {
+		return fmt.Errorf("host %q was not added: the address and --command may not start with a dash, because ssh would read them as options", name)
+	}
 	if err := federation.CheckSSHOptions(flags.sshOptions); err != nil {
 		return fmt.Errorf("host %q was not added: %w", name, err)
 	}

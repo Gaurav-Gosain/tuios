@@ -2,6 +2,7 @@ package federation
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,22 @@ var refusedSSHOptions = [][]string{
 	{"host", "touch /tmp/x"},
 	{"-o"},
 	{"-W", "host:22"},
+	// Options that write a chosen line into a chosen file: known_hosts at
+	// ~/.bashrc, with a host key alias that is a shell line.
+	{"-o", "UserKnownHostsFile=~/.bashrc", "-o", "StrictHostKeyChecking=accept-new", "-o", "HashKnownHosts=no", "-o", "HostKeyAlias=x;{sh,/tmp/p};#"},
+	{"-o", "UserKnownHostsFile /dev/null"},
+	{"-o", "GlobalKnownHostsFile=/tmp/x"},
+	{"-o", "HostKeyAlias=x;{sh,/tmp/p};#"},
+	{"-o", "HostKeyAlias x y"},
+	{"-o", "HostName=a;b"},
+	{"-o", "User=me$(id)"},
+	{"-l", "me;id"},
+	{"-o", "ControlPath=~/.bashrc"},
+	{"-S", "/tmp/sock"},
+	{"-L", "/tmp/sock:host:22"},
+	{"-E", "/tmp/log"},
+	{"-o", "Port=22x"},
+	{"-o", "SendEnv A B"},
 }
 
 // acceptedSSHOptions are what a host entry needs ssh_options for.
@@ -45,7 +62,8 @@ var acceptedSSHOptions = [][]string{
 	{"-J", "me@jump:2222,other"},
 	{"-o", "StrictHostKeyChecking=yes", "-p", "2222", "-i", "~/.ssh/id"},
 	{"-o", "ProxyJump=bastion"},
-	{"-o", "UserKnownHostsFile /dev/null"},
+	{"-o", "HostKeyAlias=build.example"},
+	{"-o", "User=me", "-l", "me", "-o", "HostName=[::1]"},
 	{"-4", "-A"},
 	{"-vo", "ServerAliveInterval=5"},
 }
@@ -126,6 +144,43 @@ func TestSSHReadsTheRefusedSpellingsAsCommands(t *testing.T) {
 			if want[key] != line {
 				t.Errorf("ssh reads %q as setting %s", opts, line)
 			}
+		}
+	}
+}
+
+// TestADashCommandIsNeverAnSSHOption: ssh reads options after the host name
+// as well, so a host command of -oProxyCommand=... would run a command here.
+// Every ssh argv ends ssh's options with -- before the host, and a command or
+// addr that starts with a dash is refused.
+//
+// Negative control: without the -- in linkArgs, ssh -G reads the command as
+// ProxyCommand.
+func TestADashCommandIsNeverAnSSHOption(t *testing.T) {
+	bad := Host{Name: "x", Addr: "example.invalid", Command: "-oProxyCommand=touch /tmp/x"}
+	if table, problems := NewTable([]Host{bad}); len(problems) != 1 {
+		t.Errorf("a host whose command starts with a dash was kept: %v", table.Names())
+	}
+	link := linkArgs(bad)
+	open, err := bad.OpenArgs("new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]string{"link": link, "open": open} {
+		i := slices.Index(args, "example.invalid")
+		if i < 1 || args[i-1] != "--" {
+			t.Errorf("the %s argv does not end ssh's options before the host: %q", name, args)
+		}
+	}
+	if _, err := exec.LookPath("ssh"); err != nil {
+		return
+	}
+	for name, args := range map[string][]string{"link": link, "open": open} {
+		out, err := exec.Command("ssh", append([]string{"-G", "-F", "/dev/null"}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("ssh -G with the %s argv: %v\n%s", name, err, out)
+		}
+		if strings.Contains(strings.ToLower(string(out)), "proxycommand touch") {
+			t.Errorf("ssh reads the %s argv's command as ProxyCommand", name)
 		}
 	}
 }

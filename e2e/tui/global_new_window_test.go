@@ -35,7 +35,7 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 	path := filepath.Join(dir, "fake-ssh-multi")
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
-	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    *) break ;;\n  esac\ndone\n")
+	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\n")
 	b.WriteString("addr=\"$1\"\nshift\n")
 	// A file down-ADDR in dir takes the machine off the network: every new
 	// connection to it is refused, the way ssh refuses a powered-off box.

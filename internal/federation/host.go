@@ -106,6 +106,12 @@ func NewTable(hosts []Host) (*Table, []error) {
 			// is read as an option, which can run a command locally.
 			problems = append(problems, fmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
 			continue
+		case strings.HasPrefix(strings.TrimSpace(h.Command), "-"):
+			// The command follows the addr on ssh's command line, and ssh
+			// reads options there too. The argv ends ssh's options with --,
+			// and a command that is an option is refused as well.
+			problems = append(problems, fmt.Errorf("host %q was ignored, because its command starts with a dash", name))
+			continue
 		}
 		if err := CheckSSHOptions(h.SSHOptions); err != nil {
 			problems = append(problems, fmt.Errorf("host %q was ignored: %w", name, err))

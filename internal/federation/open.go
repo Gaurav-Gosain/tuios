@@ -87,6 +87,8 @@ func (h Host) OpenArgs(remote ...string) ([]string, error) {
 		}
 		quoted = append(quoted, q)
 	}
-	args = append(args, h.Addr, h.remoteCommand(false, quoted...))
+	// -- ends ssh's options, which ssh otherwise reads after the host name
+	// too. See linkArgs.
+	args = append(args, "--", h.Addr, h.remoteCommand(false, quoted...))
 	return args, nil
 }

@@ -56,6 +56,7 @@ func writeFakeSSH(t *testing.T, dir string) string {
 		"    -o) shift 2 ;;\n" +
 		"    -T) shift ;;\n" +
 		"    -t) shift ;;\n" +
+		"    --) shift; break ;;\n" +
 		"    *) break ;;\n" +
 		"  esac\n" +
 		"done\n" +
