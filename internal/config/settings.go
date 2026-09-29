@@ -576,6 +576,11 @@ type Settings struct {
 	// on a light theme as on a dark one.
 	DimUnfocused int
 
+	// DimMultifocus dims the panes in the multifocus set like every other
+	// unfocused pane. False, the default, leaves them undimmed: they take the
+	// keys the user types, and full-strength content is what says so.
+	DimMultifocus bool
+
 	// Background is the ground painted on every surface that does not set
 	// its own: "off", the default, leaves the default background transparent
 	// so the host terminal shows through; "theme" paints the active theme's

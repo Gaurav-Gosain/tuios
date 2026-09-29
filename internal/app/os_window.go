@@ -132,7 +132,49 @@ func (m *OS) ClearMultifocus() {
 		}
 	}
 	m.MultifocusSet = nil
-	m.ShowNotification("Multifocus: cleared", "info", 0)
+	m.ShowNotification("Multifocus: cleared", "info", m.Settings.NotificationDuration)
+}
+
+// ToggleMultifocusAll puts every visible pane on the current workspace in the
+// multifocus set. When all of them are in it already, it clears the set.
+//
+// The panes are the ones the window cycle steps through: minimized panes and
+// popups are left out, since neither is a pane the user is typing at.
+func (m *OS) ToggleMultifocusAll() {
+	panes := m.cyclableWindows()
+	if len(panes) == 0 {
+		return
+	}
+	allIn := true
+	for _, i := range panes {
+		if !m.MultifocusSet[m.Windows[i].ID] {
+			allIn = false
+			break
+		}
+	}
+	if allIn {
+		m.ClearMultifocus()
+		return
+	}
+	if m.MultifocusSet == nil {
+		m.MultifocusSet = make(map[string]bool)
+	}
+	for _, i := range panes {
+		w := m.Windows[i]
+		if !m.MultifocusSet[w.ID] {
+			m.MultifocusSet[w.ID] = true
+			w.InvalidateCache()
+		}
+	}
+	m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", m.Settings.NotificationDuration)
+}
+
+// MultifocusUndimmed reports whether the pane is in the multifocus set and
+// appearance.dim_multifocus leaves such panes undimmed. The panes in the set
+// take the keys the user types, so they are drawn at full strength like the
+// focused pane.
+func (m *OS) MultifocusUndimmed(id string) bool {
+	return !m.Settings.DimMultifocus && m.MultifocusSet[id]
 }
 
 // cyclableWindows lists the indexes the window cycle steps through: the visible

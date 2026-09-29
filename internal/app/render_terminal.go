@@ -191,7 +191,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	// The dim this frame wants, which is also what the cached frame has to have
 	// been drawn at for the cache to be usable.
-	dim := paneDim(isFocused, &m.Settings)
+	dim := paneDim(isFocused || m.MultifocusUndimmed(window.ID), &m.Settings)
 	// A pane the last multi copy mode search found nothing in is dimmed, so
 	// the panes that will take part in the selection stand out.
 	if m.MultiCopyParked(window.ID) {
