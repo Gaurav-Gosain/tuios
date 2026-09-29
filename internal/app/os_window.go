@@ -293,8 +293,8 @@ func (m *OS) FocusWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		return m
 	}
-	// The labels name the pane that had focus.
-	if m.hints != nil && m.Windows[i].ID != m.hints.windowID {
+	// Shift and a label types into the pane that had focus.
+	if m.hints != nil && m.Windows[i].ID != m.hints.focusID {
 		m.CloseHints()
 	}
 

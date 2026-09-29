@@ -1243,6 +1243,7 @@ name alone. Some of them:
 | `window_chrome_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under pane borders and title bars, which keep their own ink; empty follows `background` |
 | `dock_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the dock; empty follows `background` |
 | `appearance.sidebar.background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the rail; empty follows `background` |
+| `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
 
 **Examples:**
 ```bash

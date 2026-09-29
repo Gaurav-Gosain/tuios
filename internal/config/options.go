@@ -1115,6 +1115,11 @@ var optionSpecs = []Option{
 		Default:     "60", Min: HintsMinDim, Max: HintsMaxDim,
 		Percent: true,
 	},
+	{
+		Path: "hints.all_panes", Type: OptionBool, Section: "hints",
+		Description: "The hints key labels every pane on the workspace, not only the focused pane",
+		Default:     "false",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

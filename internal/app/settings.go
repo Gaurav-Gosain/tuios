@@ -466,6 +466,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("hints.alphabet"),
 			opt("hints.open"),
 			opt("hints.dim"),
+			opt("hints.all_panes"),
 		}),
 	}
 

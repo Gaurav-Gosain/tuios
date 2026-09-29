@@ -12,7 +12,7 @@ import (
 // The hints frame is a pass over the composed canvas, the way the scrim is,
 // not a layer and not a change to the pane's own render.
 //
-// composeLayers calls applyHints right after it draws the pane hints mode is
+// composeLayers calls applyHints right after it draws each pane hints mode is
 // open on. The pass writes the copied view over the pane's content rectangle
 // (so the text holds still under the labels), dims everything that is not a
 // match, lights the matches, and puts the labels on them. Anything drawn
@@ -35,16 +35,26 @@ func (m *OS) hintsInk() color.Color {
 // applyHints draws hints mode over the pane whose layer id is id.
 func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 	h := m.hints
-	if h == nil || id != h.windowID {
+	if h == nil {
 		return
 	}
-	window := m.hintsWindow()
-	if window == nil {
+	var p *hintsPane
+	for _, q := range h.panes {
+		if q.windowID == id {
+			p = q
+			break
+		}
+	}
+	if p == nil {
+		return
+	}
+	if m.hintsFocused() == nil {
 		// The copy no longer matches the screen. Drawing it would put labels
 		// on text that has moved, so hints mode ends here.
 		m.CloseHints()
 		return
 	}
+	window := m.hintsPaneWindow(p)
 
 	pal := theme.UI()
 	paneBg := grounds[surfacePane].bg
@@ -63,29 +73,29 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 
 	rect := paneContentRect(window)
 	area := canvas.Bounds()
-	for y := range h.h {
+	for y := range p.h {
 		cy := rect.Min.Y + y
 		if cy < area.Min.Y || cy >= area.Max.Y || cy >= len(canvas.Lines) {
 			continue
 		}
 		line := canvas.Lines[cy]
 		labelled := false
-		for x := range h.w {
+		for x := range p.w {
 			cx := rect.Min.X + x
 			if cx < area.Min.X || cx >= area.Max.X || cx >= len(line) {
 				continue
 			}
 			cell := &line[cx]
-			*cell = h.cells[y][x]
+			*cell = p.cells[y][x]
 			if isNilColor(cell.Style.Bg) {
 				cell.Style.Bg = paneBg
 			}
 
-			idx := y*h.w + x
-			if r, ok := h.labelRune[idx]; ok {
-				label := h.matches[h.labelOf[idx]].label
+			idx := y*p.w + x
+			if r, ok := p.labelRune[idx]; ok {
+				label := h.matches[p.labelOf[idx]].label
 				if len(h.typed) == 0 || strings.HasPrefix(label, h.typed) {
-					pos := x - h.matches[h.labelOf[idx]].labelAt.x
+					pos := x - h.matches[p.labelOf[idx]].labelAt.x
 					cell.Content = string(r)
 					cell.Width = 1
 					cell.Style = uv.Style{Fg: labelFg, Bg: labelBg, Attrs: uv.AttrBold}
@@ -101,7 +111,7 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 				// cell of its own.
 				continue
 			}
-			if owner := h.owner[idx]; owner >= 0 && (h.typed == "" || strings.HasPrefix(h.matches[owner].label, h.typed)) {
+			if owner := p.owner[idx]; owner >= 0 && (h.typed == "" || strings.HasPrefix(h.matches[owner].label, h.typed)) {
 				cell.Style.Fg = matchFg
 				cell.Style.Attrs |= uv.AttrBold
 				cell.Style.Attrs &^= uv.AttrFaint
@@ -116,7 +126,7 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 			cell.Style.Fg = h.dimFg(cell.Style.Fg, cell.Style.Bg, ink, ground)
 		}
 		if labelled {
-			fixHintsWideCells(line, rect.Min.X, rect.Min.X+h.w)
+			fixHintsWideCells(line, rect.Min.X, rect.Min.X+p.w)
 		}
 	}
 }

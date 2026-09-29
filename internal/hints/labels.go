@@ -86,12 +86,18 @@ func Labels(n int, alphabet string) []string {
 type Target struct {
 	Text     string
 	Distance int
+	// Key, when set, is what makes two targets the same thing to type.
+	// Targets with the same key share a label. An empty key is the text, so
+	// by default the same text gets the same label. A path shown on two panes
+	// can name two files, and a caller gives each pane's path its own key.
+	Key string
 }
 
 // Assign gives every target a label and returns them in the targets' order.
 //
 // The same text gets the same label wherever it appears, so a hash printed
-// twice is one thing to type, not two. The texts nearest the person get the
+// twice is one thing to type, not two. A target's Key, when set, stands in
+// for its text here. The texts nearest the person get the
 // shortest labels: a text's distance is that of its nearest occurrence, and a
 // tie goes to the text seen first.
 func Assign(targets []Target, alphabet string) []string {
@@ -102,13 +108,20 @@ func Assign(targets []Target, alphabet string) []string {
 	}
 	byText := map[string]*text{}
 	var order []*text
+	key := func(t Target) string {
+		if t.Key != "" {
+			return t.Key
+		}
+		return t.Text
+	}
 	for i, t := range targets {
-		if e, ok := byText[t.Text]; ok {
+		k := key(t)
+		if e, ok := byText[k]; ok {
 			e.distance = min(e.distance, t.Distance)
 			continue
 		}
-		e := &text{value: t.Text, distance: t.Distance, first: i}
-		byText[t.Text] = e
+		e := &text{value: k, distance: t.Distance, first: i}
+		byText[k] = e
 		order = append(order, e)
 	}
 	slices.SortStableFunc(order, func(a, b *text) int {
@@ -124,7 +137,7 @@ func Assign(targets []Target, alphabet string) []string {
 	}
 	out := make([]string, len(targets))
 	for i, t := range targets {
-		out[i] = labelOf[t.Text]
+		out[i] = labelOf[key(t)]
 	}
 	return out
 }

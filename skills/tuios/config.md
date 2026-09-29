@@ -48,8 +48,10 @@ command is refused. Do not edit config.toml to widen what you hold: it waits
 for the person, and the change tells them what you did.
 
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
-addresses in the focused pane, and a typed label copies one. `hints.builtins`,
-`hints.alphabet`, `hints.open` and `hints.dim` are options. `hints.patterns`
+addresses in the focused pane, and a typed label copies one. The
+`hints_all_panes` action, or the `hints.all_panes` option, labels every pane
+on the workspace. `hints.builtins`, `hints.alphabet`, `hints.open`,
+`hints.dim` and `hints.all_panes` are options. `hints.patterns`
 is a list of Go regular expressions in the file. It is for the person at the
 keyboard: to read a pane, use `capture-pane`.
 
