@@ -200,6 +200,9 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		scaleY = float64(m.GetRenderHeight()) / float64(tmpl.ScreenHeight)
 	}
 
+	// Panes whose folder tuios would not type a cd for. See cdLine.
+	refused := 0
+
 	// Assign existing windows to template slots
 	for i, tw := range templateSlots {
 		var win *terminal.Window
@@ -207,13 +210,18 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		if i < len(existingWindows) {
 			// Reuse existing window
 			win = existingWindows[i]
-			// An existing pane is moved with a typed cd, and only when its
-			// shell is at a prompt: into an editor or an agent the line would
-			// be keys or a prompt. The path is quoted for a POSIX shell, so
-			// nothing in it runs.
+			// An existing pane is moved with a typed cd, and only when tuios
+			// can see that its shell is at a prompt: into an editor or an agent
+			// the line would be keys or a prompt. A pane it cannot see into (a
+			// daemon pane, or a platform that does not say) stays where it is.
 			if dir != "" {
-				if _, ok := paneBusyReason(win); ok {
-					_ = win.SendInput([]byte("cd " + shellQuote(dir) + " && clear\n"))
+				line, ok := cdLine(dir)
+				_, idle := paneBusyReason(win)
+				switch {
+				case !ok:
+					refused++
+				case idle && win.ShellAtPrompt():
+					_ = win.SendInput([]byte(line + " && clear\n"))
 				}
 			}
 		} else {
@@ -265,6 +273,10 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 
 		win.InvalidateCache()
+	}
+
+	if refused > 0 {
+		m.ShowNotification(cdRefusedMessage, "warning", m.Settings.NotificationDuration)
 	}
 
 	// If we have MORE existing windows than template slots, minimize the extras
@@ -351,9 +363,13 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 			fmt.Fprintf(&sb, "RenameWindow %q\n", w.CustomName)
 		}
 		if dir := layoutLoadDir(w.WorkingDir); dir != "" {
-			// Quoted twice: for the shell that runs the cd, then for the
-			// tape lexer that reads the Type line.
-			fmt.Fprintf(&sb, "Type %q\nEnter\n", "cd "+shellQuote(dir))
+			if line, ok := cdLine(dir); ok {
+				// Quoted twice: for the shell that runs the cd, then for the
+				// tape lexer that reads the Type line.
+				fmt.Fprintf(&sb, "Type %q\nEnter\n", line)
+			} else {
+				sb.WriteString("# No cd: the folder name holds a quote, a backslash or a control character.\n")
+			}
 		}
 		if w.Command != "" {
 			cmd := w.Command
@@ -370,15 +386,16 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 
 // layoutPaneDir is the directory a saved layout records for a pane.
 //
-// The pane's OSC 7 announcement is any text a program printed, so it is kept
-// only when the kernel does not contradict it. When the kernel reports the
-// shell somewhere else, that is the directory recorded. See cwdIsSpoofed.
+// It is the directory the kernel reports for the pane's shell. The pane's
+// OSC 7 announcement is any text a program printed, and where the kernel
+// cannot be asked (no shell pid, a pane on another machine, a platform with
+// no answer) nothing checks it, so no directory is recorded at all.
 func layoutPaneDir(w *terminal.Window) string {
-	if w.Cwd != "" && w.ShellPgid > 0 && cwdIsSpoofed(w.ShellPgid, w.Cwd) {
-		dir, _ := terminal.ShellCWD(w.ShellPgid)
-		return dir
+	if w.ShellPgid <= 0 {
+		return ""
 	}
-	return paneDir(w)
+	dir, _ := terminal.ShellCWD(w.ShellPgid)
+	return dir
 }
 
 // layoutLoadDir is the directory a layout entry may move a pane to, or "".

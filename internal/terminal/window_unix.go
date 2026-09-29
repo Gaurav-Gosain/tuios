@@ -75,6 +75,18 @@ func (w *Window) HasForegroundProcess() bool {
 	return fgpgrp != w.ShellPgid
 }
 
+// ShellAtPrompt reports whether tuios can see that the pane's own shell holds
+// the terminal, which is a shell at its prompt. It fails closed: no local PTY,
+// no shell pid, or no answer from the kernel is false. HasForegroundProcess is
+// the opposite question and fails open.
+func (w *Window) ShellAtPrompt() bool {
+	if w.Pty == nil || w.ShellPgid <= 0 {
+		return false
+	}
+	fgpgrp, ok := foregroundPgrp(w.Pty.Fd())
+	return ok && fgpgrp == w.ShellPgid
+}
+
 // ForegroundCommand returns the command name of the pane's foreground process
 // group, or "" when it cannot be read.
 //

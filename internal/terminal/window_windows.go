@@ -33,3 +33,6 @@ func (w *Window) HasForegroundProcess() bool {
 func (w *Window) ForegroundCommand() string {
 	return ""
 }
+
+// ShellAtPrompt is false: this platform does not say what holds the terminal.
+func (w *Window) ShellAtPrompt() bool { return false }

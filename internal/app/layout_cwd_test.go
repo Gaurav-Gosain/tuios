@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -63,18 +64,121 @@ func TestLayoutSaveRecordsTheKernelCwdOverASpoofedOne(t *testing.T) {
 	}
 }
 
-// Loading a layout into an existing pane at its prompt types a cd. The path
-// must be quoted for a POSIX shell, so nothing in it runs.
-func TestLayoutLoadQuotesTheCdForTheShell(t *testing.T) {
+// With no shell pid there is no kernel to check the OSC 7 claim against, and
+// the claim is not recorded.
+func TestLayoutSaveDropsACwdItCannotCheck(t *testing.T) {
+	useTempConfig(t)
+	w, _ := layoutWindow(t, "save-unchecked")
+	w.Workspace = 1
+	w.Cwd = spoofedCwd
+	m := layoutOS(w)
+
+	if err := SaveLayoutTemplate("unchecked", m); err != nil {
+		t.Fatal(err)
+	}
+	tmpls, err := LoadLayoutTemplates()
+	if err != nil || len(tmpls) != 1 || len(tmpls[0].Windows) != 1 {
+		t.Fatalf("templates = %+v, err %v", tmpls, err)
+	}
+	if got := tmpls[0].Windows[0].WorkingDir; got != "" {
+		t.Fatalf("saved working_dir = %q, want nothing for an unchecked claim", got)
+	}
+}
+
+// A pane tuios cannot see into (a daemon pane has no local PTY) may be running
+// anything, so loading a layout types nothing into it.
+func TestLayoutLoadTypesNothingIntoAPaneItCannotSee(t *testing.T) {
 	w, typed := layoutWindow(t, "load-win")
 	w.Workspace = 1
 	m := layoutOS(w)
 
-	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{Width: 40, Height: 10, WorkingDir: spoofedCwd}}}, m)
+	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{Width: 40, Height: 10, WorkingDir: "/tmp"}}}, m)
 
-	want := "cd " + shellQuote(spoofedCwd) + " && clear\n"
-	if got := typed.String(); got != want {
-		t.Fatalf("typed %q, want %q", got, want)
+	if got := typed.String(); got != "" {
+		t.Fatalf("typed %q into a pane whose shell tuios cannot see", got)
+	}
+}
+
+// A shell tuios spawned itself, at its prompt, is moved with a typed cd.
+func TestLayoutLoadMovesALocalShellAtItsPrompt(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	w, err := terminal.NewWindow("local-win", "t", 0, 0, 40, 10, 0, make(chan string, 4), make(chan struct{}, 1), 100)
+	if err != nil {
+		t.Skipf("cannot spawn a shell: %v", err)
+	}
+	t.Cleanup(w.Close)
+	w.Workspace = 1
+	m := layoutOS(w)
+	dir := t.TempDir()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !w.ShellAtPrompt() {
+		if time.Now().After(deadline) {
+			t.Skip("the shell never took the terminal")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{Width: 40, Height: 10, WorkingDir: dir}}}, m)
+
+	for time.Now().Before(deadline) {
+		if got, ok := terminal.ShellCWD(w.ShellPgid); ok && sameDir(got, dir) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, _ := terminal.ShellCWD(w.ShellPgid)
+	t.Fatalf("the shell is in %q, want %q", got, dir)
+}
+
+// No quoting of a quote or a backslash is right for every shell (fish reads
+// \' inside single quotes as an escaped quote), so such a folder gets no cd,
+// and the dock says so.
+func TestLayoutLoadRefusesAQuoteInTheFolder(t *testing.T) {
+	for _, dir := range []string{`/tmp/a\'';echo INJECTED;#`, `/tmp/back\slash`} {
+		w, typed := layoutWindow(t, "quote-win")
+		w.Workspace = 1
+		m := layoutOS(w)
+
+		ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{Width: 40, Height: 10, WorkingDir: dir}}}, m)
+
+		if got := typed.String(); got != "" {
+			t.Fatalf("typed %q for folder %q", got, dir)
+		}
+		if lastMessage(m) != cdRefusedMessage {
+			t.Fatalf("dock = %q, want the refusal for folder %q", lastMessage(m), dir)
+		}
+	}
+}
+
+// The sidebar's "cd here" refuses the same folders.
+func TestSidebarCdRefusesAQuoteInTheFolder(t *testing.T) {
+	w, typed := layoutWindow(t, "sidebar-win")
+	m := layoutOS(w)
+	m.filesView.Origin = w.ID
+
+	m.sendCdToOrigin(`/tmp/a\'';echo INJECTED;#`)
+
+	if got := typed.String(); got != "" {
+		t.Fatalf("typed %q", got)
+	}
+	if lastMessage(m) != cdRefusedMessage {
+		t.Fatalf("dock = %q, want the refusal", lastMessage(m))
+	}
+	// A plain folder is still typed.
+	m.sendCdToOrigin("/tmp/plain dir")
+	if got := typed.String(); got != "cd '/tmp/plain dir'\r" {
+		t.Fatalf("typed %q for a plain folder", got)
+	}
+}
+
+// The tape export writes no cd for such a folder either.
+func TestLayoutTapeExportRefusesAQuoteInTheFolder(t *testing.T) {
+	script := GenerateTapeScript(LayoutTemplate{Windows: []LayoutWindow{{WorkingDir: `/tmp/a\'';echo INJECTED;#`}}})
+	cmds, _ := tape.ParseFile(script)
+	for _, c := range cmds {
+		if c.Type == tape.CommandTypeType {
+			t.Fatalf("tape types %q for a folder holding a quote:\n%s", c.Args, script)
+		}
 	}
 }
 

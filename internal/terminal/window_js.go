@@ -17,3 +17,6 @@ func (w *Window) HasForegroundProcess() bool { return false }
 
 // ForegroundCommand has no process table to consult.
 func (w *Window) ForegroundCommand() string { return "" }
+
+// ShellAtPrompt is false: this platform does not say what holds the terminal.
+func (w *Window) ShellAtPrompt() bool { return false }

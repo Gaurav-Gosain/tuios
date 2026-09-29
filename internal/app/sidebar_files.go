@@ -795,8 +795,12 @@ func (m *OS) sendCdToOrigin(dir string) {
 		m.ShowNotification(why, "warning", m.Settings.NotificationDuration)
 		return
 	}
-	line := "cd " + shellQuote(dir) + "\r"
-	if err := window.SendInput([]byte(line)); err != nil {
+	line, ok := cdLine(dir)
+	if !ok {
+		m.ShowNotification(cdRefusedMessage, "warning", m.Settings.NotificationDuration)
+		return
+	}
+	if err := window.SendInput([]byte(line + "\r")); err != nil {
 		m.LogError("Failed to send cd to window %s: %v", window.ID, err)
 		m.ShowNotification("Could not write to that pane.", "error", m.Settings.NotificationDuration)
 	}
@@ -860,6 +864,28 @@ func paneBusyReason(window *terminal.Window) (string, bool) {
 // what keeps a directory called "; rm -rf ~" from being two commands.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// cdRefusedMessage is what the dock says when cdLine refuses a folder.
+const cdRefusedMessage = "tuios did not type a cd. The folder name holds a quote, a backslash or a control character."
+
+// cdLine is the cd command tuios types to move a shell to dir, or false when
+// dir must not be typed at all.
+//
+// shellQuote is correct for a POSIX shell, and the shell in a pane is not
+// always one. fish reads \' inside single quotes as an escaped quote, so the
+// POSIX escape for a quote ends the quoting there, and the rest of the name
+// runs as commands. No single quoting is right for every shell, so a folder
+// whose name holds a quote or a backslash is not typed. Such names are rare,
+// and the user can still cd there by hand.
+func cdLine(dir string) (string, bool) {
+	if dir == "" || strings.ContainsAny(dir, `'\`) {
+		return "", false
+	}
+	if strings.ContainsFunc(dir, func(r rune) bool { return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
+		return "", false
+	}
+	return "cd " + shellQuote(dir), true
 }
 
 // adoptWindowCwd takes the directory the daemon reports for a pane.
