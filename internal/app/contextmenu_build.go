@@ -508,8 +508,11 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 	forever := m.item(glyphClose, "Delete for good", "file_delete_forever", !hasTarget)
 	forever.Warn = true
 
-	return fileMenuTitle(t), []ContextMenuItem{
-		open,
+	rows := []ContextMenuItem{open}
+	if t.Name != "" && !t.IsDir && !t.Up {
+		rows = append(rows, m.item(glyphFile, "Edit", "file_edit", !canOpen))
+	}
+	return fileMenuTitle(t), append(rows,
 		separator(),
 		m.item(glyphCopy, "Copy", "file_copy", !hasTarget),
 		m.item(glyphCut, "Cut", "file_cut", !hasTarget),
@@ -522,7 +525,7 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 		m.item(glyphRename, "Rename", "file_rename", !hasTarget),
 		del,
 		forever,
-	}
+	)
 }
 
 // fileMenuTitle heads the menu with what it will act on: the name for a row of
