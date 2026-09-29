@@ -2,6 +2,8 @@
 
 Hints mode puts a short label on the useful text in the focused pane. Type a
 label to copy the text. It works like tmux-fingers and the kitty hints kitten.
+Hints mode can also put labels on all panes at the same time. See
+[All panes](#all-panes).
 
 ## Use it
 
@@ -41,6 +43,40 @@ The copy uses the same path as a mouse copy. tuios writes the clipboard with
 OSC 52, and on a local client also with the system clipboard tool.
 
 You can also open hints mode from the command palette: search for `hints`.
+
+## All panes
+
+The `hints_all_panes` action puts labels on all panes that the workspace
+shows. This includes tiled panes, floating panes and the focused pane.
+
+- tuios gives no label to text that you cannot see. This includes a
+  minimized pane, a pane behind a zoomed pane, a pane off the screen, and
+  text under a different pane.
+- Each label is different on all panes.
+- The focused pane gets the shortest labels. The panes nearest to it get the
+  next shortest labels.
+- The same text gets the same label on all panes. A path or a `file://` URL
+  gets one label for each pane, because each pane has its own folder.
+- A label copies the text from any pane.
+- `Shift` and a label types the text into the focused pane. The text can come
+  from a different pane.
+- `Ctrl` and a label opens the text from the pane that shows it. tuios uses
+  that pane's folder and machine.
+- Hints mode closes when one of these panes closes, moves or changes size.
+
+The action has no default key. Run it from the command palette, or bind it:
+
+```toml
+[keybindings.prefix_mode]
+hints_all_panes = ["A"]
+```
+
+To make `Ctrl+B F` put labels on all panes, set `hints.all_panes`:
+
+```toml
+[hints]
+all_panes = true
+```
 
 ## What hints mode finds
 
@@ -115,14 +151,17 @@ alphabet = "asdfghjkl"
 open = true
 # How much the text around the labels dims, in percent (10 to 90).
 dim = 60
+# Put labels on all panes on the workspace, not only on the focused pane.
+all_panes = false
 ```
 
 Your own patterns come before the built-in patterns. tuios warns about a
 pattern that does not compile when it reads the config, and hints mode skips
 that pattern.
 
-`hints.builtins`, `hints.alphabet`, `hints.open` and `hints.dim` are also on
-the settings page (Selection tab) and work with `tuios set-config`.
+`hints.builtins`, `hints.alphabet`, `hints.open`, `hints.dim` and
+`hints.all_panes` are also on the settings page (Selection tab) and work with
+`tuios set-config`.
 `hints.patterns` is a list, so you set it in the file.
 
 If your config already binds `F` in `[keybindings.prefix_mode]` to a

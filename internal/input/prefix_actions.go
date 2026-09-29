@@ -65,6 +65,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
 	d.Register("prefix_quit", handlePrefixQuit)
 	d.Register("hints", handleOpenHints)
+	d.Register("hints_all_panes", handleOpenHintsAllPanes)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
 

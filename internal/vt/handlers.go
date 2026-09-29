@@ -964,9 +964,12 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 		switch n {
 		case 5: // Operating Status
-			// We're always ready ;)
+			// Always ready. The reply keeps the query's form: the ANSI query
+			// gets the ANSI answer CSI 0 n, as in xterm and kitty. A private
+			// CSI ? 0 n here stalls strict parsers such as ratatui-image,
+			// which read only up to "[0n" (issue #253).
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
-			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
+			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.ANSIStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
 			line, col := e.reportedCursorPosition()
 			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(line, col))
@@ -984,6 +987,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		}
 
 		switch n {
+		case 5: // Operating Status, DEC form: answered CSI ? 0 n.
+			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
 			line, col := e.reportedCursorPosition()
 			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(line, col, 0)) // We don't support page numbers //nolint:errcheck

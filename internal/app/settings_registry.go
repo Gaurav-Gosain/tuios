@@ -89,6 +89,7 @@ var settingLabels = map[string]string{
 	"hints.alphabet":                    "Hint letters",
 	"hints.open":                        "Ctrl opens a hint",
 	"hints.dim":                         "Dim around hints",
+	"hints.all_panes":                   "Hints on all panes",
 
 	"appearance.sidebar.sections":             "Sections",
 	"appearance.sidebar.file_icons":           "File icons",

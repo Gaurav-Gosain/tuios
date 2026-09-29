@@ -588,6 +588,7 @@ var ActionDescriptions = map[string]string{
 	"paste_clipboard": "Paste from clipboard",
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
+	"hints_all_panes": "Label the text on all panes to copy it",
 
 	// Copy mode search (no default keybinding)
 	ActionCopyModeSearchForward:  "Enter copy mode and search forward",

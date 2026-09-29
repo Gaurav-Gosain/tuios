@@ -105,11 +105,15 @@ func TestConform_CursorPositionReportUnderLeftMargin(t *testing.T) {
 // TestConform_DeviceStatusReport covers the non-cursor half of DSR.
 func TestConform_DeviceStatusReport(t *testing.T) {
 	// DSR 5 asks whether the terminal is in working order. CSI 0 n means yes
-	// (VT510 reference manual, DSR-OS). xterm answers with the private form
-	// CSI ? 0 n, which is what this emulator sends and what every guest
-	// accepts, so the case pins that rather than the bare ANSI form.
-	if got, want := reply(t, 80, 24, "\x1b[5n"), "\x1b[?0n"; got != want {
+	// (VT510 reference manual, DSR-OS). The reply keeps the form of the
+	// query, as xterm's CASE_CPR and CASE_DSR do: the ANSI query gets
+	// CSI 0 n and the DEC private query gets CSI ? 0 n. ratatui-image reads
+	// only "[0n" and hung on the private answer (issue #253).
+	if got, want := reply(t, 80, 24, "\x1b[5n"), "\x1b[0n"; got != want {
 		t.Errorf("DSR 5 replied %q, want %q", got, want)
+	}
+	if got, want := reply(t, 80, 24, "\x1b[?5n"), "\x1b[?0n"; got != want {
+		t.Errorf("DSR ?5 replied %q, want %q", got, want)
 	}
 }
 

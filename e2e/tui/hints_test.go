@@ -664,3 +664,208 @@ func TestHintFullLineDoesNotJoinTheNext(t *testing.T) {
 	waitClipboardSequence(t, term, out, from, url)
 	alive(t, term, "after a full line under hints")
 }
+
+// TestHintsAllPanesLabelEveryPane is issue #248 on the real render path: two
+// tiled panes under shared borders, hints.all_panes on, and the leader and F
+// pressed in the left pane. Both panes show labels. The UUID in the right pane
+// is typed with Shift, and it lands at the prompt of the left pane, the pane
+// the person is in, and on the clipboard.
+//
+// How this could pass wrongly: the UUID could be typed into the right pane and
+// still be on screen. The check reads the column it lands in, which must be in
+// the left half. The label on the right pane could be a stale cell. The frame
+// is read only after a label shows on both panes, and the pane is checked for
+// no labels after the label is typed.
+func TestHintsAllPanesLabelEveryPane(t *testing.T) {
+	out := &lockedBuffer{}
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\nshared_borders = true\n\n[hints]\nall_panes = true\n")
+	term := startIn(t, base, startOpts{out: out, cols: 140, rows: 36})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+
+	// The right pane, focused after the second new pane, prints the UUID. The
+	// command builds it, so the only whole copy on screen is the output.
+	const uuid = "30c0acf5-8dd0-48f2-8d86-cf0aae99aa4a"
+	enterTerminalMode(t, term)
+	runInShell(t, term, "printf '30c0acf5-8dd0-%s\\n' 48f2-8d86-cf0aae99aa4a; echo RIGHT-READY", "RIGHT-READY", shellTimeout)
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys("h"); err != nil {
+		t.Fatalf("focus the left pane: %v", err)
+	}
+	time.Sleep(insertGuard)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "printf 'deadbee%s\\n' 42; echo LEFT-READY", "LEFT-READY", shellTimeout)
+	if err := term.SendKeys("echo TYPED-"); err != nil {
+		t.Fatalf("type the command: %v", err)
+	}
+	if err := term.WaitForText("$ echo TYPED-", uiTimeout); err != nil {
+		t.Fatalf("the command never reached the prompt: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	s := term.Screen()
+	cols, _ := s.Size()
+	ucol, urow, ok := findLastOnGrid(s, uuid)
+	if !ok || ucol < cols/2 {
+		t.Fatalf("the UUID is not in the right pane (column %d of %d):\n%s", ucol, cols, term.Snapshot())
+	}
+	scol, srow, ok := findLastOnGrid(s, hintsSHA)
+	if !ok || scol >= cols/2 {
+		t.Fatalf("the hash is not in the left pane (column %d of %d):\n%s", scol, cols, term.Snapshot())
+	}
+
+	openHints(t, term)
+	uLabel := waitHintLabel(t, term, ucol, urow, uuid)
+	sLabel := waitHintLabel(t, term, scol, srow, hintsSHA)
+	if uLabel == sLabel {
+		t.Fatalf("the two panes share the label %q", uLabel)
+	}
+	if len(sLabel) > len(uLabel) {
+		t.Errorf("the focused pane has a longer label (%q) than the other pane (%q)", sLabel, uLabel)
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes")
+	t.Logf("labels: focused pane %q, other pane %q:\n%s", sLabel, uLabel, term.Snapshot())
+
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(strings.ToUpper(uLabel)); err != nil {
+		t.Fatalf("type %q: %v", strings.ToUpper(uLabel), err)
+	}
+	waitClipboardSequence(t, term, out, from, uuid)
+	var tcol int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		c, _, ok := findLastOnGrid(s, "TYPED-"+uuid)
+		tcol = c
+		return ok && hintsNoLabels(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the UUID was not typed at a prompt: %v\n%s", err, term.Snapshot())
+	}
+	if tcol >= cols/2 {
+		t.Fatalf("the UUID was typed into the right pane (column %d), not the focused left pane:\n%s", tcol, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes-typed")
+	alive(t, term, "after hints on all panes")
+}
+
+// TestHintsAllPanesLabelOnlyWhatShows is the layout tuios starts in with
+// tiling off: plain panes that overlap, stacked by their Z. The second pane
+// covers part of the first, and part of the first pane's hashes with it. A
+// hash under the second pane must get no label, because typing a label
+// nobody can see would copy text nobody can see.
+//
+// The labels are handed out shortest first, and nine or fewer labels are
+// the first letters of the alphabet. So when every label is on screen, the
+// labels on screen are exactly the first n letters. A hidden label takes one
+// of those letters off the screen. The test also types the first letter
+// with no label on screen, which must copy nothing.
+func TestHintsAllPanesLabelOnlyWhatShows(t *testing.T) {
+	out := &lockedBuffer{}
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\ntiled = false\n\n[hints]\nall_panes = true\n")
+	term := startIn(t, base, startOpts{out: out, cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	if settledTiling(t, term) {
+		t.Fatalf("the session is tiled, so no pane covers another:\n%s", term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	// Six hashes, each further right and further down. The command holds no
+	// hash of its own.
+	runInShell(t, term, `clear; for i in 1 2 3 4 5 6; do printf "%*sdeadbee1$i\n" $((i*8)) ''; done; echo COVER-READY`,
+		"COVER-READY", shellTimeout)
+	leaveTerminalMode(t, term)
+	newWindow(t, term)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	// A new pane opens almost on top of the last one. Drag it by its title
+	// bar to the right and down, so it covers only the right part of the
+	// first pane.
+	// The second pane's top left corner is the lowest one on screen.
+	c2, r2, ok := 0, 0, false
+	scr := term.Screen()
+	scols, srows := scr.Size()
+	for r := range srows {
+		for c := range scols {
+			if scr.Cell(c, r).Content == "╭" {
+				c2, r2, ok = c, r, true
+			}
+		}
+	}
+	if !ok {
+		t.Fatalf("no title bar for the second pane:\n%s", term.Snapshot())
+	}
+	mouseDrag(t, term, c2+20, r2, c2+50, r2+2, tuitest.MouseLeft, 0)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled after the drag: %v", err)
+	}
+	var shown, hidden []string
+	for i := 1; i <= 6; i++ {
+		// A label covers the start of a hash, so the end of it is what
+		// says whether the hash shows.
+		hash := fmt.Sprintf("deadbee1%d", i)
+		if _, _, ok := findLastOnGrid(term.Screen(), hash[4:]); ok {
+			shown = append(shown, hash)
+		} else {
+			hidden = append(hidden, hash)
+		}
+	}
+	if len(hidden) == 0 || len(shown) == 0 {
+		t.Fatalf("the second pane must cover some hashes and not all (shown %v, hidden %v):\n%s",
+			shown, hidden, term.Snapshot())
+	}
+
+	openHints(t, term)
+	var labels map[string]bool
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		labels = map[string]bool{}
+		cols, rows := s.Size()
+		for r := range rows {
+			for c := range cols {
+				if l := hintLabelAt(s, c, r); l != "" && (c == 0 || !isHintLabelCell(s.Cell(c-1, r))) {
+					labels[l] = true
+				}
+			}
+		}
+		return len(labels) >= len(shown)
+	}, uiTimeout); err != nil {
+		t.Fatalf("hints never showed a label per visible hash: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-all-panes-covered")
+	t.Logf("labels on screen %v, hashes hidden %v:\n%s", labels, hidden, term.Snapshot())
+	n := len(labels)
+	if n > 8 {
+		t.Fatalf("the check needs fewer than nine labels, got %v", labels)
+	}
+	for _, r := range hintsAlphabet[:n] {
+		if !labels[string(r)] {
+			t.Errorf("the label %q is not on screen: a match nobody can see has it (labels %v)", string(r), labels)
+		}
+	}
+
+	// The first letter with no label on screen names no match. With a
+	// hidden label, it names the hidden match.
+	next := ""
+	for _, r := range hintsAlphabet {
+		if !labels[string(r)] {
+			next = string(r)
+			break
+		}
+	}
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(next); err != nil {
+		t.Fatalf("type %q: %v", next, err)
+	}
+	time.Sleep(clipboardSettle)
+	if got := clipboardSince(out, from); len(got) != 0 {
+		t.Fatalf("typing %q, which is on no label, copied %q", next, got)
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	waitHintsGone(t, term, "after esc")
+	alive(t, term, "after hints over overlapping panes")
+}

@@ -14,11 +14,19 @@ func handleOpenHints(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleOpenHintsAllPanes is the hints_all_panes action. It has no default
+// key.
+func handleOpenHintsAllPanes(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenHintsAllPanes()
+	return o, nil
+}
+
 // handleHintsKey takes a key while hints mode is open. Hints mode owns the
 // keyboard: a key it does not use is dropped, never passed to the pane.
 //
 //   - a letter of a label copies the match once the label is complete
-//   - the same letter with Shift copies it and types it into the pane
+//   - the same letter with Shift copies it and types it into the focused
+//     pane, whichever pane the match is on
 //   - the same letter with Ctrl opens it
 //   - backspace takes back a letter
 //   - esc and the leader close. q closes when q is not a label letter, and
