@@ -743,9 +743,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.panesBorderless() {
 		return nil, false
 	}
-	// The picture-in-picture view is a layer over the pane, and the fast path
-	// composes none.
-	if m.pipWanted() {
+	// The picture-in-picture view is a layer over the pane. The fast path
+	// splices its box into the frame (pipSplice), which is exact while no
+	// background is painted. With one painted, the box's cells would need the
+	// same paint pass the pane gets, so the compositor draws the frame.
+	if m.pipWanted() && m.fastPathPaints() {
 		return nil, false
 	}
 	// The sidebar is a reserved-region layer the fast path does not compose. When
@@ -846,14 +848,21 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 		}
 		return m.paintFullscreenFrame(window, boxContent, dockStr, m.Settings.DockbarPosition)
 	}
-	if m.Settings.DockbarPosition == "hidden" {
-		return boxContent
+	frame := boxContent
+	if m.Settings.DockbarPosition != "hidden" {
+		dockStr, _ := m.renderDockString()
+		if m.Settings.DockbarPosition == "top" {
+			frame = dockStr + "\n" + boxContent
+		} else {
+			frame = boxContent + "\n" + dockStr
+		}
 	}
-	dockStr, _ := m.renderDockString()
-	if m.Settings.DockbarPosition == "top" {
-		return dockStr + "\n" + boxContent
+	// The picture-in-picture view, on top of the pane. renderPiP also records
+	// where it went, or that it is not drawn, for clicks.
+	if l := m.renderPiP(); l != nil {
+		frame = pipSplice(frame, l.GetContent(), l.GetX(), l.GetY(), l.Width(), m.GetRenderWidth(), &m.pip.spliceRows, &m.pip.spliceCells)
 	}
-	return boxContent + "\n" + dockStr
+	return frame
 }
 
 // chargeRenderCost tells every pane's coalescer what the frame it just asked

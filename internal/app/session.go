@@ -295,6 +295,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		w.Close()
 	}
 	m.Windows = nil
+	// A pin names a pane of the windows just closed. See rebuildForSession.
+	m.pip = pipState{occluder: m.pip.occluder[:0]}
 
 	// Create windows from state
 	for i, ws := range state.Windows {

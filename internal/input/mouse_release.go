@@ -30,6 +30,14 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ReleaseClickReveal(msg.X, msg.Y)
 	}()
 
+	// A press on the picture-in-picture view was the view's, and so is its
+	// release. Without this the release of a click that jumped to the pinned
+	// pane went on to that pane as a release it never saw pressed.
+	if o.PiPPressed {
+		o.PiPPressed = false
+		return o, nil
+	}
+
 	// Armed by the cleanup below and returned from whichever branch gets there.
 	var settleCmd tea.Cmd
 

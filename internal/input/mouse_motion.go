@@ -184,7 +184,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// The picture-in-picture view is not a pane: a pointer resting on it
 		// is not over the tile underneath.
 		idx := findClickedWindow(mouse.X, mouse.Y, o)
-		if idx >= 0 && o.PiPAt(mouse.X, mouse.Y) && app.HitZ(o.Windows[idx]) < config.ZIndexPiP {
+		if idx >= 0 && pipOwns(mouse.X, mouse.Y, o) {
 			idx = -1
 		}
 		if idx >= 0 && idx != o.FocusedWindow {
@@ -197,7 +197,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	if o.Mode == app.TerminalMode {
+	// Hover over the picture-in-picture view is over the view, not over the
+	// pane under it. A drag that started in the pane and crosses the view
+	// still reaches the pane.
+	if o.Mode == app.TerminalMode && (mouse.Button != tea.MouseNone || !pipOwns(mouse.X, mouse.Y, o)) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
 			if guestWantsMotion(focusedWindow.Terminal, mouse.Button) {

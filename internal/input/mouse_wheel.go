@@ -56,6 +56,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The wheel over the picture-in-picture view scrolls nothing: the view
+	// is not the pane under it, and it has no scrollback of its own.
+	if wm := msg.Mouse(); pipOwns(wm.X, wm.Y, o) {
+		return o, nil
+	}
+
 	if o.ShowLogs {
 		_, maxScroll := logScrollBounds(o.Height, len(o.LogMessages))
 

@@ -1497,6 +1497,9 @@ type OS struct {
 	pendingStartTerminalMode bool
 	// pip is this client's picture-in-picture view. See pip.go.
 	pip pipState
+	// PiPPressed says the button that is down was pressed on the
+	// picture-in-picture view, so its release is the view's as well.
+	PiPPressed bool
 	// scratchPending says the scratch terminal was asked for and has not
 	// arrived yet, and scratchPendingAt is when. See scratch.go.
 	scratchPending   string
@@ -1717,6 +1720,10 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	// refuses to navigate to, leaving it permanently invisible.
 	m.CurrentWorkspace = 1
 	m.SubscribedPTYs = make(map[string]bool)
+	// The pinned pane belongs to the session just left. Its stream was
+	// dropped above, and on a switch back the ids match again with nothing
+	// streaming the pane, so the view would show a frozen screen.
+	m.pip = pipState{occluder: m.pip.occluder[:0]}
 
 	if state == nil || len(state.Windows) == 0 {
 		m.adoptEmptySessionVersion(state)

@@ -185,7 +185,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// floating pane. A press on it that no floating pane covers is the view's:
 	// the left button jumps to the pane it shows, and no press reaches the
 	// tile underneath.
-	if o.PiPAt(X, Y) && (clickedWindowIndex < 0 || app.HitZ(o.Windows[clickedWindowIndex]) < config.ZIndexPiP) {
+	if pipOwns(X, Y, o) {
+		// The release that ends this press is the view's too. See
+		// handleMouseRelease.
+		o.PiPPressed = true
 		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
 			o.SyncStateToDaemon()
 		}

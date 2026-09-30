@@ -257,6 +257,11 @@ func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {
 			t.Errorf("ASSERTION: %s is allowed through a host and the fence says it is refused", name)
 		}
 	}
+	// The picture-in-picture view is this person's screen furniture, like a
+	// theme. A daemon on another machine does not get to pin panes on it.
+	if hostCommandAllowed(&RemoteCommandPayload{CommandType: "pip", TapeArgs: []string{"w1", "on"}}) {
+		t.Error("a host may set this client's picture-in-picture view")
+	}
 	if hostCommandAllowed(&RemoteCommandPayload{CommandType: "set_config", ConfigPath: "appearance.theme"}) {
 		t.Errorf("ASSERTION: set_config is allowed through a host")
 	}

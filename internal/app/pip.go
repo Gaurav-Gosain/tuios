@@ -156,6 +156,10 @@ type pipState struct {
 	rect image.Rectangle
 	// occluder is the scratch slice the graphics pass hands the box in.
 	occluder []cellRect
+	// layer is the last layer built from box.
+	layer *lipgloss.Layer
+	// spliceRows and spliceCells are pipSplice's scratch buffers.
+	spliceRows, spliceCells frameCanvas
 	// closedNote is the dock note for a pinned pane that closed while a
 	// state sync was being applied. The sync's own "Window closed" note is
 	// shown after the sync, and the newest note is the one the dock draws, so
@@ -178,16 +182,17 @@ func (m *OS) pipSource() *terminal.Window {
 }
 
 // pipWanted reports whether the view is to be drawn: a pane is pinned, it
-// still exists, and it does not have the focus.
+// still exists, and it is not the focused pane on the screen. A focused pane
+// that is not on the screen still gets the view: moving the focused pane to
+// another workspace leaves the focus on it, off the screen.
 func (m *OS) pipWanted() bool {
 	src := m.pipSource()
 	if src == nil || src.Terminal == nil {
 		return false
 	}
-	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == src {
-		return false
-	}
-	return true
+	focused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == src
+	onScreen := src.Workspace == m.CurrentWorkspace && !src.Minimized
+	return !focused || !onScreen
 }
 
 // pipConfig is the [pip] table in force.
@@ -421,7 +426,12 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 		m.pip.boxKey = key
 	}
 	m.pip.rect = box
-	return lipgloss.NewLayer(m.pip.box).X(box.Min.X).Y(box.Min.Y).Z(config.ZIndexPiP).ID(pipLayerID)
+	// NewLayer measures its string, so the layer is built only when the box
+	// or its place changed.
+	if l := m.pip.layer; l == nil || l.GetContent() != m.pip.box || l.GetX() != box.Min.X || l.GetY() != box.Min.Y {
+		m.pip.layer = lipgloss.NewLayer(m.pip.box).X(box.Min.X).Y(box.Min.Y).Z(config.ZIndexPiP).ID(pipLayerID)
+	}
+	return m.pip.layer
 }
 
 // pipReadBody reads the source's cells into pip.body when the source had
@@ -582,6 +592,59 @@ func pipFrame(body string, cols, rows int, name, state string, seen bool, pal ov
 	b.WriteByte('\n')
 	b.WriteString(edge.Render(bl + strings.Repeat(hz, cols) + br))
 	return b.String()
+}
+
+// pipSplice draws box over frame with its top-left cell at x, y, as the
+// compositor draws a layer. It is how the fullscreen fast path draws the view
+// without composing layers, and it touches only the rows the box covers.
+//
+// A row is cut with ansi.Cut, which keeps every escape sequence before the
+// cut, so the part right of the box starts in the style and the link it had
+// there. That is exact unless a wide glyph straddles an edge of the box: Cut
+// drops it, where the compositor leaves blanks in its style. Such a row is
+// parsed to cells instead, the box's rectangle cleared and its cells set with
+// uv.Line.Set, the way cellLayer.blit draws it, and rendered again. rows and
+// cells are scratch buffers kept between frames.
+//
+// width is the frame's width and w the box's, both known to the caller, so no
+// row is measured in full.
+func pipSplice(frame, box string, x, y, w, width int, rows, cells *frameCanvas) string {
+	lines := strings.Split(frame, "\n")
+	boxLines := strings.Split(box, "\n")
+	parsed := false
+	for i, bl := range boxLines {
+		row := y + i
+		if row < 0 || row >= len(lines) {
+			continue
+		}
+		line := lines[row]
+		lineW := max(width, x+w)
+		left, right := ansi.Cut(line, 0, x), ansi.Cut(line, x+w, lineW)
+		if ansi.StringWidth(left) == x && ansi.StringWidth(right) == lineW-x-w {
+			lines[row] = left + ansi.ResetStyle + ansi.ResetHyperlink() + bl + ansi.ResetStyle + right
+			continue
+		}
+		if !parsed {
+			cells.Resize(w, len(boxLines))
+			cells.Clear()
+			uv.NewStyledString(box).Draw(cells, cells.Bounds())
+			parsed = true
+		}
+		rows.Resize(lineW, 1)
+		rows.Clear()
+		uv.NewStyledString(line).Draw(rows, rows.Bounds())
+		dst, src := rows.Lines[0], cells.Lines[i]
+		for col := range w {
+			dst.Set(x+col, nil)
+		}
+		for col := range w {
+			if c := &src[col]; !c.IsZero() {
+				dst.Set(x+col, c)
+			}
+		}
+		lines[row] = dst.Render()
+	}
+	return strings.Join(lines, "\n")
 }
 
 // pipOccluders adds the view's box to the rectangles an image must not be

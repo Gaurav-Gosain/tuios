@@ -442,3 +442,50 @@ func TestPiPInALocalSession(t *testing.T) {
 	}
 	waitNoPiP(t, term, "agent", "after the pane closed")
 }
+
+// TestPiPDoesNotFreezeAcrossASessionSwitch pins a pane that sits on another
+// workspace, where only the pin keeps its stream open, then switches to
+// another session and back. The switch drops every stream. A pin that
+// survived it came back naming the same pane with nothing streaming it, and
+// the view showed a frozen screen. The switch now ends the pin: the view is
+// either gone, or it is live.
+func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
+	base := t.TempDir()
+	// The other session exists before the client starts, so the client's
+	// session list has it.
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "other", "--detach"); err != nil {
+		t.Fatalf("create other: %v\n%s", err, out)
+	}
+	term := startPiPPanes(t, base, []string{"new", "work"},
+		`i=0; while :; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done`)
+	pinWithKey(t, term, "Pinned agent")
+	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
+	if out, err := tuiosCLI(t, base, "move-window", "2", "-w", "agent", "-s", "work"); err != nil {
+		t.Fatalf("move-window: %v\n%s", err, out)
+	}
+	waitPiP(t, term, "agent", "with the agent pane on workspace 2")
+	assertLive(t, term, base, true)
+
+	for _, want := range []string{"other", "work"} {
+		if err := term.SendKeys(tuitest.Alt("N")); err != nil {
+			t.Fatalf("next session: %v", err)
+		}
+		if err := term.WaitForText("Session: "+want, uiTimeout); err != nil {
+			t.Fatalf("never landed on %s\n%s", want, term.Snapshot())
+		}
+	}
+	// Long enough for a live view to move on by several ticks.
+	time.Sleep(2 * time.Second)
+	first, ok := findPiPBox(term.Screen(), "agent")
+	if !ok {
+		t.Logf("back on work, the pin is gone:\n%s", term.Snapshot())
+		return
+	}
+	before := lastTick(pipBoxText(term.Screen(), first))
+	time.Sleep(time.Second)
+	b, _ := findPiPBox(term.Screen(), "agent")
+	if after := lastTick(pipBoxText(term.Screen(), b)); after <= before {
+		t.Fatalf("the view is frozen at tick %d after the session round trip\n%s", before, term.Snapshot())
+	}
+}
