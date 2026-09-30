@@ -283,6 +283,7 @@ type OS struct {
 	CurrentWorkspace       int                     // Current active workspace (1-9)
 	NumWorkspaces          int                     // Total number of workspaces
 	WorkspaceFocus         map[int]int             // Remembers focused window per workspace
+	FocusHistory           map[int][]string        // Newest-first focus history per workspace
 	WorkspaceLayouts       map[int][]WindowLayout  // Stores custom layouts per workspace
 	WorkspaceHasCustom     map[int]bool            // Tracks if workspace has custom layout
 	WorkspaceMasterRatio   map[int]float64         // Stores master ratio per workspace

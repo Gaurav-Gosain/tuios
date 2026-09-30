@@ -25,6 +25,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		Width:            m.GetRenderWidth(),
 		Height:           m.GetRenderHeight(),
 		WorkspaceFocus:   make(map[int]string),
+		FocusHistory:     make(map[int][]string),
 		// Tell the daemon which of its versions this snapshot was built from, so
 		// it can reconcile rather than let a stale push undo its own mutations.
 		BaseVersion: m.DaemonStateVersion,
@@ -107,6 +108,9 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		if windowIdx >= 0 && windowIdx < len(m.Windows) {
 			state.WorkspaceFocus[workspace] = m.Windows[windowIdx].ID
 		}
+	}
+	for workspace, history := range m.FocusHistory {
+		state.FocusHistory[workspace] = slices.Clone(history)
 	}
 
 	// Serialize BSP trees for each workspace
@@ -342,6 +346,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			}
 		}
 	}
+	m.FocusHistory = session.CloneFocusHistory(state.FocusHistory)
 
 	// Restore window to BSP ID mapping FIRST (before BSP trees)
 	// This ensures GetWindowIntID() returns correct IDs when we deserialize trees
@@ -722,6 +727,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			}
 		}
 	}
+	m.FocusHistory = session.CloneFocusHistory(state.FocusHistory)
 
 	// Update BSP state. Against a daemon too old for tree ops, adopt the
 	// window->int-ID map on the same terms as the tree it keys (see

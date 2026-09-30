@@ -1,6 +1,9 @@
 package session
 
-import "maps"
+import (
+	"maps"
+	"slices"
+)
 
 // Merging a client state sync into daemon-owned state.
 //
@@ -386,6 +389,56 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 	if canonical.WorkspaceFocus != nil {
 		incoming.WorkspaceFocus = maps.Clone(canonical.WorkspaceFocus)
 	}
+	if canonical.FocusHistory != nil {
+		incoming.FocusHistory = CloneFocusHistory(canonical.FocusHistory)
+	}
+}
+
+// CloneFocusHistory returns an independent copy of a workspace MRU map.
+func CloneFocusHistory(history map[int][]string) map[int][]string {
+	if history == nil {
+		return nil
+	}
+	clone := make(map[int][]string, len(history))
+	for workspace, ids := range history {
+		clone[workspace] = slices.Clone(ids)
+	}
+	return clone
+}
+
+// RecordFocus places id at the front of workspace's MRU history.
+func RecordFocus(history map[int][]string, workspace int, id string) map[int][]string {
+	if id == "" {
+		return history
+	}
+	if history == nil {
+		history = make(map[int][]string)
+	}
+	items := history[workspace]
+	kept := items[:0]
+	for _, candidate := range items {
+		if candidate != id {
+			kept = append(kept, candidate)
+		}
+	}
+	history[workspace] = append([]string{id}, kept...)
+	return history
+}
+
+// RemoveFocus removes id from workspace's MRU history.
+func RemoveFocus(history map[int][]string, workspace int, id string) map[int][]string {
+	if history == nil {
+		return nil
+	}
+	items := history[workspace]
+	kept := items[:0]
+	for _, candidate := range items {
+		if candidate != id {
+			kept = append(kept, candidate)
+		}
+	}
+	history[workspace] = kept
+	return history
 }
 
 // focusView is the part of a state that says what the person is looking at:
@@ -395,6 +448,7 @@ type focusView struct {
 	window    string
 	workspace int
 	perWS     map[int]string
+	history   map[int][]string
 	strip     *ScrollStripState
 }
 
@@ -406,6 +460,7 @@ func focusViewOf(s *SessionState) focusView {
 		window:    s.FocusedWindowID,
 		workspace: s.CurrentWorkspace,
 		perWS:     maps.Clone(s.WorkspaceFocus),
+		history:   CloneFocusHistory(s.FocusHistory),
 		strip:     s.ScrollStrip,
 	}
 }
@@ -413,7 +468,7 @@ func focusViewOf(s *SessionState) focusView {
 // sameFocus reports whether two views name the same focus. The strip offset is
 // left out: scrolling is not a move of the focus.
 func (f focusView) sameFocus(g focusView) bool {
-	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS)
+	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS) && maps.EqualFunc(f.history, g.history, func(a, b []string) bool { return slices.Equal(a, b) })
 }
 
 // keepClientFocus puts a stale push's own focus back after reconcileStale took
@@ -442,5 +497,6 @@ func keepClientFocus(incoming *SessionState, mine focusView) {
 	incoming.FocusedWindowID = mine.window
 	incoming.CurrentWorkspace = mine.workspace
 	incoming.WorkspaceFocus = mine.perWS
+	incoming.FocusHistory = mine.history
 	incoming.ScrollStrip = mine.strip
 }

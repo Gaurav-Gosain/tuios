@@ -154,6 +154,29 @@ func firstVisibleOnWorkspace(windows []WindowState, workspace int) string {
 	return ""
 }
 
+func focusAfterClose(state *SessionState, workspace int, closed string) string {
+	if state.FocusHistory != nil {
+		history := state.FocusHistory[workspace]
+		kept := history[:0]
+		for _, id := range history {
+			if id == closed {
+				continue
+			}
+			for _, w := range state.Windows {
+				if w.ID == id && w.Workspace == workspace && !w.Minimized {
+					kept = append(kept, id)
+					break
+				}
+			}
+		}
+		state.FocusHistory[workspace] = kept
+		if len(kept) > 0 {
+			return kept[0]
+		}
+	}
+	return firstVisibleOnWorkspace(state.Windows, workspace)
+}
+
 // AddDaemonWindow spawns a fresh PTY and appends a canonical window for it to
 // the session state, focusing it on the current workspace. onExit (may be nil)
 // is invoked with the PTY ID when the shell process exits. It returns a copy of
@@ -385,6 +408,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			s.markFocusIntentLocked()
 			state.FocusedWindowID = windowID
 			state.CurrentWorkspace = workspace
+			state.FocusHistory = RecordFocus(state.FocusHistory, workspace, windowID)
 		}
 		return nil
 	})
@@ -430,7 +454,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {
-			state.FocusedWindowID = firstVisibleOnWorkspace(state.Windows, workspace)
+			state.FocusedWindowID = focusAfterClose(state, workspace, closed.ID)
 		}
 		if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == closed.ID {
 			delete(state.WorkspaceFocus, workspace)
@@ -479,6 +503,7 @@ func (s *Session) FocusDaemonWindow(target string) error {
 			state.WorkspaceFocus = make(map[int]string)
 		}
 		state.WorkspaceFocus[win.Workspace] = win.ID
+		state.FocusHistory = RecordFocus(state.FocusHistory, win.Workspace, win.ID)
 		return nil
 	})
 }
@@ -523,6 +548,7 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 			state.WorkspaceFocus = make(map[int]string)
 		}
 		state.WorkspaceFocus[state.CurrentWorkspace] = win.ID
+		state.FocusHistory = RecordFocus(state.FocusHistory, state.CurrentWorkspace, win.ID)
 		return nil
 	})
 }
@@ -629,6 +655,7 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		if state.WorkspaceFocus != nil {
 			if focus, ok := state.WorkspaceFocus[ws]; ok {
 				state.FocusedWindowID = focus
+				state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 			}
 		}
 		return nil

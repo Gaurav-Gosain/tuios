@@ -190,6 +190,7 @@ func NewOS(opts OSOptions) *OS {
 
 		// Workspace state maps
 		WorkspaceFocus:       make(map[int]int),
+		FocusHistory:         make(map[int][]string),
 		WorkspaceLayouts:     make(map[int][]WindowLayout),
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceMasterRatio: make(map[int]float64),
