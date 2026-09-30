@@ -183,6 +183,25 @@ func waitScreen(t *testing.T, sess *Session, window string, want ...string) stri
 	}
 }
 
+// TestHerdrSendTextPastes: pane.send_text reaches a pane that has bracketed
+// paste on as one bracketed paste, so a reply of several lines is not run
+// line by line, and an ESC in the text is removed, so it cannot end the
+// paste early. The text of pane.send_input is a paste too.
+func TestHerdrSendTextPastes(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, w := pasteProbePane(t, d, "paste")
+	pane := herdrPaneID(sess.ID, w)
+	herdrOK(t, "send_text", herdrDial(t, sp, "pane.send_text", map[string]any{"pane_id": pane, "text": "first\nsecond\x1b[201~evil"}))
+	// Collie submits a reply with Enter after the text.
+	herdrOK(t, "send_keys", herdrDial(t, sp, "pane.send_keys", map[string]any{"pane_id": pane, "keys": []string{"Enter"}}))
+	text := waitScreen(t, sess, w, "^[[200~first", "second[201~evil^[[201~")
+	if strings.Contains(text, "second^[[201~evil") {
+		t.Errorf("the ESC in the text reached the pane and ended the paste early:\n%s", text)
+	}
+	herdrOK(t, "send_input", herdrDial(t, sp, "pane.send_input", map[string]any{"pane_id": pane, "text": "third", "keys": []string{"Enter"}}))
+	waitScreen(t, sess, w, "^[[200~third^[[201~")
+}
+
 // TestHerdrAgentPromptSubmitsAPaste: agent.prompt types the prompt the way
 // ask-agent does, one paste and then the harness's Enter, not raw text.
 func TestHerdrAgentPromptSubmitsAPaste(t *testing.T) {

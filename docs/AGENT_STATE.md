@@ -526,9 +526,9 @@ A refused call answers error `forbidden`, and nothing changes.
 | `tab.close` | `close-window` for each pane, `set-workspace-name` | shows the nearest tab that holds a pane |
 | `pane.list`, `pane.get`, `pane.current`, `pane.layout` | `list-windows` | |
 | `pane.read`, `agent.read` | `capture-pane` | `recent` reads 80 lines when `lines` is not given, 1000 at most. `recent_unwrapped` reads as `recent`, because tuios does not join wrapped rows. `detection` reads as `visible` |
-| `pane.send_text` | `send-text` | writes the text as it is, with no bracketed paste |
+| `pane.send_text` | `send-text` with `paste` | sends the text as a paste. See [Where tuios differs from herdr](#where-tuios-differs-from-herdr) |
 | `pane.send_keys`, `agent.send_keys` | `send-keys` | herdr's key names. tuios also takes `PageUp`, `PageDown`, `Home`, `End`, `Insert` and `Delete`. `cmd`, `super` and `hyper` fail with `invalid_key` |
-| `pane.send_input` | `send-text`, `send-keys` | |
+| `pane.send_input` | `send-text` with `paste`, `send-keys` | the text is a paste, as for `pane.send_text` |
 | `pane.rename` | `set-window` | `label: null` clears the name |
 | `pane.focus`, `agent.focus` | `focus-window` | |
 | `pane.split` | `split-window`, else `new-window` | without an attached client, or with `cwd`, the new pane is a window on the same workspace |
@@ -566,6 +566,14 @@ An id that finds nothing answers `workspace_not_found`, `tab_not_found` or
 `pane_not_found`.
 
 #### Where tuios differs from herdr
+
+herdr 0.9.3 writes the text of `pane.send_text` to the pane as it is. tuios
+sends it as a paste: control characters are removed, and the text goes in
+bracketed paste delimiters when the program in the pane has bracketed paste
+on. Collie sends a reply as `pane.send_text` and then `pane.send_keys` Enter.
+Written raw, a reply of several lines runs line by line. As a paste, the
+program reads it as one block, and the Enter sends it. The text of
+`pane.send_input` is a paste too.
 
 `agent.prompt` types the prompt the way `ask-agent` does: one paste, a short
 wait for the program to take it in, and the Enter key of the harness in the
