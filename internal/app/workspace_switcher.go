@@ -34,7 +34,7 @@ func (w WorkspaceItem) Label() string {
 func (m *OS) buildWorkspaceItems() []WorkspaceItem {
 	worth := make([]int, 0, m.NumWorkspaces)
 	for n := 1; n <= m.NumWorkspaces; n++ {
-		if m.GetWorkspaceWindowCount(n) > 0 || m.WorkspaceNames[n] != "" || n == m.CurrentWorkspace {
+		if m.GetWorkspaceWindowCount(n) > 0 || m.WorkspaceNames[n] != "" || n == m.dockWorkspace() {
 			worth = append(worth, n)
 		}
 	}
@@ -44,7 +44,7 @@ func (m *OS) buildWorkspaceItems() []WorkspaceItem {
 			Number:    n,
 			Name:      m.WorkspaceNames[n],
 			Panes:     m.GetWorkspaceWindowCount(n),
-			IsCurrent: n == m.CurrentWorkspace,
+			IsCurrent: n == m.dockWorkspace(),
 		})
 	}
 	return items

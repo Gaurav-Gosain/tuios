@@ -64,7 +64,10 @@ func waitRow(t *testing.T, term *tuitest.Terminal, base, what string, ok func(co
 
 // scratchNamed matches the scratch pane of name, shown or hidden.
 func scratchNamed(name string, hidden bool) func(commandRow) bool {
-	return func(r commandRow) bool { return r.Scratch && r.ScratchName == name && r.Minimized == hidden }
+	// Shown or hidden is the client's view, read off the screen by the
+	// callers. The row says the group has a pane.
+	_ = hidden
+	return func(r commandRow) bool { return r.Scratch && r.ScratchName == name }
 }
 
 // pressCommand presses the leader and alt+k.

@@ -1576,6 +1576,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if !m.startupApplied {
 			m.startupApplied = true
 			m.applyStartupPreferences()
+			// A client that attaches while the session's focus is on a
+			// scratch pane shows the group, as a sync would.
+			m.syncScratchView()
 			// Said once, on the first frame that has a screen to say it on.
 			m.warnOnBuildMismatch()
 		}
@@ -1753,8 +1756,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// to start in terminal mode, enter it now that there is a focused
 				// window to type into.
 				m.maybeEnterPendingTerminalMode()
-				// A scratch popup that arrives takes the keyboard.
+				// The focus says whether a scratch group is on the screen, and
+				// a scratch pane that arrives takes the keyboard.
+				m.syncScratchView()
 				m.maybeFocusScratch()
+				m.leaveEmptyScratchView()
 
 				// Show notifications for significant changes
 				newWindowCount := m.windowCountForNotice()
@@ -1767,8 +1773,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					m.ShowNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)
 				}
 
-				// Workspace change notification
-				if oldWorkspace != newWorkspace {
+				// Workspace change notification. A scratch group shown or
+				// hidden is not a workspace the user switched to.
+				if oldWorkspace != newWorkspace && !session.IsScratchWorkspace(oldWorkspace) && !session.IsScratchWorkspace(newWorkspace) {
 					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", newWorkspace), "info", 2*time.Second)
 				}
 				// After the count note, so the dock draws this one.

@@ -24,10 +24,10 @@ func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {
 	// column and there is nothing to move. Both boundaries are the content
 	// region's, measured from the top margin, as the width keys measure from
 	// the left margin.
-	contentBottom := m.GetTopMargin() + m.GetUsableHeight()
+	contentBottom := m.PaneTop() + m.PaneHeight()
 	atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (contentBottom - edgeTolerance)
 	if atBottomEdge {
-		if focusedWindow.Y <= m.GetTopMargin()+edgeTolerance {
+		if focusedWindow.Y <= m.PaneTop()+edgeTolerance {
 			return
 		}
 		m.AdjustTilingNeighbors(focusedWindow, focusedWindow.X, focusedWindow.Y-deltaPixels, focusedWindow.Width, focusedWindow.Height+deltaPixels)
@@ -67,10 +67,10 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 	// LEFT edge instead: the primary width keys resize the rightmost pane too, and
 	// grow still grows. If the left edge is also the boundary the pane fills the
 	// row and there is nothing to move.
-	contentRight := m.GetLeftMargin() + m.GetContentWidth()
+	contentRight := m.PaneLeft() + m.PaneWidth()
 	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 	if atRightEdge {
-		if focusedWindow.X <= m.GetLeftMargin()+edgeTolerance {
+		if focusedWindow.X <= m.PaneLeft()+edgeTolerance {
 			return
 		}
 		m.AdjustTilingNeighbors(focusedWindow, focusedWindow.X-deltaPixels, focusedWindow.Y, focusedWindow.Width+deltaPixels, focusedWindow.Height)
@@ -107,7 +107,7 @@ func (m *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {
 
 	// Block resizing if left edge is at the content-region boundary (the screen
 	// edge, or the sidebar band when it reserves the left margin)
-	atLeftEdge := focusedWindow.X <= m.GetLeftMargin()+edgeTolerance
+	atLeftEdge := focusedWindow.X <= m.PaneLeft()+edgeTolerance
 	if atLeftEdge {
 		return
 	}
@@ -136,7 +136,7 @@ func (m *OS) ResizeFocusedWindowHeightTop(deltaPixels int) {
 
 	// Block resizing if the top edge is at the content-region boundary (the
 	// screen edge, or the dock or a session reserve above the panes)
-	atTopEdge := focusedWindow.Y <= m.GetTopMargin()+edgeTolerance
+	atTopEdge := focusedWindow.Y <= m.PaneTop()+edgeTolerance
 	if atTopEdge {
 		return
 	}
@@ -166,7 +166,7 @@ func (m *OS) SetFocusedWindowWidthPercent(pct int) {
 	if w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsPopup {
 		return
 	}
-	target := m.GetContentWidth() * pct / 100
+	target := m.PaneWidth() * pct / 100
 	if delta := target - w.Width; delta != 0 {
 		m.ResizeFocusedWindowWidth(delta)
 	}
@@ -185,7 +185,7 @@ func (m *OS) SetFocusedWindowHeightPercent(pct int) {
 	if w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsPopup {
 		return
 	}
-	target := m.GetUsableHeight() * pct / 100
+	target := m.PaneHeight() * pct / 100
 	if delta := target - w.Height; delta != 0 {
 		m.ResizeFocusedWindowHeight(delta)
 	}
@@ -219,14 +219,14 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
-	minY := m.GetTopMargin()
-	maxY := minY + m.GetUsableHeight()
+	minY := m.PaneTop()
+	maxY := minY + m.PaneHeight()
 	// Vertical split lines live inside the content region: they can be dragged
 	// no further left than the reserved left margin and no further right than
 	// the content's right edge, so a resize can never push a pane under the
 	// sidebar band.
-	minX := m.GetLeftMargin()
-	maxX := minX + m.GetContentWidth()
+	minX := m.PaneLeft()
+	maxX := minX + m.PaneWidth()
 
 	// The right edge first, then the left, then the bottom, then the top: each
 	// move sees the panes the one before it already moved.
@@ -418,10 +418,10 @@ func (m *OS) constrainHorizontalSplit(requested int, topWindows, bottomWindows [
 func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRight, finalBottom int) {
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
-	minY := m.GetTopMargin()
-	maxY := minY + m.GetUsableHeight()
-	minX := m.GetLeftMargin()
-	maxX := minX + m.GetContentWidth()
+	minY := m.PaneTop()
+	maxY := minY + m.PaneHeight()
+	minX := m.PaneLeft()
+	maxX := minX + m.PaneWidth()
 
 	resized.X = finalX
 	resized.Y = finalY
@@ -513,8 +513,8 @@ func (m *OS) SyncMasterStackFromGeometry() {
 	if !m.AutoTiling || m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
 		return
 	}
-	left, top := m.GetLeftMargin(), m.GetTopMargin()
-	width, height := m.GetContentWidth(), m.GetUsableHeight()
+	left, top := m.PaneLeft(), m.PaneTop()
+	width, height := m.PaneWidth(), m.PaneHeight()
 	right, bottom := left+width, top+height
 	gap := m.separatorGap()
 

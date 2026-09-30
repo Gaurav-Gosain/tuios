@@ -103,15 +103,6 @@ func (w *Window) SetTitle(t string) { w.title.Store(&t) }
 // IsAltScreen reports whether the application is using the alternate screen buffer.
 func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
 
-// HiddenScratch reports whether w is the scratch terminal while it is hidden.
-// A hidden scratch terminal is minimized so that the layout, the renderer and
-// focus skip it, but it is not a minimized pane the user parked: it has no
-// dock entry, no restore digit and no row in a window list. Every place that
-// offers minimized panes back to the user asks this first.
-func (w *Window) HiddenScratch() bool {
-	return w != nil && w.IsScratch && w.Minimized
-}
-
 // SetAltScreen records whether the application is using the alternate screen buffer.
 func (w *Window) SetAltScreen(v bool) { w.isAltScreen.Store(v) }
 
@@ -322,9 +313,9 @@ type Window struct {
 	// rather than the box it resolves to, because the box is this client's and
 	// the request is the session's. See session.WindowState.PopupWidth.
 	IsPopup bool
-	// IsScratch marks the session's scratch terminal, the popup
-	// toggle_scratch shows and hides. It is the session's, like IsPopup. See
-	// session.WindowState.Scratch and HiddenScratch.
+	// IsScratch marks a pane of a scratch group, an ordinary window on the
+	// group's own workspace. It is the session's, like IsPopup. See
+	// session.WindowState.Scratch.
 	IsScratch bool
 	// ScratchName keys a scratch pane: "scratch" (or empty, from before
 	// names) for the built-in one, the entry's name for a command entry.

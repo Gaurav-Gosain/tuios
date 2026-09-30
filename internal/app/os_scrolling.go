@@ -102,7 +102,7 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 // the computed strip positions are then shifted right by GetLeftMargin, so the
 // strip scrolls within the content box instead of underneath the sidebar.
 func (m *OS) ScrollingViewWidth() int {
-	return m.GetContentWidth()
+	return m.PaneWidth()
 }
 
 // ScrollingSetPositions applies the scrolling layout positions and dimensions,
@@ -118,11 +118,11 @@ func (m *OS) scrollingSetPositionsInstant() {
 func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
-	leftMargin := m.GetLeftMargin()
+	leftMargin := m.PaneLeft()
 
 	sl.ClampViewport(viewW)
 
-	layouts := sl.ComputePositions(viewW, m.GetUsableHeight(), m.GetTopMargin())
+	layouts := sl.ComputePositions(viewW, m.PaneHeight(), m.PaneTop())
 
 	// Scrolling layout transitions always animate (even with --no-animations)
 	// because the viewport shift is disorienting without the slide.
@@ -505,8 +505,8 @@ func (m *OS) scrollingLayoutStale() bool {
 	if sl == nil || len(sl.Columns) == 0 {
 		return false
 	}
-	want := sl.ComputePositions(m.ScrollingViewWidth(), m.GetUsableHeight(), m.GetTopMargin())
-	leftMargin := m.GetLeftMargin()
+	want := sl.ComputePositions(m.ScrollingViewWidth(), m.PaneHeight(), m.PaneTop())
+	leftMargin := m.PaneLeft()
 	for _, w := range m.Windows {
 		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue

@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -24,7 +25,7 @@ func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 
 // switchToWorkspaceHeld is switchToWorkspace with the announcements already held.
 func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
-	if workspace < 1 || workspace > m.NumWorkspaces {
+	if (workspace < 1 || workspace > m.NumWorkspaces) && !session.IsScratchWorkspace(workspace) {
 		m.LogWarn("Cannot switch to workspace %d: out of range (1-%d)", workspace, m.NumWorkspaces)
 		return
 	}
@@ -74,6 +75,15 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.UnsubscribeWorkspaceWindows(oldWorkspace)
 		m.SubscribeWorkspaceWindows(workspace)
+	}
+
+	// A scratch group is shown over the workspace it was switched to from,
+	// and always tiles. See scratch.go.
+	switch {
+	case session.IsScratchWorkspace(workspace):
+		m.enterScratchWorkspace(oldWorkspace, workspace)
+	case session.IsScratchWorkspace(oldWorkspace):
+		m.leaveScratchWorkspace()
 	}
 
 	// Switch to new workspace
@@ -209,6 +219,14 @@ func (m *OS) settleBorderMode(workspace int) {
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.
 func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
+		return
+	}
+	// A scratch pane stays in its group, and no window moves into one.
+	if isScratch(m.Windows[windowIndex]) || session.IsScratchWorkspace(m.Windows[windowIndex].Workspace) {
+		m.ShowNotification("A scratch pane stays in its scratch group.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		m.LogWarn("Cannot move window: invalid index %d", windowIndex)
 		return
 	}
@@ -255,6 +273,14 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 
 // MoveWindowToWorkspaceAndFollow moves a window to the specified workspace and switches to that workspace.
 func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
+	if windowIndex < 0 || windowIndex >= len(m.Windows) {
+		return
+	}
+	// A scratch pane stays in its group, and no window moves into one.
+	if isScratch(m.Windows[windowIndex]) || session.IsScratchWorkspace(m.Windows[windowIndex].Workspace) {
+		m.ShowNotification("A scratch pane stays in its scratch group.", "info", m.Settings.NotificationDuration)
+		return
+	}
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}

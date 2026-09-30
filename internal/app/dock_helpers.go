@@ -164,7 +164,7 @@ func (m *OS) workspacePillClipped(n int) bool {
 func (m *OS) occupiedWorkspaceNumbers() []int {
 	ws := make([]int, 0, m.NumWorkspaces)
 	for i := 1; i <= m.NumWorkspaces; i++ {
-		if i == m.CurrentWorkspace || m.GetWorkspaceWindowCount(i) > 0 {
+		if i == m.dockWorkspace() || m.GetWorkspaceWindowCount(i) > 0 {
 			ws = append(ws, i)
 		}
 	}
@@ -192,7 +192,7 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 		tabs = append(tabs, dockWorkspaceTab{
 			Workspace: n,
 			Label:     label,
-			Active:    n == m.CurrentWorkspace,
+			Active:    n == m.dockWorkspace(),
 			Dragged:   m.dockWorkspaceDrag.Dragging && n == m.dockWorkspaceDrag.Workspace,
 			Width:     workspacePillWidth(label, &m.Settings),
 		})
@@ -213,7 +213,7 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 // when every one is in use.
 func (m *OS) nextFreeWorkspace() int {
 	for i := 1; i <= m.NumWorkspaces; i++ {
-		if i != m.CurrentWorkspace && m.GetWorkspaceWindowCount(i) == 0 {
+		if i != m.dockWorkspace() && m.GetWorkspaceWindowCount(i) == 0 {
 			return i
 		}
 	}
@@ -346,7 +346,7 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	}
 
 	if natural := pillsSpan(strip.Pills, 0, len(strip.Pills)); natural <= avail {
-		m.dockWorkspaceScroll, m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = 0, m.CurrentWorkspace, 0
+		m.dockWorkspaceScroll, m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = 0, m.dockWorkspace(), 0
 		strip.Width = 1 + natural + addSpan
 		return strip
 	}
@@ -365,8 +365,8 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	// resize: a viewport that just narrowed can leave the current pill outside a
 	// run the user never scrolled. Scrolling by arrow changes neither, so it
 	// keeps the run it was given.
-	if m.CurrentWorkspace != m.dockWorkspaceScrollFor || inner != m.dockWorkspaceScrollAt {
-		m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = m.CurrentWorkspace, inner
+	if m.dockWorkspace() != m.dockWorkspaceScrollFor || inner != m.dockWorkspaceScrollAt {
+		m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = m.dockWorkspace(), inner
 		first = scrollToShow(all, m.activePillIndex(all), first, inner)
 	}
 	first = min(max(first, 0), lastScrollOffset(all, inner))
@@ -625,7 +625,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// of the current workspace, which the e2e harness reads as its source of
 	// truth for how many panes exist. Cutting it too is a separate change that
 	// needs that harness to grow another way to ask.
-	trail = fmt.Sprintf(" %d:%d ", m.CurrentWorkspace, m.GetWorkspaceWindowCount(m.CurrentWorkspace))
+	trail = fmt.Sprintf(" %d:%d ", m.dockWorkspace(), m.GetWorkspaceWindowCount(m.dockWorkspace()))
 
 	// Passive project-tape badge: when the focused window is inside a directory
 	// carrying a .tuios.tape, a small status marker rides in the dock. It is

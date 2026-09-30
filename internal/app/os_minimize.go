@@ -14,7 +14,10 @@ import (
 // closes when the command exits, which would leave a pill for a pane that is
 // gone. Close it instead.
 func (m *OS) MinimizeWindow(i int) {
-	if i >= 0 && i < len(m.Windows) && m.Windows[i].IsPopup {
+	// A scratch pane is not minimized either: the scratch key hides its
+	// whole group, and a pane parked on the dock of a group's workspace would
+	// be out of reach once the group hides.
+	if i >= 0 && i < len(m.Windows) && (m.Windows[i].IsPopup || m.Windows[i].IsScratch) {
 		return
 	}
 	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized {
@@ -257,15 +260,15 @@ func (m *OS) zoomedWindow() *terminal.Window {
 // the zoom of the whole screen, which is the same rectangle whichever pane
 // asked for it. See zoom_canvas.go and zoomUsesLayout.
 func (m *OS) zoomRect() (x, y, w, h int) {
-	topMargin := m.GetTopMargin()
-	leftMargin := m.GetLeftMargin()
-	contentWidth := m.GetContentWidth()
+	topMargin := m.PaneTop()
+	leftMargin := m.PaneLeft()
+	contentWidth := m.PaneWidth()
 	zoomWidth := contentWidth
 	// If ZoomMaxWidth is set, cap width and center horizontally
 	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
 		zoomWidth = m.Settings.ZoomMaxWidth
 	}
-	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.GetUsableHeight()
+	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.PaneHeight()
 }
 
 // applyZoomRect puts a zoomed pane in this client's zoom box and tells its
@@ -508,8 +511,8 @@ func (m *OS) zoomCoversRegion(w *terminal.Window) bool {
 			return false
 		}
 	}
-	return w.X <= m.GetLeftMargin() && w.Y <= m.GetTopMargin() &&
-		w.Width >= m.GetContentWidth() && w.Height >= m.GetUsableHeight()
+	return w.X <= m.PaneLeft() && w.Y <= m.PaneTop() &&
+		w.Width >= m.PaneWidth() && w.Height >= m.PaneHeight()
 }
 
 // zoomAnimation is the slide between a pane's tile and a zoom box, or nil when

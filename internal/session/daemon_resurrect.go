@@ -162,18 +162,20 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// exit and that nothing asked for. Dropping it is the same answer the
 		// loop gives a window whose shell will not start.
 		//
-		// The built-in scratch terminal is the exception. It runs a shell
-		// anyway, so the respawned shell is what it held, and it comes back
-		// hidden: the scratch key shows it where the user is, and nothing
-		// floats over the layout before anyone asks for it. A scratch of a
-		// command entry runs its command, so it goes like any popup, and its
-		// key starts the command again.
-		if w.Popup && (!w.Scratch || w.ScratchKey() != "scratch") {
+		// A scratch pane is not a popup (see scratch_workspace.go): every
+		// pane of every scratch group comes back, a fresh shell in its own
+		// folder, on its group's workspace. So the group is hidden until its
+		// key shows it, with the layout it had. A scratch pane saved as a
+		// popup, before groups had a workspace, moves to one here.
+		if w.Popup && !w.Scratch {
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
 		}
 		if w.Scratch {
-			w.Minimized = true
+			w.Popup, w.IsFloating, w.Minimized = false, false, false
+			if !IsScratchWorkspace(w.Workspace) {
+				w.Workspace = legacyScratchWorkspace(&restored, w.ScratchKey())
+			}
 		}
 
 		// WindowState dimensions are the outer window box (including the border);
@@ -268,10 +270,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
-	scratch, scratchName := "", ""
+	scratchPanes := map[string]scratchPane{}
 	for _, w := range kept {
 		if w.Scratch {
-			scratch, scratchName = w.ID, w.ScratchName
+			scratchPanes[w.ID] = scratchPane{name: w.ScratchName, workspace: w.Workspace}
 		}
 	}
 
@@ -281,8 +283,8 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	sess.MarkRestored()
 	// The scratch mark is daemon-owned in the same way: UpdateState keeps
 	// only the marks canonical state already has, and a new session has none.
-	if scratch != "" {
-		sess.markRestoredScratch(scratch, scratchName)
+	if len(scratchPanes) > 0 {
+		sess.markRestoredScratch(scratchPanes)
 	}
 
 	// The worktree record goes back on for the same reason: it is
@@ -342,4 +344,22 @@ func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
 		wt.PromptNote = "The daemon restarted before the prompt was typed. Send the prompt with send-text."
 	}
 	return &wt
+}
+
+// scratchPane is what a restore re-marks on one scratch pane.
+type scratchPane struct {
+	name      string
+	workspace int
+}
+
+// legacyScratchWorkspace is the workspace for a scratch group saved before
+// groups had one: the one another pane of the group already moved to, or the
+// lowest free one.
+func legacyScratchWorkspace(state *SessionState, key string) int {
+	for i := range state.Windows {
+		if w := &state.Windows[i]; w.Scratch && w.ScratchKey() == key && IsScratchWorkspace(w.Workspace) {
+			return w.Workspace
+		}
+	}
+	return freeScratchWorkspace(state)
 }

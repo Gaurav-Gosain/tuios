@@ -108,11 +108,18 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		}
 	}
 
+	// While a scratch group is on the screen, the workspace it is shown over
+	// is drawn under it, below every layer of the group. See scratch.go.
+	inScratch := m.InScratchView()
 	for i := range m.Windows {
 		window := m.Windows[i]
 
+		backdrop := false
 		if window.Workspace != m.CurrentWorkspace {
-			continue
+			if !inScratch || window.Workspace != m.scratchBase {
+				continue
+			}
+			backdrop = true
 		}
 
 		_, isAnimating := animatingWindows[window]
@@ -134,7 +141,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// cases the panes underneath are drawn and the zoomed one is lifted
 		// over them. Skipping them there left the pane growing over a blank
 		// screen, which is the one thing the smaller box exists to avoid.
-		if zoomedWindow != nil && window != zoomedWindow && !window.IsPopup && zoomCovers {
+		if zoomedWindow != nil && window != zoomedWindow && !window.IsPopup && zoomCovers && !backdrop {
 			continue
 		}
 
@@ -196,6 +203,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// it only in the fresh path left the cached path's scrollbar at a
 		// different depth, so it flickered as the window toggled dirty/clean.
 		zIndex := windowLayerZ(window, isAnimating)
+		if backdrop {
+			zIndex += scratchBackdropZ
+		}
 
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			if renderTraceEnabled {
@@ -291,6 +301,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if window.Terminal == nil || !window.Terminal.IsSyncActive() {
 			window.ClearDirtyFlags()
 		}
+	}
+
+	if frame := m.renderScratchFrame(); frame != nil {
+		layers = append(layers, frame)
 	}
 
 	// Add shared border separator overlay when active (not in scrolling mode)

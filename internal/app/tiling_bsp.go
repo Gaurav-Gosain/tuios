@@ -49,10 +49,10 @@ func (m *OS) GetBSPBounds() layout.Rect {
 	// margin (the sidebar, when on the left) and is narrowed by both margins.
 	// This alone re-tiles every pane into the reduced box.
 	return layout.Rect{
-		X: m.GetLeftMargin(),
-		Y: m.GetTopMargin(),
-		W: m.GetContentWidth(),
-		H: m.GetUsableHeight(),
+		X: m.PaneLeft(),
+		Y: m.PaneTop(),
+		W: m.PaneWidth(),
+		H: m.PaneHeight(),
 	}
 }
 

@@ -1511,7 +1511,13 @@ type OS struct {
 	scratchStarted map[string]time.Time
 	// deadScratch is the scratch panes the daemon reported as stopped that
 	// this client may still hold. See handleScratchOpened.
-	deadScratch       map[string]bool
+	deadScratch map[string]bool
+	// scratchBase is the workspace a scratch group is shown over, while one
+	// is on the screen, and scratchBaseTiling the tiling mode it had: a group
+	// always tiles. scratchViewName is the group's name. See scratch.go.
+	scratchBase       int
+	scratchBaseTiling bool
+	scratchViewName   string
 	scratchReturnMode Mode
 	// forceTerminalMode is OSOptions.StartInTerminalMode: applyStartupPreferences
 	// enters terminal mode once a pane is focused, for any session.

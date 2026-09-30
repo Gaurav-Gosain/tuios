@@ -763,8 +763,8 @@ type windowRow struct {
 	Workspace  int    `json:"workspace"`
 	Focused    bool   `json:"focused"`
 	Minimized  bool   `json:"minimized"`
-	// Scratch marks the session's scratch terminal. The table leaves it out
-	// while it is hidden, as the dock does. --json keeps it, marked.
+	// Scratch marks a pane of a scratch group. The table leaves it out, as
+	// the dock and the rail do. --json keeps it, marked.
 	Scratch    bool   `json:"scratch"`
 	AgentState string `json:"agent_state"`
 	AgentMsg   string `json:"agent_message"`
@@ -785,7 +785,7 @@ func printWindowList(raw json.RawMessage, on string) error {
 	}
 	shown := res.Windows[:0]
 	for _, w := range res.Windows {
-		if w.Scratch && w.Minimized {
+		if w.Scratch {
 			continue
 		}
 		shown = append(shown, w)

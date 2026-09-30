@@ -30,8 +30,8 @@ const (
 // reserved sidebar band on either side.
 func (m *OS) contentTileLayouts(n int) []layout.TileLayout {
 	return m.tileLayoutsIn(n, layout.Rect{
-		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
-		W: m.GetContentWidth(), H: m.GetUsableHeight(),
+		X: m.PaneLeft(), Y: m.PaneTop(),
+		W: m.PaneWidth(), H: m.PaneHeight(),
 	})
 }
 
@@ -463,10 +463,10 @@ func (m *OS) leaveTiling() {
 // region to the nearest place inside it. A pane wider or taller than the region
 // keeps its size and is pinned to the region's top-left edge.
 func (m *OS) bringPanesIntoView() {
-	left := m.GetLeftMargin()
-	top := m.GetTopMargin()
-	width := m.GetContentWidth()
-	height := m.GetUsableHeight()
+	left := m.PaneLeft()
+	top := m.PaneTop()
+	width := m.PaneWidth()
+	height := m.PaneHeight()
 	if width <= 0 || height <= 0 {
 		return
 	}
