@@ -573,7 +573,7 @@ This ensures:
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
 | **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
 | **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync. Video playback via mpv --vo=kitty (shm and base64) and youterm. Unicode placeholders forwarded as declarations, see below. |
-| **Sixel Passthrough** | `internal/app/sixel_passthrough.go` | Sixel forwarding       | Raw sixel passthrough with window boundary awareness            |
+| **Sixel Passthrough** | `internal/app/sixel_passthrough.go` | Sixel images           | Decodes each pane's sixel, crops it to what is visible on the frame, and sends it as sixel, as kitty graphics, or as a placeholder box. See [Sixel images](#sixel-images). |
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
 | **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
 | **BSP Tiling**        | `internal/layout/bsp.go`        | BSP tree management        | Binary space partitioning, spiral layout, split rotation        |
@@ -792,6 +792,98 @@ A guest on another machine that asks is told not to send a path at all. One
 that sends a path without asking has it read on the wrong machine, where it
 names nothing or names one of the user's own files. The checks above apply to
 that read too.
+
+### Sixel images
+
+A sixel image is pixels a terminal paints at the cursor, with no id, no crop and
+no delete. tuios cannot pass one through as it is: a pane is a part of the host
+screen, and the host would paint the picture past the pane's edges, over popups
+and over the next pane, with nothing to take it back.
+
+**Detection.** Each client decides for its own terminal.
+
+- A local terminal is asked at startup: DA1 attribute 4 says sixel.
+- An SSH client's terminal is guessed from its `TERM` first, then asked for DA1
+  once the session runs (`internal/app/sixel_probe.go`). The answer replaces
+  the guess.
+- `tuios-web` draws with xterm.js and its image addon, which does both sixel and
+  kitty graphics.
+- `TUIOS_SIXEL_GRAPHICS=1` or `0` overrides all of these.
+
+A pane is told it can draw sixel (DA1 attribute 4, and an answer to
+XTSMGRAPHICS for 256 colour registers and the pane's size in pixels) only when
+its picture will be shown: the host draws sixel or kitty graphics. In daemon
+mode the daemon's emulator answers, from the clients attached to the session:
+yes while any of them will show the picture (`Session.SetSixelAdvertised`).
+chafa, lsix, timg, yazi and notcurses choose between sixel and a text fallback
+on that answer, so a pane on a plain terminal gets their text fallback and not a
+blank. `TERM_PROGRAM` is not used to claim sixel: the names tools read as sixel
+also mean protocols tuios does not pass (WezTerm makes yazi use iTerm2 images).
+The pixel size replies (`CSI 14 t`, `16 t`, `18 t`) use the host's cell size.
+
+**Cells.** The emulator does to a sixel image what a sixel terminal does: every
+cell the image covers is written with a marker (`internal/vt/sixel_marker.go`).
+A marker is U+10EEED with four combining marks from kitty's placeholder table:
+the cell's row and column in the image, and the image id. From then on the
+picture is wherever its cells are. It scrolls into the scrollback with them,
+text written over a cell takes that cell's part of the picture away, and an
+erase clears it. Both emulator backends get this without special cases,
+because a marker is only a character. The passthrough decodes the picture on
+the pane's PTY reader and keeps it under the id (`vt.DecodeSixel`, two bytes a
+pixel, at most 64 MiB a pane and 4096 images, oldest dropped first).
+
+**Showing.** The compositor finds the markers on each finished frame
+(`internal/app/sixel_frame.go`), after every overlay and effect is drawn. What
+it finds is exactly what is visible: moved by the pane's position and scroll,
+clipped by its edges and by the popups over it, absent on another workspace.
+Each image's visible cells become rectangles, and each rectangle is sent after
+the frame's text in the same write:
+
+- On a sixel host, as a sixel of that part of the image (`vt.EncodeSixel`),
+  re-encoded from the image's own palette, so no colour changes. A whole image
+  at its own cell size is sent as the guest wrote it. Nothing is sent to the
+  host's last row, where a sixel would scroll the screen.
+- On a host with kitty graphics and no sixel, as a kitty image with one
+  placement per rectangle, cropped with a source rectangle.
+- On a host with neither, the cells show a dim box with "image" in it.
+
+Each marker becomes a space with the conceal attribute. It draws nothing, but a
+cell that stops being part of an image changes, the renderer rewrites it, and a
+sixel terminal drops the picture from a cell that is written into. That is how
+an image leaves the host: when it is cleared, scrolled away, covered or its
+pane closes. The renderer also rewrites cells that did not change, for example
+a whole line when both of its ends changed. So the passthrough reads the bytes
+the renderer writes (`internal/app/sixel_damage.go`) and sends again every
+rectangle whose cells they touched.
+
+Copying text from a pane gives blanks for image cells. A crop larger than about
+128,000 pixels is encoded on a goroutine of its own, and a kitty transmission is
+compressed on one, so neither holds up the UI.
+
+**Support.** "Tested" means run in a pane against a stand-in terminal of that
+kind; "expected" means the path is the same but the program was not run. The
+tuios mode does not change the result, because every client shows images to
+its own terminal: standalone, daemon, an SSH client (its DA1 answer decides)
+and tuios-web (a sixel host) all take the same path.
+
+| Program | Sixel host (foot, WezTerm, xterm, mlterm, Konsole, Windows Terminal, tuios-web) | Kitty host without sixel (kitty, Ghostty) | Host with neither |
+| --- | --- | --- | --- |
+| chafa | tested: sixel | expected: chafa draws kitty graphics | expected: chafa's text |
+| timg | tested: sixel | expected: timg draws kitty graphics | expected: timg's text |
+| lsix | tested: sixel | expected: sent as kitty graphics | expected: lsix refuses to run |
+| yazi | tested: sixel preview | expected: yazi draws kitty graphics | expected: no preview picture |
+| a sixel file (`cat`), img2sixel | tested: sixel | tested: sent as kitty graphics | tested: placeholder box |
+| viu | no sixel in common builds: text | expected: viu draws kitty graphics | expected: viu's text |
+| notcurses, matplotlib sixel backends | expected: sixel | expected: sent as kitty graphics | expected: text or placeholder box |
+
+img2sixel 1.10.5 on the test machine writes nothing for any input, so its row
+was tested with a sixel file of the same form.
+
+Standalone and daemon mode are covered by `e2e/tui/sixel_test.go`, which
+replays what tuios wrote to a stand-in sixel terminal and checks that the
+picture lands in the right cells, clipped, and is gone when cleared. An SSH
+client and a browser use the same code with a different writer; neither has an
+end-to-end test.
 
 ## Performance Characteristics
 

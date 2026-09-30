@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Bounds on the vim-style count prefix in the scrollback browser. maxVimCount
@@ -146,7 +147,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				fmt.Sprintf("Copied %d chars", len(text)),
 				"success", o.Settings.NotificationDuration,
 			)
-			return o, tea.SetClipboard(text)
+			return o, tea.SetClipboard(vt.StripSixelMarkers(text))
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
@@ -158,7 +159,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				fmt.Sprintf("Copied: %s", truncateForNotif(text, 30)),
 				"success", o.Settings.NotificationDuration,
 			)
-			return o, tea.SetClipboard(text)
+			return o, tea.SetClipboard(vt.StripSixelMarkers(text))
 		}
 
 	// Paste selected command back to terminal
@@ -471,7 +472,7 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
-				return o, tea.SetClipboard(text)
+				return o, tea.SetClipboard(vt.StripSixelMarkers(text))
 			}
 		} else {
 			text := vim.SelectedText()
@@ -481,7 +482,7 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
-				return o, tea.SetClipboard(text)
+				return o, tea.SetClipboard(vt.StripSixelMarkers(text))
 			}
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // copyModeEffects records the side effects a copy-mode key handler wants to
@@ -61,7 +62,8 @@ func (fx *copyModeEffects) EnterTerminalMode() { fx.enterTerminal = true }
 
 // SetClipboard queues an OSC 52 clipboard write for the yanked text.
 func (fx *copyModeEffects) SetClipboard(text string) {
-	fx.clipboard = text
+	// Image cells are markers in the grid; a copy gets blanks for them.
+	fx.clipboard = vt.StripSixelMarkers(text)
 	fx.setClipboard = true
 }
 

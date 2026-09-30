@@ -487,8 +487,6 @@ type OS struct {
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
-	sixelWinIndex   map[string]*terminal.Window    // Reused window-by-ID index for sixel placement refresh
-	sixelPosValue   WindowPositionInfo             // Reused value returned to the sixel refresh callback
 	// Scrollback lengths snapshotted before a placement refresh takes the
 	// passthrough lock. The refresh callbacks run under kp.mu/sp.mu and must
 	// not take a window's ioMu there: the PTY reader holds ioMu while

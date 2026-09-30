@@ -389,6 +389,8 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		GraphicsOutput: prw,
 	})
 	initialOS.PostRenderWriter = prw
+	// Sixel images follow the frame they sit on, in the same write.
+	initialOS.ConnectFrameWriter(prw)
 
 	// Everything the daemon sends an attached client, queued for Update. The
 	// same call the SSH server and tuios-web make.

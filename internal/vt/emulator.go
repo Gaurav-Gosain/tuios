@@ -189,7 +189,7 @@ type Emulator struct {
 	kittyPlaceholderMode KittyPlaceholderMode
 
 	// Sixel graphics passthrough callback
-	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	sixelPassthroughFunc SixelPassthroughFunc
 	// sixelAdvertised says whether a sixel image this pane draws will be
 	// shown, which is what DA1 and XTSMGRAPHICS report.
 	sixelAdvertised func() bool
@@ -1652,33 +1652,71 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 			return false
 		}
 
-		// Get cursor position for placement
-		cursorX, cursorY := e.scr.CursorPosition()
-
-		// Calculate absolute line (accounting for scrollback)
-		absLine := e.scrs[0].ScrollbackLen() + cursorY
-		if e.IsAltScreen() {
-			// Alt screen doesn't have scrollback, use viewport position
-			absLine = cursorY
-		}
-
-		// Reserve space for the image (move cursor down), whether or not a
-		// passthrough is installed: no passthrough is a test-only situation,
-		// and the cursor still moves past where the image would sit.
-		if e.sixelPassthroughFunc != nil {
-			e.sixelPassthroughFunc(cmd, cursorX, cursorY, absLine)
-		}
 		cellWidth, cellHeight := e.CellSize()
-		rows := cmd.RowsForHeight(cellHeight)
-		cols := cmd.ColsForWidth(cellWidth)
-		if rows > 0 {
-			e.ReserveImageSpace(rows, cols)
+		cmd.CellWidth, cmd.CellHeight = cellWidth, cellHeight
+		rows, cols := SixelCells(cmd, cellWidth, cellHeight)
+		cursorX, cursorY := e.scr.CursorPosition()
+		// The passthrough decodes the picture and names it. Without one (the
+		// daemon's emulator, and tests) the cells are still reserved, under
+		// id 0, so the cursor and the grid end up where a sixel terminal
+		// would leave them.
+		var id uint32
+		if e.sixelPassthroughFunc != nil {
+			id = e.sixelPassthroughFunc(cmd, cursorX, cursorY)
 		}
+		e.placeSixel(rows, cols, id)
 		return true
 	})
 }
 
-func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
+// placeSixel writes an image's marker cells at the cursor, scrolling first if
+// the image runs past the bottom, and leaves the cursor at column 0 of the row
+// under it. See sixel_marker.go.
+func (e *Emulator) placeSixel(rows, cols int, id uint32) {
+	if rows <= 0 || cols <= 0 {
+		return
+	}
+	startX, startY := e.scr.CursorPosition()
+	height, width := e.scr.Height(), e.scr.Width()
+	scroll := 0
+	if startY+rows > height {
+		// Clamped: rows past a full screen cannot be shown, and a hostile
+		// raster size would otherwise drive a scroll per row.
+		scroll = min(startY+rows-height, height)
+		// A blank pen, as in ReserveImageSpace: the guest printed no text,
+		// so background-colour erase must not paint the rows it exposes.
+		e.scr.withBlankPen(func() {
+			for range scroll {
+				e.scr.ScrollUp(1)
+			}
+		})
+	}
+	top := startY - scroll
+	for r := range rows {
+		y := top + r
+		if y < 0 || y >= height {
+			continue
+		}
+		for c := range cols {
+			x := startX + c
+			if x >= width {
+				break
+			}
+			cell := uv.Cell{Content: SixelMarker(id, r, c), Width: 1}
+			if old := e.scr.CellAt(x, y); old != nil {
+				// The compositor keeps only the background, which shows
+				// through the image's transparent pixels.
+				cell.Style.Bg = old.Style.Bg
+			}
+			e.scr.SetCell(x, y, &cell)
+		}
+	}
+	e.scr.setCursor(0, min(startY+rows-scroll, height-1), false)
+}
+
+// SetSixelPassthroughFunc installs the function that decodes a guest's sixel
+// image and returns the id its marker cells carry. See sixel_marker.go.
+func (e *Emulator) SetSixelPassthroughFunc(fn SixelPassthroughFunc) {
 	e.sixelPassthroughFunc = fn
 }
 

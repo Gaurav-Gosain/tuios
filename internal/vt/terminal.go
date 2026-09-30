@@ -132,7 +132,10 @@ type Terminal interface {
 	// SetKittyPlaceholderMode says whether placeholder cells are kept or
 	// dropped. See kitty_placeholder.go.
 	SetKittyPlaceholderMode(m KittyPlaceholderMode)
-	SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int))
+	// SetSixelPassthroughFunc installs the function that takes a guest's
+	// sixel image and returns the id its cells are marked with. See
+	// sixel_marker.go.
+	SetSixelPassthroughFunc(fn SixelPassthroughFunc)
 	// SetSixelAdvertised installs the function that decides whether the
 	// pane is told it can draw sixel: attribute 4 in the DA1 reply, and an
 	// answer to XTSMGRAPHICS. Nil tells it nothing.

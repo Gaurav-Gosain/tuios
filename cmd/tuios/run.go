@@ -150,6 +150,8 @@ func runLocal() error {
 		GraphicsOutput: prw,
 	})
 	initialOS.PostRenderWriter = prw
+	// Sixel images follow the frame they sit on, in the same write.
+	initialOS.ConnectFrameWriter(prw)
 
 	// The shared list, then the one option that is this transport's: the
 	// writer every frame and every graphics sequence serialize on.

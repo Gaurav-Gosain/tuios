@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -221,7 +222,7 @@ func selectionText(window *terminal.Window) string {
 	if window.Terminal == nil {
 		return ""
 	}
-	return extractVisualText(window.CopyMode, window)
+	return vt.StripSixelMarkers(extractVisualText(window.CopyMode, window))
 }
 
 // remainingClickWindow is how much of the multi-click window is left, measured

@@ -277,6 +277,9 @@ func tuiosSessionMiddleware() wish.Middleware {
 			}
 
 			out := &serialWriter{w: sess}
+			// The renderer's writer: frames, then the sixel images drawn on
+			// them, in one write to the shared session writer.
+			frames := app.NewFrameHookWriter(out)
 			model, err := buildSessionModel(sess, out)
 			if err != nil {
 				// The daemon refused: this client would show the session
@@ -293,8 +296,9 @@ func tuiosSessionMiddleware() wish.Middleware {
 			// with the graphics path. This server never allocates a
 			// server-side PTY (no ssh.AllocatePty), so the session itself is
 			// always the right output to wrap.
+			model.ConnectFrameWriter(frames)
 			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions()...)
-			opts = append(opts, tea.WithOutput(out))
+			opts = append(opts, tea.WithOutput(frames))
 			program := tea.NewProgram(model, opts...)
 
 			ctx, cancel := context.WithCancel(sess.Context())

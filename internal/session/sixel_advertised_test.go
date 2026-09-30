@@ -40,8 +40,9 @@ func waitSixelAdvertised(t *testing.T, d *Daemon, name string, want bool, what s
 }
 
 // TestSixelAdvertisedFollowsAttachedClients: a pane is told it can draw sixel
-// while any attached client's terminal draws it, and not while only terminals
-// without it are attached. With nobody attached the last answer stands.
+// while any attached client's terminal will show the picture, in sixel or as
+// kitty graphics, and not while only terminals with neither are attached.
+// With nobody attached the last answer stands.
 func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
@@ -54,14 +55,14 @@ func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 	sixel.send(t, MsgDetach, struct{}{})
 	waitSixelAdvertised(t, d, "img", false, "the sixel client left")
 
-	again := dialGraphicsClient(t, socketPath, "img", true, false)
-	waitSixelAdvertised(t, d, "img", true, "a sixel client again")
+	kitty := dialGraphicsClient(t, socketPath, "img", false, true)
+	waitSixelAdvertised(t, d, "img", true, "a kitty client, sent sixel as kitty images")
 
 	// One at a time: two connections' detaches are handled in any order.
 	plain.send(t, MsgDetach, struct{}{})
 	waitAttachedClients(t, d, "img", 1)
 	waitSixelAdvertised(t, d, "img", true, "the plain client left")
-	again.send(t, MsgDetach, struct{}{})
+	kitty.send(t, MsgDetach, struct{}{})
 	time.Sleep(50 * time.Millisecond)
 	waitSixelAdvertised(t, d, "img", true, "nobody attached keeps the last answer")
 }

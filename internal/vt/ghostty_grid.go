@@ -604,3 +604,61 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 	t.gridStale = true
 	t.scrollGeneration++
 }
+
+// placeSixelLocked marks an image's cells in the grid at the cursor, the
+// ghostty twin of Emulator.placeSixel. The grid is the library's, so the
+// cells are written as text: the scroll ReserveImageSpace makes, then a run
+// of marker characters on each row, then the pen and cursor put back. The pen
+// is read and restored by hand rather than with DECSC, because DECSC's one
+// slot belongs to the guest.
+func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
+	if rows <= 0 || cols <= 0 || t.closed.Load() {
+		return
+	}
+	startX, startY := t.cursorLocked()
+	height, width := t.height, t.width
+	scroll := 0
+	if startY+rows > height {
+		scroll = min(startY+rows-height, height)
+	}
+	pen, err := t.term.CursorStyle()
+	penSeq := ""
+	if err == nil && pen != nil {
+		s := t.convertStyle(pen)
+		penSeq = penStyleSequence(&s)
+	}
+	insert, _ := t.term.Mode(gh.ModeInsert)
+
+	var seq strings.Builder
+	seq.WriteString("\x1b[0m")
+	if insert {
+		seq.WriteString("\x1b[4l")
+	}
+	if scroll > 0 {
+		fmt.Fprintf(&seq, "\x1b[%d;1H", height)
+		for range scroll {
+			seq.WriteString("\n")
+		}
+	}
+	top := startY - scroll
+	n := min(cols, width-startX)
+	for r := range rows {
+		y := top + r
+		if y < 0 || y >= height || n <= 0 {
+			continue
+		}
+		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, startX+1)
+		for c := range n {
+			seq.WriteString(SixelMarker(id, r, c))
+		}
+	}
+	if insert {
+		seq.WriteString("\x1b[4h")
+	}
+	seq.WriteString("\x1b[0m")
+	seq.WriteString(penSeq)
+	fmt.Fprintf(&seq, "\x1b[%d;1H", min(startY+rows-scroll, height-1)+1)
+	t.term.VTWrite([]byte(seq.String()))
+	t.gridStale = true
+	t.scrollGeneration++
+}
