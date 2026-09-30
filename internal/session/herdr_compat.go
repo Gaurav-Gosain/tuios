@@ -68,6 +68,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // herdrMaxRequest bounds one request line. A report is a few hundred bytes.
@@ -139,6 +140,83 @@ func (h *herdrSeqs) fresh(key string, seq *uint64) bool {
 	}
 	h.high[key] = *seq
 	return true
+}
+
+// atOrBelow reports whether seq is at or below the highest seen for key. A
+// request with no seq, or a key with no mark, is never below.
+func (h *herdrSeqs) atOrBelow(key string, seq *uint64) bool {
+	if seq == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	last, ok := h.high[key]
+	return ok && *seq <= last
+}
+
+// herdrEventRate and herdrEventBurst bound the notifications and metadata
+// reports one pane may send: a burst of herdrEventBurst, then
+// herdrEventRate a second. Each one becomes an event or a state push to
+// every client, so a pane must not be able to flood them.
+const (
+	herdrEventRate  = 5.0
+	herdrEventBurst = 20.0
+	herdrBucketsMax = 4096
+)
+
+// herdrBuckets is a token bucket per pane.
+type herdrBuckets struct {
+	mu sync.Mutex
+	b  map[string]*herdrBucket
+}
+
+type herdrBucket struct {
+	tokens float64
+	at     time.Time
+}
+
+// take spends one token for window and reports whether there was one.
+func (h *herdrBuckets) take(window string, now time.Time) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.b == nil || len(h.b) > herdrBucketsMax {
+		h.b = make(map[string]*herdrBucket)
+	}
+	bk := h.b[window]
+	if bk == nil {
+		bk = &herdrBucket{tokens: herdrEventBurst, at: now}
+		h.b[window] = bk
+	}
+	bk.tokens = min(herdrEventBurst, bk.tokens+now.Sub(bk.at).Seconds()*herdrEventRate)
+	bk.at = now
+	if bk.tokens < 1 {
+		return false
+	}
+	bk.tokens--
+	return true
+}
+
+// herdrYields reports whether a state report from source should give way
+// to the harness's own tuios integration in the pane. herdr's own hook
+// scripts report with a source that starts with "herdr:". A person who has
+// installed both herdr's scripts and tuios's hooks for the same agent has
+// two reporters for one pane, and they must not take the pane from each
+// other turn by turn. tuios's hook wins: while a report that did not come
+// over this socket holds the pane for the same harness, a report from one
+// of herdr's scripts is dropped. An agent that reports to herdr by itself
+// (Crush, source "crush") is not a herdr script and never yields.
+func (d *Daemon) herdrYields(window, harness, source string) bool {
+	if !strings.HasPrefix(source, "herdr:") {
+		return false
+	}
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return false
+	}
+	sess.stateMu.RLock()
+	defer sess.stateMu.RUnlock()
+	claim, held := sess.agentClaims[window]
+	return held && claim.source == AgentSourceReport && claim.herdrAt == 0 && claim.harness != "" && claim.harness == harness
 }
 
 // listenHerdrSocket opens the herdr protocol socket, owner only, and returns
@@ -250,6 +328,11 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	if sess == "" {
 		return nil, "pane_not_found", "no pane " + p.PaneID
 	}
+	if req.Method == "notification.show" || req.Method == "pane.report_metadata" {
+		if !d.herdrEvents.take(window, time.Now()) {
+			return nil, "rate_limited", "this pane sends notifications and metadata too fast; wait and send again"
+		}
+	}
 	if req.Method == "notification.show" {
 		return d.herdrNotify(window, p)
 	}
@@ -259,6 +342,12 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	seqKey := window + "\x00" + p.Source
 	if req.Method == "pane.report_metadata" {
 		seqKey = window + "\x00meta\x00" + p.Source
+	}
+	if req.Method == "pane.report_metadata" && d.herdrSeqs.atOrBelow(window+"\x00"+p.Source, p.Seq) {
+		// Crush numbers state and metadata from one counter. Metadata at or
+		// below the source's last state report, the release included, was
+		// sent before it, and must not bring back what the release cleared.
+		return map[string]any{"type": "ok"}, "", ""
 	}
 	if !d.herdrSeqs.fresh(seqKey, p.Seq) {
 		// herdr drops a stale report without an error, and so does this.
@@ -274,9 +363,12 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	}
 	switch req.Method {
 	case "pane.report_agent":
+		if d.herdrYields(window, harness, p.Source) {
+			return map[string]any{"type": "ok"}, "", ""
+		}
 		out, code, msg := d.herdrReport(sess, window, harness, pid, p)
 		if code == "" {
-			d.markHerdrClaim(window)
+			d.markHerdrClaim(window, d.herdrAnchorsFor(cs, window))
 		}
 		return out, code, msg
 	case "pane.report_agent_session":
@@ -288,6 +380,9 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 			return nil, "report_failed", verr.Message
 		}
 	case "pane.release_agent":
+		if d.herdrYields(window, harness, p.Source) {
+			return map[string]any{"type": "ok"}, "", ""
+		}
 		// The release carries a seq, recorded above, and the high-water
 		// mark stays. A report Crush queued before it quit can reach the
 		// socket after the release, and it must not bring the pane back.
@@ -299,26 +394,27 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 }
 
 // herdrHarness is the harness a herdr agent label names: tuios's id for a
-// harness it knows, or else the label itself, cleaned to a short name, so an
-// agent tuios has never heard of still shows under its own name.
+// harness it knows, or else the label itself, lower-cased, spaces turned to
+// hyphens, and cut to letters, digits, '-' and '_' and 32 bytes, so an agent
+// tuios has never heard of still shows under its own name and a label can
+// never be a path.
 func herdrHarness(agent string) string {
 	if id, ok := integration.Canonical(agent); ok {
 		return id
 	}
-	agent = strings.ToLower(strings.TrimSpace(agent))
 	var b strings.Builder
-	for _, r := range agent {
+	for _, r := range strings.ToLower(strings.TrimSpace(agent)) {
 		if b.Len() >= 32 {
 			break
 		}
 		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
 			b.WriteRune(r)
 		case r == ' ':
 			b.WriteByte('-')
 		}
 	}
-	return b.String()
+	return strings.Trim(b.String(), "-_")
 }
 
 // herdrPane places the caller in its pane and checks pane_id names it.
@@ -338,7 +434,7 @@ func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string
 // crashes sends no pane.release_agent, and without this its last report,
 // working as often as not, would stand for as long as the pane lives. herdr
 // has the same safety net. See detectionPass.
-func (d *Daemon) markHerdrClaim(window string) {
+func (d *Daemon) markHerdrClaim(window string, anchors []herdrAnchor) {
 	sess := d.sessionHoldingWindow(window)
 	if sess == nil {
 		return
@@ -350,7 +446,57 @@ func (d *Daemon) markHerdrClaim(window string) {
 		return
 	}
 	claim.herdrAt = time.Now().UnixNano()
+	claim.herdrAnchors = anchors
 	sess.agentClaims[window] = claim
+}
+
+// herdrAnchorsFor is the processes a herdr claim from cs follows: the
+// reporter itself, and the first program above it that is not a shell,
+// below the pane's own shell. Crush reports from its own process, so the
+// first is Crush. A hook script (herdr's own for Claude Code, say) is gone
+// a moment after it reports, so the second is the agent that ran it. A
+// wrapper shell between the two (sh -c, a script) is passed over, because
+// it can outlive the harness it started. Nil when the reporter cannot be
+// read.
+func (d *Daemon) herdrAnchorsFor(cs *connState, window string) []herdrAnchor {
+	if cs == nil || cs.peerPID <= 1 || cs.peerPID == os.Getpid() {
+		return nil
+	}
+	start, ok := cs.peerStart, cs.peerStartOK
+	if !ok {
+		start, ok = procinfo.StartTime(cs.peerPID)
+	}
+	if !ok {
+		return nil
+	}
+	anchors := []herdrAnchor{{pid: cs.peerPID, start: start}}
+	paneShell := 0
+	for _, sh := range d.localPaneShells() {
+		if sh.windowID == window {
+			paneShell = sh.shellPID
+		}
+	}
+	cur := cs.peerPID
+	for depth := 0; depth < paneOriginMaxDepth; depth++ {
+		ppid, _, ok := readProcLineage(cur)
+		if !ok || ppid <= 1 || ppid == paneShell || ppid == os.Getpid() {
+			break
+		}
+		cur = ppid
+		info := readProcessInfo(ppid)
+		name := agentBaseName(info.comm)
+		if len(info.argv) > 0 {
+			name = agentBaseName(info.argv[0])
+		}
+		if name == "" || loginShells[name] {
+			continue
+		}
+		if st, ok := procinfo.StartTime(ppid); ok {
+			anchors = append(anchors, herdrAnchor{pid: ppid, start: st})
+		}
+		break
+	}
+	return anchors
 }
 
 // herdrMetadata applies one pane.report_metadata as agent metadata: each

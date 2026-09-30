@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"os/exec"
 	"slices"
 	"testing"
 	"time"
@@ -25,7 +26,9 @@ func newHerdrFixture(t *testing.T) *herdrFixture {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 	st := sess.GetState()
-	f := &herdrFixture{d: d, sess: sess, a: st.Windows[0].ID, b: st.Windows[1].ID, pid: 4242}
+	// A pid above any pid_max: no process has it, so the claim has no
+	// anchor and follows the shell alone unless a test sets a real one.
+	f := &herdrFixture{d: d, sess: sess, a: st.Windows[0].ID, b: st.Windows[1].ID, pid: 1 << 30}
 	d.setApprovalPeer(func(*connState) (bool, string) { return f.caller != "", f.caller })
 	return f
 }
@@ -195,7 +198,7 @@ func TestHerdrSessionSwitchWhileWorking(t *testing.T) {
 		t.Fatalf("session %q, want s-2", w.AgentSessionID)
 	}
 	f.report(t, f.a, "working", "", "s-2", 3)
-	f.pid = 9999
+	f.pid = 1<<30 + 1
 	f.report(t, f.a, "idle", "", "s-3", 4)
 	f.wantState(t, f.a, AgentStateWorking, "a nested run")
 }
@@ -319,4 +322,125 @@ func TestHerdrEnvTellsEveryPaneByDefault(t *testing.T) {
 	if got := m.HerdrEnv("w1", []string{"crush"}); got != nil {
 		t.Fatalf("off: %q", got)
 	}
+}
+
+// ageHerdrClaim moves the pane's herdr claim past the grace.
+func (f *herdrFixture) ageHerdrClaim(t *testing.T, id string) {
+	t.Helper()
+	f.sess.stateMu.Lock()
+	defer f.sess.stateMu.Unlock()
+	c := f.sess.agentClaims[id]
+	if c.herdrAt == 0 {
+		t.Fatal("the herdr report did not mark its claim")
+	}
+	c.herdrAt -= int64(herdrShellGrace) + int64(time.Second)
+	f.sess.agentClaims[id] = c
+}
+
+// TestHerdrClaimFollowsTheReporterUnderAWrapper: a Crush started under a
+// wrapper (sh -c 'crush; exec fish') runs in the wrapper's process group, so
+// the pane reads as at its shell while Crush works. The claim follows the
+// reporting process instead, and clears only once that process is gone.
+func TestHerdrClaimFollowsTheReporterUnderAWrapper(t *testing.T) {
+	f := newHerdrFixture(t)
+	crush := exec.Command("sleep", "60")
+	if err := crush.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = crush.Process.Kill(); _ = crush.Wait() })
+	f.pid = crush.Process.Pid
+	f.report(t, f.a, "working", "", "", 1)
+	f.ageHerdrClaim(t, f.a)
+
+	shell := agentBaseName(f.sess.getShell())
+	atShell := func(string) (foregroundInfo, bool) {
+		return foregroundInfo{pid: 7, shellPID: 7, argv: []string{shell}, comm: shell}, true
+	}
+	none := func(foregroundInfo) (detection, bool) { return detection{}, false }
+	f.sess.scanAgentDetection(atShell, none, nil)
+	f.wantState(t, f.a, AgentStateWorking, "a live Crush under a wrapper")
+
+	_ = crush.Process.Kill()
+	_ = crush.Wait()
+	f.sess.scanAgentDetection(atShell, none, nil)
+	f.wantState(t, f.a, AgentStateNone, "the Crush gone")
+}
+
+// TestHerdrMetadataAfterReleaseStaysCleared: Crush numbers state and
+// metadata from one counter. Metadata it queued before its release reaches
+// the socket after it, and must not bring the pane's metadata back.
+func TestHerdrMetadataAfterReleaseStaysCleared(t *testing.T) {
+	f := newHerdrFixture(t)
+	f.report(t, f.a, "idle", "", "", 100)
+	f.call(t, "pane.release_agent", map[string]any{"pane_id": f.a, "source": "crush", "agent": "crush", "seq": 105})
+	if _, e := f.call(t, "pane.report_metadata", map[string]any{"pane_id": f.a, "source": "crush", "title": "late", "seq": 103}); e != "" {
+		t.Fatal(e)
+	}
+	if n := len(f.window(t, f.a).AgentMeta); n != 0 {
+		t.Fatalf("%d metadata tokens after a queued report behind the release", n)
+	}
+	f.call(t, "pane.report_metadata", map[string]any{"pane_id": f.a, "source": "crush", "title": "new", "seq": 106})
+	if got := agentMetaMap(f.window(t, f.a).AgentMeta, time.Now().UnixNano()); got["title"] != "new" {
+		t.Fatalf("metadata after the release: %v", got)
+	}
+}
+
+// TestHerdrHarnessNameIsPlain: a label tuios does not know becomes a name
+// of letters, digits, '-' and '_', never a path.
+func TestHerdrHarnessNameIsPlain(t *testing.T) {
+	for in, want := range map[string]string{
+		"../../etc": "etc", "Prime Agent": "prime-agent", "a/b\\c.d": "abcd", "crush": "crush", "claude": "claude-code",
+	} {
+		if got := herdrHarness(in); got != want {
+			t.Errorf("herdrHarness(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestHerdrEventsAreRateLimited: one pane cannot flood notifications and
+// metadata. A burst goes through, then the pane is refused until tokens
+// come back, and another pane is not affected.
+func TestHerdrEventsAreRateLimited(t *testing.T) {
+	f := newHerdrFixture(t)
+	f.caller = f.a
+	refused := 0
+	for i := range 40 {
+		_, e := f.call(t, "notification.show", map[string]any{"title": "n" + itoa(i)})
+		if e != "" {
+			refused++
+		}
+	}
+	if refused == 0 || refused > 40-int(herdrEventBurst) {
+		t.Fatalf("%d of 40 notifications refused, want some and at most %d", refused, 40-int(herdrEventBurst))
+	}
+	if _, e := f.call(t, "pane.report_metadata", map[string]any{"pane_id": f.a, "source": "crush", "title": "x", "seq": 1}); e == "" {
+		t.Fatal("metadata went through an empty bucket")
+	}
+	f.caller = f.b
+	if _, e := f.call(t, "notification.show", map[string]any{"title": "other pane"}); e != "" {
+		t.Fatalf("the other pane was refused: %s", e)
+	}
+}
+
+// TestHerdrScriptYieldsToTuiosHook: a person with herdr's pi plugin and
+// tuios's pi integration installed has two reporters in one pane. tuios's
+// own report holds the pane; a report from herdr's script (source herdr:pi)
+// for the same harness is dropped, and so is its release. Crush reports to
+// herdr by itself and never yields.
+func TestHerdrScriptYieldsToTuiosHook(t *testing.T) {
+	f := newHerdrFixture(t)
+	raw, _ := json.Marshal(map[string]any{"session": "work", "window": f.a, "state": "working", "harness": "pi"})
+	if _, verr := f.d.verbSetAgentState(nil, raw); verr != nil {
+		t.Fatal(verr.Message)
+	}
+	f.caller = f.a
+	f.call(t, "pane.report_agent", map[string]any{"pane_id": f.a, "source": "herdr:pi", "agent": "pi", "state": "idle", "seq": 1})
+	f.wantState(t, f.a, AgentStateWorking, "herdr's script behind tuios's hook")
+	f.call(t, "pane.release_agent", map[string]any{"pane_id": f.a, "source": "herdr:pi", "agent": "pi", "seq": 2})
+	f.wantState(t, f.a, AgentStateWorking, "herdr's script release behind tuios's hook")
+
+	// With no tuios report in the pane, herdr's script is the reporter.
+	f.caller = f.b
+	f.call(t, "pane.report_agent", map[string]any{"pane_id": f.b, "source": "herdr:pi", "agent": "pi", "state": "working", "seq": 2})
+	f.wantState(t, f.b, AgentStateWorking, "herdr's script alone")
 }

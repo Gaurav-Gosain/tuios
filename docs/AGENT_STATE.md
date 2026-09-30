@@ -339,9 +339,10 @@ variables to panes that start a known reporter (`tuios new-window NAME crush`,
 `start-agent crush`), or to turn them off, set `herdr_protocol` in `[agents]`
 (see [the configuration reference](CONFIGURATION.md#harnesses-that-report-to-herdr)).
 
-herdr reads `HERDR_ENV=1` as "inside herdr". A herdr that you start in a tuios
-pane stops with a message about nesting. Set `herdr_protocol = "agents"` or
-herdr's `experimental.allow_nested` to run herdr there. tuios never listens on
+herdr reads `HERDR_ENV=1` as "inside herdr". With the default, `herdr` refuses
+to start inside a tuios pane. Set `herdr_protocol = "agents"` to run herdr
+nested, or turn on herdr's `experimental.allow_nested`. Other herdr commands
+that reach tuios's socket, such as `herdr pane split`, return `unsupported`. tuios never listens on
 herdr's own socket, so a real herdr on the same machine is untouched. A tuios
 started inside a herdr pane does not pass that pane's `HERDR_ENV`,
 `HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its own panes. An
@@ -368,8 +369,9 @@ The wire is herdr's: one JSON object per connection on one line, `{"id",
 harness and its session id (see [Resuming after a restart](#resuming-after-a-restart)).
 
 Each report goes through `set-agent-state` with source `report`. The harness is
-tuios's id for `agent` when tuios knows the agent, and the `agent` name itself
-when it does not. A report has the same rank, guards and alerts as a hook's
+tuios's id for `agent` when tuios knows the agent. When it does not, the harness
+is the `agent` name in lower case, with spaces made into hyphens and every
+character other than a letter, a digit, `-` or `_` removed. A report has the same rank, guards and alerts as a hook's
 report. The pid of the reporting process goes with the session id, so a Crush
 that moves to another conversation during a turn is still the same harness.
 
@@ -380,9 +382,31 @@ the agent back. Crush takes its `seq` from the clock, so a restarted Crush is
 never stale. `pane.report_metadata` has a mark of its own.
 
 An agent that exits without `pane.release_agent`, for example after a crash,
-does not keep its last state. When the pane is back at its shell prompt and the
-last report is more than two seconds old, the pane clears to `none`. herdr has
-the same rule.
+does not keep its last state. tuios records the process that reported. When
+that process is a short hook, tuios also records the first program above it
+that is not a shell. The pane clears to `none` when all three are true: the
+pane is back at its shell prompt, the last report is more than two seconds
+old, and no recorded process is still running. An agent under a wrapper
+(`sh -c 'crush; exec fish'`, a script) keeps its state while it runs, although
+the pane then shows the wrapper's shell. herdr has a similar rule.
+
+`pane.report_metadata` from a source is dropped when its `seq` is at or below
+the last state report or release from that source. So metadata that Crush
+queued before its release does not come back after it.
+
+A pane may send `notification.show` and `pane.report_metadata` in a burst of
+20, then 5 a second. Past that the answer is error `rate_limited`.
+
+#### Two reporters for one agent
+
+herdr's own hook scripts report with a `source` that starts with `herdr:`. If
+you installed herdr's scripts and tuios's integration for the same agent (for
+example Pi or opencode), both report for the pane. tuios's integration wins.
+While a report from tuios's integration holds the pane for that harness,
+tuios drops the state reports and the release from herdr's script. The
+session id and metadata from herdr's script still apply. An agent that
+reports to herdr by itself, such as Crush, is not a herdr script and is never
+dropped.
 
 A request speaks only for the caller's own pane. The daemon places the
 connecting process the way it places every caller (see

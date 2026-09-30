@@ -125,16 +125,19 @@ func KittyAnimationVar(supported bool) string {
 // The same holds for an enclosing herdr. HERDR_ENV and the pane ids name the
 // herdr pane tuios runs in: Crush, and herdr's own hooks, report to it when
 // they see them, so an agent in a tuios pane would set the state of the outer
-// herdr pane. HERDR_SOCKET_PATH stays, since it names herdr's server and says
-// nothing about which pane a process is in; a pane tuios tells about its own
-// herdr protocol socket gets it replaced (see session.Manager.HerdrEnv).
+// herdr pane. HERDR_BIN_PATH goes too: under an outer tuios it names that
+// tuios, whose report commands would report to the outer pane. It is set
+// again for a pane this tuios tells about its own socket.
+// HERDR_SOCKET_PATH stays, since it names herdr's server and says nothing
+// about which pane a process is in; a pane tuios tells about its own herdr
+// protocol socket gets it replaced (see session.Manager.HerdrEnv).
 //
 // An enclosing tuios is the same case. A daemon or a standalone tuios started
 // from a tuios pane inherits that pane's TUIOS_ variables, and its own panes
 // would name the outer pane, session and socket where they set none of their
 // own. The ones a pane sets for itself are set again after this filter.
 var hostMultiplexerVars = []string{
-	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID",
+	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
 	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
 	"TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN", "TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED",
 	"TUIOS_PANE_TTY", "TUIOS_RESTORED",

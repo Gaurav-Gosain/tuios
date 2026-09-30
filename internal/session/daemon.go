@@ -45,8 +45,11 @@ type Daemon struct {
 	herdrListener net.Listener
 	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
 	herdrSeqs herdrSeqs
-	ctx       context.Context
-	cancel    context.CancelFunc
+	// herdrEvents limits the notifications and metadata each pane sends
+	// over the herdr protocol socket.
+	herdrEvents herdrBuckets
+	ctx         context.Context
+	cancel      context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
