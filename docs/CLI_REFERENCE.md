@@ -2044,9 +2044,11 @@ Rename a session.
 
 The new name is what `tuios ls` shows and what `attach` and `-s` take. New
 panes get it as `TUIOS_SESSION`. Panes that already run keep the old name, and
-tuios commands from them still reach the session. Attach by the old name fails
-and names the new one. The rename also clears a label set with
-`tuios set-session-name`.
+tuios commands from them still reach the session. Attach and kill-session by
+the old name fail and name the new one. The rename also clears a label set
+with `tuios set-session-name`. The name of a running or saved session is
+refused. A daemon older than this command answers that it does not know it.
+Run `tuios kill-server` and start tuios again.
 
 With one argument, the session is the one given by `-s`, or else the session
 of the pane you run it in.

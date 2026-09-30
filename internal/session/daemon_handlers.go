@@ -466,6 +466,9 @@ func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 	}
 
 	if err := d.manager.DeleteSession(payload.SessionName); err != nil {
+		if renamed, ok := d.manager.ResolveSession(payload.SessionName); ok && renamed != nil {
+			return d.sendError(cs, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
+		}
 		return d.sendError(cs, ErrCodeSessionNotFound, err.Error())
 	}
 

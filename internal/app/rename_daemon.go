@@ -21,15 +21,23 @@ type RenameAppliedMsg struct {
 // The daemon owns the label: it writes it into the session state, pushes it to
 // every attached client, and saves it with the rest, which is what makes the
 // change outlive the client that made it.
-func labelVerbCmd(what, verb string, params map[string]any) tea.Cmd {
+//
+// dial reaches the daemon that holds the session this client shows. For a
+// client attached through a host that is the host's daemon, not this
+// machine's: dialing the local socket renamed a local session that happened
+// to share the name, or failed.
+func labelVerbCmd(dial agentMailDial, what, verb string, params map[string]any) tea.Cmd {
 	return func() tea.Msg {
-		c, err := session.DialVerbClient()
+		c, err := dial()
 		if err != nil {
 			return RenameAppliedMsg{What: what, Err: err}
 		}
 		defer func() { _ = c.Close() }()
 
 		if _, err := c.Call(verb, params); err != nil {
+			if stale := session.StaleDaemonError(verb, err); stale != nil {
+				err = stale
+			}
 			return RenameAppliedMsg{What: what, Err: err}
 		}
 		return RenameAppliedMsg{What: what}
@@ -53,7 +61,7 @@ func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return labelVerbCmd("Accent", verb, params)
+	return labelVerbCmd(m.verbDialer(), "Accent", verb, params)
 }
 
 // renameListingRefreshedMsg says the session listing asked for after a rename

@@ -124,8 +124,10 @@ session, `Enter` creates a session with that name and switches to it.
 name in the daemon, so `tuios ls`, `tuios attach` and every client show the
 new name. The rail's rename and the `tuios rename-session` command do the
 same. Panes that already run keep the old name in `TUIOS_SESSION`, and tuios
-commands from them still reach the session. `tuios attach` with the old name
-fails and names the new one. A name that another session has is refused.
+commands from them still reach the session. `tuios attach` and
+`tuios kill-session` with the old name fail and name the new one. An event
+stream on the session keeps its events under the new name. A name that another
+session has is refused. A name that a saved session has is refused too.
 
 With remote hosts in `[hosts]`, the switcher also lists the sessions on your
 other machines. A remote session shows as `name @ host`, and the filter

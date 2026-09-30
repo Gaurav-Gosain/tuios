@@ -1222,6 +1222,7 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
@@ -1302,6 +1303,7 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 	sentAt := gate.submittedAt
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
@@ -1309,6 +1311,7 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 
 	stateSub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(stateSub)

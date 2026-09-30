@@ -48,10 +48,11 @@ type connScope struct {
 	own bool
 	// readOnly refuses every verb that types into a pane or starts one.
 	readOnly bool
-	// session and window are the caller's pane, empty when the caller runs
-	// in no pane of this daemon.
-	session string
-	window  string
+	// sessionID and window are the caller's pane, empty when the caller runs
+	// in no pane of this daemon. The session is kept by ID, not name, so a
+	// rename leaves the connection held to the same session.
+	sessionID string
+	window    string
 	// via says how the pane was found: "pid" from the kernel, "token" from
 	// TUIOS_PANE_TOKEN, or "" when it was not.
 	via string
@@ -258,15 +259,16 @@ func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (
 		if p.PaneID != "" && p.PaneID != prev.window {
 			return nil, scopeWidenError("pane_id", "this connection's pane was settled by its first restrict-connection call")
 		}
-		next.session, next.window, next.via = prev.session, prev.window, prev.via
+		next.sessionID, next.window, next.via = prev.sessionID, prev.window, prev.via
 	} else {
 		window, via, verr := d.placeCaller(cs, p.PaneID, p.PaneToken)
 		if verr != nil {
 			return nil, verr
 		}
 		next.window, next.via = window, via
-		next.session = d.sessionOfWindow(window)
-		if next.session == "" {
+		if sess := d.sessionHoldingWindow(window); sess != nil {
+			next.sessionID = sess.ID
+		} else {
 			next.window, next.via = "", ""
 		}
 	}
@@ -278,11 +280,11 @@ func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (
 		"scope":     scopeName(next),
 		"read_only": next.readOnly,
 		"window":    next.window,
-		"session":   next.session,
+		"session":   d.sessionNameByID(next.sessionID),
 		"via":       next.via,
 	}
 	if next.own {
-		res["sessions"] = d.scopeSessionNames(next.session)
+		res["sessions"] = d.scopeSessionNames(d.sessionNameByID(next.sessionID))
 	}
 	return res, nil
 }
@@ -332,16 +334,37 @@ func (d *Daemon) placeCaller(cs *connState, paneID, token string) (window, via s
 
 // sessionOfWindow names the local session holding a window, "" for none.
 func (d *Daemon) sessionOfWindow(id string) string {
+	if sess := d.sessionHoldingWindow(id); sess != nil {
+		return sess.Name()
+	}
+	return ""
+}
+
+// sessionHoldingWindow is the local session holding a window, nil for none.
+func (d *Daemon) sessionHoldingWindow(id string) *Session {
 	if id == "" {
-		return ""
+		return nil
 	}
 	for _, sess := range d.manager.AllSessions() {
 		st := sess.GetState()
 		for i := range st.Windows {
 			if st.Windows[i].ID == id {
-				return sess.Name()
+				return sess
 			}
 		}
+	}
+	return nil
+}
+
+// sessionNameByID is the current name of the session with this ID, "" when
+// there is none. Callers that keep a session across calls keep its ID and
+// read the name here, so a rename does not cut them off from it.
+func (d *Daemon) sessionNameByID(id string) string {
+	if id == "" {
+		return ""
+	}
+	if sess := d.manager.GetSessionByID(id); sess != nil {
+		return sess.Name()
 	}
 	return ""
 }
@@ -353,7 +376,7 @@ func (d *Daemon) callerSession(cs *connState) string {
 		return ""
 	}
 	if sc := cs.scope.Load(); sc != nil {
-		return sc.session
+		return d.sessionNameByID(sc.sessionID)
 	}
 	// A connection that presented its pane's token is in that pane.
 	if w := cs.paneBound.Load(); w != nil {
@@ -375,10 +398,18 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 	if own == "" || target == "" {
 		return false
 	}
+	// Either name may be one a session was renamed from: a pane started
+	// before the rename still sends it.
+	if o, _ := d.manager.ResolveSession(own); o != nil {
+		own = o.Name()
+	}
+	t, _ := d.manager.ResolveSession(target)
+	if t != nil {
+		target = t.Name()
+	}
 	if target == own {
 		return true
 	}
-	t := d.manager.GetSession(target)
 	if t == nil {
 		return false
 	}
@@ -426,10 +457,16 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	}
 	var owners []string
 	if sc := cs.scope.Load(); sc != nil && sc.own {
-		owners = append(owners, sc.session)
+		owners = append(owners, d.sessionNameByID(sc.sessionID))
 	}
 	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
-		owners = append(owners, pa.session)
+		// The pane's session as it is named now: the view was taken at the
+		// stream's subscribe, and the session may have been renamed since.
+		own := pa.session
+		if pa.sessionID != "" {
+			own = d.sessionNameByID(pa.sessionID)
+		}
+		owners = append(owners, own)
 	}
 	if len(owners) == 0 {
 		return true
@@ -482,17 +519,18 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	if kind == scopeGlobal {
 		return nil, scopeForbidden(verb, "it reads every session, and the connection is restricted to its own")
 	}
-	if sc.session == "" {
+	own := d.sessionNameByID(sc.sessionID)
+	if own == "" {
 		return nil, scopeForbidden(verb, "the connection is restricted to its own session, and the caller runs in no pane of this daemon")
 	}
 	reach := func(target string) string {
-		if d.sessionInScope(sc.session, target) {
+		if d.sessionInScope(own, target) {
 			return ""
 		}
 		return "session " + echoName(target) + " is not the caller's own session or in its fan group"
 	}
 	deny := func(why string) *verbError { return scopeForbidden(verb, why) }
-	return d.holdToPane(verb, kind, params, sc.session, sc.window, "the connection is restricted to its own", reach, deny)
+	return d.holdToPane(verb, kind, params, own, sc.window, "the connection is restricted to its own", reach, deny)
 }
 
 // holdToPane holds one call from a caller whose pane is window in session own

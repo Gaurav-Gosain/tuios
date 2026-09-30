@@ -271,6 +271,22 @@ func explainVerbError(verb string, err error) error {
 	if !errors.As(err, &callErr) {
 		return err
 	}
+	if current, ok := session.RenamedSessionTarget(err); ok {
+		return &diagnosticError{
+			What:  strings.ToUpper(callErr.Message[:1]) + callErr.Message[1:] + ".",
+			Cause: "the session has a new name, and " + verb + " takes the new name only.",
+			Fix:   fmt.Sprintf("run the command again with %q.", current),
+			Err:   err,
+		}
+	}
+	if stale := session.StaleDaemonError(verb, err); stale != nil {
+		return &diagnosticError{
+			What:  fmt.Sprintf("The running daemon does not know %s.", verb),
+			Cause: "the daemon is older than this tuios.",
+			Fix:   "run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells.",
+			Err:   err,
+		}
+	}
 
 	d := &diagnosticError{
 		What: fmt.Sprintf("%s failed: %s.", verb, strings.TrimSuffix(callErr.Message, ".")),

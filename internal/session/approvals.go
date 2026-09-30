@@ -776,7 +776,7 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		// The hook is on its way back to the harness with the answer, and
 		// the next report it would send is working. Saying it now closes the
 		// block for every client at once, and only if the pane is still on it.
-		if sess := d.manager.GetSession(hold.session); sess != nil {
+		if sess, _ := d.manager.ResolveSession(hold.session); sess != nil {
 			_, _, _, _ = sess.applyAgentReport(hold.window, AgentReport{
 				State:   AgentStateWorking,
 				IfState: []AgentState{AgentStateNeedsInput},
