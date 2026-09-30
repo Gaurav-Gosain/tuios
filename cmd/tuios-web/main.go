@@ -20,11 +20,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 )
 
