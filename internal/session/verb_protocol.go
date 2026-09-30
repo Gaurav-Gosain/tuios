@@ -2085,48 +2085,11 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 			}))
 	}
 
-	entry, ok := verbRegistry[req.Verb]
-	if !ok {
-		known := knownVerbNames()
-		return d.writeVerbError(cs, req.ID, req.Verb,
-			hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(req.Verb), &VerbHint{
-				Verb:       "list-verbs",
-				Command:    "tuios list-verbs",
-				DidYouMean: closestMatch(req.Verb, known),
-				Available:  known,
-				Detail:     "Call list-verbs for every verb with its parameter schema and examples.",
-			}))
-	}
-
-	if verr := checkParamNames(req.Verb, entry, req.Params); verr != nil {
-		return d.writeVerbError(cs, req.ID, req.Verb, verr)
-	}
-
-	// A call from another machine is held to that machine's link policy
-	// before its handler runs. See link_policy.go.
-	if verr := d.checkLinkVerb(cs, req.Verb); verr != nil {
-		return d.writeVerbError(cs, req.ID, req.Verb, verr)
-	}
-	if req.Verb != linkPolicyVerb {
-		markLinkServed(cs)
-	}
-
-	// A call from a pane is held to what the pane holds, and a connection
-	// that restricted itself is held to that too, before anything,
-	// forwarding included, sees the call. See pane_grants.go and
-	// conn_scope.go.
-	// A session named by a name it was renamed from is named by its current
-	// one from here on. See session_rename.go.
-	req.Params = d.followRenamedSession(req.Verb, req.Params)
-	granted, verr := d.checkGrants(cs, req.Verb, req.Params)
+	entry, params, verr := d.admitVerb(cs, req.Verb, req.Params)
 	if verr != nil {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
-	scoped, verr := d.checkScope(cs, req.Verb, granted)
-	if verr != nil {
-		return d.writeVerbError(cs, req.ID, req.Verb, verr)
-	}
-	req.Params = scoped
+	req.Params = params
 
 	// A report from a pane this machine runs for another machine goes to the
 	// machine that owns the pane's window. See hosted_calls.go.
@@ -2153,6 +2116,80 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	// start only after the ack line above is on the wire so no event precedes it.
 	d.startPendingStream(cs)
 	return nil
+}
+
+// admitVerb runs every check a verb call passes before its handler: the verb
+// exists, its parameters are declared, a call over a link is held to that
+// link's policy, and a call from a pane is held to the pane's grants and a
+// restricted connection to its scope. It returns the verb's entry and the
+// params the handler should see, which the checks may have filled in.
+//
+// Every caller of a verb goes through here: the verb socket, and the herdr
+// socket's adapters (herdr_api.go), so a herdr client in a pane is held to
+// exactly what the same call as a verb would be.
+func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (verbEntry, json.RawMessage, *verbError) {
+	entry, ok := verbRegistry[verb]
+	if !ok {
+		known := knownVerbNames()
+		return verbEntry{}, nil, hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(verb), &VerbHint{
+			Verb:       "list-verbs",
+			Command:    "tuios list-verbs",
+			DidYouMean: closestMatch(verb, known),
+			Available:  known,
+			Detail:     "Call list-verbs for every verb with its parameter schema and examples.",
+		})
+	}
+
+	if verr := checkParamNames(verb, entry, params); verr != nil {
+		return verbEntry{}, nil, verr
+	}
+
+	// A call from another machine is held to that machine's link policy
+	// before its handler runs. See link_policy.go.
+	if verr := d.checkLinkVerb(cs, verb); verr != nil {
+		return verbEntry{}, nil, verr
+	}
+	if verb != linkPolicyVerb {
+		markLinkServed(cs)
+	}
+
+	// A call from a pane is held to what the pane holds, and a connection
+	// that restricted itself is held to that too, before anything,
+	// forwarding included, sees the call. See pane_grants.go and
+	// conn_scope.go.
+	// A session named by a name it was renamed from is named by its current
+	// one from here on. See session_rename.go.
+	params = d.followRenamedSession(verb, params)
+	granted, verr := d.checkGrants(cs, verb, params)
+	if verr != nil {
+		return verbEntry{}, nil, verr
+	}
+	scoped, verr := d.checkScope(cs, verb, granted)
+	if verr != nil {
+		return verbEntry{}, nil, verr
+	}
+	return entry, scoped, nil
+}
+
+// callVerb runs one verb for cs the way the verb socket does, checks and
+// all, and returns its result. It is how another protocol served by the
+// daemon (the herdr socket) reuses a verb rather than doing its work again.
+// A verb that streams (subscribe) is not called this way.
+func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, newVerbError(ErrVerbInternal, "could not encode params")
+	}
+	entry, admitted, verr := d.admitVerb(cs, verb, raw)
+	if verr != nil {
+		return nil, verr
+	}
+	if result, verr, handled := d.forwardHostedCall(cs, verb, admitted); handled {
+		return result, verr
+	}
+	result, verr := entry.handler(d, cs, admitted)
+	cs.replyFailed = nil
+	return result, verr
 }
 
 // checkParamNames refuses a request carrying a parameter the verb does not
