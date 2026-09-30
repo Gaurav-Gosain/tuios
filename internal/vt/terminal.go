@@ -133,6 +133,10 @@ type Terminal interface {
 	// dropped. See kitty_placeholder.go.
 	SetKittyPlaceholderMode(m KittyPlaceholderMode)
 	SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int))
+	// SetSixelAdvertised installs the function that decides whether the
+	// pane is told it can draw sixel: attribute 4 in the DA1 reply, and an
+	// answer to XTSMGRAPHICS. Nil tells it nothing.
+	SetSixelAdvertised(fn func() bool)
 	SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int))
 	SetCellSize(width, height int)
 	KittyMainState() *KittyState

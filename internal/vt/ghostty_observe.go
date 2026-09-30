@@ -162,6 +162,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		t.observeEraseDisplay(params)
 	case final == 'h' && prefix == '?', final == 'l' && prefix == '?':
 		t.observeDecMode(params, final == 'h')
+	case final == 'S' && prefix == '?' && inter == 0:
+		t.answerSixelGraphics(params)
 	case final == 'n' && prefix == '?' && inter == 0:
 		t.answerDecStatusReport(params)
 	}
@@ -549,6 +551,21 @@ func (t *GhosttyTerminal) handleSixelDCS(params, payload []byte) {
 	if rows > 0 {
 		t.reserveImageSpaceLocked(rows, cols)
 	}
+}
+
+// answerSixelGraphics answers XTSMGRAPHICS, which libghostty does not.
+func (t *GhosttyTerminal) answerSixelGraphics(params []byte) {
+	if t.closed.Load() {
+		return
+	}
+	item, action := csiTwoParams(params, 0, 0)
+	t.scanner.flushOut()
+	_, _ = t.pipe.Write([]byte(sixelGraphicsReply(item, action, t.sixelOn(), t.width*t.cellW, t.height*t.cellH)))
+}
+
+func (t *GhosttyTerminal) sixelOn() bool {
+	fn := t.sixelAdvertised
+	return fn != nil && fn()
 }
 
 // csiFirstParam parses the first numeric CSI parameter.

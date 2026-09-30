@@ -314,6 +314,11 @@ func (m *OS) Init() tea.Cmd {
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
+	// Ask an SSH client's terminal whether it draws sixel. See sixel_probe.go.
+	if cmd := m.sixelProbe(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Ask the terminal for its own colours where the startup probe could not,
 	// and follow its light and dark switch. See host_colors.go.
 	if cmd := m.hostColorQueries(); cmd != nil {
@@ -793,6 +798,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// The host terminal's answers about its own colours. See host_colors.go.
 	if c, ok := m.handleHostColorMsg(msg); ok {
 		return m, c
+	}
+	// An SSH client's DA1 answer. See sixel_probe.go.
+	if m.handleSixelProbe(msg) {
+		return m, nil
 	}
 
 	switch msg := msg.(type) {

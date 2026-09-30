@@ -466,6 +466,15 @@ func (t *GhosttyTerminal) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cur
 	t.sixelPassthroughFunc = fn
 }
 
+// SetSixelAdvertised installs the function that decides whether DA1 lists
+// sixel and XTSMGRAPHICS answers. It is read under the terminal's lock, so it
+// must not take it.
+func (t *GhosttyTerminal) SetSixelAdvertised(fn func() bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.sixelAdvertised = fn
+}
+
 func (t *GhosttyTerminal) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

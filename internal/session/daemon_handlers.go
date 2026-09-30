@@ -701,6 +701,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	defer session.treeOpsMu.Unlock()
 	on := true
 	animate, tuiClients := true, 0
+	sixel := false
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
@@ -712,11 +713,20 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 			if !cs.kittyAnimation {
 				animate = false
 			}
+			if cs.sixelGraphics {
+				sixel = true
+			}
 		}
 		cs.mu.Unlock()
 	}
 	d.clientsMu.RUnlock()
 	session.SetKittyAnimation(animate && tuiClients > 0)
+	// With nobody attached the last answer stands: a program started in a
+	// detached session is drawing for whoever attaches next, most likely the
+	// terminal that was just there.
+	if tuiClients > 0 {
+		session.SetSixelAdvertised(sixel)
+	}
 	if hook := treeOpsCounted.Load(); hook != nil {
 		(*hook)()
 	}

@@ -58,11 +58,13 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"UDK status", "\x1b[?25n", ""},
 		{"keyboard status", "\x1b[?26n", ""},
 		{"colour scheme", "\x1b[?996n", ""},
-		{"DA1", "\x1b[c", "\x1b[?62;1;4;6;9;15;18;22c"},
-		{"DA1 with 0", "\x1b[0c", "\x1b[?62;1;4;6;9;15;18;22c"},
+		// No sixel (4) until the host is known to show it. See
+		// TestSixelAdvertisedFollowsHost.
+		{"DA1", "\x1b[c", "\x1b[?62;1;6;9;15;18;22c"},
+		{"DA1 with 0", "\x1b[0c", "\x1b[?62;1;6;9;15;18;22c"},
 		{"DA2", "\x1b[>c", pick("\x1b[>1;10;0c", "\x1b[>0;0;0c")},
 		{"DA3", "\x1b[=c", pick("", "\x1bP!|00000000\x1b\\")},
-		{"XTVERSION", "\x1b[>0q", pick("", "\x1bP>|libghostty\x1b\\")},
+		{"XTVERSION", "\x1b[>0q", pick("", "\x1bP>|tuios\x1b\\")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := backendReply(t, tc.in); got != tc.want {

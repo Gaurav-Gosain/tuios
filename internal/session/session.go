@@ -1127,6 +1127,10 @@ type Session struct {
 	// kittyAnimation says the attached client's host edits image frames. Read
 	// from the VT callback, so it is atomic. See SetKittyAnimation.
 	kittyAnimation atomic.Bool
+	// sixelAdvertised says the session's panes are told they can draw
+	// sixel. Read from the VT's DA1 handler, so it is atomic. See
+	// SetSixelAdvertised.
+	sixelAdvertised atomic.Bool
 	// fed is the link manager a window on another machine is opened over. It is
 	// nil unless the daemon installed one, and every reader checks. See
 	// remote_pane.go.
@@ -1158,6 +1162,18 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 // daemon had answered DA1, which is where a probing guest stops reading. A
 // nested tuios then took the refusal for keys and typed it into its pane.
 func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
+
+// SetSixelAdvertised records whether a sixel image a pane draws will be shown:
+// true while any attached client's terminal draws sixel. Daemon.refreshTreeOps
+// counts it with SetKittyAnimation.
+//
+// It is what the pane's DA1 answer lists. The daemon's emulator is the one that
+// answers a guest's queries, so this is where a program such as chafa, lsix or
+// yazi learns whether to draw sixel or fall back to text.
+func (s *Session) SetSixelAdvertised(ok bool) { s.sixelAdvertised.Store(ok) }
+
+// SixelAdvertised reports what SetSixelAdvertised last recorded.
+func (s *Session) SixelAdvertised() bool { return s.sixelAdvertised.Load() }
 
 // GraphicsCapabilities returns the recorded kitty and sixel support.
 func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
@@ -1660,6 +1676,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		// and published at once, like the bell. See shell_commands.go.
 		SemanticMark: pty.noteShellMark,
 	})
+
+	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
+	terminal.SetSixelAdvertised(s.SixelAdvertised)
 
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.

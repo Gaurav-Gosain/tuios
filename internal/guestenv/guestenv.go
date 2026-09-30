@@ -13,18 +13,20 @@ import "strings"
 // know the name "TUIOS", so advertising it made every guest fall back to
 // unicode block art even when tuios was forwarding kitty graphics to a capable
 // host. Naming a terminal the tools do know makes them emit the protocol tuios
-// passes through: ghostty for kitty graphics, WezTerm for sixel. TERM is left
-// alone so no guest needs a terminfo entry that may not be installed, and
-// tuios remains identifiable through TUIOS_SESSION and TUIOS_WINDOW_ID.
+// passes through: ghostty for kitty graphics. TERM is left alone so no guest
+// needs a terminfo entry that may not be installed, and tuios remains
+// identifiable through TUIOS_SESSION and TUIOS_WINDOW_ID.
+//
+// Sixel gets no borrowed name. Every name a tool reads as sixel also means
+// something tuios does not pass through: WezTerm makes yazi draw iTerm2 inline
+// images, which reach no host. The sixel tools ask the terminal instead (DA1,
+// XTSMGRAPHICS), and the pane answers those truthfully, so "TUIOS" gets them
+// sixel: yazi, chafa, timg, lsix and notcurses all probe.
 func TermProgram(kittyGraphics, sixelGraphics bool) string {
-	switch {
-	case kittyGraphics:
+	if kittyGraphics {
 		return "ghostty"
-	case sixelGraphics:
-		return "WezTerm"
-	default:
-		return "TUIOS"
 	}
+	return "TUIOS"
 }
 
 // TermProgramFor is TermProgram for a pane that starts argv, nil for the
@@ -37,8 +39,8 @@ func TermProgram(kittyGraphics, sixelGraphics bool) string {
 // (codex-rs/tui/src/notifications/mod.rs and codex-rs/terminal-detection in
 // github.com/openai/codex). tuios shows an OSC 9 notification with its text
 // and a bell only as "bell", so a Codex pane on a plain host lost what the
-// notification said. With kitty graphics or sixel the pane is already told
-// ghostty or WezTerm, and Codex sends OSC 9.
+// notification said. With kitty graphics the pane is already told ghostty, and
+// Codex sends OSC 9.
 //
 // Such a pane is told WarpTerminal. Of the names Codex sends OSC 9 to, it is
 // the only one Codex treats like an unknown terminal in every other respect:
