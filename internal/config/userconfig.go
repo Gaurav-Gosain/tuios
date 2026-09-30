@@ -998,6 +998,10 @@ func DefaultConfig() *UserConfig {
 				// g shows or hides the scratch terminal in a popup. It was
 				// free here, and f is kept free for the reason above.
 				"toggle_scratch": {"g"},
+				// V pastes the clipboard's image into the pane as the path of a
+				// file on the pane's machine. Capital, one shift from the v
+				// that reviews.
+				"paste_image": {"V"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -2520,6 +2524,8 @@ var yieldingDefaults = map[string]bool{
 	"toggle_scratch": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
+	// V after the prefix, new in the release after v0.8.2.
+	"paste_image": true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,

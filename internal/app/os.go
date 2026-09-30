@@ -348,6 +348,8 @@ type OS struct {
 	// says nothing came back yet, and a terminal that asks the user first
 	// (Ghostty does) answers later. See ClaimPasteReply.
 	pasteAskedAt time.Time
+	// imagePaste holds the image paste's test seams. See image_paste.go.
+	imagePaste imagePasteState
 	// clipboardAsk is the pane clipboard write waiting for the user, and
 	// clipboardApproved the one the user allowed and not yet sent. See
 	// clipboard_osc52.go.

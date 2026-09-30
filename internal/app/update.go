@@ -831,6 +831,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case PendingCopyMsg:
 		return m, m.HandlePendingCopy(msg.Seq)
 
+	case imageProbeMsg:
+		// What the clipboard held when an image paste looked. See
+		// image_paste.go.
+		return m, m.applyImageProbe(msg)
+
+	case ImagePastedMsg:
+		m.applyImagePasted(msg)
+		return m, nil
+
 	case PasteTimeoutMsg:
 		// The terminal never answered the clipboard query. Say so, because the
 		// alternative is a paste key that looks broken. See clipboard_paste.go.

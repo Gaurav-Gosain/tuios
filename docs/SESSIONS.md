@@ -573,6 +573,16 @@ any session on the other machine. It will not appear in `tuios ls` there, and
 it is not enrolled in that machine's size negotiation, so a layout here can
 never shrink a session someone is working in there.
 
+### Pasting an image
+
+`Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios
+reads the image on your machine and sends it over the link. The other machine
+writes it to a file and tuios pastes the path of that file into the pane. An
+agent in the pane, such as Claude Code, can then read the image. The file is
+8 MB or less, only you can read it, and it is deleted after one hour. The
+other machine needs a tuios with `paste-pane-image`. See [Paste an
+image](KEYBINDINGS.md#paste-an-image).
+
 ### What it needs
 
 Both machines need a tuios new enough to speak `open-pane`. An older one

@@ -204,6 +204,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
+	d.Register("paste_image", handlePasteImage)
 	d.Register("clear_selection", handleClearSelection)
 
 	// Session lifecycle actions (context menu rows; the quit menu's kill rows
@@ -970,12 +971,18 @@ func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			// Ask the terminal for its clipboard, or say why it cannot answer.
-			// See app.RequestHostPaste.
-			return o, o.RequestHostPaste()
+			// Paste the clipboard's image when it holds only an image, and
+			// ask the terminal for its text otherwise. See app.RequestPaste.
+			return o, o.RequestPaste()
 		}
 	}
 	return o, nil
+}
+
+// handlePasteImage pastes the clipboard's image into the focused pane as the
+// path of a file on the pane's machine. See app.RequestImagePaste.
+func handlePasteImage(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.RequestImagePaste()
 }
 
 // handleClearSelection drops the focused window's text selection without

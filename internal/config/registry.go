@@ -613,6 +613,7 @@ var ActionDescriptions = map[string]string{
 	// Clipboard
 	"copy_selection":  "Copy selection to clipboard",
 	"paste_clipboard": "Paste from clipboard",
+	"paste_image":     "Paste the clipboard image as a file path",
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
 	"toggle_scratch":  "Show or hide the scratch terminal",

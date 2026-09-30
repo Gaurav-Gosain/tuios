@@ -231,7 +231,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Ask the terminal for its clipboard via OSC 52. The reply arrives
 			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
 			// never replies is reported instead. See app.RequestHostPaste.
-			return o, o.RequestHostPaste()
+			// An image on the clipboard is pasted as a file path first. See
+			// app.RequestPaste.
+			return o, o.RequestPaste()
 		}
 		return o, nil
 	}

@@ -769,6 +769,38 @@ func init() {
 			examples: []string{`{"id":1,"verb":"pane-agent","params":{"pane":"f2c1"}}`},
 			handler:  (*Daemon).verbPaneAgent,
 		},
+		"paste-image": {
+			description: "Write an image the person pasted to the machine where a pane's process runs, and answer with the path there. For a pane on another machine the image crosses the link and is written there. The client pastes the path into the pane as text. Only the person's attached client may call it: it needs that client's attach nonce and is refused from inside a pane. The file is readable by its owner only and is deleted after an hour, or when the daemon stops.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "The window to paste into. Omit for the focused window."},
+				{Name: "content", Type: "string", Required: true, Description: "The image, base64. PNG, JPEG, GIF, WebP, BMP or TIFF, at most 8 MB decoded. The type is read from the bytes."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The attach nonce of the person's client, attached to this session."},
+			},
+			returns: []verbParam{
+				{Name: "path", Type: "string", Description: "The image's path on the machine where the pane's process runs."},
+				{Name: "host", Type: "string", Description: "The machine the image was written to, when it is not this one."},
+				{Name: "window", Type: "string", Description: "The window the path is for."},
+				{Name: "bytes", Type: "int", Description: "How many bytes were written."},
+			},
+			examples: []string{`{"id":1,"verb":"paste-image","params":{"session":"work","window":"a1b2","content":"iVBORw0KGgo=","human_nonce":"<from the attach reply>"}}`},
+			handler:  (*Daemon).verbPasteImage,
+		},
+		"paste-pane-image": {
+			description: "Write an image for a pane this machine runs for another machine, and answer with the path here. Only the daemon that owns the window holds the token it needs. That daemon sends it for a paste-image the person made.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
+				{Name: "token", Type: "string", Required: true, Description: "The calls_token open-pane returned."},
+				{Name: "content", Type: "string", Required: true, Description: "The image, base64, at most 8 MB decoded."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane the image is for."},
+				{Name: "path", Type: "string", Description: "The image's path on this machine."},
+				{Name: "bytes", Type: "int", Description: "How many bytes were written."},
+			},
+			examples: []string{`{"id":1,"verb":"paste-pane-image","params":{"pane":"f2c1","token":"<from the open-pane reply>","content":"iVBORw0KGgo="}}`},
+			handler:  (*Daemon).verbPastePaneImage,
+		},
 		"pane-calls": {
 			description: "Open the report channel of a pane this machine runs for another machine. Only the daemon that owns the window holds the token. After the reply this machine writes one request line per report the pane's process sends naming its pane ({\"id\",\"verb\",\"params\"}: set-agent-state, set-agent-meta, set-agent-session, read-agent-messages, send-agent-message, or wait-for agent-message), and the owner answers each with {\"id\",\"result\"} or {\"id\",\"error\"}. The owner runs every request as its own window, whatever it says.",
 			params: []verbParam{
