@@ -134,10 +134,8 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 
 	// The image pane is the right one, as in the report.
 	frame := kittyFrameFile(t, t.TempDir(), 522, 720)
-	mouseClick(t, term, 90, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
-	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
+	clickToType(t, term, 90, 12)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	// The loops run in a shell without job control. The pane's interactive
 	// shell gives each command it starts its own process group, and bash
 	// sometimes fails that and says "sh: child setpgid (...): Operation not
@@ -152,10 +150,8 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	// The neighbour starts printing.
-	mouseClick(t, term, 20, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
-	runInShell(t, term, "echo TEXTPANE", "TEXTPANE", shellTimeout)
+	clickToType(t, term, 20, 12)
+	runInShell(t, term, "echo TEXT\"\"PANE", "TEXTPANE", shellTimeout)
 	typeLine(t, term, noJobControl("while :; do seq 1 60; sleep 0.05; done"))
 	leaveTerminalMode(t, term)
 

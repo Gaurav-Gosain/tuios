@@ -53,7 +53,7 @@ import (
 func anchorProducer(t *testing.T, term *tuitest.Terminal, prefix string, n int, delay string) {
 	t.Helper()
 	cmd := fmt.Sprintf(
-		"{ sleep %s; for i in $(seq 1 %d); do echo \"%s-$i-END\"; sleep 0.05; done; } & echo PRODUCER-UP",
+		"{ sleep %s; for i in $(seq 1 %d); do echo \"%s-$i-END\"; sleep 0.05; done; } & echo PRODUCER\"\"-UP",
 		delay, n, prefix)
 	runInShell(t, term, cmd, "PRODUCER-UP", shellTimeout)
 }

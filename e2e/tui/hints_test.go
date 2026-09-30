@@ -166,7 +166,7 @@ func hintsNoLabels(s tuitest.Screen) bool {
 func printHintsLine(t *testing.T, term *tuitest.Terminal) map[string][2]int {
 	t.Helper()
 	line := strings.Join([]string{hintsURL, hintsPath, hintsSHA, hintsIP}, " ")
-	runInShell(t, term, "printf '%s\\n' '"+line+"' ; echo HINTS-READY", "HINTS-READY", shellTimeout)
+	runInShell(t, term, "printf '%s\\n' '"+line+"' ; echo HINTS\"\"-READY", "HINTS-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v\n%s", err, term.Snapshot())
 	}
@@ -334,7 +334,7 @@ func TestHintEscClosesWithoutCopying(t *testing.T) {
 	if strings.Contains(term.Screen().Text(), "$ z") {
 		t.Fatalf("a key pressed while hints were open reached the shell:\n%s", term.Snapshot())
 	}
-	runInShell(t, term, "echo AFTER-ESC-OK", "AFTER-ESC-OK", shellTimeout)
+	runInShell(t, term, "echo AFTER-\"\"ESC-OK", "AFTER-ESC-OK", shellTimeout)
 	alive(t, term, "after closing hints with esc")
 }
 
@@ -351,7 +351,7 @@ func TestHintWrappedURLCopiesWhole(t *testing.T) {
 	url := "https://example.com/" + strings.Join(parts, "-")
 	// The command builds the URL, so the only full copy on screen is the
 	// output. Its first piece is unique to it.
-	cmd := "printf 'https://example.com/%s\\n' $(printf 'segment%d-' $(seq 1 17))segment18; echo WRAP-READY"
+	cmd := "printf 'https://example.com/%s\\n' $(printf 'segment%d-' $(seq 1 17))segment18; echo WRAP\"\"-READY"
 	runInShell(t, term, cmd, "WRAP-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
@@ -388,7 +388,7 @@ func TestHintCustomPattern(t *testing.T) {
 	out := &lockedBuffer{}
 	term := startHints(t, false, "[hints]\npatterns = ['TICKET-\\d+']\n", out)
 
-	runInShell(t, term, "echo see TICKET-4242 now; echo CUSTOM-READY", "CUSTOM-READY", shellTimeout)
+	runInShell(t, term, "echo see TICKET-4242 now; echo CUSTOM\"\"-READY", "CUSTOM-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestHintCtrlOpensAPath(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo "+file+"; echo OPEN-READY", "OPEN-READY", shellTimeout)
+	runInShell(t, term, "echo "+file+"; echo OPEN\"\"-READY", "OPEN-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestHintWideCharacters(t *testing.T) {
 	term := startHints(t, false, "[hints]\npatterns = ['漢字-\\d+']\n", out)
 
 	const wideURL = "https://example.com/wide-e2e"
-	runInShell(t, term, "echo 日本語 "+wideURL+" 漢字-42 tail-marker; echo WIDE-READY", "WIDE-READY", shellTimeout)
+	runInShell(t, term, "echo 日本語 "+wideURL+" 漢字-42 tail-marker; echo WIDE\"\"-READY", "WIDE-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
@@ -546,7 +546,7 @@ func TestHintsCloseWhenTheirPaneExits(t *testing.T) {
 	// shell runs a command.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo AFTER-EXIT-OK", "AFTER-EXIT-OK", shellTimeout)
+	runInShell(t, term, "echo AFTER-\"\"EXIT-OK", "AFTER-EXIT-OK", shellTimeout)
 	alive(t, term, "after hints outlived nothing")
 }
 
@@ -572,7 +572,7 @@ func TestHintsCloseOnWorkspaceSwitch(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the pane did not come back without labels: %v\n%s", err, term.Snapshot())
 	}
-	runInShell(t, term, "echo AFTER-SWITCH-OK", "AFTER-SWITCH-OK", shellTimeout)
+	runInShell(t, term, "echo AFTER-S\"\"WITCH-OK", "AFTER-SWITCH-OK", shellTimeout)
 	alive(t, term, "after a workspace switch under hints")
 }
 
@@ -596,7 +596,7 @@ func TestHintsDropAPasteAndCloseOnWheel(t *testing.T) {
 		t.Fatalf("send esc: %v", err)
 	}
 	waitHintsGone(t, term, "after esc")
-	runInShell(t, term, "echo AFTER-PASTE-OK", "AFTER-PASTE-OK", shellTimeout)
+	runInShell(t, term, "echo AFTER-P\"\"ASTE-OK", "AFTER-PASTE-OK", shellTimeout)
 	if strings.Contains(term.Screen().Text(), pasted) {
 		t.Fatalf("the paste reached the shell under hints:\n%s", term.Snapshot())
 	}
@@ -641,7 +641,7 @@ func TestHintFullLineDoesNotJoinTheNext(t *testing.T) {
 	width := cols - 2
 	const scheme = "https://example.com/"
 	url := scheme + strings.Repeat("0", width-len(scheme))
-	cmd := fmt.Sprintf("printf '%s%%0%dd\\ntail/more\\n' 0; echo FULL-READY", scheme, width-len(scheme))
+	cmd := fmt.Sprintf("printf '%s%%0%dd\\ntail/more\\n' 0; echo FULL\"\"-READY", scheme, width-len(scheme))
 	runInShell(t, term, cmd, "FULL-READY", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
@@ -690,14 +690,14 @@ func TestHintsAllPanesLabelEveryPane(t *testing.T) {
 	// command builds it, so the only whole copy on screen is the output.
 	const uuid = "30c0acf5-8dd0-48f2-8d86-cf0aae99aa4a"
 	enterTerminalMode(t, term)
-	runInShell(t, term, "printf '30c0acf5-8dd0-%s\\n' 48f2-8d86-cf0aae99aa4a; echo RIGHT-READY", "RIGHT-READY", shellTimeout)
+	runInShell(t, term, "printf '30c0acf5-8dd0-%s\\n' 48f2-8d86-cf0aae99aa4a; echo RIGHT\"\"-READY", "RIGHT-READY", shellTimeout)
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys("h"); err != nil {
 		t.Fatalf("focus the left pane: %v", err)
 	}
 	time.Sleep(insertGuard)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "printf 'deadbee%s\\n' 42; echo LEFT-READY", "LEFT-READY", shellTimeout)
+	runInShell(t, term, "printf 'deadbee%s\\n' 42; echo LEFT-\"\"READY", "LEFT-READY", shellTimeout)
 	if err := term.SendKeys("echo TYPED-"); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}
@@ -774,7 +774,7 @@ func TestHintsAllPanesLabelOnlyWhatShows(t *testing.T) {
 	enterTerminalMode(t, term)
 	// Six hashes, each further right and further down. The command holds no
 	// hash of its own.
-	runInShell(t, term, `clear; for i in 1 2 3 4 5 6; do printf "%*sdeadbee1$i\n" $((i*8)) ''; done; echo COVER-READY`,
+	runInShell(t, term, `clear; for i in 1 2 3 4 5 6; do printf "%*sdeadbee1$i\n" $((i*8)) ''; done; echo COVER""-READY`,
 		"COVER-READY", shellTimeout)
 	leaveTerminalMode(t, term)
 	newWindow(t, term)

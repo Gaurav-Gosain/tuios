@@ -83,7 +83,9 @@ func TestHoveringALinkUnderlinesItOnScreen(t *testing.T) {
 	waitWindowCount(t, term, 1, "opening a shell for the link")
 
 	enterTerminalMode(t, term)
-	runInShell(t, term, "printf 'go to %s now\\n' "+linkURL, linkURL, uiTimeout)
+	// The command holds the URL without its scheme, so the only whole copy
+	// on screen is the output.
+	runInShell(t, term, "printf 'go to https://%s now\\n' "+strings.TrimPrefix(linkURL, "https://"), linkURL, uiTimeout)
 
 	// Back to window management, so nothing about this depends on what the
 	// shell would have done with the click. A shell tracks no mouse either way;
@@ -163,7 +165,10 @@ func TestPlainTextIsNotUnderlined(t *testing.T) {
 	// A sentence with a scheme-shaped word, a bare host name and a path in it.
 	// None of the three is a link, and all three have caught naive detectors.
 	const prose = "the https protocol on example.com under /usr/local"
-	runInShell(t, term, "printf '%s\\n' "+quoteForShell(prose), "protocol on", uiTimeout)
+	// Two quoted halves that the shell joins, so the marker is only in the
+	// output.
+	head, tail, _ := strings.Cut(prose, " on ")
+	runInShell(t, term, "printf '%s\\n' "+quoteForShell(head)+quoteForShell(" on "+tail), "protocol on", uiTimeout)
 	leaveTerminalMode(t, term)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v\n%s", err, term.Snapshot())

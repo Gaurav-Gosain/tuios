@@ -127,7 +127,7 @@ func decscusrCount(stream []byte) int {
 // and vim's insert mode ask for and the one the report says is lost.
 func barPane(t *testing.T, term *tuitest.Terminal, marker string) {
 	t.Helper()
-	runInShell(t, term, `printf '\033[6 q'; echo `+marker, marker, shellTimeout)
+	runInShell(t, term, `printf '\033[6 q'; echo `+splitMarker(marker), marker, shellTimeout)
 }
 
 // TestCursorShapeSurvivesNeighbourAndSwitches is the reported bug on a single
@@ -151,7 +151,7 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	runInShell(t, term,
-		`(while true; do printf '\033[2 q'; sleep 0.2; done) & echo STOMPER`,
+		`(while true; do printf '\033[2 q'; sleep 0.2; done) & echo STOM""PER`,
 		"STOMPER", shellTimeout)
 	leaveTerminalMode(t, term)
 

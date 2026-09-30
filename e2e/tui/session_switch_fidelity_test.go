@@ -188,7 +188,7 @@ func TestSessionSwitchKeepsTheBottomOfAFullScreenTUI(t *testing.T) {
 	runInShell(t, term,
 		`H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
 			`i=1; while [ $i -le $H ]; do printf '\033[%d;1HFILLROW-%d' $i $i; i=$((i+1)); done; `+
-			`printf '\033[%d;1HLASTROW-9902\033[%d;1HNEXTTOLAST-9902' $H $((H-1))`,
+			`printf '\033[%d;1H%s\033[%d;1HNEXTTOLAST-9902' $H LASTROW-""9902 $((H-1))`,
 		"LASTROW-9902", shellTimeout)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the alternate screen never settled: %v", err)

@@ -315,7 +315,7 @@ func TestCopyFlashSweepsAShortSelectionSmoothly(t *testing.T) {
 		t.Run(run.name, func(t *testing.T) {
 			term := startFlashClient(t, run.motion, run.daemon)
 			const marker = "SWEEP-alpha-bravo-charlie-delta-echo-foxtrot-golf-hotel"
-			runInShell(t, term, "clear; echo "+marker, marker, shellTimeout)
+			runInShell(t, term, "clear; echo "+splitMarker(marker), marker, shellTimeout)
 			row, col := echoedRow(t, term, marker)
 			end := col + len(marker) - 1
 

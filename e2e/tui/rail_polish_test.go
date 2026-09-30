@@ -72,7 +72,7 @@ func TestBlockedAgentAlertCarriesTheQuestion(t *testing.T) {
 	}
 	enterTerminalMode(t, term)
 	runInShell(t, term,
-		`printf 'Do you want to make this edit to main.go?\n\342\235\257 1. Yes\n  2. No, and tell Claude what to do differently (esc)\n'`,
+		`printf 'Do you want to make this edit to main.go?\n\342\235\257 1. Yes\n  2. %s, and tell Claude what to do differently (esc)\n' No`,
 		"2. No, and tell Claude", shellTimeout)
 
 	// The dock cuts a long toast to its budget and the rail cuts the note to

@@ -661,12 +661,28 @@ func runInShell(t *testing.T, term *tuitest.Terminal, cmd, want string, timeout 
 		t.Fatalf("runInShell(%q) was given no marker to wait for; "+
 			"a command with nothing to assert on cannot fail", cmd)
 	}
+	// The typed command is echoed to the screen before it runs. A marker
+	// that appears in the command itself matches that echo, and the wait
+	// ends before the shell has done anything. Split it in the command, for
+	// example echo IMAGE""PANE, so only the shell's output can match.
+	if strings.Contains(cmd, want) {
+		t.Fatalf("runInShell(%q): the marker %q is in the command, so the "+
+			"echo of the keystrokes satisfies the wait", cmd, want)
+	}
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 		t.Fatalf("type %q: %v", cmd, err)
 	}
 	if err := term.WaitForText(want, timeout); err != nil {
 		t.Fatalf("command %q never produced %q: %v", cmd, want, err)
 	}
+}
+
+// splitMarker returns m with an empty shell string in its middle, for example
+// IMAGE""PANE for IMAGEPANE. The shell prints m, but the typed command does not
+// hold it, so runInShell can only match the output. m must not be put inside
+// single quotes, where the "" would print as two quote marks.
+func splitMarker(m string) string {
+	return m[:len(m)/2] + `""` + m[len(m)/2:]
 }
 
 // renameDialogUp reports whether the rename micro-dialog is on screen.
@@ -979,6 +995,19 @@ func mouseMotion(t *testing.T, term *tuitest.Terminal, col, row int, button tuit
 	sendMouse(t, term, "motion", tuitest.MouseEvent{
 		Col: col, Row: row, Button: button, Action: tuitest.MouseDrag, Mods: mods,
 	})
+}
+
+// clickToType clicks a pane's content and waits for terminal mode. Under the
+// harness config one click focuses the pane and starts typing in it, so an
+// enterTerminalMode after the click would send its "i" to the shell, where it
+// prefixes the next command ("iwhile ...") and the command fails.
+func clickToType(t *testing.T, term *tuitest.Terminal, col, row int) {
+	t.Helper()
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Terminal mode", uiTimeout); err != nil {
+		t.Fatalf("a click at %d,%d did not start typing in the pane: %v\n%s", col, row, err, term.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
 }
 
 // mouseClick is one complete click: press then release at the same cell.

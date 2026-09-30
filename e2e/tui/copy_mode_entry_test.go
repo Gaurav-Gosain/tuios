@@ -107,7 +107,7 @@ func TestCopyModeSearchBackwardBinding(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, `printf 'nee''dle-one\nfiller\nnee''dle-two\nfiller\n'`, "dle-two", shellTimeout)
+	runInShell(t, term, `printf 'nee''dle-one\nfiller\nnee''dle-%s\nfiller\n' two`, "dle-two", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "g"); err != nil {

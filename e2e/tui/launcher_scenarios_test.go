@@ -702,7 +702,7 @@ func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
 
 	// One pane prints without stopping for the rest of the test.
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo NEIGHBOUR", "NEIGHBOUR", shellTimeout)
+	runInShell(t, term, "echo NEIG\"\"HBOUR", "NEIGHBOUR", shellTimeout)
 	typeLine(t, term, "while :; do seq 1 40; sleep 0.05; done")
 	leaveTerminalMode(t, term)
 	time.Sleep(700 * time.Millisecond)

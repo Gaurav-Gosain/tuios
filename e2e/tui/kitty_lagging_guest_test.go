@@ -41,10 +41,8 @@ func TestKittyStretchWhileGuestLagsAResize(t *testing.T) {
 	enableTiling(t, term)
 	waitWindowCount(t, term, 2, "two tiled panes")
 
-	mouseClick(t, term, 20, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
-	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
+	clickToType(t, term, 20, 12)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	// 900ms to relay out: long enough that the interval is many frames wide
 	// rather than something to be caught between two of them.
 	_, cols, rows, xpx, ypx := startFrameloop(t, term, 900)
@@ -53,9 +51,7 @@ func TestKittyStretchWhileGuestLagsAResize(t *testing.T) {
 
 	// The neighbour prints throughout, as reported: it is what keeps the render
 	// loop awake, and an idle render loop re-places nothing.
-	mouseClick(t, term, 95, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
+	clickToType(t, term, 95, 12)
 	typeLine(t, term, "while :; do ls; done")
 	leaveTerminalMode(t, term)
 	time.Sleep(time.Second)

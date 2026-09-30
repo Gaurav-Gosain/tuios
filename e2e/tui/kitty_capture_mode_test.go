@@ -35,7 +35,7 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 			waitBoot(t, term)
 			newWindow(t, term)
 			enterTerminalMode(t, term)
-			runInShell(t, term, "echo READY", "READY", shellTimeout)
+			runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
 
 			// Transmit and display in one command, the way chafa does.
 			_, img := writeIcatPNG(t, t.TempDir())
