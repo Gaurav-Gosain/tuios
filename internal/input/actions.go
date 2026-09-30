@@ -105,6 +105,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	for i := 1; i <= 9; i++ {
 		d.Register("switch_workspace_"+string(rune('0'+i)), makeSwitchWorkspaceHandler(i))
 		d.Register("move_and_follow_"+string(rune('0'+i)), makeMoveAndFollowHandler(i))
+		d.Register("next_workspace", handleNextWorkspace)
+		d.Register("prev_workspace", handlePrevWorkspace)
 	}
 
 	// Layout actions
@@ -440,6 +442,24 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 		}
 		return o, nil
 	}
+}
+
+func handleNextWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	next := o.CurrentWorkspace + 1
+	if next > o.NumWorkspaces {
+		next = 1
+	}
+	o.SwitchToWorkspace(next)
+	return o, nil
+}
+
+func handlePrevWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.CurrentWorkspace - 1
+	if prev < 1 {
+		prev = o.NumWorkspaces
+	}
+	o.SwitchToWorkspace(prev)
+	return o, nil
 }
 
 // ============================================================================
