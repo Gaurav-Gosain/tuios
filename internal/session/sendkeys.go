@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -664,4 +665,57 @@ func (p *PTY) ApplicationCursorKeysOn() bool {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 	return p.terminal != nil && p.terminal.ApplicationCursorKeys()
+}
+
+// keyModifiers are the modifiers a send-keys token can carry, each with every
+// spelling the parser takes (splitKeyMods and parseKeyToken). list-keys
+// reports them.
+var keyModifiers = []struct {
+	Name      string   `json:"name"`
+	Spellings []string `json:"spellings"`
+}{
+	{"ctrl", []string{"ctrl+", "control+", "ctl+", "C-", "^"}},
+	{"alt", []string{"alt+", "opt+", "option+", "meta+", "M-"}},
+	{"shift", []string{"shift+", "S-"}},
+	{"super", []string{"super+", "cmd+", "win+"}},
+}
+
+// ctrlCharacters are the characters other than letters that ctrl combines
+// with (controlByte).
+var ctrlCharacters = []string{"@", "[", `\`, "]", "^", "_", "?", "space", "2", "6", "-"}
+
+// escapePrefixes start a token written as an escape sequence
+// (decodeEscapeToken).
+var escapePrefixes = []string{`\e`, `\E`, `\x1b`, `\033`, `\u001b`, "^[", "ESC byte"}
+
+// keyList is the whole send-keys grammar as list-keys reports it: every
+// named key with the spellings that reach it, the modifiers, and the other
+// kinds of token. It is a closed list. A named key or modifier missing here
+// is refused.
+func keyList() map[string]any {
+	aliases := map[string][]string{}
+	for alias, name := range keyAliases {
+		if alias != strings.ToLower(name) {
+			aliases[name] = append(aliases[name], alias)
+		}
+	}
+	keys := make([]map[string]any, 0, len(namedKeys))
+	for _, k := range namedKeys {
+		a := aliases[k.name]
+		slices.Sort(a)
+		if a == nil {
+			a = []string{}
+		}
+		keys = append(keys, map[string]any{"name": k.name, "aliases": a})
+	}
+	return map[string]any{
+		"type":            "key_list",
+		"keys":            keys,
+		"modifiers":       keyModifiers,
+		"ctrl_characters": ctrlCharacters,
+		"escape_prefixes": escapePrefixes,
+		"prefix_token":    "PREFIX",
+		"separators":      []string{" ", ","},
+		"max_repeat":      maxSendKeysRepeat,
+	}
 }

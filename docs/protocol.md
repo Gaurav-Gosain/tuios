@@ -1787,6 +1787,11 @@ to it is lost and the pane is being reattached, it has `host_link:
 "reconnecting"` and `host_link_until`, the unix time the far machine stops
 keeping the process (see [A pane that outlives its link](#a-pane-that-outlives-its-link)).
 
+A window with a pane on this daemon also has `history_rows` and `revision`,
+the numbers [capture-pane](#capture-pane) reports. A reader can compare
+`revision` with the one it last captured and skip the panes that did not
+change.
+
 ### get-window
 
 Describe one window, as the client protocol's `GetWindow` command does. With
@@ -1986,6 +1991,81 @@ Response:
 `sent_to` is `client` when the attached client took the keys; there is no
 window then.
 
+#### Key grammar
+
+The key grammar is stable and closed. A key name or a modifier that is not in
+this list is refused with `invalid_params`, and nothing is sent. `list-keys`
+returns the same list, so an adapter can build its key table from it.
+
+Named keys, with the other spellings each one takes:
+
+| Key | Also accepted |
+|-----|---------------|
+| `Enter` | `Return`, `Ret`, `CR`, `KPEnter` |
+| `Tab` | |
+| `BTab` | `BackTab`, `STab`, `shift+Tab` |
+| `Space` | `Spc` |
+| `Escape` | `Esc` |
+| `Backspace` | `BSpace`, `BS`, `BkSp` |
+| `Up`, `Down`, `Right`, `Left` | |
+| `Home`, `End` | |
+| `PageUp` | `PgUp`, `PPage`, `Prior`, `PrevPage` |
+| `PageDown` | `PgDn`, `PgDown`, `PageDn`, `NPage`, `Next`, `NextPage` |
+| `Insert` | `Ins`, `IC` |
+| `Delete` | `Del`, `DC` |
+| `F1` to `F12` | |
+
+A name matches without case, and without `-`, `_` or spaces. These wrappers
+are also taken: `<Up>`, `KEY_UP`, `ArrowUp`, `arrow-up` and `up-arrow`.
+
+Modifiers go in front of a named key or of one character:
+
+| Modifier | Spellings |
+|----------|-----------|
+| ctrl | `ctrl+`, `control+`, `ctl+`, `C-`, and `^` before one character (`^C`) |
+| alt | `alt+`, `opt+`, `option+`, `meta+`, `M-` |
+| shift | `shift+`, `S-` |
+| super | `super+`, `cmd+`, `win+`. Only the window manager of an attached client takes it. A pane refuses it |
+
+ctrl combines with a letter, and with `@`, `[`, `\`, `]`, `^`, `_`, `?`,
+`Space`, `2`, `6` and `-`. Modifiers on a named key are sent the xterm way,
+for example `ctrl+Up` is `ESC [1;5A`.
+
+The other tokens:
+
+- One character is that character.
+- `PREFIX` is the leader key. It goes only to an attached client.
+- A token that starts with `\e`, `\E`, `\x1b`, `\033`, `\u001b`, `^[` or
+  the ESC byte is an escape sequence. It is sent as it is.
+- Any other word is typed as its characters. A word that looks like a key
+  name and is not one (`Dwon`, `F13`) is refused.
+
+Keys are split on spaces and commas. `repeat` is 1 to 1000.
+
+### list-keys
+
+Return the send-keys key grammar: every named key with its aliases, the
+modifiers with their spellings, and the other kinds of token. The list is the
+one in [Key grammar](#key-grammar). It reads no session, and any connection may
+call it.
+
+Request:
+
+```json
+{"verb": "list-keys"}
+```
+
+Response (shortened):
+
+```json
+{"result": {"type": "key_list",
+  "keys": [{"name": "Enter", "aliases": ["cr", "kpenter", "ret", "return"]}, {"name": "Tab", "aliases": []}],
+  "modifiers": [{"name": "ctrl", "spellings": ["ctrl+", "control+", "ctl+", "C-", "^"]}],
+  "ctrl_characters": ["@", "[", "\\", "]", "^", "_", "?", "space", "2", "6", "-"],
+  "escape_prefixes": ["\\e", "\\E", "\\x1b", "\\033", "\\u001b", "^[", "ESC byte"],
+  "prefix_token": "PREFIX", "separators": [" ", ","], "max_repeat": 1000}}
+```
+
 ### send-text
 
 Send literal text to a window's PTY. Unlike send-keys the text is written to the
@@ -2119,8 +2199,27 @@ Request:
 Response:
 
 ```json
-{"result": {"type": "pane_content", "source": "recent", "styled": false, "resolved": false, "content": "..."}}
+{"result": {"type": "pane_content", "source": "recent", "styled": false, "resolved": false, "content": "...",
+  "history_rows": 1840, "revision": 902113, "boot_id": "9f2c41d07a3e8b65"}}
 ```
+
+A `visible` or `recent` capture also reports these fields:
+
+- `history_rows` is the number of scrollback lines above the screen. A
+  `recent` capture holds these lines and then the screen. So a reader that
+  asked for N lines has older lines to load when N is less than
+  `history_rows` plus the screen rows.
+- `revision` grows each time the pane's content can change. Output that
+  reaches the emulator moves it, and so does a resize. Two captures of one
+  source and one style with the same `revision` have the same content, so a
+  reader can skip a grid it already has.
+- `boot_id` names the daemon start. `revision` counts from 0 again when the
+  daemon restarts. Compare two revisions only when their `boot_id` is the
+  same.
+
+The content and the two numbers are read under one lock, so the revision is
+the one the content was taken at. `list-windows` reports `history_rows` and
+`revision` for every window, so a reader can check many panes with one call.
 
 The reply echoes `resolved` so a consumer can tell whether the capture it
 received was rewritten. Without `resolved`, a `styled` capture emits the

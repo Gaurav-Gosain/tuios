@@ -359,7 +359,7 @@ func assertDocumentedFields(t *testing.T, key string, entry verbEntry, res map[s
 // The list is asserted in both directions. A verb that documents its result
 // leaves it; a new verb that does not document one has to be added on purpose.
 var verbsWithNoDocumentedResult = map[string]bool{
-	"capture-pane": true, "close-window": true,
+	"close-window":         true,
 	"explain-agent-screen": true, "hello": true,
 	"kill-session": true, "list-sessions": true, "list-verbs": true,
 	"list-windows": true, "resize": true, "send-text": true,

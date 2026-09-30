@@ -104,6 +104,23 @@ func addShellFacts(sess *Session, data map[string]any) {
 	}
 }
 
+// addPaneMeta adds each window's history_rows and revision to a
+// list-windows result, the numbers capture-pane reports beside its content.
+// A window with no pane on this daemon has neither.
+func addPaneMeta(sess *Session, data map[string]any) {
+	windows, _ := data["windows"].([]map[string]any)
+	for _, w := range windows {
+		id, _ := w["pty_id"].(string)
+		pty := sess.GetPTY(id)
+		if pty == nil {
+			continue
+		}
+		m := pty.Meta()
+		w["history_rows"] = m.HistoryRows
+		w["revision"] = m.Revision
+	}
+}
+
 // commandFinishedData is a command-finished event as a result's fields.
 func commandFinishedData(sessionName, window string, ev streamEvent) map[string]any {
 	out := map[string]any{

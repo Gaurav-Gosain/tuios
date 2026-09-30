@@ -793,6 +793,9 @@ type PTY struct {
 	// vtSeq is the stream position the emulator has consumed, guarded by
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
+	// vtResizes counts the resizes the emulator has applied, guarded by
+	// terminalMu. With vtSeq it makes the pane's revision (see paneMeta).
+	vtResizes int64
 
 	// Callback when PTY process exits, used by daemon to notify clients
 	onExit func(ptyID string)
@@ -3621,6 +3624,50 @@ func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) s
 	return ResolveSGR(p.captureContent(scrollback, true), palette)
 }
 
+// paneMeta is what a capture reports about a pane beside its content.
+type paneMeta struct {
+	// HistoryRows is how many scrollback lines the pane holds above its
+	// screen: the lines a "recent" capture has before the screen.
+	HistoryRows int
+	// Revision changes whenever the pane's content can have changed: output
+	// reached its emulator, or the emulator was resized. It only grows, and
+	// it counts from 0 again when the daemon restarts. Two captures with one
+	// revision have the same content.
+	Revision int64
+}
+
+// metaLocked is the pane's paneMeta. Callers hold terminalMu.
+func (p *PTY) metaLocked() paneMeta {
+	m := paneMeta{Revision: p.vtSeq + p.vtResizes}
+	if p.terminal != nil {
+		m.HistoryRows = p.terminal.ScrollbackLen()
+	}
+	return m
+}
+
+// Meta is the pane's paneMeta now.
+func (p *PTY) Meta() paneMeta {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.metaLocked()
+}
+
+// CaptureContentMeta is CaptureContent plus the pane's paneMeta, read under
+// the same lock, so the revision is the one the content was taken at.
+func (p *PTY) CaptureContentMeta(scrollback, ansi bool) (string, paneMeta) {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.captureContent(scrollback, ansi), p.metaLocked()
+}
+
+// CaptureContentResolvedMeta is CaptureContentResolved plus the pane's
+// paneMeta, read under the same lock.
+func (p *PTY) CaptureContentResolvedMeta(scrollback bool, palette [16]color.Color) (string, paneMeta) {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return ResolveSGR(p.captureContent(scrollback, true), palette), p.metaLocked()
+}
+
 // captureContent is the shared core of the two capture paths. Callers hold
 // terminalMu.
 func (p *PTY) captureContent(scrollback, ansi bool) string {
@@ -4231,6 +4278,7 @@ func (p *PTY) vtWriter() {
 			p.terminalMu.Lock()
 			if p.terminal != nil && (p.terminal.Width() != chunk.width || p.terminal.Height() != chunk.height) {
 				p.terminal.Resize(chunk.width, chunk.height)
+				p.vtResizes++
 			}
 			p.terminalMu.Unlock()
 			continue
