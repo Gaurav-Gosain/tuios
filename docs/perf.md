@@ -2132,7 +2132,7 @@ a binary is over its budget.
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
 | linux/amd64 | 25,182,370 | 26,400,000 (raised at 26,001,570) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 24,910,000 (raised at 24,811,602) | 25,265,154 |
+| darwin/arm64 | 23,834,594 | 25,210,000 (raised at 24,913,122) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
