@@ -2,8 +2,12 @@ package vt
 
 import (
 	"image/color"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
 )
 
@@ -85,22 +89,35 @@ var diacriticIndex = sync.OnceValue(func() map[rune]int {
 	return m
 })
 
+// KittyPlaceholderImageID returns the image id a placeholder cell names. Tests
+// outside this package read cells through it.
+func KittyPlaceholderImageID(content string, fg color.Color) (uint32, bool) {
+	return kittyPlaceholderID(content, fg)
+}
+
 // kittyPlaceholderID reads the image id a placeholder cell names: the low 24
 // bits from the foreground colour, and the top 8 from a third combining mark
-// when the cell carries one.
+// when the cell carries one. A 256-colour foreground gives the low bits by its
+// index, which is how kitty reads it.
 //
-// It reports false for a foreground that cannot state an id. A placeholder
-// drawn in a palette index or in the default colour names no image, and
-// guessing one would put somebody else's picture on the screen.
+// It reports false for a foreground that cannot state an id: the default
+// colour, or one that is fully transparent.
 func kittyPlaceholderID(content string, fg color.Color) (uint32, bool) {
-	if fg == nil {
+	var id uint32
+	switch c := fg.(type) {
+	case nil:
 		return 0, false
+	case ansi.IndexedColor:
+		id = uint32(c)
+	case ansi.BasicColor:
+		id = uint32(c)
+	default:
+		r, g, b, a := fg.RGBA()
+		if a == 0 {
+			return 0, false
+		}
+		id = uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
 	}
-	r, g, b, a := fg.RGBA()
-	if a == 0 {
-		return 0, false
-	}
-	id := uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
 	if high, ok := kittyPlaceholderHighByte(content); ok {
 		id |= uint32(high) << 24
 	}
@@ -128,6 +145,16 @@ func kittyPlaceholderHighByte(content string) (int, bool) {
 // that fit in the 24 bits a colour has. tuios allocates host ids from one
 // upward, so this is every id it hands out.
 func kittyPlaceholderFg(id uint32) color.Color {
+	id &= 0xffffff
+	// An id that fits in 256 colours is written as one. tuios draws to the
+	// host in the colour profile the host declared, and a host without
+	// COLORTERM=truecolor gets true colours rounded to the nearest of 256:
+	// the host id 2 became index 22, which names an image that is not there
+	// (issue 292). An indexed colour survives that rounding unchanged, and
+	// kitty reads its index as the id.
+	if id < 256 {
+		return ansi.IndexedColor(id)
+	}
 	return color.RGBA{
 		R: uint8(id >> 16),
 		G: uint8(id >> 8),
@@ -136,23 +163,104 @@ func kittyPlaceholderFg(id uint32) color.Color {
 	}
 }
 
-// translateKittyPlaceholderFg returns the foreground a placeholder cell should
-// be drawn in, given the guest's. It returns nil when nothing should change,
-// which is the answer for a cell that names no id, an image the host has not
-// been told about, and an id too wide for a colour to carry.
-func translateKittyPlaceholderFg(content string, fg color.Color, tr KittyImageIDTranslator) color.Color {
-	if tr == nil {
-		return nil
+// kittyPlaceholderColour is a placement id carried in a colour, which is how
+// the underline colour names the placement: the index for a 256-colour value,
+// the 24 bits otherwise, and 0 for none.
+func kittyPlaceholderColour(c color.Color) uint32 {
+	switch v := c.(type) {
+	case nil:
+		return 0
+	case ansi.IndexedColor:
+		return uint32(v)
+	case ansi.BasicColor:
+		return uint32(v)
 	}
-	guestID, ok := kittyPlaceholderID(content, fg)
+	r, g, b, _ := c.RGBA()
+	return uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
+}
+
+// rewriteKittyPlaceholder makes a placeholder cell ready for the host: it names
+// the image by the id the host knows, and it states its own row and column.
+// left is the cell to its left as already stored, or nil at the start of a row.
+//
+// The id is rewritten in both places it lives. The foreground carries the low
+// 24 bits and the third mark carries the high 8. Keeping the guest's third
+// mark under the host's colour names an image that does not exist: kitten
+// icat writes that mark on every cell, so its images drew nothing.
+//
+// Ids below 256, the foreground and the placement id in the underline colour,
+// are written as 256-colour indices. tuios draws to the host in the host's
+// colour profile, and a 256-colour host rounds a true colour to a nearby index,
+// which is another id (issue 292). An index survives the rounding.
+//
+// Whether left belongs to the same image is decided on the ids, after
+// translation, because left is stored translated and this cell is not yet.
+//
+// A cell with no marks takes the high byte of its id from the cell to its left
+// too, and that cell no longer holds the guest's. memo is the last cell this
+// rewrote, at (x, y), and supplies it when it is the cell to the left.
+func rewriteKittyPlaceholder(cell, left *uv.Cell, tr KittyImageIDTranslator, memo *kittyPlaceholderMemo, x, y int) {
+	guestID, ok := kittyPlaceholderID(cell.Content, cell.Style.Fg)
 	if !ok {
-		return nil
+		return
 	}
-	hostID, ok := tr(guestID)
-	if !ok || hostID == guestID || hostID > 0xffffff {
-		return nil
+	if _, hasHigh := kittyPlaceholderHighByte(cell.Content); !hasHigh && memo != nil &&
+		memo.x == x-1 && memo.y == y && left != nil && IsKittyPlaceholder(left.Content) &&
+		memo.guest&0xffffff == guestID {
+		if leftID, ok := kittyPlaceholderID(left.Content, left.Style.Fg); ok && leftID == memo.host {
+			guestID = memo.guest
+		}
 	}
-	return kittyPlaceholderFg(hostID)
+	id := guestID
+	if tr != nil {
+		if hostID, ok := tr(guestID); ok {
+			id = hostID
+		}
+	}
+	placement := kittyPlaceholderColour(cell.Style.UnderlineColor)
+	if cell.Style.UnderlineColor != nil && placement < 256 {
+		cell.Style.UnderlineColor = ansi.IndexedColor(placement)
+	}
+
+	leftContent, sameImage := "", false
+	if left != nil && IsKittyPlaceholder(left.Content) {
+		leftContent = left.Content
+		leftID, ok := kittyPlaceholderID(left.Content, left.Style.Fg)
+		sameImage = ok && leftID == id && kittyPlaceholderColour(left.Style.UnderlineColor) == placement
+	}
+
+	row, col, ok := kittyPlaceholderNext(cell.Content, leftContent, sameImage)
+	if !ok {
+		// Nothing says where this cell is, so it keeps what the guest wrote
+		// but for the high byte, which is now the host's to state and cannot
+		// be stated without a row and column.
+		r, c, hasRow, hasCol := kittyPlaceholderRowCol(cell.Content)
+		out := string(kittyPlaceholderChar)
+		if hasRow {
+			out += string(kitty.Diacritic(r))
+		}
+		if hasCol {
+			out += string(kitty.Diacritic(c))
+		}
+		cell.Content = out
+	} else if row < 297 && col < 297 {
+		out := string(kittyPlaceholderChar) + string(kitty.Diacritic(row)) + string(kitty.Diacritic(col))
+		if high := id >> 24; high != 0 {
+			out += string(kitty.Diacritic(int(high)))
+		}
+		cell.Content = out
+	}
+	cell.Style.Fg = kittyPlaceholderFg(id)
+	if memo != nil {
+		*memo = kittyPlaceholderMemo{x: x, y: y, guest: guestID, host: id}
+	}
+}
+
+// kittyPlaceholderMemo is the last placeholder cell rewritten: where it is,
+// and the guest and host ids it names.
+type kittyPlaceholderMemo struct {
+	x, y        int
+	guest, host uint32
 }
 
 // Making a placeholder cell stand on its own.
@@ -199,23 +307,6 @@ func kittyPlaceholderRowCol(content string) (row, col int, hasRow, hasCol bool) 
 	return row, col, hasRow, hasCol
 }
 
-// kittyPlaceholderSelfDescribing returns the cell content with its row and
-// column spelled out, keeping any third mark (the image id's high byte) after
-// them. It returns "" when nothing needs changing.
-func kittyPlaceholderSelfDescribing(content string, row, col int) string {
-	if row < 0 || col < 0 || row >= 297 || col >= 297 {
-		return ""
-	}
-	if r, c, hasRow, hasCol := kittyPlaceholderRowCol(content); hasRow && hasCol && r == row && c == col {
-		return ""
-	}
-	out := string(kittyPlaceholderChar) + string(kitty.Diacritic(row)) + string(kitty.Diacritic(col))
-	if high, ok := kittyPlaceholderHighByte(content); ok {
-		out += string(kitty.Diacritic(high))
-	}
-	return out
-}
-
 // kittyPlaceholderNext works out the row and column of a cell from the cell to
 // its left, which is the inference the terminal would do if the row reached it
 // whole.
@@ -251,13 +342,34 @@ func kittyPlaceholderNext(content, left string, sameImage bool) (row, col int, o
 	return lr, lc + 1, true
 }
 
-// sameFg reports whether two cell colours are the same, which is how two
-// placeholder cells are known to belong to the same image.
-func sameFg(a, b color.Color) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
+// StripKittyPlaceholders returns s with each placeholder cell, U+10EEEE and
+// the row, column and id marks after it, written as one space. A placeholder is
+// a piece of a picture, and text that leaves the grid (a capture) has no use
+// for it. s is returned as it is when it holds none.
+func StripKittyPlaceholders(s string) string {
+	const placeholder = "\U0010EEEE"
+	if !strings.Contains(s, placeholder) {
+		return s
 	}
-	ar, ag, ab, aa := a.RGBA()
-	br, bg, bb, ba := b.RGBA()
-	return ar == br && ag == bg && ab == bb && aa == ba
+	idx := diacriticIndex()
+	var b strings.Builder
+	b.Grow(len(s))
+	for len(s) > 0 {
+		i := strings.Index(s, placeholder)
+		if i < 0 {
+			b.WriteString(s)
+			break
+		}
+		b.WriteString(s[:i])
+		b.WriteByte(' ')
+		s = s[i+len(placeholder):]
+		for len(s) > 0 {
+			r, n := utf8.DecodeRuneInString(s)
+			if _, mark := idx[r]; !mark {
+				break
+			}
+			s = s[n:]
+		}
+	}
+	return b.String()
 }

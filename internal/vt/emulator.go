@@ -187,6 +187,9 @@ type Emulator struct {
 	// kittyPlaceholderMode decides whether placeholder cells are stored or
 	// dropped. See kitty_placeholder.go.
 	kittyPlaceholderMode KittyPlaceholderMode
+	// kittyPlaceholderMemo is the last placeholder cell rewritten; see
+	// rewriteKittyPlaceholder.
+	kittyPlaceholderMemo kittyPlaceholderMemo
 
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc SixelPassthroughFunc

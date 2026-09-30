@@ -207,6 +207,7 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 	}
 	n := view.Len()
 	cellsLoaded := false
+	memo := kittyPlaceholderMemo{x: -2}
 	for x := 0; x < n && x < t.width; x++ {
 		cell := view.Cell(x)
 		var dc decodedCell
@@ -289,23 +290,11 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 			// Spell out the row and column from the cell to the left, which
 			// this loop has already built, so clipping the left of the row
 			// later cannot orphan what survives. See kitty_placeholder.go.
-			leftContent, sameImage := "", false
+			var left *uv.Cell
 			if x > 0 {
-				if l := buf.CellAt(x-1, y); l != nil {
-					leftContent = l.Content
-					sameImage = sameFg(l.Style.Fg, out.Style.Fg)
-				}
+				left = buf.CellAt(x-1, y)
 			}
-			if row, col, ok := kittyPlaceholderNext(out.Content, leftContent, sameImage); ok {
-				if full := kittyPlaceholderSelfDescribing(out.Content, row, col); full != "" {
-					out.Content = full
-				}
-			}
-			if t.kittyImageIDTranslator != nil {
-				if fg := translateKittyPlaceholderFg(out.Content, out.Style.Fg, t.kittyImageIDTranslator); fg != nil {
-					out.Style.Fg = fg
-				}
-			}
+			rewriteKittyPlaceholder(out, left, t.kittyImageIDTranslator, &memo, x, y)
 		}
 		if dc.link {
 			if uri := t.hyperlinkAt(x, y); uri != "" {
