@@ -134,8 +134,9 @@ func placeholderCellsByID(stream []byte) map[int]int {
 // placeholderTokens matches an SGR sequence or a placeholder cell, in order.
 var placeholderTokens = regexp.MustCompile(`(\x1b\[([0-9;:]*)m)|\x{10EEEE}`)
 
-// foregroundID applies one SGR to the foreground id in effect: a 24-bit
-// foreground names an id, a reset names none, and anything else leaves it.
+// foregroundID applies one SGR to the foreground id in effect: a 24-bit or
+// 256-colour foreground names an id, a reset names none, and anything else
+// leaves it.
 func foregroundID(params string, current int) int {
 	if params == "" || params == "0" {
 		return -1
@@ -153,7 +154,9 @@ func foregroundID(params string, current int) int {
 				current = r<<16 | g<<8 | b
 				i += 4
 			} else if i+2 < len(fields) && fields[i+1] == "5" {
-				current = -1
+				// kitty reads a 256-colour foreground's index as the
+				// id, which is how tuios writes ids below 256.
+				current, _ = strconv.Atoi(fields[i+2])
 				i += 2
 			}
 		}
