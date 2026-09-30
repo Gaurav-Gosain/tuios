@@ -232,6 +232,17 @@ toggle_multifocus_active = ["y"]
 toggle_multifocus_all = ["Y"]
 ```
 
+To open many panes with multifocus on in one step, use
+[`tuios xpanes`](CLI_REFERENCE.md#tuios-xpanes). It opens one pane per item on
+a new workspace, tiled, and puts all of them in the set:
+
+```bash
+tuios xpanes --ssh web1 web2 web3
+```
+
+From a script, `tuios run-command SetMultifocus <window>...` sets the set to
+exactly these windows. With no window, it empties the set.
+
 Windows in the set are drawn with a distinct border color so it is obvious which
 ones will receive your keystrokes. With `appearance.dim_unfocused` on, the
 windows in the set are not dimmed. Set `appearance.dim_multifocus = true` to

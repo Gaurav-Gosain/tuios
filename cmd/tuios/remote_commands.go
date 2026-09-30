@@ -2142,6 +2142,8 @@ func runCommandCatalog() []runCommandEntry {
 		{"Split vertical", "Split focused window vertically", "tuios run-command Split vertical"},
 		{"RotateSplit", "Rotate the split direction", "tuios run-command RotateSplit"},
 		{"EqualizeSplits", "Equalize all split ratios", "tuios run-command EqualizeSplits"},
+		{"ArrangePanes tiled|even-horizontal|even-vertical", "Lay out the panes of the workspace again", "tuios run-command ArrangePanes tiled"},
+		{"SetMultifocus [window...]", "Put exactly these windows in multifocus, or clear it", "tuios run-command SetMultifocus build tests"},
 		{"Screenshot", "Save the focused window as an image", "tuios run-command Screenshot"},
 
 		// Workspace
@@ -2288,6 +2290,8 @@ func getRunCommandCompletions(toComplete string) []string {
 		"Split\tSplit window (horizontal/vertical)",
 		"RotateSplit\tRotate split direction",
 		"EqualizeSplits\tEqualize all splits",
+		"ArrangePanes\tLay out the panes again (tiled/even-horizontal/even-vertical)",
+		"SetMultifocus\tSet the multifocus windows",
 		"SwitchWorkspace\tSwitch to workspace N",
 		"MoveToWorkspace\tMove window to workspace N",
 		"MoveAndFollowWorkspace\tMove and follow to workspace N",

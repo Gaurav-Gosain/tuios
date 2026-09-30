@@ -139,6 +139,7 @@ func hostTapeCommandAllowed(t tape.CommandType) bool {
 		tape.CommandTypeSwitchWS, tape.CommandTypeMoveToWS, tape.CommandTypeMoveAndFollowWS,
 		tape.CommandTypeSplit, tape.CommandTypeFocus, tape.CommandTypeRotateSplit,
 		tape.CommandTypeEqualizeSplits, tape.CommandTypePreselect,
+		tape.CommandTypeArrangePanes, tape.CommandTypeSetMultifocus,
 		tape.CommandTypeWait, tape.CommandTypeWaitUntilRegex,
 		tape.CommandTypeShowNotification, tape.CommandTypeFocusDirection, tape.CommandTypeToggleZoom,
 		tape.CommandTypeSmartSplit, tape.CommandTypeCommandPalette, tape.CommandTypeComment:

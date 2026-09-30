@@ -97,6 +97,12 @@ const (
 	CommandTypeEqualizeSplits CommandType = "EqualizeSplits"
 	// CommandTypePreselect represents the Preselect command.
 	CommandTypePreselect CommandType = "Preselect"
+	// CommandTypeArrangePanes lays the panes of the current workspace out as
+	// tiled, even-horizontal or even-vertical.
+	CommandTypeArrangePanes CommandType = "ArrangePanes"
+	// CommandTypeSetMultifocus makes the multifocus set exactly the named
+	// windows. With no windows it clears the set.
+	CommandTypeSetMultifocus CommandType = "SetMultifocus"
 
 	// CommandTypeWait represents the Wait command.
 	CommandTypeWait CommandType = "Wait"
@@ -219,6 +225,8 @@ var commandTypes = []CommandType{
 	CommandTypeRotateSplit,
 	CommandTypeEqualizeSplits,
 	CommandTypePreselect,
+	CommandTypeArrangePanes,
+	CommandTypeSetMultifocus,
 	CommandTypeWait,
 	CommandTypeWaitUntilRegex,
 	CommandTypeSet,
