@@ -1,6 +1,9 @@
 package app
 
 import (
+	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -10,7 +13,16 @@ import (
 // BSP (Binary Space Partitioning) Tiling Functions
 // ============================================================================
 
-// GetOrCreateBSPTree returns the BSP tree for the current workspace, creating it if needed
+// GetOrCreateBSPTree returns the BSP tree for the current workspace, creating
+// it if needed.
+//
+// A tree created here starts with the configured default scheme
+// (appearance.tiling_scheme, read live off m.Settings so a change takes hold
+// on the next workspace that needs one). Once a workspace has a tree its
+// scheme lives on the tree itself (see layout.BSPTree.AutoScheme), which is
+// what keeps a config change from moving a workspace that is already tiled,
+// and it travels with the tree through session state and the daemon's
+// layout-tree ops.
 func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 	if m.WorkspaceTrees == nil {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
@@ -19,14 +31,11 @@ func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 	tree, exists := m.WorkspaceTrees[m.CurrentWorkspace]
 	if !exists || tree == nil {
 		tree = layout.NewBSPTree()
-		// Use SchemeSpiral as default if TilingScheme not set
-		if m.TilingScheme == layout.SchemeLongestSide {
-			// SchemeLongestSide is the zero value, which means it wasn't explicitly set
-			// Default to SchemeSpiral for balanced alternating splits
-			tree.AutoScheme = layout.SchemeSpiral
-		} else {
-			tree.AutoScheme = m.TilingScheme
+		scheme := m.Settings.TilingScheme
+		if scheme == "" {
+			scheme = config.TilingSchemeSpiral
 		}
+		tree.AutoScheme = layout.ParseAutoScheme(scheme)
 		m.WorkspaceTrees[m.CurrentWorkspace] = tree
 		m.LogInfo("BSP: Created new tree for workspace %d with scheme %s", m.CurrentWorkspace, tree.AutoScheme.String())
 	}
@@ -724,6 +733,60 @@ func (m *OS) EqualizeSplits() {
 
 	// Reapply layout
 	m.ApplyBSPLayout()
+}
+
+// tilingSchemeCycle is the fixed order cycle_tiling_scheme steps through,
+// spiral first since it is the default. It matches config.TilingSchemes.
+var tilingSchemeCycle = []layout.AutoScheme{
+	layout.SchemeSpiral,
+	layout.SchemeLongestSide,
+	layout.SchemeAlternate,
+	layout.SchemeSmartSplit,
+}
+
+// CycleTilingScheme moves the current workspace's tree to the next insertion
+// scheme in tilingSchemeCycle and returns its name, or "" when there is no
+// tiled workspace to change.
+//
+// This changes only the scheme, which decides where the next split goes; it
+// never reflows the windows already on screen. GetOrCreateBSPTree creates the
+// tree with the configured default when the workspace has none yet, so this
+// always has a tree to turn.
+func (m *OS) CycleTilingScheme() string {
+	if !m.AutoTiling {
+		return ""
+	}
+	tree := m.GetOrCreateBSPTree()
+	idx := slices.Index(tilingSchemeCycle, tree.AutoScheme)
+	tree.AutoScheme = tilingSchemeCycle[(idx+1)%len(tilingSchemeCycle)]
+	return tree.AutoScheme.String()
+}
+
+// SetTilingScheme sets the current workspace's insertion scheme directly. It
+// reports whether it applied, which is false only when tiling is off.
+func (m *OS) SetTilingScheme(scheme layout.AutoScheme) bool {
+	if !m.AutoTiling {
+		return false
+	}
+	m.GetOrCreateBSPTree().AutoScheme = scheme
+	return true
+}
+
+// TilingSchemeLabel names an insertion scheme the way the dock message and
+// the command palette show it, matching config.TilingSchemes.
+func TilingSchemeLabel(scheme string) string {
+	switch scheme {
+	case config.TilingSchemeSpiral:
+		return "spiral"
+	case config.TilingSchemeLongestSide:
+		return "longest side"
+	case config.TilingSchemeAlternate:
+		return "alternate"
+	case config.TilingSchemeSmartSplit:
+		return "smart split"
+	default:
+		return scheme
+	}
 }
 
 // SwapWindowsInBSPTree swaps two windows in the BSP tree

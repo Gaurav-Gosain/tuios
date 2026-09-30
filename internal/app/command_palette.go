@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -332,6 +333,61 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				if m.AutoTiling {
 					m.EqualizeSplits()
 					m.ShowNotification("Splits equalized", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Cycle tiling scheme",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if scheme := m.CycleTilingScheme(); scheme != "" {
+					m.ShowNotification("Tiling scheme: "+TilingSchemeLabel(scheme), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set tiling scheme: spiral",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetTilingScheme(layout.SchemeSpiral) {
+					m.ShowNotification("Tiling scheme: spiral", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set tiling scheme: longest side",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetTilingScheme(layout.SchemeLongestSide) {
+					m.ShowNotification("Tiling scheme: longest side", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set tiling scheme: alternate",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetTilingScheme(layout.SchemeAlternate) {
+					m.ShowNotification("Tiling scheme: alternate", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set tiling scheme: smart split",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetTilingScheme(layout.SchemeSmartSplit) {
+					m.ShowNotification("Tiling scheme: smart split", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},

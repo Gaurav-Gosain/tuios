@@ -66,3 +66,32 @@ func TestAPeerKeepsItsOwnTreeAgainstADaemonEcho(t *testing.T) {
 		t.Errorf("a same-version echo from the daemon replaced the tree:\n before %s\n after  %s", want, got)
 	}
 }
+
+// TestCycleTilingSchemeSyncsToAPeer: the scheme lives on the tree
+// (layout.BSPTree.AutoScheme), which already travels with every layout-tree op
+// (see session.SerializedBSPTree and session.TreeKey). Cycling it on one
+// client is exactly that kind of tree change, so it reaches a peer the same
+// way a split or a drag does, with no code of its own to send it.
+func TestCycleTilingSchemeSyncsToAPeer(t *testing.T) {
+	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
+
+	before := r.m.GetOrCreateBSPTree().AutoScheme
+	scheme := r.m.CycleTilingScheme()
+	if scheme == "" {
+		t.Fatal("CycleTilingScheme did nothing while tiling was on")
+	}
+	after := r.m.GetOrCreateBSPTree().AutoScheme
+	if after == before {
+		t.Fatalf("CycleTilingScheme left the scheme at %v", before)
+	}
+	r.m.SyncStateToDaemon()
+	settleTrees(t, r, p, ex, "after cycling the tiling scheme")
+
+	peerTree := p.m.WorkspaceTrees[p.m.CurrentWorkspace]
+	if peerTree == nil {
+		t.Fatal("the peer has no tree for the workspace after settling")
+	}
+	if peerTree.AutoScheme != after {
+		t.Fatalf("peer tree AutoScheme = %v, want %v (local cycled from %v)", peerTree.AutoScheme, after, before)
+	}
+}
