@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -31,40 +34,49 @@ func (f *fakeClipboard) env(goos string, vars map[string]string, tools ...string
 		getenv:   func(k string) string { return vars[k] },
 		lookPath: func(name string) bool { return slices.Contains(tools, name) },
 		goos:     goos,
-		run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			line := name + " " + strings.Join(args, " ")
-			f.ran = append(f.ran, line)
-			if f.hang {
-				<-ctx.Done()
-				return nil, ctx.Err()
+		run: func(ctx context.Context, limit int64, name string, args ...string) ([]byte, error) {
+			out, err := f.answer(ctx, name, args...)
+			if int64(len(out)) > limit {
+				return nil, errClipboardTooLarge
 			}
-			switch {
-			case strings.Contains(line, "--list-types"), strings.Contains(line, "TARGETS"):
-				if len(f.types) == 0 {
-					return nil, errors.New("exit status 1")
-				}
-				return []byte(strings.Join(f.types, "\n") + "\n"), nil
-			case name == "osascript" && strings.Contains(line, "clipboard info"):
-				var parts []string
-				for _, t := range f.types {
-					switch t {
-					case "image/png":
-						parts = append(parts, "«class PNGf», 1234")
-					case "text/plain":
-						parts = append(parts, "«class utf8», 12, string, 12")
-					}
-				}
-				return []byte(strings.Join(parts, ", ")), nil
-			case name == "osascript":
-				return []byte("«data PNGf" + strings.ToUpper(hexOf(f.image)) + "»\n"), nil
-			case name == "powershell" && strings.Contains(line, "ContainsImage"):
-				return []byte(strings.Join(f.types, "\r\n")), nil
-			case name == "powershell":
-				return []byte(base64.StdEncoding.EncodeToString(f.image) + "\r\n"), nil
-			default:
-				return f.image, nil
-			}
+			return out, err
 		},
+	}
+}
+
+// answer is what the fake tool prints.
+func (f *fakeClipboard) answer(ctx context.Context, name string, args ...string) ([]byte, error) {
+	line := name + " " + strings.Join(args, " ")
+	f.ran = append(f.ran, line)
+	if f.hang {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	switch {
+	case strings.Contains(line, "--list-types"), strings.Contains(line, "TARGETS"):
+		if len(f.types) == 0 {
+			return nil, errors.New("exit status 1")
+		}
+		return []byte(strings.Join(f.types, "\n") + "\n"), nil
+	case name == "osascript" && strings.Contains(line, "clipboard info"):
+		var parts []string
+		for _, t := range f.types {
+			switch t {
+			case "image/png":
+				parts = append(parts, "«class PNGf», 1234")
+			case "text/plain":
+				parts = append(parts, "«class utf8», 12, string, 12")
+			}
+		}
+		return []byte(strings.Join(parts, ", ")), nil
+	case name == "osascript":
+		return []byte("«data PNGf" + strings.ToUpper(hexOf(f.image)) + "»\n"), nil
+	case name == "powershell" && strings.Contains(line, "ContainsImage"):
+		return []byte(strings.Join(f.types, "\r\n")), nil
+	case name == "powershell":
+		return []byte(base64.StdEncoding.EncodeToString(f.image) + "\r\n"), nil
+	default:
+		return f.image, nil
 	}
 }
 
@@ -97,6 +109,11 @@ func TestTheImageToolIsChosenPerPlatform(t *testing.T) {
 		{"macos", f.env("darwin", nil, "osascript"), imageClipDarwin, true},
 		{"macos over ssh", f.env("darwin", map[string]string{"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}, "osascript"), 0, false},
 		{"windows", f.env("windows", nil, "powershell"), imageClipWindows, true},
+		// Inside ssh, a display the client inherited is the far desktop's.
+		{"wayland inside ssh", f.env("linux", map[string]string{"XDG_RUNTIME_DIR": "/run/user/1", "WAYLAND_DISPLAY": "wayland-0", "SSH_CONNECTION": "1 2 3 4"}, "wl-paste", "xclip"), 0, false},
+		{"far x11 inside ssh", f.env("linux", map[string]string{"DISPLAY": ":0", "SSH_TTY": "/dev/pts/3"}, "xclip"), 0, false},
+		{"ssh -X", f.env("linux", map[string]string{"DISPLAY": "localhost:10.0", "SSH_CONNECTION": "1 2 3 4"}, "xclip"), imageClipX11, true},
+		{"ssh -X on ipv4", f.env("linux", map[string]string{"DISPLAY": "127.0.0.1:10.0", "SSH_TTY": "/dev/pts/3"}, "xclip"), imageClipX11, true},
 	}
 	for _, c := range cases {
 		got := detectImageClipboard(c.env)
@@ -327,7 +344,7 @@ func TestAnImageOverTheLimitIsNotSent(t *testing.T) {
 	if len(*calls) != 0 || typed.Len() != 0 {
 		t.Error("an image over the limit was sent")
 	}
-	if msg := lastMessage(m); !strings.Contains(msg, "limit") {
+	if msg := lastMessage(m); !strings.Contains(msg, "8 MB") {
 		t.Errorf("the message does not name the limit: %q", msg)
 	}
 }
@@ -355,9 +372,99 @@ func TestAPathIsQuotedOnlyWhenAShellWouldSplitIt(t *testing.T) {
 		"/run/user/1000/tuios/paste/tuios-paste-20261001-1.png": "/run/user/1000/tuios/paste/tuios-paste-20261001-1.png",
 		"/tmp/my dir/a.png": "'/tmp/my dir/a.png'",
 		"/tmp/it's.png":     `'/tmp/it'\''s.png'`,
+		`C:\Users\ann\AppData\Local\tuios\paste\tuios-paste-1.png`:     `C:\Users\ann\AppData\Local\tuios\paste\tuios-paste-1.png`,
+		`C:\Users\Ann Lee\AppData\Local\tuios\paste\tuios-paste-1.png`: `"C:\Users\Ann Lee\AppData\Local\tuios\paste\tuios-paste-1.png"`,
 	} {
 		if got := pastePathText(in); got != want {
 			t.Errorf("pastePathText(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// scriptTools is an environment whose clipboard tools are the shell scripts
+// in dir, run the way the real ones are. Nothing reaches a real clipboard.
+func scriptTools(t *testing.T, scripts map[string]string) imageClipboardEnv {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in tools are shell scripts")
+	}
+	dir := t.TempDir()
+	for name, body := range scripts {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return imageClipboardEnv{
+		getenv:   func(k string) string { return wayland[k] },
+		lookPath: func(name string) bool { return scripts[name] != "" },
+		goos:     "linux",
+		run: func(ctx context.Context, limit int64, name string, args ...string) ([]byte, error) {
+			return runClipTool(ctx, limit, filepath.Join(dir, name), args...)
+		},
+	}
+}
+
+// A tool that forks keeps its pipe open through the child. The deadline has
+// to end the child too, or the paste key waits on it.
+func TestAClipboardToolWithAChildStopsAtItsDeadline(t *testing.T) {
+	env := scriptTools(t, map[string]string{"wl-paste": "sleep 6 & sleep 6"})
+	clip := detectImageClipboard(env)
+	start := time.Now()
+	if _, err := clip.Types(context.Background()); err == nil {
+		t.Error("a tool that never answered was taken as an answer")
+	}
+	if waited := time.Since(start); waited > imageClipTypesTimeout+2*imageClipWaitDelay+time.Second {
+		t.Errorf("the type ask took %v, want about %v", waited, imageClipTypesTimeout)
+	}
+}
+
+// The paste key never waits on a slow tool for longer than a short bound, and
+// once a tool was slow it pastes text without asking it again.
+func TestASlowClipboardToolDoesNotHoldUpATextPaste(t *testing.T) {
+	f := &fakeClipboard{hang: true}
+	m, _, _ := imagePasteOS(t, f)
+	start := time.Now()
+	msg := m.RequestPaste()()
+	if waited := time.Since(start); waited > imageClipKeyTimeout+time.Second {
+		t.Errorf("the paste key waited %v on the type ask", waited)
+	}
+	probe, ok := msg.(imageProbeMsg)
+	if !ok || !probe.fallback {
+		t.Fatalf("a slow type ask gave %#v, want the text paste", msg)
+	}
+	_, _ = m.Update(probe)
+	if !m.pastePending {
+		t.Fatal("the text paste was not asked for")
+	}
+	f.ran = nil
+	m.pastePending = false
+	_ = m.RequestPaste()
+	if len(f.ran) != 0 || !m.pastePending {
+		t.Errorf("the next press asked the slow tool again (%v)", f.ran)
+	}
+}
+
+// A tool that writes without end is cut off at the limit and killed, and the
+// dock says the image is too large.
+func TestAnEndlessClipboardIsCutOffAtTheLimit(t *testing.T) {
+	env := scriptTools(t, map[string]string{"wl-paste": `case "$*" in *--list-types*) echo image/png ;; *) printf '\211PNG'; exec yes ;; esac`})
+	clip := detectImageClipboard(env)
+	start := time.Now()
+	_, err := clip.ReadImage(context.Background(), []string{"image/png"})
+	if !errors.Is(err, errClipboardTooLarge) {
+		t.Fatalf("an endless image read returned %v, want errClipboardTooLarge", err)
+	}
+	if waited := time.Since(start); waited > imageClipReadTimeout {
+		t.Errorf("the read took %v", waited)
+	}
+
+	w, typed := layoutWindow(t, "w1")
+	w.Workspace = 1
+	m := layoutOS(w)
+	m.Mode = TerminalMode
+	m.SetImagePasteSeams(&env, nil, func([]byte) (string, error) { return "/x.png", nil })
+	driveImagePaste(t, m, m.RequestImagePaste())
+	if typed.Len() != 0 || !strings.Contains(lastMessage(m), "8 MB") {
+		t.Errorf("an endless image typed %q and said %q", typed.String(), lastMessage(m))
 	}
 }

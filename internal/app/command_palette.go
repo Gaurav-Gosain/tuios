@@ -83,7 +83,7 @@ type CommandPaletteItem struct {
 	// heavier than the palette's usual jump it is that consequence in words
 	// ("switches session"), since a row with no key still owes the user a warning.
 	Shortcut string
-	Category string // "Window", "Layout", "Session", "Navigation"
+	Category string // "Window", "Layout", "Session", "Navigation", "Clipboard"
 	// Match holds the byte offsets in Name that the live query matched, filled
 	// in by FilterCommandPalette so the renderer can underline them without
 	// running the matcher a second time. Nil when nothing was typed, and for a
@@ -163,7 +163,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Paste the clipboard image as a file path",
 			Shortcut: "prefix+V",
-			Category: "Window",
+			Category: "Clipboard",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.RequestImagePaste()
 			},

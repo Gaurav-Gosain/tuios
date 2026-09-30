@@ -2136,6 +2136,8 @@ inside a pane is `not_human`, and nothing is written.
 The file is mode 0600, in the `paste` directory next to the socket, which is
 mode 0700. The daemon deletes it after one hour, and deletes the files it wrote
 when it stops. A daemon that starts deletes the expired files in the directory.
+The directory keeps at most 50 images and 100 MB, and the oldest go first. A
+`paste` directory that is a symbolic link is refused with `internal`.
 
 Request:
 

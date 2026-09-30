@@ -170,6 +170,13 @@ key pastes the image. When the clipboard holds text, the paste key pastes the
 text. Some terminals send an empty paste when the clipboard holds only an
 image. tuios then pastes the image.
 
+A browser can put a link or text beside a copied image. The paste key then
+pastes the text. `Ctrl+B V` always pastes the image.
+
+The paste key waits at most 0.3 seconds for the list of clipboard types. When
+the clipboard tool is slower, or cannot list the clipboard, the paste key
+pastes text. It then does not ask the tool again until tuios restarts.
+
 `Ctrl+V` alone goes to the program in the pane. Claude Code reads the
 clipboard on `Ctrl+V` itself, and that only works in a pane on this machine.
 For a pane on a host, use `Ctrl+B V`.
@@ -185,12 +192,16 @@ tuios reads the image with the clipboard tool of your system:
 
 The file is a PNG, JPEG, GIF, WebP, BMP or TIFF image of 8 MB or less. Only
 you can read it. tuios deletes it after one hour, or when the daemon stops.
-The file is in the `paste` folder next to the tuios socket.
+The file is in the `paste` folder next to the tuios socket. The folder keeps
+at most 50 images and 100 MB. When it is full, tuios deletes the oldest image.
+If the `paste` folder is a symbolic link, tuios does not paste.
 
 tuios does not read the clipboard in these cases:
 
 - The client runs in a browser. Save the image to a file and paste the path.
 - The client runs on another machine through `tuios ssh`.
+- The client runs inside ssh. The clipboard there is the other machine's.
+  An X display that `ssh -X` forwards is the exception: tuios reads it.
 - The paste comes from `send-keys`.
 
 ## Command keys

@@ -6,12 +6,18 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Reading an image from the system clipboard.
@@ -30,10 +36,11 @@ import (
 //
 // The client runs on the person's machine in every case this is used for:
 // imagePasteReason refuses a browser tab and a remote SSH client, whose
-// clipboard is somewhere else. A client started inside ssh has no display
-// variable, so the Linux tools are not found, and the macOS and Windows tools
-// are refused outright there, because they would read the far machine's
-// clipboard.
+// clipboard is somewhere else. A client started inside ssh is checked first:
+// a WAYLAND_DISPLAY or DISPLAY it inherited (from a tmux started on the far
+// desktop, say) names that desktop's clipboard, not the person's. The one
+// display that is the person's inside ssh is the one ssh -X forwards, which
+// ssh names localhost:N.
 
 // imageClipboardEnv is everything the decision and the reads depend on, so a
 // test can drive every platform with fake commands and no real clipboard.
@@ -41,8 +48,10 @@ type imageClipboardEnv struct {
 	getenv   func(string) string
 	lookPath func(string) bool
 	goos     string
-	// run runs a command and returns its stdout. It must honour ctx.
-	run func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// run runs a command and returns its stdout, at most limit bytes of it.
+	// It must honour ctx, and it returns errClipboardTooLarge when the
+	// command writes more than limit.
+	run func(ctx context.Context, limit int64, name string, args ...string) ([]byte, error)
 }
 
 // systemImageClipboardEnv is the real environment.
@@ -51,9 +60,7 @@ func systemImageClipboardEnv() imageClipboardEnv {
 		getenv:   os.Getenv,
 		lookPath: hasExecutable,
 		goos:     runtime.GOOS,
-		run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, name, args...).Output()
-		},
+		run:      runClipTool,
 	}
 }
 
@@ -74,25 +81,126 @@ type imageClipboard struct {
 }
 
 // Bounds on the helper processes. Listing the types is a question the paste
-// key waits on, so it is short. Reading a large screenshot through osascript
+// key waits on, so it is short, and shorter still for the paste key, where a
+// text paste waits behind it. Reading a large screenshot through osascript
 // is slow, so the read is given longer.
 const (
 	imageClipTypesTimeout = 1500 * time.Millisecond
+	imageClipKeyTimeout   = 300 * time.Millisecond
 	imageClipReadTimeout  = 8 * time.Second
+	// imageClipTypesMax bounds the type list. A real one is a few hundred
+	// bytes.
+	imageClipTypesMax = 64 << 10
+	// imageClipWaitDelay is how long a helper's pipes are waited on after it
+	// is killed. A child it started could otherwise hold them open.
+	imageClipWaitDelay = 500 * time.Millisecond
 )
+
+// errClipboardTooLarge is a clipboard image over the paste limit. The tool
+// that was writing it is killed, and nothing past the limit is read.
+var errClipboardTooLarge = fmt.Errorf("the image is larger than %d MB", session.PasteImageMaxBytes>>20)
+
+// runClipTool runs one helper and returns at most limit bytes of its output.
+//
+// The helper gets a process group of its own where the platform has them, and
+// the whole group is killed when ctx ends or the output passes limit. Killing
+// only the helper is not enough: a wl-paste that forks, or a script standing
+// in for one, leaves a child holding the pipe, and the read would wait on that
+// child long after the deadline.
+func runClipTool(ctx context.Context, limit int64, name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stderr = &capWriter{max: 4 << 10}
+	cmd.WaitDelay = imageClipWaitDelay
+	prepareClipCmd(cmd)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	var once sync.Once
+	kill := func() {
+		once.Do(func() {
+			killClipCmd(cmd)
+			// Closing the read end ends a read that a surviving child
+			// still holds open.
+			_ = stdout.Close()
+		})
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			kill()
+		case <-done:
+		}
+	}()
+	out, rerr := io.ReadAll(io.LimitReader(stdout, limit+1))
+	over := int64(len(out)) > limit
+	if over {
+		kill()
+	}
+	close(done)
+	werr := cmd.Wait()
+	switch {
+	case over:
+		return nil, errClipboardTooLarge
+	case ctx.Err() != nil:
+		return nil, ctx.Err()
+	case rerr != nil:
+		return nil, rerr
+	case werr != nil:
+		if msg := strings.TrimSpace(cmd.Stderr.(*capWriter).String()); msg != "" {
+			return nil, fmt.Errorf("%w: %s", werr, msg)
+		}
+		return nil, werr
+	}
+	return out, nil
+}
+
+// capWriter keeps the first max bytes written to it and drops the rest.
+type capWriter struct {
+	bytes.Buffer
+	max int
+}
+
+func (w *capWriter) Write(p []byte) (int, error) {
+	if room := w.max - w.Len(); room > 0 {
+		w.Buffer.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
+}
+
+// forwardedX11 reports whether display is the one ssh -X or -Y forwards to
+// the person's own X server, which ssh names localhost:N.
+func forwardedX11(display string) bool {
+	host, _, ok := strings.Cut(display, ":")
+	if !ok {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
 
 // detectImageClipboard finds the tool that can read an image here, or nil.
 func detectImageClipboard(env imageClipboardEnv) *imageClipboard {
+	// Inside ssh every clipboard this process can reach is the far
+	// machine's, except an X display ssh forwards back to the person.
+	if env.getenv("SSH_CONNECTION") != "" || env.getenv("SSH_TTY") != "" {
+		if forwardedX11(env.getenv("DISPLAY")) && env.lookPath("xclip") {
+			return &imageClipboard{backend: imageClipX11, env: env}
+		}
+		return nil
+	}
 	if env.getenv("XDG_RUNTIME_DIR") != "" && env.getenv("WAYLAND_DISPLAY") != "" && env.lookPath("wl-paste") {
 		return &imageClipboard{backend: imageClipWayland, env: env}
 	}
 	if env.getenv("DISPLAY") != "" && env.lookPath("xclip") {
 		return &imageClipboard{backend: imageClipX11, env: env}
-	}
-	// A client inside ssh on a Mac or a Windows box would read that box's
-	// clipboard, which is not the person's.
-	if env.getenv("SSH_CONNECTION") != "" || env.getenv("SSH_TTY") != "" {
-		return nil
 	}
 	switch env.goos {
 	case "darwin":
@@ -122,26 +230,40 @@ const windowsClipImage = `Add-Type -AssemblyName System.Windows.Forms; Add-Type 
 // Types lists what the clipboard holds, as media types where the platform
 // names them that way. An empty clipboard is no types and no error.
 func (c *imageClipboard) Types(ctx context.Context) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, imageClipTypesTimeout)
+	return c.typesWithin(ctx, imageClipTypesTimeout)
+}
+
+// errClipTypesUnsupported is a tool that says it cannot list the clipboard
+// here, such as wl-paste on a compositor without the data-control protocol.
+var errClipTypesUnsupported = errors.New("the clipboard tool cannot list the clipboard here")
+
+// typesWithin is Types with its own deadline.
+func (c *imageClipboard) typesWithin(ctx context.Context, limit time.Duration) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	var out []byte
 	var err error
 	switch c.backend {
 	case imageClipWayland:
-		out, err = c.env.run(ctx, "wl-paste", "--list-types")
+		out, err = c.env.run(ctx, imageClipTypesMax, "wl-paste", "--list-types")
 	case imageClipX11:
-		out, err = c.env.run(ctx, "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
+		out, err = c.env.run(ctx, imageClipTypesMax, "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
 	case imageClipDarwin:
-		out, err = c.env.run(ctx, "osascript", "-e", "clipboard info")
+		out, err = c.env.run(ctx, imageClipTypesMax, "osascript", "-e", "clipboard info")
 		if err == nil {
 			return darwinClipTypes(string(out)), nil
 		}
 	case imageClipWindows:
-		out, err = c.env.run(ctx, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", windowsClipTypes)
+		out, err = c.env.run(ctx, imageClipTypesMax, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", windowsClipTypes)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		// A tool that says the compositor lacks what it needs will say so
+		// on every press. The caller stops asking.
+		if msg := strings.ToLower(err.Error()); strings.Contains(msg, "not support") || strings.Contains(msg, "data-control") {
+			return nil, errClipTypesUnsupported
 		}
 		// wl-paste and xclip exit non-zero on an empty clipboard. That is
 		// an answer, not a failure.
@@ -233,13 +355,13 @@ func (c *imageClipboard) ReadImage(ctx context.Context, types []string) ([]byte,
 	var err error
 	switch c.backend {
 	case imageClipWayland:
-		out, err = c.env.run(ctx, "wl-paste", "--no-newline", "--type", kind)
+		out, err = c.env.run(ctx, session.PasteImageMaxBytes, "wl-paste", "--no-newline", "--type", kind)
 	case imageClipX11:
-		out, err = c.env.run(ctx, "xclip", "-selection", "clipboard", "-t", kind, "-o")
+		out, err = c.env.run(ctx, session.PasteImageMaxBytes, "xclip", "-selection", "clipboard", "-t", kind, "-o")
 	case imageClipDarwin:
 		out, err = c.readDarwin(ctx, kind)
 	case imageClipWindows:
-		out, err = c.env.run(ctx, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", windowsClipImage)
+		out, err = c.env.run(ctx, int64(base64.StdEncoding.EncodedLen(session.PasteImageMaxBytes))+64, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", windowsClipImage)
 		if err == nil {
 			out, err = base64.StdEncoding.DecodeString(strings.TrimSpace(string(out)))
 		}
@@ -258,7 +380,11 @@ func (c *imageClipboard) ReadImage(ctx context.Context, types []string) ([]byte,
 // twice the size and is decoded here.
 func (c *imageClipboard) readDarwin(ctx context.Context, kind string) ([]byte, error) {
 	if kind == "image/png" && c.env.lookPath("pngpaste") {
-		if out, err := c.env.run(ctx, "pngpaste", "-"); err == nil && len(out) > 0 {
+		out, err := c.env.run(ctx, session.PasteImageMaxBytes, "pngpaste", "-")
+		if errors.Is(err, errClipboardTooLarge) {
+			return nil, err
+		}
+		if err == nil && len(out) > 0 {
 			return out, nil
 		}
 	}
@@ -266,7 +392,8 @@ func (c *imageClipboard) readDarwin(ctx context.Context, kind string) ([]byte, e
 	if class == "" {
 		return nil, errNoClipboardImage
 	}
-	out, err := c.env.run(ctx, "osascript", "-e", "the clipboard as «class "+class+"»")
+	// Two hex digits a byte, and the «data CLASS» around them.
+	out, err := c.env.run(ctx, 2*session.PasteImageMaxBytes+64, "osascript", "-e", "the clipboard as «class "+class+"»")
 	if err != nil {
 		return nil, err
 	}

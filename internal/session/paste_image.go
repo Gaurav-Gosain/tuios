@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,6 +63,14 @@ const PasteImageMaxBytes = pasteImageMaxBytes
 // directory from growing for the life of the daemon.
 const pasteFileTTL = time.Hour
 
+// pasteMaxFiles and pasteMaxDirBytes bound the paste directory. It is under
+// the runtime directory, which is often a small tmpfs, and a run of pastes
+// inside the TTL must not fill it. The oldest pasted files go first.
+const (
+	pasteMaxFiles    = 50
+	pasteMaxDirBytes = 100 << 20
+)
+
 // pasteFilePerm and pasteDirPerm keep the files the owner's alone. A
 // screenshot can hold anything that was on the screen.
 const (
@@ -106,21 +115,33 @@ func sniffImage(data []byte) string {
 
 // pasteStore writes pasted images to one directory and deletes them again.
 //
-// Files are deleted three ways: a put first deletes every pasted file older
-// than the TTL, the daemon deletes the files it wrote when it stops, and a
-// daemon that starts deletes the expired ones a killed daemon left behind.
-// The directory is under the socket's, which is per boot, so nothing here
-// outlives the machine's uptime whatever happens to the daemon.
+// Files are deleted four ways: a timer deletes each pasted file once it is
+// older than the TTL, a save deletes the oldest files past the directory's
+// caps, the daemon deletes the files it wrote when it stops, and a daemon
+// that starts deletes the expired ones a killed daemon left behind. On Linux
+// and macOS the directory is under the runtime directory or /tmp, which a
+// reboot clears. On Windows it is under the user's local app data, which a
+// reboot keeps, so there the start sweep is what clears a killed daemon's
+// files.
 type pasteStore struct {
 	mu  sync.Mutex
 	dir func() (string, error)
 	now func() time.Time
 	ttl time.Duration
+	// maxFiles and maxBytes cap the directory. Zero means the defaults.
+	maxFiles int
+	maxBytes int64
 	// written is every file this store wrote that is still on disk, which is
 	// what a stop deletes. A directory shared with another process keeps that
 	// process's files.
 	written map[string]bool
+	// timer runs the next TTL sweep, nil when nothing is waiting for one.
+	timer *time.Timer
 }
+
+// errPasteDirLink is a paste directory that is a symbolic link. Following it
+// would write the images wherever it points.
+var errPasteDirLink = errors.New("the paste folder is a symbolic link or not a folder. Remove it and paste again")
 
 // newPasteStore returns a store in the "paste" directory beside the socket.
 func newPasteStore(socketPath func() string) *pasteStore {
@@ -156,11 +177,20 @@ func (s *pasteStore) save(data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, pasteDirPerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), pasteDirPerm); err != nil {
 		return "", err
 	}
-	// MkdirAll leaves an existing directory's mode alone. This one is ours,
-	// so it is put back to the owner's alone.
+	if err := os.Mkdir(dir, pasteDirPerm); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	// A link planted where the directory goes is refused, not followed.
+	if info, err := os.Lstat(dir); err != nil {
+		return "", err
+	} else if !info.IsDir() {
+		return "", fmt.Errorf("%s: %w", dir, errPasteDirLink)
+	}
+	// Mkdir leaves an existing directory's mode alone. This one is ours, so
+	// it is put back to the owner's alone.
 	_ = os.Chmod(dir, pasteDirPerm)
 	s.sweepLocked(dir)
 
@@ -186,7 +216,82 @@ func (s *pasteStore) save(data []byte) (string, error) {
 		return "", err
 	}
 	s.written[path] = true
+	s.capLocked(dir, path)
+	s.armLocked(dir)
 	return path, nil
+}
+
+// capLocked deletes the oldest pasted files until the directory is within
+// its caps. keep, the file just written, is never deleted.
+func (s *pasteStore) capLocked(dir, keep string) {
+	maxFiles, maxBytes := s.maxFiles, s.maxBytes
+	if maxFiles <= 0 {
+		maxFiles = pasteMaxFiles
+	}
+	if maxBytes <= 0 {
+		maxBytes = pasteMaxDirBytes
+	}
+	type file struct {
+		path string
+		mod  time.Time
+		size int64
+	}
+	var files []file
+	var total int64
+	for _, e := range s.pastedEntries(dir) {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, file{filepath.Join(dir, e.Name()), info.ModTime(), info.Size()})
+		total += info.Size()
+	}
+	slices.SortFunc(files, func(a, b file) int {
+		if c := a.mod.Compare(b.mod); c != 0 {
+			return c
+		}
+		return strings.Compare(a.path, b.path)
+	})
+	for i := 0; i < len(files) && (len(files)-i > maxFiles || total > maxBytes); i++ {
+		if files[i].path == keep {
+			continue
+		}
+		if err := os.Remove(files[i].path); err == nil || os.IsNotExist(err) {
+			delete(s.written, files[i].path)
+			total -= files[i].size
+		}
+	}
+}
+
+// pastedEntries lists the pasted files in dir.
+func (s *pasteStore) pastedEntries(dir string) []os.DirEntry {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	return slices.DeleteFunc(entries, func(e os.DirEntry) bool {
+		return !strings.HasPrefix(e.Name(), pasteFilePrefix) || !e.Type().IsRegular()
+	})
+}
+
+// armLocked sets the timer for the next TTL sweep: when the oldest pasted
+// file in dir expires. With no pasted file left it sets none.
+func (s *pasteStore) armLocked(dir string) {
+	if s.timer != nil {
+		s.timer.Stop()
+		s.timer = nil
+	}
+	var oldest time.Time
+	for _, e := range s.pastedEntries(dir) {
+		if info, err := e.Info(); err == nil && (oldest.IsZero() || info.ModTime().Before(oldest)) {
+			oldest = info.ModTime()
+		}
+	}
+	if oldest.IsZero() {
+		return
+	}
+	wait := max(oldest.Add(s.ttl).Sub(s.now())+10*time.Millisecond, 10*time.Millisecond)
+	s.timer = time.AfterFunc(wait, s.sweep)
 }
 
 // sweep deletes the pasted files older than the TTL.
@@ -200,20 +305,17 @@ func (s *pasteStore) sweep() {
 	if err != nil {
 		return
 	}
+	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
+		return
+	}
 	s.sweepLocked(dir)
+	s.armLocked(dir)
 }
 
 // sweepLocked is sweep with s.mu held.
 func (s *pasteStore) sweepLocked(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
 	cutoff := s.now().Add(-s.ttl)
-	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), pasteFilePrefix) || !e.Type().IsRegular() {
-			continue
-		}
+	for _, e := range s.pastedEntries(dir) {
 		info, err := e.Info()
 		if err != nil || info.ModTime().After(cutoff) {
 			continue
@@ -233,6 +335,10 @@ func (s *pasteStore) removeWritten() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.timer != nil {
+		s.timer.Stop()
+		s.timer = nil
+	}
 	for path := range s.written {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			LogError("Failed to remove pasted image %s: %v", path, err)
