@@ -165,7 +165,9 @@ func (d *Daemon) newHerdrTranslator() *herdrTranslator {
 func (t *herdrTranslator) remember(s *Session) {
 	t.sessions[s.Name()] = s.ID
 	for _, w := range s.GetState().Windows {
-		t.panes[w.ID] = herdrMemoOf(s, &w)
+		if !herdrScratch(&w) {
+			t.panes[w.ID] = herdrMemoOf(s, &w)
+		}
 	}
 }
 
@@ -235,9 +237,16 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	}
 	wsID := herdrWorkspaceID(sess.ID)
 	if ev.Type == EventWorkspaceSwitched {
+		if ev.Workspace >= herdrScratchWorkspaceBase {
+			return nil
+		}
 		return []herdrEvent{global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, max(ev.Workspace, 1)), WorkspaceID: wsID})}
 	}
 	if ev.Window == "" {
+		return nil
+	}
+	if w, ok := findWindowState(sess.GetState(), ev.Window); ok && herdrScratch(&w) {
+		// A scratch terminal is not a herdr pane. See herdrScratch.
 		return nil
 	}
 	paneID := herdrPaneID(sess.ID, ev.Window)
@@ -258,7 +267,7 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	switch ev.Type {
 	case EventWindowCreated:
 		out := []herdrEvent{global("pane_created", &herdrEventData{Pane: p})}
-		if countOnWorkspace(sess.GetState(), max(w.Workspace, 1)) == 1 {
+		if herdrCount(sess.GetState(), max(w.Workspace, 1)) == 1 {
 			if tb := v.tab(p.TabID); tb != nil {
 				out = append([]herdrEvent{global("tab_created", &herdrEventData{Tab: tb})}, out...)
 			}

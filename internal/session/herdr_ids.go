@@ -128,7 +128,7 @@ func (d *Daemon) herdrFindPane(id string) (*Session, WindowState, *herdrIDError)
 	)
 	for _, s := range d.manager.AllSessions() {
 		for _, w := range s.GetState().Windows {
-			if !strings.HasPrefix(strings.ReplaceAll(w.ID, "-", ""), want) {
+			if herdrScratch(&w) || !strings.HasPrefix(strings.ReplaceAll(w.ID, "-", ""), want) {
 				continue
 			}
 			if found {

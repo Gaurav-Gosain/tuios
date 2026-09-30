@@ -284,7 +284,30 @@ func (d *Daemon) herdrFocusedSession(sessions []*Session) *Session {
 // workspaces are fixed slots, so a slot is a tab when it holds a window, has
 // a name, or is the one showing.
 func herdrListedWorkspace(st *SessionState, ws int) bool {
-	return ws == st.CurrentWorkspace || st.WorkspaceNames[ws] != "" || countOnWorkspace(st, ws) > 0
+	return ws == st.CurrentWorkspace || st.WorkspaceNames[ws] != "" || herdrCount(st, ws) > 0
+}
+
+// herdrScratchWorkspaceBase is the first workspace number the scratch
+// terminals take. Workspaces from it up are not tabs.
+const herdrScratchWorkspaceBase = 1000
+
+// herdrScratch reports whether a window is a scratch terminal. herdr has
+// nothing like one, so it is not a pane to a herdr client: not in the
+// snapshot, the lists or the events, and not found by its id.
+func herdrScratch(w *WindowState) bool {
+	return w.Scratch || w.Workspace >= herdrScratchWorkspaceBase
+}
+
+// herdrCount is how many windows other than scratch terminals workspace ws
+// holds.
+func herdrCount(st *SessionState, ws int) int {
+	n := 0
+	for i := range st.Windows {
+		if st.Windows[i].Workspace == ws && !herdrScratch(&st.Windows[i]) {
+			n++
+		}
+	}
+	return n
 }
 
 // herdrWorkspaceOrder is a session's workspaces in display order.
@@ -328,10 +351,16 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	if label == "" {
 		label = sess.Name()
 	}
+	tabs := herdrOrderedTabs(st)
 	activeTab := herdrTabID(sess.ID, max(st.CurrentWorkspace, 1))
+	if st.CurrentWorkspace >= herdrScratchWorkspaceBase && len(tabs) > 0 {
+		// A scratch workspace is showing, and it is not a tab. The tab the
+		// person comes back to is the first one.
+		activeTab = herdrTabID(sess.ID, tabs[0])
+	}
 	w := herdrWorkspace{
 		WorkspaceID: wsID, Number: number, Label: label, Focused: active,
-		PaneCount: len(st.Windows), ActiveTabID: activeTab, AgentStatus: "unknown",
+		ActiveTabID: activeTab, AgentStatus: "unknown",
 	}
 	if wt := st.Worktree; wt != nil && wt.RepoRoot != "" {
 		w.Worktree = &herdrWorkspaceWorktree{
@@ -341,8 +370,13 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	}
 
 	panesByTab := make(map[int][]herdrPaneInfo)
+	first := len(v.panes)
 	for i := range st.Windows {
 		win := &st.Windows[i]
+		if herdrScratch(win) {
+			continue
+		}
+		w.PaneCount++
 		p := d.herdrPaneRecord(sess, st, win, active)
 		panesByTab[win.Workspace] = append(panesByTab[win.Workspace], p)
 		v.panes = append(v.panes, p)
@@ -362,7 +396,7 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 		// in one, its main checkout included. The session's directory is
 		// its focused pane's, else its first pane's.
 		dir := ""
-		for _, p := range v.panes[len(v.panes)-len(st.Windows):] {
+		for _, p := range v.panes[first:] {
 			if dir == "" || p.Focused {
 				dir = p.Cwd
 			}
@@ -370,7 +404,7 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 		w.Worktree = herdrCheckoutOf(dir)
 	}
 
-	for n, ws := range herdrOrderedTabs(st) {
+	for n, ws := range tabs {
 		t := herdrTabRecord(sess, st, ws, n+1, active, panesByTab[ws])
 		v.tabs = append(v.tabs, t)
 		v.layouts = append(v.layouts, herdrLayoutOf(sess, st, ws, panesByTab[ws]))

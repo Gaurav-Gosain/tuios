@@ -739,7 +739,7 @@ func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		}
 	}
 	for _, w := range st.Windows {
-		if w.Workspace != ws {
+		if w.Workspace != ws || herdrScratch(&w) {
 			continue
 		}
 		if _, verr := d.callVerb(cs, "close-window", herdrWin(sess, w.ID)); verr != nil && verr.Code != ErrVerbWindowNotFound {
@@ -765,7 +765,7 @@ func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdr
 func herdrNeighbourTab(st *SessionState, ws int) int {
 	order := herdrWorkspaceOrder(st)
 	at := slices.Index(order, ws)
-	holds := func(n int) bool { return countOnWorkspace(st, n) > 0 }
+	holds := func(n int) bool { return herdrCount(st, n) > 0 }
 	for i := at - 1; i >= 0; i-- {
 		if holds(order[i]) {
 			return order[i]
