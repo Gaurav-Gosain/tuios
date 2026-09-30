@@ -21,7 +21,7 @@ func TestSixelVisibleWhenScrollbackExceedsHeight(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = devnull.Close() })
 	sp := NewSixelPassthroughWithOptions(SixelPassthroughOptions{ForceEnable: true, Output: devnull})
-	sp.enabled = true
+	sp.enabled.Store(true)
 
 	winID := "test-window-id-abcdef12"
 

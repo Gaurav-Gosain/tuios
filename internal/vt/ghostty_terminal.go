@@ -131,6 +131,7 @@ type GhosttyTerminal struct {
 	// kittyPlaceholderMode decides whether placeholder cells survive the read.
 	kittyPlaceholderMode KittyPlaceholderMode
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	sixelAdvertised      func() bool
 	textSizingFunc       func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
 
 	restore *ghosttyRestore
@@ -283,8 +284,12 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 				}
 			})
 		}),
+		// XTVERSION names tuios. The library's default, "libghostty", is the
+		// name of a terminal the pane is not in: yazi reads it as Ghostty and
+		// draws kitty graphics on a host that may only draw sixel.
+		gh.WithXtversion(func(_ *gh.Terminal) string { return "tuios" }),
 		gh.WithDeviceAttributes(func(_ *gh.Terminal) (gh.DeviceAttributes, bool) {
-			return ghosttyDeviceAttributes(), true
+			return ghosttyDeviceAttributes(t.sixelOn()), true
 		}),
 	)
 	if err != nil {
@@ -681,14 +686,15 @@ func ghosttyProgressState(s gh.TerminalProgressState) (ProgressState, bool) {
 	}
 }
 
-// ghosttyDeviceAttributes answers DA1 exactly as the pure emulator does:
-// VT220 with 132 columns, sixel, selective erase, NRC, technical characters,
-// windowing and ANSI color.
-func ghosttyDeviceAttributes() gh.DeviceAttributes {
+// ghosttyDeviceAttributes answers DA1 exactly as the pure emulator does. See
+// DeviceAttributes.
+func ghosttyDeviceAttributes(sixel bool) gh.DeviceAttributes {
 	var da gh.DeviceAttributes
-	da.Primary.ConformanceLevel = 62
-	features := []uint16{1, 4, 6, 9, 15, 18, 22}
-	copy(da.Primary.Features[:], features)
-	da.Primary.NumFeatures = len(features)
+	features := DeviceAttributes(sixel)
+	da.Primary.ConformanceLevel = uint16(features[0])
+	for i, f := range features[1:] {
+		da.Primary.Features[i] = uint16(f)
+	}
+	da.Primary.NumFeatures = len(features) - 1
 	return da
 }

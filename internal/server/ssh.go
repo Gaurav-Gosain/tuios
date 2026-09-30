@@ -351,6 +351,11 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (*app.OS, 
 	// last writer wins across clients, and StartSSHServer seeds it once.
 	clientCaps := detectClientGraphics(sshSession)
 	hostCaps := clientToHostCapabilities(clientCaps)
+	// An explicit TUIOS_SIXEL_GRAPHICS from the client is final; otherwise
+	// the client's DA1 answer replaces the guess once the program runs.
+	if env := parseEnviron(sshSession.Environ()); env["TUIOS_SIXEL_GRAPHICS"] != "" && hostCaps != nil {
+		hostCaps.SixelPinned = true
+	}
 
 	// The accent picker's fallback labels describe what the terminal showing
 	// the frame will do to each colour. Its default probe reads this process's

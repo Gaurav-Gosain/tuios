@@ -127,9 +127,10 @@ func TestConform_DeviceAttributes(t *testing.T) {
 	if !strings.HasPrefix(da1, "\x1b[?6") || !strings.HasSuffix(da1, "c") {
 		t.Errorf("DA1 replied %q, which is not a VT220-or-later device attributes report", da1)
 	}
-	// 4 is sixel and 22 is colour. Both are implemented here, and a guest that
-	// reads the list is entitled to use them.
-	for _, want := range []string{";4;", ";22c"} {
+	// 22 is colour, which is implemented here, and a guest that reads the
+	// list is entitled to use it. Sixel (4) depends on the host and has its
+	// own test, TestSixelAdvertisedFollowsHost.
+	for _, want := range []string{";22c"} {
 		if !strings.Contains(da1, want) {
 			t.Errorf("DA1 replied %q, which does not contain %q", da1, want)
 		}

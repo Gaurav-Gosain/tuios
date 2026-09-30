@@ -855,16 +855,16 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			return false
 		}
 
-		_, _ = io.WriteString(e.pipe, ansi.PrimaryDeviceAttributes(
-			62, // VT220
-			1,  // 132 columns
-			4,  // Sixel graphics
-			6,  // Selective Erase
-			9,  // National Replacement Character sets
-			15, // Technical characters
-			18, // Windowing capability (XTWINOPS)
-			22, // ANSI color
-		))
+		_, _ = io.WriteString(e.pipe, ansi.PrimaryDeviceAttributes(DeviceAttributes(e.sixelOn())...))
+		return true
+	})
+
+	e.RegisterCsiHandler(ansi.Command('?', 0, 'S'), func(params ansi.Params) bool {
+		// XTSMGRAPHICS: sixel colour registers and maximum geometry.
+		item, _, _ := params.Param(0, 0)
+		action, _, _ := params.Param(1, 0)
+		cw, ch := e.CellSize()
+		_, _ = io.WriteString(e.pipe, sixelGraphicsReply(item, action, e.sixelOn(), e.Width()*cw, e.Height()*ch))
 		return true
 	})
 

@@ -47,8 +47,11 @@ type HostCapabilities struct {
 	// wrong here costs nothing.
 	KittyPlaceholders bool
 	SixelGraphics     bool
-	TrueColor         bool
-	TerminalName      string
+	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, so no
+	// later answer from the terminal changes it.
+	SixelPinned  bool
+	TrueColor    bool
+	TerminalName string
 	// FontFamily and BoldFontFamily are the faces the host draws with, as it
 	// named them itself. kitty answers a documented XTGETTCAP key with them,
 	// and fontconfig turns the name into a file, so a PNG capture can be drawn
@@ -715,8 +718,10 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	switch os.Getenv("TUIOS_SIXEL_GRAPHICS") {
 	case "1":
 		caps.SixelGraphics = true
+		caps.SixelPinned = true
 	case "0":
 		caps.SixelGraphics = false
+		caps.SixelPinned = true
 	}
 
 	switch os.Getenv("TUIOS_KITTY_ANIMATION") {

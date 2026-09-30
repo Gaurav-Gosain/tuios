@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
@@ -28,8 +29,10 @@ func sixelPassthroughLog(format string, args ...any) {
 // Unlike Kitty graphics, sixel images don't have IDs. They're placed inline
 // at the cursor position and scroll with text.
 type SixelPassthrough struct {
-	mu      sync.Mutex
-	enabled bool
+	mu sync.Mutex
+	// enabled is read from each pane's DA1 handler, on the PTY reader, and
+	// written when an SSH client's DA1 answer arrives, so it is atomic.
+	enabled atomic.Bool
 	hostOut io.Writer
 	// caps is the terminal this passthrough writes to, snapshotted per
 	// connection. See KittyPassthrough.caps. Never nil after the constructor.
@@ -40,6 +43,9 @@ type SixelPassthrough struct {
 
 	// Pending sixel output to be written
 	pendingOutput []byte
+
+	// forced keeps the passthrough on whatever the host answers (web mode).
+	forced bool
 }
 
 // SixelPassthroughPlacement represents a sixel image placed in a guest window.
@@ -99,12 +105,14 @@ func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthro
 	if hostOut == nil {
 		hostOut = os.Stdout
 	}
-	return &SixelPassthrough{
-		enabled:    enabled,
+	sp := &SixelPassthrough{
 		hostOut:    hostOut,
 		caps:       caps,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
+	sp.enabled.Store(enabled)
+	sp.forced = opts.ForceEnable
+	return sp
 }
 
 // hostCaps is the terminal this passthrough writes to. The constructor always
@@ -118,7 +126,13 @@ func (sp *SixelPassthrough) hostCaps() *HostCapabilities {
 
 // IsEnabled returns whether sixel passthrough is enabled.
 func (sp *SixelPassthrough) IsEnabled() bool {
-	return sp.enabled
+	return sp.enabled.Load()
+}
+
+// SetHostSixel updates whether the host draws sixel, from an answer that came
+// after the passthrough was built: an SSH client's DA1 reply.
+func (sp *SixelPassthrough) SetHostSixel(sixel bool) {
+	sp.enabled.Store(sixel || sp.forced)
 }
 
 // ForwardCommand handles a sixel command from a guest terminal.
@@ -133,7 +147,7 @@ func (sp *SixelPassthrough) ForwardCommand(
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
-	if !sp.enabled {
+	if !sp.enabled.Load() {
 		return
 	}
 
@@ -188,7 +202,7 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
-	if !sp.enabled {
+	if !sp.enabled.Load() {
 		sixelPassthroughLog("RefreshAllPlacements: sixel disabled")
 		return
 	}
@@ -479,6 +493,9 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			cw, ch,
 		)
 	})
+
+	// DA1 and XTSMGRAPHICS say sixel only while it reaches the host.
+	window.Terminal.SetSixelAdvertised(m.SixelPassthrough.IsEnabled)
 
 	sixelPassthroughLog("setupSixelPassthrough: configured for window %s", window.ID[:min(8, len(window.ID))])
 }

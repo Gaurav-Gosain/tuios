@@ -190,6 +190,9 @@ type Emulator struct {
 
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	// sixelAdvertised says whether a sixel image this pane draws will be
+	// shown, which is what DA1 and XTSMGRAPHICS report.
+	sixelAdvertised func() bool
 
 	// Text sizing (OSC 66) passthrough callback
 	textSizingFunc func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
@@ -1677,6 +1680,16 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 
 func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
 	e.sixelPassthroughFunc = fn
+}
+
+// SetSixelAdvertised installs the function that decides whether DA1 lists
+// sixel and XTSMGRAPHICS answers. Nil advertises nothing.
+func (e *Emulator) SetSixelAdvertised(fn func() bool) {
+	e.sixelAdvertised = fn
+}
+
+func (e *Emulator) sixelOn() bool {
+	return e.sixelAdvertised != nil && e.sixelAdvertised()
 }
 
 func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
