@@ -175,6 +175,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Fast hit testing: find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
+	// While the scratch terminal is shown, a press is either on it or a
+	// request to leave it. See scratchPress.
+	if next, cmd, done := scratchPress(msg, o, clickedWindowIndex, X, Y); done {
+		return next, cmd
+	}
+
 	// Ctrl + left press on a window: multi-select on a click, or grab the pane
 	// for moving on a drag. On the content it arms the click-vs-drag decision
 	// (committed past the threshold in handleMouseMotion, then moved through the
@@ -490,6 +496,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.DragOffsetX = X - clickedWindow.X
 	o.DragOffsetY = Y - clickedWindow.Y
 
+	// The scratch terminal is never resized or moved by the mouse.
+	if clickedWindow.IsScratch {
+		o.InteractionMode = false
+		return o, nil
+	}
+
 	switch mouse.Button {
 	case tea.MouseRight:
 		// Already in interaction mode and past the mode borrow above, now set
@@ -550,6 +562,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // forwarding motion to a mouse-mode app underneath.
 func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
+	// The scratch terminal is never moved: its box comes from [scratch].
+	if win.IsScratch {
+		o.FocusWindowFromClick(idx, x, y)
+		return
+	}
 	o.FocusWindowFromClick(idx, x, y)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode

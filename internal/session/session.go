@@ -2483,7 +2483,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentQueued:   w.AgentQueued,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
-			HiddenScratch: w.Scratch && w.Minimized,
+			Scratch:       w.Scratch,
 		})
 	}
 	return out

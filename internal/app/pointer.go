@@ -82,8 +82,8 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 			continue
 		}
 		if x >= win.X && x < win.X+win.Width && y >= win.Y && y < win.Y+win.Height {
-			if win.Z > topZ {
-				topZ = win.Z
+			if z := HitZ(win); z > topZ {
+				topZ = z
 				topIdx = i
 			}
 		}

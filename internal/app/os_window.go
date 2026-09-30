@@ -13,7 +13,9 @@ import (
 // ToggleFloating toggles the focused window between floating and tiled mode.
 func (m *OS) ToggleFloating() {
 	fw := m.GetFocusedWindow()
-	if fw == nil {
+	// A popup is always floating. Tiling one put it in the layout tree, where
+	// it took a slot from the panes and every peer read the tree back.
+	if fw == nil || fw.IsPopup {
 		return
 	}
 
@@ -301,6 +303,12 @@ func (m *OS) FocusWindow(i int) *OS {
 		m.rememberScratchReturn()
 		m.showScratch(i)
 		return m
+	}
+	// The scratch terminal is a dropdown: it is on the screen only while it
+	// has the focus. A focus that goes to any other pane, by a click, a key,
+	// the rail or a jump, hides it first.
+	if !isScratch(m.Windows[i]) {
+		m.parkScratch()
 	}
 	// Shift and a label types into the pane that had focus.
 	if m.hints != nil && m.Windows[i].ID != m.hints.focusID {

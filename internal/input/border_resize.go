@@ -48,6 +48,11 @@ func armBorderResize(x, y int, o *app.OS) bool {
 	if o.SidebarBandContains(x, y) || o.InDockBand(y) {
 		return false
 	}
+	// The scratch terminal has a fixed box, and the tiles under it are not
+	// in reach while it is shown. See scratchPress.
+	if o.ShownScratch() >= 0 {
+		return false
+	}
 	// Scrolling columns have their own width gesture; leave them alone.
 	if o.AutoTiling && o.UseScrollingLayout {
 		return false

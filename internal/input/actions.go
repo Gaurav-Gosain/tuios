@@ -2,6 +2,7 @@ package input
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -281,6 +282,12 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		}
 		if o.LearnBlocksAction(action) {
 			return o, nil
+		}
+		// A layout action is about the tiles, and the scratch terminal is not
+		// one. It hides first, and the action acts on the pane that gets the
+		// focus back.
+		if layoutAction(action) {
+			o.HideShownScratch()
 		}
 		return handler(msg, o)
 	}
@@ -1077,4 +1084,25 @@ func handleOpenLauncher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleNewSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenNewSessionPicker()
 	return o, nil
+}
+
+// layoutAction reports whether an action moves, sizes, swaps, splits or tiles
+// the focused pane. See Dispatch.
+func layoutAction(action string) bool {
+	switch action {
+	case "snap_left", "snap_right", "snap_fullscreen", "unsnap",
+		"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4",
+		"toggle_tiling", "prefix_toggle_tiling", "window_prefix_tiling",
+		"swap_left", "swap_right", "swap_up", "swap_down",
+		"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
+		"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
+		"toggle_zoom", "prefix_fullscreen",
+		"scroll_move_left", "scroll_move_right", "scroll_cycle_width", "scroll_consume", "scroll_expel",
+		"smart_split", "split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
+		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split", "prefix_equalize_splits",
+		"preselect_left", "preselect_right", "preselect_up", "preselect_down",
+		"minimize_window", "minimize_prefix_focused":
+		return true
+	}
+	return strings.HasPrefix(action, "move_and_follow_") || strings.HasPrefix(action, "workspace_prefix_move_")
 }
