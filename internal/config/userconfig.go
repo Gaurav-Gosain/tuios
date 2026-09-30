@@ -471,15 +471,9 @@ const (
 // empty, which follows appearance.background.
 var Backgrounds = []string{BackgroundOff, BackgroundTheme}
 
-// The pane background's names from before the other surfaces had one. They
-// are the same values.
-const (
-	PaneBackgroundOff   = BackgroundOff
-	PaneBackgroundTheme = BackgroundTheme
-)
-
-// PaneBackgrounds lists the keyword values for appearance.pane_background.
-var PaneBackgrounds = Backgrounds
+// PaneBackgroundOff is the pane background's name from before the other
+// surfaces had one. It is the same value as BackgroundOff.
+const PaneBackgroundOff = BackgroundOff
 
 // ScrollbarTrackNone is the track value that draws no track at all, which is
 // what the thin style looked like before it grew one.

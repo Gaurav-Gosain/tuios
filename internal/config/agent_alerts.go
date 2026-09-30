@@ -181,10 +181,6 @@ type AgentAlertPolicy struct {
 	quietFrom, quietTo int
 }
 
-// AgentAlertStateNames lists the states the [notifications.agent.states] table
-// accepts, in the order they are documented.
-var AgentAlertStateNames = []string{"needs_input", "errored", "done", "idle", "working"}
-
 // ResolveAgentAlerts turns the config table into a policy, applying every
 // default. A nil receiver resolves to the defaults, so a caller with no config
 // at all still gets the documented behavior.
