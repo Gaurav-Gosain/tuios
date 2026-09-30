@@ -316,6 +316,11 @@ func (e *Emulator) extendOpenGrapheme() {
 		Style:   e.scr.cursorPen(),
 		Link:    e.scr.cursorLink(),
 	}
+	// A placeholder split across two writes gets the same rewrite as an
+	// unsplit one.
+	if IsKittyPlaceholder(cluster) {
+		e.rewriteKittyPlaceholder(&cell, e.openGrapheme.x, e.openGrapheme.y)
+	}
 	e.scr.SetCell(e.openGrapheme.x, e.openGrapheme.y, &cell)
 	e.openGrapheme.baseASCII = 0
 	e.openGrapheme.base = cluster
@@ -568,6 +573,32 @@ func (e *Emulator) handleGrapheme(content string, width int) printOutcome {
 	return e.handleGraphemeWithin(content, width, left, right)
 }
 
+// rewriteKittyPlaceholder gives a placeholder cell bound for (x, y) its own
+// row and column and the host's image id.
+func (e *Emulator) rewriteKittyPlaceholder(cell *uv.Cell, x, y int) {
+	// Spell out this cell's row and column while the row is still whole,
+	// so clipping the left of it later cannot orphan the rest. See
+	// kitty_placeholder.go.
+	var leftContent string
+	sameImage := false
+	if x > 0 {
+		if l := e.scr.CellAt(x-1, y); l != nil {
+			leftContent = l.Content
+			sameImage = sameFg(l.Style.Fg, cell.Style.Fg)
+		}
+	}
+	if row, col, ok := kittyPlaceholderNext(cell.Content, leftContent, sameImage); ok {
+		if full := kittyPlaceholderSelfDescribing(cell.Content, row, col); full != "" {
+			cell.Content = full
+		}
+	}
+	if e.kittyImageIDTranslator != nil {
+		if fg := translateKittyPlaceholderFg(cell.Content, cell.Style.Fg, e.kittyImageIDTranslator); fg != nil {
+			cell.Style.Fg = fg
+		}
+	}
+}
+
 // handleGraphemeWithin is handleGrapheme with the line's edges already
 // decided. It exists so a continuation re-rendering a cluster from a previous
 // Write can replay the exact margins the cluster was drawn under.
@@ -598,28 +629,8 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 	// backend's readers (its own Render and the per-cell path in the app) see
 	// the translated cell without either having to know about it.
 	if IsKittyPlaceholder(content) {
-		// Spell out this cell's row and column while the row is still whole,
-		// so clipping the left of it later cannot orphan the rest. See
-		// kitty_placeholder.go.
 		x, y := e.scr.CursorPosition()
-		var leftContent string
-		sameImage := false
-		if x > 0 {
-			if l := e.scr.CellAt(x-1, y); l != nil {
-				leftContent = l.Content
-				sameImage = sameFg(l.Style.Fg, cell.Style.Fg)
-			}
-		}
-		if row, col, ok := kittyPlaceholderNext(content, leftContent, sameImage); ok {
-			if full := kittyPlaceholderSelfDescribing(content, row, col); full != "" {
-				cell.Content = full
-			}
-		}
-		if e.kittyImageIDTranslator != nil {
-			if fg := translateKittyPlaceholderFg(cell.Content, cell.Style.Fg, e.kittyImageIDTranslator); fg != nil {
-				cell.Style.Fg = fg
-			}
-		}
+		e.rewriteKittyPlaceholder(&cell, x, y)
 	}
 
 	x, y := e.scr.CursorPosition()

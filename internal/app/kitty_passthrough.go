@@ -191,6 +191,7 @@ type pendingDirectTransmit struct {
 	Width        int
 	Height       int
 	ImageID      uint32
+	PlacementID  uint32
 	Columns      int
 	Rows         int
 	SourceX      int
@@ -824,14 +825,33 @@ func (kp *KittyPassthrough) pendingGraphicsBytes() int {
 	return len(kp.pendingOutput) + kp.heldBytes
 }
 
-// HostImageID reports the id the host knows a window's guest image by. It is
-// what the emulator asks when it rewrites a kitty placeholder cell, so a cell
-// naming the guest's id reaches the host naming the host's.
+// HostImageID reports the id the host knows a window's guest image by.
 func (kp *KittyPassthrough) HostImageID(windowID string, guestID uint32) (uint32, bool) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 	hostID, ok := kp.imageIDMap[windowID][guestID]
 	return hostID, ok
+}
+
+// placeholderImageIDLimit caps the ids one window may name in placeholder
+// cells before transmitting them. Each costs a map entry, and a pane can print
+// a cell in any colour, so past this many the cells are left as written.
+const placeholderImageIDLimit = 4096
+
+// HostImageIDForPlaceholder is the id a placeholder cell is rewritten with.
+// An image not transmitted yet gets its host id now: the protocol lets the
+// cells be printed before the image, and a cell is rewritten once, as it is
+// stored.
+func (kp *KittyPassthrough) HostImageIDForPlaceholder(windowID string, guestID uint32) (uint32, bool) {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	if hostID, ok := kp.imageIDMap[windowID][guestID]; ok {
+		return hostID, true
+	}
+	if guestID == 0 || len(kp.imageIDMap[windowID]) >= placeholderImageIDLimit {
+		return 0, false
+	}
+	return kp.getOrAllocateHostID(windowID, guestID), true
 }
 
 func (kp *KittyPassthrough) allocateHostID() uint32 {

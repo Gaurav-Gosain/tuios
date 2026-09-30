@@ -29,6 +29,8 @@ import (
 //
 // tuios and the programs in its panes run as the same user, so a file tuios
 // can open is one the pane could read itself.
+//
+// A t=s name is a path only on Linux; see kittyMediumPath.
 
 // sensitiveDirs are the places no file medium may name. /dev/shm is the one
 // part of /dev that holds image data, and it is allowed.
@@ -50,6 +52,14 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		base := strings.TrimPrefix(name, "/")
 		if base == "" || base == "." || base == ".." || strings.ContainsRune(base, '/') {
 			return "", false
+		}
+		// On macOS shared memory has no path: it is opened by name with
+		// shm_open. A local host opens the name itself, so it is forwarded
+		// and the empty path says there is nothing for tuios to read. A
+		// remote host needs the bytes, which tuios cannot read, so the
+		// frame is refused.
+		if !kittyShmHasPath() {
+			return "", kp.hostReadsFiles()
 		}
 		path = "/dev/shm/" + base
 	case vt.KittyMediumFile, vt.KittyMediumTempFile:
@@ -95,6 +105,13 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		return "", false
 	}
 	return resolved, true
+}
+
+// kittyShmHasPath reports whether shared memory objects are files under
+// /dev/shm, as on Linux.
+func kittyShmHasPath() bool {
+	info, err := os.Stat("/dev/shm")
+	return err == nil && info.IsDir()
 }
 
 // kittySensitivePath reports whether path lies in a place no file medium may
