@@ -147,6 +147,14 @@ key works from inside the popup. The action is `toggle_scratch`, and
 [SESSIONS.md](SESSIONS.md#the-scratch-terminal). To add more scratch popups on
 keys of their own, see [Command keys](#command-keys).
 
+## Picture in picture
+
+`p` in window mode pins the focused pane as the picture-in-picture view, a
+small live copy of the pane in a corner of the screen. Press `p` again, on any
+pane, to unpin it. A click on the view focuses the pane. The action is
+`toggle_pip`, and `[pip]` sets the size and the corner. See
+[SESSIONS.md](SESSIONS.md#picture-in-picture).
+
 ## Command keys
 
 A `[[keybindings.command]]` entry binds a key to a command that you write.

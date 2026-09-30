@@ -2348,6 +2348,37 @@ tuios refresh-dock agents
 
 See `examples/dock/` for working components and the config that wires them up.
 
+### `tuios pip`
+
+Pin a pane as the picture-in-picture view, or unpin it.
+
+**Usage:**
+```bash
+tuios pip [window] [flags]
+```
+
+The view is a small live copy of the pane in a corner of the screen. It shows
+while another pane has the focus. The pane stays where it is in the layout. A
+click on the view goes to the pane.
+
+Name the pane by ID or name. Omit it to pin the focused pane. Name the pinned
+pane again to unpin it. The view belongs to the attached client, so the command
+needs one. Set the size and the corner in `[pip]`.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--off`: Unpin whatever is pinned
+- `--json`: Output as JSON
+
+**Examples:**
+```bash
+# Watch the agent pane while you work in another pane
+tuios pip agent
+
+# Take the view away
+tuios pip --off
+```
+
 ### `tuios list-windows`
 
 List all windows in a TUIOS session.

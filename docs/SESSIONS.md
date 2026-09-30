@@ -15,6 +15,7 @@ what does and does not come back after each kind of interruption.
 - [Daemon Sessions](#daemon-sessions)
 - [Attaching and Detaching](#attaching-and-detaching)
 - [The Scratch Terminal](#the-scratch-terminal)
+- [Picture in Picture](#picture-in-picture)
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
@@ -238,6 +239,50 @@ The action is `toggle_scratch`. To use a different key, bind the action in
 `[keybindings.prefix_mode]` or in a different section. If your config puts `g`
 on a different prefix action, `toggle_scratch` has no key.
 `tuios keybinds doctor` shows this.
+
+## Picture in Picture
+
+The picture-in-picture view is a small live copy of one pane in a corner of
+the screen. Use it to watch a pane, such as a coding agent, while you work in a
+different pane.
+
+To pin the focused pane, press `p` in window mode. Press `p` again, on any
+pane, to unpin it. The command palette has the same command. From a shell, run
+`tuios pip <window>` to pin a pane by ID or name, and `tuios pip --off` to
+unpin it.
+
+- The view is not the pane. The pane stays where it is in the layout. It keeps
+  running when it is on a different workspace, minimized or a hidden scratch
+  terminal.
+- The view shows the last rows of the pane that hold text, from the left edge,
+  at one cell for each cell. Its border shows the pane name and the agent
+  state mark. It shows text only. Images do not show in it.
+- The view is on top of the tiled panes and a zoomed pane. Popups, the scratch
+  terminal, menus and panels are on top of the view.
+- The view never takes the focus or a key.
+- A click on the view focuses the pane. tuios goes to the workspace of the
+  pane, restores a minimized pane and shows a hidden scratch terminal.
+- The view does not show while its pane has the focus.
+- The view does not cover the cursor of the focused pane or the text to the
+  left of the cursor. When that text reaches the view, the view moves to a
+  different corner.
+- When the pane closes, the view closes and the dock shows a message.
+- Each client has its own view. The view is not in the session state, so a
+  different client does not see it and a detach removes it. `tuios pip` acts
+  on the client that `tuios run-command` reaches.
+- One pane at a time is pinned. A pin replaces the previous one.
+- The view reads the cells that the pane already holds. It adds no timer and
+  does no work while the pane is quiet.
+
+```toml
+[pip]
+width = 40               # cells, border included
+height = 12
+corner = "bottom-right"  # bottom-right, bottom-left, top-right or top-left
+```
+
+The action is `toggle_pip`. If your config puts `p` on a different window
+mode action, `toggle_pip` has no key. `tuios keybinds doctor` shows this.
 
 ## What Survives
 

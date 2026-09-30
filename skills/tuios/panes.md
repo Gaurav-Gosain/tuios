@@ -324,6 +324,21 @@ built-in one is `"scratch"`). The same rules apply to it. Command keys run only
 when a person presses them. Editing config.toml does not run one, so do not
 add an entry to get a command run: open a pane or a popup yourself.
 
+A person can pin one pane as the picture-in-picture view: a small live copy
+of the pane in a corner of their screen while they work in a different pane.
+`p` in window mode (action `toggle_pip`) pins the focused pane and unpins it.
+The view belongs to the person's client and is not in session state, so
+`list-windows` does not show it. To offer the person a view of your pane, for
+example when you start a long task:
+
+```sh
+tuios pip -s work agent    # pin the pane named agent; again unpins it
+tuios pip -s work --off    # unpin whatever is pinned
+```
+
+It needs a client attached. A pane needs the `admin` grant for it, like the
+other window-manager verbs. Do not pin a pane the person did not ask about.
+
 ### The escape hatch
 
 A keybinding with no verb of its own is reachable by name:
