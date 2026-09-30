@@ -1925,8 +1925,10 @@ the pinned pane again unpins it. `off` unpins whatever is pinned and takes no
 
 The view belongs to the client, not to the session. It is not in session
 state, so the verb needs an attached client and fails with `needs_client`
-without one. With more than one client attached, the verb reaches the client
-that `run-command` reaches.
+without one. The verb reaches one client: with more than one attached, the
+client that `run-command` reaches. A client attached to a session on another
+machine refuses the command from that machine's daemon, because the view is
+part of the person's own screen.
 
 Request:
 
