@@ -68,18 +68,41 @@ func TestSnoozedItemsSurviveARestart(t *testing.T) {
 	data := a.encodeLocked()
 	a.mu.Unlock()
 	writeAttentionFile(path, data)
+	var saved attentionFile
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("decode the saved queue: %v", err)
+	}
+	asleep := 0
+	for _, it := range saved.Items {
+		if it.SnoozedUntil != 0 {
+			asleep++
+		}
+	}
+	if asleep != 2 {
+		t.Fatalf("%d items were saved asleep, want 2", asleep)
+	}
 
 	clock.add(time.Minute)
 	b, _, _ := lifecycleStore(t)
 	b.now = clock.now
 	b.load(path, func(string, string) bool { return true })
-	if n := b.snoozedCount(); n != 2 {
-		t.Fatalf("%d items came back asleep, want 2", n)
+	// The overdue snooze wakes on the store's own timer, which load arms with
+	// no delay. It runs on another goroutine, so the item is waited for: a
+	// count of the sleeping items straight after load raced that timer.
+	deadline := time.Now().Add(5 * time.Second)
+	var open []AttentionItem
+	for {
+		open = openItems(t, b)
+		if len(open) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
 	}
-	b.wakeDue()
-	open := openItems(t, b)
 	if len(open) != 1 || open[0].ID != items[1].ID {
 		t.Fatalf("after the restart %+v is open, want %s", open, items[1].ID)
+	}
+	if n := b.snoozedCount(); n != 1 {
+		t.Fatalf("%d items are asleep after the restart, want 1", n)
 	}
 	listed, _, _ := b.list(attentionQuery{snoozed: true})
 	if len(listed) != 2 || listed[1].ID != items[0].ID || listed[1].SnoozedUntil != SnoozeUntilChange {
