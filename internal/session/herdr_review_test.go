@@ -135,3 +135,63 @@ func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// pasteProbePane is a window running cat -v after it turns bracketed paste
+// on, so what reaches it shows on its screen, escapes visible.
+func pasteProbePane(t *testing.T, d *Daemon, name string) (*Session, string) {
+	t.Helper()
+	sess, err := d.manager.CreateSession(name, &SessionConfig{}, 120, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Command: []string{"sh", "-c", `stty -echo; printf '\033[?2004h'; exec cat -v`}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for pty := sess.GetPTY(win.PTYID); pty == nil || !pty.BracketedPasteOn(); pty = sess.GetPTY(win.PTYID) {
+		if time.Now().After(deadline) {
+			t.Fatal("the pane never turned bracketed paste on")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return sess, win.ID
+}
+
+// waitScreen waits for want on a pane's screen.
+func waitScreen(t *testing.T, sess *Session, window string, want ...string) string {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		st := sess.GetState()
+		w, _ := findWindowState(st, window)
+		text := ""
+		if pty := sess.GetPTY(w.PTYID); pty != nil {
+			text = pty.CaptureContent(true, false)
+		}
+		ok := true
+		for _, s := range want {
+			ok = ok && strings.Contains(text, s)
+		}
+		if ok {
+			return text
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never showed %q:\n%s", want, text)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestHerdrAgentPromptSubmitsAPaste: agent.prompt types the prompt the way
+// ask-agent does, one paste and then the harness's Enter, not raw text.
+func TestHerdrAgentPromptSubmitsAPaste(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, w := pasteProbePane(t, d, "prompt")
+	result(t, callP(dialVerb(t, sp), t, "set-agent-state", map[string]any{"session": "prompt", "window": w, "state": "idle", "harness": "claude-code"}))
+	res := herdrOK(t, "agent.prompt", herdrDial(t, sp, "agent.prompt", map[string]any{"target": herdrPaneID(sess.ID, w), "text": "fix it\nthen test\n"}))
+	if res["type"] != "agent_prompted" {
+		t.Errorf("agent.prompt answered %v", res)
+	}
+	waitScreen(t, sess, w, "^[[200~fix it", "then test^[[201~")
+}
