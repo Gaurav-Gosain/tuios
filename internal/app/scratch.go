@@ -109,7 +109,12 @@ const scratchStoppedWait = 1500 * time.Millisecond
 
 // ScratchStoppedError is a scratch command that exited within
 // scratchStoppedWait of its start.
-type ScratchStoppedError struct{ Code int }
+type ScratchStoppedError struct {
+	Code int
+	// WindowID is the pane that stopped. The client may still hold it until
+	// the push that removes it arrives. See deadScratch.
+	WindowID string
+}
 
 func (e ScratchStoppedError) Error() string {
 	return fmt.Sprintf("stopped with exit code %d", e.Code)
@@ -139,12 +144,29 @@ func (m *OS) scratchIndex() int {
 
 // scratchIndexNamed is the index of the scratch pane kept under name, or -1.
 func (m *OS) scratchIndexNamed(name string) int {
+	m.forgetGoneDeadScratch()
 	for i, w := range m.Windows {
-		if isScratch(w) && scratchNameOf(w) == name {
+		if isScratch(w) && scratchNameOf(w) == name && !m.deadScratch[w.ID] {
 			return i
 		}
 	}
 	return -1
+}
+
+// forgetGoneDeadScratch drops the dead panes the client no longer holds.
+func (m *OS) forgetGoneDeadScratch() {
+	if len(m.deadScratch) == 0 {
+		return
+	}
+	held := make(map[string]bool, len(m.Windows))
+	for _, w := range m.Windows {
+		held[w.ID] = true
+	}
+	for id := range m.deadScratch {
+		if !held[id] {
+			delete(m.deadScratch, id)
+		}
+	}
 }
 
 // scratchAction is what one press of the toggle does.
@@ -434,9 +456,10 @@ func openScratchPopup(req scratchRequest) error {
 	var res struct {
 		Type     string `json:"type"`
 		ExitCode int    `json:"exit_code"`
+		WindowID string `json:"window_id"`
 	}
 	if json.Unmarshal(raw, &res) == nil && res.Type == "popup_result" {
-		return ScratchStoppedError{Code: res.ExitCode}
+		return ScratchStoppedError{Code: res.ExitCode, WindowID: res.WindowID}
 	}
 	return nil
 }
@@ -451,6 +474,16 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 	}
 	m.scratchPending = ""
 	if stopped, ok := errors.AsType[ScratchStoppedError](msg.Err); ok {
+		// The daemon closed the pane, but the push that removes it can come
+		// after this answer, on the client's own connection. Until then a
+		// press must not find it: it would show or hide a dead pane and say
+		// nothing, where the person must get the command or its report.
+		if stopped.WindowID != "" {
+			if m.deadScratch == nil {
+				m.deadScratch = map[string]bool{}
+			}
+			m.deadScratch[stopped.WindowID] = true
+		}
 		m.ShowNotification(fmt.Sprintf("The command %s stopped with exit code %d.", msg.Label, stopped.Code), "error", m.Settings.NotificationDuration)
 		return
 	}

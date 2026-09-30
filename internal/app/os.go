@@ -1504,7 +1504,10 @@ type OS struct {
 	scratchReturnID string
 	// scratchStarted is when each local scratch pane started, by window id,
 	// so a command that exits at once is reported. See noteLocalScratchExit.
-	scratchStarted    map[string]time.Time
+	scratchStarted map[string]time.Time
+	// deadScratch is the scratch panes the daemon reported as stopped that
+	// this client may still hold. See handleScratchOpened.
+	deadScratch       map[string]bool
 	scratchReturnMode Mode
 	// forceTerminalMode is OSOptions.StartInTerminalMode: applyStartupPreferences
 	// enters terminal mode once a pane is focused, for any session.
