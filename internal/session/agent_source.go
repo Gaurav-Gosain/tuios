@@ -1,5 +1,7 @@
 package session
 
+import "time"
+
 // AgentSource names where a window's agent state came from, and is the key its
 // precedence is decided on. More than one source can want to set the same pane:
 // the harness reporting for itself, an escape sequence it emitted, a rule
@@ -146,6 +148,24 @@ type agentClaim struct {
 	// event marks a claim read from a one-off event, a desktop notification,
 	// which goes stale when the pane writes again. See AgentReport.event.
 	event bool
+	// herdrAt is when a herdr protocol reporter last set this claim, as Unix
+	// nanoseconds, and 0 for a claim no such report set. A reporter of this
+	// kind is a harness, and one that crashes sends no release, so its claim
+	// clears when the pane is back at its shell. See herdrClaimLapsed.
+	herdrAt int64
+}
+
+// herdrShellGrace is how long a herdr report is held against a reading that
+// finds the pane at its shell. The foreground is read before the claim is
+// judged, so a reading taken just before the harness started can meet the
+// harness's first report.
+const herdrShellGrace = 2 * time.Second
+
+// herdrClaimLapsed reports whether a claim a herdr reporter set has outlived
+// its harness: the pane is at its shell, and the last report is older than
+// herdrShellGrace.
+func (c agentClaim) herdrClaimLapsed(now int64) bool {
+	return c.herdrAt != 0 && now-c.herdrAt >= int64(herdrShellGrace)
 }
 
 // agentPriorClaim is what a visible-blocker override displaced, held so the

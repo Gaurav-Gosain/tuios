@@ -62,6 +62,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -101,6 +102,19 @@ type herdrParams struct {
 	Message        *string `json:"message"`
 	Seq            *uint64 `json:"seq"`
 	AgentSessionID *string `json:"agent_session_id"`
+	// ResumeArgv is herdr's resume command (herdr 0.9.2 and later). tuios
+	// resumes a conversation from the harness and session id instead, so
+	// the field is accepted and not used, as an older herdr does.
+	ResumeArgv []string `json:"resume_argv"`
+
+	// pane.report_metadata. Title and the tokens are display only; see
+	// herdrMetadata.
+	Title  *string         `json:"title"`
+	Tokens json.RawMessage `json:"tokens"`
+	TTLMs  int64           `json:"ttl_ms"`
+
+	// notification.show, which names no pane: the caller's own is used.
+	Body string `json:"body"`
 }
 
 // herdrSeqs is the highest seq seen per pane and source.
@@ -125,17 +139,6 @@ func (h *herdrSeqs) fresh(key string, seq *uint64) bool {
 	}
 	h.high[key] = *seq
 	return true
-}
-
-// forget drops every source's high-water mark for a pane.
-func (h *herdrSeqs) forget(window string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for k := range h.high {
-		if strings.HasPrefix(k, window+"\x00") {
-			delete(h.high, k)
-		}
-	}
 }
 
 // listenHerdrSocket opens the herdr protocol socket, owner only, and returns
@@ -219,15 +222,25 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	switch req.Method {
 	case "ping":
 		return map[string]any{"type": "pong", "version": "tuios", "protocol": 0}, "", ""
-	case "pane.report_agent", "pane.report_agent_session", "pane.release_agent":
+	case "pane.report_agent", "pane.report_agent_session", "pane.release_agent",
+		"pane.report_metadata", "notification.show":
 	default:
-		return nil, "unsupported", "this is tuios, which accepts only pane.report_agent, pane.report_agent_session and pane.release_agent here"
+		return nil, "unsupported", "this is tuios, which accepts only pane.report_agent, pane.report_agent_session, pane.release_agent, pane.report_metadata and notification.show here"
 	}
 	var p herdrParams
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, "invalid_params", "params: " + err.Error()
 		}
+	}
+	if req.Method == "notification.show" {
+		// herdr's notification names no pane. The caller's own pane is the
+		// one it comes from, placed the same way a report's pane is.
+		fromPane, window := d.peerPane(cs)
+		if !fromPane || window == "" {
+			return nil, "forbidden", "the caller runs in no pane of this tuios"
+		}
+		p.PaneID = window
 	}
 	window, code, msg := d.herdrPane(cs, p.PaneID)
 	if code != "" {
@@ -237,29 +250,75 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	if sess == "" {
 		return nil, "pane_not_found", "no pane " + p.PaneID
 	}
-	if !d.herdrSeqs.fresh(window+"\x00"+p.Source, p.Seq) {
+	if req.Method == "notification.show" {
+		return d.herdrNotify(window, p)
+	}
+	// Metadata has a high-water mark of its own, so a hook that numbers its
+	// metadata and its state reports apart is not dropped. Crush numbers
+	// both from one counter, which suits either.
+	seqKey := window + "\x00" + p.Source
+	if req.Method == "pane.report_metadata" {
+		seqKey = window + "\x00meta\x00" + p.Source
+	}
+	if !d.herdrSeqs.fresh(seqKey, p.Seq) {
 		// herdr drops a stale report without an error, and so does this.
 		return map[string]any{"type": "ok"}, "", ""
 	}
-	harness, _ := integration.Canonical(p.Agent)
+	if req.Method == "pane.report_metadata" {
+		return d.herdrMetadata(sess, window, p)
+	}
+	harness := herdrHarness(p.Agent)
+	pid := 0
+	if cs != nil {
+		pid = cs.peerPID
+	}
 	switch req.Method {
 	case "pane.report_agent":
-		return d.herdrReport(sess, window, harness, p)
+		out, code, msg := d.herdrReport(sess, window, harness, pid, p)
+		if code == "" {
+			d.markHerdrClaim(window)
+		}
+		return out, code, msg
 	case "pane.report_agent_session":
 		if harness == "" || p.AgentSessionID == nil || *p.AgentSessionID == "" {
-			return nil, "invalid_params", "a session report needs a known agent and an agent_session_id"
+			return nil, "invalid_params", "a session report needs an agent and an agent_session_id"
 		}
 		raw, _ := json.Marshal(map[string]any{"session": sess, "window": window, "harness": harness, "agent_session_id": *p.AgentSessionID})
 		if _, verr := d.verbSetAgentSession(nil, raw); verr != nil {
 			return nil, "report_failed", verr.Message
 		}
 	case "pane.release_agent":
-		d.herdrSeqs.forget(window)
-		if _, code, msg := d.herdrSetState(sess, window, harness, "none", "", "", ""); code != "" {
+		// The release carries a seq, recorded above, and the high-water
+		// mark stays. A report Crush queued before it quit can reach the
+		// socket after the release, and it must not bring the pane back.
+		if _, code, msg := d.herdrSetState(sess, window, harness, "none", "", "", "", 0); code != "" {
 			return nil, code, msg
 		}
 	}
 	return map[string]any{"type": "ok"}, "", ""
+}
+
+// herdrHarness is the harness a herdr agent label names: tuios's id for a
+// harness it knows, or else the label itself, cleaned to a short name, so an
+// agent tuios has never heard of still shows under its own name.
+func herdrHarness(agent string) string {
+	if id, ok := integration.Canonical(agent); ok {
+		return id
+	}
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	var b strings.Builder
+	for _, r := range agent {
+		if b.Len() >= 32 {
+			break
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 // herdrPane places the caller in its pane and checks pane_id names it.
@@ -274,11 +333,124 @@ func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string
 	return window, "", ""
 }
 
-// herdrReport applies one pane.report_agent.
-func (d *Daemon) herdrReport(sess, window, harness string, p herdrParams) (any, string, string) {
+// markHerdrClaim records that the pane's state came from a herdr reporter,
+// so the pane clears when it is back at its shell prompt. A harness that
+// crashes sends no pane.release_agent, and without this its last report,
+// working as often as not, would stand for as long as the pane lives. herdr
+// has the same safety net. See detectionPass.
+func (d *Daemon) markHerdrClaim(window string) {
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return
+	}
+	sess.stateMu.Lock()
+	defer sess.stateMu.Unlock()
+	claim, held := sess.agentClaims[window]
+	if !held || claim.source != AgentSourceReport {
+		return
+	}
+	claim.herdrAt = time.Now().UnixNano()
+	sess.agentClaims[window] = claim
+}
+
+// herdrMetadata applies one pane.report_metadata as agent metadata: each
+// token, and the title as the title token. It is display only in herdr and
+// in tuios alike. herdr's names allow capitals and are up to 32 long, and a
+// name tuios cannot hold is skipped rather than failing the report, since
+// the rest of it is still worth showing.
+func (d *Daemon) herdrMetadata(sessName, window string, p herdrParams) (any, string, string) {
+	tokens := map[string]*string{}
+	if len(p.Tokens) > 0 && string(p.Tokens) != "null" {
+		var raw map[string]*string
+		if err := json.Unmarshal(p.Tokens, &raw); err != nil {
+			return nil, "invalid_params", "tokens: " + err.Error()
+		}
+		for k, v := range raw {
+			k = strings.ToLower(k)
+			if !ValidAgentMetaKey(k) || slices.Contains(reservedAgentMetaKeys, k) {
+				continue
+			}
+			if v != nil && strings.TrimSpace(*v) == "" {
+				v = nil // herdr: an empty value clears the key
+			}
+			tokens[k] = v
+		}
+	}
+	if p.Title != nil {
+		t := strings.TrimSpace(*p.Title)
+		if t == "" {
+			tokens["title"] = nil
+		} else {
+			tokens["title"] = &t
+		}
+	}
+	if len(tokens) == 0 {
+		return map[string]any{"type": "ok"}, "", ""
+	}
+	if len(tokens) > AgentMetaMaxPerCall {
+		return nil, "invalid_params", "one report sets at most 16 tokens"
+	}
+	if p.TTLMs < 0 || time.Duration(p.TTLMs)*time.Millisecond > AgentMetaMaxTTL {
+		return nil, "invalid_params", "ttl_ms must be between 1 and 86400000"
+	}
+	rawTokens, _ := json.Marshal(tokens)
+	params := map[string]any{"session": sessName, "window": window, "tokens": json.RawMessage(rawTokens), "source": herdrMetaSource(p.Source)}
+	if p.TTLMs > 0 {
+		params["ttl_ms"] = p.TTLMs
+	}
+	raw, _ := json.Marshal(params)
+	if _, verr := d.verbSetAgentMeta(nil, raw); verr != nil {
+		return nil, "report_failed", verr.Message
+	}
+	return map[string]any{"type": "ok"}, "", ""
+}
+
+// herdrMetaSource is the metadata source a herdr reporter's tokens are
+// filed under, so they never mix with tuios's own writers'.
+func herdrMetaSource(source string) string {
+	if source == "" {
+		return "herdr"
+	}
+	return "herdr:" + source
+}
+
+// herdrNotify applies one notification.show from a pane the way a desktop
+// notification the pane sent over OSC 9 is applied: published on the event
+// stream, and matched against the [notify] rules of the harness in the pane.
+func (d *Daemon) herdrNotify(window string, p herdrParams) (any, string, string) {
+	title := ""
+	if p.Title != nil {
+		title = strings.TrimSpace(*p.Title)
+	}
+	if title == "" {
+		return nil, "invalid_params", "a notification needs a title"
+	}
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return nil, "pane_not_found", "no pane " + window
+	}
+	ptyID := ""
+	st := sess.GetState()
+	for i := range st.Windows {
+		if st.Windows[i].ID == window {
+			ptyID = st.Windows[i].PTYID
+		}
+	}
+	n := paneNotification{title: capNotifyText(title), body: capNotifyText(strings.TrimSpace(p.Body))}
+	sess.emit(SessionEvent{Type: EventNotification, Window: window, PTYID: ptyID, Title: n.title, Body: n.body})
+	if ptyID != "" {
+		sess.applyAgentNotify(ptyID, n, d.agentMatcher.registry)
+	}
+	return map[string]any{"type": "ok"}, "", ""
+}
+
+// herdrReport applies one pane.report_agent. pid is the reporting process,
+// sent as the harness pid, so a Crush that moves to another conversation
+// while it works is the same harness in the pane and not a nested one.
+func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParams) (any, string, string) {
 	msg := ""
 	if p.Message != nil {
-		msg = *p.Message
+		msg = strings.TrimSpace(*p.Message)
 	}
 	sid := ""
 	if p.AgentSessionID != nil {
@@ -286,31 +458,32 @@ func (d *Daemon) herdrReport(sess, window, harness string, p herdrParams) (any, 
 	}
 	switch p.State {
 	case "working":
-		_, code, text := d.herdrSetState(sess, window, harness, "working", msg, sid, "")
+		_, code, text := d.herdrSetState(sess, window, harness, "working", msg, sid, "", pid)
 		if code != "" {
 			return nil, code, text
 		}
 	case "blocked":
-		kind := herdrBlockedKind[harness]
+		kind := herdrBlockedKind(harness, msg)
 		if msg == "" {
 			msg = "waits for you"
 			if kind == harnessKindApproval {
 				msg = "waits for approval"
 			}
 		}
-		_, code, text := d.herdrSetStateKind(sess, window, harness, "needs_input", kind, msg, sid, "")
+		_, code, text := d.herdrSetStateKind(sess, window, harness, "needs_input", kind, msg, sid, "", pid)
 		if code != "" {
 			return nil, code, text
 		}
 	case "idle":
 		// Rest after a turn is a finished turn; rest from anywhere else,
-		// Crush's first report included, is idle.
-		reason, code, text := d.herdrSetState(sess, window, harness, "done", msg, sid, "working,needs_input")
+		// Crush's first report included, is idle. The message a reporter
+		// sends with idle is empty or stale, and is not kept.
+		reason, code, text := d.herdrSetState(sess, window, harness, "done", "", sid, "working,needs_input", pid)
 		if code != "" {
 			return nil, code, text
 		}
 		if reason == agentRefusedIfState {
-			if _, code, text := d.herdrSetState(sess, window, harness, "idle", msg, sid, ""); code != "" {
+			if _, code, text := d.herdrSetState(sess, window, harness, "idle", "", sid, "", pid); code != "" {
 				return nil, code, text
 			}
 		}
@@ -321,24 +494,41 @@ func (d *Daemon) herdrReport(sess, window, harness string, p herdrParams) (any, 
 	return map[string]any{"type": "ok"}, "", ""
 }
 
-// harnessKindApproval is the kind of a block that waits on an approval.
-const harnessKindApproval = "approval"
+// harnessKindApproval and harnessKindQuestion are the kinds of a block.
+const (
+	harnessKindApproval = "approval"
+	harnessKindQuestion = "question"
+)
 
-// herdrBlockedKind is what blocked means for a harness whose herdr reporter
-// says: Crush reports blocked only for a permission request
-// (PermissionRequested in its internal/herdr/client.go). For any other
-// reporter blocked says nothing about the kind, which is then read from the
-// message as for any report.
-var herdrBlockedKind = map[string]string{"crush": harnessKindApproval}
+// herdrBlockedKind is what a blocked report waits on, "" when the report
+// does not say, which leaves the kind to be read from the message as for
+// any report.
+//
+// Crush says. Up to v0.x it reports blocked only for a permission request
+// (PermissionRequested in its internal/herdr/client.go) and sends no
+// message. From charmbracelet/crush#3541 it sends one with every block:
+// "Permission: <tool> - <detail>" or "Permission required" for a permission
+// request, the question itself while its question tool waits, and
+// "Re-authentication required" when a provider needs a new login. Only the
+// first is an approval. The others wait for the person to answer or act.
+func herdrBlockedKind(harness, msg string) string {
+	if harness != "crush" {
+		return ""
+	}
+	if msg == "" || strings.HasPrefix(msg, "Permission") {
+		return harnessKindApproval
+	}
+	return harnessKindQuestion
+}
 
 // herdrSetState reports one state for the pane through set-agent-state,
 // returning the refusal reason, if any, or an error code and message.
-func (d *Daemon) herdrSetState(sess, window, harness, state, msg, sid, ifState string) (string, string, string) {
-	return d.herdrSetStateKind(sess, window, harness, state, "", msg, sid, ifState)
+func (d *Daemon) herdrSetState(sess, window, harness, state, msg, sid, ifState string, pid int) (string, string, string) {
+	return d.herdrSetStateKind(sess, window, harness, state, "", msg, sid, ifState, pid)
 }
 
 // herdrSetStateKind is herdrSetState with the kind of a needs_input block.
-func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid, ifState string) (string, string, string) {
+func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid, ifState string, pid int) (string, string, string) {
 	params := map[string]any{"session": sess, "window": window, "state": state}
 	if kind != "" {
 		params["kind"] = kind
@@ -351,6 +541,9 @@ func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid,
 	}
 	if sid != "" {
 		params["agent_session_id"] = sid
+		if pid > 1 {
+			params["harness_pid"] = pid
+		}
 	}
 	if ifState != "" {
 		params["if_state"] = ifState

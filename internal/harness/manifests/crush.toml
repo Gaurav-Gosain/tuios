@@ -8,13 +8,35 @@ comm      = ["crush"]
 argv0     = ["crush"]
 argv_path = ["@charmland/crush", "/crush/"]
 
-# No screen rules: herdr has no manifest for Crush, and none has been written
-# against a live Crush turn yet. Crush reports its own state over herdr's pane
-# protocol, which tuios accepts, in a pane that is told about it: one that
-# starts crush directly, or every pane with [agents] herdr_protocol = "always".
-# See internal/session/herdr_compat.go.
+# Crush reports its own state over herdr's pane protocol, which tuios accepts
+# in every pane by default (see internal/session/herdr_compat.go), so the
+# screen carries one rule only: the permission dialog. It is a backstop for a
+# report that says working while the dialog is up. Crush up to v0.97.2 has
+# that race: its permission service publishes a "request started"
+# notification that its herdr bridge can read after the request itself, as
+# the answer. charmbracelet/crush#3541 fixes it. A visible blocker takes over
+# a report only once the report has gone quiet and the pane has drawn since
+# (blockerOverridesClaim), so the rule helps when the dialog is drawn again,
+# and it gives the pane back when the dialog closes.
+#
+# The dialog, measured on crush v0.97.2 (main at d599625), is drawn in the
+# middle of the pane over the chat, so the rule reads far up:
+#
+#   │  Permission Required ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  │
+#   │ Tool bash                                  │
+#   │   Allow      Allow for Session      Deny   │
+#   │ ←/→ choose • enter confirm • esc exit      │
 [screen]
-enabled = false
+enabled   = true
+fold_case = true
+lines     = 40
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+all      = ["permission required", "allow for session", "deny"]
 
 # How a prompt is typed in. Measured on crush v0.96.1: it turns on bracketed
 # paste (DECSET 2004) at start and pushes kitty keyboard flags 1, under which

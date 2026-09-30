@@ -58,9 +58,15 @@ func TermProgramFor(argv []string, kittyGraphics, sixelGraphics bool) string {
 
 // SpeaksHerdrProtocol reports whether argv starts, directly, a harness that
 // reports its state over herdr's pane protocol when herdr's environment is
-// set: Crush (internal/herdr/client.go in github.com/charmbracelet/crush).
+// set: Crush (internal/herdr/client.go in github.com/charmbracelet/crush) and
+// Kiro CLI, both listed by herdr as supporting it themselves. It decides the
+// panes told about the socket under [agents] herdr_protocol = "agents".
 func SpeaksHerdrProtocol(argv []string) bool {
-	return programName(argv) == "crush"
+	switch programName(argv) {
+	case "crush", "kiro-cli":
+		return true
+	}
+	return false
 }
 
 // IsCodex reports whether argv starts Codex directly: its program's base

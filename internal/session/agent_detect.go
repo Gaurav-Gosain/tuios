@@ -803,7 +803,18 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			// including a screen rule's reading of a pane that has never
 			// run an agent binary, which is how an unhooked harness is
 			// exercised.
-			if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
+			//
+			// A herdr protocol reporter is the exception to the last two
+			// rules. It is the harness speaking, not a person, and one that
+			// crashed never sends pane.release_agent, so its claim clears at
+			// the shell whether or not a known agent process was seen.
+			lapsed := claim.sawProcess && claim.source != AgentSourceReport
+			// A pane started on the harness itself has the harness as its
+			// "shell", so the foreground must also be a shell by name.
+			if claim.source == AgentSourceReport && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
+				lapsed = true
+			}
+			if running && info.atShell() && lapsed {
 				out.changed++
 				if !write {
 					continue
