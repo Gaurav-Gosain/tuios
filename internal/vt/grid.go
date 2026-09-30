@@ -441,13 +441,39 @@ func (g *grid) DeleteLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 // rows about to be blanked keep the extents they carried, which is what
 // lets blankRows stop at the text they held.
 func (g *grid) rotateExt(y, end, mid int) {
-	slices.Reverse(g.ext[y:mid])
-	slices.Reverse(g.ext[mid:end])
-	slices.Reverse(g.ext[y:end])
+	rotateLeft(g.ext[y:end], mid-y)
 	// The wrap flags travel with their rows the same way.
-	slices.Reverse(g.wrap[y:mid])
-	slices.Reverse(g.wrap[mid:end])
-	slices.Reverse(g.wrap[y:end])
+	rotateLeft(g.wrap[y:end], mid-y)
+}
+
+// rotateLeft moves s[k:] to the front of s and s[:k] to the back.
+//
+// A scroll moves one row at a time almost always, from either end, so the
+// short side goes through a small stack buffer and the rest is one copy.
+// Three reversals touch every element twice and cost about 9% of the
+// process under a `yes` flood. A long rotation on both sides, such as a
+// large CSI S inside a region, still takes the reversals.
+func rotateLeft[T any](s []T, k int) {
+	n := len(s)
+	if k <= 0 || k >= n {
+		return
+	}
+	var buf [16]T
+	switch {
+	case k <= len(buf):
+		copy(buf[:k], s[:k])
+		copy(s, s[k:])
+		copy(s[n-k:], buf[:k])
+	case n-k <= len(buf):
+		m := n - k
+		copy(buf[:m], s[k:])
+		copy(s[m:], s[:k])
+		copy(s, buf[:m])
+	default:
+		slices.Reverse(s[:k])
+		slices.Reverse(s[k:])
+		slices.Reverse(s)
+	}
 }
 
 // anyRow reports whether any of rows y to end-1 has been written.
