@@ -287,15 +287,12 @@ func herdrListedWorkspace(st *SessionState, ws int) bool {
 	return ws == st.CurrentWorkspace || st.WorkspaceNames[ws] != "" || herdrCount(st, ws) > 0
 }
 
-// herdrScratchWorkspaceBase is the first workspace number the scratch
-// terminals take. Workspaces from it up are not tabs.
-const herdrScratchWorkspaceBase = 1000
-
-// herdrScratch reports whether a window is a scratch terminal. herdr has
-// nothing like one, so it is not a pane to a herdr client: not in the
-// snapshot, the lists or the events, and not found by its id.
+// herdrScratch reports whether a window is a pane of a scratch group: marked
+// scratch, or on a scratch workspace. herdr has nothing like one, so it is
+// not a pane to a herdr client: not in the snapshot, the lists or the
+// events, and not found by its id.
 func herdrScratch(w *WindowState) bool {
-	return w.Scratch || w.Workspace >= herdrScratchWorkspaceBase
+	return w.Scratch || IsScratchWorkspace(w.Workspace)
 }
 
 // herdrCount is how many windows other than scratch terminals workspace ws
@@ -353,7 +350,7 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	}
 	tabs := herdrOrderedTabs(st)
 	activeTab := herdrTabID(sess.ID, max(st.CurrentWorkspace, 1))
-	if st.CurrentWorkspace >= herdrScratchWorkspaceBase && len(tabs) > 0 {
+	if IsScratchWorkspace(st.CurrentWorkspace) && len(tabs) > 0 {
 		// A scratch workspace is showing, and it is not a tab. The tab the
 		// person comes back to is the first one.
 		activeTab = herdrTabID(sess.ID, tabs[0])

@@ -222,7 +222,7 @@ func TestHerdrLeavesScratchTerminalsOut(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "sc")
 	tr := d.newHerdrTranslator()
-	scratch, err := sess.AddDaemonWindowWith(NewWindowOptions{Popup: true, Scratch: true}, nil)
+	scratch, err := sess.AddDaemonWindowWith(NewWindowOptions{Workspace: ScratchWorkspaceBase, Popup: true, Scratch: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestHerdrLeavesScratchTerminalsOut(t *testing.T) {
 		t.Errorf("the snapshot lists %d panes, want 1: the scratch terminal is not a pane", n)
 	}
 	for _, tb := range snap["tabs"].([]any) {
-		if tb.(map[string]any)["number"].(float64) >= herdrScratchWorkspaceBase {
+		if IsScratchWorkspace(int(tb.(map[string]any)["number"].(float64))) {
 			t.Errorf("a scratch workspace is a tab: %v", tb)
 		}
 	}
