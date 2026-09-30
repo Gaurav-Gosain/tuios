@@ -32,6 +32,7 @@ type agentStateJSON struct {
 	Source       string `json:"source"`
 	Harness      string `json:"harness_id"`
 	AgentSession string `json:"agent_session_id"`
+	BlockedBy    string `json:"blocked_by"`
 }
 
 // readAgentState reads a pane's agent state, the zero value when it cannot.
@@ -613,7 +614,7 @@ func buildFakeCrush(t *testing.T) string {
 // herdr's. Its reports move the pane through idle, working, needs_input and
 // done, a stale seq is dropped, a report for another pane and a method tuios
 // does not answer are refused, and release clears the pane. A shell pane in
-// the same session is not told it is a herdr pane.
+// the same session is told it is one, as every pane is by default.
 //
 // Negative control: with the HerdrEnv call taken out of buildEnvFor, the
 // stand-in finds no herdr environment, prints NO-HERDR, and the first wait
@@ -674,45 +675,71 @@ func TestHerdrProtocolReportsACrushPane(t *testing.T) {
 	send("release")
 	waitAgentState(t, base, "e2e-agent", win, "none", "", log, "release, none")
 
-	// A shell is not a herdr pane.
+	// A shell pane is a herdr pane too by default, as in herdr, so a Crush
+	// started from a prompt reports.
 	if out, err := tuiosCLI(t, base, "new-window", "shell", "-s", "e2e-agent", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", "shell", "echo HE=${HERDR_ENV:-unset} HS=${HERDR_SOCKET_PATH:-unset} HP=${HERDR_PANE_ID:-unset}\n"); err != nil {
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", "shell", "echo HE=${HERDR_ENV:-unset} HB=${HERDR_BIN_PATH:+set}\n"); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
-	out = waitCapture(t, base, "e2e-agent", "shell", "HE=unset HS=unset HP=unset")
-	log.add("shell pane environment: %s", firstLineWith(out, "HE=unset"))
+	out = waitCapture(t, base, "e2e-agent", "shell", "HE=1 HB=set")
+	log.add("shell pane environment: %s", firstLineWith(out, "HE=1"))
 	log.save(t)
 	alive(t, term, "after the herdr protocol reports")
 }
 
-// TestHerdrProtocolAlwaysTellsShellPanes sets herdr_protocol = "always" and
-// checks a shell pane is then told about the socket, so a Crush started from
-// a shell prompt reports too, and that "off" tells even a Crush pane nothing.
+// TestHerdrProtocolAlwaysTellsShellPanes checks the three herdr_protocol
+// values: with "agents" a shell pane is not told about the socket, with
+// "always" (the default) it is, so a Crush started from a shell prompt
+// reports, and "off" tells even a Crush pane nothing.
 //
 // Negative control: with the always case taken out of Manager.HerdrEnv, the
-// shell pane reads HE=unset and the first wait fails.
+// always shell pane reads HE=unset and its wait fails.
 func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
 	mustMkdir(dir)
 	cfg := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"always\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"agents\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if out, err := tuiosCLI(t, base, "new", "e2e-agent", "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "new-window", "shell", "-s", "e2e-agent"); err != nil {
+	if out, err := tuiosCLI(t, base, "new-window", "narrow", "-s", "e2e-agent"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
-	win := windowID(t, base, "e2e-agent", "shell")
-	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", "shell", "echo HE=${HERDR_ENV:-unset} HP=${HERDR_PANE_ID:-unset}\n"); err != nil {
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", "narrow", "echo HE=${HERDR_ENV:-unset} HP=${HERDR_PANE_ID:-unset}\n"); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
-	waitCapture(t, base, "e2e-agent", "shell", "HE=1 HP="+win)
+	waitCapture(t, base, "e2e-agent", "narrow", "HE=unset HP=unset")
+
+	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"always\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	// The daemon follows the file; wait for a pane made after the change to
+	// see it.
+	deadline := time.Now().Add(uiTimeout)
+	for i := 0; ; i++ {
+		name := "shell" + itoa(i)
+		if out, err := tuiosCLI(t, base, "new-window", name, "-s", "e2e-agent", "--no-focus"); err != nil {
+			t.Fatalf("new-window: %v\n%s", err, out)
+		}
+		win := windowID(t, base, "e2e-agent", name)
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", name, "echo HE=${HERDR_ENV:-unset} HP=${HERDR_PANE_ID:-unset}\n"); err != nil {
+			t.Fatalf("send-text: %v\n%s", err, out)
+		}
+		out := waitCapture(t, base, "e2e-agent", name, "HE=")
+		if strings.Contains(out, "HE=1 HP="+win) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("herdr_protocol = always never reached a new shell pane:\n%s", out)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
 
 	crush := buildFakeCrush(t)
 	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"off\"\n"), 0o600); err != nil {
@@ -720,7 +747,7 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 	}
 	// The daemon follows the file; wait for a pane made after the change to
 	// see it.
-	deadline := time.Now().Add(uiTimeout)
+	deadline = time.Now().Add(uiTimeout)
 	for i := 0; ; i++ {
 		name := "crush" + itoa(i)
 		if out, err := tuiosCLI(t, base, "new-window", name, "-s", "e2e-agent", "--no-focus", "--", crush); err != nil {
