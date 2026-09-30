@@ -251,8 +251,8 @@ BSP tree and the layout mode.
 | Window structure | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
 | Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
 | Working directories | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
-| Screen contents | Yes | No | No | No |
-| Scrollback | Yes | No | No | No |
+| Screen contents | Yes | Yes, as history above a divider (see below) | Partial: as of the pane's last save, up to 30 seconds stale | Yes, as for a daemon restart |
+| Scrollback | Yes | Yes, the last 5000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
 | Running programs (vim, tail, a build) | Yes | No | No | No |
 | Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
 | Copy-mode position, selection | No, per-client | No | No | No |
@@ -284,8 +284,9 @@ mid-write cannot leave a half-written file where a good one used to be.
 
 The state file holds the session's structure: its windows with their geometry,
 titles, custom names, workspace, minimize state, its focus, its BSP trees, its
-layout mode, and each window's working directory. It does not hold screen
-contents, scrollback, or anything about the processes that were running.
+layout mode, and each window's working directory. It does not hold anything
+about the processes that were running. Each pane's history is saved in a
+separate file. See [Pane history](#pane-history).
 
 When the daemon starts, it restores every session it finds saved state for. For
 each window it spawns a **fresh shell** in that window's saved working directory
@@ -294,6 +295,16 @@ exists), and writes a dim one-line notice into it:
 
 ```
 -- tuios: session restored, fresh shell in /home/you/project --
+```
+
+When the pane has saved history, the notice is a divider under that history:
+
+```
+$ make
+...the last lines of the build...
+$
+-- tuios: restored from Sep 30 14:02, fresh shell in /home/you/project --
+$ _
 ```
 
 Restored shells get `TUIOS_RESTORED=1` in their environment, so your shell rc can
@@ -314,8 +325,8 @@ that session unless the daemon restores it again.
 
 What this means in practice: your layout comes back and each pane is sitting in
 the right directory, but whatever was running in those panes is not. A `vim` you
-had open is closed, a build you had running is dead, and the scrollback above the
-prompt is empty.
+had open is closed and a build you had running is dead. The output they left
+is still there to read, above the divider.
 
 Agents are the exception worth knowing about. An agent's process ends like any
 other, and whatever turn it was running does not finish. But a coding agent
@@ -341,6 +352,67 @@ If a state file is corrupt, or was written by a newer TUIOS whose format this
 build does not understand, it is moved into an archive directory rather than
 deleted, and skipped. One bad file can never block the daemon from starting or
 prevent other sessions from being restored.
+
+### Pane history
+
+The daemon saves each pane's history next to the session's state file, and a
+restore shows it again. The history comes back as text to read. It is not
+replayed into the new shell, and no command in it runs again.
+
+What comes back:
+
+- The pane's scrollback, up to 5000 lines by default, and the screen it
+  showed. Colors, bold and other styles, wide characters and wrapped lines
+  come back as they were.
+- The shell's screen when a full-screen program such as `vim` or `htop` was
+  open. The program's own screen does not come back.
+- The scratch terminal's history. Other popups do not come back, so their
+  history is not saved.
+
+A pane that ran on another machine through `[hosts]` comes back as a shell on
+this machine, without history. That machine keeps its own copy.
+
+Copy mode, search and hints reach the restored lines like any other history.
+An agent pane keeps its resume offer. The resumed agent starts under the
+divider.
+
+When the history is saved:
+
+- On a clean stop (`kill-server`, `SIGTERM`, a reboot that stops the daemon),
+  for every pane with new output.
+- During the session, with the periodic save, for a pane with new output. One
+  pane is saved at most once in 30 seconds, so a pane that prints without end
+  costs one write in 30 seconds. An idle pane is not written again.
+
+After a crash (`SIGKILL`, an out-of-memory kill), a pane comes back with its
+history as of its last save, which can be up to 30 seconds old.
+
+Where it goes and how big it gets:
+
+- One file for each pane in
+  `$XDG_STATE_HOME/tuios/sessions/scrollback/<session>/`. The directory is
+  mode 0700 and each file is mode 0600.
+- Each file is compressed. It is at most 2 MiB by default. A pane with more
+  saves fewer lines.
+- All the files of one session are at most 16 MiB together. A pane that does
+  not fit saves fewer lines.
+- The daemon deletes a pane's file when the pane closes, and a session's
+  files when the session is killed. A renamed session keeps its files.
+
+> **Privacy.** The history files hold what your panes printed, which can
+> include passwords, tokens and other secrets. They stay on your disk until
+> the pane or the session goes. To stop this, set `persist_scrollback = false`
+> in `[daemon]`. The next time the daemon starts, it deletes the history it
+> saved before.
+
+```toml
+[daemon]
+persist_scrollback = true         # save each pane's history (default true)
+persist_scrollback_lines = 5000   # most history lines one pane saves (0 = 5000)
+persist_scrollback_kb = 2048      # most KiB one pane's file takes (0 = 2048)
+```
+
+The daemon reads these settings when it starts.
 
 ## The resurrect Command
 

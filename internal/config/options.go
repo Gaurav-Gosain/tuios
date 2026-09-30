@@ -792,6 +792,21 @@ var optionSpecs = []Option{
 		Description: "After a daemon restart, ask to resume each pane's agent conversation, resume it, or do neither",
 		Accepted:    ResumeAgentsModes, Default: ResumeAgentsAsk,
 	},
+	{
+		Path: "daemon.persist_scrollback", Type: OptionBool, Section: "daemon",
+		Description: "Save each pane's history and show it again after a daemon restart",
+		Default:     "true",
+	},
+	{
+		Path: "daemon.persist_scrollback_lines", Type: OptionInt, Section: "daemon",
+		Description: "Most history lines one pane saves. 0 uses 5000.",
+		Default:     "0", Min: 0, Max: 1000000,
+	},
+	{
+		Path: "daemon.persist_scrollback_kb", Type: OptionInt, Section: "daemon",
+		Description: "Most KiB one pane's saved history takes on disk. 0 uses 2048.",
+		Default:     "0", Min: 0, Max: 1048576,
+	},
 
 	// [notifications]
 	{

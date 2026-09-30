@@ -141,6 +141,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// to: no output, no input, no way to revive it, and no UI anywhere that draws
 	// a pane as dead. Closing the window is what the daemon already does whenever
 	// a PTY goes away (see notifyPTYClosed), so the restore does the same.
+	// Each pane's saved history, by window id, which its new emulator shows
+	// above the banner. None when the setting is off.
+	var history map[string]*savedHistory
+	if d.manager.HistoryPolicy().Enabled {
+		history = loadHistory(state.Name)
+	}
+
 	kept := restored.Windows[:0]
 	saved := make(map[string]WindowState, len(restored.Windows))
 	for i := range restored.Windows {
@@ -210,7 +217,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// the new shell's first instruction. Without this a pane narrowed on
 		// purpose would come back holding the default, which under open is
 		// admin.
-		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), onExit)
+		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue

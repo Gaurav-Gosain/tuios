@@ -953,7 +953,11 @@ type Session struct {
 	// Session state (serializable)
 	state            *SessionState
 	stopResurrection func() // Stops periodic resurrection saving
-	stateMu          sync.RWMutex
+	// history records when each pane's history was last saved. See
+	// scrollback_persist.go.
+	history historySaver
+
+	stateMu sync.RWMutex
 	// snapSeq is the last SnapshotSeq handed out.
 	snapSeq atomic.Uint64
 	// pushSeen is what every snapshot's PushSeen is copied from, guarded by
@@ -1197,8 +1201,20 @@ type SessionConfig struct {
 	// it. Nil for a session made outside a manager, whose panes hold the
 	// default. See pane_grants.go.
 	grants *paneGrantTable
+	// history is what the session does with its panes' history across a
+	// restart. The manager stamps it from the daemon's config. Nil saves
+	// nothing.
+	history *HistoryPolicy
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
+}
+
+// historyPolicy is the session's HistoryPolicy, off when none was stamped.
+func (s *Session) historyPolicy() HistoryPolicy {
+	if s.config == nil || s.config.history == nil {
+		return HistoryPolicy{}
+	}
+	return *s.config.history
 }
 
 // inheritedCwd is the directory a new window should start in when the caller
@@ -1308,7 +1324,9 @@ func (s *Session) persist(state *SessionState) error {
 	if state == nil || state.Name != s.Name() {
 		return nil
 	}
-	return SaveSessionForResurrection(state)
+	err := SaveSessionForResurrection(state)
+	s.saveHistory(state, false)
+	return err
 }
 
 // SetEventSink installs the control-plane event sink for this session. It is
@@ -1417,7 +1435,7 @@ func (s *Session) forgetBroadcast() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil, nil, nil)
+	return s.createPTY(windowID, width, height, "", nil, nil, "", nil, onExit, nil, nil, nil)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1426,13 +1444,15 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil, nil)
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", &restoreSpec{}, onExit, nil, nil, nil)
 }
 
 // restorePTYWithGrants is RestorePTY for a window that was saved with grants
 // of its own, which the new process holds from its first instruction.
-func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil, grants)
+// history, when not nil, is the pane's saved history, which the new emulator
+// shows above the banner.
+func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", &restoreSpec{history: history}, onExit, nil, nil, grants)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
@@ -1452,7 +1472,7 @@ func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd s
 // pane is entered in the grant table before its process starts and leaves it
 // when the process exits, so the process is never placed in a pane the table
 // does not know. See pane_grants.go.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File, extraFiles []*os.File, grants *Grants) (*PTY, error) {
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored *restoreSpec, onExit func(ptyID string), stdout *os.File, extraFiles []*os.File, grants *Grants) (*PTY, error) {
 	// A window that was given grants and gets a new process with none named
 	// keeps what it was given, even when its last process has already gone
 	// and taken its entry in the grant table with it. Read before ptysMu is
@@ -1524,7 +1544,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			} else {
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnvFor(windowID, restored, extraEnv, command)
+			cmd.Env = s.buildEnvFor(windowID, restored != nil, extraEnv, command)
 			// The pane's terminal, so a tuios client can tell whether it runs
 			// on it or only inherited the pane's variables. See
 			// nested_attach.go.
@@ -1560,15 +1580,18 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	// Create VT emulator for persistent terminal state
 	// This maintains scrollback, screen content, cursor position across reconnects
-	terminal := vt.NewWithScrollback(width, height, s.scrollbackLines())
-
+	//
 	// For a restored shell, seed the emulator with a one-line banner so the
-	// respawned process is clearly marked. This is written directly (before the
-	// reader/writer goroutines start) so it lands at the top of the screen ahead
-	// of the shell's first prompt; it only touches the daemon-side emulator and
-	// never the real PTY, so the shell is unaffected.
-	if restored {
-		_, _ = terminal.Write([]byte(restoredBanner(cwd)))
+	// respawned process is clearly marked, under the pane's saved history when
+	// there is one (see scrollback_persist.go). This is written directly
+	// (before the reader/writer goroutines start) so it lands ahead of the
+	// shell's first prompt; it only touches the daemon-side emulator and never
+	// the real PTY, so the shell is unaffected.
+	var terminal vt.Terminal
+	if restored != nil {
+		terminal = newRestoredEmulator(width, height, s.scrollbackLines(), cwd, restored.history)
+	} else {
+		terminal = vt.NewWithScrollback(width, height, s.scrollbackLines())
 	}
 
 	pty := &PTY{
@@ -2361,9 +2384,15 @@ func (s *Session) Stop() {
 	// This is the last chance to persist the session, so a failure here is the
 	// difference between it coming back and not; it is reported rather than
 	// dropped even though Stop cannot act on it.
-	if err := s.persist(s.ResurrectionState()); err != nil {
+	final := s.ResurrectionState()
+	if err := s.persist(final); err != nil {
 		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name(), err)
 	}
+	// Every pane with output since its last save, whatever the interval: this
+	// is the save a restart restores from.
+	s.persistMu.Lock()
+	s.saveHistory(final, true)
+	s.persistMu.Unlock()
 
 	// Before the panes go, so a hold cannot publish a state against a session
 	// that has already saved and stopped.
@@ -3288,8 +3317,16 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 			row = make([]CellState, len(line))
 		}
 		r := row[:len(line)]
-		for x := range line {
+		// A history row is mostly blank tail, and the packer drops that tail
+		// anyway, so only the cells before it are converted. The rest are
+		// written as the blank the packer compares against, which keeps the
+		// bytes identical to Pack's.
+		used := usedCells(line)
+		for x := range used {
 			r[x] = colors.cellState(&line[x])
+		}
+		for x := used; x < len(r); x++ {
+			r[x] = blankCellState
 		}
 		b.add(p, r)
 	}
@@ -3300,6 +3337,26 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 		state.PackedMain = grid(t.MainCellAt)
 	}
 	state.Styles = p.styles
+}
+
+// blankCellState is a never-written cell as the wire holds it: the cell the
+// packer trims from a row's tail.
+var blankCellState = CellState{Content: " ", Width: 1}
+
+// usedCells is the length of a line without its blank tail: the cells that
+// convert to blankCellState, a space of width one with no style and no link.
+func usedCells(line uv.Line) int {
+	n := len(line)
+	for n > 0 {
+		c := &line[n-1]
+		if c.Content != " " || c.Width != 1 || c.Link != (uv.Link{}) ||
+			c.Style.Fg != nil || c.Style.Bg != nil || c.Style.UnderlineColor != nil ||
+			c.Style.Attrs != 0 || c.Style.Underline != 0 {
+			break
+		}
+		n--
+	}
+	return n
 }
 
 // ApplyTerminalState brings an emulator to the state a snapshot describes. It

@@ -291,7 +291,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, false, onExit, opts.stdout, opts.extraFiles, opts.Grants)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, nil, onExit, opts.stdout, opts.extraFiles, opts.Grants)
 	if err != nil {
 		return WindowState{}, err
 	}
