@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -514,6 +515,7 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 	var groups map[sixelGroupKey][]sixelHit
 	// Whether each id met on this frame has a picture, asked once per id.
 	pictures := map[uint32]bool{}
+	var dim color.Color
 	for y, line := range canvas.Lines {
 		for x := range line {
 			c := &line[x]
@@ -530,7 +532,11 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 				pictures[id] = has
 			}
 			if mode == sixelPlaceholder || !has {
-				sp.placeholderCell(c, id, row, col)
+				// The theme's dim text colour, read once a frame.
+				if dim == nil {
+					dim = theme.UI().FgDim
+				}
+				sp.placeholderCell(c, id, row, col, dim)
 				continue
 			}
 			sixelBlankCell(c, id)
@@ -685,15 +691,12 @@ func sixelBlankCell(c *uv.Cell, id uint32) {
 	}
 }
 
-// sixelPlaceholderFg is the colour the placeholder box is drawn in: dim, and
-// the same on a light and a dark ground.
-var sixelPlaceholderFg color.Color = color.RGBA{0x80, 0x80, 0x80, 0xff}
-
-// placeholderCell draws one cell of the box shown where an image cannot be:
-// a thin frame around the image's cells with "image" in the middle. A cell
+// placeholderCell draws one cell of the box shown where an image cannot be, in
+// fg with the faint attribute: a thin frame around the image's cells with
+// "image" in the middle. A cell
 // whose image is unknown (drawn before this client attached) gets a dotted
 // fill instead, since the frame's size is not known.
-func (sp *SixelPassthrough) placeholderCell(c *uv.Cell, id uint32, row, col int) {
+func (sp *SixelPassthrough) placeholderCell(c *uv.Cell, id uint32, row, col int, fg color.Color) {
 	sp.mu.Lock()
 	e := sp.images[id]
 	rows, cols := 0, 0
@@ -705,7 +708,7 @@ func (sp *SixelPassthrough) placeholderCell(c *uv.Cell, id uint32, row, col int)
 	bg := c.Style.Bg
 	*c = uv.Cell{Content: " ", Width: 1}
 	c.Style.Bg = bg
-	c.Style.Fg = sixelPlaceholderFg
+	c.Style.Fg = fg
 	c.Style.Attrs = uv.AttrFaint
 	if rows == 0 || cols == 0 {
 		c.Content = "·"
