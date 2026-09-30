@@ -143,18 +143,14 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 	waitWindowCount(t, term, 2, "two tiled panes")
 
 	// Left pane: the graphics app.
-	mouseClick(t, term, 20, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
-	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
+	clickToType(t, term, 20, 12)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	geom, cols, rows, xpx, ypx := startFrameloop(t, term, 0)
 	t.Logf("left pane: %dx%d cells, %dx%d px", cols, rows, xpx, ypx)
 	leaveTerminalMode(t, term)
 
 	// Right pane: the flood, running for the rest of the test.
-	mouseClick(t, term, 95, 12, tuitest.MouseLeft, 0)
-	time.Sleep(400 * time.Millisecond)
-	enterTerminalMode(t, term)
+	clickToType(t, term, 95, 12)
 	typeLine(t, term, "while :; do ls; done")
 	leaveTerminalMode(t, term)
 	time.Sleep(time.Second)

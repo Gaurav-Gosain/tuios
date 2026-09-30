@@ -83,7 +83,7 @@ func startGraphicsPane(t *testing.T, daemon bool) (*tuitest.Terminal, *kittyHost
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo READY", "READY", shellTimeout)
+	runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
 	return term, host
 }
 

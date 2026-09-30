@@ -241,8 +241,8 @@ func TestDaemonFolderClickCdOnlyAtAPrompt(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "cd "+dir+" && printf 'in-the-dir\\n'", "in-the-dir", uiTimeout)
-	runInShell(t, term, `printf '\033]7;file://%s\033\\marked\n' "$PWD"`, "marked", uiTimeout)
+	runInShell(t, term, "cd "+dir+" && printf 'in-the-%s\\n' dir", "in-the-dir", uiTimeout)
+	runInShell(t, term, `printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
 	leaveTerminalMode(t, term)
 
 	toggleSidebarViaPalette(t, term)

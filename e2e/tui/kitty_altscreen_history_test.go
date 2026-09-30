@@ -31,7 +31,7 @@ func TestKittyImageSurvivesAltScreenWithHistory(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	// The pane earns real history first; without it half the bug hid.
-	runInShell(t, term, "seq 1 200; echo HISTORYDONE", "HISTORYDONE", shellTimeout)
+	runInShell(t, term, "seq 1 200; echo HISTO\"\"RYDONE", "HISTORYDONE", shellTimeout)
 
 	// A yazi-shaped guest, compressed into one write the way a TUI paints
 	// a frame: junk that parks the cursor at the bottom-right, the

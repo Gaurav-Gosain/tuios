@@ -102,7 +102,7 @@ func TestAHostSessionStaysAttached(t *testing.T) {
 
 	// A pane that prints every second, so every second is a chance for the
 	// relay's write to fail.
-	runInShell(t, term, "{ for i in $(seq 1 40); do echo TICK-$i; sleep 1; done; } & echo TICKER-UP", "TICKER-UP", shellTimeout)
+	runInShell(t, term, "{ for i in $(seq 1 40); do echo TICK-$i; sleep 1; done; } & echo TICK\"\"ER-UP", "TICKER-UP", shellTimeout)
 	if err := term.WaitForText("TICK-3", shellTimeout); err != nil {
 		t.Fatalf("the far pane never printed: %v\n%s", err, term.Snapshot())
 	}
@@ -142,7 +142,7 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 
 	// Something on screen that only the far session could have produced, so a
 	// pane that came back empty is a failure rather than a pass.
-	runInShell(t, term, "echo BEFORE-DROP-42", "BEFORE-DROP-42", shellTimeout)
+	runInShell(t, term, "echo BEFORE-\"\"DROP-42", "BEFORE-DROP-42", shellTimeout)
 
 	breakTheLink(t)
 
@@ -174,7 +174,7 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 	if s := term.Screen().Text(); !strings.Contains(s, "BEFORE-DROP-42") {
 		t.Fatalf("ASSERTION: the pane came back without the history it had before the drop\n%s", term.Snapshot())
 	}
-	runInShell(t, term, "echo AFTER-RECONNECT-99", "AFTER-RECONNECT-99", shellTimeout)
+	runInShell(t, term, "echo AFTER-REC\"\"ONNECT-99", "AFTER-RECONNECT-99", shellTimeout)
 
 	// It is still the far session, drawn by this client, and not a new one
 	// here.

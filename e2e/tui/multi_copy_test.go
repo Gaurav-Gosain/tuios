@@ -35,10 +35,15 @@ var multiCopyLines = []string{
 	"no carrier on eth0",
 }
 
-// printfSpelled prints line without the command line holding "LLDP": the
-// shell joins "LL" and "DP" only in the output.
+// printfSpelled prints line without the command line holding it: the shell
+// joins the two halves only in the output. A line with "LLDP" is split there,
+// so the copy-mode search for "LLDP" cannot match the command line either.
 func printfSpelled(line string) string {
-	return "printf '%s\\n' \"" + strings.Replace(line, "LLDP", "LL\"\"DP", 1) + "\""
+	spelled := strings.Replace(line, "LLDP", "LL\"\"DP", 1)
+	if spelled == line {
+		spelled = splitMarker(line)
+	}
+	return "printf '%s\\n' \"" + spelled + "\""
 }
 
 // togglePaletteMultifocus adds the focused pane to the multifocus set through

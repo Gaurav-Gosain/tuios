@@ -134,7 +134,7 @@ func TestMultifocusDim(t *testing.T) {
 			for _, name := range []string{"A", "B"} {
 				newWindow(t, term)
 				enterTerminalMode(t, term)
-				runInShell(t, term, `printf '\033[38;2;220;220;220m%s\033[0m\n' "INK`+name+`X"`, "INK"+name+"X", shellTimeout)
+				runInShell(t, term, `printf '\033[38;2;220;220;220m%s\033[0m\n' "INK`+name+`""X"`, "INK"+name+"X", shellTimeout)
 				leaveTerminalMode(t, term)
 			}
 

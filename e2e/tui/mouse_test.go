@@ -400,7 +400,7 @@ func TestMouseTrackingAppKeepsItsOwnWheel(t *testing.T) {
 	last := fillScrollback(t, term, "OWNED", 200)
 
 	// Ask for mouse tracking the way an application does, in SGR encoding.
-	runInShell(t, term, `printf '\033[?1000h\033[?1006h'; echo MOUSEON`, "MOUSEON", shellTimeout)
+	runInShell(t, term, `printf '\033[?1000h\033[?1006h'; echo MOUSE""ON`, "MOUSEON", shellTimeout)
 
 	col, row := paneCell(t, term)
 	wheelAt(t, term, col, row, tuitest.MouseWheelUp, 2)
@@ -457,7 +457,7 @@ func TestBareMotionReachesAnEventTrackingApp(t *testing.T) {
 
 	// 1003 is any-event tracking: motion is reported whether or not a button is
 	// down. 1006 asks for the SGR encoding.
-	runInShell(t, term, `printf '\033[?1003h\033[?1006h'; echo MOTIONON`, "MOTIONON", shellTimeout)
+	runInShell(t, term, `printf '\033[?1003h\033[?1006h'; echo MOTION""ON`, "MOTIONON", shellTimeout)
 
 	col, row := paneCell(t, term)
 	for i := range 4 {
@@ -690,7 +690,7 @@ func TestDragSelectionCopiesOnRelease(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	const marker = "DRAGME-alpha-bravo"
-	runInShell(t, term, "echo "+marker, marker, shellTimeout)
+	runInShell(t, term, "echo "+splitMarker(marker), marker, shellTimeout)
 	row, col := findText(t, term, marker)
 
 	dragSelect(t, term, col, col+len(marker)-1, row)
@@ -825,7 +825,7 @@ func TestMenuCopiesADragSelection(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	const marker = "MENUCOPY-alpha-bravo"
-	runInShell(t, term, "echo "+marker, marker, shellTimeout)
+	runInShell(t, term, "echo "+splitMarker(marker), marker, shellTimeout)
 	row, col := findText(t, term, marker)
 
 	dragSelect(t, term, col, col+len(marker)-1, row)

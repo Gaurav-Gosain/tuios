@@ -58,9 +58,9 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	// long enough to wrap across two pane lines, and WaitForText looks for its
 	// text on one: waiting for the path made the test's own name a thing that
 	// could break it.
-	runInShell(t, term, "cd "+dir+" && printf 'in-the-dir\\n'", "in-the-dir", uiTimeout)
+	runInShell(t, term, "cd "+dir+" && printf 'in-the-%s\\n' dir", "in-the-dir", uiTimeout)
 	runInShell(t, term,
-		`printf '\033]7;file://%s\033\\marked\n' "$PWD"`, "marked", uiTimeout)
+		`printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
 	leaveTerminalMode(t, term)
 
 	toggleSidebarViaPalette(t, term)
@@ -216,7 +216,7 @@ func TestSidebarFileEditor(t *testing.T) {
 				t.Fatalf("settings did not close: %v\n%s", err, term.Snapshot())
 			}
 			enterTerminalMode(t, term)
-			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\listed\\n' \"$PWD\"", "listed", uiTimeout)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 			leaveTerminalMode(t, term)
 			toggleSidebarViaPalette(t, term)
 			waitForAll(t, term, uiTimeout, "folder listing", "alpha/", "brief.txt")
@@ -276,7 +276,7 @@ func TestSidebarFileSearch(t *testing.T) {
 			newWindow(t, term)
 			waitWindowCount(t, term, 1, "opening a shell")
 			enterTerminalMode(t, term)
-			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\listed\\n' \"$PWD\"", "listed", uiTimeout)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 			if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
 				t.Fatal(err)
 			}

@@ -39,7 +39,7 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 	// A directory big enough that each listing is a real burst of output, so
 	// the PTY reader is taking the exclusive lock continuously while the UI
 	// goroutine renders.
-	runInShell(t, term, "mkdir -p /tmp/tuios-e2e-ls && (cd /tmp/tuios-e2e-ls && for i in $(seq 1 200); do : > f$i; done) && echo SETUP-DONE",
+	runInShell(t, term, "mkdir -p /tmp/tuios-e2e-ls && (cd /tmp/tuios-e2e-ls && for i in $(seq 1 200); do : > f$i; done) && echo SETUP-\"\"DONE",
 		"SETUP-DONE", soakTimeout)
 
 	const rounds = 6
