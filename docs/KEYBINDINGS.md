@@ -20,9 +20,14 @@ editor. A folder keeps its navigation action. tuios does not edit a file that is
 not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 
 When the session runs on another machine, tuios does not check the file on your
-machine. The pane on that machine opens the file, and it shows the error if the
-editor is missing or the file is not text. tuios can not edit a file that lists
-from a different machine than the one the session runs on.
+machine. If the editor is not on that machine, no pane opens. tuios shows a
+dock note that names the editor and the machine, so you know what to check.
+
+With the File editor setting empty, a remote session uses `$EDITOR` from this
+machine. Set the File editor if the far machine has a different editor.
+
+tuios can not edit a file that lists from a different machine than the one the
+session runs on.
 
 `Shift+Enter` needs a terminal that reports modified Enter, such as one that
 uses the Kitty keyboard protocol. On other terminals, use the Edit row in the

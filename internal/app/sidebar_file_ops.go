@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -415,6 +416,20 @@ func looksLikeText(sample []byte) bool {
 	return false
 }
 
+// remoteEditIntentNote is the dock note for a file edit sent to a session on
+// another machine. This client has no way to check that host's editor or its
+// PATH, so it says what it asked for and what to check if nothing opens.
+func remoteEditIntentNote(host, name string, argv []string) string {
+	editor := "the editor"
+	if len(argv) > 0 && argv[0] != "" {
+		editor = argv[0]
+	}
+	return fmt.Sprintf(
+		"tuios asked %s to open %s in %s. If no pane opens, check that %s is on %s.",
+		host, name, editor, editor, host,
+	)
+}
+
 func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	if msg.Note != "" {
 		if msg.Err != nil {
@@ -426,11 +441,20 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	if msg.IsDir {
 		return m.fileViewOpen(filepath.Dir(msg.Path), filepath.Base(msg.Path), true)
 	}
+	remoteHost := m.AttachedHost
 	before := len(m.Windows)
 	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, msg.Path)...)
 	if !m.daemonWindowIntent && len(m.Windows) == before {
 		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
 		return nil
+	}
+	// A session on another machine gets no answer from this request: the
+	// daemon there opens the pane, or fails to, off this client's screen. Say
+	// what was asked for, because a client that stays silent here can not be
+	// told apart from one that is still waiting.
+	if remoteHost != "" && m.daemonWindowIntent {
+		m.ShowNotification(remoteEditIntentNote(remoteHost, filepath.Base(msg.Path), msg.Argv),
+			"info", m.Settings.NotificationDuration)
 	}
 	m.clearSidebarReturn()
 	m.ExitSidebarFocus()

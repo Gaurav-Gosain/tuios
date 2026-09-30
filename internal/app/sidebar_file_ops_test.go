@@ -261,3 +261,53 @@ func TestTheParentRowIsNotADeleteTarget(t *testing.T) {
 		t.Errorf("the parent folder went: %v", err)
 	}
 }
+
+// TestHandleFileEditNotesARemoteSession is the gap PR #258 left: this client
+// sends an edit to a session on another machine and then knows nothing more,
+// so it must say what it asked for. Without the note, a missing editor on the
+// far machine ends the request in silence: no pane, no message.
+func TestHandleFileEditNotesARemoteSession(t *testing.T) {
+	r := newRig(t, 1)
+	r.m.AttachedHost = "build"
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	mustWrite(t, path, "body")
+
+	r.m.handleFileEdit(fileEditMsg{Path: path, Argv: []string{"true"}})
+
+	if !r.m.daemonWindowIntent {
+		t.Fatal("the edit did not ask the daemon for a window")
+	}
+	if len(r.m.Notifications) == 0 {
+		t.Fatal("a remote edit raised no dock note")
+	}
+	got := r.m.Notifications[len(r.m.Notifications)-1].Message
+	want := "tuios asked build to open note.txt in true. If no pane opens, check that true is on build."
+	if got != want {
+		t.Errorf("dock note = %q, want %q", got, want)
+	}
+}
+
+// TestHandleFileEditIsQuietOnThisMachine is the negative control: a session
+// that runs right here gets the daemon's own state push as its answer, so the
+// remote note would only be noise.
+func TestHandleFileEditIsQuietOnThisMachine(t *testing.T) {
+	r := newRig(t, 1)
+	r.m.AttachedHost = ""
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	mustWrite(t, path, "body")
+
+	r.m.handleFileEdit(fileEditMsg{Path: path, Argv: []string{"true"}})
+
+	if !r.m.daemonWindowIntent {
+		t.Fatal("the edit did not ask the daemon for a window")
+	}
+	for _, n := range r.m.Notifications {
+		if n.Message != "" {
+			t.Errorf("a local edit raised a dock note: %q", n.Message)
+		}
+	}
+}
