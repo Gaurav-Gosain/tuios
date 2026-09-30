@@ -403,7 +403,8 @@ The fields of a `[[keybindings.copy_pipe]]` entry:
 - `description` names the entry in the dock messages. It is optional.
 
 The entry takes its key from copy mode. An entry on `y` replaces the plain
-yank. Copy mode does not use `p` or `P`. When no text is selected, the key
+yank. Copy mode does not use `p` or `P`. When an entry takes `q`, `Esc`, `v`, `V`, `/`,
+`?` or a digit, tuios shows a warning when it loads the config. When no text is selected, the key
 shows a message and runs nothing. While you type a search, the key goes into
 the search.
 
