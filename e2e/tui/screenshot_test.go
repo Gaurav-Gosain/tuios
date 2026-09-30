@@ -45,6 +45,11 @@ func shotFiles(t *testing.T, dir string) []string {
 	}
 	var out []string
 	for _, e := range entries {
+		// A capture is written to a hidden temporary file and renamed into
+		// place, so a dot file is one still being written.
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
 		out = append(out, filepath.Join(dir, e.Name()))
 	}
 	return out
