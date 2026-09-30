@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -368,5 +369,105 @@ func TestPiPJumpRestoresAMinimizedPane(t *testing.T) {
 	}
 	if b.Minimized || m.GetFocusedWindow() != b {
 		t.Fatalf("the jump left the pane minimized %v, focused %v", b.Minimized, m.GetFocusedWindow() == b)
+	}
+}
+
+// The focused pane moved to another workspace keeps the focus, off the
+// screen, as MoveDaemonWindowToWorkspace leaves it. It is not on the screen,
+// so the view of it is drawn.
+func TestPiPShowsAFocusedPaneThatIsOffTheScreen(t *testing.T) {
+	m := pipOS(t)
+	b := m.Windows[1]
+	m.FocusWindow(1)
+	if err := m.PinPiP(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m.renderPiP() != nil {
+		t.Fatal("the view is drawn while its pane is focused on the screen")
+	}
+	b.Workspace = 2
+	if m.renderPiP() == nil {
+		t.Fatal("the view is not drawn for a focused pane on another workspace")
+	}
+	b.Workspace = m.CurrentWorkspace
+	b.Minimized = true
+	if m.renderPiP() == nil {
+		t.Fatal("the view is not drawn for a focused pane that is minimized")
+	}
+}
+
+// A session switch closes every pane of the session left. Switching back
+// brings the same ids with nothing streaming the pinned pane, so a pin that
+// survived showed a frozen screen. The rebuild unpins.
+func TestPiPEndsWithTheSession(t *testing.T) {
+	m := pipOS(t)
+	if err := m.PinPiP(m.Windows[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	// The panes of a local fixture: nothing to unsubscribe from a daemon.
+	for _, w := range m.Windows {
+		w.DaemonMode = false
+	}
+	m.rebuildForSession(&session.SessionState{Name: "other"}, m.Width, m.Height)
+	if m.PiPWindowID() != "" {
+		t.Fatal("the pin outlived the session it named")
+	}
+}
+
+// The fullscreen fast path splices the view's box into its frame rather than
+// composing layers. The spliced frame has to be the frame the compositor
+// draws: the box's cells, and the pane's cells either side of it in the
+// pane's own style, including a style that started left of the box.
+func TestPiPFastPathMatchesTheCompositor(t *testing.T) {
+	m := pipOS(t)
+	a, b := m.Windows[0], m.Windows[1]
+	m.MoveWindowToWorkspace(1, 2)
+	b.WriteOutput([]byte("PINNED-OUTPUT\r\n"))
+	// Coloured runs that cross the box's columns, and a wide glyph on them.
+	var body strings.Builder
+	for range 40 {
+		body.WriteString("\x1b[31;1m" + strings.Repeat("r", 77) + "\x1b[32m世界" + strings.Repeat("g", 30) + "\x1b[m\r\n")
+	}
+	a.WriteOutput([]byte(body.String()))
+	if err := m.PinPiP(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Fatal("a lone full-screen pane with the view up does not take the fast path")
+	}
+	fast := m.composeFrame()
+	if m.pip.rect.Empty() {
+		t.Fatal("the fast path did not record the view's box")
+	}
+	box := m.pip.rect
+
+	prev := fastPathDisabled
+	fastPathDisabled = true
+	a.MarkContentDirty()
+	slow := m.composeFrame()
+	fastPathDisabled = prev
+
+	grid := func(frame string) *frameCanvas {
+		c := &frameCanvas{Buffer: *uv.NewBuffer(m.Width, m.Height)}
+		uv.NewStyledString(frame).Draw(c, c.Bounds())
+		return c
+	}
+	gf, gs := grid(fast), grid(slow)
+	if !strings.Contains(ansi.Strip(fast), "PINNED-OUTPUT") {
+		t.Fatalf("the fast frame does not show the view:\n%s", ansi.Strip(fast))
+	}
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for x := box.Min.X - 3; x < box.Max.X+1 && x < m.Width; x++ {
+			cf, cs := gf.CellAt(x, y), gs.CellAt(x, y)
+			if cf == nil || cs == nil {
+				continue
+			}
+			if cf.Content != cs.Content || !cf.Style.Equal(&cs.Style) {
+				t.Fatalf("cell (%d,%d): fast %q %+v, compositor %q %+v", x, y, cf.Content, cf.Style, cs.Content, cs.Style)
+			}
+		}
+		if w := ansi.StringWidth(strings.Split(fast, "\n")[y]); w != m.Width {
+			t.Fatalf("row %d of the fast frame is %d cells wide, want %d", y, w, m.Width)
+		}
 	}
 }

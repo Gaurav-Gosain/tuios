@@ -28,6 +28,17 @@ func sendMouseToWindow(win *terminal.Window, event uv.MouseEvent) {
 
 // Hit testing helpers
 
+// pipOwns reports whether the picture-in-picture view is what the pointer is
+// over: the view is drawn there and no floating pane covers it. A mouse event
+// the view owns never reaches the pane under it.
+func pipOwns(x, y int, o *app.OS) bool {
+	if !o.PiPAt(x, y) {
+		return false
+	}
+	idx := findClickedWindow(x, y, o)
+	return idx < 0 || app.HitZ(o.Windows[idx]) < config.ZIndexPiP
+}
+
 // findClickedWindow finds the topmost window at the given coordinates
 func findClickedWindow(x, y int, o *app.OS) int {
 	// Find the topmost window (highest Z) that contains the click point
