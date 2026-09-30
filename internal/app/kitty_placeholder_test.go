@@ -270,8 +270,7 @@ func TestTheWholePlaceholderFlow(t *testing.T) {
 			if cell == nil || !vt.IsKittyPlaceholder(cell.Content) {
 				t.Fatalf("cell (%d,%d) is not a placeholder: %+v", x, y, cell)
 			}
-			r, g, b, _ := cell.Style.Fg.RGBA()
-			named := uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
+			named, _ := vt.KittyPlaceholderImageID(cell.Content, cell.Style.Fg)
 			if !strings.Contains(host, fmt.Sprintf("i=%d", named)) {
 				t.Errorf("cell (%d,%d) names image %d, which the host was never told about:\n%q",
 					x, y, named, host)

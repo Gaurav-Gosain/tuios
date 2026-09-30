@@ -3622,7 +3622,7 @@ func packedLine(row []packedCell, styles []wireStyle, line uv.Line) uv.Line {
 func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return p.captureContent(scrollback, ansi)
+	return vt.StripKittyPlaceholders(p.captureContent(scrollback, ansi))
 }
 
 // CaptureContentResolved is CaptureContent with styling on, plus the SGR index
@@ -3635,7 +3635,7 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return ResolveSGR(p.captureContent(scrollback, true), palette)
+	return ResolveSGR(vt.StripKittyPlaceholders(p.captureContent(scrollback, true)), palette)
 }
 
 // paneMeta is what a capture reports about a pane beside its content.
