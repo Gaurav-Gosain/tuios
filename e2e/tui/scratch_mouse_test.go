@@ -151,3 +151,37 @@ func TestScratchMouseKeepsTheLayout(t *testing.T) {
 		})
 	}
 }
+
+// With focus_follows_mouse on, moving the pointer over the tiles must not take
+// the focus from the shown scratch terminal: it stays on the screen and the
+// keys still go to it.
+func TestScratchStaysShownUnderHover(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\nfocus_follows_mouse = true\n")
+	term := startIn(t, base, startOpts{cols: 160, rows: 45, args: []string{"new", "work"}})
+	waitBoot(t, term)
+	for range 2 {
+		newWindow(t, term)
+	}
+	enableTiling(t, term)
+	time.Sleep(500 * time.Millisecond)
+	toggleScratch(t, term)
+	waitScratch(t, term, base, false, false, "show over the tiles")
+	typeUntil(t, term, "echo HOVER-$((6*7))", "HOVER-42")
+	for col := 2; col < 60; col += 4 {
+		mouseHover(t, term, col, 41)
+		time.Sleep(30 * time.Millisecond)
+	}
+	time.Sleep(700 * time.Millisecond)
+	// The screen, not the daemon's list: the hover hid the popup on this
+	// client before any state went out.
+	if !strings.Contains(term.Screen().Text(), "HOVER-42") {
+		t.Fatalf("a hover hid the scratch terminal\n%s", term.Snapshot())
+	}
+	row, _ := scratchRowOf(t, base)
+	typeUntil(t, term, "echo STILL-$((2*4))", "STILL-8")
+	if pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", row.ID); err != nil || !strings.Contains(pane, "STILL-8") {
+		t.Fatalf("the keys after the hover did not reach the scratch terminal (%v):\n%s", err, pane)
+	}
+	t.Logf("the scratch terminal after the hover:\n%s", term.Snapshot())
+}

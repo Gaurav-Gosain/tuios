@@ -283,11 +283,21 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		if o.LearnBlocksAction(action) {
 			return o, nil
 		}
-		// A layout action is about the tiles, and the scratch terminal is not
-		// one. It hides first, and the action acts on the pane that gets the
-		// focus back.
+		// A layout action on the scratch terminal never acts on another pane
+		// the user did not choose. Minimize hides it. Zoom, split and
+		// preselect do nothing. A move, resize, swap or tile key hides it and
+		// does nothing else.
 		if layoutAction(action) {
-			o.HideShownScratch()
+			if si := o.ShownScratch(); si >= 0 && si == o.FocusedWindow {
+				switch {
+				case action == "minimize_window" || action == "minimize_prefix_focused":
+					o.HideShownScratch()
+				case scratchInertAction(action):
+				default:
+					o.HideShownScratch()
+				}
+				return o, nil
+			}
 		}
 		return handler(msg, o)
 	}
@@ -1105,4 +1115,17 @@ func layoutAction(action string) bool {
 		return true
 	}
 	return strings.HasPrefix(action, "move_and_follow_") || strings.HasPrefix(action, "workspace_prefix_move_")
+}
+
+// scratchInertAction reports whether a layout action does nothing at all on
+// the scratch terminal: it has no zoom and no split.
+func scratchInertAction(action string) bool {
+	switch action {
+	case "toggle_zoom", "prefix_fullscreen",
+		"smart_split", "split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
+		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split", "prefix_equalize_splits",
+		"preselect_left", "preselect_right", "preselect_up", "preselect_down":
+		return true
+	}
+	return false
 }
