@@ -268,8 +268,13 @@ unpin it.
   different corner.
 - When the pane closes, the view closes and the dock shows a message.
 - Each client has its own view. The view is not in the session state, so a
-  different client does not see it and a detach removes it. `tuios pip` acts
-  on the client that `tuios run-command` reaches.
+  different client does not see it. A detach or a switch to a different
+  session removes it.
+- `tuios pip` reaches one client. With more than one client attached, it acts
+  on the client that `tuios run-command` reaches. When you attach to a session
+  on a different machine, that machine cannot pin a pane on your screen.
+- A kitty image in a pane under the view is cut around the view. A sixel image
+  is not, so it can draw over the view. Floating panes have the same limit.
 - One pane at a time is pinned. A pin replaces the previous one.
 - The view reads the cells that the pane already holds. It adds no timer and
   does no work while the pane is quiet.
