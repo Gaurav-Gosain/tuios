@@ -1071,10 +1071,12 @@ func init() {
 				windowParam,
 				{Name: "text", Type: "string", Required: true, Description: "Text written verbatim to the PTY."},
 				{Name: "paste", Type: "bool", Description: "Send the text as a paste. Control characters other than tab, line feed and carriage return are removed. The text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on.", Default: "false"},
+				{Name: "submit", Type: "bool", Description: "Paste the text and submit it with the Enter key of the harness in the pane, after a short wait for the paste to be taken in, as ask-agent does.", Default: "false"},
 			},
 			examples: []string{
 				`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`,
 				`{"id":1,"verb":"send-text","params":{"session":"work","window":"build","text":"line one\nline two","paste":true}}`,
+				`{"id":1,"verb":"send-text","params":{"session":"work","text":"Fix the test\nthen commit","submit":true}}`,
 			},
 			handler: (*Daemon).verbSendText,
 		},

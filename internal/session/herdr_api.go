@@ -189,6 +189,7 @@ type herdrArgs struct {
 	Text      string  `json:"text,omitempty"`
 	Keys      string  `json:"keys,omitempty"`
 	Literal   bool    `json:"literal,omitempty"`
+	Submit    bool    `json:"submit,omitempty"`
 	Source    string  `json:"source,omitempty"`
 	Styled    bool    `json:"styled,omitempty"`
 	Lines     int     `json:"lines,omitempty"`
@@ -1212,7 +1213,15 @@ func (d *Daemon) herdrAgentPrompt(cs *connState, in *herdrIn) (*herdrResult, *he
 		if s := res.Agent.AgentStatus; s == "working" || s == "blocked" {
 			return nil, herdrErr("agent_not_idle", "agent "+res.Agent.PaneID+" is "+s+". Nothing was typed")
 		}
-		if _, herr := d.herdrSend(cs, id, strings.TrimRight(in.Text, "\r\n"), []string{"Enter"}, "agent_prompt_failed"); herr != nil {
+		// send-text submit is the prompt path ask-agent types with: one
+		// paste, a wait for it to be taken in, and the harness's submit key.
+		sess, win, ierr := d.herdrFindPane(id)
+		if ierr != nil {
+			return nil, ierr.herdr()
+		}
+		args := herdrWin(sess, win.ID)
+		args.Text, args.Submit = in.Text, true
+		if _, herr := d.herdrVerb(cs, "send-text", args, "agent_prompt_failed"); herr != nil {
 			return nil, herr
 		}
 		if in.Wait != nil {

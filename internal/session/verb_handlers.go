@@ -783,6 +783,7 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 		Window  string `json:"window"`
 		Text    string `json:"text"`
 		Paste   bool   `json:"paste"`
+		Submit  bool   `json:"submit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -801,6 +802,20 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 	}
 	if verr := d.recheckTyping(cs, "send-text", sess, p.Window); verr != nil {
 		return nil, verr
+	}
+	if p.Submit {
+		// The prompt path ask-agent types with: one paste, a wait for the
+		// program to take it in, and the harness's own submit key.
+		window := p.Window
+		if window == "" {
+			window, _ = focusedWindowID(sess.GetState())
+		} else if idx, err := findWindowStateIndex(sess.GetState().Windows, window); err == nil {
+			window = sess.GetState().Windows[idx].ID
+		}
+		if _, err := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, window)); err != nil {
+			return nil, ptyWriteError(err)
+		}
+		return map[string]any{"type": "ok"}, nil
 	}
 	text := p.Text
 	if p.Paste {
