@@ -444,21 +444,35 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 	}
 }
 
+// next/prev workspace cycle only through workspaces that hold at least one
+// window, wrapping at the ends. With no other populated workspace they do
+// nothing, so a stray chord cannot land the person on an empty grid.
+
 func handleNextWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	next := o.CurrentWorkspace + 1
-	if next > o.NumWorkspaces {
-		next = 1
+	for i := 1; i <= o.NumWorkspaces; i++ {
+		next := o.CurrentWorkspace + i
+		if next > o.NumWorkspaces {
+			next -= o.NumWorkspaces
+		}
+		if o.GetWorkspaceWindowCount(next) > 0 {
+			o.SwitchToWorkspace(next)
+			break
+		}
 	}
-	o.SwitchToWorkspace(next)
 	return o, nil
 }
 
 func handlePrevWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	prev := o.CurrentWorkspace - 1
-	if prev < 1 {
-		prev = o.NumWorkspaces
+	for i := 1; i <= o.NumWorkspaces; i++ {
+		prev := o.CurrentWorkspace - i
+		if prev < 1 {
+			prev += o.NumWorkspaces
+		}
+		if o.GetWorkspaceWindowCount(prev) > 0 {
+			o.SwitchToWorkspace(prev)
+			break
+		}
 	}
-	o.SwitchToWorkspace(prev)
 	return o, nil
 }
 
