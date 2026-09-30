@@ -62,3 +62,19 @@ func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	waitSixelAdvertised(t, d, "img", true, "nobody attached keeps the last answer")
 }
+
+// TestClientGraphicsAfterHelloReachesPanes: an SSH client learns what its
+// terminal draws only after it attached, from the terminal's DA1 answer. The
+// daemon's emulator answers the panes' DA1, so the update has to reach the
+// daemon and change that answer, both ways.
+func TestClientGraphicsAfterHelloReachesPanes(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	c := dialGraphicsClient(t, socketPath, "late", false, false)
+	waitSixelAdvertised(t, d, "late", false, "a client whose hello said no sixel")
+
+	c.send(t, MsgClientGraphics, &ClientGraphicsPayload{SixelGraphics: true})
+	waitSixelAdvertised(t, d, "late", true, "the client's DA1 answer said sixel")
+
+	c.send(t, MsgClientGraphics, &ClientGraphicsPayload{})
+	waitSixelAdvertised(t, d, "late", false, "the client's DA1 answer said no sixel")
+}

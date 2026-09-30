@@ -1616,6 +1616,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleReadDir(cs, msg)
 	case MsgClientFocus:
 		return d.handleClientFocus(cs, msg)
+	case MsgClientGraphics:
+		return d.handleClientGraphics(cs, msg)
 	case MsgTypeAtPrompt:
 		return d.handleTypeAtPrompt(cs, msg)
 	case MsgClosePTY:

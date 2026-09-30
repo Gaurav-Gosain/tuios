@@ -128,6 +128,11 @@ const (
 	// whose welcome set TypeAtPrompt. See type_at_prompt.go.
 	MsgTypeAtPrompt
 	MsgPromptTyped
+	// MsgClientGraphics updates the graphics a TUI client's terminal draws,
+	// after the hello: an SSH client's terminal is asked for DA1 only once
+	// the session runs. A client sends it only to a daemon whose welcome set
+	// ClientGraphics. See client_graphics.go.
+	MsgClientGraphics
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -201,6 +206,8 @@ type WelcomePayload struct {
 	// TypeAtPrompt says the daemon answers MsgTypeAtPrompt. A client that
 	// does not see it types nothing into a daemon pane it cannot check.
 	TypeAtPrompt bool `json:"type_at_prompt,omitempty"`
+	// ClientGraphics says the daemon reads MsgClientGraphics.
+	ClientGraphics bool `json:"client_graphics,omitempty"`
 	// KittyAnimationRefusal says the daemon refuses a kitty frame edit in a
 	// pane itself when not every attached client's host can make it. A client
 	// that does not see it (a daemon that predates it) refuses the edit

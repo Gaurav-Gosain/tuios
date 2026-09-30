@@ -40,5 +40,11 @@ func (m *OS) handleSixelProbe(msg tea.Msg) bool {
 	m.hostCaps().SixelGraphics = sixel
 	m.SixelPassthrough.SetHostSixel(sixel)
 	m.LogInfo("SSH client DA1 %v: sixel=%v", []int(da), sixel)
+	// The daemon's emulator answers the panes' DA1, and it knew this client
+	// only from its hello, which carried the guess.
+	if client := m.DaemonClient; client != nil {
+		kitty := m.hostCaps().KittyGraphics
+		go func() { _ = client.ReportGraphics(sixel, kitty) }()
+	}
 	return true
 }

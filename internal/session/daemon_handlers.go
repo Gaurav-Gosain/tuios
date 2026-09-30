@@ -60,6 +60,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		Codec:        wireCodecName,
 		Protocol:     ProtocolVersion,
 		ClientFocus:  true,
+		// See client_graphics.go.
+		ClientGraphics: true,
 		// See layout_tree.go.
 		LayoutTreeOps:         true,
 		TypeAtPrompt:          true,
