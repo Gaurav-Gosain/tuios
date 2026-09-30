@@ -57,7 +57,7 @@ func ForShim(g Global, tmuxEnv, dir string) bool {
 		return false
 	}
 	if g.Socket != "" {
-		return g.Socket == SocketPath(dir)
+		return IsShimSocket(g.Socket, dir)
 	}
 	return SocketFromTmux(tmuxEnv) == SocketPath(dir)
 }
@@ -144,6 +144,32 @@ func InShimDir(path, dir string) bool {
 	if path == "" || dir == "" {
 		return false
 	}
-	p, d := filepath.Clean(path), filepath.Clean(dir)
-	return p == filepath.Clean(SocketPath(dir)) || strings.HasPrefix(p, d+string(filepath.Separator))
+	p, d := canonPath(path), canonPath(dir)
+	return p == canonPath(SocketPath(dir)) || strings.HasPrefix(p, d+string(filepath.Separator))
+}
+
+// IsShimSocket reports whether path, as -S gives it, is the shim's socket in
+// dir. A relative path is taken from the working directory, and links are
+// followed, so /var/... and /private/var/... on macOS are one path.
+func IsShimSocket(path, dir string) bool {
+	return path != "" && dir != "" && canonPath(path) == canonPath(SocketPath(dir))
+}
+
+// canonPath is path made absolute, with every link in it followed. The part
+// that does not exist yet (a socket nothing listens on) is kept as given.
+func canonPath(path string) string {
+	if !filepath.IsAbs(path) {
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+	}
+	path = filepath.Clean(path)
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return path
+	}
+	return filepath.Join(canonPath(parent), filepath.Base(path))
 }

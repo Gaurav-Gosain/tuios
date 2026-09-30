@@ -348,3 +348,65 @@ func TestLayoutChecksum(t *testing.T) {
 		t.Errorf("checksum = %04x, want bb62", got)
 	}
 }
+
+// TestControlModeReattachFollowsTheNewSession attaches a client to one
+// session, then to another from stdin. Its event streams must follow: the
+// output of the new session reaches it, and a scratch terminal in it raises
+// no window notification.
+func TestControlModeReattachFollowsTheNewSession(t *testing.T) {
+	h := newHarness(t)
+	m := newMultiFake(t, "work", "api")
+	h.shim.Caller = m
+	h.shim.AllSessions = true
+	h.shim.Session, h.shim.Window, h.shim.TmuxPane = "", "", ""
+	c := startControl(t, h, true, "-C", "attach-session", "-t", "work")
+	c.block("0")
+	c.until(`^%session-changed \$\d+ work$`)
+	c.stream()
+	if out := c.stream(); out.params["session"] != "work" {
+		t.Fatalf("first output stream is for %v", out.params["session"])
+	}
+	c.send("attach-session -t api")
+	c.block("1")
+	c.until(`^%session-changed \$\d+ api$`)
+	life := c.stream()
+	out := c.stream()
+	if out.params["session"] != "api" {
+		t.Fatalf("after attaching to api the output stream is for %v", out.params["session"])
+	}
+	out.ch <- []byte(`{"type":"output","session":"api","window":"api-main-0001","bytes":3}`)
+	if l := c.until(`^%output `); l != "%output "+PaneID("api-main-0001")+" " {
+		t.Errorf("output: %q", l)
+	}
+	api := m.session("api")
+	api.with(func() {
+		api.windows = append(api.windows, &fakeWindow{id: "api-scratch", ws: 1000, scratch: true, w: 10, h: 10})
+		api.windows = append(api.windows, &fakeWindow{id: "api-side", ws: 2, w: 10, h: 10})
+	})
+	life.ch <- []byte(`{"type":"window-created","session":"api","window":"api-side"}`)
+	l := c.until(`^%(window-add|unlinked-window-add)`)
+	if !strings.HasSuffix(l, "002") || strings.HasPrefix(l, "%unlinked") {
+		t.Errorf("window-add: %q, want the api session's workspace 2 and nothing for the scratch terminal", l)
+	}
+	_ = c.stdin.Close()
+	<-c.done
+}
+
+// TestControlModeReadOnlyStaysReadOnly refuses attach -f !read-only from a
+// read-only client, as tmux does.
+func TestControlModeReadOnlyStaysReadOnly(t *testing.T) {
+	h := newHarness(t)
+	c := startControl(t, h, true, "-C", "attach-session", "-f", "read-only")
+	c.block("0")
+	c.next()
+	c.send("attach-session -f !read-only")
+	if body, end := c.block("1"); end != "%error" || !reflect.DeepEqual(body, []string{"client is read-only"}) {
+		t.Errorf("attach -f !read-only = %q %s", body, end)
+	}
+	c.send("kill-pane -t " + PaneID("leader-0001"))
+	if _, end := c.block("1"); end != "%error" || h.fake.called("close-window") {
+		t.Error("the client became writable")
+	}
+	_ = c.stdin.Close()
+	<-c.done
+}

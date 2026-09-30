@@ -20,6 +20,7 @@ type fakeWindow struct {
 	recent        string
 	cmd           string
 	history       int
+	scratch       bool
 }
 
 // call is one verb call the fake received.
@@ -132,7 +133,7 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 			rows = append(rows, map[string]any{
 				"window_id": w.id, "display_name": w.name, "workspace": w.ws, "cwd": w.cwd,
 				"x": w.x, "y": w.y, "width": w.w, "height": w.h,
-				"foreground_cmd": w.cmd, "history_rows": w.history,
+				"foreground_cmd": w.cmd, "history_rows": w.history, "scratch": w.scratch,
 			})
 		}
 		out = map[string]any{"windows": rows, "focused_window_id": f.focused, "current_workspace": f.current}
@@ -148,6 +149,11 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 				}
 			}
 			rows = append(rows, map[string]any{"workspace": ws, "name": f.wsNames[ws], "window_count": n})
+		}
+		for _, w := range f.windows {
+			if w.scratch {
+				rows = append(rows, map[string]any{"workspace": w.ws, "name": "scratch", "window_count": 1})
+			}
 		}
 		out = map[string]any{"workspaces": rows, "current_workspace": f.current}
 	case "new-window":

@@ -318,7 +318,7 @@ func (s *Shim) Run(args []string) int {
 	if len(g.Ignored) > 0 {
 		detail = append(detail, "global flags ignored: "+strings.Join(g.Ignored, " "))
 	}
-	if g.Name != "" || (g.Socket != "" && s.Dir != "" && g.Socket != SocketPath(s.Dir)) {
+	if g.Name != "" || (g.Socket != "" && s.Dir != "" && !IsShimSocket(g.Socket, s.Dir)) {
 		return s.fail(full, OutcomeUnsupported, detail, errors.New("the tuios tmux shim answers only for its own server; -L and -S name another one"))
 	}
 	if g.Version {

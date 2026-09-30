@@ -1,6 +1,8 @@
 package tmuxcompat
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -137,5 +139,34 @@ func TestExpand(t *testing.T) {
 		if got != c.want || !reflect.DeepEqual(missing, c.missing) {
 			t.Errorf("Expand(%q) = %q %v, want %q %v", c.in, got, missing, c.want, c.missing)
 		}
+	}
+}
+
+// TestShimSocketPathsCompareResolved: -S given relative to the working
+// directory, or through a link to the shim's directory (macOS /var and
+// /private/var), still names the shim's socket.
+func TestShimSocketPathsCompareResolved(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(link, "tmux")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	viaReal := filepath.Join(real, "tmux", "socket")
+	if !IsShimSocket(viaReal, dir) || !ForShim(Global{Socket: viaReal}, "", dir) {
+		t.Errorf("%s is not taken as the socket of %s", viaReal, dir)
+	}
+	if !InShimDir(filepath.Join(real, "tmux", "p", "1.sock"), dir) {
+		t.Error("a path inside the linked directory is not taken as the shim's")
+	}
+	t.Chdir(filepath.Join(real, "tmux"))
+	if !IsShimSocket("socket", dir) || !IsShimSocket("./p/../socket", dir) {
+		t.Error("a relative -S is not taken as the shim's socket")
+	}
+	if IsShimSocket("other", dir) || IsShimSocket(filepath.Join(real, "socket"), dir) {
+		t.Error("another path is taken as the shim's socket")
 	}
 }
