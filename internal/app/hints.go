@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -765,6 +766,7 @@ func snapshotHints(window *terminal.Window) *hintsPane {
 			}
 			if c := paneCellAt(window, x, y); c != nil {
 				row[x] = *c
+				vt.BlankSixelCell(&row[x])
 				if row[x].Content == "" && row[x].Width == 0 {
 					continue
 				}

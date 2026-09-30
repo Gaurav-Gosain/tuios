@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	uv "github.com/charmbracelet/ultraviolet"
+
 	"github.com/charmbracelet/x/ansi/kitty"
 )
 
@@ -134,3 +136,40 @@ func StripSixelMarkers(s string) string {
 // drawn at, and returns the id to mark the image's cells with, or 0 when the
 // image will not be shown.
 type SixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY int) uint32
+
+// CellText is a cell's content as text: a space for a sixel image cell, the
+// content otherwise. Text that leaves the grid (a capture, a copy, a search,
+// a saved history) reads cells through it, so no marker escapes as text.
+func CellText(content string) string {
+	if IsSixelMarker(content) {
+		return " "
+	}
+	return content
+}
+
+// BlankSixelCell turns an image cell into a blank that keeps its background.
+// It reports whether the cell was one.
+func BlankSixelCell(c *uv.Cell) bool {
+	if c == nil || !IsSixelMarker(c.Content) {
+		return false
+	}
+	bg := c.Style.Bg
+	*c = uv.Cell{Content: " ", Width: 1}
+	c.Style.Bg = bg
+	return true
+}
+
+// BlankSixelLine is line with its image cells blanked, copied only when it
+// holds one.
+func BlankSixelLine(line uv.Line) uv.Line {
+	for i := range line {
+		if IsSixelMarker(line[i].Content) {
+			out := append(uv.Line(nil), line...)
+			for j := i; j < len(out); j++ {
+				BlankSixelCell(&out[j])
+			}
+			return out
+		}
+	}
+	return line
+}

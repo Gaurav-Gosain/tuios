@@ -503,6 +503,8 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		for x := range w {
 			if c := at(x, y); c != nil {
 				row[x] = *c
+				// A saved history holds no image: its cells come back blank.
+				vt.BlankSixelCell(&row[x])
 			} else {
 				row[x] = uv.Cell{Content: " ", Width: 1}
 			}
@@ -519,6 +521,7 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 			continue
 		}
 		wrapped, _ := t.ScrollbackSoftWrapped(i)
+		line = vt.BlankSixelLine(line)
 		r.history = append(r.history, line[:usedCells(line)])
 		r.historyWraps = append(r.historyWraps, wrapped)
 	}

@@ -524,7 +524,7 @@ func (t *GhosttyTerminal) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.syncLocked()
-	return uv.TrimSpace(t.bufs[t.active].String())
+	return uv.TrimSpace(StripSixelMarkers(t.bufs[t.active].String()))
 }
 
 // TailText mirrors the pure emulator: the last n non-empty screen rows,
@@ -543,7 +543,7 @@ func (t *GhosttyTerminal) TailText(n int) []string {
 		b.Reset()
 		for x := 0; x < t.width; x++ {
 			if c := buf.CellAt(x, y); c != nil {
-				b.WriteString(c.Content)
+				b.WriteString(CellText(c.Content))
 			}
 		}
 		if line := strings.TrimRight(b.String(), " \t"); line != "" {

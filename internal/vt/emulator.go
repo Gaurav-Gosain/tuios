@@ -306,7 +306,7 @@ func (e *Emulator) SetLogger(l Logger) {
 // String returns a string representation of the underlying screen buffer.
 func (e *Emulator) String() string {
 	s := e.scr.buf.String()
-	return uv.TrimSpace(s)
+	return uv.TrimSpace(StripSixelMarkers(s))
 }
 
 // clusterBreak is written between two cells whose contents would otherwise
