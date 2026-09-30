@@ -828,9 +828,14 @@ the cell's row and column in the image, and the image id. From then on the
 picture is wherever its cells are. It scrolls into the scrollback with them,
 text written over a cell takes that cell's part of the picture away, and an
 erase clears it. Both emulator backends get this without special cases,
-because a marker is only a character. The passthrough decodes the picture on
-the pane's PTY reader and keeps it under the id (`vt.DecodeSixel`, two bytes a
-pixel, at most 64 MiB a pane and 4096 images, oldest dropped first).
+because a marker is only a character. After an image the cursor is on the row
+under it, as xterm leaves it. The passthrough decodes the picture on the pane's
+PTY reader and keeps it under the id (`vt.DecodeSixel`, two bytes a pixel, up
+to 1024 colour registers). An image is freed as soon as no cell names it
+(`internal/app/sixel_sweep.go`), which is what an animation leaves behind every
+frame; a pane holds at most 16 MiB and 4096 images in all, oldest dropped
+first. Cells that name an image the client does not hold, such as a pane
+restored from the daemon, draw as blanks.
 
 **Showing.** The compositor finds the markers on each finished frame
 (`internal/app/sixel_frame.go`), after every overlay and effect is drawn. What
@@ -841,8 +846,11 @@ the frame's text in the same write:
 
 - On a sixel host, as a sixel of that part of the image (`vt.EncodeSixel`),
   re-encoded from the image's own palette, so no colour changes. A whole image
-  at its own cell size is sent as the guest wrote it. Nothing is sent to the
-  host's last row, where a sixel would scroll the screen.
+  at its own cell size is sent as the guest wrote it, but only when those
+  bytes draw exactly the decoded pixels (`vt.SixelImage.Exact`): not when they
+  paint past the declared size, use a register past 255, or leave pixels
+  unpainted under an opaque background. Nothing is sent to the host's last
+  row, where a sixel would scroll the screen.
 - On a host with kitty graphics and no sixel, as a kitty image with one
   placement per rectangle, cropped with a source rectangle.
 - On a host with neither, the cells show a dim box with "image" in it.
@@ -856,7 +864,8 @@ a whole line when both of its ends changed. So the passthrough reads the bytes
 the renderer writes (`internal/app/sixel_damage.go`) and sends again every
 rectangle whose cells they touched.
 
-Copying text from a pane gives blanks for image cells. A crop larger than about
+Text that leaves a pane gives blanks for image cells: a copy, a search,
+capture-pane, agent screen reads, hints and the saved history. A crop larger than about
 128,000 pixels is encoded on a goroutine of its own, and a kitty transmission is
 compressed on one, so neither holds up the UI.
 
