@@ -191,31 +191,12 @@ func (s *Shim) newSession(name string, args []string) (string, []string, error) 
 		return OutcomeError, nil, errors.New("new-session: add -d. The tuios tmux shim does not attach a terminal. Run tuios attach to see the session")
 	}
 	var detail []string
-	for _, f := range []byte("DEX") {
-		if p.Has(f) {
-			detail = append(detail, fmt.Sprintf("new-session -%c ignored", f))
-		}
-	}
-	if _, ok := p.Value('f'); ok {
-		detail = append(detail, "new-session -f ignored")
+	if _, ok := p.Value('x'); ok {
+		detail = append(detail, "new-session -x and -y ignored: a tuios client sets the size")
+	} else if _, ok := p.Value('y'); ok {
+		detail = append(detail, "new-session -x and -y ignored: a tuios client sets the size")
 	}
 	sessName, _ := p.Value('s')
-	if p.Has('A') && sessName != "" {
-		v, err := s.loadView()
-		if err != nil {
-			return OutcomeError, detail, err
-		}
-		if sv, ok := v.sessionOf(sessName); ok {
-			s.created = sv.name
-			if a := sv.active(sv.current); a != nil && p.Has('P') {
-				format := cmpOr(valueOr(p, 'F'), "#{session_name}:")
-				out, d := expand(format, s.paneVars(a))
-				s.println(out)
-				detail = append(detail, d...)
-			}
-			return outcomeFor(detail), detail, nil
-		}
-	}
 	params := map[string]any{}
 	if sessName != "" {
 		params["name"] = sessName
@@ -232,17 +213,6 @@ func (s *Shim) newSession(name string, args []string) (string, []string, error) 
 	}
 	if cwd != "" {
 		params["cwd"] = cwd
-	}
-	for _, f := range []byte("xy") {
-		val, ok := p.Value(f)
-		if !ok || val == "-" {
-			continue
-		}
-		n, err := strconv.Atoi(val)
-		if err != nil || n < 1 {
-			return OutcomeError, detail, fmt.Errorf("new-session: -%c %q is not a size", f, val)
-		}
-		params[map[byte]string{'x': "width", 'y': "height"}[f]] = n
 	}
 	if argv := s.paneCommand(p.Args, p.Values('e')); len(argv) > 0 {
 		params["command"] = argv

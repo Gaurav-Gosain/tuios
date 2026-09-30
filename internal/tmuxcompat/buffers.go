@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -55,14 +54,11 @@ func bufferFile(dir, name string) string {
 	return filepath.Join(dir, hex.EncodeToString([]byte(name)))
 }
 
-// buffers lists the buffers, newest first: the top of tmux's buffer stack
-// first.
+// buffers lists the buffers, in no order. See topBuffer for the newest.
 func (s *Shim) buffers() ([]buffer, error) {
 	dir := s.bufferDir()
 	if dir == "" {
-		out := slices.Clone(s.memBuffers)
-		sortBuffers(out)
-		return out, nil
+		return s.memBuffers, nil
 	}
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -83,17 +79,19 @@ func (s *Shim) buffers() ([]buffer, error) {
 		}
 		out = append(out, buffer{name: string(raw), at: info.ModTime()})
 	}
-	sortBuffers(out)
 	return out, nil
 }
 
-func sortBuffers(b []buffer) {
-	slices.SortFunc(b, func(x, y buffer) int {
-		if c := y.at.Compare(x.at); c != 0 {
-			return c
+// withoutBuffer is list without the buffer called name. It is a plain loop,
+// not slices.DeleteFunc, since each generic instance costs binary size.
+func withoutBuffer(list []buffer, name string) []buffer {
+	out := list[:0]
+	for _, b := range list {
+		if b.name != name {
+			out = append(out, b)
 		}
-		return strings.Compare(y.name, x.name)
-	})
+	}
+	return out
 }
 
 // readBuffer returns the data of buffer name.
@@ -124,8 +122,7 @@ func (s *Shim) writeBuffer(name, data string) error {
 	}
 	dir := s.bufferDir()
 	if dir == "" {
-		s.memBuffers = slices.DeleteFunc(s.memBuffers, func(b buffer) bool { return b.name == name })
-		s.memBuffers = append(s.memBuffers, buffer{name: name, data: data, at: time.Now()})
+		s.memBuffers = append(withoutBuffer(s.memBuffers, name), buffer{name: name, data: data, at: time.Now()})
 		return nil
 	}
 	if err := EnsureDir(s.Dir); err != nil {
@@ -155,7 +152,7 @@ func (s *Shim) writeBuffer(name, data string) error {
 func (s *Shim) removeBuffer(name string) error {
 	dir := s.bufferDir()
 	if dir == "" {
-		s.memBuffers = slices.DeleteFunc(s.memBuffers, func(b buffer) bool { return b.name == name })
+		s.memBuffers = withoutBuffer(s.memBuffers, name)
 		return nil
 	}
 	err := os.Remove(bufferFile(dir, name))
@@ -183,13 +180,20 @@ func (s *Shim) newBufferName() (string, error) {
 	return fmt.Sprintf("buffer%04d", next), nil
 }
 
-// topBuffer is the name of the newest buffer, "" when there is none.
+// topBuffer is the name of the newest buffer, "" when there is none: the top
+// of tmux's buffer stack. Of two written at one time, the later name wins.
 func (s *Shim) topBuffer() (string, error) {
 	list, err := s.buffers()
-	if err != nil || len(list) == 0 {
+	if err != nil {
 		return "", err
 	}
-	return list[0].name, nil
+	var top buffer
+	for _, b := range list {
+		if top.name == "" || b.at.After(top.at) || b.at.Equal(top.at) && b.name > top.name {
+			top = b
+		}
+	}
+	return top.name, nil
 }
 
 // loadBuffer reads a file, or stdin for "-", into a buffer.
@@ -239,8 +243,7 @@ func (s *Shim) loadBuffer(name string, args []string) (string, []string, error) 
 	return outcomeFor(detail), detail, nil
 }
 
-// setBuffer sets a buffer's data, appends to it with -a, or renames it
-// with -n.
+// setBuffer sets a buffer's data, or appends to it with -a.
 func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -250,45 +253,19 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 	if p.Has('w') {
 		detail = append(detail, "set-buffer -w (copy to the clipboard) ignored")
 	}
-	buf, named := p.Value('b')
-	if newName, ok := p.Value('n'); ok {
-		if !named {
-			if buf, err = s.topBuffer(); err != nil {
-				return OutcomeError, detail, err
-			}
-		}
-		data, found, err := s.readBuffer(buf)
-		if err != nil {
-			return OutcomeError, detail, err
-		}
-		if !found {
-			return OutcomeError, detail, fmt.Errorf("no buffer %s", buf)
-		}
-		if err := s.writeBuffer(newName, data); err != nil {
-			return OutcomeError, detail, err
-		}
-		if err := s.removeBuffer(buf); err != nil {
-			return OutcomeError, detail, err
-		}
-		if len(p.Args) == 0 {
-			return outcomeFor(detail), detail, nil
-		}
-		buf, named = newName, true
-	}
 	if len(p.Args) != 1 {
 		return OutcomeError, detail, errors.New("set-buffer: give the data as one argument")
 	}
 	data := p.Args[0]
-	if !named {
-		if p.Has('a') {
-			buf, err = s.topBuffer()
-		}
-		if buf == "" && err == nil {
-			buf, err = s.newBufferName()
-		}
-		if err != nil {
-			return OutcomeError, detail, err
-		}
+	buf, named := p.Value('b')
+	if !named && p.Has('a') {
+		buf, err = s.topBuffer()
+	}
+	if buf == "" && err == nil {
+		buf, err = s.newBufferName()
+	}
+	if err != nil {
+		return OutcomeError, detail, err
 	}
 	if p.Has('a') {
 		old, _, err := s.readBuffer(buf)
