@@ -320,7 +320,7 @@ govulncheck ./...          # Known vulnerabilities in what the build reaches
 
 ## Star History
 
-[![Star History Chart](./assets/star-history.svg)](https://github.com/Gaurav-Gosain/tuios/stargazers)
+[![Star History Chart](https://raw.githubusercontent.com/Gaurav-Gosain/tuios/star-history/star-history.svg)](https://github.com/Gaurav-Gosain/tuios/stargazers)
 
 <p style="display:flex;flex-wrap:wrap;">
 <img alt="GitHub Language Count" src="https://img.shields.io/github/languages/count/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
