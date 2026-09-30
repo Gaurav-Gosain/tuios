@@ -188,6 +188,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	if mode == ansi.ModeInsertReplace {
 		e.cachedInsertMode.Store(setting.IsSet())
 	}
+	if mode == ansi.ModeLineFeedNewLine {
+		e.cachedLineFeedNewLine.Store(setting.IsSet())
+	}
 }
 
 // autoWrapMode reports DECAWM (?7) without touching the modes map.

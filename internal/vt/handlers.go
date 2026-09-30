@@ -36,7 +36,10 @@ type CcHandler func() bool
 
 // handlers contains the terminal's escape sequence handlers.
 type handlers struct {
-	ccHandlers  map[byte][]CcHandler
+	// ccHandlers is indexed by the control byte. It is an array rather than
+	// a map because a flood of short lines looks one up for every CR and LF,
+	// and hashing the byte key cost about 13% of the process under `yes`.
+	ccHandlers  [256][]CcHandler
 	dcsHandlers map[int][]DcsHandler
 	csiHandlers map[int][]CsiHandler
 	oscHandlers map[int][]OscHandler
@@ -91,8 +94,9 @@ func (h *handlers) registerCcHandler(r byte, handler CcHandler) {
 func (h *handlers) handleCc(r byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
-	for i := len(h.ccHandlers[r]) - 1; i >= 0; i-- {
-		if h.ccHandlers[r][i]() {
+	hs := h.ccHandlers[r]
+	for i := len(hs) - 1; i >= 0; i-- {
+		if hs[i]() {
 			return true
 		}
 	}
