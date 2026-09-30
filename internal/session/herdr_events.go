@@ -237,7 +237,7 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	}
 	wsID := herdrWorkspaceID(sess.ID)
 	if ev.Type == EventWorkspaceSwitched {
-		if ev.Workspace >= herdrScratchWorkspaceBase {
+		if IsScratchWorkspace(ev.Workspace) {
 			return nil
 		}
 		return []herdrEvent{global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, max(ev.Workspace, 1)), WorkspaceID: wsID})}
