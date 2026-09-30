@@ -1347,6 +1347,11 @@ func (d *Daemon) herdrWorktreeCreate(cs *connState, in *herdrIn) (*herdrResult, 
 // herdrWorktreeOpen shows a checkout that exists: the session that already
 // shows it, or a new session in it.
 func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
+	// It runs git before any verb does, so the caller is checked first, as
+	// for worktree.list: a refused caller learns nothing of the repository.
+	if _, _, verr := d.admitVerb(cs, "list-worktrees", nil); verr != nil {
+		return nil, herdrFromVerb(verr, "forbidden")
+	}
 	dir, herr := d.herdrRepoDir(cs, in)
 	if herr != nil {
 		return nil, herr

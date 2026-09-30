@@ -351,17 +351,19 @@ func (d *Daemon) herdrSubscribe(cs *connState) (*eventSub, *herdrError) {
 // serveHerdrEvents answers events.subscribe: the ack, then events until the
 // client closes the connection or the daemon stops.
 func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessage) {
-	subs, herr := d.herdrParseSubscriptions(params)
-	if herr != nil {
-		writeHerdr(cs.conn, id, nil, herr.code, herr.msg)
-		return
-	}
+	// The caller is checked before a pane id is looked up, so a refused
+	// caller learns nothing of which panes exist.
 	sub, herr := d.herdrSubscribe(cs)
 	if herr != nil {
 		writeHerdr(cs.conn, id, nil, herr.code, herr.msg)
 		return
 	}
 	defer d.events.unsubscribe(sub)
+	subs, herr := d.herdrParseSubscriptions(params)
+	if herr != nil {
+		writeHerdr(cs.conn, id, nil, herr.code, herr.msg)
+		return
+	}
 	_ = cs.conn.SetDeadline(time.Time{})
 	if !d.herdrWriteLine(cs, herdrLine{ID: id, Result: &herdrResult{Type: "subscription_started"}}) {
 		return

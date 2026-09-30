@@ -1544,7 +1544,7 @@ func init() {
 				{Name: "until", Type: "string", Description: "Agent state(s) to wait for, comma-separated, required by agent-state. With no window, any window in the session reaching one of them matches.", Accepted: AgentStateNames},
 				{Name: "thread", Type: "int", Description: "Narrow agent-message to one thread. Pass any message id in the thread. A thread the ring holds nothing from never matches."},
 				{Name: "command_seq", Type: "int", Description: "For command-finished with a window: match once the pane has finished more commands than this, which is already true when the command finished before the wait. Read it from list-windows or a run timeout. Without it, the next command to finish after the wait starts matches."},
-				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code.", Default: "30000"},
+				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code, at most 86400000 (24 hours). The wait also ends when the caller closes the connection.", Default: "30000"},
 				{Name: "select", Type: "string", Description: selectorSyntax + " For agent-state only: watch the agent panes it matches, in every session, including panes that open during the wait. Takes no session, window or any_session. Put the state to wait for in until, not in the selector."},
 				{Name: "every", Type: "bool", Description: "With select: match only when at least one pane matches and every matched pane is in one of the until states, and answer with all of them in panes. Without it, the first matched pane to reach one matches.", Default: "false"},
 			},
