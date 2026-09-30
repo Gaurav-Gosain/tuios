@@ -208,3 +208,67 @@ func TestScratchSizeTravelsInAPush(t *testing.T) {
 		t.Fatalf("popup size = %s x %s, want its own 60%% x 40%%", f.PopupWidth, f.PopupHeight)
 	}
 }
+
+// A session has one scratch pane per name: the built-in one and a named one
+// live side by side, and a second of either name is refused.
+func TestScratchPanesByName(t *testing.T) {
+	sess := newTestSession(t)
+	add := func(name string) error {
+		_, err := sess.AddDaemonWindowWith(NewWindowOptions{
+			Title: "s", Popup: true, Scratch: true, ScratchName: name, Command: []string{"sleep", "30"},
+		}, nil)
+		return err
+	}
+	if err := add(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := add("lazygit"); err != nil {
+		t.Fatalf("a named scratch pane beside the built-in one: %v", err)
+	}
+	if err := add("scratch"); !errors.Is(err, ErrScratchExists) {
+		t.Fatalf("a second built-in scratch: %v", err)
+	}
+	if err := add("lazygit"); !errors.Is(err, ErrScratchExists) {
+		t.Fatalf("a second lazygit scratch: %v", err)
+	}
+	names := map[string]bool{}
+	for _, w := range sess.GetState().Windows {
+		names[w.ScratchKey()] = w.Scratch
+	}
+	if !names["scratch"] || !names["lazygit"] {
+		t.Fatalf("scratch panes = %v", names)
+	}
+}
+
+// A restore keeps the built-in scratch terminal and drops a named one: the
+// named one ran a command, and its key starts it again.
+func TestRestoreDropsANamedScratch(t *testing.T) {
+	tmpDir := t.TempDir()
+	defer useResurrectionDir(tmpDir)()
+	cwd := t.TempDir()
+	saved := &SessionState{
+		Name: "named-scratch", CurrentWorkspace: 1, Width: 120, Height: 40,
+		Windows: []WindowState{
+			{ID: "pane", Width: 60, Height: 40, Workspace: 1, PTYID: "d1", Cwd: cwd},
+			{ID: "builtin", Width: 80, Height: 30, Workspace: 1, PTYID: "d2", Cwd: cwd, Popup: true, IsFloating: true, Scratch: true},
+			{ID: "lazygit", Width: 80, Height: 30, Workspace: 1, PTYID: "d3", Cwd: cwd, Popup: true, IsFloating: true, Scratch: true, ScratchName: "lazygit"},
+		},
+	}
+	if err := SaveSessionForResurrection(saved); err != nil {
+		t.Fatal(err)
+	}
+	d := NewDaemon(&DaemonConfig{})
+	d.restoreAllSessions()
+	defer d.manager.Shutdown()
+	sess := d.manager.GetSession("named-scratch")
+	if sess == nil {
+		t.Fatal("not restored")
+	}
+	ids := map[string]bool{}
+	for _, w := range sess.GetState().Windows {
+		ids[w.ID] = true
+	}
+	if !ids["builtin"] || ids["lazygit"] {
+		t.Fatalf("restored = %v, want the built-in scratch and not lazygit", ids)
+	}
+}

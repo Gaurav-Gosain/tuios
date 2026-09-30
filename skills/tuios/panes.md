@@ -318,6 +318,12 @@ running. A hidden scratch terminal is minimized. `list-windows` returns it with
 person's scratch pad: do not type into it, and do not count it as a pane you
 placed. `[scratch]` sets its width and height.
 
+A `[[keybindings.command]]` entry of type `scratch` is a scratch pane of its
+own, with `"scratch_name"` in `list-windows` set to the entry's name (the
+built-in one is `"scratch"`). The same rules apply to it. Command keys run only
+when a person presses them. Editing config.toml does not run one, so do not
+add an entry to get a command run: open a pane or a popup yourself.
+
 ### The escape hatch
 
 A keybinding with no verb of its own is reachable by name:

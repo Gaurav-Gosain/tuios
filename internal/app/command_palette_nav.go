@@ -37,6 +37,7 @@ func (m *OS) rebuildPaletteItems() {
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems)+len(m.PaletteSettingItems))
 	items = append(items, static...)
+	items = append(items, m.commandPaletteItems()...)
 	items = append(items, m.PaletteSessionItems...)
 	items = append(items, m.PaletteKeybindItems...)
 	items = append(items, m.PaletteSettingItems...)

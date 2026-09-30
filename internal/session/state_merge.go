@@ -187,6 +187,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		width   string
 		height  string
 		scratch bool
+		name    string
 	}
 	popups := make(map[string]popup, len(canonical.Windows))
 	// The machine a window's process runs on is stamped once, when the daemon
@@ -221,7 +222,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			cwds[w.ID] = cwd
 		}
 		if w.Popup {
-			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.Scratch}
+			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.Scratch, w.ScratchName}
 		}
 		if w.Host != "" {
 			hosts[w.ID] = w.Host
@@ -271,6 +272,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// the mark on another pane nor clear it.
 		p, ok := popups[w.ID]
 		w.Scratch = ok && p.scratch
+		w.ScratchName = ""
+		if w.Scratch {
+			w.ScratchName = p.name
+		}
 		if ok {
 			w.Popup = true
 			w.IsFloating = true

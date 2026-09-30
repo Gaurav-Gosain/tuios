@@ -73,6 +73,8 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
+	validateCommands(cfg, result)
+
 	// Validate leader key
 	if cfg.Keybindings.LeaderKey != "" {
 		valid, errMsg := normalizer.ValidateKey(cfg.Keybindings.LeaderKey)

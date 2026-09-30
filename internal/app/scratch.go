@@ -34,8 +34,56 @@ import (
 // is looked up here before a key is passed to the pane, so the shell never
 // sees the toggle, and pressing it from inside the popup hides the popup.
 
-// scratchName is the name the scratch terminal carries on its border.
-const scratchName = "scratch"
+// scratchName is the name the built-in scratch terminal carries on its border
+// and in session state.
+const scratchName = config.DefaultScratchName
+
+// scratchSpec is one scratch terminal: the built-in one, or a
+// [[keybindings.command]] entry of type scratch. Each has its own pane, found
+// by Name.
+type scratchSpec struct {
+	// Name keys the pane in session state (WindowState.ScratchName).
+	Name string
+	// Title is what the popup border shows.
+	Title string
+	// Command is the argv the pane runs. Empty runs the user's shell.
+	Command []string
+	// Width and Height are the popup's size, as tuios popup takes them.
+	Width, Height string
+}
+
+// builtinScratch is the scratch terminal toggle_scratch shows: the user's
+// shell, sized by [scratch].
+func (m *OS) builtinScratch() scratchSpec {
+	cfg := m.scratchConfig()
+	return scratchSpec{Name: scratchName, Title: scratchName, Width: cfg.WidthSpec(), Height: cfg.HeightSpec()}
+}
+
+// scratchSpecFor is the spec behind a scratch pane's name, for a show that
+// did not come from its key (a focus jump). ok is false for a name the config
+// no longer has.
+func (m *OS) scratchSpecFor(name string) (scratchSpec, bool) {
+	if name == "" || name == scratchName {
+		return m.builtinScratch(), true
+	}
+	if m.UserConfig == nil {
+		return scratchSpec{}, false
+	}
+	c, ok := m.UserConfig.Keybindings.CommandFor(config.CommandActionPrefix + name)
+	if !ok || c.ResolvedType() != config.CommandTypeScratch {
+		return scratchSpec{}, false
+	}
+	return m.commandScratchSpec(c, nil), true
+}
+
+// scratchNameOf is the name a scratch pane is kept under. A pane from before
+// scratch names is the built-in one.
+func scratchNameOf(w *terminal.Window) string {
+	if w.ScratchName == "" {
+		return scratchName
+	}
+	return w.ScratchName
+}
 
 // scratchPendingMax is the backstop on a create that is on its way. A create
 // is on its way from the press until the daemon refuses it or the pane
@@ -67,10 +115,15 @@ func isScratch(w *terminal.Window) bool {
 	return w != nil && w.IsPopup && w.IsScratch
 }
 
-// scratchIndex is the index of the scratch terminal, or -1.
+// scratchIndex is the index of the built-in scratch terminal, or -1.
 func (m *OS) scratchIndex() int {
+	return m.scratchIndexNamed(scratchName)
+}
+
+// scratchIndexNamed is the index of the scratch pane kept under name, or -1.
+func (m *OS) scratchIndexNamed(name string) int {
 	for i, w := range m.Windows {
-		if isScratch(w) {
+		if isScratch(w) && scratchNameOf(w) == name {
 			return i
 		}
 	}
@@ -103,15 +156,15 @@ type scratchPlan struct {
 // A scratch terminal on the screen means hide. One that is hidden, or left
 // on another workspace, means show here. None means create, unless a create
 // is already on its way.
-func (m *OS) planScratch() scratchPlan {
-	if i := m.scratchIndex(); i >= 0 {
+func (m *OS) planScratch(name string) scratchPlan {
+	if i := m.scratchIndexNamed(name); i >= 0 {
 		w := m.Windows[i]
 		if !w.Minimized && w.Workspace == m.CurrentWorkspace {
 			return scratchPlan{action: scratchHide, index: i}
 		}
 		return scratchPlan{action: scratchShow, index: i}
 	}
-	if m.scratchPending && time.Since(m.scratchPendingAt) < scratchPendingMax {
+	if m.scratchPending == name && time.Since(m.scratchPendingAt) < scratchPendingMax {
 		return scratchPlan{action: scratchNothing, index: -1}
 	}
 	if m.IsDaemonSession && m.DaemonClient != nil && m.AttachedHost != "" {
@@ -126,7 +179,13 @@ func (m *OS) planScratch() scratchPlan {
 // ToggleScratch shows the scratch terminal on the current workspace, or hides
 // it when it is already there. The first press creates it.
 func (m *OS) ToggleScratch() tea.Cmd {
-	plan := m.planScratch()
+	return m.toggleScratch(m.builtinScratch())
+}
+
+// toggleScratch is ToggleScratch for any scratch: the built-in one or a
+// command entry's.
+func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
+	plan := m.planScratch(spec.Name)
 	switch plan.action {
 	case scratchRefuse:
 		m.ShowNotification(plan.refuse, "warning", m.Settings.NotificationDuration)
@@ -137,7 +196,7 @@ func (m *OS) ToggleScratch() tea.Cmd {
 		m.showScratch(plan.index)
 	case scratchCreate:
 		m.rememberScratchReturn()
-		return m.createScratch()
+		return m.createScratch(spec)
 	}
 	return nil
 }
@@ -158,11 +217,17 @@ func (m *OS) showScratch(i int) {
 	w := m.Windows[i]
 	w.Workspace = m.CurrentWorkspace
 	w.Minimized = false
-	// [scratch] is read on each show, so a size set since the last show
+	// The config is read on each show, so a size set since the last show
 	// applies now.
-	if m.UserConfig != nil {
-		cfg := m.scratchConfig()
-		w.PopupWidth, w.PopupHeight = cfg.WidthSpec(), cfg.HeightSpec()
+	if spec, ok := m.scratchSpecFor(scratchNameOf(w)); ok && m.UserConfig != nil {
+		w.PopupWidth, w.PopupHeight = spec.Width, spec.Height
+	}
+	// One scratch terminal is on the screen at a time.
+	for j, o := range m.Windows {
+		if j != i && isScratch(o) && !o.Minimized {
+			o.Minimized = true
+			o.InvalidateCache()
+		}
 	}
 	m.applyPopupRect(w, false)
 	w.InvalidateCache()
@@ -231,20 +296,22 @@ func (m *OS) scratchDir() string {
 
 // createScratch makes the scratch terminal: through the daemon in a daemon
 // session, here otherwise.
-func (m *OS) createScratch() tea.Cmd {
-	cfg := m.scratchConfig()
+func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 	dir := m.scratchDir()
 	if !m.IsDaemonSession || m.DaemonClient == nil {
-		m.createLocalScratch(dir, cfg)
+		m.createLocalScratch(dir, spec)
 		return nil
 	}
-	m.scratchPending = true
+	m.scratchPending = spec.Name
 	m.scratchPendingAt = time.Now()
 	req := scratchRequest{
 		Session:   m.SessionName,
+		Name:      spec.Name,
+		Title:     spec.Title,
+		Command:   spec.Command,
 		Dir:       dir,
-		Width:     cfg.WidthSpec(),
-		Height:    cfg.HeightSpec(),
+		Width:     spec.Width,
+		Height:    spec.Height,
 		Workspace: m.CurrentWorkspace,
 	}
 	return func() tea.Msg {
@@ -255,25 +322,37 @@ func (m *OS) createScratch() tea.Cmd {
 // createLocalScratch makes the scratch terminal in a session without a
 // daemon. The shell starts at the popup's size, so its first prompt is drawn
 // for the box it is in.
-func (m *OS) createLocalScratch(dir string, cfg config.ScratchConfig) {
-	probe := &terminal.Window{PopupWidth: cfg.WidthSpec(), PopupHeight: cfg.HeightSpec()}
+func (m *OS) createLocalScratch(dir string, spec scratchSpec) {
+	w := m.newLocalPopup(dir, spec.Title, spec.Width, spec.Height, spec.Command)
+	if w == nil {
+		return
+	}
+	w.IsScratch = true
+	w.ScratchName = spec.Name
+	m.showScratch(len(m.Windows) - 1)
+}
+
+// newLocalPopup makes a popup pane in a session without a daemon and appends
+// it. The command starts at the popup's size, so its first frame is drawn for
+// the box it is in. An empty command runs the user's shell.
+func (m *OS) newLocalPopup(dir, title, widthSpec, heightSpec string, command []string) *terminal.Window {
+	probe := &terminal.Window{PopupWidth: widthSpec, PopupHeight: heightSpec}
 	x, y, width, height := m.popupRect(probe)
 
 	id := createID()
-	w, err := terminal.NewWindowIn(dir, id, scratchName, x, y, width, height, len(m.Windows),
-		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines)
+	w, err := terminal.NewWindowIn(dir, id, title, x, y, width, height, len(m.Windows),
+		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
 	if err != nil {
-		m.LogError("Failed to create the scratch terminal: %v", err)
-		m.ShowNotification("The scratch terminal did not open: "+err.Error(), "error", m.Settings.NotificationDuration)
-		return
+		m.LogError("Failed to create the popup %s: %v", title, err)
+		m.ShowNotification("The popup did not open: "+err.Error(), "error", m.Settings.NotificationDuration)
+		return nil
 	}
 	if caps := m.hostCaps(); caps.CellWidth > 0 && caps.CellHeight > 0 {
 		w.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}
 	w.Workspace = m.CurrentWorkspace
-	w.CustomName = scratchName
+	w.CustomName = title
 	w.IsPopup = true
-	w.IsScratch = true
 	w.IsFloating = true
 	w.PopupWidth = probe.PopupWidth
 	w.PopupHeight = probe.PopupHeight
@@ -281,13 +360,15 @@ func (m *OS) createLocalScratch(dir string, cfg config.ScratchConfig) {
 	m.installPassthroughs(w)
 	m.setupCwdWatch(w)
 	m.Windows = append(m.Windows, w)
-	m.showScratch(len(m.Windows) - 1)
+	return w
 }
 
 // scratchRequest is what the daemon call needs, copied off the model so the
 // call can run off the update goroutine.
 type scratchRequest struct {
 	Session       string
+	Name, Title   string
+	Command       []string
 	Dir           string
 	Width, Height string
 	Workspace     int
@@ -302,12 +383,16 @@ func openScratchPopup(req scratchRequest) error {
 	}
 	defer func() { _ = c.Close() }()
 	params := map[string]any{
-		"session":   req.Session,
-		"name":      scratchName,
-		"width":     req.Width,
-		"height":    req.Height,
-		"workspace": req.Workspace,
-		"scratch":   true,
+		"session":      req.Session,
+		"name":         req.Title,
+		"width":        req.Width,
+		"height":       req.Height,
+		"workspace":    req.Workspace,
+		"scratch":      true,
+		"scratch_name": req.Name,
+	}
+	if len(req.Command) > 0 {
+		params["command"] = req.Command
 	}
 	if req.Dir != "" {
 		params["cwd"] = req.Dir
@@ -324,28 +409,28 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 	if msg.Err == nil {
 		return
 	}
-	m.scratchPending = false
+	m.scratchPending = ""
 	m.ShowNotification("The scratch terminal did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)
 }
 
 // maybeFocusScratch ends the create on its way once its pane arrives, and
 // shows it the way a press does, so the user can type into it at once.
 func (m *OS) maybeFocusScratch() {
-	if !m.scratchPending {
+	if m.scratchPending == "" {
 		return
 	}
 	if time.Since(m.scratchPendingAt) >= scratchPendingMax {
-		m.scratchPending = false
+		m.scratchPending = ""
 		return
 	}
-	i := m.scratchIndex()
+	i := m.scratchIndexNamed(m.scratchPending)
 	if i < 0 {
 		return
 	}
-	m.scratchPending = false
-	if w := m.Windows[i]; w.Minimized || w.Workspace != m.CurrentWorkspace || m.FocusedWindow != i || m.Mode != TerminalMode {
-		m.showScratch(i)
-	}
+	m.scratchPending = ""
+	// Always, even when the daemon's push already focused it: the show is
+	// also what hides another scratch pane that is on the screen.
+	m.showScratch(i)
 }
 
 // windowCountForNotice is the window count the created and closed notices
@@ -364,14 +449,12 @@ func (m *OS) windowCountForNotice() int {
 // ShownScratch is the index of the scratch terminal while it is on the screen
 // (shown, on the current workspace), or -1.
 func (m *OS) ShownScratch() int {
-	i := m.scratchIndex()
-	if i < 0 {
-		return -1
+	for i, w := range m.Windows {
+		if isScratch(w) && !w.Minimized && w.Workspace == m.CurrentWorkspace {
+			return i
+		}
 	}
-	if w := m.Windows[i]; w.Minimized || w.Workspace != m.CurrentWorkspace {
-		return -1
-	}
-	return i
+	return -1
 }
 
 // parkScratch hides a shown scratch terminal without moving the focus or the
@@ -379,8 +462,14 @@ func (m *OS) ShownScratch() int {
 // FocusWindow). The press of the scratch key uses hideScratch, which also
 // gives the focus back.
 func (m *OS) parkScratch() {
-	i := m.scratchIndex()
-	if i < 0 || m.Windows[i].Minimized {
+	i := -1
+	for j, w := range m.Windows {
+		if isScratch(w) && !w.Minimized {
+			i = j
+			break
+		}
+	}
+	if i < 0 {
 		return
 	}
 	m.Windows[i].Minimized = true

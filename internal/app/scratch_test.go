@@ -57,7 +57,7 @@ func TestScratchPlan(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := scratchOS(t, true)
 			tc.setup(m)
-			if got := m.planScratch(); got.action != tc.want {
+			if got := m.planScratch(scratchName); got.action != tc.want {
 				t.Fatalf("plan = %+v, want action %d", got, tc.want)
 			}
 		})
@@ -212,7 +212,7 @@ func TestScratchCreateAsksOnceAndWaits(t *testing.T) {
 		t.Fatal("a second press asked again while the first was on its way")
 	}
 	m.handleScratchOpened(ScratchOpenedMsg{})
-	if m.ToggleScratch() != nil || !m.scratchPending {
+	if m.ToggleScratch() != nil || m.scratchPending == "" {
 		t.Fatal("a press after the daemon's answer, before the pane arrived, asked again")
 	}
 	m.scratchPendingAt = time.Now().Add(-scratchPendingMax)
@@ -226,15 +226,15 @@ func TestScratchArrivalTakesTheKeyboard(t *testing.T) {
 	m := scratchOS(t, false)
 	m.Mode = WindowManagementMode
 	m.rememberScratchReturn()
-	m.scratchPending, m.scratchPendingAt = true, time.Now()
+	m.scratchPending, m.scratchPendingAt = scratchName, time.Now()
 
 	m.maybeFocusScratch()
-	if m.Mode == TerminalMode || !m.scratchPending {
+	if m.Mode == TerminalMode || m.scratchPending == "" {
 		t.Fatal("terminal mode came before the pane")
 	}
 	w := addScratch(m, 1, false)
 	m.maybeFocusScratch()
-	if m.Mode != TerminalMode || m.GetFocusedWindow() != w || m.scratchPending {
+	if m.Mode != TerminalMode || m.GetFocusedWindow() != w || m.scratchPending != "" {
 		t.Fatalf("mode=%v focused=%v pending=%v", m.Mode, m.GetFocusedWindow() == w, m.scratchPending)
 	}
 	m.ToggleScratch()
@@ -245,9 +245,9 @@ func TestScratchArrivalTakesTheKeyboard(t *testing.T) {
 
 func TestScratchCreateFailureIsShown(t *testing.T) {
 	m := scratchOS(t, true)
-	m.scratchPending, m.scratchPendingAt = true, time.Now()
+	m.scratchPending, m.scratchPendingAt = scratchName, time.Now()
 	m.handleScratchOpened(ScratchOpenedMsg{Err: errString("no client")})
-	if m.scratchPending {
+	if m.scratchPending != "" {
 		t.Fatal("a failed create stayed on its way")
 	}
 	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "did not open") {

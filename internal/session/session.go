@@ -218,6 +218,11 @@ type WindowState struct {
 	// It is set at creation by the popup verb and, like Popup, is the
 	// daemon's: a push cannot set or clear it.
 	Scratch bool `json:"scratch,omitempty"`
+	// ScratchName keys a scratch pane: empty or "scratch" for the built-in
+	// scratch terminal, the entry's name for a [[keybindings.command]] entry
+	// of type scratch. A session has at most one scratch pane per name. It is
+	// the daemon's, like Scratch.
+	ScratchName string `json:"scratch_name,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory
@@ -4276,4 +4281,13 @@ func (s *Session) isGlobal() bool {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.state.Global
+}
+
+// ScratchKey is the name a scratch pane is kept under, with the built-in
+// scratch terminal's name filled in.
+func (w WindowState) ScratchKey() string {
+	if w.ScratchName == "" {
+		return "scratch"
+	}
+	return w.ScratchName
 }

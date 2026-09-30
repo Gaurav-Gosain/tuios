@@ -110,7 +110,10 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 	// action. GetKeys gave the bare key of the first section only, which
 	// listed launcher as "a" (its key after the leader) and not alt+space.
 	presses := config.PressesByAction(registry)
-	for _, section := range sections {
+	for _, section := range append(sections, struct {
+		Title   string
+		Actions []string
+	}{Title: "Commands", Actions: commandActions(registry)}) {
 		rows := keybindListRows(presses, section.Actions)
 		if len(rows) == 0 {
 			continue
@@ -155,6 +158,9 @@ func keybindListRows(presses map[string][]string, actions []string) [][]string {
 			continue
 		}
 		desc := config.ActionDescriptions[action]
+		if desc == "" {
+			desc = commandLabel(action)
+		}
 		if desc == "" {
 			desc = action
 		}
@@ -313,4 +319,24 @@ func layoutSaveHint(cfg *config.UserConfig) string {
 	}
 	return fmt.Sprintf("No saved layouts. To save one, open a session and press %s %s %s, or %s.",
 		leader, layoutKeys[0], saveKeys[0], palette)
+}
+
+// commandActions lists the [[keybindings.command]] entries' actions, in the
+// order the config file has them.
+func commandActions(registry *config.KeybindRegistry) []string {
+	var out []string
+	for _, c := range registry.GetConfig().Keybindings.Commands() {
+		out = append(out, c.Action())
+	}
+	return out
+}
+
+// commandLabel is the label of a command entry's action, read from the
+// user's config, or "".
+func commandLabel(action string) string {
+	c, ok := loadKeybindConfig().Keybindings.CommandFor(action)
+	if !ok {
+		return ""
+	}
+	return c.Label()
 }
