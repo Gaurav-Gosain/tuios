@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // The built-in pattern names. They are what a config file writes in
@@ -126,7 +127,7 @@ func New(builtins []string, custom []string) (*Matcher, []error) {
 		}
 		m.custom = append(m.custom, pattern{kind: Custom, re: re, group: group})
 	}
-	for _, p := range builtinPatterns {
+	for _, p := range builtinPatterns() {
 		if slices.Contains(builtins, p.kind) {
 			m.builtin = append(m.builtin, p)
 		}
@@ -321,131 +322,137 @@ const wordChars = `\p{L}\p{M}\p{N}_`
 
 // builtinPatterns is every built-in rule. The order is the tie-break when two
 // claims are the same length, so the more specific kind comes first.
-var builtinPatterns = []pattern{
-	{
-		kind: URL,
-		re:   regexp.MustCompile(`(?:https?|ftps?|file|ssh|git)://[^\s<>"'` + "`" + `|^{}\\]+|\bgit@[\w.-]+:[\w./~-]+`),
-		trim: trimURL,
-		valid: func(line string, s, e int) bool {
-			// A scheme needs something after it.
-			return !strings.HasSuffix(line[s:e], "://")
+//
+// The rules compile on first use. Compiled at package init they cost every
+// tuios process about 0.8 ms and 1,600 allocations, a third of all package
+// init, and only a process that opens hints mode reads them.
+var builtinPatterns = sync.OnceValue(func() []pattern {
+	return []pattern{
+		{
+			kind: URL,
+			re:   regexp.MustCompile(`(?:https?|ftps?|file|ssh|git)://[^\s<>"'` + "`" + `|^{}\\]+|\bgit@[\w.-]+:[\w./~-]+`),
+			trim: trimURL,
+			valid: func(line string, s, e int) bool {
+				// A scheme needs something after it.
+				return !strings.HasSuffix(line[s:e], "://")
+			},
 		},
-	},
-	{
-		// The two sides of a diff header, copied without their a/ and b/.
-		kind:  Diff,
-		re:    regexp.MustCompile(`(?:^|\s)[ab]/(\S+)`),
-		line:  regexp.MustCompile(`^(?:diff --git |--- |\+\+\+ )`),
-		group: 1,
-	},
-	{
-		// A path git status prints after "modified:" and the like.
-		kind:  Diff,
-		re:    regexp.MustCompile(`:\s+(?:\S+ -> )?(\S+)\s*$`),
-		line:  regexp.MustCompile(`^\s*(?:modified|deleted|new file|renamed|copied|typechange|both modified|both added|both deleted|added by us|added by them|deleted by us|deleted by them):\s`),
-		group: 1,
-	},
-	{
-		kind: UUID,
-		re:   regexp.MustCompile(`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`),
-	},
-	{
-		kind: Email,
-		re:   regexp.MustCompile(`[` + wordChars + `.+-]+@[` + wordChars + `-]+(?:\.[` + wordChars + `-]+)+`),
-	},
-	{
-		// A Kubernetes resource as kubectl names it: kind/name, with an
-		// optional API group on the kind (deployment.apps/web).
-		kind: ID,
-		re:   regexp.MustCompile(`\b(?:` + kubeKinds + `)(?:\.[a-z0-9.-]+)?/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\b`),
-	},
-	{
-		// A pod name: the deployment, the replica set's hash and the pod's
-		// own five characters.
-		kind: ID,
-		re:   regexp.MustCompile(`\b[a-z0-9]+(?:-[a-z0-9]+)*-[a-z0-9]{8,10}-[a-z0-9]{5}\b`),
-		valid: func(line string, s, e int) bool {
-			// The two hashes almost always hold a digit. Words joined with
-			// hyphens never do, and that is what keeps prose out.
-			tail := line[s:e]
-			i := strings.LastIndexByte(tail, '-')
-			j := strings.LastIndexByte(tail[:i], '-')
-			return strings.ContainsAny(tail[j+1:], "0123456789")
+		{
+			// The two sides of a diff header, copied without their a/ and b/.
+			kind:  Diff,
+			re:    regexp.MustCompile(`(?:^|\s)[ab]/(\S+)`),
+			line:  regexp.MustCompile(`^(?:diff --git |--- |\+\+\+ )`),
+			group: 1,
 		},
-	},
-	{
-		// An image or layer digest, as docker and podman print it.
-		kind: ID,
-		re:   regexp.MustCompile(`\bsha256:[0-9a-f]{12,64}\b`),
-	},
-	{
-		kind: IP,
-		re:   regexp.MustCompile(`(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%[\w.]+)?`),
-		valid: func(line string, s, e int) bool {
-			text := line[s:e]
-			if !strings.ContainsAny(text, "0123456789abcdefABCDEF") || !isolated(line, s, e, ":.") {
-				return false
-			}
-			addr, err := netip.ParseAddr(text)
-			return err == nil && addr.Is6()
+		{
+			// A path git status prints after "modified:" and the like.
+			kind:  Diff,
+			re:    regexp.MustCompile(`:\s+(?:\S+ -> )?(\S+)\s*$`),
+			line:  regexp.MustCompile(`^\s*(?:modified|deleted|new file|renamed|copied|typechange|both modified|both added|both deleted|added by us|added by them|deleted by us|deleted by them):\s`),
+			group: 1,
 		},
-	},
-	{
-		kind: IP,
-		re:   regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2}|:\d{1,5})?\b`),
-		valid: func(line string, s, e int) bool {
-			host := line[s:e]
-			if i := strings.IndexAny(host, "/:"); i >= 0 {
-				host = host[:i]
-			}
-			addr, err := netip.ParseAddr(host)
-			return err == nil && addr.Is4() && isolated(line, s, e, ".")
+		{
+			kind: UUID,
+			re:   regexp.MustCompile(`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`),
 		},
-	},
-	{
-		kind: Path,
-		re: regexp.MustCompile(`(?:(?:~|\.\.?)?(?:/` + pathSeg + `)+|` + pathSeg + `(?:/` + pathSeg + `)+)/?` +
-			`(?::\d+(?::\d+)?)?`),
-		trim: trimPath,
-		valid: func(line string, s, e int) bool {
-			text := line[s:e]
-			// A lone slash, or slashes and dots only, is not a path worth a label.
-			if strings.Trim(text, "/.~") == "" {
-				return false
-			}
-			// "//" is a URL's, a comment's, or nothing.
-			if strings.HasPrefix(text, "//") {
-				return false
-			}
-			return true
+		{
+			kind: Email,
+			re:   regexp.MustCompile(`[` + wordChars + `.+-]+@[` + wordChars + `-]+(?:\.[` + wordChars + `-]+)+`),
 		},
-	},
-	{
-		kind: SHA,
-		re:   regexp.MustCompile(`\b[0-9a-f]{7,64}\b`),
-		valid: func(line string, s, e int) bool {
-			n := e - s
-			return (n <= 40 || n == 64) && hasDigitAndLetter(line[s:e])
+		{
+			// A Kubernetes resource as kubectl names it: kind/name, with an
+			// optional API group on the kind (deployment.apps/web).
+			kind: ID,
+			re:   regexp.MustCompile(`\b(?:` + kubeKinds + `)(?:\.[a-z0-9.-]+)?/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\b`),
 		},
-	},
-	{
-		kind: Color,
-		re:   regexp.MustCompile(`#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b`),
-		valid: func(line string, s, e int) bool {
-			if s > 0 && wordByte(line[s-1]) {
-				return false
-			}
-			// "#123" is an issue far more often than a colour, so the short
-			// form needs a letter to count.
-			return e-s != 4 || strings.ContainsAny(line[s+1:e], "abcdefABCDEF")
+		{
+			// A pod name: the deployment, the replica set's hash and the pod's
+			// own five characters.
+			kind: ID,
+			re:   regexp.MustCompile(`\b[a-z0-9]+(?:-[a-z0-9]+)*-[a-z0-9]{8,10}-[a-z0-9]{5}\b`),
+			valid: func(line string, s, e int) bool {
+				// The two hashes almost always hold a digit. Words joined with
+				// hyphens never do, and that is what keeps prose out.
+				tail := line[s:e]
+				i := strings.LastIndexByte(tail, '-')
+				j := strings.LastIndexByte(tail[:i], '-')
+				return strings.ContainsAny(tail[j+1:], "0123456789")
+			},
 		},
-	},
-	{
-		kind: Hex,
-		re:   regexp.MustCompile(`\b0x[0-9a-fA-F]+\b`),
-	},
-	{
-		kind: Number,
-		re:   regexp.MustCompile(`\b\d{4,}\b`),
-	},
-}
+		{
+			// An image or layer digest, as docker and podman print it.
+			kind: ID,
+			re:   regexp.MustCompile(`\bsha256:[0-9a-f]{12,64}\b`),
+		},
+		{
+			kind: IP,
+			re:   regexp.MustCompile(`(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%[\w.]+)?`),
+			valid: func(line string, s, e int) bool {
+				text := line[s:e]
+				if !strings.ContainsAny(text, "0123456789abcdefABCDEF") || !isolated(line, s, e, ":.") {
+					return false
+				}
+				addr, err := netip.ParseAddr(text)
+				return err == nil && addr.Is6()
+			},
+		},
+		{
+			kind: IP,
+			re:   regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2}|:\d{1,5})?\b`),
+			valid: func(line string, s, e int) bool {
+				host := line[s:e]
+				if i := strings.IndexAny(host, "/:"); i >= 0 {
+					host = host[:i]
+				}
+				addr, err := netip.ParseAddr(host)
+				return err == nil && addr.Is4() && isolated(line, s, e, ".")
+			},
+		},
+		{
+			kind: Path,
+			re: regexp.MustCompile(`(?:(?:~|\.\.?)?(?:/` + pathSeg + `)+|` + pathSeg + `(?:/` + pathSeg + `)+)/?` +
+				`(?::\d+(?::\d+)?)?`),
+			trim: trimPath,
+			valid: func(line string, s, e int) bool {
+				text := line[s:e]
+				// A lone slash, or slashes and dots only, is not a path worth a label.
+				if strings.Trim(text, "/.~") == "" {
+					return false
+				}
+				// "//" is a URL's, a comment's, or nothing.
+				if strings.HasPrefix(text, "//") {
+					return false
+				}
+				return true
+			},
+		},
+		{
+			kind: SHA,
+			re:   regexp.MustCompile(`\b[0-9a-f]{7,64}\b`),
+			valid: func(line string, s, e int) bool {
+				n := e - s
+				return (n <= 40 || n == 64) && hasDigitAndLetter(line[s:e])
+			},
+		},
+		{
+			kind: Color,
+			re:   regexp.MustCompile(`#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b`),
+			valid: func(line string, s, e int) bool {
+				if s > 0 && wordByte(line[s-1]) {
+					return false
+				}
+				// "#123" is an issue far more often than a colour, so the short
+				// form needs a letter to count.
+				return e-s != 4 || strings.ContainsAny(line[s+1:e], "abcdefABCDEF")
+			},
+		},
+		{
+			kind: Hex,
+			re:   regexp.MustCompile(`\b0x[0-9a-fA-F]+\b`),
+		},
+		{
+			kind: Number,
+			re:   regexp.MustCompile(`\b\d{4,}\b`),
+		},
+	}
+})
