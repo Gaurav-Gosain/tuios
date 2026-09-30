@@ -65,8 +65,11 @@ func TestPerfDoomFireStream(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
+	// The shell must build the marker. A literal marker in the typed
+	// command matches its own echo, and the wait then ends before cat
+	// starts: this test reported 12,350 fps that way.
 	marker := "DOOMFIREDONE"
-	cmd := fmt.Sprintf("cat %s; printf '\\n%s\\n'", path, marker)
+	cmd := fmt.Sprintf("cat %s; printf '\\nDOOMFIRE%%s\\n' DONE", path)
 	begin := time.Now()
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 		t.Fatalf("start stream: %v", err)

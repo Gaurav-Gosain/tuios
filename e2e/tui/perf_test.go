@@ -371,6 +371,16 @@ func TestPerfInputLatency(t *testing.T) {
 			for range panes {
 				newWindow(t, term)
 			}
+			if panes > 1 {
+				// Tiling is on by default, and the spiral gives the newest
+				// window the smallest tile: at eight panes it is 11 columns,
+				// too narrow for the typed line. Tab wraps focus to the first
+				// window, which holds the largest tile. Every pane is still
+				// drawn on each frame.
+				if err := term.SendKeys(tuitest.Tab); err != nil {
+					t.Fatalf("tab: %v", err)
+				}
+			}
 			enterTerminalMode(t, term)
 			report(t, typeLatency(t, term), fmt.Sprintf("input latency/%d panes", panes))
 		})
@@ -570,6 +580,11 @@ func startDaemonWithPprof(t *testing.T, base string) string {
 	for _, key := range xdgKeys {
 		env = append(env, key+"="+xdgDir(base, key))
 	}
+	// The daemon spawns the panes, so it needs the shell startIn gives a
+	// client. Without it the panes run the login shell from the caller's
+	// environment, which on a zsh machine with an isolated home stops at
+	// zsh-newuser-install and never runs a typed command.
+	env = append(env, "SHELL=/bin/sh", "ENV=", "PS1="+perfPromptMark+"$ ")
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 	daemon := exec.Command(tuiosBin, "daemon", "--pprof", addr)
 	daemon.Env = env
@@ -671,7 +686,9 @@ func TestPerfMemoryClientAndDaemon(t *testing.T) {
 	for _, id := range ids {
 		for {
 			out, _ := tuiosCLI(t, base, "capture-pane", "-s", "mem", "-w", id, "--lines", "3")
-			if strings.Contains(out, "FLOOD2DONE") {
+			// A narrow tile wraps the marker across two rows, and
+			// capture-pane prints each row on its own line.
+			if strings.Contains(strings.ReplaceAll(out, "\n", ""), "FLOOD2DONE") {
 				break
 			}
 			if time.Now().After(deadline) {
