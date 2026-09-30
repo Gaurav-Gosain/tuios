@@ -308,3 +308,59 @@ func runEnv(dir string, env []string, args ...string) (string, error) {
 	}
 	return stdout.String(), nil
 }
+
+// Entry is one checkout of a repository, as git worktree list reports it.
+type Entry struct {
+	// Path is the checkout's directory.
+	Path string
+	// Branch is the branch checked out there, empty when the checkout is
+	// detached or bare.
+	Branch   string
+	Bare     bool
+	Detached bool
+	Prunable bool
+	// Linked is true for every checkout but the repository's main one.
+	Linked bool
+}
+
+// List returns every checkout of the repository dir is in, the main one
+// first, as git worktree list --porcelain reports them.
+func List(dir string) ([]Entry, error) {
+	out, err := run(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	return parseWorktreeList(out), nil
+}
+
+// parseWorktreeList reads git worktree list --porcelain: one block per
+// checkout, blocks split by a blank line, the first block the main checkout.
+func parseWorktreeList(out string) []Entry {
+	var entries []Entry
+	var cur *Entry
+	for line := range strings.SplitSeq(out, "\n") {
+		key, value, _ := strings.Cut(strings.TrimRight(line, "\r"), " ")
+		switch key {
+		case "worktree":
+			entries = append(entries, Entry{Path: value, Linked: len(entries) > 0})
+			cur = &entries[len(entries)-1]
+		case "branch":
+			if cur != nil {
+				cur.Branch = strings.TrimPrefix(value, "refs/heads/")
+			}
+		case "bare":
+			if cur != nil {
+				cur.Bare = true
+			}
+		case "detached":
+			if cur != nil {
+				cur.Detached = true
+			}
+		case "prunable":
+			if cur != nil {
+				cur.Prunable = true
+			}
+		}
+	}
+	return entries
+}
