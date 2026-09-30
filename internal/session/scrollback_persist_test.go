@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -485,5 +486,260 @@ func TestHistoryTurnedOffIsDeletedAtStart(t *testing.T) {
 	d2.dropHistoryWhenOff()
 	if _, err := os.Stat(historyRoot()); !os.IsNotExist(err) {
 		t.Errorf("history saved before the setting went off is still on disk: %v", err)
+	}
+}
+
+// The default is the number of rows a client asks for when it attaches, so a
+// restore saves no row a client is never sent, and a save holds a pane for a
+// fifth of what 5000 rows cost on libghostty.
+func TestHistoryDefaultLinesMatchWhatAClientIsSent(t *testing.T) {
+	if got := ResolveHistoryPolicy(nil, 0, 0).Lines; got != DefaultStateScrollback {
+		t.Errorf("default history lines %d, want %d, what an attach sends", got, DefaultStateScrollback)
+	}
+}
+
+// Packing reads nothing from the emulator, so only the read of the rows has
+// to hold the pane's lock: output written after the read does not reach the
+// state packed from it.
+func TestHistoryPackingReadsOnlyTheCapturedRows(t *testing.T) {
+	p := &PTY{ID: "p", terminal: vt.NewWithScrollback(40, 5, 100)}
+	writePane(p, "BEFORE\r\n")
+	rows, _ := p.captureHistory(100)
+	writePane(p, "AFTER\r\n")
+	st := rows.state(len(rows.history))
+	if err := st.Unpack(); err != nil {
+		t.Fatal(err)
+	}
+	var text []string
+	for _, r := range append(st.Scrollback, st.Screen...) {
+		var b strings.Builder
+		for _, c := range r {
+			b.WriteString(c.Content)
+		}
+		text = append(text, strings.TrimSpace(b.String()))
+	}
+	joined := strings.Join(text, "\n")
+	if !strings.Contains(joined, "BEFORE") || strings.Contains(joined, "AFTER") {
+		t.Errorf("packed state is not the captured one:\n%s", joined)
+	}
+}
+
+func savedFile(t *testing.T, lines int) []byte {
+	t.Helper()
+	src := vt.NewWithScrollback(40, 5, 1000)
+	_, _ = src.Write([]byte(manyLines("t", lines)))
+	data, err := encodeHistory(&savedHistory{Version: historyVersion, SavedAt: time.Now(), State: historyStateOf(src, 1000)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// gzip checks its checksum only at the end of the stream, which gob never
+// reads to.
+func TestHistoryTruncatedFileIsCorrupt(t *testing.T) {
+	data := savedFile(t, 50)
+	if _, err := decodeHistory(bytes.NewReader(data)); err != nil {
+		t.Fatalf("the whole file does not decode: %v", err)
+	}
+	if _, err := decodeHistory(bytes.NewReader(data[:len(data)-4])); err == nil {
+		t.Error("a file cut 4 bytes short decoded as valid")
+	}
+	bad := bytes.Clone(data)
+	bad[len(bad)-6] ^= 0xff // the checksum
+	if _, err := decodeHistory(bytes.NewReader(bad)); err == nil {
+		t.Error("a file with a wrong checksum decoded as valid")
+	}
+}
+
+// A restore builds an emulator of the saved size at daemon start.
+func TestHistoryScreenSizeIsBounded(t *testing.T) {
+	for _, size := range [][2]int{{65536, 65536}, {maxHistoryDim + 1, 10}, {2000, 2000}} {
+		st := &TerminalState{Width: size[0], Height: size[1], Styles: []StyleState{{}}}
+		data, err := encodeHistory(&savedHistory{Version: historyVersion, State: st})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := decodeHistory(bytes.NewReader(data)); err == nil {
+			t.Errorf("a %dx%d screen decoded", size[0], size[1])
+		}
+	}
+}
+
+func TestHistoryWriteIgnoresWhatIsAlreadyThere(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("modes and symlinks")
+	}
+	dir := t.TempDir()
+	defer useResurrectionDir(dir)()
+	path := historyPath("s", "win")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A leftover temporary file with a wide mode, and a planted symlink at
+	// the name a fixed temporary file would take.
+	if err := os.WriteFile(path+".tmp", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path + ".tmp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path+".tmp"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writePrivateFile(path, []byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "keep" {
+		t.Errorf("the write went through a planted symlink: target now %q", got)
+	}
+	fi, err := os.Lstat(path)
+	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0o600 {
+		t.Errorf("saved file %v %v, want a regular 0600 file", fi.Mode(), err)
+	}
+	if di, _ := os.Stat(filepath.Dir(path)); di.Mode().Perm() != 0o700 {
+		t.Errorf("session history dir is %v, want 0700", di.Mode().Perm())
+	}
+
+	// And a leftover 0644 file at the old fixed name does not lend its mode.
+	_ = os.Remove(path + ".tmp")
+	if err := os.WriteFile(path+".tmp", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateFile(path, []byte("data2")); err != nil {
+		t.Fatal(err)
+	}
+	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
+		t.Errorf("saved file is %v after a leftover 0644 temp file, want 0600", fi.Mode().Perm())
+	}
+}
+
+// History with no state file can never be restored, and it holds what the
+// panes printed.
+func TestHistoryWithoutStateIsCleanedAtStart(t *testing.T) {
+	defer useResurrectionDir(t.TempDir())()
+	if err := SaveSessionForResurrection(&SessionState{Name: "kept", Windows: []WindowState{{ID: "w"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"kept", "orphan"} {
+		if err := writePrivateFile(historyPath(name, "w"), []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	CleanResurrectionDir()
+	if _, err := os.Stat(historyPath("kept", "w")); err != nil {
+		t.Errorf("history of a saved session went: %v", err)
+	}
+	if _, err := os.Stat(historyDir("orphan")); !os.IsNotExist(err) {
+		t.Errorf("history of a session with no state is still there: %v", err)
+	}
+}
+
+// A killed session's history is deleted with its state, so the stop does not
+// write it first.
+func TestKillSessionDoesNotSaveHistory(t *testing.T) {
+	defer useResurrectionDir(t.TempDir())()
+	prev := scrollbackSaveInterval
+	scrollbackSaveInterval = time.Hour
+	defer func() { scrollbackSaveInterval = prev }()
+
+	d := NewDaemon(&DaemonConfig{History: ResolveHistoryPolicy(nil, 0, 0)})
+	defer d.manager.Shutdown()
+	sess, err := d.manager.CreateSession("doomed", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pty, err := sess.CreatePTY("win-1", 40, 20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess.UpdateState(&SessionState{Name: "doomed", Windows: []WindowState{{ID: "win-1", PTYID: pty.ID}}})
+	// Saved once, so the periodic saver waits out the hour, and then given
+	// output the forced save on a stop would write.
+	sess.persistMu.Lock()
+	sess.saveHistory(sess.ResurrectionState(), true)
+	sess.persistMu.Unlock()
+	writePane(pty, "secret\r\n")
+
+	var writes atomic.Int32
+	historyWriteHook = func(name, _ string) {
+		if name == "doomed" {
+			writes.Add(1)
+		}
+	}
+	defer func() { historyWriteHook = nil }()
+	if err := d.manager.DeleteSession("doomed"); err != nil {
+		t.Fatal(err)
+	}
+	if n := writes.Load(); n != 0 {
+		t.Errorf("killing the session wrote its history %d times before deleting it", n)
+	}
+}
+
+// The first save after a restore keeps the time of the save it was restored
+// from; a save after that records its own.
+func TestHistoryFirstSaveAfterRestoreKeepsItsTime(t *testing.T) {
+	defer useResurrectionDir(t.TempDir())()
+	orig := time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)
+	src := vt.NewWithScrollback(78, 22, 1000)
+	_, _ = src.Write([]byte("OLD\r\n$ "))
+	data, err := encodeHistory(&savedHistory{Version: historyVersion, SavedAt: orig, State: historyStateOf(src, 1000)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateFile(historyPath("again", "win-1"), data); err != nil {
+		t.Fatal(err)
+	}
+	d := NewDaemon(&DaemonConfig{History: ResolveHistoryPolicy(nil, 0, 0)})
+	defer d.manager.Shutdown()
+	sess, err := d.restoreSession(&SessionState{Name: "again", Width: 80, Height: 24,
+		Windows: []WindowState{{ID: "win-1", Width: 80, Height: 24}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	save := func() time.Time {
+		sess.persistMu.Lock()
+		sess.saveHistory(sess.ResurrectionState(), true)
+		sess.persistMu.Unlock()
+		h := loadHistory("again")["win-1"]
+		if h == nil {
+			t.Fatal("not saved")
+		}
+		return h.SavedAt
+	}
+	if got := save(); !got.Equal(orig) {
+		t.Errorf("first save after the restore records %v, want the restored %v", got, orig)
+	}
+	writePane(sess.GetPTY(sess.GetState().Windows[0].PTYID), "new\r\n")
+	if got := save(); got.Equal(orig) {
+		t.Error("a later save still records the restored time")
+	}
+}
+
+// A file of another layout is another build's: skipped, and left in place.
+func TestHistoryOtherVersionIsSkippedNotDeleted(t *testing.T) {
+	defer useResurrectionDir(t.TempDir())()
+	src := vt.NewWithScrollback(40, 5, 100)
+	data, err := encodeHistory(&savedHistory{Version: historyVersion + 1, SavedAt: time.Now(), State: historyStateOf(src, 100)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := historyPath("newer", "win")
+	if err := writePrivateFile(path, data); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadHistory("newer"); len(got) != 0 {
+		t.Errorf("a file of another version loaded")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("a file of another version was deleted: %v", err)
 	}
 }

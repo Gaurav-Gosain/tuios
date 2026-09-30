@@ -956,6 +956,9 @@ type Session struct {
 	// history records when each pane's history was last saved. See
 	// scrollback_persist.go.
 	history historySaver
+	// discardHistory is set when the session is killed. The history would be
+	// deleted with the state straight after, so the last save skips it.
+	discardHistory atomic.Bool
 
 	stateMu sync.RWMutex
 	// snapSeq is the last SnapshotSeq handed out.

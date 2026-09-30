@@ -198,7 +198,7 @@ type DaemonConfig struct {
 	// next starts.
 	PersistScrollback *bool `toml:"persist_scrollback"`
 	// PersistScrollbackLines is the most history lines one pane saves, the
-	// screen not counted. Zero means 5000.
+	// screen not counted. Zero means 1000.
 	PersistScrollbackLines int `toml:"persist_scrollback_lines"`
 	// PersistScrollbackKB is the most one pane's saved history takes on
 	// disk, compressed, in KiB. Zero means 2048. A pane over it saves fewer

@@ -25,7 +25,7 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
-`persist_scrollback` in `[daemon]` (default `true`) saves each pane's history with its session. After a daemon restart or a reboot, the restored pane shows that history above a dim divider, and the new shell starts under it. `persist_scrollback_lines` (default 5000) and `persist_scrollback_kb` (default 2048) set the most lines and the most KiB one pane saves. The files hold what your panes printed, secrets included. Set `persist_scrollback = false` to stop this. The next time the daemon starts, it deletes the history it saved before. See [SESSIONS.md](SESSIONS.md#pane-history).
+`persist_scrollback` in `[daemon]` (default `true`) saves each pane's history with its session. After a daemon restart or a reboot, the restored pane shows that history above a dim divider, and the new shell starts under it. `persist_scrollback_lines` (default 1000) and `persist_scrollback_kb` (default 2048) set the most lines and the most KiB one pane saves. The files hold what your panes printed, secrets included. Set `persist_scrollback = false` to stop this. The next time the daemon starts, it deletes the history it saved before. See [SESSIONS.md](SESSIONS.md#pane-history).
 
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 

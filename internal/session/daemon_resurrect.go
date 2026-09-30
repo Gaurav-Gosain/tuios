@@ -223,6 +223,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			continue
 		}
 		w.PTYID = pty.ID
+		if h := history[w.ID]; h != nil {
+			// The first save records the restored history's own time. See
+			// historyMark.savedAt.
+			sess.history.setMark(w.ID, historyMark{ptyID: pty.ID, seq: -1, savedAt: h.SavedAt})
+		}
 		// The pid of the shell just respawned. Resurrection state carries no pid
 		// (see WindowState.ShellPID), so without this a restored pane waits for
 		// the detector's poll before the rail can check what it reports.
