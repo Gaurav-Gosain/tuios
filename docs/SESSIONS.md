@@ -195,6 +195,13 @@ height = "80%"
 The `session` key is no longer used. tuios ignores it, and the config
 warnings tell you to remove it.
 
+The scratch terminal is a pane of the current session. It does not make a
+separate session, so it does not change the session that a bare
+`tuios attach` picks.
+
+The first version of this key made a session called `scratch`. tuios does not
+use that session any more. To remove it, run `tuios kill-session scratch`.
+
 The action is `toggle_scratch`. To use a different key, bind the action in
 `[keybindings.prefix_mode]` or in a different section. If your config puts `g`
 on a different prefix action, `toggle_scratch` has no key.
