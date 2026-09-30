@@ -2,6 +2,7 @@ package vt
 
 import (
 	"image"
+	"image/color"
 	"strconv"
 )
 
@@ -37,7 +38,7 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 	}
 
 	// Registers the crop uses, renumbered from zero.
-	remap := make([]int, SixelMaxRegisters+1)
+	remap := make([]int, len(img.Palette)+1)
 	for i := range remap {
 		remap[i] = -1
 	}
@@ -51,6 +52,16 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 				used = append(used, int(v))
 			}
 		}
+	}
+
+	if len(used) > SixelMaxRegisters {
+		// More colours than a pane is told it has: the rest take the
+		// nearest of the first 256.
+		keep := used[:SixelMaxRegisters]
+		for _, v := range used[SixelMaxRegisters:] {
+			remap[v] = nearestRegister(img, keep, img.Palette[v-1])
+		}
+		used = keep
 	}
 
 	out := make([]byte, 0, 64+len(used)*20+dstW*dstH/3)
@@ -148,4 +159,17 @@ func appendRun(out []byte, ch byte, n int) []byte {
 		out = append(out, ch)
 	}
 	return out
+}
+
+// nearestRegister is the index in keep of the colour closest to c.
+func nearestRegister(img *SixelImage, keep []int, c color.RGBA) int {
+	best, bestD := 0, -1
+	for i, v := range keep {
+		k := img.Palette[v-1]
+		dr, dg, db := int(k.R)-int(c.R), int(k.G)-int(c.G), int(k.B)-int(c.B)
+		if d := dr*dr + dg*dg + db*db; bestD < 0 || d < bestD {
+			best, bestD = i, d
+		}
+	}
+	return best
 }

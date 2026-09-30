@@ -208,7 +208,7 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint
 		e.img = vt.DecodeSixel(cmd)
 		if e.img != nil {
 			e.bytes = e.img.Bytes()
-			if mode == sixelNative {
+			if mode == sixelNative && e.img.Exact {
 				e.raw = append([]byte(nil), cmd.RawSequence...)
 				e.bytes += len(e.raw)
 			}
