@@ -530,7 +530,7 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 // the answer came from before it got here, the check a reply from the mail
 // overlay passes.
 func (d *Daemon) mailAskAnswer(h askHold, out askOutcome) {
-	sess := d.manager.GetSession(h.session)
+	sess, _ := d.manager.ResolveSession(h.session)
 	if sess == nil {
 		return
 	}

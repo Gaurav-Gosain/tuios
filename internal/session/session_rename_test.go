@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -163,4 +164,151 @@ func jsonEscape(s string) string {
 		}
 	}
 	return string(out)
+}
+
+// TestGrantedPaneReachesItsSessionByTheOldName: a pane held to its grants
+// sends TUIOS_SESSION, which keeps the old name after a rename. The grant
+// check compared that name with the pane's live one and refused its own
+// session.
+func TestGrantedPaneReachesItsSessionByTheOldName(t *testing.T) {
+	d, sp, a1, a2, _ := scopeFixture(t)
+	setStrict(d)
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
+	if _, err := d.manager.RenameSession("a", "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	c := dialVerb(t, sp)
+	result(t, callP(c, t, "set-agent-state", map[string]any{"session": "a", "state": "working"}))
+	result(t, callP(c, t, "list-windows", map[string]any{"session": "a"}))
+	result(t, callP(c, t, "send-agent-message", map[string]any{"session": "a", "to": a2, "text": "hi"}))
+	if st := d.manager.GetSession("renamed").GetState(); st.Windows[0].AgentState != AgentStateWorking {
+		t.Errorf("the pane's report by the old name did not land: %v", st.Windows[0].AgentState)
+	}
+	// The old name reaches only the renamed session, never another one.
+	wantForbidden(t, "list-windows of b", callP(c, t, "list-windows", map[string]any{"session": "b"}))
+}
+
+// TestRestrictedConnectionFollowsARename: tuios mcp restricts its connection
+// to its own session. The restriction held the session's name, so after a
+// rename every event and every call of that session was out of reach.
+func TestRestrictedConnectionFollowsARename(t *testing.T) {
+	d, sp, a1, _, _ := scopeFixture(t)
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
+	c := dialVerb(t, sp)
+	restrict(t, c, map[string]any{"read_only": true})
+	result(t, callP(c, t, "subscribe", map[string]any{"types": []string{EventAgentState}}))
+
+	if _, err := d.manager.RenameSession("a", "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	plain := dialVerb(t, sp)
+	setAgentState(t, plain, "renamed", a1, "working", "", "")
+	if ev := readEvent(t, c); ev["session"] != "renamed" || ev["window"] != a1 {
+		t.Fatalf("event after the rename = %v, want the renamed session's", ev)
+	}
+
+	calls := dialVerb(t, sp)
+	res := restrict(t, calls, map[string]any{"scope": "own"})
+	if res["session"] != "renamed" {
+		t.Fatalf("restrict after the rename names session %v, want renamed", res["session"])
+	}
+	if _, err := d.manager.RenameSession("renamed", "again"); err != nil {
+		t.Fatal(err)
+	}
+	listed := result(t, callP(calls, t, "list-agents", nil))
+	if listed["session"] != "again" {
+		t.Errorf("list-agents on a restricted connection after a rename listed %v, want again", listed["session"])
+	}
+}
+
+// TestSubscriberFollowsARename: a stream on one session keeps getting its
+// events under the new name, and does not get the old name's close.
+func TestSubscriberFollowsARename(t *testing.T) {
+	d, sp, a1, _, _ := scopeFixture(t)
+	c := dialVerb(t, sp)
+	result(t, callP(c, t, "subscribe", map[string]any{"session": "a"}))
+	if _, err := d.manager.RenameSession("a", "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	plain := dialVerb(t, sp)
+	setAgentState(t, plain, "renamed", a1, "working", "", "")
+	for {
+		ev := readEvent(t, c)
+		if ev["type"] == EventSessionClosed {
+			t.Fatalf("the stream got %v, which reads as the end of its session", ev)
+		}
+		if ev["type"] == EventAgentState {
+			if ev["session"] != "renamed" {
+				t.Errorf("agent state event = %v, want session renamed", ev)
+			}
+			return
+		}
+	}
+}
+
+// TestHoldsMoveWithARename: open questions and approval holds are answered
+// by session name. Left on the old name, an answer after a rename was lost.
+func TestHoldsMoveWithARename(t *testing.T) {
+	a := newAttentionStore(func(streamEvent) {}, func() uint64 { return 0 })
+	h, err := a.openAsk(AttentionItem{Session: "a", Window: "w1", Summary: "ok?"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.holds = map[string]*approvalHold{"r1": {id: "r1", session: "a", window: "w1"}}
+	a.renameSession("a", "renamed")
+	if h.session != "renamed" || a.holds["r1"].session != "renamed" {
+		t.Errorf("after the rename the ask is on %q and the approval on %q, want renamed", h.session, a.holds["r1"].session)
+	}
+	for _, it := range a.items {
+		if it.Session != "renamed" {
+			t.Errorf("Inbox item %s is still on %q", it.ID, it.Session)
+		}
+	}
+}
+
+// TestKillByOldNameNamesTheNewOne: a kill never follows an old name. It says
+// what the session is called now, the way attach does.
+func TestKillByOldNameNamesTheNewOne(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "test")
+	if _, err := d.manager.RenameSession("test", "work"); err != nil {
+		t.Fatal(err)
+	}
+	c := dialVerb(t, sp)
+	resp := c.call(t, `{"id":1,"verb":"kill-session","params":{"session":"test"}}`)
+	msg, _ := errorOf(t, resp)["message"].(string)
+	if got, ok := RenamedSessionTarget(errors.New(msg)); !ok || got != "work" {
+		t.Errorf("kill-session by the old name said %q, want the new name work", msg)
+	}
+	if d.manager.GetSession("work") == nil {
+		t.Error("a kill by the old name killed the renamed session")
+	}
+}
+
+// TestRenameRefusesASavedSessionsName: a saved session that is not running
+// owns its state file, and a rename to its name would overwrite it.
+func TestRenameRefusesASavedSessionsName(t *testing.T) {
+	d, _ := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "test")
+	if err := SaveSessionForResurrection(&SessionState{Name: "saved"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.manager.RenameSession("test", "saved"); err == nil {
+		t.Fatal("a rename took the name of a saved session")
+	}
+	if loaded, err := LoadResurrectionState("saved"); err != nil || loaded.Name != "saved" {
+		t.Errorf("the saved session's file changed: %v %v", loaded, err)
+	}
+}
+
+// TestStaleDaemonErrorNamesTheRestart: an older daemon answers unknown_verb
+// for rename-session, and the person is told to restart it.
+func TestStaleDaemonErrorNamesTheRestart(t *testing.T) {
+	err := StaleDaemonError("rename-session", &VerbCallError{Code: ErrVerbUnknownVerb, Message: "unknown verb"})
+	if err == nil || !strings.Contains(err.Error(), "tuios kill-server") {
+		t.Errorf("StaleDaemonError = %v, want the kill-server restart", err)
+	}
+	if StaleDaemonError("no-such-verb", &VerbCallError{Code: ErrVerbUnknownVerb}) != nil {
+		t.Error("a verb this tuios does not know either was blamed on the daemon")
+	}
 }

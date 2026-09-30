@@ -183,7 +183,7 @@ func (m *OS) CommitRename() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return labelVerbCmd("Rename", verb, params)
+	return labelVerbCmd(m.verbDialer(), "Rename", verb, params)
 }
 
 // renameVerb picks the daemon verb a rename goes through and builds its params.

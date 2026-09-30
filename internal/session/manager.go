@@ -319,24 +319,36 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 		return nil, err
 	}
 
-	m.mu.Lock()
-	sess := m.sessions[old]
+	sess := m.GetSession(old)
 	if sess == nil {
-		m.mu.Unlock()
 		return nil, fmt.Errorf("session '%s' not found", old)
 	}
 	if old == newName {
-		m.mu.Unlock()
 		return sess, nil
+	}
+	// Held from before the name changes until the state file has moved, so no
+	// save of this session can land in between. See Session.persist. It is
+	// taken before m.mu, never while m.mu is held, so a slow save of this
+	// session never stalls every other lookup in the daemon.
+	sess.persistMu.Lock()
+	defer sess.persistMu.Unlock()
+
+	// A saved session that is not running still owns its state file. Taking
+	// its name would overwrite that file, and the saved session would be lost.
+	if _, err := os.Stat(getResurrectionPath(newName)); err == nil && m.GetSession(newName) == nil {
+		return nil, fmt.Errorf("a saved session is named '%s'. Restore it with 'tuios resurrect %s', or pick another name", newName, newName)
+	}
+
+	m.mu.Lock()
+	if m.sessions[old] != sess {
+		// Renamed or killed while this call waited for the save.
+		m.mu.Unlock()
+		return nil, fmt.Errorf("session '%s' not found", old)
 	}
 	if _, exists := m.sessions[newName]; exists {
 		m.mu.Unlock()
 		return nil, fmt.Errorf("session '%s' already exists", newName)
 	}
-	// Held from before the name changes until the state file has moved, so no
-	// save of this session can land in between. See Session.persist.
-	sess.persistMu.Lock()
-	defer sess.persistMu.Unlock()
 	delete(m.sessions, old)
 	m.sessions[newName] = sess
 	delete(m.aliases, newName)
@@ -368,12 +380,14 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 		}
 	}
 
-	RemoveResurrectionState(old)
+	// The new file is written before the old one goes, so a crash between
+	// the two leaves the session saved under one name or both, never none.
 	if st := sess.ResurrectionState(); st != nil {
 		if err := SaveSessionForResurrection(st); err != nil {
 			LogError("Resurrection save for renamed session %q failed: %v", newName, err)
 		}
 	}
+	RemoveResurrectionState(old)
 
 	if onRename != nil {
 		onRename(sess, old)

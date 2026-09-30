@@ -911,6 +911,15 @@ func (d *Daemon) verbKillSession(_ *connState, params json.RawMessage) (any, *ve
 			&VerbHint{Param: "session", Command: "tuios ls", Available: d.sessionNames()})
 	}
 	if err := d.manager.DeleteSession(p.Session); err != nil {
+		// An old name is never followed to a kill. The caller hears the new
+		// name and can kill by it on purpose.
+		if renamed, ok := d.manager.ResolveSession(p.Session); ok && renamed != nil {
+			return nil, hintedVerbError(ErrVerbSessionNotFound, RenamedSessionMessage(p.Session, renamed.Name()), &VerbHint{
+				Param:   "session",
+				Command: "tuios kill-session " + renamed.Name(),
+				Detail:  "The session has a new name. Kill it by the new name.",
+			})
+		}
 		available := d.sessionNames()
 		return nil, hintedVerbError(ErrVerbSessionNotFound, err.Error(), &VerbHint{
 			Param:      "session",

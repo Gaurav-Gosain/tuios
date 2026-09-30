@@ -2070,6 +2070,9 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	// that restricted itself is held to that too, before anything,
 	// forwarding included, sees the call. See pane_grants.go and
 	// conn_scope.go.
+	// A session named by a name it was renamed from is named by its current
+	// one from here on. See session_rename.go.
+	req.Params = d.followRenamedSession(req.Verb, req.Params)
 	granted, verr := d.checkGrants(cs, req.Verb, req.Params)
 	if verr != nil {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)

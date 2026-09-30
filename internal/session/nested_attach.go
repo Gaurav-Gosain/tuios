@@ -335,7 +335,8 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 	}
 	if sock, ok := readProcEnvVar(pid, SocketEnv); ok && sock != "" && sock == d.manager.SocketPath() {
 		if name, ok := readProcEnvVar(pid, "TUIOS_SESSION"); ok && name != "" {
-			if sess := d.manager.GetSession(name); sess != nil {
+			// A pane started before a rename holds the old name.
+			if sess, _ := d.manager.ResolveSession(name); sess != nil {
 				return sess, paneOriginEnv
 			}
 		}

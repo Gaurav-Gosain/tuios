@@ -241,9 +241,15 @@ const eventPaneFocused = "pane-focused"
 // everything. An empty types set matches all event types.
 type eventFilter struct {
 	session string
-	window  string
-	ptyID   string
-	types   map[string]bool
+	// sess, when set, is the live session the filter is about, and events
+	// are matched against the name it has now rather than session. A
+	// subscriber then follows a rename: events after it carry the new name,
+	// and the session-closed a rename publishes for the old name, which is
+	// not the end of this session, does not reach it.
+	sess   *Session
+	window string
+	ptyID  string
+	types  map[string]bool
 	// hosts admits the events relayed from linked hosts, and lets the session
 	// and window filters match events of other machines. Without it an event
 	// about another machine reaches only a subscriber that names no session,
@@ -259,7 +265,11 @@ func (f eventFilter) match(ev streamEvent) bool {
 			return false
 		}
 	}
-	if f.session != "" && ev.Session != f.session {
+	if f.sess != nil {
+		if ev.Session != f.sess.Name() {
+			return false
+		}
+	} else if f.session != "" && ev.Session != f.session {
 		return false
 	}
 	if f.window != "" && ev.Window != f.window {

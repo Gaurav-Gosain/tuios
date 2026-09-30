@@ -181,7 +181,7 @@ func (m *OS) DockWorkspaceDragRelease(x, y int) (bool, tea.Cmd) {
 		// pointer just built rather than snapping back to the old one and jumping
 		// again when the daemon's push lands.
 		m.WorkspaceOrder = d.Order
-		return true, setWorkspaceOrderCmd(m.SessionName, d.Order)
+		return true, setWorkspaceOrderCmd(m.verbDialer(), m.SessionName, d.Order)
 	}
 	if ws := m.DockWorkspacePillAt(x, y); ws == d.Workspace {
 		m.SwitchToWorkspace(ws)
@@ -192,11 +192,11 @@ func (m *OS) DockWorkspaceDragRelease(x, y int) (bool, tea.Cmd) {
 // setWorkspaceOrderCmd writes the arrangement through the daemon, which owns it
 // for the same reason it owns the workspace names: it has to survive a reattach
 // and reach every other client attached to the session.
-func setWorkspaceOrderCmd(sessionName string, order []int) tea.Cmd {
+func setWorkspaceOrderCmd(dial agentMailDial, sessionName string, order []int) tea.Cmd {
 	if sessionName == "" || len(order) == 0 {
 		return nil
 	}
-	return labelVerbCmd("Arrange", "set-workspace-order", map[string]any{
+	return labelVerbCmd(dial, "Arrange", "set-workspace-order", map[string]any{
 		"session": sessionName, "order": order,
 	})
 }

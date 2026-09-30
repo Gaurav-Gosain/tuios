@@ -118,7 +118,7 @@ func (d *Daemon) callerReachesSession(cs *connState, target string) bool {
 	if cs == nil {
 		return true
 	}
-	if sc := cs.scope.Load(); sc != nil && sc.own && !d.sessionInScope(sc.session, target) {
+	if sc := cs.scope.Load(); sc != nil && sc.own && !d.sessionInScope(d.sessionNameByID(sc.sessionID), target) {
 		return false
 	}
 	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) && !d.sessionInScope(pa.session, target) {

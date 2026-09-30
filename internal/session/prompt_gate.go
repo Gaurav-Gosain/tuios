@@ -151,6 +151,7 @@ func (g *promptGate) stalledMessage(stall time.Duration) string {
 func (d *Daemon) waitPromptTaken(sess *Session, pty *PTY, g *promptGate, stall time.Duration) (taken, gone bool) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)

@@ -297,6 +297,7 @@ func readyBy(w WindowState) string {
 func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout time.Duration, stopOnBlocked, reportedOnly bool, held func(WindowState)) (WindowState, agentStartOutcome) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)

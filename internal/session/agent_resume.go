@@ -175,7 +175,9 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 			return
 		}
 	}
-	sess := d.manager.GetSession(o.session)
+	// The offer was made before a delay, and the session may have been
+	// renamed since.
+	sess, _ := d.manager.ResolveSession(o.session)
 	if sess == nil {
 		return
 	}

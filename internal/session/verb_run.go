@@ -133,7 +133,7 @@ func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *
 	if window == "" && commandSeq != nil {
 		return nil, invalidParam("command_seq", "command_seq counts one pane's commands, so it needs a window")
 	}
-	filter := eventFilter{session: sess.Name(), types: map[string]bool{EventCommandFinished: true}}
+	filter := eventFilter{session: sess.Name(), sess: sess, types: map[string]bool{EventCommandFinished: true}}
 	var (
 		target WindowState
 		pty    *PTY
@@ -246,6 +246,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		ptyID:   pty.ID,
 		types: map[string]bool{
 			EventPrompt: true, EventCommandStarted: true, EventCommandFinished: true,

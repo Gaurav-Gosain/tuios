@@ -894,6 +894,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 	d.agents.rename(old, name)
 	d.attention.renameSession(old, name)
 	d.renameQueuedSession(old, name)
+	d.manager.grants.renameSession(old, name)
 	// A listing reader has no event for a rename. The old name closes and the
 	// new one opens, which is what every reader, a linked machine's fleet
 	// cache included, already handles by listing again.

@@ -1274,6 +1274,18 @@ func (a *attentionStore) renameSession(old, newName string) {
 		a.snoozedKey[attentionItemKey(it)] = id
 		moved = true
 	}
+	// The held questions and approvals are matched by session name when
+	// they are answered, so they move too.
+	for _, h := range a.asks {
+		if h.session == old {
+			h.session = newName
+		}
+	}
+	for _, h := range a.holds {
+		if h.session == old {
+			h.session = newName
+		}
+	}
 	if moved {
 		a.rev++
 		a.changedLocked()

@@ -1,12 +1,14 @@
 package app
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -160,5 +162,39 @@ func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
 		if w := lipgloss.Width(line); w != geo.Width {
 			t.Errorf("row %d is %d cells wide, want %d: a wide rune knocked the frame out of square\n%s", i, w, geo.Width, out)
 		}
+	}
+}
+
+// TestSessionRenameThroughHostDialsTheHost: a client attached through a host
+// shows the host's sessions, so a rename or an accent must reach the host's
+// daemon. labelVerbCmd dialed this machine's socket every time, which renamed
+// a local session of the same name, or failed.
+func TestSessionRenameThroughHostDialsTheHost(t *testing.T) {
+	var hosts []string
+	local := 0
+	prevHost, prevLocal := dialVerbThroughHost, dialVerbLocal
+	t.Cleanup(func() { dialVerbThroughHost, dialVerbLocal = prevHost, prevLocal })
+	dialVerbThroughHost = func(host, _ string) (*session.VerbClient, session.HostConnectionInfo, error) {
+		hosts = append(hosts, host)
+		return nil, session.HostConnectionInfo{}, errors.New("no link in this test")
+	}
+	dialVerbLocal = func() (*session.VerbClient, error) {
+		local++
+		return nil, errors.New("no daemon in this test")
+	}
+
+	m := &OS{Settings: config.Global, SessionName: "test", AttachedHost: "build"}
+	m.BeginRenameSession("test")
+	m.RenameBuffer = "work"
+	cmd := m.CommitRename()
+	if cmd == nil {
+		t.Fatal("the rename sent nothing")
+	}
+	_ = cmd()
+	if accent := m.setSessionAccentCmd("test", "cyan"); accent != nil {
+		_ = accent()
+	}
+	if local != 0 || len(hosts) != 2 || hosts[0] != "build" || hosts[1] != "build" {
+		t.Errorf("dialed the local socket %d times and hosts %v, want host build twice and no local dial", local, hosts)
 	}
 }

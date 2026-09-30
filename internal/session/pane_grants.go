@@ -418,6 +418,9 @@ func PanePermissionsFromConfig(c config.PermissionsConfig) config.ResolvedPermis
 type paneAuth struct {
 	window  string
 	session string
+	// sessionID is the session's ID, empty when it was found only through
+	// the grant table. A stream reads the session's current name through it.
+	sessionID string
 	// via is how the pane was found: pid from the kernel, env from the
 	// process's TUIOS_PANE_ID, token from a presented TUIOS_PANE_TOKEN.
 	via      string
@@ -554,7 +557,10 @@ func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 	}
 	table := d.manager.grants
 	g, explicit := table.effective(window)
-	session := d.sessionOfWindow(window)
+	session, sessionID := "", ""
+	if sess := d.sessionHoldingWindow(window); sess != nil {
+		session, sessionID = sess.Name(), sess.ID
+	}
 	if session == "" {
 		// A pane whose window is not in its session's state yet: the
 		// process started before the window was recorded.
@@ -562,7 +568,7 @@ func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 			session = e.session
 		}
 	}
-	return &paneAuth{window: window, session: session, via: via, grants: g, explicit: explicit}
+	return &paneAuth{window: window, session: session, sessionID: sessionID, via: via, grants: g, explicit: explicit}
 }
 
 // unplacedWindow names the pane of a caller whose process cannot be read.
@@ -1293,4 +1299,20 @@ func savedGrants(names []string) *Grants {
 	valid, _ := config.CanonicalPaneGrants(names)
 	g := grantsFromNames(valid)
 	return &g
+}
+
+// renameSession moves the panes of the session named old to newName, so the
+// table still names the session a pane is in after a rename.
+func (t *paneGrantTable) renameSession(old, newName string) {
+	if t == nil || old == newName {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for id, e := range t.panes {
+		if e.session == old {
+			e.session = newName
+			t.panes[id] = e
+		}
+	}
 }

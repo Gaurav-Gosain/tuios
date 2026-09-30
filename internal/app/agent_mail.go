@@ -434,6 +434,10 @@ func (m *OS) agentMailLoad() tea.Cmd {
 	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
 
+// verbDialer reaches the daemon that holds the session this client shows:
+// the host's when the client is attached through one, else this machine's.
+func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
+
 // agentMailDialer is how a mailbox command reaches the daemon that holds the
 // ring: this machine's daemon directly, or, while this client is attached to
 // a session on another machine, that machine's daemon through the link. The
@@ -445,12 +449,19 @@ func (m *OS) agentMailDialer() agentMailDial {
 	}
 	return func() (*session.VerbClient, error) {
 		if host == "" {
-			return session.DialVerbClient()
+			return dialVerbLocal()
 		}
-		c, _, err := session.DialVerbClientThroughHost(host, build)
+		c, _, err := dialVerbThroughHost(host, build)
 		return c, err
 	}
 }
+
+// dialVerbThroughHost and dialVerbLocal are the two ways verbDialer reaches a
+// daemon, as variables so a test can see which one a command used.
+var (
+	dialVerbThroughHost = session.DialVerbClientThroughHost
+	dialVerbLocal       = session.DialVerbClient
+)
 
 // agentMailDial opens a verb connection to the daemon that holds the ring.
 type agentMailDial func() (*session.VerbClient, error)

@@ -71,6 +71,13 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	cs.mu.Unlock()
 
 	filter := eventFilter{session: p.Session, window: p.Window, hosts: p.Hosts}
+	// A live session is followed through a rename. A name no session has yet
+	// stays a plain name, so a subscriber can wait for it to be made.
+	if p.Session != "" {
+		if live := d.manager.GetSession(p.Session); live != nil {
+			filter.sess = live
+		}
+	}
 	if len(p.Types) > 0 {
 		filter.types = make(map[string]bool, len(p.Types))
 		for _, t := range p.Types {
@@ -386,6 +393,7 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventWindowExit: true, EventWindowClosed: true},
 	}, defaultEventQueue)
@@ -428,6 +436,7 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
@@ -495,7 +504,7 @@ func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-ch
 		// clock: nothing will ever report a state for it again.
 		types[EventWindowClosed] = true
 	}
-	sub := d.events.subscribe(eventFilter{session: sess.Name(), types: types}, defaultEventQueue)
+	sub := d.events.subscribe(eventFilter{session: sess.Name(), sess: sess, types: types}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
 	check := func() (string, string, bool) {
@@ -732,6 +741,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
+		sess:    sess,
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
@@ -814,7 +824,7 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, dea
 		// clock: nothing will ever be delivered to it again.
 		types[EventWindowClosed] = true
 	}
-	sub := d.events.subscribe(eventFilter{session: sess.Name(), types: types}, defaultEventQueue)
+	sub := d.events.subscribe(eventFilter{session: sess.Name(), sess: sess, types: types}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
 	check := func() (AgentMessage, bool) {
