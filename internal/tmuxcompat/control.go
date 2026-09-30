@@ -93,6 +93,14 @@ type control struct {
 	pending          map[string]bool
 	outcome          string
 	detail           []string
+	// attaches counts the attaches, so the loop sees one and opens its event
+	// streams again for the session attached to.
+	attaches int
+	// streams are the open event streams, lifecycle and output their
+	// events, and stop ends the goroutines that read them.
+	streams           []EventStream
+	lifecycle, output <-chan []byte
+	stop              chan struct{}
 }
 
 // runControl answers a control-mode client until it detaches.
@@ -200,6 +208,10 @@ func (c *control) attach(args []string) (string, error) {
 		c.readOnly = true
 	}
 	if f, ok := p.Value('f'); ok {
+		// A read-only client cannot make itself writable, as in tmux.
+		if c.readOnly && slices.Contains(strings.Split(f, ","), "!read-only") {
+			return OutcomeError, errors.New("client is read-only")
+		}
 		for flag := range strings.SplitSeq(f, ",") {
 			switch strings.TrimPrefix(flag, "!") {
 			case "read-only":
@@ -235,6 +247,7 @@ func (c *control) attach(args []string) (string, error) {
 		return OutcomeError, fmt.Errorf("can't find session: %s", tv)
 	}
 	c.sessID, c.sessName, c.prev = sv.id, sv.name, v
+	c.attaches++
 	return OutcomeOK, nil
 }
 
@@ -266,7 +279,8 @@ func streamLines(r io.Reader) <-chan string {
 }
 
 // streamEvents feeds an event stream to a channel, closed when it ends.
-func streamEvents(st EventStream) <-chan []byte {
+// It stops, without closing the channel, once stop is closed.
+func streamEvents(st EventStream, stop <-chan struct{}) <-chan []byte {
 	ch := make(chan []byte)
 	go func() {
 		defer close(ch)
@@ -275,10 +289,55 @@ func streamEvents(st EventStream) <-chan []byte {
 			if err != nil {
 				return
 			}
-			ch <- ev
+			select {
+			case ch <- ev:
+			case <-stop:
+				return
+			}
 		}
 	}()
 	return ch
+}
+
+// closeStreams closes the event streams and ends their readers.
+func (c *control) closeStreams() {
+	if c.stop != nil {
+		close(c.stop)
+		c.stop = nil
+	}
+	for _, st := range c.streams {
+		_ = st.Close()
+	}
+	c.streams, c.lifecycle, c.output = nil, nil, nil
+}
+
+// subscribe opens the event streams for the session attached to, closing
+// the ones open before. It runs at the start and after every attach, so a
+// client that attaches to another session, or attaches late, follows it.
+func (c *control) subscribe() {
+	c.closeStreams()
+	clear(c.pending)
+	s := c.s
+	if s.Subscribe == nil {
+		return
+	}
+	c.stop = make(chan struct{})
+	params := map[string]any{"types": lifecycleEvents}
+	if !s.AllSessions {
+		params["session"] = s.Session
+	}
+	if st, err := s.Subscribe(params); err == nil {
+		c.streams = append(c.streams, st)
+		c.lifecycle = streamEvents(st, c.stop)
+	} else {
+		c.detail = mergeDetail(c.detail, []string{"control mode: no event stream, reading the session every " + controlPoll.String() + ": " + logText(err)})
+	}
+	if !c.noOutput && c.sessName != "" {
+		if st, err := s.Subscribe(map[string]any{"types": []string{"output"}, "session": c.sessName}); err == nil {
+			c.streams = append(c.streams, st)
+			c.output = streamEvents(st, c.stop)
+		}
+	}
 }
 
 // loop reads commands and events until the client detaches.
@@ -288,25 +347,8 @@ func (c *control) loop() {
 	if s.Stdin != nil {
 		lines = streamLines(s.Stdin)
 	}
-	var lifecycle, output <-chan []byte
-	if s.Subscribe != nil {
-		params := map[string]any{"types": lifecycleEvents}
-		if !s.AllSessions {
-			params["session"] = s.Session
-		}
-		if st, err := s.Subscribe(params); err == nil {
-			defer st.Close()
-			lifecycle = streamEvents(st)
-		} else {
-			c.detail = mergeDetail(c.detail, []string{"control mode: no event stream, reading the session every " + controlPoll.String() + ": " + logText(err)})
-		}
-		if !c.noOutput && c.sessName != "" {
-			if st, err := s.Subscribe(map[string]any{"types": []string{"output"}, "session": c.sessName}); err == nil {
-				defer st.Close()
-				output = streamEvents(st)
-			}
-		}
-	}
+	c.subscribe()
+	defer c.closeStreams()
 	poll := time.NewTicker(controlPoll)
 	defer poll.Stop()
 	var settle, flush <-chan time.Time
@@ -325,20 +367,24 @@ func (c *control) loop() {
 				c.line("%%error %d %d 1", now, c.num)
 				continue
 			}
+			attaches := c.attaches
 			for _, cmd := range cmds {
 				c.command(cmd, 1)
 				if c.quit {
 					return
 				}
 			}
+			if c.attaches != attaches {
+				c.subscribe()
+			}
 			if settle == nil {
 				settle = time.After(controlSettle)
 			}
-		case ev, ok := <-lifecycle:
+		case ev, ok := <-c.lifecycle:
 			if !ok {
 				// The stream ended: the daemon stopped, or dropped the
 				// subscription. A read says which.
-				lifecycle = nil
+				c.lifecycle = nil
 				if !c.refresh() {
 					return
 				}
@@ -348,9 +394,9 @@ func (c *control) loop() {
 			if settle == nil {
 				settle = time.After(controlSettle)
 			}
-		case ev, ok := <-output:
+		case ev, ok := <-c.output:
 			if !ok {
-				output = nil
+				c.output = nil
 				continue
 			}
 			var e struct {

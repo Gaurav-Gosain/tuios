@@ -189,6 +189,7 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 			Height      int    `json:"height"`
 			Foreground  string `json:"foreground_cmd"`
 			History     *int   `json:"history_rows"`
+			Scratch     bool   `json:"scratch"`
 		} `json:"windows"`
 		Focused string `json:"focused_window_id"`
 		Current int    `json:"current_workspace"`
@@ -215,6 +216,12 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 		sv.num = sessionNumber(cmpOr(info.ID, info.Name))
 	}
 	for _, w := range wl.Windows {
+		// A scratch terminal is not a tmux pane. Its workspace is numbered
+		// from 1000, which would also collide with the window ids of the
+		// sessions (session*1000+workspace).
+		if w.Scratch || w.Workspace >= windowStride {
+			continue
+		}
 		p := pane{
 			ID:        w.ID,
 			Num:       PaneNumber(w.ID),
@@ -254,6 +261,9 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 		return nil, fmt.Errorf("read list-workspaces: %w", err)
 	}
 	for _, w := range ws.Workspaces {
+		if w.Workspace >= windowStride {
+			continue
+		}
 		sv.workspace = append(sv.workspace, w.Workspace)
 		if w.Name != "" {
 			sv.wsName[w.Workspace] = w.Name

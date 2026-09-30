@@ -319,3 +319,25 @@ func TestPaneWithoutAdminLists(t *testing.T) {
 		t.Errorf("list-panes failed: %s", h.err)
 	}
 }
+
+// TestScratchWindowsAreNotPanes leaves the scratch terminal (workspace 1000
+// and up) out of the listing. Its workspace number would collide with the
+// window ids of every session (session*1000+workspace).
+func TestScratchWindowsAreNotPanes(t *testing.T) {
+	h := newHarness(t)
+	m := newMultiFake(t, "work", "api")
+	m.session("work").windows = append(m.session("work").windows, &fakeWindow{id: "scratch-0001", ws: 1000, scratch: true, w: 80, h: 24})
+	h.shim.Caller = m
+	h.shim.AllSessions = true
+	h.shim.Session, h.shim.Window, h.shim.TmuxPane = "", "", ""
+	code, out := h.run("list-windows", "-a", "-F", "#{window_id} #{window_index}", ";", "list-panes", "-a", "-F", "#{pane_id}")
+	if code != 0 {
+		t.Fatalf("listing failed: %s", h.err)
+	}
+	if strings.Contains(out, " 1000\n") || strings.Contains(out, PaneID("scratch-0001")) {
+		t.Errorf("the scratch terminal is listed:\n%s", out)
+	}
+	if n := strings.Count(out, "\n"); n != 4 {
+		t.Errorf("listing has %d lines, want two windows and two panes:\n%s", n, out)
+	}
+}
