@@ -57,7 +57,9 @@ func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 	again := dialGraphicsClient(t, socketPath, "img", true, false)
 	waitSixelAdvertised(t, d, "img", true, "a sixel client again")
 
+	// One at a time: two connections' detaches are handled in any order.
 	plain.send(t, MsgDetach, struct{}{})
+	waitSixelAdvertised(t, d, "img", true, "the plain client left")
 	again.send(t, MsgDetach, struct{}{})
 	time.Sleep(50 * time.Millisecond)
 	waitSixelAdvertised(t, d, "img", true, "nobody attached keeps the last answer")
