@@ -826,7 +826,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Scratch: show or hide the scratch session",
+			Name:     "Scratch: show or hide the scratch terminal",
 			Shortcut: "prefix+g",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

@@ -271,6 +271,10 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// Marked as list-windows marks it. See session.windowStateToData.
+	if w.IsScratch {
+		info["scratch"] = true
+	}
 
 	if w.PTYID != "" {
 		info["pty_id"] = w.PTYID

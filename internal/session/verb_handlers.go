@@ -402,7 +402,8 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		Wait          bool `json:"wait"`
 		CaptureStdout bool `json:"capture_stdout"`
 		Timeout       int  `json:"timeout"`
-		// Scratch marks the popup as the one toggle_scratch shows and hides.
+		// Scratch opens the session's scratch terminal: a shell when no
+		// command is named, marked so toggle_scratch shows and hides it.
 		Scratch bool `json:"scratch"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -412,8 +413,13 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	if verr != nil {
 		return nil, verr
 	}
-	if len(p.Command) == 0 || p.Command[0] == "" {
+	// The scratch terminal runs the user's shell unless told otherwise, so it
+	// is the one popup that needs no command.
+	if (len(p.Command) == 0 || p.Command[0] == "") && !p.Scratch {
 		return nil, invalidParam("command", "a popup runs one command and closes when it exits, so name the command to run")
+	}
+	if len(p.Command) > 0 && p.Command[0] == "" {
+		return nil, invalidParam("command", "the command's first word is empty. Name the program to run")
 	}
 	if p.CaptureStdout && !p.Wait {
 		return nil, invalidParam("capture_stdout", "capture_stdout returns the output when the command exits, so it needs wait")
@@ -454,18 +460,28 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 			})
 	}
 
+	// One scratch terminal per session. The toggle shows the one there is,
+	// so a second is only ever a double press that raced the first.
+	if p.Scratch {
+		for _, w := range sess.GetState().Windows {
+			if w.Scratch {
+				return nil, invalidParam("scratch", "this session already has a scratch terminal. Press the scratch key to show it")
+			}
+		}
+	}
+
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	opts := NewWindowOptions{
-		Title:        p.Name,
-		Cwd:          p.Cwd,
-		Workspace:    p.Workspace,
-		Focus:        true,
-		Command:      p.Command,
-		Name:         p.Name,
-		Popup:        true,
-		PopupWidth:   p.Width,
-		PopupHeight:  p.Height,
-		ScratchPopup: p.Scratch,
+		Title:       p.Name,
+		Cwd:         p.Cwd,
+		Workspace:   p.Workspace,
+		Focus:       true,
+		Command:     p.Command,
+		Name:        p.Name,
+		Popup:       true,
+		PopupWidth:  p.Width,
+		PopupHeight: p.Height,
+		Scratch:     p.Scratch,
 	}
 	var capture *popupCapture
 	if p.CaptureStdout {

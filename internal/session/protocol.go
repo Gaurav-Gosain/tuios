@@ -356,6 +356,10 @@ type WindowSummary struct {
 	// omitted when zero, which is exactly how an older daemon's listing reads:
 	// unknown, and the row goes untagged rather than wrongly tagged.
 	Workspace int `json:"workspace,omitempty"`
+	// HiddenScratch marks the session's scratch terminal while it is hidden.
+	// A rail leaves the row out, as the attached client does. Additive and
+	// omitted when false.
+	HiddenScratch bool `json:"hidden_scratch,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.

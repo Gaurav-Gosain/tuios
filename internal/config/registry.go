@@ -588,7 +588,7 @@ var ActionDescriptions = map[string]string{
 	"paste_clipboard": "Paste from clipboard",
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
-	"toggle_scratch":  "Show or hide the scratch session in a popup",
+	"toggle_scratch":  "Show or hide the scratch terminal",
 	"hints_all_panes": "Label the text on all panes to copy it",
 
 	// Copy mode search (no default keybinding)

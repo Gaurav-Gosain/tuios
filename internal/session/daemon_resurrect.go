@@ -151,9 +151,17 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// back gives the user a floating box holding a shell that will never
 		// exit and that nothing asked for. Dropping it is the same answer the
 		// loop gives a window whose shell will not start.
-		if w.Popup {
+		//
+		// The scratch terminal is the exception. It runs a shell anyway, so the
+		// respawned shell is what it held, and it comes back hidden: the
+		// scratch key shows it where the user is, and nothing floats over the
+		// layout before anyone asks for it.
+		if w.Popup && !w.Scratch {
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
+		}
+		if w.Scratch {
+			w.Minimized = true
 		}
 
 		// WindowState dimensions are the outer window box (including the border);
@@ -243,10 +251,22 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
+	scratch := ""
+	for _, w := range kept {
+		if w.Scratch {
+			scratch = w.ID
+		}
+	}
+
 	sess.UpdateState(&restored)
 	// After UpdateState, which takes this field from canonical state and would
 	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
+	// The scratch mark is daemon-owned in the same way: UpdateState keeps
+	// only the marks canonical state already has, and a new session has none.
+	if scratch != "" {
+		sess.markRestoredScratch(scratch)
+	}
 
 	// The worktree record goes back on for the same reason: it is
 	// daemon-owned, and the canonical one is what the respawned first shell

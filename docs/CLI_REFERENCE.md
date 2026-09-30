@@ -1057,8 +1057,9 @@ still there on the next attach. A daemon restart does not bring it back: the
 restore respawns a shell rather than the command, which is not the popup. Press
 esc in window mode to close one by hand, or close it like any other pane.
 
-To show a session in a popup and keep it between shows, use the scratch
-session (`Ctrl+B g`). See [SESSIONS.md](SESSIONS.md#the-scratch-session).
+To keep a shell in a popup between shows, use the scratch terminal
+(`Ctrl+B g`). It comes back hidden after a daemon restart. See
+[SESSIONS.md](SESSIONS.md#the-scratch-terminal).
 
 **Examples:**
 ```bash
@@ -1248,9 +1249,8 @@ name alone. Some of them:
 | `dock_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the dock; empty follows `background` |
 | `appearance.sidebar.background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the rail; empty follows `background` |
 | `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
-| `scratch.session` | a session name | The session that `Ctrl+B g` shows in a popup (default `scratch`). tuios creates it the first time. The name cannot start with `-` |
-| `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch popup (default `80%`) |
-| `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch popup (default `80%`) |
+| `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch terminal that `Ctrl+B g` shows (default `80%`) |
+| `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch terminal (default `80%`) |
 
 **Examples:**
 ```bash

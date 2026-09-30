@@ -305,7 +305,7 @@ func makePrefixSelectHandler(num int) ActionHandler {
 			}
 			// In tiling mode minimized windows are not on screen, so they do not
 			// take up a number.
-			if o.AutoTiling && win.Minimized {
+			if o.AutoTiling && win.Minimized || win.HiddenScratch() {
 				continue
 			}
 			position++
@@ -468,7 +468,7 @@ func handleMinimizeFocused(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func minimizedInCurrentWorkspace(o *app.OS) []int {
 	var indices []int
 	for i, win := range o.Windows {
-		if win.Minimized && win.Workspace == o.CurrentWorkspace {
+		if win.Minimized && win.Workspace == o.CurrentWorkspace && !win.IsScratch {
 			indices = append(indices, i)
 		}
 	}
@@ -596,7 +596,7 @@ func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleToggleScratch shows the scratch session in a popup, or hides it. See
+// handleToggleScratch shows the scratch terminal in a popup, or hides it. See
 // internal/app/scratch.go.
 func handleToggleScratch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ToggleScratch()

@@ -207,9 +207,9 @@ type NewWindowOptions struct {
 	// See WindowState.PopupWidth. They mean nothing unless Popup is set.
 	PopupWidth  string
 	PopupHeight string
-	// ScratchPopup marks the popup as the one toggle_scratch shows. See
-	// WindowState.ScratchPopup. It means nothing unless Popup is set.
-	ScratchPopup bool
+	// Scratch marks the popup as the session's scratch terminal. See
+	// WindowState.Scratch. It means nothing unless Popup is set.
+	Scratch bool
 	// stdout, when set, is the process's standard output in place of the PTY.
 	// See createPTY. It is unexported: only the popup verb's capture sets it.
 	stdout *os.File
@@ -351,11 +351,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			// A popup is always floating. The daemon marks it here rather than
 			// leaving the client to infer it, because every peer reads the float
 			// as layout intent and a peer that missed it tiles the popup away.
-			Popup:        opts.Popup,
-			IsFloating:   opts.Popup,
-			PopupWidth:   opts.PopupWidth,
-			PopupHeight:  opts.PopupHeight,
-			ScratchPopup: opts.Popup && opts.ScratchPopup,
+			Popup:       opts.Popup,
+			IsFloating:  opts.Popup,
+			PopupWidth:  opts.PopupWidth,
+			PopupHeight: opts.PopupHeight,
+			Scratch:     opts.Popup && opts.Scratch,
 		}
 		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {
@@ -588,6 +588,20 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		if state.WorkspaceFocus != nil {
 			if focus, ok := state.WorkspaceFocus[ws]; ok {
 				state.FocusedWindowID = focus
+			}
+		}
+		return nil
+	})
+}
+
+// markRestoredScratch marks the window id as the session's scratch terminal,
+// hidden. A restore calls it: a push cannot set the mark, so the restore sets
+// it on canonical state after the push. See daemon_resurrect.go.
+func (s *Session) markRestoredScratch(id string) {
+	_ = s.mutateState(func(state *SessionState) error {
+		for i := range state.Windows {
+			if w := &state.Windows[i]; w.ID == id {
+				w.Scratch, w.Popup, w.IsFloating, w.Minimized = true, true, true, true
 			}
 		}
 		return nil

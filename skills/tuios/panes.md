@@ -310,12 +310,13 @@ tuios popup -s work --wait -- gum confirm "Deploy?" && ./deploy.sh
 status; `--capture-stdout` prints its standard output. A popup closed by hand
 exits 130. Capture is not on Windows.
 
-A person's `Ctrl+B g` (action `toggle_scratch`) is a popup of this kind. It
-runs `tuios attach` on the `scratch` session and carries the `scratch` mark of
-the popup verb. The key closes only a popup with that mark. Hiding closes the
-popup and leaves the session running. `[scratch]` sets the session name and
-the size. The session is an ordinary one, so address it with `-s scratch`, not
-through the popup.
+A person's `Ctrl+B g` (action `toggle_scratch`) shows the scratch terminal: a
+popup that runs a shell and carries the `scratch` mark of the popup verb. A
+session has one. The key hides it instead of closing it, so the shell keeps
+running. A hidden scratch terminal is minimized. `list-windows` returns it with
+`"scratch": true`, and a hidden one has `"minimized": true`. It is the
+person's scratch pad: do not type into it, and do not count it as a pane you
+placed. `[scratch]` sets its width and height.
 
 ### The escape hatch
 

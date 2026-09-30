@@ -25,7 +25,7 @@ import (
 
 // attachTerminalMode is tuios attach --terminal-mode: the client starts in
 // terminal mode on the focused pane, whatever [startup] says and whether the
-// session is new or not. The scratch popup runs its attach with it.
+// session is new or not. A popup that runs tuios attach can use it.
 var attachTerminalMode bool
 
 func runAttach(sessionName string, createIfMissing bool) error {

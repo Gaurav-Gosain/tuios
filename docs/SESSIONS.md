@@ -14,7 +14,7 @@ what does and does not come back after each kind of interruption.
 - [Local Sessions](#local-sessions)
 - [Daemon Sessions](#daemon-sessions)
 - [Attaching and Detaching](#attaching-and-detaching)
-- [The Scratch Session](#the-scratch-session)
+- [The Scratch Terminal](#the-scratch-terminal)
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
@@ -152,49 +152,48 @@ drops, the process is killed) is equivalent to a detach as far as the session is
 concerned. The daemon notices the connection go away and keeps the session
 running. Nothing is lost, because nothing the session needs lived in the client.
 
-## The Scratch Session
+## The Scratch Terminal
 
-`Ctrl+B` `g` shows a session in a popup over the current layout. Press
-`Ctrl+B` `g` again to hide the popup. The session keeps running, so the next
-`Ctrl+B` `g` shows it as you left it. tmux-floax does the same for tmux.
+`Ctrl+B` `g` shows a scratch terminal in a popup over the current layout. The
+scratch terminal is one shell with a border. It has no tab bar, sidebar or
+dock of its own. Press `Ctrl+B` `g` again to hide it. tmux-floax does the same
+for tmux.
 
-The session has the name `scratch`. tuios creates it the first time you press
-the key. It is an ordinary session: `tuios ls` shows it, and you can attach to
-it from a different terminal.
+Hiding does not close the terminal. The shell keeps running with its
+scrollback. The next `Ctrl+B` `g` shows the same terminal as you left it. The
+keyboard goes to it in terminal mode.
 
-The popup runs `tuios attach` on the session. When you hide the popup, tuios
-closes it, and that client detaches. The session does not stop. The next show
-opens a new popup on the workspace you are on. The keyboard goes to the
-session's pane, in terminal mode.
-
-The popup belongs to the session you show it in, like every popup. Every
-client of that session shows it. When a different client of the session
-presses the key, the popup closes for all clients.
-
-If the attach in the popup fails, the popup shows the error. Press enter to
-close it.
-
-- The key works from inside the popup. tuios reads `Ctrl+B` before the popup
-  gets it.
-- To use a prefix key in the scratch session, press `Ctrl+B` two times. Then
+- Each session has one scratch terminal. tuios creates it the first time you
   press the key.
-- In the scratch session itself, the key does not open a popup. The popup
-  would show the session inside itself. The dock shows a message.
-- The popup needs a box of 22x8 cells or more. On a smaller screen the dock
-  shows a message.
-- The session name cannot start with `-`, and it cannot have a `/`. The dock
-  shows a message when the name is not valid.
-- The key closes only its own popup. A popup that you open with
-  `tuios popup --name scratch` stays open.
-- The key works for sessions on this machine only.
-- When you detach, the popup stays open. It is there when you attach again.
+- The shell starts in the folder of the focused pane, or in your home folder.
+- The terminal opens on the workspace you are on. On a different workspace,
+  the key moves it there.
+- When you hide it, the focus goes back to the pane you used before.
+- The key works from inside the popup. tuios reads `Ctrl+B` before the shell
+  gets it.
+- A hidden scratch terminal is not in the dock, the window list, the sidebar,
+  the tiled layout, the focus cycle or multifocus. The `tuios list-windows`
+  table does not show it. `tuios list-windows --json` shows it with
+  `"scratch": true`, and `"minimized": true` while it is hidden.
+- When you detach, the scratch terminal stays as it is. It is there when you
+  attach again.
+- After a daemon restart, the scratch terminal comes back hidden, with a new
+  shell.
+- When the shell exits, the popup closes. The next `Ctrl+B` `g` starts a new
+  shell.
+- A popup that you open with `tuios popup --name scratch` is not the scratch
+  terminal. The key does not hide or close it.
+- In a session on a different machine, the key does not open a scratch
+  terminal. The dock shows a message.
 
 ```toml
 [scratch]
-session = "scratch" # the session the popup shows
-width = "80%"       # cells (100) or percent (80%)
+width = "80%"  # cells (100) or percent (80%)
 height = "80%"
 ```
+
+The `session` key is no longer used. tuios ignores it, and the config
+warnings tell you to remove it.
 
 The action is `toggle_scratch`. To use a different key, bind the action in
 `[keybindings.prefix_mode]` or in a different section. If your config puts `g`

@@ -25,6 +25,7 @@ var optionWalkSkips = map[string]string{
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
 	"hints.patterns":               "a list of regular expressions, which a value arriving as one string cannot spell",
+	"scratch.session":              "no longer used: read only so a config from the first scratch design loads and validation can say to remove it",
 	"agents":                       "file-plane config the daemon reads from the file, like [hosts]: which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
 }
 

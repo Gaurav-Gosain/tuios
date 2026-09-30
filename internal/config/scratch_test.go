@@ -7,7 +7,7 @@ import (
 
 func TestScratchDefaults(t *testing.T) {
 	s := DefaultConfig().Scratch
-	if s.SessionName() != "scratch" || s.WidthSpec() != "80%" || s.HeightSpec() != "80%" {
+	if s.Session != "" || s.WidthSpec() != "80%" || s.HeightSpec() != "80%" {
 		t.Fatalf("defaults = %+v", s)
 	}
 	if got := DefaultConfig().Keybindings.PrefixMode["toggle_scratch"]; len(got) != 1 || got[0] != "g" {
@@ -16,13 +16,42 @@ func TestScratchDefaults(t *testing.T) {
 }
 
 func TestScratchTableParses(t *testing.T) {
-	cfg, err := ParseUserConfig([]byte("[scratch]\nsession = \"notes\"\nwidth = \"100\"\nheight = \"50%\"\n"))
+	cfg, err := ParseUserConfig([]byte("[scratch]\nwidth = \"100\"\nheight = \"50%\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := cfg.Scratch
-	if s.SessionName() != "notes" || s.WidthSpec() != "100" || s.HeightSpec() != "50%" {
+	if s.WidthSpec() != "100" || s.HeightSpec() != "50%" {
 		t.Fatalf("parsed = %+v", s)
+	}
+}
+
+// A config written for the first design still has the session key. It loads,
+// the sizes still apply, and validation says the key is no longer used.
+func TestScratchOldSessionKeyLoadsAndWarns(t *testing.T) {
+	cfg, err := ParseUserConfig([]byte("[scratch]\nsession = \"notes\"\nwidth = \"70%\"\n"))
+	if err != nil {
+		t.Fatalf("a config with the old key did not load: %v", err)
+	}
+	if cfg.Scratch.WidthSpec() != "70%" || cfg.Scratch.HeightSpec() != "80%" {
+		t.Fatalf("sizes = %+v", cfg.Scratch)
+	}
+	res := ValidateConfig(cfg)
+	if res.HasErrors() {
+		t.Fatalf("the old key is an error, want a warning: %+v", res.Errors)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if w.Field == "scratch" && w.Key == "session" && strings.Contains(w.Message, "no longer used") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no warning about the old session key: %+v", res.Warnings)
+	}
+	// The key is gone from the options, so set-config refuses it.
+	if err := SetOptionValue(cfg, "scratch.session", "notes"); err == nil {
+		t.Fatal("set-config accepted scratch.session")
 	}
 }
 
@@ -34,7 +63,7 @@ func TestScratchTableFillsWhatIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := cfg.Scratch
-	if s.Session != "scratch" || s.Width != "70%" || s.Height != "80%" {
+	if s.Width != "70%" || s.Height != "80%" {
 		t.Fatalf("filled = %+v", s)
 	}
 }
@@ -54,15 +83,12 @@ func TestScratchValidation(t *testing.T) {
 		want string // "" means no warning
 	}{
 		{"defaults", defaultScratchConfig(), ""},
-		{"cells", ScratchConfig{Session: "s", Width: "100", Height: "30"}, ""},
-		{"percent below floor is fine", ScratchConfig{Session: "s", Width: "5%", Height: "5%"}, ""},
-		{"not a size", ScratchConfig{Session: "s", Width: "wide"}, "is not a number"},
-		{"too many percent", ScratchConfig{Session: "s", Height: "120%"}, "more than the whole region"},
-		{"narrow cells", ScratchConfig{Session: "s", Width: "10"}, "width of 22 cells or more"},
-		{"short cells", ScratchConfig{Session: "s", Height: "5"}, "height of 8 cells or more"},
-		{"path in name", ScratchConfig{Session: "a/b"}, "path separator"},
-		{"space in name", ScratchConfig{Session: " s"}, "spaces at the start or end"},
-		{"name is a flag", ScratchConfig{Session: "-x"}, `starts with "-"`},
+		{"cells", ScratchConfig{Width: "100", Height: "30"}, ""},
+		{"small cells", ScratchConfig{Width: "10", Height: "5"}, ""},
+		{"percent", ScratchConfig{Width: "5%", Height: "5%"}, ""},
+		{"not a size", ScratchConfig{Width: "wide"}, "is not a number"},
+		{"too many percent", ScratchConfig{Height: "120%"}, "more than the whole region"},
+		{"old session key", ScratchConfig{Session: "notes"}, "no longer used"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -103,16 +129,6 @@ func TestScratchSizeOptionIsChecked(t *testing.T) {
 	}
 	if err := SetOptionValue(cfg, "scratch.height", "tall"); err == nil {
 		t.Fatal("tall accepted")
-	}
-	// The session name gets the rule the popup gets: no name that reads as a
-	// flag, and none the daemon refuses.
-	for _, bad := range []string{"-x", "a/b", " s"} {
-		if err := SetOptionValue(cfg, "scratch.session", bad); err == nil {
-			t.Fatalf("scratch.session %q accepted", bad)
-		}
-	}
-	if err := SetOptionValue(cfg, "scratch.session", "notes"); err != nil {
-		t.Fatalf("notes refused: %v", err)
 	}
 }
 

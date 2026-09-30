@@ -64,7 +64,14 @@ func (m *OS) MinimizeWindow(i int) {
 }
 
 // RestoreWindow restores a minimized window at the specified index.
+//
+// The hidden scratch terminal is not restored here. Only the scratch key shows
+// it, because showing it also moves it to the current workspace and puts the
+// keyboard in it (see ToggleScratch). A "restore all" leaves it hidden.
 func (m *OS) RestoreWindow(i int) {
+	if i >= 0 && i < len(m.Windows) && m.Windows[i].IsScratch {
+		return
+	}
 	if i >= 0 && i < len(m.Windows) && m.Windows[i].Minimized {
 		window := m.Windows[i]
 
@@ -626,7 +633,7 @@ func (m *OS) RestoreMinimizedByIndex(index int) {
 	// Find the nth minimized window in current workspace
 	minimizedCount := 0
 	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && window.Minimized {
+		if window.Workspace == m.CurrentWorkspace && window.Minimized && !window.IsScratch {
 			if minimizedCount == index {
 				m.RestoreWindow(i)
 				return
@@ -656,7 +663,7 @@ func (m *OS) FocusNextVisibleWindow() {
 // HasMinimizedWindows returns true if there are any minimized windows.
 func (m *OS) HasMinimizedWindows() bool {
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && w.Minimized {
+		if w.Workspace == m.CurrentWorkspace && w.Minimized && !w.IsScratch {
 			return true
 		}
 	}

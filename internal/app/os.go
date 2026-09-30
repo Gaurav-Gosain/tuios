@@ -1495,13 +1495,17 @@ type OS struct {
 	// terminal mode is deferred until that window materializes through a state
 	// sync and can be focused.
 	pendingStartTerminalMode bool
-	// scratchPending says a scratch popup was asked for and has not arrived
-	// yet, and scratchPendingAt is when. See scratch.go.
-	scratchPending bool
+	// scratchPending says the scratch terminal was asked for and has not
+	// arrived yet, and scratchPendingAt is when. See scratch.go.
+	scratchPending   bool
+	scratchPendingAt time.Time
+	// scratchReturnID and scratchReturnMode are the pane and the mode the
+	// focus goes back to when the scratch terminal hides.
+	scratchReturnID   string
+	scratchReturnMode Mode
 	// forceTerminalMode is OSOptions.StartInTerminalMode: applyStartupPreferences
 	// enters terminal mode once a pane is focused, for any session.
 	forceTerminalMode bool
-	scratchPendingAt  time.Time
 	// layoutInstant places the next layout without animation. See
 	// applyStartupTiling and layoutAnimationDuration.
 	layoutInstant bool
