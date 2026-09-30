@@ -27,6 +27,8 @@ type sshExitRun struct {
 	mu   sync.Mutex
 	seen strings.Builder
 	done chan error
+	// readDone closes when the reader has taken everything the server wrote.
+	readDone chan struct{}
 }
 
 // startSSHExitRun brings up a daemon, an SSH server in front of it, and a real
@@ -103,8 +105,10 @@ func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 		t.Fatalf("start shell: %v", err)
 	}
 
-	run := &sshExitRun{daemon: d, session: sess, client: client, name: name, done: make(chan error, 1)}
+	run := &sshExitRun{daemon: d, session: sess, client: client, name: name,
+		done: make(chan error, 1), readDone: make(chan struct{})}
 	go func() {
+		defer close(run.readDone)
 		buf := make([]byte, 8192)
 		for {
 			n, rerr := stdout.Read(buf)
@@ -158,6 +162,15 @@ func (r *sshExitRun) waitForExit(t *testing.T, d time.Duration) string {
 		}
 	case <-time.After(d):
 		t.Fatalf("the SSH client never exited: it is still rendering a session that is gone\n--- last output ---\n%s",
+			tailPrintable(r.text()))
+	}
+	// The session ending does not mean its output has been read. The last
+	// frame, the one with the reason in it, can still be in the channel when
+	// Wait returns, so the reader is waited for until it reaches the end.
+	select {
+	case <-r.readDone:
+	case <-time.After(d):
+		t.Fatalf("the SSH client exited but its output never ended\n--- last output ---\n%s",
 			tailPrintable(r.text()))
 	}
 	return r.text()
