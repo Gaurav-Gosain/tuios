@@ -10,8 +10,10 @@
 package capture
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,17 +322,40 @@ func cleanLabel(s string) string {
 
 // Save writes bytes to path, creating the parent directory. An empty path is
 // an error rather than a guess: every caller resolves one first.
+//
+// The bytes go to a hidden temporary file in the same directory, which is then
+// renamed onto path. A reader (a file manager, a watcher, the preview, a test)
+// that sees path appear therefore sees the whole capture: os.WriteFile creates
+// the file empty and fills it after, and anything that opened it in between
+// read nothing. A capture that fails part way leaves no half-written file.
 func Save(path string, data []byte) error {
 	if path == "" {
 		return fmt.Errorf("no output path")
 	}
-	if dir := filepath.Dir(path); dir != "" {
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			return fmt.Errorf("could not create %s: %w", dir, err)
-		}
+	// The name's claim goes once the capture is in place, or when it could not
+	// be written and holds nothing. An explicit path was never claimed, and
+	// removing a claim that is not there does nothing.
+	defer func() { _ = os.Remove(claimPath(path)) }()
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("could not create %s: %w", dir, err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
 		return fmt.Errorf("could not write %s: %w", path, err)
+	}
+	tmpPath := tmp.Name()
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	if werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmpPath, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("could not write %s: %w", path, werr)
 	}
 	return nil
 }
@@ -376,8 +401,13 @@ const freeNameLimit = 1000
 // command, so a second capture can be started while the first is still being
 // written. Looking and then writing would let both look at the same empty
 // second and both pick the same name, and the second write would silently take
-// the first one's file. An empty file is left behind only if the write that
-// follows fails outright, which is the case where there was no capture anyway.
+// the first one's file.
+//
+// The claim is a hidden file beside the name, not the name itself. A claim on
+// the name was an empty file under the capture's own name until Save filled
+// it, and a reader that found it in that moment (a file manager, a watcher, a
+// test) read an empty capture. Save removes the claim once the capture is in
+// place.
 func freeName(dir, name string) string {
 	path := filepath.Join(dir, name)
 	if claimName(path) {
@@ -394,12 +424,27 @@ func freeName(dir, name string) string {
 	return path
 }
 
-// claimName creates path if nothing holds it, and reports whether it did.
+// claimPath is the hidden file that holds path for a capture being written.
+func claimPath(path string) string {
+	return filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".claim")
+}
+
+// claimName takes path for one capture and reports whether it could. It fails
+// when a finished capture holds the name, or another capture is writing it.
+//
+// The claim is taken before the name is checked, and it is released only after
+// Save has renamed the capture into place. So a capture that checks the name
+// while another is writing it fails on the claim, and one that checks it after
+// finds the finished file.
 func claimName(path string) bool {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(claimPath(path), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return false
 	}
 	_ = f.Close()
+	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+		_ = os.Remove(claimPath(path))
+		return false
+	}
 	return true
 }
