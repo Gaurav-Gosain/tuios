@@ -356,10 +356,11 @@ type SessionState struct {
 	// names the pane currently selected there, it lets a close return to the
 	// pane the user visited immediately before it.
 	FocusHistory map[int][]string `json:"focus_history,omitempty"`
-	MasterRatio  float64          `json:"master_ratio"`
-	AutoTiling   bool             `json:"auto_tiling"`
-	Width        int              `json:"width"`
-	Height       int              `json:"height"`
+
+	MasterRatio float64 `json:"master_ratio"`
+	AutoTiling  bool    `json:"auto_tiling"`
+	Width       int     `json:"width"`
+	Height      int     `json:"height"`
 	// Input mode (window-management vs terminal) is deliberately absent: it is
 	// per-viewer, not per-session. It used to live here, which meant one client
 	// entering terminal mode flipped the input mode of every other client
