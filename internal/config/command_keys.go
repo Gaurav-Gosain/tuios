@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Command keybindings: [[keybindings.command]] entries that bind a key to a
@@ -73,13 +75,23 @@ func (c CommandBinding) ResolvedType() string {
 
 // ResolvedName is the entry's name: its own name field, else a slug of its
 // description, else a slug of its command.
+//
+// A slug keeps ASCII letters and digits only, so a description in another
+// script can give an empty one. The key comes next, which is ASCII. The last
+// resort is a hash of the entry's text, which is the same on every run.
 func (c CommandBinding) ResolvedName() string {
-	for _, s := range []string{c.Name, c.Description, c.Command} {
+	for _, s := range []string{c.Name, c.Description, c.Command, c.Key} {
 		if slug := commandSlug(s); slug != "" {
 			return slug
 		}
 	}
-	return ""
+	text := c.Name + "\x00" + c.Description + "\x00" + c.Command + "\x00" + c.Key
+	if strings.Trim(text, "\x00") == "" {
+		return ""
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(text))
+	return fmt.Sprintf("cmd-%08x", h.Sum32())
 }
 
 // Action is the entry's action name, for the registry and the dispatcher.
@@ -210,21 +222,19 @@ func (k *KeybindingsConfig) CommandFor(action string) (CommandBinding, bool) {
 	return CommandBinding{}, false
 }
 
-// commandSection is the key lists the command entries add to one section, by
-// action name.
-func (k *KeybindingsConfig) commandSection(section string) map[string][]string {
-	var out map[string][]string
-	for _, c := range k.Commands() {
-		if c.Section() != section {
-			continue
-		}
-		if out == nil {
-			out = map[string][]string{}
-		}
-		out[c.Action()] = []string{c.BareKey()}
+// isLeader reports whether key is the leader key. The leader is read before
+// any section, so an entry on it never runs.
+func (k *KeybindingsConfig) isLeader(key string) bool {
+	leader := k.LeaderKey
+	if leader == "" {
+		leader = DefaultLeaderKey
 	}
-	return out
+	return CanonicalKey(key) == CanonicalKey(leader)
 }
+
+// LeaderAction is what Bindings names as the taker of a command entry's key
+// when the key is the leader.
+const LeaderAction = "leader_key"
 
 // validateCommands warns about each entry tuios leaves out. An entry is a
 // warning and not an error, so a mistake in one entry never stops tuios.
@@ -245,5 +255,22 @@ func validateCommands(cfg *UserConfig, result *ValidationResult) {
 			continue
 		}
 		seen[c.ResolvedName()] = true
+		if c.Section() == SectionGlobal && bareLetterKey(c.BareKey()) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: field, Key: c.Key,
+				Message: fmt.Sprintf("The key %s has no modifier and no prefix+, so tuios takes it from every pane. Use prefix+%s or add a modifier, for example alt+%s.", c.BareKey(), c.BareKey(), c.BareKey()),
+			})
+		}
 	}
+}
+
+// bareLetterKey reports whether key is one printable character with no
+// modifier: a key a person types into a pane.
+func bareLetterKey(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "space" {
+		return true
+	}
+	r, size := utf8.DecodeRuneInString(key)
+	return size == len(key) && size > 0 && unicode.IsPrint(r)
 }

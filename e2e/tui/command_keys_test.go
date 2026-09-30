@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -184,4 +186,37 @@ command = "echo \"$TUIOS_SESSION $TUIOS_ACTIVE_PANE_ID\" > `+out+`"
 		t.Fatalf("the shell command changed the windows from %d to %d", before, after)
 	}
 	alive(t, term, "after the command keys")
+}
+
+// A scratch entry whose command exits at once says so on the dock, with the
+// exit code, and the next press tries again instead of waiting out a create
+// that never arrives.
+func TestScratchEntryThatStopsAtOnce(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[[keybindings.command]]\nkey = \"prefix+alt+y\"\ntype = \"scratch\"\ncommand = \"exit 7\"\ndescription = \"Broken\"\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "work"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	// The dock counts its messages after "esc": "+2". A second report
+	// raises it, which a press still blocked by the first create would not.
+	count := func(s tuitest.Screen) int {
+		m := regexp.MustCompile(`esc\s+\+(\d+)`).FindStringSubmatch(s.Text())
+		if m == nil {
+			return 0
+		}
+		n, _ := strconv.Atoi(m[1])
+		return n
+	}
+	last := 0
+	for try := 1; try <= 2; try++ {
+		pressCommand(t, term, 'y')
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "stopped with exit code 7") && count(s) > last
+		}, uiTimeout); err != nil {
+			t.Fatalf("press %d: no new report (count %d): %v\n%s", try, count(term.Screen()), err, term.Snapshot())
+		}
+		last = count(term.Screen())
+		t.Logf("press %d:\n%s", try, term.Snapshot())
+	}
+	alive(t, term, "after a scratch that stops at once")
 }

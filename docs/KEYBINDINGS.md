@@ -193,16 +193,36 @@ The command gets these variables:
 | `TUIOS_ACTIVE_PANE_ID` | The pane that had the focus |
 | `TUIOS_ACTIVE_PANE_CWD` | The folder in which the command starts |
 
-A command key never takes a key from a tuios action. When the key is taken,
-`tuios keybinds doctor` shows the entry as dead. The command palette lists
-each entry, and `tuios keybinds list` shows them under Commands.
+A command key never takes a key from a tuios action or from the leader key.
+When the key is taken, `tuios keybinds doctor` shows the entry as dead. When
+two entries have the same key, the first entry in `config.toml` runs, and the
+doctor shows the other as dead. To move an entry to a different key, edit its
+`key` in `config.toml`. The command palette lists each entry, and
+`tuios keybinds list` shows them under Commands.
+
+A key with no modifier and no `prefix+`, for example `g`, works in terminal
+mode too. It takes that letter from every pane, so tuios shows a warning. Use
+`prefix+g` or a key with a modifier, for example `alt+g`.
+
+When a scratch command stops in its first moments, for example because the
+program is not installed, the dock shows its exit code. The next press starts
+it again. tuios does not start it again by itself.
+
+The command and the palette row of an entry change when you save
+`config.toml`. A changed key works in the next client, as for the other
+keybindings. When you remove or rename an entry, or change the description of
+an entry that has no `name`, its scratch popup closes at the next reload. The
+dock shows a message.
 
 In a session on a different machine, a `scratch` or `popup` entry does not
 run. The dock shows a message. A `pane` entry runs on the machine of the
 session. A `shell` entry runs on the machine that runs the tuios client.
 
 Only a key press or the command palette runs a command key. A change to
-`config.toml` does not run a command.
+`config.toml` does not run a command. A pane that has the respond grant can
+press keys as you through `run-command`. It can press a command key, also from
+a session on a different machine, and a `shell` entry then runs on this
+machine. Give the respond grant only to a pane that you trust.
 
 ## Copy mode
 

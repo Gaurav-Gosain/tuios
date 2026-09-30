@@ -133,11 +133,14 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		// The message names the winner and says how to act on it. A warning
 		// that only listed the actions left the reader with a fact and no
 		// verb, and the verb is the whole point of reporting it.
+		how := fmt.Sprintf("Run `tuios keybinds unbind <action> %s` to take the key off one of them.", key)
+		if slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, CommandActionPrefix) }) {
+			how = "To move a command entry, edit its key in the [[keybindings.command]] table of config.toml. For an action, run `tuios keybinds unbind <action> " + key + "`."
+		}
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "keybindings",
-			Key:   key,
-			Message: fmt.Sprintf("%s runs %s. These never run: %s. Run `tuios keybinds unbind <action> %s` to take the key off one of them.",
-				key, actions[0], strings.Join(actions[1:], ", "), key),
+			Field:   "keybindings",
+			Key:     key,
+			Message: fmt.Sprintf("%s runs %s. These never run: %s. %s", key, actions[0], strings.Join(actions[1:], ", "), how),
 		})
 	}
 

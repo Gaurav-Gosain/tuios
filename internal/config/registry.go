@@ -136,16 +136,16 @@ func (r *KeybindRegistry) sectionKeyMap(section map[string][]string) map[string]
 // the built-in keeps it, and tuios keybinds doctor reports the entry as
 // shadowed (see Bindings).
 func (r *KeybindRegistry) withCommands(keyMap map[string]string, section string) map[string]string {
-	cmds := r.config.Keybindings.commandSection(section)
-	actions := make([]string, 0, len(cmds))
-	for action := range cmds {
-		actions = append(actions, action)
-	}
-	sort.Strings(actions)
-	for _, action := range actions {
-		for _, key := range r.normalizer.ExpandKeys(cmds[action]) {
+	kb := &r.config.Keybindings
+	// Config order, the order Bindings reports them in: of two entries on one
+	// key, the first in the file runs.
+	for _, c := range kb.Commands() {
+		if c.Section() != section || kb.isLeader(c.BareKey()) {
+			continue
+		}
+		for _, key := range r.normalizer.ExpandKeys([]string{c.BareKey()}) {
 			if _, taken := keyMap[key]; !taken {
-				keyMap[key] = action
+				keyMap[key] = c.Action()
 			}
 		}
 	}

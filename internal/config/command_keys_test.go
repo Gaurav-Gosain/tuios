@@ -169,3 +169,86 @@ func TestCommandEntryDuplicateName(t *testing.T) {
 		t.Fatalf("warnings = %+v", res.Warnings)
 	}
 }
+
+// Of two entries on one key, the first in the file runs, and the report
+// agrees. The key map used to sort by name, so alpha ran while the doctor
+// named zeta.
+func TestCommandEntriesOnOneKeyFollowTheFile(t *testing.T) {
+	cfg, err := ParseUserConfig([]byte("[[keybindings.command]]\nkey = \"alt+x\"\ncommand = \"z\"\nname = \"zeta\"\n[[keybindings.command]]\nkey = \"alt+x\"\ncommand = \"a\"\nname = \"alpha\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewKeybindRegistry(cfg)
+	if got := r.GetGlobalAction("alt+x"); got != "command:zeta" {
+		t.Fatalf("alt+x runs %q, want command:zeta", got)
+	}
+	for _, b := range r.Bindings() {
+		switch b.Action {
+		case "command:zeta":
+			if b.Shadowed {
+				t.Error("the report says zeta is dead")
+			}
+		case "command:alpha":
+			if !b.Shadowed || b.ShadowedBy != "command:zeta" {
+				t.Errorf("alpha = %+v, want dead behind zeta", b)
+			}
+		}
+	}
+	var msg string
+	for _, w := range ValidateConfig(cfg).Warnings {
+		if strings.Contains(w.Message, "command:alpha") {
+			msg = w.Message
+		}
+	}
+	if !strings.Contains(msg, "runs command:zeta") || !strings.Contains(msg, "[[keybindings.command]]") || strings.Contains(msg, "unbind command:") {
+		t.Fatalf("warning = %q, want zeta the winner and a config.toml hint", msg)
+	}
+}
+
+// An entry on the leader key never runs, and the report says so.
+func TestCommandEntryOnTheLeaderIsDead(t *testing.T) {
+	cfg, err := ParseUserConfig([]byte("[[keybindings.command]]\nkey = \"ctrl+b\"\ncommand = \"x\"\nname = \"lead\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewKeybindRegistry(cfg)
+	if got := r.GetGlobalAction("ctrl+b"); got == "command:lead" {
+		t.Fatal("the leader runs the entry")
+	}
+	for _, b := range r.Bindings() {
+		if b.Action == "command:lead" && (!b.Shadowed || b.ShadowedBy != LeaderAction) {
+			t.Fatalf("binding = %+v, want dead behind the leader", b)
+		}
+	}
+}
+
+// A global key with no modifier takes the letter from every pane: warned.
+func TestBareGlobalKeyWarns(t *testing.T) {
+	for key, want := range map[string]bool{"g": true, "G": true, "space": true, "alt+g": false, "prefix+g": false, "f5": false} {
+		cfg, err := ParseUserConfig([]byte("[[keybindings.command]]\nkey = \"" + key + "\"\ncommand = \"x\"\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := false
+		for _, w := range ValidateConfig(cfg).Warnings {
+			got = got || strings.Contains(w.Message, "takes it from every pane")
+		}
+		if got != want {
+			t.Errorf("key %q warned=%v, want %v", key, got, want)
+		}
+	}
+}
+
+// A name that no slug can make falls back to the key, then to a hash, and
+// is the same on every read.
+func TestCommandNameFallback(t *testing.T) {
+	c := CommandBinding{Key: "prefix+alt+g", Description: "Привет", Command: "эхо"}
+	if got := c.ResolvedName(); got != "prefix-alt-g" {
+		t.Fatalf("name = %q, want prefix-alt-g", got)
+	}
+	c = CommandBinding{Key: "ж", Description: "Привет", Command: "эхо"}
+	a, b := c.ResolvedName(), c.ResolvedName()
+	if a == "" || a != b || !strings.HasPrefix(a, "cmd-") {
+		t.Fatalf("names = %q, %q, want one stable cmd- name", a, b)
+	}
+}
