@@ -32,18 +32,6 @@ func (s *SessionState) workspaceAccepts(ws int) bool {
 	return (ws >= 1 && ws <= s.workspaceBound()) || IsScratchWorkspace(ws)
 }
 
-// scratchGroupWorkspace is the workspace of the scratch group named name, and
-// whether the group has a pane.
-func scratchGroupWorkspace(state *SessionState, name string) (int, bool) {
-	key := WindowState{ScratchName: name}.ScratchKey()
-	for i := range state.Windows {
-		if w := &state.Windows[i]; w.Scratch && w.ScratchKey() == key && IsScratchWorkspace(w.Workspace) {
-			return w.Workspace, true
-		}
-	}
-	return 0, false
-}
-
 // freeScratchWorkspace is the lowest scratch workspace no window is on.
 func freeScratchWorkspace(state *SessionState) int {
 	used := map[int]bool{}
