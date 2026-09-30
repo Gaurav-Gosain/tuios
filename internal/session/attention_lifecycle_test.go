@@ -86,18 +86,12 @@ func TestSnoozedItemsSurviveARestart(t *testing.T) {
 	b, _, _ := lifecycleStore(t)
 	b.now = clock.now
 	b.load(path, func(string, string) bool { return true })
-	// The overdue snooze wakes on the store's own timer, which load arms with
-	// no delay. It runs on another goroutine, so the item is waited for: a
-	// count of the sleeping items straight after load raced that timer.
-	deadline := time.Now().Add(5 * time.Second)
-	var open []AttentionItem
-	for {
-		open = openItems(t, b)
-		if len(open) > 0 || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	// load arms the wake timer with no delay for the overdue snooze, and the
+	// timer runs on its own goroutine. wakeDue does the same work here, so the
+	// result does not depend on which of the two gets there first. A count of
+	// the sleeping items straight after load raced that timer.
+	b.wakeDue()
+	open := openItems(t, b)
 	if len(open) != 1 || open[0].ID != items[1].ID {
 		t.Fatalf("after the restart %+v is open, want %s", open, items[1].ID)
 	}
