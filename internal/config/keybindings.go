@@ -28,6 +28,7 @@ const (
 	whichKeyInboxMail     = "Inbox: mail"
 	whichKeyReview        = "Review changes"
 	whichKeyNewestDone    = "Newest finished"
+	whichKeyPasteImage    = "Paste image"
 )
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
@@ -37,7 +38,7 @@ const (
 // been seen; the keys work either way.
 func IsAgentPrefixKeybinding(k Keybinding) bool {
 	switch k.Description {
-	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone:
+	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone, whichKeyPasteImage:
 		return true
 	}
 	return false
@@ -130,7 +131,6 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("n/p", "Next/prev window"),
 		kb("0-9", "Jump to window"),
 		kb("z", "Toggle zoom"),
-		kb("V", "Paste image"),
 	}}
 	panes := KeybindingGroup{Title: "Panes", Bindings: []Keybinding{
 		// The arrows walk panes, and the prefix stays armed for a moment
@@ -195,6 +195,10 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("M", whichKeyInboxMail),
 		kb("O", whichKeyNewestDone),
 		kb("v", whichKeyReview),
+		// An image is pasted for an agent to read, so the line waits for an
+		// agent with the others. The Windows section has no room for it at
+		// 80x24.
+		kb("V", whichKeyPasteImage),
 	}}
 	return []KeybindingGroup{windows, panes, sessions, modes, menus, tools, agents}
 }
