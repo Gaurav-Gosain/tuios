@@ -1912,6 +1912,34 @@ Response:
 {"result": {"type": "ok"}}
 ```
 
+### pip
+
+Pin a pane as the attached client's picture-in-picture view, or unpin it. The
+view is a small live copy of the pane in a corner of the client's screen. It
+shows while another pane has the focus.
+
+Params: `session` (optional), `window` (optional; a window ID or name),
+`off` (optional bool). Omit `window` to pin the client's focused pane. Naming
+the pinned pane again unpins it. `off` unpins whatever is pinned and takes no
+`window`.
+
+The view belongs to the client, not to the session. It is not in session
+state, so the verb needs an attached client and fails with `needs_client`
+without one. With more than one client attached, the verb reaches the client
+that `run-command` reaches.
+
+Request:
+
+```json
+{"verb": "pip", "params": {"session": "work", "window": "agent"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "pip", "pinned": true, "window_id": "6a7ad980-..."}}
+```
+
 ### send-keys
 
 Send keys to a window's program: arrows, page keys, Enter, `ctrl+c`. Tokens
@@ -3879,7 +3907,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |
