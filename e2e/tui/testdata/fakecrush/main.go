@@ -9,7 +9,7 @@
 // It prints what it was told, sends Crush's first report (idle), and then
 // reads one word per line from its terminal and sends that report: working,
 // blocked, idle, release, stale (a seq below the last one), foreign (another
-// pane's id) and unsupported (a method tuios does not answer). The words
+// pane's id) and unsupported (pane.zoom, a method tuios does not answer). The words
 // charmbracelet/crush#3541 adds are permission and question (blocked with the
 // message that Crush sends for each), meta (pane.report_metadata with a title
 // and a model token) and notify (notification.show). crash reports working
@@ -46,7 +46,7 @@ type request struct {
 
 func main() {
 	env, sock, pane := os.Getenv("HERDR_ENV"), os.Getenv("HERDR_SOCKET_PATH"), os.Getenv("HERDR_PANE_ID")
-	fmt.Printf("HERDR_ENV=%q PANE_MATCHES=%v SOCKET_SET=%v\n", env, pane != "" && pane == os.Getenv("TUIOS_PANE_ID"), sock != "")
+	fmt.Printf("HERDR_ENV=%q PANE_MATCHES=%v SOCKET_SET=%v\n", env, pane != "" && strings.HasSuffix(pane, ":p"+herdrHex(os.Getenv("TUIOS_PANE_ID"))), sock != "")
 	if env != "1" || sock == "" || pane == "" {
 		fmt.Println("NO-HERDR")
 		_, _ = io.Copy(io.Discard, os.Stdin)
@@ -76,7 +76,7 @@ func main() {
 		case "foreign":
 			send("pane.report_agent", "working", "not-this-pane", next())
 		case "unsupported":
-			send("pane.send_input", "", pane, next())
+			send("pane.zoom", "", pane, next())
 		case "permission":
 			sendMsg("pane.report_agent", "blocked", "Permission: bash - go test ./...", pane, next())
 		case "question":
@@ -111,4 +111,11 @@ func dialSend(socketPath string, req request) string {
 	}
 	out, _ := io.ReadAll(conn)
 	return strings.TrimSpace(string(out))
+}
+
+// herdrHex is the part of a tuios id that tuios puts in a herdr id: the
+// first 12 hex digits, dashes dropped. HERDR_PANE_ID is <session>:p<this>.
+func herdrHex(id string) string {
+	id = strings.ReplaceAll(id, "-", "")
+	return id[:min(len(id), 12)]
 }

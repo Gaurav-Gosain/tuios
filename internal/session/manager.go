@@ -172,13 +172,14 @@ func (m *Manager) SetHerdrBin(path string) {
 
 // HerdrEnv is the herdr environment a pane that runs command (nil for the
 // user's shell) is started with, nil for none: HERDR_ENV, HERDR_SOCKET_PATH
-// naming tuios's own socket, HERDR_PANE_ID naming the pane, and
+// naming tuios's own socket, HERDR_PANE_ID and HERDR_WORKSPACE_ID naming the
+// pane and its session in herdr's form (herdr_ids.go), and
 // HERDR_BIN_PATH naming this tuios, for a reporter that calls herdr's CLI
 // rather than the socket. A pane gets it when the daemon listens on the
 // socket and [agents] herdr_protocol is not off: every pane by default, as
 // in herdr, or with "agents" only a pane that starts a harness known to
 // report this way. See herdr_compat.go.
-func (m *Manager) HerdrEnv(windowID string, command []string) []string {
+func (m *Manager) HerdrEnv(sessionID, windowID string, command []string) []string {
 	sock := ""
 	if p := m.herdrSocket.Load(); p != nil {
 		sock = *p
@@ -193,7 +194,10 @@ func (m *Manager) HerdrEnv(windowID string, command []string) []string {
 	if mode != config.HerdrProtocolAlways && !guestenv.SpeaksHerdrProtocol(command) {
 		return nil
 	}
-	env := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + windowID}
+	env := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + herdrPaneID(sessionID, windowID)}
+	if sessionID != "" {
+		env = append(env, "HERDR_WORKSPACE_ID="+herdrWorkspaceID(sessionID))
+	}
 	if p := m.herdrBin.Load(); p != nil && *p != "" {
 		env = append(env, "HERDR_BIN_PATH="+*p)
 	}

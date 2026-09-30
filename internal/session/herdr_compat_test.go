@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -179,8 +180,8 @@ func TestHerdrPaneReportsOnlyForItself(t *testing.T) {
 		}
 	}
 	f.caller = f.a
-	if _, e := f.call(t, "pane.send_input", map[string]any{"pane_id": f.a}); e == "" {
-		t.Fatal("pane.send_input was answered")
+	if _, e := f.call(t, "pane.swap", map[string]any{"pane_id": f.a}); !strings.HasPrefix(e, "unsupported") {
+		t.Fatalf("pane.swap answered %q, want unsupported", e)
 	}
 }
 
@@ -307,19 +308,21 @@ func TestHerdrEnvTellsEveryPaneByDefault(t *testing.T) {
 	m := &Manager{}
 	m.SetHerdrSocket("/run/tuios.sock.herdr")
 	m.SetHerdrBin("/usr/bin/tuios")
-	want := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=/run/tuios.sock.herdr", "HERDR_PANE_ID=w1", "HERDR_BIN_PATH=/usr/bin/tuios"}
-	if got := m.HerdrEnv("w1", nil); !slices.Equal(got, want) {
+	sid, wid := "5f0c8a1e-7b2d-4c3e-9f10-aabbccddeeff", "0d1e2f3a-4b5c-6d7e-8f90-112233445566"
+	want := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=/run/tuios.sock.herdr", "HERDR_PANE_ID=w5f0c8a1e7b2d:p0d1e2f3a4b5c",
+		"HERDR_WORKSPACE_ID=w5f0c8a1e7b2d", "HERDR_BIN_PATH=/usr/bin/tuios"}
+	if got := m.HerdrEnv(sid, wid, nil); !slices.Equal(got, want) {
 		t.Fatalf("a shell pane by default: %q", got)
 	}
 	m.SetHerdrProtocol("agents")
-	if got := m.HerdrEnv("w1", nil); got != nil {
+	if got := m.HerdrEnv(sid, wid, nil); got != nil {
 		t.Fatalf("a shell pane with agents: %q", got)
 	}
-	if got := m.HerdrEnv("w1", []string{"/opt/bin/crush"}); len(got) != 4 {
+	if got := m.HerdrEnv(sid, wid, []string{"/opt/bin/crush"}); len(got) != 5 {
 		t.Fatalf("a Crush pane with agents: %q", got)
 	}
 	m.SetHerdrProtocol("off")
-	if got := m.HerdrEnv("w1", []string{"crush"}); got != nil {
+	if got := m.HerdrEnv(sid, wid, []string{"crush"}); got != nil {
 		t.Fatalf("off: %q", got)
 	}
 }
