@@ -203,6 +203,8 @@ func TestWindowSummariesAgreeCoversEveryField(t *testing.T) {
 			f.SetUint(1)
 		case reflect.Slice:
 			f.Set(reflect.ValueOf([]AgentMetaToken{{Key: "k"}}))
+		case reflect.Bool:
+			f.SetBool(true)
 		default:
 			t.Fatalf("field %s has a kind this test does not know: %s", rt.Field(i).Name, f.Kind())
 		}

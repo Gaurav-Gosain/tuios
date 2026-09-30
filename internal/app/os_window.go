@@ -652,7 +652,7 @@ func (m *OS) applyStartupTiling() {
 	}
 	// The first layout is placed, not animated. A pane that slides into its
 	// tile keeps its old size until the slide ends, and a shell that ran a
-	// command in that time read the old size: the scratch popup's first
+	// command in that time read the old size: a popup's first
 	// command saw half the popup.
 	m.layoutInstant = true
 	defer func() { m.layoutInstant = false }()

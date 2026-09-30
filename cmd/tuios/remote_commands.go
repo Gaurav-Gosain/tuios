@@ -763,6 +763,9 @@ type windowRow struct {
 	Workspace  int    `json:"workspace"`
 	Focused    bool   `json:"focused"`
 	Minimized  bool   `json:"minimized"`
+	// Scratch marks the session's scratch terminal. The table leaves it out
+	// while it is hidden, as the dock does. --json keeps it, marked.
+	Scratch    bool   `json:"scratch"`
 	AgentState string `json:"agent_state"`
 	AgentMsg   string `json:"agent_message"`
 	Width      int    `json:"width"`
@@ -780,6 +783,14 @@ func printWindowList(raw json.RawMessage, on string) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
+	shown := res.Windows[:0]
+	for _, w := range res.Windows {
+		if w.Scratch && w.Minimized {
+			continue
+		}
+		shown = append(shown, w)
+	}
+	res.Windows = shown
 	if len(res.Windows) == 0 {
 		fmt.Println("No windows. Create one with 'tuios new-window'.")
 		return nil
@@ -822,7 +833,7 @@ func printWindowList(raw json.RawMessage, on string) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d window(s)%s. * marks the focused one.\n", res.Total, on)
+	fmt.Printf("\n%d window(s)%s. * marks the focused one.\n", len(res.Windows), on)
 	return nil
 }
 

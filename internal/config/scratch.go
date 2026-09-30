@@ -6,67 +6,44 @@ import (
 	"strings"
 )
 
-// ScratchConfig is the [scratch] section: the session toggle_scratch shows in
-// a popup over the current layout, and the size of that popup.
-//
-// The session is an ordinary daemon session. The popup runs `tuios attach` on
-// it, so hiding the popup detaches that one client and leaves the session
-// running, the way tmux-floax keeps its session.
+// ScratchConfig is the [scratch] section: the size of the scratch terminal,
+// the one shell toggle_scratch shows in a popup over the current layout.
 type ScratchConfig struct {
-	// Session is the name of the session the popup shows (default: scratch).
-	// tuios creates it the first time it is shown.
-	Session string `toml:"session"`
 	// Width and Height are the popup's size, in cells (60) or percent (80%)
 	// of the pane region, as tuios popup takes them (default: 80%).
 	Width  string `toml:"width"`
 	Height string `toml:"height"`
+	// Session named the session the first design showed in the popup, a
+	// nested tuios. The popup is a plain shell now, so the key is read only
+	// to tell the user it is no longer used (see validateScratch). A config
+	// that still has it loads.
+	Session string `toml:"session,omitempty"`
 }
 
 // Scratch defaults, one source for DefaultConfig, the registry and the
 // accessors.
 const (
-	ScratchDefaultSession = "scratch"
-	ScratchDefaultWidth   = "80%"
-	ScratchDefaultHeight  = "80%"
-
-	// ScratchMinWidth and ScratchMinHeight are the smallest box, border
-	// included, that shows the session at its real size. The daemon counts a
-	// client at no less than 20x6 cells (see session.minClientWidth), so a
-	// client in a smaller pane draws a session larger than the pane, and the
-	// pane cuts it off. The border takes one cell on each edge.
-	ScratchMinWidth  = 20 + 2
-	ScratchMinHeight = 6 + 2
+	ScratchDefaultWidth  = "80%"
+	ScratchDefaultHeight = "80%"
 )
 
 // defaultScratchConfig returns the section DefaultConfig carries.
 func defaultScratchConfig() ScratchConfig {
 	return ScratchConfig{
-		Session: ScratchDefaultSession,
-		Width:   ScratchDefaultWidth,
-		Height:  ScratchDefaultHeight,
+		Width:  ScratchDefaultWidth,
+		Height: ScratchDefaultHeight,
 	}
 }
 
 // fillMissingScratch fills an absent value with its default.
 func fillMissingScratch(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Scratch, &defaultCfg.Scratch
-	if strings.TrimSpace(s.Session) == "" {
-		s.Session = d.Session
-	}
 	if strings.TrimSpace(s.Width) == "" {
 		s.Width = d.Width
 	}
 	if strings.TrimSpace(s.Height) == "" {
 		s.Height = d.Height
 	}
-}
-
-// SessionName is the effective session name.
-func (s ScratchConfig) SessionName() string {
-	if name := strings.TrimSpace(s.Session); name != "" {
-		return name
-	}
-	return ScratchDefaultSession
 }
 
 // WidthSpec and HeightSpec are the effective sizes. A value that does not
@@ -111,63 +88,34 @@ func ParseBoxSize(spec string) (value int, percent bool, err error) {
 	return value, percent, nil
 }
 
-// validateScratch warns about a size that does not parse, a size in cells
-// below the floor, and a session name the daemon refuses. Each one falls back
-// or fails at run time, so without a warning a typo would look like the key
-// ignoring the config.
+// validateScratch warns about a size that does not parse and about the old
+// session key. A bad size falls back at run time, so without a warning a typo
+// would look like the key ignoring the config.
 func validateScratch(cfg *UserConfig, result *ValidationResult) {
 	s := cfg.Scratch
 	for _, f := range []struct {
 		key, spec, fallback string
-		floor               int
 	}{
-		{"width", s.Width, ScratchDefaultWidth, ScratchMinWidth},
-		{"height", s.Height, ScratchDefaultHeight, ScratchMinHeight},
+		{"width", s.Width, ScratchDefaultWidth},
+		{"height", s.Height, ScratchDefaultHeight},
 	} {
 		if strings.TrimSpace(f.spec) == "" {
 			continue
 		}
-		value, percent, err := ParseBoxSize(f.spec)
-		switch {
-		case err != nil:
+		if _, _, err := ParseBoxSize(f.spec); err != nil {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field: "scratch", Key: f.key,
-				Message: fmt.Sprintf("%v. The scratch popup uses %s.", err, f.fallback),
-			})
-		case !percent && value < f.floor:
-			result.Warnings = append(result.Warnings, ValidationError{
-				Field: "scratch", Key: f.key,
-				Message: fmt.Sprintf("The scratch popup needs a %s of %d cells or more. It does not open at %d.",
-					f.key, f.floor, value),
+				Message: fmt.Sprintf("%v. The scratch terminal uses %s.", err, f.fallback),
 			})
 		}
 	}
-	if msg := ScratchNameProblem(s.Session); msg != "" {
+	if strings.TrimSpace(s.Session) != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "scratch", Key: "session", Message: msg + " The scratch key cannot open it.",
+			Field: "scratch", Key: "session",
+			Message: ScratchSessionUnused,
 		})
 	}
 }
 
-// ScratchNameProblem says why a name cannot be the scratch session, or "".
-// It follows session.ValidateSessionName, which config cannot import, and
-// adds one rule: a name that starts with "-" reads as a flag on a command
-// line. ValidateSessionName does not refuse that, because a saved session of
-// such a name would then no longer restore.
-func ScratchNameProblem(name string) string {
-	switch {
-	case name == "":
-		return ""
-	case strings.HasPrefix(name, "-"):
-		return fmt.Sprintf("The session name %q starts with \"-\".", name)
-	case strings.TrimSpace(name) != name:
-		return fmt.Sprintf("The session name %q has spaces at the start or end.", name)
-	case name == "." || name == "..":
-		return fmt.Sprintf("The session name %q is reserved.", name)
-	case strings.ContainsAny(name, `/\`):
-		return fmt.Sprintf("The session name %q has a path separator.", name)
-	case strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }):
-		return fmt.Sprintf("The session name %q has a control character.", name)
-	}
-	return ""
-}
+// ScratchSessionUnused is what tuios says about the old [scratch] session key.
+const ScratchSessionUnused = "This key is no longer used. The scratch key shows one shell in a popup. Remove the key."

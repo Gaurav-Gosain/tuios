@@ -221,7 +221,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			cwds[w.ID] = cwd
 		}
 		if w.Popup {
-			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.ScratchPopup}
+			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.Scratch}
 		}
 		if w.Host != "" {
 			hosts[w.ID] = w.Host
@@ -270,7 +270,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// Only the daemon marks the scratch popup, so a push can neither set
 		// the mark on another pane nor clear it.
 		p, ok := popups[w.ID]
-		w.ScratchPopup = ok && p.scratch
+		w.Scratch = ok && p.scratch
 		if ok {
 			w.Popup = true
 			w.IsFloating = true

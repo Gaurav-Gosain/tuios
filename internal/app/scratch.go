@@ -1,8 +1,6 @@
 package app
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -12,43 +10,47 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The scratch popup, after tmux-floax: one key shows a persistent session in a
-// popup over the current layout, and the same key hides it again.
+// The scratch terminal, after tmux-floax: one key shows a shell in a popup
+// over the current layout, and the same key hides it again.
 //
-// The popup is an ordinary popup (os_popup.go) whose command is
-// `tuios attach -c <session>`, marked as the scratch popup when the daemon
-// opens it (session.WindowState.ScratchPopup). Hiding it closes the popup,
-// which ends that attach and so detaches one client. The session is the
-// daemon's and keeps running, so the next show attaches it again and it is
-// exactly as it was.
+// It is one pane per session, a popup marked as the scratch terminal
+// (session.WindowState.Scratch). The first press creates it. After that the
+// key never closes it: hiding minimizes it, so the shell keeps running with
+// its scrollback, and the next press shows the same pane on whichever
+// workspace the user is on, focused and in terminal mode.
 //
-// Closing rather than hiding the popup is deliberate. A hidden popup is a pane
-// every peer of this session still holds: it would sit in the window set, the
-// dock and the saved state, and its client would stay attached to the scratch
-// session at the popup's last size while nobody looks at it. A closed popup
-// leaves nothing behind, it opens on whichever workspace the user is on when
-// they press the key, and the reattach it costs is one local round trip.
+// Minimizing is what keeps a hidden pane out of the layout, the renderer, the
+// focus cycle and hit testing, because all of them already skip a minimized
+// pane. What minimizing would add, a dock entry and a restore digit, is taken
+// back out explicitly: every place that offers minimized panes to the user
+// asks terminal.Window.HiddenScratch first. The pane stays in the session
+// state, so it survives a detach, and the daemon brings it back hidden after
+// a restart (see daemon_resurrect.go).
 //
-// The popup is the session's, like every popup, so a toggle on another client
-// of the same session closes it for everyone.
+// When its shell exits the pane closes like any popup, and the next press
+// starts a new one.
 //
-// The key reaches this client even while the popup has the focus. A binding is
-// looked up here before a key is passed to the pane, so the inner client never
+// The key reaches this client even while the popup has the focus. A binding
+// is looked up here before a key is passed to the pane, so the shell never
 // sees the toggle, and pressing it from inside the popup hides the popup.
 
-// scratchPendingMax is the backstop on a show that is on its way. A show is
-// on its way from the press until the daemon refuses it or the popup arrives,
-// and a second press in that time does nothing, so a double press cannot open
-// two popups. The backstop only matters when the daemon never answers.
+// scratchName is the name the scratch terminal carries on its border.
+const scratchName = "scratch"
+
+// scratchPendingMax is the backstop on a create that is on its way. A create
+// is on its way from the press until the daemon refuses it or the pane
+// arrives, and a second press in that time does nothing, so a double press
+// cannot ask for two panes. The backstop only matters when the daemon never
+// answers.
 const scratchPendingMax = 10 * time.Second
 
-// ScratchOpenedMsg reports the outcome of the call that opens the scratch
-// popup.
+// ScratchOpenedMsg reports the outcome of the call that creates the scratch
+// terminal in a daemon session.
 type ScratchOpenedMsg struct {
 	Err error
 }
 
-// scratchOpener opens the popup through the daemon. Tests replace it.
+// scratchOpener creates the pane through the daemon. Tests replace it.
 var scratchOpener = openScratchPopup
 
 // scratchConfig is the [scratch] table in force.
@@ -59,100 +61,182 @@ func (m *OS) scratchConfig() config.ScratchConfig {
 	return m.UserConfig.Scratch
 }
 
-// isScratchPopup reports whether w is a popup toggle_scratch opened. The mark
-// is the daemon's, so a popup the user opened with the same name is not one.
-func isScratchPopup(w *terminal.Window) bool {
-	return w != nil && w.IsPopup && w.IsScratchPopup
+// isScratch reports whether w is the scratch terminal. The mark is the
+// daemon's, so a popup the user opened with the same name is not one.
+func isScratch(w *terminal.Window) bool {
+	return w != nil && w.IsPopup && w.IsScratch
 }
+
+// scratchIndex is the index of the scratch terminal, or -1.
+func (m *OS) scratchIndex() int {
+	for i, w := range m.Windows {
+		if isScratch(w) {
+			return i
+		}
+	}
+	return -1
+}
+
+// scratchAction is what one press of the toggle does.
+type scratchAction int
+
+const (
+	scratchNothing scratchAction = iota
+	scratchCreate
+	scratchShow
+	scratchHide
+	scratchRefuse
+)
 
 // scratchPlan is what one press of the toggle does. It is worked out apart
 // from doing it, so a test can read the decision without a daemon.
 type scratchPlan struct {
-	// refuse is the warning to show instead of acting, or "".
+	action scratchAction
+	// index is the scratch terminal, for show and hide.
+	index int
+	// refuse is the warning to show instead of acting.
 	refuse string
-	// close are the indexes of the scratch popups to close, highest first.
-	close []int
-	// open asks the daemon for a popup on the current workspace.
-	open bool
 }
 
 // planScratch decides what the toggle does now.
 //
-// A scratch popup on the current workspace means hide: every scratch popup
-// closes. Otherwise it means show, and a popup left on another workspace
-// closes as the new one opens here, so the popup follows the user.
-func (m *OS) planScratch(cfg config.ScratchConfig) scratchPlan {
-	name := cfg.SessionName()
-	switch {
-	case !m.IsDaemonSession || m.DaemonClient == nil:
-		return scratchPlan{refuse: "The scratch popup needs a daemon session. Start tuios with the daemon to use it."}
-	case m.AttachedHost != "":
-		return scratchPlan{refuse: "The scratch popup works only on this machine. Switch to a session on this machine to use it."}
-	case m.SessionName == name:
-		// The popup would show this session inside itself, which the
-		// daemon refuses (see session/nested_attach.go).
-		return scratchPlan{refuse: "This is the scratch session. Open the scratch popup from a different session."}
-	}
-
-	var plan scratchPlan
-	here := false
-	for i := len(m.Windows) - 1; i >= 0; i-- {
+// A scratch terminal on the screen means hide. One that is hidden, or left
+// on another workspace, means show here. None means create, unless a create
+// is already on its way.
+func (m *OS) planScratch() scratchPlan {
+	if i := m.scratchIndex(); i >= 0 {
 		w := m.Windows[i]
-		if !isScratchPopup(w) {
-			continue
+		if !w.Minimized && w.Workspace == m.CurrentWorkspace {
+			return scratchPlan{action: scratchHide, index: i}
 		}
-		here = here || w.Workspace == m.CurrentWorkspace
-		plan.close = append(plan.close, i)
-	}
-	// A hide needs nothing from the config, so a bad name never traps a
-	// popup on the screen.
-	if here {
-		return plan
+		return scratchPlan{action: scratchShow, index: i}
 	}
 	if m.scratchPending && time.Since(m.scratchPendingAt) < scratchPendingMax {
-		return scratchPlan{}
+		return scratchPlan{action: scratchNothing, index: -1}
 	}
-	if problem := config.ScratchNameProblem(name); problem != "" {
-		return scratchPlan{refuse: problem + " Set a different [scratch] session name."}
+	if m.IsDaemonSession && m.DaemonClient != nil && m.AttachedHost != "" {
+		// The create goes to the daemon on this machine, and the session is
+		// on another one.
+		return scratchPlan{action: scratchRefuse, index: -1,
+			refuse: "The scratch terminal works only in a session on this machine."}
 	}
-
-	boxW := session.ResolvePopupSize(cfg.WidthSpec(), session.PopupDefaultWidth, m.GetContentWidth(), session.PopupMinWidth)
-	boxH := session.ResolvePopupSize(cfg.HeightSpec(), session.PopupDefaultHeight, m.GetUsableHeight(), session.PopupMinHeight)
-	if boxW < config.ScratchMinWidth || boxH < config.ScratchMinHeight {
-		return scratchPlan{refuse: scratchTooSmallMessage()}
-	}
-	plan.open = true
-	return plan
+	return scratchPlan{action: scratchCreate, index: -1}
 }
 
-// ToggleScratch shows the scratch session in a popup on the current
-// workspace, or hides the popup when it is already there.
+// ToggleScratch shows the scratch terminal on the current workspace, or hides
+// it when it is already there. The first press creates it.
 func (m *OS) ToggleScratch() tea.Cmd {
-	cfg := m.scratchConfig()
-	plan := m.planScratch(cfg)
-	if plan.refuse != "" {
+	plan := m.planScratch()
+	switch plan.action {
+	case scratchRefuse:
 		m.ShowNotification(plan.refuse, "warning", m.Settings.NotificationDuration)
-		return nil
+	case scratchHide:
+		m.hideScratch(plan.index)
+	case scratchShow:
+		m.rememberScratchReturn()
+		m.showScratch(plan.index)
+	case scratchCreate:
+		m.rememberScratchReturn()
+		return m.createScratch()
 	}
-	// Highest index first, so an index still names its window when the close
-	// is local and removes it at once.
-	for _, i := range plan.close {
-		m.DeleteWindow(i)
-	}
-	if !plan.open {
-		// A hide ends any show still on its way. A press that did nothing
-		// (a show is already on its way) leaves it alone.
-		if len(plan.close) > 0 {
-			m.scratchPending = false
-		}
-		return nil
-	}
+	return nil
+}
 
+// rememberScratchReturn records the pane and the mode to go back to when the
+// scratch terminal hides.
+func (m *OS) rememberScratchReturn() {
+	m.scratchReturnMode = m.Mode
+	m.scratchReturnID = ""
+	if w := m.GetFocusedWindow(); w != nil && !isScratch(w) {
+		m.scratchReturnID = w.ID
+	}
+}
+
+// showScratch puts the scratch terminal on the current workspace, on top, and
+// gives it the keyboard.
+func (m *OS) showScratch(i int) {
+	w := m.Windows[i]
+	w.Workspace = m.CurrentWorkspace
+	w.Minimized = false
+	m.applyPopupRect(w, false)
+	w.InvalidateCache()
+	m.FocusWindow(i)
+	if m.Mode != TerminalMode {
+		m.EnterTerminalMode()
+	}
+	m.MarkAllDirty()
+	m.SyncStateToDaemon()
+}
+
+// hideScratch minimizes the scratch terminal and gives the focus back to the
+// pane that had it before the show, in the mode it was in.
+func (m *OS) hideScratch(i int) {
+	w := m.Windows[i]
+	w.Minimized = true
+	w.InvalidateCache()
+
+	back := -1
+	for j, o := range m.Windows {
+		if o.ID == m.scratchReturnID && m.scratchReturnID != "" &&
+			o.Workspace == m.CurrentWorkspace && !o.Minimized {
+			back = j
+			break
+		}
+	}
+	if back >= 0 {
+		m.FocusWindow(back)
+	} else {
+		m.FocusNextVisibleWindow()
+	}
+	switch {
+	case !m.hasFocusedWindow() || isScratch(m.GetFocusedWindow()):
+		m.FocusedWindow = -1
+		if m.Mode == TerminalMode {
+			m.ExitTerminalMode()
+		}
+	case m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode:
+		m.ExitTerminalMode()
+	}
+	m.scratchReturnID = ""
+	m.MarkAllDirty()
+	m.SyncStateToDaemon()
+}
+
+// scratchDir is the folder the scratch shell starts in: the focused pane's,
+// when it is a folder on this machine, else the home folder.
+func (m *OS) scratchDir() string {
+	if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
+		dir := ""
+		if w.Cwd != "" {
+			dir, _ = localCwdPath(w.Cwd)
+		} else {
+			dir = w.CWD()
+		}
+		if info, err := os.Stat(dir); dir != "" && err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+// createScratch makes the scratch terminal: through the daemon in a daemon
+// session, here otherwise.
+func (m *OS) createScratch() tea.Cmd {
+	cfg := m.scratchConfig()
+	dir := m.scratchDir()
+	if !m.IsDaemonSession || m.DaemonClient == nil {
+		m.createLocalScratch(dir, cfg)
+		return nil
+	}
 	m.scratchPending = true
 	m.scratchPendingAt = time.Now()
 	req := scratchRequest{
-		Outer:     m.SessionName,
-		Name:      cfg.SessionName(),
+		Session:   m.SessionName,
+		Dir:       dir,
 		Width:     cfg.WidthSpec(),
 		Height:    cfg.HeightSpec(),
 		Workspace: m.CurrentWorkspace,
@@ -162,80 +246,84 @@ func (m *OS) ToggleScratch() tea.Cmd {
 	}
 }
 
-// scratchTooSmallMessage is the warning for a popup box below the floor.
-func scratchTooSmallMessage() string {
-	return fmt.Sprintf("The scratch popup needs %dx%d cells. Make the terminal or the [scratch] size larger.",
-		config.ScratchMinWidth, config.ScratchMinHeight)
+// createLocalScratch makes the scratch terminal in a session without a
+// daemon. The shell starts at the popup's size, so its first prompt is drawn
+// for the box it is in.
+func (m *OS) createLocalScratch(dir string, cfg config.ScratchConfig) {
+	probe := &terminal.Window{PopupWidth: cfg.WidthSpec(), PopupHeight: cfg.HeightSpec()}
+	x, y, width, height := m.popupRect(probe)
+
+	id := createID()
+	w, err := terminal.NewWindowIn(dir, id, scratchName, x, y, width, height, len(m.Windows),
+		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines)
+	if err != nil {
+		m.LogError("Failed to create the scratch terminal: %v", err)
+		m.ShowNotification("The scratch terminal did not open: "+err.Error(), "error", m.Settings.NotificationDuration)
+		return
+	}
+	if caps := m.hostCaps(); caps.CellWidth > 0 && caps.CellHeight > 0 {
+		w.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
+	}
+	w.Workspace = m.CurrentWorkspace
+	w.CustomName = scratchName
+	w.IsPopup = true
+	w.IsScratch = true
+	w.IsFloating = true
+	w.PopupWidth = probe.PopupWidth
+	w.PopupHeight = probe.PopupHeight
+
+	m.installPassthroughs(w)
+	m.setupCwdWatch(w)
+	m.Windows = append(m.Windows, w)
+	m.showScratch(len(m.Windows) - 1)
 }
 
-// scratchRequest is what the popup call needs, copied off the model so the
+// scratchRequest is what the daemon call needs, copied off the model so the
 // call can run off the update goroutine.
 type scratchRequest struct {
-	Outer         string
-	Name          string
+	Session       string
+	Dir           string
 	Width, Height string
 	Workspace     int
 }
 
-// scratchCommand is the popup's argv: this binary, attaching the scratch
-// session. openScratchPopup has made the session already. -c still creates
-// it if it was killed between the two calls.
-//
-// --hold keeps a failed attach on the screen until enter, where it would
-// otherwise close the popup before anyone read why. --terminal-mode puts the
-// keyboard in the session's pane, since typing is what the popup is for.
-// The name comes after --, so no name is read as a flag.
-func scratchCommand(name string) []string {
-	exe, err := os.Executable()
-	if err != nil || exe == "" {
-		exe = "tuios"
-	}
-	return []string{exe, "attach", "-c", "--hold", "--terminal-mode", "--", name}
-}
-
-// openScratchPopup asks the daemon for the popup. It runs as a command,
-// never from Update, for the reason labelVerbCmd gives.
+// openScratchPopup asks the daemon for the scratch terminal. It runs as a
+// command, never from Update, for the reason labelVerbCmd gives.
 func openScratchPopup(req scratchRequest) error {
 	c, err := session.DialVerbClient()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = c.Close() }()
-	// The session is made here, with a first window, rather than by the
-	// attach: a session the attach creates has no window unless
-	// [startup] open_default_window is on, and the popup would show an
-	// empty session with nothing to type into.
-	if _, err := c.Call("new-session", map[string]any{"name": req.Name}); err != nil {
-		if call, ok := errors.AsType[*session.VerbCallError](err); !ok || call.Code != session.ErrVerbSessionExists {
-			return err
-		}
-	}
-	_, err = c.Call("popup", map[string]any{
-		"session":   req.Outer,
-		"name":      req.Name,
+	params := map[string]any{
+		"session":   req.Session,
+		"name":      scratchName,
 		"width":     req.Width,
 		"height":    req.Height,
 		"workspace": req.Workspace,
 		"scratch":   true,
-		"command":   scratchCommand(req.Name),
-	})
+	}
+	if req.Dir != "" {
+		params["cwd"] = req.Dir
+	}
+	_, err = c.Call("popup", params)
 	return err
 }
 
-// handleScratchOpened reports a failed show and ends it. A show the daemon
-// accepted stays on its way until its popup arrives in a state push, where
-// maybeFocusScratch takes it: until then this client does not hold the
-// popup, and a second press would open another.
+// handleScratchOpened reports a failed create and ends it. A create the
+// daemon accepted stays on its way until its pane arrives in a state push,
+// where maybeFocusScratch takes it: until then this client does not hold the
+// pane, and a second press would ask for another.
 func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 	if msg.Err == nil {
 		return
 	}
 	m.scratchPending = false
-	m.ShowNotification("The scratch popup did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)
+	m.ShowNotification("The scratch terminal did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)
 }
 
-// maybeFocusScratch ends the show on its way once its popup arrives, and puts
-// the keyboard in the popup, so the user can type into the session at once.
+// maybeFocusScratch ends the create on its way once its pane arrives, and
+// shows it the way a press does, so the user can type into it at once.
 func (m *OS) maybeFocusScratch() {
 	if !m.scratchPending {
 		return
@@ -244,11 +332,12 @@ func (m *OS) maybeFocusScratch() {
 		m.scratchPending = false
 		return
 	}
-	if !m.hasFocusedWindow() || !isScratchPopup(m.Windows[m.FocusedWindow]) {
+	i := m.scratchIndex()
+	if i < 0 {
 		return
 	}
 	m.scratchPending = false
-	if m.Mode != TerminalMode {
-		m.EnterTerminalMode()
+	if w := m.Windows[i]; w.Minimized || w.Workspace != m.CurrentWorkspace || m.FocusedWindow != i || m.Mode != TerminalMode {
+		m.showScratch(i)
 	}
 }

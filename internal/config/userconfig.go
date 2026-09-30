@@ -39,8 +39,8 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
-	// Scratch is the [scratch] table: the session toggle_scratch shows in a
-	// popup, and the popup's size. See scratch.go.
+	// Scratch is the [scratch] table: the size of the scratch terminal that
+	// toggle_scratch shows in a popup. See scratch.go.
 	Scratch ScratchConfig `toml:"scratch"`
 
 	// YieldedDefaults are the new default bindings left off because the key
@@ -938,7 +938,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_next_finished": {"O"},
 				// F, as in tmux-fingers. f searches files.
 				"hints": {"F"},
-				// g shows or hides the scratch session in a popup. It was
+				// g shows or hides the scratch terminal in a popup. It was
 				// free here, and f is kept free for the reason above.
 				"toggle_scratch": {"g"},
 			},

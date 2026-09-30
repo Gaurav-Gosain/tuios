@@ -1851,8 +1851,12 @@ Params: `command` (required argv), `session` (optional), `width` and `height`
 (optional, cells such as `"60"` or a share of the pane region such as `"60%"`,
 default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional),
 `wait`, `capture_stdout` and `timeout` (optional, below), and `scratch`
-(optional). `scratch` marks the popup as the one the `toggle_scratch` key
-shows and hides. The key closes only a popup with this mark.
+(optional). `scratch` opens the session's scratch terminal, the popup the
+`toggle_scratch` key shows and hides. With `scratch`, `command` is optional
+and defaults to the shell. A session has one scratch terminal, so a second
+call with `scratch` fails with `invalid_params`. `list-windows` marks the
+scratch terminal with `"scratch": true`. It survives a daemon restart, hidden,
+with a new shell.
 
 The popup's command starts at the size the popup has on the screen: the size
 the caller asked for, in the session's pane region.

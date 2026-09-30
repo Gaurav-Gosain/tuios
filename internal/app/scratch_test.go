@@ -1,130 +1,188 @@
 package app
 
 import (
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// scratchOS is a daemon client on session "work", workspace 1, 120x40, with
-// one tiled pane and the default [scratch] table.
-func scratchOS(t *testing.T) *OS {
+// scratchOS is a client with one pane, "alpha", on workspace 1, 120x40, and
+// the default [scratch] table. daemon picks a daemon session or a local one.
+// The daemon client is not connected, so a test that shows or hides the pane
+// runs local: a daemon session would push the state.
+func scratchOS(t *testing.T, daemon bool) *OS {
 	t.Helper()
-	m := dockSessionOS(t, 120, true)
+	m := dockSessionOS(t, 120, daemon)
 	m.SessionName = "work"
-	cfg := config.DefaultConfig()
-	m.UserConfig = cfg
+	m.UserConfig = config.DefaultConfig()
 	return m
 }
 
-// addScratchPopup puts a scratch popup for name on workspace ws.
-func addScratchPopup(m *OS, name string, ws int) {
-	m.Windows = append(m.Windows, &terminal.Window{
-		ID: "popup-" + name, IsPopup: true, IsScratchPopup: true, CustomName: name, Workspace: ws,
+// addScratch puts the scratch terminal on workspace ws, hidden or shown.
+func addScratch(m *OS, ws int, hidden bool) *terminal.Window {
+	w := &terminal.Window{
+		ID: "scratch-pane", IsPopup: true, IsScratch: true, IsFloating: true,
+		CustomName: scratchName, Workspace: ws, Minimized: hidden,
 		Width: 80, Height: 30,
-	})
-}
-
-func TestScratchPlanShowsWhenNoPopupIsOpen(t *testing.T) {
-	m := scratchOS(t)
-	plan := m.planScratch(m.scratchConfig())
-	if plan.refuse != "" || !plan.open || len(plan.close) != 0 {
-		t.Fatalf("plan = %+v, want an open and nothing else", plan)
 	}
+	m.Windows = append(m.Windows, w)
+	return w
 }
 
-func TestScratchPlanHidesThePopupOnThisWorkspace(t *testing.T) {
-	m := scratchOS(t)
-	addScratchPopup(m, "scratch", 1)
-	plan := m.planScratch(m.scratchConfig())
-	if plan.open || plan.refuse != "" || !slices.Equal(plan.close, []int{1}) {
-		t.Fatalf("plan = %+v, want the popup at index 1 closed and no open", plan)
-	}
-}
-
-// A popup left on another workspace follows the user: it closes there and a
-// new one opens here.
-func TestScratchPlanMovesThePopupToThisWorkspace(t *testing.T) {
-	m := scratchOS(t)
-	addScratchPopup(m, "scratch", 2)
-	plan := m.planScratch(m.scratchConfig())
-	if !plan.open || !slices.Equal(plan.close, []int{1}) {
-		t.Fatalf("plan = %+v, want the popup on workspace 2 closed and a new one opened", plan)
-	}
-}
-
-// A popup the user opened, even one named scratch, and a pane that is not a
-// popup are not the scratch popup. Only the daemon's mark makes one.
-func TestScratchPlanIgnoresOtherPopups(t *testing.T) {
-	m := scratchOS(t)
-	m.Windows = append(m.Windows,
-		&terminal.Window{ID: "user-popup", IsPopup: true, CustomName: "scratch", Workspace: 1},
-		&terminal.Window{ID: "plain", CustomName: "scratch", Workspace: 1})
-	plan := m.planScratch(m.scratchConfig())
-	if !plan.open || len(plan.close) != 0 {
-		t.Fatalf("plan = %+v, want an open and nothing closed", plan)
-	}
-}
-
-// A hide closes the scratch popup whatever session it shows, so a popup
-// opened before the config changed, or with a name the config now refuses,
-// can still be hidden.
-func TestScratchPlanHidesWhateverTheConfigSays(t *testing.T) {
-	m := scratchOS(t)
-	addScratchPopup(m, "scratch", 1)
-	m.UserConfig.Scratch.Session = "-x"
-	plan := m.planScratch(m.scratchConfig())
-	if plan.open || plan.refuse != "" || !slices.Equal(plan.close, []int{1}) {
-		t.Fatalf("plan = %+v, want the popup closed", plan)
-	}
-}
-
-func TestScratchPlanRefusals(t *testing.T) {
+func TestScratchPlan(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(*OS)
-		want  string
+		want  scratchAction
 	}{
-		{"no daemon", func(m *OS) { m.IsDaemonSession, m.DaemonClient = false, nil }, "needs a daemon session"},
-		{"another host", func(m *OS) { m.AttachedHost = "build" }, "only on this machine"},
-		{"inside the scratch session", func(m *OS) { m.SessionName = "scratch" }, "This is the scratch session"},
-		{"too narrow", func(m *OS) { m.UserConfig.Scratch.Width = "15%" }, "needs 22x8 cells"},
-		{"too short", func(m *OS) { m.Height = 9 }, "needs 22x8 cells"},
-		{"name is a flag", func(m *OS) { m.UserConfig.Scratch.Session = "-x" }, `starts with "-"`},
-		{"name has a slash", func(m *OS) { m.UserConfig.Scratch.Session = "a/b" }, "path separator"},
+		{"none creates", func(*OS) {}, scratchCreate},
+		{"shown here hides", func(m *OS) { addScratch(m, 1, false) }, scratchHide},
+		{"hidden shows", func(m *OS) { addScratch(m, 1, true) }, scratchShow},
+		{"hidden elsewhere shows", func(m *OS) { addScratch(m, 3, true) }, scratchShow},
+		// Left open on another workspace: the press brings it here.
+		{"shown elsewhere shows", func(m *OS) { addScratch(m, 2, false) }, scratchShow},
+		// A popup the user opened, even one called scratch, is not the
+		// scratch terminal. Only the daemon's mark makes one.
+		{"other popups create", func(m *OS) {
+			m.Windows = append(m.Windows,
+				&terminal.Window{ID: "user-popup", IsPopup: true, CustomName: scratchName, Workspace: 1},
+				&terminal.Window{ID: "plain", CustomName: scratchName, Workspace: 1, IsScratch: true})
+		}, scratchCreate},
+		{"session on another machine refuses", func(m *OS) { m.AttachedHost = "build" }, scratchRefuse},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := scratchOS(t)
+			m := scratchOS(t, true)
 			tc.setup(m)
-			plan := m.planScratch(m.scratchConfig())
-			if !strings.Contains(plan.refuse, tc.want) || plan.open || len(plan.close) != 0 {
-				t.Fatalf("plan = %+v, want a refusal with %q", plan, tc.want)
+			if got := m.planScratch(); got.action != tc.want {
+				t.Fatalf("plan = %+v, want action %d", got, tc.want)
 			}
 		})
 	}
 }
 
-// The scratch session's own client refuses even when a popup of that name is
-// open in it, because the popup would show the session inside itself.
-func TestScratchPlanRefusesInsideTheScratchSessionWithAPopup(t *testing.T) {
-	m := scratchOS(t)
-	m.SessionName = "scratch"
-	addScratchPopup(m, "scratch", 1)
-	if plan := m.planScratch(m.scratchConfig()); plan.refuse == "" {
-		t.Fatalf("plan = %+v, want a refusal", plan)
+// A hide and a show keep the same pane: nothing closes it, and the show puts
+// it on the workspace the user is on, focused, in terminal mode. The hide
+// gives the focus and the mode back.
+func TestScratchHideAndShowKeepThePane(t *testing.T) {
+	m := scratchOS(t, false)
+	m.Mode = WindowManagementMode
+	w := addScratch(m, 1, true)
+	alpha := m.Windows[0]
+
+	if m.ToggleScratch() != nil {
+		t.Fatal("showing a scratch terminal that exists asked the daemon for another")
+	}
+	if w.Minimized || m.GetFocusedWindow() != w || m.Mode != TerminalMode {
+		t.Fatalf("after show: minimized=%v focused=%v mode=%v", w.Minimized, m.GetFocusedWindow() == w, m.Mode)
+	}
+
+	m.ToggleScratch()
+	if !w.Minimized || m.GetFocusedWindow() != alpha || m.Mode != WindowManagementMode {
+		t.Fatalf("after hide: minimized=%v focused alpha=%v mode=%v", w.Minimized, m.GetFocusedWindow() == alpha, m.Mode)
+	}
+	if len(m.Windows) != 2 {
+		t.Fatalf("the hide closed a pane: %d windows", len(m.Windows))
+	}
+
+	// The next show is on workspace 4, and the pane follows.
+	m.CurrentWorkspace = 4
+	m.ToggleScratch()
+	if w.Workspace != 4 || w.Minimized || m.GetFocusedWindow() != w {
+		t.Fatalf("show on workspace 4: workspace=%d minimized=%v", w.Workspace, w.Minimized)
 	}
 }
 
-// A second press while the first popup is on its way does nothing, so a
-// double press cannot open two popups. After the wait it may ask again.
-func TestScratchToggleWaitsForAShowOnItsWay(t *testing.T) {
-	m := scratchOS(t)
+// A user in terminal mode goes back to terminal mode on the pane they left.
+func TestScratchHideKeepsTerminalMode(t *testing.T) {
+	m := scratchOS(t, false)
+	m.Mode = TerminalMode
+	addScratch(m, 1, true)
+	m.ToggleScratch()
+	m.ToggleScratch()
+	if m.Mode != TerminalMode || m.FocusedWindow != 0 {
+		t.Fatalf("mode=%v focused=%d, want terminal mode on alpha", m.Mode, m.FocusedWindow)
+	}
+}
+
+// The hidden scratch terminal is minimized, but it is offered nowhere a
+// minimized pane is: no dock entry, no restore, no row in the window list or
+// the rail, and it does not count as a window on the workspace. A plain
+// minimized pane next to it still gets all of them, so the filter is the
+// scratch mark and not the minimize.
+func TestHiddenScratchIsInNoList(t *testing.T) {
+	m := scratchOS(t, false)
+	parked := &terminal.Window{ID: "parked", Workspace: 1, Minimized: true, MinimizeOrder: 1}
+	m.Windows = append(m.Windows, parked)
+	w := addScratch(m, 1, true)
+	scratchAt := len(m.Windows) - 1
+
+	items := m.getDockItems()
+	if len(items) != 1 || m.Windows[items[0].WindowIndex] != parked {
+		t.Fatalf("dock items = %+v, want only the parked pane", items)
+	}
+	for _, it := range m.GetAggregateViewItems() {
+		if it.Window == w {
+			t.Fatal("the window list shows the hidden scratch terminal")
+		}
+	}
+	for _, row := range m.currentSessionInput().Windows {
+		if row.ID == w.ID {
+			t.Fatal("the rail shows the hidden scratch terminal")
+		}
+	}
+	if n := m.GetWorkspaceWindowCount(1); n != 2 {
+		t.Fatalf("workspace 1 counts %d windows, want 2 (alpha and parked)", n)
+	}
+
+	// Restore all, and a restore by index, leave it hidden.
+	m.RestoreWindow(scratchAt)
+	m.RestoreMinimizedByIndex(1)
+	if !w.Minimized {
+		t.Fatal("a restore showed the scratch terminal")
+	}
+	m.RestoreMinimizedByIndex(0)
+	if parked.Minimized {
+		t.Fatal("the parked pane did not restore")
+	}
+	if m.HasMinimizedWindows() {
+		t.Fatal("HasMinimizedWindows counts the hidden scratch terminal")
+	}
+
+	// Shown, it is an ordinary popup and the list has it again.
+	w.Minimized = false
+	found := false
+	for _, it := range m.GetAggregateViewItems() {
+		found = found || it.Window == w
+	}
+	if !found {
+		t.Fatal("the window list leaves out the shown scratch terminal")
+	}
+}
+
+// Hidden, it cannot be cycled to or joined to multifocus.
+func TestHiddenScratchIsNotCycledOrMultifocused(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, 1, true)
+	for _, i := range m.cyclableWindows() {
+		if isScratch(m.Windows[i]) {
+			t.Fatal("the focus cycle reaches the scratch terminal")
+		}
+	}
+	m.ToggleMultifocus(1)
+	if m.MultifocusSet[m.Windows[1].ID] {
+		t.Fatal("the scratch terminal joined multifocus")
+	}
+}
+
+// In a daemon session the first press asks the daemon for the pane, in the
+// focused pane's folder or the home folder, and a second press while that
+// is on its way does nothing, so a double press cannot make two.
+func TestScratchCreateAsksOnceAndWaits(t *testing.T) {
+	m := scratchOS(t, true)
 	var asked []scratchRequest
 	prev := scratchOpener
 	scratchOpener = func(r scratchRequest) error { asked = append(asked, r); return nil }
@@ -132,64 +190,61 @@ func TestScratchToggleWaitsForAShowOnItsWay(t *testing.T) {
 
 	cmd := m.ToggleScratch()
 	if cmd == nil {
-		t.Fatal("the first press asked for no popup")
+		t.Fatal("the first press asked for nothing")
 	}
 	if msg, ok := cmd().(ScratchOpenedMsg); !ok || msg.Err != nil {
-		t.Fatalf("the open reported %#v", msg)
+		t.Fatalf("the create reported %#v", msg)
 	}
 	if len(asked) != 1 {
 		t.Fatalf("asked %d times, want 1", len(asked))
 	}
-	r := asked[0]
-	if r.Outer != "work" || r.Name != "scratch" || r.Width != "80%" || r.Height != "80%" || r.Workspace != 1 {
+	if r := asked[0]; r.Session != "work" || r.Width != "80%" || r.Height != "80%" || r.Workspace != 1 || r.Dir == "" {
 		t.Fatalf("request = %+v", r)
 	}
 	if m.ToggleScratch() != nil {
-		t.Fatal("a second press opened a second popup while the first was on its way")
+		t.Fatal("a second press asked again while the first was on its way")
 	}
-	// The daemon answered, but the popup has not arrived: still on its way.
 	m.handleScratchOpened(ScratchOpenedMsg{})
 	if m.ToggleScratch() != nil || !m.scratchPending {
-		t.Fatal("a press after the daemon's answer, before the popup arrived, asked again")
-	}
-	// Well past 3 s, still nothing: only the backstop ends it.
-	m.scratchPendingAt = time.Now().Add(-5 * time.Second)
-	if m.ToggleScratch() != nil {
-		t.Fatal("the show on its way ended on a fixed short timer")
+		t.Fatal("a press after the daemon's answer, before the pane arrived, asked again")
 	}
 	m.scratchPendingAt = time.Now().Add(-scratchPendingMax)
 	if m.ToggleScratch() == nil {
-		t.Fatal("a press after the wait asked for no popup")
+		t.Fatal("a press after the backstop asked for nothing")
 	}
 }
 
-// The popup that arrives takes the keyboard in terminal mode.
-func TestScratchPopupArrivalEntersTerminalMode(t *testing.T) {
-	m := scratchOS(t)
+// The pane that arrives is shown the way a press shows it.
+func TestScratchArrivalTakesTheKeyboard(t *testing.T) {
+	m := scratchOS(t, false)
 	m.Mode = WindowManagementMode
+	m.rememberScratchReturn()
 	m.scratchPending, m.scratchPendingAt = true, time.Now()
 
 	m.maybeFocusScratch()
 	if m.Mode == TerminalMode || !m.scratchPending {
-		t.Fatal("terminal mode came before the popup")
+		t.Fatal("terminal mode came before the pane")
 	}
-	addScratchPopup(m, "scratch", 1)
-	m.FocusedWindow = 1
+	w := addScratch(m, 1, false)
 	m.maybeFocusScratch()
-	if m.Mode != TerminalMode {
-		t.Fatal("the popup arrived and the keyboard stayed in window mode")
+	if m.Mode != TerminalMode || m.GetFocusedWindow() != w || m.scratchPending {
+		t.Fatalf("mode=%v focused=%v pending=%v", m.Mode, m.GetFocusedWindow() == w, m.scratchPending)
 	}
-	if m.scratchPending {
-		t.Fatal("the show stayed on its way after the popup arrived")
+	m.ToggleScratch()
+	if m.FocusedWindow != 0 || m.Mode != WindowManagementMode {
+		t.Fatal("the hide after an arrival did not go back to alpha in window mode")
 	}
 }
 
-func TestScratchOpenFailureIsShown(t *testing.T) {
-	m := scratchOS(t)
+func TestScratchCreateFailureIsShown(t *testing.T) {
+	m := scratchOS(t, true)
 	m.scratchPending, m.scratchPendingAt = true, time.Now()
 	m.handleScratchOpened(ScratchOpenedMsg{Err: errString("no client")})
 	if m.scratchPending {
-		t.Fatal("a failed show stayed on its way")
+		t.Fatal("a failed create stayed on its way")
+	}
+	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "did not open") {
+		t.Fatalf("notifications = %+v", m.Notifications)
 	}
 }
 
@@ -197,26 +252,10 @@ type errString string
 
 func (e errString) Error() string { return string(e) }
 
-// The name follows --, so no name is read as a flag.
-func TestScratchCommandAttachesAndCreates(t *testing.T) {
-	argv := scratchCommand("-notes")
-	if !slices.Equal(argv[1:], []string{"attach", "-c", "--hold", "--terminal-mode", "--", "-notes"}) {
-		t.Fatalf("argv = %v", argv)
-	}
-}
-
-// The popup's own size floor must not undercut the scratch floor, or a
-// resolved box could pass the check here and still be clamped smaller.
-func TestScratchFloorIsAboveThePopupFloor(t *testing.T) {
-	if config.ScratchMinWidth < session.PopupMinWidth || config.ScratchMinHeight < session.PopupMinHeight {
-		t.Fatal("the scratch floor is below the popup floor")
-	}
-}
-
 // tuios attach --terminal-mode enters terminal mode on a session somebody
 // already arranged, where [startup] start_in_terminal_mode is not consulted.
 func TestForcedTerminalModeOnAnArrangedSession(t *testing.T) {
-	m := scratchOS(t)
+	m := scratchOS(t, true)
 	m.Mode = WindowManagementMode
 	m.sessionUnarranged = false
 	m.forceTerminalMode = true
@@ -228,7 +267,7 @@ func TestForcedTerminalModeOnAnArrangedSession(t *testing.T) {
 
 // With no pane yet, terminal mode waits for the first one.
 func TestForcedTerminalModeWaitsForAPane(t *testing.T) {
-	m := scratchOS(t)
+	m := scratchOS(t, true)
 	m.Windows = nil
 	m.FocusedWindow = -1
 	m.Mode = WindowManagementMode

@@ -446,7 +446,7 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 		groups := config.GetPrefixKeybindingGroups("minimize")
 		minimizedCount := 0
 		for _, win := range m.Windows {
-			if win.Minimized && win.Workspace == m.CurrentWorkspace {
+			if win.Minimized && win.Workspace == m.CurrentWorkspace && !win.IsScratch {
 				minimizedCount++
 			}
 		}

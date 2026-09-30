@@ -556,7 +556,7 @@ the remote client. See 'tuios hosts --help'.`,
 			}
 			// A failure is held on the screen with --hold for the reason a
 			// host attach holds it: a pane that runs this command closes when
-			// it exits, and the scratch popup is such a pane.
+			// it exits, and a popup that runs tuios attach is such a pane.
 			return holdAfter(runAttach(name, createIfMissing), attachHold)
 		},
 	}

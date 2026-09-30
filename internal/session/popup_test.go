@@ -104,7 +104,7 @@ func TestClientSyncCannotUnmakeAPopup(t *testing.T) {
 // command it was given, so bringing a popup back would hand the user a floating
 // box holding a shell nobody asked for and that will never exit.
 //
-// Negative control, confirmed red: remove the `if w.Popup { continue }` guard in
+// Negative control, confirmed red: remove the `if w.Popup && !w.Scratch { continue }` guard in
 // restoreSession. The restored session comes back with two windows and the test
 // names the popup that should not be there.
 func TestAPopupDoesNotSurviveTheDaemon(t *testing.T) {

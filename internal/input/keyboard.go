@@ -25,7 +25,7 @@ func selectWindowByIndex(num int, o *app.OS) {
 		if win.Workspace != o.CurrentWorkspace {
 			continue
 		}
-		if o.AutoTiling && win.Minimized {
+		if o.AutoTiling && win.Minimized || win.HiddenScratch() {
 			continue
 		}
 		count++
