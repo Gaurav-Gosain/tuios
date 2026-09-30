@@ -292,6 +292,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	}
 
 	hello.LayoutTreeOps = true
+	hello.ScratchWorkspaces = true
 
 	// Send hello with capabilities
 	msg, err := NewMessage(MsgHello, hello)

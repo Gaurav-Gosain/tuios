@@ -186,6 +186,12 @@ type HelloPayload struct {
 	// attached to a session the daemon turns the ops off for every client
 	// there. See Session.SetLayoutTreeOps.
 	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
+	// ScratchWorkspaces says the client shows a scratch group from its own
+	// workspace (see scratch_workspace.go). A client that predates it leaves
+	// it false, and while such a client is attached the session makes the
+	// scratch terminal a popup, as that client expects. See
+	// Session.SetScratchWorkspaces.
+	ScratchWorkspaces bool `json:"scratch_workspaces,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

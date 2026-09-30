@@ -322,7 +322,13 @@ func (m *OS) FocusWindow(i int) *OS {
 	// notification, focus-window), and the switch below into the group's
 	// workspace is the show. A focus on an ordinary pane while a group is on
 	// the screen is the same switch the other way, which hides the group.
-	if isScratch(m.Windows[i]) && m.Windows[i].Workspace != m.CurrentWorkspace && !m.InScratchView() {
+	// A hidden scratch popup (see scratch_legacy.go) is shown in place.
+	if isLegacyScratch(m.Windows[i]) && m.Windows[i].Minimized {
+		m.rememberScratchReturn()
+		m.legacyShowScratch(i)
+		return m
+	}
+	if isScratch(m.Windows[i]) && !m.Windows[i].IsPopup && m.Windows[i].Workspace != m.CurrentWorkspace && !m.InScratchView() {
 		m.rememberScratchReturn()
 		m.scratchViewName = scratchNameOf(m.Windows[i])
 	}

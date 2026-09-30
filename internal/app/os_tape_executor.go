@@ -332,7 +332,7 @@ func (m *OS) GetWindowListData() map[string]any {
 		"total":             len(m.Windows),
 		"focused_index":     m.FocusedWindow,
 		"focused_window_id": focusedWindowID,
-		"current_workspace": m.CurrentWorkspace,
+		"current_workspace": m.dockWorkspace(),
 		"workspace_windows": workspaceWindows,
 	}
 }
@@ -381,7 +381,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 	}
 
 	info := map[string]any{
-		"current_workspace":  m.CurrentWorkspace,
+		"current_workspace":  m.dockWorkspace(),
 		"total_windows":      len(m.Windows),
 		"focused_window_id":  focusedWindowID,
 		"mode":               mode,

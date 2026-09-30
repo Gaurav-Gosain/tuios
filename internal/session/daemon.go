@@ -393,6 +393,9 @@ type connState struct {
 	// treeOps says the client's hello offered MsgLayoutTree. Set once, at
 	// hello. See Daemon.refreshTreeOps.
 	treeOps bool
+	// scratchWS says the client's hello offered scratch workspaces. See
+	// Daemon.refreshTreeOps.
+	scratchWS bool
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns

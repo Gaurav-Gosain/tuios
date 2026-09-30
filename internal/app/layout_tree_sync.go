@@ -58,6 +58,7 @@ func (m *OS) adoptTreeOpsFlag(state *session.SessionState) {
 	}
 	wasOn := m.treeOpsOn()
 	m.sessionTreeOpsOff = !state.LayoutTreeOps
+	m.sessionScratchWSOff = !state.ScratchWorkspaces
 	if !wasOn && m.treeOpsOn() {
 		m.treeSeen = m.treeKeys()
 		m.treeDerived = nil

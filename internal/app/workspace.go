@@ -170,6 +170,11 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// Fire after the switch has fully landed (focus resolved, layout applied),
 	// so a hook that inspects the session sees the workspace it was told about.
 	// The newly focused window is reported alongside the workspace pair.
+	// A scratch group shown or hidden is not a workspace switch: no hook
+	// hears of a scratch workspace.
+	if session.IsScratchWorkspace(workspace) || session.IsScratchWorkspace(oldWorkspace) {
+		return
+	}
 	focusedID, focusedName := "", ""
 	if w := m.GetFocusedWindow(); w != nil {
 		focusedID, focusedName = w.ID, w.Title()

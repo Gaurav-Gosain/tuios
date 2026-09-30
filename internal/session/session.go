@@ -506,6 +506,12 @@ type SessionState struct {
 	// never sets it; a client reads it only from a daemon whose welcome
 	// offered them. Wire only.
 	LayoutTreeOps bool `json:"-"`
+	// ScratchWorkspaces says every attached client shows a scratch group
+	// from its own workspace. While a client that predates it is attached it
+	// is false, a new scratch terminal is a popup again, and no focus goes
+	// to a pane on a scratch workspace. See Session.SetScratchWorkspaces. A
+	// daemon that predates it never sets it. Wire only.
+	ScratchWorkspaces bool `json:"-"`
 	// SnapshotSeq numbers the copies of the state the session hands out, in
 	// the order they were taken. A copy is taken under the state lock and sent
 	// after it is released, and the daemon sends from more than one goroutine
@@ -999,6 +1005,9 @@ type Session struct {
 	// treeOpsOff is set while a client too old for tree ops is attached.
 	// Guarded by stateMu. See SetLayoutTreeOps.
 	treeOpsOff bool
+	// scratchWSOff is set while a client too old for scratch workspaces is
+	// attached. Guarded by stateMu. See SetScratchWorkspaces.
+	scratchWSOff bool
 	// treeOpsMu is held across working out whether the session's tree ops
 	// should be on and applying the answer, so two refreshes cannot apply
 	// their answers in the opposite order to the one they worked them out
@@ -2057,6 +2066,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	stateCopy.PushSeen = maps.Clone(s.pushSeen)
 	stateCopy.LayoutTreeOps = !s.treeOpsOff
+	stateCopy.ScratchWorkspaces = !s.scratchWSOff
 	// Taken under the state lock, so a copy with a higher number shows the
 	// state at least as late as one with a lower number.
 	stateCopy.SnapshotSeq = s.snapSeq.Add(1)
@@ -2297,6 +2307,11 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
+		// While a client too old for scratch workspaces is attached, a push
+		// cannot put the focus on one: that client would draw it nowhere.
+		if s.scratchWSOff {
+			unfocusScratchLocked(state)
+		}
 		// Version counts daemon-side mutations only, so converging on a client
 		// snapshot carries it forward unchanged: the client is not telling the
 		// daemon anything the daemon did not already know.

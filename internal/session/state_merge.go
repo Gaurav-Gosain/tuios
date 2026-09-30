@@ -295,7 +295,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		sm, isScratch := scratches[w.ID]
 		w.Scratch, w.ScratchName = isScratch, sm.name
 		switch {
-		case isScratch:
+		case isScratch && IsScratchWorkspace(sm.workspace):
 			w.Workspace = sm.workspace
 		case IsScratchWorkspace(w.Workspace):
 			if ws, known := workspaces[w.ID]; known {
