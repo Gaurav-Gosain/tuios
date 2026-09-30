@@ -1420,6 +1420,14 @@ attached client is told the session ended and exits with a non-zero status, so a
 script that kills a session does not leave a user staring at a dead UI. The
 `session-closed` event fires on the event stream at the same time.
 
+## herdr compatibility
+
+A second socket beside the daemon socket, `<daemon socket>.herdr`, answers
+herdr's socket API, so tools built for herdr work with tuios. Each herdr
+method runs the tuios verb that does the same work, with the same pane grants
+and checks. [AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility) has the
+mapping, the method table and the event table.
+
 ## Verbs
 
 This catalog is deliberately partial: it documents the verbs whose semantics

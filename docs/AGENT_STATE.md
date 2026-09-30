@@ -331,7 +331,8 @@ Every pane starts with these variables, as in herdr:
 | --- | --- |
 | `HERDR_ENV` | `1` |
 | `HERDR_SOCKET_PATH` | `<daemon socket>.herdr`, a socket of tuios's own, owner only |
-| `HERDR_PANE_ID` | the pane's window id, the same as `TUIOS_PANE_ID` |
+| `HERDR_PANE_ID` | the pane's id in herdr's form, `w<session>:p<window>` (see [herdr compatibility](#herdr-compatibility)) |
+| `HERDR_WORKSPACE_ID` | the id of the pane's session in herdr's form, `w<session>` |
 | `HERDR_BIN_PATH` | this tuios, which answers herdr's report commands |
 
 So a Crush that you start from a shell prompt reports its state. To limit the
@@ -341,9 +342,11 @@ variables to panes that start a known reporter (`tuios new-window NAME crush`,
 
 herdr reads `HERDR_ENV=1` as "inside herdr". With the default, `herdr` refuses
 to start inside a tuios pane. Set `herdr_protocol = "agents"` to run herdr
-nested, or turn on herdr's `experimental.allow_nested`. Other herdr commands
-that reach tuios's socket, such as `herdr pane split`, return `unsupported`. tuios never listens on
-herdr's own socket, so a real herdr on the same machine is untouched. A tuios
+nested, or turn on herdr's `experimental.allow_nested`. The same socket also
+answers herdr's socket API, so herdr's own CLI and tools built for herdr work
+in a tuios pane (see [herdr compatibility](#herdr-compatibility)). tuios never
+listens on herdr's own socket, so a real herdr on the same machine is
+untouched. A tuios
 started inside a herdr pane does not pass that pane's `HERDR_ENV`,
 `HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its own panes. An
 agent in a tuios pane never sets the state of the herdr pane around it.
@@ -362,8 +365,7 @@ The wire is herdr's: one JSON object per connection on one line, `{"id",
 | `pane.release_agent` | `none` |
 | `pane.report_metadata` | `title` and each token become the pane's [agent metadata](#agent-metadata), filed under source `herdr:<source>`. A `null` token clears the key. A name tuios cannot hold is skipped |
 | `notification.show` | a `notification` event from the caller's pane, matched against the harness's [notification rules](#notification-rules) |
-| `ping` | a pong |
-| anything else | error `unsupported` |
+| any other method | see [herdr compatibility](#herdr-compatibility) |
 
 `resume_argv` is accepted and not used. tuios resumes a conversation from the
 harness and its session id (see [Resuming after a restart](#resuming-after-a-restart)).
@@ -408,11 +410,12 @@ session id and metadata from herdr's script still apply. An agent that
 reports to herdr by itself, such as Crush, is not a herdr script and is never
 dropped.
 
-A request speaks only for the caller's own pane. The daemon places the
+A report speaks only for the caller's own pane. The daemon places the
 connecting process the way it places every caller (see
 [How a process is placed](#how-a-process-is-placed)). It answers `forbidden` to
-a `pane_id` that is not that pane, and to a process in no pane. Pane grants do
-not limit these reports, because a pane may always report for itself.
+a `pane_id` that is not that pane, and to a process in no pane. The `pane_id`
+can be herdr's form or the window id. Pane grants do not limit these reports,
+because a pane may always report for itself.
 
 #### herdr's report commands
 
@@ -429,6 +432,167 @@ takes herdr's arguments and sends the same requests to `HERDR_SOCKET_PATH`:
 
 `pane report-agent-session` works the same way. Other herdr commands are not
 there. Use `set-agent-state` and `set-agent-meta` in your own scripts.
+
+### herdr compatibility
+
+The herdr socket also answers herdr's socket API. Tools that are built for
+herdr then work with tuios: Collie's herdr adapter, herdr plugins, bar widgets
+and editor bridges. Point the tool at the socket with `HERDR_SOCKET_PATH`. The socket is the
+daemon socket with `.herdr` added: `$XDG_RUNTIME_DIR/tuios/tuios.sock.herdr`,
+or `/tmp/tuios-<uid>/tuios.sock.herdr` when `XDG_RUNTIME_DIR` is not set.
+
+```bash
+export HERDR_SOCKET_PATH="$XDG_RUNTIME_DIR/tuios/tuios.sock.herdr"
+```
+
+In a tuios pane, `HERDR_SOCKET_PATH` is set already.
+
+tuios follows the API of herdr **0.9.3** (protocol 22). A `ping` answers
+`{"type":"pong","version":"0.9.3+tuios","protocol":22,"server":"tuios"}`.
+`session.snapshot` gives the same version. The `+tuios` part is semver build
+metadata, so a version check reads it as 0.9.3. A tool that must know it talks
+to tuios reads `server`.
+
+#### How tuios maps onto herdr
+
+| herdr | tuios | Id |
+| --- | --- | --- |
+| workspace | session | `w` and the first 12 hex digits of the session id |
+| tab | workspace (a numbered slot of the session) | `<workspace id>:t<workspace number>` |
+| pane | window | `<workspace id>:p` and the first 12 hex digits of the window id |
+
+The ids stay the same while the session and the window exist. A rename does
+not change them. A pane id also finds a window that moved to another session.
+Where herdr takes a pane id, tuios also takes the window id, or 8 or more of
+its first hex digits.
+
+A tuios workspace is a fixed slot, and herdr lists only the tabs that exist.
+So a workspace is a tab when it holds a window, has a name, or is the one that
+shows. A tab's `number` is the workspace number. An unnamed tab's `label` is
+its number.
+
+Agent state maps onto herdr's `agent_status`:
+
+| tuios | herdr |
+| --- | --- |
+| `working` | `working` |
+| `needs_input` | `blocked` |
+| `idle` | `idle` |
+| `done`, `errored` | `done` |
+| `unknown`, none | `unknown` |
+
+A pane's `agent` is herdr's name for the harness: `claude` for Claude Code,
+`gemini` for Gemini CLI, `cursor` for Cursor Agent, `agy` for Antigravity,
+`qodercli` for Qoder, and tuios's id for every other harness. A tab and a
+workspace show the status of their most urgent pane, in herdr's order:
+`blocked`, `done`, `working`, `idle`, `unknown`. The conversation id that a
+harness reports becomes `agent_session`, with `kind` `path` for a path and `id`
+for anything else. Agent metadata becomes `tokens`, and the `title` token
+becomes `title`. `revision` counts the bytes the pane printed, so it changes
+when the pane prints. `scroll` gives the scrollback rows and the screen rows.
+
+#### Who may call what
+
+A method runs the tuios verb that does the same work, with the same checks. A
+caller outside every pane is you, as on the daemon socket. A caller in a pane
+holds the pane's [grants](#what-a-pane-may-do):
+
+- A read (`session.snapshot`, the lists, `pane.read`, `events.subscribe`)
+  needs `read`. It shows only the sessions the pane may read.
+- `pane.send_text`, `pane.send_keys` and `pane.send_input` need `write`. A pane
+  may not type into a pane that waits on a prompt without `respond`, because
+  the keys answer the prompt. `admin` does not give `respond`.
+- A create, close, rename, focus or move needs `admin`.
+
+A refused call answers error `forbidden`, and nothing changes.
+
+#### Methods
+
+| Method | tuios verb | Notes |
+| --- | --- | --- |
+| `ping` | none | |
+| `session.snapshot` | `list-windows` for each session | `layouts` gives each pane's rectangle. `splits` is always empty |
+| `workspace.list`, `workspace.get` | `list-windows` | |
+| `workspace.create` | `new-session`, `set-session-name` | `label` is the display name. `focus` does nothing |
+| `workspace.rename` | `set-session-name` | |
+| `workspace.close` | `kill-session` | |
+| `tab.list`, `tab.get` | `list-windows` | |
+| `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |
+| `tab.rename` | `set-workspace-name` | |
+| `tab.focus` | `select-workspace` | |
+| `tab.move` | `set-workspace-order` | |
+| `tab.close` | `close-window` for each pane, `set-workspace-name` | shows the nearest tab that holds a pane |
+| `pane.list`, `pane.get`, `pane.current`, `pane.layout` | `list-windows` | |
+| `pane.read`, `agent.read` | `capture-pane` | `recent` reads 80 lines when `lines` is not given, 1000 at most. `recent_unwrapped` reads as `recent`, because tuios does not join wrapped rows. `detection` reads as `visible` |
+| `pane.send_text` | `send-text` | writes the text as it is, with no bracketed paste |
+| `pane.send_keys`, `agent.send_keys` | `send-keys` | herdr's key names. tuios also takes `PageUp`, `PageDown`, `Home`, `End`, `Insert` and `Delete`. `cmd`, `super` and `hyper` fail with `invalid_key` |
+| `pane.send_input` | `send-text`, `send-keys` | |
+| `pane.rename` | `set-window` | `label: null` clears the name |
+| `pane.focus`, `agent.focus` | `focus-window` | |
+| `pane.split` | `split-window`, else `new-window` | without an attached client, or with `cwd`, the new pane is a window on the same workspace |
+| `pane.close` | `close-window` | |
+| `pane.wait_for_output` | `wait-for window-output` | |
+| `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
+| `agent.wait` | `wait-for agent-state` | |
+| `agent.prompt` | `send-text`, `send-keys` | an agent that works or waits on a prompt fails with `agent_not_idle` |
+| `worktree.list` | `git worktree list` | needs what `list-worktrees` needs |
+| `worktree.create` | `new-worktree` | tuios chooses the path. A `path` fails with `unsupported` |
+| `worktree.open` | `new-session` in the checkout | a checkout that a session shows answers `already_open: true` |
+| `worktree.remove` | `remove-worktree` | |
+| `events.subscribe` | `subscribe` | see below |
+| `events.wait` | `wait-for agent-state` | answers only a `pane_agent_status_changed` match, as herdr does |
+| the pane reports | `set-agent-state` and the rest | see [herdr's pane state protocol](#herdrs-pane-state-protocol) |
+
+Every other herdr method answers error `unsupported`: the `server.*`,
+`plugin.*`, `integration.*`, `client.*` and `layout.*` methods, and
+`workspace.focus`, `workspace.move`, `workspace.move_block`,
+`workspace.report_metadata`, `agent.start`, `agent.rename`, `agent.explain`,
+`agent.view.*`, `pane.zoom`, `pane.resize`, `pane.swap`, `pane.move`,
+`pane.scroll`, `pane.clear`, `pane.process_info` and the copy, selection and
+link methods. A method that herdr does not have answers `invalid_request`, as
+herdr does.
+
+`env` in a create fails with `unsupported`. A missing parameter answers
+`invalid_request` with serde's words, for example ``missing field `pane_id` ``.
+An id that finds nothing answers `workspace_not_found`, `tab_not_found` or
+`pane_not_found`.
+
+#### Events
+
+`events.subscribe` answers `{"id","result":{"type":"subscription_started"}}`
+and then sends one event on each line, until the client closes the
+connection. herdr's shapes apply: a global event is
+`{"event":"pane_created","data":{"type":"pane_created",...}}`, and a pane
+event is `{"event":"pane.agent_status_changed","data":{...}}`.
+
+| tuios event | herdr event |
+| --- | --- |
+| `session-created` | `workspace_created`, or `workspace_renamed` after a rename |
+| `session-closed` | `workspace_closed` |
+| `window-created` | `pane_created`, and `tab_created` for a new tab |
+| `window-closed` | `pane_closed`, and `tab_closed` for a tab that is gone |
+| `window-exit` | `pane_exited` |
+| `window-retitled` | `pane_updated` |
+| `window-focused` | `pane_focused` |
+| `window-moved` | `pane_moved` |
+| `workspace-switched` | `tab_focused` |
+| `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
+
+`pane.agent_status_changed` needs a `pane_id`. `pane.scroll_changed` and
+`pane.output_matched` fail with `unsupported`: use `pane.wait_for_output`. A
+subscription type that herdr does not know fails the whole call, as in herdr.
+When a client reads too slowly and events are lost, the stream sends error
+`events_lost` and closes. Read `session.snapshot` again and subscribe again.
+
+#### Tracking herdr
+
+The mapping follows herdr's `src/api/schema` and `src/app/api` at the version
+above. `herdrTargetVersion` in `internal/session/herdr_api.go` names it. To
+move to a new herdr release, compare its `src/api/schema` with the one at
+`v0.9.3`, and update the methods, fields and events that changed. Then update
+the version and the Collie fixture in
+`internal/session/testdata/herdr/collie_requests.json`.
+`TestHerdrConformanceCollie` replays that fixture against a daemon.
 
 ## Sources and precedence
 
