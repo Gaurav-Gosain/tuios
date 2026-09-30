@@ -640,6 +640,11 @@ var optionSpecs = []Option{
 		Description: "What happens when a program in a pane sets the clipboard: off, ask, focused (the focused pane only, others ask) or on",
 		Accepted:    OSC52WriteModes, Default: OSC52WriteFocused,
 	},
+	{
+		Path: "appearance.selection.copy_command", Type: OptionString, Section: "selection",
+		Description: "A command that gets each copy mode yank on stdin. Its output goes to the clipboard. If this is empty, tuios copies the selection as it is.",
+		Default:     "",
+	},
 
 	// [appearance.sidebar]
 	{

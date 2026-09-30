@@ -44,6 +44,11 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 		return handleMultiCopyKey(msg, o, window)
 	}
 
+	// A [[keybindings.copy_pipe]] key. See copymode_pipe.go.
+	if pipe, ok := copyPipeKey(msg, o, window.CopyMode); ok {
+		return copyPipeYank(o, window, pipe)
+	}
+
 	fx := &copyModeEffects{}
 	dispatchCopyModeKey(msg, window, fx, &o.Settings)
 	return fx.apply(o, window)

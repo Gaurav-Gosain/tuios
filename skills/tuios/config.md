@@ -314,3 +314,25 @@ A key under the leader does not work inside copy mode, because copy mode uses
 
 tuios cannot put two actions on one key. `tuios send-keys` cannot drive copy
 mode, because copy mode ignores remote keys.
+
+tmux `copy-command` is `appearance.selection.copy_command`: every yank in copy
+mode goes to that command on stdin, and its stdout goes to the clipboard.
+tmux `copy-pipe` and `copy-pipe-and-cancel` are `[[keybindings.copy_pipe]]`
+entries. `cancel = true` leaves copy mode after the yank, and `false` stays
+where it is with the selection cleared:
+
+```toml
+# tmux: bind -T copy-mode-vi p send -X copy-pipe-and-cancel 'tr "\n" " "'
+[[keybindings.copy_pipe]]
+key = "p"
+command = "tr '\n' ' '"
+cancel = true
+description = "flatten"
+```
+
+When the command writes nothing, fails or runs past 10 seconds, the clipboard
+gets the plain selection, and a failure shows the exit code and the first
+line of stderr on the dock. The command runs on the machine of the tuios
+client, with the command-key variables (`TUIOS_SESSION`,
+`TUIOS_ACTIVE_PANE_ID`, `TUIOS_ACTIVE_PANE_CWD`). In multi copy mode it runs
+once, on the text `y` copies in the current format.

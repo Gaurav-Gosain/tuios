@@ -1793,6 +1793,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handleCommandRan(msg)
 		return m, nil
 
+	case CopyPipeDoneMsg:
+		return m, m.handleCopyPipeDone(msg)
+
 	case RenameAppliedMsg:
 		if msg.Err != nil {
 			what := msg.What

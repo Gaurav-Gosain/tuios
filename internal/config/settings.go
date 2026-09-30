@@ -325,6 +325,9 @@ type Settings struct {
 	// OSC52Write says what happens when a program in a pane sets the
 	// clipboard with OSC 52. One of OSC52WriteModes.
 	OSC52Write string
+	// CopyCommand is the command a copy-mode yank pipes the selection
+	// through: appearance.selection.copy_command. Empty copies it as it is.
+	CopyCommand string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is

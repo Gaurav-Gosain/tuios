@@ -7,3 +7,6 @@ import "os/exec"
 // detachFromTerminal does nothing here: there is no controlling terminal to
 // leave. See runCommandShell.
 func detachFromTerminal(*exec.Cmd) {}
+
+// killGroupOnCancel keeps the default cancel here: kill the process.
+func killGroupOnCancel(*exec.Cmd) {}

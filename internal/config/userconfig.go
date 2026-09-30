@@ -556,6 +556,9 @@ type SelectionConfig struct {
 	// OSC52Write says what happens when a program in a pane sets the
 	// clipboard with OSC 52: off, ask, focused or on. See OSC52WriteModes.
 	OSC52Write string `toml:"osc52_write,omitempty"`
+	// CopyCommand is a command every copy-mode yank pipes the selection
+	// through, as tmux's copy-command. Empty copies the selection as it is.
+	CopyCommand string `toml:"copy_command,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -650,6 +653,9 @@ type KeybindingsConfig struct {
 	// Command is the [[keybindings.command]] entries: a key that runs a
 	// command the user writes. See command_keys.go.
 	Command []CommandBinding `toml:"command,omitempty"`
+	// CopyPipe is the [[keybindings.copy_pipe]] entries: a copy-mode key
+	// that pipes the selection through a command. See copy_pipe.go.
+	CopyPipe []CopyPipeBinding `toml:"copy_pipe,omitempty"`
 	// Script binds are live only while a .tape is playing back. Its own section
 	// because it is its own keyboard context: sharing ctrl+p with the palette by
 	// default is not a conflict, since only one of the two contexts is ever
@@ -1925,6 +1931,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if slices.Contains(OSC52WriteModes, cfg.Appearance.Selection.OSC52Write) {
 		s.OSC52Write = cfg.Appearance.Selection.OSC52Write
 	}
+	// Assigned always, so clearing the setting survives a reload.
+	s.CopyCommand = strings.TrimSpace(cfg.Appearance.Selection.CopyCommand)
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to
