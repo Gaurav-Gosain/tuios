@@ -122,6 +122,10 @@ func (m *OS) RestoreWindow(i int) {
 // When zoomed, the window fills the entire viewport (minus dock). When unzoomed, it
 // returns to its previous size and position. Other windows are hidden while zoomed.
 func (m *OS) ToggleZoom() {
+	// A popup has its own box, centred over the layout. It does not zoom.
+	if fw := m.GetFocusedWindow(); fw != nil && fw.IsPopup {
+		return
+	}
 	m.settleSizes(func() { m.toggleZoom() })
 }
 

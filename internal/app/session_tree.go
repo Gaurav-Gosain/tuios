@@ -64,8 +64,9 @@ func shellTitleLabel(title string) string {
 func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	windows := make([]sessiontree.WindowInput, 0, len(m.Windows))
 	for i, w := range m.Windows {
-		// The hidden scratch terminal has no row. See Window.HiddenScratch.
-		if w == nil || w.HiddenScratch() {
+		// The scratch terminal has no row, shown or hidden. It is reached by
+		// its key, and a row for it read as one more pane of the layout.
+		if w == nil || isScratch(w) {
 			continue
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
@@ -118,7 +119,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	summaries := client.SessionWindows(name)
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
 	for _, w := range summaries {
-		if w.HiddenScratch {
+		if w.Scratch {
 			continue
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.CompletionSeq)

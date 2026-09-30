@@ -235,8 +235,8 @@ func (m *OS) CaptureWindowAt(x, y int) int {
 			continue
 		}
 		w := m.Windows[h.Index]
-		if w != nil && w.Z > topZ {
-			top, topZ = h.Index, w.Z
+		if w != nil && HitZ(w) > topZ {
+			top, topZ = h.Index, HitZ(w)
 		}
 	}
 	return top

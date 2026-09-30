@@ -173,10 +173,19 @@ keyboard goes to it in terminal mode.
   scratch terminal. `tuios kill-window` closes it.
 - A focus on the hidden scratch terminal, for example with
   `tuios focus-window`, shows it first.
+- The scratch terminal is shown only while it has the focus. A click outside
+  it hides it and focuses the pane under the pointer. The click does nothing
+  else. A focus on a different pane, by a key or from the sidebar, also hides
+  it.
+- The mouse does not move or resize the scratch terminal. Its size comes from
+  `[scratch]`.
+- A key that moves, resizes, swaps, splits, zooms or tiles a pane hides the
+  scratch terminal first. The key then acts on the pane that gets the focus.
 - The key works from inside the popup. tuios reads `Ctrl+B` before the shell
   gets it.
-- A hidden scratch terminal is not in the dock, the window list, the sidebar,
-  the tiled layout, the focus cycle or multifocus. The `tuios list-windows`
+- The sidebar, the window list and the window count do not show the scratch
+  terminal. A hidden scratch terminal is also not in the dock, the tiled
+  layout, the focus cycle or multifocus. The `tuios list-windows`
   table does not show it. `tuios list-windows --json` shows it with
   `"scratch": true`, and `"minimized": true` while it is hidden.
 - When you detach, the scratch terminal stays as it is. It is there when you

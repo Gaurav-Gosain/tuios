@@ -158,7 +158,7 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	// Show. One bordered terminal named scratch, with the keyboard in it.
 	toggleScratch(t, term)
 	first := waitScratch(t, term, base, false, false, "the first show")
-	waitCount(t, term, 2, "with the scratch terminal shown")
+	waitCount(t, term, 1, "with the scratch terminal shown, which the count leaves out")
 	tries := typeUntil(t, term, "echo SCRATCH-$((6*7))", "SCRATCH-42")
 	t.Logf("the scratch terminal with text typed into it (%d tries):\n%s", tries, term.Snapshot())
 
@@ -265,7 +265,7 @@ func TestScratchTerminalWithoutDaemon(t *testing.T) {
 	newWindow(t, term)
 
 	toggleScratch(t, term)
-	waitCount(t, term, 2, "with the scratch terminal shown")
+	waitCount(t, term, 1, "with the scratch terminal shown, which the count leaves out")
 	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
 	t.Logf("the local scratch terminal:\n%s", term.Snapshot())
 

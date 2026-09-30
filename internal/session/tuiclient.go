@@ -2094,5 +2094,5 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.AgentMeta, b.AgentMeta) &&
 		a.AgentQueued == b.AgentQueued &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
-		a.HiddenScratch == b.HiddenScratch
+		a.Scratch == b.Scratch
 }

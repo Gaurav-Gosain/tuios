@@ -335,7 +335,7 @@ func (m *OS) GetVisibleWindows() []*terminal.Window {
 func (m *OS) GetWorkspaceWindowCount(workspace int) int {
 	count := 0
 	for _, w := range m.Windows {
-		if w.Workspace == workspace && !w.HiddenScratch() {
+		if w.Workspace == workspace && !isScratch(w) {
 			count++
 		}
 	}

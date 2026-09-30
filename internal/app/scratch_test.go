@@ -152,14 +152,21 @@ func TestHiddenScratchIsInNoList(t *testing.T) {
 		t.Fatal("HasMinimizedWindows counts the hidden scratch terminal")
 	}
 
-	// Shown, it is an ordinary popup and the list has it again.
+	// Shown, it is still no window of the layout: the list and the rail
+	// leave it out, and the workspace count does not include it.
 	w.Minimized = false
-	found := false
 	for _, it := range m.GetAggregateViewItems() {
-		found = found || it.Window == w
+		if it.Window == w {
+			t.Fatal("the window list shows the scratch terminal")
+		}
 	}
-	if !found {
-		t.Fatal("the window list leaves out the shown scratch terminal")
+	for _, row := range m.currentSessionInput().Windows {
+		if row.ID == w.ID {
+			t.Fatal("the rail shows the shown scratch terminal")
+		}
+	}
+	if n := m.GetWorkspaceWindowCount(1); n != 2 {
+		t.Fatalf("workspace 1 counts %d windows with the scratch terminal shown, want 2", n)
 	}
 }
 
@@ -386,7 +393,38 @@ func TestLayoutLeavesScratchOut(t *testing.T) {
 		t.Fatalf("templates = %+v, err %v, want one pane", tmpls, err)
 	}
 	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{X: 0, Y: 0, Width: 40, Height: 10}}}, m)
-	if s.X != 20 || s.Y != 5 || s.Minimized {
-		t.Fatalf("the layout moved the scratch terminal: %d,%d minimized=%v", s.X, s.Y, s.Minimized)
+	// The load focuses a pane of the layout, which hides the scratch
+	// terminal (it is a dropdown). It keeps its own box.
+	if s.X != 20 || s.Y != 5 {
+		t.Fatalf("the layout moved the scratch terminal to %d,%d", s.X, s.Y)
+	}
+}
+
+// The scratch terminal is a dropdown: a focus that goes to another pane, by
+// any path, hides it.
+func TestFocusElsewhereHidesScratch(t *testing.T) {
+	m := scratchOS(t, false)
+	w := addScratch(m, 1, true)
+	m.ToggleScratch()
+	m.FocusWindow(0)
+	if !w.Minimized || m.FocusedWindow != 0 {
+		t.Fatalf("minimized=%v focused=%d, want hidden and alpha focused", w.Minimized, m.FocusedWindow)
+	}
+}
+
+// The scratch terminal never enters the tiling: toggling floating on it does
+// nothing, and a retile keeps it out of the BSP tree.
+func TestScratchStaysOutOfTheTiling(t *testing.T) {
+	m := scratchOS(t, false)
+	m.AutoTiling = true
+	w := addScratch(m, 1, true)
+	m.ToggleScratch()
+	m.ToggleFloating()
+	if !w.IsFloating {
+		t.Fatal("toggle floating tiled the scratch terminal")
+	}
+	m.TileAllWindows()
+	if tree := m.WorkspaceTrees[1]; tree != nil && tree.HasWindow(m.GetWindowIntID(w.ID)) {
+		t.Fatal("the BSP tree holds the scratch terminal")
 	}
 }

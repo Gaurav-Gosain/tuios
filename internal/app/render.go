@@ -350,6 +350,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 // capped at ZIndexFloatingTop so no number of floating panes can reach the dock
 // or an overlay. A window in motion that draws its own border goes to
 // ZIndexAnimating, above the tiled panes it is sliding across.
+// HitZ is the rank a pointer hit test compares: the rank the pane is drawn at
+// when it is still. A hit test that compared the raw Z disagreed with the
+// frame whenever a floating pane's Z was below a tile's: a click on a popup,
+// drawn on top, landed on the tile underneath it.
+func HitZ(window *terminal.Window) int {
+	return windowLayerZ(window, false)
+}
+
 func windowLayerZ(window *terminal.Window, animating bool) int {
 	// A zoomed pane is drawn over the layout whenever the layout is drawn at
 	// all, which is a box smaller than the region or a zoom part way through

@@ -360,3 +360,42 @@ func (m *OS) windowCountForNotice() int {
 	}
 	return n
 }
+
+// ShownScratch is the index of the scratch terminal while it is on the screen
+// (shown, on the current workspace), or -1.
+func (m *OS) ShownScratch() int {
+	i := m.scratchIndex()
+	if i < 0 {
+		return -1
+	}
+	if w := m.Windows[i]; w.Minimized || w.Workspace != m.CurrentWorkspace {
+		return -1
+	}
+	return i
+}
+
+// parkScratch hides a shown scratch terminal without moving the focus or the
+// mode. It is for a focus that is already on its way to another pane (see
+// FocusWindow). The press of the scratch key uses hideScratch, which also
+// gives the focus back.
+func (m *OS) parkScratch() {
+	i := m.scratchIndex()
+	if i < 0 || m.Windows[i].Minimized {
+		return
+	}
+	m.Windows[i].Minimized = true
+	m.Windows[i].InvalidateCache()
+	m.scratchReturnID = ""
+	m.MarkAllDirty()
+}
+
+// HideShownScratch hides the scratch terminal when it is on the screen, and
+// gives the focus back as the key does. It reports whether it hid one.
+func (m *OS) HideShownScratch() bool {
+	i := m.ShownScratch()
+	if i < 0 {
+		return false
+	}
+	m.hideScratch(i)
+	return true
+}
