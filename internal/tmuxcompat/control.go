@@ -124,7 +124,7 @@ func (s *Shim) runControl(full []string, g Global, words []string, detail []stri
 
 // exit ends the client the way tmux does.
 func (c *control) exit(g Global) {
-	io.WriteString(c.out, "%exit\n")
+	_, _ = io.WriteString(c.out, "%exit\n")
 	if g.Control == 2 {
 		fmt.Fprint(c.out, "\x1b\\")
 	}
@@ -174,7 +174,7 @@ func (c *control) command(argv []string, flags int) bool {
 	c.outcome = worse(c.outcome, outcome)
 	c.detail = mergeDetail(c.detail, detail)
 	c.line("%%begin %d %d %d", started, num, flags)
-	c.out.Write(out.Bytes())
+	_, _ = c.out.Write(out.Bytes())
 	if err != nil {
 		c.detail = mergeDetail(c.detail, []string{logText(err)})
 		c.line("%s", err.Error())
