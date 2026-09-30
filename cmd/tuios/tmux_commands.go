@@ -70,6 +70,12 @@ func runAsTmux(args []string) int {
 	} else {
 		ours = dir != "" && tmuxcompat.SocketFromTmux(os.Getenv("TMUX")) == tmuxcompat.SocketPath(dir)
 	}
+	// A call that names a socket in the shim's directory is the shim's, even
+	// when the shim cannot parse it. A real tmux given that path would start
+	// a server on it.
+	if !ours && dir != "" && tmuxcompat.InShimDir(tmuxcompat.ExplicitSocket(args), dir) {
+		ours = true
+	}
 	if ours {
 		return runTmuxShim(args, dir)
 	}
@@ -94,12 +100,20 @@ func runAsTmux(args []string) int {
 // answer without one.
 type lazyCaller struct {
 	client *session.VerbClient
+	// socket is the shim's socket, named in the error tmux prints when no
+	// server runs. Empty keeps the daemon's own explanation.
+	socket string
 }
 
 func (l *lazyCaller) Call(verb string, params any) (json.RawMessage, error) {
 	if l.client == nil {
 		c, err := dialVerb()
 		if err != nil {
+			// tmux's words for a server that is not there, which tools
+			// driving tmux read as "not reachable".
+			if de, ok := errors.AsType[*diagnosticError](err); ok && de.Status == noDaemonStatus && l.socket != "" {
+				return nil, fmt.Errorf("no server running on %s", l.socket)
+			}
 			return nil, err
 		}
 		l.client = c
@@ -120,6 +134,9 @@ func (l *lazyCaller) close() {
 // runTmuxShim runs one tmux invocation through the shim.
 func runTmuxShim(args []string, dir string) int {
 	caller := &lazyCaller{}
+	if dir != "" {
+		caller.socket = tmuxcompat.SocketPath(dir)
+	}
 	defer caller.close()
 	cwd, _ := os.Getwd()
 	pid := 0
@@ -132,19 +149,27 @@ func runTmuxShim(args []string, dir string) int {
 			holderEnv = append(holderEnv, k+"="+v)
 		}
 	}
+	sess, window := os.Getenv("TUIOS_SESSION"), os.Getenv("TUIOS_PANE_ID")
 	shim := &tmuxcompat.Shim{
-		Caller:    caller,
-		Session:   os.Getenv("TUIOS_SESSION"),
-		Window:    os.Getenv("TUIOS_PANE_ID"),
-		TmuxPane:  os.Getenv("TMUX_PANE"),
-		Cwd:       cwd,
-		Exe:       selfExe(),
-		Dir:       dir,
-		ServerPID: pid,
-		HolderEnv: holderEnv,
-		Stdout:    os.Stdout,
-		Stderr:    os.Stderr,
-		Log:       tmuxcompat.LoggerFromEnv(os.Getenv),
+		Caller:  caller,
+		Session: sess,
+		// A caller in no pane and naming no session is the person, or a
+		// tool they run outside tuios. It sees every session, as a tmux
+		// client sees every session of its server.
+		AllSessions: sess == "" && window == "",
+		Window:      window,
+		Shell:       os.Getenv("SHELL"),
+		Stdin:       os.Stdin,
+		Subscribe:   subscribeVerb,
+		TmuxPane:    os.Getenv("TMUX_PANE"),
+		Cwd:         cwd,
+		Exe:         selfExe(),
+		Dir:         dir,
+		ServerPID:   pid,
+		HolderEnv:   holderEnv,
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+		Log:         tmuxcompat.LoggerFromEnv(os.Getenv),
 	}
 	if dir != "" {
 		if err := tmuxcompat.EnsureDir(dir); err != nil {
@@ -155,27 +180,52 @@ func runTmuxShim(args []string, dir string) int {
 	return shim.Run(args)
 }
 
+// verbStream is a verb connection that has subscribed: an event stream.
+type verbStream struct{ client *session.VerbClient }
+
+func (v verbStream) Next() ([]byte, error) { return v.client.ReadEventLine(0) }
+func (v verbStream) Close() error          { return v.client.Close() }
+
+// subscribeVerb opens an event stream on a connection of its own, for the
+// shim's control mode.
+func subscribeVerb(params map[string]any) (tmuxcompat.EventStream, error) {
+	c, err := dialVerb()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.Call("subscribe", params); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	return verbStream{c}, nil
+}
+
 // newTmuxCommand is `tuios tmux`: the shim, asked for by name.
 func newTmuxCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tmux [tmux arguments]",
-		Short: "Answer a tmux command in the caller's tuios session (the tmux shim)",
-		Long: `Answer one tmux command line in the tuios session of the pane it runs in,
-the same way the tmux link that 'tuios tmux-shim' installs does.
+		Short: "Answer a tmux command in tuios (the tmux shim)",
+		Long: `Answer one tmux command line in tuios, the same way the tmux link that
+'tuios tmux-shim' installs does.
 
-The tmux session is the caller's tuios session, a tmux window is a workspace
-(@N), and a tmux pane is a tuios window (%N, a number derived from its id).
-Nothing reaches another session.
+In a tuios pane, the tmux session is the pane's tuios session, and nothing
+reaches another session. Outside a pane, with TUIOS_SESSION unset, every
+tuios session is a tmux session. A tmux window is a workspace (@N), and a
+tmux pane is a tuios window (%N, a number derived from its id).
 
 Supported: split-window, new-window, send-keys, capture-pane -p,
-display-message, list-panes, list-windows, list-sessions, has-session,
-kill-pane, kill-window, select-pane, select-window, rename-window,
-respawn-pane -k and -V. set-option, set-window-option, set-hook,
+display-message, list-panes, list-windows, list-sessions, list-clients,
+has-session, kill-pane, kill-window, select-pane, select-window,
+rename-window, respawn-pane -k, load-buffer, set-buffer, paste-buffer,
+delete-buffer, show-options, new-session -d (outside a pane only), -V, and
+control mode (-C and -CC). set-option, set-window-option, set-hook,
 refresh-client, select-layout, resize-pane and start-server succeed and do
 nothing. Anything else fails and is recorded in the shim log.`,
 		Example: `  tuios tmux display-message -p '#{pane_id} #{window_id}'
   tuios tmux split-window -d -P -F '#{pane_id}'
-  tuios tmux list-panes -F '#{pane_id} #{pane_title}'`,
+  tuios tmux list-panes -F '#{pane_id} #{pane_title}'
+  echo hello | tuios tmux load-buffer - \; paste-buffer -t %12345
+  tuios tmux -C attach-session -t work`,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {

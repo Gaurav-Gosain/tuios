@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/google/uuid"
 )
 
@@ -781,6 +782,7 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 		Session string `json:"session"`
 		Window  string `json:"window"`
 		Text    string `json:"text"`
+		Paste   bool   `json:"paste"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -800,7 +802,16 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 	if verr := d.recheckTyping(cs, "send-text", sess, p.Window); verr != nil {
 		return nil, verr
 	}
-	if _, err := pty.Write([]byte(p.Text)); err != nil {
+	text := p.Text
+	if p.Paste {
+		// A paste: sanitized as every paste into a pane is, and bracketed
+		// when the pane's program asked for bracketed paste.
+		text = vt.SanitizePaste(text)
+		if text != "" && pty.BracketedPasteOn() {
+			text = bracketedPasteStart + text + bracketedPasteEnd
+		}
+	}
+	if _, err := pty.Write([]byte(text)); err != nil {
 		return nil, ptyWriteError(err)
 	}
 	return map[string]any{"type": "ok"}, nil

@@ -2,8 +2,10 @@ package tmuxcompat
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,11 +22,30 @@ type pane struct {
 	X, Y      int
 	Width     int
 	Height    int
+	// Command is what the pane runs in the foreground, empty at a shell
+	// prompt or when the daemon does not say (foreground_cmd).
+	Command string
+	// History is how many lines of scrollback the pane holds above its
+	// screen, -1 when the daemon does not say (history_rows).
+	History int
+	sess    *sessionView
 }
 
-// view is one read of the caller's session: its windows and workspaces.
-type view struct {
-	session   string
+// sessionView is one tuios session: a tmux session. Its windows are the
+// workspaces that hold panes.
+type sessionView struct {
+	name string
+	// id is the tuios session id, empty when the daemon did not list it.
+	id string
+	// num is the number in the session's tmux id: 0 when the shim serves one
+	// session, and sessionNumber(id) when it serves them all.
+	num       uint32
+	server    bool
+	activity  int64
+	created   int64
+	attached  bool
+	width     int
+	height    int
 	panes     []pane
 	current   int
 	focused   string
@@ -34,9 +55,125 @@ type view struct {
 	workspace []int // every workspace number the session has
 }
 
-// loadView reads the session through list-windows and list-workspaces.
+// view is one read of the sessions the shim serves.
+type view struct {
+	// server is true when the shim serves every session of the daemon (a
+	// caller outside any pane with no TUIOS_SESSION), false when it serves the
+	// caller's session alone.
+	server   bool
+	sessions []*sessionView
+	// def is the session an empty target means: the caller's, or, when the
+	// shim serves every session, the one a person looked at last.
+	def *sessionView
+}
+
+// listedSession is one entry of the list-sessions verb.
+type listedSession struct {
+	Name       string `json:"name"`
+	ID         string `json:"id"`
+	Created    int64  `json:"created"`
+	LastActive int64  `json:"last_active"`
+	Attached   bool   `json:"attached"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+}
+
+// daemonSessions reads the daemon's sessions.
+func (s *Shim) daemonSessions() ([]listedSession, error) {
+	raw, err := s.Caller.Call("list-sessions", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var ls struct {
+		Sessions []listedSession `json:"sessions"`
+	}
+	if err := json.Unmarshal(raw, &ls); err != nil {
+		return nil, fmt.Errorf("read list-sessions: %w", err)
+	}
+	return ls.Sessions, nil
+}
+
+// loadView reads the sessions the shim serves through list-sessions,
+// list-windows and list-workspaces.
 func (s *Shim) loadView() (*view, error) {
-	raw, err := s.Caller.Call("list-windows", map[string]any{"session": s.Session})
+	v := &view{server: s.AllSessions}
+	if !v.server {
+		sv, err := s.loadSession(s.sessionInfo(), false)
+		if err != nil {
+			return nil, err
+		}
+		v.sessions = []*sessionView{sv}
+		v.def = sv
+		return v, nil
+	}
+	listed, err := s.daemonSessions()
+	if err != nil {
+		return nil, err
+	}
+	used := map[uint32]bool{}
+	for _, l := range listed {
+		sv, err := s.loadSession(l, true)
+		if err != nil {
+			// A session closed between the two reads is not an error: it is
+			// simply not there any more.
+			var coded interface{ ErrorCode() string }
+			if errors.As(err, &coded) && coded.ErrorCode() == "session_not_found" {
+				continue
+			}
+			return nil, err
+		}
+		// Two sessions whose ids hash to one number would share tmux ids.
+		// The later one (in list-sessions order, which is stable) moves to
+		// the next free number.
+		for used[sv.num] {
+			sv.num = (sv.num + 1) & 0xfffff
+			if sv.num == 0 {
+				sv.num = 1
+			}
+		}
+		used[sv.num] = true
+		v.sessions = append(v.sessions, sv)
+	}
+	for _, sv := range v.sessions {
+		if v.def == nil || sv.attached && !v.def.attached ||
+			sv.attached == v.def.attached && sv.activity > v.def.activity {
+			v.def = sv
+		}
+	}
+	return v, nil
+}
+
+// sessionInfo describes the caller's session. list-sessions says the most,
+// but a pane needs admin to list every session, so a pane without it reads
+// session-info, which lacks the activity and creation times.
+func (s *Shim) sessionInfo() listedSession {
+	if listed, err := s.daemonSessions(); err == nil {
+		for _, l := range listed {
+			if l.Name == s.Session {
+				return l
+			}
+		}
+	}
+	info := listedSession{Name: s.Session}
+	raw, err := s.Caller.Call("session-info", map[string]any{"session": s.Session})
+	if err != nil {
+		return info
+	}
+	var si struct {
+		ID       string `json:"session_id"`
+		Width    int    `json:"width"`
+		Height   int    `json:"height"`
+		Attached bool   `json:"tui_attached"`
+	}
+	if json.Unmarshal(raw, &si) == nil {
+		info.ID, info.Width, info.Height, info.Attached = si.ID, si.Width, si.Height, si.Attached
+	}
+	return info
+}
+
+// loadSession reads one session's windows and workspaces.
+func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error) {
+	raw, err := s.Caller.Call("list-windows", map[string]any{"session": info.Name})
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +187,8 @@ func (s *Shim) loadView() (*view, error) {
 			Y           int    `json:"y"`
 			Width       int    `json:"width"`
 			Height      int    `json:"height"`
+			Foreground  string `json:"foreground_cmd"`
+			History     *int   `json:"history_rows"`
 		} `json:"windows"`
 		Focused string `json:"focused_window_id"`
 		Current int    `json:"current_workspace"`
@@ -57,19 +196,29 @@ func (s *Shim) loadView() (*view, error) {
 	if err := json.Unmarshal(raw, &wl); err != nil {
 		return nil, fmt.Errorf("read list-windows: %w", err)
 	}
-	v := &view{
-		session: s.Session,
-		current: wl.Current,
-		focused: wl.Focused,
-		wsFocus: map[int]string{},
-		wsName:  map[int]string{},
-		wsCount: map[int]int{},
+	sv := &sessionView{
+		name:     info.Name,
+		id:       info.ID,
+		server:   server,
+		activity: info.LastActive,
+		created:  info.Created,
+		attached: info.Attached,
+		width:    info.Width,
+		height:   info.Height,
+		current:  wl.Current,
+		focused:  wl.Focused,
+		wsFocus:  map[int]string{},
+		wsName:   map[int]string{},
+		wsCount:  map[int]int{},
+	}
+	if server {
+		sv.num = sessionNumber(cmpOr(info.ID, info.Name))
 	}
 	for _, w := range wl.Windows {
 		p := pane{
 			ID:        w.ID,
 			Num:       PaneNumber(w.ID),
-			Index:     v.wsCount[w.Workspace],
+			Index:     sv.wsCount[w.Workspace],
 			Workspace: w.Workspace,
 			Title:     w.DisplayName,
 			Cwd:       w.Cwd,
@@ -77,12 +226,20 @@ func (s *Shim) loadView() (*view, error) {
 			Y:         w.Y,
 			Width:     w.Width,
 			Height:    w.Height,
+			Command:   w.Foreground,
+			History:   -1,
 		}
-		v.wsCount[w.Workspace]++
-		v.panes = append(v.panes, p)
+		if w.History != nil {
+			p.History = *w.History
+		}
+		sv.wsCount[w.Workspace]++
+		sv.panes = append(sv.panes, p)
+	}
+	for i := range sv.panes {
+		sv.panes[i].sess = sv
 	}
 
-	raw, err = s.Caller.Call("list-workspaces", map[string]any{"session": s.Session})
+	raw, err = s.Caller.Call("list-workspaces", map[string]any{"session": info.Name})
 	if err != nil {
 		return nil, err
 	}
@@ -97,47 +254,70 @@ func (s *Shim) loadView() (*view, error) {
 		return nil, fmt.Errorf("read list-workspaces: %w", err)
 	}
 	for _, w := range ws.Workspaces {
-		v.workspace = append(v.workspace, w.Workspace)
+		sv.workspace = append(sv.workspace, w.Workspace)
 		if w.Name != "" {
-			v.wsName[w.Workspace] = w.Name
+			sv.wsName[w.Workspace] = w.Name
 		}
 		if w.Focused != "" {
-			v.wsFocus[w.Workspace] = w.Focused
+			sv.wsFocus[w.Workspace] = w.Focused
 		}
 	}
-	return v, nil
+	return sv, nil
+}
+
+// cmpOr returns a, or b when a is empty.
+func cmpOr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// sessionID is the session's tmux id, $N.
+func (sv *sessionView) sessionID() string {
+	return "$" + strconv.FormatUint(uint64(sv.num), 10)
+}
+
+// windowID is the tmux id of workspace ws, @N. With one session N is the
+// workspace number. With every session it also carries the session's number,
+// since tmux window ids are unique on the server.
+func (sv *sessionView) windowID(ws int) string {
+	if !sv.server {
+		return "@" + strconv.Itoa(ws)
+	}
+	return "@" + strconv.FormatUint(uint64(sv.num)*windowStride+uint64(ws), 10)
 }
 
 // panesOn lists the panes of one workspace, in list-windows order.
-func (v *view) panesOn(ws int) []*pane {
+func (sv *sessionView) panesOn(ws int) []*pane {
 	var out []*pane
-	for i := range v.panes {
-		if v.panes[i].Workspace == ws {
-			out = append(out, &v.panes[i])
+	for i := range sv.panes {
+		if sv.panes[i].Workspace == ws {
+			out = append(out, &sv.panes[i])
 		}
 	}
 	return out
 }
 
-// byWindowID finds the pane of a tuios window id.
-func (v *view) byWindowID(id string) *pane {
-	for i := range v.panes {
-		if v.panes[i].ID == id {
-			return &v.panes[i]
+// byWindowID finds the pane of a tuios window id in this session.
+func (sv *sessionView) byWindowID(id string) *pane {
+	for i := range sv.panes {
+		if sv.panes[i].ID == id {
+			return &sv.panes[i]
 		}
 	}
 	return nil
 }
 
 // active is the active pane of a workspace: its focused window, or its first.
-func (v *view) active(ws int) *pane {
-	on := v.panesOn(ws)
+func (sv *sessionView) active(ws int) *pane {
+	on := sv.panesOn(ws)
 	if len(on) == 0 {
 		return nil
 	}
-	want := v.wsFocus[ws]
-	if want == "" && ws == v.current {
-		want = v.focused
+	want := sv.wsFocus[ws]
+	if want == "" && ws == sv.current {
+		want = sv.focused
 	}
 	for _, p := range on {
 		if p.ID == want {
@@ -147,25 +327,170 @@ func (v *view) active(ws int) *pane {
 	return on[0]
 }
 
-func (v *view) isActive(p *pane) bool {
-	a := v.active(p.Workspace)
+func (sv *sessionView) isActive(p *pane) bool {
+	a := sv.active(p.Workspace)
 	return a != nil && a.ID == p.ID
 }
 
-// isSession reports whether a target's session part names the caller's
-// session. "=" asks for an exact match, which is the only kind the shim does.
-func (v *view) isSession(name string) bool {
-	name = strings.TrimPrefix(name, "=")
-	return name == v.session || name == "$0"
+// workspaceOf resolves a tmux window reference inside this session: "@N",
+// "N", or a workspace name.
+func (sv *sessionView) workspaceOf(ref string) (int, error) {
+	ref = strings.TrimPrefix(ref, "=")
+	if num, ok := strings.CutPrefix(ref, "@"); ok {
+		n, err := strconv.ParseUint(num, 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("can't find window: %s", ref)
+		}
+		ws := int(n)
+		if sv.server {
+			if uint32(n/windowStride) != sv.num {
+				return 0, fmt.Errorf("can't find window: %s", ref)
+			}
+			ws = int(n % windowStride)
+		}
+		if sv.hasWorkspace(ws) {
+			return ws, nil
+		}
+		return 0, fmt.Errorf("can't find window: %s", ref)
+	}
+	if n, err := strconv.Atoi(ref); err == nil {
+		if sv.hasWorkspace(n) {
+			return n, nil
+		}
+		return 0, fmt.Errorf("can't find window: %s", ref)
+	}
+	for ws, name := range sv.wsName {
+		if name == ref {
+			return ws, nil
+		}
+	}
+	return 0, fmt.Errorf("can't find window: %s", ref)
+}
+
+func (sv *sessionView) hasWorkspace(ws int) bool {
+	if slices.Contains(sv.workspace, ws) {
+		return true
+	}
+	_, ok := sv.wsCount[ws]
+	return ok
+}
+
+// windowsInUse lists the workspaces that hold panes, ascending: the session's
+// tmux windows.
+func (sv *sessionView) windowsInUse() []int {
+	var out []int
+	seen := map[int]bool{}
+	for _, ws := range sv.workspace {
+		if sv.wsCount[ws] > 0 && !seen[ws] {
+			out = append(out, ws)
+			seen[ws] = true
+		}
+	}
+	for ws, n := range sv.wsCount {
+		if n > 0 && !seen[ws] {
+			out = append(out, ws)
+			seen[ws] = true
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// path is the session's session_path: the directory of its first pane,
+// which is where the session started.
+func (sv *sessionView) path() string {
+	if len(sv.panes) > 0 {
+		return sv.panes[0].Cwd
+	}
+	return ""
+}
+
+// allPanes lists every pane the view holds, session by session.
+func (v *view) allPanes() []*pane {
+	var out []*pane
+	for _, sv := range v.sessions {
+		for i := range sv.panes {
+			out = append(out, &sv.panes[i])
+		}
+	}
+	return out
+}
+
+// byWindowID finds the pane of a tuios window id in any session served.
+func (v *view) byWindowID(id string) *pane {
+	if id == "" {
+		return nil
+	}
+	for _, sv := range v.sessions {
+		if p := sv.byWindowID(id); p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
+// sessionOf resolves a session reference: its name, "=name" or its id $N.
+func (v *view) sessionOf(ref string) (*sessionView, bool) {
+	ref = strings.TrimPrefix(ref, "=")
+	if ref == "" {
+		return nil, false
+	}
+	if num, ok := strings.CutPrefix(ref, "$"); ok {
+		n, err := strconv.ParseUint(num, 10, 32)
+		if err != nil {
+			return nil, false
+		}
+		for _, sv := range v.sessions {
+			if uint64(sv.num) == n {
+				return sv, true
+			}
+		}
+		return nil, false
+	}
+	for _, sv := range v.sessions {
+		if sv.name == ref {
+			return sv, true
+		}
+	}
+	return nil, false
+}
+
+// isSession reports whether ref names a session the shim serves.
+func (v *view) isSession(ref string) bool {
+	_, ok := v.sessionOf(ref)
+	return ok
+}
+
+// windowByID resolves "@N" when the shim serves every session, where the
+// number names the session too. It returns false for anything else.
+func (v *view) windowByID(ref string) (*sessionView, int, bool) {
+	num, ok := strings.CutPrefix(strings.TrimPrefix(ref, "="), "@")
+	if !ok || !v.server {
+		return nil, 0, false
+	}
+	n, err := strconv.ParseUint(num, 10, 32)
+	if err != nil {
+		return nil, 0, false
+	}
+	for _, sv := range v.sessions {
+		if uint64(sv.num) == n/windowStride {
+			ws := int(n % windowStride)
+			if sv.hasWorkspace(ws) {
+				return sv, ws, true
+			}
+		}
+	}
+	return nil, 0, false
 }
 
 // paneByID resolves the part after "%": the pane number, or a tuios window id
 // or a prefix of one at least four characters long that matches one window.
 func (v *view) paneByID(ref string) (*pane, error) {
+	all := v.allPanes()
 	if n, err := strconv.ParseUint(ref, 10, 32); err == nil {
-		for i := range v.panes {
-			if uint64(v.panes[i].Num) == n {
-				return &v.panes[i], nil
+		for _, p := range all {
+			if uint64(p.Num) == n {
+				return p, nil
 			}
 		}
 	}
@@ -174,12 +499,12 @@ func (v *view) paneByID(ref string) (*pane, error) {
 	}
 	if len(ref) >= 4 {
 		var hit *pane
-		for i := range v.panes {
-			if strings.HasPrefix(v.panes[i].ID, ref) {
+		for _, p := range all {
+			if strings.HasPrefix(p.ID, ref) {
 				if hit != nil {
 					return nil, fmt.Errorf("can't find pane: %%%s (it matches more than one)", ref)
 				}
-				hit = &v.panes[i]
+				hit = p
 			}
 		}
 		if hit != nil {
@@ -187,28 +512,6 @@ func (v *view) paneByID(ref string) (*pane, error) {
 		}
 	}
 	return nil, fmt.Errorf("can't find pane: %%%s", ref)
-}
-
-// workspaceOf resolves a tmux window reference: "@N", "N", or a workspace
-// name.
-func (v *view) workspaceOf(ref string) (int, error) {
-	ref = strings.TrimPrefix(ref, "=")
-	num := strings.TrimPrefix(ref, "@")
-	if n, err := strconv.Atoi(num); err == nil {
-		if slices.Contains(v.workspace, n) {
-			return n, nil
-		}
-		if _, ok := v.wsCount[n]; ok {
-			return n, nil
-		}
-		return 0, fmt.Errorf("can't find window: %s", ref)
-	}
-	for ws, name := range v.wsName {
-		if name == ref {
-			return ws, nil
-		}
-	}
-	return 0, fmt.Errorf("can't find window: %s", ref)
 }
 
 // splitTarget cuts a target ("session:window.pane") into its parts. hasSess
@@ -226,6 +529,25 @@ func splitTarget(t string) (sess, win, pn string, hasSess, hasPane bool) {
 	return
 }
 
+// targetSession picks the session a target's session part names, or the
+// default one: dflt's, then the view's.
+func (v *view) targetSession(sessRef string, hasSess bool, dflt *pane) (*sessionView, error) {
+	if hasSess && sessRef != "" {
+		sv, ok := v.sessionOf(sessRef)
+		if !ok {
+			return nil, fmt.Errorf("can't find session: %s", sessRef)
+		}
+		return sv, nil
+	}
+	if dflt != nil {
+		return dflt.sess, nil
+	}
+	if v.def == nil {
+		return nil, fmt.Errorf("no current session")
+	}
+	return v.def, nil
+}
+
 // resolvePane resolves a pane target. dflt is the pane an empty target means.
 func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 	if t == "" {
@@ -240,19 +562,27 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 	if p := v.byWindowID(t); p != nil {
 		return p, nil
 	}
-	sess, win, pn, hasSess, hasPane := splitTarget(t)
-	if hasSess && sess != "" && !v.isSession(sess) {
-		return nil, fmt.Errorf("can't find session: %s", sess)
+	sessRef, win, pn, hasSess, hasPane := splitTarget(t)
+	sv, err := v.targetSession(sessRef, hasSess, dflt)
+	if err != nil {
+		return nil, err
 	}
-	if !hasSess && !hasPane && v.isSession(win) {
-		win = ""
+	if !hasSess && !hasPane {
+		if named, ok := v.sessionOf(win); ok {
+			sv, win = named, ""
+		}
 	}
-	ws := v.current
-	if dflt != nil {
+	if win != "" {
+		if wsv, _, ok := v.windowByID(win); ok && !hasSess {
+			sv = wsv
+		}
+	}
+	ws := sv.current
+	if dflt != nil && dflt.sess == sv {
 		ws = dflt.Workspace
 	}
 	if win != "" {
-		n, err := v.workspaceOf(win)
+		n, err := sv.workspaceOf(win)
 		if err != nil {
 			if !hasSess && !hasPane {
 				return nil, fmt.Errorf("can't find pane: %s", t)
@@ -262,10 +592,10 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 		ws = n
 	}
 	if !hasPane || pn == "" {
-		if win == "" && dflt != nil && !hasSess {
+		if win == "" && dflt != nil && dflt.sess == sv && !hasSess {
 			return dflt, nil
 		}
-		if p := v.active(ws); p != nil {
+		if p := sv.active(ws); p != nil {
 			return p, nil
 		}
 		return nil, fmt.Errorf("can't find pane: %s", t)
@@ -277,7 +607,7 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't find pane: %s", pn)
 	}
-	for _, p := range v.panesOn(ws) {
+	for _, p := range sv.panesOn(ws) {
 		if p.Index == idx {
 			return p, nil
 		}
@@ -285,90 +615,93 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 	return nil, fmt.Errorf("can't find pane: %s", pn)
 }
 
-// resolveWindow resolves a window target to a workspace number.
-func (v *view) resolveWindow(t string, dflt *pane) (int, error) {
+// resolveWindow resolves a window target to a session and a workspace number.
+func (v *view) resolveWindow(t string, dflt *pane) (*sessionView, int, error) {
 	if t == "" {
 		if dflt != nil {
-			return dflt.Workspace, nil
+			return dflt.sess, dflt.Workspace, nil
 		}
-		return v.current, nil
+		if v.def == nil {
+			return nil, 0, fmt.Errorf("no current window")
+		}
+		return v.def, v.def.current, nil
 	}
 	if strings.HasPrefix(t, "%") {
 		p, err := v.paneByID(t[1:])
 		if err != nil {
-			return 0, err
+			return nil, 0, err
 		}
-		return p.Workspace, nil
+		return p.sess, p.Workspace, nil
 	}
 	if p := v.byWindowID(t); p != nil {
-		return p.Workspace, nil
+		return p.sess, p.Workspace, nil
 	}
-	sess, win, _, hasSess, _ := splitTarget(t)
-	if hasSess && sess != "" && !v.isSession(sess) {
-		return 0, fmt.Errorf("can't find session: %s", sess)
+	sessRef, win, _, hasSess, _ := splitTarget(t)
+	if !hasSess {
+		if sv, ws, ok := v.windowByID(win); ok {
+			return sv, ws, nil
+		}
 	}
-	if !hasSess && v.isSession(win) {
-		win = ""
+	sv, err := v.targetSession(sessRef, hasSess, dflt)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !hasSess {
+		if named, ok := v.sessionOf(win); ok {
+			sv, win = named, ""
+		}
 	}
 	if win == "" {
-		if dflt != nil && !hasSess {
-			return dflt.Workspace, nil
+		if dflt != nil && dflt.sess == sv && !hasSess {
+			return sv, dflt.Workspace, nil
 		}
-		return v.current, nil
+		return sv, sv.current, nil
 	}
-	return v.workspaceOf(win)
+	ws, err := sv.workspaceOf(win)
+	return sv, ws, err
 }
 
-// windowsInUse lists the workspaces that hold panes, ascending: the session's
-// tmux windows.
-func (v *view) windowsInUse() []int {
-	var out []int
-	seen := map[int]bool{}
-	for _, ws := range v.workspace {
-		if v.wsCount[ws] > 0 && !seen[ws] {
-			out = append(out, ws)
-			seen[ws] = true
-		}
-	}
-	for ws, n := range v.wsCount {
-		if n > 0 && !seen[ws] {
-			out = append(out, ws)
-			seen[ws] = true
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// sessionVars are the format variables every context has.
-func (s *Shim) sessionVars(v *view) map[string]string {
+// sessionVars are the format variables of a session. With sv nil they are
+// the server's alone.
+func (s *Shim) sessionVars(sv *sessionView) map[string]string {
 	host, _ := os.Hostname()
 	short := host
 	if i := strings.IndexByte(short, '.'); i >= 0 {
 		short = short[:i]
 	}
 	vars := map[string]string{
-		"session_name":     v.session,
-		"session_id":       "$0",
-		"session_windows":  strconv.Itoa(len(v.windowsInUse())),
-		"session_attached": "1",
-		"host":             host,
-		"host_short":       short,
-		"version":          Version,
-		"pid":              strconv.Itoa(s.ServerPID),
+		"host":       host,
+		"host_short": short,
+		"version":    Version,
+		"pid":        strconv.Itoa(s.ServerPID),
 	}
 	if s.Dir != "" {
 		vars["socket_path"] = SocketPath(s.Dir)
 	}
+	if sv == nil {
+		return vars
+	}
+	vars["session_name"] = sv.name
+	vars["session_id"] = sv.sessionID()
+	vars["session_windows"] = strconv.Itoa(len(sv.windowsInUse()))
+	// A session the shim serves for a pane caller is the one that pane is
+	// in, and a client shows it.
+	vars["session_attached"] = boolString(sv.attached || !sv.server)
+	vars["session_activity"] = strconv.FormatInt(sv.activity, 10)
+	vars["session_created"] = strconv.FormatInt(sv.created, 10)
+	vars["session_path"] = sv.path()
 	return vars
 }
 
-// windowVars adds the variables of workspace ws.
-func (s *Shim) windowVars(v *view, ws int, vars map[string]string) {
-	on := v.panesOn(ws)
-	name := v.wsName[ws]
+// windowVars adds the variables of workspace ws of sv.
+func (s *Shim) windowVars(sv *sessionView, ws int, vars map[string]string) {
+	on := sv.panesOn(ws)
+	name := sv.wsName[ws]
+	// A workspace with no name of its own shows its active pane's title, so
+	// its name follows what runs there: tmux's automatic-rename.
+	auto := name == ""
 	if name == "" {
-		if a := v.active(ws); a != nil && a.Title != "" {
+		if a := sv.active(ws); a != nil && a.Title != "" {
 			name = a.Title
 		} else {
 			name = strconv.Itoa(ws)
@@ -390,28 +723,29 @@ func (s *Shim) windowVars(v *view, ws int, vars map[string]string) {
 		}
 	}
 	flags := ""
-	if ws == v.current {
+	if ws == sv.current {
 		flags = "*"
 	}
-	vars["window_id"] = "@" + strconv.Itoa(ws)
+	vars["window_id"] = sv.windowID(ws)
 	vars["window_index"] = strconv.Itoa(ws)
 	vars["window_name"] = name
-	vars["window_active"] = boolString(ws == v.current)
+	vars["window_active"] = boolString(ws == sv.current)
 	vars["window_panes"] = strconv.Itoa(len(on))
 	vars["window_flags"] = flags
 	vars["window_width"] = strconv.Itoa(maxX - minX)
 	vars["window_height"] = strconv.Itoa(maxY - minY)
+	vars["automatic-rename"] = boolString(auto)
 }
 
 // paneVars is the whole context for one pane.
-func (s *Shim) paneVars(v *view, p *pane) map[string]string {
-	vars := s.sessionVars(v)
-	s.windowVars(v, p.Workspace, vars)
+func (s *Shim) paneVars(p *pane) map[string]string {
+	vars := s.sessionVars(p.sess)
+	s.windowVars(p.sess, p.Workspace, vars)
 	vars["pane_id"] = "%" + strconv.FormatUint(uint64(p.Num), 10)
 	vars["pane_index"] = strconv.Itoa(p.Index)
 	vars["pane_title"] = p.Title
 	vars["pane_current_path"] = p.Cwd
-	vars["pane_active"] = boolString(v.isActive(p))
+	vars["pane_active"] = boolString(p.sess.isActive(p))
 	vars["pane_width"] = strconv.Itoa(p.Width)
 	vars["pane_height"] = strconv.Itoa(p.Height)
 	vars["pane_left"] = strconv.Itoa(p.X)
@@ -422,6 +756,16 @@ func (s *Shim) paneVars(v *view, p *pane) map[string]string {
 	vars["pane_in_mode"] = "0"
 	vars["pane_marked"] = "0"
 	vars["pane_synchronized"] = "0"
+	// tmux names the foreground process. tuios names it only when it is not
+	// the pane's shell, so an empty one is the shell.
+	shell := ""
+	if s.Shell != "" {
+		shell = filepath.Base(s.Shell)
+	}
+	vars["pane_current_command"] = cmpOr(p.Command, shell)
+	if p.History >= 0 {
+		vars["history_size"] = strconv.Itoa(p.History)
+	}
 	vars["tuios_window_id"] = p.ID
 	return vars
 }

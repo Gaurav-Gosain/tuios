@@ -21,7 +21,6 @@ func TestParseGlobal(t *testing.T) {
 		{args: []string{"-2uS", "/s", "ls"}, socket: "/s", rest: []string{"ls"}},
 		{args: []string{"-V"}, version: true, rest: []string{}},
 		{args: []string{"-f", "/dev/null", "--", "-weird"}, rest: []string{"-weird"}},
-		{args: []string{"-CC"}, failWith: "control mode"},
 		{args: []string{"-Q"}, failWith: "unknown option"},
 		{args: []string{"-S"}, failWith: "requires an argument"},
 	}
@@ -39,6 +38,28 @@ func TestParseGlobal(t *testing.T) {
 		}
 		if g.Socket != c.socket || g.Name != c.name || g.Version != c.version || !reflect.DeepEqual(rest, c.rest) {
 			t.Errorf("ParseGlobal(%v) = %+v %v", c.args, g, rest)
+		}
+	}
+}
+
+func TestParseGlobalControlMode(t *testing.T) {
+	for _, c := range []struct {
+		args    []string
+		control int
+		rest    []string
+	}{
+		{[]string{"-C", "attach-session", "-t", "$0"}, 1, []string{"attach-session", "-t", "$0"}},
+		{[]string{"-CC"}, 2, []string{}},
+		{[]string{"-S", "/s", "-C", "attach"}, 1, []string{"attach"}},
+		{[]string{"-uCS/s", "ls"}, 1, []string{"ls"}},
+	} {
+		g, rest, err := ParseGlobal(c.args)
+		if err != nil {
+			t.Errorf("ParseGlobal(%v): %v", c.args, err)
+			continue
+		}
+		if g.Control != c.control || !reflect.DeepEqual(rest, c.rest) {
+			t.Errorf("ParseGlobal(%v) = control %d rest %v, want %d %v", c.args, g.Control, rest, c.control, c.rest)
 		}
 	}
 }

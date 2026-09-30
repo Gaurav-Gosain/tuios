@@ -1782,6 +1782,9 @@ Response:
 }}
 ```
 
+A window that runs a program other than its shell has `foreground_cmd`, the
+program's name. It is omitted at a shell prompt.
+
 A window whose process runs on another machine also has `host`. While the link
 to it is lost and the pane is being reattached, it has `host_link:
 "reconnecting"` and `host_link_until`, the unix time the far machine stops
@@ -2074,7 +2077,13 @@ Send literal text to a window's PTY. Unlike send-keys the text is written to the
 PTY verbatim with no key parsing, so it is always safe and always goes straight
 to the daemon owned PTY. Include a trailing newline to submit a line.
 
-Params: `session` (optional), `window` (optional), `text` (required).
+Params: `session` (optional), `window` (optional), `text` (required),
+`paste` (optional, default false).
+
+With `paste`, the text goes in as a paste. Control characters other than tab,
+line feed and carriage return are removed. The text is wrapped in the
+bracketed paste delimiters when the program in the pane turned bracketed
+paste on. The tmux shim's `paste-buffer` uses it.
 
 Request:
 
