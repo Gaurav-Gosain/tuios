@@ -140,6 +140,15 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 	}
 	hashIntStr(s.WorkspaceFocus)
+	// Focus history decides where the daemon sends focus when a pane closes, so
+	// it must not be mistaken for an otherwise identical state-sync repeat.
+	num(len(s.FocusHistory))
+	for _, workspace := range sortedIntKeys(s.FocusHistory) {
+		num(workspace)
+		for _, id := range s.FocusHistory[workspace] {
+			str(id)
+		}
+	}
 	hashIntStr(s.WorkspaceNames)
 
 	// The per-workspace master ratios, folded in the same way and for the same

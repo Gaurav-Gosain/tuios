@@ -352,10 +352,14 @@ type SessionState struct {
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
 	WorkspaceFocus   map[int]string `json:"workspace_focus,omitempty"` // workspace -> focused window ID
-	MasterRatio      float64        `json:"master_ratio"`
-	AutoTiling       bool           `json:"auto_tiling"`
-	Width            int            `json:"width"`
-	Height           int            `json:"height"`
+	// FocusHistory is newest-first per workspace. Unlike WorkspaceFocus, which
+	// names the pane currently selected there, it lets a close return to the
+	// pane the user visited immediately before it.
+	FocusHistory map[int][]string `json:"focus_history,omitempty"`
+	MasterRatio  float64          `json:"master_ratio"`
+	AutoTiling   bool             `json:"auto_tiling"`
+	Width        int              `json:"width"`
+	Height       int              `json:"height"`
 	// Input mode (window-management vs terminal) is deliberately absent: it is
 	// per-viewer, not per-session. It used to live here, which meant one client
 	// entering terminal mode flipped the input mode of every other client
@@ -2007,6 +2011,12 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceFocus != nil {
 		stateCopy.WorkspaceFocus = make(map[int]string)
 		maps.Copy(stateCopy.WorkspaceFocus, s.state.WorkspaceFocus)
+	}
+	if s.state.FocusHistory != nil {
+		stateCopy.FocusHistory = make(map[int][]string, len(s.state.FocusHistory))
+		for workspace, history := range s.state.FocusHistory {
+			stateCopy.FocusHistory[workspace] = slices.Clone(history)
+		}
 	}
 	if s.state.Options != nil {
 		stateCopy.Options = make(map[string]string, len(s.state.Options))

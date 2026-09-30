@@ -2,6 +2,14 @@ package session
 
 import "testing"
 
+func TestFocusHistoryChangesStateFingerprint(t *testing.T) {
+	before := &SessionState{FocusHistory: map[int][]string{1: {"c", "b", "a"}}}
+	after := &SessionState{FocusHistory: map[int][]string{1: {"c", "a", "b"}}}
+	if StateFingerprint(before) == StateFingerprint(after) {
+		t.Fatal("a changed focus history was treated as an unchanged state sync")
+	}
+}
+
 // The focus-repair rule is what decides where focus lands after the focused
 // window goes away. Two implementations answer that question today: the daemon's
 // (CloseDaemonWindow) and the TUI's (OS.FocusNextVisibleWindow, which takes the
@@ -33,6 +41,7 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 		// window's workspace; "" means the entry must be absent.
 		wantWorkspaceFocus string
 		workspace          int
+		history            []string
 	}{
 		{
 			name:      "closing an unfocused window leaves focus alone",
@@ -40,6 +49,12 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 			focused:   "a",
 			close:     "b",
 			wantFocus: "a", wantWorkspaceFocus: "a", workspace: 1,
+		},
+		{
+			name:    "closing follows most recently focused visible pane",
+			windows: []window{{id: "a", workspace: 1}, {id: "b", workspace: 1}, {id: "c", workspace: 1}},
+			focused: "c", close: "c", history: []string{"c", "b", "a"},
+			wantFocus: "b", wantWorkspaceFocus: "b", workspace: 1,
 		},
 		{
 			name:      "closing the focused window falls to the next in slice order",
@@ -110,6 +125,9 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 				}
 				state.FocusedWindowID = tc.focused
 				state.WorkspaceFocus[tc.workspace] = tc.focused
+				if tc.history != nil {
+					state.FocusHistory = map[int][]string{tc.workspace: append([]string(nil), tc.history...)}
+				}
 				return nil
 			}); err != nil {
 				t.Fatalf("seeding state failed: %v", err)

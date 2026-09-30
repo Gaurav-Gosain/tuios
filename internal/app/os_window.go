@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -366,6 +367,7 @@ func (m *OS) FocusWindow(i int) *OS {
 
 	// ATOMIC: Set focus and Z-index in one operation
 	m.FocusedWindow = i
+	m.FocusHistory = session.RecordFocus(m.FocusHistory, m.Windows[i].Workspace, m.Windows[i].ID)
 
 	// Save focus for current workspace
 	if m.Windows[i].Workspace == m.CurrentWorkspace {
@@ -888,6 +890,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	m.Windows = slices.Delete(m.Windows, i, i+1)
+	m.FocusHistory = session.RemoveFocus(m.FocusHistory, deletedWorkspace, deletedWindow.ID)
 	m.closeStaleHints()
 
 	// Explicitly clear the deleted window pointer to help GC
@@ -905,7 +908,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 		m.FocusedWindow--
 	} else if i == m.FocusedWindow {
 		// If we deleted the focused window, find the next visible window to focus
-		m.FocusNextVisibleWindow()
+		m.FocusMostRecentVisibleWindow()
 	}
 
 	// Retile if in tiling mode
@@ -953,6 +956,21 @@ func (m *OS) DeleteWindow(i int) *OS {
 	m.SyncStateToDaemon()
 
 	return m
+}
+
+// FocusMostRecentVisibleWindow restores the most recently focused visible pane
+// on this workspace. If history predates this feature, it falls back to the
+// existing deterministic first-visible rule.
+func (m *OS) FocusMostRecentVisibleWindow() {
+	for _, id := range m.FocusHistory[m.CurrentWorkspace] {
+		for i, w := range m.Windows {
+			if w.ID == id && w.Workspace == m.CurrentWorkspace && !w.Minimized {
+				m.FocusWindow(i)
+				return
+			}
+		}
+	}
+	m.FocusNextVisibleWindow()
 }
 
 // GetFocusedWindow returns the currently focused window.
