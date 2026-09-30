@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -257,5 +259,82 @@ func TestAPastedImageForAPaneOnAnotherMachineIsWrittenThere(t *testing.T) {
 	old := &remotePane{host: p.host, id: p.id, fed: p.fed}
 	if _, err := old.pasteImage(ctx, data); err == nil {
 		t.Error("a pane with no token took a paste")
+	}
+}
+
+// TestAPastedImageGoesOnTimeWithNoOtherPaste: the hour is kept by a timer,
+// not by the next paste or the next start.
+func TestAPastedImageGoesOnTimeWithNoOtherPaste(t *testing.T) {
+	s, _, _ := newTestPasteStore(t)
+	s.now = time.Now
+	s.ttl = 150 * time.Millisecond
+	t.Cleanup(s.removeWritten)
+	path, err := s.save(testPNG("timed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("an image past its TTL is still on disk, and nothing else ran")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestThePasteDirectoryKeepsToItsCaps: a run of pastes inside the TTL cannot
+// fill the runtime directory. The oldest go first, the newest stays.
+func TestThePasteDirectoryKeepsToItsCaps(t *testing.T) {
+	s, dir, _ := newTestPasteStore(t)
+	s.maxFiles = 3
+	var paths []string
+	for i := range 5 {
+		p, err := s.save(testPNG(string(rune('a' + i))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+		time.Sleep(5 * time.Millisecond)
+	}
+	left, _ := filepath.Glob(filepath.Join(dir, pasteFilePrefix+"*"))
+	if len(left) != 3 {
+		t.Fatalf("the directory holds %d images, want 3", len(left))
+	}
+	for _, p := range paths[:2] {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("an old image %s outlived the cap", p)
+		}
+	}
+
+	s.maxFiles, s.maxBytes = 0, int64(2*len(testPNG("x")))
+	last, err := s.save(testPNG("y"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, _ = filepath.Glob(filepath.Join(dir, pasteFilePrefix+"*"))
+	if len(left) != 2 || !slices.Contains(left, last) {
+		t.Errorf("under a byte cap of two images the directory holds %v", left)
+	}
+}
+
+// TestASymlinkedPasteDirectoryIsRefused: a link where the directory goes would
+// have the images written wherever it points.
+func TestASymlinkedPasteDirectoryIsRefused(t *testing.T) {
+	s, dir, _ := newTestPasteStore(t)
+	target := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.save(testPNG("z")); !errors.Is(err, errPasteDirLink) {
+		t.Errorf("a save through a linked directory returned %v, want it refused", err)
+	}
+	if entries, _ := os.ReadDir(target); len(entries) != 0 {
+		t.Errorf("the link's target got %d files", len(entries))
 	}
 }

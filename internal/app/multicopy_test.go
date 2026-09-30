@@ -124,7 +124,7 @@ func TestPrefixMenuNamesMultiCopyMode(t *testing.T) {
 
 	describe := func() string {
 		for _, bnd := range m.prefixMenuBindings() {
-			if bnd.Key == "[" {
+			if bnd.Key == config.WhichKeyCopyPasteKey {
 				return bnd.Description
 			}
 		}
@@ -134,7 +134,7 @@ func TestPrefixMenuNamesMultiCopyMode(t *testing.T) {
 		t.Errorf("without multifocus the menu says %q", got)
 	}
 	m.MultifocusSet = map[string]bool{"wa": true, "wb": true}
-	if got := describe(); got != "Multi copy (2)" {
-		t.Errorf("with multifocus the menu says %q, want Multi copy (2)", got)
+	if got := describe(); got != "Multi copy (2)/paste image" {
+		t.Errorf("with multifocus the menu says %q, want Multi copy (2)/paste image", got)
 	}
 }

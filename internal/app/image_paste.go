@@ -63,6 +63,11 @@ type imagePasteState struct {
 	call func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
 	// save writes an image for a client with no daemon.
 	save func([]byte) (string, error)
+	// keyProbeOff stops the paste key from asking the clipboard for its
+	// types, after an ask that was too slow or that the tool said it cannot
+	// answer here. The text paste then runs at once, every press. The
+	// paste_image action still asks.
+	keyProbeOff bool
 }
 
 // SetImagePasteSeams replaces the clipboard, the daemon call and the local
@@ -105,6 +110,9 @@ type imageProbeMsg struct {
 	err    error
 	// fallback asks for the text paste instead.
 	fallback bool
+	// keyProbeOff says the type ask was too slow or cannot work here, so the
+	// paste key stops making it.
+	keyProbeOff bool
 }
 
 // ImagePastedMsg is the daemon's answer: the path to paste into window.
@@ -119,6 +127,9 @@ type ImagePastedMsg struct {
 // clipboard holds an image and no text, and asks for the text otherwise.
 func (m *OS) RequestPaste() tea.Cmd {
 	if m.imagePasteReason() != "" {
+		return m.RequestHostPaste()
+	}
+	if m.imagePaste.keyProbeOff {
 		return m.RequestHostPaste()
 	}
 	clip := m.imageClipboardHere()
@@ -151,7 +162,7 @@ func (m *OS) RequestImagePaste() tea.Cmd {
 // empty bracketed paste. It says nothing when there is none.
 func (m *OS) PasteImageOnEmptyPaste() tea.Cmd {
 	w := m.GetFocusedWindow()
-	if w == nil || m.imagePasteReason() != "" {
+	if w == nil || m.imagePasteReason() != "" || m.imagePaste.keyProbeOff {
 		return nil
 	}
 	clip := m.imageClipboardHere()
@@ -168,9 +179,17 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 	return func() tea.Msg {
 		ctx := context.Background()
 		msg := imageProbeMsg{window: window, mode: mode}
-		types, err := clip.Types(ctx)
-		if err != nil && mode == imagePasteKey {
-			msg.fallback = true
+		// The paste key's text paste waits behind this ask, so the key gives
+		// it a short bound. Past it the text is pasted, and the key does not
+		// ask again.
+		limit := imageClipTypesTimeout
+		if mode != imagePasteAction {
+			limit = imageClipKeyTimeout
+		}
+		types, err := clip.typesWithin(ctx, limit)
+		if err != nil && mode != imagePasteAction {
+			msg.fallback = mode == imagePasteKey
+			msg.keyProbeOff = true
 			return msg
 		}
 		image := bestImageType(types) != ""
@@ -201,13 +220,24 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 
 // applyImageProbe acts on what the clipboard held.
 func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
+	if msg.keyProbeOff {
+		m.imagePaste.keyProbeOff = true
+	}
 	if msg.fallback {
 		return m.RequestHostPaste()
 	}
+	if msg.data == nil && msg.err == nil {
+		return nil
+	}
 	if msg.err != nil {
-		if errors.Is(msg.err, errNoClipboardImage) {
+		switch {
+		case errors.Is(msg.err, errNoClipboardImage):
 			m.ShowNotification("The clipboard holds no image.", "info", m.Settings.NotificationDuration)
-		} else {
+		case errors.Is(msg.err, errClipboardTooLarge):
+			m.ShowNotification(fmt.Sprintf("The image is larger than %d MB. Nothing was pasted.", session.PasteImageMaxBytes>>20), "warning", m.Settings.NotificationDuration*2)
+		case errors.Is(msg.err, errClipTypesUnsupported):
+			m.ShowNotification("The clipboard tool cannot read the clipboard here. Nothing was pasted.", "warning", m.Settings.NotificationDuration*2)
+		default:
 			m.ShowNotification("tuios cannot read the clipboard image: "+msg.err.Error(), "error", m.Settings.NotificationDuration*2)
 		}
 		return nil
@@ -309,17 +339,31 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) {
 	m.ShowNotification("Pasted the image as a file on "+where+".", "success", m.Settings.NotificationDuration)
 }
 
-// pastePathText is the text pasted for a path: the path itself, in single
-// quotes only when it holds a character a shell would split or expand. The
-// directories tuios writes to hold none, so this is the path as it is.
+// pastePathText is the text pasted for a path: the path itself, quoted only
+// when it holds a character a shell would split or expand. The directories
+// tuios writes to on Linux and macOS hold none, so there it is the path as it
+// is.
+//
+// A Windows path (C:\...) goes in double quotes when it needs quoting at all:
+// cmd, PowerShell and the agents that read a path from a prompt all take that
+// form, and a Windows file name cannot hold a double quote. The machine the
+// path is for can be another one than this, so the shape of the path decides,
+// not the platform tuios runs on.
 func pastePathText(path string) string {
-	safe := func(r rune) bool {
-		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+:@%,=", r)
+	windows := len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') &&
+		(path[0] >= 'a' && path[0] <= 'z' || path[0] >= 'A' && path[0] <= 'Z')
+	extra := "/._-+:@%,="
+	if windows {
+		extra += "\\"
 	}
 	for _, r := range path {
-		if !safe(r) {
-			return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(extra, r) {
+			continue
 		}
+		if windows {
+			return `"` + path + `"`
+		}
+		return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 	}
 	return path
 }

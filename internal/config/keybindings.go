@@ -28,7 +28,6 @@ const (
 	whichKeyInboxMail     = "Inbox: mail"
 	whichKeyReview        = "Review changes"
 	whichKeyNewestDone    = "Newest finished"
-	whichKeyPasteImage    = "Paste image"
 )
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
@@ -38,7 +37,7 @@ const (
 // been seen; the keys work either way.
 func IsAgentPrefixKeybinding(k Keybinding) bool {
 	switch k.Description {
-	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone, whichKeyPasteImage:
+	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone:
 		return true
 	}
 	return false
@@ -50,6 +49,10 @@ func IsAgentPrefixKeybinding(k Keybinding) bool {
 func IsReviewPrefixKeybinding(k Keybinding) bool {
 	return k.Description == whichKeyReview
 }
+
+// WhichKeyCopyPasteKey is the leader menu's line for copy mode ([) and the
+// image paste (V).
+const WhichKeyCopyPasteKey = "[/V"
 
 // GetPrefixKeybindings returns keybindings for the prefix overlay, every group
 // in order. isDaemonSession indicates whether we're running in daemon mode
@@ -166,7 +169,9 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		modes.Bindings = append(modes.Bindings, kb("d/Esc", "Window mode"))
 	}
 	modes.Bindings = append(modes.Bindings,
-		kb("[", "Scrollback mode"),
+		// Copy mode and the image paste share a line: the leader's menu
+		// fills an 80x24 screen, and a line more pushes it off the bottom.
+		kb(WhichKeyCopyPasteKey, "Copy mode/paste image"),
 		kb("s", "Scrollback browser"),
 		kb("b", "Toggle sidebar"),
 		kb("e", "Focus sidebar"),
@@ -195,10 +200,6 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("M", whichKeyInboxMail),
 		kb("O", whichKeyNewestDone),
 		kb("v", whichKeyReview),
-		// An image is pasted for an agent to read, so the line waits for an
-		// agent with the others. The Windows section has no room for it at
-		// 80x24.
-		kb("V", whichKeyPasteImage),
 	}}
 	return []KeybindingGroup{windows, panes, sessions, modes, menus, tools, agents}
 }
