@@ -517,8 +517,8 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 	sp.mu.Unlock()
 
 	var groups map[sixelGroupKey][]sixelHit
-	// Whether each id met on this frame has a picture, asked once per id.
-	pictures := map[uint32]bool{}
+	// What is known of each id met on this frame, asked once per id.
+	infos := map[uint32]sixelInfo{}
 	var dim color.Color
 	for y, line := range canvas.Lines {
 		for x := range line {
@@ -530,17 +530,23 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 			if !ok {
 				id = 0
 			}
-			has, seen := pictures[id]
+			info, seen := infos[id]
 			if !seen {
-				has = id != 0 && sp.hasPicture(id)
-				pictures[id] = has
+				info = sp.info(id)
+				infos[id] = info
 			}
-			if mode == sixelPlaceholder || !has {
+			if info.rows == 0 {
+				// An image this client never held, drawn before it
+				// attached or freed since: its cells are plain blanks.
+				blankCellKeepGround(c)
+				continue
+			}
+			if mode == sixelPlaceholder || !info.picture {
 				// The theme's dim text colour, read once a frame.
 				if dim == nil {
 					dim = theme.UI().FgDim
 				}
-				sp.placeholderCell(c, id, row, col, dim)
+				placeholderCell(c, row, col, info.rows, info.cols, dim)
 				continue
 			}
 			sixelBlankCell(c, id)
@@ -576,6 +582,7 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 		cols = len(canvas.Lines[0])
 	}
 	sp.SetFrame(rects, hw, hh, cols, rows)
+	m.sweepSixelImages()
 }
 
 // groundHash hashes the backgrounds of the cells a rectangle covers (FNV-1a).
@@ -598,13 +605,28 @@ func groundHash(canvas *frameCanvas, r sixelRect) uint64 {
 	return h
 }
 
-// hasPicture reports whether an image can be drawn as a picture: it is held
-// and it was decoded.
-func (sp *SixelPassthrough) hasPicture(id uint32) bool {
+// sixelInfo is what the scan needs to know of an image: whether it can be
+// drawn as a picture, and its size in cells (zero when it is not held).
+type sixelInfo struct {
+	picture    bool
+	rows, cols int
+}
+
+func (sp *SixelPassthrough) info(id uint32) sixelInfo {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	e := sp.images[id]
-	return e != nil && e.img != nil
+	if id == 0 || e == nil {
+		return sixelInfo{}
+	}
+	return sixelInfo{picture: e.img != nil, rows: e.rows, cols: e.cols}
+}
+
+// blankCellKeepGround makes an image cell a plain blank on its background.
+func blankCellKeepGround(c *uv.Cell) {
+	bg := c.Style.Bg
+	*c = uv.Cell{Content: " ", Width: 1}
+	c.Style.Bg = bg
 }
 
 // sixelRects turns one image's visible cells into rectangles: each row's runs
@@ -695,29 +717,13 @@ func sixelBlankCell(c *uv.Cell, id uint32) {
 	}
 }
 
-// placeholderCell draws one cell of the box shown where an image cannot be, in
-// fg with the faint attribute: a thin frame around the image's cells with
-// "image" in the middle. A cell
-// whose image is unknown (drawn before this client attached) gets a dotted
-// fill instead, since the frame's size is not known.
-func (sp *SixelPassthrough) placeholderCell(c *uv.Cell, id uint32, row, col int, fg color.Color) {
-	sp.mu.Lock()
-	e := sp.images[id]
-	rows, cols := 0, 0
-	if e != nil {
-		rows, cols = e.rows, e.cols
-	}
-	sp.mu.Unlock()
-
-	bg := c.Style.Bg
-	*c = uv.Cell{Content: " ", Width: 1}
-	c.Style.Bg = bg
+// placeholderCell draws one cell of the box shown where an image of rows by
+// cols cells cannot be, in fg with the faint attribute: a thin frame around
+// the image's cells with "image" in the middle.
+func placeholderCell(c *uv.Cell, row, col, rows, cols int, fg color.Color) {
+	blankCellKeepGround(c)
 	c.Style.Fg = fg
 	c.Style.Attrs = uv.AttrFaint
-	if rows == 0 || cols == 0 {
-		c.Content = "·"
-		return
-	}
 	last := func(v, n int) bool { return v == n-1 }
 	switch {
 	case rows == 1 || cols == 1:
