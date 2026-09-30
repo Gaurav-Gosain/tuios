@@ -3,12 +3,14 @@ package app
 import (
 	"errors"
 	"fmt"
-	"io"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -68,9 +70,10 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 	}
 	dir := m.scratchDir()
 	if m.AttachedHost != "" {
-		// The folder is a path on this machine, and the pane would start on
-		// the session's.
-		dir = ""
+		// Every pane is on the session's machine, so the folder is the
+		// focused pane's own path there, and this machine's home means
+		// nothing.
+		dir = m.remotePaneDir()
 	}
 	env := m.commandEnv(dir)
 	argv := commandArgv(c.Command, env)
@@ -143,7 +146,9 @@ func (m *OS) commandEnv(dir string) map[string]string {
 	if w := m.GetFocusedWindow(); w != nil {
 		env["TUIOS_ACTIVE_PANE_ID"] = w.ID
 	}
-	if m.IsDaemonSession {
+	// The socket is this machine's. A pane on another machine has its own
+	// daemon's socket set already.
+	if m.IsDaemonSession && m.AttachedHost == "" {
 		if path, err := session.GetSocketPath(); err == nil {
 			env[session.SocketEnv] = path
 		}
@@ -151,23 +156,53 @@ func (m *OS) commandEnv(dir string) map[string]string {
 	return env
 }
 
+// remotePaneDir is the focused pane's folder in a session on another
+// machine: the path the shell there reported (OSC 7), whatever host it
+// names, or "".
+func (m *OS) remotePaneDir() string {
+	w := m.GetFocusedWindow()
+	if w == nil || w.Cwd == "" {
+		return ""
+	}
+	if u, err := url.Parse(w.Cwd); err == nil && u.Scheme == "file" {
+		return u.Path
+	}
+	if filepath.IsAbs(w.Cwd) {
+		return w.Cwd
+	}
+	return ""
+}
+
 // commandArgv is the argv that runs a command line through sh -c with env
 // set. An empty line is an empty argv, which runs the user's shell. The
 // variables go through env(1) so the daemon, which spawns the pane, needs no
 // new field to carry them.
 func commandArgv(line string, env map[string]string) []string {
+	return commandArgvFor(runtime.GOOS, line, env)
+}
+
+// commandArgvFor is commandArgv for the given GOOS, so a test can read the
+// Windows form.
+func commandArgvFor(goos, line string, env map[string]string) []string {
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return nil
-	}
-	if runtime.GOOS == "windows" {
-		return []string{"cmd", "/C", line}
 	}
 	keys := make([]string, 0, len(env))
 	for k := range env {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	if goos == "windows" {
+		// cmd has no env(1). set "K=V" sets one variable, and && runs the
+		// next part only after it.
+		var b strings.Builder
+		for _, k := range keys {
+			fmt.Fprintf(&b, "set \"%s=%s\" && ", k, env[k])
+		}
+		b.WriteString(line)
+		return []string{"cmd", "/C", b.String()}
+	}
 	argv := []string{"env"}
 	for _, k := range keys {
 		argv = append(argv, k+"="+env[k])
@@ -183,10 +218,17 @@ func runCommandShell(argv []string, dir string) error {
 	}
 	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 - the user's own config.toml names the command
 	cmd.Dir = dir
-	cmd.Stdin = nil
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	// Nil, not io.Discard: io.Discard makes Go copy from a pipe, and a child
+	// the command put in the background holds the pipe open, so Run waited
+	// for that child too. Nil is /dev/null, which nobody waits on.
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	cmd.Env = os.Environ()
+	// A child that still holds an output after the command exits is let go
+	// after this long.
+	cmd.WaitDelay = time.Second
+	// A session of its own: no controlling terminal, so sudo or a write to
+	// /dev/tty cannot draw on the tuios screen.
+	detachFromTerminal(cmd)
 	return cmd.Run()
 }
 
@@ -232,12 +274,25 @@ func (m *OS) commandPaletteItems() []CommandPaletteItem {
 		return nil
 	}
 	cmds := m.UserConfig.Keybindings.Commands()
+	// A shadowed entry's key runs something else, so the row shows no key.
+	dead := map[string]bool{}
+	if m.KeybindRegistry != nil {
+		for _, b := range m.KeybindRegistry.Bindings() {
+			if b.Section == config.SectionCommand && b.Shadowed {
+				dead[b.Action] = true
+			}
+		}
+	}
 	items := make([]CommandPaletteItem, 0, len(cmds))
 	for _, c := range cmds {
 		action := c.Action()
+		shortcut := ""
+		if !dead[action] {
+			shortcut = commandShortcut(c)
+		}
 		items = append(items, CommandPaletteItem{
 			Name:     c.Label(),
-			Shortcut: strings.TrimSpace(c.Key),
+			Shortcut: shortcut,
 			Category: paletteCategoryCommands,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.RunCommandBinding(action)
@@ -245,4 +300,14 @@ func (m *OS) commandPaletteItems() []CommandPaletteItem {
 		})
 	}
 	return items
+}
+
+// commandShortcut is an entry's key as the palette spells the built-in keys:
+// prefix+ and then the key in its canonical form.
+func commandShortcut(c config.CommandBinding) string {
+	key := config.CanonicalKey(c.BareKey())
+	if c.Section() == config.SectionPrefixMode {
+		return "prefix+" + key
+	}
+	return key
 }

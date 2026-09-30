@@ -1272,6 +1272,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		windowID := msg.WindowID
 		for i, w := range m.Windows {
 			if w.ID == windowID {
+				m.noteLocalScratchExit(w)
 				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 				m.DeleteWindow(i)
 				break

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -95,7 +98,21 @@ const scratchPendingMax = 10 * time.Second
 // ScratchOpenedMsg reports the outcome of the call that creates the scratch
 // terminal in a daemon session.
 type ScratchOpenedMsg struct {
-	Err error
+	// Label names the scratch in a message.
+	Label string
+	Err   error
+}
+
+// scratchStoppedWait is how long the create waits to see whether the command
+// exits at once, as a command that is not installed does.
+const scratchStoppedWait = 1500 * time.Millisecond
+
+// ScratchStoppedError is a scratch command that exited within
+// scratchStoppedWait of its start.
+type ScratchStoppedError struct{ Code int }
+
+func (e ScratchStoppedError) Error() string {
+	return fmt.Sprintf("stopped with exit code %d", e.Code)
 }
 
 // scratchOpener creates the pane through the daemon. Tests replace it.
@@ -314,8 +331,9 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		Height:    spec.Height,
 		Workspace: m.CurrentWorkspace,
 	}
+	label := spec.Title
 	return func() tea.Msg {
-		return ScratchOpenedMsg{Err: scratchOpener(req)}
+		return ScratchOpenedMsg{Label: label, Err: scratchOpener(req)}
 	}
 }
 
@@ -329,6 +347,10 @@ func (m *OS) createLocalScratch(dir string, spec scratchSpec) {
 	}
 	w.IsScratch = true
 	w.ScratchName = spec.Name
+	if m.scratchStarted == nil {
+		m.scratchStarted = map[string]time.Time{}
+	}
+	m.scratchStarted[w.ID] = time.Now()
 	m.showScratch(len(m.Windows) - 1)
 }
 
@@ -397,8 +419,26 @@ func openScratchPopup(req scratchRequest) error {
 	if req.Dir != "" {
 		params["cwd"] = req.Dir
 	}
-	_, err = c.Call("popup", params)
-	return err
+	// Wait a moment for the command to exit. One that exits at once (a typo,
+	// a program that is not installed) is reported with its code, and the
+	// create ends. The daemon keeps the popup when the wait runs out.
+	params["wait"] = true
+	params["timeout"] = int(scratchStoppedWait / time.Millisecond)
+	raw, err := c.CallWithTimeout("popup", params, scratchStoppedWait+5*time.Second)
+	if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbTimeout {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var res struct {
+		Type     string `json:"type"`
+		ExitCode int    `json:"exit_code"`
+	}
+	if json.Unmarshal(raw, &res) == nil && res.Type == "popup_result" {
+		return ScratchStoppedError{Code: res.ExitCode}
+	}
+	return nil
 }
 
 // handleScratchOpened reports a failed create and ends it. A create the
@@ -410,6 +450,10 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 		return
 	}
 	m.scratchPending = ""
+	if stopped, ok := errors.AsType[ScratchStoppedError](msg.Err); ok {
+		m.ShowNotification(fmt.Sprintf("The command %s stopped with exit code %d.", msg.Label, stopped.Code), "error", m.Settings.NotificationDuration)
+		return
+	}
 	m.ShowNotification("The scratch terminal did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)
 }
 
@@ -493,4 +537,39 @@ func (m *OS) HideShownScratch() bool {
 	}
 	m.hideScratch(i)
 	return true
+}
+
+// noteLocalScratchExit reports a local scratch pane whose command exited
+// within scratchStoppedWait of its start. The daemon path reports it from
+// the popup call instead (openScratchPopup). The pane is not started again,
+// so a command that cannot run does not loop.
+func (m *OS) noteLocalScratchExit(w *terminal.Window) {
+	started, ok := m.scratchStarted[w.ID]
+	delete(m.scratchStarted, w.ID)
+	if !ok || !isScratch(w) || time.Since(started) >= scratchStoppedWait {
+		return
+	}
+	m.ShowNotification(fmt.Sprintf("The command %s stopped at once.", w.CustomName), "error", m.Settings.NotificationDuration)
+}
+
+// pruneOrphanScratches closes each scratch pane whose entry the config no
+// longer has: an entry removed, renamed, or given a new description with no
+// name, which changes its name. Hidden, such a pane had no key to show it and
+// ran on. The built-in scratch terminal always has its key.
+func (m *OS) pruneOrphanScratches() {
+	for i := len(m.Windows) - 1; i >= 0; i-- {
+		w := m.Windows[i]
+		if !isScratch(w) || scratchNameOf(w) == scratchName {
+			continue
+		}
+		if _, ok := m.scratchSpecFor(scratchNameOf(w)); ok {
+			continue
+		}
+		label := w.CustomName
+		if label == "" {
+			label = scratchNameOf(w)
+		}
+		m.DeleteWindow(i)
+		m.ShowNotification(fmt.Sprintf("The scratch popup %s closed. config.toml has no entry for it now.", label), "info", m.Settings.NotificationDuration)
+	}
 }

@@ -436,6 +436,11 @@ func (r *KeybindRegistry) Bindings() []Binding {
 					Press:   press(scope.Chord, key),
 				})
 				lookup := lookupForm(key)
+				if kb.isLeader(key) {
+					out[idx].Shadowed = true
+					out[idx].ShadowedBy = LeaderAction
+					continue
+				}
 				if prev, taken := winner[lookup]; taken {
 					out[idx].Shadowed = true
 					out[idx].ShadowedBy = out[prev].Action

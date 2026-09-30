@@ -1501,7 +1501,10 @@ type OS struct {
 	scratchPendingAt time.Time
 	// scratchReturnID and scratchReturnMode are the pane and the mode the
 	// focus goes back to when the scratch terminal hides.
-	scratchReturnID   string
+	scratchReturnID string
+	// scratchStarted is when each local scratch pane started, by window id,
+	// so a command that exits at once is reported. See noteLocalScratchExit.
+	scratchStarted    map[string]time.Time
 	scratchReturnMode Mode
 	// forceTerminalMode is OSOptions.StartInTerminalMode: applyStartupPreferences
 	// enters terminal mode once a pane is focused, for any session.

@@ -167,3 +167,108 @@ func TestArrivingScratchHidesTheShownOne(t *testing.T) {
 		t.Fatalf("one hidden=%v two hidden=%v, want only two shown", one.Minimized, two.Minimized)
 	}
 }
+
+// A shell entry that puts a child in the background returns when the
+// command does, not when the child does.
+func TestShellEntryDoesNotWaitForABackgroundChild(t *testing.T) {
+	start := time.Now()
+	if err := runCommandShell(commandArgv("sleep 3 &", nil), ""); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Fatalf("the entry took %v: it waited for the background child", d)
+	}
+}
+
+// A reload closes a scratch pane whose entry is gone. The built-in scratch
+// terminal and a pane whose entry is still there stay.
+func TestReloadClosesOrphanScratches(t *testing.T) {
+	m := commandOS(t, false, config.CommandBinding{Key: "alt+y", Type: "scratch", Name: "kept"})
+	for _, name := range []string{"", "kept", "gone"} {
+		m.Windows = append(m.Windows, &terminal.Window{ID: "s-" + name, IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: name, Workspace: 1, Minimized: true})
+	}
+	m.pruneOrphanScratches()
+	var left []string
+	for _, w := range m.Windows {
+		left = append(left, w.ID)
+	}
+	if slices.Contains(left, "s-gone") || !slices.Contains(left, "s-") || !slices.Contains(left, "s-kept") {
+		t.Fatalf("windows = %v, want s-gone closed and the others kept", left)
+	}
+	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "no entry") {
+		t.Fatalf("notifications = %+v", m.Notifications)
+	}
+}
+
+// A scratch command that exits at once is reported with its code, and the
+// create ends, so the next press may try again.
+func TestScratchThatStopsAtOnceIsReported(t *testing.T) {
+	m := commandOS(t, true)
+	m.scratchPending, m.scratchPendingAt = "lazygit", time.Now()
+	m.handleScratchOpened(ScratchOpenedMsg{Label: "Lazygit", Err: ScratchStoppedError{Code: 127}})
+	if m.scratchPending != "" {
+		t.Fatal("the create stayed on its way")
+	}
+	if n := len(m.Notifications); n == 0 || m.Notifications[n-1].Message != "The command Lazygit stopped with exit code 127." {
+		t.Fatalf("notifications = %+v", m.Notifications)
+	}
+}
+
+// A local scratch pane that exits at once is reported. One that ran a while
+// is not.
+func TestLocalScratchThatStopsAtOnceIsReported(t *testing.T) {
+	m := commandOS(t, false)
+	w := &terminal.Window{ID: "fast", IsPopup: true, IsScratch: true, ScratchName: "x", CustomName: "X"}
+	slow := &terminal.Window{ID: "slow", IsPopup: true, IsScratch: true, ScratchName: "y", CustomName: "Y"}
+	m.scratchStarted = map[string]time.Time{"fast": time.Now(), "slow": time.Now().Add(-time.Minute)}
+	m.noteLocalScratchExit(slow)
+	if len(m.Notifications) != 0 {
+		t.Fatal("a scratch that ran a minute was reported")
+	}
+	m.noteLocalScratchExit(w)
+	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "X stopped") {
+		t.Fatalf("notifications = %+v", m.Notifications)
+	}
+}
+
+// In a session on another machine a pane entry gets no socket of this
+// machine and starts in the focused pane's folder there.
+func TestRemotePaneEntryEnv(t *testing.T) {
+	m := commandOS(t, true)
+	m.AttachedHost = "build"
+	m.Windows[0].Cwd = "file://build/srv/app"
+	if got := m.remotePaneDir(); got != "/srv/app" {
+		t.Fatalf("dir = %q, want /srv/app", got)
+	}
+	env := m.commandEnv(m.remotePaneDir())
+	if _, ok := env["TUIOS_SOCKET"]; ok {
+		t.Fatal("a remote pane got this machine's socket")
+	}
+	if env["TUIOS_ACTIVE_PANE_CWD"] != "/srv/app" {
+		t.Fatalf("env = %v", env)
+	}
+}
+
+// On Windows the variables are set with set, before the command.
+func TestCommandArgvOnWindowsSetsTheVariables(t *testing.T) {
+	argv := commandArgvFor("windows", "dir", map[string]string{"TUIOS_SESSION": "work"})
+	if len(argv) != 3 || argv[0] != "cmd" || argv[2] != `set "TUIOS_SESSION=work" && dir` {
+		t.Fatalf("argv = %q", argv)
+	}
+}
+
+// The palette shows an entry's key as the built-ins show theirs, and no key
+// for an entry whose key another action took.
+func TestPaletteShortcutOfAnEntry(t *testing.T) {
+	m := commandOS(t, false,
+		config.CommandBinding{Key: "PREFIX+Alt+G", Command: "lazygit", Name: "live"},
+		config.CommandBinding{Key: "prefix+g", Command: "htop", Name: "dead"})
+	m.KeybindRegistry = config.NewKeybindRegistry(m.UserConfig)
+	m.rebuildPaletteItems()
+	if got := paletteItemNamed(m.PaletteItems, "Run lazygit").Shortcut; got != "prefix+alt+g" {
+		t.Errorf("live shortcut = %q, want prefix+alt+g", got)
+	}
+	if got := paletteItemNamed(m.PaletteItems, "Run htop").Shortcut; got != "" {
+		t.Errorf("dead shortcut = %q, want none", got)
+	}
+}

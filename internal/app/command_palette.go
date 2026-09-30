@@ -64,6 +64,8 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// what puts the new config on the model, which every section outside
 	// [appearance] is read from live.
 	cmd := m.ReloadDockComponents(cfg)
+	// A scratch entry the new file renamed or removed has no key any more.
+	m.pruneOrphanScratches()
 	// The beam is client-local, so nothing else carries it: without this the
 	// screen and the config disagree about whether it is on, and the next
 	// toggle writes the disagreement back to the file.
