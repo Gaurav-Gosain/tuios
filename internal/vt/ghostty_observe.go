@@ -231,6 +231,17 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 					if rows, err := t.term.ScrollbackRows(); err == nil {
 						t.mainSbLen = int(rows)
 					}
+					// Bring the main screen's shadow up to date too.
+					// It is only synced when something reads the
+					// screen, and the library shows only the active
+					// screen, so output that arrived with no read
+					// before this switch was never in bufs[0]: the
+					// shell's screen under vim read as blank to
+					// MainCellAt, in a snapshot and in saved history.
+					// The cache still says main here, so the sync
+					// targets bufs[0].
+					t.gridStale = true
+					t.syncLocked()
 				}
 			}
 			t.cachedAltScreen.Store(set)

@@ -29,6 +29,9 @@ type Manager struct {
 	// scrollbackLines is stamped into every session made here, so each pane
 	// keeps the history depth the daemon was configured with.
 	scrollbackLines int
+	// history is what sessions made from now on do with their panes' history
+	// across a restart. Nil saves nothing. Guarded by mu.
+	history *HistoryPolicy
 	// inheritCwd is appearance.new_window_inherit_cwd, stamped into every
 	// session this manager makes.
 	inheritCwd bool
@@ -102,6 +105,24 @@ func (m *Manager) SetScrollbackLines(n int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scrollbackLines = n
+}
+
+// SetHistoryPolicy sets what every session made from now on does with its
+// panes' history across a restart.
+func (m *Manager) SetHistoryPolicy(p HistoryPolicy) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.history = &p
+}
+
+// HistoryPolicy is what SetHistoryPolicy last set, off when nothing did.
+func (m *Manager) HistoryPolicy() HistoryPolicy {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.history == nil {
+		return HistoryPolicy{}
+	}
+	return *m.history
 }
 
 // SetNewWindowInheritCwd sets whether a window made from now on starts in the
@@ -230,6 +251,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv
+	}
+	if cfg.history == nil {
+		cfg.history = m.history
 	}
 	if cfg.grants == nil {
 		cfg.grants = m.grants
@@ -387,6 +411,8 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 			LogError("Resurrection save for renamed session %q failed: %v", newName, err)
 		}
 	}
+	// Before the old state goes, which takes the old name's history with it.
+	moveHistory(old, newName)
 	RemoveResurrectionState(old)
 
 	if onRename != nil {

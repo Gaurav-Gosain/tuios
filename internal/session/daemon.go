@@ -583,6 +583,11 @@ type DaemonConfig struct {
 	// the resume command into each restored shell; "off" does neither. See
 	// agent_resume.go.
 	ResumeAgents string
+	// History is daemon.persist_scrollback and its bounds, resolved: whether
+	// each pane's history is saved with its session and shown again when a
+	// restart restores it. The zero value saves nothing; a real starter fills
+	// it through DaemonConfigFromUser.
+	History HistoryPolicy
 	// Hosts are the federated peers from the [hosts] config table. Empty, the
 	// default, means the daemon holds no links and every federation verb reports
 	// an empty table.
@@ -663,6 +668,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
+	d.manager.SetHistoryPolicy(cfg.History)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
@@ -1017,6 +1023,7 @@ func (d *Daemon) Start() error {
 	// Restore sessions saved before the previous shutdown/crash before we start
 	// accepting clients, so an attach immediately after start finds them. Runs
 	// synchronously; a single corrupt file is archived and skipped, never fatal.
+	d.dropHistoryWhenOff()
 	if !d.disableAutoRestore {
 		d.restoreAllSessions()
 	}

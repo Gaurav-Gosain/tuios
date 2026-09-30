@@ -308,10 +308,14 @@ func ListResurrectableSessions() ([]string, error) {
 	return names, nil
 }
 
-// RemoveResurrectionState deletes the resurrection file for a session.
+// RemoveResurrectionState deletes the resurrection file for a session, and
+// its saved pane history.
 func RemoveResurrectionState(sessionName string) {
 	path := getResurrectionPath(sessionName)
 	_ = os.Remove(path)
+	// The session's pane history goes with it. It is only ever read back into
+	// a restore of this state, and it holds whatever the panes printed.
+	RemoveHistory(sessionName)
 }
 
 // StartPeriodicSave starts a goroutine that saves session state, and returns a

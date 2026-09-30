@@ -190,6 +190,20 @@ type DaemonConfig struct {
 	// command into its restored shell, and "off" does neither. The processes
 	// themselves never survive a restart; this brings back the conversation.
 	ResumeAgents string `toml:"resume_agents"`
+	// PersistScrollback saves each pane's history with its session, and a
+	// restore after a daemon restart or a reboot shows it again above the new
+	// shell. Nil means on, the default. The files hold whatever the panes
+	// printed, secrets included, so false is for the person who does not want
+	// that on disk; turning it off deletes what was saved when the daemon
+	// next starts.
+	PersistScrollback *bool `toml:"persist_scrollback"`
+	// PersistScrollbackLines is the most history lines one pane saves, the
+	// screen not counted. Zero means 5000.
+	PersistScrollbackLines int `toml:"persist_scrollback_lines"`
+	// PersistScrollbackKB is the most one pane's saved history takes on
+	// disk, compressed, in KiB. Zero means 2048. A pane over it saves fewer
+	// lines.
+	PersistScrollbackKB int `toml:"persist_scrollback_kb"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
