@@ -118,6 +118,9 @@ func hostCommandAllowed(p *RemoteCommandPayload) bool {
 		return true
 	case "list_dock_components", "list_hooks", "refresh_dock":
 		return true
+	case "pip":
+		// The view shows a pane of the session on screen, on this screen.
+		return true
 	case "tape_command":
 		return hostTapeCommandAllowed(tape.CommandType(p.TapeCommand))
 	}

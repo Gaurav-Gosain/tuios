@@ -42,6 +42,9 @@ type UserConfig struct {
 	// Scratch is the [scratch] table: the size of the scratch terminal that
 	// toggle_scratch shows in a popup. See scratch.go.
 	Scratch ScratchConfig `toml:"scratch"`
+	// PiP is the [pip] table: the size and corner of the picture-in-picture
+	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
+	PiP PiPConfig `toml:"pip"`
 
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
@@ -750,6 +753,7 @@ func DefaultConfig() *UserConfig {
 		Spotlight:   defaultSpotlightConfig(),
 		Hints:       defaultHintsConfig(),
 		Scratch:     defaultScratchConfig(),
+		PiP:         defaultPiPConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -767,6 +771,9 @@ func DefaultConfig() *UserConfig {
 				"restore_all":       {"M"},
 				"toggle_zoom":       {"z"},
 				"start_screensaver": {"S"},
+				// p pins the focused pane as the picture-in-picture view and
+				// unpins it again. p for pin. It was free in window mode.
+				"toggle_pip": {"p"},
 				// Finishing a mouse selection has always told the user to press
 				// 'c' to copy it. Until this binding existed, nothing was
 				// listening.
@@ -1532,6 +1539,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	fillMissingSpotlight(&cfg, defaultCfg)
 	fillMissingHints(&cfg, defaultCfg)
 	fillMissingScratch(&cfg, defaultCfg)
+	fillMissingPiP(&cfg, defaultCfg)
 	return &cfg, nil
 }
 
@@ -2453,6 +2461,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 var yieldingDefaults = map[string]bool{
 	"hints":          true,
 	"toggle_scratch": true,
+	// p in window mode, new in the release after v0.8.2.
+	"toggle_pip": true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,

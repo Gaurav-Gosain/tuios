@@ -66,7 +66,7 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 				"minimize_window", "restore_all",
 				"next_window", "prev_window",
 				"toggle_multifocus_active", "toggle_multifocus_all",
-				"toggle_scratch",
+				"toggle_scratch", "toggle_pip",
 			},
 		},
 		{

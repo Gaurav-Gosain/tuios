@@ -265,6 +265,14 @@ func (m *OS) layerFill(id string, bounds image.Rectangle, w, h int, grounds *fra
 		return layerFill{outer: grounds[surfaceDock]}
 	case "scrollback-browser":
 		return layerFill{outer: grounds[surfacePane]}
+	case pipLayerID:
+		// The view is a small pane: its body on the pane ground, its frame
+		// on the chrome's.
+		return layerFill{
+			rect:  image.Rect(1, 1, w-1, h-1),
+			inner: grounds[surfacePane],
+			outer: grounds[surfaceChrome],
+		}
 	}
 	if r, ok := m.paneContentRects[id]; ok {
 		// Taken relative to where the layer landed, so a pane clipped at the

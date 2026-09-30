@@ -403,6 +403,23 @@ func init() {
 			},
 			handler: (*Daemon).verbRefreshDock,
 		},
+		"pip": {
+			description: "Pin a pane as the attached client's picture-in-picture view: a small live copy of the pane in a corner of the screen while another pane has the focus. Naming the pinned pane again unpins it. The view belongs to the client, not the session, and needs an attached client.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name to pin. Omit to pin the client's focused pane, or to unpin it when it is the pinned one."},
+				{Name: "off", Type: "bool", Description: "Unpin whatever is pinned. Takes no window.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "pinned", Type: "bool", Description: "Whether a pane is pinned now."},
+				{Name: "window_id", Type: "string", Description: "Id of the pinned pane, empty when nothing is pinned."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"pip","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"pip","params":{"off":true}}`,
+			},
+			handler: (*Daemon).verbPiP,
+		},
 		"list-sessions": {
 			description: "List all sessions the daemon holds.",
 			examples:    []string{`{"id":1,"verb":"list-sessions"}`},

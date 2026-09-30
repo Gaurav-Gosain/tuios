@@ -1495,6 +1495,8 @@ type OS struct {
 	// terminal mode is deferred until that window materializes through a state
 	// sync and can be focused.
 	pendingStartTerminalMode bool
+	// pip is this client's picture-in-picture view. See pip.go.
+	pip pipState
 	// scratchPending says the scratch terminal was asked for and has not
 	// arrived yet, and scratchPendingAt is when. See scratch.go.
 	scratchPending   string

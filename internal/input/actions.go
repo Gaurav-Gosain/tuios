@@ -242,6 +242,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
+	d.Register("toggle_pip", handleTogglePiP)
 
 	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
@@ -903,6 +904,13 @@ func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	save := o.ToggleSpotlight()
 	toggleNotify(o, "Spotlight", o.SpotlightOn())
 	return o, save
+}
+
+// handleTogglePiP pins the focused pane as the picture-in-picture view, or
+// unpins the pinned one. See internal/app/pip.go.
+func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.TogglePiP()
+	return o, nil
 }
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

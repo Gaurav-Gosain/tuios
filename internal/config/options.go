@@ -1101,6 +1101,24 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [pip]. Read each time the picture-in-picture view is drawn, and
+	// client-local like the spotlight.
+	{
+		Path: "pip.width", Type: OptionInt, Section: "pip",
+		Description: "Width of the picture-in-picture view, border included, in cells",
+		Default:     "40", Min: PiPMinWidth, Max: PiPMaxWidth,
+	},
+	{
+		Path: "pip.height", Type: OptionInt, Section: "pip",
+		Description: "Height of the picture-in-picture view, border included, in cells",
+		Default:     "12", Min: PiPMinHeight, Max: PiPMaxHeight,
+	},
+	{
+		Path: "pip.corner", Type: OptionString, Section: "pip",
+		Description: "Corner the picture-in-picture view goes to first. It moves to another corner when the cursor enters it",
+		Accepted:    PiPCorners, Default: PiPCornerBottomRight,
+	},
+
 	// [hints]. Read each time hints mode opens. hints.patterns is a list and
 	// is set in the file only, like [keybindings].
 	{
