@@ -9,8 +9,12 @@
 // It prints what it was told, sends Crush's first report (idle), and then
 // reads one word per line from its terminal and sends that report: working,
 // blocked, idle, release, stale (a seq below the last one), foreign (another
-// pane's id) and unsupported (a method tuios does not answer). Each answer is
-// printed on a line of its own, after REPLY.
+// pane's id) and unsupported (a method tuios does not answer). The words
+// charmbracelet/crush#3541 adds are permission and question (blocked with the
+// message that Crush sends for each), meta (pane.report_metadata with a title
+// and a model token) and notify (notification.show). crash reports working
+// and exits at once with no release, the way a killed Crush leaves its pane.
+// Each answer is printed on a line of its own, after REPLY.
 package main
 
 import (
@@ -29,6 +33,7 @@ type params struct {
 	Source         string `json:"source"`
 	Agent          string `json:"agent"`
 	State          string `json:"state,omitempty"`
+	Message        string `json:"message,omitempty"`
 	Seq            uint64 `json:"seq"`
 	AgentSessionID string `json:"agent_session_id"`
 }
@@ -36,7 +41,7 @@ type params struct {
 type request struct {
 	ID     string `json:"id"`
 	Method string `json:"method"`
-	Params params `json:"params"`
+	Params any    `json:"params"`
 }
 
 func main() {
@@ -48,14 +53,14 @@ func main() {
 		return
 	}
 	seq := uint64(time.Now().UnixNano())
-	send := func(method, state, paneID string, s uint64) {
-		req := request{
-			ID:     fmt.Sprintf("crush:%s:%d", method, time.Now().UnixNano()),
-			Method: method,
-			Params: params{PaneID: paneID, Source: "crush", Agent: "crush", State: state, Seq: s, AgentSessionID: "fake-session"},
-		}
+	sendRaw := func(method string, p any) {
+		req := request{ID: fmt.Sprintf("crush:%s:%d", method, time.Now().UnixNano()), Method: method, Params: p}
 		fmt.Println("REPLY " + dialSend(sock, req))
 	}
+	sendMsg := func(method, state, message, paneID string, s uint64) {
+		sendRaw(method, params{PaneID: paneID, Source: "crush", Agent: "crush", State: state, Message: message, Seq: s, AgentSessionID: "fake-session"})
+	}
+	send := func(method, state, paneID string, s uint64) { sendMsg(method, state, "", paneID, s) }
 	next := func() uint64 { seq++; return seq }
 	send("pane.report_agent", "idle", pane, next())
 	fmt.Println("FAKE-CRUSH-READY")
@@ -72,6 +77,20 @@ func main() {
 			send("pane.report_agent", "working", "not-this-pane", next())
 		case "unsupported":
 			send("pane.send_input", "", pane, next())
+		case "permission":
+			sendMsg("pane.report_agent", "blocked", "Permission: bash - go test ./...", pane, next())
+		case "question":
+			sendMsg("pane.report_agent", "blocked", "Pick a database", pane, next())
+		case "meta":
+			sendRaw("pane.report_metadata", map[string]any{
+				"pane_id": pane, "source": "crush", "title": "Fix the flaky test",
+				"tokens": map[string]any{"session": "fake-session", "model": "fake-model"}, "seq": next(),
+			})
+		case "notify":
+			sendRaw("notification.show", map[string]any{"title": "Crush finished", "body": "All tests pass"})
+		case "crash":
+			send("pane.report_agent", "working", pane, next())
+			os.Exit(3)
 		case "quit":
 			return
 		}
