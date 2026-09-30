@@ -97,6 +97,7 @@ const (
 var verbScopes = map[string]scopeKind{
 	"hello":               scopeOpen,
 	"list-verbs":          scopeOpen,
+	"list-keys":           scopeOpen,
 	"unsubscribe":         scopeOpen,
 	"restrict-connection": scopeOpen,
 	// pane-grants reports the caller's own grants and touches no session.

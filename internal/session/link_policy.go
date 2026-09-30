@@ -59,6 +59,7 @@ const capRelay = "*"
 var verbCapabilities = map[string][]string{
 	"hello":      nil,
 	"list-verbs": nil,
+	"list-keys":  nil,
 	"link-peer":  nil,
 	// restrict-connection only gives up authority on the calling
 	// connection, so it needs nothing.

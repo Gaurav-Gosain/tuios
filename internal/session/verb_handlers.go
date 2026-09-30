@@ -174,6 +174,7 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	data := buildWindowListData(sess.GetState())
 	data["type"] = "window_list"
 	addShellFacts(sess, data)
+	addPaneMeta(sess, data)
 	return data, nil
 }
 
@@ -856,14 +857,15 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	// instead of reporting styled=false beside a rewritten capture.
 	ansi := p.Styled || p.ANSI || p.Resolved
 	var content string
+	var meta paneMeta
 	if p.Resolved {
 		palette, verr := paletteFromParams(p.Palette)
 		if verr != nil {
 			return nil, verr
 		}
-		content = pty.CaptureContentResolved(scrollback, palette)
+		content, meta = pty.CaptureContentResolvedMeta(scrollback, palette)
 	} else {
-		content = pty.CaptureContent(scrollback, ansi)
+		content, meta = pty.CaptureContentMeta(scrollback, ansi)
 	}
 	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
 
@@ -875,13 +877,21 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 			source = "visible"
 		}
 	}
-	return map[string]any{
-		"type":     "pane_content",
-		"content":  content,
-		"source":   source,
-		"styled":   ansi,
-		"resolved": p.Resolved,
-	}, nil
+	out := map[string]any{
+		"type":         "pane_content",
+		"content":      content,
+		"source":       source,
+		"styled":       ansi,
+		"resolved":     p.Resolved,
+		"history_rows": meta.HistoryRows,
+		"revision":     meta.Revision,
+	}
+	// A revision counts from 0 again when the daemon restarts, so it is a
+	// cache key only beside the daemon start it came from.
+	if d.events != nil {
+		out["boot_id"] = d.events.bootIdentity()
+	}
+	return out, nil
 }
 
 func (d *Daemon) verbResize(_ *connState, params json.RawMessage) (any, *verbError) {

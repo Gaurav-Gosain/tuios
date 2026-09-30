@@ -358,6 +358,20 @@ func init() {
 			},
 			handler: (*Daemon).verbListVerbs,
 		},
+		"list-keys": {
+			description: "List the send-keys key grammar: every key name with its aliases, the modifiers and their spellings, and the other kinds of token. The list is closed: a key name or modifier missing from it is refused.",
+			returns: []verbParam{
+				{Name: "keys", Type: "[]object", Description: "Every named key, as {name, aliases}. name is the canonical spelling. aliases are the other spellings, lower case, since names are matched without case, hyphens or underscores."},
+				{Name: "modifiers", Type: "[]object", Description: "Every modifier, as {name, spellings}. super reaches only an attached client's window manager, never a pane."},
+				{Name: "ctrl_characters", Type: "[]string", Description: "The characters other than letters that ctrl combines with."},
+				{Name: "escape_prefixes", Type: "[]string", Description: "The prefixes that make a token an escape sequence, sent as it is."},
+				{Name: "prefix_token", Type: "string", Description: "The token for the leader key."},
+				{Name: "separators", Type: "[]string", Description: "The characters keys are split on."},
+				{Name: "max_repeat", Type: "int", Description: "The largest repeat send-keys takes."},
+			},
+			examples: []string{`{"id":1,"verb":"list-keys"}`},
+			handler:  (*Daemon).verbListKeys,
+		},
 		"list-hooks": {
 			description: "List the hook table and what each hook command last did: how many times it ran, its last exit code, when it last ran and its last error.",
 			params: []verbParam{
@@ -1102,6 +1116,15 @@ func init() {
 				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
+			},
+			returns: []verbParam{
+				{Name: "content", Type: "string", Description: "The captured text, one line per row."},
+				{Name: "source", Type: "string", Description: "The buffer captured.", Accepted: captureSources},
+				{Name: "styled", Type: "bool", Description: "Whether content carries ANSI styling."},
+				{Name: "resolved", Type: "bool", Description: "Whether index colours were rewritten to 24-bit RGB."},
+				{Name: "history_rows", Type: "int", Description: "How many scrollback lines the pane holds above its screen. A recent capture of more lines than this plus the screen has nothing older to show. Not on a last-command-output capture."},
+				{Name: "revision", Type: "int", Description: "A number that grows each time the pane's content can change: output reaches it, or it is resized. Two captures of one source with one revision have the same content. It counts from 0 again when the daemon restarts. Not on a last-command-output capture."},
+				{Name: "boot_id", Type: "string", Description: "The daemon start the revision belongs to, the boot_id of subscribe and list-attention. Compare revisions only when boot_id is the same."},
 			},
 			examples: []string{`{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","lines":50}}`},
 			handler:  (*Daemon).verbCapturePane,
@@ -2224,6 +2247,11 @@ func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
 // the error-code catalog, which together are enough to drive the control plane
 // without reading the documentation. Naming a verb narrows the output to that
 // one verb.
+// verbListKeys reports the send-keys key grammar. It reads no session.
+func (d *Daemon) verbListKeys(_ *connState, _ json.RawMessage) (any, *verbError) {
+	return keyList(), nil
+}
+
 func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Verb string `json:"verb"`
