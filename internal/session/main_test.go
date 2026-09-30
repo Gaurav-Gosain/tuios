@@ -38,7 +38,7 @@ func leakedSaverGoroutines() int {
 	n := runtime.Stack(buf, true)
 	// The running frame appears once per goroutine; the plain function name
 	// would also match each "created by" line and double-count.
-	return strings.Count(string(buf[:n]), "StartPeriodicSave.func1(")
+	return strings.Count(string(buf[:n]), "startPeriodicSaveWith.func1(")
 }
 
 // pinResurrectionDir gives the resurrection state a directory of its own.

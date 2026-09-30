@@ -1259,8 +1259,22 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"unsubscribe"}`},
 			handler:     (*Daemon).verbUnsubscribe,
 		},
+		"rename-session": {
+			description: "Rename a session. The new name is what ls lists, what attach and every verb take, and what new panes get as TUIOS_SESSION. The old name still reaches the session for panes that already run. The session's display label is cleared.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "name", Type: "string", Required: true, Description: "The new name. It must be unique, must not be empty, and must not hold a slash, a backslash or a control character."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always session_renamed."},
+				{Name: "session", Type: "string", Description: "The session's new name."},
+				{Name: "old_name", Type: "string", Description: "The name it had before. It still reaches the session for panes that already run."},
+			},
+			examples: []string{`{"id":1,"verb":"rename-session","params":{"session":"work","name":"payments"}}`},
+			handler:  (*Daemon).verbRenameSession,
+		},
 		"set-session-name": {
-			description: "Set a session's display name. The session keeps its real name for addressing, persistence and TUIOS_SESSION.",
+			description: "Set a session's display label. The session keeps its name for addressing, persistence and TUIOS_SESSION. To change the name, use rename-session.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "name", Type: "string", Description: "Display label for the session. Omit or pass an empty string to clear it and fall back to the session name."},

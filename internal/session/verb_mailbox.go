@@ -763,3 +763,19 @@ func mediaTypeFor(path string) string {
 		return "application/octet-stream"
 	}
 }
+
+// rename moves a session's ring to its new name, so the mail its agents sent
+// and got stays readable after the session is renamed.
+func (b *agentBus) rename(old, newName string) {
+	if b == nil || old == newName {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if mb := b.boxes[old]; mb != nil {
+		delete(b.boxes, old)
+		if b.boxes[newName] == nil {
+			b.boxes[newName] = mb
+		}
+	}
+}

@@ -596,7 +596,7 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		p.Session, p.Window = sess.Name, sess.GetState().Windows[idx].ID
+		p.Session, p.Window = sess.Name(), sess.GetState().Windows[idx].ID
 	}
 	a := d.attention
 	a.mu.Lock()
@@ -671,7 +671,7 @@ func (d *Daemon) markAttentionUnread(p markAttentionParams) (any, *verbError) {
 	}
 	sess.MarkCompletionUnseen(w.ID)
 	it := d.attention.openUnread(AttentionItem{
-		Session:       sess.Name,
+		Session:       sess.Name(),
 		Window:        w.ID,
 		Workspace:     w.Workspace,
 		Harness:       w.AgentHarness,

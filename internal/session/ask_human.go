@@ -360,7 +360,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	item := AttentionItem{Session: sess.Name, Summary: p.Question, Options: p.Options, Name: "ask-human"}
+	item := AttentionItem{Session: sess.Name(), Summary: p.Question, Options: p.Options, Name: "ask-human"}
 	target := p.Window
 	if fromPane && target == "" {
 		target = own
@@ -389,7 +389,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 			Detail: "Nothing was asked. Wait for the person to answer or dismiss one, then ask again.",
 		})
 	}
-	LogBasic("Question %s put to the person for %s in %s", hold.id, firstNonEmpty(shortID(item.Window), "a caller outside every pane"), sess.Name)
+	LogBasic("Question %s put to the person for %s in %s", hold.id, firstNonEmpty(shortID(item.Window), "a caller outside every pane"), sess.Name())
 	if !wait {
 		return askResult(hold.id, askOutcome{}), nil
 	}
@@ -538,7 +538,7 @@ func (d *Daemon) mailAskAnswer(h askHold, out askOutcome) {
 	if err != nil {
 		return
 	}
-	stored := d.agents.send(sess.Name, AgentMessage{
+	stored := d.agents.send(sess.Name(), AgentMessage{
 		Kind:          agentMsgDirect,
 		From:          AgentInboxHuman,
 		FromLabel:     AgentInboxHuman,
@@ -549,5 +549,5 @@ func (d *Daemon) mailAskAnswer(h askHold, out askOutcome) {
 		VerifiedHuman: true,
 	})
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
-	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name, Window: stored.To})
+	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name(), Window: stored.To})
 }

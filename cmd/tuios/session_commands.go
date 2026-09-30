@@ -338,6 +338,14 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		if host != "" {
 			return explainMissingHostSession(host, sessionName, names, err)
 		}
+		if current, ok := session.RenamedSessionTarget(err); ok {
+			return &diagnosticError{
+				What:  fmt.Sprintf("Session %q was renamed to %q.", sessionName, current),
+				Cause: "the session has a new name, and attach takes the new name only.",
+				Fix:   fmt.Sprintf("run 'tuios attach %s'.", current),
+				Err:   err,
+			}
+		}
 		if !createNew && sessionName != "" {
 			return explainMissingSession(sessionName, names)
 		}
@@ -553,8 +561,14 @@ func runListSessions(jsonOutput bool) error {
 			anyRestored = true
 		}
 
+		// A display label set by set-session-name is shown beside the name,
+		// so ls and the UI never show a session by two unrelated names.
+		name := s.Name
+		if s.DisplayName != "" && s.DisplayName != s.Name {
+			name = fmt.Sprintf("%s (%s)", s.Name, s.DisplayName)
+		}
 		rows = append(rows, []string{
-			s.Name,
+			name,
 			fmt.Sprintf("%d", s.WindowCount),
 			status,
 			formatTimeAgo(s.Created),

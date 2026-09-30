@@ -131,7 +131,7 @@ func TestAPaneOnAnotherMachineReadsAndSendsItsOwnMail(t *testing.T) {
 		{Verb: "wait-for", Params: json.RawMessage(`{"condition":"window-exit","window":"$PANE","timeout":100}`)},
 	})
 	c := hubVerb(t)
-	raw, _ := json.Marshal(map[string]any{"session": sess.Name, "to": win.ID, "text": "please rebase"})
+	raw, _ := json.Marshal(map[string]any{"session": sess.Name(), "to": win.ID, "text": "please rebase"})
 	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"send-agent-message","params":%s}`, raw)))
 
 	text := waitForPaneText(t, pty, "DONE", paneBudget)
@@ -146,7 +146,7 @@ func TestAPaneOnAnotherMachineReadsAndSendsItsOwnMail(t *testing.T) {
 		t.Errorf("a message the pane sent as human went through: %q", text)
 	}
 
-	res := result(t, c.call(t, fmt.Sprintf(`{"id":2,"verb":"read-agent-messages","params":{"session":%q,"to":"human","peek":true}}`, sess.Name)))
+	res := result(t, c.call(t, fmt.Sprintf(`{"id":2,"verb":"read-agent-messages","params":{"session":%q,"to":"human","peek":true}}`, sess.Name())))
 	msgs, _ := res["messages"].([]any)
 	found := false
 	for _, m := range msgs {
@@ -278,7 +278,7 @@ func TestAHostedPaneAttachesOnlyStashedFiles(t *testing.T) {
 	if len(messages) == 2 && messages[0] != messages[1] {
 		t.Errorf("the refusal tells a file that exists from one that does not: %q vs %q", messages[0], messages[1])
 	}
-	if _, ok := d.agents.firstUnread(sess.Name, peer, 0); ok {
+	if _, ok := d.agents.firstUnread(sess.Name(), peer, 0); ok {
 		t.Error("a refused message was stored")
 	}
 

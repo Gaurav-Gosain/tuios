@@ -233,7 +233,7 @@ func (d *Daemon) verbListQueued(_ *connState, params json.RawMessage) (any, *ver
 		for _, e := range pq.entries {
 			row := map[string]any{
 				"id":      e.id,
-				"session": sess.Name,
+				"session": sess.Name(),
 				"window":  w.ID,
 				"name":    windowLabelOf(w),
 				"at":      e.at,
@@ -250,7 +250,7 @@ func (d *Daemon) verbListQueued(_ *connState, params json.RawMessage) (any, *ver
 	q.mu.Unlock()
 	return map[string]any{
 		"type":    "queued_prompts",
-		"session": sess.Name,
+		"session": sess.Name(),
 		"entries": entries,
 	}, nil
 }
@@ -386,7 +386,7 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	q.mu.Unlock()
 
 	if !p.All && !found {
-		return nil, hintedVerbError(ErrVerbInvalidParams, "no queued entry "+echoName(p.ID)+" in session "+echoName(sess.Name), &VerbHint{
+		return nil, hintedVerbError(ErrVerbInvalidParams, "no queued entry "+echoName(p.ID)+" in session "+echoName(sess.Name()), &VerbHint{
 			Param:   "id",
 			Verb:    "list-queued",
 			Command: "tuios queue ls",
@@ -399,10 +399,10 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 		})
 	}
 	if len(cancelled) > 0 {
-		LogBasic("Cancelled queued %s in session %s", strings.Join(cancelled, ","), sess.Name)
+		LogBasic("Cancelled queued %s in session %s", strings.Join(cancelled, ","), sess.Name())
 		for _, window := range stalledIn {
 			if w, ok := findWindowState(state, window); ok {
-				d.attention.closeHeldPrompt(sess.Name, window, attentionText(queueStalledSummary(w), attentionMaxSummary))
+				d.attention.closeHeldPrompt(sess.Name(), window, attentionText(queueStalledSummary(w), attentionMaxSummary))
 			}
 		}
 		d.publishQueued(holder)

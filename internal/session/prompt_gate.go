@@ -150,7 +150,7 @@ func (g *promptGate) stalledMessage(stall time.Duration) string {
 // the prompt was taken and whether the window is gone.
 func (d *Daemon) waitPromptTaken(sess *Session, pty *PTY, g *promptGate, stall time.Duration) (taken, gone bool) {
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)

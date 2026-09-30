@@ -17,6 +17,12 @@ type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session // Sessions by name
 	byID     map[string]*Session // Sessions by ID (for quick lookup)
+	// aliases maps a name a session was renamed from to that session's ID. A
+	// pane started before a rename keeps TUIOS_SESSION set to the old name,
+	// and a running process cannot be given a new environment, so a verb that
+	// names the old session still reaches it through here. A live session of
+	// that name always wins, and an alias goes when its session does.
+	aliases map[string]string
 
 	// Configuration
 	socketPath string // Path to socket
@@ -50,6 +56,16 @@ type Manager struct {
 	// Both run outside m.mu so a hook may safely call back into the manager.
 	onCreate func(*Session)
 	onDelete func(*Session)
+	// onRename fires after a rename, outside m.mu, with the old name.
+	onRename func(sess *Session, old string)
+}
+
+// SetRenameHook installs the callback RenameSession fires once a session has
+// its new name. The daemon uses it to tell every client to list again.
+func (m *Manager) SetRenameHook(fn func(sess *Session, old string)) {
+	m.mu.Lock()
+	m.onRename = fn
+	m.mu.Unlock()
 }
 
 // SetSessionHooks installs lifecycle callbacks invoked when a session is created
@@ -67,6 +83,7 @@ func NewManager() *Manager {
 	return &Manager{
 		sessions: make(map[string]*Session),
 		byID:     make(map[string]*Session),
+		aliases:  make(map[string]string),
 		// The default matches config.DefaultSettings: a daemon nobody
 		// configured still opens windows where the user is looking.
 		inheritCwd:   true,
@@ -226,10 +243,12 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 
 	// If no name was provided, one was auto-generated
-	name = session.Name
+	name = session.Name()
 
-	// Register the session
+	// Register the session. A name that used to be an alias now names this
+	// session, so the alias stops pointing at the one renamed away from it.
 	m.sessions[name] = session
+	delete(m.aliases, name)
 	m.byID[session.ID] = session
 	onCreate := m.onCreate
 	m.mu.Unlock()
@@ -254,6 +273,112 @@ func (m *Manager) GetSessionByID(id string) *Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.byID[id]
+}
+
+// ResolveSession returns the session a name addresses: the live session of
+// that name, or else the session renamed away from it. renamed is true only
+// in the second case, so a caller that must not follow a rename, such as an
+// attach by name, can tell the two apart.
+func (m *Manager) ResolveSession(name string) (sess *Session, renamed bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if s := m.sessions[name]; s != nil {
+		return s, false
+	}
+	if id, ok := m.aliases[name]; ok {
+		if s := m.byID[id]; s != nil {
+			return s, true
+		}
+	}
+	return nil, false
+}
+
+// dropAliasesLocked forgets every old name of the session with this ID. The
+// caller holds m.mu.
+func (m *Manager) dropAliasesLocked(id string) {
+	for alias, target := range m.aliases {
+		if target == id {
+			delete(m.aliases, alias)
+		}
+	}
+}
+
+// RenameSession gives the session named old the name newName. The name is the
+// session's only name: the session map key, the state file, what ls and every
+// client list, and what TUIOS_SESSION holds in panes started from now on. It
+// also clears the session's display label, so every view shows the new name.
+//
+// Panes that already run keep TUIOS_SESSION=old. The old name stays an alias
+// for this session (see ResolveSession) until the session goes or a new
+// session takes that name.
+func (m *Manager) RenameSession(old, newName string) (*Session, error) {
+	if newName == "" {
+		return nil, fmt.Errorf("a session name cannot be empty")
+	}
+	if err := ValidateSessionName(newName); err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	sess := m.sessions[old]
+	if sess == nil {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("session '%s' not found", old)
+	}
+	if old == newName {
+		m.mu.Unlock()
+		return sess, nil
+	}
+	if _, exists := m.sessions[newName]; exists {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("session '%s' already exists", newName)
+	}
+	// Held from before the name changes until the state file has moved, so no
+	// save of this session can land in between. See Session.persist.
+	sess.persistMu.Lock()
+	defer sess.persistMu.Unlock()
+	delete(m.sessions, old)
+	m.sessions[newName] = sess
+	delete(m.aliases, newName)
+	m.aliases[old] = sess.ID
+	sess.setName(newName)
+	others := make([]*Session, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		if s != sess {
+			others = append(others, s)
+		}
+	}
+	onRename := m.onRename
+	m.mu.Unlock()
+
+	// Through mutateState, so every attached client gets the new name on the
+	// same push as any other daemon-side change, and adopts it.
+	_ = sess.mutateState(func(st *SessionState) error {
+		st.Name = newName
+		st.DisplayName = ""
+		return nil
+	})
+
+	// Sessions a fan started from this one record it by name.
+	for _, s := range others {
+		if wt := s.Worktree(); wt != nil && wt.LaunchedFrom == old {
+			moved := *wt
+			moved.LaunchedFrom = newName
+			_ = s.SetWorktree(&moved)
+		}
+	}
+
+	RemoveResurrectionState(old)
+	if st := sess.ResurrectionState(); st != nil {
+		if err := SaveSessionForResurrection(st); err != nil {
+			LogError("Resurrection save for renamed session %q failed: %v", newName, err)
+		}
+	}
+
+	if onRename != nil {
+		onRename(sess, old)
+	}
+	return sess, nil
 }
 
 // GetOrCreateSession returns an existing session or creates a new one.
@@ -286,6 +411,7 @@ func (m *Manager) DeleteSession(name string) error {
 	}
 	delete(m.sessions, name)
 	delete(m.byID, session.ID)
+	m.dropAliasesLocked(session.ID)
 	onDelete := m.onDelete
 	m.mu.Unlock()
 
@@ -318,7 +444,7 @@ func (m *Manager) ListSessions() []SessionInfo {
 	}
 	sort.Slice(ordered, func(i, j int) bool {
 		if ordered[i].Created.Equal(ordered[j].Created) {
-			return ordered[i].Name < ordered[j].Name
+			return ordered[i].Name() < ordered[j].Name()
 		}
 		return ordered[i].Created.Before(ordered[j].Created)
 	})
@@ -367,6 +493,7 @@ func (m *Manager) Shutdown() {
 	}
 	m.sessions = make(map[string]*Session)
 	m.byID = make(map[string]*Session)
+	m.aliases = make(map[string]string)
 	m.mu.Unlock()
 
 	// Stop all sessions (outside lock)

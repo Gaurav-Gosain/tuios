@@ -175,6 +175,7 @@ var verbScopes = map[string]scopeKind{
 	"kill-session":         scopeDeny,
 	"set-option":           scopeDeny,
 	"set-session-name":     scopeDeny,
+	"rename-session":       scopeDeny,
 	"set-session-accent":   scopeDeny,
 	"set-workspace-name":   scopeDeny,
 	"set-workspace-order":  scopeDeny,
@@ -338,7 +339,7 @@ func (d *Daemon) sessionOfWindow(id string) string {
 		st := sess.GetState()
 		for i := range st.Windows {
 			if st.Windows[i].ID == id {
-				return sess.Name
+				return sess.Name()
 			}
 		}
 	}
@@ -403,8 +404,8 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 func (d *Daemon) scopeSessionNames(own string) []string {
 	out := []string{}
 	for _, sess := range d.manager.AllSessions() {
-		if d.sessionInScope(own, sess.Name) {
-			out = append(out, sess.Name)
+		if d.sessionInScope(own, sess.Name()) {
+			out = append(out, sess.Name())
 		}
 	}
 	slices.Sort(out)

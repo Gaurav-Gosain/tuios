@@ -2038,13 +2038,44 @@ What a daemon restart does with these conversations is
 Inbox, answered with `y`; `auto` types the command into each restored shell;
 `off` does neither.
 
+### `tuios rename-session`
+
+Rename a session.
+
+The new name is what `tuios ls` shows and what `attach` and `-s` take. New
+panes get it as `TUIOS_SESSION`. Panes that already run keep the old name, and
+tuios commands from them still reach the session. Attach by the old name fails
+and names the new one. The rename also clears a label set with
+`tuios set-session-name`.
+
+With one argument, the session is the one given by `-s`, or else the session
+of the pane you run it in.
+
+**Usage:**
+```bash
+tuios rename-session [session] <new-name> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session to rename (default: the session of this pane)
+
+**Examples:**
+```bash
+# Rename the session "test" to "work"
+tuios rename-session test work
+
+# Rename the session of this pane
+tuios rename-session work
+```
+
 ### `tuios set-session-name`
 
 Set the label a session shows in the sidebar and the dock.
 
 The session keeps its own name for addressing, persistence and
 `TUIOS_SESSION`, so a script that targets it by name keeps working. Pass no
-name to clear the label.
+name to clear the label. To change the name itself, use
+`tuios rename-session`.
 
 **Usage:**
 ```bash

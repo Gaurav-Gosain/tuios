@@ -227,7 +227,7 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 	}
 	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
 	LogBasic("Session %s resized to %dx%d, chrome %+v (min of %d clients)",
-		session.Name, newWidth, newHeight, newReserve, payload.ClientCount)
+		session.Name(), newWidth, newHeight, newReserve, payload.ClientCount)
 	return newWidth, newHeight, newReserve
 }
 

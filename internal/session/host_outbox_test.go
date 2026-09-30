@@ -121,7 +121,7 @@ func TestARefusedDeliveryIsReportedAndDismissed(t *testing.T) {
 	if !strings.Contains(item["summary"].(string), "forbidden") {
 		t.Errorf("the refusal does not say why: %v", item["summary"])
 	}
-	tui := attachTUI(t, sp, makeSessionWithWindow(t, hub, "here").Name)
+	tui := attachTUI(t, sp, makeSessionWithWindow(t, hub, "here").Name())
 	result(t, callVerb(t, local, "dismiss-attention", map[string]any{"id": item["id"], "human_nonce": tui.HumanNonce()}))
 	if hubOutboxItem(t, hub) != nil {
 		t.Error("the outbox item is still open after it was dismissed")
@@ -143,7 +143,7 @@ func TestDismissingTheOutboxDiscardsWhatWaits(t *testing.T) {
 	if item == nil {
 		t.Fatal("no outbox item")
 	}
-	tui := attachTUI(t, sp, makeSessionWithWindow(t, hub, "here").Name)
+	tui := attachTUI(t, sp, makeSessionWithWindow(t, hub, "here").Name())
 	res := result(t, callVerb(t, local, "dismiss-attention", map[string]any{"id": item["id"], "human_nonce": tui.HumanNonce()}))
 	if res["discarded"] != float64(1) {
 		t.Errorf("dismiss answered %v, want one message discarded", res)

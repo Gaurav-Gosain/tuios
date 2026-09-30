@@ -1241,3 +1241,41 @@ func attentionText(s string, limit int) string {
 	}
 	return strings.TrimSpace(out[:cut])
 }
+
+// renameSession moves every item of the session named old to newName, open
+// and snoozed alike, so a rename leaves the queue pointing at the session it
+// was about. The keys are worked out again because they hold the name.
+func (a *attentionStore) renameSession(old, newName string) {
+	if a == nil || old == newName {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	moved := false
+	for id, it := range a.items {
+		if it.Session != old {
+			continue
+		}
+		if a.byKey[attentionItemKey(it)] == id {
+			delete(a.byKey, attentionItemKey(it))
+		}
+		it.Session = newName
+		a.byKey[attentionItemKey(it)] = id
+		moved = true
+	}
+	for id, it := range a.snoozed {
+		if it.Session != old {
+			continue
+		}
+		if a.snoozedKey[attentionItemKey(it)] == id {
+			delete(a.snoozedKey, attentionItemKey(it))
+		}
+		it.Session = newName
+		a.snoozedKey[attentionItemKey(it)] = id
+		moved = true
+	}
+	if moved {
+		a.rev++
+		a.changedLocked()
+	}
+}

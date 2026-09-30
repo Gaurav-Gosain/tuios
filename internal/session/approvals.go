@@ -635,7 +635,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	}
 
 	spec := holdSpec{
-		session:     sess.Name,
+		session:     sess.Name(),
 		window:      w.ID,
 		kind:        AttentionApproval,
 		summary:     summary,
@@ -657,7 +657,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if hold == nil {
 		return approvalResult("", approvalOutcome{Reason: reason}), nil
 	}
-	LogBasic("Approval %s held for %s in %s (%s) for up to %s", hold.id, w.ID, sess.Name, harnessID, holdFor)
+	LogBasic("Approval %s held for %s in %s (%s) for up to %s", hold.id, w.ID, sess.Name(), harnessID, holdFor)
 
 	var gone <-chan struct{}
 	if cs != nil && cs.conn != nil {
@@ -733,7 +733,7 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		id, ok := d.attention.holdOn(sess.Name, st.Windows[idx].ID)
+		id, ok := d.attention.holdOn(sess.Name(), st.Windows[idx].ID)
 		if !ok {
 			return nil, noHoldError("no approval is held for window " + echoName(p.Window))
 		}

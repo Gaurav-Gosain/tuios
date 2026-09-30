@@ -78,7 +78,7 @@ func (d *Daemon) verbGetApproval(_ *connState, params json.RawMessage) (any, *ve
 		}
 		// A hold in another session is not found, so a caller held to its
 		// own session learns nothing about the rest.
-		ok = sess.Name == h.session
+		ok = sess.Name() == h.session
 	}
 	if !ok {
 		return nil, noHoldError("no approval is held under request " + echoName(p.RequestID))

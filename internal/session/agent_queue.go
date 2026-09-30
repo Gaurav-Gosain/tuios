@@ -317,7 +317,7 @@ func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (
 		pq = &paneQueue{}
 		q.panes[target.ID] = pq
 	}
-	pq.session = sess.Name
+	pq.session = sess.Name()
 	if len(pq.entries) >= limit {
 		if len(pq.entries) == 0 {
 			delete(q.panes, target.ID)
@@ -602,13 +602,13 @@ func (d *Daemon) deliverQueued(window string) {
 		// Stamped with when the Enter went out, not now: a fast turn can
 		// reach its rest while the gate waits, and that rest counts.
 		if live {
-			q.stampLocked(window, sess.Name, at)
+			q.stampLocked(window, sess.Name(), at)
 		}
 		q.removeLocked(window, pq, func(x *queueEntry) bool { return x == e })
 		LogBasic("Typed queued %s into window %s", e.id, shortWindowID(window))
 	case PromptStalled:
 		if live {
-			q.stampLocked(window, sess.Name, at)
+			q.stampLocked(window, sess.Name(), at)
 		}
 		e.state = queueStalled
 		// A pane that closed while the gate waited has dropped its queue,
@@ -646,7 +646,7 @@ func (d *Daemon) deliverQueued(window string) {
 	q.mu.Unlock()
 
 	if stalled {
-		d.attention.openQueueStalled(sess.Name, target)
+		d.attention.openQueueStalled(sess.Name(), target)
 	}
 	d.publishQueued(window)
 }
@@ -710,7 +710,7 @@ func (d *Daemon) queueOriginRefusal(e *queueEntry, sess *Session, target WindowS
 		if g.Has(GrantAdmin) {
 			return ""
 		}
-		if why := d.paneWriteReach(pa, sess.Name); why != "" {
+		if why := d.paneWriteReach(pa, sess.Name()); why != "" {
 			return "window " + shortWindowID(o.window) + " that queued it holds " + g.String() + " now: " + why
 		}
 		if why := d.typingRefusal(pa, target, true); why != "" {
@@ -774,4 +774,32 @@ func queuePreview(text string) string {
 		return b.String() + "..."
 	}
 	return b.String()
+}
+
+// renameQueuedSession moves every queue record of the session named old to
+// newName, so a rename neither drops what is queued for its panes nor leaves
+// it for a sweep by a name nothing uses any more.
+func (d *Daemon) renameQueuedSession(old, newName string) {
+	q := &d.queue
+	if old == newName || (q.total.Load() == 0 && q.stamped.Load() == 0) {
+		return
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for id, st := range q.typed {
+		if st.session == old {
+			st.session = newName
+			q.typed[id] = st
+		}
+	}
+	for _, pq := range q.panes {
+		if pq.session == old {
+			pq.session = newName
+		}
+		for _, e := range pq.entries {
+			if e.origin.session == old {
+				e.origin.session = newName
+			}
+		}
+	}
 }

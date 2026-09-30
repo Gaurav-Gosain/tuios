@@ -86,7 +86,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		LogBasic("Execute command: session not found")
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
-	LogBasic("Execute command: found session %s (ID=%s)", session.Name, session.ID)
+	LogBasic("Execute command: found session %s (ID=%s)", session.Name(), session.ID)
 
 	if why := d.refuseTapeTyping(cs, &payload); why != "" {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
@@ -269,9 +269,12 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 }
 
 // findTargetSession finds a session by name, or returns the most recently active session.
+// A name a session was renamed from still finds it: a pane started before the
+// rename keeps the old name in TUIOS_SESSION, and its commands send that.
 func (d *Daemon) findTargetSession(sessionName string) *Session {
 	if sessionName != "" {
-		return d.manager.GetSession(sessionName)
+		sess, _ := d.manager.ResolveSession(sessionName)
+		return sess
 	}
 
 	// Find the most recently active session

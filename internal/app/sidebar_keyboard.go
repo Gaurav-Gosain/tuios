@@ -497,8 +497,8 @@ func (m *OS) sidebarCursorWindow() *terminal.Window {
 }
 
 // SidebarRenameCursor starts a rename on the cursor row, whatever it is. A
-// window is renamed locally; a session row renames the session's label through
-// the daemon, which owns it. The session's identity is never touched.
+// window is renamed locally. A session row renames the session through the
+// daemon, which owns its name.
 func (m *OS) SidebarRenameCursor() {
 	if w := m.sidebarCursorWindow(); w != nil {
 		m.BeginRenameWindow(w)

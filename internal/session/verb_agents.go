@@ -139,12 +139,12 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 
-	unread := d.agents.unreadCounts(sess.Name)
+	unread := d.agents.unreadCounts(sess.Name())
 	agents := d.agentRows(sess, p.All, unread, d.evidenceNow().UnixNano(), sel)
 
 	out := map[string]any{
 		"type":    "agent_list",
-		"session": sess.Name,
+		"session": sess.Name(),
 		"agents":  agents,
 		"total":   len(agents),
 		// The person's inbox, which is not a row because it is not a pane: it
@@ -186,12 +186,12 @@ func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noTo
 // sel, when not nil, keeps only the rows it matches.
 func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	sessions := d.manager.AllSessions()
-	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
 	now := d.evidenceNow().UnixNano()
 	agents := make([]map[string]any, 0, len(sessions))
 	humanUnread := 0
 	for _, sess := range sessions {
-		unread := d.agents.unreadCounts(sess.Name)
+		unread := d.agents.unreadCounts(sess.Name())
 		humanUnread += unread[AgentInboxHuman]
 		agents = append(agents, d.agentRows(sess, all, unread, now, sel)...)
 	}
@@ -234,7 +234,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			source = claim.source.Name()
 		}
 		agents = append(agents, map[string]any{
-			"session":        sess.Name,
+			"session":        sess.Name(),
 			"window_id":      w.ID,
 			"name":           windowLabelOf(w),
 			"state":          w.AgentState.Name(),
@@ -305,7 +305,7 @@ func (d *Daemon) resolveSender(state *SessionState, from string, anySession bool
 	}
 	for _, sess := range d.manager.AllSessions() {
 		if w, ok := findWindowState(sess.GetState(), from); ok {
-			return w.ID, windowLabelOf(w) + " in " + sess.Name, nil
+			return w.ID, windowLabelOf(w) + " in " + sess.Name(), nil
 		}
 	}
 	return "", "", err
@@ -393,8 +393,8 @@ func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams)
 	for _, pane := range panes {
 		q := p
 		q.Select, q.Confirm = "", ""
-		q.Session, q.To = pane.sess.Name, pane.window.ID
-		row := map[string]any{"session": pane.sess.Name, "window": pane.window.ID, "name": windowLabelOf(pane.window)}
+		q.Session, q.To = pane.sess.Name(), pane.window.ID
+		row := map[string]any{"session": pane.sess.Name(), "window": pane.window.ID, "name": windowLabelOf(pane.window)}
 		res, verr := d.sendAgentMessage(cs, q, true)
 		if verr != nil {
 			row["ok"] = false
@@ -569,7 +569,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	if viaLink {
 		sender = "link:" + msg.OriginHost + ":" + msg.FromLabel
 	}
-	if !d.agents.checkRate(sess.Name, sender) {
+	if !d.agents.checkRate(sess.Name(), sender) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
 			Command: "tuios read-agent-messages",
 			Detail:  "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
@@ -578,7 +578,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// And what other machines can leave waiting is bounded on its own, so a
 	// link cannot fill the ring with mail nobody here asked for.
 	if viaLink {
-		unread, notices := d.agents.linkQueued(sess.Name)
+		unread, notices := d.agents.linkQueued(sess.Name())
 		if msg.Kind == agentMsgDirect && unread >= agentLinkMaxQueued {
 			return nil, hintedVerbError(ErrVerbRateLimited, "this session holds "+strconv.Itoa(unread)+" unread messages from other machines, which is the cap", &VerbHint{
 				Command: "tuios read-agent-messages",
@@ -593,7 +593,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		}
 	}
 
-	stored := d.agents.send(sess.Name, msg)
+	stored := d.agents.send(sess.Name(), msg)
 
 	// The attached clients get the whole message, not only the event: they
 	// are the readers that cannot come back and read the ring on their own
@@ -606,7 +606,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// about the message changes.
 	d.events.publish(streamEvent{
 		Type:    EventAgentMessage,
-		Session: sess.Name,
+		Session: sess.Name(),
 		Window:  stored.To,
 	})
 	// Mail to the person waits in the Inbox until it is read.
@@ -614,7 +614,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 
 	return map[string]any{
 		"type":       "agent_message_sent",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"message_id": stored.ID,
 		"kind":       stored.Kind,
 		"to":         stored.To,
@@ -674,7 +674,7 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	if verr != nil {
 		return nil, verr
 	}
-	held, ok := d.agents.takeHeld(sess.Name, p.ID)
+	held, ok := d.agents.takeHeld(sess.Name(), p.ID)
 	if !ok {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "no held message has id "+strconv.FormatUint(p.ID, 10)+" in this session", &VerbHint{
 			Param:   "id",
@@ -702,18 +702,18 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	if out.ReplyTo > d.agents.highestID() {
 		out.ReplyTo = 0
 	}
-	stored := d.agents.send(sess.Name, out)
+	stored := d.agents.send(sess.Name(), out)
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
-	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name, Window: stored.To})
+	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name(), Window: stored.To})
 	// The held copy was marked read when it was taken. Only it: other mail to
 	// the person in the same thread stays as it was.
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: []uint64{held.ID}, ReadAt: held.ReadAt}, "")
-	if _, unread := d.agents.firstUnread(sess.Name, AgentInboxHuman, held.ThreadID); !unread {
-		d.attention.noteMailRead(sess.Name, held.ThreadID)
+	if _, unread := d.agents.firstUnread(sess.Name(), AgentInboxHuman, held.ThreadID); !unread {
+		d.attention.noteMailRead(sess.Name(), held.ThreadID)
 	}
 	return map[string]any{
 		"type":       "agent_message_released",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"held_id":    held.ID,
 		"message_id": stored.ID,
 		"to":         stored.To,
@@ -750,7 +750,7 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	// The filter takes any id in the thread, not only the root's, so a caller
 	// that read a reply can pass the id it has rather than tracing back to the
 	// first message.
-	q.thread = d.agents.resolveThread(sess.Name, p.Thread)
+	q.thread = d.agents.resolveThread(sess.Name(), p.Thread)
 	if p.To != "" {
 		id, _, err := resolveMailParty(state, p.To)
 		if err != nil {
@@ -773,7 +773,7 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	}
 	q.live = func(id string) bool { return live[id] }
 
-	res := d.agents.read(sess.Name, q)
+	res := d.agents.read(sess.Name(), q)
 
 	// A read that marked something read is news to the attached clients: the
 	// unread count they draw beside a pane just changed, and nothing else would
@@ -799,15 +799,15 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 			}
 		}
 		for thread := range threads {
-			if _, unread := d.agents.firstUnread(sess.Name, AgentInboxHuman, thread); !unread {
-				d.attention.noteMailRead(sess.Name, thread)
+			if _, unread := d.agents.firstUnread(sess.Name(), AgentInboxHuman, thread); !unread {
+				d.attention.noteMailRead(sess.Name(), thread)
 			}
 		}
 	}
 
 	return map[string]any{
 		"type":    "agent_messages",
-		"session": sess.Name,
+		"session": sess.Name(),
 		"inbox":   q.inbox,
 		// The thread the filter resolved to, zero when the read was not filtered.
 		// It can differ from what the caller passed: any id in the thread names
@@ -924,7 +924,7 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 	var wg sync.WaitGroup
 	for i, pane := range panes {
 		wg.Go(func() {
-			row := map[string]any{"session": pane.sess.Name, "window": pane.window.ID, "name": windowLabelOf(pane.window)}
+			row := map[string]any{"session": pane.sess.Name(), "window": pane.window.ID, "name": windowLabelOf(pane.window)}
 			// The pane is read again: the set was resolved a moment ago, and
 			// a single ask reads its target at the time of the call too.
 			state := pane.sess.GetState()
@@ -1102,7 +1102,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 
 	return map[string]any{
 		"type":       "agent_reply",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"window":     target.ID,
 		"name":       windowLabelOf(target),
 		"waited_for": waitedFor,
@@ -1126,7 +1126,7 @@ func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, origin askOrig
 	if len(reply) > agentMsgMaxText {
 		reply = reply[:agentMsgMaxText]
 	}
-	stored := d.agents.send(sess.Name, AgentMessage{
+	stored := d.agents.send(sess.Name(), AgentMessage{
 		Kind:       agentMsgAsk,
 		From:       from,
 		FromLabel:  fromLabel,
@@ -1221,7 +1221,7 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 // caller got before needs_input left agentRestStates.
 func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
@@ -1301,14 +1301,14 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate *promptGate, settle, timeout, stall time.Duration) (string, string) {
 	sentAt := gate.submittedAt
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
 	stateSub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(stateSub)

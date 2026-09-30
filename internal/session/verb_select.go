@@ -35,7 +35,7 @@ func (p selectedPane) key() string { return localAttentionHost + "/" + p.window.
 
 // label is how a refusal lists the pane: session/name and the short id.
 func (p selectedPane) label() string {
-	return p.sess.Name + "/" + windowLabelOf(p.window) + " (" + shortWindowID(p.window.ID) + ")"
+	return p.sess.Name() + "/" + windowLabelOf(p.window) + " (" + shortWindowID(p.window.ID) + ")"
 }
 
 // parseVerbSelector parses a selector parameter for this daemon: a leading ~
@@ -77,7 +77,7 @@ func (d *Daemon) parseVerbSelector(text string) (*Selector, *verbError) {
 func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string) SelectorTarget {
 	return SelectorTarget{
 		Host:     localAttentionHost,
-		Session:  sess.Name,
+		Session:  sess.Name(),
 		Name:     windowLabelOf(w),
 		State:    w.AgentState.Name(),
 		Harness:  firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness),
@@ -93,7 +93,7 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string) 
 // in the same session is not something to ask or message.
 func (d *Daemon) selectPanes(sel *Selector, all bool) []selectedPane {
 	sessions := d.manager.AllSessions()
-	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
 	var out []selectedPane
 	for _, sess := range sessions {
 		st := sess.GetState()

@@ -913,8 +913,15 @@ func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
 // The daemon manages PTYs and stores state; the client runs the TUI.
 type Session struct {
 	// Identity
-	ID   string
-	Name string
+	ID string
+	// name is the session's one name: what the daemon lists, addresses it by,
+	// saves its state file under and exports as TUIOS_SESSION to new panes. It
+	// changes only through Manager.RenameSession, and it is read from many
+	// goroutines, so it is an atomic pointer rather than a plain string.
+	name atomic.Pointer[string]
+	// persistMu serializes writes of the state file with a rename, which moves
+	// the file. See persist.
+	persistMu sync.Mutex
 
 	// PTYs managed by this session
 	ptys   map[string]*PTY
@@ -1236,7 +1243,6 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 
 	session := &Session{
 		ID:   id,
-		Name: name,
 		ptys: make(map[string]*PTY),
 		state: &SessionState{
 			Name:             name,
@@ -1260,13 +1266,44 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		config:     cfg,
 	}
 
+	session.setName(name)
+
 	// Start periodic resurrection saving
-	session.stopResurrection = StartPeriodicSave(
+	session.stopResurrection = startPeriodicSaveWith(
 		func() *SessionState { return session.ResurrectionState() },
 		func() bool { return session.stateDirty.Swap(false) },
+		session.persist,
 	)
 
 	return session, nil
+}
+
+// Name is the session's name. See the name field.
+func (s *Session) Name() string {
+	if p := s.name.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setName records the session's name. Only the constructor and
+// Manager.RenameSession call it.
+func (s *Session) setName(name string) {
+	s.name.Store(&name)
+}
+
+// persist writes a state snapshot to the session's state file. It holds
+// persistMu, which a rename also holds while it moves the file, and it drops a
+// snapshot taken under a name the session no longer has: written after the
+// rename, it would bring the old name back as a second session on the next
+// daemon start.
+func (s *Session) persist(state *SessionState) error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	if state == nil || state.Name != s.Name() {
+		return nil
+	}
+	return SaveSessionForResurrection(state)
 }
 
 // SetEventSink installs the control-plane event sink for this session. It is
@@ -1427,7 +1464,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	if host == "" && windowID != "" && s.config != nil && s.config.grants != nil {
 		table := s.config.grants
-		table.add(windowID, id, s.Name, grants)
+		table.add(windowID, id, s.Name(), grants)
 		exit := onExit
 		onExit = func(ptyID string) {
 			table.remove(windowID, ptyID)
@@ -2202,6 +2239,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		}
 		s.clientFocusMoved[origin] = state.Version
 	}
+	// The name is the daemon's. A client that built this push before a rename
+	// still carries the old one, and taking it would undo the rename.
+	state.Name = s.Name()
 	s.state = state
 	// A client pushing state with a pane focused has that pane in front of
 	// its user, so whatever it finished has been seen.
@@ -2316,8 +2356,8 @@ func (s *Session) Stop() {
 	// This is the last chance to persist the session, so a failure here is the
 	// difference between it coming back and not; it is reported rather than
 	// dropped even though Stop cannot act on it.
-	if err := SaveSessionForResurrection(s.ResurrectionState()); err != nil {
-		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name, err)
+	if err := s.persist(s.ResurrectionState()); err != nil {
+		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name(), err)
 	}
 
 	// Before the panes go, so a hold cannot publish a state against a session
@@ -2419,7 +2459,7 @@ func (s *Session) Info() SessionInfo {
 	}
 
 	return SessionInfo{
-		Name:             s.Name,
+		Name:             s.Name(),
 		ID:               s.ID,
 		Created:          s.Created.Unix(),
 		LastActive:       s.LastActive().Unix(),
@@ -2566,7 +2606,7 @@ func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []s
 	kitty, sixel := s.GraphicsCapabilities()
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
-	env = append(env, "TUIOS_SESSION="+s.Name)
+	env = append(env, "TUIOS_SESSION="+s.Name())
 	// TUIOS_HOST names the machine this pane runs on. A pane is always local
 	// to the daemon that made it, so this is the daemon's own hostname, on
 	// every machine: a program that wants to know where it is reads it, and a

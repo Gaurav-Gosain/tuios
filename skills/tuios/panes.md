@@ -334,10 +334,13 @@ a verb where one exists.
 ## Naming things for the person watching
 
 ```sh
+tuios rename-session work payments        # the name: ls, attach and -s use it
 tuios set-session-name "Payments API"     # the label; the session keeps its name
 tuios set-session-accent cyan
 tuios set-workspace-name 2 review
 ```
 
 A display name does not change how the session is addressed: `-s work` keeps
-working.
+working. A rename does change it. After a rename, the old name still reaches
+the session from panes that already run, but `tuios attach` takes only the new
+name.

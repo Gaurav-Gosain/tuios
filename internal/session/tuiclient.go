@@ -63,8 +63,11 @@ type TUIClient struct {
 	mu     sync.Mutex
 	readMu sync.Mutex
 
-	sessionID   string
-	sessionName string
+	sessionID string
+	// sessionName is the attached session's name. The read loop writes it
+	// when a state push brings a new name after a rename, while the UI reads
+	// it, so it is atomic. Use SessionName and setSessionName.
+	sessionName atomic.Pointer[string]
 	// humanNonce is the secret the daemon issued in the last attach reply. The
 	// mail overlay sends it with a reply from the person, so the daemon can
 	// store the reply as verified_human. Empty before an attach and after one
@@ -415,7 +418,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 			return nil, err
 		}
 		c.sessionID = payload.SessionID
-		c.sessionName = payload.SessionName
+		c.setSessionName(payload.SessionName)
 		c.humanNonce.Store(&payload.HumanNonce)
 		c.startPushes()
 		c.appliedSeq.Store(stateSeq(payload.State))
@@ -515,7 +518,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	c.switchMu.Lock()
 	defer c.switchMu.Unlock()
 
-	prevName := c.sessionName
+	prevName := c.SessionName()
 	debugLog("[SWITCH] Starting session switch to %q", targetName)
 
 	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
@@ -559,7 +562,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		if state != nil {
 			windowCount = len(state.Windows)
 		}
-		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
+		debugLog("[SWITCH] Attached to %q (%d windows)", c.SessionName(), windowCount)
 		return state, nil
 	}
 
@@ -618,7 +621,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 			return nil, err
 		}
 		c.sessionID = payload.SessionID
-		c.sessionName = payload.SessionName
+		c.setSessionName(payload.SessionName)
 		c.humanNonce.Store(&payload.HumanNonce)
 		c.startPushes()
 		c.appliedSeq.Store(stateSeq(payload.State))
@@ -1064,7 +1067,7 @@ func (c *TUIClient) SendIntent(commandType string, args ...string) error {
 // daemon spawns the shell there, so nothing has to be typed into it.
 func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error {
 	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
-		SessionName: c.sessionName,
+		SessionName: c.SessionName(),
 		CommandType: commandType,
 		Args:        args,
 		Cwd:         cwd,
@@ -1240,10 +1243,10 @@ func (c *TUIClient) PredatesOwnPush(state *SessionState) bool {
 // KillSession terminates the currently attached session.
 // This should be called when the user wants to quit AND kill the session.
 func (c *TUIClient) KillSession() error {
-	if c.sessionName == "" {
+	if c.SessionName() == "" {
 		return nil
 	}
-	return c.KillSessionByName(c.sessionName)
+	return c.KillSessionByName(c.SessionName())
 }
 
 // KillSessionByName terminates a session by name (can be any session, not just
@@ -1582,6 +1585,12 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 		c.multiClientMu.Unlock()
 
+		// The daemon owns the name. A rename reaches this client as a push
+		// with the new one, and every later call from here must use it.
+		if payload.State != nil && payload.State.Name != "" {
+			c.setSessionName(payload.State.Name)
+		}
+
 		if handler != nil {
 			handler(payload.State, payload.TriggerType, payload.SourceID)
 		}
@@ -1667,7 +1676,15 @@ func (c *TUIClient) Close() error {
 
 // SessionName returns the attached session name.
 func (c *TUIClient) SessionName() string {
-	return c.sessionName
+	if p := c.sessionName.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setSessionName records the attached session's name.
+func (c *TUIClient) setSessionName(name string) {
+	c.sessionName.Store(&name)
 }
 
 // HumanNonce returns the secret the daemon issued for the current attach, or

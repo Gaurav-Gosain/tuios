@@ -64,7 +64,7 @@ func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *ver
 	// rather than from this process's active tint: the daemon does not draw, and
 	// its own tint is not the attached client's.
 	if sess := d.findTargetSession(p.Session); sess != nil {
-		out["session"] = sess.Name
+		out["session"] = sess.Name()
 		if v, ok := sess.GetOption("appearance.theme"); ok {
 			out["active"] = v
 			out["active_source"] = "session"

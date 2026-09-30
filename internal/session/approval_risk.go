@@ -182,7 +182,7 @@ func respondApproves(prompt harness.Prompt, action string, reply harness.Reply) 
 // allow risky calls: an agent with the grant may deny one and never allow
 // it. A deny is always taken.
 func (d *Daemon) respondRiskRefusal(sess *Session, window string, prompt harness.Prompt, action string, reply harness.Reply, ack []string, byPane bool) *verbError {
-	rules := d.attention.riskOn(sess.Name, window)
+	rules := d.attention.riskOn(sess.Name(), window)
 	if len(rules) == 0 || !respondApproves(prompt, action, reply) {
 		return nil
 	}

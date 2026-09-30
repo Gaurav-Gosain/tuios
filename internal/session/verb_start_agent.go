@@ -193,7 +193,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	w, outcome := d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, p.Protocol != "", nil)
 	out := map[string]any{
 		"type":            "agent_started",
-		"session":         sess.Name,
+		"session":         sess.Name(),
 		"session_id":      sess.ID,
 		"created_session": created,
 		"window_id":       win.ID,

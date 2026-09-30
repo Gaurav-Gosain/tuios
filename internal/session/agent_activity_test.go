@@ -164,8 +164,9 @@ func TestAgentActivityEventIsPublishedAndNotReplayed(t *testing.T) {
 // it keeps up to shellCmdlineMax bytes, and a secret in it is masked.
 func TestShellCommandTargetIsCut(t *testing.T) {
 	store := newActivityStore(nil)
-	s := &Session{ID: "sid", Name: "work"}
-	store.add(s.ID, s.Name, "w", AgentActivityEntry{Kind: ActivityPrompt, Text: "go"}, true)
+	s := &Session{ID: "sid"}
+	s.setName("work")
+	store.add(s.ID, s.Name(), "w", AgentActivityEntry{Kind: ActivityPrompt, Text: "go"}, true)
 	long := "API_TOKEN=abc123def go test " + strings.Repeat("./pkg/x ", shellCmdlineMax/8)
 	store.noteSessionEvent(s, SessionEvent{Type: EventCommandFinished, Window: "w", Cmdline: long, ExitCode: intp(0)})
 	got, _, _ := store.read(s.ID, "w")

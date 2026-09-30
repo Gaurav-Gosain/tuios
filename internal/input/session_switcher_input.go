@@ -82,8 +82,8 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 
 	case "ctrl+r":
-		// Renames the label, never the identity: the session keeps the name it
-		// is addressed, persisted and detached by.
+		// Renames the session through the daemon, so the new name is the
+		// one ls lists and attach takes.
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
 			if selected.Host != "" {
 				// Renames go to the daemon this client is connected to,

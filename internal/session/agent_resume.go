@@ -301,7 +301,7 @@ func (d *Daemon) typeResume(sess *Session, target string) (resumePlan, error) {
 	if _, err := pty.Write([]byte(line)); err != nil {
 		return plan, err
 	}
-	d.attention.closeResume(sess.Name, plan.window.ID, AttentionClosedResolved)
+	d.attention.closeResume(sess.Name(), plan.window.ID, AttentionClosedResolved)
 	return plan, nil
 }
 

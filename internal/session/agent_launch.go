@@ -296,7 +296,7 @@ func readyBy(w WindowState) string {
 // its own report is the evidence.
 func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout time.Duration, stopOnBlocked, reportedOnly bool, held func(WindowState)) (WindowState, agentStartOutcome) {
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
@@ -312,7 +312,7 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 	heldSummary := ""
 	defer func() {
 		if heldSummary != "" {
-			d.attention.closeHeldPrompt(sess.Name, windowID, heldSummary)
+			d.attention.closeHeldPrompt(sess.Name(), windowID, heldSummary)
 		}
 	}()
 	check := func() (WindowState, agentStartOutcome, bool) {
@@ -354,7 +354,7 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 			if !ok || w.AgentState == AgentStateNeedsInput {
 				continue
 			}
-			heldSummary = d.attention.openHeldPrompt(sess.Name, w)
+			heldSummary = d.attention.openHeldPrompt(sess.Name(), w)
 			if held != nil {
 				held(w)
 			}

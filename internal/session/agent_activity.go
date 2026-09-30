@@ -311,13 +311,13 @@ func (a *activityStore) noteSessionEvent(s *Session, ev SessionEvent) {
 			return
 		}
 		target := attentionText(ev.Cmdline, activityTextMax)
-		a.add(s.ID, s.Name, ev.Window, AgentActivityEntry{Kind: ActivityCommand, Target: target, Exit: exit}, false)
+		a.add(s.ID, s.Name(), ev.Window, AgentActivityEntry{Kind: ActivityCommand, Target: target, Exit: exit}, false)
 	case EventAgentState:
 		e := AgentActivityEntry{Kind: ActivityState, Text: ev.State}
 		if ev.completionSeq > ev.prevCompletionSeq {
 			e.turns = ev.completionSeq - ev.prevCompletionSeq
 		}
-		a.add(s.ID, s.Name, ev.Window, e, false)
+		a.add(s.ID, s.Name(), ev.Window, e, false)
 	case EventWindowClosed:
 		a.forgetWindow(s.ID, ev.Window)
 	}
@@ -394,7 +394,7 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 // report the activity rode on, applied or not.
 func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentActivityReport, state AgentState) {
 	e := activityEntryOf(r)
-	d.activity.add(sess.ID, sess.Name, windowID, e, true)
+	d.activity.add(sess.ID, sess.Name(), windowID, e, true)
 	d.dropRingOfClosedWindow(sess, windowID)
 	sess.applyActivityMeta(windowID, activityMetaFor(e, r.Model, state))
 }
@@ -761,7 +761,7 @@ func (d *Daemon) verbAgentActivity(_ *connState, params json.RawMessage) (any, *
 	}
 	out := map[string]any{
 		"type":      "agent_activity",
-		"session":   sess.Name,
+		"session":   sess.Name(),
 		"window":    w.ID,
 		"entries":   entries,
 		"last_seq":  lastSeq,

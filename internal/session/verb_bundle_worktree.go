@@ -187,9 +187,9 @@ func (d *Daemon) verbBundleWorktree(cs *connState, params json.RawMessage) (any,
 		return nil, verr
 	}
 	if _, err := os.Stat(info.Path); err != nil {
-		return nil, hintedVerbError(ErrVerbNotWorktree, "the worktree of "+sess.Name+" is gone: "+info.Path+" no longer exists", nil)
+		return nil, hintedVerbError(ErrVerbNotWorktree, "the worktree of "+sess.Name()+" is gone: "+info.Path+" no longer exists", nil)
 	}
-	return d.openBundle(cs, sess.Name, info, p.Full)
+	return d.openBundle(cs, sess.Name(), info, p.Full)
 }
 
 // liveHead reads the branch and commit the worktree's HEAD is on now. The
