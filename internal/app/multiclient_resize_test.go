@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -246,16 +247,25 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()
 
+	// Every sync the peer is sent, by the pane names it carries.
+	// The daemon delivers broadcasts to one client in the order it made them,
+	// so a named sync arriving proves every sync made before it has arrived.
 	var mu sync.Mutex
-	received := 0
+	var names []string
 	peer := session.NewTUIClient()
 	if err := peer.Connect("test", holderCols, holderRows); err != nil {
 		t.Fatalf("peer connect: %v", err)
 	}
 	t.Cleanup(func() { _ = peer.Close() })
-	peer.OnStateSync(func(*session.SessionState, string, string) {
+	peer.OnStateSync(func(st *session.SessionState, _, _ string) {
+		name := ""
+		if st != nil {
+			for _, w := range st.Windows {
+				name += w.CustomName + "\x00"
+			}
+		}
 		mu.Lock()
-		received++
+		names = append(names, name)
 		mu.Unlock()
 	})
 	if _, err := peer.AttachSession(r.session, false, holderCols, holderRows); err != nil {
@@ -263,29 +273,37 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	}
 	peer.StartReadLoop()
 
-	count := func() int {
-		mu.Lock()
-		defer mu.Unlock()
-		return received
+	// syncsUntil pushes a rename and waits for the peer to be sent it. It
+	// returns how many syncs the peer was sent before that one.
+	syncsUntil := func(name, what string) int {
+		t.Helper()
+		r.win(0).CustomName = name
+		r.m.SyncStateToDaemon()
+		deadline := time.Now().Add(rigWait)
+		for {
+			mu.Lock()
+			for i, got := range names {
+				if strings.Contains(got, name+"\x00") {
+					before := i
+					names = names[i+1:]
+					mu.Unlock()
+					return before
+				}
+			}
+			mu.Unlock()
+			if time.Now().After(deadline) {
+				t.Fatalf("the peer never received %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 
 	// One push that does say something, so the fixture is proven to deliver at
 	// all: without it a zero below would be indistinguishable from a peer that
-	// never receives anything.
-	r.win(0).CustomName = "renamed"
-	r.m.SyncStateToDaemon()
-	deadline := time.Now().Add(rigWait)
-	for count() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the peer never received the one sync that changed something; " +
-				"the count below would prove nothing")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	mu.Lock()
-	received = 0
-	mu.Unlock()
+	// never receives anything. The syncs before it are not counted: the tile
+	// above reaches the daemon with this push as a tree op, and the daemon
+	// sends the peer that op's state on its own, ahead of the push.
+	_ = syncsUntil("renamed", "the one sync that changed something; the count below would prove nothing")
 
 	// The case under test: repeated syncs with nothing changed between them,
 	// which is what typing into a pane produces.
@@ -293,10 +311,10 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	for range repeats {
 		r.m.SyncStateToDaemon()
 	}
-	// Long enough for anything forwarded to have arrived.
-	time.Sleep(500 * time.Millisecond)
 
-	if got := count(); got != 0 {
+	// A second rename marks the end. Anything forwarded for the repeats
+	// arrives ahead of it.
+	if got := syncsUntil("barrier", "the rename that marks the end of the repeats"); got != 0 {
 		t.Errorf("the peer was sent %d of %d syncs carrying a state it already held, want 0",
 			got, repeats)
 	}
