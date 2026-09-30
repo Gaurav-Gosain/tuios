@@ -181,6 +181,17 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return next, cmd
 	}
 
+	// The picture-in-picture view is drawn over the tiles and under every
+	// floating pane. A press on it that no floating pane covers is the view's:
+	// the left button jumps to the pane it shows, and no press reaches the
+	// tile underneath.
+	if o.PiPAt(X, Y) && (clickedWindowIndex < 0 || app.HitZ(o.Windows[clickedWindowIndex]) < config.ZIndexPiP) {
+		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
+			o.SyncStateToDaemon()
+		}
+		return o, nil
+	}
+
 	// Ctrl + left press on a window: multi-select on a click, or grab the pane
 	// for moving on a drag. On the content it arms the click-vs-drag decision
 	// (committed past the threshold in handleMouseMotion, then moved through the

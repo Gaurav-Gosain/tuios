@@ -151,6 +151,7 @@ var verbScopes = map[string]scopeKind{
 
 	"list-dock-components": scopeDeny,
 	"refresh-dock":         scopeDeny,
+	"pip":                  scopeDeny,
 	"new-session":          scopeDeny,
 	"new-worktree":         scopeDeny,
 	"remove-worktree":      scopeDeny,

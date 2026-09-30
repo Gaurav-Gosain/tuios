@@ -1181,13 +1181,18 @@ const (
 	// ZIndexAnimating is the z-index for windows currently animating.
 	ZIndexAnimating = 501
 
+	// ZIndexPiP is the z-index of the picture-in-picture view. It is above
+	// every tile, the separators and a zoomed pane, and below the floating
+	// band, so a popup or the scratch terminal draws over it.
+	ZIndexPiP = 502
+
 	// ZIndexFloating is where the floating band starts: a floating window is
 	// drawn at ZIndexFloating plus its Z, capped at ZIndexFloatingTop. The band
 	// used to start one above the separators at 998, which put a floating
 	// window with Z >= 2 over the dock, the clock, the log viewer, the which-key
 	// overlay and the scrollback browser: every overlay between 1000 and 1003
 	// was reachable with a handful of panes open.
-	ZIndexFloating = 502
+	ZIndexFloating = 503
 
 	// ZIndexFloatingTop is the highest z-index a floating window can be drawn
 	// at. Every overlay and the dock sit above it.

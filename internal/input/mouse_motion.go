@@ -181,7 +181,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
-		if idx := findClickedWindow(mouse.X, mouse.Y, o); idx >= 0 && idx != o.FocusedWindow {
+		// The picture-in-picture view is not a pane: a pointer resting on it
+		// is not over the tile underneath.
+		idx := findClickedWindow(mouse.X, mouse.Y, o)
+		if idx >= 0 && o.PiPAt(mouse.X, mouse.Y) && app.HitZ(o.Windows[idx]) < config.ZIndexPiP {
+			idx = -1
+		}
+		if idx >= 0 && idx != o.FocusedWindow {
 			o.FocusWindow(idx)
 			// In the scrolling layout, bring the whole column on screen. Focus
 			// went through the least-scroll rule, which leaves a column that is

@@ -153,7 +153,7 @@ func dividerCells(m *OS) []layout.Rect {
 
 // gapTestOS builds a tiled session of n panes under shared borders, each
 // pane holding a marker that starts in its own first column.
-func gapTestOS(t *testing.T, n int) *OS {
+func gapTestOS(t testing.TB, n int) *OS {
 	t.Helper()
 	origAnim := config.Global.Motion
 	config.Global.Motion = config.MotionNone

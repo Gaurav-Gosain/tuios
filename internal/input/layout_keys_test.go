@@ -153,7 +153,8 @@ func TestBaseLayoutKeyDrivesCopyMode(t *testing.T) {
 // A Latin layout's own letters keep their meaning. With report-all keys on,
 // every plain letter carries its US-position key, and reading an unbound one
 // by position ran the binding there: AZERTY "a" is on the US q key (quit), and
-// Dvorak puts "'" on q, "p" on r (rename) and "y" on t (tiling).
+// Dvorak puts "'" on q, "o" on s (the sidebar) and "y" on t (tiling). Dvorak
+// "p" on r (rename) was a case here until p became toggle_pip's own key.
 func TestLatinLayoutLetterDoesNotRunUSPositionBinding(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -161,7 +162,7 @@ func TestLatinLayoutLetterDoesNotRunUSPositionBinding(t *testing.T) {
 	}{
 		{"azerty a", tea.KeyPressMsg{Code: 'a', BaseCode: 'q', Text: "a"}},
 		{"dvorak quote", tea.KeyPressMsg{Code: '\'', BaseCode: 'q', Text: "'"}},
-		{"dvorak p", tea.KeyPressMsg{Code: 'p', BaseCode: 'r', Text: "p"}},
+		{"dvorak o", tea.KeyPressMsg{Code: 'o', BaseCode: 's', Text: "o"}},
 		{"dvorak y", tea.KeyPressMsg{Code: 'y', BaseCode: 't', Text: "y"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

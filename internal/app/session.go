@@ -1367,6 +1367,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 // gone, and a stale BSP id mapping hands a later window an id this one still
 // owns.
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
+	m.pipSourceClosed(w)
 	if m.DaemonClient != nil && w.PTYID != "" {
 		m.unsubscribeFromPTY(w)
 	}
@@ -1921,6 +1922,12 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 
 	// Check if actually subscribed
 	if !m.SubscribedPTYs[ptyID] {
+		return
+	}
+	// The pinned pane is drawn in the picture-in-picture view wherever it
+	// is, so its stream stays open. Unpinning it, or its closing, clears the
+	// pin first and lets this through. See pip.go.
+	if m.pipKeepsStream(window) {
 		return
 	}
 

@@ -858,6 +858,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Picture in picture: pin or unpin the focused pane",
+			Shortcut: "p",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.TogglePiP()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Toggle spotlight",
 			Shortcut: "b",
 			Category: "Session",

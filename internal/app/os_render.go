@@ -14,6 +14,7 @@ func (m *OS) MarkAllDirty() {
 	}
 	m.cachedViewContent = "" // Invalidate view cache
 	m.sidebarCache.invalidate()
+	m.pip.dirty = true
 }
 
 // markZenDirty marks the windows whose zen-mode border visibility is about to
@@ -74,8 +75,20 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		// Their PTY data is still consumed (preventing buffer overflow), but we avoid
 		// marking them dirty and triggering unnecessary rendering work.
 		if window.Minimized || window.Workspace != m.CurrentWorkspace {
-			// Drain the new-output flag so it doesn't accumulate
-			window.HasNewOutput.Swap(false)
+			// Drain the new-output flag so it doesn't accumulate. The one
+			// hidden pane whose output is drawn is the pinned one, in the
+			// picture-in-picture view, and it is paced like an unfocused
+			// pane below: every third pass, with the flag kept between so
+			// the last output is still drawn once the pane goes quiet.
+			if window.HasNewOutput.Swap(false) && window.ID == m.pip.windowID {
+				window.UpdateCounter++
+				if window.UpdateCounter%3 == 0 {
+					m.pip.dirty = true
+					hasChanges = true
+				} else {
+					window.HasNewOutput.Store(true)
+				}
+			}
 			continue
 		}
 
@@ -104,6 +117,11 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			if window.UpdateCounter%3 == 0 {
 				window.MarkContentDirty()
 				hasChanges = true
+				// The picture-in-picture view of this pane follows it at
+				// the same pace.
+				if window.ID == m.pip.windowID {
+					m.pip.dirty = true
+				}
 			} else {
 				// Don't clear the flag. Let it stay set so the window
 				// updates on the next cycle or when focused

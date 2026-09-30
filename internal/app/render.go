@@ -306,6 +306,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if sidebarLayer := m.renderSidebar(); sidebarLayer != nil {
 			layers = append(layers, sidebarLayer)
 		}
+		// The picture-in-picture view, above the tiles and below every popup
+		// and panel by its z. See pip.go.
+		if pipLayer := m.renderPiP(); pipLayer != nil {
+			layers = append(layers, pipLayer)
+		}
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
@@ -738,6 +743,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.panesBorderless() {
 		return nil, false
 	}
+	// The picture-in-picture view is a layer over the pane, and the fast path
+	// composes none.
+	if m.pipWanted() {
+		return nil, false
+	}
 	// The sidebar is a reserved-region layer the fast path does not compose. When
 	// it reserves any columns a lone window no longer fills the screen, so fall
 	// back to the compositor (which draws the sidebar and clips the pane to the
@@ -1022,7 +1032,7 @@ func (m *OS) flushGraphicsForView() {
 		// Chrome that leaves the panes showing. Set every frame, and nil
 		// once capture mode closes, so the images get their full rectangle
 		// back on the next refresh.
-		m.KittyPassthrough.SetChromeOccluders(m.captureOccluders())
+		m.KittyPassthrough.SetChromeOccluders(m.pipOccluders(m.captureOccluders()))
 	}
 
 	// The launcher's own icons run past the hide above rather than through it.

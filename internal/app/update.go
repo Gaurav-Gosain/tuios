@@ -1751,6 +1751,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				if oldWorkspace != newWorkspace {
 					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", newWorkspace), "info", 2*time.Second)
 				}
+				// After the count note, so the dock draws this one.
+				m.flushPiPNote()
 
 				// A rename by this client or any other arrives on this push, so
 				// an open switcher follows it without being reopened.
@@ -2264,6 +2266,28 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				if sendErr := m.DaemonClient.SendCommandResultWithData(
 					msg.RequestID, true, "command executed", resultData); sendErr != nil {
 					m.LogError("hooks: could not answer list-hooks: %v", sendErr)
+				}
+			}
+			return m, relisten
+		case "pip":
+			// The pip verb: pin a pane as this client's picture-in-picture
+			// view, or unpin it. TapeArgs are the window id ("" for the
+			// focused pane) and "off". The view is this client's alone, so
+			// nothing is pushed to the daemon for it.
+			window, off := "", false
+			if len(msg.TapeArgs) > 0 {
+				window = msg.TapeArgs[0]
+			}
+			if len(msg.TapeArgs) > 1 {
+				off = msg.TapeArgs[1] == "off"
+			}
+			pinned, id, pipErr := m.SetPiP(window, off)
+			if m.DaemonClient != nil && msg.RequestID != "" {
+				if pipErr != nil {
+					_ = m.DaemonClient.SendCommandResult(msg.RequestID, false, pipErr.Error())
+				} else {
+					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed",
+						map[string]any{"pinned": pinned, "window_id": id})
 				}
 			}
 			return m, relisten
