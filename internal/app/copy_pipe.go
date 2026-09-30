@@ -159,14 +159,15 @@ type cappedBuffer struct {
 }
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
-	if room := b.max - b.buf.Len(); room < len(p) {
+	n := len(p)
+	if room := b.max - b.buf.Len(); room < n {
 		b.over = true
 		p = p[:max(room, 0)]
 	}
 	b.buf.Write(p)
 	// The whole write is reported, so the command is not killed by a short
 	// write while it drains the rest.
-	return len(p), nil
+	return n, nil
 }
 
 // runCopyPipe runs argv with input on stdin and returns its stdout.

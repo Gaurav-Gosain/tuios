@@ -382,6 +382,16 @@ The clipboard gets the selection itself in these cases:
 - The command runs for more than 10 seconds. tuios stops the command and the
   processes that it started.
 
+tuios waits until the command closes its stdout. `xclip` starts a process that
+stays open after `xclip` stops, and keeps stdout open. tuios then waits 1
+second more. To prevent the wait, send the stdout of `xclip` to `/dev/null`.
+This example also puts each yank in the X primary selection:
+
+```toml
+[appearance.selection]
+copy_command = "xclip -selection primary >/dev/null"
+```
+
 The fields of a `[[keybindings.copy_pipe]]` entry:
 
 - `key` is the key in copy mode. Write it as in the other sections.

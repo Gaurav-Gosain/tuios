@@ -88,3 +88,25 @@ func TestCopyPipeEntryValidation(t *testing.T) {
 		})
 	}
 }
+
+// An entry on a key copy mode needs is used, with a warning. y is allowed
+// without one.
+func TestCopyPipeEntryOnACopyModeKeyWarns(t *testing.T) {
+	for _, key := range []string{"q", "esc", "v", "V", "/", "?", "0", "5"} {
+		cfg, err := ParseUserConfig([]byte("[[keybindings.copy_pipe]]\nkey = \"" + key + "\"\ncommand = \"cat\"\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := ValidateConfig(cfg)
+		if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0].Message, "Copy mode uses the key") {
+			t.Errorf("key %s: warnings = %+v", key, res.Warnings)
+		}
+	}
+	cfg, err := ParseUserConfig([]byte("[[keybindings.copy_pipe]]\nkey = \"y\"\ncommand = \"cat\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := ValidateConfig(cfg); len(res.Warnings) != 0 {
+		t.Errorf("an entry on y warned: %+v", res.Warnings)
+	}
+}
