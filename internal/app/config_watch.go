@@ -133,9 +133,10 @@ type configWatchMsg struct {
 }
 
 // watchesConfig reports whether this model follows the config file. The
-// tests build models with no kind and get no watcher.
+// tests build models with no kind and get no watcher, and Learn mode runs a
+// pinned config with no file behind it.
 func (m *OS) watchesConfig() bool {
-	return m.Client != ClientUnknown && !m.ScriptMode
+	return m.Client != ClientUnknown && !m.ScriptMode && !m.LearnMode
 }
 
 // startConfigWatch subscribes this session to the file and returns the

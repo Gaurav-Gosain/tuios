@@ -1,0 +1,84 @@
+name: Learn server release
+
+# Builds tuios-learn, the server behind `ssh learn.tuios.dev`, for Linux on
+# amd64 and arm64, and attaches the binaries to a release. It is separate
+# from release.yml so a tuios release neither builds nor ships it.
+#
+# Release it by pushing a tag such as learn-v0.1.0. A pull request that
+# touches the server builds and tests it without releasing.
+
+on:
+  push:
+    tags:
+      - "learn-v*"
+  pull_request:
+    paths:
+      - "cmd/tuios-learn/**"
+      - "internal/learnssh/**"
+      - "internal/learn/**"
+      - "internal/webshell/**"
+      - ".github/workflows/learn-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test -count=1 ./internal/learnssh/ ./internal/learn/... ./internal/webshell/
+
+      - name: Build
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#learn-}"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X main.version=${version}" \
+              -o "dist/tuios-learn_linux_${arch}" ./cmd/tuios-learn
+          done
+          cp cmd/tuios-learn/deploy/tuios-learn.service dist/
+          (cd dist && sha256sum tuios-learn_linux_* tuios-learn.service > SHA256SUMS)
+          ls -la dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tuios-learn
+          path: dist/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/learn-v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: tuios-learn
+          path: dist/
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "tuios-learn ${GITHUB_REF_NAME#learn-}" \
+            --notes "The server behind ssh learn.tuios.dev. Install it with the systemd unit in this release." \
+            --latest=false

@@ -1,0 +1,1840 @@
+{
+  "$comment": "The lessons of tuios.dev/learn and ssh learn.tuios.dev. Generated from tuios-docs lib/learn/tracks at the ref in learn/TUIOS_REF; see internal/learn/lessons/README.md for the matcher grammar.",
+  "version": 1,
+  "tracks": [
+    {
+      "id": "basics",
+      "title": "The basics",
+      "blurb": "Windows, typing, the leader key and help. From zero.",
+      "audience": "New here",
+      "minutes": 4,
+      "next": [
+        "layouts",
+        "power-moves"
+      ],
+      "steps": [
+        {
+          "id": "open-window",
+          "title": "Open a window",
+          "note": "You start in window mode. Keys move windows.",
+          "keys": [
+            "n"
+          ],
+          "needs": "window",
+          "done": {
+            "on": "window.open"
+          },
+          "hint": "Click the dark area first, then press n.",
+          "learned": "new window",
+          "ssh": {
+            "hint": "Press n. If nothing happens, press esc first, then n."
+          }
+        },
+        {
+          "id": "start-typing",
+          "title": "Start typing in it",
+          "note": "i flips to typing mode. Watch the badge.",
+          "keys": [
+            "i"
+          ],
+          "needs": "window",
+          "done": {
+            "changed": "mode",
+            "to": "terminal"
+          },
+          "hint": "Press i. The badge turns green and says TYPING.",
+          "learned": "typing mode"
+        },
+        {
+          "id": "run-neofetch",
+          "title": "Say hi to the shell",
+          "note": "Your keys go to the program now.",
+          "keys": [
+            {
+              "text": "neofetch"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "ran": "neofetch"
+          },
+          "hint": "Type neofetch and press enter.",
+          "learned": "run a command"
+        },
+        {
+          "id": "split",
+          "title": "Split with the leader key",
+          "note": "ctrl+b, let go, then a key. It works in any mode.",
+          "keys": [
+            "ctrl+b",
+            "|"
+          ],
+          "done": {
+            "via": [
+              "prefix_split_vertical"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "Hold ctrl, tap b, let go. A menu pops up. Now press | (shift and backslash).",
+          "learned": "split"
+        },
+        {
+          "id": "window-mode",
+          "title": "Back to window mode",
+          "note": "ctrl+b, then esc. The badge flips back.",
+          "keys": [
+            "ctrl+b",
+            "esc"
+          ],
+          "done": {
+            "changed": "mode",
+            "to": "window"
+          },
+          "hint": "ctrl+b, let go, then esc.",
+          "learned": "window mode"
+        },
+        {
+          "id": "hop",
+          "title": "Hop between windows",
+          "note": "The bright border follows you.",
+          "keys": [
+            "tab"
+          ],
+          "needs": "window",
+          "done": {
+            "on": "window.focus",
+            "where": {
+              "data.to": {
+                "truthy": true
+              }
+            }
+          },
+          "hint": "In window mode, tab moves to the next window.",
+          "learned": "next window"
+        },
+        {
+          "id": "close",
+          "title": "Close one",
+          "note": "No prompt, no fuss.",
+          "keys": [
+            "x"
+          ],
+          "needs": "window",
+          "done": {
+            "on": "window.close"
+          },
+          "hint": "In window mode, x closes the window with the bright border.",
+          "learned": "close"
+        },
+        {
+          "id": "help",
+          "title": "Every key, one page",
+          "note": "Forgot a key? It is in here.",
+          "keys": [
+            "?",
+            "esc"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "opened": "help"
+              },
+              {
+                "closed": "help"
+              }
+            ]
+          },
+          "hint": "Press ? to open help. Look around, then esc to close it.",
+          "learned": "help"
+        },
+        {
+          "id": "palette",
+          "title": "Or just search for it",
+          "note": "The command palette runs anything by name.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "zoom"
+            },
+            "enter"
+          ],
+          "done": {
+            "zoomed": true
+          },
+          "hint": "ctrl+p opens the palette. Type zoom and press enter.",
+          "learned": "command palette"
+        }
+      ]
+    },
+    {
+      "id": "from-tmux",
+      "title": "Coming from tmux",
+      "blurb": "Your fingers already know most of it. Here is what changes.",
+      "audience": "tmux users",
+      "minutes": 4,
+      "next": [
+        "layouts",
+        "workspaces"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "new-window",
+          "title": "New window",
+          "note": "Same as tmux. A tuios window is a pane you can move.",
+          "keys": [
+            "ctrl+b",
+            "c"
+          ],
+          "done": {
+            "via": [
+              "prefix_new_window"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "Hold ctrl and tap b, let go, then press c.",
+          "learned": "new window"
+        },
+        {
+          "id": "split-right",
+          "title": "Split right",
+          "note": "tmux used %. Here it is |, which looks like the split.",
+          "keys": [
+            "ctrl+b",
+            "|"
+          ],
+          "done": {
+            "via": [
+              "prefix_split_vertical"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "| is shift and backslash. The plain backslash works too.",
+          "learned": "split right"
+        },
+        {
+          "id": "split-down",
+          "title": "Split down",
+          "note": "tmux used \". Here it is -.",
+          "keys": [
+            "ctrl+b",
+            "-"
+          ],
+          "done": {
+            "via": [
+              "prefix_split_horizontal"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "ctrl+b, then the minus key.",
+          "learned": "split down"
+        },
+        {
+          "id": "move",
+          "title": "Move between panes",
+          "note": "Same arrows as tmux.",
+          "keys": [
+            "ctrl+b",
+            "left"
+          ],
+          "done": {
+            "via": [
+              "terminal_focus_left",
+              "terminal_focus_right",
+              "terminal_focus_up",
+              "terminal_focus_down"
+            ],
+            "then": {
+              "on": "window.focus"
+            }
+          },
+          "hint": "ctrl+b, then any arrow key. One ctrl+b covers a few arrows in a row.",
+          "learned": "move focus"
+        },
+        {
+          "id": "zoom",
+          "title": "Zoom in, then out",
+          "note": "Same as tmux.",
+          "keys": [
+            "ctrl+b",
+            "z",
+            "ctrl+b",
+            "z"
+          ],
+          "done": {
+            "seq": [
+              {
+                "zoomed": true
+              },
+              {
+                "zoomed": false
+              }
+            ]
+          },
+          "hint": "ctrl+b z zooms. Do it again to unzoom.",
+          "learned": "zoom"
+        },
+        {
+          "id": "copy-mode",
+          "title": "Copy mode, vim keys built in",
+          "note": "tmux used [ too, with emacs keys unless you set mode-keys vi.",
+          "keys": [
+            "ctrl+b",
+            "[",
+            "/",
+            {
+              "text": "tuios"
+            },
+            "enter",
+            "q"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "copyMode"
+              },
+              {
+                "opened": "search"
+              },
+              {
+                "closed": "copyMode"
+              }
+            ]
+          },
+          "hint": "ctrl+b [ enters copy mode. / searches, enter jumps to the match, q leaves.",
+          "learned": "copy mode"
+        },
+        {
+          "id": "window-mode",
+          "title": "Meet window mode",
+          "note": "New: a mode with no prefix at all.",
+          "keys": [
+            "ctrl+b",
+            "esc"
+          ],
+          "done": {
+            "changed": "mode",
+            "to": "window"
+          },
+          "hint": "ctrl+b, then esc. The badge flips to WINDOWS. i goes back to typing.",
+          "learned": "window mode"
+        },
+        {
+          "id": "workspace",
+          "title": "Jump to workspace 2",
+          "note": "tmux's ctrl+b w listed windows. Here w picks one of nine desktops.",
+          "keys": [
+            "ctrl+b",
+            "w",
+            "2"
+          ],
+          "done": {
+            "changed": "workspace",
+            "to": 2
+          },
+          "hint": "ctrl+b, then w, then 2. Your panes wait on workspace 1.",
+          "learned": "workspaces"
+        },
+        {
+          "id": "detach",
+          "title": "Detach, same as ever",
+          "keys": [
+            "ctrl+b",
+            "d"
+          ],
+          "setup": [
+            {
+              "command": "newWindow",
+              "args": [
+                "sessions"
+              ],
+              "wait": 350
+            },
+            {
+              "command": "action",
+              "args": [
+                "toggle_zoom"
+              ],
+              "wait": 250
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios ls\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "detach",
+            "body": "ctrl+b d detaches, like tmux. A daemon keeps every pane running. tuios ls lists sessions, tuios attach brings one back, and ctrl+b S switches between them.",
+            "href": "/docs/sessions",
+            "linkText": "Sessions and attach"
+          },
+          "learned": "detach"
+        }
+      ]
+    },
+    {
+      "id": "from-zellij",
+      "title": "Coming from zellij",
+      "blurb": "Modes, panes, tabs and floats. Same ideas, fewer menus.",
+      "audience": "zellij users",
+      "minutes": 4,
+      "next": [
+        "layouts",
+        "workspaces"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "locked",
+          "title": "Typing is locked mode",
+          "note": "Every key goes to the program, except ctrl+b. No ctrl+g needed.",
+          "keys": [
+            {
+              "text": "top"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "on": "shell.start",
+            "where": {
+              "data.command": "top"
+            }
+          },
+          "hint": "Type top and press enter. It keeps running while you work.",
+          "learned": "run a program"
+        },
+        {
+          "id": "new-pane",
+          "title": "New pane",
+          "note": "zellij used alt+n. Here alt+n hops to the next pane.",
+          "keys": [
+            "ctrl+b",
+            "c"
+          ],
+          "done": {
+            "via": [
+              "prefix_new_window"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "Hold ctrl and tap b, let go, then press c. top keeps running.",
+          "learned": "new pane"
+        },
+        {
+          "id": "split-right",
+          "title": "Split right",
+          "note": "zellij used ctrl+p, then r.",
+          "keys": [
+            "ctrl+b",
+            "|"
+          ],
+          "done": {
+            "via": [
+              "prefix_split_vertical"
+            ],
+            "then": {
+              "on": "window.open"
+            }
+          },
+          "hint": "ctrl+b, then | (shift and backslash).",
+          "learned": "split right"
+        },
+        {
+          "id": "focus",
+          "title": "Move with alt and arrows",
+          "note": "Same as zellij.",
+          "keys": [
+            "alt+left"
+          ],
+          "needs": "terminal",
+          "done": {
+            "via": [
+              "terminal_focus_left",
+              "terminal_focus_right",
+              "terminal_focus_up",
+              "terminal_focus_down"
+            ],
+            "then": {
+              "on": "window.focus"
+            }
+          },
+          "hint": "Hold alt (option on a Mac) and press an arrow. ctrl+b then an arrow works too.",
+          "learned": "move focus",
+          "ssh": {
+            "hint": "Hold alt (on a Mac, turn on Option as Meta in your terminal) and press an arrow. ctrl+b then an arrow works too."
+          }
+        },
+        {
+          "id": "fullscreen",
+          "title": "Fullscreen, then back",
+          "note": "zellij used ctrl+p, then f.",
+          "keys": [
+            "ctrl+b",
+            "z",
+            "ctrl+b",
+            "z"
+          ],
+          "done": {
+            "seq": [
+              {
+                "zoomed": true
+              },
+              {
+                "zoomed": false
+              }
+            ]
+          },
+          "hint": "ctrl+b z fills the screen with one pane. Again to put it back.",
+          "learned": "fullscreen"
+        },
+        {
+          "id": "float",
+          "title": "Float a pane",
+          "note": "zellij used alt+f. Drag its title bar with the mouse to move it.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "float"
+            },
+            "enter"
+          ],
+          "done": {
+            "on": "window.float",
+            "where": {
+              "data.floating": true
+            }
+          },
+          "hint": "ctrl+p opens the command palette. Type float and press enter.",
+          "learned": "floating pane"
+        },
+        {
+          "id": "search",
+          "title": "Scroll and search",
+          "note": "zellij used ctrl+s, then s. Here it is copy mode.",
+          "keys": [
+            "ctrl+b",
+            "[",
+            "/",
+            {
+              "text": "tuios"
+            },
+            "enter",
+            "q"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "copyMode"
+              },
+              {
+                "opened": "search"
+              },
+              {
+                "closed": "copyMode"
+              }
+            ]
+          },
+          "hint": "ctrl+b [ enters copy mode. / searches, enter jumps, q leaves.",
+          "learned": "search"
+        },
+        {
+          "id": "tabs",
+          "title": "Tabs are workspaces",
+          "note": "zellij used ctrl+t, then 2. tuios has nine, each a whole desktop.",
+          "keys": [
+            "ctrl+b",
+            "w",
+            "2"
+          ],
+          "done": {
+            "changed": "workspace",
+            "to": 2
+          },
+          "hint": "ctrl+b, then w, then 2. alt+2 works too, if your browser lets it.",
+          "learned": "workspaces",
+          "ssh": {
+            "hint": "ctrl+b, then w, then 2. alt+2 works too, if your terminal sends it."
+          }
+        },
+        {
+          "id": "sessions",
+          "title": "Sessions and detach",
+          "keys": [
+            "ctrl+b",
+            "d"
+          ],
+          "setup": [
+            {
+              "command": "newWindow",
+              "args": [
+                "sessions"
+              ],
+              "wait": 350
+            },
+            {
+              "command": "action",
+              "args": [
+                "toggle_zoom"
+              ],
+              "wait": 250
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios ls\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "detach",
+            "body": "zellij used ctrl+o, then d. Here ctrl+b d detaches and a daemon keeps it all running. ctrl+b S is the session manager.",
+            "href": "/docs/sessions",
+            "linkText": "How sessions work"
+          },
+          "learned": "detach"
+        }
+      ]
+    },
+    {
+      "id": "layouts",
+      "title": "Layouts",
+      "blurb": "Tiles, a master and a stack, a scrolling strip, and floats.",
+      "audience": "Tidy minds",
+      "minutes": 5,
+      "next": [
+        "workspaces",
+        "power-moves"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "window"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "preselect",
+          "title": "Choose where it lands",
+          "note": "alt and h, j, k or l picks the side. Then n.",
+          "keys": [
+            "alt+j",
+            "n"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "on": "action",
+                "where": {
+                  "data.name": {
+                    "prefix": "preselect_"
+                  }
+                }
+              },
+              {
+                "on": "window.open"
+              }
+            ]
+          },
+          "hint": "Hold alt (option on a Mac), tap j, let go. Then n. The new window opens below.",
+          "learned": "preselect",
+          "ssh": {
+            "hint": "Hold alt (on a Mac, turn on Option as Meta in your terminal), tap j, let go. Then n. The new window opens below."
+          }
+        },
+        {
+          "id": "rotate",
+          "title": "Rotate the split",
+          "note": "Side by side becomes stacked, and back.",
+          "keys": [
+            "R"
+          ],
+          "needs": "window",
+          "done": {
+            "via": [
+              "rotate_split"
+            ],
+            "then": {
+              "moved": true
+            }
+          },
+          "hint": "Capital R, so shift and r.",
+          "learned": "rotate"
+        },
+        {
+          "id": "swap",
+          "title": "Swap two windows",
+          "note": "Capital H, J, K, L push the window that way.",
+          "keys": [
+            "H"
+          ],
+          "needs": "window",
+          "done": {
+            "via": [
+              "swap_left",
+              "swap_right",
+              "swap_up",
+              "swap_down"
+            ],
+            "then": {
+              "moved": true
+            }
+          },
+          "hint": "Shift and h swaps left. Try L if nothing is to the left.",
+          "learned": "swap"
+        },
+        {
+          "id": "master",
+          "title": "Master and stack",
+          "note": "One big window on the left, the rest stacked on the right.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "master"
+            },
+            "enter"
+          ],
+          "done": {
+            "changed": "layout",
+            "to": "master-stack"
+          },
+          "hint": "ctrl+p opens the palette. Type master and press enter.",
+          "learned": "master-stack"
+        },
+        {
+          "id": "ratio",
+          "title": "Grow the master",
+          "note": "> grows it, < shrinks it.",
+          "keys": [
+            ">",
+            ">"
+          ],
+          "needs": "window",
+          "done": {
+            "via": [
+              "resize_master_grow",
+              "resize_master_shrink"
+            ],
+            "then": {
+              "moved": true
+            }
+          },
+          "hint": "> is shift and the period key.",
+          "learned": "master ratio"
+        },
+        {
+          "id": "scrolling",
+          "title": "The scrolling strip",
+          "note": "Columns on an endless strip. New ones slide in, nothing shrinks.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "scrolling"
+            },
+            "enter"
+          ],
+          "done": {
+            "changed": "layout",
+            "to": "scrolling"
+          },
+          "hint": "ctrl+p, type scrolling, press enter.",
+          "learned": "scrolling"
+        },
+        {
+          "id": "column-width",
+          "title": "Widen a column",
+          "note": "The strip scrolls to keep it in view.",
+          "keys": [
+            ">",
+            ">"
+          ],
+          "needs": "window",
+          "done": {
+            "via": [
+              "resize_master_grow",
+              "resize_master_shrink"
+            ],
+            "then": {
+              "moved": true
+            }
+          },
+          "hint": "> widens the column, < narrows it.",
+          "learned": "column width"
+        },
+        {
+          "id": "zoom",
+          "title": "Zoom in, then out",
+          "keys": [
+            "z",
+            "z"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "zoomed": true
+              },
+              {
+                "zoomed": false
+              }
+            ]
+          },
+          "hint": "z zooms the window. z again puts it back.",
+          "learned": "zoom"
+        },
+        {
+          "id": "float",
+          "title": "Let them float, then snap",
+          "note": "t turns tiling off. h and l snap to a half. Floating windows can overlap, and the snapped one sits on top.",
+          "keys": [
+            "t",
+            "h"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "changed": "tiling",
+                "to": false
+              },
+              {
+                "via": [
+                  "snap_left",
+                  "snap_right"
+                ],
+                "then": {
+                  "moved": true
+                }
+              }
+            ]
+          },
+          "hint": "t floats every window. Then h snaps this one to the left half. Drag them with the mouse too.",
+          "learned": "float and snap"
+        }
+      ]
+    },
+    {
+      "id": "workspaces",
+      "title": "Workspaces",
+      "blurb": "Nine desktops in one terminal, and a side rail that shows it all.",
+      "audience": "Many projects",
+      "minutes": 4,
+      "next": [
+        "agents",
+        "power-moves"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "window"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "visit",
+          "title": "Visit workspace 2",
+          "note": "Your two windows wait on workspace 1.",
+          "keys": [
+            "ctrl+b",
+            "w",
+            "2"
+          ],
+          "done": {
+            "changed": "workspace",
+            "to": 2
+          },
+          "hint": "ctrl+b, then w, then 2. The dock at the bottom shows where you are.",
+          "learned": "switch workspace"
+        },
+        {
+          "id": "fill",
+          "title": "Make it yours",
+          "note": "Each workspace has its own windows and layout.",
+          "keys": [
+            "n"
+          ],
+          "needs": "window",
+          "done": {
+            "on": "window.open",
+            "where": {
+              "data.workspace": 2
+            }
+          },
+          "hint": "In window mode, n opens a window here.",
+          "learned": "new window"
+        },
+        {
+          "id": "back",
+          "title": "Jump straight back",
+          "note": "alt and a number skips the prefix.",
+          "keys": [
+            "alt+1"
+          ],
+          "done": {
+            "changed": "workspace",
+            "to": 1
+          },
+          "hint": "Hold alt (option on a Mac) and press 1. If the browser takes it, ctrl+b w 1 does the same.",
+          "learned": "alt+number",
+          "ssh": {
+            "hint": "Hold alt and press 1. On a Mac, turn on Option as Meta in your terminal. ctrl+b w 1 does the same."
+          }
+        },
+        {
+          "id": "send",
+          "title": "Send a window away",
+          "note": "Shift and a number moves the window, and you follow it.",
+          "keys": [
+            "ctrl+b",
+            "w",
+            "#"
+          ],
+          "done": {
+            "via": [
+              "workspace_prefix_move_1",
+              "workspace_prefix_move_2",
+              "workspace_prefix_move_3",
+              "workspace_prefix_move_4",
+              "workspace_prefix_move_5",
+              "workspace_prefix_move_6",
+              "workspace_prefix_move_7",
+              "workspace_prefix_move_8",
+              "workspace_prefix_move_9"
+            ],
+            "then": {
+              "on": "workspace"
+            }
+          },
+          "hint": "ctrl+b, w, then shift and 3, which is #.",
+          "learned": "move window"
+        },
+        {
+          "id": "rail",
+          "title": "Open the rail",
+          "note": "Sessions, windows, agents and files, at a glance.",
+          "keys": [
+            "ctrl+b",
+            "b"
+          ],
+          "done": {
+            "opened": "sidebar"
+          },
+          "hint": "ctrl+b, then b. The rail opens on the left.",
+          "learned": "rail"
+        },
+        {
+          "id": "walk-rail",
+          "title": "Walk the rail",
+          "note": "s steps in. j and k move, enter jumps there.",
+          "keys": [
+            "s",
+            "j",
+            "j",
+            "enter"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "on": "action",
+                "where": {
+                  "data.name": "focus_sidebar"
+                }
+              },
+              {
+                "on": "workspace"
+              }
+            ]
+          },
+          "hint": "Press s. j twice lands on the first window, the one marked w1. Enter takes you there.",
+          "learned": "rail keys"
+        },
+        {
+          "id": "switcher",
+          "title": "See every workspace",
+          "note": "A picker with a preview of each one.",
+          "keys": [
+            "ctrl+b",
+            "W",
+            "enter"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "workspaceSwitcher"
+              },
+              {
+                "closed": "workspaceSwitcher"
+              }
+            ]
+          },
+          "hint": "ctrl+b, then capital W. Arrows pick one, enter goes there.",
+          "learned": "workspace switcher"
+        },
+        {
+          "id": "remote",
+          "title": "Every session, every machine",
+          "keys": [
+            "ctrl+b",
+            "S"
+          ],
+          "setup": [
+            {
+              "command": "newWindow",
+              "args": [
+                "sessions"
+              ],
+              "wait": 350
+            },
+            {
+              "command": "action",
+              "args": [
+                "toggle_zoom"
+              ],
+              "wait": 250
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios ls\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "remote",
+            "body": "On your machine the rail lists every session, and sessions on your other machines too. ctrl+b S switches between them.",
+            "href": "/docs/session-rail",
+            "linkText": "The session rail"
+          },
+          "learned": "sessions"
+        }
+      ]
+    },
+    {
+      "id": "power-moves",
+      "title": "Power moves",
+      "blurb": "Palette, launcher, copy mode and the scrollback browser.",
+      "audience": "Keyboard fans",
+      "minutes": 5,
+      "next": [
+        "make-it-yours",
+        "automation"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ],
+          "wait": 150
+        },
+        {
+          "command": "type",
+          "args": [
+            "ls\r"
+          ],
+          "wait": 300
+        },
+        {
+          "command": "type",
+          "args": [
+            "neofetch\r"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "showkeys",
+          "title": "Show your keys",
+          "note": "Every key you press now pops up bottom right.",
+          "keys": [
+            "ctrl+b",
+            "D",
+            "k"
+          ],
+          "done": {
+            "notified": "^Showkeys: ON"
+          },
+          "hint": "ctrl+b, then capital D for the debug menu, then k.",
+          "learned": "showkeys"
+        },
+        {
+          "id": "which-key",
+          "title": "Menus inside menus",
+          "note": "After ctrl+b the panel lists every next key. t opens the window menu.",
+          "keys": [
+            "ctrl+b",
+            "t",
+            "esc"
+          ],
+          "done": {
+            "seq": [
+              {
+                "changed": "prefix",
+                "to": "window"
+              },
+              {
+                "changed": "prefix",
+                "to": ""
+              }
+            ]
+          },
+          "hint": "ctrl+b, then t. Read the new menu, then esc.",
+          "learned": "which-key"
+        },
+        {
+          "id": "palette",
+          "title": "Run anything by name",
+          "note": "No key to remember. Just type.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "split vertical"
+            },
+            "enter"
+          ],
+          "done": {
+            "on": "window.open"
+          },
+          "hint": "ctrl+p opens the palette. Type split vertical and press enter.",
+          "learned": "command palette"
+        },
+        {
+          "id": "launcher",
+          "title": "Launch a program",
+          "note": "ctrl+b a opens the launcher. alt+space does too.",
+          "keys": [
+            "ctrl+b",
+            "a",
+            {
+              "text": "rain"
+            },
+            "enter"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "launcher"
+              },
+              {
+                "on": "window.open"
+              }
+            ]
+          },
+          "hint": "ctrl+b, then a. Type rain and press enter. It opens in a new window.",
+          "learned": "launcher"
+        },
+        {
+          "id": "copy-search",
+          "title": "Copy mode with vim keys",
+          "note": "hjkl, w, b, gg and G all work. / searches.",
+          "keys": [
+            "ctrl+b",
+            "[",
+            "/",
+            {
+              "text": "WebAssembly"
+            },
+            "enter"
+          ],
+          "setup": [
+            {
+              "command": "action",
+              "args": [
+                "select_window_1"
+              ],
+              "wait": 200
+            }
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "copyMode"
+              },
+              {
+                "opened": "search"
+              },
+              {
+                "closed": "search"
+              }
+            ]
+          },
+          "hint": "ctrl+b [ enters copy mode. / starts a search, type the word, enter jumps to it.",
+          "learned": "copy mode"
+        },
+        {
+          "id": "yank",
+          "title": "Select and yank",
+          "note": "v selects, e stretches it a word, y copies. q leaves.",
+          "keys": [
+            "v",
+            "e",
+            "y",
+            "q"
+          ],
+          "done": {
+            "seq": [
+              {
+                "notified": "^Yanked"
+              },
+              {
+                "closed": "copyMode"
+              }
+            ]
+          },
+          "hint": "Still in copy mode: v, then e, then y. Then q to leave.",
+          "learned": "yank"
+        },
+        {
+          "id": "scrollback",
+          "title": "Browse old commands",
+          "note": "Every command and its output, newest first.",
+          "keys": [
+            "ctrl+b",
+            "s",
+            "esc"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "scrollback"
+              },
+              {
+                "closed": "scrollback"
+              }
+            ]
+          },
+          "hint": "ctrl+b, then s. Look around, then esc closes it.",
+          "learned": "scrollback browser"
+        }
+      ]
+    },
+    {
+      "id": "make-it-yours",
+      "title": "Make it yours",
+      "blurb": "Hundreds of themes, borders, glyphs and a screen saver.",
+      "audience": "Ricers",
+      "minutes": 3,
+      "next": [
+        "power-moves",
+        "agents"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ],
+          "wait": 150
+        },
+        {
+          "command": "type",
+          "args": [
+            "neofetch\r"
+          ],
+          "wait": 300
+        },
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "type",
+          "args": [
+            "top\r"
+          ],
+          "wait": 300
+        },
+        {
+          "command": "mode",
+          "args": [
+            "window"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "theme",
+          "title": "Try on a theme",
+          "note": "Type to filter, arrows to browse. Watch top change color.",
+          "keys": [
+            "ctrl+p",
+            {
+              "text": "theme"
+            },
+            "enter",
+            {
+              "text": "gruvbox"
+            },
+            "enter"
+          ],
+          "done": {
+            "seq": [
+              {
+                "opened": "themePicker"
+              },
+              {
+                "on": "theme"
+              },
+              {
+                "closed": "themePicker"
+              }
+            ]
+          },
+          "hint": "ctrl+p, type theme, enter. In the picker type gruvbox, or browse with the arrows. Enter keeps it.",
+          "learned": "themes"
+        },
+        {
+          "id": "settings",
+          "title": "Open the settings",
+          "note": "Everything in the config file, live.",
+          "keys": [
+            "ctrl+b",
+            ","
+          ],
+          "done": {
+            "opened": "settings"
+          },
+          "hint": "ctrl+b, then the comma key.",
+          "learned": "settings"
+        },
+        {
+          "id": "glyphs",
+          "title": "Pick heavy glyphs",
+          "note": "The shapes tuios draws its frames and marks with.",
+          "keys": [
+            "down",
+            "right"
+          ],
+          "done": {
+            "setting": "glyphs"
+          },
+          "hint": "Down once to Glyph set, then right to change it.",
+          "learned": "glyphs"
+        },
+        {
+          "id": "borders",
+          "title": "Draw borders with them",
+          "note": "Set Border style to glyphs and the frames turn heavy. Esc closes, so you can look.",
+          "keys": [
+            "down",
+            "left",
+            "esc"
+          ],
+          "done": {
+            "seq": [
+              {
+                "setting": "borderStyle"
+              },
+              {
+                "closed": "settings"
+              }
+            ]
+          },
+          "hint": "Down once to Border style, left to glyphs, then esc.",
+          "learned": "border style"
+        },
+        {
+          "id": "screensaver",
+          "title": "Start the screen saver",
+          "note": "It kicks in by itself when you step away. Give it a few seconds, then any key wakes it.",
+          "keys": [
+            "S",
+            "esc"
+          ],
+          "needs": "window",
+          "done": {
+            "seq": [
+              {
+                "opened": "screensaver"
+              },
+              {
+                "closed": "screensaver"
+              }
+            ]
+          },
+          "hint": "Capital S, so shift and s. Enjoy it, then press any key.",
+          "learned": "screen saver"
+        },
+        {
+          "id": "config",
+          "title": "Keep it forever",
+          "note": "Your picks, saved in one file.",
+          "keys": [
+            "i",
+            {
+              "text": "cat .config/tuios/config.toml"
+            },
+            "enter"
+          ],
+          "setup": [
+            {
+              "command": "action",
+              "args": [
+                "select_window_1"
+              ],
+              "wait": 200
+            }
+          ],
+          "done": {
+            "ran": "cat"
+          },
+          "hint": "Press i to type, then cat .config/tuios/config.toml and enter.",
+          "learned": "config file"
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "title": "Agents",
+      "blurb": "Run coding agents side by side and never miss a question.",
+      "audience": "Agent herders",
+      "minutes": 4,
+      "next": [
+        "automation",
+        "workspaces"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "agent"
+          ],
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "rail",
+          "title": "Open the rail",
+          "note": "Every agent shows up here, with what it is doing.",
+          "keys": [
+            "ctrl+b",
+            "b"
+          ],
+          "done": {
+            "opened": "sidebar"
+          },
+          "hint": "ctrl+b, then b. The rail opens on the left.",
+          "learned": "rail"
+        },
+        {
+          "id": "start",
+          "title": "Start an agent",
+          "note": "A pretend Claude Code. It never leaves this tab.",
+          "keys": [
+            {
+              "text": "claude"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "agent": "working"
+          },
+          "hint": "Type claude and press enter. Watch the rail.",
+          "learned": "run an agent",
+          "ssh": {
+            "note": "A pretend Claude Code. It never leaves this server."
+          }
+        },
+        {
+          "id": "elsewhere",
+          "title": "Go do something else",
+          "note": "It will ask you something soon. You will know.",
+          "keys": [
+            "ctrl+b",
+            "w",
+            "2"
+          ],
+          "done": {
+            "changed": "workspace",
+            "to": 2
+          },
+          "hint": "ctrl+b, then w, then 2. Keep an eye on the rail and the dock.",
+          "learned": "switch workspace"
+        },
+        {
+          "id": "jump",
+          "title": "Jump to the question",
+          "note": "The rail turns orange and the dock rings. ctrl+b j takes you there.",
+          "keys": [
+            "ctrl+b",
+            "j"
+          ],
+          "done": {
+            "on": "window.focus",
+            "where": {
+              "window(data.to).agent": {
+                "truthy": true
+              }
+            }
+          },
+          "hint": "Wait for the orange mark, then ctrl+b, then j.",
+          "learned": "jump to alert"
+        },
+        {
+          "id": "approve",
+          "title": "Say yes",
+          "note": "y approves. The mark turns green when it is done.",
+          "keys": [
+            "y"
+          ],
+          "needs": "terminal",
+          "setup": [
+            {
+              "command": "mode",
+              "args": [
+                "terminal"
+              ]
+            }
+          ],
+          "done": {
+            "agent": "done"
+          },
+          "hint": "Press y, or enter on Yes.",
+          "learned": "approve"
+        },
+        {
+          "id": "mail",
+          "title": "Agents that talk",
+          "keys": [
+            "ctrl+b",
+            "M"
+          ],
+          "setup": [
+            {
+              "command": "newWindow",
+              "args": [
+                "real machine"
+              ],
+              "wait": 350
+            },
+            {
+              "command": "action",
+              "args": [
+                "toggle_zoom"
+              ],
+              "wait": 250
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios list-agents\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "mail",
+            "body": "On a real machine agents find each other with tuios list-agents, leave messages, and ask you questions. ctrl+b M opens your inbox.",
+            "href": "/docs/agent-messaging",
+            "linkText": "Agent messaging"
+          },
+          "learned": "mail"
+        },
+        {
+          "id": "fanout",
+          "title": "One prompt, three agents",
+          "keys": [
+            {
+              "text": "tuios fan 3"
+            }
+          ],
+          "setup": [
+            {
+              "command": "type",
+              "args": [
+                "clear\r"
+              ],
+              "wait": 150
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios fan 3 --agent claude 'add dark mode'\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "fanout",
+            "body": "tuios fan starts the same prompt in several agents, each in its own git worktree and session. Compare them, keep the best.",
+            "href": "/docs/worktrees",
+            "linkText": "Fan-out and worktrees"
+          },
+          "learned": "fan-out"
+        },
+        {
+          "id": "worktree",
+          "title": "A worktree per agent",
+          "keys": [
+            {
+              "text": "tuios worktree new"
+            }
+          ],
+          "setup": [
+            {
+              "command": "type",
+              "args": [
+                "clear\r"
+              ],
+              "wait": 150
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios worktree new feat/retry\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "worktree",
+            "body": "A worktree is a second checkout on its own branch. One command makes it and a session inside it, and the rail groups them by repo.",
+            "href": "/docs/worktrees",
+            "linkText": "Worktrees"
+          },
+          "learned": "worktrees"
+        }
+      ]
+    },
+    {
+      "id": "automation",
+      "title": "Automation",
+      "blurb": "Tapes that drive tuios, a JSON protocol, and hooks.",
+      "audience": "Scripters",
+      "minutes": 4,
+      "next": [
+        "agents",
+        "power-moves"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "wait": 250
+        },
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "read",
+          "title": "Read a tape",
+          "note": "A tape is a script of keys and commands.",
+          "keys": [
+            {
+              "text": "cat demo.tape"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "ranLine": "^cat\\s+demo\\.tape"
+          },
+          "hint": "Type cat demo.tape and press enter.",
+          "learned": "tape files"
+        },
+        {
+          "id": "play",
+          "title": "Press play",
+          "note": "Hands off. tuios types it all.",
+          "keys": [
+            {
+              "text": "tuios tape play demo.tape"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "on": "tape.finish"
+          },
+          "hint": "Type tuios tape play demo.tape and press enter. Then watch.",
+          "learned": "play a tape"
+        },
+        {
+          "id": "list",
+          "title": "Find more tapes",
+          "keys": [
+            {
+              "text": "tuios tape list"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "ranLine": "^tuios\\s+tape\\s+(list|ls)"
+          },
+          "hint": "Type tuios tape list and press enter.",
+          "learned": "list tapes"
+        },
+        {
+          "id": "party",
+          "title": "Play the party tape",
+          "note": "Three programs, a zoom and a trip to workspace 2.",
+          "keys": [
+            {
+              "text": "tuios tape play party.tape"
+            },
+            "enter"
+          ],
+          "needs": "terminal",
+          "done": {
+            "on": "tape.finish"
+          },
+          "hint": "Type tuios tape play party.tape and press enter.",
+          "learned": "tapes"
+        },
+        {
+          "id": "protocol",
+          "title": "Drive it with JSON",
+          "keys": [
+            {
+              "text": "tuios list-verbs"
+            }
+          ],
+          "setup": [
+            {
+              "command": "newWindow",
+              "args": [
+                "real machine"
+              ],
+              "wait": 350
+            },
+            {
+              "command": "action",
+              "args": [
+                "toggle_zoom"
+              ],
+              "wait": 250
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios list-verbs\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "protocol",
+            "body": "The daemon speaks JSON lines on its socket. Open windows, type, read panes and wait for output from any script. tuios list-verbs lists it all.",
+            "href": "/docs/control-protocol",
+            "linkText": "The control protocol"
+          },
+          "learned": "control protocol"
+        },
+        {
+          "id": "hooks",
+          "title": "Run a command on events",
+          "keys": [
+            {
+              "text": "tuios list-hooks"
+            }
+          ],
+          "setup": [
+            {
+              "command": "type",
+              "args": [
+                "clear\r"
+              ],
+              "wait": 150
+            },
+            {
+              "command": "type",
+              "args": [
+                "tuios list-hooks\r"
+              ]
+            }
+          ],
+          "hint": "",
+          "explainer": {
+            "art": "hooks",
+            "body": "Hooks run your shell commands when a window opens, focus moves, or an agent finishes. Put them in [hooks] in your config.",
+            "href": "/docs/hooks",
+            "linkText": "Hooks"
+          },
+          "learned": "hooks"
+        }
+      ]
+    }
+  ]
+}

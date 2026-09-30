@@ -198,6 +198,11 @@ type PlayTapeMsg struct {
 // interactive player, the one `tuios tape play` and the tape manager use. It
 // returns the tick that drives playback.
 func (m *OS) PlayTape(name, script string) (tea.Cmd, error) {
+	// A finished tape stays in script mode for scriptDoneLinger, to show
+	// that it finished. It is not playing, so it does not block a new one.
+	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
+		m.exitScriptMode()
+	}
 	if m.ScriptMode {
 		return nil, errors.New("a tape is already playing")
 	}

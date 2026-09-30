@@ -233,7 +233,16 @@ func readFile(p string) (string, bool) {
 	return s, ok
 }
 
-// writeFile creates or replaces a file. The parent has to exist.
+// The fake filesystem's limits. The SSH tour is public, and without a bound
+// a loop of appends would grow a session's memory until it is killed.
+const (
+	MaxFileSize  = 64 << 10
+	MaxFilesSize = 1 << 20
+	MaxFiles     = 512
+)
+
+// writeFile creates or replaces a file. The parent has to exist, and the
+// file and the filesystem stay under the limits above.
 func writeFile(p, content string, appendTo bool) bool {
 	fsMu.Lock()
 	defer fsMu.Unlock()
@@ -243,9 +252,26 @@ func writeFile(p, content string, appendTo bool) bool {
 	if appendTo {
 		content = files[p] + content
 	}
+	old, exists := files[p]
+	if !exists && len(files) >= MaxFiles {
+		return false
+	}
+	if len(content) > MaxFileSize || filesSize-len(old)+len(content) > MaxFilesSize {
+		return false
+	}
+	filesSize += len(content) - len(old)
 	files[p] = content
 	return true
 }
+
+// filesSize is the bytes in every file, kept by writeFile and remove.
+var filesSize = func() int {
+	n := 0
+	for _, c := range files {
+		n += len(c)
+	}
+	return n
+}()
 
 // ConfigPath is the fake tuios config file.
 const ConfigPath = Home + "/.config/tuios/config.toml"
@@ -275,7 +301,9 @@ func WriteConfig(theme, border, glyphs string) {
 	}
 	fsMu.Lock()
 	defer fsMu.Unlock()
-	files[ConfigPath] = configText(theme, border, glyphs)
+	text := configText(theme, border, glyphs)
+	filesSize += len(text) - len(files[ConfigPath])
+	files[ConfigPath] = text
 }
 
 func mkdir(p string) bool {
@@ -294,7 +322,8 @@ func mkdir(p string) bool {
 func remove(p string) bool {
 	fsMu.Lock()
 	defer fsMu.Unlock()
-	if _, ok := files[p]; ok {
+	if c, ok := files[p]; ok {
+		filesSize -= len(c)
 		delete(files, p)
 		return true
 	}
