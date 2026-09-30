@@ -347,6 +347,7 @@ func writePrivateFile(path string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	// #nosec G302 - a directory needs its execute bit, and 0700 is owner only
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
