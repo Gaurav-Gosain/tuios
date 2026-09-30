@@ -262,6 +262,9 @@ path.
 Limitations:
 
 - **Terminal mode only.** In window management mode nothing is broadcast.
+- **Only the panes on screen.** A key goes only to the panes of the set that
+  are on the current workspace and are not minimized. The other panes stay in
+  the set and get keys again when they are on screen.
 - **The set is client-side.** It is not part of session state, so it does not
   survive a detach and it is not shared with other clients attached to the same
   session. Switching sessions clears it.

@@ -677,3 +677,34 @@ func TestADroppedHostIsInTheInbox(t *testing.T) {
 		t.Errorf("the item stayed after the entry was fixed: %q", got)
 	}
 }
+
+// TestAPaneSetMultifocusOnlyNamesPanesItMayTypeInto: the windows in the
+// multifocus set get every key the person types, so a pane may put a window
+// there only when it may type into that window, as with send-keys.
+//
+// Negative control: with refuseMultifocusInto cut from verbRunCommand, the
+// call goes to the client and no refusal comes back.
+func TestAPaneSetMultifocusOnlyNamesPanesItMayTypeInto(t *testing.T) {
+	d, sp, a1, a2, _ := scopeFixture(t)
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	attachTUI(t, sp, "a")
+	if err := d.manager.GetSession("a").mutateState(func(st *SessionState) error {
+		for i := range st.Windows {
+			if st.Windows[i].ID == a2 {
+				st.Windows[i].AgentState = AgentStateNeedsInput
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
+	c := dialVerb(t, sp)
+	resp := callP(c, t, "run-command", map[string]any{"session": "a", "command": "SetMultifocus", "args": []string{a1, a2}})
+	wantForbidden(t, "SetMultifocus naming a pane on a prompt", resp)
+	if e, _ := resp["error"].(map[string]any); e == nil || !strings.Contains(fmt.Sprint(e["message"]), "waiting on a prompt") {
+		t.Errorf("the refusal %v does not say the pane waits on a prompt", resp["error"])
+	}
+	resp = callP(c, t, "run-command", map[string]any{"session": "a", "command": "SetMultifocus", "args": []string{"no-such-window"}})
+	wantForbidden(t, "SetMultifocus naming a window that does not exist", resp)
+}

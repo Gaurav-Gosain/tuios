@@ -333,3 +333,30 @@ func TestMultifocusPasteStripsTheBracketEndInEveryPane(t *testing.T) {
 		t.Errorf("multifocus pane got %q, want %q", got, want)
 	}
 }
+
+// A member of the set on another workspace, or minimized, is off screen, so a
+// typed key and a paste do not reach it. The member on screen still gets both.
+func TestMultifocusSkipsMembersOffScreen(t *testing.T) {
+	o, sent := multifocusHarness(t)
+	var other, hidden strings.Builder
+	far := multifocusPane(t, "far", false, &other)
+	far.Workspace = 2
+	min := multifocusPane(t, "min", false, &hidden)
+	min.Minimized = true
+	o.Windows = append(o.Windows, far, min)
+	o.MultifocusSet["far"] = true
+	o.MultifocusSet["min"] = true
+
+	_, _ = HandleInput(tea.KeyPressMsg{Code: 'x', Text: "x"}, o)
+	_, _ = HandleInput(tea.PasteMsg{Content: "echo hi"}, o)
+
+	if got := sent[1].String(); !strings.Contains(got, "x") || !strings.Contains(got, "echo hi") {
+		t.Errorf("the member on screen got %q, want the key and the paste", got)
+	}
+	if got := other.String(); got != "" {
+		t.Errorf("the member on workspace 2 got %q", got)
+	}
+	if got := hidden.String(); got != "" {
+		t.Errorf("the minimized member got %q", got)
+	}
+}

@@ -933,6 +933,31 @@ func (d *Daemon) refuseTypingInto(cs *connState, sess *Session, ptyID string) st
 	return ""
 }
 
+// refuseMultifocusInto checks a SetMultifocus from the caller on cs. The
+// windows it names get every key the person types in the focused pane, so a
+// pane may name only the windows it may type into itself, as with send-keys.
+// It returns "" when the command may run.
+func (d *Daemon) refuseMultifocusInto(cs *connState, sess *Session, command string, windows []string) string {
+	if command != string(tape.CommandTypeSetMultifocus) {
+		return ""
+	}
+	pa := d.paneAuthority(cs)
+	if pa == nil {
+		return ""
+	}
+	state := sess.GetState()
+	for _, w := range windows {
+		idx, err := findWindowStateIndex(state.Windows, w)
+		if err != nil {
+			return "window " + w + " is not in session " + sess.Name()
+		}
+		if why := d.typingRefusal(pa, state.Windows[idx], false); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
 // typingTapeCommands are the tape commands that press keys or type, in the
 // focused pane or the window manager, and the ones that do so by other means:
 // Source runs another tape file, and LoadLayout types a cd line into panes.

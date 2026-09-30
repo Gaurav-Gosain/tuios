@@ -109,5 +109,29 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 			strings.Count(term.Screen().Text(), "SYNC-42"), err, term.Snapshot())
 	}
 	t.Logf("after xpanes and one typed line:\n%s", term.Snapshot())
+
+	// Back on workspace 1, a typed line stays there. The set's panes on
+	// workspace 2 are off screen, so the line must not run in them.
+	showWorkspace := func(ws string, want string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "select-workspace", "-s", "xp", ws); err != nil {
+			t.Fatalf("select-workspace %s: %v\n%s", ws, err, out)
+		}
+		if err := term.WaitForText(want, uiTimeout); err != nil {
+			t.Fatalf("workspace %s never showed %q: %v\n%s", ws, want, err, term.Snapshot())
+		}
+	}
+	showWorkspace("1", "Opened 3 panes")
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("send alt+esc: %v", err)
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo LEAK-$((5*5))", "LEAK-25", shellTimeout)
+	showWorkspace("2", "ITEM-c")
+	time.Sleep(500 * time.Millisecond)
+	if text := term.Screen().Text(); strings.Contains(text, "LEAK") {
+		t.Fatalf("a line typed on workspace 1 reached the panes on workspace 2:\n%s", term.Snapshot())
+	}
 	alive(t, term, "after xpanes")
 }

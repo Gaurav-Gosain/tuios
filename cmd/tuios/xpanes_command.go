@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,8 @@ line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 With -c, each pane runs the command with sh -c. tuios replaces {} with the
 item, in shell quotes. The pane closes when the command stops. To keep the
 pane, end the command with "; exec $SHELL". Without -c, each pane is a shell.
+In a session on another machine, the daemon there chooses the shell, and the
+pane does not get TUIOS_XPANES_ITEM.
 
 Each pane gets the item in TUIOS_XPANES_ITEM and its number, from 1, in
 TUIOS_XPANES_INDEX. The item is the name of the pane.
@@ -101,7 +104,7 @@ you what it could not do.`,
 	f.StringVarP(&o.placeholder, "replace", "I", xpanesDefaultPlaceholder, "Text in the command that tuios replaces with the item")
 	f.StringVarP(&o.layout, "layout", "l", layout.ArrangeTiled, "Layout: tiled, even-horizontal or even-vertical (also t, eh, ev)")
 	f.IntVarP(&o.perPane, "items-per-pane", "n", 1, "Number of items for each pane. tuios joins them with spaces")
-	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -c 'ssh {}'")
+	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -c 'ssh -- {}'")
 	f.BoolVar(&o.noSync, "no-sync", false, "Do not turn multifocus on")
 	f.BoolVar(&o.force, "force", false, fmt.Sprintf("Open more than %d panes", xpanesMaxPanes))
 	f.BoolVar(&o.jsonOutput, "json", false, "Output result as JSON")
@@ -178,7 +181,8 @@ func xpanesQuote(s string) string {
 }
 
 // xpanesPanes groups the items perPane at a time and builds each pane's argv.
-// command is the -c text, or "" for a shell.
+// command is the -c text, or "" for a shell. With no command and no shell the
+// argv is empty, and the daemon starts its own shell.
 func xpanesPanes(items []string, perPane int, command, placeholder, shell string) []xpanesPane {
 	perPane = max(perPane, 1)
 	var panes []xpanesPane
@@ -201,7 +205,7 @@ func xpanesPanes(items []string, perPane int, command, placeholder, shell string
 				line = strings.ReplaceAll(command, placeholder, strings.Join(quoted, " "))
 			}
 			argv = append(env, "sh", "-c", line)
-		} else {
+		} else if shell != "" {
 			argv = append(env, shell)
 		}
 		panes = append(panes, xpanesPane{Items: group, Title: xpanesTitle(joined), Argv: argv})
@@ -216,6 +220,28 @@ func xpanesTitle(item string) string {
 		item = string(r[:59]) + "…"
 	}
 	return item
+}
+
+// xpanesCommandLine is the command each pane runs: -c, or ssh with --ssh.
+// The -- ends ssh's options, so an item that starts with - is a host.
+func xpanesCommandLine(o xpanesOptions) string {
+	if o.ssh {
+		return "ssh -- " + o.placeholder
+	}
+	return o.command
+}
+
+// xpanesShell is the shell of a pane with no command: $SHELL on this machine,
+// else /bin/sh. On another machine this machine's $SHELL path means nothing,
+// so it is "", and the daemon there chooses the shell.
+func xpanesShell(host, envShell string) string {
+	switch {
+	case host != "":
+		return ""
+	case envShell != "":
+		return envShell
+	}
+	return "/bin/sh"
 }
 
 // xpanesResult is what xpanes did, for the summary and --json.
@@ -240,23 +266,24 @@ func runXpanes(o xpanesOptions, items []string) error {
 	if o.perPane < 1 {
 		return errors.New("-n must be 1 or more")
 	}
-	command := o.command
-	if o.ssh {
-		command = "ssh " + o.placeholder
-	}
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-	panes := xpanesPanes(items, o.perPane, command, o.placeholder, shell)
-	if len(panes) > xpanesMaxPanes && !o.force {
-		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
-	}
-
+	command := xpanesCommandLine(o)
 	sessionName := o.session
 	if sessionName == "" {
 		sessionName = os.Getenv("TUIOS_SESSION")
 	}
+	host, _, _, err := resolveTarget(sessionName, "")
+	if err != nil {
+		return err
+	}
+	// A shell pane on this machine is $SHELL with the item in its
+	// environment. On another machine this machine's $SHELL path means
+	// nothing, so the daemon there chooses the shell, and the item is only
+	// the pane's name.
+	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")))
+	if len(panes) > xpanesMaxPanes && !o.force {
+		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
+	}
+
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
@@ -282,7 +309,9 @@ func runXpanes(o xpanesOptions, items []string) error {
 			"name":      p.Title,
 			"workspace": ws,
 			"focus":     i == 0,
-			"command":   p.Argv,
+		}
+		if len(p.Argv) > 0 {
+			params["command"] = p.Argv
 		}
 		if cwd != "" {
 			params["cwd"] = cwd
@@ -303,7 +332,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 		res.Windows = append(res.Windows, w.WindowID)
 	}
 
-	arrange := append([]string{kind}, res.Windows...)
+	arrange := append([]string{kind, strconv.Itoa(ws)}, res.Windows...)
 	if err := xpanesClientCommand(t, "ArrangePanes", arrange); err != nil {
 		res.Warnings = append(res.Warnings, xpanesWarning("tuios could not lay out the panes", err, name))
 	} else {
@@ -381,12 +410,12 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, error) {
 
 // xpanesClientCommand runs a client command through run-command. A window the
 // client has not heard of yet is tried again for a few seconds: see
-// app.ErrWindowNotHereYet.
+// app.ErrNotHereYet.
 func xpanesClientCommand(t *verbTarget, command string, args []string) error {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		_, err := t.client.Call("run-command", t.params(map[string]any{"command": command, "args": args}))
-		if err == nil || !strings.Contains(err.Error(), app.ErrWindowNotHereYet) || time.Now().After(deadline) {
+		if err == nil || !strings.Contains(err.Error(), app.ErrNotHereYet) || time.Now().After(deadline) {
 			return err
 		}
 		time.Sleep(100 * time.Millisecond)

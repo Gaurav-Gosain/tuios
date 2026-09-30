@@ -36,12 +36,8 @@ func forwardPasteToFocused(o *app.OS, text string) bool {
 	}
 
 	ok := sendPaste(focusedWindow, text) == nil
-	if len(o.MultifocusSet) > 0 {
-		for idx, w := range o.Windows {
-			if idx != o.FocusedWindow && o.MultifocusSet[w.ID] {
-				_ = sendPaste(w, text)
-			}
-		}
+	for _, w := range o.MultifocusPeers() {
+		_ = sendPaste(w, text)
 	}
 	return ok
 }

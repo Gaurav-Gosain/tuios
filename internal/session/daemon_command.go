@@ -99,6 +99,9 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 		payload.CommandType = canonical
 	}
+	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {
+		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
+	}
 
 	// Find the TUI client attached to this session. When one is present most
 	// commands are routed to it (unchanged behavior). With no client attached,

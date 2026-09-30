@@ -270,15 +270,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.Mode = app.WindowManagementMode
 				focusedWindow.InvalidateCache()
 			}
-			// Forward keystrokes to all multifocused windows.
-			// MultifocusSet is keyed by window ID; iterate in slice order so
-			// the send order stays stable across swaps and state sync.
-			if len(o.MultifocusSet) > 0 {
-				for idx, w := range o.Windows {
-					if idx != o.FocusedWindow && o.MultifocusSet[w.ID] {
-						_ = w.SendInput(rawInput)
-					}
-				}
+			// Forward keystrokes to the multifocus set's panes on screen.
+			// See MultifocusPeers: slice order keeps the send order stable
+			// across swaps and state sync.
+			for _, w := range o.MultifocusPeers() {
+				_ = w.SendInput(rawInput)
 			}
 		}
 	} else {
