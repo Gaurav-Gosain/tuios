@@ -636,6 +636,9 @@ type KeybindingsConfig struct {
 	// they are not terminal-mode-only, and rather than literals in the input
 	// path because a key nobody can rebind is a key nobody can inspect.
 	Global map[string][]string `toml:"global"`
+	// Command is the [[keybindings.command]] entries: a key that runs a
+	// command the user writes. See command_keys.go.
+	Command []CommandBinding `toml:"command,omitempty"`
 	// Script binds are live only while a .tape is playing back. Its own section
 	// because it is its own keyboard context: sharing ctrl+p with the palette by
 	// default is not a conflict, since only one of the two contexts is ever

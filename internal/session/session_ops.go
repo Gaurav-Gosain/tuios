@@ -211,6 +211,8 @@ type NewWindowOptions struct {
 	// Scratch marks the popup as the session's scratch terminal. See
 	// WindowState.Scratch. It means nothing unless Popup is set.
 	Scratch bool
+	// ScratchName is the scratch pane's name. See WindowState.ScratchName.
+	ScratchName string
 	// stdout, when set, is the process's standard output in place of the PTY.
 	// See createPTY. It is unexported: only the popup verb's capture sets it.
 	stdout *os.File
@@ -315,8 +317,9 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		// One scratch terminal per session, checked under the state lock so
 		// two calls that race cannot both add one.
 		if opts.Popup && opts.Scratch {
+			want := WindowState{ScratchName: opts.ScratchName}.ScratchKey()
 			for i := range state.Windows {
-				if state.Windows[i].Scratch {
+				if state.Windows[i].Scratch && state.Windows[i].ScratchKey() == want {
 					return ErrScratchExists
 				}
 			}
@@ -366,6 +369,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			PopupWidth:  opts.PopupWidth,
 			PopupHeight: opts.PopupHeight,
 			Scratch:     opts.Popup && opts.Scratch,
+			ScratchName: scratchNameIf(opts),
 		}
 		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {
@@ -393,7 +397,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 }
 
 // ErrScratchExists is the refusal of a second scratch terminal in a session.
-var ErrScratchExists = errors.New("this session already has a scratch terminal. Press the scratch key to show it")
+var ErrScratchExists = errors.New("this session already has a scratch terminal of this name. Press its key to show it")
+
+// scratchNameIf is the name a new window keeps, empty for any window that is
+// not a scratch pane and for the built-in scratch terminal.
+func scratchNameIf(opts NewWindowOptions) string {
+	if !opts.Popup || !opts.Scratch || opts.ScratchName == "scratch" {
+		return ""
+	}
+	return opts.ScratchName
+}
 
 // CloseDaemonWindow removes the window matching target from the session state
 // and closes its PTY. It moves focus to another window in the same workspace
@@ -625,11 +638,12 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 // markRestoredScratch marks the window id as the session's scratch terminal,
 // hidden. A restore calls it: a push cannot set the mark, so the restore sets
 // it on canonical state after the push. See daemon_resurrect.go.
-func (s *Session) markRestoredScratch(id string) {
+func (s *Session) markRestoredScratch(id, name string) {
 	_ = s.mutateState(func(state *SessionState) error {
 		for i := range state.Windows {
 			if w := &state.Windows[i]; w.ID == id {
 				w.Scratch, w.Popup, w.IsFloating, w.Minimized = true, true, true, true
+				w.ScratchName = name
 			}
 		}
 		// A hidden pane holds no focus, or the first client would type into it.

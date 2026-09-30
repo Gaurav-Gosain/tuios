@@ -1497,7 +1497,7 @@ type OS struct {
 	pendingStartTerminalMode bool
 	// scratchPending says the scratch terminal was asked for and has not
 	// arrived yet, and scratchPendingAt is when. See scratch.go.
-	scratchPending   bool
+	scratchPending   string
 	scratchPendingAt time.Time
 	// scratchReturnID and scratchReturnMode are the pane and the mode the
 	// focus goes back to when the scratch terminal hides.

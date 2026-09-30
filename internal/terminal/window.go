@@ -325,7 +325,10 @@ type Window struct {
 	// IsScratch marks the session's scratch terminal, the popup
 	// toggle_scratch shows and hides. It is the session's, like IsPopup. See
 	// session.WindowState.Scratch and HiddenScratch.
-	IsScratch   bool
+	IsScratch bool
+	// ScratchName keys a scratch pane: "scratch" (or empty, from before
+	// names) for the built-in one, the entry's name for a command entry.
+	ScratchName string
 	PopupWidth  string
 	PopupHeight string
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)

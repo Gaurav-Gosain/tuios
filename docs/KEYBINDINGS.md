@@ -144,7 +144,65 @@ run it from the command palette. Set `hints.all_panes = true` to make
 Press it again to hide the popup. The shell keeps running between shows. The
 key works from inside the popup. The action is `toggle_scratch`, and
 `[scratch]` sets the popup size. See
-[SESSIONS.md](SESSIONS.md#the-scratch-terminal).
+[SESSIONS.md](SESSIONS.md#the-scratch-terminal). To add more scratch popups on
+keys of their own, see [Command keys](#command-keys).
+
+## Command keys
+
+A `[[keybindings.command]]` entry binds a key to a command that you write.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+g"
+type = "scratch"
+command = "lazygit"
+description = "Lazygit"
+width = "80%"
+height = "80%"
+```
+
+- `key` is the key that runs the command. A key that starts with `prefix+`
+  works after the leader (`Ctrl+B`). Any other key works in window mode and
+  in terminal mode.
+- `type` is one of these:
+  - `scratch`: a popup that stays. The key shows it and hides it, as
+    `Ctrl+B g` does for the scratch terminal. Each entry has its own popup.
+    One scratch popup is on the screen at a time. When the command exits, the
+    popup closes, and the next press starts the command again. With no
+    `command`, the popup runs your shell.
+  - `popup`: a popup that closes when the command exits. This is the default.
+  - `pane`: a new pane in the layout, next to the focused pane. It closes when
+    the command exits.
+  - `shell`: the command runs with no window. You do not see its output. When
+    the command fails, the dock shows a message.
+- `command` runs with `sh -c`, so you can write pipes and quotes. It starts in
+  the folder of the focused pane.
+- `description` is the name in the command palette and in
+  `tuios keybinds list`. It is optional.
+- `name` keeps a scratch popup under a fixed name. It is optional. Without it,
+  tuios makes the name from the description or the command.
+- `width` and `height` set the size of a scratch or popup entry, in cells
+  (`100`) or percent (`80%`). The default is `80%`.
+
+The command gets these variables:
+
+| Variable | Value |
+|---|---|
+| `TUIOS_SESSION` | The session in which you pressed the key |
+| `TUIOS_SOCKET` | The socket of the daemon |
+| `TUIOS_ACTIVE_PANE_ID` | The pane that had the focus |
+| `TUIOS_ACTIVE_PANE_CWD` | The folder in which the command starts |
+
+A command key never takes a key from a tuios action. When the key is taken,
+`tuios keybinds doctor` shows the entry as dead. The command palette lists
+each entry, and `tuios keybinds list` shows them under Commands.
+
+In a session on a different machine, a `scratch` or `popup` entry does not
+run. The dock shows a message. A `pane` entry runs on the machine of the
+session. A `shell` entry runs on the machine that runs the tuios client.
+
+Only a key press or the command palette runs a command key. A change to
+`config.toml` does not run a command.
 
 ## Copy mode
 

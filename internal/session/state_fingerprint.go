@@ -123,6 +123,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(w.PopupWidth)
 		str(w.PopupHeight)
 		flag(w.Scratch)
+		str(w.ScratchName)
 		str(w.ForegroundCmd)
 		num(w.ShellPID)
 		num(len(w.Grants))

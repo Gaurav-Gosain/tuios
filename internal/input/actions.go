@@ -266,7 +266,13 @@ func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
 
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if handler, ok := d.handlers[action]; ok {
+	handler, ok := d.handlers[action]
+	// A [[keybindings.command]] entry is an action of its own, named after
+	// the entry. It has no handler in the table: the entry says what to run.
+	if !ok && strings.HasPrefix(action, config.CommandActionPrefix) {
+		handler, ok = handleCommandBinding(action), true
+	}
+	if ok {
 		// Record the action if tape recording is active
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 			o.TapeRecorder.RecordAction(action)
@@ -309,7 +315,14 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 // HasAction checks if an action is registered
 func (d *ActionDispatcher) HasAction(action string) bool {
 	_, ok := d.handlers[action]
-	return ok
+	return ok || strings.HasPrefix(action, config.CommandActionPrefix)
+}
+
+// handleCommandBinding runs the [[keybindings.command]] entry behind action.
+func handleCommandBinding(action string) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		return o, o.RunCommandBinding(action)
+	}
 }
 
 // Global action dispatcher instance

@@ -93,6 +93,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PopupWidth:  w.PopupWidth,
 			PopupHeight: w.PopupHeight,
 			Scratch:     w.IsScratch,
+			ScratchName: w.ScratchName,
 		}
 	}
 
@@ -1150,6 +1151,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// zoom box is, and applyPopupRects recomputes it here.
 	w.IsPopup = ws.Popup
 	w.IsScratch = ws.Scratch
+	w.ScratchName = ws.ScratchName
 	w.PopupWidth = ws.PopupWidth
 	w.PopupHeight = ws.PopupHeight
 	w.PreZoomX = ws.PreZoomX
@@ -1272,6 +1274,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	// WindowState.Popup.
 	window.IsPopup = ws.Popup
 	window.IsScratch = ws.Scratch
+	window.ScratchName = ws.ScratchName
 	window.PopupWidth = ws.PopupWidth
 	window.PopupHeight = ws.PopupHeight
 	window.PreZoomX = ws.PreZoomX

@@ -29,6 +29,8 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `[scratch]` sets the size of the scratch terminal that `Ctrl+B g` shows in a popup. The old `session` key is no longer used. See [SESSIONS.md](SESSIONS.md#the-scratch-terminal).
 
+`[[keybindings.command]]` binds a key to a command that you write: a scratch popup, a popup, a pane or a command with no window. A mistake in an entry is a warning, and tuios ignores that entry. See [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

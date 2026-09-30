@@ -1769,6 +1769,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handleScratchOpened(msg)
 		return m, nil
 
+	case CommandRanMsg:
+		m.handleCommandRan(msg)
+		return m, nil
+
 	case RenameAppliedMsg:
 		if msg.Err != nil {
 			what := msg.What

@@ -75,7 +75,7 @@ func (r *KeybindRegistry) buildMappings() {
 	// They are resolved here all the same, once, into their own maps.
 	kb := &r.config.Keybindings
 	r.sections = sectionMaps{
-		prefix:          r.sectionKeyMap(kb.PrefixMode),
+		prefix:          r.withCommands(r.sectionKeyMap(kb.PrefixMode), SectionPrefixMode),
 		windowPrefix:    r.sectionKeyMap(kb.WindowPrefix),
 		minimizePrefix:  r.sectionKeyMap(kb.MinimizePrefix),
 		workspacePrefix: r.sectionKeyMap(kb.WorkspacePrefix),
@@ -83,7 +83,7 @@ func (r *KeybindRegistry) buildMappings() {
 		tapePrefix:      r.sectionKeyMap(kb.TapePrefix),
 		layoutPrefix:    r.sectionKeyMap(kb.LayoutPrefix),
 		terminalMode:    r.sectionKeyMap(kb.TerminalMode),
-		global:          r.sectionKeyMap(kb.Global),
+		global:          r.withCommands(r.sectionKeyMap(kb.Global), SectionGlobal),
 		script:          r.sectionKeyMap(kb.Script),
 		sidebar:         r.sectionKeyMap(kb.Sidebar),
 		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
@@ -123,6 +123,27 @@ func (r *KeybindRegistry) sectionKeyMap(section map[string][]string) map[string]
 	keyMap := make(map[string]string, len(section))
 	for _, action := range actions {
 		for _, key := range r.normalizer.ExpandKeys(section[action]) {
+			if _, taken := keyMap[key]; !taken {
+				keyMap[key] = action
+			}
+		}
+	}
+	return keyMap
+}
+
+// withCommands adds the [[keybindings.command]] keys of one section to its
+// key map. A command entry never takes a key a built-in action already has:
+// the built-in keeps it, and tuios keybinds doctor reports the entry as
+// shadowed (see Bindings).
+func (r *KeybindRegistry) withCommands(keyMap map[string]string, section string) map[string]string {
+	cmds := r.config.Keybindings.commandSection(section)
+	actions := make([]string, 0, len(cmds))
+	for action := range cmds {
+		actions = append(actions, action)
+	}
+	sort.Strings(actions)
+	for _, action := range actions {
+		for _, key := range r.normalizer.ExpandKeys(cmds[action]) {
 			if _, taken := keyMap[key]; !taken {
 				keyMap[key] = action
 			}

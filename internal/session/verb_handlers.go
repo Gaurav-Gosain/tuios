@@ -408,6 +408,8 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		// Scratch opens the session's scratch terminal: a shell when no
 		// command is named, marked so toggle_scratch shows and hides it.
 		Scratch bool `json:"scratch"`
+		// ScratchName names the scratch pane. Empty is the built-in one.
+		ScratchName string `json:"scratch_name"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -468,8 +470,9 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	// early check spares a shell; AddDaemonWindowWith makes the check that
 	// holds, under the state lock.
 	if p.Scratch {
+		want := WindowState{ScratchName: p.ScratchName}.ScratchKey()
 		for _, w := range sess.GetState().Windows {
-			if w.Scratch {
+			if w.Scratch && w.ScratchKey() == want {
 				return nil, invalidParam("scratch", ErrScratchExists.Error())
 			}
 		}
@@ -487,6 +490,7 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		PopupWidth:  p.Width,
 		PopupHeight: p.Height,
 		Scratch:     p.Scratch,
+		ScratchName: p.ScratchName,
 	}
 	var capture *popupCapture
 	if p.CaptureStdout {

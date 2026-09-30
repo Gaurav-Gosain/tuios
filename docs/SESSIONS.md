@@ -227,6 +227,13 @@ separate session, so it does not change the session that a bare
 The first version of this key made a session called `scratch`. tuios does not
 use that session any more. To remove it, run `tuios kill-session scratch`.
 
+To add more scratch popups, each on its own key and with its own command,
+add `[[keybindings.command]]` entries of type `scratch`. See
+[KEYBINDINGS.md](KEYBINDINGS.md#command-keys). The rules above apply to each
+of them. One scratch popup is on the screen at a time: a show hides the
+other. After a daemon restart, only the built-in scratch terminal comes back.
+The key of an entry starts its command again.
+
 The action is `toggle_scratch`. To use a different key, bind the action in
 `[keybindings.prefix_mode]` or in a different section. If your config puts `g`
 on a different prefix action, `toggle_scratch` has no key.

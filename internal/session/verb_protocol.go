@@ -861,6 +861,7 @@ func init() {
 				{Name: "wait", Type: "bool", Description: "Keep the call open until the command exits, and return its exit_code in a popup_result.", Default: "false"},
 				{Name: "capture_stdout", Type: "bool", Description: "With wait: send the command's standard output to a pipe the daemon reads instead of the popup, and return it as stdout. A picker such as fzf draws on the terminal and prints only the choice, so the choice comes back. Not on Windows.", Default: "false"},
 				{Name: "timeout", Type: "int", Description: "With wait: milliseconds to wait before failing with the timeout code. The popup stays open. 0 waits as long as it is open.", Default: "0"},
+				{Name: "scratch_name", Type: "string", Description: "With scratch: the scratch pane's name. A session has one scratch pane per name. Empty is the built-in scratch terminal.", Default: ""},
 				{Name: "scratch", Type: "bool", Description: "Open the session's scratch terminal, the popup the toggle_scratch key shows and hides. command is optional and defaults to the shell. A session has one scratch terminal.", Default: "false"},
 			},
 			returns: []verbParam{

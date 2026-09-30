@@ -152,11 +152,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// exit and that nothing asked for. Dropping it is the same answer the
 		// loop gives a window whose shell will not start.
 		//
-		// The scratch terminal is the exception. It runs a shell anyway, so the
-		// respawned shell is what it held, and it comes back hidden: the
-		// scratch key shows it where the user is, and nothing floats over the
-		// layout before anyone asks for it.
-		if w.Popup && !w.Scratch {
+		// The built-in scratch terminal is the exception. It runs a shell
+		// anyway, so the respawned shell is what it held, and it comes back
+		// hidden: the scratch key shows it where the user is, and nothing
+		// floats over the layout before anyone asks for it. A scratch of a
+		// command entry runs its command, so it goes like any popup, and its
+		// key starts the command again.
+		if w.Popup && (!w.Scratch || w.ScratchKey() != "scratch") {
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
 		}
@@ -251,10 +253,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
-	scratch := ""
+	scratch, scratchName := "", ""
 	for _, w := range kept {
 		if w.Scratch {
-			scratch = w.ID
+			scratch, scratchName = w.ID, w.ScratchName
 		}
 	}
 
@@ -265,7 +267,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// The scratch mark is daemon-owned in the same way: UpdateState keeps
 	// only the marks canonical state already has, and a new session has none.
 	if scratch != "" {
-		sess.markRestoredScratch(scratch)
+		sess.markRestoredScratch(scratch, scratchName)
 	}
 
 	// The worktree record goes back on for the same reason: it is

@@ -339,6 +339,7 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	// the panes the user placed. minimized true on it means hidden.
 	if w.Scratch {
 		info["scratch"] = true
+		info["scratch_name"] = w.ScratchKey()
 	}
 	// Where the window's process is, when it is known. A shell that never
 	// announces and a machine that cannot be reached both leave it empty, so
