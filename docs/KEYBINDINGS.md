@@ -224,6 +224,73 @@ press keys as you through `run-command`. It can press a command key, also from
 a session on a different machine, and a `shell` entry then runs on this
 machine. Give the respond grant only to a pane that you trust.
 
+### Recipes
+
+These are command keys for common tasks. Copy an entry into `config.toml` and
+change the key to taste. Run `tuios keybinds doctor` after you add one, to
+check the key is free.
+
+**Per-session notes.** This scratch entry opens `$EDITOR` on a notes file
+named after the session, and makes the notes folder first. It falls back to
+`vi` when `$EDITOR` is not set.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+n"
+type = "scratch"
+command = "mkdir -p ~/notes && ${EDITOR:-vi} ~/notes/$TUIOS_SESSION.md"
+description = "Session notes"
+```
+
+**Browser pane.** This scratch entry opens a page in terminal-browser. It
+needs terminal-browser installed, and a terminal with kitty graphics.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+b"
+type = "scratch"
+command = "terminal-browser open https://example.com"
+description = "Browser"
+```
+
+**lazygit.** This is the example at the top of this section. It opens lazygit
+in the focused pane's folder.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+g"
+type = "scratch"
+command = "lazygit"
+description = "Lazygit"
+width = "80%"
+height = "80%"
+```
+
+**Pick a file into the focused pane.** This popup runs `fzf` and types the
+pick into the pane you came from, with
+[`tuios send-text`](CLI_REFERENCE.md#tuios-send-text) and the pane id from
+`TUIOS_ACTIVE_PANE_ID`.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+p"
+type = "popup"
+command = "tuios send-text -w \"$TUIOS_ACTIVE_PANE_ID\" \"$(fzf)\""
+description = "Pick a file"
+```
+
+**Copy the pane's folder.** This shell entry copies the focused pane's folder
+to the clipboard. It tries `pbcopy`, then `wl-copy`, then `xclip`, and uses the
+first one it finds.
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+y"
+type = "shell"
+command = "printf %s \"$TUIOS_ACTIVE_PANE_CWD\" | (pbcopy || wl-copy || xclip -selection clipboard)"
+description = "Copy pane folder"
+```
+
 ## Copy mode
 
 `Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the
