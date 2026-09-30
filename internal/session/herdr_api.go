@@ -189,6 +189,7 @@ type herdrArgs struct {
 	Text      string  `json:"text,omitempty"`
 	Keys      string  `json:"keys,omitempty"`
 	Literal   bool    `json:"literal,omitempty"`
+	Paste     bool    `json:"paste,omitempty"`
 	Submit    bool    `json:"submit,omitempty"`
 	Source    string  `json:"source,omitempty"`
 	Styled    bool    `json:"styled,omitempty"`
@@ -911,12 +912,17 @@ func (d *Daemon) herdrPaneSend(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return d.herdrSend(cs, in.PaneID, in.Text, in.Keys, "pane_send_failed")
 }
 
-// herdrSend types text, then keys, into a pane: send-text for the text as it
-// is, and send-keys for the keys. Each call is checked as that verb is, so a
-// pane is held to its write grant and to typingRefusal. Every key is read
+// herdrSend types text, then keys, into a pane: send-text with paste for the
+// text, and send-keys for the keys. Each call is checked as that verb is, so
+// a pane is held to its write grant and to typingRefusal. Every key is read
 // before anything is sent, so a key tuios cannot send fails the call whole,
-// as in herdr. text is written as it is, with no bracketed paste; herdr from
-// 0.9 wraps it in bracketed paste when the pane has that mode on.
+// as in herdr.
+//
+// herdr 0.9.3 writes the text raw. tuios sends it as a paste: control
+// characters removed, and in bracketed paste delimiters when the pane's
+// program has that mode on. Collie sends a reply as send_text and then
+// send_keys Enter, and a reply of several lines written raw would run line by
+// line.
 func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail string) (*herdrResult, *herdrError) {
 	runs, bad := herdrKeyRuns(keys)
 	if bad != "" {
@@ -928,7 +934,7 @@ func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail s
 	}
 	if text != "" {
 		args := herdrWin(sess, win.ID)
-		args.Text = text
+		args.Text, args.Paste = text, true
 		if _, herr := d.herdrVerb(cs, "send-text", args, fail); herr != nil {
 			return nil, herr
 		}
