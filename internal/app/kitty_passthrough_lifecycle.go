@@ -170,7 +170,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	// built. Installed here because this is where the window and the
 	// passthrough are introduced to each other.
 	window.Terminal.SetKittyImageIDTranslator(func(guestID uint32) (uint32, bool) {
-		return kp.HostImageID(win.ID, guestID)
+		return kp.HostImageIDForPlaceholder(win.ID, guestID)
 	})
 	// Placeholder cells are only worth keeping on a host that draws them. Kept
 	// anywhere else they are missing-glyph boxes where the picture should be,

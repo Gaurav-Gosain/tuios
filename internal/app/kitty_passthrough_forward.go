@@ -156,6 +156,11 @@ func (kp *KittyPassthrough) ForwardCommand(
 		if result != nil {
 			return result
 		}
+		// A virtual placement reserves no rows: the application prints
+		// the cells the image occupies.
+		if cmd.Virtual {
+			break
+		}
 		// On the final chunk (m=0), return image dimensions so the guest
 		// terminal reserves whitespace for the image. This applies to BOTH
 		// file-based AND direct transmissions (chafa uses direct with chunks).
@@ -303,6 +308,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			Width:          cmd.Width,
 			Height:         cmd.Height,
 			ImageID:        cmd.ImageID,
+			PlacementID:    cmd.PlacementID,
 			Columns:        cmd.Columns,
 			Rows:           cmd.Rows,
 			SourceX:        cmd.SourceX,
@@ -442,6 +448,13 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		len(pending.Data), update, hostID, imgCols, imgRows,
 		pending.SourceX, pending.SourceY, pending.SourceWidth, pending.SourceHeight,
 		pending.Width, pending.Height)
+
+	// a=T with U=1: the image goes where the guest's placeholder cells are,
+	// so there is nothing for tuios to position.
+	if pending.AndPlace && pending.Virtual {
+		kp.declareVirtualPlacement(windowID, hostID, pending.PlacementID, pending.Columns, pending.Rows, pending.ZIndex)
+		return nil
+	}
 
 	// Track placement for RefreshAllPlacements
 	if kp.placements[windowID] == nil {
@@ -756,6 +769,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// icat/youterm: may reuse ID but sends single unchunked command (more=false).
 	isVideoFrame := reusingID && andPlace && cmd.More
 
+	// a=T with U=1: the image goes where the guest's placeholder cells are,
+	// so nothing is recorded for the refresh pass to position.
+	if andPlace && cmd.Virtual {
+		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		kp.declareVirtualPlacement(windowID, hostID, cmd.PlacementID, cmd.Columns, cmd.Rows, cmd.ZIndex)
+		return
+	}
+
 	if isVideoFrame && kp.hostOut != nil {
 		// Override to a=T for video immediate flush (buf was built with a=t)
 		bufBytes := bytes.Replace(buf.Bytes(), []byte("a=t,"), []byte("a=T,"), 1)
@@ -1033,6 +1054,23 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
+
+	// a=T with U=1: transmit, then declare the virtual placement. Both go
+	// through the queue, not the async writer: retransmitting an id deletes
+	// its placements on the host, so the declaration must follow the bytes.
+	if andPlace && cmd.Virtual {
+		if kp.emitBitmap(windowID, hostID, format, cmd.Compression, cmd.Width, cmd.Height, rawPixels, cmd.ImageID != 0) == bitmapFull {
+			if kp.pendingGraphicsFull() {
+				kittyPassthroughLog("forwardFileTransmitInline: dropping a %d byte virtual frame, %d bytes already queued",
+					len(data), kp.pendingGraphicsBytes())
+				return
+			}
+			kp.pendingOutput = append(kp.pendingOutput, kp.buildInlineChunks(
+				hostID, format, compression, cmd.Width, cmd.Height, data)...)
+		}
+		kp.declareVirtualPlacement(windowID, hostID, cmd.PlacementID, cmd.Columns, cmd.Rows, cmd.ZIndex)
+		return
+	}
 
 	// Real remote terminal (ssh) video: the host does not repaint an existing
 	// placement when its bitmap is re-transmitted, and letting RefreshAllPlacements
@@ -1331,33 +1369,43 @@ func (kp *KittyPassthrough) forwardVirtualPlace(cmd *vt.KittyCommand, windowID s
 	// names nothing yet, rather than the guest's id, which on the host may
 	// be another pane's image.
 	hostID := kp.getOrAllocateHostID(windowID, cmd.ImageID)
+	kp.declareVirtualPlacement(windowID, hostID, cmd.PlacementID, cmd.Columns, cmd.Rows, cmd.ZIndex)
+}
 
-	var buf bytes.Buffer
-	buf.WriteString("\x1b_Ga=p,U=1")
-	fmt.Fprintf(&buf, ",i=%d", hostID)
-	if cmd.PlacementID > 0 {
-		fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
-	}
-	if cmd.Columns > 0 {
-		fmt.Fprintf(&buf, ",c=%d", cmd.Columns)
-	}
-	if cmd.Rows > 0 {
-		fmt.Fprintf(&buf, ",r=%d", cmd.Rows)
-	}
-	if cmd.ZIndex != 0 {
-		fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
-	}
-	buf.WriteString(",q=2")
-	buf.WriteString("\x1b\\")
-	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+// declareVirtualPlacement queues a=p,U=1 for hostID and records the id so
+// the image is freed with its window.
+func (kp *KittyPassthrough) declareVirtualPlacement(windowID string, hostID, placementID uint32, cols, rows int, z int32) {
+	kp.pendingOutput = append(kp.pendingOutput, buildVirtualPlace(hostID, placementID, cols, rows, z)...)
 
 	if kp.virtualImages[windowID] == nil {
 		kp.virtualImages[windowID] = make(map[uint32]bool)
 	}
 	kp.virtualImages[windowID][hostID] = true
 
-	kittyPassthroughLog("forwardVirtualPlace: hostID=%d cols=%d rows=%d winID=%s",
-		hostID, cmd.Columns, cmd.Rows, windowID[:min(8, len(windowID))])
+	kittyPassthroughLog("declareVirtualPlacement: hostID=%d cols=%d rows=%d winID=%s",
+		hostID, cols, rows, windowID[:min(8, len(windowID))])
+}
+
+// buildVirtualPlace encodes a virtual placement of hostID over cols by rows.
+func buildVirtualPlace(hostID, placementID uint32, cols, rows int, z int32) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("\x1b_Ga=p,U=1")
+	fmt.Fprintf(&buf, ",i=%d", hostID)
+	if placementID > 0 {
+		fmt.Fprintf(&buf, ",p=%d", placementID)
+	}
+	if cols > 0 {
+		fmt.Fprintf(&buf, ",c=%d", cols)
+	}
+	if rows > 0 {
+		fmt.Fprintf(&buf, ",r=%d", rows)
+	}
+	if z != 0 {
+		fmt.Fprintf(&buf, ",z=%d", z)
+	}
+	buf.WriteString(",q=2")
+	buf.WriteString("\x1b\\")
+	return buf.Bytes()
 }
 
 func (kp *KittyPassthrough) forwardPlace(
@@ -1648,6 +1696,9 @@ func (kp *KittyPassthrough) forwardFileFrameIsNew(
 ) bool {
 	if cmd.ImageID == 0 {
 		return true // a fresh image every time; there is nothing to compare with
+	}
+	if filePath == "" {
+		return true // shared memory with no path to read; see kittyMediumPath
 	}
 	if kp.frameHashMisses == nil {
 		kp.frameHashMisses = make(map[string]map[uint32]int)
