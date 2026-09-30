@@ -195,3 +195,40 @@ func TestHerdrAgentPromptSubmitsAPaste(t *testing.T) {
 	}
 	waitScreen(t, sess, w, "^[[200~fix it", "then test^[[201~")
 }
+
+// TestHerdrLeavesScratchTerminalsOut: a scratch terminal is not a herdr
+// pane. It is not in the snapshot, its workspace is not a tab, its id finds
+// nothing, and its events are not sent. It still reports its own agent.
+func TestHerdrLeavesScratchTerminalsOut(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "sc")
+	tr := d.newHerdrTranslator()
+	scratch, err := sess.AddDaemonWindowWith(NewWindowOptions{Popup: true, Scratch: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap := herdrOK(t, "snapshot", herdrDial(t, sp, "session.snapshot", nil))["snapshot"].(map[string]any)
+	if n := len(snap["panes"].([]any)); n != 1 {
+		t.Errorf("the snapshot lists %d panes, want 1: the scratch terminal is not a pane", n)
+	}
+	for _, tb := range snap["tabs"].([]any) {
+		if tb.(map[string]any)["number"].(float64) >= herdrScratchWorkspaceBase {
+			t.Errorf("a scratch workspace is a tab: %v", tb)
+		}
+	}
+	if ws := snap["workspaces"].([]any)[0].(map[string]any); ws["pane_count"] != float64(1) {
+		t.Errorf("pane_count %v, want 1", ws["pane_count"])
+	}
+	if code := herdrCode(herdrDial(t, sp, "pane.get", map[string]any{"pane_id": herdrPaneID(sess.ID, scratch.ID)})); code != "pane_not_found" {
+		t.Errorf("pane.get of the scratch terminal answered %q", code)
+	}
+	for _, typ := range []string{EventWindowCreated, EventWindowFocused, EventAgentState} {
+		if got := tr.translate(streamEvent{Type: typ, Session: "sc", Window: scratch.ID}); len(got) != 0 {
+			t.Errorf("%s of the scratch terminal gave %+v", typ, got)
+		}
+	}
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, scratch.ID })
+	if _, e := herdrCallAs(t, sp, "pane.report_agent", map[string]any{"pane_id": herdrPaneID(sess.ID, scratch.ID), "source": "crush", "agent": "crush", "state": "working", "seq": 1}); e != "" {
+		t.Errorf("the scratch terminal's own report: %s", e)
+	}
+}

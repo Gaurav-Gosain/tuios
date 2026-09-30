@@ -515,10 +515,11 @@ func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string
 	if !fromPane || window == "" {
 		return "", "forbidden", "the caller runs in no pane of this tuios"
 	}
-	if paneID != window {
-		if _, win, ierr := d.herdrFindPane(paneID); ierr != nil || win.ID != window {
-			return "", "forbidden", "a pane may report only for itself"
-		}
+	// The caller's own window by herdr's id: the part after ":p" names it.
+	// A scratch terminal, which herdr's lists leave out, reports this way
+	// too.
+	if _, part, ok := strings.Cut(paneID, ":p"); paneID != window && (!ok || part != herdrHex(window)) {
+		return "", "forbidden", "a pane may report only for itself"
 	}
 	return window, "", ""
 }
