@@ -1070,9 +1070,13 @@ func init() {
 				sessionParam,
 				windowParam,
 				{Name: "text", Type: "string", Required: true, Description: "Text written verbatim to the PTY."},
+				{Name: "paste", Type: "bool", Description: "Send the text as a paste. Control characters other than tab, line feed and carriage return are removed. The text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on.", Default: "false"},
 			},
-			examples: []string{`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`},
-			handler:  (*Daemon).verbSendText,
+			examples: []string{
+				`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`,
+				`{"id":1,"verb":"send-text","params":{"session":"work","window":"build","text":"line one\nline two","paste":true}}`,
+			},
+			handler: (*Daemon).verbSendText,
 		},
 		"run": {
 			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there.",

@@ -4,6 +4,7 @@ import (
 	"hash/fnv"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Version is the tmux version the shim reports for -V. Tools gate features on
@@ -83,4 +84,66 @@ func SocketFromTmux(tmux string) string {
 		}
 	}
 	return tmux
+}
+
+// ExplicitSocket returns the socket path a tmux argv names with -S, read
+// loosely: flags the shim does not know do not stop the scan, so a call such
+// as `tmux -S <socket> -X ...` still names its socket. It returns "" when no
+// -S comes before the command. runAsTmux uses it to keep a call that names
+// the shim's socket away from a real tmux, which would otherwise start a
+// server on that path.
+func ExplicitSocket(args []string) string {
+	sock := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" || len(a) < 2 || a[0] != '-' {
+			break
+		}
+		for j := 1; j < len(a); j++ {
+			c := a[j]
+			if !strings.ContainsRune("SLfcT", rune(c)) {
+				continue
+			}
+			val := a[j+1:]
+			if val == "" && i+1 < len(args) {
+				i++
+				val = args[i]
+			}
+			if c == 'S' {
+				sock = val
+			}
+			break
+		}
+	}
+	return sock
+}
+
+// sessionNumber is the number in a session's tmux id ($N) when the shim
+// serves every session of the daemon: 20 bits of FNV-1a over the tuios
+// session id, so it survives a rename. It is 0 in no case, since $0 is the
+// id of the one session the shim serves in a pane.
+func sessionNumber(sessionID string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(sessionID))
+	n := h.Sum32() & 0xfffff
+	if n == 0 {
+		n = 1
+	}
+	return n
+}
+
+// windowStride separates the sessions in a window number when the shim
+// serves every session: window N is workspace N%windowStride of the session
+// whose number is N/windowStride. tmux window ids are unique on the server,
+// and workspace numbers repeat in every session.
+const windowStride = 1000
+
+// InShimDir reports whether path is the shim's socket or any path inside the
+// shim's runtime directory dir.
+func InShimDir(path, dir string) bool {
+	if path == "" || dir == "" {
+		return false
+	}
+	p, d := filepath.Clean(path), filepath.Clean(dir)
+	return p == filepath.Clean(SocketPath(dir)) || strings.HasPrefix(p, d+string(filepath.Separator))
 }

@@ -21,8 +21,13 @@ type Shim struct {
 	// Caller reaches the daemon.
 	Caller Caller
 	// Session is the caller's tuios session, the one session the shim
-	// serves. Required.
+	// serves. Required unless AllSessions is set.
 	Session string
+	// AllSessions makes the shim serve every session of the daemon, each a
+	// tmux session. It is for a caller outside any pane, such as a tool that
+	// drives the person's tmux from outside it. A caller in a pane is held
+	// to its own session.
+	AllSessions bool
 	// Window is the caller's tuios window id (TUIOS_PANE_ID), "" outside a
 	// pane.
 	Window string
@@ -41,13 +46,30 @@ type Shim struct {
 	// HolderEnv is extra KEY=VALUE for the processes of new panes, beyond
 	// what the holder sets itself. The launcher passes the log settings here.
 	HolderEnv []string
+	// Shell is the panes' shell ($SHELL). Its base name is
+	// pane_current_command when nothing else runs in a pane.
+	Shell string
+	// Stdin is what load-buffer - reads, and where control mode reads its
+	// commands.
+	Stdin io.Reader
 	// Stdout and Stderr receive what tmux would print.
 	Stdout, Stderr io.Writer
+	// Subscribe opens a stream of daemon events (the subscribe verb) on a
+	// connection of its own. Control mode needs it. Nil leaves control mode
+	// to notice changes by reading the session again every few seconds.
+	Subscribe func(params map[string]any) (EventStream, error)
 	// Log records the calls (see Logger). Nil records nothing.
 	Log *Logger
 
 	// respawn delivers a respawn-pane request. Nil means RequestRespawn.
 	respawn func(dir, windowID string, req RespawnRequest) error
+	// memBuffers are the paste buffers of a shim with no runtime directory.
+	memBuffers []buffer
+	// control is set while the shim answers a control-mode client.
+	control bool
+	// created is the session new-session made last, for control mode to
+	// attach to.
+	created string
 }
 
 // handler runs one command. It returns the outcome to log, detail for the
@@ -56,21 +78,29 @@ type handler func(s *Shim, name string, args []string) (string, []string, error)
 
 // commands maps every command the shim answers to its handler.
 var commands = map[string]handler{
-	"split-window":    (*Shim).splitWindow,
-	"new-window":      (*Shim).newWindow,
-	"send-keys":       (*Shim).sendKeys,
-	"capture-pane":    (*Shim).capturePane,
-	"display-message": (*Shim).displayMessage,
-	"list-panes":      (*Shim).listPanes,
-	"list-windows":    (*Shim).listWindows,
-	"list-sessions":   (*Shim).listSessions,
-	"has-session":     (*Shim).hasSession,
-	"kill-pane":       (*Shim).killPane,
-	"kill-window":     (*Shim).killWindow,
-	"select-pane":     (*Shim).selectPane,
-	"select-window":   (*Shim).selectWindow,
-	"rename-window":   (*Shim).renameWindow,
-	"respawn-pane":    (*Shim).respawnPane,
+	"split-window":        (*Shim).splitWindow,
+	"new-window":          (*Shim).newWindow,
+	"send-keys":           (*Shim).sendKeys,
+	"capture-pane":        (*Shim).capturePane,
+	"display-message":     (*Shim).displayMessage,
+	"list-panes":          (*Shim).listPanes,
+	"list-windows":        (*Shim).listWindows,
+	"list-sessions":       (*Shim).listSessions,
+	"has-session":         (*Shim).hasSession,
+	"kill-pane":           (*Shim).killPane,
+	"kill-window":         (*Shim).killWindow,
+	"select-pane":         (*Shim).selectPane,
+	"select-window":       (*Shim).selectWindow,
+	"rename-window":       (*Shim).renameWindow,
+	"respawn-pane":        (*Shim).respawnPane,
+	"load-buffer":         (*Shim).loadBuffer,
+	"set-buffer":          (*Shim).setBuffer,
+	"paste-buffer":        (*Shim).pasteBuffer,
+	"delete-buffer":       (*Shim).deleteBuffer,
+	"list-clients":        (*Shim).listClients,
+	"show-options":        (*Shim).showOptions,
+	"show-window-options": (*Shim).showOptions,
+	"new-session":         (*Shim).newSession,
 }
 
 // specs are the flags each command accepts. A tmux flag missing here is
@@ -78,27 +108,35 @@ var commands = map[string]handler{
 // placement flags of split-window (-b -f -h -v -l -p -Z) are accepted and
 // leave placement to tuios's layout.
 var specs = map[string]spec{
-	"split-window":    {bools: "bdfhvPZ", values: "celpFt"},
-	"new-window":      {bools: "dP", values: "ceFnt"},
-	"send-keys":       {bools: "HlR", values: "Nt"},
-	"capture-pane":    {bools: "eJNpq", values: "ESt"},
-	"display-message": {bools: "Nlpv", values: "cdtF"},
-	"list-panes":      {bools: "as", values: "Ft"},
-	"list-windows":    {bools: "a", values: "Ft"},
-	"list-sessions":   {values: "F"},
-	"has-session":     {values: "t"},
-	"kill-pane":       {values: "t"},
-	"kill-window":     {values: "t"},
-	"select-pane":     {bools: "DLRUZ", values: "tTP"},
-	"select-window":   {values: "t"},
-	"rename-window":   {values: "t"},
-	"respawn-pane":    {bools: "k", values: "cet"},
+	"split-window":        {bools: "bdfhvPZ", values: "celpFt"},
+	"new-window":          {bools: "dP", values: "ceFnt"},
+	"send-keys":           {bools: "HlR", values: "Nt"},
+	"capture-pane":        {bools: "eJNpq", values: "ESt"},
+	"display-message":     {bools: "Nlpv", values: "cdtF"},
+	"list-panes":          {bools: "as", values: "Ft"},
+	"list-windows":        {bools: "a", values: "Ft"},
+	"list-sessions":       {values: "F"},
+	"has-session":         {values: "t"},
+	"kill-pane":           {values: "t"},
+	"kill-window":         {values: "t"},
+	"select-pane":         {bools: "DLRUZ", values: "tTP"},
+	"select-window":       {values: "t"},
+	"rename-window":       {values: "t"},
+	"respawn-pane":        {bools: "k", values: "cet"},
+	"load-buffer":         {bools: "w", values: "bt"},
+	"set-buffer":          {bools: "aw", values: "btn"},
+	"paste-buffer":        {bools: "dpr", values: "bst"},
+	"delete-buffer":       {values: "b"},
+	"list-clients":        {values: "Ft"},
+	"show-options":        {bools: "AgHpqsvw", values: "t"},
+	"show-window-options": {bools: "gv", values: "t"},
+	"new-session":         {bools: "AdDEPX", values: "cefFnstxy"},
 }
 
 // textCommands carry text as their positional arguments: keys to type or a
 // command line to run. The log records how many there were, not what they
 // said, since they can hold secrets.
-var textCommands = []string{"send-keys", "split-window", "new-window", "respawn-pane"}
+var textCommands = []string{"send-keys", "split-window", "new-window", "respawn-pane", "set-buffer", "new-session"}
 
 // redact returns argv (starting "tmux") as the log records it. Only what the
 // shim can name is kept: the global flags, the name of a known tmux command,
@@ -240,6 +278,8 @@ var aliases = map[string]string{
 	"swapp":     "swap-pane",
 	"lastp":     "last-pane",
 	"pasteb":    "paste-buffer",
+	"loadb":     "load-buffer",
+	"deleteb":   "delete-buffer",
 	"setb":      "set-buffer",
 	"showb":     "show-buffer",
 	"run":       "run-shell",
@@ -263,7 +303,7 @@ var aliases = map[string]string{
 // refusedCommands end or replace tuios sessions, which the shim never does:
 // the caller's session is not the shim's to end, and another session is out
 // of its reach.
-var refusedCommands = []string{"kill-session", "kill-server", "new-session", "attach-session", "switch-client", "detach-client"}
+var refusedCommands = []string{"kill-session", "kill-server", "attach-session", "switch-client", "detach-client"}
 
 // Run answers one tmux invocation. args is argv without the program name. It
 // returns the exit status tmux would.
@@ -286,8 +326,11 @@ func (s *Shim) Run(args []string) int {
 		s.Log.Record(full, OutcomeOK, detail)
 		return 0
 	}
-	if s.Session == "" {
+	if s.Session == "" && !s.AllSessions {
 		return s.fail(full, OutcomeError, detail, errors.New("no tuios session: the tmux shim runs in a tuios pane (TUIOS_SESSION is unset)"))
+	}
+	if g.Control > 0 {
+		return s.runControl(full, g, words, detail)
 	}
 	cmds := SplitCommands(words)
 	if len(cmds) == 0 {
@@ -370,7 +413,7 @@ func logText(err error) string {
 func (s *Shim) println(line string) { fmt.Fprintln(s.Stdout, line) }
 
 // callerPane is the pane an empty target means: TMUX_PANE, then the caller's
-// tuios window, then the focused pane.
+// tuios window, then the focused pane of the default session.
 func (s *Shim) callerPane(v *view) *pane {
 	if strings.HasPrefix(s.TmuxPane, "%") {
 		if p, err := v.paneByID(s.TmuxPane[1:]); err == nil {
@@ -380,10 +423,13 @@ func (s *Shim) callerPane(v *view) *pane {
 	if p := v.byWindowID(s.Window); p != nil {
 		return p
 	}
-	if p := v.byWindowID(v.focused); p != nil {
+	if v.def == nil {
+		return nil
+	}
+	if p := v.def.byWindowID(v.def.focused); p != nil {
 		return p
 	}
-	return v.active(v.current)
+	return v.def.active(v.def.current)
 }
 
 // expand expands a format and turns missing variables into log detail.
@@ -426,14 +472,14 @@ func (s *Shim) paneCommand(cmd, env []string) []string {
 	return append(argv, cmd...)
 }
 
-// newPane opens a tuios window for split-window and new-window and returns
-// its id.
-func (s *Shim) newPane(ws int, focus bool, cwd string, cmd, env []string) (string, error) {
+// newPane opens a tuios window for split-window and new-window in workspace
+// ws of session sess and returns its id.
+func (s *Shim) newPane(sess string, ws int, focus bool, cwd string, cmd, env []string) (string, error) {
 	if cwd == "" {
 		cwd = s.Cwd
 	}
 	params := map[string]any{
-		"session":   s.Session,
+		"session":   sess,
 		"workspace": ws,
 		"focus":     focus,
 	}
@@ -456,8 +502,10 @@ func (s *Shim) newPane(ws int, focus bool, cwd string, cmd, env []string) (strin
 	return res.ID, nil
 }
 
-// printNew prints the -P line for a pane just made.
-func (s *Shim) printNew(id, format string) []string {
+// printNew prints the -P line for a pane just made. cwd is the directory it
+// was started in: a new pane's shell has not said where it is yet, so
+// pane_current_path is cwd until it does.
+func (s *Shim) printNew(id, format, cwd string) []string {
 	v, err := s.loadView()
 	if err != nil {
 		s.println(PaneID(id))
@@ -468,7 +516,11 @@ func (s *Shim) printNew(id, format string) []string {
 		s.println(PaneID(id))
 		return []string{"-P: the new pane was not in list-windows yet"}
 	}
-	out, detail := expand(format, s.paneVars(v, p))
+	vars := s.paneVars(p)
+	if vars["pane_current_path"] == "" {
+		vars["pane_current_path"] = cmpOr(cwd, s.Cwd)
+	}
+	out, detail := expand(format, vars)
 	s.println(out)
 	return detail
 }
@@ -491,7 +543,7 @@ func (s *Shim) splitWindow(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, err
 	}
 	cwd, _ := p.Value('c')
-	id, err := s.newPane(target.Workspace, !p.Has('d'), cwd, p.Args, p.Values('e'))
+	id, err := s.newPane(target.sess.name, target.Workspace, !p.Has('d'), cwd, p.Args, p.Values('e'))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
@@ -502,7 +554,7 @@ func (s *Shim) splitWindow(name string, args []string) (string, []string, error)
 	if !ok {
 		format = "#{session_name}:#{window_index}.#{pane_index}"
 	}
-	detail := s.printNew(id, format)
+	detail := s.printNew(id, format, cwd)
 	return outcomeFor(detail), detail, nil
 }
 
@@ -516,27 +568,37 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	ws := 0
 	tv, _ := p.Value('t')
-	sess, win, _, hasSess, _ := splitTarget(tv)
-	if hasSess && sess != "" && !v.isSession(sess) {
-		return OutcomeError, nil, fmt.Errorf("can't find session: %s", sess)
-	}
-	if !hasSess && v.isSession(win) {
+	sessRef, win, _, hasSess, _ := splitTarget(tv)
+	var sv *sessionView
+	switch {
+	case !hasSess && win != "" && v.isSession(win):
+		sv, _ = v.sessionOf(win)
 		win = ""
+	case !hasSess && win != "":
+		if wsv, _, ok := v.windowByID(win); ok {
+			sv = wsv
+		}
 	}
+	if sv == nil {
+		dflt := s.callerPane(v)
+		if sv, err = v.targetSession(sessRef, hasSess, dflt); err != nil {
+			return OutcomeError, nil, err
+		}
+	}
+	ws := 0
 	if win != "" {
-		n, err := strconv.Atoi(strings.TrimPrefix(win, "@"))
-		if err != nil || !slices.Contains(v.workspace, n) {
+		n, err := sv.workspaceOf(win)
+		if err != nil {
 			return OutcomeError, nil, fmt.Errorf("create window failed: tuios has no workspace %s", win)
 		}
-		if v.wsCount[n] > 0 {
+		if sv.wsCount[n] > 0 {
 			return OutcomeError, nil, fmt.Errorf("create window failed: index %d in use", n)
 		}
 		ws = n
 	} else {
-		for _, n := range v.workspace {
-			if v.wsCount[n] == 0 {
+		for _, n := range sv.workspace {
+			if sv.wsCount[n] == 0 {
 				ws = n
 				break
 			}
@@ -546,12 +608,12 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 		}
 	}
 	cwd, _ := p.Value('c')
-	id, err := s.newPane(ws, !p.Has('d'), cwd, p.Args, p.Values('e'))
+	id, err := s.newPane(sv.name, ws, !p.Has('d'), cwd, p.Args, p.Values('e'))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
 	if n, ok := p.Value('n'); ok {
-		if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": s.Session, "workspace": ws, "name": n}); err != nil {
+		if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": sv.name, "workspace": ws, "name": n}); err != nil {
 			return OutcomeError, nil, fmt.Errorf("name window failed: %w", err)
 		}
 	}
@@ -562,7 +624,7 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 	if !ok {
 		format = "#{session_name}:#{window_index}"
 	}
-	detail := s.printNew(id, format)
+	detail := s.printNew(id, format, cwd)
 	return outcomeFor(detail), detail, nil
 }
 
@@ -599,7 +661,7 @@ func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 	if text == "" {
 		return outcomeFor(detail), detail, nil
 	}
-	if _, err := s.Caller.Call("send-text", map[string]any{"session": s.Session, "window": target.ID, "text": text}); err != nil {
+	if _, err := s.Caller.Call("send-text", map[string]any{"session": target.sess.name, "window": target.ID, "text": text}); err != nil {
 		return OutcomeError, detail, err
 	}
 	return outcomeFor(detail), detail, nil
@@ -614,8 +676,8 @@ func splitLines(content string) []string {
 	return strings.Split(content, "\n")
 }
 
-func (s *Shim) capture(id, source string, styled bool) ([]string, error) {
-	raw, err := s.Caller.Call("capture-pane", map[string]any{"session": s.Session, "window": id, "source": source, "styled": styled})
+func (s *Shim) capture(p *pane, source string, styled bool) ([]string, error) {
+	raw, err := s.Caller.Call("capture-pane", map[string]any{"session": p.sess.name, "window": p.ID, "source": source, "styled": styled})
 	if err != nil {
 		return nil, err
 	}
@@ -642,14 +704,14 @@ func captureLine(val string, dash int) (int, error) {
 }
 
 // capturePane prints a pane's content. Only -p is supported: without it tmux
-// fills a paste buffer, and the shim keeps none.
+// fills a paste buffer, which the shim does not do.
 func (s *Shim) capturePane(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
 		return OutcomeUnsupported, nil, err
 	}
 	if !p.Has('p') {
-		return OutcomeUnsupported, nil, errors.New("capture-pane: only -p (print) is supported; the tuios tmux shim keeps no paste buffers")
+		return OutcomeUnsupported, nil, errors.New("capture-pane: only -p (print) is supported")
 	}
 	v, err := s.loadView()
 	if err != nil {
@@ -661,7 +723,7 @@ func (s *Shim) capturePane(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, err
 	}
 	styled := p.Has('e')
-	visible, err := s.capture(target.ID, "visible", styled)
+	visible, err := s.capture(target, "visible", styled)
 	if err != nil {
 		return OutcomeError, nil, err
 	}
@@ -677,7 +739,7 @@ func (s *Shim) capturePane(name string, args []string) (string, []string, error)
 			}
 		}
 		if start < 0 {
-			recent, err := s.capture(target.ID, "recent", styled)
+			recent, err := s.capture(target, "recent", styled)
 			if err != nil {
 				return OutcomeError, nil, err
 			}
@@ -725,13 +787,22 @@ func (s *Shim) displayMessage(name string, args []string) (string, []string, err
 		return OutcomeError, nil, err
 	}
 	tv, _ := p.Value('t')
-	target, err := v.resolvePane(tv, s.callerPane(v))
-	if err != nil {
-		return OutcomeError, nil, err
+	var vars map[string]string
+	dflt := s.callerPane(v)
+	if tv == "" && dflt == nil {
+		// No pane to describe: a server with no session. The server's own
+		// variables (version, socket_path) still expand, as in tmux.
+		vars = s.sessionVars(nil)
+	} else {
+		target, err := v.resolvePane(tv, dflt)
+		if err != nil {
+			return OutcomeError, nil, err
+		}
+		vars = s.paneVars(target)
 	}
 	out, detail := format, []string(nil)
 	if !p.Has('l') {
-		out, detail = expand(format, s.paneVars(v, target))
+		out, detail = expand(format, vars)
 	}
 	if !p.Has('p') {
 		return OutcomeIgnored, detail, nil
@@ -740,8 +811,8 @@ func (s *Shim) displayMessage(name string, args []string) (string, []string, err
 	return outcomeFor(detail), detail, nil
 }
 
-// listPanes prints the panes of the target window, or with -s or -a of the
-// whole session.
+// listPanes prints the panes of the target window, with -s of the target
+// session, or with -a of every session.
 func (s *Shim) listPanes(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -751,37 +822,48 @@ func (s *Shim) listPanes(name string, args []string) (string, []string, error) {
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	all := p.Has('a') || p.Has('s')
 	format, ok := p.Value('F')
 	if !ok {
 		format = "#{pane_index}: [#{pane_width}x#{pane_height}] #{pane_id}#{?pane_active, (active),}"
-		if all {
+		if p.Has('a') || p.Has('s') {
 			format = "#{session_name}:#{window_index}." + format
 		}
 	}
 	var list []*pane
-	if all {
-		for _, ws := range v.windowsInUse() {
-			list = append(list, v.panesOn(ws)...)
+	tv, _ := p.Value('t')
+	switch {
+	case p.Has('a'):
+		for _, sv := range v.sessions {
+			for _, ws := range sv.windowsInUse() {
+				list = append(list, sv.panesOn(ws)...)
+			}
 		}
-	} else {
-		tv, _ := p.Value('t')
-		ws, err := v.resolveWindow(tv, s.callerPane(v))
+	case p.Has('s'):
+		sv, _, err := v.resolveWindow(tv, s.callerPane(v))
 		if err != nil {
 			return OutcomeError, nil, err
 		}
-		list = v.panesOn(ws)
+		for _, ws := range sv.windowsInUse() {
+			list = append(list, sv.panesOn(ws)...)
+		}
+	default:
+		sv, ws, err := v.resolveWindow(tv, s.callerPane(v))
+		if err != nil {
+			return OutcomeError, nil, err
+		}
+		list = sv.panesOn(ws)
 	}
 	var detail []string
 	for _, pn := range list {
-		out, d := expand(format, s.paneVars(v, pn))
+		out, d := expand(format, s.paneVars(pn))
 		detail = mergeDetail(detail, d)
 		s.println(out)
 	}
 	return outcomeFor(detail), detail, nil
 }
 
-// listWindows prints the workspaces that hold panes.
+// listWindows prints the workspaces that hold panes: of the target session,
+// or with -a of every session.
 func (s *Shim) listWindows(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -791,8 +873,23 @@ func (s *Shim) listWindows(name string, args []string) (string, []string, error)
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	if tv, ok := p.Value('t'); ok && tv != "" && !v.isSession(strings.TrimSuffix(tv, ":")) {
-		return OutcomeError, nil, fmt.Errorf("can't find session: %s", tv)
+	sessions := v.sessions
+	if !p.Has('a') {
+		sv := v.def
+		if c := s.callerPane(v); c != nil {
+			sv = c.sess
+		}
+		if tv, ok := p.Value('t'); ok && tv != "" {
+			named, found := v.sessionOf(strings.TrimSuffix(tv, ":"))
+			if !found {
+				return OutcomeError, nil, fmt.Errorf("can't find session: %s", tv)
+			}
+			sv = named
+		}
+		if sv == nil {
+			return OutcomeError, nil, errors.New("no current session")
+		}
+		sessions = []*sessionView{sv}
 	}
 	format, ok := p.Value('F')
 	if !ok {
@@ -802,20 +899,22 @@ func (s *Shim) listWindows(name string, args []string) (string, []string, error)
 		}
 	}
 	var detail []string
-	for _, ws := range v.windowsInUse() {
-		vars := s.sessionVars(v)
-		s.windowVars(v, ws, vars)
-		if a := v.active(ws); a != nil {
-			vars = s.paneVars(v, a)
+	for _, sv := range sessions {
+		for _, ws := range sv.windowsInUse() {
+			vars := s.sessionVars(sv)
+			s.windowVars(sv, ws, vars)
+			if a := sv.active(ws); a != nil {
+				vars = s.paneVars(a)
+			}
+			out, d := expand(format, vars)
+			detail = mergeDetail(detail, d)
+			s.println(out)
 		}
-		out, d := expand(format, vars)
-		detail = mergeDetail(detail, d)
-		s.println(out)
 	}
 	return outcomeFor(detail), detail, nil
 }
 
-// listSessions prints the one session the shim serves.
+// listSessions prints the sessions the shim serves.
 func (s *Shim) listSessions(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -827,14 +926,18 @@ func (s *Shim) listSessions(name string, args []string) (string, []string, error
 	}
 	format, ok := p.Value('F')
 	if !ok {
-		format = "#{session_name}: #{session_windows} windows (attached)"
+		format = "#{session_name}: #{session_windows} windows#{?session_attached, (attached),}"
 	}
-	out, detail := expand(format, s.sessionVars(v))
-	s.println(out)
+	var detail []string
+	for _, sv := range v.sessions {
+		out, d := expand(format, s.sessionVars(sv))
+		detail = mergeDetail(detail, d)
+		s.println(out)
+	}
 	return outcomeFor(detail), detail, nil
 }
 
-// hasSession succeeds for the caller's session and fails for any other.
+// hasSession succeeds for a session the shim serves and fails for any other.
 func (s *Shim) hasSession(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -845,7 +948,17 @@ func (s *Shim) hasSession(name string, args []string) (string, []string, error) 
 	if before, _, ok := strings.Cut(tv, ":"); ok {
 		sess = before
 	}
-	if sess == "" || strings.TrimPrefix(sess, "=") == s.Session || sess == "$0" {
+	if !s.AllSessions {
+		if sess == "" || strings.TrimPrefix(sess, "=") == s.Session || sess == "$0" {
+			return OutcomeOK, nil, nil
+		}
+		return OutcomeOK, nil, fmt.Errorf("can't find session: %s", sess)
+	}
+	v, err := s.loadView()
+	if err != nil {
+		return OutcomeError, nil, err
+	}
+	if sess == "" && v.def != nil || v.isSession(sess) {
 		return OutcomeOK, nil, nil
 	}
 	return OutcomeOK, nil, fmt.Errorf("can't find session: %s", sess)
@@ -866,7 +979,7 @@ func (s *Shim) killPane(name string, args []string) (string, []string, error) {
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	if _, err := s.Caller.Call("close-window", map[string]any{"session": s.Session, "window": target.ID}); err != nil {
+	if _, err := s.Caller.Call("close-window", map[string]any{"session": target.sess.name, "window": target.ID}); err != nil {
 		return OutcomeError, nil, err
 	}
 	return OutcomeOK, nil, nil
@@ -883,12 +996,12 @@ func (s *Shim) killWindow(name string, args []string) (string, []string, error) 
 		return OutcomeError, nil, err
 	}
 	tv, _ := p.Value('t')
-	ws, err := v.resolveWindow(tv, s.callerPane(v))
+	sv, ws, err := v.resolveWindow(tv, s.callerPane(v))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	for _, pn := range v.panesOn(ws) {
-		if _, err := s.Caller.Call("close-window", map[string]any{"session": s.Session, "window": pn.ID}); err != nil {
+	for _, pn := range sv.panesOn(ws) {
+		if _, err := s.Caller.Call("close-window", map[string]any{"session": sv.name, "window": pn.ID}); err != nil {
 			return OutcomeError, nil, err
 		}
 	}
@@ -910,10 +1023,11 @@ func (s *Shim) selectPane(name string, args []string) (string, []string, error) 
 	if err != nil {
 		return OutcomeError, nil, err
 	}
+	sess := target.sess.name
 	// -T and -P change the pane and return, as they do in tmux: naming a
 	// teammate's pane must not move the person's focus.
 	if title, ok := p.Value('T'); ok {
-		if _, err := s.Caller.Call("set-window", map[string]any{"session": s.Session, "window": target.ID, "name": title}); err != nil {
+		if _, err := s.Caller.Call("set-window", map[string]any{"session": sess, "window": target.ID, "name": title}); err != nil {
 			return OutcomeError, nil, err
 		}
 		return OutcomeOK, nil, nil
@@ -924,13 +1038,13 @@ func (s *Shim) selectPane(name string, args []string) (string, []string, error) 
 	dirs := map[byte]string{'L': "left", 'R': "right", 'U': "up", 'D': "down"}
 	for _, c := range []byte("LRUD") {
 		if p.Has(c) {
-			if _, err := s.Caller.Call("focus-window", map[string]any{"session": s.Session, "direction": dirs[c]}); err != nil {
+			if _, err := s.Caller.Call("focus-window", map[string]any{"session": sess, "direction": dirs[c]}); err != nil {
 				return OutcomeError, nil, err
 			}
 			return OutcomeOK, nil, nil
 		}
 	}
-	if _, err := s.Caller.Call("focus-window", map[string]any{"session": s.Session, "window": target.ID}); err != nil {
+	if _, err := s.Caller.Call("focus-window", map[string]any{"session": sess, "window": target.ID}); err != nil {
 		return OutcomeError, nil, err
 	}
 	return OutcomeOK, nil, nil
@@ -947,11 +1061,11 @@ func (s *Shim) selectWindow(name string, args []string) (string, []string, error
 		return OutcomeError, nil, err
 	}
 	tv, _ := p.Value('t')
-	ws, err := v.resolveWindow(tv, s.callerPane(v))
+	sv, ws, err := v.resolveWindow(tv, s.callerPane(v))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	if _, err := s.Caller.Call("select-workspace", map[string]any{"session": s.Session, "workspace": ws}); err != nil {
+	if _, err := s.Caller.Call("select-workspace", map[string]any{"session": sv.name, "workspace": ws}); err != nil {
 		return OutcomeError, nil, err
 	}
 	return OutcomeOK, nil, nil
@@ -971,11 +1085,11 @@ func (s *Shim) renameWindow(name string, args []string) (string, []string, error
 		return OutcomeError, nil, err
 	}
 	tv, _ := p.Value('t')
-	ws, err := v.resolveWindow(tv, s.callerPane(v))
+	sv, ws, err := v.resolveWindow(tv, s.callerPane(v))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": s.Session, "workspace": ws, "name": p.Args[0]}); err != nil {
+	if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": sv.name, "workspace": ws, "name": p.Args[0]}); err != nil {
 		return OutcomeError, nil, err
 	}
 	return OutcomeOK, nil, nil

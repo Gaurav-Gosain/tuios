@@ -17,6 +17,14 @@
 //     derived from the tuios window id (PaneNumber), so the same pane has the
 //     same id in every call without the shim keeping any state.
 //
+// A caller outside every pane with no TUIOS_SESSION (a tool that drives the
+// person's tmux from outside tuios) gets the whole daemon instead: every
+// session is a tmux session, $N and @N carry a number derived from the tuios
+// session id, and new-session starts a tuios session. See AllSessions.
+//
+// The shim also answers tmux's control mode (-C, -CC) from the daemon's event
+// stream; control.go lists what it sends and what it does not.
+//
 // The shim grants no authority. It runs as the caller, dials the daemon socket
 // the caller could dial with the tuios CLI, and calls verbs that CLI already
 // exposes. What it adds is confinement: every target resolves inside the

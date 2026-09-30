@@ -354,6 +354,12 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.Host != "" {
 		info["host"] = w.Host
 	}
+	// What the pane runs in the foreground, omitted at a shell prompt. The
+	// agent detector reads it; the tmux shim reports it as
+	// pane_current_command.
+	if w.ForegroundCmd != "" {
+		info["foreground_cmd"] = w.ForegroundCmd
+	}
 	// Set only while the link to that machine is lost and the pane is being
 	// reattached: reconnecting, and when the far machine stops keeping it.
 	if w.HostLink != "" {

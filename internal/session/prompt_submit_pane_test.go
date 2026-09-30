@@ -90,3 +90,32 @@ func TestAskAgentPastesAndSubmitsWithCR(t *testing.T) {
 		t.Errorf("the pane read %q, want %q", got, want)
 	}
 }
+
+// TestSendTextPasteBrackets sends text with paste: the control characters go,
+// and the text is wrapped in the bracketed paste delimiters because the
+// program in the pane turned bracketed paste on. The ESC in the text is what
+// would end the paste early; without the sanitizing the pane reads a
+// delimiter the text carried.
+func TestSendTextPasteBrackets(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "tpaste")
+	id, _ := rawReaderPane(t, d, sess)
+	c := dialVerb(t, sp)
+
+	result(t, c.call(t, `{"id":1,"verb":"send-text","params":{"session":"tpaste","window":"`+id+`","text":"one\ntwo\u001b[201~x","paste":true}}`))
+	result(t, c.call(t, `{"id":2,"verb":"send-text","params":{"session":"tpaste","window":"`+id+`","text":"\r"}}`))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		res := result(t, c.call(t, `{"id":3,"verb":"capture-pane","params":{"session":"tpaste","window":"`+id+`"}}`))
+		if got, ok := gotBytes(t, res["content"].(string)); ok {
+			if want := "\x1b[200~one\ntwo[201~x\x1b[201~\r"; got != want {
+				t.Errorf("the pane read %q, want %q", got, want)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never reported what it read: %q", res["content"])
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}

@@ -13,6 +13,9 @@ type Global struct {
 	Name string
 	// Version is -V.
 	Version bool
+	// Control is 1 for -C (control mode) and 2 for -CC (control mode that
+	// wraps its output in a DCS sequence, as iTerm2 asks for).
+	Control int
 	// Ignored lists the global flags accepted and ignored: -2, -u, -v, -N and
 	// -f with its file.
 	Ignored []string
@@ -68,7 +71,8 @@ func ParseGlobal(args []string) (Global, []string, error) {
 				g.Ignored = append(g.Ignored, "-"+string(c))
 				j++
 			case 'C':
-				return g, nil, fmt.Errorf("control mode (-C) is not supported by the tuios tmux shim")
+				g.Control = min(g.Control+1, 2)
+				j++
 			default:
 				return g, nil, fmt.Errorf("unknown option: -%c", c)
 			}
