@@ -97,6 +97,9 @@ type Emulator struct {
 	// Thread-safe cached insert-mode flag (IRM, updated on set/reset). Read
 	// once per printed character, for the same reason as cachedAutoWrap.
 	cachedInsertMode atomic.Bool
+	// Thread-safe cached LNM flag (ANSI mode 20, updated on set/reset). Read
+	// once per line feed, for the same reason as cachedAutoWrap.
+	cachedLineFeedNewLine atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
 	// syncOpens counts the synchronized updates the guest has opened: it
@@ -242,7 +245,6 @@ func NewEmulator(w, h int) *Emulator {
 	t.cursorStyle, t.cursorSteady = defaultCursorStyle, defaultCursorSteady
 
 	// Initialize handler maps upfront to avoid nil checks during registration
-	t.ccHandlers = make(map[byte][]CcHandler)
 	t.dcsHandlers = make(map[int][]DcsHandler)
 	t.csiHandlers = make(map[int][]CsiHandler)
 	t.oscHandlers = make(map[int][]OscHandler)

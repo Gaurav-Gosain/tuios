@@ -2,7 +2,6 @@ package vt
 
 import (
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // handleControl handles a control character.
@@ -16,7 +15,9 @@ func (e *Emulator) handleControl(r byte) {
 // linefeed is the same as [index], except that it respects [ansi.LNM] mode.
 func (e *Emulator) linefeed() {
 	e.index()
-	if e.isModeSet(ansi.ModeLineFeedNewLine) {
+	// LNM is an ANSI mode, so RestoreModes, which writes DEC modes only,
+	// never touches it, and setMode keeps this cache in step.
+	if e.cachedLineFeedNewLine.Load() {
 		e.carriageReturn()
 	}
 }
