@@ -21,11 +21,23 @@ type SixelImage struct {
 	// Palette is indexed by register. Registers the image never set keep the
 	// VT340 defaults, as a terminal would.
 	Palette []color.RGBA
+	// Exact says the guest's own bytes draw exactly this image on a sixel
+	// terminal, so they may be sent as they are. It is false when the data
+	// painted past the size the raster attributes declared (a terminal would
+	// paint those pixels over whatever is beside the image's cells), when it
+	// used a register past the 256 a pane is told it has, or when it asked
+	// for an opaque background and left pixels unpainted (terminals disagree
+	// on what fills them). Such an image is always re-encoded from Pix.
+	Exact bool
 }
 
 // Sixel limits. A guest controls every one of these numbers, so each is
 // bounded before anything is allocated.
 const (
+	// sixelDecodeRegisters is how many colour registers an image may define,
+	// xterm's own limit. A pane is told 256 (SixelMaxRegisters); an image
+	// that uses more is decoded whole and re-encoded to 256.
+	sixelDecodeRegisters = 1024
 	// SixelMaxDimension bounds either side of a decoded image in pixels. It
 	// is larger than any screen, so a real picture is never cut by it.
 	SixelMaxDimension = 8192
@@ -59,7 +71,8 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 		Width:   w,
 		Height:  h,
 		Pix:     make([]uint16, w*h),
-		Palette: make([]color.RGBA, SixelMaxRegisters),
+		Palette: make([]color.RGBA, sixelDecodeRegisters),
+		Exact:   true,
 	}
 	for i := range img.Palette {
 		img.Palette[i] = sixelDefaultPalette[i%len(sixelDefaultPalette)]
@@ -83,6 +96,11 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 		return n, i > start
 	}
 	paint := func(bits byte, count int) {
+		if bits != 0 && (x+count > w || y+5 >= h && bits>>max(0, h-y) != 0) {
+			// Pixels past the declared size: dropped here, and a reason not
+			// to send the guest's bytes, which would paint them.
+			img.Exact = false
+		}
 		if bits == 0 || y >= h {
 			x += count
 			return
@@ -136,7 +154,10 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 				}
 				break
 			}
-			reg = params[0] % SixelMaxRegisters
+			reg = params[0] % sixelDecodeRegisters
+			if reg >= SixelMaxRegisters {
+				img.Exact = false
+			}
 			if np >= 5 {
 				img.Palette[reg] = sixelColor(params[1], params[2], params[3], params[4])
 			}
@@ -156,6 +177,17 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 			}
 		default:
 			i++
+		}
+	}
+	if cmd.BackgroundMode != 1 {
+		// An opaque background: unpainted pixels take register 0, whatever
+		// the terminal would have done, so a crop and the whole image look
+		// the same.
+		for i, v := range img.Pix {
+			if v == 0 {
+				img.Pix[i] = 1
+				img.Exact = false
+			}
 		}
 	}
 	return img

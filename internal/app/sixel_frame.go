@@ -252,7 +252,11 @@ func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool
 		hw, hh = e.cellW, e.cellH
 	}
 	whole := r.r0 == 0 && r.c0 == 0 && r.r1 == e.rows && r.c1 == e.cols
-	if whole && hw == e.cellW && hh == e.cellH && len(e.raw) > 0 {
+	// The guest's bytes only when they draw exactly the decoded image; see
+	// vt.SixelImage.Exact. Anything else is re-encoded, which costs 2 to 18
+	// ms for a 800x500 crop (BenchmarkEncodeSixelCrop, ...Noise) and is done
+	// off the renderer's goroutine past sixelSyncPixels.
+	if whole && hw == e.cellW && hh == e.cellH && len(e.raw) > 0 && e.img.Exact {
 		out := make([]byte, 0, len(e.raw)+4)
 		out = append(out, "\x1bP"...)
 		out = append(out, e.raw...)
