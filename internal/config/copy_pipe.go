@@ -117,5 +117,22 @@ func validateCopyPipes(cfg *UserConfig, result *ValidationResult) {
 			continue
 		}
 		seen[key] = true
+		if copyModeOwnKey(key) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: field, Key: c.Key,
+				Message: fmt.Sprintf("Copy mode uses the key %s. This entry takes the key from copy mode. Use a different key, for example p or alt+y.", c.Key),
+			})
+		}
 	}
+}
+
+// copyModeOwnKey reports whether key is one that copy mode needs to leave,
+// select or search: q, esc, v, V, / and ?, and the digits of a count. y is not
+// in the list: an entry on y replaces the plain yank on purpose.
+func copyModeOwnKey(key string) bool {
+	switch key {
+	case "q", "esc", "v", "V", "/", "?":
+		return true
+	}
+	return len(key) == 1 && key[0] >= '0' && key[0] <= '9'
 }

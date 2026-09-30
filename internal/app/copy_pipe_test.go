@@ -153,3 +153,18 @@ func TestCopyCommandLabelIsShort(t *testing.T) {
 		t.Fatalf("label = %q", got)
 	}
 }
+
+// A write past the cap is reported whole, so the writer is not told of a
+// short write, and the rest is dropped.
+func TestCappedBufferReportsTheWholeWrite(t *testing.T) {
+	b := &cappedBuffer{max: 4}
+	if n, err := b.Write([]byte("abcdef")); n != 6 || err != nil {
+		t.Fatalf("Write = %d, %v; want 6, nil", n, err)
+	}
+	if n, err := b.Write([]byte("gh")); n != 2 || err != nil {
+		t.Fatalf("second Write = %d, %v; want 2, nil", n, err)
+	}
+	if got := b.buf.String(); got != "abcd" || !b.over {
+		t.Fatalf("buffer = %q, over = %v", got, b.over)
+	}
+}

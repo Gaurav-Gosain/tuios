@@ -108,6 +108,9 @@ var settingsUIExcluded = map[string]string{
 	// through the config file and through set-config, both of which are the
 	// host's own doing.
 	"notifications.agent.command": "a shell command the host runs; not for a panel any client can open",
+	// The same for the copy command: every yank runs it on the machine of
+	// the client, which for tuios ssh and the web client is the server.
+	"appearance.selection.copy_command": "a shell command the host runs on each yank; not for a panel any client can open",
 
 	// Two filesystem paths on the machine hosting the session. A row would let
 	// whoever attached point server-side writes and server-side reads at any
