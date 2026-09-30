@@ -156,6 +156,43 @@ pane, to unpin it. A click on the view focuses the pane. The action is
 `toggle_pip`, and `[pip]` sets the size and the corner. See
 [SESSIONS.md](SESSIONS.md#picture-in-picture).
 
+## Paste an image
+
+`Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios
+saves the image to a file on the machine where the pane runs. Then it pastes
+the path of that file into the pane. The pane can run on this machine or on a
+host. Claude Code, Codex and other agents read an image from a path in the
+prompt. The action is `paste_image`, and the command palette has it too.
+
+The paste key also pastes an image. The paste key is `Ctrl+Shift+V`, `Super+V`
+or `paste_clipboard`. When the clipboard holds an image and no text, the paste
+key pastes the image. When the clipboard holds text, the paste key pastes the
+text. Some terminals send an empty paste when the clipboard holds only an
+image. tuios then pastes the image.
+
+`Ctrl+V` alone goes to the program in the pane. Claude Code reads the
+clipboard on `Ctrl+V` itself, and that only works in a pane on this machine.
+For a pane on a host, use `Ctrl+B V`.
+
+tuios reads the image with the clipboard tool of your system:
+
+| System | Tool |
+| --- | --- |
+| Linux, Wayland | `wl-paste` from wl-clipboard |
+| Linux, X11 | `xclip`. `xsel` cannot read an image. |
+| macOS | `osascript`, or `pngpaste` when it is installed |
+| Windows | PowerShell |
+
+The file is a PNG, JPEG, GIF, WebP, BMP or TIFF image of 8 MB or less. Only
+you can read it. tuios deletes it after one hour, or when the daemon stops.
+The file is in the `paste` folder next to the tuios socket.
+
+tuios does not read the clipboard in these cases:
+
+- The client runs in a browser. Save the image to a file and paste the path.
+- The client runs on another machine through `tuios ssh`.
+- The paste comes from `send-keys`.
+
 ## Command keys
 
 A `[[keybindings.command]]` entry binds a key to a command that you write.

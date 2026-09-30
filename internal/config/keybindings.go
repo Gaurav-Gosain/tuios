@@ -130,6 +130,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("n/p", "Next/prev window"),
 		kb("0-9", "Jump to window"),
 		kb("z", "Toggle zoom"),
+		kb("V", "Paste image"),
 	}}
 	panes := KeybindingGroup{Title: "Panes", Bindings: []Keybinding{
 		// The arrows walk panes, and the prefix stays armed for a moment

@@ -162,6 +162,10 @@ var verbScopes = map[string]scopeKind{
 	"pane-cwd":             scopeDeny,
 	"pane-agent":           scopeDeny,
 	"pane-calls":           scopeDeny,
+	// paste-image is the person's act and paste-pane-image the owning
+	// daemon's. Neither is for a restricted caller.
+	"paste-image":          scopeDeny,
+	"paste-pane-image":     scopeDeny,
 	"read-dir":             scopeDeny,
 	"new-window":           scopeDeny,
 	"popup":                scopeDeny,

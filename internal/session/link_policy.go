@@ -121,6 +121,13 @@ var verbCapabilities = map[string][]string{
 	"pane-agent":   {config.LinkAllowOpen},
 	"pane-calls":   {config.LinkAllowOpen},
 
+	// paste-pane-image writes a file for a hosted pane, which the peer
+	// opened, and needs the pane's token as well. paste-image writes a file
+	// and has its path typed into a pane, which is what write already
+	// reaches. Its handler also wants the person.
+	"paste-pane-image": {config.LinkAllowOpen},
+	"paste-image":      {config.LinkAllowWrite},
+
 	"refresh-dock":    {config.LinkAllowWrite},
 	"pip":             {config.LinkAllowWrite},
 	"remove-worktree": {config.LinkAllowWrite},

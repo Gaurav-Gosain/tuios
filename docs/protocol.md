@@ -2114,6 +2114,45 @@ Response:
 {"result": {"type": "ok"}}
 ```
 
+### paste-image
+
+Writes an image to a file on the machine where a window's process runs, and
+returns the path of the file there. The client calls it when the person pastes
+an image. Then the client pastes the path into the window as text. For a
+window whose process runs on a host, the daemon sends the image to that host
+with `paste-pane-image` on a new link connection. The host writes the file.
+
+Params: `session` (optional), `window` (optional, the focused window when
+empty), `content` (required), `human_nonce` (required).
+
+`content` is the image, base64. The image is PNG, JPEG, GIF, WebP, BMP or
+TIFF, and 8 MB or less when decoded. The daemon reads the type from the bytes
+and gives the file the matching extension. Other content is `invalid_params`.
+
+`human_nonce` is the attach nonce of the person's client, attached to the same
+session. A call without it, with a nonce of another session, or from a process
+inside a pane is `not_human`, and nothing is written.
+
+The file is mode 0600, in the `paste` directory next to the socket, which is
+mode 0700. The daemon deletes it after one hour, and deletes the files it wrote
+when it stops. A daemon that starts deletes the expired files in the directory.
+
+Request:
+
+```json
+{"id": 1, "verb": "paste-image", "params": {"session": "work", "window": "a1b2", "content": "iVBORw0KGgo...", "human_nonce": "..."}}
+```
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "pasted_image", "session": "work", "window": "a1b2", "host": "build", "path": "/run/user/1000/tuios/paste/tuios-paste-20261001-101500-3f2a9c0d1e2b.png", "bytes": 48213}}
+```
+
+`host` is present only when the file is on another machine. A host that
+cannot take the image is `host_unreachable`. Over a link, `paste-image` needs
+`write`, and the nonce must come from an attach on the `link-human` socket.
+
 ### run
 
 Type one command line at a pane's shell prompt, wait for the shell to report
@@ -4023,6 +4062,19 @@ Ends a hosted pane at once: its process is killed and its connection closed.
 The asking daemon sends it when a window is closed on purpose. Result: `pane`,
 `closed`. An unknown pane is `unknown_pane`. Over a link it needs `open`.
 
+### paste-pane-image
+
+```json
+{"id": 1, "verb": "paste-pane-image", "params": {"pane": "f2c1...", "token": "...", "content": "iVBORw0KGgo..."}}
+```
+
+Writes an image for a hosted pane, with the rules of `paste-image`, and
+returns `pane`, `path` and `bytes`. `token` is the `calls_token` of the
+`open-pane` reply. Only the daemon that owns the window has it, and that daemon
+sends this call only for a `paste-image` of the person. A wrong or missing
+token is `forbidden`. An unknown pane is `unknown_pane`. Over a link it needs
+`open`.
+
 ### What a linked machine may do here
 
 A connection that arrives over a link is accepted on a link socket
@@ -4039,8 +4091,8 @@ the one before. The configuration is in
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
 | `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
-| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
+| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |

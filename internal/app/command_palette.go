@@ -160,6 +160,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, m.ScreenshotScreen()
 			},
 		},
+		{
+			Name:     "Paste the clipboard image as a file path",
+			Shortcut: "prefix+V",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.RequestImagePaste()
+			},
+		},
 
 		// Window management
 		{

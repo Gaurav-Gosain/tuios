@@ -109,6 +109,12 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"pane-agent#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-calls#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"close-pane#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
+	// paste-pane-image names a hosted pane by the same literal. The paste
+	// itself is proved in paste_image_test.go.
+	"paste-pane-image#0": {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
+	// paste-image is the person's act and needs a nonce no client here was
+	// issued. The allowed path is proved in paste_image_test.go.
+	"paste-image#0": {errCode: ErrVerbNotHuman, why: "the example's nonce is a placeholder, and no client here holds one"},
 
 	// link-peer names the machine a link connection came from, so it is only
 	// taken on a link socket. The allowed path is proved in

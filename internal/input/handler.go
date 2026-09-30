@@ -130,6 +130,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		if o.Mode == app.TerminalMode {
 			o.NotePaneKey()
+			// An empty paste carries nothing. Some terminals send one when
+			// the clipboard holds only an image, so tuios looks for one.
+			// See app.PasteImageOnEmptyPaste.
+			if msg.Content == "" {
+				return o, o.PasteImageOnEmptyPaste()
+			}
 			forwardPasteToFocused(o, msg.Content)
 		}
 		return o, nil

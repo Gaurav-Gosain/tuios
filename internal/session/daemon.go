@@ -195,6 +195,9 @@ type Daemon struct {
 	// which is why the daemon deletes them on session deletion, on shutdown, and
 	// again on the next start. See stash.go.
 	stash *stashStore
+	// pastes holds the images the person pasted into panes. See
+	// paste_image.go.
+	pastes *pasteStore
 
 	// bundles holds the worktree transfers bundle-worktree has open. Its zero
 	// value is ready. See verb_bundle_worktree.go.
@@ -676,6 +679,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
+	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
 	d.manager.SetHistoryPolicy(cfg.History)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
@@ -1034,6 +1038,10 @@ func (d *Daemon) Start() error {
 	// is where they go. A restored session does not get its old stash back, for
 	// the same reason it does not get its old mail: its panes are new processes.
 	d.stash.sweep()
+	// Pasted images a killed daemon left behind go once they are past their
+	// TTL. A standalone client may share the directory, so only expired
+	// ones are taken.
+	d.pastes.sweep()
 
 	// Restore sessions saved before the previous shutdown/crash before we start
 	// accepting clients, so an attach immediately after start finds them. Runs
@@ -1261,6 +1269,7 @@ func (d *Daemon) shutdown() error {
 		// still writing, and the promise the stash makes is that its files do not
 		// outlive the daemon that owns them.
 		d.stash.sweep()
+		d.pastes.removeWritten()
 
 		// Unlinking the socket is deliberately the last thing the daemon does,
 		// after the final resurrection saves and after the pid file. It is the
