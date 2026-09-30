@@ -130,7 +130,7 @@ type GhosttyTerminal struct {
 	kittyImageIDTranslator KittyImageIDTranslator
 	// kittyPlaceholderMode decides whether placeholder cells survive the read.
 	kittyPlaceholderMode KittyPlaceholderMode
-	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	sixelPassthroughFunc SixelPassthroughFunc
 	sixelAdvertised      func() bool
 	textSizingFunc       func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
 

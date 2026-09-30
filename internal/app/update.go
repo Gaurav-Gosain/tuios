@@ -1550,6 +1550,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.Width = max(1, msg.Width)
 		m.Height = max(1, msg.Height)
 		m.MarkAllDirty()
+		// The renderer erases and redraws the host screen on a resize, which
+		// takes every sixel image with it.
+		m.SixelPassthrough.Invalidate()
 		// A resize is drawn immediately and finished later. Everything below
 		// lays the panes out at the new size; the expensive half (resizing each
 		// emulator's backing store for real, telling the PTY and the daemon,

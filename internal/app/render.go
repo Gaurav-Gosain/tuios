@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -656,6 +657,7 @@ func (m *OS) composeFrame() string {
 	// screen it is animating and needs nothing further from the compositor.
 	if m.screensaver.active && m.screensaver.frame != "" {
 		m.OverlayHits = m.OverlayHits[:0]
+		m.SixelPassthrough.SetFrame(nil, 0, 0, 0, 0)
 		return m.screensaver.frame
 	}
 	// Hints mode whose pane went away, left the screen or lost focus ends
@@ -667,7 +669,14 @@ func (m *OS) composeFrame() string {
 		// The fast path draws no rail, so no working row is on screen and the
 		// shimmer's clock must not go on asking for frames.
 		m.motion.rail = m.motion.rail[:0]
-		return m.buildFullscreenFrame(window)
+		frame := m.buildFullscreenFrame(window)
+		// Image cells this client never registered, which a pane restored
+		// from the daemon can hold, would reach the host as private-use
+		// characters. The compositor replaces them, so it draws this frame.
+		if !strings.Contains(frame, vt.SixelMarkerLead) {
+			m.SixelPassthrough.SetFrame(nil, 0, 0, 0, 0)
+			return frame
+		}
 	}
 	canvas := m.GetCanvas(true)
 	// The spotlight goes here and nowhere else: after every pane's cached layer
@@ -680,6 +689,8 @@ func (m *OS) composeFrame() string {
 	if m.celebration.active() {
 		m.celebration.draw(canvas)
 	}
+	// Last, so the images are cut by everything drawn over the panes.
+	m.scanSixelFrame(canvas)
 	// The frame goes out as the canvas wrote it. The bubbletea renderer
 	// downsamples it per cell to the profile of the terminal it is drawn on,
 	// the same one lipgloss.Writer would have detected locally and the one
@@ -760,9 +771,6 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 		return nil, false
 	}
-	if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
-		return nil, false
-	}
 
 	visible := m.GetVisibleWindows()
 	if len(visible) != 1 {
@@ -770,6 +778,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	}
 	window := visible[0]
 	if window.IsBeingManipulated {
+		return nil, false
+	}
+	// Image cells are found and replaced on the compositor's canvas, which
+	// the fast path does not build.
+	if m.SixelPassthrough != nil && m.SixelPassthrough.WindowHasImages(window.ID) {
 		return nil, false
 	}
 	// A scrolled-back pane shows a scrollbar thumb, which only the compositor
@@ -1057,28 +1070,14 @@ func (m *OS) flushGraphicsForView() {
 	// same as the launcher's icons, so it runs past hideImages rather than
 	// through it.
 	m.flushScreenshotGraphicsForFrame()
-	// A sixel image is pixels written into the host's cells, with no crop
-	// and no delete. Capture mode's marquee drawn over one would punch holes
-	// in it that nothing repaints, so sixel images still go for the length of
-	// the mode.
-	hideSixel := hideImages || m.Capture.Active
-	if hideSixel && m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
-		m.SixelPassthrough.HideAllPlacements()
-		// Flush the clear commands
-		data := m.SixelPassthrough.FlushPending()
-		if len(data) > 0 {
-			m.WriteHost(data)
-		}
-	}
+	// Sixel images need nothing here: they are cut by whatever covers them
+	// on the frame itself, and sent with it. See sixel_frame.go.
 	if hideImages {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()
 		}
 	} else {
 		m.GetKittyGraphicsCmd()
-		if !hideSixel {
-			m.GetSixelGraphicsCmd()
-		}
 		m.RefreshTextSizing()
 		m.FlushTextSizing()
 	}
@@ -1201,68 +1200,5 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	}
 	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes, preview=%q", len(data), preview)
 	m.KittyPassthrough.WriteToHost(data)
-	return nil
-}
-
-func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
-	if m.SixelPassthrough == nil {
-		return nil
-	}
-
-	// Refresh placements for all windows
-	if m.SixelPassthrough.PlacementCount() > 0 {
-		// Build a window-by-ID index of eligible windows once per frame and
-		// reuse it across placements, instead of rescanning m.Windows per
-		// placement (which was O(placements*windows)).
-		if m.sixelWinIndex == nil {
-			m.sixelWinIndex = make(map[string]*terminal.Window, len(m.Windows))
-		} else {
-			clear(m.sixelWinIndex)
-		}
-		for _, w := range m.Windows {
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
-				m.sixelWinIndex[w.ID] = w
-			}
-		}
-		screenWidth := m.GetRenderWidth()
-		screenHeight := m.GetRenderHeight()
-		m.snapshotPlacementScrollbackLens()
-		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
-			w := m.sixelWinIndex[windowID]
-			if w == nil {
-				return nil
-			}
-			// Snapshotted above, outside sp.mu; see
-			// snapshotPlacementScrollbackLens for why it cannot be read here.
-			scrollbackLen := m.placementScrollbackLen[w.ID]
-			// Reuse a single value; the callback's result is consumed before
-			// the next call, so a shared value avoids a per-call heap alloc.
-			m.sixelPosValue = WindowPositionInfo{
-				WindowX:            w.X,
-				WindowY:            w.Y,
-				ContentOffsetX:     w.BorderOffset(),
-				ContentOffsetY:     w.BorderOffset(),
-				Width:              w.Width,
-				Height:             w.Height,
-				Visible:            true,
-				ScrollbackLen:      scrollbackLen,
-				ScrollOffset:       w.ScrollbackOffset,
-				IsBeingManipulated: w.IsBeingManipulated,
-				WindowZ:            w.Z,
-				IsAltScreen:        w.IsAltScreen(),
-				ScreenWidth:        screenWidth,
-				ScreenHeight:       screenHeight,
-			}
-			return &m.sixelPosValue
-		})
-	}
-
-	// Sixel output goes out through the same serialized writer as the frames,
-	// wrapped in a synchronized update so the terminal applies it in one step.
-	data := m.SixelPassthrough.FlushPending()
-	if len(data) == 0 {
-		return nil
-	}
-	m.WriteHost(syncBegin, data, syncEnd)
 	return nil
 }

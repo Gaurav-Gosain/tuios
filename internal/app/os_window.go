@@ -822,6 +822,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", shortID(deletedWindow.ID), windowIntID)
 	}
 
+	if m.SixelPassthrough != nil {
+		m.SixelPassthrough.ClearWindow(deletedWindow.ID)
+	}
 	if m.KittyPassthrough != nil {
 		m.KittyPassthrough.OnWindowClose(deletedWindow.ID)
 		if data := m.KittyPassthrough.FlushPending(); len(data) > 0 {

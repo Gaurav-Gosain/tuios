@@ -521,7 +521,8 @@ func (t *GhosttyTerminal) handleKittyAPC(payload []byte) {
 	}
 }
 
-// handleSixelDCS mirrors the pure emulator's sixel DCS handler.
+// handleSixelDCS mirrors the pure emulator's sixel DCS handler: the image
+// is handed to the passthrough, and its cells are marked in the grid.
 func (t *GhosttyTerminal) handleSixelDCS(params, payload []byte) {
 	fullData := make([]byte, 0, len(params)+1+len(payload))
 	fullData = append(fullData, params...)
@@ -532,25 +533,13 @@ func (t *GhosttyTerminal) handleSixelDCS(params, payload []byte) {
 		return
 	}
 	curX, curY := t.cursorLocked()
-	absLine := t.scrollbackLenLocked() + curY
-	if t.activeAltLiveLocked() {
-		// The cached alt flag is one chunk stale inside a scanner hook.
-		absLine = curY
-	}
-
-	cellW, cellH := t.cellW, t.cellH
-	rows := cmd.RowsForHeight(cellH)
-	cols := cmd.ColsForWidth(cellW)
-
-	// Reserve space whether or not a passthrough is installed: no
-	// passthrough is a test-only situation in this backend, and the cursor
-	// still moves past where the image would sit.
+	cmd.CellWidth, cmd.CellHeight = t.cellW, t.cellH
+	rows, cols := SixelCells(cmd, t.cellW, t.cellH)
+	var id uint32
 	if fn := t.sixelPassthroughFunc; fn != nil {
-		t.callUnlocked(func() { fn(cmd, curX, curY, absLine) })
+		t.callUnlocked(func() { id = fn(cmd, curX, curY) })
 	}
-	if rows > 0 {
-		t.reserveImageSpaceLocked(rows, cols)
-	}
+	t.placeSixelLocked(rows, cols, id)
 }
 
 // answerSixelGraphics answers XTSMGRAPHICS, which libghostty does not.

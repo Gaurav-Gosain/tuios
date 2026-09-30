@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
@@ -25,477 +24,320 @@ func sixelPassthroughLog(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "[%s] SIXEL-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
-// SixelPassthrough handles forwarding sixel graphics to the host terminal.
-// Unlike Kitty graphics, sixel images don't have IDs. They're placed inline
-// at the cursor position and scroll with text.
-type SixelPassthrough struct {
-	mu sync.Mutex
-	// enabled is read from each pane's DA1 handler, on the PTY reader, and
-	// written when an SSH client's DA1 answer arrives, so it is atomic.
-	enabled atomic.Bool
-	hostOut io.Writer
-	// caps is the terminal this passthrough writes to, snapshotted per
-	// connection. See KittyPassthrough.caps. Never nil after the constructor.
-	caps *HostCapabilities
+// sixelMode is how this connection's terminal is shown a pane's sixel image.
+type sixelMode int
 
-	// Placements per window
-	placements map[string][]*SixelPassthroughPlacement
+const (
+	// sixelPlaceholder draws a dim box where the image is. The host has
+	// neither sixel nor kitty graphics, and a sixel sent to it would at best
+	// be dropped and at worst print as text.
+	sixelPlaceholder sixelMode = iota
+	// sixelNative sends the image as sixel, cropped to what is visible.
+	sixelNative
+	// sixelViaKitty sends the decoded image as a kitty graphics image, for a
+	// host that has kitty graphics and not sixel.
+	sixelViaKitty
+)
 
-	// Pending sixel output to be written
-	pendingOutput []byte
-
-	// forced keeps the passthrough on whatever the host answers (web mode).
-	forced bool
+func (m sixelMode) String() string {
+	switch m {
+	case sixelNative:
+		return "sixel"
+	case sixelViaKitty:
+		return "kitty"
+	default:
+		return "placeholder"
+	}
 }
 
-// SixelPassthroughPlacement represents a sixel image placed in a guest window.
-type SixelPassthroughPlacement struct {
-	WindowID     string
-	AbsoluteLine int // Absolute line in scrollback where image starts
-	GuestX       int // Column position in guest terminal
+// Memory bounds. A pane keeps the images whose cells may still be on screen
+// or in its scrollback; these cap what that can cost.
+const (
+	// sixelWindowBudget is the most decoded image data one pane holds. Past
+	// it the pane's oldest images are dropped, and their cells, if they are
+	// ever shown again, show the placeholder.
+	sixelWindowBudget = 64 << 20
+	// sixelMaxImages bounds the number of images across all panes, which an
+	// animation of tiny frames could otherwise grow without limit.
+	sixelMaxImages = 4096
+)
 
-	// Image dimensions
-	Width  int // Pixel width
-	Height int // Pixel height
-	Rows   int // Number of terminal rows
-	Cols   int // Number of terminal columns
+// SixelPassthrough shows the sixel images panes draw on this connection's
+// terminal.
+//
+// The emulator marks the cells an image covers (see internal/vt's
+// sixel_marker.go) and hands the image here, where it is decoded and kept
+// under an id. The compositor finds the marked cells on each finished frame
+// (sixel_frame.go) and says which parts of which images are visible where;
+// this type turns that into bytes for the host, after the frame's text, from
+// the renderer's writer (FrameBytes).
+type SixelPassthrough struct {
+	mu   sync.Mutex
+	mode sixelMode
+	caps *HostCapabilities
 
-	// Host terminal position (calculated during refresh)
-	HostX int
-	HostY int
+	nextID   uint32
+	images   map[uint32]*sixelEntry
+	byWindow map[string]int // decoded bytes held per window
 
-	// Visibility state
-	Hidden bool
+	frame sixelFrameState
+	// direct writes to the host outside the renderer's writes, for output a
+	// background job made ready. See ConnectFrameWriter.
+	direct func([]byte)
+}
 
-	// Track if currently placed and at what position (to avoid re-rendering every frame)
-	PlacedAtX int
-	PlacedAtY int
-	IsPlaced  bool
-
-	// The raw sixel data for re-rendering
-	RawSequence []byte
-
-	// Track which screen the image was placed on
-	PlacedOnAltScreen bool
+// sixelEntry is one image a pane drew.
+type sixelEntry struct {
+	windowID string
+	img      *vt.SixelImage // nil in placeholder mode
+	// raw is the guest's own DCS body, sent unchanged when the whole image
+	// is visible at the size it was drawn for.
+	raw []byte
+	// cellW and cellH are the cell size the pane measured the image with,
+	// and rows and cols the cells it covers at that size.
+	cellW, cellH int
+	rows, cols   int
+	// kittyID is the id the image was sent to a kitty host under, 0 until
+	// it is sent, and kittyPayload the transmission once it is built.
+	kittyID      uint32
+	kittyPayload []byte
+	bytes        int
+	seq          uint64 // registration order, for eviction
 }
 
 // SixelPassthroughOptions configures a SixelPassthrough instance.
 type SixelPassthroughOptions struct {
-	// ForceEnable skips capability detection (for web mode).
+	// ForceEnable says the terminal draws sixel without asking it (web mode).
 	ForceEnable bool
-	// Output is the writer for sixel output. If nil, uses os.Stdout. Web mode
-	// passes the sip PtySlave; SSH mode passes the ssh.Session.
+	// Output is unused: sixel output goes out through the renderer's writer
+	// (FrameBytes), so it lands after the frame it belongs to. Kept so callers
+	// that pass their graphics writer to every passthrough need not special
+	// case this one.
 	Output io.Writer
 	// Caps is the terminal at the far end of this session. Nil falls back to
 	// this process's own terminal.
 	Caps *HostCapabilities
 }
 
-// NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom
-// options. Use this in web mode to pass the sip session's PtySlave() so
-// sixel bytes flow through the same PTY as the browser's text output.
+// NewSixelPassthroughWithOptions creates the passthrough for one connection.
 func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthrough {
 	caps := opts.Caps
 	if caps == nil {
 		caps = GetHostCapabilities()
 	}
-	enabled := caps.SixelGraphics || opts.ForceEnable
-	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v Force=%v TerminalName=%s", caps.SixelGraphics, opts.ForceEnable, caps.TerminalName)
-	hostOut := opts.Output
-	if hostOut == nil {
-		hostOut = os.Stdout
-	}
 	sp := &SixelPassthrough{
-		hostOut:    hostOut,
-		caps:       caps,
-		placements: make(map[string][]*SixelPassthroughPlacement),
+		caps:     caps,
+		images:   make(map[uint32]*sixelEntry),
+		byWindow: make(map[string]int),
 	}
-	sp.enabled.Store(enabled)
-	sp.forced = opts.ForceEnable
+	sp.mode = chooseSixelMode(caps.SixelGraphics || opts.ForceEnable, caps.KittyGraphics)
+	sixelPassthroughLog("NewSixelPassthrough: sixel=%v kitty=%v force=%v term=%s mode=%s",
+		caps.SixelGraphics, caps.KittyGraphics, opts.ForceEnable, caps.TerminalName, sp.mode)
 	return sp
 }
 
-// hostCaps is the terminal this passthrough writes to. The constructor always
-// fills the field; the fallback only covers a zero-value struct.
-func (sp *SixelPassthrough) hostCaps() *HostCapabilities {
-	if sp.caps != nil {
-		return sp.caps
+// chooseSixelMode prefers the host's own sixel, then kitty, then the box.
+// Sixel first because it is the format the image arrived in: the whole image
+// goes out byte for byte, and only a crop is re-encoded.
+func chooseSixelMode(sixel, kitty bool) sixelMode {
+	switch {
+	case sixel:
+		return sixelNative
+	case kitty:
+		return sixelViaKitty
+	default:
+		return sixelPlaceholder
 	}
-	return GetHostCapabilities()
-}
-
-// IsEnabled returns whether sixel passthrough is enabled.
-func (sp *SixelPassthrough) IsEnabled() bool {
-	return sp.enabled.Load()
 }
 
 // SetHostSixel updates whether the host draws sixel, from an answer that came
-// after the passthrough was built: an SSH client's DA1 reply.
+// after the passthrough was built: an SSH client's DA1 reply. Images already
+// shown in the old mode are taken down on the next frame.
 func (sp *SixelPassthrough) SetHostSixel(sixel bool) {
-	sp.enabled.Store(sixel || sp.forced)
-}
-
-// ForwardCommand handles a sixel command from a guest terminal.
-// It stores the placement for later rendering during RefreshAllPlacements.
-func (sp *SixelPassthrough) ForwardCommand(
-	windowID string,
-	cmd *vt.SixelCommand,
-	cursorX, cursorY, absLine int,
-	isAltScreen bool,
-	cellWidth, cellHeight int,
-) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-
-	if !sp.enabled.Load() {
+	mode := chooseSixelMode(sixel, sp.caps.KittyGraphics)
+	if mode == sp.mode {
 		return
 	}
-
-	sixelPassthroughLog("ForwardCommand: windowID=%s, pos=(%d,%d), absLine=%d, size=%dx%d",
-		windowID[:min(8, len(windowID))], cursorX, cursorY, absLine, cmd.Width, cmd.Height)
-
-	// Calculate rows and columns
-	rows := cmd.RowsForHeight(cellHeight)
-	cols := cmd.ColsForWidth(cellWidth)
-
-	// Check for existing placement at the same position with same dimensions
-	// (shell redraws can re-emit the same sixel)
-	for _, existing := range sp.placements[windowID] {
-		if existing.AbsoluteLine == absLine && existing.GuestX == cursorX &&
-			existing.Width == cmd.Width && existing.Height == cmd.Height {
-			// Update in place
-			existing.RawSequence = cmd.RawSequence
-			existing.IsPlaced = false // Force re-render
-			sixelPassthroughLog("ForwardCommand: updated existing placement at absLine=%d", absLine)
-			return
-		}
-	}
-
-	placement := &SixelPassthroughPlacement{
-		WindowID:          windowID,
-		AbsoluteLine:      absLine,
-		GuestX:            cursorX,
-		Width:             cmd.Width,
-		Height:            cmd.Height,
-		Rows:              rows,
-		Cols:              cols,
-		Hidden:            true, // Start hidden, RefreshAllPlacements will determine visibility
-		RawSequence:       cmd.RawSequence,
-		PlacedOnAltScreen: isAltScreen,
-	}
-
-	sp.placements[windowID] = append(sp.placements[windowID], placement)
+	sixelPassthroughLog("SetHostSixel: %s -> %s", sp.mode, mode)
+	sp.frame.pending = append(sp.frame.pending, sp.takeDownLocked()...)
+	sp.mode = mode
+	// Images decoded for the old mode stay valid; ones registered in
+	// placeholder mode were never decoded and keep showing the box.
 }
 
-// ClearWindow removes all placements for a window.
+// IsEnabled reports whether images are shown as pictures, in either format.
+func (sp *SixelPassthrough) IsEnabled() bool {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	return sp.mode != sixelPlaceholder
+}
+
+// Advertised reports whether panes are told they can draw sixel. It is true
+// when the picture will be shown, in sixel or through kitty: a program that
+// is told sixel and draws it gets its image, and one that is not told falls
+// back to text rather than to the placeholder box.
+func (sp *SixelPassthrough) Advertised() bool {
+	return sp.IsEnabled()
+}
+
+// Register takes an image a pane drew and returns the id its cells are
+// marked with. It runs on the pane's PTY reader, so the decode costs the
+// reader and not the UI.
+func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint32 {
+	if cmd == nil {
+		return 0
+	}
+	cw, ch := cmd.CellWidth, cmd.CellHeight
+	if cw <= 0 || ch <= 0 {
+		return 0
+	}
+	rows, cols := vt.SixelCells(cmd, cw, ch)
+	if rows <= 0 || cols <= 0 {
+		return 0
+	}
+	sp.mu.Lock()
+	mode := sp.mode
+	sp.mu.Unlock()
+
+	e := &sixelEntry{windowID: windowID, cellW: cw, cellH: ch, rows: rows, cols: cols}
+	if mode != sixelPlaceholder {
+		// Decoded outside the lock: it is the expensive part, and nothing
+		// else touches the image until it is registered below.
+		e.img = vt.DecodeSixel(cmd)
+		if e.img != nil {
+			e.bytes = e.img.Bytes()
+			if mode == sixelNative {
+				e.raw = append([]byte(nil), cmd.RawSequence...)
+				e.bytes += len(e.raw)
+			}
+		}
+		// An image too large to decode still gets an id, so its cells show
+		// the placeholder rather than nothing.
+	}
+
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	id := sp.allocateIDLocked()
+	if id == 0 {
+		return 0
+	}
+	sp.frame.seq++
+	e.seq = sp.frame.seq
+	sp.images[id] = e
+	sp.byWindow[windowID] += e.bytes
+	sp.evictLocked(windowID)
+	sixelPassthroughLog("Register: win=%s id=%d %dx%d px, %dx%d cells at %dx%d, %d bytes, mode=%s",
+		windowID[:min(8, len(windowID))], id, cmd.Width, cmd.Height, cols, rows, cw, ch, e.bytes, mode)
+	return id
+}
+
+// allocateIDLocked returns a free id in 1..vt.SixelMaxID, or 0 when every id
+// is taken, which the image cap makes impossible in practice.
+func (sp *SixelPassthrough) allocateIDLocked() uint32 {
+	for range vt.SixelMaxID {
+		sp.nextID++
+		if sp.nextID > vt.SixelMaxID {
+			sp.nextID = 1
+		}
+		if _, used := sp.images[sp.nextID]; !used {
+			return sp.nextID
+		}
+	}
+	return 0
+}
+
+// evictLocked drops the oldest images of windowID until the window is within
+// budget, and the oldest overall past the image count cap. An image on screen
+// in the last frame is kept while there is anything older to drop.
+func (sp *SixelPassthrough) evictLocked(windowID string) {
+	for sp.byWindow[windowID] > sixelWindowBudget || len(sp.images) > sixelMaxImages {
+		overCount := len(sp.images) > sixelMaxImages
+		var victim uint32
+		var oldest uint64
+		for id, e := range sp.images {
+			if !overCount && e.windowID != windowID {
+				continue
+			}
+			if sp.frame.visible[id] {
+				continue
+			}
+			if victim == 0 || e.seq < oldest {
+				victim, oldest = id, e.seq
+			}
+		}
+		if victim == 0 {
+			return
+		}
+		sp.dropLocked(victim)
+	}
+}
+
+// dropLocked forgets one image, and frees it on a kitty host.
+func (sp *SixelPassthrough) dropLocked(id uint32) {
+	e := sp.images[id]
+	if e == nil {
+		return
+	}
+	delete(sp.images, id)
+	sp.byWindow[e.windowID] -= e.bytes
+	if sp.byWindow[e.windowID] <= 0 {
+		delete(sp.byWindow, e.windowID)
+	}
+	sp.frame.dropCache(id)
+	if e.kittyID != 0 {
+		sp.frame.pending = append(sp.frame.pending, kittyFreeImage(e.kittyID)...)
+	}
+}
+
+// ClearWindow forgets every image a window drew. Called when the window
+// closes; the images' cells went with it, so nothing is left to show them.
 func (sp *SixelPassthrough) ClearWindow(windowID string) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-
-	delete(sp.placements, windowID)
+	for id, e := range sp.images {
+		if e.windowID == windowID {
+			sp.dropLocked(id)
+		}
+	}
 	sixelPassthroughLog("ClearWindow: windowID=%s", windowID[:min(8, len(windowID))])
 }
 
-// RefreshAllPlacements updates visibility and positions for all placements.
-// This is called during each render cycle.
-func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID string) *WindowPositionInfo) {
+// ImageCount is the number of images held, for tests and the debug log.
+func (sp *SixelPassthrough) ImageCount() int {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-
-	if !sp.enabled.Load() {
-		sixelPassthroughLog("RefreshAllPlacements: sixel disabled")
-		return
-	}
-
-	caps := sp.hostCaps()
-	cellWidth := caps.CellWidth
-	cellHeight := caps.CellHeight
-
-	if cellWidth == 0 {
-		cellWidth = 9
-	}
-	if cellHeight == 0 {
-		cellHeight = 20
-	}
-
-	hostHeight := caps.Rows
-
-	for windowID, placements := range sp.placements {
-		info := getWindowInfo(windowID)
-		if info == nil {
-			for _, p := range placements {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-			}
-			continue
-		}
-		if !info.Visible {
-			for _, p := range placements {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-			}
-			continue
-		}
-
-		sixelPassthroughLog("Window %s: pos=(%d,%d) size=%dx%d scrollback=%d offset=%d",
-			windowID[:min(8, len(windowID))], info.WindowX, info.WindowY, info.Width, info.Height,
-			info.ScrollbackLen, info.ScrollOffset)
-
-		// During window manipulation (drag/resize), hide only this window's images
-		if info.IsBeingManipulated {
-			for _, p := range placements {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-			}
-			continue
-		}
-
-		// Calculate viewport boundaries using content height (exclude borders)
-		contentHeight := info.Height - 2*info.ContentOffsetY
-		if contentHeight <= 0 {
-			contentHeight = info.Height
-		}
-		// viewportTop is the absolute scrollback line at the top row of the
-		// content viewport, matching the kitty path
-		// (kitty_passthrough_placement.go). AbsoluteLine is also absolute
-		// (scrollbackLen+cursorY at placement time), so relativeY =
-		// AbsoluteLine - viewportTop is the on-screen row directly. The old
-		// formula subtracted an extra contentHeight, so once scrollback grew
-		// past the window height relativeY overshot by contentHeight and the
-		// bottom-edge guards hid the image.
-		viewportTop := info.ScrollbackLen - info.ScrollOffset
-		viewportBottom := viewportTop + contentHeight
-
-		for _, p := range placements {
-			// Check if placement matches current screen mode
-			if p.PlacedOnAltScreen != info.IsAltScreen {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Calculate visibility
-			placementBottom := p.AbsoluteLine + p.Rows
-
-			// Check if any part is visible
-			anyPartVisible := placementBottom > viewportTop && p.AbsoluteLine < viewportBottom
-
-			// When not scrolled back, also consider images that extend beyond
-			// current scrollback (the scrollback may not have caught up with
-			// ReserveImageSpace yet)
-			if !anyPartVisible && info.ScrollOffset == 0 && p.AbsoluteLine >= viewportTop {
-				anyPartVisible = true
-			}
-
-			if !anyPartVisible {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Calculate host position
-			relativeY := max(0, p.AbsoluteLine-viewportTop)
-
-			hostX := info.WindowX + info.ContentOffsetX + p.GuestX
-			hostY := info.WindowY + info.ContentOffsetY + relativeY
-
-			// Window content area bounds (in host coordinates)
-			windowContentBottom := info.WindowY + info.Height - info.ContentOffsetY
-
-			// Hide if image extends past window content bottom
-			// (sixel can't be pixel-cropped without palette re-quantization)
-			if hostY+p.Rows > windowContentBottom {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Hide if image extends past screen bottom (causes scroll feedback)
-			if hostY+p.Rows >= hostHeight-1 {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Hide if top is clipped (scrolled partially out of view)
-			if p.AbsoluteLine < viewportTop {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Check if position changed, and only re-render if needed
-			positionChanged := !p.IsPlaced ||
-				p.PlacedAtX != hostX || p.PlacedAtY != hostY
-
-			// Update placement state
-			p.HostX = hostX
-			p.HostY = hostY
-
-			// Only place the sixel image if position changed
-			if positionChanged {
-				sixelPassthroughLog("placeSixel: rendering at (%d,%d) imgSize=%dx%d rows=%d",
-					hostX, hostY, p.Width, p.Height, p.Rows)
-				sp.placeSixel(p, cellWidth, cellHeight)
-				p.PlacedAtX = hostX
-				p.PlacedAtY = hostY
-				p.IsPlaced = true
-			}
-			p.Hidden = false
-		}
-	}
+	return len(sp.images)
 }
 
-// hidePlacement hides a sixel placement by overwriting the image area with
-// spaces. Unlike Kitty graphics, sixel has no delete command, so we must
-// actively clear the area.
-func (sp *SixelPassthrough) hidePlacement(p *SixelPassthroughPlacement) {
-	if p.IsPlaced && p.Rows > 0 {
-		// Clear the image area by writing spaces over it
-		var buf []byte
-		buf = append(buf, "\x1b7"...) // Save cursor
-		for row := range p.Rows {
-			buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", p.PlacedAtY+row+1, p.PlacedAtX+1)...)
-			buf = append(buf, fmt.Sprintf("\x1b[%dX", p.Cols)...) // Erase N characters
-		}
-		buf = append(buf, "\x1b8"...) // Restore cursor
-		sp.pendingOutput = append(sp.pendingOutput, buf...)
-	}
-	p.Hidden = true
-	p.IsPlaced = false
-}
-
-// placeSixel writes a sixel image to the host terminal at the specified position.
-// The raw sixel data is passed through without re-encoding to preserve the
-// original palette and image quality. Clipping is handled by hiding images
-// that don't fit within window boundaries.
-func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
-	if len(p.RawSequence) == 0 {
-		return
-	}
-
-	// Build the sixel output
-	var buf []byte
-
-	// Save cursor position
-	buf = append(buf, "\x1b7"...)
-
-	// Move to target position (1-indexed)
-	buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", p.HostY+1, p.HostX+1)...)
-
-	// Write the DCS sixel sequence with raw data passthrough
-	// Format: ESC P <params> q <data> ESC \
-	buf = append(buf, "\x1bP"...)
-	buf = append(buf, p.RawSequence...)
-	buf = append(buf, "\x1b\\"...)
-
-	// Restore cursor position
-	buf = append(buf, "\x1b8"...)
-
-	sp.pendingOutput = append(sp.pendingOutput, buf...)
-}
-
-// HideAllPlacements hides all sixel placements and queues clear commands.
-func (sp *SixelPassthrough) HideAllPlacements() {
+// WindowHasImages reports whether a window has drawn an image this
+// passthrough still holds. The fullscreen fast path does not look for image
+// cells, so such a window takes the compositor.
+func (sp *SixelPassthrough) WindowHasImages(windowID string) bool {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-
-	for _, placements := range sp.placements {
-		for _, p := range placements {
-			if !p.Hidden {
-				sp.hidePlacement(p)
-			}
+	_, ok := sp.byWindow[windowID]
+	if ok {
+		return true
+	}
+	for _, e := range sp.images {
+		if e.windowID == windowID {
+			return true
 		}
 	}
+	return false
 }
 
-// FlushPending returns pending sixel output and clears the buffer.
-func (sp *SixelPassthrough) FlushPending() []byte {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	if len(sp.pendingOutput) == 0 {
-		return nil
-	}
-
-	result := make([]byte, len(sp.pendingOutput))
-	copy(result, sp.pendingOutput)
-	sp.pendingOutput = sp.pendingOutput[:0]
-	return result
-}
-
-// PlacementCount returns the total number of placements across all windows.
-func (sp *SixelPassthrough) PlacementCount() int {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	count := 0
-	for _, placements := range sp.placements {
-		count += len(placements)
-	}
-	return count
-}
-
-// setupSixelPassthrough configures sixel passthrough for a window.
+// setupSixelPassthrough connects a window's emulator to the passthrough.
 func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 	if m.SixelPassthrough == nil || window == nil || window.Terminal == nil {
 		return
 	}
-
-	win := window
-	var lastSixelLen int
-	var lastSixelTime time.Time
-	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int) {
-		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
-			return
-		}
-
-		// Deduplicate: skip if same-sized sixel arrives within 1 second
-		// (shell prompt redraws can re-trigger the DCS handler)
-		now := time.Now()
-		if len(cmd.RawSequence) == lastSixelLen && now.Sub(lastSixelTime) < time.Second {
-			return
-		}
-		lastSixelLen = len(cmd.RawSequence)
-		lastSixelTime = now
-
-		// Get fresh cell dimensions (may change on resize)
-		caps := m.hostCaps()
-		cw := caps.CellWidth
-		ch := caps.CellHeight
-		if cw == 0 {
-			cw = 9
-		}
-		if ch == 0 {
-			ch = 20
-		}
-
-		// Log via the published snapshot: this callback runs on the PTY-reader
-		// goroutine, and the live geometry fields belong to the update loop.
-		geo := win.LastGeometry()
-		sixelPassthroughLog("CALLBACK: rawLen=%d cursorX=%d cursorY=%d absLine=%d winX=%d winY=%d winW=%d winH=%d cell=%dx%d",
-			len(cmd.RawSequence), cursorX, cursorY, absLine, geo.X, geo.Y, geo.Width, geo.Height, cw, ch)
-
-		// Route through the placement system for proper position tracking and clipping
-		m.SixelPassthrough.ForwardCommand(
-			win.ID,
-			cmd,
-			cursorX, cursorY, absLine,
-			win.IsAltScreen(),
-			cw, ch,
-		)
+	sp := m.SixelPassthrough
+	id := window.ID
+	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, _, _ int) uint32 {
+		return sp.Register(id, cmd)
 	})
-
-	// DA1 and XTSMGRAPHICS say sixel only while it reaches the host.
-	window.Terminal.SetSixelAdvertised(m.SixelPassthrough.IsEnabled)
-
-	sixelPassthroughLog("setupSixelPassthrough: configured for window %s", window.ID[:min(8, len(window.ID))])
+	window.Terminal.SetSixelAdvertised(sp.Advertised)
 }

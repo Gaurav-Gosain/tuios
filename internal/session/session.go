@@ -1164,12 +1164,14 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
 
 // SetSixelAdvertised records whether a sixel image a pane draws will be shown:
-// true while any attached client's terminal draws sixel. Daemon.refreshTreeOps
-// counts it with SetKittyAnimation.
+// true while any attached client's terminal draws sixel or kitty graphics,
+// since a client with kitty and no sixel is sent the picture as a kitty image.
+// Daemon.refreshTreeOps counts it with SetKittyAnimation.
 //
 // It is what the pane's DA1 answer lists. The daemon's emulator is the one that
 // answers a guest's queries, so this is where a program such as chafa, lsix or
-// yazi learns whether to draw sixel or fall back to text.
+// yazi learns whether to draw sixel or fall back to text. A client with neither
+// protocol is shown a placeholder box where the image is.
 func (s *Session) SetSixelAdvertised(ok bool) { s.sixelAdvertised.Store(ok) }
 
 // SixelAdvertised reports what SetSixelAdvertised last recorded.

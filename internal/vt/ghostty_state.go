@@ -460,7 +460,7 @@ func (t *GhosttyTerminal) SetKittyImageIDTranslator(fn KittyImageIDTranslator) {
 	t.kittyImageIDTranslator = fn
 }
 
-func (t *GhosttyTerminal) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
+func (t *GhosttyTerminal) SetSixelPassthroughFunc(fn SixelPassthroughFunc) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sixelPassthroughFunc = fn

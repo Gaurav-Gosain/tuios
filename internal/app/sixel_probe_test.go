@@ -34,7 +34,7 @@ func TestSSHClientDA1DecidesSixel(t *testing.T) {
 			if !m.handleSixelProbe(uv.PrimaryDeviceAttributesEvent(tc.da1)) {
 				t.Fatal("the DA1 answer was not taken")
 			}
-			if got := m.SixelPassthrough.IsEnabled(); got != tc.want {
+			if got := m.SixelPassthrough.Advertised(); got != tc.want {
 				t.Errorf("sixel shown = %v, want %v", got, tc.want)
 			}
 		})

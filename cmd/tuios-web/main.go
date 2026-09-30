@@ -426,7 +426,15 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// programStart for why the teardown goroutine below has to wait for it.
 	running := make(chan struct{})
 	started := &programStart{Model: model, start: sync.OnceFunc(func() { close(running) })}
-	program := tea.NewProgram(started, append(sip.MakeOptions(sess), app.ProgramOptions()...)...)
+	opts := append(sip.MakeOptions(sess), app.ProgramOptions()...)
+	// The renderer's writer, so the sixel images drawn on a frame go out
+	// after it in the same write. Graphics already share the PTY slave.
+	if slave := sess.PtySlave(); slave != nil {
+		frames := app.NewFrameHookFile(slave)
+		model.ConnectFrameWriter(frames)
+		opts = append(opts, tea.WithOutput(frames))
+	}
+	program := tea.NewProgram(started, opts...)
 	// Tear down after the program has fully stopped, the way the SSH server
 	// does. Closing on the session context instead ran Cleanup while the last
 	// frames were still going out.

@@ -1382,6 +1382,9 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 		}
 	}
 
+	if m.SixelPassthrough != nil {
+		m.SixelPassthrough.ClearWindow(w.ID)
+	}
 	if m.KittyPassthrough != nil {
 		m.KittyPassthrough.OnWindowClose(w.ID)
 		if data := m.KittyPassthrough.FlushPending(); len(data) > 0 {

@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Multi copy mode is copy mode on every pane of the multifocus set at once.
@@ -357,7 +358,7 @@ func (m *OS) YankMultiCopy(panes []MultiCopyPane, skipped int) tea.Cmd {
 		m.ShowNotification("No pane has a selection. Press v or V to select, then press y.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	text := FormatMultiCopy(mc.Format, panes)
+	text := vt.StripSixelMarkers(FormatMultiCopy(mc.Format, panes))
 	m.CancelPendingCopy()
 	var flash []*terminal.Window
 	for _, p := range panes {

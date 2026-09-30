@@ -30,6 +30,12 @@ type SixelCommand struct {
 
 	// RawSequence contains the complete DCS sequence for passthrough
 	RawSequence []byte
+
+	// CellWidth and CellHeight are the cell size in pixels the emulator
+	// measured the image against, set before the passthrough sees it. The
+	// image's marker cells were counted at this size, so the compositor
+	// maps a cell back to its pixels with it.
+	CellWidth, CellHeight int
 }
 
 // ParseSixelCommand parses a DCS sixel sequence.
