@@ -438,6 +438,10 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_focus_right": "user binding",
 	"scroll_move_left":   "user binding",
 	"scroll_move_right":  "user binding",
+	// Workspace cycling. The numbered keys and the switcher cover the default
+	// surface; a user who wants h/l cycle binds these.
+	"next_workspace": "user binding",
+	"prev_workspace": "user binding",
 	"scroll_cycle_width": "user binding",
 	"scroll_consume":     "user binding",
 	"scroll_expel":       "user binding",
