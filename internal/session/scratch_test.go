@@ -272,3 +272,29 @@ func TestRestoreDropsANamedScratch(t *testing.T) {
 		t.Fatalf("restored = %v, want the built-in scratch and not lazygit", ids)
 	}
 }
+
+// A scratch command that stops within the wait is closed before the answer,
+// so a press right after the report starts it again instead of being refused
+// as a second scratch of the name.
+//
+// Negative control, confirmed red: drop the CloseDaemonWindow call in
+// verbPopup and the scratch window is still in the state when the answer
+// arrives.
+func TestStoppedScratchIsClosedBeforeTheAnswer(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	attachTUI(t, sp, "work")
+	c := dialVerb(t, sp)
+	call := `{"id":1,"verb":"popup","params":{"session":"work","scratch":true,"scratch_name":"broken","command":["sh","-c","exit 7"],"wait":true,"timeout":1500}}`
+	for try := 1; try <= 2; try++ {
+		res := result(t, c.call(t, call))
+		if res["type"] != "popup_result" || res["exit_code"] != float64(7) {
+			t.Fatalf("try %d: answer = %v", try, res)
+		}
+		for _, w := range sess.GetState().Windows {
+			if w.Scratch && w.ScratchKey() == "broken" {
+				t.Fatalf("try %d: the stopped scratch is still in the state at the answer", try)
+			}
+		}
+	}
+}

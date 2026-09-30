@@ -272,3 +272,34 @@ func TestPaletteShortcutOfAnEntry(t *testing.T) {
 		t.Errorf("dead shortcut = %q, want none", got)
 	}
 }
+
+// A press after a stop report starts the command again, even while this
+// client still holds the stopped pane: the push that removes it can come
+// after the report. The press used to find the dead pane and show or hide
+// it, and the person got neither the popup nor a report.
+func TestPressAfterAStopReportCreatesAgain(t *testing.T) {
+	m := commandOS(t, true, config.CommandBinding{Key: "prefix+alt+y", Type: "scratch", Command: "exit 7", Name: "broken"})
+	var asked int
+	prev := scratchOpener
+	scratchOpener = func(scratchRequest) error { asked++; return nil }
+	t.Cleanup(func() { scratchOpener = prev })
+
+	// The stopped pane arrived and is still held, shown.
+	m.Windows = append(m.Windows, &terminal.Window{ID: "dead", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "broken", Workspace: 1})
+	m.handleScratchOpened(ScratchOpenedMsg{Label: "broken", Err: ScratchStoppedError{Code: 7, WindowID: "dead"}})
+
+	cmd := m.RunCommandBinding("command:broken")
+	if cmd == nil {
+		t.Fatal("the press after the report did not ask for the pane")
+	}
+	cmd()
+	if asked != 1 {
+		t.Fatalf("asked %d times, want 1", asked)
+	}
+	// Once the push drops the pane, the note of it goes too.
+	m.Windows = m.Windows[:1]
+	m.scratchIndexNamed("broken")
+	if len(m.deadScratch) != 0 {
+		t.Fatalf("deadScratch = %v, want empty once the pane is gone", m.deadScratch)
+	}
+}

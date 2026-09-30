@@ -525,6 +525,15 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 				Detail:  "The popup is still on the screen and its command still runs. Wait for it with the command shown, or raise timeout.",
 			})
 		}
+		// A scratch pane whose command ended is closed before the answer
+		// goes out, not later when the PTY close is handled. The caller
+		// reports the exit and the person presses the key again at once, and
+		// a pane still in the state then answered that press with "already
+		// has a scratch terminal", or was shown and hidden, dead, instead of
+		// starting the command again. An error means it is closed already.
+		if p.Scratch {
+			_, _ = sess.CloseDaemonWindow(win.ID)
+		}
 		res := map[string]any{
 			"type":      "popup_result",
 			"window_id": win.ID,
