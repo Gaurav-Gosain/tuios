@@ -87,7 +87,7 @@ func extractLineTextFromCells(cells []uv.Cell) string {
 			continue
 		}
 		if cell.Content != "" {
-			for _, r := range cell.Content {
+			for _, r := range vt.CellText(cell.Content) {
 				result = append(result, r)
 			}
 		} else {
@@ -109,7 +109,7 @@ func extractScreenLineText(term vt.Terminal, y int) string {
 			continue
 		}
 		if cell != nil && cell.Content != "" {
-			for _, r := range cell.Content {
+			for _, r := range vt.CellText(cell.Content) {
 				result = append(result, r)
 			}
 		} else {
@@ -128,6 +128,7 @@ func getScreenLineCells(term vt.Terminal, y int) []uv.Cell {
 		cell := term.CellAt(x, y)
 		if cell != nil {
 			cells[x] = *cell
+			vt.BlankSixelCell(&cells[x])
 		} else {
 			// Empty cell
 			cells[x] = uv.Cell{Content: " ", Width: 1}

@@ -3613,6 +3613,11 @@ func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) s
 // captureContent is the shared core of the two capture paths. Callers hold
 // terminalMu.
 func (p *PTY) captureContent(scrollback, ansi bool) string {
+	// A sixel image's cells are markers in the grid; a capture gets blanks.
+	return vt.StripSixelMarkers(p.captureContentRaw(scrollback, ansi))
+}
+
+func (p *PTY) captureContentRaw(scrollback, ansi bool) string {
 	if p.terminal == nil {
 		return ""
 	}

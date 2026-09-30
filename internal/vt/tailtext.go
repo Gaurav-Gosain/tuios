@@ -30,7 +30,7 @@ func (e *Emulator) TailText(n int) []string {
 		b.Reset()
 		for x := range w {
 			if c := e.CellAt(x, y); c != nil {
-				b.WriteString(c.Content)
+				b.WriteString(CellText(c.Content))
 			}
 		}
 		if line := strings.TrimRight(b.String(), " \t"); line != "" {

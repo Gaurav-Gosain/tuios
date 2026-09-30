@@ -357,7 +357,7 @@ func readTerminalLines(term vt.Terminal, c, d vt.SemanticMarker) ([]string, bool
 	for abs := from; abs <= to; abs++ {
 		var b strings.Builder
 		if abs < sbLen {
-			b.WriteString(term.ScrollbackLine(abs).String())
+			b.WriteString(vt.StripSixelMarkers(term.ScrollbackLine(abs).String()))
 		} else {
 			y := abs - sbLen
 			for x := 0; x < width; x++ {

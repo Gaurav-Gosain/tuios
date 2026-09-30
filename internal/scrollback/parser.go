@@ -384,7 +384,7 @@ func extractAbsLineText(term vt.Terminal, absLine int) string {
 	for x := range w {
 		cell := term.CellAt(x, screenY)
 		if cell != nil && cell.Content != "" {
-			sb.WriteString(string(cell.Content))
+			sb.WriteString(vt.CellText(cell.Content))
 		} else {
 			sb.WriteByte(' ')
 		}
@@ -436,7 +436,7 @@ func lineToText(line uv.Line) string {
 	var sb strings.Builder
 	for _, cell := range line {
 		if cell.Content != "" {
-			sb.WriteString(string(cell.Content))
+			sb.WriteString(vt.CellText(cell.Content))
 		} else {
 			sb.WriteByte(' ')
 		}
