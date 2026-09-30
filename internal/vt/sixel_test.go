@@ -1,6 +1,7 @@
 package vt_test
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"strings"
@@ -237,5 +238,102 @@ func BenchmarkEncodeSixelNoise(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = vt.EncodeSixel(img, crop, crop.Dx(), crop.Dy())
+	}
+}
+
+// TestSixelCursorBelowImage: after an image at the bottom of the screen the
+// cursor is on the row under it, as xterm leaves it, so text printed next
+// does not land on the image's last row. Both backends.
+func TestSixelCursorBelowImage(t *testing.T) {
+	for _, startRow := range []int{1, 4, 5} {
+		term := vt.New(10, 6)
+		term.SetCellSize(8, 6)
+		term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 9 })
+		// Two image rows (12 pixels at 6 per row).
+		if _, err := term.Write([]byte(fmt.Sprintf("\x1b[%d;1H%sAFTER", startRow+1, testSixel))); err != nil {
+			t.Fatal(err)
+		}
+		markers := 0
+		for y := range 6 {
+			for x := range 10 {
+				if c := term.CellAt(x, y); c != nil && vt.IsSixelMarker(c.Content) {
+					markers++
+				}
+			}
+		}
+		if markers != 4 {
+			t.Errorf("image from row %d: %d image cells left after the next text, want 4", startRow, markers)
+		}
+		_ = term.Close()
+	}
+}
+
+// TestSixelUnderScrollRegionAndOriginMode: an image drawn with a scroll
+// region and origin mode set lands at the cursor and leaves the cursor under
+// it on both backends, and each image cell keeps the background of the cell
+// it replaced.
+func TestSixelUnderScrollRegionAndOriginMode(t *testing.T) {
+	term := vt.New(10, 8)
+	t.Cleanup(func() { _ = term.Close() })
+	term.SetCellSize(8, 6)
+	term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 4 })
+	// Region rows 2..7, origin mode on, cursor at region row 3 (screen row
+	// 4, index 3), which is painted blue first.
+	in := "\x1b[2;7r\x1b[?6h\x1b[3;1H\x1b[44mABCD\x1b[0m\x1b[3;1H" + testSixel + "Z"
+	if _, err := term.Write([]byte(in)); err != nil {
+		t.Fatal(err)
+	}
+	for _, y := range []int{3, 4} {
+		for x := range 2 {
+			c := term.CellAt(x, y)
+			if c == nil || !vt.IsSixelMarker(c.Content) {
+				t.Fatalf("no image cell at %d,%d", x, y)
+			}
+			if y == 3 && c.Style.Bg == nil {
+				t.Errorf("image cell %d,%d lost the blue background under it", x, y)
+			}
+		}
+	}
+	if c := term.CellAt(0, 5); c == nil || c.Content != "Z" {
+		t.Errorf("text after the image is not on the row under it: %#v", c)
+	}
+}
+
+// TestSixelExact: the guest's bytes may stand in for the decoded image only
+// when they draw the same pixels. Painting past the declared size, using a
+// register past 255, or leaving pixels unpainted under an opaque background
+// each rule that out.
+func TestSixelExact(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		exact      bool
+	}{
+		{"fits", "0;1;0q\"1;1;10;12#1;2;100;0;0!10~-!10~", true},
+		{"paints past the width", "0;1;0q\"1;1;10;20#1;2;100;0;0!400~-!400~-!400~-!400~-!400~", false},
+		{"paints past the height", "0;1;0q\"1;1;10;6#1;2;100;0;0!10~-!10~", false},
+		{"register 300", "0;1;0q\"1;1;10;6#300;2;100;0;0!10~", false},
+		{"opaque with a gap", "0;0;0q\"1;1;10;6#1;2;100;0;0!5~", false},
+		{"opaque and full", "0;0;0q\"1;1;10;6#1;2;100;0;0!10~", true},
+	} {
+		img := vt.DecodeSixel(vt.ParseSixelCommand([]byte(tc.body)))
+		if img == nil || img.Exact != tc.exact {
+			t.Errorf("%s: exact = %v, want %v", tc.name, img != nil && img.Exact, tc.exact)
+		}
+	}
+	// An opaque gap is filled with register 0, so every crop agrees.
+	img := vt.DecodeSixel(vt.ParseSixelCommand([]byte("0;0;0q\"1;1;10;6#0;2;0;0;100#1;2;100;0;0!5~")))
+	if c, ok := img.At(8, 2); !ok || c.B != 255 {
+		t.Errorf("unpainted pixel under an opaque background = %v %v, want register 0 (blue)", c, ok)
+	}
+	// Colours past the 256 a pane is told fold into the first 256.
+	var b strings.Builder
+	b.WriteString("0;1;0q\"1;1;300;6")
+	for i := range 300 {
+		fmt.Fprintf(&b, "#%d;2;%d;%d;50$%s~", i, i%101, (i/3)%101, strings.Repeat("?", i))
+	}
+	big := vt.DecodeSixel(vt.ParseSixelCommand([]byte(b.String())))
+	seq := vt.EncodeSixel(big, image.Rect(0, 0, 300, 6), 300, 6)
+	if strings.Contains(string(seq), "#256;") {
+		t.Errorf("a re-encoded image defines more than 256 registers")
 	}
 }

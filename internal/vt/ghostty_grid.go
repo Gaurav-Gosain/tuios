@@ -607,19 +607,24 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 
 // placeSixelLocked marks an image's cells in the grid at the cursor, the
 // ghostty twin of Emulator.placeSixel. The grid is the library's, so the
-// cells are written as text: the scroll ReserveImageSpace makes, then a run
-// of marker characters on each row, then the pen and cursor put back. The pen
-// is read and restored by hand rather than with DECSC, because DECSC's one
-// slot belongs to the guest.
+// cells are written as text: a scroll of the region (SU, as the pure
+// emulator's ScrollUp), then a run of marker characters on each row, then the
+// pen and cursor put back. Origin mode and insert mode are switched off while
+// the cells are written, so the absolute moves and the prints mean what they
+// say. Each marker keeps the background of the cell it replaces, as in the
+// pure emulator. The pen is read and restored by hand rather than with DECSC,
+// because DECSC's one slot belongs to the guest.
 func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
 	if rows <= 0 || cols <= 0 || t.closed.Load() {
 		return
 	}
 	startX, startY := t.cursorLocked()
 	height, width := t.height, t.width
+	// One row more than the image: the cursor ends on the row under it, as
+	// in Emulator.placeSixel.
 	scroll := 0
-	if startY+rows > height {
-		scroll = min(startY+rows-height, height)
+	if startY+rows+1 > height {
+		scroll = min(startY+rows+1-height, height)
 	}
 	pen, err := t.term.CursorStyle()
 	penSeq := ""
@@ -628,18 +633,30 @@ func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
 		penSeq = penStyleSequence(&s)
 	}
 	insert, _ := t.term.Mode(gh.ModeInsert)
+	origin, _ := t.term.Mode(gh.ModeOrigin)
 
 	var seq strings.Builder
 	seq.WriteString("\x1b[0m")
 	if insert {
 		seq.WriteString("\x1b[4l")
 	}
-	if scroll > 0 {
-		fmt.Fprintf(&seq, "\x1b[%d;1H", height)
-		for range scroll {
-			seq.WriteString("\n")
-		}
+	if origin {
+		seq.WriteString("\x1b[?6l")
 	}
+	if scroll > 0 {
+		fmt.Fprintf(&seq, "\x1b[%dS", scroll)
+	}
+	t.term.VTWrite([]byte(seq.String()))
+	seq.Reset()
+
+	// The backgrounds the markers keep, read after the scroll.
+	t.gridStale = true
+	t.syncLocked()
+	var buf *grid
+	if t.activeAltLiveLocked() == (t.active == 1) {
+		buf = t.bufs[t.active]
+	}
+
 	top := startY - scroll
 	n := min(cols, width-startX)
 	for r := range rows {
@@ -648,16 +665,39 @@ func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
 			continue
 		}
 		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, startX+1)
+		var last color.Color
 		for c := range n {
+			var bg color.Color
+			if buf != nil {
+				if cell := buf.CellAt(startX+c, y); cell != nil {
+					bg = cell.Style.Bg
+				}
+			}
+			if c == 0 || bg != last {
+				seq.WriteString("\x1b[0m")
+				if bg != nil {
+					st := uv.Style{Bg: bg}
+					seq.WriteString(penStyleSequence(&st))
+				}
+				last = bg
+			}
 			seq.WriteString(SixelMarker(id, r, c))
 		}
 	}
+	seq.WriteString("\x1b[0m")
 	if insert {
 		seq.WriteString("\x1b[4h")
 	}
-	seq.WriteString("\x1b[0m")
+	finalY := min(startY+rows-scroll, height-1)
+	if origin {
+		// Setting DECOM homes the cursor, so the move comes after it, in
+		// the region's coordinates.
+		seq.WriteString("\x1b[?6h")
+		fmt.Fprintf(&seq, "\x1b[%d;%dH", finalY-t.scrollRegion.Min.Y+1, 1)
+	} else {
+		fmt.Fprintf(&seq, "\x1b[%d;1H", finalY+1)
+	}
 	seq.WriteString(penSeq)
-	fmt.Fprintf(&seq, "\x1b[%d;1H", min(startY+rows-scroll, height-1)+1)
 	t.term.VTWrite([]byte(seq.String()))
 	t.gridStale = true
 	t.scrollGeneration++
