@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // TestContextEnvVars checks the variables a hook command is given. User hook
@@ -24,7 +23,9 @@ func TestContextEnvVars(t *testing.T) {
 		SessionID:  "sess-xyz",
 	})
 
-	time.Sleep(300 * time.Millisecond)
+	// Fire runs the hook in its own goroutine. Wait joins it, so the file
+	// is complete when it is read.
+	m.Wait()
 
 	data, err := os.ReadFile(envFile)
 	if err != nil {

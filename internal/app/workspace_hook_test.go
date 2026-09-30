@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -37,14 +36,12 @@ func TestSwitchToWorkspaceFiresHook(t *testing.T) {
 		t.Fatalf("CurrentWorkspace = %d, want 2", m.CurrentWorkspace)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(marker); err == nil {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// FireHookContext hands the hook to the manager before it returns, and
+	// Wait joins every hook fired so far.
+	mgr.Wait()
+	if _, err := os.Stat(marker); err != nil {
+		t.Error("after-workspace-switch hook never ran")
 	}
-	t.Error("after-workspace-switch hook never ran")
 }
 
 // Switching to the workspace already shown is a no-op, so it must not fire.
@@ -68,7 +65,7 @@ func TestSwitchToSameWorkspaceDoesNotFireHook(t *testing.T) {
 
 	m.SwitchToWorkspace(1)
 
-	time.Sleep(200 * time.Millisecond)
+	mgr.Wait()
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("hook fired for a switch to the workspace already shown")
 	}
