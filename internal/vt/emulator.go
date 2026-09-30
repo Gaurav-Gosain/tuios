@@ -1669,9 +1669,12 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 	})
 }
 
-// placeSixel writes an image's marker cells at the cursor, scrolling first if
-// the image runs past the bottom, and leaves the cursor at column 0 of the row
-// under it. See sixel_marker.go.
+// placeSixel writes an image's marker cells at the cursor and leaves the
+// cursor at column 0 of the row under the image, scrolling first so that row
+// exists. That is xterm's placement with sixel scrolling on (DECSDM reset,
+// the default): a carriage return and an index after the image's last row.
+// Leaving the cursor on the last row instead let the next text a program
+// printed overwrite the picture's bottom row. See sixel_marker.go.
 func (e *Emulator) placeSixel(rows, cols int, id uint32) {
 	if rows <= 0 || cols <= 0 {
 		return
@@ -1679,10 +1682,10 @@ func (e *Emulator) placeSixel(rows, cols int, id uint32) {
 	startX, startY := e.scr.CursorPosition()
 	height, width := e.scr.Height(), e.scr.Width()
 	scroll := 0
-	if startY+rows > height {
+	if startY+rows+1 > height {
 		// Clamped: rows past a full screen cannot be shown, and a hostile
 		// raster size would otherwise drive a scroll per row.
-		scroll = min(startY+rows-height, height)
+		scroll = min(startY+rows+1-height, height)
 		// A blank pen, as in ReserveImageSpace: the guest printed no text,
 		// so background-colour erase must not paint the rows it exposes.
 		e.scr.withBlankPen(func() {
