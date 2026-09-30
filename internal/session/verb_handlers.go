@@ -224,6 +224,8 @@ func (d *Daemon) verbGetWindow(_ *connState, params json.RawMessage) (any, *verb
 	data := windowStateToData(state, idx)
 	if pty := sess.GetPTY(state.Windows[idx].PTYID); pty != nil {
 		maps.Copy(data, shellFactsData(pty.ShellFacts()))
+		m := pty.Meta()
+		data["history_rows"], data["revision"] = m.HistoryRows, m.Revision
 	}
 	data["type"] = "window"
 	return data, nil
