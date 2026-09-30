@@ -6,27 +6,52 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // scratchOS is a client with one pane, "alpha", on workspace 1, 120x40, and
 // the default [scratch] table. daemon picks a daemon session or a local one.
-// The daemon client is not connected, so a test that shows or hides the pane
+// The daemon client is not connected, so a test that shows or hides a group
 // runs local: a daemon session would push the state.
 func scratchOS(t *testing.T, daemon bool) *OS {
 	t.Helper()
 	m := dockSessionOS(t, 120, daemon)
 	m.SessionName = "work"
 	m.UserConfig = config.DefaultConfig()
+	if m.WorkspaceFocus == nil {
+		m.WorkspaceFocus = map[int]int{}
+	}
+	m.WorkspaceLayouts = map[int][]WindowLayout{}
+	m.WorkspaceHasCustom = map[int]bool{}
+	m.WorkspaceMasterRatio = map[int]float64{}
+	m.WorkspaceStackRatio = map[int]float64{}
+	m.PendingResizes = map[string][2]int{}
+	if m.NumWorkspaces == 0 {
+		m.NumWorkspaces = 9
+	}
 	return m
 }
 
-// addScratch puts the scratch terminal on workspace ws, hidden or shown.
-func addScratch(m *OS, ws int, hidden bool) *terminal.Window {
+// addScratch adds a pane of the scratch group name, on the group's
+// workspace (the one another pane of the group is on, or a free one).
+func addScratch(m *OS, name, id string) *terminal.Window {
+	ws := 0
+	for _, w := range m.Windows {
+		if isScratch(w) && scratchNameOf(w) == name {
+			ws = w.Workspace
+		}
+	}
+	if ws == 0 {
+		ws = m.scratchWorkspaceFree()
+	}
+	stored := name
+	if name == scratchName {
+		stored = ""
+	}
 	w := &terminal.Window{
-		ID: "scratch-pane", IsPopup: true, IsScratch: true, IsFloating: true,
-		CustomName: scratchName, Workspace: ws, Minimized: hidden,
-		Width: 80, Height: 30,
+		ID: id, IsScratch: true, ScratchName: stored, CustomName: name,
+		Workspace: ws, Width: 40, Height: 10,
 	}
 	m.Windows = append(m.Windows, w)
 	return w
@@ -39,23 +64,24 @@ func TestScratchPlan(t *testing.T) {
 		want  scratchAction
 	}{
 		{"none creates", func(*OS) {}, scratchCreate},
-		{"shown here hides", func(m *OS) { addScratch(m, 1, false) }, scratchHide},
-		{"hidden shows", func(m *OS) { addScratch(m, 1, true) }, scratchShow},
-		{"hidden elsewhere shows", func(m *OS) { addScratch(m, 3, true) }, scratchShow},
-		// Left open on another workspace: the press brings it here.
-		{"shown elsewhere shows", func(m *OS) { addScratch(m, 2, false) }, scratchShow},
-		// A popup the user opened, even one called scratch, is not the
-		// scratch terminal. Only the daemon's mark makes one.
-		{"other popups create", func(m *OS) {
-			m.Windows = append(m.Windows,
-				&terminal.Window{ID: "user-popup", IsPopup: true, CustomName: scratchName, Workspace: 1},
-				&terminal.Window{ID: "plain", CustomName: scratchName, Workspace: 1, IsScratch: true})
+		{"hidden group shows", func(m *OS) { addScratch(m, scratchName, "s1") }, scratchShow},
+		{"shown group hides", func(m *OS) {
+			addScratch(m, scratchName, "s1")
+			m.showScratch(1)
+		}, scratchHide},
+		// A pane the user opened, even one named scratch, is not in the
+		// group. Only the daemon's mark makes one.
+		{"other panes create", func(m *OS) {
+			m.Windows = append(m.Windows, &terminal.Window{ID: "plain", CustomName: scratchName, Workspace: 1})
 		}, scratchCreate},
-		{"session on another machine refuses", func(m *OS) { m.AttachedHost = "build" }, scratchRefuse},
+		{"session on another machine refuses", func(m *OS) {
+			m.IsDaemonSession, m.DaemonClient = true, &session.TUIClient{}
+			m.AttachedHost = "build"
+		}, scratchRefuse},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := scratchOS(t, true)
+			m := scratchOS(t, false)
 			tc.setup(m)
 			if got := m.planScratch(scratchName); got.action != tc.want {
 				t.Fatalf("plan = %+v, want action %d", got, tc.want)
@@ -64,130 +90,188 @@ func TestScratchPlan(t *testing.T) {
 	}
 }
 
-// A hide and a show keep the same pane: nothing closes it, and the show puts
-// it on the workspace the user is on, focused, in terminal mode. The hide
-// gives the focus and the mode back.
-func TestScratchHideAndShowKeepThePane(t *testing.T) {
+// A show makes the group's workspace the current one, over the workspace the
+// user was on, in terminal mode. A hide goes back to that workspace, to the
+// pane and the mode the show found. No pane is made or closed.
+func TestScratchShowAndHideSwitchToTheGroup(t *testing.T) {
 	m := scratchOS(t, false)
 	m.Mode = WindowManagementMode
-	w := addScratch(m, 1, true)
-	alpha := m.Windows[0]
+	a := addScratch(m, scratchName, "s1")
+	b := addScratch(m, scratchName, "s2")
 
-	if m.ToggleScratch() != nil {
-		t.Fatal("showing a scratch terminal that exists asked the daemon for another")
+	m.ToggleScratch()
+	if m.CurrentWorkspace != a.Workspace || !m.InScratchView() || m.scratchBase != 1 {
+		t.Fatalf("after show: current=%d base=%d, want %d over 1", m.CurrentWorkspace, m.scratchBase, a.Workspace)
 	}
-	if w.Minimized || m.GetFocusedWindow() != w || m.Mode != TerminalMode {
-		t.Fatalf("after show: minimized=%v focused=%v mode=%v", w.Minimized, m.GetFocusedWindow() == w, m.Mode)
+	if f := m.GetFocusedWindow(); f != a && f != b {
+		t.Fatal("the show did not focus a pane of the group")
+	}
+	if m.Mode != TerminalMode || !m.AutoTiling {
+		t.Fatalf("mode=%v tiling=%v, want terminal mode and a tiled group", m.Mode, m.AutoTiling)
 	}
 
 	m.ToggleScratch()
-	if !w.Minimized || m.GetFocusedWindow() != alpha || m.Mode != WindowManagementMode {
-		t.Fatalf("after hide: minimized=%v focused alpha=%v mode=%v", w.Minimized, m.GetFocusedWindow() == alpha, m.Mode)
+	if m.CurrentWorkspace != 1 || m.InScratchView() || m.FocusedWindow != 0 || m.Mode != WindowManagementMode {
+		t.Fatalf("after hide: current=%d focused=%d mode=%v", m.CurrentWorkspace, m.FocusedWindow, m.Mode)
 	}
-	if len(m.Windows) != 2 {
-		t.Fatalf("the hide closed a pane: %d windows", len(m.Windows))
+	if m.AutoTiling {
+		t.Fatal("the hide left tiling on where the user had it off")
 	}
-
-	// The next show is on workspace 4, and the pane follows.
-	m.CurrentWorkspace = 4
-	m.ToggleScratch()
-	if w.Workspace != 4 || w.Minimized || m.GetFocusedWindow() != w {
-		t.Fatalf("show on workspace 4: workspace=%d minimized=%v", w.Workspace, w.Minimized)
+	if len(m.Windows) != 3 {
+		t.Fatalf("windows = %d, want 3", len(m.Windows))
 	}
 }
 
-// A user in terminal mode goes back to terminal mode on the pane they left.
-func TestScratchHideKeepsTerminalMode(t *testing.T) {
+// The session hears of the workspace the user is on, never the group's, so a
+// peer is not moved onto a scratch workspace.
+func TestScratchViewIsNotTheSessionWorkspace(t *testing.T) {
 	m := scratchOS(t, false)
-	m.Mode = TerminalMode
-	addScratch(m, 1, true)
+	m.AutoTiling = false
+	addScratch(m, scratchName, "s1")
 	m.ToggleScratch()
-	m.ToggleScratch()
-	if m.Mode != TerminalMode || m.FocusedWindow != 0 {
-		t.Fatalf("mode=%v focused=%d, want terminal mode on alpha", m.Mode, m.FocusedWindow)
+	st := m.BuildSessionState()
+	if st.CurrentWorkspace != 1 || st.AutoTiling {
+		t.Fatalf("pushed workspace=%d tiling=%v, want 1 and the user's own off", st.CurrentWorkspace, st.AutoTiling)
 	}
 }
 
-// The hidden scratch terminal is minimized, but it is offered nowhere a
-// minimized pane is: no dock entry, no restore, no row in the window list or
-// the rail, and it does not count as a window on the workspace. A plain
-// minimized pane next to it still gets all of them, so the filter is the
-// scratch mark and not the minimize.
-func TestHiddenScratchIsInNoList(t *testing.T) {
+// The group tiles inside the scratch box, and the box sits inside the pane
+// region, sized by [scratch].
+func TestScratchGroupTilesInsideTheBox(t *testing.T) {
 	m := scratchOS(t, false)
-	parked := &terminal.Window{ID: "parked", Workspace: 1, Minimized: true, MinimizeOrder: 1}
-	m.Windows = append(m.Windows, parked)
-	w := addScratch(m, 1, true)
-	scratchAt := len(m.Windows) - 1
-
-	items := m.getDockItems()
-	if len(items) != 1 || m.Windows[items[0].WindowIndex] != parked {
-		t.Fatalf("dock items = %+v, want only the parked pane", items)
+	m.UserConfig.Scratch.Width, m.UserConfig.Scratch.Height = "50%", "50%"
+	addScratch(m, scratchName, "s1")
+	m.ToggleScratch()
+	outer, inner, ok := m.scratchRegion()
+	if !ok {
+		t.Fatal("no scratch region in the view")
 	}
+	if outer.W != m.GetContentWidth()/2 || outer.H != m.GetUsableHeight()/2 {
+		t.Fatalf("box = %+v, want half the region %dx%d", outer, m.GetContentWidth(), m.GetUsableHeight())
+	}
+	if m.PaneLeft() != inner.X || m.PaneTop() != inner.Y || m.PaneWidth() != inner.W || m.PaneHeight() != inner.H {
+		t.Fatalf("pane region = %d,%d %dx%d, want the box's inside %+v", m.PaneLeft(), m.PaneTop(), m.PaneWidth(), m.PaneHeight(), inner)
+	}
+	m.ToggleScratch()
+	if m.PaneWidth() != m.GetContentWidth() {
+		t.Fatal("the pane region stayed cut down after the hide")
+	}
+}
+
+// Closing a pane of the group closes that pane. Closing the last one ends the
+// group and goes back.
+func TestClosingTheLastScratchPaneEndsTheGroup(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, scratchName, "s1")
+	addScratch(m, scratchName, "s2")
+	m.ToggleScratch()
+	m.CloseWindowByHand(m.FocusedWindow)
+	if !m.InScratchView() || len(m.Windows) != 2 {
+		t.Fatalf("after one close: view=%v windows=%d", m.InScratchView(), len(m.Windows))
+	}
+	m.CloseWindowByHand(m.scratchIndex())
+	if m.InScratchView() || m.CurrentWorkspace != 1 || len(m.Windows) != 1 {
+		t.Fatalf("after the last close: view=%v current=%d windows=%d", m.InScratchView(), m.CurrentWorkspace, len(m.Windows))
+	}
+}
+
+// A focus jump to a pane of a hidden group shows the group. A focus on an
+// ordinary pane while a group is shown goes back.
+func TestFocusMovesInAndOutOfTheGroup(t *testing.T) {
+	m := scratchOS(t, false)
+	w := addScratch(m, scratchName, "s1")
+	m.FocusWindow(1)
+	if !m.InScratchView() || m.CurrentWorkspace != w.Workspace || m.scratchBase != 1 {
+		t.Fatalf("a focus on a hidden group's pane: view=%v current=%d base=%d", m.InScratchView(), m.CurrentWorkspace, m.scratchBase)
+	}
+	m.FocusWindow(0)
+	if m.InScratchView() || m.CurrentWorkspace != 1 {
+		t.Fatalf("a focus back on alpha: view=%v current=%d", m.InScratchView(), m.CurrentWorkspace)
+	}
+}
+
+// A new window made inside the group joins it, locally.
+func TestNewWindowInsideTheGroupJoinsIt(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, "notes", "s1")
+	m.showScratch(1)
+	m.AddWindow("")
+	w := m.Windows[len(m.Windows)-1]
+	t.Cleanup(func() { w.Close() })
+	if !w.IsScratch || scratchNameOf(w) != "notes" || w.Workspace != m.CurrentWorkspace {
+		t.Fatalf("new window scratch=%v name=%q ws=%d", w.IsScratch, scratchNameOf(w), w.Workspace)
+	}
+}
+
+// Each group is its own workspace, so showing one group while another is
+// on the screen switches between them and keeps the workspace both are shown
+// over.
+func TestSecondGroupReplacesTheFirst(t *testing.T) {
+	m := scratchOS(t, false)
+	a := addScratch(m, "one", "a")
+	b := addScratch(m, "two", "b")
+	if a.Workspace == b.Workspace {
+		t.Fatal("two groups share a workspace")
+	}
+	m.showScratch(1)
+	m.showScratch(2)
+	if m.CurrentWorkspace != b.Workspace || m.scratchBase != 1 {
+		t.Fatalf("current=%d base=%d, want %d over 1", m.CurrentWorkspace, m.scratchBase, b.Workspace)
+	}
+	m.leaveScratchView()
+	if m.CurrentWorkspace != 1 {
+		t.Fatalf("the hide went to %d, want 1", m.CurrentWorkspace)
+	}
+}
+
+// A hidden group is in no list: not the window list, the rail or the
+// workspace count, and not on a workspace a key can reach.
+func TestScratchGroupIsInNoList(t *testing.T) {
+	m := scratchOS(t, false)
+	w := addScratch(m, scratchName, "s1")
 	for _, it := range m.GetAggregateViewItems() {
 		if it.Window == w {
-			t.Fatal("the window list shows the hidden scratch terminal")
+			t.Fatal("the window list shows a scratch pane")
 		}
 	}
 	for _, row := range m.currentSessionInput().Windows {
 		if row.ID == w.ID {
-			t.Fatal("the rail shows the hidden scratch terminal")
+			t.Fatal("the rail shows a scratch pane")
 		}
 	}
-	if n := m.GetWorkspaceWindowCount(1); n != 2 {
-		t.Fatalf("workspace 1 counts %d windows, want 2 (alpha and parked)", n)
+	if w.Workspace <= m.NumWorkspaces {
+		t.Fatalf("scratch workspace %d is in reach of the workspace keys", w.Workspace)
 	}
-
-	// Restore all, and a restore by index, leave it hidden.
-	m.RestoreWindow(scratchAt)
-	m.RestoreMinimizedByIndex(1)
-	if !w.Minimized {
-		t.Fatal("a restore showed the scratch terminal")
-	}
-	m.RestoreMinimizedByIndex(0)
-	if parked.Minimized {
-		t.Fatal("the parked pane did not restore")
-	}
-	if m.HasMinimizedWindows() {
-		t.Fatal("HasMinimizedWindows counts the hidden scratch terminal")
-	}
-
-	// Shown, it is still no window of the layout: the list and the rail
-	// leave it out, and the workspace count does not include it.
-	w.Minimized = false
-	for _, it := range m.GetAggregateViewItems() {
-		if it.Window == w {
-			t.Fatal("the window list shows the scratch terminal")
-		}
-	}
-	for _, row := range m.currentSessionInput().Windows {
-		if row.ID == w.ID {
-			t.Fatal("the rail shows the shown scratch terminal")
-		}
-	}
-	if n := m.GetWorkspaceWindowCount(1); n != 2 {
-		t.Fatalf("workspace 1 counts %d windows with the scratch terminal shown, want 2", n)
+	m.showScratch(1)
+	if m.dockWorkspace() != 1 {
+		t.Fatalf("the dock names workspace %d, want 1", m.dockWorkspace())
 	}
 }
 
-// Hidden, it cannot be cycled to or joined to multifocus.
-func TestHiddenScratchIsNotCycledOrMultifocused(t *testing.T) {
+// A scratch pane is not minimized, not floated and not moved out of its
+// group, and its pane menu dims Minimize.
+func TestScratchPaneStaysInItsGroup(t *testing.T) {
 	m := scratchOS(t, false)
-	addScratch(m, 1, true)
-	for _, i := range m.cyclableWindows() {
-		if isScratch(m.Windows[i]) {
-			t.Fatal("the focus cycle reaches the scratch terminal")
-		}
+	w := addScratch(m, scratchName, "s1")
+	m.showScratch(1)
+	ws := w.Workspace
+	m.MinimizeWindow(1)
+	m.ToggleFloating()
+	m.MoveWindowToWorkspace(1, 2)
+	if w.Minimized || w.IsFloating || w.Workspace != ws {
+		t.Fatalf("minimized=%v floating=%v ws=%d", w.Minimized, w.IsFloating, w.Workspace)
 	}
-	m.ToggleMultifocus(1)
-	if m.MultifocusSet[m.Windows[1].ID] {
-		t.Fatal("the scratch terminal joined multifocus")
+	_, items := m.paneMenu(1)
+	for _, it := range items {
+		if it.Action == "minimize_window" && !it.Dim {
+			t.Error("minimize is live on a scratch pane")
+		}
+		if it.Action == "toggle_zoom" && it.Dim {
+			t.Error("zoom is dimmed on a scratch pane")
+		}
 	}
 }
 
-// In a daemon session the first press asks the daemon for the pane, in the
-// focused pane's folder or the home folder, and a second press while that
-// is on its way does nothing, so a double press cannot make two.
 func TestScratchCreateAsksOnceAndWaits(t *testing.T) {
 	m := scratchOS(t, true)
 	var asked []scratchRequest
@@ -221,7 +305,8 @@ func TestScratchCreateAsksOnceAndWaits(t *testing.T) {
 	}
 }
 
-// The pane that arrives is shown the way a press shows it.
+// The pane that arrives is shown the way a press shows it: its group comes
+// on the screen and the keyboard goes to it.
 func TestScratchArrivalTakesTheKeyboard(t *testing.T) {
 	m := scratchOS(t, false)
 	m.Mode = WindowManagementMode
@@ -232,7 +317,7 @@ func TestScratchArrivalTakesTheKeyboard(t *testing.T) {
 	if m.Mode == TerminalMode || m.scratchPending == "" {
 		t.Fatal("terminal mode came before the pane")
 	}
-	w := addScratch(m, 1, false)
+	w := addScratch(m, scratchName, "arrived")
 	m.maybeFocusScratch()
 	if m.Mode != TerminalMode || m.GetFocusedWindow() != w || m.scratchPending != "" {
 		t.Fatalf("mode=%v focused=%v pending=%v", m.Mode, m.GetFocusedWindow() == w, m.scratchPending)
@@ -293,52 +378,11 @@ func TestForcedTerminalModeWaitsForAPane(t *testing.T) {
 	}
 }
 
-// Closing the scratch terminal by hand hides it. Esc in window mode
-// (CloseFocusedPopup) and the close key, button and palette entry
-// (CloseWindowByHand) all keep the shell, so a running job survives. Another
-// popup still closes.
-func TestScratchCloseByHandHides(t *testing.T) {
-	m := scratchOS(t, false)
-	w := addScratch(m, 1, true)
-	m.ToggleScratch()
-	if !m.CloseFocusedPopup() {
-		t.Fatal("esc did nothing on the shown scratch terminal")
-	}
-	if m.scratchIndex() < 0 || !w.Minimized {
-		t.Fatalf("esc closed the scratch terminal: present=%v minimized=%v", m.scratchIndex() >= 0, w.Minimized)
-	}
-	m.ToggleScratch()
-	m.CloseWindowByHand(m.scratchIndex())
-	if m.scratchIndex() < 0 || !w.Minimized {
-		t.Fatal("the close key closed the scratch terminal")
-	}
-	if m.FocusedWindow != 0 {
-		t.Fatalf("focus after the hide = %d, want alpha", m.FocusedWindow)
-	}
-}
-
-// Any focus on the hidden scratch terminal shows it first, so keys never go
-// into a pane nobody can see. The rail, the Inbox, a notification and
-// focus-window all focus through FocusWindow.
-func TestFocusOnHiddenScratchShowsIt(t *testing.T) {
-	m := scratchOS(t, false)
-	m.Mode = WindowManagementMode
-	w := addScratch(m, 3, true)
-	m.FocusWindow(1)
-	if w.Minimized || w.Workspace != 1 || m.CurrentWorkspace != 1 || m.GetFocusedWindow() != w {
-		t.Fatalf("minimized=%v workspace=%d current=%d focused=%v", w.Minimized, w.Workspace, m.CurrentWorkspace, m.GetFocusedWindow() == w)
-	}
-	m.ToggleScratch()
-	if m.FocusedWindow != 0 || m.Mode != WindowManagementMode {
-		t.Fatal("the hide after a focus jump did not go back to alpha")
-	}
-}
-
 // The dock menu's Restore counts in RestoreMinimizedByIndex's order, which
 // leaves the scratch terminal out.
 func TestMinimizedPositionSkipsScratch(t *testing.T) {
 	m := scratchOS(t, false)
-	addScratch(m, 1, true)
+	addScratch(m, scratchName, "s1").Minimized = true
 	parked := &terminal.Window{ID: "parked", Workspace: 1, Minimized: true}
 	m.Windows = append(m.Windows, parked)
 	if pos := m.minimizedPosition(2); pos != 0 {
@@ -350,40 +394,19 @@ func TestMinimizedPositionSkipsScratch(t *testing.T) {
 	}
 }
 
-// The created and closed notices do not count the scratch terminal.
-func TestNoticeCountLeavesScratchOut(t *testing.T) {
-	m := scratchOS(t, false)
-	addScratch(m, 1, false)
-	if n := m.windowCountForNotice(); n != 1 {
-		t.Fatalf("count = %d, want 1", n)
-	}
-}
-
-// A show reads [scratch] again, so a size set since the last show applies.
-func TestScratchShowReadsTheSize(t *testing.T) {
-	m := scratchOS(t, false)
-	// A window with an emulator, so the box is really resized.
-	w := newTestWindow(t, "scratch-pane", 80, 30)
-	w.IsPopup, w.IsScratch, w.IsFloating, w.Minimized, w.Workspace = true, true, true, true, 1
-	m.Windows = append(m.Windows, w)
-	m.UserConfig.Scratch.Width, m.UserConfig.Scratch.Height = "50", "10"
-	m.ToggleScratch()
-	if w.PopupWidth != "50" || w.PopupHeight != "10" {
-		t.Fatalf("size = %s x %s, want 50 x 10", w.PopupWidth, w.PopupHeight)
-	}
-	_, _, width, height := m.popupRect(w)
-	if w.Width != width || w.Height != height || width != 50 || height != 10 {
-		t.Fatalf("box = %dx%d, rect %dx%d, want 50x10", w.Width, w.Height, width, height)
-	}
-}
-
 // A layout template neither stores the scratch terminal nor gives it a slot.
 func TestLayoutLeavesScratchOut(t *testing.T) {
 	useTempConfig(t)
 	a, _ := layoutWindow(t, "a")
 	a.Workspace = 1
 	m := layoutOS(a)
-	s := addScratch(m, 1, false)
+	if m.WorkspaceFocus == nil {
+		m.WorkspaceFocus = map[int]int{}
+	}
+	s := addScratch(m, scratchName, "s1")
+	// On the layout's workspace, which a scratch pane never is, so the test
+	// reads the mark and not the workspace.
+	s.Workspace = 1
 	s.X, s.Y = 20, 5
 	if err := SaveLayoutTemplate("with-scratch", m); err != nil {
 		t.Fatal(err)
@@ -393,85 +416,41 @@ func TestLayoutLeavesScratchOut(t *testing.T) {
 		t.Fatalf("templates = %+v, err %v, want one pane", tmpls, err)
 	}
 	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{X: 0, Y: 0, Width: 40, Height: 10}}}, m)
-	// The load focuses a pane of the layout, which hides the scratch
-	// terminal (it is a dropdown). It keeps its own box.
 	if s.X != 20 || s.Y != 5 {
 		t.Fatalf("the layout moved the scratch terminal to %d,%d", s.X, s.Y)
 	}
 }
 
-// The scratch terminal is a dropdown: a focus that goes to another pane, by
-// any path, hides it.
-func TestFocusElsewhereHidesScratch(t *testing.T) {
+// Multifocus inside a group takes the group's panes, and none of the
+// workspace it is shown over.
+func TestMultifocusAllInsideTheGroup(t *testing.T) {
 	m := scratchOS(t, false)
-	w := addScratch(m, 1, true)
-	m.ToggleScratch()
-	m.FocusWindow(0)
-	if !w.Minimized || m.FocusedWindow != 0 {
-		t.Fatalf("minimized=%v focused=%d, want hidden and alpha focused", w.Minimized, m.FocusedWindow)
+	a := addScratch(m, scratchName, "s1")
+	b := addScratch(m, scratchName, "s2")
+	m.showScratch(1)
+	m.ToggleMultifocusAll()
+	if !m.MultifocusSet[a.ID] || !m.MultifocusSet[b.ID] || m.MultifocusSet[m.Windows[0].ID] {
+		t.Fatalf("multifocus set = %v, want the two scratch panes only", m.MultifocusSet)
 	}
 }
 
-// The scratch terminal never enters the tiling: toggling floating on it does
-// nothing, and a retile keeps it out of the BSP tree.
-func TestScratchStaysOutOfTheTiling(t *testing.T) {
+// A state push that puts the focus on a scratch pane shows its group on this
+// client, and one that puts it back on an ordinary pane hides the group. The
+// focus is session state and the view is not, so this is how every client of
+// a session agrees on whether a group is up.
+//
+// Negative control, confirmed red: drop the show branch in syncScratchView.
+func TestSyncScratchViewFollowsTheFocus(t *testing.T) {
 	m := scratchOS(t, false)
-	m.AutoTiling = true
-	w := addScratch(m, 1, true)
-	m.ToggleScratch()
-	m.ToggleFloating()
-	if !w.IsFloating {
-		t.Fatal("toggle floating tiled the scratch terminal")
+	w := addScratch(m, scratchName, "s1")
+	m.FocusedWindow = 1 // as ApplyStateSync sets it from FocusedWindowID
+	m.syncScratchView()
+	if !m.InScratchView() || m.CurrentWorkspace != w.Workspace {
+		t.Fatalf("a focus on a scratch pane: view=%v current=%d", m.InScratchView(), m.CurrentWorkspace)
 	}
-	m.TileAllWindows()
-	if tree := m.WorkspaceTrees[1]; tree != nil && tree.HasWindow(m.GetWindowIntID(w.ID)) {
-		t.Fatal("the BSP tree holds the scratch terminal")
-	}
-}
-
-// A focus that hides the scratch terminal gives back the mode the show found.
-func TestParkRestoresTheMode(t *testing.T) {
-	m := scratchOS(t, false)
-	m.Mode = WindowManagementMode
-	addScratch(m, 1, true)
-	m.ToggleScratch()
-	if m.Mode != TerminalMode {
-		t.Fatal("the show did not enter terminal mode")
-	}
-	m.FocusWindow(0)
-	if m.Mode != WindowManagementMode {
-		t.Fatalf("mode after a focus elsewhere = %v, want window mode", m.Mode)
-	}
-}
-
-// A popup opened from inside the scratch terminal leaves it on the screen.
-func TestPopupOverScratchKeepsItShown(t *testing.T) {
-	m := scratchOS(t, false)
-	w := addScratch(m, 1, true)
-	m.ToggleScratch()
-	m.Windows = append(m.Windows, &terminal.Window{ID: "picker", IsPopup: true, IsFloating: true, Workspace: 1})
-	m.FocusWindow(2)
-	if w.Minimized {
-		t.Fatal("a popup over the scratch terminal hid it")
-	}
-}
-
-// The scratch terminal's pane menu dims Zoom and the splits.
-func TestScratchPaneMenuDimsZoomAndSplit(t *testing.T) {
-	m := scratchOS(t, false)
-	m.AutoTiling = true
-	addScratch(m, 1, false)
-	_, items := m.paneMenu(1)
-	for _, it := range items {
-		switch it.Action {
-		case "toggle_zoom", "split_vertical", "split_horizontal":
-			if !it.Dim {
-				t.Errorf("%s is live on the scratch terminal", it.Action)
-			}
-		case "minimize_window":
-			if it.Dim {
-				t.Error("minimize is dimmed on the scratch terminal")
-			}
-		}
+	m.FocusedWindow = 0
+	m.syncScratchView()
+	if m.InScratchView() || m.CurrentWorkspace != 1 {
+		t.Fatalf("a focus back on alpha: view=%v current=%d", m.InScratchView(), m.CurrentWorkspace)
 	}
 }

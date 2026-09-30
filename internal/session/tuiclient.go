@@ -1069,11 +1069,18 @@ func (c *TUIClient) SendIntent(commandType string, args ...string) error {
 // SendIntentIn is SendIntent with the directory a NewWindow starts in. The
 // daemon spawns the shell there, so nothing has to be typed into it.
 func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error {
+	return c.SendIntentAt(cwd, 0, commandType, args...)
+}
+
+// SendIntentAt is SendIntentIn with the workspace a NewWindow goes on. Zero
+// is the session's current workspace.
+func (c *TUIClient) SendIntentAt(cwd string, workspace int, commandType string, args ...string) error {
 	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
 		SessionName: c.SessionName(),
 		CommandType: commandType,
 		Args:        args,
 		Cwd:         cwd,
+		Workspace:   workspace,
 	})
 	if err != nil {
 		return err

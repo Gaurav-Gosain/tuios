@@ -586,6 +586,10 @@ type ExecuteCommandPayload struct {
 	// default. An older daemon ignores it and the window starts where it
 	// would have before.
 	Cwd string `json:"cwd,omitempty"`
+	// Workspace is the workspace a NewWindow goes on. Zero is the session's
+	// current one. A client in a scratch group sends the group's workspace,
+	// which is never the session's current one. An older daemon ignores it.
+	Workspace int `json:"workspace,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

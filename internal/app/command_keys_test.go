@@ -32,33 +32,33 @@ func TestCommandArgvRunsShWithTheVariables(t *testing.T) {
 	}
 }
 
-// Each scratch entry keeps its own pane, and only one is shown at a time.
+// Each scratch entry keeps its own group on its own workspace, and one group
+// is on the screen at a time.
 func TestScratchEntriesKeepTheirOwnPanes(t *testing.T) {
 	m := commandOS(t, false,
 		config.CommandBinding{Key: "prefix+alt+y", Type: "scratch", Command: "sh", Name: "one"},
 		config.CommandBinding{Key: "prefix+alt+u", Type: "scratch", Command: "sh", Name: "two"})
-	one := &terminal.Window{ID: "one", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "one", Workspace: 1, Minimized: true}
-	two := &terminal.Window{ID: "two", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "two", Workspace: 1, Minimized: true}
-	m.Windows = append(m.Windows, one, two)
+	one := addScratch(m, "one", "one")
+	two := addScratch(m, "two", "two")
 
 	m.RunCommandBinding("command:one")
-	if one.Minimized || !two.Minimized || m.GetFocusedWindow() != one {
-		t.Fatalf("after one: one hidden=%v two hidden=%v", one.Minimized, two.Minimized)
+	if m.CurrentWorkspace != one.Workspace || m.GetFocusedWindow() != one {
+		t.Fatalf("after one: current=%d, want %d", m.CurrentWorkspace, one.Workspace)
 	}
 	m.RunCommandBinding("command:two")
-	if !one.Minimized || two.Minimized || m.GetFocusedWindow() != two {
-		t.Fatalf("after two: one hidden=%v two hidden=%v", one.Minimized, two.Minimized)
+	if m.CurrentWorkspace != two.Workspace || m.GetFocusedWindow() != two || m.scratchBase != 1 {
+		t.Fatalf("after two: current=%d base=%d, want %d over 1", m.CurrentWorkspace, m.scratchBase, two.Workspace)
 	}
 	m.RunCommandBinding("command:two")
-	if !two.Minimized || m.FocusedWindow != 0 {
+	if m.InScratchView() || m.FocusedWindow != 0 {
 		t.Fatal("the second press of two did not hide it")
 	}
 	if len(m.Windows) != 3 {
 		t.Fatalf("windows = %d, want 3: no pane is made or closed", len(m.Windows))
 	}
-	// The built-in scratch terminal is a third, separate pane.
+	// The built-in scratch group is a third, separate one.
 	if m.scratchIndex() >= 0 {
-		t.Fatal("an entry's pane counts as the built-in scratch terminal")
+		t.Fatal("an entry's pane counts as the built-in scratch group")
 	}
 }
 
@@ -152,19 +152,17 @@ func TestCommandEntriesInThePalette(t *testing.T) {
 	}
 }
 
-// A scratch pane that arrives from the daemon hides the scratch pane on the
-// screen, even when the push already focused it.
+// A scratch group that arrives from the daemon replaces the group on the
+// screen.
 func TestArrivingScratchHidesTheShownOne(t *testing.T) {
 	m := commandOS(t, false)
-	m.Mode = TerminalMode
-	one := &terminal.Window{ID: "one", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "one", Workspace: 1}
-	two := &terminal.Window{ID: "two", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "two", Workspace: 1}
-	m.Windows = append(m.Windows, one, two)
-	m.FocusedWindow = 2
+	one := addScratch(m, "one", "one")
+	m.showScratch(1)
+	two := addScratch(m, "two", "two")
 	m.scratchPending, m.scratchPendingAt = "two", time.Now()
 	m.maybeFocusScratch()
-	if !one.Minimized || two.Minimized {
-		t.Fatalf("one hidden=%v two hidden=%v, want only two shown", one.Minimized, two.Minimized)
+	if m.CurrentWorkspace != two.Workspace || m.CurrentWorkspace == one.Workspace || m.scratchBase != 1 {
+		t.Fatalf("current=%d base=%d, want group two over 1", m.CurrentWorkspace, m.scratchBase)
 	}
 }
 
@@ -217,9 +215,11 @@ func TestScratchThatStopsAtOnceIsReported(t *testing.T) {
 // A local scratch pane that exits at once is reported. One that ran a while
 // is not.
 func TestLocalScratchThatStopsAtOnceIsReported(t *testing.T) {
-	m := commandOS(t, false)
-	w := &terminal.Window{ID: "fast", IsPopup: true, IsScratch: true, ScratchName: "x", CustomName: "X"}
-	slow := &terminal.Window{ID: "slow", IsPopup: true, IsScratch: true, ScratchName: "y", CustomName: "Y"}
+	m := commandOS(t, false,
+		config.CommandBinding{Key: "alt+x", Type: "scratch", Name: "x", Description: "X"},
+		config.CommandBinding{Key: "alt+y", Type: "scratch", Name: "y", Description: "Y"})
+	w := &terminal.Window{ID: "fast", IsScratch: true, ScratchName: "x"}
+	slow := &terminal.Window{ID: "slow", IsScratch: true, ScratchName: "y"}
 	m.scratchStarted = map[string]time.Time{"fast": time.Now(), "slow": time.Now().Add(-time.Minute)}
 	m.noteLocalScratchExit(slow)
 	if len(m.Notifications) != 0 {

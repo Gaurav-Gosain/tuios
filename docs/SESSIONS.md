@@ -164,51 +164,53 @@ running. Nothing is lost, because nothing the session needs lived in the client.
 
 ## The Scratch Terminal
 
-`Ctrl+B` `g` shows a scratch terminal in a popup over the current layout. The
-scratch terminal is one shell with a border. It has no tab bar, sidebar or
-dock of its own. Press `Ctrl+B` `g` again to hide it. tmux-floax does the same
-for tmux.
+`Ctrl+B` `g` shows the scratch terminal in a box over the current layout.
+Press `Ctrl+B` `g` again to hide it. tmux-floax does the same for tmux.
 
-Hiding does not close the terminal. The shell keeps running with its
-scrollback. The next `Ctrl+B` `g` shows the same terminal as you left it. The
-keyboard goes to it in terminal mode.
+The scratch terminal is a small layout of its own. It starts as one shell. You
+can split it into more panes, and move, resize and zoom them, as on a
+workspace. The key shows and hides all of its panes together. For example, keep
+log tails of three services and a shell for tests in the scratch terminal, and
+go back to your code with one key.
+
+Hiding does not close a pane. Each shell keeps running with its scrollback. The
+next `Ctrl+B` `g` shows the panes as you left them. The keyboard goes to the
+pane that had the focus, in terminal mode.
 
 - Each session has one scratch terminal. tuios creates it the first time you
   press the key.
-- The shell starts in the folder of the focused pane, or in your home folder.
-- The terminal opens on the workspace you are on. On a different workspace,
-  the key moves it there.
-- When you hide it, the focus goes back to the pane you used before.
-- Esc in window mode, the close key and the close button also hide the
-  scratch terminal. `tuios kill-window` closes it.
-- A focus on the hidden scratch terminal, for example with
-  `tuios focus-window`, shows it first.
-- The scratch terminal is shown only while it has the focus. A click outside
-  it hides it and focuses the pane under the pointer. The click does nothing
-  else. A focus on a different pane, by a key or from the sidebar, also hides
-  it.
-- The mouse does not move or resize the scratch terminal. Its size comes from
-  `[scratch]`.
-- A window key pressed in the scratch terminal does not act on a different
-  pane. The minimize key hides it. Zoom and split do nothing. A key that moves,
-  resizes, swaps or tiles a pane hides it.
-- With `focus_follows_mouse` on, the pointer does not take the focus from the
-  scratch terminal.
-- The key works from inside the popup. tuios reads `Ctrl+B` before the shell
+- The first shell starts in the folder of the focused pane, or in your home
+  folder.
+- The box shows over the workspace you are on. Its frame shows the name.
+- When you hide it, the focus goes back to the pane you used before, in the
+  mode you used before.
+- The window keys act inside the box while a pane of the scratch terminal has
+  the focus: split, focus movement, resize, swap, zoom, close and multifocus.
+  `tuios xpanes` that you run in a pane of the scratch terminal opens its panes
+  in the scratch terminal.
+- A pane of the scratch terminal is not minimized, not floated and not moved
+  to a workspace. The dock shows a message for a move.
+- Closing a pane closes it. When you close the last pane, the scratch terminal
+  ends and the box goes away. The next `Ctrl+B` `g` starts a new one.
+- A focus on a pane of the hidden scratch terminal, for example with
+  `tuios focus-window`, shows the box first.
+- A click outside the box hides it and focuses the pane under the pointer. The
+  click does nothing else. A focus on a pane outside the box, by a key or from
+  the sidebar, also hides it.
+- The mouse acts on the panes inside the box, as on a workspace. The box
+  itself does not move or change size. Its size comes from `[scratch]`.
+- The key works from inside the box. tuios reads `Ctrl+B` before the shell
   gets it.
-- The sidebar, the window list and the window count do not show the scratch
-  terminal. A hidden scratch terminal is also not in the dock, the tiled
-  layout, the focus cycle or multifocus. The `tuios list-windows`
-  table does not show it. `tuios list-windows --json` shows it with
-  `"scratch": true`, and `"minimized": true` while it is hidden.
+- The sidebar, the window list, the window count and the workspace list do not
+  show the panes of the scratch terminal. The `tuios list-windows` table does
+  not show them. `tuios list-windows --json` shows each with `"scratch": true`,
+  its `"scratch_name"`, and a workspace number of 1000 or more.
+- The focus is part of the session. When a client shows the scratch terminal,
+  every client of the session shows it.
 - When you detach, the scratch terminal stays as it is. It is there when you
   attach again.
-- After a daemon restart, the scratch terminal comes back hidden, with a new
-  shell.
-- When the shell exits, the popup closes. The next `Ctrl+B` `g` starts a new
-  shell.
-- A popup that you open with `tuios popup --name scratch` is not the scratch
-  terminal. The key does not hide or close it.
+- After a daemon restart, the scratch terminal comes back hidden. Each pane has
+  a new shell in its own folder, under its saved history, in the same layout.
 - In a session on a different machine, the key does not open a scratch
   terminal. The dock shows a message.
 
@@ -221,19 +223,20 @@ height = "80%"
 The `session` key is no longer used. tuios ignores it, and the config
 warnings tell you to remove it.
 
-The scratch terminal is a pane of the current session. It does not make a
+The scratch terminal is part of the current session. It does not make a
 separate session, so it does not change the session that a bare
 `tuios attach` picks.
 
 The first version of this key made a session called `scratch`. tuios does not
 use that session any more. To remove it, run `tuios kill-session scratch`.
 
-To add more scratch popups, each on its own key and with its own command,
+To add more scratch terminals, each on its own key and with its own command,
 add `[[keybindings.command]]` entries of type `scratch`. See
-[KEYBINDINGS.md](KEYBINDINGS.md#command-keys). The rules above apply to each
-of them. One scratch popup is on the screen at a time: a show hides the
-other. After a daemon restart, only the built-in scratch terminal comes back.
-The key of an entry starts its command again.
+[KEYBINDINGS.md](KEYBINDINGS.md#command-keys). Each one has its own layout,
+and the rules above apply to each of them. One box is on the screen at a
+time: a show replaces the other. After a daemon restart, the first pane of an
+entry has a shell, not the command of the entry. To start the command again,
+close the pane.
 
 The action is `toggle_scratch`. To use a different key, bind the action in
 `[keybindings.prefix_mode]` or in a different section. If your config puts `g`
@@ -252,8 +255,8 @@ pane, to unpin it. The command palette has the same command. From a shell, run
 unpin it.
 
 - The view is not the pane. The pane stays where it is in the layout. It keeps
-  running when it is on a different workspace, minimized or a hidden scratch
-  terminal.
+  running when it is on a different workspace, minimized or in a hidden
+  scratch terminal.
 - The view shows the last rows of the pane that hold text, from the left edge,
   at one cell for each cell. Its border shows the pane name and the agent
   state mark. It shows text only. Images do not show in it.

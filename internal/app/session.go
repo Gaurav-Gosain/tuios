@@ -17,11 +17,19 @@ import (
 // For windows with active animations, it uses the final (target) positions
 // so other clients see the end state immediately without animation jitter.
 func (m *OS) BuildSessionState() *session.SessionState {
+	// While a scratch group is on the screen the session's workspace and
+	// tiling mode are still the ones the user left: the group is this
+	// client's view, and the focus on its pane is what the session holds of
+	// it. See scratch.go.
+	currentWorkspace, autoTiling := m.CurrentWorkspace, m.AutoTiling
+	if m.InScratchView() {
+		currentWorkspace, autoTiling = max(m.scratchBase, 1), m.scratchBaseTiling
+	}
 	state := &session.SessionState{
 		Name:             m.SessionName,
-		CurrentWorkspace: m.CurrentWorkspace,
+		CurrentWorkspace: currentWorkspace,
 		MasterRatio:      m.MasterRatio,
-		AutoTiling:       m.AutoTiling,
+		AutoTiling:       autoTiling,
 		Width:            m.GetRenderWidth(),
 		Height:           m.GetRenderHeight(),
 		WorkspaceFocus:   make(map[int]string),
@@ -678,10 +686,22 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// retile.
 	previousWorkspace := m.CurrentWorkspace
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
-	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.MasterRatio = state.MasterRatio
 	tilingWasOn := m.AutoTiling
 	m.AutoTiling = state.AutoTiling
+	// A scratch group on the screen stays while the session is still on the
+	// workspace it was shown over. The tiling mode the push carries is that
+	// workspace's. See BuildSessionState.
+	if session.IsScratchWorkspace(previousWorkspace) {
+		if m.CurrentWorkspace == max(m.scratchBase, 1) {
+			m.scratchBaseTiling = m.AutoTiling
+			m.CurrentWorkspace, m.AutoTiling = previousWorkspace, true
+		} else {
+			m.scratchBaseTiling = m.AutoTiling
+			m.leaveScratchWorkspace()
+		}
+	}
+	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.adoptWorkspaceMasterRatio(state)
 	m.adoptWorkspaceStackRatio(state)
 	m.adoptWorkspaceHasCustom(state)

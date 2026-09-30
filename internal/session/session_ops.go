@@ -262,6 +262,11 @@ type NewWindowOptions struct {
 // window created on the current workspace and moved is visible on the wrong
 // workspace for as long as the two calls take, which an attached client renders.
 func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID string)) (WindowState, error) {
+	// A scratch pane is an ordinary tiled window on its group's workspace, not
+	// a popup. See scratch_workspace.go.
+	if opts.Scratch {
+		opts.Popup = false
+	}
 	title := opts.Title
 	width, height := s.Size()
 	if width <= 0 {
@@ -297,8 +302,8 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// Reject the workspace before spawning anything: a PTY created for a window
 	// that then fails to be placed is a process nothing owns.
 	if opts.Workspace != 0 {
-		if bound := s.GetState().workspaceBound(); opts.Workspace < 1 || opts.Workspace > bound {
-			return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, bound)
+		if st := s.GetState(); !st.workspaceAccepts(opts.Workspace) {
+			return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
 		}
 	}
 
@@ -340,13 +345,20 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	err = s.mutateState(func(state *SessionState) error {
 		// One scratch terminal per session, checked under the state lock so
 		// two calls that race cannot both add one.
-		if opts.Popup && opts.Scratch {
-			want := WindowState{ScratchName: opts.ScratchName}.ScratchKey()
-			for i := range state.Windows {
-				if state.Windows[i].Scratch && state.Windows[i].ScratchKey() == want {
-					return ErrScratchExists
-				}
+		scratch, scratchName := false, ""
+		if opts.Scratch {
+			if _, exists := scratchGroupWorkspace(state, opts.ScratchName); exists {
+				return ErrScratchExists
 			}
+			scratch, scratchName = true, scratchNameIf(opts)
+			opts.Workspace = freeScratchWorkspace(state)
+		} else if IsScratchWorkspace(opts.Workspace) {
+			// A split inside a scratch group joins the group.
+			name, ok := scratchNameOnWorkspace(state, opts.Workspace)
+			if !ok {
+				return errNoScratchGroup(opts.Workspace)
+			}
+			scratch, scratchName = true, name
 		}
 		if first && (state.Worktree == nil || !state.Worktree.Managed) {
 			state.Worktree = detected
@@ -392,8 +404,8 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			IsFloating:  opts.Popup,
 			PopupWidth:  opts.PopupWidth,
 			PopupHeight: opts.PopupHeight,
-			Scratch:     opts.Popup && opts.Scratch,
-			ScratchName: scratchNameIf(opts),
+			Scratch:     scratch,
+			ScratchName: scratchName,
 		}
 		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {
@@ -408,7 +420,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		if opts.Focus {
 			s.markFocusIntentLocked()
 			state.FocusedWindowID = windowID
-			state.CurrentWorkspace = workspace
+			// A scratch workspace is never the session's current one: a
+			// client shows it over the workspace it is on.
+			if !IsScratchWorkspace(workspace) {
+				state.CurrentWorkspace = workspace
+			}
 			state.FocusHistory = RecordFocus(state.FocusHistory, workspace, windowID)
 		}
 		return nil
@@ -427,7 +443,7 @@ var ErrScratchExists = errors.New("this session already has a scratch terminal o
 // scratchNameIf is the name a new window keeps, empty for any window that is
 // not a scratch pane and for the built-in scratch terminal.
 func scratchNameIf(opts NewWindowOptions) string {
-	if !opts.Popup || !opts.Scratch || opts.ScratchName == "scratch" {
+	if !opts.Scratch || opts.ScratchName == "scratch" {
 		return ""
 	}
 	return opts.ScratchName
@@ -491,16 +507,15 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		if err != nil {
 			return err
 		}
-		// A hidden scratch terminal is shown on the current workspace
-		// before it takes the focus, so keys never go to a pane nobody sees.
-		if w := &state.Windows[idx]; w.Scratch && w.Minimized {
-			w.Minimized = false
-			w.Workspace = state.CurrentWorkspace
-		}
 		win := state.Windows[idx]
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
-		state.CurrentWorkspace = win.Workspace
+		// A scratch pane takes the focus without its workspace becoming the
+		// session's: a client that sees the focus on a scratch pane shows the
+		// group over the workspace it is on (OS.syncScratchView).
+		if !IsScratchWorkspace(win.Workspace) {
+			state.CurrentWorkspace = win.Workspace
+		}
 		if state.WorkspaceFocus == nil {
 			state.WorkspaceFocus = make(map[int]string)
 		}
@@ -667,21 +682,19 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 // markRestoredScratch marks the window id as the session's scratch terminal,
 // hidden. A restore calls it: a push cannot set the mark, so the restore sets
 // it on canonical state after the push. See daemon_resurrect.go.
-func (s *Session) markRestoredScratch(id, name string) {
+func (s *Session) markRestoredScratch(panes map[string]scratchPane) {
 	_ = s.mutateState(func(state *SessionState) error {
 		for i := range state.Windows {
-			if w := &state.Windows[i]; w.ID == id {
-				w.Scratch, w.Popup, w.IsFloating, w.Minimized = true, true, true, true
-				w.ScratchName = name
+			w := &state.Windows[i]
+			p, ok := panes[w.ID]
+			if !ok {
+				continue
 			}
-		}
-		// A hidden pane holds no focus, or the first client would type into it.
-		if state.FocusedWindowID == id {
-			state.FocusedWindowID = ""
-		}
-		for ws, fid := range state.WorkspaceFocus {
-			if fid == id {
-				delete(state.WorkspaceFocus, ws)
+			w.Scratch, w.ScratchName, w.Workspace = true, p.name, p.workspace
+			w.Popup, w.IsFloating, w.Minimized = false, false, false
+			// A hidden group holds no focus, or the first client would show it.
+			if state.FocusedWindowID == w.ID {
+				state.FocusedWindowID = ""
 			}
 		}
 		return nil

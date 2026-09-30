@@ -111,8 +111,8 @@ func (c zoomCanvas) applySplit(s layout.SplitLine) layout.SplitLine {
 func (m *OS) zoomCanvasBounds(zoomed *terminal.Window, tile layout.Rect) (layout.Rect, bool) {
 	pct := m.Settings.GetZoomSize()
 	region := layout.Rect{
-		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
-		W: m.GetContentWidth(), H: m.GetUsableHeight(),
+		X: m.PaneLeft(), Y: m.PaneTop(),
+		W: m.PaneWidth(), H: m.PaneHeight(),
 	}
 	if zoomed == nil || pct >= 100 || tile.W <= 0 || tile.H <= 0 || region.W <= 0 || region.H <= 0 {
 		return region, false
@@ -163,8 +163,8 @@ func (m *OS) zoomCanvasBounds(zoomed *terminal.Window, tile layout.Rect) (layout
 // actually has neighbours on.
 func (m *OS) zoomCanvasAt(bounds, zoomedRect layout.Rect) zoomCanvas {
 	region := layout.Rect{
-		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
-		W: m.GetContentWidth(), H: m.GetUsableHeight(),
+		X: m.PaneLeft(), Y: m.PaneTop(),
+		W: m.PaneWidth(), H: m.PaneHeight(),
 	}
 	c := zoomCanvas{on: true, bounds: bounds}
 	c.panX = clampInt(zoomedRect.X+zoomedRect.W/2-region.W/2-region.X, 0, max(bounds.W-region.W, 0))

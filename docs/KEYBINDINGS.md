@@ -140,12 +140,13 @@ run it from the command palette. Set `hints.all_panes = true` to make
 
 ## Scratch terminal
 
-`Ctrl+B g` shows the scratch terminal, one shell in a popup over the layout.
-Press it again to hide the popup. The shell keeps running between shows. The
-key works from inside the popup. The action is `toggle_scratch`, and
-`[scratch]` sets the popup size. See
-[SESSIONS.md](SESSIONS.md#the-scratch-terminal). To add more scratch popups on
-keys of their own, see [Command keys](#command-keys).
+`Ctrl+B g` shows the scratch terminal, a small layout of panes in a box over
+the current layout. Press it again to hide the box. The shells keep running
+between shows. Inside the box the window keys act on its panes: split, move
+the focus, resize, swap, zoom and close. The key works from inside the box.
+The action is `toggle_scratch`, and `[scratch]` sets the size of the box. See
+[SESSIONS.md](SESSIONS.md#the-scratch-terminal). To add more scratch terminals
+on keys of their own, see [Command keys](#command-keys).
 
 ## Picture in picture
 
@@ -173,11 +174,12 @@ height = "80%"
   works after the leader (`Ctrl+B`). Any other key works in window mode and
   in terminal mode.
 - `type` is one of these:
-  - `scratch`: a popup that stays. The key shows it and hides it, as
-    `Ctrl+B g` does for the scratch terminal. Each entry has its own popup.
-    One scratch popup is on the screen at a time. When the command exits, the
-    popup closes, and the next press starts the command again. With no
-    `command`, the popup runs your shell.
+  - `scratch`: a scratch terminal of its own. The key shows it and hides it,
+    as `Ctrl+B g` does for the built-in one. Each entry has its own layout:
+    you can split it. One scratch terminal is on the screen at a time. When
+    the command exits, its pane closes. When no pane is left, the next press
+    starts the command again. With no `command`, the first pane runs your
+    shell.
   - `popup`: a popup that closes when the command exits. This is the default.
   - `pane`: a new pane in the layout, next to the focused pane. It closes when
     the command exits.
@@ -187,7 +189,7 @@ height = "80%"
   the folder of the focused pane.
 - `description` is the name in the command palette and in
   `tuios keybinds list`. It is optional.
-- `name` keeps a scratch popup under a fixed name. It is optional. Without it,
+- `name` keeps a scratch terminal under a fixed name. It is optional. Without it,
   tuios makes the name from the description or the command.
 - `width` and `height` set the size of a scratch or popup entry, in cells
   (`100`) or percent (`80%`). The default is `80%`.
@@ -219,7 +221,8 @@ it again. tuios does not start it again by itself.
 The command and the palette row of an entry change when you save
 `config.toml`. A changed key works in the next client, as for the other
 keybindings. When you remove or rename an entry, or change the description of
-an entry that has no `name`, its scratch popup closes at the next reload. The
+an entry that has no `name`, the panes of its scratch terminal close at the
+next reload. The
 dock shows a message.
 
 In a session on a different machine, a `scratch` or `popup` entry does not

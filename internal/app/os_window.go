@@ -16,7 +16,7 @@ func (m *OS) ToggleFloating() {
 	fw := m.GetFocusedWindow()
 	// A popup is always floating. Tiling one put it in the layout tree, where
 	// it took a slot from the panes and every peer read the tree back.
-	if fw == nil || fw.IsPopup {
+	if fw == nil || fw.IsPopup || fw.IsScratch {
 		return
 	}
 
@@ -317,22 +317,14 @@ func (m *OS) FocusWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		return m
 	}
-	// A hidden scratch terminal is shown before it takes the focus. Every jump
-	// comes through here (the rail, the Inbox, a notification, focus-window),
-	// and a focus on the hidden pane sent keys into a shell nobody could see.
-	// showScratch un-hides it and calls back here.
-	if m.Windows[i].HiddenScratch() {
+	// A pane of a hidden scratch group is shown with its group before it
+	// takes the focus. Every jump comes through here (the rail, the Inbox, a
+	// notification, focus-window), and the switch below into the group's
+	// workspace is the show. A focus on an ordinary pane while a group is on
+	// the screen is the same switch the other way, which hides the group.
+	if isScratch(m.Windows[i]) && m.Windows[i].Workspace != m.CurrentWorkspace && !m.InScratchView() {
 		m.rememberScratchReturn()
-		m.showScratch(i)
-		return m
-	}
-	// The scratch terminal is a dropdown: it is on the screen only while it
-	// has the focus. A focus that goes to any other pane, by a click, a key,
-	// the rail or a jump, hides it first.
-	// A popup opened from inside it (tuios popup) is the one exception: the
-	// scratch terminal stays on the screen behind it.
-	if !isScratch(m.Windows[i]) && !m.Windows[i].IsPopup {
-		m.parkScratch()
+		m.scratchViewName = scratchNameOf(m.Windows[i])
 	}
 	// Shift and a label types into the pane that had focus.
 	if m.hints != nil && m.Windows[i].ID != m.hints.focusID {
@@ -458,9 +450,9 @@ func (m *OS) RecalcZOrder() {
 func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 	// A new floating window spawns inside the content region beside any
 	// reserved sidebar band, so it is never born half-hidden under the sidebar.
-	leftMargin := m.GetLeftMargin()
-	contentWidth := m.GetContentWidth()
-	screenHeight := m.GetUsableHeight()
+	leftMargin := m.PaneLeft()
+	contentWidth := m.PaneWidth()
+	screenHeight := m.PaneHeight()
 	if contentWidth <= 0 || screenHeight <= 0 {
 		// Sensible defaults when the screen size is not known yet.
 		leftMargin = 0
@@ -593,7 +585,13 @@ func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 			// positional: name first, argv after.
 			args = append([]string{name}, command...)
 		}
-		if err := m.DaemonClient.SendIntentIn(dir, "NewWindow", args...); err != nil {
+		// Inside a scratch group the window goes on the group's workspace,
+		// which is never the session's current one.
+		ws := 0
+		if m.InScratchView() {
+			ws = m.CurrentWorkspace
+		}
+		if err := m.DaemonClient.SendIntentAt(dir, ws, "NewWindow", args...); err != nil {
 			m.LogError("Failed to ask the daemon for a new window: %v", err)
 		} else {
 			// From here until the daemon says what it did, this client does not
@@ -624,6 +622,14 @@ func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 
 	window.Workspace = m.CurrentWorkspace
 	window.CustomName = name
+	// A window made inside a scratch group joins the group.
+	if m.InScratchView() {
+		window.IsScratch = true
+		window.ScratchName = m.scratchViewName
+		if window.ScratchName == scratchName {
+			window.ScratchName = ""
+		}
+	}
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)

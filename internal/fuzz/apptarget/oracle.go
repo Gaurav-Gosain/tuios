@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -127,14 +128,16 @@ func checkModelIndexes(t *Target) []fuzz.Violation {
 	if m.FocusedWindow < -1 || m.FocusedWindow >= len(m.Windows) {
 		return vio("focus-index", "FocusedWindow %d with %d panes", m.FocusedWindow, len(m.Windows))
 	}
-	if m.CurrentWorkspace < 1 || m.CurrentWorkspace > m.NumWorkspaces {
+	// A scratch group's workspace is outside the range on purpose: see
+	// session/scratch_workspace.go.
+	if (m.CurrentWorkspace < 1 || m.CurrentWorkspace > m.NumWorkspaces) && !session.IsScratchWorkspace(m.CurrentWorkspace) {
 		return vio("workspace-range", "CurrentWorkspace %d outside 1..%d", m.CurrentWorkspace, m.NumWorkspaces)
 	}
 	for i, w := range m.Windows {
 		if w == nil {
 			return vio("nil-pane", "Windows[%d] is nil", i)
 		}
-		if w.Workspace < 1 || w.Workspace > m.NumWorkspaces {
+		if (w.Workspace < 1 || w.Workspace > m.NumWorkspaces) && !(w.IsScratch && session.IsScratchWorkspace(w.Workspace)) {
 			return vio("workspace-range", "%s sits on workspace %d, outside 1..%d", w.ID, w.Workspace, m.NumWorkspaces)
 		}
 	}

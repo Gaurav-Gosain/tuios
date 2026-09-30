@@ -197,6 +197,16 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		name    string
 	}
 	popups := make(map[string]popup, len(canonical.Windows))
+	// The scratch mark, its name and its workspace are the daemon's too. A
+	// scratch pane is a tiled window on its group's workspace (see
+	// scratch_workspace.go), so a push can neither move one off that
+	// workspace nor put an ordinary window on one.
+	type scratchMark struct {
+		name      string
+		workspace int
+	}
+	scratches := make(map[string]scratchMark)
+	workspaces := make(map[string]int, len(canonical.Windows))
 	// The machine a window's process runs on is stamped once, when the daemon
 	// creates the window, and nothing moves a process between machines
 	// afterwards. So canonical is always the truth and it is carried by id the
@@ -231,6 +241,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.Popup {
 			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.Scratch, w.ScratchName}
 		}
+		if w.Scratch {
+			scratches[w.ID] = scratchMark{w.ScratchName, w.Workspace}
+		}
+		workspaces[w.ID] = w.Workspace
 		if w.Host != "" {
 			hosts[w.ID] = w.Host
 		}
@@ -278,10 +292,15 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// Only the daemon marks the scratch popup, so a push can neither set
 		// the mark on another pane nor clear it.
 		p, ok := popups[w.ID]
-		w.Scratch = ok && p.scratch
-		w.ScratchName = ""
-		if w.Scratch {
-			w.ScratchName = p.name
+		sm, isScratch := scratches[w.ID]
+		w.Scratch, w.ScratchName = isScratch, sm.name
+		switch {
+		case isScratch:
+			w.Workspace = sm.workspace
+		case IsScratchWorkspace(w.Workspace):
+			if ws, known := workspaces[w.ID]; known {
+				w.Workspace = ws
+			}
 		}
 		if ok {
 			w.Popup = true

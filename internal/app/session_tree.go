@@ -104,7 +104,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		IsCurrent:        true,
 		Restored:         m.SessionRestored,
 		Global:           m.SessionGlobal,
-		CurrentWorkspace: m.CurrentWorkspace,
+		CurrentWorkspace: m.dockWorkspace(),
 		Worktree:         worktreeRef(m.SessionWorktree),
 		Windows:          windows,
 	}

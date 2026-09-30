@@ -305,7 +305,7 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	default:
 		r.bottom = bounds.Y + bounds.H
 	}
-	if m.GetLeftMargin() > 0 {
+	if m.PaneLeft() > 0 {
 		r.left = bounds.X - 1
 	}
 	if m.GetRightMargin() > 0 {
@@ -798,7 +798,7 @@ func (m *OS) focusPerimeter(bounds layout.Rect) borderPerimeter {
 		clipTop:    max(win.Y-1, bounds.Y),
 		clipBottom: min(win.Y+win.Height, bounds.Y+bounds.H-1),
 
-		capLeft:  m.GetLeftMargin() == 0 || win.X-1 >= bounds.X,
+		capLeft:  m.PaneLeft() == 0 || win.X-1 >= bounds.X,
 		capRight: m.GetRightMargin() == 0 || win.X+win.Width < bounds.X+bounds.W,
 	}
 }

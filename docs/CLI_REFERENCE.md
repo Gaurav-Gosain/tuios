@@ -1057,8 +1057,9 @@ still there on the next attach. A daemon restart does not bring it back: the
 restore respawns a shell rather than the command, which is not the popup. Press
 esc in window mode to close one by hand, or close it like any other pane.
 
-To keep a shell in a popup between shows, use the scratch terminal
-(`Ctrl+B g`). It comes back hidden after a daemon restart. See
+To keep shells in a box between shows, use the scratch terminal
+(`Ctrl+B g`), a small layout of panes. It comes back hidden after a daemon
+restart. See
 [SESSIONS.md](SESSIONS.md#the-scratch-terminal). To put a command in a popup
 on a key of its own, use a `[[keybindings.command]]` entry. See
 [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).

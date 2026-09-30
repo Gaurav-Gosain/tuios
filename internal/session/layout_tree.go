@@ -73,7 +73,7 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
 		// Counted with the change it makes. See notePushLocked.
 		s.notePushLocked(p.PushOrigin, p.PushSeq)
-		if p.Workspace < 0 || p.Workspace > state.workspaceBound() {
+		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
 			return fmt.Errorf("workspace %d is out of range", p.Workspace)
 		}
 		trees, ids, next, changed := placeTree(state, p.Workspace, p.Tree, p.Leaves)

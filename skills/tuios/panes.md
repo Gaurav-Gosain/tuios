@@ -333,16 +333,17 @@ status; `--capture-stdout` prints its standard output. A popup closed by hand
 exits 130. Capture is not on Windows.
 
 A person's `Ctrl+B g` (action `toggle_scratch`) shows the scratch terminal: a
-popup that runs a shell and carries the `scratch` mark of the popup verb. A
-session has one. The key hides it instead of closing it, so the shell keeps
-running. A hidden scratch terminal is minimized. `list-windows` returns it with
-`"scratch": true`, and a hidden one has `"minimized": true`. It is the
-person's scratch pad: do not type into it, and do not count it as a pane you
-placed. `[scratch]` sets its width and height.
+group of panes on a workspace of its own, numbered from 1000 up, drawn in a
+box over the workspace the person is on. The key shows and hides the whole
+group, and the shells keep running. `list-windows` returns each pane with
+`"scratch": true`, its `"scratch_name"` (the built-in one is `"scratch"`) and
+that workspace. The session's current workspace is never a scratch one: whether
+a group is on the screen follows the focus. It is the person's scratch pad: do
+not type into it, do not count its panes as panes you placed, and do not focus
+one, since a focus on it shows the group. `[scratch]` sets the size of the box.
 
-A `[[keybindings.command]]` entry of type `scratch` is a scratch pane of its
-own, with `"scratch_name"` in `list-windows` set to the entry's name (the
-built-in one is `"scratch"`). The same rules apply to it. Command keys run only
+A `[[keybindings.command]]` entry of type `scratch` is a group of its own. The
+same rules apply to it. Command keys run only
 when a person presses them. Editing config.toml does not run one, so do not
 add an entry to get a command run: open a pane or a popup yourself.
 

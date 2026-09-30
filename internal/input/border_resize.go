@@ -48,11 +48,6 @@ func armBorderResize(x, y int, o *app.OS) bool {
 	if o.SidebarBandContains(x, y) || o.InDockBand(y) {
 		return false
 	}
-	// The scratch terminal has a fixed box, and the tiles under it are not
-	// in reach while it is shown. See scratchPress.
-	if o.ShownScratch() >= 0 {
-		return false
-	}
 	// Scrolling columns have their own width gesture; leave them alone.
 	if o.AutoTiling && o.UseScrollingLayout {
 		return false
@@ -74,9 +69,9 @@ func armBorderResize(x, y int, o *app.OS) bool {
 // border column each pane draws for itself, which is why the grab is measured
 // from BorderOffset: it is the pane's own answer to whether it drew one.
 func armTiledBorderResize(x, y int, o *app.OS) bool {
-	contentLeft, contentTop := o.GetLeftMargin(), o.GetTopMargin()
-	contentRight := contentLeft + o.GetContentWidth()
-	contentBottom := contentTop + o.GetUsableHeight()
+	contentLeft, contentTop := o.PaneLeft(), o.PaneTop()
+	contentRight := contentLeft + o.PaneWidth()
+	contentBottom := contentTop + o.PaneHeight()
 	slop := borderSlop(o)
 
 	for i := range o.Windows {

@@ -174,10 +174,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// focus-follows-mouse that stops working wherever the user actually spends
 	// their time just reads as broken. Rail keyboard focus still suppresses it,
 	// since the rail owns the keyboard and a click is the way back to a pane.
-	// A shown scratch terminal keeps the focus until a click or a key moves
-	// it: a hover that focused the pane under the pointer would hide it on
-	// the first move out of the popup.
-	if o.Settings.FocusFollowsMouse && !o.SidebarFocused && o.ShownScratch() < 0 &&
+	// Inside a scratch group the hover finds only the group's panes: the
+	// backdrop is not the current workspace.
+	if o.Settings.FocusFollowsMouse && !o.SidebarFocused &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
@@ -297,8 +296,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// The visible sliver must stay inside the content region, so a drag can
 		// never park a pane wholly under a reserved sidebar band.
-		leftMargin := o.GetLeftMargin()
-		contentRight := leftMargin + o.GetContentWidth()
+		leftMargin := o.PaneLeft()
+		contentRight := leftMargin + o.PaneWidth()
 
 		// Prevent window from going too far left (causes ANSI rendering issues)
 		if newX < leftMargin-(focusedWindow.Width-minVisibleX) {
@@ -311,13 +310,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Prevent window from going too far up
-		topMargin := o.GetTopMargin()
+		topMargin := o.PaneTop()
 		if newY < topMargin-(focusedWindow.Height-minVisibleY) {
 			newY = topMargin - (focusedWindow.Height - minVisibleY)
 		}
 
 		// Prevent window from going behind dock
-		maxY := topMargin + o.GetUsableHeight() - minVisibleY
+		maxY := topMargin + o.PaneHeight() - minVisibleY
 		if newY > maxY {
 			newY = maxY
 		}
@@ -384,8 +383,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Apply viewport bounds checking to prevent windows from going off-screen
 		// or under a reserved sidebar band. This is consistent with drag bounds
 		// checking and prevents layout issues.
-		leftMargin := o.GetLeftMargin()
-		contentRight := leftMargin + o.GetContentWidth()
+		leftMargin := o.PaneLeft()
+		contentRight := leftMargin + o.PaneWidth()
 
 		// Left edge: prevent X before the content region
 		if newX < leftMargin {
@@ -397,7 +396,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Top edge: prevent window from moving into dock area or above screen
-		topMargin := o.GetTopMargin()
+		topMargin := o.PaneTop()
 		if newY < topMargin {
 			// If resizing from top, adjust height to compensate
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.TopRight {
@@ -419,7 +418,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// Bottom edge: prevent window from exceeding usable height (dock area)
 		// maxY is the absolute bottom boundary accounting for dock position
-		maxY := topMargin + o.GetUsableHeight()
+		maxY := topMargin + o.PaneHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
 				// Resizing from bottom edge: constrain height
@@ -527,8 +526,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				sl.ViewportX += newWidth - oldWidth
 			}
 			sl.ClampViewport(viewW)
-			layouts := sl.ComputePositions(viewW, o.GetUsableHeight(), o.GetTopMargin())
-			stripLeft := o.GetLeftMargin()
+			layouts := sl.ComputePositions(viewW, o.PaneHeight(), o.PaneTop())
+			stripLeft := o.PaneLeft()
 			for winID, rect := range layouts {
 				win := o.GetWindowByIntID(winID)
 				if win == nil {

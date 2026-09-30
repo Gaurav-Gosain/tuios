@@ -352,8 +352,8 @@ func (m *OS) PiPAt(x, y int) bool {
 }
 
 // JumpToPiP focuses the pinned pane: it switches to the pane's workspace,
-// restores it when it is minimised and shows it when it is a hidden scratch
-// terminal (FocusWindow does the last two). The view then is not drawn,
+// restores it when it is minimised, and shows its group when it is a scratch
+// pane (FocusWindow does the switch). The view then is not drawn,
 // because its pane has the focus. It reports whether there was a pane to go
 // to.
 func (m *OS) JumpToPiP() bool {
@@ -362,7 +362,7 @@ func (m *OS) JumpToPiP() bool {
 		return false
 	}
 	w := m.Windows[i]
-	if w.Minimized && !w.HiddenScratch() {
+	if w.Minimized {
 		if w.Workspace != m.CurrentWorkspace {
 			m.FocusWindow(i)
 		}

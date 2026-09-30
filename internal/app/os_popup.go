@@ -28,10 +28,10 @@ import (
 // region: it is cut down to the region instead of overhanging it. That is the
 // tiler's rule (internal/layout.spans) applied to a size a person typed.
 func (m *OS) popupRect(w *terminal.Window) (x, y, width, height int) {
-	topMargin := m.GetTopMargin()
-	leftMargin := m.GetLeftMargin()
-	contentWidth := m.GetContentWidth()
-	contentHeight := m.GetUsableHeight()
+	topMargin := m.PaneTop()
+	leftMargin := m.PaneLeft()
+	contentWidth := m.PaneWidth()
+	contentHeight := m.PaneHeight()
 
 	width = session.ResolvePopupSize(w.PopupWidth, session.PopupDefaultWidth, contentWidth, session.PopupMinWidth)
 	height = session.ResolvePopupSize(w.PopupHeight, session.PopupDefaultHeight, contentHeight, session.PopupMinHeight)
@@ -109,18 +109,13 @@ func (m *OS) CloseFocusedPopup() bool {
 }
 
 // CloseWindowByHand is what a close key, the close button and the palette's
-// close do to the pane at i. The scratch terminal hides instead: its shell may
-// run a long job, and a close by hand would end it with no question asked.
-// kill-window and a tape's CloseWindow still close it.
+// close do to the pane at i. A pane of a scratch group closes like any pane.
+// When it was the group's last one, the group ends and the view goes back to
+// the workspace it was shown over.
 func (m *OS) CloseWindowByHand(i int) {
 	if i < 0 || i >= len(m.Windows) {
 		return
 	}
-	if isScratch(m.Windows[i]) {
-		if !m.Windows[i].Minimized {
-			m.hideScratch(i)
-		}
-		return
-	}
 	m.DeleteWindow(i)
+	m.leaveEmptyScratchView()
 }

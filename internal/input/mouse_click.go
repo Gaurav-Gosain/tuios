@@ -510,12 +510,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.DragOffsetX = X - clickedWindow.X
 	o.DragOffsetY = Y - clickedWindow.Y
 
-	// The scratch terminal is never resized or moved by the mouse.
-	if clickedWindow.IsScratch {
-		o.InteractionMode = false
-		return o, nil
-	}
-
 	switch mouse.Button {
 	case tea.MouseRight:
 		// Already in interaction mode and past the mode borrow above, now set
@@ -576,11 +570,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // forwarding motion to a mouse-mode app underneath.
 func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
-	// The scratch terminal is never moved: its box comes from [scratch].
-	if win.IsScratch {
-		o.FocusWindowFromClick(idx, x, y)
-		return
-	}
 	o.FocusWindowFromClick(idx, x, y)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode

@@ -48,6 +48,12 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 // executeDaemonCommandIn is executeDaemonCommand with the directory a
 // NewWindow starts in. Other commands ignore cwd.
 func (d *Daemon) executeDaemonCommandIn(sess *Session, commandType string, args []string, cwd string, onExit func(ptyID string)) (map[string]any, error) {
+	return d.executeDaemonCommandAt(sess, commandType, args, cwd, 0, onExit)
+}
+
+// executeDaemonCommandAt is executeDaemonCommandIn with the workspace a
+// NewWindow goes on. Zero is the session's current one.
+func (d *Daemon) executeDaemonCommandAt(sess *Session, commandType string, args []string, cwd string, workspace int, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
 		name := ""
@@ -63,7 +69,7 @@ func (d *Daemon) executeDaemonCommandIn(sess *Session, commandType string, args 
 			command = args[1:]
 		}
 		win, err := sess.AddDaemonWindowWith(
-			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd}, onExit)
+			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd, Workspace: workspace}, onExit)
 		if err != nil {
 			return nil, err
 		}

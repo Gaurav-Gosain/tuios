@@ -296,22 +296,9 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		if o.LearnBlocksAction(action) {
 			return o, nil
 		}
-		// A layout action on the scratch terminal never acts on another pane
-		// the user did not choose. Minimize hides it. Zoom, split and
-		// preselect do nothing. A move, resize, swap or tile key hides it and
-		// does nothing else.
-		if layoutAction(action) {
-			if si := o.ShownScratch(); si >= 0 && si == o.FocusedWindow {
-				switch {
-				case action == "minimize_window" || action == "minimize_prefix_focused":
-					o.HideShownScratch()
-				case scratchInertAction(action):
-				default:
-					o.HideShownScratch()
-				}
-				return o, nil
-			}
-		}
+		// Inside a scratch group a layout key acts on the group's panes, since
+		// the group's workspace is the current one. The few that would take a
+		// pane out of the group are refused by the OS methods they call.
 		return handler(msg, o)
 	}
 	return o, nil
@@ -1173,38 +1160,4 @@ func handleOpenLauncher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleNewSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenNewSessionPicker()
 	return o, nil
-}
-
-// layoutAction reports whether an action moves, sizes, swaps, splits or tiles
-// the focused pane. See Dispatch.
-func layoutAction(action string) bool {
-	switch action {
-	case "snap_left", "snap_right", "snap_fullscreen", "unsnap",
-		"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4",
-		"toggle_tiling", "prefix_toggle_tiling", "window_prefix_tiling",
-		"swap_left", "swap_right", "swap_up", "swap_down",
-		"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
-		"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
-		"toggle_zoom", "prefix_fullscreen",
-		"scroll_move_left", "scroll_move_right", "scroll_cycle_width", "scroll_consume", "scroll_expel",
-		"smart_split", "split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
-		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split", "prefix_equalize_splits",
-		"preselect_left", "preselect_right", "preselect_up", "preselect_down",
-		"minimize_window", "minimize_prefix_focused":
-		return true
-	}
-	return strings.HasPrefix(action, "move_and_follow_") || strings.HasPrefix(action, "workspace_prefix_move_")
-}
-
-// scratchInertAction reports whether a layout action does nothing at all on
-// the scratch terminal: it has no zoom and no split.
-func scratchInertAction(action string) bool {
-	switch action {
-	case "toggle_zoom", "prefix_fullscreen",
-		"smart_split", "split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
-		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split", "prefix_equalize_splits",
-		"preselect_left", "preselect_right", "preselect_up", "preselect_down":
-		return true
-	}
-	return false
 }

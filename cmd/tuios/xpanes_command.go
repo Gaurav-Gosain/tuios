@@ -291,13 +291,26 @@ func runXpanes(o xpanesOptions, items []string) error {
 	defer t.Close()
 
 	res := xpanesResult{Layout: kind}
-	ws, name, err := xpanesWorkspace(t, o.workspace)
-	if err != nil {
-		return reportVerbError(err, o.jsonOutput)
+	ws, name, err := 0, "", error(nil)
+	// Run from a pane of a scratch group, the panes join that group: the
+	// group is a workspace of its own, on the screen already.
+	scratchWS := 0
+	if o.workspace == 0 {
+		scratchWS = xpanesScratchWorkspace(t, os.Getenv("TUIOS_PANE_ID"))
+	}
+	if scratchWS != 0 {
+		ws, name = scratchWS, t.session
+	} else {
+		ws, name, err = xpanesWorkspace(t, o.workspace)
+		if err != nil {
+			return reportVerbError(err, o.jsonOutput)
+		}
 	}
 	res.Session, res.Workspace = name, ws
-	if _, err := t.client.Call("select-workspace", t.params(map[string]any{"workspace": ws})); err != nil {
-		return reportVerbError(t.explain("select-workspace", err), o.jsonOutput)
+	if scratchWS == 0 {
+		if _, err := t.client.Call("select-workspace", t.params(map[string]any{"workspace": ws})); err != nil {
+			return reportVerbError(t.explain("select-workspace", err), o.jsonOutput)
+		}
 	}
 
 	cwd := ""
@@ -451,4 +464,33 @@ func xpanesSummary(r xpanesResult) string {
 		b.WriteString(" Multifocus is on.")
 	}
 	return b.String()
+}
+
+// xpanesScratchWorkspace is the workspace of the scratch group the pane id
+// belongs to, or 0 for any other pane, an empty id, or a session tuios cannot
+// read.
+func xpanesScratchWorkspace(t *verbTarget, paneID string) int {
+	if paneID == "" {
+		return 0
+	}
+	raw, err := t.client.Call("list-windows", t.params(nil))
+	if err != nil {
+		return 0
+	}
+	var list struct {
+		Windows []struct {
+			ID        string `json:"window_id"`
+			Workspace int    `json:"workspace"`
+			Scratch   bool   `json:"scratch"`
+		} `json:"windows"`
+	}
+	if json.Unmarshal(raw, &list) != nil {
+		return 0
+	}
+	for _, w := range list.Windows {
+		if w.ID == paneID && w.Scratch && session.IsScratchWorkspace(w.Workspace) {
+			return w.Workspace
+		}
+	}
+	return 0
 }

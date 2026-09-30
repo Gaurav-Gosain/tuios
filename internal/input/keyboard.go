@@ -25,9 +25,7 @@ func selectWindowByIndex(num int, o *app.OS) {
 		if win.Workspace != o.CurrentWorkspace {
 			continue
 		}
-		// The scratch terminal has no number, shown or hidden, as it has no
-		// row on the rail.
-		if o.AutoTiling && win.Minimized || win.IsScratch {
+		if o.AutoTiling && win.Minimized {
 			continue
 		}
 		count++

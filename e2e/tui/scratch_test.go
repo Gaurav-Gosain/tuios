@@ -53,8 +53,10 @@ func scratchRowOf(t *testing.T, base string) (scratchRow, bool) {
 	return scratchRow{}, false
 }
 
-// waitScratch waits until the scratch terminal is listed as shown or hidden,
-// or is gone when gone is set, and returns its row.
+// waitScratch waits until the scratch terminal is listed, or is gone when
+// gone is set, and returns its row. Whether the group is on the screen is the
+// client's view, not session state, so hidden is read off the screen by the
+// callers; the argument stays so the calls read as what they check.
 func waitScratch(t *testing.T, term *tuitest.Terminal, base string, hidden, gone bool, what string) scratchRow {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -63,7 +65,8 @@ func waitScratch(t *testing.T, term *tuitest.Terminal, base string, hidden, gone
 		switch {
 		case gone && !ok:
 			return row
-		case !gone && ok && row.Minimized == hidden:
+		case !gone && ok:
+			_ = hidden
 			return row
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -286,10 +289,11 @@ func TestScratchTerminalWithoutDaemon(t *testing.T) {
 // TestScratchTerminalSurvivesCloseAndFocus covers the ways a key could end or
 // reach the scratch terminal behind the user's back.
 //
-// Esc in window mode closes a popup. On the scratch terminal it hides it, so
-// the job in the shell keeps running. A focus-window on the hidden pane shows
-// it before it takes the keys, so nothing is typed into a pane nobody sees.
-// A relative focus never lands on the hidden pane.
+// Esc in window mode closes a popup, but a scratch pane is not one: esc
+// leaves the group on the screen and the shell running. A focus-window on a
+// pane of the hidden group shows the group before it takes the keys, so
+// nothing is typed into a pane nobody sees. A relative focus never lands on a
+// hidden group's pane.
 func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 	base := t.TempDir()
 	term := startScratchOuter(t, base)
@@ -298,16 +302,21 @@ func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 	first := waitScratch(t, term, base, false, false, "the first show")
 	typeUntil(t, term, "echo KEEP-$((6*7))", "KEEP-42")
 
-	// Esc to window mode, then esc on the popup.
+	// Esc to window mode, then esc on the scratch pane: nothing closes.
 	windowManagementMode(t, term)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}
-	waitGone(t, term, "esc on the scratch terminal", "KEEP-42")
-	if row := waitScratch(t, term, base, true, false, "after esc"); row.ID != first.ID {
-		t.Fatalf("esc closed the scratch terminal: %s, then %s", first.ID, row.ID)
+	time.Sleep(500 * time.Millisecond)
+	if !strings.Contains(term.Screen().Text(), "KEEP-42") {
+		t.Fatalf("esc hid or closed the scratch group\n%s", term.Snapshot())
 	}
-	t.Logf("after esc on the scratch terminal:\n%s", term.Snapshot())
+	if row := waitScratch(t, term, base, false, false, "after esc"); row.ID != first.ID {
+		t.Fatalf("esc closed the scratch pane: %s, then %s", first.ID, row.ID)
+	}
+	t.Logf("after esc on the scratch pane:\n%s", term.Snapshot())
+	toggleScratch(t, term)
+	waitGone(t, term, "the scratch key", "KEEP-42")
 
 	// A relative focus walks the visible panes only.
 	for range 3 {

@@ -5,37 +5,46 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The scratch terminal, after tmux-floax: one key shows a shell in a popup
-// over the current layout, and the same key hides it again.
+// The scratch terminal, after tmux-floax: one key shows a small layout of
+// panes in a box over the current workspace, and the same key hides it again.
 //
-// It is one pane per session, a popup marked as the scratch terminal
-// (session.WindowState.Scratch). The first press creates it. After that the
-// key never closes it: hiding minimizes it, so the shell keeps running with
-// its scrollback, and the next press shows the same pane on whichever
-// workspace the user is on, focused and in terminal mode.
+// A scratch group is a workspace of its own (see session/scratch_workspace.go):
+// its panes are ordinary tiled windows on a workspace numbered from
+// session.ScratchWorkspaceBase up. Showing the group makes that workspace the
+// current one on this client, with the workspace the user left drawn under
+// it (the backdrop) and the pane region cut down to the scratch box
+// (scratchRegion). Hiding the group goes back. So everything that works on the
+// current workspace works inside the scratch with no code of its own: split,
+// focus movement, resize, zoom, close, multifocus, the BSP tree and its sync,
+// layout save and the daemon's restore. And a hidden group is simply a
+// workspace nobody is on, which every list, the dock, the renderer, tiling and
+// focus already leave alone.
 //
-// Minimizing is what keeps a hidden pane out of the layout, the renderer, the
-// focus cycle and hit testing, because all of them already skip a minimized
-// pane. What minimizing would add, a dock entry and a restore digit, is taken
-// back out explicitly: every place that offers minimized panes to the user
-// asks terminal.Window.HiddenScratch first. The pane stays in the session
-// state, so it survives a detach, and the daemon brings it back hidden after
-// a restart (see daemon_resurrect.go).
+// Each group has its own workspace, so each [[keybindings.command]] entry of
+// type scratch keeps its own layout. One group is on the screen at a time: a
+// show from inside another group switches straight to the new one.
 //
-// When its shell exits the pane closes like any popup, and the next press
-// starts a new one.
+// The session's current workspace stays the one the user left: this client
+// sends that one (BuildSessionState), and the focus on a scratch pane is what
+// tells every client to show the group (syncScratchView).
 //
-// The key reaches this client even while the popup has the focus. A binding
-// is looked up here before a key is passed to the pane, so the shell never
-// sees the toggle, and pressing it from inside the popup hides the popup.
+// When the last pane of a group closes, the group ends and the view goes
+// back. The next press starts a new group.
+//
+// The key reaches this client even while a scratch pane has the focus. A
+// binding is looked up here before a key is passed to the pane.
 
 // scratchName is the name the built-in scratch terminal carries on its border
 // and in session state.
@@ -131,26 +140,34 @@ func (m *OS) scratchConfig() config.ScratchConfig {
 	return m.UserConfig.Scratch
 }
 
-// isScratch reports whether w is the scratch terminal. The mark is the
-// daemon's, so a popup the user opened with the same name is not one.
+// isScratch reports whether w is a pane of a scratch group. The mark is the
+// daemon's, so a pane the user opened with the same name is not one.
 func isScratch(w *terminal.Window) bool {
-	return w != nil && w.IsPopup && w.IsScratch
+	return w != nil && w.IsScratch
 }
 
-// scratchIndex is the index of the built-in scratch terminal, or -1.
+// scratchIndex is the index of a pane of the built-in scratch group, or -1.
 func (m *OS) scratchIndex() int {
 	return m.scratchIndexNamed(scratchName)
 }
 
-// scratchIndexNamed is the index of the scratch pane kept under name, or -1.
+// scratchIndexNamed is the index of a pane of the group kept under name, or
+// -1. It is the pane the group had the focus on, when the client knows it.
 func (m *OS) scratchIndexNamed(name string) int {
 	m.forgetGoneDeadScratch()
+	first := -1
 	for i, w := range m.Windows {
-		if isScratch(w) && scratchNameOf(w) == name && !m.deadScratch[w.ID] {
+		if !isScratch(w) || scratchNameOf(w) != name || m.deadScratch[w.ID] {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		if f, ok := m.WorkspaceFocus[w.Workspace]; ok && f == i {
 			return i
 		}
 	}
-	return -1
+	return first
 }
 
 // forgetGoneDeadScratch drops the dead panes the client no longer holds.
@@ -169,6 +186,20 @@ func (m *OS) forgetGoneDeadScratch() {
 	}
 }
 
+// InScratchView reports whether this client shows a scratch group now.
+func (m *OS) InScratchView() bool {
+	return session.IsScratchWorkspace(m.CurrentWorkspace)
+}
+
+// ShownScratch is the index of the focused scratch pane while a group is on
+// the screen, or -1.
+func (m *OS) ShownScratch() int {
+	if !m.InScratchView() || !m.hasFocusedWindow() || !isScratch(m.Windows[m.FocusedWindow]) {
+		return -1
+	}
+	return m.FocusedWindow
+}
+
 // scratchAction is what one press of the toggle does.
 type scratchAction int
 
@@ -184,7 +215,7 @@ const (
 // from doing it, so a test can read the decision without a daemon.
 type scratchPlan struct {
 	action scratchAction
-	// index is the scratch terminal, for show and hide.
+	// index is a pane of the group, for show and hide.
 	index int
 	// refuse is the warning to show instead of acting.
 	refuse string
@@ -192,13 +223,11 @@ type scratchPlan struct {
 
 // planScratch decides what the toggle does now.
 //
-// A scratch terminal on the screen means hide. One that is hidden, or left
-// on another workspace, means show here. None means create, unless a create
-// is already on its way.
+// The group on the screen means hide. A group that exists means show it. None
+// means create, unless a create is already on its way.
 func (m *OS) planScratch(name string) scratchPlan {
 	if i := m.scratchIndexNamed(name); i >= 0 {
-		w := m.Windows[i]
-		if !w.Minimized && w.Workspace == m.CurrentWorkspace {
+		if m.Windows[i].Workspace == m.CurrentWorkspace {
 			return scratchPlan{action: scratchHide, index: i}
 		}
 		return scratchPlan{action: scratchShow, index: i}
@@ -215,8 +244,8 @@ func (m *OS) planScratch(name string) scratchPlan {
 	return scratchPlan{action: scratchCreate, index: -1}
 }
 
-// ToggleScratch shows the scratch terminal on the current workspace, or hides
-// it when it is already there. The first press creates it.
+// ToggleScratch shows the built-in scratch group, or hides it when it is on
+// the screen. The first press creates it.
 func (m *OS) ToggleScratch() tea.Cmd {
 	return m.toggleScratch(m.builtinScratch())
 }
@@ -229,19 +258,20 @@ func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 	case scratchRefuse:
 		m.ShowNotification(plan.refuse, "warning", m.Settings.NotificationDuration)
 	case scratchHide:
-		m.hideScratch(plan.index)
+		m.leaveScratchView()
 	case scratchShow:
-		m.rememberScratchReturn()
 		m.showScratch(plan.index)
 	case scratchCreate:
-		m.rememberScratchReturn()
+		if !m.InScratchView() {
+			m.rememberScratchReturn()
+		}
 		return m.createScratch(spec)
 	}
 	return nil
 }
 
 // rememberScratchReturn records the pane and the mode to go back to when the
-// scratch terminal hides.
+// scratch group hides.
 func (m *OS) rememberScratchReturn() {
 	m.scratchReturnMode = m.Mode
 	m.scratchReturnID = ""
@@ -250,66 +280,187 @@ func (m *OS) rememberScratchReturn() {
 	}
 }
 
-// showScratch puts the scratch terminal on the current workspace, on top, and
-// gives it the keyboard.
+// showScratch shows the group of the pane at i, with the focus on that pane,
+// in terminal mode. The switch into the group's workspace does the rest
+// (enterScratchWorkspace).
 func (m *OS) showScratch(i int) {
 	w := m.Windows[i]
-	w.Workspace = m.CurrentWorkspace
-	w.Minimized = false
-	// The config is read on each show, so a size set since the last show
-	// applies now.
-	if spec, ok := m.scratchSpecFor(scratchNameOf(w)); ok && m.UserConfig != nil {
-		w.PopupWidth, w.PopupHeight = spec.Width, spec.Height
+	if !m.InScratchView() {
+		m.rememberScratchReturn()
 	}
-	// One scratch terminal is on the screen at a time.
-	for j, o := range m.Windows {
-		if j != i && isScratch(o) && !o.Minimized {
-			o.Minimized = true
-			o.InvalidateCache()
-		}
+	m.scratchViewName = scratchNameOf(w)
+	if w.Workspace != m.CurrentWorkspace {
+		m.switchToWorkspace(w.Workspace, i)
+	} else {
+		m.FocusWindow(i)
 	}
-	m.applyPopupRect(w, false)
-	w.InvalidateCache()
-	m.FocusWindow(i)
-	if m.Mode != TerminalMode {
+	if m.Mode != TerminalMode && m.hasFocusedWindow() {
 		m.EnterTerminalMode()
 	}
 	m.MarkAllDirty()
-	m.SyncStateToDaemon()
 }
 
-// hideScratch minimizes the scratch terminal and gives the focus back to the
-// pane that had it before the show, in the mode it was in.
-func (m *OS) hideScratch(i int) {
-	w := m.Windows[i]
-	w.Minimized = true
-	w.InvalidateCache()
-
+// leaveScratchView goes back to the workspace the scratch group was shown
+// over, to the pane that had the focus before, in the mode it was in.
+func (m *OS) leaveScratchView() {
+	if !m.InScratchView() {
+		return
+	}
+	base := m.scratchBase
+	if base < 1 {
+		base = 1
+	}
 	back := -1
 	for j, o := range m.Windows {
-		if o.ID == m.scratchReturnID && m.scratchReturnID != "" &&
-			o.Workspace == m.CurrentWorkspace && !o.Minimized {
+		if m.scratchReturnID != "" && o.ID == m.scratchReturnID && o.Workspace == base && !o.Minimized {
 			back = j
 			break
 		}
 	}
-	if back >= 0 {
-		m.FocusWindow(back)
-	} else {
-		m.FocusNextVisibleWindow()
-	}
-	switch {
-	case !m.hasFocusedWindow() || isScratch(m.GetFocusedWindow()):
-		m.FocusedWindow = -1
+	m.switchToWorkspace(base, back)
+	if !m.hasFocusedWindow() {
 		if m.Mode == TerminalMode {
 			m.ExitTerminalMode()
 		}
-	case m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode:
+	} else if m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode {
 		m.ExitTerminalMode()
 	}
 	m.scratchReturnID = ""
 	m.MarkAllDirty()
-	m.SyncStateToDaemon()
+}
+
+// enterScratchWorkspace is the bookkeeping of a switch from an ordinary
+// workspace into a scratch one, run by switchToWorkspaceHeld before it
+// retiles: the workspace left is the backdrop, and the group always tiles.
+func (m *OS) enterScratchWorkspace(from, to int) {
+	if !session.IsScratchWorkspace(from) {
+		m.scratchBase = from
+		m.scratchBaseTiling = m.AutoTiling
+	}
+	m.AutoTiling = true
+	if name, ok := m.scratchNameOnWorkspace(to); ok {
+		m.scratchViewName = name
+	}
+}
+
+// leaveScratchWorkspace is the bookkeeping of a switch from a scratch
+// workspace to an ordinary one: the tiling mode the user left comes back.
+func (m *OS) leaveScratchWorkspace() {
+	m.AutoTiling = m.scratchBaseTiling
+	m.scratchBase = 0
+	m.scratchViewName = ""
+}
+
+// scratchNameOnWorkspace is the name of the group on a scratch workspace.
+func (m *OS) scratchNameOnWorkspace(ws int) (string, bool) {
+	for _, w := range m.Windows {
+		if w.Workspace == ws && isScratch(w) {
+			return scratchNameOf(w), true
+		}
+	}
+	return "", false
+}
+
+// scratchWorkspaceFree is the lowest scratch workspace no window is on, for a
+// group made without a daemon.
+func (m *OS) scratchWorkspaceFree() int {
+	used := map[int]bool{}
+	for _, w := range m.Windows {
+		used[w.Workspace] = true
+	}
+	ws := session.ScratchWorkspaceBase
+	for used[ws] {
+		ws++
+	}
+	return ws
+}
+
+// leaveEmptyScratchView goes back when the group on the screen has no pane
+// left: its last pane closed, and the group ended.
+func (m *OS) leaveEmptyScratchView() {
+	if !m.InScratchView() || m.scratchPending != "" {
+		return
+	}
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace {
+			return
+		}
+	}
+	m.leaveScratchView()
+}
+
+// syncScratchView shows or leaves a group to match the focus a state push
+// set. The focus is session state and the scratch view is not, so a client
+// that focuses a scratch pane makes every client of the session show its
+// group, and a focus back on an ordinary pane takes every client out.
+func (m *OS) syncScratchView() {
+	if !m.hasFocusedWindow() {
+		return
+	}
+	w := m.Windows[m.FocusedWindow]
+	switch {
+	case isScratch(w) && w.Workspace != m.CurrentWorkspace:
+		m.showScratch(m.FocusedWindow)
+	case !isScratch(w) && m.InScratchView() && w.Workspace != m.CurrentWorkspace:
+		m.leaveScratchView()
+	}
+}
+
+// scratchRegion is the scratch box while a group is on the screen: the outer
+// box, which the frame is drawn on, and the inner one, which the group's panes
+// tile. The size is the group's spec, read from the config on every call, in
+// the pane region the session agreed.
+func (m *OS) scratchRegion() (outer, inner layout.Rect, ok bool) {
+	if !m.InScratchView() {
+		return layout.Rect{}, layout.Rect{}, false
+	}
+	spec, known := m.scratchSpecFor(m.scratchViewName)
+	if !known {
+		spec = scratchSpec{Width: config.ScratchDefaultWidth, Height: config.ScratchDefaultHeight}
+	}
+	left, top := m.GetLeftMargin(), m.GetTopMargin()
+	cw, ch := m.GetContentWidth(), m.GetUsableHeight()
+	w := session.ResolvePopupSize(spec.Width, session.PopupDefaultWidth, cw, session.PopupMinWidth+2)
+	h := session.ResolvePopupSize(spec.Height, session.PopupDefaultHeight, ch, session.PopupMinHeight+2)
+	outer = layout.Rect{X: left + (cw-w)/2, Y: top + (ch-h)/2, W: w, H: h}
+	inner = layout.Rect{X: outer.X + 1, Y: outer.Y + 1, W: max(outer.W-2, 1), H: max(outer.H-2, 1)}
+	return outer, inner, true
+}
+
+// PaneLeft, PaneTop, PaneWidth and PaneHeight are the region the panes of the
+// current workspace are laid out in: the content region, or the inside of the
+// scratch box while a group is on the screen. Tiling, zoom, popups and the
+// border drag read these. Chrome (the dock, the sidebar, overlays) reads the
+// Get*Margin family, which never moves.
+func (m *OS) PaneLeft() int {
+	if _, in, ok := m.scratchRegion(); ok {
+		return in.X
+	}
+	return m.GetLeftMargin()
+}
+
+// PaneTop is PaneLeft's top edge.
+func (m *OS) PaneTop() int {
+	if _, in, ok := m.scratchRegion(); ok {
+		return in.Y
+	}
+	return m.GetTopMargin()
+}
+
+// PaneWidth is the width of the pane region.
+func (m *OS) PaneWidth() int {
+	if _, in, ok := m.scratchRegion(); ok {
+		return in.W
+	}
+	return m.GetContentWidth()
+}
+
+// PaneHeight is the height of the pane region.
+func (m *OS) PaneHeight() int {
+	if _, in, ok := m.scratchRegion(); ok {
+		return in.H
+	}
+	return m.GetUsableHeight()
 }
 
 // scratchDir is the folder the scratch shell starts in: the focused pane's,
@@ -359,14 +510,19 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 	}
 }
 
-// createLocalScratch makes the scratch terminal in a session without a
-// daemon. The shell starts at the popup's size, so its first prompt is drawn
-// for the box it is in.
+// createLocalScratch makes a scratch group in a session without a daemon: a
+// free scratch workspace, shown, with one pane.
 func (m *OS) createLocalScratch(dir string, spec scratchSpec) {
-	w := m.newLocalPopup(dir, spec.Title, spec.Width, spec.Height, spec.Command)
-	if w == nil {
+	ws := m.scratchWorkspaceFree()
+	m.scratchViewName = spec.Name
+	m.switchToWorkspace(ws, -1)
+	before := len(m.Windows)
+	m.AddWindowIn(dir, "", spec.Command...)
+	if len(m.Windows) == before {
+		m.leaveScratchView()
 		return
 	}
+	w := m.Windows[len(m.Windows)-1]
 	w.IsScratch = true
 	w.ScratchName = spec.Name
 	if m.scratchStarted == nil {
@@ -427,8 +583,10 @@ func openScratchPopup(req scratchRequest) error {
 	}
 	defer func() { _ = c.Close() }()
 	params := map[string]any{
-		"session":      req.Session,
-		"name":         req.Title,
+		"session": req.Session,
+		// The box's frame names the group, so its first pane takes the
+		// title its shell sets.
+		"name":         "",
 		"width":        req.Width,
 		"height":       req.Height,
 		"workspace":    req.Workspace,
@@ -506,7 +664,7 @@ func (m *OS) maybeFocusScratch() {
 	}
 	m.scratchPending = ""
 	// Always, even when the daemon's push already focused it: the show is
-	// also what hides another scratch pane that is on the screen.
+	// also what enters terminal mode.
 	m.showScratch(i)
 }
 
@@ -523,52 +681,13 @@ func (m *OS) windowCountForNotice() int {
 	return n
 }
 
-// ShownScratch is the index of the scratch terminal while it is on the screen
-// (shown, on the current workspace), or -1.
-func (m *OS) ShownScratch() int {
-	for i, w := range m.Windows {
-		if isScratch(w) && !w.Minimized && w.Workspace == m.CurrentWorkspace {
-			return i
-		}
-	}
-	return -1
-}
-
-// parkScratch hides a shown scratch terminal without moving the focus or the
-// mode. It is for a focus that is already on its way to another pane (see
-// FocusWindow). The press of the scratch key uses hideScratch, which also
-// gives the focus back.
-func (m *OS) parkScratch() {
-	i := -1
-	for j, w := range m.Windows {
-		if isScratch(w) && !w.Minimized {
-			i = j
-			break
-		}
-	}
-	if i < 0 {
-		return
-	}
-	m.Windows[i].Minimized = true
-	m.Windows[i].InvalidateCache()
-	m.scratchReturnID = ""
-	// The mode goes back to the one the show found, as a hide by the key
-	// does. The caller may still change it for the pane it focuses.
-	if m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode {
-		m.ExitTerminalMode()
-	}
-	m.MarkAllDirty()
-	m.SyncStateToDaemon()
-}
-
-// HideShownScratch hides the scratch terminal when it is on the screen, and
+// HideShownScratch hides the scratch group when it is on the screen, and
 // gives the focus back as the key does. It reports whether it hid one.
 func (m *OS) HideShownScratch() bool {
-	i := m.ShownScratch()
-	if i < 0 {
+	if !m.InScratchView() {
 		return false
 	}
-	m.hideScratch(i)
+	m.leaveScratchView()
 	return true
 }
 
@@ -582,7 +701,11 @@ func (m *OS) noteLocalScratchExit(w *terminal.Window) {
 	if !ok || !isScratch(w) || time.Since(started) >= scratchStoppedWait {
 		return
 	}
-	m.ShowNotification(fmt.Sprintf("The command %s stopped at once.", w.CustomName), "error", m.Settings.NotificationDuration)
+	label := scratchNameOf(w)
+	if spec, ok := m.scratchSpecFor(label); ok && spec.Title != "" {
+		label = spec.Title
+	}
+	m.ShowNotification(fmt.Sprintf("The command %s stopped at once.", label), "error", m.Settings.NotificationDuration)
 }
 
 // pruneOrphanScratches closes each scratch pane whose entry the config no
@@ -605,4 +728,63 @@ func (m *OS) pruneOrphanScratches() {
 		m.DeleteWindow(i)
 		m.ShowNotification(fmt.Sprintf("The scratch popup %s closed. config.toml has no entry for it now.", label), "info", m.Settings.NotificationDuration)
 	}
+	m.leaveEmptyScratchView()
+}
+
+// scratchBackdropZ moves every layer of the workspace a scratch group is
+// shown over below the group's frame and panes.
+const scratchBackdropZ = -10000
+
+// renderScratchFrame is the scratch box while a group is on the screen: a
+// border with the group's name, filled, between the backdrop and the group's
+// panes. The fill keeps the backdrop out of the gaps between the panes.
+func (m *OS) renderScratchFrame() *lipgloss.Layer {
+	outer, _, ok := m.scratchRegion()
+	if !ok || outer.W < 2 || outer.H < 2 {
+		return nil
+	}
+	title := m.scratchViewName
+	if spec, known := m.scratchSpecFor(m.scratchViewName); known && spec.Title != "" {
+		title = spec.Title
+	}
+	inner := outer.W - 2
+	label := ""
+	if title != "" && inner >= 6 {
+		label = " " + truncateRunes(title, inner-4) + " "
+	}
+	top := "╭─" + label + strings.Repeat("─", max(inner-1-lipgloss.Width(label), 0)) + "╮"
+	rows := make([]string, 0, outer.H)
+	rows = append(rows, top)
+	mid := "│" + strings.Repeat(" ", inner) + "│"
+	for range outer.H - 2 {
+		rows = append(rows, mid)
+	}
+	rows = append(rows, "╰"+strings.Repeat("─", inner)+"╯")
+	style := lipgloss.NewStyle().Foreground(theme.BorderFocusedWindowOn(m.host.bg))
+	return lipgloss.NewLayer(style.Render(strings.Join(rows, "\n"))).X(outer.X).Y(outer.Y).Z(-1).ID("scratch-frame")
+}
+
+// truncateRunes cuts s to at most n runes.
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:max(n, 0)])
+}
+
+// ScratchBox is the scratch box while a group is on the screen.
+func (m *OS) ScratchBox() (layout.Rect, bool) {
+	outer, _, ok := m.scratchRegion()
+	return outer, ok
+}
+
+// dockWorkspace is the workspace the dock names: the one a scratch group is
+// shown over, while a group is on the screen. The group's own number means
+// nothing to a person.
+func (m *OS) dockWorkspace() int {
+	if m.InScratchView() {
+		return max(m.scratchBase, 1)
+	}
+	return m.CurrentWorkspace
 }
