@@ -169,10 +169,11 @@ func focusAfterClose(state *SessionState, workspace int, closed string) string {
 				}
 			}
 		}
-		state.FocusHistory[workspace] = kept
 		if len(kept) > 0 {
+			state.FocusHistory[workspace] = kept
 			return kept[0]
 		}
+		delete(state.FocusHistory, workspace)
 	}
 	return firstVisibleOnWorkspace(state.Windows, workspace)
 }
@@ -446,6 +447,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		closed = state.Windows[idx]
 		workspace := closed.Workspace
 		state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+		state.FocusHistory = RemoveFocus(state.FocusHistory, closed.ID)
 		// The window is gone, so nothing owns its agent state any more. The
 		// detector sweeps stale claims on its own tick too, but only when it is
 		// running, and a claim can now come from a source that is not the detector.

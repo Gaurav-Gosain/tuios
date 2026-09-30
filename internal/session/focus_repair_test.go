@@ -49,6 +49,78 @@ func TestFocusHistoryAloneIsNotAFocusMove(t *testing.T) {
 	}
 }
 
+func TestRecordFocusCapsHistory(t *testing.T) {
+	var history map[int][]string
+	for i := range 17 {
+		history = RecordFocus(history, 1, string(rune('a'+i)))
+	}
+
+	got := history[1]
+	if len(got) != 16 {
+		t.Fatalf("history length = %d, want 16", len(got))
+	}
+	if got[0] != "q" || got[len(got)-1] != "b" {
+		t.Fatalf("history = %q, want entries q through b", got)
+	}
+}
+
+func TestRemoveFocusRemovesIDFromEveryWorkspace(t *testing.T) {
+	history := map[int][]string{
+		1: {"closed", "one"},
+		2: {"two", "closed"},
+	}
+
+	RemoveFocus(history, "closed")
+	if !slices.Equal(history[1], []string{"one"}) || !slices.Equal(history[2], []string{"two"}) {
+		t.Fatalf("history = %#v, want closed removed everywhere", history)
+	}
+}
+
+func TestRemoveFocusDropsEmptyHistory(t *testing.T) {
+	history := map[int][]string{1: {"closed"}}
+	RemoveFocus(history, "closed")
+	if _, ok := history[1]; ok {
+		t.Fatalf("history = %#v, want workspace entry removed", history)
+	}
+}
+
+func TestFocusAfterCloseDropsEmptyHistory(t *testing.T) {
+	state := &SessionState{FocusHistory: map[int][]string{1: {"closed"}}}
+	if got := focusAfterClose(state, 1, "closed"); got != "" {
+		t.Fatalf("focusAfterClose = %q, want none", got)
+	}
+	if _, ok := state.FocusHistory[1]; ok {
+		t.Fatalf("FocusHistory = %#v, want workspace entry removed", state.FocusHistory)
+	}
+}
+
+func TestDaemonClosePrunesUnfocusedWindowFromFocusHistory(t *testing.T) {
+	sess := newTestSession(t)
+	if err := sess.mutateState(func(state *SessionState) error {
+		state.Windows = []WindowState{
+			{ID: "focused", Workspace: 1},
+			{ID: "closed", Workspace: 1},
+		}
+		state.FocusedWindowID = "focused"
+		state.CurrentWorkspace = 1
+		state.FocusHistory = map[int][]string{
+			1: {"focused", "closed"},
+			2: {"closed"},
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seeding state: %v", err)
+	}
+
+	if _, err := sess.CloseDaemonWindow("closed"); err != nil {
+		t.Fatalf("CloseDaemonWindow: %v", err)
+	}
+	got := sess.GetState().FocusHistory
+	if !slices.Equal(got[1], []string{"focused"}) || len(got[2]) != 0 {
+		t.Fatalf("history after close = %#v, want closed removed everywhere", got)
+	}
+}
+
 // The focus-repair rule is what decides where focus lands after the focused
 // window goes away. Two implementations answer that question today: the daemon's
 // (CloseDaemonWindow) and the TUI's (OS.FocusNextVisibleWindow, which takes the
