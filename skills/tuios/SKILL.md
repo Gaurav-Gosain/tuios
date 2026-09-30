@@ -274,7 +274,7 @@ Print one with `tuios --skill <topic>`:
 
 | Topic | What it covers |
 | --- | --- |
-| `panes` | Sessions of your own, opening panes, markers and exit codes, `run`, layouts, popups, screenshots |
+| `panes` | Sessions of your own, opening panes, `xpanes`, markers and exit codes, `run`, layouts, popups, screenshots |
 | `state` | Reporting state, harness hooks, metadata, sources and precedence, detection, resuming after a restart |
 | `inbox` | The person's Inbox, `ask-human`, reading a blocked prompt, approvals answered from the Inbox |
 | `mail` | Messages between agents, threads, attachments, the stash, `ask-agent` in full, loops, trust |

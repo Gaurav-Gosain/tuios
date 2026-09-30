@@ -1,0 +1,425 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"regexp"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+)
+
+// tuios xpanes, after greymd/tmux-xpanes (discussion #273): one pane per item
+// in a new workspace, tiled, with multifocus on for all of them.
+//
+// It is made of the verbs any script has: list-workspaces, select-workspace,
+// new-window, focus-window, and run-command with the two client commands
+// ArrangePanes and SetMultifocus. Those two exist because the BSP tree of a
+// workspace and the multifocus set are the attached client's state, and no
+// verb reached them.
+
+// xpanesMaxPanes is how many panes xpanes opens without --force.
+const xpanesMaxPanes = 64
+
+// xpanesDefaultPlaceholder is what -c replaces with the item, as in xpanes.
+const xpanesDefaultPlaceholder = "{}"
+
+// xpanesOptions is the command line.
+type xpanesOptions struct {
+	session     string
+	workspace   int
+	command     string
+	placeholder string
+	layout      string
+	perPane     int
+	ssh         bool
+	noSync      bool
+	force       bool
+	jsonOutput  bool
+}
+
+func newXpanesCommand() *cobra.Command {
+	var o xpanesOptions
+	cmd := &cobra.Command{
+		Use:   "xpanes [flags] [items...]",
+		Short: "Open one pane per item in a new workspace, with multifocus on",
+		Long: `Open one pane per item in a new tiled workspace, and turn multifocus on for
+all of them. Then the keys you type go to every pane. This is like
+tmux-xpanes.
+
+The items are the arguments. With no arguments, tuios reads one item from each
+line of stdin, when stdin is not a terminal. tuios ignores empty lines.
+
+With -c, each pane runs the command with sh -c. tuios replaces {} with the
+item, in shell quotes. The pane closes when the command stops. To keep the
+pane, end the command with "; exec $SHELL". Without -c, each pane is a shell.
+
+Each pane gets the item in TUIOS_XPANES_ITEM and its number, from 1, in
+TUIOS_XPANES_INDEX. The item is the name of the pane.
+
+tuios opens the panes on the first empty workspace of the session, and shows
+that workspace. Inside a tuios pane, the session is the session of the pane.
+Outside, it is the most recently active session. -s names a different one.
+
+The layout and multifocus need a client attached to the session. The layout
+needs tiling on and the bsp layout. Otherwise tuios opens the panes and tells
+you what it could not do.`,
+		Example: `  # Three ssh sessions, and type into all of them at the same time
+  tuios xpanes --ssh host1 host2 host3
+
+  # Items from stdin, one command for each
+  printf 'a\nb\nc\n' | tuios xpanes -c 'echo {}; exec $SHELL'
+
+  # Tail logs side by side, without multifocus
+  ls /var/log/*.log | tuios xpanes -l even-horizontal --no-sync -c 'tail -f {}'
+
+  # Two items for each pane
+  tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			items, err := xpanesItems(args, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			return runXpanes(o, items)
+		},
+	}
+	f := cmd.Flags()
+	f.StringVarP(&o.session, "session", "s", "", "Session to open the panes in (default: this pane's session, else the most recently active)")
+	f.IntVar(&o.workspace, "workspace", 0, "Workspace to open the panes on. It must be empty (default: the first empty workspace)")
+	f.StringVarP(&o.command, "command", "c", "", "Command to run in each pane, with {} replaced by the item")
+	f.StringVarP(&o.placeholder, "replace", "I", xpanesDefaultPlaceholder, "Text in the command that tuios replaces with the item")
+	f.StringVarP(&o.layout, "layout", "l", layout.ArrangeTiled, "Layout: tiled, even-horizontal or even-vertical (also t, eh, ev)")
+	f.IntVarP(&o.perPane, "items-per-pane", "n", 1, "Number of items for each pane. tuios joins them with spaces")
+	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -c 'ssh {}'")
+	f.BoolVar(&o.noSync, "no-sync", false, "Do not turn multifocus on")
+	f.BoolVar(&o.force, "force", false, fmt.Sprintf("Open more than %d panes", xpanesMaxPanes))
+	f.BoolVar(&o.jsonOutput, "json", false, "Output result as JSON")
+	cmd.MarkFlagsMutuallyExclusive("command", "ssh")
+	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = cmd.RegisterFlagCompletionFunc("layout", cobra.FixedCompletions(layout.Arrangements, cobra.ShellCompDirectiveNoFileComp))
+	return cmd
+}
+
+// xpanesItems is the items from the arguments, else from stdin when stdin is
+// not a terminal. Empty items are left out.
+func xpanesItems(args []string, stdin io.Reader) ([]string, error) {
+	var items []string
+	if len(args) > 0 {
+		for _, a := range args {
+			if strings.TrimSpace(a) != "" {
+				items = append(items, a)
+			}
+		}
+	} else if !readerIsTerminal(stdin) {
+		sc := bufio.NewScanner(stdin)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			if line := strings.TrimRight(sc.Text(), "\r"); strings.TrimSpace(line) != "" {
+				items = append(items, line)
+			}
+		}
+		if err := sc.Err(); err != nil {
+			return nil, fmt.Errorf("could not read the items from stdin: %w", err)
+		}
+	}
+	if len(items) == 0 {
+		return nil, errors.New("there are no items. Give the items as arguments, or one on each line of stdin")
+	}
+	return items, nil
+}
+
+// readerIsTerminal reports whether r is a terminal.
+func readerIsTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
+
+// xpanesLayout is the arrangement a -l value names: tmux's names and
+// xpanes' short forms.
+func xpanesLayout(name string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "", "t", layout.ArrangeTiled:
+		return layout.ArrangeTiled, nil
+	case "eh", layout.ArrangeEvenHorizontal:
+		return layout.ArrangeEvenHorizontal, nil
+	case "ev", layout.ArrangeEvenVertical:
+		return layout.ArrangeEvenVertical, nil
+	}
+	return "", fmt.Errorf("the layout %q is not known. Use tiled, even-horizontal or even-vertical", name)
+}
+
+// xpanesPane is one pane to open.
+type xpanesPane struct {
+	Items []string
+	Title string
+	Argv  []string
+}
+
+// shellSafe matches a word sh reads as itself.
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9@%+=:,./_-]+$`)
+
+// xpanesQuote quotes s for sh, so sh -c reads it back as one word.
+func xpanesQuote(s string) string {
+	if shellSafe.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// xpanesPanes groups the items perPane at a time and builds each pane's argv.
+// command is the -c text, or "" for a shell.
+func xpanesPanes(items []string, perPane int, command, placeholder, shell string) []xpanesPane {
+	perPane = max(perPane, 1)
+	var panes []xpanesPane
+	for start := 0; start < len(items); start += perPane {
+		group := items[start:min(start+perPane, len(items))]
+		joined := strings.Join(group, " ")
+		env := []string{
+			"env",
+			"TUIOS_XPANES_ITEM=" + joined,
+			fmt.Sprintf("TUIOS_XPANES_INDEX=%d", len(panes)+1),
+		}
+		var argv []string
+		if command != "" {
+			quoted := make([]string, len(group))
+			for i, it := range group {
+				quoted[i] = xpanesQuote(it)
+			}
+			line := command
+			if placeholder != "" {
+				line = strings.ReplaceAll(command, placeholder, strings.Join(quoted, " "))
+			}
+			argv = append(env, "sh", "-c", line)
+		} else {
+			argv = append(env, shell)
+		}
+		panes = append(panes, xpanesPane{Items: group, Title: xpanesTitle(joined), Argv: argv})
+	}
+	return panes
+}
+
+// xpanesTitle is the pane name for an item: one line, at most 60 characters.
+func xpanesTitle(item string) string {
+	item = strings.Join(strings.Fields(item), " ")
+	if r := []rune(item); len(r) > 60 {
+		item = string(r[:59]) + "…"
+	}
+	return item
+}
+
+// xpanesResult is what xpanes did, for the summary and --json.
+type xpanesResult struct {
+	Session    string
+	Workspace  int
+	Windows    []string
+	Layout     string
+	Arranged   bool
+	Multifocus bool
+	Warnings   []string
+}
+
+func runXpanes(o xpanesOptions, items []string) error {
+	if runtime.GOOS == "windows" {
+		return errors.New("tuios xpanes needs sh, so it does not work on Windows")
+	}
+	kind, err := xpanesLayout(o.layout)
+	if err != nil {
+		return err
+	}
+	if o.perPane < 1 {
+		return errors.New("-n must be 1 or more")
+	}
+	command := o.command
+	if o.ssh {
+		command = "ssh " + o.placeholder
+	}
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	panes := xpanesPanes(items, o.perPane, command, o.placeholder, shell)
+	if len(panes) > xpanesMaxPanes && !o.force {
+		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
+	}
+
+	sessionName := o.session
+	if sessionName == "" {
+		sessionName = os.Getenv("TUIOS_SESSION")
+	}
+	t, err := dialSessionTarget(sessionName)
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+
+	res := xpanesResult{Layout: kind}
+	ws, name, err := xpanesWorkspace(t, o.workspace)
+	if err != nil {
+		return reportVerbError(err, o.jsonOutput)
+	}
+	res.Session, res.Workspace = name, ws
+	if _, err := t.client.Call("select-workspace", t.params(map[string]any{"workspace": ws})); err != nil {
+		return reportVerbError(t.explain("select-workspace", err), o.jsonOutput)
+	}
+
+	cwd := ""
+	if t.host == "" {
+		cwd, _ = os.Getwd()
+	}
+	for i, p := range panes {
+		params := map[string]any{
+			"name":      p.Title,
+			"workspace": ws,
+			"focus":     i == 0,
+			"command":   p.Argv,
+		}
+		if cwd != "" {
+			params["cwd"] = cwd
+		}
+		raw, err := t.client.Call("new-window", t.params(params))
+		if err != nil {
+			if len(res.Windows) > 0 {
+				err = fmt.Errorf("%w (%d of %d panes are open)", t.explain("new-window", err), len(res.Windows), len(panes))
+			}
+			return reportVerbError(err, o.jsonOutput)
+		}
+		var w struct {
+			WindowID string `json:"window_id"`
+		}
+		if err := json.Unmarshal(raw, &w); err != nil || w.WindowID == "" {
+			return fmt.Errorf("the daemon did not return the id of the new window")
+		}
+		res.Windows = append(res.Windows, w.WindowID)
+	}
+
+	arrange := append([]string{kind}, res.Windows...)
+	if err := xpanesClientCommand(t, "ArrangePanes", arrange); err != nil {
+		res.Warnings = append(res.Warnings, xpanesWarning("tuios could not lay out the panes", err, name))
+	} else {
+		res.Arranged = true
+	}
+	if !o.noSync {
+		if err := xpanesClientCommand(t, "SetMultifocus", res.Windows); err != nil {
+			res.Warnings = append(res.Warnings, xpanesWarning("tuios could not turn multifocus on", err, name))
+		} else {
+			res.Multifocus = true
+		}
+	}
+	_, _ = t.client.Call("focus-window", t.params(map[string]any{"window": res.Windows[0]}))
+
+	if o.jsonOutput {
+		outputJSON(map[string]any{
+			"success": true, "session": res.Session, "workspace": res.Workspace,
+			"windows": res.Windows, "layout": res.Layout, "arranged": res.Arranged,
+			"multifocus": res.Multifocus, "warnings": res.Warnings,
+		})
+		return nil
+	}
+	fmt.Println(xpanesSummary(res))
+	for _, w := range res.Warnings {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	return nil
+}
+
+// xpanesWorkspace picks the workspace: the one asked for, which must be
+// empty, or the first empty one. It also returns the session's name.
+func xpanesWorkspace(t *verbTarget, asked int) (int, string, error) {
+	raw, err := t.client.Call("list-workspaces", t.params(nil))
+	if err != nil {
+		return 0, "", t.explain("list-workspaces", err)
+	}
+	var list struct {
+		Workspaces []struct {
+			Workspace   int  `json:"workspace"`
+			WindowCount int  `json:"window_count"`
+			Current     bool `json:"current"`
+		} `json:"workspaces"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return 0, "", fmt.Errorf("could not read the workspaces: %w", err)
+	}
+	name := t.session
+	if info, err := t.client.Call("session-info", t.params(nil)); err == nil {
+		var s struct {
+			Name string `json:"session_name"`
+		}
+		if json.Unmarshal(info, &s) == nil && s.Name != "" {
+			name = s.Name
+		}
+	}
+	if asked != 0 {
+		for _, w := range list.Workspaces {
+			if w.Workspace != asked {
+				continue
+			}
+			if w.WindowCount > 0 {
+				return 0, "", fmt.Errorf("workspace %d has %d windows. Use an empty workspace, or leave out --workspace", asked, w.WindowCount)
+			}
+			return asked, name, nil
+		}
+		return 0, "", fmt.Errorf("workspace %d does not exist. Use a number from 1 to %d", asked, len(list.Workspaces))
+	}
+	for _, w := range list.Workspaces {
+		if w.WindowCount == 0 && !w.Current {
+			return w.Workspace, name, nil
+		}
+	}
+	return 0, "", errors.New("every workspace has windows. Close the windows on one workspace, then try again")
+}
+
+// xpanesClientCommand runs a client command through run-command. A window the
+// client has not heard of yet is tried again for a few seconds: see
+// app.ErrWindowNotHereYet.
+func xpanesClientCommand(t *verbTarget, command string, args []string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, err := t.client.Call("run-command", t.params(map[string]any{"command": command, "args": args}))
+		if err == nil || !strings.Contains(err.Error(), app.ErrWindowNotHereYet) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// xpanesWarning says what xpanes could not do, and what to do about it.
+func xpanesWarning(what string, err error, sessionName string) string {
+	var call *session.VerbCallError
+	if errors.As(err, &call) && call.Code == session.ErrVerbNeedsClient {
+		return fmt.Sprintf("%s, because no client is attached to session %s. Attach with: tuios attach %s", what, sessionName, sessionName)
+	}
+	msg := err.Error()
+	if errors.As(err, &call) {
+		msg = call.Message
+	}
+	return fmt.Sprintf("%s: %s", what, msg)
+}
+
+// xpanesSummary is the line xpanes prints.
+func xpanesSummary(r xpanesResult) string {
+	n := len(r.Windows)
+	noun := "panes"
+	if n == 1 {
+		noun = "pane"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Opened %d %s on workspace %d of session %s.", n, noun, r.Workspace, r.Session)
+	if r.Arranged {
+		fmt.Fprintf(&b, " The layout is %s.", r.Layout)
+	}
+	if r.Multifocus {
+		b.WriteString(" Multifocus is on.")
+	}
+	return b.String()
+}

@@ -50,7 +50,9 @@ type Executor interface {
 	SplitVertical() error
 	RotateSplit() error
 	EqualizeSplitsExec() error
-	Preselect(direction string) error // "left", "right", "up", "down"
+	Preselect(direction string) error                       // "left", "right", "up", "down"
+	ArrangePanesExec(layout string, windows []string) error // "tiled", "even-horizontal", "even-vertical"
+	SetMultifocusExec(windows []string) error
 
 	// Workspace
 	SwitchWorkspace(workspace int) error
@@ -259,6 +261,15 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return errMissingArg("Preselect", "left, right, up or down")
 		}
 		return ce.executor.Preselect(strings.ToLower(cmd.Args[0]))
+
+	case CommandTypeArrangePanes:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("ArrangePanes", "tiled, even-horizontal or even-vertical")
+		}
+		return ce.executor.ArrangePanesExec(strings.ToLower(cmd.Args[0]), cmd.Args[1:])
+
+	case CommandTypeSetMultifocus:
+		return ce.executor.SetMultifocusExec(cmd.Args)
 
 	// Workspace
 	case CommandTypeSwitchWS:

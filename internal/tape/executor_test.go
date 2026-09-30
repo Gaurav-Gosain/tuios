@@ -16,6 +16,8 @@ func (nopExecutor) SwitchWorkspace(_ int) error                     { return nil
 func (nopExecutor) FocusWindowByName(_ string) error                { return nil }
 func (nopExecutor) FocusWindowByID(_ string) error                  { return nil }
 func (nopExecutor) Preselect(_ string) error                        { return nil }
+func (nopExecutor) ArrangePanesExec(_ string, _ []string) error     { return nil }
+func (nopExecutor) SetMultifocusExec(_ []string) error              { return nil }
 func (nopExecutor) SaveLayoutExec(_ string) error                   { return nil }
 func (nopExecutor) SetConfig(_, _ string) error                     { return nil }
 func (nopExecutor) ShowNotificationCmd(_, _ string) error           { return nil }

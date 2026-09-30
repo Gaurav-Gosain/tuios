@@ -68,6 +68,25 @@ stays in the list until something closes it:
 tuios run-command -s work CloseWindow "$id"
 ```
 
+## Many panes at once
+
+`tuios xpanes` opens one pane per item on a new workspace, tiled, with
+multifocus on, like tmux-xpanes. Items come from the arguments or from stdin:
+
+```sh
+tuios xpanes --ssh web1 web2 web3                   # ssh to each host
+printf 'a\nb\n' | tuios xpanes -c 'make test-{}'    # {} is the item, shell quoted
+tuios xpanes --no-sync -l even-horizontal -c 'tail -f {}' app.log db.log
+```
+
+Each pane gets `TUIOS_XPANES_ITEM` and `TUIOS_XPANES_INDEX`, and is named after
+its item. A `-c` pane closes when its command exits; end the command with
+`; exec $SHELL` to keep it. `--json` prints the window ids. The layout and
+multifocus need an attached client; without one the panes open and a warning
+says so. More than 64 panes needs `--force`. For work you drive yourself, open
+panes with `new-window` and keep the ids; xpanes is for a person who wants to
+type into all of them.
+
 ## Text from many panes
 
 For a script, loop over the panes and use `capture-pane`:

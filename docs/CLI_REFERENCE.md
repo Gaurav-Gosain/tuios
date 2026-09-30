@@ -1087,6 +1087,73 @@ tuios popup --width 90% --height 80% -- htop
 tuios popup --json -- fzf | jq -r .window_id
 ```
 
+### `tuios xpanes`
+
+Open one pane per item in a new tiled workspace, and turn multifocus on for
+all of them. Then the keys you type go to every pane. This is like
+[tmux-xpanes](https://github.com/greymd/tmux-xpanes).
+
+**Usage:**
+```bash
+tuios xpanes [flags] [items...]
+command | tuios xpanes [flags]
+```
+
+The items are the arguments. With no arguments, tuios reads one item from each
+line of stdin, when stdin is not a terminal. tuios ignores empty lines.
+
+**Flags:**
+- `-c, --command <cmd>`: Command to run in each pane with `sh -c`. tuios replaces `{}` with the item, in shell quotes
+- `-I, --replace <text>`: Text that tuios replaces with the item (default: `{}`)
+- `--ssh`: Run `ssh` with the item in each pane. This is the same as `-c 'ssh {}'`
+- `-l, --layout <name>`: `tiled`, `even-horizontal` or `even-vertical`, or `t`, `eh` and `ev` (default: `tiled`)
+- `-n, --items-per-pane <n>`: Number of items for each pane. tuios joins them with spaces (default: 1)
+- `--no-sync`: Do not turn multifocus on
+- `--workspace <n>`: Workspace for the panes. It must be empty (default: the first empty workspace)
+- `-s, --session <name>`: Session for the panes (default: the session of this pane, else the most recently active)
+- `--force`: Open more than 64 panes
+- `--json`: Output the result as JSON
+
+**Panes:**
+
+- With `-c`, the pane closes when the command stops. To keep the pane, end the
+  command with `; exec $SHELL`.
+- Without `-c`, each pane is a shell.
+- Each pane gets the item in `TUIOS_XPANES_ITEM` and its number, from 1, in
+  `TUIOS_XPANES_INDEX`.
+- The item is the name of the pane.
+- The panes start in the folder where you run `tuios xpanes`.
+
+**Layout and multifocus:**
+
+tuios shows the new workspace and lays out the panes in item order. `tiled` is
+a grid. `even-horizontal` puts the panes side by side. `even-vertical` puts
+them one above the other.
+
+The layout and multifocus need a client attached to the session. The layout
+also needs tiling on and the `bsp` layout. When tuios cannot do one of them,
+it opens the panes and tells you what it did not do.
+
+`tuios xpanes` uses the verbs `list-workspaces`, `select-workspace`,
+`new-window` and `run-command`. The two client commands `ArrangePanes` and
+`SetMultifocus` also work alone with
+[`tuios run-command`](#tuios-run-command).
+
+**Examples:**
+```bash
+# Three ssh sessions, and type into all of them at the same time
+tuios xpanes --ssh host1 host2 host3
+
+# Items from stdin, one command for each
+printf 'a\nb\nc\n' | tuios xpanes -c 'echo {}; exec $SHELL'
+
+# Follow logs side by side, without multifocus
+ls /var/log/*.log | tuios xpanes -l even-horizontal --no-sync -c 'tail -f {}'
+
+# Two items for each pane
+tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt
+```
+
 ### `tuios ask-human`
 
 Ask the person a question with a fixed set of answers, wait for them to pick
@@ -1181,6 +1248,8 @@ exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 | `Split` | `horizontal` or `vertical` | Split the focused window |
 | `RotateSplit` | | Rotate the split direction |
 | `EqualizeSplits` | | Equalize all split ratios |
+| `ArrangePanes` | `tiled`, `even-horizontal` or `even-vertical` | Lay out the panes of the workspace again, in window order. Needs the bsp layout |
+| `SetMultifocus` | `[window...]` | Put exactly these windows in multifocus. With no window, clear multifocus |
 | `Screenshot` | | Save the focused window as an image |
 | `SwitchWorkspace` | `<1-9>` | Switch to workspace |
 | `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
