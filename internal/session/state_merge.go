@@ -52,6 +52,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}
+	// Older clients omit focus history.
+	if incoming.FocusHistory == nil {
+		incoming.FocusHistory = canonical.FocusHistory
+	}
 	// The order is daemon-owned for the same reason the names are, and an
 	// ordinary client sync omits it, so a nil incoming means "not sent" rather
 	// than "cleared". Without this a client that has never reordered anything
@@ -468,7 +472,7 @@ func focusViewOf(s *SessionState) focusView {
 // sameFocus reports whether two views name the same focus. The strip offset is
 // left out: scrolling is not a move of the focus.
 func (f focusView) sameFocus(g focusView) bool {
-	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS) && maps.EqualFunc(f.history, g.history, func(a, b []string) bool { return slices.Equal(a, b) })
+	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS)
 }
 
 // keepClientFocus puts a stale push's own focus back after reconcileStale took
