@@ -203,17 +203,24 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	typeUntil(t, term, "echo AGAIN-$((7*8))", "AGAIN-56")
 	t.Logf("the scratch terminal shown again and typed into:\n%s", term.Snapshot())
 
-	// Detach with the popup on the screen, and attach again.
+	// Detach with the popup on the screen, and attach again with a bare
+	// tuios attach. It picks the most recently active session. The first
+	// design made a session called scratch, which then won this pick, so a
+	// bare attach landed in scratch instead of work. The scratch terminal is
+	// a pane of work, so work is the only session to pick.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("send leader d: %v", err)
 	}
 	waitExit(t, term, "after leader d")
-	term = startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "work"}})
+	term = startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach"}})
 	if err := term.WaitForText("AGAIN-56", bootTimeout); err != nil {
 		t.Fatalf("the scratch terminal did not come back on reattach: %v\n%s", err, term.Snapshot())
 	}
 	if row := waitScratch(t, term, base, false, false, "after the reattach"); row.ID != first.ID {
 		t.Fatalf("the reattach made a new pane: %s, then %s", first.ID, row.ID)
+	}
+	if out, err := tuiosCLI(t, base, "ls", "--json"); err != nil || strings.Count(out, `"name"`) != 1 || !strings.Contains(out, `"work"`) {
+		t.Fatalf("after the bare attach the daemon lists %s, want only work", out)
 	}
 	t.Logf("after the reattach:\n%s", term.Snapshot())
 	time.Sleep(insertGuard)
