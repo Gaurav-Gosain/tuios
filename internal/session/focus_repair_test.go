@@ -1,12 +1,51 @@
 package session
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestFocusHistoryChangesStateFingerprint(t *testing.T) {
 	before := &SessionState{FocusHistory: map[int][]string{1: {"c", "b", "a"}}}
 	after := &SessionState{FocusHistory: map[int][]string{1: {"c", "a", "b"}}}
 	if StateFingerprint(before) == StateFingerprint(after) {
 		t.Fatal("a changed focus history was treated as an unchanged state sync")
+	}
+}
+
+func TestOlderClientSyncKeepsDaemonFocusHistory(t *testing.T) {
+	sess := newTestSession(t)
+	if err := sess.mutateState(func(state *SessionState) error {
+		state.FocusHistory = map[int][]string{1: {"current", "previous"}}
+		return nil
+	}); err != nil {
+		t.Fatalf("seeding focus history: %v", err)
+	}
+
+	// Older clients omit FocusHistory.
+	oldClientPush := clientSnapshot(sess)
+	oldClientPush.FocusHistory = nil
+	if !sess.UpdateState(oldClientPush) {
+		t.Fatal("old client push was unexpectedly treated as stale")
+	}
+
+	got := sess.GetState().FocusHistory
+	want := []string{"current", "previous"}
+	if len(got) != 1 || !slices.Equal(got[1], want) {
+		t.Fatalf("FocusHistory after old client push = %#v, want %#v", got, map[int][]string{1: want})
+	}
+}
+
+func TestFocusHistoryAloneIsNotAFocusMove(t *testing.T) {
+	before := focusView{
+		window: "current", workspace: 1,
+		perWS:   map[int]string{1: "current"},
+		history: map[int][]string{1: {"current", "previous"}},
+	}
+	after := before
+	after.history = map[int][]string{1: {"current"}}
+	if !before.sameFocus(after) {
+		t.Fatal("changing MRU history without changing focus was treated as a focus move")
 	}
 }
 
