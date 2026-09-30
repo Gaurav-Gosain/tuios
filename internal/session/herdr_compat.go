@@ -1,6 +1,6 @@
 package session
 
-// herdr's pane state protocol, accepted as an input.
+// herdr's pane state protocol, accepted as an input, and herdr's socket API.
 //
 // herdr (github.com/herdrdev/herdr) is another terminal multiplexer for
 // coding agents. Its panes carry HERDR_ENV=1, HERDR_SOCKET_PATH and
@@ -11,6 +11,11 @@ package session
 // with no install step, so accepting the same requests gives a Crush pane its
 // exact state.
 //
+// The same socket answers herdr's socket API for tools built on herdr:
+// Collie's herdr adapter, herdr plugins, bar widgets and editor bridges. That
+// part is herdr_api.go and herdr_events.go. This file carries the transport
+// and the pane report methods.
+//
 // tuios's own contract stays set-agent-state on the daemon socket (see
 // docs/AGENT_STATE.md). This is a second door into the same report path, and
 // it is kept apart from herdr's own so a real herdr on the same machine is
@@ -19,24 +24,25 @@ package session
 //   - It is a socket of tuios's own, beside the daemon's (HerdrSocketPath),
 //     never herdr's path. herdr reads HERDR_SOCKET_PATH as the path of its own
 //     server, and HERDR_ENV=1 as "inside herdr", which makes herdr refuse to
-//     start nested. So tuios sets the three variables only in a pane where they
+//     start nested. So tuios sets the variables only in a pane where they
 //     are wanted: one that starts a harness known to report this way, or every
 //     pane when [agents] herdr_protocol = "always" asks for it. A shell pane
 //     is not told it is a herdr pane.
 //   - A pane never inherits an outer herdr's HERDR_ENV or pane ids from the
 //     daemon's environment (guestenv.WithoutHostMultiplexer), so an agent in a
 //     tuios pane cannot report to the herdr pane tuios itself runs in.
-//   - Only the requests that report a pane's own agent are answered:
-//     pane.report_agent, pane.report_agent_session, pane.release_agent, and
-//     ping. Everything else gets herdr's error shape with code
-//     "unsupported", so a herdr client that reached this socket by mistake
-//     fails plainly instead of being answered as if tuios were herdr.
+//   - A method herdr has and tuios cannot map answers herdr's error shape with
+//     code "unsupported", and a method herdr does not have answers as herdr
+//     does, with invalid_request. A pong and a snapshot report herdr's
+//     version with "+tuios" and server "tuios", so a client can tell.
 //
-// A request may speak only for the caller's own pane. The daemon places the
+// A report may speak only for the caller's own pane. The daemon places the
 // process on the other end of the connection the way it places every caller
 // (peerPane: the kernel's peer pid, its ancestors, its terminal, and last its
 // TUIOS_PANE_ID) and refuses a pane_id that is not that pane. A process
-// outside every pane, or one the daemon cannot place, is refused.
+// outside every pane, or one the daemon cannot place, is refused a report.
+// The API methods hold a caller to what the same tuios verb would: see
+// herdr_api.go.
 //
 // Mapping, from herdr's PaneAgentState (src/api/schema/common.rs):
 //
@@ -56,12 +62,14 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -71,8 +79,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// herdrMaxRequest bounds one request line. A report is a few hundred bytes.
-const herdrMaxRequest = 64 << 10
+// herdrMaxRequest bounds one request line, as herdr's 1 MiB cap does. A
+// report is a few hundred bytes; a pane.send_text can be a long paste.
+const herdrMaxRequest = 1 << 20
 
 // herdrIOTimeout bounds reading the request and writing the answer.
 const herdrIOTimeout = 2 * time.Second
@@ -261,22 +270,44 @@ func (d *Daemon) acceptHerdrLoop(l net.Listener) {
 	}
 }
 
-// serveHerdr answers one request and closes the connection.
+// serveHerdr answers one request and closes the connection, or for
+// events.subscribe streams events on it until the client closes it.
 func (d *Daemon) serveHerdr(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in the herdr protocol socket: %v\n%s", r, debug.Stack())
+		}
+	}()
 	_ = conn.SetDeadline(time.Now().Add(herdrIOTimeout))
-	cs := &connState{conn: conn, peerPID: peerPID(conn)}
+	cs := &connState{conn: conn, clientID: "herdr-" + newClientID(), done: make(chan struct{}), peerPID: peerPID(conn)}
 	d.pinPeer(cs)
 	line, err := bufio.NewReaderSize(io.LimitReader(conn, herdrMaxRequest), 4096).ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return
 	}
-	var req herdrRequest
-	if err := json.Unmarshal(line, &req); err != nil {
-		writeHerdr(conn, "", nil, "invalid_request", "the request is not a JSON object")
+	if len(bytes.TrimSpace(line)) == 0 {
 		return
 	}
+	var req herdrRequest
+	if err := json.Unmarshal(line, &req); err != nil {
+		// herdr answers with the id only when it is a string it can read.
+		var idOnly struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(line, &idOnly)
+		writeHerdr(conn, idOnly.ID, nil, "invalid_request", "invalid request: "+err.Error())
+		return
+	}
+	if req.Method == "events.subscribe" {
+		d.serveHerdrEvents(cs, req.ID, req.Params)
+		return
+	}
+	// A wait runs as long as its own timeout says; the other methods answer
+	// at once.
+	_ = conn.SetDeadline(time.Time{})
 	result, code, msg := d.herdrCall(cs, req)
+	_ = conn.SetWriteDeadline(time.Now().Add(herdrIOTimeout))
 	writeHerdr(conn, req.ID, result, code, msg)
 }
 
@@ -295,15 +326,23 @@ func writeHerdr(w io.Writer, id string, result any, code, msg string) {
 	_, _ = w.Write(append(data, '\n'))
 }
 
+// herdrReportMethods are the methods a pane reports its own agent with.
+var herdrReportMethods = []string{
+	"pane.report_agent", "pane.report_agent_session", "pane.release_agent",
+	"pane.report_metadata", "notification.show",
+}
+
 // herdrCall carries out one request: a result, or an error code and message.
 func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string) {
-	switch req.Method {
-	case "ping":
-		return map[string]any{"type": "pong", "version": "tuios", "protocol": 0}, "", ""
-	case "pane.report_agent", "pane.report_agent_session", "pane.release_agent",
-		"pane.report_metadata", "notification.show":
-	default:
-		return nil, "unsupported", "this is tuios, which accepts only pane.report_agent, pane.report_agent_session, pane.release_agent, pane.report_metadata and notification.show here"
+	if !slices.Contains(herdrReportMethods, req.Method) {
+		out, herr, handled := d.herdrAPICall(cs, req.Method, req.Params)
+		if !handled {
+			return nil, "invalid_request", "invalid request: unknown variant `" + echoName(req.Method) + "`"
+		}
+		if herr != nil {
+			return nil, herr.code, herr.msg
+		}
+		return out, "", ""
 	}
 	var p herdrParams
 	if len(req.Params) > 0 {
@@ -417,14 +456,17 @@ func herdrHarness(agent string) string {
 	return strings.Trim(b.String(), "-_")
 }
 
-// herdrPane places the caller in its pane and checks pane_id names it.
+// herdrPane places the caller in its pane and checks pane_id names it. The
+// id is herdr's form (HERDR_PANE_ID) or the pane's tuios window id.
 func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string) {
 	fromPane, window := d.peerPane(cs)
-	switch {
-	case !fromPane || window == "":
+	if !fromPane || window == "" {
 		return "", "forbidden", "the caller runs in no pane of this tuios"
-	case paneID != window:
-		return "", "forbidden", "a pane may report only for itself"
+	}
+	if paneID != window {
+		if _, win, ierr := d.herdrFindPane(paneID); ierr != nil || win.ID != window {
+			return "", "forbidden", "a pane may report only for itself"
+		}
 	}
 	return window, "", ""
 }

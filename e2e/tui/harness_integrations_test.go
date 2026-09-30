@@ -732,7 +732,8 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 			t.Fatalf("send-text: %v\n%s", err, out)
 		}
 		out := waitCapture(t, base, "e2e-agent", name, "HE=")
-		if strings.Contains(out, "HE=1 HP="+win) {
+		// HERDR_PANE_ID is herdr's form, w<session>:p<window>.
+		if strings.Contains(out, "HE=1 HP=w") && strings.Contains(out, ":p"+strings.ReplaceAll(win, "-", "")[:12]) {
 			break
 		}
 		if time.Now().After(deadline) {
