@@ -59,6 +59,7 @@ func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 
 	// One at a time: two connections' detaches are handled in any order.
 	plain.send(t, MsgDetach, struct{}{})
+	waitAttachedClients(t, d, "img", 1)
 	waitSixelAdvertised(t, d, "img", true, "the plain client left")
 	again.send(t, MsgDetach, struct{}{})
 	time.Sleep(50 * time.Millisecond)
@@ -79,4 +80,30 @@ func TestClientGraphicsAfterHelloReachesPanes(t *testing.T) {
 
 	c.send(t, MsgClientGraphics, &ClientGraphicsPayload{})
 	waitSixelAdvertised(t, d, "late", false, "the client's DA1 answer said no sixel")
+}
+
+// waitAttachedClients waits until n TUI clients are attached to the session.
+func waitAttachedClients(t *testing.T, d *Daemon, name string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)
+	for {
+		s := d.manager.GetSession(name)
+		count := 0
+		d.clientsMu.RLock()
+		for _, cs := range d.clients {
+			cs.mu.Lock()
+			if s != nil && cs.sessionID == s.ID && cs.isTUIClient && cs.attached {
+				count++
+			}
+			cs.mu.Unlock()
+		}
+		d.clientsMu.RUnlock()
+		if count == n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d clients attached to %s, want %d", count, name, n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
