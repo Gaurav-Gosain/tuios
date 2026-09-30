@@ -45,6 +45,8 @@ type Manager struct {
 	// spawn time through HerdrEnv. See herdr_compat.go.
 	herdrSocket atomic.Pointer[string]
 	herdrMode   atomic.Pointer[string]
+	// herdrBin is HERDR_BIN_PATH, this tuios. See SetHerdrBin.
+	herdrBin atomic.Pointer[string]
 	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
 	// is picked at random for each manager and never leaves memory. See
 	// pane_token.go.
@@ -154,24 +156,33 @@ func (m *Manager) SetHerdrSocket(path string) {
 }
 
 // SetHerdrProtocol sets which panes are told about the herdr protocol
-// socket: config.HerdrProtocolAgents, config.HerdrProtocolAlways or
+// socket: config.HerdrProtocolAlways, config.HerdrProtocolAgents or
 // config.HerdrProtocolOff.
 func (m *Manager) SetHerdrProtocol(mode string) {
 	m.herdrMode.Store(&mode)
 }
 
+// SetHerdrBin records the program a pane is given as HERDR_BIN_PATH: this
+// tuios, which answers herdr's report commands (tuios pane report-agent and
+// the rest) over the herdr protocol socket. "" gives no HERDR_BIN_PATH.
+func (m *Manager) SetHerdrBin(path string) {
+	m.herdrBin.Store(&path)
+}
+
 // HerdrEnv is the herdr environment a pane that runs command (nil for the
 // user's shell) is started with, nil for none: HERDR_ENV, HERDR_SOCKET_PATH
-// naming tuios's own socket, and HERDR_PANE_ID naming the pane. A pane gets
-// it when the daemon listens on the socket, [agents] herdr_protocol is not
-// off, and the pane starts a harness known to report over it or the mode is
-// always. See herdr_compat.go for why a shell pane is not told by default.
+// naming tuios's own socket, HERDR_PANE_ID naming the pane, and
+// HERDR_BIN_PATH naming this tuios, for a reporter that calls herdr's CLI
+// rather than the socket. A pane gets it when the daemon listens on the
+// socket and [agents] herdr_protocol is not off: every pane by default, as
+// in herdr, or with "agents" only a pane that starts a harness known to
+// report this way. See herdr_compat.go.
 func (m *Manager) HerdrEnv(windowID string, command []string) []string {
 	sock := ""
 	if p := m.herdrSocket.Load(); p != nil {
 		sock = *p
 	}
-	mode := config.HerdrProtocolAgents
+	mode := config.HerdrProtocolAlways
 	if p := m.herdrMode.Load(); p != nil {
 		mode = config.NormalizeHerdrProtocol(*p)
 	}
@@ -181,7 +192,11 @@ func (m *Manager) HerdrEnv(windowID string, command []string) []string {
 	if mode != config.HerdrProtocolAlways && !guestenv.SpeaksHerdrProtocol(command) {
 		return nil
 	}
-	return []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + windowID}
+	env := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + windowID}
+	if p := m.herdrBin.Load(); p != nil && *p != "" {
+		env = append(env, "HERDR_BIN_PATH="+*p)
+	}
+	return env
 }
 
 // HostName is the name this machine gives itself, for TUIOS_HOST: the

@@ -1000,6 +1000,12 @@ func (d *Daemon) Start() error {
 	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
 		d.herdrListener = l
 		d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
+		// herdr's report commands, for a reporter that runs
+		// "$HERDR_BIN_PATH" pane report-agent, are answered by this
+		// binary. See cmd/tuios/herdr_commands.go.
+		if exe, err := d.agentProtoExecutable(); err == nil {
+			d.manager.SetHerdrBin(exe)
+		}
 	}
 
 	if err := d.writePidFile(); err != nil {

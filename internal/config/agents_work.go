@@ -169,7 +169,7 @@ func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 	}
 	if h := strings.ToLower(strings.TrimSpace(cfg.Agents.HerdrProtocol)); h != "" && h != NormalizeHerdrProtocol(h) {
 		warn("agents", "herdr_protocol", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s, %s); read as %s",
-			cfg.Agents.HerdrProtocol, HerdrProtocolAgents, HerdrProtocolAlways, HerdrProtocolOff, HerdrProtocolAgents))
+			cfg.Agents.HerdrProtocol, HerdrProtocolAlways, HerdrProtocolAgents, HerdrProtocolOff, HerdrProtocolAlways))
 	}
 	if q := cfg.Agents.Queue.Max; q < 0 || q > MaxQueueMax {
 		warn("agents.queue", "max", fmt.Sprintf("%d is outside 1 to %d; read as %d", q, MaxQueueMax, cfg.Agents.Queue.MaxEntries()))

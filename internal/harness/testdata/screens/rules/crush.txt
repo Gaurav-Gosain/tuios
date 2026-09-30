@@ -1,0 +1,37 @@
+# harness: crush
+# want: needs_input
+# how: measured. crush v0.97.2 (main at d599625) in a tuios pane, asking to
+# run a bash tool call a local stand-in model provider sent. Path shortened.
+---
+   Charm™ CRUSH ╱╱╱╱╱╱╱╱╱╱╱╱╱╱ master • ~/.../3/s/i/work • 0% • ctrl+d open
+ │ RUN-TOOL now ╭────────────────────────────────────────────╮
+                │  Permission Required ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  │
+   ● Bash touch │                                            │
+                │ Tool bash                                  │
+   Requesting pe│ Path /tmp/work                             │
+                │ Desc Create a marker file                  │
+                │                                            │
+                │                                            │
+                │   touch tuios-e2e-marker                   │
+                │                                            │
+                │                                            │
+   > Thinking...│   Allow      Allow for Session      Deny   │
+ :::            │                                            │
+ :::            │ ←/→ choose • enter confirm • esc exit      │
+                ╰────────────────────────────────────────────╯
+ esc cancel • tab focus chat • shift+tab mode • / or ctrl+p commands …
+=====
+# harness: crush
+# want: none
+# how: measured. The same Crush after the tool ran, at rest. The chat still
+# shows the tool call, and no rule matches.
+---
+   Charm™ CRUSH ╱╱╱╱╱╱╱╱╱╱╱╱╱╱ master • ~/.../3/s/i/work • 0% • ctrl+d open
+ │ RUN-TOOL now
+   ✓ Bash touch tuios-e2e-marker
+   Done. The command ran.
+   ◇ Fake via fake in 3s ───────────────────────────────────────────────────
+   > Ready for instructions
+ :::
+ :::
+ tab focus chat • shift+tab mode • / or ctrl+p commands • ctrl+m models …

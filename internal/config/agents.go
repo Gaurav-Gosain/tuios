@@ -30,12 +30,13 @@ type AgentsConfig struct {
 	// agent when it comes to rest. See agents_work.go.
 	Queue QueueConfig `toml:"queue,omitempty"`
 	// HerdrProtocol says which panes are told about the socket tuios accepts
-	// herdr's pane state protocol on, which Crush reports to by itself:
-	// "agents" (the default) for a pane that starts such a harness directly,
-	// "always" for every pane, so one started from a shell reports too, and
-	// "off" for none. A pane told about it reads as a herdr pane to anything
-	// that checks HERDR_ENV, herdr itself included, which refuses to start
-	// inside one. See docs/AGENT_STATE.md.
+	// herdr's pane state protocol on, which Crush and other harnesses report
+	// to by themselves: "always" (the default) for every pane, the way herdr
+	// tells every pane, so a harness started from a shell reports too;
+	// "agents" for a pane that starts such a harness directly; and "off" for
+	// none. A pane told about it reads as a herdr pane to anything that checks
+	// HERDR_ENV, herdr itself included, which refuses to start inside one
+	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
 }
 
@@ -47,13 +48,13 @@ const (
 )
 
 // NormalizeHerdrProtocol reads an [agents] herdr_protocol value. Empty and
-// anything unrecognised mean the default, "agents".
+// anything unrecognised mean the default, "always".
 func NormalizeHerdrProtocol(v string) string {
 	switch v = strings.ToLower(strings.TrimSpace(v)); v {
-	case HerdrProtocolAlways, HerdrProtocolOff:
+	case HerdrProtocolAgents, HerdrProtocolOff:
 		return v
 	}
-	return HerdrProtocolAgents
+	return HerdrProtocolAlways
 }
 
 // ApprovalsConfig is the [agents.approvals] table: which harnesses hand their
