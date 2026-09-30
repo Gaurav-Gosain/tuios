@@ -342,6 +342,11 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: PaneGapMax,
 	},
 	{
+		Path: "appearance.tiling_scheme", Type: OptionString, Section: "appearance",
+		Description: "BSP scheme a workspace inserts new windows with the first time it is tiled. A workspace already tiled keeps its own scheme.",
+		Accepted:    TilingSchemes, Default: TilingSchemeSpiral,
+	},
+	{
 		Path: "appearance.master_ratio", Type: OptionInt, Section: "appearance",
 		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
 		Default:     strconv.Itoa(MasterRatioDefault), Min: MasterRatioMin, Max: MasterRatioMax,

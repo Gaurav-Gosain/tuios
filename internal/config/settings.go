@@ -113,6 +113,14 @@ type Settings struct {
 	// Set via --border-style flag or appearance.border_style config
 	BorderStyle string
 
+	// TilingScheme is the BSP insertion scheme a workspace starts with the
+	// first time it is tiled: one of the TilingScheme* constants (spiral,
+	// longest_side, alternate, smart_split). Set via appearance.tiling_scheme.
+	// GetOrCreateBSPTree reads this only when a workspace has no tree yet; a
+	// workspace that is already tiled keeps its own scheme regardless of this
+	// value.
+	TilingScheme string
+
 	// ZenMode controls when window borders are hidden. Valid values are the
 	// ZenMode* constants: disabled (always visible), always (always hidden) or
 	// mouse (hidden while the pointer is idle). Set via appearance.zen_mode.
@@ -658,6 +666,7 @@ func DefaultSettings() Settings {
 		WrapLists:                   true,
 		SharedBorders:               false,
 		BorderStyle:                 "rounded",
+		TilingScheme:                TilingSchemeSpiral,
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
 		DockbarPosition:             DefaultDockbarPosition,

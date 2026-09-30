@@ -449,6 +449,15 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// BSP has one split it does not ship a key for.
 	"smart_split": "user binding",
 
+	// The tiling scheme actions (#291). No key is clearly free, so all five
+	// ship unbound; the palette reaches every one, and cycle_tiling_scheme is
+	// the row most users want.
+	"cycle_tiling_scheme":            "palette row, user binding",
+	"set_tiling_scheme_spiral":       "palette row, user binding",
+	"set_tiling_scheme_longest_side": "palette row, user binding",
+	"set_tiling_scheme_alternate":    "palette row, user binding",
+	"set_tiling_scheme_smart_split":  "palette row, user binding",
+
 	// Two of the three screenshot verbs. The picker is the one with a key.
 	"screenshot":        "run-command verb, user binding",
 	"screenshot_screen": "run-command verb, user binding",

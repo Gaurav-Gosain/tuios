@@ -282,6 +282,12 @@ type AppearanceConfig struct {
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
+	// TilingScheme is the BSP insertion scheme a workspace starts with the
+	// first time it is tiled: spiral, longest_side, alternate or smart_split.
+	// See TilingSchemes. A workspace that already has a tree keeps its own
+	// scheme, set here, by a layout template, or by cycle_tiling_scheme;
+	// changing this later does not move it. See GetOrCreateBSPTree.
+	TilingScheme string `toml:"tiling_scheme"` // Default BSP insertion scheme for a new workspace (default: spiral)
 	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
 	// because that is what a settings stepper and a CLI argument can carry: the
 	// option registry holds ints, and "50" is a value a person types. The model
@@ -377,6 +383,32 @@ var AutoEnterTerminalModes = []string{
 	string(AutoEnterTerminalOff),
 	string(AutoEnterTerminalTargeted),
 	string(AutoEnterTerminalAll),
+}
+
+// BSP tiling insertion schemes. See AppearanceConfig.TilingScheme. The
+// strings match layout.AutoScheme.String() and layout.ParseAutoScheme, which
+// also parse a layout template's own tiling_scheme.
+const (
+	// TilingSchemeSpiral alternates the split axis by the depth of the window
+	// being split, bspwm-style (default).
+	TilingSchemeSpiral = "spiral"
+	// TilingSchemeLongestSide splits across a window's longer side.
+	TilingSchemeLongestSide = "longest_side"
+	// TilingSchemeAlternate alternates the split axis by the tree's total
+	// split count.
+	TilingSchemeAlternate = "alternate"
+	// TilingSchemeSmartSplit picks the axis from the target window's aspect
+	// ratio, falling back to depth parity when neither side dominates.
+	TilingSchemeSmartSplit = "smart_split"
+)
+
+// TilingSchemes lists the valid values for appearance.tiling_scheme, in the
+// order cycle_tiling_scheme steps through them.
+var TilingSchemes = []string{
+	TilingSchemeSpiral,
+	TilingSchemeLongestSide,
+	TilingSchemeAlternate,
+	TilingSchemeSmartSplit,
 }
 
 // Zen-mode policies. See AppearanceConfig.ZenMode.
@@ -717,6 +749,7 @@ func DefaultConfig() *UserConfig {
 			ModalDim:                 new(ModalDimDefault),
 			PanelPadding:             overlay.DefaultPanelPadding,
 			ClockFormat:              DefaultClockFormat,
+			TilingScheme:             TilingSchemeSpiral,
 			MasterRatio:              MasterRatioDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			ScrollColumnMax:          ScrollColumnWidthMax,
@@ -1733,6 +1766,14 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ZenMode = cfg.Appearance.ZenMode
 	} else if cfg.Appearance.ZenMode != "" {
 		s.ZenMode = ZenModeDisabled
+	}
+
+	// TilingScheme takes the same shape: a typo falls back to spiral, which is
+	// what a new workspace already defaulted to before this setting existed.
+	if slices.Contains(TilingSchemes, cfg.Appearance.TilingScheme) {
+		s.TilingScheme = cfg.Appearance.TilingScheme
+	} else if cfg.Appearance.TilingScheme != "" {
+		s.TilingScheme = TilingSchemeSpiral
 	}
 
 	// Links takes the same shape: a typo falls back to the default rather than

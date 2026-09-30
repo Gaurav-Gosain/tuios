@@ -169,6 +169,10 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("split_vertical", handleSplitVertical)
 	d.Register("rotate_split", handleRotateSplit)
 	d.Register("equalize_splits", handleEqualizeSplits)
+	d.Register("cycle_tiling_scheme", handleCycleTilingScheme)
+	for _, scheme := range config.TilingSchemes {
+		d.Register("set_tiling_scheme_"+scheme, makeSetTilingSchemeHandler(scheme))
+	}
 	d.Register("preselect_left", handlePreselectLeft)
 	d.Register("preselect_right", handlePreselectRight)
 	d.Register("preselect_up", handlePreselectUp)
@@ -752,6 +756,26 @@ func handleEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ShowNotification("Splits equalized", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
+}
+
+func handleCycleTilingScheme(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if scheme := o.CycleTilingScheme(); scheme != "" {
+		o.ShowNotification("Tiling scheme: "+app.TilingSchemeLabel(scheme), "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+// makeSetTilingSchemeHandler returns a handler for set_tiling_scheme_<name>,
+// one per config.TilingSchemes entry, so a scheme can be bound directly
+// instead of stepped to with cycle_tiling_scheme.
+func makeSetTilingSchemeHandler(scheme string) ActionHandler {
+	parsed := layout.ParseAutoScheme(scheme)
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		if o.SetTilingScheme(parsed) {
+			o.ShowNotification("Tiling scheme: "+app.TilingSchemeLabel(scheme), "info", o.Settings.NotificationDuration)
+		}
+		return o, nil
+	}
 }
 
 func handlePreselectLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

@@ -59,3 +59,32 @@ func TestApplyLayoutNeverOverlaps(t *testing.T) {
 		}
 	}
 }
+
+// TestParseAutoSchemeRoundTrips checks every AutoScheme String()s to the text
+// ParseAutoScheme reads back, which is the text a layout template's
+// tiling_scheme and appearance.tiling_scheme both hold (see
+// config.TilingSchemes, which has to spell these the same way).
+func TestParseAutoSchemeRoundTrips(t *testing.T) {
+	cases := []struct {
+		text string
+		want AutoScheme
+	}{
+		{"spiral", SchemeSpiral},
+		{"longest_side", SchemeLongestSide},
+		{"alternate", SchemeAlternate},
+		{"smart_split", SchemeSmartSplit},
+	}
+	for _, tc := range cases {
+		if got := ParseAutoScheme(tc.text); got != tc.want {
+			t.Errorf("ParseAutoScheme(%q) = %v, want %v", tc.text, got, tc.want)
+		}
+		if got := tc.want.String(); got != tc.text {
+			t.Errorf("%v.String() = %q, want %q", tc.want, got, tc.text)
+		}
+	}
+	// An unrecognised value falls back rather than panicking or zeroing
+	// silently to something a caller would not expect.
+	if got := ParseAutoScheme("nonsense"); got != SchemeLongestSide {
+		t.Errorf("ParseAutoScheme(\"nonsense\") = %v, want the longest_side fallback", got)
+	}
+}

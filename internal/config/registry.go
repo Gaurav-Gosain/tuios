@@ -585,14 +585,19 @@ var ActionDescriptions = map[string]string{
 	"resize_height_90":          "Set focused window height to 90%",
 
 	// BSP Tiling
-	"split_horizontal": "Split window horizontally (top/bottom)",
-	"split_vertical":   "Split window vertically (left/right)",
-	"rotate_split":     "Rotate split",
-	"equalize_splits":  "Equalize all split ratios",
-	"preselect_left":   "Preselect left for next window",
-	"preselect_right":  "Preselect right for next window",
-	"preselect_up":     "Preselect up for next window",
-	"preselect_down":   "Preselect down for next window",
+	"split_horizontal":               "Split window horizontally (top/bottom)",
+	"split_vertical":                 "Split window vertically (left/right)",
+	"rotate_split":                   "Rotate split",
+	"equalize_splits":                "Equalize all split ratios",
+	"preselect_left":                 "Preselect left for next window",
+	"preselect_right":                "Preselect right for next window",
+	"preselect_up":                   "Preselect up for next window",
+	"preselect_down":                 "Preselect down for next window",
+	"cycle_tiling_scheme":            "Cycle the workspace's tiling scheme: spiral, longest side, alternate, smart split",
+	"set_tiling_scheme_spiral":       "Set the workspace's tiling scheme to spiral",
+	"set_tiling_scheme_longest_side": "Set the workspace's tiling scheme to longest side",
+	"set_tiling_scheme_alternate":    "Set the workspace's tiling scheme to alternate",
+	"set_tiling_scheme_smart_split":  "Set the workspace's tiling scheme to smart split",
 
 	// Mode Control
 	"enter_terminal_mode": "Enter terminal mode",

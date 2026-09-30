@@ -152,6 +152,35 @@ func TestLayoutTreeOpThatChangesNothingIsNotApplied(t *testing.T) {
 	}
 }
 
+// TestLayoutTreeOpAppliesAScheduleChangeAlone: a client that only cycles the
+// tree's tiling scheme (see app.CycleTilingScheme) sends the same shape with a
+// different AutoScheme. That has to land as a real change, the way #230's ops
+// already treat a ratio or a split-type edit, because TreeKey folds the
+// scheme into the key it compares (see TreeKey).
+func TestLayoutTreeOpAppliesATilingSchemeChangeAlone(t *testing.T) {
+	sess, a, b := treeSession(t)
+	shape := bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))
+	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
+		Tree:   &SerializedBSPTree{Root: shape, AutoScheme: 0, DefaultRatio: 0.5},
+		Leaves: map[int]string{1: a, 2: b}}
+	applyTree(t, sess, op)
+	v := sess.GetState().Version
+
+	schemeOnly := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
+		Tree:   &SerializedBSPTree{Root: shape, AutoScheme: 2, DefaultRatio: 0.5},
+		Leaves: map[int]string{1: a, 2: b}}
+	if !applyTree(t, sess, schemeOnly) {
+		t.Fatal("an op that only changed the tiling scheme was refused as a no-op")
+	}
+	if got := sess.GetState().Version; got != v+1 {
+		t.Fatalf("Version = %d after a scheme-only op, want %d", got, v+1)
+	}
+	st := sess.GetState()
+	if got := st.WorkspaceTrees[1].AutoScheme; got != 2 {
+		t.Fatalf("session tree AutoScheme = %d, want 2", got)
+	}
+}
+
 // TestPushAfterATreeOpIsCurrent: a tree op lands, from this client or a peer,
 // and a push built before it arrives. The op changed only the trees, and the
 // push carries none, so the push is current: the window move and the minimise
