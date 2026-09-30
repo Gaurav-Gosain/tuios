@@ -295,6 +295,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Host:      p.Host,
 		Grants:    grants,
 	}, onExit)
+	if errors.Is(err, ErrScratchExists) {
+		return nil, invalidParam("scratch", err.Error())
+	}
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
@@ -461,11 +464,13 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	}
 
 	// One scratch terminal per session. The toggle shows the one there is,
-	// so a second is only ever a double press that raced the first.
+	// so a second is only ever a double press that raced the first. This
+	// early check spares a shell; AddDaemonWindowWith makes the check that
+	// holds, under the state lock.
 	if p.Scratch {
 		for _, w := range sess.GetState().Windows {
 			if w.Scratch {
-				return nil, invalidParam("scratch", "this session already has a scratch terminal. Press the scratch key to show it")
+				return nil, invalidParam("scratch", ErrScratchExists.Error())
 			}
 		}
 	}

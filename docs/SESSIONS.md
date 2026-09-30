@@ -169,6 +169,10 @@ keyboard goes to it in terminal mode.
 - The terminal opens on the workspace you are on. On a different workspace,
   the key moves it there.
 - When you hide it, the focus goes back to the pane you used before.
+- Esc in window mode, the close key and the close button also hide the
+  scratch terminal. `tuios kill-window` closes it.
+- A focus on the hidden scratch terminal, for example with
+  `tuios focus-window`, shows it first.
 - The key works from inside the popup. tuios reads `Ctrl+B` before the shell
   gets it.
 - A hidden scratch terminal is not in the dock, the window list, the sidebar,

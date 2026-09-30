@@ -932,6 +932,9 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 				return m.setConfigFromRegistry("appearance."+path, value)
 			}
 		}
+		if msg, retired := config.RetiredOption(path); retired {
+			return errors.New(msg)
+		}
 		return fmt.Errorf("unknown config path: %s", path)
 	}
 	if m.UserConfig == nil {

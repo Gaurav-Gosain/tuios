@@ -203,6 +203,10 @@ func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	w := o.Windows[o.FocusedWindow]
+	if w.IsScratch {
+		o.CloseWindowByHand(o.FocusedWindow)
+		return o, nil
+	}
 	o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 	o.DeleteWindow(o.FocusedWindow)
 	if len(o.Windows) > 0 {

@@ -1,6 +1,10 @@
 package session
 
-import "testing"
+import (
+	"errors"
+	"sync"
+	"testing"
+)
 
 // The mark is the daemon's. A push that omits it keeps it, and a push that
 // claims it for another pane does not get it.
@@ -117,5 +121,90 @@ func TestScratchTerminalSurvivesTheDaemonHidden(t *testing.T) {
 	if !s.Scratch || !s.Popup || !s.Minimized || s.PTYID == "" || s.PTYID == "dead-2" {
 		t.Fatalf("restored scratch = scratch %v popup %v minimized %v pty %q, want a hidden scratch popup with a new shell",
 			s.Scratch, s.Popup, s.Minimized, s.PTYID)
+	}
+}
+
+// Two creates that race cannot both add a scratch terminal: the check is made
+// under the state lock, and the loser's shell is closed.
+//
+// Negative control, confirmed red: drop the check in AddDaemonWindowWith and
+// both goroutines add one.
+func TestScratchCreateIsAtomic(t *testing.T) {
+	sess := newTestSession(t)
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Go(func() {
+			_, errs[i] = sess.AddDaemonWindowWith(NewWindowOptions{
+				Title: "scratch", Popup: true, Scratch: true, Command: []string{"sleep", "30"},
+			}, nil)
+		})
+	}
+	wg.Wait()
+	made := 0
+	for _, w := range sess.GetState().Windows {
+		if w.Scratch {
+			made++
+		}
+	}
+	refused := 0
+	for _, err := range errs {
+		if errors.Is(err, ErrScratchExists) {
+			refused++
+		}
+	}
+	if made != 1 || refused != len(errs)-1 {
+		t.Fatalf("made %d scratch terminals, refused %d, want 1 and %d", made, refused, len(errs)-1)
+	}
+}
+
+// The daemon's focus cycle never lands on a hidden scratch terminal, and a
+// focus by id shows it on the current workspace first.
+func TestDaemonFocusAndHiddenScratch(t *testing.T) {
+	sess := newTestSession(t)
+	state := &SessionState{CurrentWorkspace: 2, Windows: []WindowState{
+		{ID: "a", Workspace: 2},
+		{ID: "hidden", Workspace: 2, Popup: true, Scratch: true, Minimized: true},
+		{ID: "b", Workspace: 2},
+	}, FocusedWindowID: "a"}
+	_ = sess.mutateState(func(s *SessionState) error { *s = *state; return nil })
+
+	for range 4 {
+		if err := sess.CycleDaemonFocus(1); err != nil {
+			t.Fatal(err)
+		}
+		if got := sess.GetState().FocusedWindowID; got == "hidden" {
+			t.Fatal("the focus cycle landed on the hidden scratch terminal")
+		}
+	}
+	_ = sess.mutateState(func(s *SessionState) error { s.Windows[1].Workspace = 5; return nil })
+	if err := sess.FocusDaemonWindow("hidden"); err != nil {
+		t.Fatal(err)
+	}
+	st := sess.GetState()
+	w := st.Windows[1]
+	if st.FocusedWindowID != "hidden" || w.Minimized || w.Workspace != 2 || st.CurrentWorkspace != 2 {
+		t.Fatalf("focus=%s minimized=%v workspace=%d current=%d, want it shown on workspace 2",
+			st.FocusedWindowID, w.Minimized, w.Workspace, st.CurrentWorkspace)
+	}
+}
+
+// A push may change the scratch terminal's size, which the show reads from
+// [scratch]. It may not change another popup's.
+func TestScratchSizeTravelsInAPush(t *testing.T) {
+	canonical := &SessionState{Windows: []WindowState{
+		{ID: "scratch", Popup: true, Scratch: true, PopupWidth: "80%", PopupHeight: "80%"},
+		{ID: "fzf", Popup: true, PopupWidth: "60%", PopupHeight: "40%"},
+	}}
+	incoming := &SessionState{Windows: []WindowState{
+		{ID: "scratch", PopupWidth: "50", PopupHeight: "10"},
+		{ID: "fzf", PopupWidth: "50", PopupHeight: "10"},
+	}}
+	retainDaemonExclusive(incoming, canonical)
+	if s := incoming.Windows[0]; s.PopupWidth != "50" || s.PopupHeight != "10" {
+		t.Fatalf("scratch size = %s x %s, want the pushed 50 x 10", s.PopupWidth, s.PopupHeight)
+	}
+	if f := incoming.Windows[1]; f.PopupWidth != "60%" || f.PopupHeight != "40%" {
+		t.Fatalf("popup size = %s x %s, want its own 60%% x 40%%", f.PopupWidth, f.PopupHeight)
 	}
 }

@@ -158,6 +158,12 @@ func (m *OS) showScratch(i int) {
 	w := m.Windows[i]
 	w.Workspace = m.CurrentWorkspace
 	w.Minimized = false
+	// [scratch] is read on each show, so a size set since the last show
+	// applies now.
+	if m.UserConfig != nil {
+		cfg := m.scratchConfig()
+		w.PopupWidth, w.PopupHeight = cfg.WidthSpec(), cfg.HeightSpec()
+	}
 	m.applyPopupRect(w, false)
 	w.InvalidateCache()
 	m.FocusWindow(i)
@@ -340,4 +346,17 @@ func (m *OS) maybeFocusScratch() {
 	if w := m.Windows[i]; w.Minimized || w.Workspace != m.CurrentWorkspace || m.FocusedWindow != i || m.Mode != TerminalMode {
 		m.showScratch(i)
 	}
+}
+
+// windowCountForNotice is the window count the created and closed notices
+// report. The scratch terminal is not counted: its show and hide are not a
+// window made or closed.
+func (m *OS) windowCountForNotice() int {
+	n := 0
+	for _, w := range m.Windows {
+		if !isScratch(w) {
+			n++
+		}
+	}
+	return n
 }

@@ -282,3 +282,56 @@ func TestScratchTerminalWithoutDaemon(t *testing.T) {
 	}
 	alive(t, term, "after the local round trip")
 }
+
+// TestScratchTerminalSurvivesCloseAndFocus covers the ways a key could end or
+// reach the scratch terminal behind the user's back.
+//
+// Esc in window mode closes a popup. On the scratch terminal it hides it, so
+// the job in the shell keeps running. A focus-window on the hidden pane shows
+// it before it takes the keys, so nothing is typed into a pane nobody sees.
+// A relative focus never lands on the hidden pane.
+func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
+	base := t.TempDir()
+	term := startScratchOuter(t, base)
+
+	toggleScratch(t, term)
+	first := waitScratch(t, term, base, false, false, "the first show")
+	typeUntil(t, term, "echo KEEP-$((6*7))", "KEEP-42")
+
+	// Esc to window mode, then esc on the popup.
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	waitGone(t, term, "esc on the scratch terminal", "KEEP-42")
+	if row := waitScratch(t, term, base, true, false, "after esc"); row.ID != first.ID {
+		t.Fatalf("esc closed the scratch terminal: %s, then %s", first.ID, row.ID)
+	}
+	t.Logf("after esc on the scratch terminal:\n%s", term.Snapshot())
+
+	// A relative focus walks the visible panes only.
+	for range 3 {
+		if out, err := tuiosCLI(t, base, "focus-window", "-s", "work", "--relative", "next"); err != nil {
+			t.Logf("focus-window --relative next: %v %s", err, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if row := waitScratch(t, term, base, true, false, "after a relative focus"); row.ID != first.ID {
+		t.Fatalf("the hidden pane changed: %s", row.ID)
+	}
+	if strings.Contains(term.Screen().Text(), "KEEP-42") {
+		t.Fatalf("a relative focus showed the hidden scratch terminal\n%s", term.Snapshot())
+	}
+
+	// A focus by id shows it, with the text it kept, and takes the keys.
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "work", first.ID); err != nil {
+		t.Fatalf("focus-window: %v %s", err, out)
+	}
+	if err := term.WaitForText("KEEP-42", uiTimeout); err != nil {
+		t.Fatalf("focus-window did not show the scratch terminal: %v\n%s", err, term.Snapshot())
+	}
+	waitScratch(t, term, base, false, false, "after focus-window")
+	typeUntil(t, term, "echo SEEN-$((3*3))", "SEEN-9")
+	t.Logf("after focus-window on the hidden scratch terminal:\n%s", term.Snapshot())
+	alive(t, term, "after esc and focus-window")
+}

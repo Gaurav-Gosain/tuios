@@ -183,7 +183,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
-					m.DeleteWindow(m.FocusedWindow)
+					m.CloseWindowByHand(m.FocusedWindow)
 				}
 				return m, nil
 			},

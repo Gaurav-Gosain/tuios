@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -310,7 +311,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	}
 
 	var win WindowState
-	_ = s.mutateState(func(state *SessionState) error {
+	err = s.mutateState(func(state *SessionState) error {
+		// One scratch terminal per session, checked under the state lock so
+		// two calls that race cannot both add one.
+		if opts.Popup && opts.Scratch {
+			for i := range state.Windows {
+				if state.Windows[i].Scratch {
+					return ErrScratchExists
+				}
+			}
+		}
 		if first && (state.Worktree == nil || !state.Worktree.Managed) {
 			state.Worktree = detected
 		}
@@ -374,8 +384,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 		return nil
 	})
+	if err != nil {
+		// The shell started for a window that was refused has no owner.
+		_ = s.ClosePTY(pty.ID)
+		return WindowState{}, err
+	}
 	return win, nil
 }
+
+// ErrScratchExists is the refusal of a second scratch terminal in a session.
+var ErrScratchExists = errors.New("this session already has a scratch terminal. Press the scratch key to show it")
 
 // CloseDaemonWindow removes the window matching target from the session state
 // and closes its PTY. It moves focus to another window in the same workspace
@@ -434,6 +452,12 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		if err != nil {
 			return err
 		}
+		// A hidden scratch terminal is shown on the current workspace
+		// before it takes the focus, so keys never go to a pane nobody sees.
+		if w := &state.Windows[idx]; w.Scratch && w.Minimized {
+			w.Minimized = false
+			w.Workspace = state.CurrentWorkspace
+		}
 		win := state.Windows[idx]
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
@@ -456,6 +480,10 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 		current := -1
 		for i := range state.Windows {
 			if state.Windows[i].Workspace != state.CurrentWorkspace {
+				continue
+			}
+			// The cycle never lands on a hidden scratch terminal.
+			if state.Windows[i].Scratch && state.Windows[i].Minimized {
 				continue
 			}
 			if state.Windows[i].ID == state.FocusedWindowID {
@@ -602,6 +630,15 @@ func (s *Session) markRestoredScratch(id string) {
 		for i := range state.Windows {
 			if w := &state.Windows[i]; w.ID == id {
 				w.Scratch, w.Popup, w.IsFloating, w.Minimized = true, true, true, true
+			}
+		}
+		// A hidden pane holds no focus, or the first client would type into it.
+		if state.FocusedWindowID == id {
+			state.FocusedWindowID = ""
+		}
+		for ws, fid := range state.WorkspaceFocus {
+			if fid == id {
+				delete(state.WorkspaceFocus, ws)
 			}
 		}
 		return nil
