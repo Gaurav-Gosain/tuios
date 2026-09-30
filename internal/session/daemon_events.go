@@ -36,7 +36,10 @@ const (
 	EventWindowMinimized   = "window-minimized"   // a window was minimized
 	EventWindowRestored    = "window-restored"    // a minimized window was restored
 	EventWorkspaceSwitched = "workspace-switched" // the session's current workspace changed
-	EventAgentState        = "agent-state"        // a window's agent state changed
+	// EventWorkspaceRenamed: a workspace's name was set, changed or cleared.
+	// Workspace is the workspace, and Title its new name, absent when cleared.
+	EventWorkspaceRenamed = "workspace-renamed"
+	EventAgentState       = "agent-state" // a window's agent state changed
 	// EventAgentMessage is one agent leaving a message for another. Window is
 	// the recipient's window id, or empty for a session-wide notice. It carries
 	// nothing else on purpose: a subscriber reads the message back from the ring

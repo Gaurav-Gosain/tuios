@@ -138,6 +138,7 @@ mode. With no client attached they go to the focused window.
 | Enter | `Enter` | `Return`, `CR`, `KEY_ENTER` |
 | Escape | `Escape` | `Esc` |
 | Editing | `Tab` `BTab` `Space` `Backspace` `Delete` `Insert` | `shift+Tab`, `BSpace`, `BS`, `Del`, `DC`, `Ins`, `IC` |
+| Comma | `Comma` | `comma`; a bare `,` splits keys, so use this name |
 | Function keys | `F1` to `F12` | `f5`, `KEY_F5` |
 | A character | `q` `j` `G` `/` `?` | any single character |
 | With modifiers | `ctrl+c` `alt+b` `shift+Up` `ctrl+Right` | `C-c`, `M-b`, `S-Up`, `^C`, `Ctrl+C` |
@@ -150,6 +151,8 @@ program asked for: `less` and `vim` turn on application cursor keys and get
 (`Dwon`, `KEY_FOO`, `F13`) fails with `invalid_params`, the names above, and
 the closest one; nothing is sent. A plain lower-case word such as `ls` is still
 typed as its letters.
+
+The list is closed. The `list-keys` verb returns every name and spelling.
 
 `--repeat N` (`-N N`) sends the whole sequence N times, up to 1000.
 `ctrl+b` with `-w` is the byte 0x02 for the program in the window, which is

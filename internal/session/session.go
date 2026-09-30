@@ -453,6 +453,10 @@ type SessionState struct {
 	// the daemon disagreed with a client configured for any other number.
 	// Zero means unstated, and the bound falls back to defaultWorkspaces.
 	NumWorkspaces int `json:"num_workspaces,omitempty"`
+	// SessionID is the session's id, stamped on every save so a restored
+	// session keeps it. Empty in state written before it existed, and such a
+	// session gets a new id on restore.
+	SessionID string `json:"session_id,omitempty"`
 	// ResurrectionVersion tags the on-disk state schema. It is stamped by
 	// SaveSessionForResurrection (not by clients) and checked on load so that
 	// state written by a newer, incompatible tuios is archived rather than
@@ -1231,6 +1235,11 @@ type SessionConfig struct {
 	history *HistoryPolicy
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
+	// restoreID is the id a restored session had before the daemon
+	// restarted, from its state file. A session made with it keeps that id,
+	// so a client's ids for it stay valid. Empty, or an id already in use,
+	// mints a new one.
+	restoreID string
 }
 
 // historyPolicy is the session's HistoryPolicy, off when none was stamped.
@@ -1280,6 +1289,9 @@ func (s *Session) scrollbackLines() int {
 // NewSession creates a new persistent session.
 func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, error) {
 	id := uuid.New().String()
+	if cfg != nil && cfg.restoreID != "" {
+		id = cfg.restoreID
+	}
 	if name == "" {
 		name = fmt.Sprintf("session-%s", id[:8])
 	}
@@ -1348,6 +1360,7 @@ func (s *Session) persist(state *SessionState) error {
 	if state == nil || state.Name != s.Name() {
 		return nil
 	}
+	state.SessionID = s.ID
 	err := SaveSessionForResurrection(state)
 	s.saveHistory(state, false)
 	return err
@@ -2165,6 +2178,7 @@ func (s *Session) ResurrectionState() *SessionState {
 	if len(state.Windows) > 0 {
 		s.refreshWorktree(state.Windows[0].Cwd)
 	}
+	state.SessionID = s.ID
 	return state
 }
 

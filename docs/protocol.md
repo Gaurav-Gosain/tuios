@@ -1951,7 +1951,7 @@ Response:
 
 Send keys to a window's program: arrows, page keys, Enter, `ctrl+c`. Tokens
 are split on spaces and commas, and every token is parsed before anything is
-sent. A token is a key name (`Enter` `Tab` `BTab` `Space` `Escape`
+sent. A token is a key name (`Enter` `Tab` `BTab` `Space` `Comma` `Escape`
 `Backspace` `Up` `Down` `Right` `Left` `Home` `End` `PageUp` `PageDown`
 `Insert` `Delete` `F1` to `F12`, case-insensitive, also spelled `arrow-up`,
 `ArrowUp`, `KEY_UP`, `<Up>`, `PgDn`, `Esc`, `Return`, `BSpace` and the like),
@@ -2005,6 +2005,7 @@ Named keys, with the other spellings each one takes:
 | `Tab` | |
 | `BTab` | `BackTab`, `STab`, `shift+Tab` |
 | `Space` | `Spc` |
+| `Comma` | the `,` character, which cannot be a key by itself because keys are split on commas |
 | `Escape` | `Esc` |
 | `Backspace` | `BSpace`, `BS`, `BkSp` |
 | `Up`, `Down`, `Right`, `Left` | |
@@ -2040,7 +2041,8 @@ The other tokens:
 - Any other word is typed as its characters. A word that looks like a key
   name and is not one (`Dwon`, `F13`) is refused.
 
-Keys are split on spaces and commas. `repeat` is 1 to 1000.
+Keys are split on spaces and commas. To send a comma, use `Comma`. To send a
+space, use `Space`. `repeat` is 1 to 1000.
 
 ### list-keys
 
@@ -3009,7 +3011,11 @@ A key that was never set returns an `option_not_found` error.
 
 Record the agent state a pane reports. Params: `session`, `window`, `state`
 (required), `message`, `source` (default `report`), `harness`, and five fields
-a hook reporter adds, each optional:
+a hook reporter adds, each optional. Without `window`, a caller in a pane
+reports about its own pane, and its own session when `session` is omitted. A
+caller outside every pane reports about the focused window, as before.
+
+The five hook fields:
 
 - `kind`: `approval` or `question`, what a `needs_input` state waits for. Only
   valid with `needs_input`. Stored as the window's `agent_kind` and reported by
@@ -4269,6 +4275,7 @@ Event types:
 | `window-minimized` | A window was minimized. | `session`, `window`, `pty_id` |
 | `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
 | `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
+| `workspace-renamed` | A workspace's name was set, changed or cleared. `title` is the new name, absent when the name was cleared. | `session`, `workspace`, `title` |
 | `agent-state` | A window's agent state changed, whichever tier changed it. A pane ceasing to be an agent reports `none`. | `session`, `window`, `pty_id`, `state` |
 | `agent-message` | A message was left in the session's ring. `window` is the recipient, or empty for a session-wide notice. Read the message itself with `read-agent-messages`. | `session`, `window` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
@@ -4306,8 +4313,8 @@ it, so:
 
 Ordering within a single mutation is stable: closes, then creates, then
 per-window changes (`window-retitled`, `window-moved`,
-`window-minimized`/`window-restored`), then `workspace-switched`, then
-`window-focused`. Focus comes last because it is usually a consequence of an
+`window-minimized`/`window-restored`), then `workspace-renamed`, then
+`workspace-switched`, then `window-focused`. Focus comes last because it is usually a consequence of an
 earlier event in the same batch, so a consumer building a model from the stream
 already knows about the window being focused by the time it is told to focus it.
 

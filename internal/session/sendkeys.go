@@ -92,6 +92,9 @@ var namedKeys = []namedKey{
 	{name: "Tab", kind: keyPlain, plain: "\t"},
 	{name: "BTab", kind: keyPlain, plain: "\x1b[Z"},
 	{name: "Space", kind: keyPlain, plain: " "},
+	// Comma is the one character send-keys cannot take as itself, since it
+	// splits keys on commas.
+	{name: "Comma", kind: keyPlain, plain: ","},
 	{name: "Escape", kind: keyPlain, plain: "\x1b"},
 	{name: "Backspace", kind: keyPlain, plain: "\x7f"},
 	{name: "Up", kind: keyCursor, final: 'A'},

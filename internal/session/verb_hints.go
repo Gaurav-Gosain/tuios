@@ -57,7 +57,7 @@ var (
 	EventTypeNames = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
-		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
+		EventWorkspaceSwitched, EventWorkspaceRenamed, EventAgentState, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,

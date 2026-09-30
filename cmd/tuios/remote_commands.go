@@ -1174,6 +1174,14 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	}
 	defer func() { _ = client.Close() }()
 
+	// Run in a pane with no --window, the report is about that pane, not the
+	// focused one. A daemon that places the caller does the same. This covers
+	// one that does not.
+	if windowTarget == "" && (sessionName == "" || sessionName == os.Getenv("TUIOS_SESSION")) {
+		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" && os.Getenv("TUIOS_SESSION") != "" {
+			windowTarget, sessionName = pane, os.Getenv("TUIOS_SESSION")
+		}
+	}
 	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,

@@ -1761,8 +1761,8 @@ tuios set-agent-state <state> [flags]
 **States:** `none`, `working`, `needs_input`, `idle`, `done`, `errored`, `unknown`
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
-- `-w, --window <id-or-name>`: Target window (default: focused)
+- `-s, --session <name>`: Target session (default: the pane's own session in a pane, else the most recently active)
+- `-w, --window <id-or-name>`: Target window (default: the pane this runs in, else the focused one)
 - `-m, --message <text>`: Short note reported with the state
 - `--source <source>`: Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
 - `--harness <id>`: Id of the harness the state is about, e.g. `claude-code`

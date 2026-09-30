@@ -1,5 +1,10 @@
 package session
 
+import (
+	"maps"
+	"slices"
+)
+
 // Window lifecycle events are derived, in one place, from the difference between
 // two canonical SessionState snapshots. This matters because a mutation reaches
 // daemon-owned state by one of two routes: the headless daemon-side ops in
@@ -51,6 +56,8 @@ type lifecycleSnapshot struct {
 	index     map[string]int    // window ID -> index into windows
 	focused   string
 	workspace int
+	// wsNames is a copy of the workspace names, for workspace-renamed.
+	wsNames map[int]string
 }
 
 // snapshotLifecycle captures the lifecycle-relevant parts of state. The caller
@@ -62,6 +69,9 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	}
 	snap.focused = state.FocusedWindowID
 	snap.workspace = state.CurrentWorkspace
+	if len(state.WorkspaceNames) > 0 {
+		snap.wsNames = maps.Clone(state.WorkspaceNames)
+	}
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
 	worktreeRoot := ""
 	if state.Worktree != nil {
@@ -211,6 +221,24 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				prevCompletionSeq: w.completionSeq,
 			})
 		}
+	}
+
+	// A workspace whose name was set, changed or cleared. Title is the new
+	// name, empty when it was cleared. Ascending, so the order is stable.
+	var renamed []int
+	for ws, name := range after.wsNames {
+		if before.wsNames[ws] != name {
+			renamed = append(renamed, ws)
+		}
+	}
+	for ws := range before.wsNames {
+		if _, ok := after.wsNames[ws]; !ok {
+			renamed = append(renamed, ws)
+		}
+	}
+	slices.Sort(renamed)
+	for _, ws := range renamed {
+		events = append(events, SessionEvent{Type: EventWorkspaceRenamed, Workspace: ws, Title: after.wsNames[ws]})
 	}
 
 	if after.workspace != before.workspace && after.workspace > 0 {

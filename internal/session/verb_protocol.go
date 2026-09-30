@@ -1047,7 +1047,7 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "keys", Type: "string", Required: true, Description: `Keys split on spaces and commas, e.g. "Down Down PageDown" or "ctrl+c". A key is a name (Enter Tab BTab Space Escape Backspace Up Down Right Left Home End PageUp PageDown Insert Delete F1-F12, case-insensitive, also as arrow-up, KEY_UP, <Up>, PgDn), one character, a name or character after ctrl+, alt+ or shift+ (or tmux C-, M-, S-), an escape sequence written \e[A, or PREFIX for the leader key.`},
+				{Name: "keys", Type: "string", Required: true, Description: `Keys split on spaces and commas, e.g. "Down Down PageDown" or "ctrl+c". A key is a name (Enter Tab BTab Space Comma Escape Backspace Up Down Right Left Home End PageUp PageDown Insert Delete F1-F12, case-insensitive, also as arrow-up, KEY_UP, <Up>, PgDn), one character, a name or character after ctrl+, alt+ or shift+ (or tmux C-, M-, S-), an escape sequence written \e[A, or PREFIX for the leader key. list-keys returns the full list.`},
 				{Name: "literal", Type: "bool", Description: "Send the keys to the PTY without parsing them as key names.", Default: "false"},
 				{Name: "raw", Type: "bool", Description: "Treat every character as its own key instead of splitting on spaces and commas.", Default: "false"},
 				{Name: "repeat", Type: "int", Description: "Send the whole sequence this many times, 1 to 1000.", Default: "1"},

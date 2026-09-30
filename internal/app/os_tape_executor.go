@@ -1322,6 +1322,10 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 
 	// Parse the key itself
 	lowerKey := strings.ToLower(key)
+	// Comma is the name send-keys gives ",", which it splits keys on.
+	if lowerKey == "comma" {
+		key, lowerKey = ",", ","
+	}
 
 	// Check for special keys
 	switch lowerKey {
