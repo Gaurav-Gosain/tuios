@@ -365,18 +365,6 @@ func (s *Settings) GetNotificationRule(stroke string) string {
 	return stroke
 }
 
-// Dock Mode Colors
-const (
-	// DockColorWindow is the color for window mode indicator
-	DockColorWindow = "#4865f2" // Blue
-
-	// DockColorTerminal is the color for terminal mode indicator
-	DockColorTerminal = "#4ade80" // Green
-
-	// DockColorCopy is the color for copy mode indicator
-	DockColorCopy = "#fb923c" // Orange
-)
-
 // =============================================================================
 // Runtime Configuration
 // =============================================================================
@@ -718,22 +706,6 @@ func (s *Settings) GetDockModeIconTiling() string {
 		return DockModeIconTilingASCII
 	}
 	return DockModeIconTiling
-}
-
-// GetDockIconTerminalCount returns the appropriate terminal count icon based on UseASCIIOnly
-func (s *Settings) GetDockIconTerminalCount() string {
-	if s.NerdFontsOff() {
-		return DockIconTerminalCountASCII
-	}
-	return DockIconTerminalCount
-}
-
-// GetDockIconWorkspaceCount returns the appropriate workspace count icon based on UseASCIIOnly
-func (s *Settings) GetDockIconWorkspaceCount() string {
-	if s.NerdFontsOff() {
-		return DockIconWorkspaceCountASCII
-	}
-	return DockIconWorkspaceCount
 }
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.
@@ -1080,15 +1052,6 @@ func (s *Settings) AllBackgroundResolved() string {
 	return ResolveBackground("", s.Background)
 }
 
-// PaneBackgroundHex returns the pane background in force when it is a colour
-// literal rather than a keyword.
-func (s *Settings) PaneBackgroundHex() (string, bool) {
-	if v := s.PaneBackgroundResolved(); IsHexColor(v) {
-		return v, true
-	}
-	return "", false
-}
-
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.
 // An empty string is a blank cell, which in the track style is its surface fill
 // and in the thin style is no track at all. That is also what ASCII
@@ -1197,40 +1160,12 @@ func (s *Settings) GetWindowSeparatorChar() string {
 }
 
 // =============================================================================
-// Button Positions (relative offsets)
-// =============================================================================
-
-const (
-	// MinimizeButtonLeftNonTiling is the left position offset for minimize button in non-tiling mode.
-	MinimizeButtonLeftNonTiling = -11
-	// MinimizeButtonRightNonTiling is the right position offset for minimize button in non-tiling mode.
-	MinimizeButtonRightNonTiling = -9
-	// MaximizeButtonLeft is the left position offset for maximize button.
-	MaximizeButtonLeft = -8
-	// MaximizeButtonRight is the right position offset for maximize button.
-	MaximizeButtonRight = -6
-
-	// MinimizeButtonLeftTiling is the left position offset for minimize button in tiling mode.
-	MinimizeButtonLeftTiling = -8
-	// MinimizeButtonRightTiling is the right position offset for minimize button in tiling mode.
-	MinimizeButtonRightTiling = -6
-
-	// CloseButtonLeft is the left position offset for close button (same for both modes).
-	CloseButtonLeft = -5
-	// CloseButtonRight is the right position offset for close button (same for both modes).
-	CloseButtonRight = -3
-)
-
-// =============================================================================
 // Limits
 // =============================================================================
 
 const (
 	// MaxLogMessages is the maximum number of log messages to keep in memory
 	MaxLogMessages = 100
-
-	// MaxWorkspaces is the maximum number of workspaces supported
-	MaxWorkspaces = 9
 )
 
 // =============================================================================
@@ -1310,39 +1245,6 @@ const (
 
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
-)
-
-// =============================================================================
-// Character Constants
-// =============================================================================
-
-const (
-	// DEL is the delete character code
-	DEL = 0x7f
-
-	// ESC is the escape character code
-	ESC = 0x1b
-
-	// NUL is the null character code
-	NUL = 0x00
-
-	// Tab is the tab character code
-	Tab = 0x09
-
-	// Space is the space character code
-	Space = ' '
-)
-
-// =============================================================================
-// Helper Offsets and Counts
-// =============================================================================
-
-const (
-	// MaxNameTruncateLength is the max length before truncating with ellipsis
-	MaxNameTruncateLength = 12
-
-	// EllipsisLength is the length of the ellipsis string
-	EllipsisLength = 3
 )
 
 // The colours a pane paints over its own output to mark text. See

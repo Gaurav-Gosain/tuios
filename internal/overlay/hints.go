@@ -54,14 +54,6 @@ func Optional(hints []Hint) []Hint {
 	return hints
 }
 
-// Essential returns hints with each marked HintEssential.
-func Essential(hints []Hint) []Hint {
-	for i := range hints {
-		hints[i].Priority = HintEssential
-	}
-	return hints
-}
-
 // rank is the priority fitHints drops by.
 func (h Hint) rank() HintPriority {
 	if h.Key == "esc" || h.Priority >= HintEssential {

@@ -278,10 +278,6 @@ func WriteConfig(theme, border, glyphs string) {
 	files[ConfigPath] = configText(theme, border, glyphs)
 }
 
-// ReadFile returns a file of the fake filesystem, for tests outside the
-// package.
-func ReadFile(p string) (string, bool) { return readFile(p) }
-
 func mkdir(p string) bool {
 	fsMu.Lock()
 	defer fsMu.Unlock()

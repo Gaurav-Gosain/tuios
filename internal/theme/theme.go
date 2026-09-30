@@ -363,18 +363,6 @@ func NotificationInfo() color.Color {
 	return slotAt16(4, chromeOr(func(c *Chrome) color.Color { return c.Info }, t.Blue))
 }
 
-// NotificationGround is the ground a message's inks are measured against: the
-// bare bar the dock draws on, the same ground the strip's overflow arrows are
-// measured on. The block carries no fill of its own. It sat on the chrome's
-// Surface step once, and the slab was the largest ink object in the bar; worse,
-// every severity ink had to be lifted toward the text colour to clear the mark
-// floor on the raised grey, which washed the hue out of exactly the marks that
-// carry the message. On the bare canvas the four severities clear the floor as
-// themselves.
-func NotificationGround() color.Color {
-	return GroundUI().Canvas
-}
-
 // RailRule returns the ink for the chrome's structure: the rail's edge, the
 // dock's separator, the unburnt remainder of a notification's burn, the
 // collapsed strip's hairline and its group divider. All of it is one class,

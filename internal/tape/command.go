@@ -303,22 +303,6 @@ type KeyCombo struct {
 	Key   string // The key itself (b, 1, etc.)
 }
 
-// String returns a string representation of the key combo
-func (kc *KeyCombo) String() string {
-	var result string
-	if kc.Ctrl {
-		result += "Ctrl+"
-	}
-	if kc.Alt {
-		result += "Alt+"
-	}
-	if kc.Shift {
-		result += "Shift+"
-	}
-	result += kc.Key
-	return result
-}
-
 // ParseKeyCombo parses a key combo string like "Ctrl+B" or "Alt+Shift+1"
 func ParseKeyCombo(s string) (*KeyCombo, error) {
 	kc := &KeyCombo{}

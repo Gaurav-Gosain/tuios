@@ -98,12 +98,6 @@ func (t *TTY) Size() (cols, rows int) {
 	return c, r
 }
 
-// Env reads the environment the window gave the guest.
-func (t *TTY) Env(key string) string { return t.env[key] }
-
-// Write sends output to the window.
-func (t *TTY) Write(b []byte) (int, error) { return t.pty.out.Write(b) }
-
 // Print writes a string.
 func (t *TTY) Print(s string) { _, _ = t.pty.out.Write([]byte(s)) }
 
