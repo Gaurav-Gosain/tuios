@@ -1041,7 +1041,7 @@ func (d *Daemon) verbSetWorkspaceOrder(_ *connState, params json.RawMessage) (an
 	return map[string]any{"type": "workspace_order_set", "workspace_order": sess.GetState().WorkspaceOrder}, nil
 }
 
-func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -1120,12 +1120,27 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		}
 		ifState = append(ifState, st)
 	}
+	// A report from inside a pane that names no window is about that pane,
+	// not about the focused one. The pane is the one the daemon placed the
+	// caller in, so a hook or a person in the pane marks the pane they are in.
+	var own *paneAuth
+	if p.Window == "" {
+		if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && pa.window != "" && pa.window != unplacedWindow && pa.session != "" {
+			own = pa
+			if p.Session == "" {
+				p.Session = pa.session
+			}
+		}
+	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
 	}
 
 	target := p.Window
+	if target == "" && own != nil && sess.Name() == own.session {
+		target = own.window
+	}
 	if target == "" {
 		id, err := focusedWindowID(sess.GetState())
 		if err != nil {

@@ -796,7 +796,7 @@ To type text, use send-text. send-keys splits its argument on spaces and commas,
 so 'echo hello' types "echohello".
 
 Keys (case-insensitive; the argument is split on spaces and commas):
-  Enter Tab BTab Space Escape Backspace
+  Enter Tab BTab Space Comma Escape Backspace
   Up Down Left Right Home End PageUp PageDown Insert Delete F1-F12
   a single character: q, j, /, G
   ctrl+X, alt+X, shift+X on a character or a key: ctrl+c, alt+b, shift+Up
@@ -807,6 +807,9 @@ Other spellings of the same keys work too: up, UP, arrow-up, ArrowUp, KEY_UP,
 escape sequence can be written as \e[A, \x1b[A or \033[A. A word that looks
 like a misspelled key (Dwon, KEY_FOO, F13) is refused with the list of names,
 and nothing is sent.
+
+The list is closed and stable. The list-keys verb returns it, with every
+spelling of every key.
 
 --repeat sends the whole sequence that many times. The command prints where the
 keys went: "sent 5 keys to window docs (d6b97fe4)".
@@ -1109,8 +1112,11 @@ Run 'tuios list-options' to see every path.`,
 surface which panes need attention. State is one of: none, working, needs_input,
 idle, done, errored, unknown. A pane reports its own state by running this
 against the daemon socket; tuios agent-hook, which the installed harness
-integrations run, does exactly that.`,
-		Example: `  # Mark the focused pane as working
+integrations run, does exactly that.
+
+Without --window, run in a pane, the report is about that pane. Run outside
+every pane, it is about the focused pane.`,
+		Example: `  # Mark the pane this runs in as working (outside a pane: the focused pane)
   tuios set-agent-state working
 
   # Mark a specific pane as needing input, with a note

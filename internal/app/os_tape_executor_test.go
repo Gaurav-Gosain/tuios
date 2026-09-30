@@ -109,6 +109,9 @@ func TestParseKeyToMessage(t *testing.T) {
 		// A modified space keeps its modifier: Text must stay empty so
 		// String() does not drop Ctrl.
 		{"ctrl+space", "ctrl+space", "ctrl+space", tea.ModCtrl},
+		// Comma is the name send-keys gives ",", which it splits keys on.
+		{"comma", "Comma", ",", 0},
+		{"alt+comma", "alt+Comma", "alt+,", tea.ModAlt},
 	}
 
 	for _, tt := range tests {

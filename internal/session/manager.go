@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"os"
 	"sort"
 	"sync"
@@ -272,6 +273,14 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.grants == nil {
 		cfg.grants = m.grants
+	}
+
+	// A restored id is kept only when it is a well-formed id no live session
+	// holds. Anything else gets a new one, as before ids were saved.
+	if cfg.restoreID != "" {
+		if _, err := uuid.Parse(cfg.restoreID); err != nil || m.byID[cfg.restoreID] != nil {
+			cfg.restoreID = ""
+		}
 	}
 
 	// Create the session

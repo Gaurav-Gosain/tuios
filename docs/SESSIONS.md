@@ -298,6 +298,7 @@ BSP tree and the layout mode.
 | | Client exits (detach, crash, SSH drop) | Daemon restart (`kill-server`, `SIGTERM`) | Daemon crash (`SIGKILL`, OOM) | Reboot |
 |---|---|---|---|---|
 | Session exists afterwards | Yes | Yes, restored on daemon start | Yes, restored on daemon start | Yes, restored on daemon start |
+| Session id | Yes | Yes | Yes | Yes |
 | Window structure | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
 | Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
 | Working directories | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
@@ -317,6 +318,10 @@ doing.
 
 The three daemon columns are all resurrection, described next. Nothing survives
 a daemon exit except what was written to disk.
+
+The session id is saved in the state file, so a restored session keeps its id
+and a client that stored the id still finds the session. A state file from a
+build before ids were saved has none, and that session gets a new id once.
 
 ## Resurrection
 
