@@ -171,6 +171,8 @@ type TUIClient struct {
 	// typeAtPromptSupported says the daemon's welcome offered
 	// MsgTypeAtPrompt. See TypeAtPrompt.
 	typeAtPromptSupported bool
+	// graphicsSupported says the daemon's welcome offered MsgClientGraphics.
+	graphicsSupported bool
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -348,6 +350,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.focusSupported = welcome.ClientFocus
 	c.treeOps.Store(welcome.LayoutTreeOps)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
+	c.graphicsSupported = welcome.ClientGraphics
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.

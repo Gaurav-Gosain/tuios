@@ -353,7 +353,7 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (*app.OS, 
 	hostCaps := clientToHostCapabilities(clientCaps)
 	// An explicit TUIOS_SIXEL_GRAPHICS from the client is final; otherwise
 	// the client's DA1 answer replaces the guess once the program runs.
-	if env := parseEnviron(sshSession.Environ()); env["TUIOS_SIXEL_GRAPHICS"] != "" && hostCaps != nil {
+	if env := parseEnviron(sshSession.Environ()); (env["TUIOS_SIXEL_GRAPHICS"] == "0" || env["TUIOS_SIXEL_GRAPHICS"] == "1") && hostCaps != nil {
 		hostCaps.SixelPinned = true
 	}
 

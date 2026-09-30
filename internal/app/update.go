@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -282,6 +283,13 @@ func getInputHandler() InputHandler {
 // anything printed then is wiped by the first frame. A notification points at
 // the log so the problems are noticed rather than merely recorded.
 func (m *OS) reportConfigWarnings() {
+	if caps := m.hostCaps(); caps != nil {
+		for _, w := range caps.Warnings {
+			if !slices.Contains(m.ConfigWarnings, w) {
+				m.ConfigWarnings = append(m.ConfigWarnings, w)
+			}
+		}
+	}
 	if len(m.ConfigWarnings) == 0 {
 		return
 	}

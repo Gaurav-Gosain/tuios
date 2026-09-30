@@ -49,7 +49,9 @@ type HostCapabilities struct {
 	SixelGraphics     bool
 	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, so no
 	// later answer from the terminal changes it.
-	SixelPinned  bool
+	SixelPinned bool
+	// Warnings are problems with the overrides, shown once the UI is up.
+	Warnings     []string
 	TrueColor    bool
 	TerminalName string
 	// FontFamily and BoldFontFamily are the faces the host draws with, as it
@@ -722,6 +724,11 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	case "0":
 		caps.SixelGraphics = false
 		caps.SixelPinned = true
+	case "":
+	default:
+		caps.Warnings = append(caps.Warnings, fmt.Sprintf(
+			"TUIOS_SIXEL_GRAPHICS is %q. Set it to 1 or 0. tuios ignores the value and asks the terminal.",
+			os.Getenv("TUIOS_SIXEL_GRAPHICS")))
 	}
 
 	switch os.Getenv("TUIOS_KITTY_ANIMATION") {
