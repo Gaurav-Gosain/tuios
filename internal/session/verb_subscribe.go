@@ -2,7 +2,9 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
+	"net"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,6 +19,65 @@ import (
 
 // defaultWaitTimeout bounds a wait-for verb that omits an explicit timeout.
 const defaultWaitTimeout = 30 * time.Second
+
+// maxWaitTimeoutMS is the longest timeout a wait takes: 24 hours. A longer
+// one is refused, which also keeps it clear of overflowing a time.Duration.
+const maxWaitTimeoutMS = 24 * 60 * 60 * 1000
+
+// waitClientPoll is how often a wait looks whether its caller has closed the
+// connection.
+const waitClientPoll = 500 * time.Millisecond
+
+// waitDeadline is the channel a wait ends on: the timeout, or before it the
+// caller going away. A caller on a connection has gone when the other end
+// closed it (connPeerClosed). A call from a pane on another machine has gone
+// when the report channel it came on ends, which is the only way its answer
+// could go back. A wait whose caller has gone ends at once, so a client that
+// closes does not leave its goroutine and event subscription behind until
+// the timeout. stop ends the watch when the wait returns.
+func (d *Daemon) waitDeadline(cs *connState, timeout time.Duration) (deadline <-chan time.Time, stop func()) {
+	var conn net.Conn
+	var ended <-chan struct{}
+	if cs != nil {
+		conn, ended = cs.conn, cs.hostedEnded
+	}
+	if conn == nil && ended == nil {
+		timer := time.NewTimer(timeout)
+		return timer.C, func() { timer.Stop() }
+	}
+	ends := make(chan time.Time, 1)
+	done := make(chan struct{})
+	go func() {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		var poll <-chan time.Time
+		if conn != nil {
+			ticker := time.NewTicker(waitClientPoll)
+			defer ticker.Stop()
+			poll = ticker.C
+		}
+		for {
+			select {
+			case now := <-timer.C:
+				ends <- now
+				return
+			case <-ended:
+				ends <- time.Now()
+				return
+			case <-poll:
+				if connPeerClosed(conn) {
+					ends <- time.Now()
+					return
+				}
+			case <-done:
+				return
+			case <-d.ctx.Done():
+				return
+			}
+		}
+	}()
+	return ends, func() { close(done) }
+}
 
 // defaultIdleWindow is the quiet period a window-idle wait uses when the request
 // omits an idle duration.
@@ -269,30 +330,15 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		}
 	}
 
+	if p.Timeout < 0 || p.Timeout > maxWaitTimeoutMS {
+		return nil, invalidParam("timeout", fmt.Sprintf("timeout is milliseconds from 1 to %d (24 hours)", maxWaitTimeoutMS))
+	}
 	timeout := defaultWaitTimeout
 	if p.Timeout > 0 {
 		timeout = time.Duration(p.Timeout) * time.Millisecond
 	}
-	deadline := time.After(timeout)
-	if cs != nil && cs.hostedEnded != nil {
-		// A call from a pane on another machine ends with the report channel
-		// it came on, which is the only way its answer could go back.
-		ends := make(chan time.Time, 1)
-		stop := make(chan struct{})
-		defer close(stop)
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		go func() {
-			select {
-			case now := <-timer.C:
-				ends <- now
-			case <-cs.hostedEnded:
-				ends <- time.Now()
-			case <-stop:
-			}
-		}()
-		deadline = ends
-	}
+	deadline, stop := d.waitDeadline(cs, timeout)
+	defer stop()
 
 	if p.Select != "" {
 		sel, verr := d.parseVerbSelector(p.Select)

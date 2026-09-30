@@ -127,6 +127,46 @@ type herdrParams struct {
 	Body string `json:"body"`
 }
 
+// herdrConnsPerCaller and herdrStreamsPerCaller bound what one process may
+// hold open on the herdr socket at once: connections of any kind, and of
+// those the event streams. A wait holds its connection for as long as it
+// waits, so without a bound one process could pin a goroutine and an event
+// subscription each for as many connections as it opened. A caller is its
+// peer pid; every caller the kernel names no pid for shares one count.
+const (
+	herdrConnsPerCaller   = 64
+	herdrStreamsPerCaller = 8
+)
+
+// herdrConnCount is the connections each caller holds open.
+type herdrConnCount struct {
+	mu sync.Mutex
+	n  map[int]int
+}
+
+// take counts one more for key and reports whether it fits under limit.
+func (c *herdrConnCount) take(key, limit int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n == nil {
+		c.n = make(map[int]int)
+	}
+	if c.n[key] >= limit {
+		return false
+	}
+	c.n[key]++
+	return true
+}
+
+// give counts one fewer for key.
+func (c *herdrConnCount) give(key int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n[key]--; c.n[key] <= 0 {
+		delete(c.n, key)
+	}
+}
+
 // herdrSeqs is the highest seq seen per pane and source.
 type herdrSeqs struct {
 	mu   sync.Mutex
@@ -281,6 +321,11 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 	}()
 	_ = conn.SetDeadline(time.Now().Add(herdrIOTimeout))
 	cs := &connState{conn: conn, clientID: "herdr-" + newClientID(), done: make(chan struct{}), peerPID: peerPID(conn)}
+	if !d.herdrConns.take(cs.peerPID, herdrConnsPerCaller) {
+		writeHerdr(conn, "", nil, "rate_limited", "this process has too many connections open on the herdr socket. Close some and try again")
+		return
+	}
+	defer d.herdrConns.give(cs.peerPID)
 	d.pinPeer(cs)
 	line, err := bufio.NewReaderSize(io.LimitReader(conn, herdrMaxRequest), 4096).ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -300,6 +345,13 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 		return
 	}
 	if req.Method == "events.subscribe" {
+		// A stream is held open, so a caller holds fewer of them. The key
+		// is apart from the connection count's.
+		if !d.herdrConns.take(-1-cs.peerPID, herdrStreamsPerCaller) {
+			writeHerdr(conn, req.ID, nil, "rate_limited", "this process has too many event streams open. Close one and subscribe again")
+			return
+		}
+		defer d.herdrConns.give(-1 - cs.peerPID)
 		d.serveHerdrEvents(cs, req.ID, req.Params)
 		return
 	}

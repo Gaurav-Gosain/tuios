@@ -48,8 +48,11 @@ type Daemon struct {
 	// herdrEvents limits the notifications and metadata each pane sends
 	// over the herdr protocol socket.
 	herdrEvents herdrBuckets
-	ctx         context.Context
-	cancel      context.CancelFunc
+	// herdrConns counts each caller's open connections on the herdr
+	// protocol socket. See herdrConnLimits.
+	herdrConns herdrConnCount
+	ctx        context.Context
+	cancel     context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
