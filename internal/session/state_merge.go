@@ -412,6 +412,8 @@ func CloneFocusHistory(history map[int][]string) map[int][]string {
 
 // RecordFocus places id at the front of workspace's MRU history.
 func RecordFocus(history map[int][]string, workspace int, id string) map[int][]string {
+	const maxFocusHistory = 16
+
 	if id == "" {
 		return history
 	}
@@ -425,23 +427,32 @@ func RecordFocus(history map[int][]string, workspace int, id string) map[int][]s
 			kept = append(kept, candidate)
 		}
 	}
-	history[workspace] = append([]string{id}, kept...)
+	items = append([]string{id}, kept...)
+	if len(items) > maxFocusHistory {
+		items = items[:maxFocusHistory]
+	}
+	history[workspace] = items
 	return history
 }
 
-// RemoveFocus removes id from workspace's MRU history.
-func RemoveFocus(history map[int][]string, workspace int, id string) map[int][]string {
+// RemoveFocus removes id from every MRU history.
+func RemoveFocus(history map[int][]string, id string) map[int][]string {
 	if history == nil {
 		return nil
 	}
-	items := history[workspace]
-	kept := items[:0]
-	for _, candidate := range items {
-		if candidate != id {
-			kept = append(kept, candidate)
+	for workspace, items := range history {
+		kept := items[:0]
+		for _, candidate := range items {
+			if candidate != id {
+				kept = append(kept, candidate)
+			}
+		}
+		if len(kept) == 0 {
+			delete(history, workspace)
+		} else {
+			history[workspace] = kept
 		}
 	}
-	history[workspace] = kept
 	return history
 }
 

@@ -890,7 +890,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	m.Windows = slices.Delete(m.Windows, i, i+1)
-	m.FocusHistory = session.RemoveFocus(m.FocusHistory, deletedWorkspace, deletedWindow.ID)
+	m.FocusHistory = session.RemoveFocus(m.FocusHistory, deletedWindow.ID)
 	m.closeStaleHints()
 
 	// Explicitly clear the deleted window pointer to help GC
