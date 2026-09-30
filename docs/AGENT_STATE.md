@@ -80,6 +80,45 @@ matches the build.
    attached: an `after-agent-state` hook ([HOOKS.md](HOOKS.md); `tuios --skill
    recipes` has a working one).
 
+## Supported agents
+
+tuios gets an agent's state in one of these ways, best first:
+
+- **Hook**: a hook or plugin that `tuios integration install` writes reports
+  each state. "Session" means that the hook reports only the conversation id.
+- **herdr**: the agent reports by itself over
+  [herdr's pane state protocol](#herdrs-pane-state-protocol). You install
+  nothing.
+- **Screen**: rules read the pane's screen and title
+  ([Screen rules](#screen-rules), [Title rules](#title-rules)).
+- **Process**: tuios sees the program and the pane's output, and nothing more.
+
+| Agent | How tuios reads it | States | Tested in tuios |
+| --- | --- | --- | --- |
+| Claude Code | hook, screen, title, notification | working, needs_input, idle, done | hook E2E, screen fixtures |
+| Codex | hook, screen, title, notification | working, needs_input, idle, done | notification E2E, screen fixtures |
+| Gemini CLI | hook, screen, title | working, needs_input, idle, done | screen fixtures |
+| opencode | hook (plugin), screen | working, needs_input, idle, done | plugin E2E, screen fixtures |
+| Kilo | hook (plugin), screen | working, needs_input, idle, done | unit, screen fixtures |
+| Amp | hook (plugin), screen, title | working, needs_input, idle, done | plugin E2E |
+| Pi | hook (extension), screen | working, needs_input, idle, done | plugin E2E |
+| oh-my-pi | hook (extension) | working, needs_input, idle, done | plugin E2E |
+| Kimi Code CLI | hook, screen | working, needs_input, idle, done | unit, screen fixtures |
+| Qwen Code | hook, screen, title | working, needs_input, idle, done | hook E2E, screen fixtures |
+| GitHub Copilot CLI | hook, screen | working, needs_input, idle, done | hook E2E |
+| Cursor Agent | hook, screen | working, needs_input, idle, done | hook E2E |
+| Crush | herdr, a screen rule for the permission dialog, session hook | working, needs_input (approval or question), idle, done | E2E with a real Crush, E2E with a stand-in |
+| Kiro CLI | herdr (herdr lists it as reporting by itself), screen, title | working, needs_input, idle | screen fixtures |
+| Command Code, Muse Code, Prime Agent | herdr (herdr lists them as reporting by themselves) | working, needs_input, idle | unit and E2E with a stand-in, not with the real agent |
+| Antigravity CLI, Devin CLI, Droid, Qoder CLI | session hook, screen | working, needs_input, idle | screen fixtures |
+| Grok CLI, Hermes Agent | session hook, screen, title | working, needs_input, idle | screen fixtures |
+| Cline, Goose, Maki | screen | working, needs_input, idle | screen fixtures |
+| Aider | process | working, idle | unit |
+
+An agent that herdr supports through its own hook scripts, such as Letta Code
+or MastraCode, reports to tuios too when you install herdr's integration for it.
+Those scripts send herdr's protocol to `HERDR_SOCKET_PATH`.
+
 ## Where to find what
 
 | To | Read |
@@ -280,31 +319,33 @@ and every integration tuios installs call. A pane finds the daemon through
 
 ### herdr's pane state protocol
 
-tuios also accepts the reports some harnesses already send to herdr, another
-multiplexer for coding agents, so they work with no install step. Crush sends
-them natively when it finds herdr's environment in its pane. It is an input
-only: tuios answers nothing else a herdr client could ask.
+tuios also accepts the reports that agents send to herdr, another multiplexer
+for coding agents. Crush, Kiro CLI, Command Code, Muse Code and Prime Agent
+send these reports by themselves when they find herdr's environment in their
+pane. herdr's own hook scripts, if you installed them with `herdr integration
+install`, send them too. Nothing needs to be installed for tuios.
 
-A pane that is to report this way is started with:
+Every pane starts with these variables, as in herdr:
 
 | Variable | Value |
 | --- | --- |
 | `HERDR_ENV` | `1` |
 | `HERDR_SOCKET_PATH` | `<daemon socket>.herdr`, a socket of tuios's own, owner only |
 | `HERDR_PANE_ID` | the pane's window id, the same as `TUIOS_PANE_ID` |
+| `HERDR_BIN_PATH` | this tuios, which answers herdr's report commands |
 
-herdr reads `HERDR_SOCKET_PATH` as the path of its own server and
-`HERDR_ENV=1` as "inside herdr", so tuios sets them only where they are wanted:
-in a pane that starts Crush directly (`tuios new-window NAME crush`,
-`start-agent crush`, `fan --agent crush`), or in every pane with
-`herdr_protocol = "always"` in `[agents]` (see
-[the configuration reference](CONFIGURATION.md#harnesses-that-report-to-herdr)).
-A shell pane is not told it is a herdr pane by default, and tuios never listens
-on herdr's own socket, so a real herdr on the same machine is untouched. The
-other way round, a tuios started inside a herdr pane does not pass that pane's
-`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its
-own panes, the way it does not pass on `TMUX`, so an agent in a tuios pane never
-sets the state of the herdr pane around it.
+So a Crush that you start from a shell prompt reports its state. To limit the
+variables to panes that start a known reporter (`tuios new-window NAME crush`,
+`start-agent crush`), or to turn them off, set `herdr_protocol` in `[agents]`
+(see [the configuration reference](CONFIGURATION.md#harnesses-that-report-to-herdr)).
+
+herdr reads `HERDR_ENV=1` as "inside herdr". A herdr that you start in a tuios
+pane stops with a message about nesting. Set `herdr_protocol = "agents"` or
+herdr's `experimental.allow_nested` to run herdr there. tuios never listens on
+herdr's own socket, so a real herdr on the same machine is untouched. A tuios
+started inside a herdr pane does not pass that pane's `HERDR_ENV`,
+`HERDR_PANE_ID`, `HERDR_TAB_ID` or `HERDR_WORKSPACE_ID` on to its own panes. An
+agent in a tuios pane never sets the state of the herdr pane around it.
 
 The wire is herdr's: one JSON object per connection on one line, `{"id",
 "method", "params"}`, answered with one line, `{"id", "result": {"type":
@@ -313,23 +354,57 @@ The wire is herdr's: one JSON object per connection on one line, `{"id",
 | Method | What tuios does |
 | --- | --- |
 | `pane.report_agent` `state: working` | `working` |
-| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, which reports `blocked` only on a permission request, kind `approval` |
-| `pane.report_agent` `state: idle` | `done` when the pane is `working` or `needs_input`, since the harness came to rest from a turn, and `idle` otherwise |
+| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, a message that starts with `Permission`, or no message, is kind `approval`. Any other Crush message (a question, a new login) is kind `question` |
+| `pane.report_agent` `state: idle` | `done` when the pane is `working` or `needs_input`, and `idle` otherwise |
 | `pane.report_agent` `state: unknown` | nothing |
 | `pane.report_agent_session` | the conversation id, as `set-agent-session` |
 | `pane.release_agent` | `none` |
+| `pane.report_metadata` | `title` and each token become the pane's [agent metadata](#agent-metadata), filed under source `herdr:<source>`. A `null` token clears the key. A name tuios cannot hold is skipped |
+| `notification.show` | a `notification` event from the caller's pane, matched against the harness's [notification rules](#notification-rules) |
 | `ping` | a pong |
 | anything else | error `unsupported` |
 
-Each report goes through `set-agent-state` with source `report`, the harness
-named by `agent` when tuios knows it, and `agent_session_id` when sent, so it
-has the same rank, guards and alerts as a hook's report. A report whose `seq`
-is not above the last one from the same `source` for the pane is dropped
-without an error, as herdr does; Crush seeds its `seq` from the clock, so a
-restarted Crush is never stale. A request speaks only for the caller's own
-pane: the daemon places the connecting process the way it places every caller
-(see [How a process is placed](#how-a-process-is-placed)) and answers
-`forbidden` to a `pane_id` that is not that pane, and to a process in no pane.
+`resume_argv` is accepted and not used. tuios resumes a conversation from the
+harness and its session id (see [Resuming after a restart](#resuming-after-a-restart)).
+
+Each report goes through `set-agent-state` with source `report`. The harness is
+tuios's id for `agent` when tuios knows the agent, and the `agent` name itself
+when it does not. A report has the same rank, guards and alerts as a hook's
+report. The pid of the reporting process goes with the session id, so a Crush
+that moves to another conversation during a turn is still the same harness.
+
+A report whose `seq` is not above the last one from the same `source` for the
+pane is dropped without an error, as herdr does. The mark stays after
+`pane.release_agent`, so a report that arrives after the release does not bring
+the agent back. Crush takes its `seq` from the clock, so a restarted Crush is
+never stale. `pane.report_metadata` has a mark of its own.
+
+An agent that exits without `pane.release_agent`, for example after a crash,
+does not keep its last state. When the pane is back at its shell prompt and the
+last report is more than two seconds old, the pane clears to `none`. herdr has
+the same rule.
+
+A request speaks only for the caller's own pane. The daemon places the
+connecting process the way it places every caller (see
+[How a process is placed](#how-a-process-is-placed)). It answers `forbidden` to
+a `pane_id` that is not that pane, and to a process in no pane. Pane grants do
+not limit these reports, because a pane may always report for itself.
+
+#### herdr's report commands
+
+herdr's guide for agent authors tells an agent to report through
+`"$HERDR_BIN_PATH" pane report-agent`. In a tuios pane that runs tuios, which
+takes herdr's arguments and sends the same requests to `HERDR_SOCKET_PATH`:
+
+```bash
+"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" --source my-agent --agent my-agent --state working --seq 1
+"$HERDR_BIN_PATH" pane report-metadata "$HERDR_PANE_ID" --source my-agent --title "Fix the build" --token model=opus
+"$HERDR_BIN_PATH" pane release-agent "$HERDR_PANE_ID" --source my-agent --agent my-agent --seq 2
+"$HERDR_BIN_PATH" notification show "Build done" --body "All tests pass"
+```
+
+`pane report-agent-session` works the same way. Other herdr commands are not
+there. Use `set-agent-state` and `set-agent-meta` in your own scripts.
 
 ## Sources and precedence
 
@@ -2272,7 +2347,7 @@ status` and `tuios doctor agents` say which each one is.
 | Cursor Agent | state | hooks in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
 | Qwen Code | state | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | [hooks](https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md) |
 | Antigravity CLI | session | a `tuios` block in `~/.gemini/config/hooks.json` (or `$ANTIGRAVITY_CLI_CONFIG_DIR`) | herdr's Antigravity installer |
-| Crush | session | a `PreToolUse` hook in `~/.config/crush/crush.json` (or `$XDG_CONFIG_HOME/crush`) | [hooks](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) |
+| Crush | session | a `PreToolUse` hook in `~/.config/crush/crush.json` (or `$XDG_CONFIG_HOME/crush`). Crush reports its state by itself over [herdr's protocol](#herdrs-pane-state-protocol), with no install | [hooks](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) |
 | Devin CLI | session | `hooks` in `config.json` in `$XDG_CONFIG_HOME/devin`, `~/.config/devin` or `%APPDATA%\devin` | herdr's Devin installer |
 | Droid | session | `hooks` in `~/.factory/settings.json` | herdr's Droid installer |
 | Grok CLI | session | `hooks/tuios.json` in `~/.grok` (or `$GROK_HOME`), a file of its own | herdr's Grok installer |
@@ -3155,8 +3230,8 @@ wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
 One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
 name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 
-A pane that starts Crush, or every pane with `herdr_protocol = "always"`, also
-gets `HERDR_ENV`, `HERDR_SOCKET_PATH` and `HERDR_PANE_ID`. See
+Every pane also gets `HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_PANE_ID` and
+`HERDR_BIN_PATH`, unless `herdr_protocol` in `[agents]` says otherwise. See
 [herdr's pane state protocol](#herdrs-pane-state-protocol).
 
 ### What a pane says its terminal is
