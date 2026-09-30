@@ -250,7 +250,7 @@ func TestSixelCursorBelowImage(t *testing.T) {
 		term.SetCellSize(8, 6)
 		term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 9 })
 		// Two image rows (12 pixels at 6 per row).
-		if _, err := term.Write([]byte(fmt.Sprintf("\x1b[%d;1H%sAFTER", startRow+1, testSixel))); err != nil {
+		if _, err := fmt.Fprintf(term, "\x1b[%d;1H%sAFTER", startRow+1, testSixel); err != nil {
 			t.Fatal(err)
 		}
 		markers := 0
