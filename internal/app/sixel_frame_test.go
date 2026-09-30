@@ -244,3 +244,68 @@ func TestFrameHookWriterOrder(t *testing.T) {
 		t.Fatalf("wrote %q", got)
 	}
 }
+
+// TestSixelSweepFreesOverwrittenImages: an animation draws each frame as a
+// new image over the last. The images whose cells are all gone are freed on
+// the next sweep, not held until the pane's budget evicts them, and the one
+// still on screen stays.
+func TestSixelSweepFreesOverwrittenImages(t *testing.T) {
+	oldEvery, oldGrace := sixelSweepEvery, sixelSweepGrace
+	sixelSweepEvery, sixelSweepGrace = 0, 0
+	t.Cleanup(func() { sixelSweepEvery, sixelSweepGrace = oldEvery, oldGrace })
+
+	m, win := sixelOS(t, sixelNative)
+	for range 20 {
+		win.WriteOutput([]byte("\x1b[H"))
+		win.WriteOutput(sixelTestImage(20, 3))
+	}
+	win.MarkContentDirty()
+	if n := m.SixelPassthrough.ImageCount(); n != 20 {
+		t.Fatalf("held %d images after 20 frames, want 20 before a sweep", n)
+	}
+	m.testFrame()
+	deadline := time.Now().Add(5 * time.Second)
+	for m.SixelPassthrough.ImageCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		m.SixelPassthrough.mu.Lock()
+		m.SixelPassthrough.lastSweep = time.Time{}
+		m.SixelPassthrough.mu.Unlock()
+		m.sweepSixelImages()
+	}
+	if n := m.SixelPassthrough.ImageCount(); n != 1 {
+		t.Fatalf("after the sweep %d images are held, want the 1 on screen", n)
+	}
+	// Clearing the pane leaves nothing to hold.
+	win.WriteOutput([]byte("\x1b[2J\x1b[3J"))
+	win.MarkContentDirty()
+	m.testFrame()
+	for m.SixelPassthrough.ImageCount() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		m.SixelPassthrough.mu.Lock()
+		m.SixelPassthrough.lastSweep = time.Time{}
+		m.SixelPassthrough.mu.Unlock()
+		m.sweepSixelImages()
+	}
+	if n := m.SixelPassthrough.ImageCount(); n != 0 {
+		t.Fatalf("after clear %d images are held", n)
+	}
+}
+
+// TestSixelUnknownCellsAreBlank: cells naming an image this client never held
+// (a pane restored from the daemon) draw as plain blanks, not as a box or
+// dots.
+func TestSixelUnknownCellsAreBlank(t *testing.T) {
+	m, win := sixelOS(t, sixelNative)
+	win.LockIO()
+	win.Terminal.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 777 })
+	win.UnlockIO()
+	win.WriteOutput([]byte("top\r\n"))
+	win.WriteOutput(sixelTestImage(10, 2))
+	win.MarkContentDirty()
+	frame := m.composeFrame()
+	for _, bad := range []string{"·", "┌", vt.SixelMarkerLead} {
+		if strings.Contains(frame, bad) {
+			t.Fatalf("unknown image cells drew %q", bad)
+		}
+	}
+}

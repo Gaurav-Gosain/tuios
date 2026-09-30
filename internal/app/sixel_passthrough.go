@@ -55,8 +55,10 @@ func (m sixelMode) String() string {
 const (
 	// sixelWindowBudget is the most decoded image data one pane holds. Past
 	// it the pane's oldest images are dropped, and their cells, if they are
-	// ever shown again, show the placeholder.
-	sixelWindowBudget = 64 << 20
+	// ever shown again, show the placeholder. Images whose cells are all gone
+	// are freed long before this, by the sweep (sixel_sweep.go); the budget
+	// is for a pane that keeps many pictures in its scrollback.
+	sixelWindowBudget = 16 << 20
 	// sixelMaxImages bounds the number of images across all panes, which an
 	// animation of tiny frames could otherwise grow without limit.
 	sixelMaxImages = 4096
@@ -84,6 +86,8 @@ type SixelPassthrough struct {
 	// direct writes to the host outside the renderer's writes, for output a
 	// background job made ready. See ConnectFrameWriter.
 	direct func([]byte)
+	// lastSweep is when the last sweep started. See sixel_sweep.go.
+	lastSweep time.Time
 }
 
 // sixelEntry is one image a pane drew.
@@ -103,6 +107,9 @@ type sixelEntry struct {
 	kittyPayload []byte
 	bytes        int
 	seq          uint64 // registration order, for eviction
+	// born is when the image was registered. The sweep leaves a young image
+	// alone: its cells are written just after it is registered.
+	born time.Time
 }
 
 // SixelPassthroughOptions configures a SixelPassthrough instance.
@@ -225,6 +232,7 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint
 	}
 	sp.frame.seq++
 	e.seq = sp.frame.seq
+	e.born = time.Now()
 	sp.images[id] = e
 	sp.byWindow[windowID] += e.bytes
 	sp.evictLocked(windowID)

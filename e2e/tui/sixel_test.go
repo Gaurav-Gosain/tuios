@@ -263,7 +263,7 @@ func startSixelPane(t *testing.T, host *sixelHost, daemon bool) (*tuitest.Termin
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo READY", "READY", shellTimeout)
+	runInShell(t, term, "echo RE''ADY", "READY", shellTimeout)
 	return term, base
 }
 
@@ -331,7 +331,7 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 
 			// Clearing the pane takes the picture off the host.
 			enterTerminalMode(t, term)
-			runInShell(t, term, "clear; echo CLEARED", "CLEARED", shellTimeout)
+			runInShell(t, term, "clear; echo CLEA''RED", "CLEARED", shellTimeout)
 			time.Sleep(time.Second)
 			hv = replayHost(t, host.bytes(), 120, 40)
 			if left := checkHostImage(t, "cleared", term, hv, f, origin); left != 0 {
@@ -611,7 +611,7 @@ func TestSixelFallbacks(t *testing.T) {
 			waitBoot(t, term)
 			newWindow(t, term)
 			enterTerminalMode(t, term)
-			runInShell(t, term, "echo READY", "READY", shellTimeout)
+			runInShell(t, term, "echo RE''ADY", "READY", shellTimeout)
 
 			dir := t.TempDir()
 			da1 := paneDA1(t, term, dir)
@@ -653,5 +653,72 @@ func TestSixelFallbacks(t *testing.T) {
 				t.Errorf("an image marker reached the host as text")
 			}
 		})
+	}
+}
+
+// TestSixelAtTheBottomKeepsItsLastRow: an image drawn at the bottom of a pane
+// scrolls it, and the text printed next goes on the row under the image, as
+// in xterm. It used to land on the image's last row and erase it.
+func TestSixelAtTheBottomKeepsItsLastRow(t *testing.T) {
+	host := newSixelHost(true, false)
+	term, _ := startSixelPane(t, host, false)
+	f := writeSixelFixture(t, t.TempDir(), 20, 6)
+	typeLine(t, term, "clear; seq 80; cat "+f.path+"; printf AFTER''BOT")
+	if err := term.WaitForText("AFTERBOT", shellTimeout); err != nil {
+		t.Fatalf("no AFTERBOT: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+	after := sixelRowOf(term.Screen(), "AFTERBOT")
+	origin := image.Pt(1, after-6)
+	hv := replayHost(t, host.bytes(), 120, 40)
+	if n := checkHostImage(t, "at the bottom", term, hv, f, origin); n != 6*20 {
+		t.Errorf("host shows %d of the image's %d cells", n, 6*20)
+	}
+}
+
+// sixelPaintedExtent is how far a sixel sequence paints, in pixels, whatever
+// size its raster attributes declare.
+func sixelPaintedExtent(body []byte) (w, h int) {
+	cmd := vt.ParseSixelCommand(body)
+	if cmd == nil {
+		return 0, 0
+	}
+	cmd.Width, cmd.Height = 2048, 2048
+	// Count painted pixels only, whatever the background mode says.
+	cmd.BackgroundMode = 1
+	img := vt.DecodeSixel(cmd)
+	for y := range img.Height {
+		for x := range img.Width {
+			if _, ok := img.At(x, y); ok {
+				w, h = max(w, x+1), max(h, y+1)
+			}
+		}
+	}
+	return w, h
+}
+
+// TestSixelOverpaintIsCut: a guest image that declares 10x20 pixels and paints
+// 400x30 covers one cell. The host must never be sent pixels past that cell;
+// the guest's own bytes would paint over the panes beside it.
+func TestSixelOverpaintIsCut(t *testing.T) {
+	host := newSixelHost(true, false)
+	term, _ := startSixelPane(t, host, false)
+	path := filepath.Join(t.TempDir(), "over.six")
+	body := "\x1bPq\"1;1;10;20#1;2;100;0;0!400~-!400~-!400~-!400~-!400~\x1b\\"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := len(host.bytes())
+	runInShell(t, term, "clear; cat "+path+"; echo; echo OVER''DONE", "OVERDONE", shellTimeout)
+	time.Sleep(time.Second)
+	out := host.bytes()[before:]
+	dcs := regexp.MustCompile(`(?s)\x1bP([0-9;]*q.*?)\x1b\\`).FindAllSubmatch(out, -1)
+	if len(dcs) == 0 {
+		t.Fatalf("the host was sent no sixel")
+	}
+	for _, m := range dcs {
+		if w, h := sixelPaintedExtent(m[1]); w > cellW || h > cellH {
+			t.Errorf("the host was sent a sixel painting %dx%d pixels for a one-cell image", w, h)
+		}
 	}
 }
