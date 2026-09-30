@@ -709,6 +709,10 @@ type OS struct {
 	// sessionTreeOpsOff is set while the session has tree ops turned off. See
 	// treeOpsOn.
 	sessionTreeOpsOff bool
+	// sessionScratchWSOff is set while the session has scratch workspaces
+	// off: an older daemon, or an older client attached. The scratch
+	// terminal is then a popup, as before. See scratch_legacy.go.
+	sessionScratchWSOff bool
 
 	// applyingPeerSync is set while ApplyStateSync is folding a state that came
 	// from somewhere else into this client. It is what makes a sync loop

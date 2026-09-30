@@ -263,8 +263,11 @@ type NewWindowOptions struct {
 // workspace for as long as the two calls take, which an attached client renders.
 func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID string)) (WindowState, error) {
 	// A scratch pane is an ordinary tiled window on its group's workspace, not
-	// a popup. See scratch_workspace.go.
-	if opts.Scratch {
+	// a popup. See scratch_workspace.go. While a client too old for that is
+	// attached it is a popup on the current workspace, as that client
+	// expects.
+	legacyScratch := opts.Scratch && !s.scratchWorkspacesOn()
+	if opts.Scratch && !legacyScratch {
 		opts.Popup = false
 	}
 	title := opts.Title
@@ -347,11 +350,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		// two calls that race cannot both add one.
 		scratch, scratchName := false, ""
 		if opts.Scratch {
-			if _, exists := scratchGroupWorkspace(state, opts.ScratchName); exists {
-				return ErrScratchExists
+			key := WindowState{ScratchName: opts.ScratchName}.ScratchKey()
+			for i := range state.Windows {
+				if w := &state.Windows[i]; w.Scratch && w.ScratchKey() == key {
+					return ErrScratchExists
+				}
 			}
 			scratch, scratchName = true, scratchNameIf(opts)
-			opts.Workspace = freeScratchWorkspace(state)
+			if !legacyScratch {
+				opts.Workspace = freeScratchWorkspace(state)
+			}
 		} else if IsScratchWorkspace(opts.Workspace) {
 			// A split inside a scratch group joins the group.
 			name, ok := scratchNameOnWorkspace(state, opts.Workspace)
@@ -507,7 +515,18 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		if err != nil {
 			return err
 		}
+		// A scratch popup, from a session in which a client too old for
+		// scratch workspaces is attached, is shown on the current workspace
+		// before it takes the focus.
+		if w := &state.Windows[idx]; w.Scratch && w.Popup && w.Minimized {
+			w.Minimized = false
+			w.Workspace = state.CurrentWorkspace
+		}
 		win := state.Windows[idx]
+		// No focus goes to a scratch workspace a client cannot show.
+		if IsScratchWorkspace(win.Workspace) && s.scratchWSOff {
+			return fmt.Errorf("an older tuios client is attached to this session, so a scratch pane cannot take the focus")
+		}
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
 		// A scratch pane takes the focus without its workspace becoming the
@@ -592,6 +611,11 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 		if err != nil {
 			return err
 		}
+		// A scratch pane stays in its group: moved off its workspace, the
+		// group would lose it.
+		if state.Windows[idx].Scratch {
+			return errScratchPaneStays
+		}
 		oldWorkspace := state.Windows[idx].Workspace
 		state.Windows[idx].Workspace = ws
 
@@ -675,6 +699,9 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 				state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 			}
 		}
+		// A focus left on a scratch pane would show its group over the
+		// workspace just selected: the selection means the workspace.
+		unfocusScratchLocked(state)
 		return nil
 	})
 }

@@ -403,6 +403,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// The trees just taken are the session's, so none of them is news to send
 	// back. See layout_tree_sync.go.
 	m.sessionTreeOpsOff = !state.LayoutTreeOps
+	m.sessionScratchWSOff = !state.ScratchWorkspaces
 	m.noteSessionTrees()
 
 	// A client joining a scrolling session starts where the session is looking,

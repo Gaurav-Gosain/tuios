@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -59,7 +60,9 @@ func (m *OS) BeginRenameSession(name string) {
 // BeginRenameWorkspace starts a rename of a workspace, seeded with its current
 // name. An unnamed workspace opens empty: its number is not a name it was given.
 func (m *OS) BeginRenameWorkspace(ws int) {
-	if ws <= 0 {
+	// A scratch group's workspace has no name to give: its box shows the
+	// group's name.
+	if ws <= 0 || session.IsScratchWorkspace(ws) {
 		return
 	}
 	m.RenameKind = RenameWorkspace

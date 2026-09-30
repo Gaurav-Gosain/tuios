@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -90,6 +91,12 @@ func templateFilePath(name string) string {
 
 // SaveLayoutTemplate saves the current workspace layout.
 func SaveLayoutTemplate(name string, m *OS) error {
+	// A layout is a workspace's, and a scratch group is not one: saved from
+	// inside the box it would be empty, loaded there it would fill the box
+	// with panes of the workspace's size.
+	if m.InScratchView() {
+		return errLayoutInScratch
+	}
 	if err := ensureTemplatesDir(); err != nil {
 		return fmt.Errorf("create layouts dir: %w", err)
 	}
@@ -176,6 +183,10 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 
 // ApplyLayoutTemplate recreates a workspace from a template.
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
+	if m.InScratchView() {
+		m.ShowNotification(errLayoutInScratch.Error(), "warning", m.Settings.NotificationDuration)
+		return
+	}
 	// Collect existing windows in current workspace (reuse them instead of killing)
 	var existingWindows []*terminal.Window
 	for _, w := range m.Windows {
@@ -414,3 +425,6 @@ func layoutLoadDir(dir string) string {
 	}
 	return dir
 }
+
+// errLayoutInScratch refuses a layout save or load inside a scratch group.
+var errLayoutInScratch = errors.New("hide the scratch terminal first. A layout belongs to a workspace")

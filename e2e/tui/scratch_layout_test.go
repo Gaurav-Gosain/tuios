@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -197,4 +198,74 @@ func TestScratchGroupSurvivesADaemonRestart(t *testing.T) {
 	typeUntil(t, second, "echo LIVE-$((6*7))", "LIVE-42")
 	t.Logf("the group after the restart:\n%s", second.Snapshot())
 	alive(t, second, "after the restart")
+}
+
+// The scratch key against a build from before scratch workspaces, named by
+// TUIOS_E2E_OLD_BIN (the suite does not build it). Right after an upgrade
+// the daemon is the old one until it restarts; and an old client can be
+// attached to a new daemon. In both the scratch terminal is a popup, and the
+// key must still hide it.
+func TestScratchWithAnOlderBuild(t *testing.T) {
+	old := os.Getenv("TUIOS_E2E_OLD_BIN")
+	if old == "" {
+		t.Skip("TUIOS_E2E_OLD_BIN is not set")
+	}
+	withOld := func(f func()) {
+		prev := tuiosBin
+		tuiosBin = old
+		defer func() { tuiosBin = prev }()
+		f()
+	}
+
+	t.Run("old daemon", func(t *testing.T) {
+		base := t.TempDir()
+		withOld(func() {
+			killDaemon(t, base)
+			if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
+				t.Fatalf("create the session: %v\n%s", err, out)
+			}
+		})
+		term := attachIn(t, base, "work", startOpts{cols: 120, rows: 40})
+		time.Sleep(time.Second)
+		toggleScratch(t, term)
+		// Typed only once the popup is there: the client is in window mode
+		// until it arrives, and letters there are window keys.
+		waitScratch(t, term, base, false, false, "the popup from the old daemon")
+		time.Sleep(500 * time.Millisecond)
+		typeUntil(t, term, "echo OLDD-$((6*7))", "OLDD-42")
+		toggleScratch(t, term)
+		noneOnScreen(t, term, "the scratch popup after the second press", "OLDD-42")
+		toggleScratch(t, term)
+		allOnScreen(t, term, "the scratch popup shown again", "OLDD-42")
+		alive(t, term, "with an old daemon")
+	})
+
+	t.Run("old client attached", func(t *testing.T) {
+		base := t.TempDir()
+		killDaemon(t, base)
+		if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
+			t.Fatalf("create the session: %v\n%s", err, out)
+		}
+		var oldTerm *tuitest.Terminal
+		withOld(func() { oldTerm = attachIn(t, base, "work", startOpts{cols: 120, rows: 40}) })
+		term := attachIn(t, base, "work", startOpts{cols: 120, rows: 40})
+		time.Sleep(time.Second)
+		toggleScratch(t, term)
+		waitScratch(t, term, base, false, false, "the popup with an old client attached")
+		time.Sleep(500 * time.Millisecond)
+		typeUntil(t, term, "echo OLDC-$((6*7))", "OLDC-42")
+		// The old client shows the same popup: the focus is on a pane it can
+		// draw.
+		if err := oldTerm.WaitForText("OLDC-42", uiTimeout); err != nil {
+			t.Fatalf("the old client does not show the scratch terminal: %v\n%s", err, oldTerm.Snapshot())
+		}
+		toggleScratch(t, term)
+		noneOnScreen(t, term, "the scratch popup after the second press", "OLDC-42")
+		for _, r := range commandRows(t, base) {
+			if r.Scratch && r.Workspace >= 1000 {
+				t.Fatalf("a scratch pane went on workspace %d with an old client attached", r.Workspace)
+			}
+		}
+		alive(t, term, "with an old client")
+	})
 }

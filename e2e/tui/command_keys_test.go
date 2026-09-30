@@ -31,6 +31,7 @@ type commandRow struct {
 	Minimized   bool   `json:"minimized"`
 	Scratch     bool   `json:"scratch"`
 	ScratchName string `json:"scratch_name"`
+	Workspace   int    `json:"workspace"`
 }
 
 func commandRows(t *testing.T, base string) []commandRow {

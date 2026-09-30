@@ -454,3 +454,78 @@ func TestSyncScratchViewFollowsTheFocus(t *testing.T) {
 		t.Fatalf("a focus back on alpha: view=%v current=%d", m.InScratchView(), m.CurrentWorkspace)
 	}
 }
+
+// The rename key does nothing on a scratch workspace, and a show or hide
+// fires no workspace-switch hook.
+func TestScratchWorkspaceIsNotRenamed(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, scratchName, "s1")
+	m.showScratch(1)
+	m.BeginRenameCurrentWorkspace()
+	if m.Renaming() {
+		t.Fatal("the rename key opened a rename of the scratch workspace")
+	}
+	if got := m.dockWorkspace(); got != 1 {
+		t.Fatalf("reported workspace %d, want 1", got)
+	}
+}
+
+// A scratch popup (from an older daemon, or with an older client attached)
+// hides and shows with the key, by minimizing, whatever the session says.
+//
+// Negative control, confirmed red: drop the legacy branch in toggleScratch
+// and the second press finds the popup on the current workspace and leaves
+// it.
+func TestScratchPopupFromAnOlderDaemonHides(t *testing.T) {
+	m := scratchOS(t, false)
+	w := &terminal.Window{ID: "old", IsPopup: true, IsFloating: true, IsScratch: true, Workspace: 1, Width: 40, Height: 10}
+	m.Windows = append(m.Windows, w)
+	m.FocusedWindow = 1
+	m.ToggleScratch()
+	if !w.Minimized || m.InScratchView() || m.FocusedWindow != 0 {
+		t.Fatalf("minimized=%v view=%v focused=%d, want the popup hidden", w.Minimized, m.InScratchView(), m.FocusedWindow)
+	}
+	m.ToggleScratch()
+	if w.Minimized || m.GetFocusedWindow() != w {
+		t.Fatal("the second press did not show the popup")
+	}
+}
+
+// Without scratch workspaces in the session (an older client attached), the
+// scratch key does not show a group, which that client could not draw: it
+// says why.
+func TestScratchWorkspacesOffDoesNotShowAGroup(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, scratchName, "s1")
+	m.IsDaemonSession, m.DaemonClient = true, &session.TUIClient{}
+	m.sessionScratchWSOff = true
+	if m.scratchWorkspaces() {
+		t.Fatal("scratch workspaces on in a session that has them off")
+	}
+	m.ToggleScratch()
+	if m.InScratchView() {
+		t.Fatal("the key showed a group with scratch workspaces off")
+	}
+	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "older tuios client") {
+		t.Fatalf("notifications = %+v", m.Notifications)
+	}
+}
+
+// A layout is not saved or loaded inside a group, and tiling stays on there.
+func TestLayoutAndTilingInsideTheGroup(t *testing.T) {
+	useTempConfig(t)
+	m := scratchOS(t, false)
+	addScratch(m, scratchName, "s1")
+	m.showScratch(1)
+	if err := SaveLayoutTemplate("in-scratch", m); err == nil {
+		t.Fatal("a layout was saved inside the group")
+	}
+	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{Width: 40, Height: 10}, {Width: 40, Height: 10}}}, m)
+	if len(m.Windows) != 2 {
+		t.Fatalf("a layout load inside the group made panes: %d windows", len(m.Windows))
+	}
+	m.ToggleAutoTiling()
+	if !m.AutoTiling {
+		t.Fatal("tiling went off inside the group")
+	}
+}

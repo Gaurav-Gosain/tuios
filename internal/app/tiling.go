@@ -365,6 +365,13 @@ func (m *OS) ToggleAutoTiling() {
 // copies drift: a path that forgets the borderless flag, for example, draws
 // panes with no borders and no dividers after tiling is turned off.
 func (m *OS) SetAutoTiling(on bool) {
+	// A scratch group always tiles: it is a layout in a box, and the box has
+	// no floating panes to go back to. The workspace it is shown over keeps
+	// its own mode (see BuildSessionState).
+	if m.InScratchView() && !on {
+		m.ShowNotification("A scratch terminal is always tiled.", "info", m.Settings.NotificationDuration)
+		return
+	}
 	m.settleSizes(func() { m.setAutoTiling(on) })
 }
 

@@ -14,8 +14,9 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 
 	cs.hello = &payload
 	cs.mu.Lock()
-	changed := cs.treeOps != payload.LayoutTreeOps
+	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
+	cs.scratchWS = payload.ScratchWorkspaces
 	attachedTo := cs.sessionID
 	cs.mu.Unlock()
 	// A second hello on an attached connection can change what the client
@@ -701,7 +702,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	// "off" left the ops on beside a client that cannot send them.
 	session.treeOpsMu.Lock()
 	defer session.treeOpsMu.Unlock()
-	on := true
+	on, scratchWS := true, true
 	animate, tuiClients := true, 0
 	images := false
 	d.clientsMu.RLock()
@@ -711,6 +712,9 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 			tuiClients++
 			if !cs.treeOps {
 				on = false
+			}
+			if !cs.scratchWS {
+				scratchWS = false
 			}
 			if !cs.kittyAnimation {
 				animate = false
@@ -733,6 +737,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 		(*hook)()
 	}
 	session.SetLayoutTreeOps(on)
+	session.SetScratchWorkspaces(scratchWS)
 }
 
 // treeOpsCounted runs in refreshTreeOps between the count and the change. It

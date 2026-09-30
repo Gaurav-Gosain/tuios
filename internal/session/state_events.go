@@ -71,6 +71,10 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	snap.workspace = state.CurrentWorkspace
 	if len(state.WorkspaceNames) > 0 {
 		snap.wsNames = maps.Clone(state.WorkspaceNames)
+		// A scratch group's workspace is not a workspace a person names or
+		// switches to, so no workspace event ever reports one. See
+		// scratch_workspace.go.
+		maps.DeleteFunc(snap.wsNames, func(ws int, _ string) bool { return IsScratchWorkspace(ws) })
 	}
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
 	worktreeRoot := ""
@@ -241,7 +245,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		events = append(events, SessionEvent{Type: EventWorkspaceRenamed, Workspace: ws, Title: after.wsNames[ws]})
 	}
 
-	if after.workspace != before.workspace && after.workspace > 0 {
+	if after.workspace != before.workspace && after.workspace > 0 && !IsScratchWorkspace(after.workspace) {
 		events = append(events, SessionEvent{
 			Type:              EventWorkspaceSwitched,
 			Workspace:         after.workspace,

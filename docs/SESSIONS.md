@@ -213,6 +213,9 @@ pane that had the focus, in terminal mode.
   a new shell in its own folder, under its saved history, in the same layout.
 - In a session on a different machine, the key does not open a scratch
   terminal. The dock shows a message.
+- Until the daemon restarts after an upgrade, and while a client of an older
+  tuios is attached to the session, the scratch terminal is one pane in a
+  popup, as in older versions. The key shows and hides it the same way.
 
 ```toml
 [scratch]
