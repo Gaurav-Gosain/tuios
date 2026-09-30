@@ -386,7 +386,13 @@ func (m *OS) parkScratch() {
 	m.Windows[i].Minimized = true
 	m.Windows[i].InvalidateCache()
 	m.scratchReturnID = ""
+	// The mode goes back to the one the show found, as a hide by the key
+	// does. The caller may still change it for the pane it focuses.
+	if m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode {
+		m.ExitTerminalMode()
+	}
 	m.MarkAllDirty()
+	m.SyncStateToDaemon()
 }
 
 // HideShownScratch hides the scratch terminal when it is on the screen, and

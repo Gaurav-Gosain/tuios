@@ -174,7 +174,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// focus-follows-mouse that stops working wherever the user actually spends
 	// their time just reads as broken. Rail keyboard focus still suppresses it,
 	// since the rail owns the keyboard and a click is the way back to a pane.
-	if o.Settings.FocusFollowsMouse && !o.SidebarFocused &&
+	// A shown scratch terminal keeps the focus until a click or a key moves
+	// it: a hover that focused the pane under the pointer would hide it on
+	// the first move out of the popup.
+	if o.Settings.FocusFollowsMouse && !o.SidebarFocused && o.ShownScratch() < 0 &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {

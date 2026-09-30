@@ -307,7 +307,9 @@ func (m *OS) FocusWindow(i int) *OS {
 	// The scratch terminal is a dropdown: it is on the screen only while it
 	// has the focus. A focus that goes to any other pane, by a click, a key,
 	// the rail or a jump, hides it first.
-	if !isScratch(m.Windows[i]) {
+	// A popup opened from inside it (tuios popup) is the one exception: the
+	// scratch terminal stays on the screen behind it.
+	if !isScratch(m.Windows[i]) && !m.Windows[i].IsPopup {
 		m.parkScratch()
 	}
 	// Shift and a label types into the pane that had focus.

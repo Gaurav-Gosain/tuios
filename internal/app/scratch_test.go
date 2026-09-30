@@ -428,3 +428,50 @@ func TestScratchStaysOutOfTheTiling(t *testing.T) {
 		t.Fatal("the BSP tree holds the scratch terminal")
 	}
 }
+
+// A focus that hides the scratch terminal gives back the mode the show found.
+func TestParkRestoresTheMode(t *testing.T) {
+	m := scratchOS(t, false)
+	m.Mode = WindowManagementMode
+	addScratch(m, 1, true)
+	m.ToggleScratch()
+	if m.Mode != TerminalMode {
+		t.Fatal("the show did not enter terminal mode")
+	}
+	m.FocusWindow(0)
+	if m.Mode != WindowManagementMode {
+		t.Fatalf("mode after a focus elsewhere = %v, want window mode", m.Mode)
+	}
+}
+
+// A popup opened from inside the scratch terminal leaves it on the screen.
+func TestPopupOverScratchKeepsItShown(t *testing.T) {
+	m := scratchOS(t, false)
+	w := addScratch(m, 1, true)
+	m.ToggleScratch()
+	m.Windows = append(m.Windows, &terminal.Window{ID: "picker", IsPopup: true, IsFloating: true, Workspace: 1})
+	m.FocusWindow(2)
+	if w.Minimized {
+		t.Fatal("a popup over the scratch terminal hid it")
+	}
+}
+
+// The scratch terminal's pane menu dims Zoom and the splits.
+func TestScratchPaneMenuDimsZoomAndSplit(t *testing.T) {
+	m := scratchOS(t, false)
+	m.AutoTiling = true
+	addScratch(m, 1, false)
+	_, items := m.paneMenu(1)
+	for _, it := range items {
+		switch it.Action {
+		case "toggle_zoom", "split_vertical", "split_horizontal":
+			if !it.Dim {
+				t.Errorf("%s is live on the scratch terminal", it.Action)
+			}
+		case "minimize_window":
+			if it.Dim {
+				t.Error("minimize is dimmed on the scratch terminal")
+			}
+		}
+	}
+}

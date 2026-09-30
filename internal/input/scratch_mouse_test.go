@@ -92,15 +92,70 @@ func TestPressOutsideScratchHidesIt(t *testing.T) {
 	}
 }
 
-// A layout key hides the scratch terminal first and acts on the pane that
-// gets the focus back.
-func TestLayoutActionHidesScratchFirst(t *testing.T) {
-	o, tile, s := scratchOverTile(t)
-	GetDispatcher().Dispatch("toggle_zoom", tea.KeyPressMsg{}, o)
-	if !s.Minimized || s.Zoomed {
-		t.Fatalf("minimized=%v zoomed=%v, want hidden and not zoomed", s.Minimized, s.Zoomed)
+// A window key pressed on the scratch terminal never acts on another pane.
+// Minimize hides it. Zoom and split do nothing. A move, swap, resize or tile
+// key hides it and does nothing else.
+//
+// Negative control, confirmed red: drop the scratch branch in Dispatch and
+// minimize minimizes the tile.
+func TestWindowKeysOnScratchLeaveOtherPanesAlone(t *testing.T) {
+	for _, c := range []struct {
+		action string
+		hidden bool
+	}{
+		{"minimize_window", true},
+		{"toggle_zoom", false},
+		{"split_vertical", false},
+		{"snap_left", true},
+		{"swap_left", true},
+		{"resize_master_grow", true},
+	} {
+		t.Run(c.action, func(t *testing.T) {
+			o, tile, s := scratchOverTile(t)
+			GetDispatcher().Dispatch(c.action, tea.KeyPressMsg{}, o)
+			if s.Minimized != c.hidden || s.Zoomed {
+				t.Fatalf("scratch minimized=%v zoomed=%v, want hidden=%v", s.Minimized, s.Zoomed, c.hidden)
+			}
+			if tile.Minimized || tile.Zoomed || tile.X != 0 || tile.Width != 100 || len(o.Windows) != 2 {
+				t.Fatalf("%s acted on the tile: minimized=%v zoomed=%v x=%d w=%d windows=%d",
+					c.action, tile.Minimized, tile.Zoomed, tile.X, tile.Width, len(o.Windows))
+			}
+		})
 	}
+}
+
+// Minimize from the scratch terminal's own pane menu hides it.
+func TestScratchMenuMinimizeHidesIt(t *testing.T) {
+	o, tile, s := scratchOverTile(t)
+	runContextMenuAction("minimize_window", o)
+	if !s.Minimized || tile.Minimized {
+		t.Fatalf("scratch minimized=%v tile minimized=%v, want only the scratch hidden", s.Minimized, tile.Minimized)
+	}
+}
+
+// A hover does not take the focus from a shown scratch terminal.
+//
+// Negative control, confirmed red: drop the ShownScratch check in
+// handleMouseMotion and the first move over the tile hides the popup.
+func TestHoverKeepsScratchShown(t *testing.T) {
+	o, _, s := scratchOverTile(t)
+	o.Settings.FocusFollowsMouse = true
+	o.Mode = app.TerminalMode
+	for x := 2; x < 10; x++ {
+		handleMouseMotion(tea.MouseMotionMsg{Button: tea.MouseNone, X: x, Y: 35}, o)
+	}
+	if s.Minimized || o.FocusedWindow != 1 {
+		t.Fatalf("minimized=%v focused=%d, want the scratch shown and focused", s.Minimized, o.FocusedWindow)
+	}
+}
+
+// Alt+N numbers skip the scratch terminal, shown or hidden, as the rail does.
+func TestSelectByNumberSkipsScratch(t *testing.T) {
+	o, tile, s := scratchOverTile(t)
+	o.Windows = []*terminal.Window{s, tile}
+	o.FocusedWindow = 0
+	selectWindowByIndex(1, o)
 	if o.GetFocusedWindow() != tile {
-		t.Fatal("the focus did not go back to the tile")
+		t.Fatal("number 1 did not select the tile")
 	}
 }

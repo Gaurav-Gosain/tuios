@@ -260,6 +260,9 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 	// is the inert control this project forbids. See ClipboardReadUnsupportedReason.
 	canPaste := m.Mode == TerminalMode && m.ClipboardReadUnsupportedReason() == ""
 	canSplit := m.AutoTiling
+	// The scratch terminal has no split and no zoom. Its Minimize hides it.
+	scratch := isScratch(win)
+	canSplit = canSplit && !scratch
 
 	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
 	closeItem.Warn = true
@@ -276,7 +279,7 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 		m.item(glyphRename, "Rename", "rename_window", false),
 		// An accent shows on the rail, so there is nothing to set without one.
 		m.item(glyphPalette, "Accent color", "set_accent", !m.SidebarActive()),
-		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
+		m.item(glyphZoom, "Zoom", "toggle_zoom", scratch),
 		m.item(glyphCopy, "Screenshot this window", "screenshot_window", false),
 		m.item(glyphMinimize, "Minimize", "minimize_window", false),
 		closeItem,

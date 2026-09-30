@@ -179,8 +179,11 @@ keyboard goes to it in terminal mode.
   it.
 - The mouse does not move or resize the scratch terminal. Its size comes from
   `[scratch]`.
-- A key that moves, resizes, swaps, splits, zooms or tiles a pane hides the
-  scratch terminal first. The key then acts on the pane that gets the focus.
+- A window key pressed in the scratch terminal does not act on a different
+  pane. The minimize key hides it. Zoom and split do nothing. A key that moves,
+  resizes, swaps or tiles a pane hides it.
+- With `focus_follows_mouse` on, the pointer does not take the focus from the
+  scratch terminal.
 - The key works from inside the popup. tuios reads `Ctrl+B` before the shell
   gets it.
 - The sidebar, the window list and the window count do not show the scratch

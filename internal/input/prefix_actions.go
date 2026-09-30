@@ -309,7 +309,7 @@ func makePrefixSelectHandler(num int) ActionHandler {
 			}
 			// In tiling mode minimized windows are not on screen, so they do not
 			// take up a number.
-			if o.AutoTiling && win.Minimized || win.HiddenScratch() {
+			if o.AutoTiling && win.Minimized || win.IsScratch {
 				continue
 			}
 			position++
