@@ -2090,12 +2090,17 @@ PTY verbatim with no key parsing, so it is always safe and always goes straight
 to the daemon owned PTY. Include a trailing newline to submit a line.
 
 Params: `session` (optional), `window` (optional), `text` (required),
-`paste` (optional, default false).
+`paste` (optional, default false), `submit` (optional, default false).
 
 With `paste`, the text goes in as a paste. Control characters other than tab,
 line feed and carriage return are removed. The text is wrapped in the
 bracketed paste delimiters when the program in the pane turned bracketed
 paste on. The tmux shim's `paste-buffer` uses it.
+
+With `submit: true`, the text is typed the way `ask-agent` types a prompt: as
+one paste, in bracketed paste delimiters when the program in the pane has
+bracketed paste on, then a short wait for the paste to be taken in, then the
+Enter key of the harness in the pane.
 
 Request:
 
@@ -4482,7 +4487,10 @@ watch the agent panes it matches in every session, including panes that open
 during the wait; takes no `session`, `window` or `any_session`), `every` (bool,
 with `select`: match only when at least one pane matches and all of them are in
 an `until` state, and answer with them in `panes`), `timeout` (milliseconds;
-default 30000).
+default 30000, at most 86400000, which is 24 hours).
+
+A wait ends when its caller closes the connection. It does not wait for its
+timeout then.
 
 Conditions:
 

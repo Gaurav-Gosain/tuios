@@ -468,7 +468,9 @@ its first hex digits.
 
 A tuios workspace is a fixed slot, and herdr lists only the tabs that exist.
 So a workspace is a tab when it holds a window, has a name, or is the one that
-shows. A tab's `number` is the workspace number. An unnamed tab's `label` is
+shows. A scratch terminal is not a pane to a herdr client, and a scratch
+workspace is not a tab. They are not in the snapshot, the lists or the
+events. A tab's `number` is the workspace number. An unnamed tab's `label` is
 its number.
 
 Agent state maps onto herdr's `agent_status`:
@@ -534,7 +536,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.wait_for_output` | `wait-for window-output` | |
 | `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
 | `agent.wait` | `wait-for agent-state` | |
-| `agent.prompt` | `send-text`, `send-keys` | an agent that works or waits on a prompt fails with `agent_not_idle` |
+| `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. An agent that works or waits on a prompt fails with `agent_not_idle` |
 | `worktree.list` | `git worktree list` | needs what `list-worktrees` needs |
 | `worktree.create` | `new-worktree` | tuios chooses the path. A `path` fails with `unsupported` |
 | `worktree.open` | `new-session` in the checkout | a checkout that a session shows answers `already_open: true` |
@@ -552,10 +554,22 @@ Every other herdr method answers error `unsupported`: the `server.*`,
 link methods. A method that herdr does not have answers `invalid_request`, as
 herdr does.
 
+A wait (`pane.wait_for_output`, `agent.wait`, `events.wait`, `agent.prompt`
+with `wait`) takes a `timeout_ms` of 24 hours at most. A longer one fails with
+`invalid_params`. A wait ends when its client closes the connection. One
+process may hold 64 connections on the socket at once, and 8 event streams.
+Past that the answer is `rate_limited`.
+
 `env` in a create fails with `unsupported`. A missing parameter answers
 `invalid_request` with serde's words, for example ``missing field `pane_id` ``.
 An id that finds nothing answers `workspace_not_found`, `tab_not_found` or
 `pane_not_found`.
+
+#### Where tuios differs from herdr
+
+`agent.prompt` types the prompt the way `ask-agent` does: one paste, a short
+wait for the program to take it in, and the Enter key of the harness in the
+pane. This applies to a pane on a linked host too.
 
 #### Events
 
