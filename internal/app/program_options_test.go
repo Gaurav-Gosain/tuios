@@ -88,6 +88,15 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter") {
 				return true
 			}
+			// The SSH tour's session process is a transport of the same
+			// kind, over pipes from its server: it also supplies the colour
+			// profile and TERM the server worked out for the client, which
+			// wish would otherwise supply, and it has no signals to catch.
+			if path == "internal/learnssh/session.go" &&
+				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter" ||
+					name == "WithColorProfile" || name == "WithEnvironment" || name == "WithoutSignalHandler") {
+				return true
+			}
 			t.Errorf("%s:%d: tea.%s set outside ProgramOptions; the other clients do not get it",
 				path, fset.Position(call.Pos()).Line, name)
 			return true
