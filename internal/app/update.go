@@ -1778,11 +1778,22 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ShowNotification(what+" failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, nil
 		}
-		// The attached session's new label rides the state push. A session this
-		// client is not attached to gets no push, so its listing is refreshed
-		// instead, off this goroutine.
+		// The attached session's new name rides the state push. The listing
+		// the rail and the switcher read is refreshed off this goroutine, and
+		// the switcher is rebuilt again once it lands: rebuilt only now, it
+		// kept a row for the old name beside the new one.
 		m.refreshSwitcherItems()
-		return m, refreshForeignSessionsCmd(m.DaemonClient)
+		if client := m.DaemonClient; client != nil {
+			return m, func() tea.Msg {
+				client.TryRefreshSessionList()
+				return renameListingRefreshedMsg{}
+			}
+		}
+		return m, nil
+
+	case renameListingRefreshedMsg:
+		m.refreshSwitcherItems()
+		return m, nil
 
 	case ClientJoinedMsg:
 		// Another client joined the session

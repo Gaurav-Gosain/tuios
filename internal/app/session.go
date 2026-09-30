@@ -650,8 +650,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	newerState := state.Version > m.DaemonStateVersion
 	adoptTopology := newerState || fromPeer
 
-	// Update global state
+	// Update global state. The name is the daemon's, and a push is how a
+	// rename reaches this client. The dock's commands are told too, since
+	// they get the name as TUIOS_SESSION.
+	renamed := state.Name != "" && m.SessionName != "" && state.Name != m.SessionName
 	m.SessionName = state.Name
+	if renamed {
+		m.SyncDockContext()
+	}
 	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
 	// A workspace switch adopted from a sync moves which panes are laid out, and

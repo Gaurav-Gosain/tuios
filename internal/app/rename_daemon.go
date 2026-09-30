@@ -56,6 +56,10 @@ func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 	return labelVerbCmd("Accent", verb, params)
 }
 
+// renameListingRefreshedMsg says the session listing asked for after a rename
+// has landed, so the open switcher can be rebuilt from it.
+type renameListingRefreshedMsg struct{}
+
 // refreshSwitcherItems rebuilds whichever switcher is open, so a rename (this
 // client's or another client's) shows up in the list it was made from.
 func (m *OS) refreshSwitcherItems() {

@@ -10,6 +10,7 @@ import (
 
 // TestRailRightClickRenamesTheSessionUnderThePointer drives the menu's rename
 // row against a real daemon, on a session this client is not attached to.
+// The rename changes the session's name, so ls lists the new one.
 //
 // It is the same shape as the kill test and guards the same class of defect: a
 // row that names one session and acts on another. A rename that reached the
@@ -58,42 +59,38 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 		t.Fatalf("the editor did not name the row's session: %v\n%s", err, term.Snapshot())
 	}
 
-	if err := term.SendKeys("Payments API"); err != nil {
-		t.Fatalf("type the new label: %v", err)
+	// The editor opens on the session's name. Clear it and type the new one.
+	if err := term.SendKeys(strings.Repeat("\x7f", 8)); err != nil {
+		t.Fatalf("clear the editor: %v", err)
 	}
-	if err := term.WaitForText("Payments API", uiTimeout); err != nil {
-		t.Fatalf("the editor did not take the typed label: %v\n%s", err, term.Snapshot())
+	if err := term.SendKeys("payments"); err != nil {
+		t.Fatalf("type the new name: %v", err)
+	}
+	if err := term.WaitForText("payments", uiTimeout); err != nil {
+		t.Fatalf("the editor did not take the typed name: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("commit the rename: %v", err)
 	}
 
 	// The rail is the screen the user is looking at, so it is where the rename
-	// has to land: bravo's row now reads by its new label and alpha's does not.
+	// has to land: bravo's row now reads by its new name and alpha's does not.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "Payments API") && strings.Contains(text, "alpha")
+		return strings.Contains(text, "payments") && strings.Contains(text, "alpha")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the rail did not show the renamed session beside the attached one: %v\n%s", err, term.Snapshot())
 	}
 
-	// The daemon is the authority on which session was renamed, and these are
-	// the assertions that would fail if the rename had reached the attached one.
-	// session-info rather than ls: the label is display state, and ls lists the
-	// names sessions are addressed by, which a rename deliberately leaves alone.
-	out, err := tuiosCLI(t, base, "session-info", "--session", "bravo")
-	if err != nil {
-		t.Fatalf("session-info bravo: %v: %s", err, out)
+	// The daemon is the authority on which session was renamed, and ls is
+	// what a person checks (issue #266). These fail if the rename reached the
+	// attached session or only set a label.
+	names := sessionNames(t, base)
+	if !hasName(names, "payments") || hasName(names, "bravo") {
+		t.Errorf("tuios ls lists %v, want payments in place of bravo", names)
 	}
-	if !strings.Contains(out, "Payments API") {
-		t.Errorf("the daemon never took bravo's rename:\n%s", out)
-	}
-	out, err = tuiosCLI(t, base, "session-info", "--session", "alpha")
-	if err != nil {
-		t.Fatalf("session-info alpha: %v: %s", err, out)
-	}
-	if strings.Contains(out, "Payments API") {
-		t.Errorf("the rename landed on the attached session:\n%s", out)
+	if !hasName(names, "alpha") {
+		t.Errorf("the rename landed on the attached session: ls lists %v", names)
 	}
 
 	alive(t, term, "after renaming another session from the rail")

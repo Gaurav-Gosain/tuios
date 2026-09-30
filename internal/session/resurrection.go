@@ -327,6 +327,13 @@ func RemoveResurrectionState(sessionName string) {
 // before a SIGKILL was lost entirely, which is the worst case there is: it is the
 // session the user just made.
 func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
+	return startPeriodicSaveWith(getState, takeDirty, SaveSessionForResurrection)
+}
+
+// startPeriodicSaveWith is StartPeriodicSave with the write it makes. A session
+// passes its own, which drops a snapshot taken under a name the session has
+// since been renamed from (see Session.persist).
+func startPeriodicSaveWith(getState func() *SessionState, takeDirty func() bool, save func(*SessionState) error) func() {
 	stopCh := make(chan struct{})
 	done := make(chan struct{})
 
@@ -348,7 +355,7 @@ func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) fun
 				if state == nil {
 					continue
 				}
-				if err := SaveSessionForResurrection(state); err != nil {
+				if err := save(state); err != nil {
 					LogError("Resurrection save for session %q failed: %v", state.Name, err)
 				}
 			case <-stopCh:

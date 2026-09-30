@@ -55,7 +55,7 @@ func (d *Daemon) verbListGlyphs(_ *connState, params json.RawMessage) (any, *ver
 	}
 
 	if sess := d.findTargetSession(p.Session); sess != nil {
-		out["session"] = sess.Name
+		out["session"] = sess.Name()
 		if v, ok := sess.GetOption("appearance.glyphs"); ok {
 			out["active"] = v
 			out["active_source"] = "session"

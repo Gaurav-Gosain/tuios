@@ -76,7 +76,7 @@ func (d *Daemon) localPaneShells() []paneShell {
 				continue
 			}
 			if pid := pty.ShellPID(); pid > 1 {
-				out = append(out, paneShell{session: sess.Name, windowID: w.ID, shellPID: pid})
+				out = append(out, paneShell{session: sess.Name(), windowID: w.ID, shellPID: pid})
 			}
 		}
 	}

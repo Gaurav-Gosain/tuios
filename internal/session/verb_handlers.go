@@ -76,7 +76,7 @@ func mapResolveErr(err error, sess *Session) *verbError {
 			Detail:  "This command changes what is drawn on screen, so it only runs with a client attached. Attach to the session, then retry.",
 		}
 		if sess != nil {
-			hint.Command = "tuios attach " + sess.Name
+			hint.Command = "tuios attach " + sess.Name()
 		}
 		return hintedVerbError(ErrVerbNeedsClient, msg, hint)
 	}
@@ -458,7 +458,7 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		return nil, hintedVerbError(ErrVerbNeedsClient,
 			"a popup is drawn on a screen, so it needs an attached client",
 			&VerbHint{
-				Command: "tuios attach " + sess.Name,
+				Command: "tuios attach " + sess.Name(),
 				Detail:  "the daemon has no viewport, so it cannot place a popup nobody is displaying. Attach a client and retry.",
 			})
 	}
@@ -940,7 +940,7 @@ func (d *Daemon) verbSetSessionName(_ *connState, params json.RawMessage) (any, 
 	}
 	// session is the identity the caller addressed and keeps addressing; the
 	// rename only changed display_name.
-	return map[string]any{"type": "session_name_set", "session": sess.Name, "display_name": name}, nil
+	return map[string]any{"type": "session_name_set", "session": sess.Name(), "display_name": name}, nil
 }
 
 func (d *Daemon) verbSetSessionAccent(_ *connState, params json.RawMessage) (any, *verbError) {
@@ -959,7 +959,7 @@ func (d *Daemon) verbSetSessionAccent(_ *connState, params json.RawMessage) (any
 	if err := sess.SetAccent(accent); err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not set session accent: "+err.Error())
 	}
-	return map[string]any{"type": "session_accent_set", "session": sess.Name, "accent": accent}, nil
+	return map[string]any{"type": "session_accent_set", "session": sess.Name(), "accent": accent}, nil
 }
 
 func (d *Daemon) verbSetWorkspaceName(_ *connState, params json.RawMessage) (any, *verbError) {

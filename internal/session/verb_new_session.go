@@ -100,7 +100,7 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 
 	out := map[string]any{
 		"type":       "session_created",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"session_id": sess.ID,
 		"width":      width,
 		"height":     height,

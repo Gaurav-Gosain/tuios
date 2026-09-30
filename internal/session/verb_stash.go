@@ -51,7 +51,7 @@ func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbE
 	}
 
 	referenced := func() map[string]bool {
-		return d.agents.referencedPaths(sess.Name)
+		return d.agents.referencedPaths(sess.Name())
 	}
 	var res stashResult
 	var err error
@@ -84,7 +84,7 @@ func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbE
 
 	return map[string]any{
 		"type":    "stash_entry",
-		"session": sess.Name,
+		"session": sess.Name(),
 		"path":    res.Entry.Path,
 		"name":    res.Entry.Name,
 		"hash":    res.Entry.Hash,
@@ -124,7 +124,7 @@ func (d *Daemon) verbStashList(_ *connState, params json.RawMessage) (any, *verb
 	}
 
 	listing, err := d.stash.list(sess.ID, func() map[string]bool {
-		return d.agents.referencedPaths(sess.Name)
+		return d.agents.referencedPaths(sess.Name())
 	})
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "cannot read the stash directory: "+err.Error())
@@ -154,7 +154,7 @@ func (d *Daemon) verbStashList(_ *connState, params json.RawMessage) (any, *verb
 
 	return map[string]any{
 		"type":           "stash_list",
-		"session":        sess.Name,
+		"session":        sess.Name(),
 		"dir":            listing.Dir,
 		"entries":        entries,
 		"total":          len(entries),
@@ -187,7 +187,7 @@ func (d *Daemon) verbStashGet(_ *connState, params json.RawMessage) (any, *verbE
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "stash get "+echoName(p.Path)+": not a file in this session's stash", &VerbHint{
 			Param:   "path",
-			Command: "tuios stash list -s " + sess.Name,
+			Command: "tuios stash list -s " + sess.Name(),
 			Detail:  "Only a path the stash printed can be read back. The listing shows them.",
 		})
 	}
@@ -207,7 +207,7 @@ func (d *Daemon) verbStashGet(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	return map[string]any{
 		"type":       "stash_content",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"path":       entry.Path,
 		"name":       entry.Name,
 		"hash":       entry.Hash,

@@ -60,11 +60,11 @@ func (d *Daemon) fanTarget(cs *connState, name string) (*Session, *WorktreeInfo,
 	if info.Group == "" {
 		var fans []string
 		for _, s := range d.manager.AllSessions() {
-			if wt := s.Worktree(); wt != nil && wt.Group != "" && d.callerReachesSession(cs, s.Name) {
-				fans = append(fans, s.Name)
+			if wt := s.Worktree(); wt != nil && wt.Group != "" && d.callerReachesSession(cs, s.Name()) {
+				fans = append(fans, s.Name())
 			}
 		}
-		return nil, nil, hintedVerbError(ErrVerbInvalidParams, "session "+sess.Name+" is a worktree session that is not part of a fan", &VerbHint{
+		return nil, nil, hintedVerbError(ErrVerbInvalidParams, "session "+sess.Name()+" is a worktree session that is not part of a fan", &VerbHint{
 			Param:     "session",
 			Command:   "tuios worktree ls",
 			Available: fans,
@@ -84,7 +84,7 @@ func (d *Daemon) fanSiblings(info *WorktreeInfo) []*Session {
 			out = append(out, s)
 		}
 	}
-	slices.SortFunc(out, func(a, b *Session) int { return fanOrder(a.Name, b.Name) })
+	slices.SortFunc(out, func(a, b *Session) int { return fanOrder(a.Name(), b.Name()) })
 	return out
 }
 
@@ -178,7 +178,7 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	changes := p.Changes == nil || *p.Changes
 	var siblings []*Session
 	for _, s := range d.fanSiblings(info) {
-		if d.callerReachesSession(cs, s.Name) {
+		if d.callerReachesSession(cs, s.Name()) {
 			siblings = append(siblings, s)
 		}
 	}
@@ -228,7 +228,7 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 		wt = &WorktreeInfo{}
 	}
 	row := fanCompareRow{
-		Session:      s.Name,
+		Session:      s.Name(),
 		Branch:       wt.Branch,
 		Path:         wt.Path,
 		Agent:        wt.Agent,
@@ -370,19 +370,19 @@ func (d *Daemon) verbVerifyFan(cs *connState, params json.RawMessage) (any, *ver
 	started := []string{}
 	skipped := []map[string]any{}
 	for _, s := range d.fanSiblings(info) {
-		if !d.callerReachesSession(cs, s.Name) {
+		if !d.callerReachesSession(cs, s.Name()) {
 			continue
 		}
 		wt := s.worktreeListing()
 		if wt == nil || wt.Gone {
-			skipped = append(skipped, map[string]any{"session": s.Name, "reason": "its worktree directory is gone"})
+			skipped = append(skipped, map[string]any{"session": s.Name(), "reason": "its worktree directory is gone"})
 			continue
 		}
 		if err := d.startFanVerify(s, wt.Path, p.Command, env, timeout); err != nil {
-			skipped = append(skipped, map[string]any{"session": s.Name, "reason": err.Error()})
+			skipped = append(skipped, map[string]any{"session": s.Name(), "reason": err.Error()})
 			continue
 		}
-		started = append(started, s.Name)
+		started = append(started, s.Name())
 	}
 	if len(started) == 0 {
 		return nil, hintedVerbError(ErrVerbInternal, "no check was started in fan "+info.Group, &VerbHint{
@@ -682,10 +682,10 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 	if info.Group == "" {
-		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+kept.Name+" is not part of a fan, so it has no siblings to remove", &VerbHint{
+		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+kept.Name()+" is not part of a fan, so it has no siblings to remove", &VerbHint{
 			Param:   "session",
 			Verb:    "remove-worktree",
-			Command: "tuios worktree rm " + kept.Name,
+			Command: "tuios worktree rm " + kept.Name(),
 			Detail:  "Nothing was removed. remove-worktree removes one worktree.",
 		})
 	}
@@ -695,11 +695,11 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		if s == kept {
 			continue
 		}
-		raw, _ := json.Marshal(map[string]any{"session": s.Name, "stash": p.Stash, "force": p.Force})
+		raw, _ := json.Marshal(map[string]any{"session": s.Name(), "stash": p.Stash, "force": p.Force})
 		res, verr := d.verbRemoveWorktree(cs, raw)
 		if verr != nil {
 			left++
-			out := map[string]any{"session": s.Name, "removed": false, "note": verr.Message, "code": verr.Code}
+			out := map[string]any{"session": s.Name(), "removed": false, "note": verr.Message, "code": verr.Code}
 			removed = append(removed, out)
 			continue
 		}
@@ -711,7 +711,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		out, _ := res.(map[string]any)
 		if out == nil {
-			out = map[string]any{"session": s.Name}
+			out = map[string]any{"session": s.Name()}
 		}
 		delete(out, "type")
 		out["removed"] = true
@@ -719,7 +719,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	return map[string]any{
 		"type":    "fan_kept",
-		"kept":    kept.Name,
+		"kept":    kept.Name(),
 		"branch":  info.Branch,
 		"group":   info.Group,
 		"repo":    info.Repo,

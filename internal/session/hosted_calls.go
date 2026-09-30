@@ -653,7 +653,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 			})
 		}
 	}
-	fields["session"] = mustJSON(s.Name)
+	fields["session"] = mustJSON(s.Name())
 	fields[field] = mustJSON(windowID)
 	raw := mustJSON(fields)
 	if verr := checkParamNames(verb, entry, raw); verr != nil {

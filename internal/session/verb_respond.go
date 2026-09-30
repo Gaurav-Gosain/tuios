@@ -336,7 +336,7 @@ func peekResult(sess *Session, look promptLook, now time.Time) map[string]any {
 	}
 	return map[string]any{
 		"type":       "prompt_peek",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"window":     w.ID,
 		"name":       windowLabelOf(w),
 		"harness":    w.AgentHarness,
@@ -414,7 +414,7 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	// sessions it may write to. See pane_grants.go.
 	byPane := ""
 	if !d.mayRespond(cs, p.HumanNonce) {
-		if !d.paneMayRespond(cs, sess.Name) {
+		if !d.paneMayRespond(cs, sess.Name()) {
 			return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
 				Param:  "human_nonce",
 				Detail: "Answering an agent's prompt is acting as the person, so it takes the nonce of a client attached right now, from a process outside every pane: the Inbox's peek sends its own. A shell outside tuios may respond when the daemon runs with [daemon] respond_from_shell = true, and a pane may when the person gave it the respond grant with tuios set-pane-grants. An agent that wants a prompt answered should ask the person with send-agent-message -w human.",
@@ -470,15 +470,15 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	slot.answered = look.id
 	if byPane != "" {
-		LogBasic("respond: %s %s on %s/%s (prompt %s), by pane %s under its respond grant", p.Action, reply.Sent, sess.Name, shortWindowID(w.ID), look.id, shortWindowID(byPane))
+		LogBasic("respond: %s %s on %s/%s (prompt %s), by pane %s under its respond grant", p.Action, reply.Sent, sess.Name(), shortWindowID(w.ID), look.id, shortWindowID(byPane))
 	} else {
-		LogBasic("respond: %s %s on %s/%s (prompt %s)", p.Action, reply.Sent, sess.Name, shortWindowID(w.ID), look.id)
+		LogBasic("respond: %s %s on %s/%s (prompt %s)", p.Action, reply.Sent, sess.Name(), shortWindowID(w.ID), look.id)
 	}
 
 	settledBy, now := d.waitPromptAnswered(sess, w.ID, look.id, wait)
 	out := map[string]any{
 		"type":       "prompt_response",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"window":     w.ID,
 		"action":     p.Action,
 		"sent":       reply.Sent,

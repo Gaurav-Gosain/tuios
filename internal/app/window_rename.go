@@ -21,8 +21,8 @@ const (
 	RenameNone RenameKind = iota
 	// RenameWindow targets a window's custom name.
 	RenameWindow
-	// RenameSession targets a session's display name. It never touches the
-	// session's identity, which stays the name it is addressed and persisted by.
+	// RenameSession targets a session's name, which the daemon owns. The
+	// rename goes to the daemon, and the new name comes back on a state push.
 	RenameSession
 	// RenameWorkspace targets a workspace's name. The number stays its identity.
 	RenameWorkspace
@@ -45,19 +45,15 @@ func (m *OS) BeginRenameWindow(w *terminal.Window) {
 	w.InvalidateCache()
 }
 
-// BeginRenameSession starts a rename of a session's display label, seeded with
-// the label it already has. The seed is the label and not the identity name, so
-// an empty field means "no label" rather than "about to overwrite the identity".
+// BeginRenameSession starts a rename of a session, seeded with what the
+// session shows now: its name, or its display label when a script set one.
 func (m *OS) BeginRenameSession(name string) {
 	if name == "" {
 		return
 	}
 	m.RenameKind = RenameSession
 	m.RenameTargetID = name
-	m.RenameBuffer = ""
-	if display, _ := m.daemonSessionLabel(name); display != "" {
-		m.RenameBuffer = display
-	}
+	m.RenameBuffer = m.SessionLabel(name)
 }
 
 // BeginRenameWorkspace starts a rename of a workspace, seeded with its current
@@ -129,18 +125,6 @@ func (m *OS) BeginRenameCurrentWorkspace() {
 	m.BeginRenameWorkspace(ws)
 }
 
-// daemonSessionLabel reads the cached label for a session, preferring the live
-// value for the attached one.
-func (m *OS) daemonSessionLabel(name string) (display, accent string) {
-	if name == m.SessionName {
-		return m.SessionDisplayName, m.SessionAccent
-	}
-	if m.DaemonClient == nil {
-		return "", ""
-	}
-	return m.DaemonClient.SessionLabel(name)
-}
-
 // RenameTarget is the window an in-progress rename applies to, or nil when no
 // window rename is running or the window went away under it.
 func (m *OS) RenameTarget() *terminal.Window {
@@ -190,6 +174,11 @@ func (m *OS) CommitRename() tea.Cmd {
 		}
 		return nil
 	}
+	if kind == RenameSession && label == m.SessionLabel(target) {
+		// Nothing changed, so there is nothing to send. A session that
+		// shows a display label keeps it.
+		return nil
+	}
 	verb, params, ok := renameVerb(kind, target, m.SessionName, label)
 	if !ok {
 		return nil
@@ -198,16 +187,17 @@ func (m *OS) CommitRename() tea.Cmd {
 }
 
 // renameVerb picks the daemon verb a rename goes through and builds its params.
-// A session rename addresses the session by its identity and sends the label
-// separately, which is the whole point: set-session-name changes display_name
-// and leaves the name the session is addressed and persisted by alone.
+// A session rename changes the session's name with rename-session, so the name
+// the UI shows is the name ls lists and attach takes (issue #266). It used to
+// send set-session-name, which only set a display label.
+// An empty name is not sent: a session cannot be without a name.
 func renameVerb(kind RenameKind, target, sessionName, label string) (string, map[string]any, bool) {
 	switch kind {
 	case RenameSession:
-		if target == "" {
+		if target == "" || label == "" {
 			return "", nil, false
 		}
-		return "set-session-name", map[string]any{"session": target, "name": label}, true
+		return "rename-session", map[string]any{"session": target, "name": label}, true
 	case RenameWorkspace:
 		ws, err := strconv.Atoi(target)
 		if err != nil || ws <= 0 {

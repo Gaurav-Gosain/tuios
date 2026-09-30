@@ -206,7 +206,7 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		if verr != nil {
 			return nil, verr
 		}
-		againstName = sib.Name
+		againstName = sib.Name()
 		opt.AgainstDir = sib.Worktree().Path
 	} else {
 		base, err := review.ResolveBase(ctx, repo.root, p.Base, repo.recorded, p.Uncommitted)
@@ -233,7 +233,7 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	notes, _ := d.reviewNotes.list(repo.root, target.ID)
 	out := map[string]any{
 		"type":        "review_diff",
-		"session":     sess.Name,
+		"session":     sess.Name(),
 		"window":      target.ID,
 		"repo_root":   repo.repoRoot,
 		"worktree":    repo.root,
@@ -268,7 +268,7 @@ func reviewGitFailed(err error) *verbError {
 // one, that the caller could name itself.
 func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, name string) (*Session, *verbError) {
 	if repo.info == nil || repo.info.Group == "" {
-		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sess.Name+" is not part of a fan, so it has no attempt to compare against", &VerbHint{
+		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sess.Name()+" is not part of a fan, so it has no attempt to compare against", &VerbHint{
 			Param:  "against",
 			Detail: "Nothing was read. against names another attempt of the same fan. Leave it out to review against the base.",
 		})
@@ -278,20 +278,20 @@ func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, na
 		return nil, verr
 	}
 	if sib == sess || info.Group != repo.info.Group || info.RepoRoot != repo.info.RepoRoot {
-		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sib.Name+" is not another attempt of fan "+repo.info.Group, &VerbHint{
+		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sib.Name()+" is not another attempt of fan "+repo.info.Group, &VerbHint{
 			Param:   "against",
-			Command: "tuios fan compare " + sess.Name,
+			Command: "tuios fan compare " + sess.Name(),
 			Detail:  "Nothing was read. against names another session of the same fan.",
 		})
 	}
-	if !d.callerReachesSession(cs, sib.Name) {
+	if !d.callerReachesSession(cs, sib.Name()) {
 		return nil, hintedVerbError(ErrVerbForbidden, "session "+echoName(name)+" is outside what this caller reaches", &VerbHint{
 			Param:  "against",
 			Detail: "Nothing was read. A pane without the admin grant reaches its own session and its fan group.",
 		})
 	}
 	if wt := sib.worktreeListing(); wt == nil || wt.Gone {
-		return nil, hintedVerbError(ErrVerbNotRepo, "the worktree of session "+sib.Name+" is gone", &VerbHint{Param: "against"})
+		return nil, hintedVerbError(ErrVerbNotRepo, "the worktree of session "+sib.Name()+" is gone", &VerbHint{Param: "against"})
 	}
 	return sib, nil
 }
@@ -492,7 +492,7 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 			return nil, verr
 		}
 	}
-	out := map[string]any{"type": "review_notes", "session": sess.Name, "window": target.ID, "worktree": repo.root}
+	out := map[string]any{"type": "review_notes", "session": sess.Name(), "window": target.ID, "worktree": repo.root}
 
 	switch p.Action {
 	case "add":
@@ -705,7 +705,7 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	d.reviewNotes.markSent(repo.root, target.ID, ids, time.Now().UnixNano())
 	out := map[string]any{
 		"type":       "review_sent",
-		"session":    sess.Name,
+		"session":    sess.Name(),
 		"window":     target.ID,
 		"notes":      len(picked),
 		"ids":        ids,
@@ -777,7 +777,7 @@ func (d *Daemon) reviewNoteAuthorRefusal(by string, sess *Session, target Window
 		return ""
 	}
 	pa := &paneAuth{window: by, session: session, grants: g, explicit: explicit}
-	if why := d.paneWriteReach(pa, sess.Name); why != "" {
+	if why := d.paneWriteReach(pa, sess.Name()); why != "" {
 		return "window " + shortWindowID(by) + " that wrote a note holds " + g.String() + " now: " + why
 	}
 	if why := d.typingRefusal(pa, target, true); why != "" {

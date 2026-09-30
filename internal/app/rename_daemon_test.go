@@ -10,19 +10,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// TestRenameVerbAddressesTheIdentityAndSendsTheLabel is the contract that keeps
-// a rename off the identity: the session is addressed by the name it has always
-// had, and the user's text travels as a separate label.
-func TestRenameVerbAddressesTheIdentityAndSendsTheLabel(t *testing.T) {
-	verb, params, ok := renameVerb(RenameSession, "work", "work", "Payments API")
-	if !ok || verb != "set-session-name" {
-		t.Fatalf("session rename verb = %q (ok=%v), want set-session-name", verb, ok)
+// TestRenameVerbRenamesTheSession is issue #266: a session rename from the UI
+// must change the session's name in the daemon, so the name the UI shows is
+// the name ls lists. It used to send set-session-name, which only set a label,
+// and ls kept the old name.
+func TestRenameVerbRenamesTheSession(t *testing.T) {
+	verb, params, ok := renameVerb(RenameSession, "test", "test", "work")
+	if !ok || verb != "rename-session" {
+		t.Fatalf("session rename verb = %q (ok=%v), want rename-session", verb, ok)
 	}
-	if params["session"] != "work" {
-		t.Errorf("addressed %v, want the identity work", params["session"])
+	if params["session"] != "test" {
+		t.Errorf("addressed %v, want the current name test", params["session"])
 	}
-	if params["name"] != "Payments API" {
-		t.Errorf("label = %v, want Payments API", params["name"])
+	if params["name"] != "work" {
+		t.Errorf("new name = %v, want work", params["name"])
 	}
 
 	verb, params, ok = renameVerb(RenameWorkspace, "2", "work", "review")
@@ -33,9 +34,9 @@ func TestRenameVerbAddressesTheIdentityAndSendsTheLabel(t *testing.T) {
 		t.Errorf("workspace rename params = %v", params)
 	}
 
-	// A clearing rename is an empty label, never a missing verb.
-	if _, params, ok = renameVerb(RenameSession, "work", "work", ""); !ok || params["name"] != "" {
-		t.Errorf("clearing a session label produced ok=%v params=%v", ok, params)
+	// A session cannot be without a name, so an empty field sends nothing.
+	if _, _, ok = renameVerb(RenameSession, "work", "work", ""); ok {
+		t.Error("an empty session name produced a verb")
 	}
 	if _, _, ok = renameVerb(RenameWindow, "w1", "work", "x"); ok {
 		t.Error("a window rename must not go through a session verb")
@@ -72,7 +73,7 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 		t.Error("the editor is still open after committing")
 	}
 	if m.SessionName != "work" {
-		t.Errorf("SessionName = %q, want the untouched identity work", m.SessionName)
+		t.Errorf("SessionName = %q, want work until the daemon pushes the new name", m.SessionName)
 	}
 
 	// The round trip happens when the runtime runs the command, not before.
@@ -83,6 +84,21 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 	}
 	if applied.Err == nil {
 		t.Error("expected a dial error with no daemon listening")
+	}
+}
+
+// TestSessionRenameSeedsTheName: the editor opens on the name the session
+// shows, so a person edits the name rather than typing it from nothing, and
+// saving it unchanged sends nothing.
+func TestSessionRenameSeedsTheName(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
+	m := &OS{Settings: config.Global, SessionName: "test"}
+	m.BeginRenameSession("test")
+	if m.RenameBuffer != "test" {
+		t.Fatalf("editor seeded with %q, want the session's name test", m.RenameBuffer)
+	}
+	if cmd := m.CommitRename(); cmd != nil {
+		t.Error("saving the name unchanged sent a rename")
 	}
 }
 

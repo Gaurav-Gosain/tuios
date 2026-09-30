@@ -210,12 +210,12 @@ func (d *Daemon) watchNestedAfterAttach(cs *connState, targetID, nonce string, f
 // The size it set is dropped with it, as for any client that leaves.
 func (d *Daemon) ejectNested(cs *connState, inside, target *Session) {
 	LogBasic("Detached client %s (pid %d) from session %s: %s, in session %s",
-		cs.clientID, cs.peerPID, target.Name, paneOriginProbe, inside.Name)
+		cs.clientID, cs.peerPID, target.Name(), paneOriginProbe, inside.Name())
 	if !d.detachClient(cs) {
 		return
 	}
 	_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
-		SessionName: target.Name,
+		SessionName: target.Name(),
 		Reason:      nestedRefusalText(inside, target),
 		Nested:      true,
 	})
@@ -362,9 +362,9 @@ func (s *Session) holdsWindowID(id string) bool {
 // asks for session target.
 func nestedRefusalText(inside, target *Session) string {
 	if target.ID != inside.ID {
-		return nestedChainMessage(inside.Name, target.Name)
+		return nestedChainMessage(inside.Name(), target.Name())
 	}
-	return NestedAttachMessage(inside.Name, false)
+	return NestedAttachMessage(inside.Name(), false)
 }
 
 // refuseNestedAttach sends the refusal for an attach that would show a session
@@ -372,16 +372,16 @@ func nestedRefusalText(inside, target *Session) string {
 // the client runs in a pane of the session it asks for.
 func (d *Daemon) refuseNestedAttach(cs *connState, inside, target *Session, why string) error {
 	unnamed := target == nil
-	msg := NestedAttachMessage(inside.Name, true)
+	msg := NestedAttachMessage(inside.Name(), true)
 	if !unnamed {
 		msg = nestedRefusalText(inside, target)
 	}
 	LogBasic("Refused attach from client %s (pid %d): it runs in a pane of session %s (%s)",
-		cs.clientID, cs.peerPID, inside.Name, why)
+		cs.clientID, cs.peerPID, inside.Name(), why)
 	return d.sendMessage(cs, MsgError, &ErrorPayload{
 		Code:    ErrCodeNestedAttach,
 		Message: msg,
-		Session: inside.Name,
+		Session: inside.Name(),
 		Unnamed: unnamed,
 	})
 }

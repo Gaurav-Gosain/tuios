@@ -685,6 +685,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// manager gets an event sink that publishes to the hub, and creation/deletion
 	// raise session lifecycle events.
 	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
+	d.manager.SetRenameHook(d.onSessionRenamed)
 
 	d.configPath = cfg.ConfigPath
 	d.hostDial = cfg.HostDial
@@ -733,7 +734,7 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 // onSessionCreated installs a session's event and state sinks and publishes a
 // session-created event. It runs on the manager's create hook.
 func (d *Daemon) onSessionCreated(s *Session) {
-	name := s.Name
+	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
 	// change the daemon made itself shows up in a live TUI without the verb that
 	// made it knowing a client exists. Source is empty because the daemon, not a
@@ -763,6 +764,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
 	s.SetEventSink(func(ev SessionEvent) {
+		// Read per event, not once at creation: a rename changes it, and
+		// every record made from here must carry the name the session has now.
+		name := s.Name()
 		// A pane's own output is the signal that its agent quit: when the agent
 		// leaves the foreground the shell prompt returns as output, so probe that
 		// pane and clear an auto-detected glyph at once rather than waiting for the
@@ -882,6 +886,21 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
 }
 
+// onSessionRenamed moves what the daemon keeps by session name to the new
+// name, and tells every event reader and linked machine to list again. It runs on
+// the manager's rename hook, after the session and its state carry the name.
+func (d *Daemon) onSessionRenamed(s *Session, old string) {
+	name := s.Name()
+	d.agents.rename(old, name)
+	d.attention.renameSession(old, name)
+	d.renameQueuedSession(old, name)
+	// A listing reader has no event for a rename. The old name closes and the
+	// new one opens, which is what every reader, a linked machine's fleet
+	// cache included, already handles by listing again.
+	d.events.publish(streamEvent{Type: EventSessionClosed, Session: old})
+	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+}
+
 // onSessionDeleted publishes a session-closed event and tells every client
 // attached to the session that it is gone. It runs on the manager's delete hook,
 // so every deletion path (the kill-session verb, the legacy kill message, and
@@ -891,21 +910,21 @@ func (d *Daemon) onSessionCreated(s *Session) {
 // PTYs are closed and their windows are gone, but the socket stays open, so the
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
-	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
+	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
-	d.agents.forget(s.Name)
+	d.agents.forget(s.Name())
 	// And so are its panes' activity rings.
 	d.activity.forgetSession(s.ID)
 	// And nothing in it is waiting for anybody any more.
-	d.attention.closeSession(s.Name)
+	d.attention.closeSession(s.Name())
 	// And no message waits for an agent in it.
-	d.forgetQueuedSession(s.Name)
+	d.forgetQueuedSession(s.Name())
 	// And its stashed files go with it. This is the lifetime the stash promises,
 	// and it runs on the manager's delete hook, so every path that kills a
 	// session takes the files with it.
 	d.stash.forget(s.ID)
 	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
-		SessionName: s.Name,
+		SessionName: s.Name(),
 		Reason:      "the session was terminated",
 	}, "")
 }

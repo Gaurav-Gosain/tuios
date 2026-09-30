@@ -203,7 +203,7 @@ func (d *Daemon) fireSessionHooks(sess *Session, ev SessionEvent) {
 		d.fireAgentStateHook(sess, ev)
 		return
 	}
-	d.hooks.Fire(event, hookContext(sess.Name, ev))
+	d.hooks.Fire(event, hookContext(sess.Name(), ev))
 }
 
 // hookContext is the environment a hook command reads, built from the event
@@ -267,7 +267,7 @@ func findWindowState(state *SessionState, id string) (WindowState, bool) {
 // under the state lock the sink already holds.
 func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	policy := d.agentAlerts
-	key := sess.Name + "\x00" + ev.Window
+	key := sess.Name() + "\x00" + ev.Window
 
 	// Any further transition retires whatever was parked for this pane: the
 	// state it was going to announce is no longer the state the pane is in.
@@ -280,7 +280,7 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 		return
 	}
 
-	sessionID, sessionName, window, to := sess.ID, sess.Name, ev.Window, ev.State
+	sessionID, sessionName, window, to := sess.ID, sess.Name(), ev.Window, ev.State
 	ctx := hookContext(sessionName, ev)
 
 	// suppressed reports whether a client is attached and is showing this

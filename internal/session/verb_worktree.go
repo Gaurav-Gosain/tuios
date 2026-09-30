@@ -72,7 +72,7 @@ func (d *Daemon) worktreeTarget(name string) (*Session, *WorktreeInfo, *verbErro
 	}
 	info := sess.Worktree()
 	if info == nil {
-		return nil, nil, hintedVerbError(ErrVerbNotWorktree, "session "+sess.Name+" is not in a git worktree", &VerbHint{
+		return nil, nil, hintedVerbError(ErrVerbNotWorktree, "session "+sess.Name()+" is not in a git worktree", &VerbHint{
 			Param:     "session",
 			Verb:      "list-worktrees",
 			Command:   "tuios worktree ls",
@@ -184,7 +184,7 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 		})
 	}
 	return map[string]any{
-		"session":        sess.Name,
+		"session":        sess.Name(),
 		"session_id":     sess.ID,
 		"repo":           info.Repo,
 		"repo_root":      root,
@@ -334,7 +334,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 
 	out := map[string]any{
 		"type":        "worktree_removed",
-		"session":     sess.Name,
+		"session":     sess.Name(),
 		"branch":      info.Branch,
 		"path":        info.Path,
 		"repo":        info.Repo,
@@ -364,7 +364,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 				fmt.Sprintf("%s holds %d uncommitted %s. Nothing was removed.", info.Path, changes, plural(changes, "change", "changes")),
 				&VerbHint{
 					Param:   "stash",
-					Command: "tuios worktree rm " + sess.Name + " --stash",
+					Command: "tuios worktree rm " + sess.Name() + " --stash",
 					Detail:  "Pass stash to keep the changes in git stash, or force to discard them. The branch " + info.Branch + " is kept either way.",
 				})
 		}
@@ -390,7 +390,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 
 	out["session_killed"] = false
 	if !p.KeepSession {
-		if err := d.manager.DeleteSession(sess.Name); err == nil {
+		if err := d.manager.DeleteSession(sess.Name()); err == nil {
 			out["session_killed"] = true
 		}
 	}

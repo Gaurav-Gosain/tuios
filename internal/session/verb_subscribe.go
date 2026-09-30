@@ -385,7 +385,7 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 	}
 
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventWindowExit: true, EventWindowClosed: true},
 	}, defaultEventQueue)
@@ -427,7 +427,7 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 	}
 
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
@@ -495,7 +495,7 @@ func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-ch
 		// clock: nothing will ever report a state for it again.
 		types[EventWindowClosed] = true
 	}
-	sub := d.events.subscribe(eventFilter{session: sess.Name, types: types}, defaultEventQueue)
+	sub := d.events.subscribe(eventFilter{session: sess.Name(), types: types}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
 	check := func() (string, string, bool) {
@@ -513,7 +513,7 @@ func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-ch
 	}
 
 	matched := func(id, name string) map[string]any {
-		return waitMatched("agent-state", map[string]any{"session": sess.Name, "window": id, "state": name})
+		return waitMatched("agent-state", map[string]any{"session": sess.Name(), "window": id, "state": name})
 	}
 	if id, name, ok := check(); ok {
 		return matched(id, name), nil
@@ -564,14 +564,14 @@ func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Tim
 		sessions := d.manager.AllSessions()
 		// Sorted, so when several panes already match the answer does not
 		// depend on map order.
-		slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
+		slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
 		for _, sess := range sessions {
 			state := sess.GetState()
 			for i := range state.Windows {
 				w := &state.Windows[i]
 				if states[w.AgentState.Name()] {
 					return waitMatched("agent-state", map[string]any{
-						"session": sess.Name, "window": w.ID, "state": w.AgentState.Name(),
+						"session": sess.Name(), "window": w.ID, "state": w.AgentState.Name(),
 					}), true
 				}
 			}
@@ -628,14 +628,14 @@ func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, d
 				if !states[name] {
 					return nil, false
 				}
-				matched = append(matched, map[string]any{"session": p.sess.Name, "window": p.window.ID, "state": name})
+				matched = append(matched, map[string]any{"session": p.sess.Name(), "window": p.window.ID, "state": name})
 			}
 			return waitMatched("agent-state", map[string]any{"select": sel.String(), "every": true, "panes": matched, "total": len(matched)}), true
 		}
 		for _, p := range panes {
 			if name := p.window.AgentState.Name(); states[name] {
 				return waitMatched("agent-state", map[string]any{
-					"select": sel.String(), "session": p.sess.Name, "window": p.window.ID, "state": name,
+					"select": sel.String(), "session": p.sess.Name(), "window": p.window.ID, "state": name,
 				}), true
 			}
 		}
@@ -731,7 +731,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	}
 
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
@@ -806,7 +806,7 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, dea
 
 	// Any id in the thread names the thread, the same rule read-agent-messages
 	// follows, so a caller can wait on the id of the message it just sent.
-	thread = d.agents.resolveThread(sess.Name, thread)
+	thread = d.agents.resolveThread(sess.Name(), thread)
 
 	types := map[string]bool{EventAgentMessage: true}
 	if inbox != "" {
@@ -814,14 +814,14 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, dea
 		// clock: nothing will ever be delivered to it again.
 		types[EventWindowClosed] = true
 	}
-	sub := d.events.subscribe(eventFilter{session: sess.Name, types: types}, defaultEventQueue)
+	sub := d.events.subscribe(eventFilter{session: sess.Name(), types: types}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
 	check := func() (AgentMessage, bool) {
 		if inbox != "" {
-			return d.agents.firstUnread(sess.Name, inbox, thread)
+			return d.agents.firstUnread(sess.Name(), inbox, thread)
 		}
-		return d.agents.newerThan(sess.Name, baseline, thread)
+		return d.agents.newerThan(sess.Name(), baseline, thread)
 	}
 
 	if m, ok := check(); ok {

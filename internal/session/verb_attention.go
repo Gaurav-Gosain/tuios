@@ -219,7 +219,7 @@ func (d *Daemon) markHumanThreadRead(sess *Session, thread uint64) {
 		return
 	}
 	raw, err := json.Marshal(map[string]any{
-		"session": sess.Name,
+		"session": sess.Name(),
 		"to":      AgentInboxHuman,
 		"thread":  thread,
 		"limit":   agentMailboxMaxMessages,

@@ -92,7 +92,7 @@ func (d *Daemon) waitPopupExit(sess *Session, win WindowState, timeout time.Dura
 		return -1, true
 	}
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types:   map[string]bool{EventWindowExit: true, EventWindowClosed: true},
 	}, defaultEventQueue)

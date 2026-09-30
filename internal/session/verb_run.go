@@ -133,7 +133,7 @@ func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *
 	if window == "" && commandSeq != nil {
 		return nil, invalidParam("command_seq", "command_seq counts one pane's commands, so it needs a window")
 	}
-	filter := eventFilter{session: sess.Name, types: map[string]bool{EventCommandFinished: true}}
+	filter := eventFilter{session: sess.Name(), types: map[string]bool{EventCommandFinished: true}}
 	var (
 		target WindowState
 		pty    *PTY
@@ -160,7 +160,7 @@ func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *
 				// Finished before the wait began. The facts hold only the
 				// newest command, which is the one to report.
 				ev := streamEvent{Cmdline: facts.LastCmdline, DurationMS: facts.LastDuration.Milliseconds(), CommandSeq: facts.CommandSeq, ExitCode: facts.LastExit}
-				return waitMatched(waitCommandFinished, commandFinishedData(sess.Name, target.ID, ev)), nil
+				return waitMatched(waitCommandFinished, commandFinishedData(sess.Name(), target.ID, ev)), nil
 			}
 		}
 	}
@@ -182,7 +182,7 @@ func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *
 				if pty != nil && ev.CommandSeq <= baseline {
 					continue
 				}
-				return waitMatched(waitCommandFinished, commandFinishedData(sess.Name, ev.Window, ev)), nil
+				return waitMatched(waitCommandFinished, commandFinishedData(sess.Name(), ev.Window, ev)), nil
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	}
 
 	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
+		session: sess.Name(),
 		ptyID:   pty.ID,
 		types: map[string]bool{
 			EventPrompt: true, EventCommandStarted: true, EventCommandFinished: true,
@@ -292,7 +292,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	// commands. The claim is held until this call ends.
 	if !pty.runClaim.CompareAndSwap(false, true) {
 		return nil, hintedVerbError(ErrVerbNotAtPrompt, "another run is typing or running in window "+echoName(windowLabelFor(w)), &VerbHint{
-			Command: "tuios wait-for command-finished -s " + sess.Name + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
+			Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
 			Detail:  "Nothing was typed. Wait for that command to finish, then run again, or run in another pane.",
 		})
 	}
@@ -310,7 +310,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 			msg += ": it is running " + strconv.Quote(facts.Running)
 		}
 		return nil, hintedVerbError(ErrVerbNotAtPrompt, msg, &VerbHint{
-			Command: "tuios wait-for command-finished -s " + sess.Name + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
+			Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
 			Detail:  "Nothing was typed. Wait for the running command to finish, then run again, or run in another pane.",
 		})
 	}
@@ -323,7 +323,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	if _, err := submitPrompt(ctx, pty, p.Command, harness.DefaultInputProfile()); err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
 	}
-	LogBasic("run: typed a command in %s of %s", shortID(w.ID), sess.Name)
+	LogBasic("run: typed a command in %s of %s", shortID(w.ID), sess.Name())
 
 	started := false
 	for {
@@ -337,7 +337,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 				detail = "The command was typed and the shell has not reported it running. Look at the pane with capture-pane: the line may sit at the prompt, or the shell may have stopped sending OSC 133 marks."
 			}
 			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for the command to finish", &VerbHint{
-				Command: "tuios wait-for command-finished -s " + sess.Name + " -w " + w.ID + " --command-seq " + strconv.FormatUint(baseline, 10),
+				Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(baseline, 10),
 				Detail:  detail,
 			})
 		case <-gone:
@@ -361,7 +361,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 				}
 				output, truncated, _ := pty.LastCommandOutput()
 				output = sliceCaptureLines(output, 0, 0, p.Lines)
-				res := commandFinishedData(sess.Name, w.ID, ev)
+				res := commandFinishedData(sess.Name(), w.ID, ev)
 				res["type"] = "command_result"
 				res["output"] = output
 				res["truncated"] = truncated

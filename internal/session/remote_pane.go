@@ -569,7 +569,7 @@ func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cw
 		Height:  height,
 		Cwd:     cwd,
 		Command: command,
-		Session: s.Name,
+		Session: s.Name(),
 	}
 	// The window id goes only when there is a daemon to hold the report
 	// channel it promises: a far machine that gets it exports it and waits for

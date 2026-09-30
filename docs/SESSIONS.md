@@ -120,6 +120,13 @@ to the highlighted session, `Ctrl+D` to delete one (with a confirmation prompt,
 and never the session you are currently on). If your query matches no existing
 session, `Enter` creates a session with that name and switches to it.
 
+`Ctrl+R` renames the highlighted session. The rename changes the session's
+name in the daemon, so `tuios ls`, `tuios attach` and every client show the
+new name. The rail's rename and the `tuios rename-session` command do the
+same. Panes that already run keep the old name in `TUIOS_SESSION`, and tuios
+commands from them still reach the session. `tuios attach` with the old name
+fails and names the new one. A name that another session has is refused.
+
 With remote hosts in `[hosts]`, the switcher also lists the sessions on your
 other machines. A remote session shows as `name @ host`, and the filter
 matches that text. `Enter` switches to it, and back again, in either

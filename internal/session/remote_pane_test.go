@@ -237,7 +237,7 @@ func TestAHostedPaneBelongsToNoSessionOnTheMachineItRunsOn(t *testing.T) {
 	}
 	for _, s := range d.manager.AllSessions() {
 		if n := len(s.GetState().Windows); n != 0 {
-			t.Errorf("the far machine put the hosted pane in session %q, which now has %d windows", s.Name, n)
+			t.Errorf("the far machine put the hosted pane in session %q, which now has %d windows", s.Name(), n)
 		}
 	}
 }

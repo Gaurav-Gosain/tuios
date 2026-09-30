@@ -570,7 +570,7 @@ func (d *Daemon) routeTape(sess *Session, command string, args []string) *verbEr
 		return hintedVerbError(ErrVerbNeedsClient,
 			command+" changes what is drawn on screen, so it needs an attached client",
 			&VerbHint{
-				Command: "tuios attach " + sess.Name,
+				Command: "tuios attach " + sess.Name(),
 				Detail:  "the daemon has no viewport, so it cannot compute a geometry nobody is displaying. Attach a client and retry.",
 			})
 	}

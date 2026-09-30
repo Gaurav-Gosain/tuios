@@ -1355,6 +1355,24 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	return nil
 }
 
+// runRenameSession changes a session's name through the daemon. With no
+// session given it renames the session of the pane it runs in, and never
+// guesses one outside a pane.
+func runRenameSession(target, name string) error {
+	if target == "" {
+		target = os.Getenv("TUIOS_SESSION")
+	}
+	if target == "" {
+		return errors.New("name the session to rename: tuios rename-session <session> <new-name>")
+	}
+	return callAndReport("rename-session", map[string]any{
+		"session": target,
+		"name":    name,
+	}, func(res map[string]any) {
+		fmt.Printf("Renamed session %v to %v.\n", res["old_name"], res["session"])
+	})
+}
+
 // runSetSessionName sets a session's display label. The session keeps its own
 // name for addressing, so renaming the label never breaks a script.
 func runSetSessionName(sessionName, name string) error {

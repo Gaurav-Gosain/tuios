@@ -112,6 +112,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	} else {
 		session = d.manager.GetSession(payload.SessionName)
 		if session == nil {
+			// An attach by an old name is refused rather than followed: a
+			// person who types it has an old name in mind and should learn
+			// the new one.
+			if renamed, ok := d.manager.ResolveSession(payload.SessionName); ok && renamed != nil {
+				return d.sendError(cs, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
+			}
 			return d.sendError(cs, ErrCodeSessionNotFound, fmt.Sprintf("session '%s' not found", payload.SessionName))
 		}
 	}
@@ -172,7 +178,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	clientCount := d.getSessionClientCount(session.ID)
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
-		cs.clientID, session.Name, clientCount, payload.Width, payload.Height)
+		cs.clientID, session.Name(), clientCount, payload.Width, payload.Height)
 
 	// Tell the clients already here that somebody joined.
 	if clientCount > 1 {
@@ -253,7 +259,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
 	if err := d.sendAttachReply(cs, &AttachedPayload{
-		SessionName: session.Name,
+		SessionName: session.Name(),
 		SessionID:   session.ID,
 		Width:       effectiveWidth,
 		Height:      effectiveHeight,
@@ -284,9 +290,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// change again without the broadcast catching it.
 	if d.manager.GetSessionByID(session.ID) == nil {
 		LogBasic("Session %s was terminated while %s was attaching; telling it directly",
-			session.Name, cs.clientID)
+			session.Name(), cs.clientID)
 		_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
-			SessionName: session.Name,
+			SessionName: session.Name(),
 			Reason:      "the session was terminated",
 		})
 		return nil
@@ -319,7 +325,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.mu.Unlock()
 	if missed {
 		LogBasic("Session %s state moved while %s was attaching; telling it directly",
-			session.Name, cs.clientID)
+			session.Name(), cs.clientID)
 		if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
 			State:       session.GetState(),
 			TriggerType: "update",
@@ -330,7 +336,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if w, h := session.Size(); w > 0 && h > 0 {
 		if r := session.LayoutReserve(); w != effectiveWidth || h != effectiveHeight || r != effectiveReserve {
 			LogBasic("Session %s moved to %dx%d chrome %+v while %s was attaching; telling it directly",
-				session.Name, w, h, r, cs.clientID)
+				session.Name(), w, h, r, cs.clientID)
 			_ = d.sendMessage(cs, MsgSessionResize, &SessionResizePayload{
 				Width:       w,
 				Height:      h,
@@ -609,7 +615,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		d.notifyPTYClosed(sessionID, ptyID)
 	}
 
-	debugLog("[DEBUG] Creating PTY %dx%d for session %s", width, height, session.Name)
+	debugLog("[DEBUG] Creating PTY %dx%d for session %s", width, height, session.Name())
 	pty, err := session.CreatePTY(payload.WindowID, width, height, onExit)
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)

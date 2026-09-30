@@ -2099,7 +2099,8 @@ non-zero with the timeout error.`,
 		Long: `Set the label a session shows in the sidebar and the dock.
 
 The session keeps its own name for addressing, persistence and TUIOS_SESSION, so
-a script that targets it by name keeps working. Pass no name to clear the label.`,
+a script that targets it by name keeps working. Pass no name to clear the label.
+To change the name itself, use 'tuios rename-session'.`,
 		Example: `  # Label the current session
   tuios set-session-name "Payments API"
 
@@ -2119,6 +2120,36 @@ a script that targets it by name keeps working. Pass no name to clear the label.
 	}
 	setSessionNameCmd.Flags().StringVarP(&setSessionNameSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = setSessionNameCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var renameSessionSession string
+	renameSessionCmd := &cobra.Command{
+		Use:   "rename-session [session] <new-name>",
+		Short: "Rename a session",
+		Long: `Rename a session.
+
+The new name is what 'tuios ls' shows and what attach and -s take. New panes
+get it as TUIOS_SESSION. Panes that already run keep the old name, and tuios
+commands from them still reach the session. Attach by the old name fails and
+names the new one.
+
+With one argument, the session is the one given by -s, or else the session of
+the pane you run it in.`,
+		Example: `  # Rename the session "test" to "work"
+  tuios rename-session test work
+
+  # Rename the session of this pane
+  tuios rename-session work`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			target, name := renameSessionSession, args[len(args)-1]
+			if len(args) == 2 {
+				target = args[0]
+			}
+			return runRenameSession(target, name)
+		},
+	}
+	renameSessionCmd.Flags().StringVarP(&renameSessionSession, "session", "s", "", "Session to rename (default: the session of this pane)")
+	_ = renameSessionCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var setSessionAccentSession string
 	setSessionAccentCmd := &cobra.Command{
@@ -2878,7 +2909,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newReviewCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
-	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
+	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)

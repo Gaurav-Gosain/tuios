@@ -1222,7 +1222,7 @@ func (d *Daemon) verbSetPaneGrants(cs *connState, params json.RawMessage) (any, 
 	}
 	st := sess.GetState()
 	window := p.Window
-	if window == "" && caller != nil && caller.session == sess.Name {
+	if window == "" && caller != nil && caller.session == sess.Name() {
 		window = caller.window
 	}
 	if window == "" {
@@ -1267,7 +1267,7 @@ func (d *Daemon) verbSetPaneGrants(cs *connState, params json.RawMessage) (any, 
 	LogBasic("Pane %s grants %s -> %s, set by %s", shortWindowID(w.ID), prev.String(), next.String(), by)
 	return map[string]any{
 		"type":              "pane_grants_set",
-		"session":           sess.Name,
+		"session":           sess.Name(),
 		"window":            w.ID,
 		"grants":            next.Names(),
 		"explicit":          want != nil,
