@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -1130,7 +1131,7 @@ var optionSpecs = []Option{
 	},
 
 	// [scratch]. Read each time toggle_scratch creates or shows the scratch
-	// terminal.
+	// terminal. A show resizes the popup to the size in force.
 	{
 		Path: "scratch.width", Type: OptionString, Section: "scratch",
 		Description: "Width of the scratch terminal, in cells (60) or percent (80%)",
@@ -1228,6 +1229,9 @@ func (o Option) checkValue(value string) error {
 func SetOptionValue(cfg *UserConfig, path, value string) error {
 	opt, ok := LookupOption(path)
 	if !ok {
+		if msg, retired := RetiredOption(path); retired {
+			return errors.New(msg)
+		}
 		return fmt.Errorf("unknown config option %q", path)
 	}
 	if err := opt.checkValue(value); err != nil {

@@ -1722,7 +1722,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Another client updated state: apply incrementally
 		if msg.State != nil {
 			// Track what changed for notifications
-			oldWindowCount := len(m.Windows)
+			oldWindowCount := m.windowCountForNotice()
 			oldWorkspace := m.CurrentWorkspace
 
 			if err := m.ApplyStateSyncFrom(msg.State, msg.SourceID); err != nil {
@@ -1736,7 +1736,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.maybeFocusScratch()
 
 				// Show notifications for significant changes
-				newWindowCount := len(m.Windows)
+				newWindowCount := m.windowCountForNotice()
 				newWorkspace := m.CurrentWorkspace
 
 				// Window count change notification

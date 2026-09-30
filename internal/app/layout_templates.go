@@ -111,7 +111,9 @@ func SaveLayoutTemplate(name string, m *OS) error {
 
 	// Collect windows
 	for _, w := range m.Windows {
-		if w.Workspace != m.CurrentWorkspace {
+		// The scratch terminal is not a pane of the layout. A template that
+		// stored it would open it as an ordinary pane.
+		if w.Workspace != m.CurrentWorkspace || isScratch(w) {
 			continue
 		}
 		lw := LayoutWindow{
@@ -177,7 +179,8 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	// Collect existing windows in current workspace (reuse them instead of killing)
 	var existingWindows []*terminal.Window
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+		// The scratch terminal keeps its popup. It never fills a slot.
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !isScratch(w) {
 			existingWindows = append(existingWindows, w)
 		}
 	}

@@ -355,7 +355,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
 			case app.WindowButtonClose:
-				o.DeleteWindow(clickedWindowIndex)
+				o.CloseWindowByHand(clickedWindowIndex)
 			case app.WindowButtonMinimize:
 				o.MinimizeWindow(clickedWindowIndex)
 			case app.WindowButtonZoom:

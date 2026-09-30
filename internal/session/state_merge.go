@@ -274,8 +274,15 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if ok {
 			w.Popup = true
 			w.IsFloating = true
-			w.PopupWidth = p.width
-			w.PopupHeight = p.height
+			// The scratch terminal takes its size from [scratch] on each
+			// show, so the client that shows it may change the size. Any
+			// other popup keeps the size its caller asked for.
+			if !p.scratch || w.PopupWidth == "" {
+				w.PopupWidth = p.width
+			}
+			if !p.scratch || w.PopupHeight == "" {
+				w.PopupHeight = p.height
+			}
 		}
 		ids := agentIDs[w.ID]
 		w.AgentKind = ids.kind

@@ -182,7 +182,9 @@ func (m *OS) OpenAggregateView() {
 func (m *OS) minimizedPosition(windowIndex int) int {
 	pos := 0
 	for i, win := range m.Windows {
-		if win == nil || win.Workspace != m.CurrentWorkspace || !win.Minimized {
+		// The hidden scratch terminal is not counted, as RestoreMinimizedByIndex
+		// does not count it.
+		if win == nil || win.Workspace != m.CurrentWorkspace || !win.Minimized || win.IsScratch {
 			continue
 		}
 		if i == windowIndex {

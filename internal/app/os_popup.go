@@ -101,9 +101,26 @@ func (m *OS) CloseFocusedPopup() bool {
 	}
 	for i := range m.Windows {
 		if m.Windows[i] == w {
-			m.DeleteWindow(i)
+			m.CloseWindowByHand(i)
 			return true
 		}
 	}
 	return false
+}
+
+// CloseWindowByHand is what a close key, the close button and the palette's
+// close do to the pane at i. The scratch terminal hides instead: its shell may
+// run a long job, and a close by hand would end it with no question asked.
+// kill-window and a tape's CloseWindow still close it.
+func (m *OS) CloseWindowByHand(i int) {
+	if i < 0 || i >= len(m.Windows) {
+		return
+	}
+	if isScratch(m.Windows[i]) {
+		if !m.Windows[i].Minimized {
+			m.hideScratch(i)
+		}
+		return
+	}
+	m.DeleteWindow(i)
 }

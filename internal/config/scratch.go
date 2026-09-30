@@ -117,5 +117,14 @@ func validateScratch(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
+// RetiredOption says why path can no longer be set, for a path the registry
+// dropped but a user may still name. ok is false for any other path.
+func RetiredOption(path string) (msg string, ok bool) {
+	if path == "scratch.session" {
+		return path + ": " + ScratchSessionUnused, true
+	}
+	return "", false
+}
+
 // ScratchSessionUnused is what tuios says about the old [scratch] session key.
 const ScratchSessionUnused = "This key is no longer used. The scratch key shows one shell in a popup. Remove the key."

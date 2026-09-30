@@ -146,3 +146,11 @@ func TestScratchDefaultKeyYields(t *testing.T) {
 		t.Fatalf("prefix_help lost g: %v", got)
 	}
 }
+
+// set-config on the old key says why, not only that the path is unknown.
+func TestScratchSessionSetSaysNoLongerUsed(t *testing.T) {
+	err := SetOptionValue(DefaultConfig(), "scratch.session", "notes")
+	if err == nil || !strings.Contains(err.Error(), "no longer used") {
+		t.Fatalf("err = %v, want the no longer used message", err)
+	}
+}

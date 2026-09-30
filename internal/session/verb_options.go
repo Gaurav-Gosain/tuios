@@ -174,6 +174,9 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 	}
 
 	opt, path, known := resolveOptionPath(p.Key)
+	if msg, retired := config.RetiredOption(p.Key); !known && retired {
+		return nil, invalidParam("key", msg)
+	}
 	if !known {
 		return nil, hintedVerbError(ErrVerbOptionNotFound, "no such option "+echoName(p.Key), &VerbHint{
 			Param:      "key",

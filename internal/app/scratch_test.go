@@ -285,3 +285,108 @@ func TestForcedTerminalModeWaitsForAPane(t *testing.T) {
 		t.Fatal("the first pane arrived and the client stayed in window mode")
 	}
 }
+
+// Closing the scratch terminal by hand hides it. Esc in window mode
+// (CloseFocusedPopup) and the close key, button and palette entry
+// (CloseWindowByHand) all keep the shell, so a running job survives. Another
+// popup still closes.
+func TestScratchCloseByHandHides(t *testing.T) {
+	m := scratchOS(t, false)
+	w := addScratch(m, 1, true)
+	m.ToggleScratch()
+	if !m.CloseFocusedPopup() {
+		t.Fatal("esc did nothing on the shown scratch terminal")
+	}
+	if m.scratchIndex() < 0 || !w.Minimized {
+		t.Fatalf("esc closed the scratch terminal: present=%v minimized=%v", m.scratchIndex() >= 0, w.Minimized)
+	}
+	m.ToggleScratch()
+	m.CloseWindowByHand(m.scratchIndex())
+	if m.scratchIndex() < 0 || !w.Minimized {
+		t.Fatal("the close key closed the scratch terminal")
+	}
+	if m.FocusedWindow != 0 {
+		t.Fatalf("focus after the hide = %d, want alpha", m.FocusedWindow)
+	}
+}
+
+// Any focus on the hidden scratch terminal shows it first, so keys never go
+// into a pane nobody can see. The rail, the Inbox, a notification and
+// focus-window all focus through FocusWindow.
+func TestFocusOnHiddenScratchShowsIt(t *testing.T) {
+	m := scratchOS(t, false)
+	m.Mode = WindowManagementMode
+	w := addScratch(m, 3, true)
+	m.FocusWindow(1)
+	if w.Minimized || w.Workspace != 1 || m.CurrentWorkspace != 1 || m.GetFocusedWindow() != w {
+		t.Fatalf("minimized=%v workspace=%d current=%d focused=%v", w.Minimized, w.Workspace, m.CurrentWorkspace, m.GetFocusedWindow() == w)
+	}
+	m.ToggleScratch()
+	if m.FocusedWindow != 0 || m.Mode != WindowManagementMode {
+		t.Fatal("the hide after a focus jump did not go back to alpha")
+	}
+}
+
+// The dock menu's Restore counts in RestoreMinimizedByIndex's order, which
+// leaves the scratch terminal out.
+func TestMinimizedPositionSkipsScratch(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, 1, true)
+	parked := &terminal.Window{ID: "parked", Workspace: 1, Minimized: true}
+	m.Windows = append(m.Windows, parked)
+	if pos := m.minimizedPosition(2); pos != 0 {
+		t.Fatalf("parked is at %d, want 0", pos)
+	}
+	m.RestoreMinimizedByIndex(m.minimizedPosition(2))
+	if parked.Minimized {
+		t.Fatal("restore picked the wrong pane")
+	}
+}
+
+// The created and closed notices do not count the scratch terminal.
+func TestNoticeCountLeavesScratchOut(t *testing.T) {
+	m := scratchOS(t, false)
+	addScratch(m, 1, false)
+	if n := m.windowCountForNotice(); n != 1 {
+		t.Fatalf("count = %d, want 1", n)
+	}
+}
+
+// A show reads [scratch] again, so a size set since the last show applies.
+func TestScratchShowReadsTheSize(t *testing.T) {
+	m := scratchOS(t, false)
+	// A window with an emulator, so the box is really resized.
+	w := newTestWindow(t, "scratch-pane", 80, 30)
+	w.IsPopup, w.IsScratch, w.IsFloating, w.Minimized, w.Workspace = true, true, true, true, 1
+	m.Windows = append(m.Windows, w)
+	m.UserConfig.Scratch.Width, m.UserConfig.Scratch.Height = "50", "10"
+	m.ToggleScratch()
+	if w.PopupWidth != "50" || w.PopupHeight != "10" {
+		t.Fatalf("size = %s x %s, want 50 x 10", w.PopupWidth, w.PopupHeight)
+	}
+	_, _, width, height := m.popupRect(w)
+	if w.Width != width || w.Height != height || width != 50 || height != 10 {
+		t.Fatalf("box = %dx%d, rect %dx%d, want 50x10", w.Width, w.Height, width, height)
+	}
+}
+
+// A layout template neither stores the scratch terminal nor gives it a slot.
+func TestLayoutLeavesScratchOut(t *testing.T) {
+	useTempConfig(t)
+	a, _ := layoutWindow(t, "a")
+	a.Workspace = 1
+	m := layoutOS(a)
+	s := addScratch(m, 1, false)
+	s.X, s.Y = 20, 5
+	if err := SaveLayoutTemplate("with-scratch", m); err != nil {
+		t.Fatal(err)
+	}
+	tmpls, err := LoadLayoutTemplates()
+	if err != nil || len(tmpls) != 1 || len(tmpls[0].Windows) != 1 {
+		t.Fatalf("templates = %+v, err %v, want one pane", tmpls, err)
+	}
+	ApplyLayoutTemplate(LayoutTemplate{Windows: []LayoutWindow{{X: 0, Y: 0, Width: 40, Height: 10}}}, m)
+	if s.X != 20 || s.Y != 5 || s.Minimized {
+		t.Fatalf("the layout moved the scratch terminal: %d,%d minimized=%v", s.X, s.Y, s.Minimized)
+	}
+}

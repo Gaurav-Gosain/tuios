@@ -293,6 +293,15 @@ func (m *OS) FocusWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		return m
 	}
+	// A hidden scratch terminal is shown before it takes the focus. Every jump
+	// comes through here (the rail, the Inbox, a notification, focus-window),
+	// and a focus on the hidden pane sent keys into a shell nobody could see.
+	// showScratch un-hides it and calls back here.
+	if m.Windows[i].HiddenScratch() {
+		m.rememberScratchReturn()
+		m.showScratch(i)
+		return m
+	}
 	// Shift and a label types into the pane that had focus.
 	if m.hints != nil && m.Windows[i].ID != m.hints.focusID {
 		m.CloseHints()
