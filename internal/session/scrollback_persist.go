@@ -33,6 +33,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -43,20 +44,37 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 const (
 	// DefaultHistoryLines is how many history rows a pane saves when the
-	// config names no number: daemon.persist_scrollback_lines.
-	DefaultHistoryLines = 5000
+	// config names no number: daemon.persist_scrollback_lines. It is the
+	// number a client asks for when it attaches, so a restore does not save
+	// rows no client is sent. It also bounds how long a save holds a pane:
+	// libghostty hands history out a cell at a time, and 5000 rows of a
+	// 200-column pane took over 250 ms there.
+	DefaultHistoryLines = DefaultStateScrollback
 	// DefaultHistoryKB is the most one pane's saved file may take on disk,
 	// compressed, when the config names no number: daemon.persist_scrollback_kb.
 	DefaultHistoryKB = 2048
 	historyDirName   = "scrollback"
 	historyExt       = ".hist.gz"
-	// historyVersion is bumped when the file's layout changes in a way an
-	// older reader cannot take. A file at another version is ignored.
-	historyVersion = 1
+	// historyVersion names the file's layout: the savedHistory record and
+	// the packed cell format inside it. It is packedFormatVersion times a
+	// hundred plus the record's own number, so a change to the packed format
+	// (snapshot_pack.go) changes it without anyone remembering to. A file at
+	// another version is skipped and left alone, since a build that writes
+	// that version may run here again.
+	historyVersion = packedFormatVersion*100 + 1
+
+	// maxHistoryDim and maxHistoryCells bound the screen a history file may
+	// describe. A restore builds an emulator of that size at daemon start,
+	// before any client is connected, so the size is input to check, not a
+	// fact: the same bound a pane spawned for another machine is held to,
+	// and an area no real terminal reaches.
+	maxHistoryDim   = hostedPaneMaxDim
+	maxHistoryCells = 1 << 20
 )
 
 // historySessionBytes is the most one session's saved history may take on disk
@@ -119,6 +137,11 @@ type historyMark struct {
 	ptyID string
 	seq   int64
 	at    time.Time
+	// savedAt, when set, is the time the next save records instead of now.
+	// A restored pane holds the time of the save it was restored from until
+	// its first save, so a second restart right after the first still says
+	// when its history was written, not when the restore saved it again.
+	savedAt time.Time
 }
 
 // historySaver is a session's record of its panes' saves. Guarded by mu; a
@@ -165,6 +188,26 @@ func RemoveAllHistory() {
 	_ = os.RemoveAll(historyRoot())
 }
 
+// cleanOrphanHistory deletes the history of every session that has no state
+// file. That history can never be restored: the state was archived as
+// corrupt, or a daemon from before pane history killed or renamed the session
+// and never knew to take its history along. Called at daemon start, before
+// any session is live.
+func cleanOrphanHistory() {
+	entries, err := os.ReadDir(historyRoot())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if _, err := os.Stat(getResurrectionPath(e.Name())); err == nil {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(historyRoot(), e.Name())); err != nil {
+			LogError("Failed to remove saved history of gone session %s: %v", e.Name(), err)
+		}
+	}
+}
+
 // dropHistoryWhenOff deletes the history saved while daemon.persist_scrollback
 // was on, once it is set to false, so turning it off also takes the saved text
 // off the disk. A daemon that read no config saves nothing and deletes
@@ -193,7 +236,7 @@ func moveHistory(oldName, newName string) {
 // the interval, for the last save before a stop. Called under persistMu.
 func (s *Session) saveHistory(state *SessionState, force bool) {
 	pol := s.historyPolicy()
-	if !pol.Enabled || state == nil || state.Name != s.Name() {
+	if !pol.Enabled || state == nil || state.Name != s.Name() || s.discardHistory.Load() {
 		return
 	}
 	name := state.Name
@@ -217,7 +260,11 @@ func (s *Session) saveHistory(state *SessionState, force bool) {
 				continue
 			}
 		}
-		seq, err := s.saveOnePane(name, w.ID, pty, pol, now)
+		savedAt := now
+		if seen && mark.ptyID == pty.ID && !mark.savedAt.IsZero() {
+			savedAt = mark.savedAt
+		}
+		seq, err := s.saveOnePane(name, w.ID, pty, pol, savedAt)
 		if err != nil {
 			LogError("Saving the history of pane %s in session %q failed: %v", shortID(w.ID), name, err)
 			continue
@@ -240,22 +287,24 @@ func historyWanted(w WindowState) bool {
 }
 
 // saveOnePane captures one pane and writes its file, and returns the stream
-// position the capture was taken at. The file is kept within the pane's bound
-// and the session's: a capture that compresses too big is taken again with
-// fewer rows, and one that still does not fit is not written.
-func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol HistoryPolicy, now time.Time) (int64, error) {
+// position the capture was taken at. The pane's lock is held only while its
+// rows are read; packing, encoding and compression happen after. The file is
+// kept within the pane's bound and the session's: a capture that compresses
+// too big is packed again from fewer of the rows already read, and one that
+// still does not fit is not written.
+//
+// savedAt is the time the file records, which the divider shows on restore.
+func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol HistoryPolicy, savedAt time.Time) (int64, error) {
 	budget := min(pol.Bytes, historySessionBytes-otherHistoryBytes(sessionName, windowID))
-	lines := pol.Lines
+	rows, seq := pty.captureHistory(pol.Lines)
+	if rows == nil {
+		return seq, nil
+	}
+	lines := len(rows.history)
 	var data []byte
-	var seq int64
 	for range 4 {
-		var st *TerminalState
-		st, seq = pty.historyState(lines)
-		if st == nil {
-			return seq, nil
-		}
 		var err error
-		data, err = encodeHistory(&savedHistory{Version: historyVersion, SavedAt: now, State: st})
+		data, err = encodeHistory(&savedHistory{Version: historyVersion, SavedAt: savedAt, State: rows.state(lines)})
 		if err != nil {
 			return seq, err
 		}
@@ -277,23 +326,56 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 		_ = os.Remove(path)
 		return seq, nil
 	}
+	if historyWriteHook != nil {
+		historyWriteHook(sessionName, windowID)
+	}
 	return seq, writePrivateFile(path, data)
 }
 
+// historyWriteHook, when set, is told of every history file about to be
+// written. Test-only.
+var historyWriteHook func(sessionName, windowID string)
+
 // writePrivateFile writes data to path through a temporary file and a rename,
-// with the directory 0700 and the file 0600.
+// with the directory 0700 and the file 0600. The temporary file gets a fresh
+// name from os.CreateTemp, so a leftover or planted file at a fixed name, a
+// symlink included, is never written through, and its mode never carries over
+// to the saved file. A directory that already existed with a wider mode is
+// narrowed.
 func writePrivateFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".hist-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
 		return err
 	}
+	ok = true
 	return nil
 }
 
@@ -367,42 +449,126 @@ func (p *PTY) consumedSeq() int64 {
 	return p.vtSeq
 }
 
-// historyState captures the pane's history for saving, with at most lines
-// history rows, and the stream position it was taken at. Only the read of the
-// emulator happens under its lock; the encoding is the caller's.
-func (p *PTY) historyState(lines int) (*TerminalState, int64) {
+// historyRows is a pane's history as read from its emulator, before it is
+// packed. The lines are the emulator's own decoded rows, which neither backend
+// changes after handing them out, cut to their used cells.
+type historyRows struct {
+	width, height int
+	// cursorY is the cursor's row, -1 when the screen saved is the main one
+	// under an alternate screen, where the cursor is somewhere else.
+	cursorY      int
+	screen       []uv.Line
+	screenWraps  []bool
+	history      []uv.Line
+	historyWraps []bool
+}
+
+// captureHistory reads the pane's history for saving, with at most lines
+// history rows, and the stream position it was read at. This is all that
+// holds the emulator's lock; see historyRows.state for the rest.
+func (p *PTY) captureHistory(lines int) (*historyRows, int64) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 	if p.terminal == nil {
 		return nil, p.vtSeq
 	}
-	n := lines
-	if n <= 0 {
-		n = -1 // none; zero would mean the default
-	}
-	return historyStateOf(p.terminal, n), p.vtSeq
+	return captureHistoryRows(p.terminal, lines), p.vtSeq
 }
 
-// historyStateOf is the part of a pane's emulator a restore needs: the main
-// screen and up to maxScrollback history rows, packed.
+// captureHistoryRows reads the main screen and up to lines history rows.
 //
 // A full-screen program on the alternate screen at the moment of the save is
 // left out. Its screen is gone the moment the program is, and what the user
-// had before it, the shell's screen, is the main one, which the snapshot
-// carries while the alternate one is up.
-func historyStateOf(t vt.Terminal, maxScrollback int) *TerminalState {
-	st := terminalStateOf(t, t.Width(), t.Height(), maxScrollback, 0, true)
-	if st.IsAltScreen {
-		st.PackedScreen, st.PackedMain = st.PackedMain, nil
-		// The flags read were the alternate screen's. The main screen's are
-		// not reachable while it is hidden, and no flag is the safe answer:
-		// a wrongly joined row glues two lines into one.
-		st.ScreenWraps = nil
-		st.IsAltScreen = false
-		st.CursorY = -1
+// had before it, the shell's screen, is the main one.
+func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
+	w, h := t.Width(), t.Height()
+	r := &historyRows{width: w, height: h, cursorY: t.CursorPosition().Y}
+	at := t.CellAt
+	if t.IsAltScreen() {
+		at = t.MainCellAt
+		// The main screen's cursor and wrap flags are not reachable while it is
+		// hidden. No flag is the safe answer: a wrongly joined row glues two
+		// lines into one.
+		r.cursorY = -1
+	} else {
+		r.screenWraps = make([]bool, h)
+		for y := range h {
+			r.screenWraps[y], _ = t.RowSoftWrapped(y)
+		}
 	}
-	st.Modes, st.KittyKbdStack, st.Pen, st.Margins, st.Charsets, st.CursorShape = nil, nil, nil, nil, nil, 0
+	r.screen = make([]uv.Line, h)
+	for y := range h {
+		row := make(uv.Line, w)
+		for x := range w {
+			if c := at(x, y); c != nil {
+				row[x] = *c
+			} else {
+				row[x] = uv.Cell{Content: " ", Width: 1}
+			}
+		}
+		r.screen[y] = row[:usedCells(row)]
+	}
+	n := t.ScrollbackLen()
+	first := max(n-max(lines, 0), 0)
+	r.history = make([]uv.Line, 0, n-first)
+	r.historyWraps = make([]bool, 0, n-first)
+	for i := first; i < n; i++ {
+		line := t.ScrollbackLine(i)
+		if line == nil {
+			continue
+		}
+		wrapped, _ := t.ScrollbackSoftWrapped(i)
+		r.history = append(r.history, line[:usedCells(line)])
+		r.historyWraps = append(r.historyWraps, wrapped)
+	}
+	return r
+}
+
+// state packs the screen and the newest lines of the history rows into the
+// form the file holds. It reads nothing from the emulator.
+func (r *historyRows) state(lines int) *TerminalState {
+	lines = min(max(lines, 0), len(r.history))
+	history := r.history[len(r.history)-lines:]
+	st := &TerminalState{
+		Width:           r.width,
+		Height:          r.height,
+		CursorY:         r.cursorY,
+		ScrollbackLen:   len(history),
+		ScreenWraps:     wrapBits(r.screenWraps),
+		ScrollbackWraps: wrapBits(r.historyWraps[len(r.historyWraps)-lines:]),
+	}
+	colors := colorWireCache{}
+	p := newRowPacker()
+	var row []CellState
+	pack := func(lines []uv.Line) []byte {
+		b := newPackedRows(len(lines) * 32)
+		for _, line := range lines {
+			row = row[:0]
+			for x := range line {
+				row = append(row, colors.cellState(&line[x]))
+			}
+			// The blank tail was cut when the rows were read. Put back to
+			// the pane's width it records the row's width, as a snapshot
+			// does, and the packer drops it again.
+			for len(row) < r.width {
+				row = append(row, blankCellState)
+			}
+			b.add(p, row)
+		}
+		return b.blob()
+	}
+	// Screen first and then history, the order Pack packs them in.
+	st.PackedScreen = pack(r.screen)
+	st.PackedScrollback = pack(history)
+	st.Styles = p.styles
 	return st
+}
+
+// historyStateOf is captureHistoryRows and state together, for a caller that
+// holds the emulator itself.
+func historyStateOf(t vt.Terminal, lines int) *TerminalState {
+	r := captureHistoryRows(t, lines)
+	return r.state(len(r.history))
 }
 
 func encodeHistory(h *savedHistory) ([]byte, error) {
@@ -424,6 +590,13 @@ func encodeHistory(h *savedHistory) ([]byte, error) {
 // so a damaged or planted file cannot take the daemon's memory at start.
 const maxHistoryFile = 256 << 20
 
+// errHistoryVersion is a history file of a layout this build does not read.
+type errHistoryVersion struct{ v int }
+
+func (e errHistoryVersion) Error() string {
+	return fmt.Sprintf("history version %d, this build reads %d", e.v, historyVersion)
+}
+
 func decodeHistory(r io.Reader) (*savedHistory, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
@@ -431,14 +604,22 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 	}
 	defer zr.Close()
 	var h savedHistory
-	if err := gob.NewDecoder(io.LimitReader(zr, maxHistoryFile)).Decode(&h); err != nil {
+	lr := io.LimitReader(zr, maxHistoryFile)
+	if err := gob.NewDecoder(lr).Decode(&h); err != nil {
+		return nil, err
+	}
+	// gzip checks its checksum and length only at the end of the stream, and
+	// gob stops reading once it has its value, so a file cut short decoded
+	// as whole. Reading to the end is what makes the check happen.
+	if _, err := io.Copy(io.Discard, lr); err != nil {
 		return nil, err
 	}
 	if h.Version != historyVersion {
-		return nil, fmt.Errorf("history version %d, this build reads %d", h.Version, historyVersion)
+		return nil, errHistoryVersion{h.Version}
 	}
-	if h.State == nil || h.State.Width <= 0 || h.State.Height <= 0 {
-		return nil, fmt.Errorf("history has no screen")
+	if st := h.State; st == nil || st.Width <= 0 || st.Height <= 0 ||
+		st.Width > maxHistoryDim || st.Height > maxHistoryDim || st.Width*st.Height > maxHistoryCells {
+		return nil, fmt.Errorf("history screen size is out of bounds")
 	}
 	return &h, nil
 }
@@ -465,6 +646,13 @@ func loadHistory(sessionName string) map[string]*savedHistory {
 		}
 		h, err := decodeHistory(f)
 		_ = f.Close()
+		var other errHistoryVersion
+		if errors.As(err, &other) {
+			// Another build's file, whole as far as this one can tell. It is
+			// skipped rather than deleted: that build may run here again.
+			log.Printf("Skipping saved history %s: %v", path, err)
+			continue
+		}
 		if err != nil {
 			log.Printf("Discarding saved history %s: %v", path, err)
 			_ = os.Remove(path)

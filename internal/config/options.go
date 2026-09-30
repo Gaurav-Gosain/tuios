@@ -794,17 +794,17 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "daemon.persist_scrollback", Type: OptionBool, Section: "daemon",
-		Description: "Save each pane's history and show it again after a daemon restart",
+		Description: "Save each pane's history and show it again after a daemon restart. A change applies when the daemon next starts.",
 		Default:     "true",
 	},
 	{
 		Path: "daemon.persist_scrollback_lines", Type: OptionInt, Section: "daemon",
-		Description: "Most history lines one pane saves. 0 uses 5000.",
+		Description: "Most history lines one pane saves. 0 uses 1000. A change applies when the daemon next starts.",
 		Default:     "0", Min: 0, Max: 1000000,
 	},
 	{
 		Path: "daemon.persist_scrollback_kb", Type: OptionInt, Section: "daemon",
-		Description: "Most KiB one pane's saved history takes on disk. 0 uses 2048.",
+		Description: "Most KiB one pane's saved history takes on disk. 0 uses 2048. A change applies when the daemon next starts.",
 		Default:     "0", Min: 0, Max: 1048576,
 	},
 

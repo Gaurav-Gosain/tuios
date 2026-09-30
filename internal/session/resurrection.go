@@ -175,6 +175,8 @@ func CleanResurrectionDir() {
 		}
 	}
 
+	cleanOrphanHistory()
+
 	archiveDir := ResurrectionArchiveDir()
 	archived, err := os.ReadDir(archiveDir)
 	if err != nil {

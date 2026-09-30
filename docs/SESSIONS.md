@@ -252,7 +252,7 @@ BSP tree and the layout mode.
 | Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
 | Working directories | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
 | Screen contents | Yes | Yes, as history above a divider (see below) | Partial: as of the pane's last save, up to 30 seconds stale | Yes, as for a daemon restart |
-| Scrollback | Yes | Yes, the last 5000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
+| Scrollback | Yes | Yes, the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
 | Running programs (vim, tail, a build) | Yes | No | No | No |
 | Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
 | Copy-mode position, selection | No, per-client | No | No | No |
@@ -361,7 +361,7 @@ replayed into the new shell, and no command in it runs again.
 
 What comes back:
 
-- The pane's scrollback, up to 5000 lines by default, and the screen it
+- The pane's scrollback, up to 1000 lines by default, and the screen it
   showed. Colors, bold and other styles, wide characters and wrapped lines
   come back as they were.
 - The shell's screen when a full-screen program such as `vim` or `htop` was
@@ -398,6 +398,7 @@ Where it goes and how big it gets:
   not fit saves fewer lines.
 - The daemon deletes a pane's file when the pane closes, and a session's
   files when the session is killed. A renamed session keeps its files.
+- When the daemon starts, it deletes history that has no saved session.
 
 > **Privacy.** The history files hold what your panes printed, which can
 > include passwords, tokens and other secrets. They stay on your disk until
@@ -408,7 +409,7 @@ Where it goes and how big it gets:
 ```toml
 [daemon]
 persist_scrollback = true         # save each pane's history (default true)
-persist_scrollback_lines = 5000   # most history lines one pane saves (0 = 5000)
+persist_scrollback_lines = 1000   # most history lines one pane saves (0 = 1000)
 persist_scrollback_kb = 2048      # most KiB one pane's file takes (0 = 2048)
 ```
 

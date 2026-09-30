@@ -35,6 +35,12 @@ import (
 // back into an emulator cell, which was most of what a restore allocated. A
 // reader that wants the cells, such as a test oracle, calls Unpack.
 
+// packedFormatVersion names the packed layout below. Bump it with any change
+// to what pack writes or walkPacked reads: saved pane history
+// (scrollback_persist.go) stores packed rows on disk and takes its version
+// from this one.
+const packedFormatVersion = 1
+
 // isBlank reports whether a cell is what a never-written cell looks like,
 // which is what a row's tail is trimmed down to. A wide rune's continuation is
 // empty too, but it is not blank: writing a blank over it would empty the
