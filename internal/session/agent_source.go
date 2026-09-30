@@ -1,6 +1,10 @@
 package session
 
-import "time"
+import (
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+)
 
 // AgentSource names where a window's agent state came from, and is the key its
 // precedence is decided on. More than one source can want to set the same pane:
@@ -151,8 +155,26 @@ type agentClaim struct {
 	// herdrAt is when a herdr protocol reporter last set this claim, as Unix
 	// nanoseconds, and 0 for a claim no such report set. A reporter of this
 	// kind is a harness, and one that crashes sends no release, so its claim
-	// clears when the pane is back at its shell. See herdrClaimLapsed.
+	// clears once the harness is gone. See herdrClaimLapsed.
 	herdrAt int64
+	// herdrAnchors are the processes whose life the claim follows: the
+	// process that reported and, when that one is a short-lived hook, the
+	// first program above it that is not a shell. The claim stands while any
+	// of them lives.
+	herdrAnchors []herdrAnchor
+}
+
+// herdrAnchor is one process a herdr claim follows, named by pid and start
+// time so a reused pid is not taken for the same process.
+type herdrAnchor struct {
+	pid   int
+	start uint64
+}
+
+// alive reports whether the process is still the one recorded.
+func (a herdrAnchor) alive() bool {
+	st, ok := procinfo.StartTime(a.pid)
+	return ok && st == a.start
 }
 
 // herdrShellGrace is how long a herdr report is held against a reading that
@@ -162,10 +184,22 @@ type agentClaim struct {
 const herdrShellGrace = 2 * time.Second
 
 // herdrClaimLapsed reports whether a claim a herdr reporter set has outlived
-// its harness: the pane is at its shell, and the last report is older than
-// herdrShellGrace.
+// its harness: the last report is older than herdrShellGrace, and no process
+// the claim follows is alive. The foreground is not enough on its own: a
+// harness started under a wrapper (sh -c 'crush; exec fish', a script, a
+// command line) runs in the wrapper's process group, so the pane reads as
+// at its shell while the harness works. A claim with no anchor, from a
+// caller the daemon could not read, lapses on the foreground alone.
 func (c agentClaim) herdrClaimLapsed(now int64) bool {
-	return c.herdrAt != 0 && now-c.herdrAt >= int64(herdrShellGrace)
+	if c.herdrAt == 0 || now-c.herdrAt < int64(herdrShellGrace) {
+		return false
+	}
+	for _, a := range c.herdrAnchors {
+		if a.alive() {
+			return false
+		}
+	}
+	return true
 }
 
 // agentPriorClaim is what a visible-blocker override displaced, held so the
