@@ -1582,36 +1582,44 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		kp.deleteAllWindowPlacements(windowID, false)
 
 	case vt.KittyDeleteByID:
-		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
-			if hostID, ok := windowMap[cmd.ImageID]; ok {
-				kp.deleteOnePlacement(&PassthroughPlacement{HostImageID: hostID})
-				if placements := kp.placements[windowID]; placements != nil {
-					delete(placements, hostID)
-				}
-				delete(windowMap, cmd.ImageID)
-				kp.forgetImagePixels(windowID, cmd.ImageID)
-				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d)", cmd.ImageID, hostID)
+		// d=i takes the image's placements down and keeps its data, so
+		// the guest may place it again by the same id. The guest's id
+		// keeps naming the same host id for the same reason, and because
+		// placeholder cells already stored name that host id: superfile
+		// deletes an id and transmits under it again, and a new host id
+		// would leave the cells it does not reprint naming nothing.
+		if hostID, ok := kp.imageIDMap[windowID][cmd.ImageID]; ok {
+			kp.deleteOnePlacement(&PassthroughPlacement{HostImageID: hostID})
+			if placements := kp.placements[windowID]; placements != nil {
+				delete(placements, hostID)
 			}
+			// A file frame sent again under the kept id is not a repeat
+			// of one the host still shows.
+			kp.forgetFrameHashes(windowID)
+			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d)", cmd.ImageID, hostID)
 		}
 
 	case vt.KittyDeleteByIDAndPlacement:
-		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
-			if hostID, ok := windowMap[cmd.ImageID]; ok {
-				var buf bytes.Buffer
-				buf.WriteString("\x1b_G")
-				fmt.Fprintf(&buf, "a=d,d=I,i=%d", hostID)
-				if cmd.PlacementID > 0 {
-					fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
-				}
-				buf.WriteString(",q=2\x1b\\")
-				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-				if placements := kp.placements[windowID]; placements != nil {
-					delete(placements, hostID)
-				}
-				delete(windowMap, cmd.ImageID)
-				kp.forgetImagePixels(windowID, cmd.ImageID)
-				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
+		// d=I frees the data as well. The id mapping stays, as above.
+		if hostID, ok := kp.imageIDMap[windowID][cmd.ImageID]; ok {
+			var buf bytes.Buffer
+			buf.WriteString("\x1b_G")
+			fmt.Fprintf(&buf, "a=d,d=I,i=%d", hostID)
+			if cmd.PlacementID > 0 {
+				fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
 			}
+			buf.WriteString(",q=2\x1b\\")
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+			if placements := kp.placements[windowID]; placements != nil {
+				delete(placements, hostID)
+			}
+			if cmd.PlacementID == 0 {
+				// Nothing is left on the host to free when the window goes.
+				delete(kp.virtualImages[windowID], hostID)
+			}
+			kp.forgetImagePixels(windowID, cmd.ImageID)
+			kp.forgetFrameHashes(windowID)
+			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
 		}
 
 	default:

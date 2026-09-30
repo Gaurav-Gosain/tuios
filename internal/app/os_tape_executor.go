@@ -1557,5 +1557,7 @@ func (m *OS) capturePane(windowTarget, flags string) (string, error) {
 		}
 	}
 
-	return content, nil
+	// A pane on a host that draws kitty placeholders keeps them in its
+	// grid; a capture is text and gets blanks in their place.
+	return vt.StripKittyPlaceholders(content), nil
 }

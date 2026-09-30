@@ -61,6 +61,8 @@ type KittyPassthrough struct {
 	// there misses it, exactly as it misses the remote-video images below.
 	// This is what gets those images deleted when the window goes away.
 	virtualImages map[string]map[uint32]bool
+	// freeLowIDs are released host ids below lowHostIDs, to be used again.
+	freeLowIDs map[uint32]struct{}
 	// occluderScratch is reused by every refresh pass. The windows drawn over
 	// a pane are the same for all of that pane's images, and a refresh runs on
 	// every frame a window is being dragged, so this is built once per window
@@ -825,6 +827,27 @@ func (kp *KittyPassthrough) pendingGraphicsBytes() int {
 	return len(kp.pendingOutput) + kp.heldBytes
 }
 
+// releaseHostID frees a host id whose guest mapping is gone, which happens
+// when its window closes. The host is told to drop the image and its
+// placements (d=I), and the window stops counting it as a placeholder image.
+//
+// An id below lowHostIDs goes back for reuse. A placeholder cell names an id
+// that fits in one with a 256-colour index, which a 256-colour host keeps
+// intact, and counting ids only upward would use that range up.
+func (kp *KittyPassthrough) releaseHostID(windowID string, hostID uint32) {
+	if hostID == 0 {
+		return
+	}
+	kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
+	delete(kp.virtualImages[windowID], hostID)
+	if hostID < lowHostIDs {
+		if kp.freeLowIDs == nil {
+			kp.freeLowIDs = make(map[uint32]struct{})
+		}
+		kp.freeLowIDs[hostID] = struct{}{}
+	}
+}
+
 // HostImageID reports the id the host knows a window's guest image by.
 func (kp *KittyPassthrough) HostImageID(windowID string, guestID uint32) (uint32, bool) {
 	kp.mu.Lock()
@@ -854,7 +877,21 @@ func (kp *KittyPassthrough) HostImageIDForPlaceholder(windowID string, guestID u
 	return kp.getOrAllocateHostID(windowID, guestID), true
 }
 
+// lowHostIDs is the range of host ids a placeholder cell can name with a
+// 256-colour index. See releaseHostID.
+const lowHostIDs = 256
+
 func (kp *KittyPassthrough) allocateHostID() uint32 {
+	// A freed id below lowHostIDs is used again before a new one is counted
+	// out, lowest first.
+	if len(kp.freeLowIDs) > 0 {
+		id := uint32(lowHostIDs)
+		for free := range kp.freeLowIDs {
+			id = min(id, free)
+		}
+		delete(kp.freeLowIDs, id)
+		return id
+	}
 	id := kp.nextHostID
 	kp.nextHostID++
 	if kp.nextHostID == 0 {

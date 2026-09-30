@@ -68,6 +68,9 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		kp.deleteOnePlacement(p)
 	}
 	delete(kp.placements, windowID)
+	for _, hostID := range kp.imageIDMap[windowID] {
+		kp.releaseHostID(windowID, hostID)
+	}
 	delete(kp.imageIDMap, windowID)
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
