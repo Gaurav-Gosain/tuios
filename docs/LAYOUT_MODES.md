@@ -311,6 +311,11 @@ The formats:
 The format starts as the value of `appearance.selection.multi_format` (default
 `plain`). `Tab` changes it until you leave multi copy mode.
 
+`appearance.selection.copy_command` and a `[[keybindings.copy_pipe]]` key
+also work in multi copy mode. The command gets the text that `y` copies, in
+the current format, one time for all panes. See
+[Pipe a yank through a command](KEYBINDINGS.md#pipe-a-yank-through-a-command).
+
 `Y` opens a prompt at the bottom of the focused pane. The default path is
 `~/tuios-copy-<date>-<time>.<ext>`, with `txt`, `md` or `json` for the format.
 Type or paste a path. Press `Enter` to save, or press `Esc` to cancel.

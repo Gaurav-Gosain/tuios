@@ -463,6 +463,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.selection.multi_format"),
 			opt("appearance.selection.copy_entry"),
 			opt("appearance.selection.osc52_write"),
+			opt("appearance.selection.copy_command"),
 			opt("hints.builtins"),
 			opt("hints.alphabet"),
 			opt("hints.open"),

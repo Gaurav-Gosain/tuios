@@ -348,6 +348,73 @@ When a search finds more than 1000 matches, the prompt shows `1000+`.
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 
+### Pipe a yank through a command
+
+A yank can go through a command before it goes to the clipboard. tmux calls
+this `copy-command` and `copy-pipe`. tuios has two parts:
+
+- `appearance.selection.copy_command` runs one command on every yank in copy
+  mode.
+- A `[[keybindings.copy_pipe]]` entry binds a key in copy mode to its own
+  command.
+
+```toml
+[appearance.selection]
+copy_command = "tmux-copy-it"
+
+[[keybindings.copy_pipe]]
+key = "p"
+command = "tr '\n' ' '"
+cancel = true
+description = "flatten"
+```
+
+The command runs with `sh -c`. It gets the selection on stdin. The clipboard
+gets what the command writes to stdout. When the selection does not end with
+a new line, tuios removes one new line from the end of the output.
+
+The clipboard gets the selection itself in these cases:
+
+- The command writes nothing. Use this for a command that sends the text to a
+  socket or a file.
+- The command stops with an exit code that is not 0. The dock shows the exit
+  code and the first line of stderr.
+- The command runs for more than 10 seconds. tuios stops the command and the
+  processes that it started.
+
+The fields of a `[[keybindings.copy_pipe]]` entry:
+
+- `key` is the key in copy mode. Write it as in the other sections.
+- `command` gets the selection on stdin.
+- `cancel` says what happens after the yank. With `false`, the default, copy
+  mode stays on and the cursor stays where it is. tuios clears the selection.
+  This is tmux `copy-pipe`. With `true`, copy mode stops, as with `q`. This is tmux
+  `copy-pipe-and-cancel`.
+- `description` names the entry in the dock messages. It is optional.
+
+The entry takes its key from copy mode. An entry on `y` replaces the plain
+yank. Copy mode does not use `p` or `P`. When no text is selected, the key
+shows a message and runs nothing. While you type a search, the key goes into
+the search.
+
+Without `copy_command`, `y` copies the selection as it is. With
+`copy_command`, `y` and `c` pipe the selection through that command. A
+`[[keybindings.copy_pipe]]` key always uses its own command. A mouse
+selection that copies on release does not use `copy_command`. A drag does not
+run a command.
+
+In multi copy mode, the command gets the text that `y` copies: the selection
+of each pane, joined in the current format. It runs one time for all panes.
+Use the `json` format to process each pane separately, for example with `jq`.
+With `cancel = true`, multi copy mode stops in every pane.
+
+The command runs on the machine that runs the tuios client. That is the same
+machine as for a `shell` command key. For the SSH and web clients, it is the
+server. The command starts in the folder of the focused pane and gets the
+variables of a command key: `TUIOS_SESSION`, `TUIOS_SOCKET`,
+`TUIOS_ACTIVE_PANE_ID` and `TUIOS_ACTIVE_PANE_CWD`. You can use tuios while
+the command runs.
+
 ## Screenshots over a panel
 
 `Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the

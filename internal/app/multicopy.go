@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -349,7 +350,20 @@ func (m *OS) MultiCopyPaneFor(w *terminal.Window, text string) MultiCopyPane {
 // format, sweeps the copy light over each selection, and says what went. The
 // selections must still be in place when it is called; the caller clears them
 // afterwards. skipped is how many panes of the mode had no selection.
+//
+// The text goes through appearance.selection.copy_command when it is set.
 func (m *OS) YankMultiCopy(panes []MultiCopyPane, skipped int) tea.Cmd {
+	return m.yankMultiCopy(panes, skipped, nil)
+}
+
+// PipeMultiCopy is YankMultiCopy through the command of a copy-pipe entry.
+// The command gets the selections once, joined in the current format, the
+// text y would copy.
+func (m *OS) PipeMultiCopy(panes []MultiCopyPane, skipped int, pipe config.CopyPipeBinding) tea.Cmd {
+	return m.yankMultiCopy(panes, skipped, &pipe)
+}
+
+func (m *OS) yankMultiCopy(panes []MultiCopyPane, skipped int, pipe *config.CopyPipeBinding) tea.Cmd {
 	mc := m.MultiCopy
 	if mc == nil {
 		return nil
@@ -378,7 +392,10 @@ func (m *OS) YankMultiCopy(panes []MultiCopyPane, skipped int) tea.Cmd {
 	} else {
 		m.ShowNotification(msg, "success", m.Settings.NotificationDuration)
 	}
-	return m.clipboardWriteCmd(text)
+	if pipe != nil {
+		return m.PipeYank(text, pipe.Command, pipe.Label())
+	}
+	return m.Yank(text)
 }
 
 func paneCount(n int) string {

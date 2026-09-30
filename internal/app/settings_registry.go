@@ -161,6 +161,7 @@ var settingPlaceholders = map[string]string{
 	"appearance.word_characters":           "@-./_~?&=%+#",
 	"hints.builtins":                       "url,path,sha,ip",
 	"notifications.agent.command":          "notify-send {state} {title}",
+	"appearance.selection.copy_command":    "tr '\\n' ' '",
 	"notifications.agent.quiet_hours":      "22:00-08:00",
 }
 
@@ -171,6 +172,7 @@ var settingUnset = map[string]string{
 	"appearance.window_title_format":       "(raw title)",
 	"appearance.dock_workspace_tab_format": "(name only)",
 	"appearance.preferred_shell":           "(auto-detect)",
+	"appearance.selection.copy_command":    "(copy the selection as it is)",
 	"appearance.clock_format":              config.DefaultClockFormat,
 	"dock.clock.format":                    "(appearance.clock_format)",
 }

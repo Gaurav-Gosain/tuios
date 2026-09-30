@@ -60,7 +60,8 @@ func (fx *copyModeEffects) ExitCopyMode() { fx.exitCopyMode = true }
 // EnterTerminalMode marks the OS for a switch into terminal mode.
 func (fx *copyModeEffects) EnterTerminalMode() { fx.enterTerminal = true }
 
-// SetClipboard queues an OSC 52 clipboard write for the yanked text.
+// SetClipboard queues the yank of text: through the copy command when one is
+// set, else an OSC 52 clipboard write.
 func (fx *copyModeEffects) SetClipboard(text string) {
 	// Image cells are markers in the grid; a copy gets blanks for them.
 	fx.clipboard = vt.StripSixelMarkers(text)
@@ -90,7 +91,11 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 		cmd = o.EnterTerminalMode()
 	}
 	if fx.setClipboard {
-		cmd = tea.SetClipboard(fx.clipboard)
+		if o != nil && o.Settings.CopyCommand != "" {
+			cmd = o.Yank(fx.clipboard)
+		} else {
+			cmd = tea.SetClipboard(fx.clipboard)
+		}
 	}
 	return o, cmd
 }

@@ -52,7 +52,8 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	// pane: "1y" is a yank of every selection, not a count handed to one pane.
 	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch {
 		inVisual := leadState == terminal.CopyModeVisualChar || leadState == terminal.CopyModeVisualLine
-		wholeSet := k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
+		pipe, isPipe := copyPipeKey(msg, o, lcm)
+		wholeSet := isPipe || k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
 		if wholeSet {
 			for _, w := range windows {
 				if w.CopyMode != nil {
@@ -61,6 +62,23 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 			}
 		}
 		switch {
+		case isPipe:
+			// One pipe for the whole set: the command gets the text y would
+			// copy, in the current format.
+			panes, skipped, selected := collectMultiCopy(o, windows)
+			if len(panes) == 0 {
+				o.ShowNotification(fmt.Sprintf("No pane has a selection. Press v or V to select, then press %s.", pipe.Key), "warning", o.Settings.NotificationDuration)
+				return o, nil
+			}
+			cmd := o.PipeMultiCopy(panes, skipped, pipe)
+			for _, w := range selected {
+				w.CopyMode.State = terminal.CopyModeNormal
+				w.InvalidateCache()
+			}
+			if pipe.Cancel {
+				o.ExitMultiCopyMode()
+			}
+			return o, cmd
 		case k == "tab":
 			o.CycleMultiCopyFormat()
 			return o, nil

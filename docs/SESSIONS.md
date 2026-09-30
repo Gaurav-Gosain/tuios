@@ -794,6 +794,16 @@ cursor. See [Copy mode](KEYBINDINGS.md#copy-mode) for the search keys.
 copy_entry = "cursor"
 ```
 
+`copy_command` is a command that gets each yank in copy mode on stdin. The
+clipboard gets what the command writes to stdout. When the value is empty,
+the default, `y` copies the selection as it is. See
+[Pipe a yank through a command](KEYBINDINGS.md#pipe-a-yank-through-a-command).
+
+```toml
+[appearance.selection]
+copy_command = "tr -s ' '"
+```
+
 `osc52_write` controls what happens when a program in a pane sets the
 clipboard with OSC 52. An editor uses OSC 52 to yank over ssh. Any output can
 also carry OSC 52, for example a file that a program prints.
