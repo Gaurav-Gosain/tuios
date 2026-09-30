@@ -97,3 +97,30 @@ func TestXpanesRefusesTooManyPanes(t *testing.T) {
 		t.Fatalf("%d panes with -n 2", n)
 	}
 }
+
+// --ssh ends ssh's options before the item, so an item that starts with - is
+// a host name and not an option.
+func TestXpanesSSHEndsTheOptions(t *testing.T) {
+	line := xpanesCommandLine(xpanesOptions{ssh: true, placeholder: "{}"})
+	panes := xpanesPanes([]string{"-oProxyCommand=evil"}, 1, line, "{}", "sh")
+	if got := panes[0].Argv[5]; got != "ssh -- -oProxyCommand=evil" {
+		t.Fatalf("argv = %q", got)
+	}
+}
+
+// On another machine, a pane with no command has no argv, so the daemon there
+// starts its own shell. On this machine it is $SHELL.
+func TestXpanesShellOnAnotherMachine(t *testing.T) {
+	if got := xpanesShell("build", "/usr/bin/fish"); got != "" {
+		t.Fatalf("remote shell = %q, want the daemon's", got)
+	}
+	if got := xpanesShell("", "/usr/bin/fish"); got != "/usr/bin/fish" {
+		t.Fatalf("local shell = %q", got)
+	}
+	if got := xpanesShell("", ""); got != "/bin/sh" {
+		t.Fatalf("local shell without $SHELL = %q", got)
+	}
+	if panes := xpanesPanes([]string{"db1"}, 1, "", "{}", ""); len(panes[0].Argv) != 0 {
+		t.Fatalf("a remote shell pane has argv %q", panes[0].Argv)
+	}
+}

@@ -1105,7 +1105,7 @@ line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 **Flags:**
 - `-c, --command <cmd>`: Command to run in each pane with `sh -c`. tuios replaces `{}` with the item, in shell quotes
 - `-I, --replace <text>`: Text that tuios replaces with the item (default: `{}`)
-- `--ssh`: Run `ssh` with the item in each pane. This is the same as `-c 'ssh {}'`
+- `--ssh`: Run `ssh` with the item in each pane. This is the same as `-c 'ssh -- {}'`. The `--` makes sure that ssh does not read an item that starts with `-` as an option
 - `-l, --layout <name>`: `tiled`, `even-horizontal` or `even-vertical`, or `t`, `eh` and `ev` (default: `tiled`)
 - `-n, --items-per-pane <n>`: Number of items for each pane. tuios joins them with spaces (default: 1)
 - `--no-sync`: Do not turn multifocus on
@@ -1118,7 +1118,9 @@ line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 
 - With `-c`, the pane closes when the command stops. To keep the pane, end the
   command with `; exec $SHELL`.
-- Without `-c`, each pane is a shell.
+- Without `-c`, each pane is a shell. In a session on another machine, the
+  daemon there chooses the shell, and the pane does not get
+  `TUIOS_XPANES_ITEM` or `TUIOS_XPANES_INDEX`.
 - Each pane gets the item in `TUIOS_XPANES_ITEM` and its number, from 1, in
   `TUIOS_XPANES_INDEX`.
 - The item is the name of the pane.
@@ -1248,8 +1250,8 @@ exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 | `Split` | `horizontal` or `vertical` | Split the focused window |
 | `RotateSplit` | | Rotate the split direction |
 | `EqualizeSplits` | | Equalize all split ratios |
-| `ArrangePanes` | `tiled`, `even-horizontal` or `even-vertical` | Lay out the panes of the workspace again, in window order. Needs the bsp layout |
-| `SetMultifocus` | `[window...]` | Put exactly these windows in multifocus. With no window, clear multifocus |
+| `ArrangePanes` | `<layout> [workspace [window...]]` | Lay out the panes of the workspace again as `tiled`, `even-horizontal` or `even-vertical`. The named windows come first, then the other panes in window order. With a workspace, the command fails when that workspace is not showing. Needs the bsp layout |
+| `SetMultifocus` | `[window...]` | Put exactly these windows in multifocus. Each window must be on the showing workspace and not minimized. From a pane, each window must be one that the pane can type into. With no window, clear multifocus |
 | `Screenshot` | | Save the focused window as an image |
 | `SwitchWorkspace` | `<1-9>` | Switch to workspace |
 | `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |

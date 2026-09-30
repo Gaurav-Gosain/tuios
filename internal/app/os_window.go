@@ -134,6 +134,27 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 	}
 }
 
+// MultifocusPeers is the panes a key or a paste in the focused pane also
+// goes to: the members of the multifocus set, other than the focused pane,
+// that are on the current workspace and not minimized, in window-list order.
+// A member on another workspace, or minimized, is off screen, and the person
+// cannot see what the key does there. It stays in the set and gets keys again
+// when it is on screen.
+func (m *OS) MultifocusPeers() []*terminal.Window {
+	if len(m.MultifocusSet) == 0 {
+		return nil
+	}
+	var out []*terminal.Window
+	for idx, w := range m.Windows {
+		if idx == m.FocusedWindow || w == nil || !m.MultifocusSet[w.ID] ||
+			w.Workspace != m.CurrentWorkspace || w.Minimized {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
 // showMultifocusCount shows how many panes of the current workspace are in
 // the multifocus set.
 func (m *OS) showMultifocusCount() {

@@ -541,6 +541,9 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	if why := d.refuseMultifocusInto(cs, sess, p.Command, p.Args); why != "" {
+		return nil, newVerbError(ErrVerbForbidden, "run-command "+p.Command+" is refused for this pane: "+why)
+	}
 
 	// The daemon-owned commands run here whether or not a client is attached, the
 	// same rule the CLI path follows, so the two cannot disagree about what a
