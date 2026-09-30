@@ -82,3 +82,23 @@ func TestDetectDoesNotCallTheMainCheckoutAWorktree(t *testing.T) {
 		t.Errorf("Detect on a plain directory = %+v, want no worktree", info)
 	}
 }
+
+func TestParseWorktreeList(t *testing.T) {
+	out := "worktree /src/app\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/main\n\n" +
+		"worktree /wt/app/feat-x\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/feat/x\n\n" +
+		"worktree /wt/app/old\nHEAD 3333333333333333333333333333333333333333\ndetached\nprunable gitdir file points to non-existent location\n\n"
+	got := parseWorktreeList(out)
+	want := []Entry{
+		{Path: "/src/app", Branch: "main"},
+		{Path: "/wt/app/feat-x", Branch: "feat/x", Linked: true},
+		{Path: "/wt/app/old", Detached: true, Prunable: true, Linked: true},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d entries, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d: got %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
