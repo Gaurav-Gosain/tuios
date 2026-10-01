@@ -134,6 +134,35 @@ since they draw the same frame. A screenshot of one pane is drawn on the pane's
 painted colour, and a screen or region capture carries every painted surface
 as it is drawn.
 
+## Master-stack layout
+
+These options shape the master-stack layout. Each workspace starts with them.
+The layout keys change the workspace on screen, and the workspace keeps the
+change. See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
+
+| Option | What it does | Values | Default |
+|---|---|---|---|
+| `appearance.master_position` | The side the master panes take. With `center`, the stack panes go to the right and the left in turn | `left`, `right`, `top`, `bottom`, `center` | `left` |
+| `appearance.master_count` | How many panes are master panes | 1-9 | 1 |
+| `appearance.master_ratio` | The share of the screen the master panes take, as a percent | 10-90 | 50 |
+| `appearance.master_grid` | With one master on the left, show four or more panes as a grid | `true`, `false` | `true` |
+
+This example puts an editor in the middle with terminals on both sides. It
+keeps that layout at every pane count:
+
+```toml
+[startup]
+layout = "master-stack"
+
+[appearance]
+master_position = "center"
+master_ratio = 50
+```
+
+With `center`, the grid is off, so `master_grid` has no effect. The first pane
+of the workspace is the master. To make another pane the master, focus it and
+press `Ctrl+B L Enter`.
+
 ## The dock's components
 
 The `[dock]` table's region lists and custom components are not scalar

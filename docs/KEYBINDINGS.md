@@ -350,6 +350,34 @@ command = "printf %s \"$TUIOS_ACTIVE_PANE_CWD\" | (pbcopy || wl-copy || xclip -s
 description = "Copy pane folder"
 ```
 
+## Master-stack layout
+
+The layout prefix (`Ctrl+B L`) has keys for the master-stack layout. They act
+on the workspace on screen.
+
+| Keys | Action | What it does |
+|---|---|---|
+| `Ctrl+B L o` | `cycle_master_position` | Move the master panes to the next side: left, right, top, bottom, center |
+| `Ctrl+B L Enter` | `swap_with_master` | Swap the focused pane with the master pane |
+| `Ctrl+B L m` | `focus_master` | Focus the master pane |
+| `Ctrl+B L i` | `add_master` | Make one more pane a master pane |
+| `Ctrl+B L d` | `remove_master` | Make one pane fewer a master pane |
+
+The resize keys, such as `<` and `>` in window mode, move the divider between
+the master panes and the stack on every side. The workspace keeps the new size.
+
+`set_master_position_left`, `set_master_position_right`,
+`set_master_position_top`, `set_master_position_bottom` and
+`set_master_position_center` have no default key. To bind one, add it to a
+section:
+
+```toml
+[keybindings.layout_prefix]
+set_master_position_center = ["c"]
+```
+
+See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
+
 ## Close every pane on a workspace
 
 The `close_workspace` action closes every pane on the current workspace. It is

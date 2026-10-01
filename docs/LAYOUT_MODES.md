@@ -10,6 +10,7 @@ view and multifocus. This document covers all of them.
 ## Table of Contents
 
 - [The Three Layout Modes](#the-three-layout-modes)
+- [Master-Stack Layout](#master-stack-layout)
 - [Scrolling Layout](#scrolling-layout)
 - [Aggregate View](#aggregate-view)
 - [Multifocus](#multifocus)
@@ -23,7 +24,7 @@ is on is a separate choice, made from the command palette:
 | Palette command | Mode |
 |---|---|
 | Layout: BSP Tiling | Binary space partitioning, the default. See [BSP_TILING.md](BSP_TILING.md) |
-| Layout: Master-Stack | One master pane on the left, the rest stacked on the right |
+| Layout: Master-Stack | Master panes on one side, the other panes in a stack beside them. See [Master-Stack Layout](#master-stack-layout) |
 | Layout: Scrolling (niri-style) | An infinite horizontal strip of columns, described below |
 | Layout: Disable Tiling | Turns tiling off; windows float freely |
 
@@ -35,13 +36,16 @@ the nine workspaces keeps its own.
 
 ### Settings
 
-Four settings shape the tiling, and all four are in the settings page
+These settings shape the tiling. All of them are in the settings page
 (`Ctrl+B ,`) as well as in `config.toml`:
 
 | Setting | What it does |
 |---|---|
 | `startup.layout` | The mode a **new** session starts in: `bsp`, `master-stack` or `scrolling`. A session that already exists keeps its own. |
 | `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (10-90). The `<` and `>` keys, the percentage resizes and a mouse drag on the divider move it for the workspace you are on, and every client attached to the session follows. A workspace nobody has moved it on starts at this setting. |
+| `appearance.master_position` | The side the master panes take in master-stack: `left`, `right`, `top`, `bottom` or `center`. The default is `left`. See [Master-Stack Layout](#master-stack-layout). |
+| `appearance.master_count` | How many panes are master panes in master-stack, 1-9. The default is 1. |
+| `appearance.master_grid` | With one master on the left, show four or more panes as a grid. The default is `true`. Set `false` to keep the master and the stack at every pane count. |
 | `appearance.scroll_column_width` | A column's width in the scrolling layout, as a percent of the screen (20-90). |
 | `appearance.gap` | Cells of empty ground between neighbouring panes, in every mode. |
 
@@ -66,19 +70,92 @@ How a resize is kept depends on the layout:
 
 - **BSP** writes the resize into the split ratios of the tree.
 - **Master-stack** writes it into the workspace's ratios: the master ratio
-  (the master column's width, or the top pane's height when two panes are
-  stacked on a tall screen) and, with three panes, the stack ratio (how the
-  height is split between the two stacked panes). The keyboard resizes, the
-  percentage resizes and a mouse drag on a divider all do this, so the resize
-  survives a retile. Both ratios are session state, so every client attached
-  to the session lays the workspace out the same way. With four or more panes
-  master-stack is an equal-share grid with no ratio to keep, so a resize there
-  lasts only until the next retile.
+  (the width of the master column, or the height of the master row when the
+  master is at the top or the bottom) and, when the stack holds two panes, the
+  stack ratio (how the stack splits its space between them). This works on
+  every side the master can take. The keyboard resizes, the percentage resizes
+  and a mouse drag on a divider all do this, so the resize survives a retile.
+  With the master in the center, a resize moves one divider, and the next
+  retile puts the master back in the middle at its new width. Both ratios are
+  session state, so every client attached to the session lays the workspace
+  out the same way. The default grid (four or more panes, one master on the
+  left) has no ratio to keep, so a resize there lasts only until the next
+  retile.
 - **Scrolling layout: width only.** The width actions reach the focused
   column through the scrolling column resizer, which clamps to the column
   width range; the height actions have no scrolling branch, so
   `Shift+5`..`Shift+9` do nothing there (column heights are recomputed as
   equal spans on the next layout pass).
+
+## Master-Stack Layout
+
+The master-stack layout puts the first panes of a workspace in a master area
+and the other panes in a stack beside it. The master area is for the pane you
+work in most, such as an editor. The layout is close to dwm's tile layout and
+to Hyprland's master layout.
+
+### Where the masters go
+
+`appearance.master_position` sets the side:
+
+| Value | Layout |
+|---|---|
+| `left` | The masters are a column on the left. The stack is a column on the right. This is the default. |
+| `right` | The masters are on the right. The stack is on the left. |
+| `top` | The masters are a row at the top. The stack is a row under it. |
+| `bottom` | The masters are a row at the bottom. The stack is a row above it. |
+| `center` | The masters are a column in the middle. The stack panes go to the right and the left in turn. |
+
+With `center`, the first stack pane goes to the right, the next to the left,
+and so on. So three panes are three columns with the master in the middle, and
+five panes put two panes on each side. When there is only one stack pane, the
+master goes to the left and the stack pane takes the right. The layout does
+not keep an empty column on one side.
+
+Two panes on a screen that is taller than it is wide stack one above the
+other. With `left` the master is at the top. With `right` it is at the bottom.
+
+### More than one master
+
+`appearance.master_count` sets how many panes are masters. The masters share
+the master area in equal parts. When every pane is a master, the panes share
+the screen in equal parts.
+
+### The grid
+
+With one master on the left, four or more panes show as an equal grid. This is
+the layout from before the other sides existed, and it stays the default so
+your layout does not change on an upgrade. Set `appearance.master_grid = false`
+to keep the master and the stack at every pane count. Any other side, or more
+than one master, always keeps the master.
+
+### Change the layout while you work
+
+Each workspace has its own master side and master count. The settings above
+are the values a workspace starts with. The keys and commands below change the
+workspace on screen, and the workspace keeps the change. In a daemon session
+the change goes to the daemon, so every attached client shows the same layout
+and the session keeps it after a detach.
+
+| Keys | Action | What it does |
+|---|---|---|
+| `Ctrl+B L o` | `cycle_master_position` | Move the masters to the next side: left, right, top, bottom, center |
+| `Ctrl+B L Enter` | `swap_with_master` | Swap the focused pane with the master. On the master, swap with the first stack pane |
+| `Ctrl+B L m` | `focus_master` | Focus the master |
+| `Ctrl+B L i` | `add_master` | Make one more pane a master |
+| `Ctrl+B L d` | `remove_master` | Make one pane fewer a master |
+
+`set_master_position_left`, `_right`, `_top`, `_bottom` and `_center` set one
+side directly. They have no default key. The command palette has an entry for
+each.
+
+From a shell:
+
+```sh
+tuios set-layout --master-position center
+tuios set-layout --masters 2
+tuios run-command SwapWithMaster
+```
 
 ## Scrolling Layout
 
