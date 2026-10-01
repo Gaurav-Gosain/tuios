@@ -91,8 +91,11 @@ tuios-courier watch          # a line per arrival, for a spare pane
 ```
 
 - `peers add NAME ID --release auto` lets a peer's mail through without you.
-- A reply in a thread you sent into, from the peer you sent it to, is released
-  at once. Set `reply_release = "hold"` in `courier.toml` to hold those too.
+- A reply in a thread you started, from the peer you started it with, is
+  released at once. Set `reply_release = "hold"` in `courier.toml` to hold
+  those too. Answering a thread someone else started does not make their later
+  mail in it skip the hold.
+- Mail no agent has read is never cleaned up, however old: drop it yourself.
 - Mail from someone not in your peers is kept unopened and delivered when you
   add them.
 
@@ -139,6 +142,13 @@ What it does not protect:
   unreviewed.
 - The keys live in a file only you can read. Anyone who can read your files can
   be you.
+- A request signature names no relay. Two relays that serve the same roster
+  would each accept, within two minutes, a request captured from the other.
+  Run one relay per roster.
+- The nonce cache is in memory, so a request captured in the two minutes
+  before a relay restarts can be replayed once after it. A replayed fetch or
+  ack only fetches or deletes the requester's own mail, which the client
+  already has; a replayed send is a duplicate the recipient's store drops.
 
 ## Protocol
 

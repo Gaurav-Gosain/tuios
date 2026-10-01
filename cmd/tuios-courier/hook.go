@@ -58,7 +58,9 @@ settings to add.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if event != "prompt" && event != "stop" {
-				return fmt.Errorf("--event is prompt or stop, not %q", event)
+				// A hook must not fail Claude, even when it is wired wrong.
+				fmt.Fprintf(cmd.ErrOrStderr(), "tuios-courier: --event is prompt or stop, not %q\n", event)
+				return nil
 			}
 			in := readHookInput(cmd.InOrStdin())
 			if event == "stop" && in.StopHookActive {

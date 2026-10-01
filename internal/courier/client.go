@@ -219,7 +219,7 @@ type fetchedBox struct {
 func (c *Client) Sync(ctx context.Context, wait time.Duration) (SyncResult, error) {
 	res := SyncResult{Rejected: map[string]int{}}
 	if !c.gcRan {
-		c.store.GC()
+		c.store.GCIfDue()
 		c.gcRan = true
 	}
 	for _, p := range c.store.Pending() {
@@ -228,7 +228,7 @@ func (c *Client) Sync(ctx context.Context, wait time.Duration) (SyncResult, erro
 			c.store.RemovePending(p.RelayID)
 			continue
 		}
-		if c.accept(fetchedBox{ID: p.RelayID, From: p.From, ReceivedAt: p.ReceivedAt, Box: p.Box}, from, &res, true) {
+		if c.accept(fetchedBox{ID: p.RelayID, From: p.From, ReceivedAt: p.ReceivedAt, Box: p.Box}, from, &res, true) == boxDone {
 			c.store.RemovePending(p.RelayID)
 		}
 	}
@@ -254,8 +254,9 @@ func (c *Client) Sync(ctx context.Context, wait time.Duration) (SyncResult, erro
 			acks = append(acks, fb.ID)
 			continue
 		}
-		c.accept(fb, from, &res, false)
-		acks = append(acks, fb.ID)
+		if c.accept(fb, from, &res, false) != boxRetry {
+			acks = append(acks, fb.ID)
+		}
 	}
 	res.Pending = len(c.store.Pending())
 	for len(acks) > 0 {
@@ -273,38 +274,57 @@ func (c *Client) Sync(ctx context.Context, wait time.Duration) (SyncResult, erro
 	return res, nil
 }
 
-// accept opens one box and stores it. It reports whether the box is finished
-// with: stored, refused for good, or a duplicate. A box from a sender not in
-// peers is kept (when it is not already a kept one) and is not finished.
-func (c *Client) accept(fb fetchedBox, relayFrom Identity, res *SyncResult, fromPending bool) bool {
+// What accept did with a box.
+type boxOutcome int
+
+const (
+	// boxDone: stored, refused for good, or a duplicate. Ack it.
+	boxDone boxOutcome = iota
+	// boxKept: from a sender not in peers, kept locally until they are
+	// added. Ack it: the local copy is the one that counts now.
+	boxKept
+	// boxRetry: the store could not take it. Leave it on the relay.
+	boxRetry
+)
+
+// accept opens one box and stores it. A box retried from the pending store
+// that is still from an unknown sender comes back boxKept and stays there.
+func (c *Client) accept(fb fetchedBox, relayFrom Identity, res *SyncResult, fromPending bool) boxOutcome {
 	op, err := Open(c.keys, fb.Box, c.cfg.Lookup)
 	if reason := RejectReason(err); reason == ReasonUnknownSender {
-		if !fromPending {
-			if err := c.store.SavePending(fb.ID, relayFrom, fb.Box, c.now()); err != nil {
-				res.Rejected[ReasonUnknownSender]++
-			}
+		if fromPending {
+			return boxKept
 		}
-		return false
+		if err := c.store.SavePending(fb.ID, relayFrom, fb.Box, c.now()); err != nil {
+			// That sender has too much waiting already: this one is
+			// refused, and nobody else's room is taken.
+			res.Rejected[ReasonUnknownSender]++
+			return boxDone
+		}
+		return boxKept
 	} else if err != nil {
 		if reason == "" {
 			reason = ReasonUndecryptable
 		}
 		res.Rejected[reason]++
-		return true
+		return boxDone
 	}
 	if !op.From.Equal(relayFrom) {
 		res.Rejected[ReasonFromMismatch]++
-		return true
+		return boxDone
 	}
 	now := c.now()
 	if age := now.Sub(op.Msg.SentAt); age > MaxMessageAge || age < -maxClockAhead {
 		res.Rejected[ReasonStale]++
-		return true
+		return boxDone
 	}
 	rec := Record{Msg: op.Msg, From: op.From.String(), Peer: op.Peer, RelayID: fb.ID, ReceivedAt: now.UTC()}
 	added, err := c.store.Put(rec)
-	if err != nil || !added {
-		return err == nil
+	if err != nil {
+		return boxRetry
+	}
+	if !added {
+		return boxDone
 	}
 	res.New++
 	if c.releases(op) {
@@ -312,10 +332,11 @@ func (c *Client) accept(fb fetchedBox, relayFrom Identity, res *SyncResult, from
 	} else {
 		res.Held++
 	}
-	return true
+	return boxDone
 }
 
-// releases decides whether new mail goes straight to the agents.
+// releases decides whether new mail goes straight to the agents: the peer is
+// set to auto, or it answers in a thread this person started with that peer.
 func (c *Client) releases(op Opened) bool {
 	if c.cfg.Peers[op.Peer].Release == ReleaseAuto {
 		return true

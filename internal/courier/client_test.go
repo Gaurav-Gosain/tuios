@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -283,5 +284,26 @@ func TestClientRelayDown(t *testing.T) {
 func TestClientUsesProxyFromEnvironment(t *testing.T) {
 	if !courier.UsesEnvironmentProxy(courier.DefaultHTTPClient()) {
 		t.Fatal("the default client does not honour HTTPS_PROXY")
+	}
+}
+
+func TestClientDoesNotAckMailItCouldNotStore(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory the test cannot write")
+	}
+	w := newWorld(t, "ghaith", "gg")
+	w.introduce("ghaith", "gg", courier.ReleaseAuto)
+	gg := w.people["gg"]
+	inbox := filepath.Join(courier.StoreDirForTest(gg.store), "inbox")
+	w.people["ghaith"].client.Send(ctx(t), courier.Outgoing{To: "gg", Body: "must not be lost"})
+	os.Chmod(inbox, 0o500)
+	res, _ := gg.client.Sync(ctx(t), 0)
+	os.Chmod(inbox, 0o700)
+	if res.New != 0 {
+		t.Fatalf("stored into a read-only inbox: %+v", res)
+	}
+	res, err := gg.client.Sync(ctx(t), 0)
+	if err != nil || res.New != 1 {
+		t.Fatalf("the mail the store could not take was acked and lost: %+v %v", res, err)
 	}
 }

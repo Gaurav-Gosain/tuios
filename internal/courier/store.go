@@ -38,8 +38,12 @@ import (
 // handed out again: a repeat, never a loss.
 const claimLease = 2 * time.Minute
 
-// maxPending bounds the mail kept from senders not yet in peers.
-const maxPending = 64
+// The mail kept from senders not yet in peers is bounded per sender, so one
+// sender cannot use up the room a newcomer's first message needs, and overall.
+const (
+	maxPendingPerSender = 16
+	maxPending          = 256
+)
 
 // Record is a received message as the store keeps it.
 type Record struct {
@@ -165,6 +169,10 @@ func createOnce(path string, data []byte) (bool, error) {
 	_, werr = f.Write(data)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
+	}
+	if werr != nil {
+		// A torn file would read as a duplicate of the next try.
+		_ = os.Remove(path)
 	}
 	return werr == nil, werr
 }
@@ -307,8 +315,10 @@ func (s *Store) claimFresh(key string) bool {
 	}
 	n, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
 	if err != nil {
-		// A claim being written right now reads empty: it is fresh.
-		return true
+		// Empty or torn: being written right now, or left by a reader that
+		// died before it wrote the time. The file's own time bounds both.
+		info, err := os.Stat(s.inbox(key + ".claim"))
+		return err == nil && time.Since(info.ModTime()) < claimLease
 	}
 	return s.now().Sub(time.Unix(0, n)) < claimLease
 }
@@ -322,7 +332,11 @@ func (s *Store) claim(key string) bool {
 		if err == nil {
 			_, werr := f.Write(stamp)
 			cerr := f.Close()
-			return werr == nil && cerr == nil
+			if werr != nil || cerr != nil {
+				_ = os.Remove(path)
+				return false
+			}
+			return true
 		}
 		if !errors.Is(err, fs.ErrExist) || s.claimFresh(key) {
 			return false
@@ -398,10 +412,15 @@ func (s *Store) RecordSent(r SentRecord) error {
 	if _, err := createOnce(s.sent(r.Msg.ID+".json"), data); err != nil {
 		return err
 	}
+	if r.Msg.Thread != r.Msg.ID {
+		// A reply into someone else's thread does not make it this
+		// person's: their later mail in it is held like any other.
+		return nil
+	}
 	return mark(s.sent(r.Msg.Thread+"-"+to.MailboxID()+".to"), []byte(strconv.FormatInt(s.now().UnixNano(), 10)))
 }
 
-// SentInto reports whether this person sent into thread, to from.
+// SentInto reports whether this person started thread, writing to from.
 func (s *Store) SentInto(thread string, from Identity) bool {
 	return ValidID(thread) && exists(s.sent(thread+"-"+from.MailboxID()+".to"))
 }
@@ -419,8 +438,18 @@ func (s *Store) SavePending(relayID string, from Identity, box []byte, now time.
 	if !ValidID(relayID) {
 		return errors.New("invalid relay id")
 	}
-	if len(s.Pending()) >= maxPending {
-		return fmt.Errorf("already holding %d messages from senders not in peers", maxPending)
+	all := s.Pending()
+	mine := 0
+	for _, p := range all {
+		if p.From == from.String() {
+			mine++
+		}
+	}
+	if mine >= maxPendingPerSender {
+		return fmt.Errorf("already holding %d messages from %s, who is not in peers", mine, from.Fingerprint())
+	}
+	if len(all) >= maxPending {
+		return fmt.Errorf("already holding %d messages from senders not in peers", len(all))
 	}
 	data, err := json.Marshal(PendingBox{From: from.String(), ReceivedAt: now, Box: box})
 	if err != nil {
@@ -467,7 +496,9 @@ func (s *Store) RemovePending(relayID string) {
 func (s *Store) GC() {
 	now := s.now()
 	for _, e := range s.all() {
-		if now.Sub(e.Msg.SentAt) <= MaxMessageAge {
+		// Mail no agent has read and the person has not dropped stays,
+		// however old: GC must not be how a message goes unseen.
+		if now.Sub(e.Msg.SentAt) <= MaxMessageAge || !(e.Read || e.Dropped) {
 			continue
 		}
 		for _, suffix := range []string{".released", ".read", ".claim", ".dropped", ".json"} {
@@ -533,4 +564,23 @@ func (s *Store) ThreadByPrefix(prefix string) (string, bool) {
 		return t, true
 	}
 	return "", false
+}
+
+// gcEvery is how often GCIfDue lets GC run. A hook runs on every prompt in
+// a fresh process, and should not walk the whole store each time.
+const gcEvery = time.Hour
+
+// GCIfDue runs GC when the last run was gcEvery ago or more, and reports
+// whether it ran. The time of the last run is kept in the store.
+func (s *Store) GCIfDue() bool {
+	stamp := filepath.Join(s.dir, "gc.stamp")
+	now := s.now()
+	if data, err := os.ReadFile(stamp); err == nil {
+		if n, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil && now.Sub(time.Unix(0, n)) < gcEvery {
+			return false
+		}
+	}
+	s.GC()
+	_ = writeFileAtomic(stamp, []byte(strconv.FormatInt(now.UnixNano(), 10)), 0o600)
+	return true
 }

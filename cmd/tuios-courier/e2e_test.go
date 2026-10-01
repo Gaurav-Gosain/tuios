@@ -333,3 +333,10 @@ func TestAcceptanceSendFromStdinAndErrors(t *testing.T) {
 		t.Fatal("a bad agent label was sent")
 	}
 }
+
+func TestAcceptanceHookBadEventDoesNotFail(t *testing.T) {
+	h := &home{t: t, dir: t.TempDir()}
+	if r := h.run(`{}`, "hook", "claude-code", "--event", "sometimes"); r.code != 0 || strings.TrimSpace(r.stdout) != "" {
+		t.Fatalf("hook with a bad event: exit %d\n%s", r.code, r.stdout)
+	}
+}

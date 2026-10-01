@@ -44,6 +44,10 @@ func CleanText(s string) string {
 		switch {
 		case r == '\n' || r == '\t':
 			b.WriteRune(r)
+		case r == 0x2028 || r == 0x2029:
+			// Line and paragraph separators break a line for a reader
+			// without a newline, which would start a line with no gutter.
+			b.WriteByte('\n')
 		case r == utf8.RuneError && size == 1:
 			b.WriteRune(utf8.RuneError)
 		case unicode.IsControl(r), invisibleFormatRune(r):
@@ -55,7 +59,7 @@ func CleanText(s string) string {
 }
 
 // invisibleFormatRune is internal/session.InvisibleFormatRune, copied for the
-// same reason as the fence.
+// same reason as the fence, with two more ranges below.
 func invisibleFormatRune(r rune) bool {
 	switch {
 	case r >= 0x200b && r <= 0x200f:
@@ -65,6 +69,10 @@ func invisibleFormatRune(r rune) bool {
 	case r >= 0x2060 && r <= 0x2069:
 		return true
 	case r == 0xfeff, r == 0x061c:
+		return true
+	// Beyond tuios's list: the soft hyphen, and the tag characters, which
+	// draw nothing and can carry text a reader does not see.
+	case r == 0x00ad, r >= 0xe0000 && r <= 0xe007f:
 		return true
 	}
 	return false

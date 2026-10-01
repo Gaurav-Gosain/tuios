@@ -223,6 +223,7 @@ func TestStoreGC(t *testing.T) {
 	gg := mustKeys(t)
 	old := testRecord(t, gg, "", "old", clock.Now())
 	s.Put(old)
+	s.Drop(old.Key())
 	s.RecordSent(SentRecord{Msg: testMessage("q"), To: gg.Identity().String(), Peer: "gg"})
 	clock.Advance(MaxMessageAge + time.Hour)
 	fresh := testRecord(t, gg, "", "fresh", clock.Now())
@@ -252,7 +253,16 @@ func TestStoreSentThreads(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !s.SentInto(q.Thread, gg.Identity()) {
-		t.Fatal("a thread I sent into, from the peer I sent to, is not mine")
+		t.Fatal("a thread I started, from the peer I sent to, is not mine")
+	}
+	// Answering a thread gg started does not make gg's later mail in it mine.
+	theirs := testMessage("answer")
+	theirs.Thread = NewID()
+	if err := s.RecordSent(SentRecord{Msg: theirs, To: gg.Identity().String(), Peer: "gg"}); err != nil {
+		t.Fatal(err)
+	}
+	if s.SentInto(theirs.Thread, gg.Identity()) {
+		t.Fatal("a reply into gg's thread made the thread count as mine")
 	}
 	if s.SentInto(q.Thread, zain.Identity()) {
 		t.Fatal("a thread I sent to gg counts as one I sent to zain")
@@ -282,7 +292,7 @@ func TestStoreFind(t *testing.T) {
 func TestStorePending(t *testing.T) {
 	s, clock := newTestStore(t)
 	gg := mustKeys(t)
-	for range maxPending {
+	for range maxPendingPerSender {
 		if err := s.SavePending(NewID(), gg.Identity(), []byte("box"), clock.Now()); err != nil {
 			t.Fatal(err)
 		}
@@ -291,11 +301,11 @@ func TestStorePending(t *testing.T) {
 		t.Fatal("pending is unbounded")
 	}
 	p := s.Pending()
-	if len(p) != maxPending {
-		t.Fatalf("%d pending, want %d", len(p), maxPending)
+	if len(p) != maxPendingPerSender {
+		t.Fatalf("%d pending, want %d", len(p), maxPendingPerSender)
 	}
 	s.RemovePending(p[0].RelayID)
-	if len(s.Pending()) != maxPending-1 {
+	if len(s.Pending()) != maxPendingPerSender-1 {
 		t.Fatal("RemovePending did not remove it")
 	}
 	clock.Advance(MaxRelayTTL + time.Hour)
@@ -320,5 +330,77 @@ func TestStoreThreadByPrefix(t *testing.T) {
 	}
 	if _, ok := s.ThreadByPrefix("ffffffffff"); ok && q.Thread[:10] != "ffffffffff" && rec.Msg.Thread[:10] != "ffffffffff" {
 		t.Fatal("found a thread that is not there")
+	}
+}
+
+func TestStoreEmptyClaimExpires(t *testing.T) {
+	s, clock := newTestStore(t)
+	rec := testRecord(t, mustKeys(t), "", "hi", clock.Now())
+	s.Put(rec)
+	s.Release(rec.Key())
+	// A reader died between creating its claim and writing the time into it.
+	if err := os.WriteFile(s.inbox(rec.Key()+".claim"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-claimLease - time.Minute)
+	os.Chtimes(s.inbox(rec.Key()+".claim"), old, old)
+	clock.Advance(claimLease + time.Minute)
+	if got := s.Deliverable(Filter{}); len(got) != 1 {
+		t.Fatal("an empty, old claim holds the message forever")
+	}
+}
+
+func TestStoreGCKeepsUnreadMail(t *testing.T) {
+	s, clock := newTestStore(t)
+	gg := mustKeys(t)
+	held := testRecord(t, gg, "", "held", clock.Now())
+	unread := testRecord(t, gg, "", "released, unread", clock.Now())
+	read := testRecord(t, gg, "", "read", clock.Now())
+	for _, r := range []Record{held, unread, read} {
+		s.Put(r)
+	}
+	s.Release(unread.Key())
+	s.Release(read.Key())
+	s.Deliver(Filter{Thread: read.Msg.Thread}, func([]Entry) error { return nil })
+	clock.Advance(MaxMessageAge + time.Hour)
+	s.GC()
+	if _, err := s.Get(held.Key()); err != nil {
+		t.Fatal("GC deleted held mail the person never saw")
+	}
+	if _, err := s.Get(unread.Key()); err != nil {
+		t.Fatal("GC deleted released mail no agent read")
+	}
+	if _, err := s.Get(read.Key()); err == nil {
+		t.Fatal("GC kept read mail past MaxMessageAge")
+	}
+}
+
+func TestStorePendingIsBoundedPerSender(t *testing.T) {
+	s, clock := newTestStore(t)
+	flooder, newcomer := mustKeys(t), mustKeys(t)
+	for i := 0; ; i++ {
+		if err := s.SavePending(NewID(), flooder.Identity(), []byte("box"), clock.Now()); err != nil {
+			break
+		}
+		if i > maxPending {
+			t.Fatal("one sender's pending mail is unbounded")
+		}
+	}
+	if err := s.SavePending(NewID(), newcomer.Identity(), []byte("box"), clock.Now()); err != nil {
+		t.Fatalf("one sender filled the pending space for everyone: %v", err)
+	}
+}
+
+func TestStoreGCIfDue(t *testing.T) {
+	s, clock := newTestStore(t)
+	if !s.GCIfDue() {
+		t.Fatal("the first GC did not run")
+	}
+	if s.GCIfDue() {
+		t.Fatal("GC ran again at once")
+	}
+	clock.Advance(gcEvery + time.Minute)
+	if !s.GCIfDue() {
+		t.Fatal("GC did not run once due")
 	}
 }

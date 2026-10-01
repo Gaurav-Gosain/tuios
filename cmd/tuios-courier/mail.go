@@ -268,7 +268,13 @@ question.`,
 				if n > 0 {
 					return nil
 				}
-				// Another reader took it first: keep waiting.
+				// Another reader took it first, or the claim failed: wait a
+				// moment rather than spin, then keep waiting.
+				select {
+				case <-cmd.Context().Done():
+					return cmd.Context().Err()
+				case <-time.After(250 * time.Millisecond):
+				}
 			}
 		},
 	}
