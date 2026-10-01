@@ -1,10 +1,10 @@
 package app
 
 import (
+	"image"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	uv "github.com/charmbracelet/ultraviolet"
-	"image"
 )
 
 // getRealCursor returns a real terminal cursor for the focused window,
@@ -62,32 +62,17 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
-	// Take the lock only if it is free. A pane in an output burst holds the
-	// exclusive side almost continuously, and this read runs on the frame that
-	// carries the user's keystroke echo, so blocking here makes a flooding
-	// pane slow down typing everywhere. The cursor from the last frame that
-	// did acquire is at most one frame stale and converges the moment the
-	// burst ends, which is the same trade the compositor already makes for
-	// pane content.
-	var hidden, steady bool
-	var pos uv.Position
-	var style vt.CursorStyle
-	if window.TryRLockIO() {
-		if window.Terminal == nil {
-			// Re-check under the lock: Close() nils Terminal while holding it.
-			window.RUnlockIO()
-			return nil
-		}
-		hidden = window.Terminal.IsCursorHidden()
-		pos = window.Terminal.CursorPosition()
-		style, steady = window.Terminal.CursorStyle()
-		window.RUnlockIO()
-		window.CachedCursor, window.CachedCursorHidden = pos, hidden
-		window.CachedCursorStyle, window.CachedCursorSteady = style, steady
-	} else {
-		hidden, pos = window.CachedCursorHidden, window.CachedCursor
-		style, steady = window.CachedCursorStyle, window.CachedCursorSteady
+	// GuestCursor takes the lock only if it is free. A pane in an output
+	// burst holds it almost continuously, and blocking on this frame, which
+	// carries the user's keystroke echo, makes a flooding pane slow down
+	// typing everywhere. The cursor from the last frame that did read it is
+	// at most one frame stale, the same trade the compositor makes for pane
+	// content.
+	pos, hidden, ok := window.GuestCursor()
+	if !ok {
+		return nil
 	}
+	style, steady := window.CachedCursorStyle, window.CachedCursorSteady
 
 	if hidden {
 		return nil

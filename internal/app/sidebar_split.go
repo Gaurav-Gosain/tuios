@@ -198,7 +198,7 @@ func (m *OS) SidebarSplitMotion(x, y int) bool {
 	if !g.Valid || g.Avail <= 0 {
 		return true
 	}
-	share := g.sidebarSplitShareFor(y - m.ViewTopMargin())
+	share := g.sidebarSplitShareFor(y - m.viewReserve().Top)
 	if share != m.SidebarSectionSplit {
 		m.SidebarSectionSplit = share
 		m.MarkAllDirty()

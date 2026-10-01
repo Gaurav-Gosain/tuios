@@ -1094,7 +1094,7 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
-	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.ViewTopMargin()).Z(config.ZIndexDock).ID(sidebarLayerID)
+	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.viewReserve().Top).Z(config.ZIndexDock).ID(sidebarLayerID)
 }
 
 // sidebarWindowSection windows one section's rows onto the lines it was given,
@@ -1153,7 +1153,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		return nil, 0
 	}
 
-	topMargin := m.ViewTopMargin()
+	topMargin := m.viewReserve().Top
 	sidebarX := 0
 	edgeLeft := m.Settings.SidebarPosition != "right"
 	if !edgeLeft {

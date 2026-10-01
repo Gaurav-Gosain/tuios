@@ -54,7 +54,7 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 	// it to the screen either way, which is what keeps a link near the right
 	// edge from pushing its own label off it.
 	x, y := m.LastMouseX, m.LastMouseY+1
-	if y >= m.ViewTopMargin()+m.ViewUsableHeight() {
+	if y >= m.viewReserve().Top+m.ViewUsableHeight() {
 		y = m.LastMouseY - 1
 	}
 	return tooltipLayer(label, x, y, renderW, "link-label")

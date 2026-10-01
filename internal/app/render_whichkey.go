@@ -479,7 +479,7 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	// starts under a dock at the top: measured from the top of the screen, a
 	// long menu ran up over that dock and cut its notice in half.
 	maxRows := 1 << 20
-	if room := m.GetRenderHeight() - m.ViewTopMargin(); room > 0 {
+	if room := m.GetRenderHeight() - m.viewReserve().Top; room > 0 {
 		maxRows = max(room-5, 1)
 	}
 	cols, more := m.whichKeyLayout(title, groups, maxRows)

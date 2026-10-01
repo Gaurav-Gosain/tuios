@@ -91,7 +91,7 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 	if w <= 0 {
 		return false
 	}
-	topMargin := m.ViewTopMargin()
+	topMargin := m.viewReserve().Top
 	if y < topMargin || y >= topMargin+m.ViewUsableHeight() {
 		return false
 	}
