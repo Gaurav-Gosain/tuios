@@ -584,7 +584,9 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
 		}
 		var n int
 		n, moved = s.moveSubagentsLocked(w, m.subagents, now)
-		expiry = s.subagentExpiryLocked()
+		if m.subagents.op != "" {
+			expiry = s.subagentExpiryLocked()
+		}
 		next, changed, err := applyAgentMeta(cur, u, now)
 		if err != nil {
 			return err

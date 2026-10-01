@@ -50,6 +50,13 @@ func (s *Session) noteCwdOnOutput(p *PTY) {
 	if p == nil {
 		return
 	}
+	// A local shell that announces its folder, and has no report from
+	// another machine to clear, gives checkPaneCwd nothing to do.
+	if p.place.announced.Load() && p.place.Elsewhere() == "" {
+		if _, remote := p.pty.(*remotePane); !remote {
+			return
+		}
+	}
 	c := &p.cwdCheck
 	c.mu.Lock()
 	wait := cwdCheckInterval - time.Since(c.at)

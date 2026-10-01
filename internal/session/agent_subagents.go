@@ -170,18 +170,20 @@ func (s *Session) forgetSubagentsLocked(st *SessionState) {
 	if len(s.agentSubagents) == 0 {
 		return
 	}
-	live := make(map[string]*WindowState, len(s.agentSubagents))
-	for i := range st.Windows {
-		if _, ok := s.agentSubagents[st.Windows[i].ID]; ok {
-			live[st.Windows[i].ID] = &st.Windows[i]
-		}
-	}
 	maps.DeleteFunc(s.agentSubagents, func(id string, _ map[string]subagent) bool {
-		w, ok := live[id]
-		if ok && w.AgentState != AgentStateNone {
+		// Few windows have subagents, so a scan for each costs less than a
+		// map of them all.
+		var w *WindowState
+		for i := range st.Windows {
+			if st.Windows[i].ID == id {
+				w = &st.Windows[i]
+				break
+			}
+		}
+		if w != nil && w.AgentState != AgentStateNone {
 			return false
 		}
-		if ok {
+		if w != nil {
 			w.AgentSubagents = 0
 			if agentMetaValue(w.AgentMeta, AgentMetaSubagents) != "" {
 				// A new slice, since a published snapshot may share the old one.

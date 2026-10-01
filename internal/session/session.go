@@ -1949,9 +1949,9 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// subscribed to and nothing about the rest, so a reattach or a resurrection
 	// snapshot built from the stored value alone brings back a title the window
 	// stopped having. Taken outside stateMu: the PTY map is a different lock.
-	live := s.liveTitles()
+	live := s.livePaneFacts()
 	for i := range state.Windows {
-		if t := live[state.Windows[i].PTYID]; t != "" {
+		if t := live[state.Windows[i].PTYID].title; t != "" {
 			state.Windows[i].Title = ClampDisplayText(t)
 		}
 	}
@@ -1967,10 +1967,9 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// value that won would keep that client on the first folder for good. This
 	// writes into the copy, so the stored state keeps what it had.
 	cwds := s.liveCwds()
-	places := s.livePlaces()
 	for i := range state.Windows {
 		w := &state.Windows[i]
-		place := places[w.PTYID]
+		place := live[w.PTYID].place
 		w.CwdHost = place.elsewhere
 		switch {
 		case place.cwd != "":
@@ -2040,29 +2039,34 @@ type placeFact struct {
 	seed string
 }
 
-// livePlaces is what each pane's shell announced over OSC 7, by PTY id: the
-// folder, and the machine when the report named another one, or else the
-// folder the shell was started in. A pane with none of them is left out. Two atomic loads per pane, so it is not
-// cached the way the process read is.
-func (s *Session) livePlaces() map[string]placeFact {
+// paneFact is what a pane's emulator and shell know now, for a snapshot.
+type paneFact struct {
+	title string
+	place placeFact
+}
+
+// livePaneFacts is each pane's live facts by PTY id, in one pass over the
+// PTYs: the title its application last set, and what its shell announced
+// over OSC 7, the folder and the machine when the report named another one,
+// or else the folder the shell was started in. A pane with none of them is
+// left out. A few atomic loads per pane, so it is not cached the way the
+// process read is.
+func (s *Session) livePaneFacts() map[string]paneFact {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
-	var out map[string]placeFact
+	out := make(map[string]paneFact, len(s.ptys))
 	for id, pty := range s.ptys {
-		if _, remote := pty.pty.(*remotePane); remote {
-			continue
+		var fact paneFact
+		fact.title = pty.Title()
+		if _, remote := pty.pty.(*remotePane); !remote {
+			fact.place = placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
+			if fact.place.cwd == "" {
+				fact.place.seed = pty.place.Cwd()
+			}
 		}
-		fact := placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
-		if fact.cwd == "" {
-			fact.seed = pty.place.Cwd()
+		if fact != (paneFact{}) {
+			out[id] = fact
 		}
-		if fact == (placeFact{}) {
-			continue
-		}
-		if out == nil {
-			out = make(map[string]placeFact)
-		}
-		out[id] = fact
 	}
 	return out
 }
