@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // sidebarRestoredTag is the rail's marker for a session rebuilt from saved
@@ -2298,12 +2299,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 // windowIndexByID returns the index of the window with the given ID in m.Windows,
 // or -1. Used to turn a sidebar window row into a focusable pane.
 func (m *OS) windowIndexByID(id string) int {
-	for i, w := range m.Windows {
-		if w != nil && w.ID == id {
-			return i
-		}
-	}
-	return -1
+	return slices.IndexFunc(m.Windows, func(w *terminal.Window) bool { return w != nil && w.ID == id })
 }
 
 // sidebarSessionRow renders one session row.
