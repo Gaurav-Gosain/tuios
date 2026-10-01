@@ -185,6 +185,64 @@ func TestWindowSizeSmallestIgnoresInput(t *testing.T) {
 	waitMark(t, small, true, "the small client under largest")
 }
 
+// TestWindowSizeSwitchToLatestStartsFromInput changes a session to latest at
+// run time. A client reports input only under latest, so the switch has to
+// give the daemon a starting point: the client that had input just before,
+// which is where the person who switched it is.
+//
+// The big client types and then the policy changes. The small client
+// attached last, which is the daemon's choice when no client has reported
+// input, so a switch with no starting point settles at 80x24.
+//
+// NEGATIVE CONTROL: with the policy change case removed from reportActivity,
+// the session goes to the small client's 80x24 and the test fails.
+func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
+	big, small, base := windowSizePair(t, "largest", "", nil)
+	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest")
+	// The daemon names the policy to the other clients when one resizes the
+	// session. Until then a client does not know it and reports all input.
+	// The small client grows past the big one and back, so the big client
+	// learns the policy is largest.
+	for _, sz := range [][2]int{{wsBigCols + 1, wsSmallRows}, {wsSmallCols, wsSmallRows}} {
+		if err := small.Resize(sz[0], sz[1]); err != nil {
+			t.Fatalf("resize the small client: %v", err)
+		}
+		waitWSSize(t, base, max(sz[0], wsBigCols), wsBigRows, "after a resize of the small client")
+	}
+	waitMark(t, small, true, "the small client under largest")
+
+	time.Sleep(wsHoldGap)
+	activity(t, big)
+	// A lone Esc reaches the client after its escape timeout. The switch
+	// waits for it, so the key is handled under largest, and still well
+	// inside the time a switch carries input over.
+	time.Sleep(500 * time.Millisecond)
+	if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "latest", "-s", wsSession); err != nil {
+		t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if _, _, policy := wsSize(t, base); policy == "latest" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the policy never changed to latest")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Past the hold, so a switch to the client that attached last would have
+	// landed.
+	time.Sleep(wsHoldGap)
+	if w, h, _ := wsSize(t, base); w != wsBigCols || h != wsBigRows {
+		t.Fatalf("after the switch to latest the session is %dx%d, want the big client's %dx%d", w, h, wsBigCols, wsBigRows)
+	}
+	saveArtifact(t, small, artifactDir(t), "switch-to-latest-small")
+
+	// From there input moves it as usual.
+	activity(t, small)
+	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
+}
+
 // TestWindowSizeLatestDebounce types in both clients in turn, faster than
 // the hold. The session must not move while they alternate, and must go to
 // the one that typed last once the other one stops.

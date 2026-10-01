@@ -738,13 +738,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
 	m.msgClock = time.Now()
-	// The person's input is what makes this client the latest one under the
-	// daemon's window_size latest policy. Reported before it is handled, so
-	// a key that also resizes nothing is still counted. See
-	// session.TUIClient.ReportActivity.
-	if m.IsDaemonSession && m.DaemonClient != nil && isActivityInput(msg) {
-		m.DaemonClient.ReportActivity(m.msgClock)
-	}
+	m.reportActivity(msg)
 	model, cmd := m.handleMsg(msg)
 	m.msgClock = time.Time{}
 	m.recordScrollAnchors()
@@ -2596,6 +2590,45 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// activityCarry is how recent this client's input must be to be reported
+// when the session's policy changes to latest. The person who changed it
+// gave input a moment before, through the palette or a command typed in a
+// pane, and is the one the session should follow first.
+const activityCarry = 2 * time.Second
+
+// reportActivity tells the daemon about the person's input, which is what
+// makes this client the latest one under the window_size latest policy.
+// Reported before the input is handled, so a key that resizes nothing is
+// still counted. See session.TUIClient.ReportActivity.
+//
+// Only the latest policy reads it, so under a policy the daemon names as
+// another one nothing is sent. When the policy changes to latest, a client that had input in the
+// last activityCarry reports it once, so the daemon has a starting point.
+// Every client reporting then would make the latest one whichever report
+// happened to arrive last.
+func (m *OS) reportActivity(msg tea.Msg) {
+	if !m.IsDaemonSession || m.DaemonClient == nil {
+		return
+	}
+	input := isActivityInput(msg)
+	if input {
+		m.lastActivity = m.msgClock
+	}
+	// The daemon names the policy only when it resizes the session, so a
+	// client that attached to a session that kept its size does not know
+	// it. Such a client reports, as every client did before.
+	policy := m.DaemonClient.SessionWindowSize()
+	latest := policy == "" || policy == config.WindowSizeLatest
+	switch {
+	case !latest:
+	case input:
+		m.DaemonClient.ReportActivity(m.msgClock)
+	case !m.wasLatest && !m.lastActivity.IsZero() && m.msgClock.Sub(m.lastActivity) < activityCarry:
+		m.DaemonClient.ReportActivity(m.msgClock)
+	}
+	m.wasLatest = latest
 }
 
 // isPersonInput reports whether msg came from the terminal the client runs
