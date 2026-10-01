@@ -54,7 +54,7 @@ func (s conserveScript) String() string {
 // blank column that is not text, and a space typed there would read the same.
 var conserveAtoms = []string{
 	"a", "b", "c", "x", "y", "z", "0", "1", "_", "-",
-	"世", "界", "é", "é", "\U0001F468‍\U0001F469‍\U0001F467", "\U0001F1FA\U0001F1F8", "☝️",
+	"世", "界", "é", "é", "\U0001F468‍\U0001F469‍\U0001F467", "\U0001F1FA\U0001F1F8", "\u261d\ufe0f",
 }
 
 // genConserve draws a case from seed. widths says whether the resizes may
