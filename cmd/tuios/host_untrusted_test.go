@@ -268,3 +268,15 @@ func TestStashGetFromAHostIsMarkedUntrusted(t *testing.T) {
 		t.Errorf("ASSERTION: a local stash get was marked untrusted: %v", got)
 	}
 }
+
+// plainText removes every invisible class and keeps a line separator as a
+// line break, so the fence's gutter starts the next line.
+func TestPlainTextDropsEveryInvisibleClass(t *testing.T) {
+	in := "a­️\U000E0041᠎\U0001D173b c"
+	if got := plainText(in); got != "ab\nc" {
+		t.Fatalf("plainText(%q) = %q, want %q", in, got, "ab\nc")
+	}
+	if got := hostStyledText("\x1b[1m" + in); got != "\x1b[1mab\nc" {
+		t.Fatalf("hostStyledText = %q", got)
+	}
+}

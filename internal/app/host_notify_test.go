@@ -97,3 +97,12 @@ func TestNotifyTextKeepsTheZeroWidthJoiner(t *testing.T) {
 		t.Fatalf("notifyPlainText kept a zero-width space or a bidi override: %q", got)
 	}
 }
+
+// Variation selectors, the soft hyphen, other format characters and a joiner
+// outside an emoji draw nothing, and a line separator is a line break.
+func TestNotifyTextDropsEveryInvisibleClass(t *testing.T) {
+	in := "ad‍min­︁\U000E0101᠎￹\U0001D173‌ ok now"
+	if got := notifyPlainText(in); got != "admin ok now" {
+		t.Fatalf("notifyPlainText(%q) = %q, want %q", in, got, "admin ok now")
+	}
+}

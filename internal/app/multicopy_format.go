@@ -49,10 +49,6 @@ func sanitizeMultiCopyTitle(title string) string {
 			r = ' '
 		case unicode.IsControl(r), session.InvisibleFormatRune(r):
 			continue
-		case unicode.Is(unicode.Cf, r):
-			// Any other format character (soft hyphen, tag characters, the
-			// interlinear annotation marks) is invisible too.
-			continue
 		}
 		b.WriteRune(r)
 		n++

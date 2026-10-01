@@ -486,7 +486,7 @@ func approvalLineShown(line string) bool {
 		return false
 	}
 	for _, r := range line {
-		if !unicode.IsPrint(r) {
+		if !unicode.IsPrint(r) || InvisibleFormatRune(r) {
 			return false
 		}
 	}

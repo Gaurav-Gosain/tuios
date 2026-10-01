@@ -3,6 +3,8 @@ package session
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // UntrustedOpen and UntrustedClose fence text another program wrote: a mail
@@ -32,8 +34,11 @@ const UntrustedGutterASCII = "| "
 
 // UntrustedBodyLines splits body into its lines, each behind gutter. An empty
 // body is one empty gutter line, so the fence never closes on its own open.
+// Invisible characters are removed first (invisible.Strip), and a line or
+// paragraph separator splits a line like a line feed, so it cannot start a
+// screen line without the gutter.
 func UntrustedBodyLines(body, gutter string) []string {
-	lines := strings.Split(body, "\n")
+	lines := strings.Split(invisible.Strip(body), "\n")
 	for i, l := range lines {
 		lines[i] = gutter + l
 	}
@@ -42,10 +47,11 @@ func UntrustedBodyLines(body, gutter string) []string {
 
 // UntrustedFence is body fenced as text from who: the open line, every body
 // line behind the gutter, and the close line, joined with newlines and with no
-// newline at the end. The caller cleans body of control characters first.
+// newline at the end. The caller cleans body of control characters first;
+// invisible characters are removed here from who and body both.
 func UntrustedFence(who, body string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, UntrustedOpen, who)
+	fmt.Fprintf(&b, UntrustedOpen, strings.ReplaceAll(invisible.Strip(who), "\n", " "))
 	for _, l := range UntrustedBodyLines(body, UntrustedGutter) {
 		b.WriteString("\n")
 		b.WriteString(l)
@@ -55,21 +61,10 @@ func UntrustedFence(who, body string) string {
 	return b.String()
 }
 
-// InvisibleFormatRune reports whether r is a zero-width or bidirectional
-// formatting character: U+200B to U+200F, U+202A to U+202E, U+2060 to U+2069,
-// U+061C (the Arabic letter mark) and U+FEFF. They draw nothing, and a bidi override reorders what follows it,
-// so a name or a body holding one can read as something it is not. Every
-// place that prints another program's text drops them.
-func InvisibleFormatRune(r rune) bool {
-	switch {
-	case r >= 0x200b && r <= 0x200f:
-		return true
-	case r >= 0x202a && r <= 0x202e:
-		return true
-	case r >= 0x2060 && r <= 0x2069:
-		return true
-	case r == 0xfeff, r == 0x061c:
-		return true
-	}
-	return false
-}
+// InvisibleFormatRune reports whether r draws nothing but changes how text
+// reads: a format character, a variation selector, or a line or paragraph
+// separator (invisible.Rune has the full list). Every place that prints
+// another program's text drops them. A caller that cleans a whole string
+// uses invisible.Strip instead, which keeps the line break a separator
+// stands for and a zero-width joiner between two emoji.
+func InvisibleFormatRune(r rune) bool { return invisible.Rune(r) }

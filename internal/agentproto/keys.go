@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // Keyboard input for the pane's prompt line. The pane's terminal is in raw
@@ -133,7 +135,7 @@ func (p *keyParser) ground(c byte, out []key) []key {
 		}
 		r, _ := utf8.DecodeRune(p.pending)
 		p.pending = p.pending[:0]
-		if r != utf8.RuneError && !isUnsafe(r) {
+		if r != utf8.RuneError && typedRune(r) {
 			out = append(out, key{kind: keyRune, r: r})
 		}
 		return out
@@ -159,4 +161,17 @@ func (p *keyParser) ground(c byte, out []key) []key {
 		}
 	}
 	return out
+}
+
+// typedRune reports whether a rune the person typed goes into the prompt.
+// Controls and invisible characters do not, except the zero-width joiner and
+// the emoji variation selectors, which are part of an emoji the person typed.
+func typedRune(r rune) bool {
+	switch {
+	case isControl(r):
+		return false
+	case r == 0x200d, r >= 0xfe00 && r <= 0xfe0f:
+		return true
+	}
+	return !invisible.Rune(r)
 }
