@@ -58,7 +58,7 @@ func scanAll(input []byte, chunk int, withholdOSC func(int) bool) *scanRecorder 
 // of the same stream forwards the same bytes and fires the same events. OSC 52
 // and OSC 66 are the numbers withheld here.
 func TestGhosttyScan(t *testing.T) {
-	withhold := func(n int) bool { return n == 52 || n == 66 }
+	withhold := func(n int) bool { return n == 52 || n == 66 || n == 7777 }
 	for _, tc := range []struct {
 		name   string
 		in     string
@@ -83,6 +83,12 @@ func TestGhosttyScan(t *testing.T) {
 			in:     "x\x1b]0;title\ay\x1b]66;s=2;Big\az",
 			fwd:    "x\x1b]0;title\ayz",
 			events: []string{`osc:0:"0;title"`, `osc:66:"66;s=2;Big"`},
+		},
+		{
+			name:   "OSC 7777 is withheld for pane navigation",
+			in:     "x\x1b]7777;tuios-nvim-navigator;focus;right\ay",
+			fwd:    "xy",
+			events: []string{`osc:7777:"7777;tuios-nvim-navigator;focus;right"`},
 		},
 		{
 			name:   "ST terminates an OSC",
