@@ -39,7 +39,19 @@ func (m *OS) CreateSnapAnimation(i int, quarter SnapQuarter) *ui.Animation {
 	targetWidth = max(targetWidth, config.DefaultWindowWidth)
 	targetHeight = max(targetHeight, config.DefaultWindowHeight)
 
-	return ui.NewSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, m.Settings.GetAnimationDuration())
+	return m.newSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, m.Settings.GetAnimationDuration())
+}
+
+// newSnapAnimation is ui.NewSnapAnimation started on the layout clock. Every
+// pane a message moves then starts on one clock: one key can lay the panes
+// out several times, and panes started a few microseconds apart can round a
+// shared edge a cell apart.
+func (m *OS) newSnapAnimation(w *terminal.Window, x, y, width, height int, dur time.Duration) *ui.Animation {
+	anim := ui.NewSnapAnimation(w, x, y, width, height, dur)
+	if anim != nil {
+		anim.StartTime = m.layoutClock()
+	}
+	return anim
 }
 
 // HasActiveAnimations returns true if there are any active animations

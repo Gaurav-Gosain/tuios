@@ -320,7 +320,7 @@ func (m *OS) ApplyBSPLayout() {
 		}
 
 		// Create animation for smooth transition
-		anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
+		anim := m.newSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
 
 		if anim != nil {
 			m.Animations = append(m.Animations, anim)

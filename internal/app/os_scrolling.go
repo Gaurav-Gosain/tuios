@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // GetOrCreateScrollingLayout returns the scrolling layout for the current workspace.
@@ -217,13 +216,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 		if slide || (animate && alreadyPlaced && moved) {
 			m.CancelAnimationsForWindow(win)
-			if anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
-				// Every column that moves on this message starts on one clock.
-				// One key can lay the strip out several times (the focus step,
-				// then the zoom handed to the new column), and columns started
-				// a few microseconds apart can round a shared edge a cell
-				// apart.
-				anim.StartTime = m.layoutClock()
+			if anim := m.newSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
 				m.Animations = append(m.Animations, anim)
 				continue
 			}

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"image/color"
 	"reflect"
+	"slices"
 	"sync"
 	"unicode/utf8"
 
@@ -556,11 +557,7 @@ func (sb *Scrollback) setWrapped(index int, wrapped bool) {
 	if index < 0 || index >= sb.Len() {
 		return
 	}
-	if wrapped {
-		sb.wraps[sb.slot(index)] = rowWrapped
-	} else {
-		sb.wraps[sb.slot(index)] = 0
-	}
+	sb.wraps[sb.slot(index)] = wrapFlag(wrapped)
 }
 
 // LineWrapped reports whether the line at index, oldest first, carried on to
@@ -633,13 +630,14 @@ func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 	return sb.decodeInto(make(uv.Line, width), data[n:])
 }
 
-// lineWidth is the width a stored line was written at.
-func lineWidth(data []byte) int {
-	width, n := binary.Uvarint(data)
+// lineWidth is the width a stored line was written at, and n the bytes its
+// width header takes.
+func lineWidth(data []byte) (width, n int) {
+	w, n := binary.Uvarint(data)
 	if n <= 0 {
-		return 0
+		return 0, n
 	}
-	return int(width)
+	return int(w), n
 }
 
 // decodeRows decodes the lines from index from to end-1 into one block of
@@ -653,18 +651,18 @@ func (sb *Scrollback) decodeRows(from, end int, block []uv.Cell, out []uv.Line) 
 	}
 	total := 0
 	for i := from; i < end; i++ {
-		total += lineWidth(sb.lines[sb.slot(i)])
+		w, _ := lineWidth(sb.lines[sb.slot(i)])
+		total += w
 	}
 	if cap(block) < total {
 		block = make([]uv.Cell, total)
 	}
 	block = block[:total]
-	out = growCap(out, end-from)
+	out = slices.Grow(out[:0], end-from)
 	at := 0
 	for i := from; i < end; i++ {
 		data := sb.lines[sb.slot(i)]
-		w := lineWidth(data)
-		_, n := binary.Uvarint(data)
+		w, n := lineWidth(data)
 		line := block[at : at+w : at+w]
 		at += w
 		if n > 0 {

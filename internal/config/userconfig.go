@@ -2684,9 +2684,7 @@ func fillMapDefaultsYielding(target, defaults map[string][]string) {
 				free = append(free, key)
 			}
 		}
-		if len(free) == len(v) {
-			target[k] = v
-		} else if len(free) > 0 {
+		if len(free) > 0 {
 			target[k] = free
 		}
 	}

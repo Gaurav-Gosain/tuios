@@ -3,7 +3,6 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Tiling constants
@@ -233,7 +232,7 @@ func (m *OS) tileAllWindows() {
 					// settles it before the placement: the allowance decides how
 					// much of the rectangle the guest gets.
 					visibleWindows[i].Tiled = m.panesBorderless()
-					if anim := ui.NewSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
+					if anim := m.newSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
 						m.Animations = append(m.Animations, anim)
 						visibleWindows[i].InvalidateCache()
 						continue
