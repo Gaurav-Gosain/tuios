@@ -24,8 +24,10 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentHarness = ""
 	w.AgentMeta = nil
 	// The delivery queue lives in daemon memory and dies with it, so a saved
-	// count names messages nobody holds any more.
+	// count names messages nobody holds any more. The subagents the count
+	// below says ran in a process that is gone.
 	w.AgentQueued = 0
+	w.AgentSubagents = 0
 	w.ForegroundCmd = ""
 }
 

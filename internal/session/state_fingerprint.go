@@ -119,6 +119,7 @@ func StateFingerprint(s *SessionState) uint64 {
 			str(t.Value)
 		}
 		num(w.AgentQueued)
+		num(w.AgentSubagents)
 		flag(w.Popup)
 		str(w.PopupWidth)
 		str(w.PopupHeight)

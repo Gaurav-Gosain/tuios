@@ -183,8 +183,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// state at all.
 	metas := make(map[string][]AgentMetaToken)
 	// The delivery queue's length is the daemon's count of what it holds for
-	// a pane, and no client sets it, so canonical wins like the meta.
+	// a pane, and no client sets it, so canonical wins like the meta. So does
+	// the subagent count, which only the pane's hooks move.
 	queued := make(map[string]int)
+	subagents := make(map[string]int)
 	// The popup mark and the size the popup was asked for are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
 	// is always the truth and they are carried over by id the way Cwd is.
@@ -266,6 +268,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.AgentQueued != 0 {
 			queued[w.ID] = w.AgentQueued
 		}
+		if w.AgentSubagents != 0 {
+			subagents[w.ID] = w.AgentSubagents
+		}
 	}
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
@@ -328,6 +333,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]
 		w.AgentQueued = queued[w.ID]
+		w.AgentSubagents = subagents[w.ID]
 		w.Grants = paneGrants[w.ID]
 	}
 }

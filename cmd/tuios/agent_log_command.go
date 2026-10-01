@@ -70,8 +70,8 @@ func newAgentLogCommand() *cobra.Command {
 		Use:   "agent-log",
 		Short: "Show what the agent in a pane has been doing",
 		Long: `Show what the agent in a pane has been doing: the prompts it was given, the
-tool calls it made and how they ended, the turns it finished, and the commands
-its shell ran, oldest first.
+tool calls it made and how they ended, the turns it finished, the subagents it
+started and when they stopped, and the commands its shell ran, oldest first.
 
 The daemon keeps the newest 256 of these per pane, in memory only, from the
 activity the harness hooks report ('tuios integration install claude-code' or
@@ -185,6 +185,10 @@ func agentLogLabel(e agentLogEntry) string {
 			return "finished"
 		}
 		return "said"
+	case session.ActivitySubagentStart, session.ActivitySubagentStop:
+		return "subagent"
+	case session.ActivitySessionStart:
+		return "session"
 	}
 	return plainLine(e.Kind)
 }
@@ -193,6 +197,24 @@ func agentLogLabel(e agentLogEntry) string {
 // in it was written by the agent or its shell, so each is kept to one plain
 // line.
 func agentLogDetail(e agentLogEntry) string {
+	switch e.Kind {
+	case session.ActivitySubagentStart, session.ActivitySubagentStop:
+		// "Explore started": the subagent's type, then what it did.
+		did := "started"
+		if e.Kind == session.ActivitySubagentStop {
+			did = "stopped"
+		}
+		if e.Text == "" {
+			return did
+		}
+		return plainLine(e.Text) + " " + did
+	case session.ActivitySessionStart:
+		// How the conversation started: startup, resume or clear.
+		if e.Text == "" {
+			return "started"
+		}
+		return "started (" + plainLine(e.Text) + ")"
+	}
 	var b strings.Builder
 	switch {
 	case e.Tool != "" && e.Target != "":

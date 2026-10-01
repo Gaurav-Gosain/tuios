@@ -87,6 +87,8 @@ var hostedCallVerbs = map[string]string{
 	"read-agent-messages": "to",
 	"send-agent-message":  "from",
 	"wait-for":            "window",
+	// set-agent-state's activity with no state, about the same pane.
+	"report-agent-activity": "window",
 }
 
 // hostedCallDropped are parameters removed from a forwarded call before the

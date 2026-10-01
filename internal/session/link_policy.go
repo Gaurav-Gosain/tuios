@@ -159,6 +159,8 @@ var verbCapabilities = map[string][]string{
 	"resume-agent":        {config.LinkAllowWrite},
 	"request-approval":    {config.LinkAllowWrite},
 	"run":                 {config.LinkAllowWrite},
+	// set-agent-state's activity with no state, so the same capability.
+	"report-agent-activity": {config.LinkAllowWrite},
 	// ask-human's own handler refuses every link caller as well.
 	"ask-human": {config.LinkAllowWrite},
 
