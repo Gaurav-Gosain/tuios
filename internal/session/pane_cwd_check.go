@@ -85,12 +85,8 @@ func (s *Session) checkPaneCwd(p *PTY) {
 	// A report from another machine lasts while the program that made it,
 	// ssh or what it runs, holds the terminal. Once the shell has it back the
 	// pane is on this machine again, whether or not this shell announces.
-	if p.place.Elsewhere() != "" {
-		if pid := p.ShellPID(); pid > 0 {
-			if fg, ok := readForegroundPGID(pid); ok && fg == pid && p.place.setElsewhere("") {
-				s.publishPlaceMove()
-			}
-		}
+	if p.place.Elsewhere() != "" && shellAtPrompt(p) && p.place.setElsewhere("") {
+		s.publishPlaceMove()
 	}
 	if p.place.announced.Load() {
 		// The shell reports its own moves, at once and more exactly than
