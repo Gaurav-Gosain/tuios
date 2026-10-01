@@ -11,6 +11,7 @@ pkgs.buildGoModule rec {
   subPackages = [
     "cmd/tuios"
     "cmd/tuios-web"
+    "cmd/tuios-courier"
   ];
 
   # The build sandbox has no network, so Go cannot fetch a newer toolchain

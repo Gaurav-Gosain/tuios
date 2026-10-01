@@ -89,6 +89,45 @@ builds:
     flags:
       - -trimpath
 
+  - id: tuios-courier
+    main: ./cmd/tuios-courier
+    binary: tuios-courier
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+    goarm:
+      - "6"
+      - "7"
+    ignore:
+      # Windows ARM builds are not commonly needed
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      # FreeBSD/OpenBSD ARM builds
+      - goos: freebsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
   # The ghostty builds link libghostty-vt (static, built by
   # scripts/ghostty-lib.sh at a pinned commit) behind the ghostty build tag.
   # One build per target because cgo needs a per-target compiler; zig is the
@@ -214,6 +253,21 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     ids:
       - tuios-web
+    files:
+      - README.md
+      - LICENSE*
+
+  - id: tuios-courier-archive
+    name_template: >-
+      {{ .ProjectName }}-courier_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    ids:
+      - tuios-courier
     files:
       - README.md
       - LICENSE*

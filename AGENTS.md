@@ -19,6 +19,8 @@ TUIOS (Terminal UI Operating System) is a terminal-based window manager built in
 
 **Note:** The web terminal functionality is provided by the separate `tuios-web` binary for security isolation. See `cmd/tuios-web/` and [docs/WEB.md](docs/WEB.md) for details.
 
+**Note:** Agent mail between machines that tuios links cannot reach is the separate `tuios-courier` binary, for the same reason: it must add no way into the daemon. It must not import `internal/session`, `internal/federation`, `internal/app`, `internal/server` or `internal/terminal`; `TestIsolationFromTheDaemon` in `cmd/tuios-courier` fails the build if it does. See [docs/COURIER.md](docs/COURIER.md).
+
 ## Essential Commands
 
 ### Build & Run
@@ -104,6 +106,7 @@ docker run -it --rm tuios
 tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
 ├── cmd/tuios-web/          # Web terminal server binary (separate for security)
+├── cmd/tuios-courier/      # Agent mail between machines through an HTTPS relay (separate for security)
 ├── cmd/tuios-wasm/         # Browser build for the Learn tuios tour (js/wasm)
 ├── cmd/tuios-fuzz/         # The property fuzzer, drawn while it runs; kept out of the shipped binary
 ├── internal/
@@ -135,6 +138,7 @@ tuios/
 │   │   └── scrollback.go   # History ring (10,000 lines unless configured)
 │   ├── session/            # The daemon: sessions, PTYs (session.go), wire protocol, JSON verbs
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
+│   ├── courier/            # tuios-courier: identity keys, sealed mail, signed requests, the local mail store and client; relay/ is the server
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
 │   ├── gitstate/           # Branch and upstream drift for the sidebar
 │   ├── review/             # Reading a worktree's diff, and the notes left on it
