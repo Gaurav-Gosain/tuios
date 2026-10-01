@@ -111,7 +111,7 @@ type CommandPaletteItem struct {
 
 // GetCommandPaletteItems returns all available commands for the command palette.
 func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
-	return []CommandPaletteItem{
+	items := []CommandPaletteItem{
 		// The launcher is its own overlay, and this is the row that opens it.
 		// It is the bridge that keeps "one box finds everything" true as an
 		// entry point without the two lists having to be ranked against each
@@ -411,61 +411,20 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		{
-			Name:     "Set master position: left",
-			Shortcut: "",
+	}
+	for _, pos := range config.MasterPositions {
+		items = append(items, CommandPaletteItem{
+			Name:     "Set master position: " + pos,
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(config.MasterPositionLeft) {
-					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionLeft), "info", s.NotificationDuration)
+				if m.SetMasterPosition(pos) {
+					m.ShowNotification(MasterPositionMessage(m, pos), "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
-		},
-		{
-			Name:     "Set master position: right",
-			Shortcut: "",
-			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(config.MasterPositionRight) {
-					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionRight), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
-		},
-		{
-			Name:     "Set master position: top",
-			Shortcut: "",
-			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(config.MasterPositionTop) {
-					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionTop), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
-		},
-		{
-			Name:     "Set master position: bottom",
-			Shortcut: "",
-			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(config.MasterPositionBottom) {
-					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionBottom), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
-		},
-		{
-			Name:     "Set master position: center",
-			Shortcut: "",
-			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(config.MasterPositionCenter) {
-					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionCenter), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
-		},
+		})
+	}
+	return append(items, []CommandPaletteItem{
 		{
 			Name:     "Add a master pane",
 			Shortcut: "",
@@ -1134,7 +1093,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-	}
+	}...)
 }
 
 // paletteStateTokens are the states a leading "@" token narrows the palette to.
