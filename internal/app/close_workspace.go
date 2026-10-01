@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -93,10 +94,5 @@ func (m *OS) CloseWorkspacePanes(ws int) {
 
 // windowIndex is the index of w in m.Windows, or -1.
 func (m *OS) windowIndex(w *terminal.Window) int {
-	for i, x := range m.Windows {
-		if x == w {
-			return i
-		}
-	}
-	return -1
+	return slices.Index(m.Windows, w)
 }

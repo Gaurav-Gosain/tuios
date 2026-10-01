@@ -190,12 +190,11 @@ func (m *OS) RemoveMaster() int {
 // masterIndex is the index in m.Windows of the current workspace's first
 // master, or -1 when the workspace has no tiled pane.
 func (m *OS) masterIndex() int {
-	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
-			return i
-		}
+	panes := m.tilablePanes(m.CurrentWorkspace)
+	if len(panes) == 0 {
+		return -1
 	}
-	return -1
+	return m.windowIndex(panes[0])
 }
 
 // FocusMaster moves the focus to the first master. It reports false when the
@@ -225,20 +224,16 @@ func (m *OS) SwapWithMaster() bool {
 	if focused.Workspace != m.CurrentWorkspace || focused.Minimized || focused.IsFloating {
 		return false
 	}
-	target := m.masterIndex()
-	if target == m.FocusedWindow {
-		target = -1
-		for i := m.FocusedWindow + 1; i < len(m.Windows); i++ {
-			w := m.Windows[i]
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
-				target = i
-				break
-			}
-		}
-	}
-	if target < 0 {
+	// The first master, or the pane after it when the focus is on it.
+	panes := m.tilablePanes(m.CurrentWorkspace)
+	if len(panes) < 2 {
 		return false
 	}
+	other := panes[0]
+	if other == focused {
+		other = panes[1]
+	}
+	target := m.windowIndex(other)
 	m.SwapWindowsInstant(m.FocusedWindow, target)
 	// The panes swapped rectangles, which are the slots they now hold. A
 	// retile settles anything a resize had left between slots.

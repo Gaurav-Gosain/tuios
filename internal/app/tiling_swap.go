@@ -251,17 +251,12 @@ func (m *OS) SwapWindowDown() {
 // daemon routes here because the split tree lives in the client: the daemon
 // picks the pair, and the client moves them.
 func (m *OS) SwapWindowsByID(source, target string) error {
-	si, ti := -1, -1
-	for i, w := range m.Windows {
-		switch w.ID {
-		case source:
-			si = i
-		case target:
-			ti = i
-		}
+	si, ti := m.windowIndexByID(source), m.windowIndexByID(target)
+	if si < 0 {
+		return fmt.Errorf("no pane %s to swap", source)
 	}
-	if si < 0 || ti < 0 {
-		return fmt.Errorf("no pane %s to swap", map[bool]string{true: source, false: target}[si < 0])
+	if ti < 0 {
+		return fmt.Errorf("no pane %s to swap", target)
 	}
 	if si == ti {
 		return nil

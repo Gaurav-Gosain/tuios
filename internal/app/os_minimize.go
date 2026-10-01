@@ -683,12 +683,7 @@ func (m *OS) HasMinimizedWindows() bool {
 // pane named: a toggle sent after a focus could reach this client before the
 // focus did, and zoom the pane that had the focus before.
 func (m *OS) ZoomWindowByID(id string, on bool) error {
-	idx := -1
-	for i, w := range m.Windows {
-		if w != nil && w.ID == id {
-			idx = i
-		}
-	}
+	idx := m.windowIndexByID(id)
 	if idx < 0 {
 		return fmt.Errorf("no pane %s to zoom", id)
 	}
@@ -699,23 +694,23 @@ func (m *OS) ZoomWindowByID(id string, on bool) error {
 	if z := m.zoomedWindow(); z != nil && z != target && !on {
 		// The zoom is on another pane of the workspace. It is ended from
 		// that pane.
-		for i, w := range m.Windows {
-			if w == z {
-				m.FocusWindow(i)
-			}
-		}
-		m.ToggleZoom()
-	}
-	for i, w := range m.Windows {
-		if w == target {
+		if i := m.windowIndex(z); i >= 0 {
 			m.FocusWindow(i)
 		}
+		m.ToggleZoom()
+	}
+	if i := m.windowIndex(target); i >= 0 {
+		m.FocusWindow(i)
 	}
 	if target.Zoomed != on {
 		m.ToggleZoom()
 	}
 	if target.Zoomed != on {
-		return fmt.Errorf("the pane could not be zoomed %v", map[bool]string{true: "on", false: "off"}[on])
+		state := "off"
+		if on {
+			state = "on"
+		}
+		return fmt.Errorf("the pane could not be zoomed %s", state)
 	}
 	return nil
 }
