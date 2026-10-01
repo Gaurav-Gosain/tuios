@@ -44,7 +44,7 @@ func TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane(t *testing.T) {
 
 	out := m.renderTerminal(win, true, false)
 	rows := 0
-	for _, row := range strings.Split(out, "\n") {
+	for row := range strings.SplitSeq(out, "\n") {
 		plain := ansi.Strip(row)
 		if !strings.HasPrefix(plain, "A") {
 			continue

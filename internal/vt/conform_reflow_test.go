@@ -25,7 +25,7 @@ func TestConform_Reflow(t *testing.T) {
 			in:      "0123456789\r\n$ ",
 			resize:  [][2]int{{4, 4}},
 			want:    "0123\n4567\n89\n$",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "2,3",
 		},
 		{
@@ -34,7 +34,7 @@ func TestConform_Reflow(t *testing.T) {
 			in:      "0123456789\r\n$ ",
 			resize:  [][2]int{{4, 4}, {10, 4}},
 			want:    "0123456789\n$",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "2,1",
 		},
 		{
@@ -53,7 +53,7 @@ func TestConform_Reflow(t *testing.T) {
 			in:      "aaaaaaaa\r\nbbbbbbbb\r\n$ ",
 			resize:  [][2]int{{4, 3}},
 			want:    "bbbb\nbbbb\n$",
-			history: ptr("aaaa\naaaa"),
+			history: new("aaaa\naaaa"),
 			cursor:  "2,2",
 		},
 		{
@@ -117,7 +117,7 @@ func TestConform_Reflow(t *testing.T) {
 			in:      "l1\r\nl2\r\nl3\r\n$ ",
 			resize:  [][2]int{{10, 4}},
 			want:    "l1\nl2\nl3\n$",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "2,3",
 		},
 		{
@@ -128,7 +128,7 @@ func TestConform_Reflow(t *testing.T) {
 			in:      "l1\r\nl2\r\nl3\x1b[1;1H",
 			resize:  [][2]int{{10, 4}},
 			want:    "l2\nl3",
-			history: ptr("l1"),
+			history: new("l1"),
 			cursor:  "0,0",
 		},
 		{
@@ -153,8 +153,8 @@ func TestConform_Reflow(t *testing.T) {
 			resize: [][2]int{{4, 3}},
 			want:   "abcd\nefgh",
 			cells: []cellWant{
-				{x: 0, y: 1, content: "e", fg: indexed(1), link: ptr("http://x")},
-				{x: 1, y: 0, content: "b", link: ptr("")},
+				{x: 0, y: 1, content: "e", fg: indexed(1), link: new("http://x")},
+				{x: 1, y: 0, content: "b", link: new("")},
 			},
 		},
 	})
