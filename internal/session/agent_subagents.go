@@ -125,16 +125,25 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 	return len(set), false
 }
 
-// subagentsMetaValue is the subagents key for n subagents: "1 subagent" or
-// "n subagents", and nil to remove the key at zero.
+// SubagentsText is how n subagents read on the rail and in the subagents
+// key: "1 subagent" or "n subagents", and "" at zero.
+func SubagentsText(n int) string {
+	switch {
+	case n <= 0:
+		return ""
+	case n == 1:
+		return "1 subagent"
+	}
+	return strconv.Itoa(n) + " subagents"
+}
+
+// subagentsMetaValue is the subagents key for n subagents, and nil to remove
+// the key at zero.
 func subagentsMetaValue(n int) *string {
 	if n <= 0 {
 		return nil
 	}
-	v := strconv.Itoa(n) + " subagents"
-	if n == 1 {
-		v = "1 subagent"
-	}
+	v := SubagentsText(n)
 	return &v
 }
 
