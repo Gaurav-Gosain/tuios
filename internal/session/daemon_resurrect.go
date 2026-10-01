@@ -284,6 +284,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// After UpdateState, which takes this field from canonical state and would
 	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
+	// The master-stack shapes are daemon-owned in the same way. See
+	// RestoreMasterLayouts.
+	sess.RestoreMasterLayouts(state.WorkspaceMasterLayout)
 	// The scratch mark is daemon-owned in the same way: UpdateState keeps
 	// only the marks canonical state already has, and a new session has none.
 	if len(scratchPanes) > 0 {
