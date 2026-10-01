@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	tlayout "github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
-	"github.com/google/uuid"
 )
 
 // herdr's pane navigation, zoom, process and agent start methods, and
@@ -359,22 +358,10 @@ func cmpOr(a, b *herdrSite) *herdrSite {
 }
 
 // herdrRouteClient sends one command to the client attached to sess and
-// waits for it to be done.
+// waits for it to be done. See routeTape.
 func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...string) *herdrError {
-	tui := d.findTUIClient(sess.ID)
-	if tui == nil {
-		return herdrErr("no_client", "this needs a tuios client attached to the session. Attach one with tuios attach "+sess.Name()+", then try again")
-	}
-	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{CommandType: command, TapeArgs: args}, routedVerbTimeout)
-	if err != nil {
-		return herdrErr("timeout", "the attached client did not answer: "+err.Error())
-	}
-	if res == nil || !res.Success {
-		msg := "the attached client refused the request"
-		if res != nil && res.Message != "" {
-			msg = res.Message
-		}
-		return herdrErr(fail, msg)
+	if verr := d.routeTape(sess, command, "", args); verr != nil {
+		return herdrFromVerb(verr, fail)
 	}
 	return nil
 }

@@ -99,7 +99,7 @@ func (d *Daemon) verbFocusWindow(_ *connState, params json.RawMessage) (any, *ve
 		}
 		// A direction is a question about the viewport, so it only has an answer
 		// where there is one.
-		if verr := d.routeTape(sess, "FocusDirection", []string{p.Direction}); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", "FocusDirection", []string{p.Direction}); verr != nil {
 			return nil, verr
 		}
 	}
@@ -386,27 +386,27 @@ func (d *Daemon) verbSetLayout(_ *connState, params json.RawMessage) (any, *verb
 		if *p.Tiling {
 			cmd = "EnableTiling"
 		}
-		if verr := d.routeTape(sess, cmd, nil); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", cmd, nil); verr != nil {
 			return nil, verr
 		}
 	}
 	if p.Rotate {
-		if verr := d.routeTape(sess, "RotateSplit", nil); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", "RotateSplit", nil); verr != nil {
 			return nil, verr
 		}
 	}
 	if p.Equalize {
-		if verr := d.routeTape(sess, "EqualizeSplits", nil); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", "EqualizeSplits", nil); verr != nil {
 			return nil, verr
 		}
 	}
 	if p.MasterPosition != "" {
-		if verr := d.routeTape(sess, "SetMasterPosition", []string{p.MasterPosition}); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", "SetMasterPosition", []string{p.MasterPosition}); verr != nil {
 			return nil, verr
 		}
 	}
 	if p.MasterCount != 0 {
-		if verr := d.routeTape(sess, "SetMasterCount", []string{strconv.Itoa(p.MasterCount)}); verr != nil {
+		if verr := d.routeTape(sess, "tape_command", "SetMasterCount", []string{strconv.Itoa(p.MasterCount)}); verr != nil {
 			return nil, verr
 		}
 	}
@@ -485,7 +485,7 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 		// without it a split of a pane that was not focused cut the one
 		// that was.
 		if st := sess.GetState(); st != nil && st.FocusedWindowID != "" {
-			if verr := d.routeTape(sess, "FocusWindow", []string{st.FocusedWindowID}); verr != nil {
+			if verr := d.routeTape(sess, "tape_command", "FocusWindow", []string{st.FocusedWindowID}); verr != nil {
 				return nil, verr
 			}
 		}
@@ -494,7 +494,7 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 	pre := sess.GetState()
 	before := windowIDSet(pre)
 	target := pre.FocusedWindowID
-	if verr := d.routeTape(sess, "Split", []string{p.Direction}); verr != nil {
+	if verr := d.routeTape(sess, "tape_command", "Split", []string{p.Direction}); verr != nil {
 		return nil, verr
 	}
 
@@ -610,26 +610,32 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 		return out, nil
 	}
 
-	if verr := d.routeTape(sess, p.Command, p.Args); verr != nil {
+	if verr := d.routeTape(sess, "tape_command", p.Command, p.Args); verr != nil {
 		return nil, verr
 	}
 	return map[string]any{"type": "command_result", "command": p.Command, "routed": true}, nil
 }
 
-// routeTape sends one tape command to the session's attached client and waits
-// for its result, reporting needs_client when nobody is attached.
-func (d *Daemon) routeTape(sess *Session, command string, args []string) *verbError {
+// routeTape sends one command to the session's attached client and waits for
+// its result, reporting needs_client when nobody is attached. commandType is
+// the routed command's type: "tape_command" with command the tape command's
+// name, or another type the client runs from args alone.
+func (d *Daemon) routeTape(sess *Session, commandType, command string, args []string) *verbError {
 	tui := d.findTUIClient(sess.ID)
 	if tui == nil {
+		what := command
+		if what == "" {
+			what = "this"
+		}
 		return hintedVerbError(ErrVerbNeedsClient,
-			command+" changes what is drawn on screen, so it needs an attached client",
+			what+" changes what is drawn on screen, so it needs an attached client",
 			&VerbHint{
 				Command: "tuios attach " + sess.Name(),
 				Detail:  "the daemon has no viewport, so it cannot compute a geometry nobody is displaying. Attach a client and retry.",
 			})
 	}
 	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-		CommandType: "tape_command",
+		CommandType: commandType,
 		TapeCommand: command,
 		TapeArgs:    args,
 	}, routedVerbTimeout)
@@ -637,7 +643,11 @@ func (d *Daemon) routeTape(sess *Session, command string, args []string) *verbEr
 		return newVerbError(ErrVerbCommandFailed, err.Error())
 	}
 	if !res.Success {
-		return newVerbError(ErrVerbCommandFailed, res.Message)
+		msg := res.Message
+		if msg == "" {
+			msg = "the attached client refused the request"
+		}
+		return newVerbError(ErrVerbCommandFailed, msg)
 	}
 	return nil
 }

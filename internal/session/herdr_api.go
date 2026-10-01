@@ -372,6 +372,9 @@ func herdrFromVerb(verr *verbError, fail string) *herdrError {
 	if verr.Hint != nil && verr.Hint.Detail != "" && verr.Code == ErrVerbForbidden {
 		msg += " " + verr.Hint.Detail
 	}
+	if verr.Hint != nil && verr.Hint.Command != "" && verr.Code == ErrVerbNeedsClient {
+		msg = strings.TrimSuffix(msg, ".") + ". Attach one with " + verr.Hint.Command + ", then try again"
+	}
 	code := fail
 	switch verr.Code {
 	case ErrVerbSessionNotFound:
