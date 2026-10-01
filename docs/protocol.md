@@ -1841,9 +1841,11 @@ Params, all optional: `session`, `name` (window name; omit to use the shell's
 title), `workspace` (workspace number; omit for the current one), `cwd`
 (directory to start in; omit to inherit the daemon's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a
-shell, not parsed by any shell; the window closes when it exits), and `host`
-(run the window's process on a machine from the `[hosts]` table; omit or pass
-`local` for this machine).
+shell, not parsed by any shell; with a client attached, the window closes when
+it exits), `host` (run the window's process on a machine from the `[hosts]`
+table; omit or pass `local` for this machine), and `close_on_exit` (default
+false; close the window when its process exits, also with no client attached.
+Without it, a detached session keeps the window until something closes it).
 
 Request:
 

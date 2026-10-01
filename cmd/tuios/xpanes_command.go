@@ -190,6 +190,9 @@ type xpanesPane struct {
 	// Line is the command tuios types into the pane's shell, without speedy
 	// mode. Empty means nothing is typed.
 	Line string
+	// CloseOnExit asks the daemon to close the pane when its command exits,
+	// for -ss. A detached session keeps an exited pane otherwise.
+	CloseOnExit bool
 }
 
 // Speedy modes, after tmux-xpanes -s and -ss.
@@ -255,6 +258,7 @@ func xpanesPanes(items []string, perPane int, command, placeholder, shell string
 			p.Argv = append(env, "sh", "-c", line+"\n"+xpanesHold)
 		case line != "" && speedy == xpanesSpeedyClose:
 			p.Argv = append(env, "sh", "-c", line)
+			p.CloseOnExit = true
 		default:
 			if shell != "" {
 				p.Argv = append(env, shell)
@@ -273,6 +277,62 @@ func xpanesTitle(item string) string {
 		item = string(r[:59]) + "…"
 	}
 	return item
+}
+
+// xpanesReadyTimeout is how long xpanes waits for a pane's shell to draw its
+// prompt before it types the command anyway.
+const xpanesReadyTimeout = 10 * time.Second
+
+// xpanesReadyIdle is how long a shell must be quiet after its first output
+// to count as ready to read a line.
+const xpanesReadyIdle = 300 * time.Millisecond
+
+// xpanesWindowParams is params for a verb on one window. verbTarget.params
+// sets the window to the -w flag of the command line, and xpanes has none, so
+// the window is set after it. Set before it, every call went to the focused
+// window: all the commands were typed into the first pane.
+func xpanesWindowParams(t *verbTarget, window string, p map[string]any) map[string]any {
+	p = t.params(p)
+	p["window"] = window
+	return p
+}
+
+// xpanesTypeError is a pane whose command xpanes could not type.
+type xpanesTypeError struct {
+	what string
+	err  error
+}
+
+// xpanesTypeCommands types each pane's line into that pane, by window id,
+// and presses Enter. It waits for the pane's shell first: for its first
+// output, the prompt, and then for xpanesReadyIdle of quiet. A shell that is
+// still starting can drop what is typed before its prompt, so typing at once
+// lost the commands. A pane that is not ready by the timeout gets its line
+// anyway. The interval is between the lines.
+func xpanesTypeCommands(c verbCaller, t *verbTarget, panes []xpanesPane, windows []string, interval, timeout time.Duration) []xpanesTypeError {
+	var errs []xpanesTypeError
+	typed := 0
+	for i, p := range panes {
+		if p.Line == "" || i >= len(windows) {
+			continue
+		}
+		if typed > 0 {
+			time.Sleep(interval)
+		}
+		typed++
+		id := windows[i]
+		ms := int(timeout / time.Millisecond)
+		_, _ = c.Call("wait-for", xpanesWindowParams(t, id, map[string]any{
+			"condition": "window-output", "pattern": `\S`, "timeout": ms,
+		}))
+		_, _ = c.Call("wait-for", xpanesWindowParams(t, id, map[string]any{
+			"condition": "window-idle", "idle": int(xpanesReadyIdle / time.Millisecond), "timeout": ms,
+		}))
+		if _, err := c.Call("send-text", xpanesWindowParams(t, id, map[string]any{"text": p.Line + "\r"})); err != nil {
+			errs = append(errs, xpanesTypeError{fmt.Sprintf("tuios could not type the command into pane %d", i+1), err})
+		}
+	}
+	return errs
 }
 
 // xpanesSpeedyMode is the speedy mode the options ask for. --ssh turns on -s,
@@ -407,6 +467,9 @@ func runXpanes(o xpanesOptions, items []string) error {
 		if len(p.Argv) > 0 {
 			params["command"] = p.Argv
 		}
+		if p.CloseOnExit {
+			params["close_on_exit"] = true
+		}
 		if cwd != "" {
 			params["cwd"] = cwd
 		}
@@ -439,24 +502,12 @@ func runXpanes(o xpanesOptions, items []string) error {
 			res.Multifocus = true
 		}
 	}
-	_, _ = t.client.Call("focus-window", t.params(map[string]any{"window": res.Windows[0]}))
+	_, _ = t.client.Call("focus-window", xpanesWindowParams(t, res.Windows[0], nil))
 
 	// Without speedy mode each pane is a shell, and the command is typed into
-	// it, as tmux-xpanes does. A shell that is still starting reads the line
-	// when it is ready.
-	typed := 0
-	for i, p := range panes {
-		if p.Line == "" {
-			continue
-		}
-		if typed > 0 {
-			time.Sleep(interval)
-		}
-		typed++
-		params := map[string]any{"window": res.Windows[i], "text": p.Line + "\n"}
-		if _, err := t.client.Call("send-text", t.params(params)); err != nil {
-			res.Warnings = append(res.Warnings, xpanesWarning(fmt.Sprintf("tuios could not type the command into pane %d", i+1), err, name))
-		}
+	// it, as tmux-xpanes does.
+	for _, err := range xpanesTypeCommands(t.client, t, panes, res.Windows, interval, xpanesReadyTimeout) {
+		res.Warnings = append(res.Warnings, xpanesWarning(err.what, err.err, name))
 	}
 
 	if o.jsonOutput {

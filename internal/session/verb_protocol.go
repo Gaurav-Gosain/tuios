@@ -894,6 +894,7 @@ func init() {
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits."},
 				{Name: "host", Type: "string", Description: "Run the window's process on another machine, named as it is in the [hosts] config table. The window belongs to this session and is drawn and sized here; only the process is there. Omit, or pass \"local\", for this machine."},
 				grantsParam,
+				{Name: "close_on_exit", Type: "bool", Description: "Close the window when its process exits, also with no client attached. Without it, a detached session keeps a window whose process exited until something closes it.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestXpanesItemsFromArgsAndStdin(t *testing.T) {
@@ -156,7 +158,7 @@ func TestXpanesSpeedyHoldsAndSpeedyCloseDoesNot(t *testing.T) {
 		t.Fatalf("-s pane printed %q, %v", out, err)
 	}
 	closing := xpanesPanes([]string{"x"}, 1, "echo RAN-{}", "{}", "/bin/zsh", xpanesSpeedyClose)[0]
-	if closing.Line != "" || closing.Argv[5] != "echo RAN-x" {
+	if closing.Line != "" || closing.Argv[5] != "echo RAN-x" || !closing.CloseOnExit || hold.CloseOnExit {
 		t.Fatalf("-ss pane = %+v", closing)
 	}
 }
@@ -208,5 +210,53 @@ func TestXpanesFlags(t *testing.T) {
 	}
 	if f.ShorthandLookup("s").Name != "speedy" {
 		t.Fatal("-s is not speedy mode")
+	}
+}
+
+// xpanesCalls records the verbs xpanes calls.
+type xpanesCalls struct {
+	verbs  []string
+	params []map[string]any
+}
+
+func (c *xpanesCalls) Call(verb string, params any) (json.RawMessage, error) {
+	c.verbs = append(c.verbs, verb)
+	c.params = append(c.params, params.(map[string]any))
+	return json.RawMessage(`{}`), nil
+}
+
+// Each pane's command is typed into that pane, by window id, after its shell
+// has drawn a prompt and gone quiet, and Enter runs it. The session has no -w
+// flag here, as when tuios xpanes runs: verbTarget.params used to replace the
+// window with that empty flag, so every line went to the focused pane.
+func TestXpanesTypesEachCommandIntoItsOwnPane(t *testing.T) {
+	panes := xpanesPanes([]string{"alpha", "beta", "gamma"}, 1, `echo "hello world from {}"`, "{}", "/bin/sh", xpanesInteractive)
+	ids := []string{"w-alpha", "w-beta", "w-gamma"}
+	calls := &xpanesCalls{}
+	if errs := xpanesTypeCommands(calls, &verbTarget{session: "demo"}, panes, ids, 0, time.Second); len(errs) != 0 {
+		t.Fatalf("errors = %+v", errs)
+	}
+	if len(calls.verbs) != 9 {
+		t.Fatalf("calls = %v", calls.verbs)
+	}
+	for i, id := range ids {
+		wantVerbs := []string{"wait-for", "wait-for", "send-text"}
+		for j, verb := range wantVerbs {
+			k := 3*i + j
+			p := calls.params[k]
+			if calls.verbs[k] != verb || p["window"] != id || p["session"] != "demo" {
+				t.Fatalf("call %d = %s %v, want %s on window %s", k, calls.verbs[k], p, verb, id)
+			}
+		}
+		if c := calls.params[3*i]["condition"]; c != "window-output" {
+			t.Errorf("pane %s: first wait is %v", id, c)
+		}
+		if c := calls.params[3*i+1]["condition"]; c != "window-idle" {
+			t.Errorf("pane %s: second wait is %v", id, c)
+		}
+		want := `echo "hello world from ` + strings.TrimPrefix(id, "w-") + `"` + "\r"
+		if got := calls.params[3*i+2]["text"]; got != want {
+			t.Errorf("pane %s got text %q, want %q", id, got, want)
+		}
 	}
 }
