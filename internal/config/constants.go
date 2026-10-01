@@ -606,10 +606,20 @@ const (
 // ValidMasterPosition returns pos when it is one of MasterPositions and left
 // otherwise, so a typo lays the panes out as they always were.
 func ValidMasterPosition(pos string) string {
-	if slices.Contains(MasterPositions, pos) {
+	if IsMasterPosition(pos) {
 		return pos
 	}
 	return MasterPositionLeft
+}
+
+// IsMasterPosition reports whether pos is one of MasterPositions.
+func IsMasterPosition(pos string) bool {
+	return slices.Contains(MasterPositions, pos)
+}
+
+// ValidMasterCount reports whether n is inside the master count's range.
+func ValidMasterCount(n int) bool {
+	return n >= MasterCountMin && n <= MasterCountMax
 }
 
 // ClampMasterCount keeps a master count inside its range. Zero and below are

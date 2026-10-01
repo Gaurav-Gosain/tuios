@@ -147,7 +147,7 @@ func (m *OS) CycleMasterPosition() string {
 // whether it applied, which is false when tiling is off or pos is not a
 // position.
 func (m *OS) SetMasterPosition(pos string) bool {
-	if !m.AutoTiling || !slices.Contains(config.MasterPositions, pos) {
+	if !m.AutoTiling || !config.IsMasterPosition(pos) {
 		return false
 	}
 	st := m.masterLayoutFor(m.CurrentWorkspace)
@@ -164,7 +164,7 @@ func (m *OS) SetMasterCount(n int) int {
 		return 0
 	}
 	st := m.masterLayoutFor(m.CurrentWorkspace)
-	st.Count = min(max(n, config.MasterCountMin), config.MasterCountMax)
+	st.Count = config.ClampMasterCount(n)
 	m.setMasterLayout(st)
 	return st.Count
 }
@@ -251,17 +251,18 @@ func (m *OS) SwapWithMaster() bool {
 // the master-stack layout it also says where the position takes effect, so a
 // key that seems to do nothing explains itself.
 func MasterPositionMessage(m *OS, pos string) string {
-	msg := "Master position: " + pos
-	if !m.inMasterStack() {
-		msg += ". This applies in the master-stack layout."
-	}
-	return msg
+	return m.masterLayoutMessage("Master position: " + pos)
 }
 
 // MasterCountMessage is the dock message for a new master count, on the same
 // terms as MasterPositionMessage.
 func MasterCountMessage(m *OS, n int) string {
-	msg := "Master panes: " + strconv.Itoa(n)
+	return m.masterLayoutMessage("Master panes: " + strconv.Itoa(n))
+}
+
+// masterLayoutMessage is msg, with where it takes effect added outside the
+// master-stack layout.
+func (m *OS) masterLayoutMessage(msg string) string {
 	if !m.inMasterStack() {
 		msg += ". This applies in the master-stack layout."
 	}
