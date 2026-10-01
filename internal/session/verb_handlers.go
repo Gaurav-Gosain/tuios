@@ -158,15 +158,11 @@ func (d *Daemon) verbSessionInfo(_ *connState, params json.RawMessage) (any, *ve
 	hasClient := d.findTUIClient(sess.ID) != nil
 	data := buildSessionInfoData(sess, sess.GetState(), hasClient, d.sessionHostFocus(sess.ID))
 	data["type"] = "session_info"
-	// The size the daemon settled on and the window_size policy it used, as
-	// distinct from width and height above, which are the last size a client
-	// pushed with its state.
-	policy := sess.WindowSizePolicy()
-	if policy == "" {
-		policy = d.sessionWindowSize(sess)
+	// Before any client was measured the session has no policy in force, and
+	// the one it is set to is the honest answer.
+	if data["window_size"] == "" {
+		data["window_size"] = d.sessionWindowSize(sess)
 	}
-	data["window_size"] = policy
-	data["session_width"], data["session_height"] = sess.Size()
 	return data, nil
 }
 
