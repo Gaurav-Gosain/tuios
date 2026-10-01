@@ -57,12 +57,15 @@ func TestCapturePaneReportsHistoryAndRevision(t *testing.T) {
 	capture := func(n int, source string) map[string]any {
 		return result(t, c.call(t, `{"id":`+strconv.Itoa(n)+`,"verb":"capture-pane","params":{"session":"meta","window":"`+id+`","source":"`+source+`"}}`))
 	}
-	result(t, c.call(t, `{"id":1,"verb":"send-text","params":{"session":"meta","window":"`+id+`","text":"seq 1 60; echo DONE-MARK\n"}}`))
+	// The quotes keep the marker out of the command line. The tty echoes text
+	// sent before the shell reads it, and the shell draws it again after its
+	// prompt, so a plain marker shows twice before seq has run.
+	result(t, c.call(t, `{"id":1,"verb":"send-text","params":{"session":"meta","window":"`+id+`","text":"seq 1 60; echo DONE''-MARK\n"}}`))
 	deadline := time.Now().Add(10 * time.Second)
 	var first map[string]any
 	for {
 		first = capture(2, "recent")
-		if strings.Count(first["content"].(string), "DONE-MARK") >= 2 {
+		if strings.Contains(first["content"].(string), "\nDONE-MARK\n") {
 			break
 		}
 		if time.Now().After(deadline) {
