@@ -39,8 +39,8 @@ detect_os() {
         Linux*)     OS="Linux";;
         Darwin*)    OS="Darwin";;
         CYGWIN*|MINGW*|MSYS*) OS="Windows";;
-        FreeBSD*)   OS="FreeBSD";;
-        OpenBSD*)   OS="OpenBSD";;
+        FreeBSD*)   OS="Freebsd";;
+        OpenBSD*)   OS="Openbsd";;
         *)          OS="UNKNOWN";;
     esac
     echo "$OS"
