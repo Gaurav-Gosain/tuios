@@ -479,6 +479,16 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 		if err := sess.FocusDaemonWindow(p.Window); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		// The client splits the pane it has focused, and the focus above
+		// reaches it as a state push, which can arrive after the split. So
+		// the client is told to focus the same pane first, and waited for:
+		// without it a split of a pane that was not focused cut the one
+		// that was.
+		if st := sess.GetState(); st != nil && st.FocusedWindowID != "" {
+			if verr := d.routeTape(sess, "FocusWindow", []string{st.FocusedWindowID}); verr != nil {
+				return nil, verr
+			}
+		}
 	}
 
 	before := windowIDSet(sess.GetState())
