@@ -33,10 +33,6 @@ type grid struct {
 	rows []uv.Line
 	// width is the number of columns; every non-nil row has this length.
 	width int
-	// blank is a row of blank cells of the grid's width, made on the first
-	// read that needs a whole row for a nil one and shared by later reads.
-	// It is never written.
-	blank uv.Line
 	// ext holds, for each row, a column from which every cell to the right
 	// is a plain blank (isBlankCell). It is 0 for a row nothing has written.
 	// It is an upper bound, not the exact end of the text: a write raises
@@ -118,18 +114,6 @@ func (g *grid) row(y int) uv.Line {
 	return g.rows[y]
 }
 
-// rowOrBlank returns row y for reading as a whole line, substituting the
-// shared blank row for one that has not been written.
-func (g *grid) rowOrBlank(y int) uv.Line {
-	if row := g.rows[y]; row != nil {
-		return row
-	}
-	if len(g.blank) != g.width {
-		g.blank = newBlankLine(g.width)
-	}
-	return g.blank
-}
-
 func newBlankLine(width int) uv.Line {
 	line := make(uv.Line, width)
 	for x := range line {
@@ -180,7 +164,6 @@ func (g *grid) Resize(width, height int) {
 				g.rows[y] = row[:width]
 			}
 		}
-		g.blank = nil
 		g.width = width
 		// Columns added on the right are blank, so only a narrower grid
 		// has to pull the extents in.
@@ -487,13 +470,19 @@ func (g *grid) anyRow(y, end int) bool {
 }
 
 // String returns the text of the grid, as uv.Buffer.String does.
+//
+// It runs under a read lock, alongside other readers, so it must not write to
+// the grid. A row that has not been written is all blanks, and a line's text
+// drops trailing blanks, so its text is empty.
 func (g *grid) String() string {
 	var b strings.Builder
-	for y := range g.rows {
+	for y, row := range g.rows {
 		if y > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(g.rowOrBlank(y).String())
+		if row != nil {
+			b.WriteString(row.String())
+		}
 	}
 	return b.String()
 }
