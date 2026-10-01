@@ -7,7 +7,8 @@ import "strings"
 // events, the common input fields (session_id, transcript_path, cwd,
 // hook_event_name, agent_id "only in subagent context"), Notification's
 // notification_type values, PermissionRequest's tool_name and tool_input,
-// SessionStart's source, StopFailure's error_type and SessionEnd's reason.
+// SessionStart's source, StopFailure's error_type, SessionEnd's reason, and
+// SubagentStart's and SubagentStop's agent_id and agent_type.
 //
 // What each event means for a pane:
 //
@@ -24,11 +25,14 @@ import "strings"
 //	Stop                  done
 //	StopFailure           errored, with the error_type
 //	SessionEnd            none
-//	SubagentStop and any event with agent_id: nothing
+//	SubagentStart         no state: a subagent started, see claudeSubagent
+//	SubagentStop          no state: a subagent stopped
+//	any other event with agent_id: nothing
 //
-// Five of them also carry activity for the pane's ring, read from the fields
+// Eight of them also carry activity for the pane's ring, read from the fields
 // the reference documents for them:
 //
+//	SessionStart          session_start: source (startup, resume or clear)
 //	UserPromptSubmit      prompt: the first line of prompt
 //	PreToolUse            tool: tool_name, and what tool_input names
 //	PostToolUse           tool_done, ok: the files an edit tool wrote
@@ -36,6 +40,20 @@ import "strings"
 //	Stop                  turn_end: the first line of last_assistant_message,
 //	                      which is also the done report's message, or no
 //	                      text when the field is missing or empty
+//	SubagentStart         subagent_start: agent_id and agent_type
+//	SubagentStop          subagent_stop: agent_id and agent_type
+//
+// The last three go with report-agent-activity rather than on a state report
+// (see StateActivity). The daemon counts the subagents started and not yet
+// stopped on the pane, and forgets them at a session_start, so the rail can
+// say work goes on in a pane whose main agent finished its turn. Claude Code 2.1.286, measured: a
+// subagent's start and stop carry the same agent_id and the main session's
+// session_id, and SubagentStop fires for a background subagent too, and for
+// one that errors or is stopped. An agent-team teammate fires both in its
+// lead's session, with its name as agent_type: a start each time it wakes to
+// work, a stop when it goes idle. SubagentStop also carries background_tasks,
+// a list of the session's running tasks that still names the subagent
+// stopping; it is not in the reference, so nothing here reads it.
 //
 // PermissionRequest is the approval signal. Notification's permission_prompt
 // also fires for one, but only after the user seems away, which is too late
@@ -63,14 +81,20 @@ func translateClaude(in Input, p fields) Decision {
 		return skip(ClaudeCode, event, "foreign harness: the event comes from Grok")
 	}
 	if p.str("agent_id") != "" {
+		if event == "SubagentStart" || event == "SubagentStop" {
+			return claudeSubagent(event, p)
+		}
 		return skip(ClaudeCode, event, "subagent event")
 	}
 	switch event {
 	case "SessionStart":
-		if p.str("source") == "compact" {
+		source := p.str("source")
+		if source == "compact" {
 			return skip(ClaudeCode, event, "compaction restarts the session mid-turn")
 		}
-		return send(ClaudeCode, event, identity(Report{State: "idle"}, p))
+		r := identity(Report{State: "idle"}, p)
+		r.Activity = &Activity{Event: ActivitySessionStart, Text: activityText(source)}
+		return send(ClaudeCode, event, r)
 	case "UserPromptSubmit":
 		r := identity(Report{State: "working"}, p)
 		if text := activityText(p.str("prompt")); text != "" {
@@ -119,8 +143,8 @@ func translateClaude(in Input, p fields) Decision {
 		return send(ClaudeCode, event, identity(Report{State: "errored", Message: msg}, p))
 	case "SessionEnd":
 		return send(ClaudeCode, event, identity(Report{State: "none"}, p))
-	case "SubagentStop":
-		return skip(ClaudeCode, event, "subagent event")
+	case "SubagentStart", "SubagentStop":
+		return skip(ClaudeCode, event, "subagent event with no agent_id")
 	case "":
 		return skip(ClaudeCode, event, "the payload names no event")
 	default:
@@ -171,6 +195,24 @@ func claudeNotification(event string, p fields) Decision {
 	default:
 		return skip(ClaudeCode, event, "notification type "+kind+" is not a state change")
 	}
+}
+
+// claudeSubagent reports a subagent starting or stopping. The report is its
+// activity alone, with no state, which the hook sends with
+// report-agent-activity: the main agent's own events say what the pane is
+// doing, and a subagent's start or stop, which can come while the pane is
+// done, says nothing about that. The session id rides along so the daemon's
+// identity guard keeps a nested run's subagents off the pane.
+func claudeSubagent(event string, p fields) Decision {
+	id := p.str("agent_id")
+	if !ValidSubagentID(id) {
+		return skip(ClaudeCode, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+	}
+	a := &Activity{Event: ActivitySubagentStart, AgentID: id, AgentType: activityText(p.str("agent_type"))}
+	if event == "SubagentStop" {
+		a.Event = ActivitySubagentStop
+	}
+	return send(ClaudeCode, event, Report{SessionID: p.str("session_id"), Activity: a})
 }
 
 // turnEnd adds a Stop event's activity to its done report: the first line of

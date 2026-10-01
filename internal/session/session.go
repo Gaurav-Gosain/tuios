@@ -188,6 +188,11 @@ type WindowState struct {
 	// AgentMeta and never set by a client. Additive: zero, which is what an
 	// older daemon sends, means nothing is queued. See verb_queue.go.
 	AgentQueued int `json:"agent_queued,omitempty"`
+	// AgentSubagents is how many subagents the pane's agent is running, as its
+	// hooks reported them (see agent_subagents.go). Daemon-owned like
+	// AgentQueued and never set by a client. Additive: zero, which is what an
+	// older daemon sends, means none.
+	AgentSubagents int `json:"agent_subagents,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -1098,6 +1103,14 @@ type Session struct {
 	// stateMu.
 	agentHarnessPIDs map[string]int
 
+	// agentSubagents records, by window ID, the subagents the window's agent
+	// is running, as its hooks reported them: subagent id to its type and
+	// when it was last reported. The window's AgentSubagents and the reserved
+	// metadata key subagents count them, and all three move in one mutation.
+	// See agent_subagents.go. Daemon memory only, and read and written under
+	// stateMu.
+	agentSubagents map[string]map[string]subagent
+
 	// transcripts binds windows to the record files their harnesses write. It is
 	// held here rather than in SessionState because none of it is state: a
 	// transcript path names a project directory and a session, so it is kept in
@@ -1133,6 +1146,13 @@ type Session struct {
 	agentMetaTimer *time.Timer
 	agentMetaAt    int64
 	agentMetaMu    sync.Mutex
+
+	// subagentTimer is the one-shot that drops subagents gone quiet, due at
+	// subagentAt (Unix nanoseconds). Nil while no pane has subagents. Guarded
+	// by subagentMu. See agent_subagents.go.
+	subagentTimer *time.Timer
+	subagentAt    int64
+	subagentMu    sync.Mutex
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -2338,6 +2358,8 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	// still carries the old one, and taking it would undo the rename.
 	state.Name = s.Name()
 	s.state = state
+	// A window the client closed takes its subagents with it.
+	s.forgetSubagentsLocked(state)
 	// A client pushing state with a pane focused has that pane in front of
 	// its user, so whatever it finished has been seen.
 	if seen {
@@ -2413,6 +2435,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
 	clearNowAtRestLocked(before, s.state)
+	s.forgetSubagentsLocked(s.state)
 	pruneDeadLeaves(s.state)
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
 	// is what advances the version. A client that pushes a snapshot built before
@@ -2466,6 +2489,7 @@ func (s *Session) Stop() {
 	s.stopAgentHoldTimer()
 	s.idle.stop()
 	s.stopAgentMetaTimer()
+	s.stopSubagentTimer()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -2622,6 +2646,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			CompletionSeq: w.CompletionSeq,
 			AgentMeta:     w.AgentMeta,
 			AgentQueued:   w.AgentQueued,
+			Subagents:     w.AgentSubagents,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 			Scratch:       w.Scratch,

@@ -396,6 +396,9 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentQueued > 0 {
 			mixI(w.AgentQueued)
 		}
+		if w.AgentSubagents > 0 {
+			mixI(w.AgentSubagents)
+		}
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

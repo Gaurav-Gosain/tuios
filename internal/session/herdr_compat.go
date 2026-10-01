@@ -213,30 +213,32 @@ const (
 	herdrBucketsMax = 4096
 )
 
-// herdrBuckets is a token bucket per pane.
-type herdrBuckets struct {
+// paneBuckets is a token bucket per pane. herdr's notifications and metadata
+// have one, and so does report-agent-activity, each with its own rate.
+type paneBuckets struct {
 	mu sync.Mutex
-	b  map[string]*herdrBucket
+	b  map[string]*paneBucket
 }
 
-type herdrBucket struct {
+type paneBucket struct {
 	tokens float64
 	at     time.Time
 }
 
-// take spends one token for window and reports whether there was one.
-func (h *herdrBuckets) take(window string, now time.Time) bool {
+// take spends one token for window, from a bucket that holds burst and fills
+// at rate a second, and reports whether there was one.
+func (h *paneBuckets) take(window string, now time.Time, rate, burst float64) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.b == nil || len(h.b) > herdrBucketsMax {
-		h.b = make(map[string]*herdrBucket)
+		h.b = make(map[string]*paneBucket)
 	}
 	bk := h.b[window]
 	if bk == nil {
-		bk = &herdrBucket{tokens: herdrEventBurst, at: now}
+		bk = &paneBucket{tokens: burst, at: now}
 		h.b[window] = bk
 	}
-	bk.tokens = min(herdrEventBurst, bk.tokens+now.Sub(bk.at).Seconds()*herdrEventRate)
+	bk.tokens = min(burst, bk.tokens+now.Sub(bk.at).Seconds()*rate)
 	bk.at = now
 	if bk.tokens < 1 {
 		return false
@@ -435,7 +437,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		return nil, "pane_not_found", "no pane " + p.PaneID
 	}
 	if req.Method == "notification.show" || req.Method == "pane.report_metadata" {
-		if !d.herdrEvents.take(window, time.Now()) {
+		if !d.herdrEvents.take(window, time.Now(), herdrEventRate, herdrEventBurst) {
 			return nil, "rate_limited", "this pane sends notifications and metadata too fast; wait and send again"
 		}
 	}

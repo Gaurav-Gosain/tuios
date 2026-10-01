@@ -93,9 +93,9 @@ and leave the state to the pane's screen rules.
 The pane is found from --window, then TUIOS_PANE_ID, then the process's
 controlling terminal, then its parent processes, so a harness or sandbox
 that scrubs the environment is still reported for. A payload that does not
-parse, an event with no mapping, a subagent's event, and an event from a
-harness other than the one TUIOS_AGENT names are all reported as nothing,
-never as done.
+parse, an event with no mapping, a subagent's own tool calls, and an event
+from a harness other than the one TUIOS_AGENT names are all reported as
+nothing, never as done.
 
 It asks the daemon which set-agent-state fields it supports and sends only
 those. A conditional report (if_state) is not sent to a daemon older than the
@@ -107,6 +107,13 @@ tool name), which the daemon keeps in the pane's activity ring for
 'tuios agent-log' and the rail's "now" line. Only the first line of any text is
 sent, with likely secrets masked. A Stop's done report says the first line of
 what the agent said last.
+
+Claude Code's SubagentStart and SubagentStop report no state. Each sends the
+subagent with report-agent-activity, and the daemon counts the subagents
+started and not yet stopped in the pane's subagents metadata, which the rail
+shows on a pane at rest. A SessionStart sends its idle report and then a
+session_start, which clears the count. A daemon without report-agent-activity
+gets neither.
 
 A report that ends a turn (done or errored) also sends what the pane's status
 line feed (tuios agent-statusline) held back, with set-agent-meta for the same
@@ -176,8 +183,14 @@ type agentHookOutcome struct {
 	Reason      string   `json:"reason,omitempty"`
 	// ActivityRecorded says whether the daemon kept the event's activity,
 	// nil when none was sent.
-	ActivityRecorded *bool  `json:"activity_recorded,omitempty"`
-	Error            string `json:"error,omitempty"`
+	ActivityRecorded *bool `json:"activity_recorded,omitempty"`
+	// Subagents is how many subagents the pane holds after a
+	// report-agent-activity call, nil when none was made.
+	Subagents *int `json:"subagents,omitempty"`
+	// ActivityError is why the report-agent-activity call that followed a
+	// state report failed. The state report stands.
+	ActivityError string `json:"activity_error,omitempty"`
+	Error         string `json:"error,omitempty"`
 	// Hold is what happened to a prompt the Inbox could answer, when the
 	// hook asked for one.
 	Hold *approvalTrace `json:"hold,omitempty"`
@@ -417,16 +430,82 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 		out.Applied, out.Reason = &res.Applied, res.Reason
 		return out
 	}
-	res, dropped, err := reportHook(client, out.Session, out.Window, out.Harness, out.HarnessPID, *out.Report)
-	out.Unsupported = dropped
-	if err != nil {
-		out.Error = err.Error()
+	// An event set-agent-state does not take goes with report-agent-activity:
+	// on its own for a report with no state, and after the state report for
+	// one with a state, so a new conversation has taken the pane over by
+	// the time its session_start is checked against it.
+	r := *out.Report
+	var alone *integration.Activity
+	if r.Activity != nil && !integration.StateActivity(r.Activity.Event) {
+		alone, r.Activity = r.Activity, nil
+	}
+	if r.State != "" {
+		res, dropped, err := reportHook(client, out.Session, out.Window, out.Harness, out.HarnessPID, r)
+		out.Unsupported = dropped
+		if err != nil {
+			out.Error = err.Error()
+			return out
+		}
+		out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
+		out.ActivityRecorded = res.ActivityRecorded
+		out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
+	}
+	if alone == nil {
 		return out
 	}
-	out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
-	out.ActivityRecorded = res.ActivityRecorded
-	out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
+	res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, *alone)
+	switch {
+	case err != nil && r.State == "":
+		out.Error = err.Error()
+	case err != nil:
+		out.ActivityError = err.Error()
+	default:
+		out.ActivityRecorded, out.Subagents = &res.Recorded, &res.Subagents
+		if r.State == "" {
+			out.State, out.Reason = res.State, res.Reason
+		}
+	}
 	return out
+}
+
+// hookActivityResult is the part of report-agent-activity's answer the hook
+// reads.
+type hookActivityResult struct {
+	State     string `json:"state"`
+	Recorded  bool   `json:"recorded"`
+	Reason    string `json:"reason"`
+	Subagents int    `json:"subagents"`
+}
+
+// reportHookActivity sends one hook event with report-agent-activity. A
+// daemon from before the verb answers unknown_verb, which changes nothing, so
+// the hook does not ask list-verbs first; the error says why nothing was
+// recorded.
+func reportHookActivity(client verbCaller, sess, window, harness string, harnessPID int, sessionID string, a integration.Activity) (hookActivityResult, error) {
+	params := map[string]any{
+		"session":  sess,
+		"window":   window,
+		"harness":  harness,
+		"activity": a,
+	}
+	if sessionID != "" {
+		params["agent_session_id"] = sessionID
+		if harnessPID > 1 {
+			params["harness_pid"] = harnessPID
+		}
+	}
+	raw, err := client.Call("report-agent-activity", params)
+	if verr, ok := errors.AsType[*session.VerbCallError](err); ok && verr.Code == session.ErrVerbUnknownVerb {
+		return hookActivityResult{}, errors.New("the running daemon predates report-agent-activity, so the " + a.Event + " was not reported. It works once the daemon restarts")
+	}
+	if err != nil {
+		return hookActivityResult{}, err
+	}
+	var res hookActivityResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return hookActivityResult{}, err
+	}
+	return res, nil
 }
 
 // flushAtTurnEnd sends what the pane's status line feed held back when this

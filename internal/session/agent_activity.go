@@ -3,16 +3,18 @@ package session
 import (
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
-// An agent pane's activity: the prompts, tool calls, tool results and
-// finished turns its hooks reported, kept in a bounded ring per pane in daemon
-// memory, and the recap computed from it.
+// An agent pane's activity: the prompts, tool calls, tool results, finished
+// turns, subagents and conversation starts its hooks reported, kept in a
+// bounded ring per pane in daemon memory, and the recap computed from it.
 //
 // The ring is written only by the pane's own reports: activity rides
 // set-agent-state, which is scopeSelf and passes the identity guard first. It
@@ -70,6 +72,15 @@ const (
 	ActivityCommand = "command"
 	// ActivityState is the pane's agent state changing. Text is the new state.
 	ActivityState = "state"
+	// ActivitySubagentStart is a subagent the agent handed work to starting,
+	// or an agent-team teammate waking to work. Text is its type.
+	ActivitySubagentStart = "subagent_start"
+	// ActivitySubagentStop is a subagent that finished, failed or was stopped,
+	// or a teammate going idle. Text is its type.
+	ActivitySubagentStop = "subagent_stop"
+	// ActivitySessionStart is the agent starting a conversation: a new one, a
+	// resumed one, or a fresh one after a clear. Text says which.
+	ActivitySessionStart = "session_start"
 )
 
 // Reserved agent metadata keys. Only the daemon writes them, from hook
@@ -82,6 +93,10 @@ const (
 	AgentMetaNow = "now"
 	// AgentMetaPrompt is the first line of the last prompt submitted.
 	AgentMetaPrompt = "prompt"
+	// AgentMetaSubagents is how many subagents the agent is running, as a
+	// value that reads on its own: "1 subagent", "3 subagents". It is absent
+	// while there are none. See agent_subagents.go.
+	AgentMetaSubagents = "subagents"
 	// AgentMetaModel is the model the harness named. It is not reserved: a
 	// status line may write it too.
 	AgentMetaModel = "model"
@@ -93,7 +108,7 @@ const (
 
 // reservedAgentMetaKeys are the keys set-agent-meta refuses and its clear
 // leaves alone.
-var reservedAgentMetaKeys = []string{AgentMetaNow, AgentMetaPrompt}
+var reservedAgentMetaKeys = []string{AgentMetaNow, AgentMetaPrompt, AgentMetaSubagents}
 
 // AgentActivityEntry is one entry of a pane's activity ring.
 type AgentActivityEntry struct {
@@ -339,16 +354,24 @@ type AgentActivityReport struct {
 	OK *bool `json:"ok,omitempty"`
 	// Model is the model the harness named, when it did.
 	Model string `json:"model,omitempty"`
+	// AgentID and AgentType name the subagent of a subagent event: the
+	// harness's id for it, which pairs its start with its stop, and its type.
+	AgentID   string `json:"agent_id,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
 }
 
-// checkActivityReport refuses an activity whose event is not one of
-// activityEvents. A report without one is not checked.
-func checkActivityReport(a *AgentActivityReport) *verbError {
+// checkActivityReport refuses an activity whose event is not one of events,
+// the verb's, and a subagent event without an id the daemon can keep. A
+// report without one is not checked.
+func checkActivityReport(a *AgentActivityReport, events []string) *verbError {
 	if a == nil {
 		return nil
 	}
-	if !slices.Contains(activityEvents, a.Event) {
-		return invalidParam("activity", "activity.event is one of the activity events", activityEvents...)
+	if !slices.Contains(events, a.Event) {
+		return invalidParam("activity", "activity.event is one of the activity events", events...)
+	}
+	if subagentEvent(a.Event) && !integration.ValidSubagentID(a.AgentID) {
+		return invalidParam("activity", "a subagent event needs activity.agent_id: 1 to "+strconv.Itoa(integration.SubagentIDMax)+" letters, digits, '_', '.', ':', '@' or '-'")
 	}
 	return nil
 }
@@ -372,6 +395,11 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 		Target: attentionText(r.Target, activityTextMax),
 		Text:   attentionText(firstLine(r.Text), activityTextMax),
 	}
+	if subagentEvent(r.Event) {
+		// The entry says which kind of agent it was. Its id pairs a start
+		// with its stop in the daemon and says nothing to a reader.
+		e.Text = attentionText(firstLine(r.AgentType), activityToolMax)
+	}
 	if r.OK != nil {
 		ok := *r.OK
 		e.OK = &ok
@@ -390,13 +418,30 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 }
 
 // recordAgentActivity keeps one hook event in the pane's ring and moves the
-// reserved metadata keys it implies. state is the pane's state after the
-// report the activity rode on, applied or not.
-func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentActivityReport, state AgentState) {
+// reserved metadata keys it implies, and reports whether the ring kept it.
+// state is the pane's state after the report the activity rode on, applied
+// or not.
+//
+// A subagent's start or stop is kept only when it moved the pane's
+// subagents. A stop for one the pane never saw start, a second start of one
+// already running, a start past the cap and a start on a pane with no agent
+// state are nothing, and an entry in the ring would say otherwise.
+func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentActivityReport, state AgentState) bool {
 	e := activityEntryOf(r)
+	m := activityMetaFor(e, r.Model, state)
+	m.subagents = subagentChangeOf(r)
+	if subagentEvent(r.Event) {
+		if !sess.applyActivityMeta(windowID, m) {
+			return false
+		}
+		d.activity.add(sess.ID, sess.Name(), windowID, e, true)
+		d.dropRingOfClosedWindow(sess, windowID)
+		return true
+	}
 	d.activity.add(sess.ID, sess.Name(), windowID, e, true)
 	d.dropRingOfClosedWindow(sess, windowID)
-	sess.applyActivityMeta(windowID, activityMetaFor(e, r.Model, state))
+	sess.applyActivityMeta(windowID, m)
+	return true
 }
 
 // dropRingOfClosedWindow forgets the pane's ring when the window is gone. The
@@ -427,6 +472,9 @@ type activityMeta struct {
 	values []*string
 	// model is a model the harness named, empty when it named none.
 	model string
+	// subagents is what the entry does to the subagents the pane's agent is
+	// running, which the subagents key counts.
+	subagents subagentChange
 }
 
 // activityMetaFor decides the metadata an entry implies. A tool call starting
@@ -510,10 +558,17 @@ func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
 // holding the value, a key already absent, and a model the pane already shows
 // from any source change nothing, so a hook firing on every tool call pushes
 // state only when what the rail draws moves.
-func (s *Session) applyActivityMeta(windowID string, m activityMeta) {
-	if len(m.keys) == 0 && m.model == "" {
-		return
+//
+// The pane's subagents move in the same mutation as the count the window
+// carries and the key that says it, under the state lock, so hooks for
+// subagents started together, which a harness runs at the same moment, cannot
+// leave a count the set no longer has. It reports whether they moved.
+func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
+	if len(m.keys) == 0 && m.model == "" && m.subagents.op == "" {
+		return false
 	}
+	moved := false
+	var expiry int64
 	_ = s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, windowID)
 		if err != nil {
@@ -527,6 +582,9 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) {
 			u.Keys = append(u.Keys, key)
 			u.Values = append(u.Values, m.values[i])
 		}
+		var n int
+		n, moved = s.moveSubagentsLocked(w, m.subagents, now)
+		expiry = s.subagentExpiryLocked()
 		next, changed, err := applyAgentMeta(cur, u, now)
 		if err != nil {
 			return err
@@ -540,12 +598,19 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) {
 			}
 			changed = true
 		}
+		if moved {
+			w.AgentSubagents = n
+			next = withSubagentsKey(next, n, now)
+			changed = true
+		}
 		if !changed && len(cur) == len(w.AgentMeta) {
 			return errNoAgentMetaChange
 		}
 		w.AgentMeta = next
 		return nil
 	})
+	s.armSubagentPrune(expiry)
+	return moved
 }
 
 // agentMetaValue is the value tokens hold for key, or "".

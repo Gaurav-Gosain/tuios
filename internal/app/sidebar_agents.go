@@ -191,11 +191,15 @@ const sidebarAgentFoldMin = 2
 
 // sidebarAgentRests reports whether a row has been at rest long enough to
 // fold: idle, unknown or a finished turn already seen, in that state for at
-// least the threshold, not the focused pane and with nothing queued for it. A
-// row that needs the person, a finished turn not yet seen and a working agent
-// never fold.
+// least the threshold, not the focused pane, with nothing queued for it and
+// no subagents at work. A row that needs the person, a finished turn not yet
+// seen and a working agent never fold, and neither does a row whose agent
+// ended its turn with subagents still running: the work is not at rest.
 func sidebarAgentRests(e sidebarAgentEntry, threshold time.Duration, now time.Time) bool {
 	if threshold <= 0 || e.Fold > 0 || e.Focused || e.Queued > 0 || e.StateAt <= 0 {
+		return false
+	}
+	if e.Subagents > 0 {
 		return false
 	}
 	if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupIdle {

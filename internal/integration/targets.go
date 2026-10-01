@@ -197,8 +197,10 @@ var targets = []*Target{
 		// Version 2 gives PermissionRequest room to hold its prompt for the
 		// Inbox ([agents.approvals]): 310 seconds, past the daemon's longest
 		// hold of 300. With approvals off the hook still returns in well under
-		// a second, so the longer limit costs nothing.
-		ID: ClaudeCode, Name: "Claude Code", Binary: "claude", Version: 2, Reports: ReportsState,
+		// a second, so the longer limit costs nothing. Version 3 adds
+		// SubagentStart and SubagentStop, so the rail can say a pane's agent
+		// still has subagents at work after its own turn ended.
+		ID: ClaudeCode, Name: "Claude Code", Binary: "claude", Version: 3, Reports: ReportsState,
 		Source:    "https://code.claude.com/docs/en/hooks (settings.json hooks: event, matcher group, command hook, timeout in seconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("CLAUDE_CONFIG_DIR", ".claude") },
 		File:      "settings.json",
@@ -208,6 +210,7 @@ var targets = []*Target{
 			{"PermissionRequest", ApprovalHookTimeout}, {"PostToolUse", 5}, {"PostToolUseFailure", 5},
 			{"PermissionDenied", 5}, {"ElicitationResult", 5}, {"Notification", 5},
 			{"Stop", 5}, {"StopFailure", 5}, {"SessionEnd", 5},
+			{"SubagentStart", 5}, {"SubagentStop", 5},
 		},
 	},
 	{

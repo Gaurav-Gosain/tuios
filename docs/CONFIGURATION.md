@@ -302,17 +302,20 @@ or a click on it shows the rows until the rail lets go of the keyboard, or,
 when the rail did not have the keyboard, until a click outside the rail or a
 pane is focused. It
 takes two rows or more, and never a row that needs you, a finished turn not
-yet seen, a working agent, the pane you are in, or one with messages queued.
+yet seen, a working agent, the pane you are in, one with messages queued, or
+one whose agent has subagents at work.
 
-The agent row in `[appearance.sidebar.agent_row]` has three tokens for what
+The agent row in `[appearance.sidebar.agent_row]` has four tokens for what
 tuios feeds itself: `now` (what a working agent is doing, drawn only while it
-works), `context` (`ctx 84%` in the warning ink, drawn only at 80% or more)
-and `prompt` (the first line of the last prompt, not shipped on the row). The
-shipped `tokens` list is now `["session", "need", "harness", "name",
-"elapsed", "context", "meta", "now", "message"]`; a list you wrote keeps its
-own order and gains nothing. The `meta` token no longer draws the fed keys
-(`now`, `prompt`, `model`, `context`, `cost`, `plan`), so place any of them
-you want with its own token. See
+works), `context` (`ctx 84%` in the warning ink, drawn only at 80% or more),
+`subagents` (`2 subagents`, how many subagents the agent has at work, drawn
+on any row while any run, from Claude Code's hooks) and `prompt` (the first
+line of the last prompt, not shipped on the row). The shipped `tokens` list is
+now `["session", "need", "harness", "name", "elapsed", "context", "subagents",
+"meta", "now", "message"]`; a list you wrote keeps its own order and gains
+nothing, so add `subagents` to it to see the count. The `meta` token no longer
+draws the fed keys (`now`, `prompt`, `model`, `context`, `cost`, `plan`,
+`subagents`), so place any of them you want with its own token. See
 [What the second line says](AGENT_STATE.md#what-the-second-line-says).
 
 The `$name` tokens can place the metadata keys tuios now feeds: `$model`,

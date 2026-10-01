@@ -421,6 +421,9 @@ type Window struct {
 	// AgentQueued is how many messages wait in the pane's delivery queue, as the
 	// daemon synced it. Zero for none, and from a daemon that has no queue.
 	AgentQueued int
+	// AgentSubagents is how many subagents the pane's agent is running, as the
+	// daemon synced it. Zero for none, and from a daemon that counts none.
+	AgentSubagents int
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds), as
 	// the daemon stamped it. The rail shows the elapsed time so a pane waiting
 	// on input reads differently from one that just started working.

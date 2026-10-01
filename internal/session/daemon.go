@@ -47,7 +47,10 @@ type Daemon struct {
 	herdrSeqs herdrSeqs
 	// herdrEvents limits the notifications and metadata each pane sends
 	// over the herdr protocol socket.
-	herdrEvents herdrBuckets
+	herdrEvents paneBuckets
+	// activityReports limits the report-agent-activity calls each pane
+	// makes. See verbReportAgentActivity.
+	activityReports paneBuckets
 	// herdrConns counts each caller's open connections on the herdr
 	// protocol socket. See herdrConnLimits.
 	herdrConns herdrConnCount

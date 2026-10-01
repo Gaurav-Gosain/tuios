@@ -19,8 +19,8 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach. Includes `read`, `write` and `fan`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
-`set-agent-meta`, `set-agent-session`, `ask-human`, `request-approval`) and ask
-what you hold. So `tuios agent-hook` works in every pane.
+`set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human`,
+`request-approval`) and ask what you hold. So `tuios agent-hook` works in every pane.
 
 `TUIOS_PANE_GRANTS` is what the pane held when its process started;
 `tuios pane-grants` is what it holds now.

@@ -166,6 +166,31 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A pane counts the subagents its agent is running.** An agent that hands work
+to subagents and ends its turn reports `done` while they work, so the daemon
+keeps, per pane, the subagents its hooks reported starting and not yet
+stopping (see [Agent metadata](AGENT_STATE.md#agent-metadata)). The reports
+come with the new verb [report-agent-activity](#report-agent-activity), and
+`set-agent-state` is unchanged: `state` is still required, and its `activity`
+still takes the five events it did. What changes for a caller of the older
+verbs:
+
+- `subagents` is a reserved metadata key, written by tuios: `1 subagent`,
+  `3 subagents`, absent at none. `set-agent-meta` refuses it like `now` and
+  `prompt`, and its `clear` leaves it.
+- `get-agent-state` and every `list-agents` entry gain `subagents`, the count
+  as a number, 0 while none run. The synced window state gains
+  `agent_subagents`, omitted when zero and taken from the daemon's own state
+  on every client push, and so does a session's window summary.
+- `agent-activity` entries have three more kinds: `subagent_start` and
+  `subagent_stop`, with the subagent's type as `text`, and `session_start`,
+  with how the conversation started.
+- The Claude Code integration is version 3: it adds `SubagentStart` and
+  `SubagentStop` entries, so `integration status` reads a version 2 install as
+  out of date until it is installed again. Its `SessionStart` sends the same
+  `set-agent-state` as before and then a `report-agent-activity`
+  `session_start`.
+
 **A call from another machine is held to a link policy.** Every verb and
 every binary message that arrives over a link is checked against what the
 `[hosts]` table on the receiving machine lets the calling machine do, before
@@ -1495,7 +1520,7 @@ What a restricted connection may call:
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `ask-human` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
@@ -1514,8 +1539,9 @@ Under `own`:
   caller's own session: a selector reaches every session.
 - A `host` naming another machine, such as `send-agent-message`'s outbox
   delivery, is refused: no session on another machine is in reach.
-- `set-agent-state`, `set-agent-meta` and `set-agent-session` with no
-  `window` land on the caller's own pane, and naming another pane is refused.
+- `set-agent-state`, `set-agent-meta`, `set-agent-session` and
+  `report-agent-activity` with no `window` land on the caller's own pane, and
+  naming another pane is refused.
 - `send-agent-message` and `ask-agent` in the caller's own session get `from`
   set to the caller's pane, and a different `from` is refused.
   `read-agent-messages` may name only the caller's own inbox in `to`.
@@ -1547,7 +1573,8 @@ person configured) is held to nothing new.
 Whatever it holds, a pane may call `hello`, `list-verbs`, `unsubscribe`,
 `restrict-connection`, `pane-grants` and `resolve-pane`, and report about
 itself: `set-agent-state`, `set-agent-meta`, `set-agent-session`,
-`ask-human` and `request-approval`, on its own pane only.
+`report-agent-activity`, `ask-human` and `request-approval`, on its own pane
+only.
 
 A pane holds the grants it was given: `new-window`, `start-agent` and `fan`
 take `grants`, and `set-pane-grants` changes them later. A pane given none
@@ -3207,6 +3234,71 @@ Wire compatibility: a new verb. An older daemon answers `unknown_verb`, and
 `tuios agent-hook` asks `list-verbs` first and sends nothing to a daemon
 without it.
 
+### report-agent-activity
+
+Record one hook event of a pane's own agent without reporting a state. It is
+what `tuios agent-hook` sends for an event that says nothing about what the
+pane's agent is doing: Claude Code's `SubagentStart` and `SubagentStop`, and
+the `session_start` that follows a `SessionStart`'s state report. Params:
+`session`, `window`, `activity` (required), `harness`, `agent_session_id`,
+`harness_pid`. Without `window`, a caller in a pane reports about its own
+pane, as with `set-agent-state`.
+
+`activity` is `set-agent-state`'s activity with three more events, the list
+`list-verbs` gives as `accepted`: `subagent_start` and `subagent_stop`, with
+`agent_id` (required: 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-`,
+which pairs a start with its stop) and `agent_type`, and `session_start`, with
+how the conversation started as `text`. An unknown event, and a subagent event
+without a valid `agent_id`, is `invalid_params` and nothing is recorded.
+
+```json
+{"verb": "report-agent-activity", "params": {"session": "work", "window": "build", "harness": "claude-code", "agent_session_id": "5f1c", "activity": {"event": "subagent_start", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}}}
+```
+
+```json
+{"result": {"type": "agent_activity_reported", "window_id": "3f2a9c1e", "state": "done", "recorded": true, "subagents": 3}}
+```
+
+The event goes into the pane's activity ring and moves the reserved metadata
+keys as `set-agent-state`'s activity does, and nothing else moves: not the
+state, its source or its stamp, the message or the harness attribution.
+`state` in the answer is what the window shows, and `subagents` how many
+subagents it holds after the call.
+
+The pane's subagents:
+
+- `subagent_start` adds one and `subagent_stop` removes it. The window
+  carries the count as `agent_subagents`, and the reserved metadata key
+  `subagents` says it in words. A pane holds at most 64.
+- `recorded` is false, and the ring keeps nothing, for a stop of a subagent
+  the pane never saw start, a start past 64, a start on a pane whose state is
+  `none`, and a second start of one already running, which renews when the
+  pane last heard of it.
+- They are forgotten on `session_start`, when the window's state goes to
+  `none` (a `SessionEnd`, the agent leaving the pane, `set-agent-state none`)
+  and when the window closes. One the pane hears nothing more of for an hour,
+  a stop lost to an interrupt, is dropped then, and the change is pushed like
+  any other. They are daemon memory only.
+
+The guard: a report naming a conversation other than the one the window
+holds is refused with `reason: foreign_session`, and one naming a harness
+other than the one it is attributed to with `foreign_harness`, at rest as well
+as mid-turn. A state report from another conversation takes a pane at rest
+over; this report never takes a pane over, so another conversation's
+subagent is not the pane's, such as one a `claude -p` the agent left running
+in the background starts.
+
+Rate: a pane may report a burst of 64 events, then 10 a second. A call past
+that is `rate_limited` and records nothing. Each recorded event may push
+state to every attached client, and the cap of 64 bounds memory, not pushes.
+
+Who may call it: as `set-agent-state`, a pane for itself only; over a link it
+needs `write`, and a hosted pane's process sends it to its owner.
+
+Wire compatibility: a new verb. An older daemon answers `unknown_verb`, which
+changes nothing: `tuios agent-hook` then reports the `SessionStart`'s state
+alone, and nothing for a subagent.
+
 ### resume-agent
 
 Resume the agent conversation recorded for a pane: type the harness's resume
@@ -3302,9 +3394,11 @@ replaced with spaces and is cut to 80 characters. A bad key, too many keys, or
 a TTL out of range is `invalid_params`; a cut value is not an error, and its
 key is listed in `truncated`.
 
-Reserved keys: `now` (what the agent is doing, such as `Bash: go test ./...`)
-and `prompt` (the first line of the last prompt) are written by tuios from the
-`activity` a hook reports with `set-agent-state`, with source `activity`. This
+Reserved keys: `now` (what the agent is doing, such as `Bash: go test ./...`),
+`prompt` (the first line of the last prompt) and `subagents` (how many
+subagents the agent is running, such as `3 subagents`) are written by tuios
+from the `activity` a hook reports with `set-agent-state` or
+[report-agent-activity](#report-agent-activity), with source `activity`. This
 verb refuses them with `invalid_params`, and its `clear` leaves them. A hook
 that names a model also sets `model`, with source `hook`, which a caller may
 still write.
@@ -3336,7 +3430,8 @@ Response:
 {"result": {"type": "agent_meta_set", "window_id": "3f2a9c1e", "meta": {"model": "opus", "context": "42%"}, "truncated": []}}
 ```
 
-`get-agent-state` and each `list-agents` entry carry the same `meta` object.
+`get-agent-state` and each `list-agents` entry carry the same `meta` object,
+and `subagents`, the count `meta`'s `subagents` key states, as a number.
 
 Keys tuios writes itself, each only when the harness states it: `model`,
 `context` (`42%`), `cost` (`$1.20`, or the amount and an ISO 4217 code for
@@ -4008,8 +4103,9 @@ dialled one way:
    `{"id":1,"verb":"set-agent-state","params":{...}}`, one per line, and the
    owner answers each with `{"id":1,"result":{...}}` or
    `{"id":1,"error":{...}}`, in any order.
-3. On the far machine, a call of `set-agent-state`, `set-agent-meta` or
-   `set-agent-session` with `window`, `read-agent-messages` with `to`,
+3. On the far machine, a call of `set-agent-state`, `set-agent-meta`,
+   `set-agent-session` or `report-agent-activity` with `window`,
+   `read-agent-messages` with `to`,
    `send-agent-message` with `from`, or `wait-for` with condition
    `agent-message` and `window`, set to the pane's id or window id, is sent to
    the owner, and the owner's answer is the answer.
@@ -4206,6 +4302,9 @@ Each entry has `seq` (per pane, from 1), `at` (unix nanoseconds) and `kind`:
 | `tool_done` | a tool call that finished | `tool`, `target`, `files` it wrote, `ok` when the harness said |
 | `tool_failed` | a tool call that failed | `tool`, `target`, `ok` false, `text`: the error's first line |
 | `turn_end` | the agent finishing a turn | `text`: the first line of what it said last, absent when the harness sent none |
+| `subagent_start` | a subagent starting, or a teammate waking to work, reported with [report-agent-activity](#report-agent-activity); kept only when the pane did not have it running already | `text`: its type |
+| `subagent_stop` | a subagent stopping, or a teammate going idle; kept only for one the pane saw start | `text`: its type |
+| `session_start` | the agent starting a conversation | `text`: how, such as `startup`, `resume` or `clear` |
 | `command` | a command the pane's shell finished | `target`: the command line, `exit` when the shell sent one |
 | `state` | the pane's agent state changing | `text`: the new state |
 

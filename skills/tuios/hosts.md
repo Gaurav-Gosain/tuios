@@ -131,7 +131,8 @@ tuios wait-for agent-message -w "$TUIOS_PANE_ID" --timeout 600000
 ```
 
 Only `set-agent-state`, `set-agent-meta`, `set-agent-session`,
-`read-agent-messages`, `send-agent-message` and `wait-for agent-message` cross,
+`report-agent-activity`, `read-agent-messages`, `send-agent-message` and
+`wait-for agent-message` cross,
 and always as your own window. A wait there runs at most an hour. Everything
 else you run talks to the machine you are on.
 

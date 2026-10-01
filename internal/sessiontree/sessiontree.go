@@ -68,6 +68,9 @@ type Node struct {
 	// Queued is how many messages wait in the pane's delivery queue to be
 	// typed when its agent comes to rest. Never rolled up.
 	Queued int
+	// Subagents is how many subagents the pane's agent is running. Never
+	// rolled up.
+	Subagents int
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -161,6 +164,8 @@ type WindowInput struct {
 	Meta []MetaToken
 	// Queued is how many messages wait in the pane's delivery queue.
 	Queued int
+	// Subagents is how many subagents the pane's agent is running.
+	Subagents int
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -312,6 +317,7 @@ func BuildSession(s SessionInput) Node {
 			AgentKind:  w.AgentKind,
 			Meta:       w.Meta,
 			Queued:     w.Queued,
+			Subagents:  w.Subagents,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 			Host:       w.Host,

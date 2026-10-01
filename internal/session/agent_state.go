@@ -268,6 +268,33 @@ func (s *Session) agentReportGuard(target string, r AgentReport) (string, string
 	return w.ID, sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r)
 }
 
+// activityReportGuard is agentReportGuard for report-agent-activity, which
+// carries no state, and returns the state the window shows as well. Such a
+// report never takes a pane over, so beyond sessionGuard it is refused
+// whenever it names a conversation other than the one the pane holds, or a
+// harness other than the one the pane is attributed to, at rest as well as
+// mid-turn: the subagents of a `claude -p` the agent left running in the
+// background are not the pane's agent's, whatever the pane is doing.
+func (s *Session) activityReportGuard(target string, r AgentReport) (string, AgentState, string, error) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	idx, err := findWindowStateIndex(s.state.Windows, target)
+	if err != nil {
+		return "", AgentStateNone, "", err
+	}
+	w := &s.state.Windows[idx]
+	claim, held := s.agentClaims[w.ID]
+	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r)
+	switch {
+	case reason != "":
+	case r.SessionID != "" && w.AgentSessionID != "" && r.SessionID != w.AgentSessionID:
+		reason = agentRefusedForeignSession
+	case r.Harness != "" && w.AgentHarness != "" && r.Harness != w.AgentHarness:
+		reason = agentRefusedForeignHarness
+	}
+	return w.ID, w.AgentState, reason, nil
+}
+
 // applyAgentReport is ApplyAgentReport with the reason a refused report was
 // refused, empty when it was applied.
 func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bool, string, error) {

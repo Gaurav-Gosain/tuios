@@ -24,6 +24,10 @@ var (
 	approvalKinds = []string{AttentionApproval, AttentionPlan}
 	// activityEvents are the entries set-agent-state's activity reports.
 	activityEvents = []string{"prompt", "tool", "tool_done", "tool_failed", "turn_end"}
+	// reportActivityEvents are the entries report-agent-activity takes: the
+	// same, and the events no state report carries, which set-agent-state
+	// predates.
+	reportActivityEvents = append(append([]string(nil), activityEvents...), "subagent_start", "subagent_stop", "session_start")
 )
 
 // agentWorkVerbs are the registry entries of the verbs above.
@@ -207,7 +211,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// agent_activity.go
 		"agent-activity": {
-			description: "Read what the agent in a pane has been doing, from the ring of hook events the daemon keeps for it: prompts, tool calls and their results, finished turns, and the commands its shell ran, the newest 256 of them. A pane gets a ring on the first hook report that carries activity, and loses it when it closes; the ring is daemon memory only. With recap, a summary of it since a time. The text is the agent's, cleaned and masked, and marked untrusted.",
+			description: "Read what the agent in a pane has been doing, from the ring of hook events the daemon keeps for it: prompts, tool calls and their results, finished turns, subagents starting and stopping, conversations starting, and the commands its shell ran, the newest 256 of them. A pane gets a ring on the first hook report that carries activity, and loses it when it closes; the ring is daemon memory only. With recap, a summary of it since a time. The text is the agent's, cleaned and masked, and marked untrusted.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -217,7 +221,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "recap", Type: "bool", Description: "Also summarise the entries: turns, files, commands, the last test run and what the agent last said.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "entries", Type: "[]object", Description: "Oldest first: seq, at (unix nanoseconds), kind (prompt, tool, tool_done, tool_failed, turn_end, command or state), tool, target, files, ok, exit and text per entry. Empty for a pane with no ring."},
+				{Name: "entries", Type: "[]object", Description: "Oldest first: seq, at (unix nanoseconds), kind (prompt, tool, tool_done, tool_failed, turn_end, subagent_start, subagent_stop, session_start, command or state), tool, target, files, ok, exit and text per entry. Empty for a pane with no ring."},
 				{Name: "window", Type: "string", Description: "The window id the entries are of."},
 				{Name: "last_seq", Type: "int", Description: "The seq of the newest entry the ring holds."},
 				{Name: "recap", Type: "object", Description: "With recap, over every entry after since and since_seq whatever the limit: since (where it starts), turns, files (the first 20), files_total, commands, tests (the newest test run: cmdline, ok or null when unknown, at), last_said and state (the pane's state now)."},

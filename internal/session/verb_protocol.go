@@ -1451,6 +1451,28 @@ func init() {
 			},
 			handler: (*Daemon).verbSetAgentSession,
 		},
+		"report-agent-activity": {
+			description: "Record one hook event of a window's pane's own agent without reporting a state: a subagent starting or stopping, a conversation starting, or any activity set-agent-state takes. It goes into the pane's activity ring, read back with agent-activity, and moves the reserved metadata keys, the subagents count above all. The state, its source and stamp, the message and the harness attribution stay as they are. It is what a hook sends for an event that says nothing about what the pane's agent is doing.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "activity", Type: "object", Required: true, Description: "The hook event: event, and as set-agent-state's activity tool, target, text, files, ok and model. A subagent event takes agent_id (1 to 128 letters, digits, '_', '.', ':', '@' or '-', required), which pairs a start with its stop, and agent_type. session_start, a new, resumed or cleared conversation, forgets the pane's subagents.", Accepted: reportActivityEvents},
+				{Name: "harness", Type: "string", Description: "Id of the harness the event is about. A window attributed to a different harness refuses it with reason foreign_harness."},
+				{Name: "agent_session_id", Type: "string", Description: "The harness's own id for the conversation the event is about. A window holding a different id refuses it with reason foreign_session, at rest as well as mid-turn: the report never takes a pane over, so another conversation's subagent is not the pane's."},
+				{Name: "harness_pid", Type: "int", Description: "The pid of the harness process that ran the hook, read as set-agent-state reads it. Kept in daemon memory only."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window the event is about."},
+				{Name: "state", Type: "string", Description: "The state the window shows, unchanged by the call.", Accepted: AgentStateNames},
+				{Name: "recorded", Type: "bool", Description: "Whether the event went into the pane's activity ring. False for one the guard refused, and for a subagent event that moved nothing: a stop for a subagent the pane never saw start, a second start of one running (which renews it), a start past 64, or a start on a pane with no state."},
+				{Name: "reason", Type: "string", Description: "Why the guard refused the event. Absent when it did not.", Accepted: []string{agentRefusedForeignSession, agentRefusedForeignHarness}},
+				{Name: "subagents", Type: "int", Description: "How many subagents the pane's agent is running after the call."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"report-agent-activity","params":{"session":"work","window":"build","harness":"claude-code","agent_session_id":"5f1c","activity":{"event":"subagent_start","agent_id":"a3f09c2e71d4b5a68","agent_type":"Explore"}}}`,
+			},
+			handler: (*Daemon).verbReportAgentActivity,
+		},
 		"resume-agent": {
 			description: "Resume the agent conversation recorded for a window's pane: type the harness's resume command, built from its manifest's [resume] template and the window's agent_session_id, into the pane's shell. It is how a pane restored after a daemon restart gets its conversation back; the old process does not survive a restart, so this starts a new one on the same conversation. It types only when the pane's own shell holds the terminal's foreground, so the command never lands in a running program, and it closes the pane's resume item in the Inbox. The command is fixed by the manifest and the id is one plain shell token, so the call can type nothing a caller chose.",
 			params: []verbParam{
@@ -1492,6 +1514,7 @@ func init() {
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own conversation id, empty until a hook reports one."},
 				{Name: "meta", Type: "object", Description: "The set-agent-meta keys, key to value."},
 				{Name: "queued", Type: "int", Description: "How many messages wait in the pane's delivery queue."},
+				{Name: "subagents", Type: "int", Description: "How many subagents the pane's agent is running, as its hooks reported them with report-agent-activity. meta's subagents key says it in words."},
 			},
 			examples: []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:  (*Daemon).verbGetAgentState,
@@ -1516,10 +1539,10 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "tokens", Type: "object", Description: "Key to value. A string sets the key, null removes it. At most 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters, digits, '_' or '-', starting with a letter, and not now or prompt. A value has control characters replaced and is cut to 80 characters. Required unless clear is true."},
+				{Name: "tokens", Type: "object", Description: "Key to value. A string sets the key, null removes it. At most 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters, digits, '_' or '-', starting with a letter, and not now, prompt or subagents. A value has control characters replaced and is cut to 80 characters. Required unless clear is true."},
 				{Name: "source", Type: "string", Description: "Who is writing, recorded on each key so clear can remove only this writer's keys."},
 				{Name: "ttl_ms", Type: "int", Description: "Milliseconds the keys set by this call live before the daemon drops them. 0 keeps them until they are removed or the agent leaves. At most one day.", Default: "0"},
-				{Name: "clear", Type: "bool", Description: "Remove every key this source wrote, or every key when source is empty, before applying tokens. The keys tuios writes, now and prompt, stay.", Default: "false"},
+				{Name: "clear", Type: "bool", Description: "Remove every key this source wrote, or every key when source is empty, before applying tokens. The keys tuios writes, now, prompt and subagents, stay.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "The window the metadata was recorded on."},
@@ -1616,7 +1639,7 @@ func init() {
 				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps only the panes it matches, in every session unless session is also given. The answer then carries the confirm token a write by the same selector takes."},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, identity, evidence_age_ms, completion_seq, finished_unread, agent_session_id, meta, group, protocol, queued. queued is how many messages wait in the pane's delivery queue. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane. identity, confidence and evidence_age_ms are as get-agent-state reports them."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, identity, evidence_age_ms, completion_seq, finished_unread, agent_session_id, meta, group, protocol, queued, subagents. queued is how many messages wait in the pane's delivery queue. subagents is how many subagents the pane's agent is running, as its hooks reported them. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane. identity, confidence and evidence_age_ms are as get-agent-state reports them."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
 				{Name: "confirm", Type: "string", Description: "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},

@@ -273,6 +273,8 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"protocol": d.paneProtocol(w.ID),
 			// How many messages wait in the pane's delivery queue.
 			"queued": w.AgentQueued,
+			// How many subagents the pane's agent is running.
+			"subagents": w.AgentSubagents,
 		})
 	}
 	return agents

@@ -1197,6 +1197,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentHarness = ws.AgentHarness
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
+	w.AgentSubagents = ws.AgentSubagents
 	w.AgentStateAt = ws.AgentStateAt
 	prevSeq := w.AgentCompletionSeq
 	w.AgentCompletionSeq = ws.CompletionSeq
@@ -1321,6 +1322,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentHarness = ws.AgentHarness
 	window.AgentMeta = agentMetaFromWire(nil, ws.AgentMeta)
 	window.AgentQueued = ws.AgentQueued
+	window.AgentSubagents = ws.AgentSubagents
 	window.AgentStateAt = ws.AgentStateAt
 	window.AgentCompletionSeq = ws.CompletionSeq
 	window.ForegroundCmd = ws.ForegroundCmd

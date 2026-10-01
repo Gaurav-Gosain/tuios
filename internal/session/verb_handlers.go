@@ -1171,7 +1171,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if verr := checkActivityReport(p.Activity); verr != nil {
+	if verr := checkActivityReport(p.Activity, activityEvents); verr != nil {
 		return nil, verr
 	}
 	if p.State == "" {
@@ -1226,33 +1226,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		}
 		ifState = append(ifState, st)
 	}
-	// A report from inside a pane that names no window is about that pane,
-	// not about the focused one. The pane is the one the daemon placed the
-	// caller in, so a hook or a person in the pane marks the pane they are in.
-	var own *paneAuth
-	if p.Window == "" {
-		if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && pa.window != "" && pa.window != unplacedWindow && pa.session != "" {
-			own = pa
-			if p.Session == "" {
-				p.Session = pa.session
-			}
-		}
-	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, target, verr := d.reportTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
-	}
-
-	target := p.Window
-	if target == "" && own != nil && sess.Name() == own.session {
-		target = own.window
-	}
-	if target == "" {
-		id, err := focusedWindowID(sess.GetState())
-		if err != nil {
-			return nil, mapResolveErr(err, sess)
-		}
-		target = id
 	}
 
 	report := AgentReport{
@@ -1322,6 +1298,109 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 	}
 	if p.Activity != nil {
 		out["activity_recorded"] = recorded
+	}
+	return out, nil
+}
+
+// reportTarget resolves the pane a report is about. A report from inside a
+// pane that names no window is about that pane, not about the focused one.
+// The pane is the one the daemon placed the caller in, so a hook or a person
+// in the pane marks the pane they are in. A caller outside every pane reports
+// about the focused window.
+func (d *Daemon) reportTarget(cs *connState, sessionName, window string) (*Session, string, *verbError) {
+	var own *paneAuth
+	if window == "" {
+		if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && pa.window != "" && pa.window != unplacedWindow && pa.session != "" {
+			own = pa
+			if sessionName == "" {
+				sessionName = pa.session
+			}
+		}
+	}
+	sess, verr := d.resolveVerbSession(sessionName)
+	if verr != nil {
+		return nil, "", verr
+	}
+	target := window
+	if target == "" && own != nil && sess.Name() == own.session {
+		target = own.window
+	}
+	if target == "" {
+		id, err := focusedWindowID(sess.GetState())
+		if err != nil {
+			return nil, "", mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	return sess, target, nil
+}
+
+// Rates of report-agent-activity. Each event it records may change what the
+// rail draws, and so push state to every attached client, and the subagent
+// cap bounds memory, not pushes. So a pane may report a burst of
+// agentActivityBurst events, then agentActivityRate a second; a call past
+// that is refused with rate_limited and records nothing. The burst is a full
+// set of subagents starting at once.
+const (
+	agentActivityRate  = 10.0
+	agentActivityBurst = float64(subagentsMax)
+)
+
+// verbReportAgentActivity records one hook event of a pane's own agent with
+// no state report: a subagent starting or stopping, a conversation starting,
+// or any other activity event. The event goes into the pane's ring and moves
+// its reserved metadata keys, the subagents key above all, once it passes
+// activityReportGuard. Nothing else moves: not the state, its source or its
+// stamp, not the message, and not the harness the pane is attributed to.
+func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session        string               `json:"session"`
+		Window         string               `json:"window"`
+		Harness        string               `json:"harness"`
+		AgentSessionID string               `json:"agent_session_id"`
+		HarnessPID     int                  `json:"harness_pid"`
+		Activity       *AgentActivityReport `json:"activity"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Activity == nil {
+		return nil, invalidParam("activity", "activity is required: the hook event to record, with its event")
+	}
+	if verr := checkActivityReport(p.Activity, reportActivityEvents); verr != nil {
+		return nil, verr
+	}
+	sess, target, verr := d.reportTarget(cs, p.Session, p.Window)
+	if verr != nil {
+		return nil, verr
+	}
+	windowID, state, reason, err := sess.activityReportGuard(target, AgentReport{
+		Harness:    p.Harness,
+		SessionID:  p.AgentSessionID,
+		HarnessPID: p.HarnessPID,
+	})
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	if !d.activityReports.take(windowID, time.Now(), agentActivityRate, agentActivityBurst) {
+		return nil, hintedVerbError(ErrVerbRateLimited, "this pane reports activity too fast", &VerbHint{
+			Param:  "activity",
+			Detail: fmt.Sprintf("a pane may report a burst of %d events, then %g a second. Nothing was recorded; report again later.", int(agentActivityBurst), agentActivityRate),
+		})
+	}
+	recorded := false
+	if reason == "" {
+		recorded = d.recordAgentActivity(sess, windowID, p.Activity, state)
+	}
+	out := map[string]any{
+		"type":      "agent_activity_reported",
+		"window_id": windowID,
+		"state":     state.Name(),
+		"recorded":  recorded,
+		"subagents": sess.subagentCount(windowID),
+	}
+	if reason != "" {
+		out["reason"] = reason
 	}
 	return out, nil
 }
@@ -1474,6 +1553,10 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"meta": agentMetaMap(w.AgentMeta, time.Now().UnixNano()),
 		// queued is how many messages wait in the pane's delivery queue.
 		"queued": w.AgentQueued,
+		// subagents is how many subagents the pane's agent is running, as
+		// its hooks reported them; meta's subagents key says the same in
+		// words.
+		"subagents": w.AgentSubagents,
 	}, nil
 }
 
