@@ -565,6 +565,7 @@ func TestHerdrFrontAgentStartQuotesForTheShell(t *testing.T) {
 	pwned := filepath.Join(base, "PWNED")
 	corpus := []string{
 		`x\'; touch ` + pwned + `; #`,
+		`x\\'; touch ` + pwned + `6; #`,
 		`a'b`,
 		`$(touch ` + pwned + `2)`,
 		"`touch " + pwned + "3`",
