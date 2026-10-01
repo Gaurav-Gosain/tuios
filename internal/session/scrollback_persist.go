@@ -713,9 +713,19 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 		wraps[len(wraps)-1] = false
 	}
 
-	// Room under the saved rows for the divider and the new prompt.
+	// Room under the saved rows for the divider and the new prompt. Only
+	// rows that fit the saved width go onto the screen: a history row keeps
+	// the width it was written at, which is wider than the screen when the
+	// pane narrowed before the save, and the screen would cut it.
 	keep := min(len(rows), max(st.Height-2, 0))
 	split := len(rows) - keep
+	for i := len(rows) - 1; i >= split; i-- {
+		if rowExtent(rows[i]) > st.Width {
+			split = i + 1
+			break
+		}
+	}
+	keep = len(rows) - split
 	out := &TerminalState{
 		Width:         st.Width,
 		Height:        st.Height,
@@ -728,6 +738,18 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 	out.ScrollbackWraps = wrapBits(wraps[:split])
 	out.ScreenWraps = wrapBits(wraps[split:])
 	ApplyTerminalState(t, out)
+}
+
+// rowExtent is the number of columns a row needs to show everything it
+// holds: up to the end of its last cell that is not a plain blank.
+func rowExtent(row []CellState) int {
+	for i := len(row) - 1; i >= 0; i-- {
+		c := &row[i]
+		if (c.Content != "" && c.Content != " ") || c.StyleState != (StyleState{}) {
+			return i + max(c.Width, 1)
+		}
+	}
+	return 0
 }
 
 // blankRow reports whether a row shows nothing.
