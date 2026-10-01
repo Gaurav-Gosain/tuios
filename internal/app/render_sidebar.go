@@ -437,6 +437,9 @@ type sidebarAgentEntry struct {
 	Meta []sessiontree.MetaToken
 	// Queued is how many messages wait in the pane's delivery queue.
 	Queued int
+	// Subagents is how many subagents the pane's agent is running, which the
+	// subagents row token draws.
+	Subagents int
 	// SessionLabel is what to print for SessionID: the session's display name
 	// when it has one. Identity keys the row, the label only fronts it.
 	SessionLabel string
@@ -2086,6 +2089,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				AgentKind:    win.AgentKind,
 				Meta:         win.Meta,
 				Queued:       win.Queued,
+				Subagents:    win.Subagents,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,
@@ -2610,7 +2614,7 @@ func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overl
 	if sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou {
 		note = sidebarNoteKeepAsk(note, avail)
 	} else {
-		note = sidebarNoteKeepNow(note, avail)
+		note = sidebarNoteKeepSubagents(sidebarNoteKeepNow(note, avail), avail)
 	}
 	text := m.sidebarAgentNoteText(note, quiet, avail, pal)
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+text, cw, rowBg)
@@ -2636,6 +2640,35 @@ func sidebarNoteKeepAsk(tokens []sidebarAgentToken, avail int) []sidebarAgentTok
 // gives way to it. A context warning stays: running out of room is news too.
 func sidebarNoteKeepNow(tokens []sidebarAgentToken, avail int) []sidebarAgentToken {
 	return sidebarNoteKeepLast(tokens, avail, "now", func(tk sidebarAgentToken) bool { return tk.Name == "harness" })
+}
+
+// sidebarNoteKeepSubagents is the note line of a row whose agent has
+// subagents at work, cut so the count stays. A value on the line is kept whole
+// or dropped from the end, so on a narrow rail "claude · ctx 91% · 2
+// subagents" kept the harness and the warning and dropped the count, which on
+// a row at rest is the one sign that work goes on. The harness gives way to
+// it, as it does to now.
+func sidebarNoteKeepSubagents(tokens []sidebarAgentToken, avail int) []sidebarAgentToken {
+	at := slices.IndexFunc(tokens, func(tk sidebarAgentToken) bool { return tk.Name == "subagents" })
+	if at < 0 {
+		return tokens
+	}
+	sepW := lipgloss.Width(sidebarAgentSep())
+	w := lipgloss.Width(tokens[at].Text)
+	for _, tk := range tokens[:at] {
+		w += lipgloss.Width(tk.Text) + sepW
+	}
+	if w <= avail {
+		return tokens
+	}
+	out := make([]sidebarAgentToken, 0, len(tokens))
+	for i, tk := range tokens {
+		if i < at && tk.Name == "harness" {
+			continue
+		}
+		out = append(out, tk)
+	}
+	return out
 }
 
 // sidebarNoteKeepLast drops the tokens in front of the last one that droppable
