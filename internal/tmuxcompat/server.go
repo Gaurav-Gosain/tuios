@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // listClients prints one client for each session a tuios client is attached
@@ -101,26 +103,30 @@ var options = []option{
 // predates it, and the shim then says latest, as it always did, since the
 // pane's size followed the tuios client.
 func (s *Shim) windowSize() string {
-	raw, err := s.Caller.Call("get-option", map[string]any{"session": s.Session, "key": "daemon.window_size"})
+	var v string
+	if !s.daemonOption(map[string]any{"session": s.Session, "key": "daemon.window_size"}, &v) || v == "" {
+		return config.WindowSizeLatest
+	}
+	return v
+}
+
+// daemonOption reads a daemon option, named by params as get-option takes
+// them, into v. It reports false when the daemon does not say.
+func (s *Shim) daemonOption(params map[string]any, v any) bool {
+	raw, err := s.Caller.Call("get-option", params)
 	if err != nil {
-		return "latest"
+		return false
 	}
 	var res struct {
 		Value json.RawMessage `json:"value"`
 	}
-	var v string
-	if json.Unmarshal(raw, &res) != nil || json.Unmarshal(res.Value, &v) != nil || v == "" {
-		return "latest"
-	}
-	return v
+	return json.Unmarshal(raw, &res) == nil && json.Unmarshal(res.Value, v) == nil
 }
 
 // setWindowSize is set-option window-size: it sets the session's
 // daemon.window_size. tmux's manual has no tuios equivalent and is refused.
 func (s *Shim) setWindowSize(value string) (string, error) {
-	switch value {
-	case "smallest", "largest", "latest":
-	default:
+	if !slices.Contains(config.WindowSizeModes, value) {
 		return OutcomeError, fmt.Errorf("window-size: %s is not supported, use smallest, largest or latest", value)
 	}
 	if _, err := s.Caller.Call("set-option", map[string]any{"session": s.Session, "key": "daemon.window_size", "value": value}); err != nil {
@@ -129,48 +135,22 @@ func (s *Shim) setWindowSize(value string) (string, error) {
 	return OutcomeOK, nil
 }
 
-// optionAssignment finds the option name and value in set-option's arguments.
-// Every flag is skipped, and -t with its target. It reports false when -u
-// (unset) is given or no name is found.
-func optionAssignment(args []string) (name, value string, ok bool) {
-	var rest []string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--":
-			rest = append(rest, args[i+1:]...)
-			i = len(args)
-		case a == "-t":
-			i++
-		case len(a) > 1 && a[0] == '-' && len(rest) == 0:
-			if strings.ContainsRune(a, 'u') {
-				return "", "", false
-			}
-		default:
-			rest = append(rest, a)
-		}
-	}
-	if len(rest) < 2 {
+// optionAssignment finds the option name and value in the arguments of cmd,
+// set-option or set-window-option. It reports false when -u (unset) is
+// given, a flag is not tmux's, or no name and value are found.
+func optionAssignment(cmd string, args []string) (name, value string, ok bool) {
+	p, err := parseFlags(cmd, specs[cmd], args)
+	if err != nil || p.Has('u') || len(p.Args) < 2 {
 		return "", "", false
 	}
-	return rest[0], rest[1], true
+	return p.Args[0], p.Args[1], true
 }
 
 // historyLimit is the scrollback length tuios keeps, read from the daemon's
 // appearance.scrollback_lines. It is empty when the daemon does not say.
 func (s *Shim) historyLimit() string {
-	raw, err := s.Caller.Call("get-option", map[string]any{"key": "appearance.scrollback_lines"})
-	if err != nil {
-		return ""
-	}
-	var res struct {
-		Value json.RawMessage `json:"value"`
-	}
-	if json.Unmarshal(raw, &res) != nil {
-		return ""
-	}
 	var n int64
-	if json.Unmarshal(res.Value, &n) == nil {
+	if s.daemonOption(map[string]any{"key": "appearance.scrollback_lines"}, &n) {
 		return strconv.FormatInt(n, 10)
 	}
 	return ""
