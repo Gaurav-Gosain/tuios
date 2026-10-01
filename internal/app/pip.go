@@ -206,7 +206,8 @@ func (m *OS) pipConfig() config.PiPConfig {
 // pipRegion is the rectangle the panes are laid out in, which the box is
 // placed inside. It leaves out the rail and the dock.
 func (m *OS) pipRegion() image.Rectangle {
-	x, y := m.ViewLeftMargin(), m.ViewTopMargin()
+	view := m.viewReserve()
+	x, y := view.Left, view.Top
 	return image.Rect(x, y, x+m.ViewContentWidth(), y+m.ViewUsableHeight())
 }
 

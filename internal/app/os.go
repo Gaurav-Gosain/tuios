@@ -166,6 +166,8 @@ type OS struct {
 	// pressInLayout says the button press now held was mapped to the layout
 	// frame, so the drag and the release that follow it are too.
 	pressInLayout bool
+	// viewMark is the last mark renderViewMark built. See viewMarkCache.
+	viewMark viewMarkCache
 	// pointerSeenX/Y is where the host last reported the pointer, whether or
 	// not that motion reached Update. LastMouseX/Y is the position of the
 	// last motion that did reach it, which is what the filter's "moved a

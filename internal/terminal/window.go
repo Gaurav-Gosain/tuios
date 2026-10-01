@@ -885,3 +885,30 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 
 	return window
 }
+
+// GuestCursor reads the guest's cursor: its position and whether it is
+// hidden. It also refreshes the Cached* cursor fields, the style included, so
+// a caller that needs the shape reads it there after this call.
+//
+// The I/O lock is taken only if it is free. A pane in an output burst holds
+// the exclusive side almost continuously, and the frame that would wait for
+// it carries the user's keystroke echo. When the lock is busy the cursor the
+// last read saw is returned, which is at most a frame stale. ok is false when
+// the window has no terminal.
+func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
+	if w.Terminal == nil {
+		return pos, false, false
+	}
+	if w.TryRLockIO() {
+		if w.Terminal == nil {
+			// Close nils Terminal while it holds the lock.
+			w.RUnlockIO()
+			return pos, false, false
+		}
+		w.CachedCursor = w.Terminal.CursorPosition()
+		w.CachedCursorHidden = w.Terminal.IsCursorHidden()
+		w.CachedCursorStyle, w.CachedCursorSteady = w.Terminal.CursorStyle()
+		w.RUnlockIO()
+	}
+	return w.CachedCursor, w.CachedCursorHidden, true
+}

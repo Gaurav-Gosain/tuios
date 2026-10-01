@@ -125,7 +125,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// Geometry and layout knobs.
 	mixI(m.GetSidebarWidth())
 	mixI(m.ViewUsableHeight())
-	mixI(m.ViewTopMargin())
+	mixI(m.viewReserve().Top)
 	mixI(m.GetRenderWidth())
 	mixS(m.Settings.SidebarPosition)
 	// The layout: which sections are stacked, in what order, with what share,

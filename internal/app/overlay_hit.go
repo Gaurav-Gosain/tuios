@@ -215,7 +215,7 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	// Centred in the rows under a dock at the top, and kept below it while it
 	// fits there. See panelRoomHeight.
-	top := min(m.ViewTopMargin(), max(rh-geo.Height, 0))
+	top := min(m.viewReserve().Top, max(rh-geo.Height, 0))
 	off := m.overlayOffset(kind)
 	x := m.panelCenterX(geo.Width, rw) + off[0]
 	y := top + m.overlayAnchorY(kind, geo.Height, rh-top) + off[1]
@@ -242,7 +242,7 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 // the headers, cut off beside the Inbox on an 80 column screen.
 func (m *OS) panelCenterX(w, screenW int) int {
 	if room := m.ViewContentWidth(); w <= room {
-		return m.ViewLeftMargin() + (room-w)/2
+		return m.viewReserve().Left + (room-w)/2
 	}
 	return m.railCoverX((screenW-w)/2, w, screenW)
 }
@@ -251,10 +251,10 @@ func (m *OS) panelCenterX(w, screenW int) int {
 // the rail so that it covers the rail completely, since a rail cut down to a
 // column or two is only fragments of its rows.
 func (m *OS) railCoverX(x, w, screenW int) int {
-	if right := m.ViewRightMargin(); right > 0 && x+w > screenW-right && x+w < screenW {
+	if right := m.viewReserve().Right; right > 0 && x+w > screenW-right && x+w < screenW {
 		x = screenW - w
 	}
-	if left := m.ViewLeftMargin(); left > 0 && x > 0 && x < left {
+	if left := m.viewReserve().Left; left > 0 && x > 0 && x < left {
 		x = 0
 	}
 	return max(x, 0)

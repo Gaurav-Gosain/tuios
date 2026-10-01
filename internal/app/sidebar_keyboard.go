@@ -452,7 +452,7 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 	if m.Settings.SidebarPosition == "right" {
 		x = m.GetRenderWidth() - m.GetSidebarWidth()
 	}
-	return x, m.ViewTopMargin()
+	return x, m.viewReserve().Top
 }
 
 // sidebarSetCursorToHit points the keyboard cursor at a clicked row, so a click

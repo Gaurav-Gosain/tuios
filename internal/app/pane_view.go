@@ -3,11 +3,13 @@ package app
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 
@@ -31,7 +33,7 @@ import (
 //     daemon's state all use it.
 //   - The view frame is this client's terminal. The rail, the dock, the
 //     overlays and every other piece of chrome are drawn in it, around this
-//     client's own reserve (the View* margins below), so they stay whole and
+//     client's own reserve (viewReserve below), so they stay whole and
 //     at the edges of the screen whatever the session's size.
 //
 // sessionView maps the one onto the other: the pane layers are composed shifted
@@ -79,23 +81,26 @@ func (m *OS) GetLayoutHeight() int {
 	return m.GetRenderHeight()
 }
 
-// ViewLeftMargin is the columns this client's chrome takes on the left of its
-// own screen. It is GetLeftMargin unless the session is wider than this
-// client, when only this client's own chrome is kept: the session's agreed
-// reserve is a layout quantity, and the view has no blank band to leave.
-func (m *OS) ViewLeftMargin() int {
-	if !m.cropsWidth() {
-		return m.GetLeftMargin()
+// viewReserve is the chrome this client takes around its own screen. Along
+// an axis the session fits, it is the layout's reserve. Along an axis the
+// session overflows, only this client's own chrome is kept: the session's
+// agreed reserve is a layout quantity, and the view has no blank band to leave.
+func (m *OS) viewReserve() session.LayoutReserve {
+	r := m.paneReserve()
+	own := m.OwnLayoutReserve()
+	if m.cropsWidth() {
+		r.Left, r.Right = own.Left, own.Right
 	}
-	return m.clampReserve(m.OwnLayoutReserve().Left, m.GetRenderWidth())
-}
-
-// ViewRightMargin is ViewLeftMargin for the right edge.
-func (m *OS) ViewRightMargin() int {
-	if !m.cropsWidth() {
-		return m.GetRightMargin()
+	if m.cropsHeight() {
+		r.Top, r.Bottom = own.Top, own.Bottom
 	}
-	return m.clampReserve(m.OwnLayoutReserve().Right, m.GetRenderWidth())
+	w, h := m.GetRenderWidth(), m.GetRenderHeight()
+	return session.LayoutReserve{
+		Left:   m.clampReserve(r.Left, w),
+		Right:  m.clampReserve(r.Right, w),
+		Top:    m.clampReserve(r.Top, h),
+		Bottom: m.clampReserve(r.Bottom, h),
+	}
 }
 
 // ViewContentWidth is the width of this client's pane area on its own screen.
@@ -103,23 +108,8 @@ func (m *OS) ViewContentWidth() int {
 	if !m.cropsWidth() {
 		return m.GetContentWidth()
 	}
-	return max(m.GetRenderWidth()-m.ViewLeftMargin()-m.ViewRightMargin(), 0)
-}
-
-// ViewTopMargin is ViewLeftMargin for the top edge.
-func (m *OS) ViewTopMargin() int {
-	if !m.cropsHeight() {
-		return m.GetTopMargin()
-	}
-	return m.clampReserve(m.OwnLayoutReserve().Top, m.GetRenderHeight())
-}
-
-// ViewBottomMargin is ViewLeftMargin for the bottom edge.
-func (m *OS) ViewBottomMargin() int {
-	if !m.cropsHeight() {
-		return m.GetBottomMargin()
-	}
-	return m.clampReserve(m.OwnLayoutReserve().Bottom, m.GetRenderHeight())
+	r := m.viewReserve()
+	return max(m.GetRenderWidth()-r.Left-r.Right, 0)
 }
 
 // ViewUsableHeight is the height of this client's pane area on its own screen.
@@ -127,7 +117,8 @@ func (m *OS) ViewUsableHeight() int {
 	if !m.cropsHeight() {
 		return m.GetUsableHeight()
 	}
-	return max(m.GetRenderHeight()-m.ViewTopMargin()-m.ViewBottomMargin(), 0)
+	r := m.viewReserve()
+	return max(m.GetRenderHeight()-r.Top-r.Bottom, 0)
 }
 
 // sessionView is one frame's mapping from the layout frame to the view frame.
@@ -173,8 +164,9 @@ func (m *OS) computeSessionView() sessionView {
 	}
 	box := image.Rect(m.GetLeftMargin(), m.GetTopMargin(),
 		m.GetLeftMargin()+m.GetContentWidth(), m.GetTopMargin()+m.GetUsableHeight())
-	clip := image.Rect(m.ViewLeftMargin(), m.ViewTopMargin(),
-		m.ViewLeftMargin()+m.ViewContentWidth(), m.ViewTopMargin()+m.ViewUsableHeight())
+	view := m.viewReserve()
+	clip := image.Rect(view.Left, view.Top,
+		view.Left+m.ViewContentWidth(), view.Top+m.ViewUsableHeight())
 	v := sessionView{on: true, box: box, clip: clip}
 
 	cx, cy, cursor := m.viewTarget()
@@ -225,9 +217,7 @@ func (m *OS) viewTarget() (x, y int, cursor bool) {
 
 // paneCursor is the position the view follows in a window, in the layout
 // frame: the copy-mode cursor while copy mode is shown, otherwise the
-// terminal's cursor, shown or hidden. It takes the window's lock only if it is
-// free and otherwise uses the position the last frame read, as getRealCursor
-// does.
+// terminal's cursor, shown or hidden, read as getRealCursor reads it.
 //
 // A hidden cursor is followed on purpose. An agent CLI hides the terminal's
 // cursor and draws its own, but it still moves the real one to its input box,
@@ -248,14 +238,8 @@ func paneCursor(w *terminal.Window) (int, int, bool) {
 		}
 		return w.X + border + x, w.Y + border + y, true
 	}
-	pos := w.CachedCursor
-	if w.TryRLockIO() {
-		if w.Terminal != nil {
-			pos = w.Terminal.CursorPosition()
-		}
-		w.RUnlockIO()
-	}
-	if !inside(pos.X, pos.Y) {
+	pos, _, ok := w.GuestCursor()
+	if !ok || !inside(pos.X, pos.Y) {
 		return 0, 0, false
 	}
 	return w.X + border + pos.X, w.Y + border + pos.Y, true
@@ -303,55 +287,46 @@ func (m *OS) PaneViewOn() bool { return m.sessionView.on }
 // every mouse event and clears the mark with SetPointerInLayout(false) after.
 func (m *OS) MapPointer(msg tea.Msg) tea.Msg {
 	m.pointerInLayout = false
-	var mouse tea.Mouse
-	switch msg := msg.(type) {
-	case tea.MouseClickMsg:
-		mouse = tea.Mouse(msg)
-	case tea.MouseReleaseMsg:
-		mouse = tea.Mouse(msg)
-	case tea.MouseMotionMsg:
-		mouse = tea.Mouse(msg)
-	case tea.MouseWheelMsg:
-		mouse = tea.Mouse(msg)
-	default:
-		return msg
-	}
 	if !m.sessionView.on {
-		m.pressInLayout = false
+		if _, ok := msg.(tea.MouseMsg); ok {
+			m.pressInLayout = false
+		}
 		return msg
 	}
-	mapIt := false
-	switch msg.(type) {
+	switch e := msg.(type) {
 	case tea.MouseClickMsg:
-		mapIt = m.pointerOverPanes(mouse.X, mouse.Y)
-		m.pressInLayout = mapIt
+		m.pressInLayout = m.pointerOverPanes(e.X, e.Y)
+		if m.pressInLayout {
+			return tea.MouseClickMsg(m.mouseToLayout(tea.Mouse(e)))
+		}
 	case tea.MouseReleaseMsg:
-		mapIt = m.pressInLayout
+		held := m.pressInLayout
 		m.pressInLayout = false
+		if held {
+			return tea.MouseReleaseMsg(m.mouseToLayout(tea.Mouse(e)))
+		}
 	case tea.MouseMotionMsg:
-		if mouse.Button != tea.MouseNone {
-			mapIt = m.pressInLayout
-		} else {
-			mapIt = m.pointerOverPanes(mouse.X, mouse.Y)
+		mapIt := m.pressInLayout
+		if e.Button == tea.MouseNone {
+			mapIt = m.pointerOverPanes(e.X, e.Y)
+		}
+		if mapIt {
+			return tea.MouseMotionMsg(m.mouseToLayout(tea.Mouse(e)))
 		}
 	case tea.MouseWheelMsg:
-		mapIt = m.pointerOverPanes(mouse.X, mouse.Y)
+		if m.pointerOverPanes(e.X, e.Y) {
+			return tea.MouseWheelMsg(m.mouseToLayout(tea.Mouse(e)))
+		}
 	}
-	if !mapIt {
-		return msg
-	}
+	return msg
+}
+
+// mouseToLayout maps a mouse event's position to the layout frame and marks
+// the event being handled as mapped.
+func (m *OS) mouseToLayout(mouse tea.Mouse) tea.Mouse {
 	mouse.X, mouse.Y = m.sessionView.toLayout(mouse.X, mouse.Y)
 	m.pointerInLayout = true
-	switch msg.(type) {
-	case tea.MouseClickMsg:
-		return tea.MouseClickMsg(mouse)
-	case tea.MouseReleaseMsg:
-		return tea.MouseReleaseMsg(mouse)
-	case tea.MouseMotionMsg:
-		return tea.MouseMotionMsg(mouse)
-	default:
-		return tea.MouseWheelMsg(mouse)
-	}
+	return mouse
 }
 
 // pointerOverPanes reports whether a pointer on the screen is over the
@@ -384,40 +359,82 @@ func (m *OS) renderViewMark() *lipgloss.Layer {
 	if !v.on || v.clip.Empty() {
 		return nil
 	}
-	left, right, up, down := "←", "→", "↑", "↓"
-	if m.Settings.UseASCIIOnly {
-		left, right, up, down = "<", ">", "^", "v"
-	}
-	var arrows strings.Builder
+	var arrows uint8
 	if v.offX > 0 {
-		arrows.WriteString(left)
+		arrows |= 1
 	}
 	if v.offX+v.clip.Dx() < v.box.Dx() {
-		arrows.WriteString(right)
+		arrows |= 2
 	}
 	if v.offY > 0 {
-		arrows.WriteString(up)
+		arrows |= 4
 	}
 	if v.offY+v.clip.Dy() < v.box.Dy() {
-		arrows.WriteString(down)
-	}
-	text := fmt.Sprintf("Part of session %dx%d", m.EffectiveWidth, m.EffectiveHeight)
-	if arrows.Len() > 0 {
-		text = arrows.String() + " " + text
+		arrows |= 8
 	}
 	pal := theme.UI()
-	label := tooltipLabel(text, m.GetRenderWidth(), pal)
-	width := lipgloss.Width(label)
+	key := viewMarkKey{
+		arrows: arrows, ascii: m.Settings.UseASCIIOnly,
+		w: m.EffectiveWidth, h: m.EffectiveHeight, room: m.GetRenderWidth(),
+		surface: pal.Surface, fg: pal.Fg,
+	}
+	c := &m.viewMark
+	if !c.valid || c.key != key {
+		c.key, c.valid = key, true
+		c.label = viewMarkLabel(key, pal)
+		c.width = lipgloss.Width(c.label)
+	}
+	label, width := c.label, c.width
 	x, y := m.GetRenderWidth()-width-1, v.clip.Max.Y-1
 	switch m.Settings.DockbarPosition {
 	case "hidden":
 		x = v.clip.Max.X - width
 	case "top":
-		y = m.ViewTopMargin() - 1
+		y = m.viewReserve().Top - 1
 	default:
-		y = m.ViewTopMargin() + m.ViewUsableHeight()
+		y = m.viewReserve().Top + m.ViewUsableHeight()
 	}
 	return lipgloss.NewLayer(label).X(max(x, 0)).Y(max(y, 0)).Z(config.ZIndexDock + 1).ID(viewMarkLayerID)
+}
+
+// viewMarkKey is everything the mark's label is built from: which arrows it
+// shows, the session's size, the room on the screen and the two theme colours.
+type viewMarkKey struct {
+	arrows  uint8
+	ascii   bool
+	w, h    int
+	room    int
+	surface color.Color
+	fg      color.Color
+}
+
+// viewMarkCache keeps the mark's label across frames. The view and the
+// session's size change rarely, and the label is a Sprintf and a lipgloss
+// render that would otherwise run on every frame.
+type viewMarkCache struct {
+	valid bool
+	key   viewMarkKey
+	label string
+	width int
+}
+
+// viewMarkLabel builds the mark's label for key.
+func viewMarkLabel(key viewMarkKey, pal overlay.Palette) string {
+	glyphs := [4]string{"←", "→", "↑", "↓"}
+	if key.ascii {
+		glyphs = [4]string{"<", ">", "^", "v"}
+	}
+	var arrows strings.Builder
+	for i, g := range glyphs {
+		if key.arrows&(1<<i) != 0 {
+			arrows.WriteString(g)
+		}
+	}
+	text := fmt.Sprintf("Part of session %dx%d", key.w, key.h)
+	if arrows.Len() > 0 {
+		text = arrows.String() + " " + text
+	}
+	return tooltipLabel(text, key.room, pal)
 }
 
 // sendWindowSizeToDaemon sets the window_size policy of the session this
@@ -427,15 +444,9 @@ func (m *OS) sendWindowSizeToDaemon(value string) {
 	if !m.IsDaemonSession || m.DaemonClient == nil || m.SessionName == "" {
 		return
 	}
-	build, host, name := m.DaemonClient.ClientVersion(), m.AttachedHost, m.SessionName
+	dial, name := m.verbDialer(), m.SessionName
 	go func() {
-		var client *session.VerbClient
-		var err error
-		if host != "" {
-			client, _, err = dialVerbThroughHost(host, build)
-		} else {
-			client, err = session.DialVerbClientAs(build)
-		}
+		client, err := dial()
 		if err != nil {
 			return
 		}

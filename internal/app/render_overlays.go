@@ -192,7 +192,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		)
 
 		welcomeLayer := lipgloss.NewLayer(centeredContent).
-			X(m.ViewLeftMargin()).Y(m.ViewTopMargin()).Z(1).ID("welcome")
+			X(m.viewReserve().Left).Y(m.viewReserve().Top).Z(1).ID("welcome")
 
 		layers = append(layers, welcomeLayer)
 	}
@@ -558,7 +558,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// the screen and then covers the rail whole.
 		regionX, regionW := 0, renderWidth
 		if room := m.ViewContentWidth(); overlayWidth+4 <= room {
-			regionX, regionW = m.ViewLeftMargin(), room
+			regionX, regionW = m.viewReserve().Left, room
 		}
 		switch m.Settings.WhichKeyPosition {
 		case "top-left":
@@ -583,7 +583,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// A binding list taller than the screen would otherwise be positioned
 		// off the top, hiding the first entries with no way to reach them.
 		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
-		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.ViewTopMargin(), 0)
+		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.viewReserve().Top, 0)
 
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).

@@ -86,13 +86,7 @@ func (w *Window) EnterCopyModeCentered() {
 // frame saw is used, which is at most a frame stale. The try also means a
 // caller that already holds the read lock cannot deadlock here.
 func (w *Window) copyEntryCursor() (int, int) {
-	pos := w.CachedCursor
-	if w.TryRLockIO() {
-		if w.Terminal != nil {
-			pos = w.Terminal.CursorPosition()
-		}
-		w.RUnlockIO()
-	}
+	pos, _, _ := w.GuestCursor()
 	maxX := max(w.ContentWidth()-1, 0)
 	maxY := max(w.ContentHeight()-1, 0)
 	return max(min(pos.X, maxX), 0), max(min(pos.Y, maxY), 0)
