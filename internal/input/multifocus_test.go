@@ -114,6 +114,22 @@ func TestMultifocusIMECommitBroadcast(t *testing.T) {
 	}
 }
 
+func TestMultifocusDoesNotBroadcastNvimNavigationKey(t *testing.T) {
+	o, sent := multifocusHarness(t)
+	o.Settings.NvimNavigation = true
+	o.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
+	active := true
+	o.Update(app.NvimNavigationMsg{WindowID: "a", State: &active})
+
+	o, _ = HandleKeyPress(altArrow("right"), o)
+	if got := sent[0].String(); got == "" {
+		t.Fatal("focused pane did not receive the navigation key")
+	}
+	if got := sent[1].String(); got != "" {
+		t.Errorf("multifocus peer received navigation key %q", got)
+	}
+}
+
 // Hints mode and the multi copy save prompt take a paste before any pane
 // does, so no pane in the set may see it.
 func TestMultifocusPasteInterceptedByPrompts(t *testing.T) {

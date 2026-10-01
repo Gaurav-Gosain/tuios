@@ -141,3 +141,11 @@ func (m *OS) matchesPendingNvimNavigation(msg NvimNavigationMsg) bool {
 	return pending != nil && time.Now().Before(pending.ExpiresAt) &&
 		pending.WindowID == msg.WindowID && pending.Direction == msg.Direction
 }
+
+// NvimNavigationForwarding reports whether this key is for the navigator pane.
+func (m *OS) NvimNavigationForwarding(direction string) bool {
+	focused := m.GetFocusedWindow()
+	pending := m.pendingNvimNavigation
+	return focused != nil && pending != nil && time.Now().Before(pending.ExpiresAt) &&
+		pending.WindowID == focused.ID && pending.Direction == direction
+}
