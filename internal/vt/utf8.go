@@ -508,8 +508,11 @@ func (e *Emulator) printASCIIRun(run []byte) {
 				row[x+k] = cell
 			}
 			// Written behind the grid's back, so its extent is raised here
-			// (see grid.ext).
+			// (see grid.ext), and the row's tail dropped (see grid.tail):
+			// the shell has repainted the row.
 			e.scr.buf.raiseExt(y, x+n)
+			e.scr.buf.dropTail(y)
+			e.scr.wideCol = false
 		} else {
 			for k := range n {
 				cell.Content = asciiStr[run[k]]

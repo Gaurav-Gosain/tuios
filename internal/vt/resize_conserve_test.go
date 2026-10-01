@@ -50,6 +50,9 @@ type conserveScript struct {
 	ringCap int
 	// parked says a program left the cursor above text it drew lower down.
 	parked bool
+	// checkMarks says the OSC 133 marks have to stay on their text. A mark
+	// on an open prompt's row past a narrower width is clamped to it.
+	checkMarks bool
 	// saved says the cursor was saved (DECSC) at the end of the last line
 	// of output, past its text, and has to come back there.
 	saved bool
@@ -115,7 +118,11 @@ func genConserve(seed uint64, widths bool) conserveScript {
 	} else {
 		b.WriteString("$ ")
 	}
-	s.checkCursor = !open
+	// An open prompt is resized back to its first size at the end (see
+	// conserveProblem), so the cursor on it has to come back where it was,
+	// even from a width that could not show its column.
+	s.checkCursor = true
+	s.checkMarks = !open
 	if !open && r.IntN(3) == 0 {
 		// A program that draws at the bottom and parks the cursor higher up.
 		// A screen too short for the text below the cursor keeps the text
@@ -324,7 +331,7 @@ func conserveProblem(s conserveScript) string {
 		}
 		// The libghostty backend does not move the marks with a reflow;
 		// see the report on the backends' resize behaviour.
-		if s.checkCursor && vt.Backend != "ghostty" {
+		if s.checkMarks && s.checkCursor && vt.Backend != "ghostty" {
 			_, marksAfter := logicalLinesAt(tm, markPoints(tm))
 			if !slices.Equal(marksBefore, marksAfter) {
 				return fmt.Sprintf("an OSC 133 mark moved off its text: %v before, %v after", marksBefore, marksAfter)
@@ -336,7 +343,7 @@ func conserveProblem(s conserveScript) string {
 		// position further past the text is not text to follow. DECRC
 		// clamps to the screen, so a saved place just past text that fills
 		// the last row comes back on the last character.
-		if s.saved && s.checkCursor && s.alt == "" && minHeight(s.sizes) >= 2 && vt.Backend != "ghostty" &&
+		if s.saved && s.checkMarks && s.checkCursor && s.alt == "" && minHeight(s.sizes) >= 2 && vt.Backend != "ghostty" &&
 			savedBefore[0] >= 0 && savedBefore[0] < len(before) &&
 			savedBefore[1] <= lineLen(before[savedBefore[0]]) {
 			// A saved place whose row went into the history at any step

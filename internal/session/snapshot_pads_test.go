@@ -146,3 +146,31 @@ func TestPaddingFieldsAreOptionalOnTheWire(t *testing.T) {
 		t.Fatalf("a snapshot from an old peer decoded with padding: %+v", cur.State)
 	}
 }
+
+// TestSavedHistoryKeepsAFrozenPromptsTail: a shell's open prompt keeps its
+// rows whole across a narrowing by holding the cells past the width off the
+// edge. A history saved while it is narrow saves those cells with the row,
+// so the restored pane has the whole command line.
+func TestSavedHistoryKeepsAFrozenPromptsTail(t *testing.T) {
+	typed := "echo " + strings.Repeat("T", 30) + "-END"
+	src := vt.NewWithScrollback(60, 4, 1000)
+	_, _ = src.Write([]byte("out\r\n\x1b]133;A\x07$ \x1b]133;B\x07" + typed))
+	src.Resize(20, 4)
+	if strings.Contains(textOf(src), "-END") {
+		t.Fatal("the narrow pane shows the whole command, so no tail is held and this tests nothing")
+	}
+	h := &savedHistory{Version: historyVersion, SavedAt: time.Now(), State: captureHistoryRows(src, 1000).state(1000)}
+	h.State.Pack()
+	data, err := encodeHistory(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := decodeHistory(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := newRestoredEmulator(60, 4, 1000, "", back)
+	if got := textOf(restored); !strings.Contains(got, typed) {
+		t.Errorf("the restored pane lost the part of the command past the narrow width:\n%s", got)
+	}
+}
