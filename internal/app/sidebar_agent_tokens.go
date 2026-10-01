@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -88,7 +89,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "subagents":
 		// "2 subagents" on any row, since a pane at rest with subagents at
 		// work is the case it is for. Its number is the count, for gt and lt.
-		if tk.Text = sidebarSubagentsText(e.Subagents); tk.Text != "" {
+		if tk.Text = session.SubagentsText(e.Subagents); tk.Text != "" {
 			tk.Number, tk.HasNumber = float64(e.Subagents), true
 		}
 	default:
@@ -211,18 +212,6 @@ func sidebarAgentQuietMessage(note []sidebarAgentToken, e sidebarAgentEntry) []s
 		return note
 	}
 	return slices.DeleteFunc(note, func(tk sidebarAgentToken) bool { return tk.Name == "message" })
-}
-
-// sidebarSubagentsText is the subagents token for n subagents: "1 subagent",
-// "3 subagents", and nothing at none.
-func sidebarSubagentsText(n int) string {
-	switch {
-	case n <= 0:
-		return ""
-	case n == 1:
-		return "1 subagent"
-	}
-	return strconv.Itoa(n) + " subagents"
 }
 
 // sidebarContextPercent reads a context value as a percent: "42%", "42.5%" or
