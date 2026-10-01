@@ -29,7 +29,7 @@ import (
 // TestIdleCostStaysLow holds it.
 //
 // Its frames go through the ordinary render path. The fade and the shimmer are
-// passes over the composed canvas (see composeLayers), so a frame drawn for
+// passes over the composed canvas (see composeLayersIn), so a frame drawn for
 // them re-renders no pane and rebuilds no rail: every cached layer is copied in
 // as it is on any frame, and the pass edits the few cells that move.
 
@@ -204,7 +204,7 @@ func fadeLevel(start, now time.Time) uint8 {
 }
 
 // applyFade carries the cells of one overlay's rectangle toward the ground by
-// how far its fade has left to run. composeLayers calls it right after the
+// how far its fade has left to run. composeLayersIn calls it right after the
 // overlay's layer is drawn, so the pass covers that overlay and nothing else.
 func (m *OS) applyFade(canvas *frameCanvas, id string, bounds image.Rectangle, now time.Time) {
 	i, ok := modalIndex[id]

@@ -11,7 +11,7 @@ import (
 )
 
 // composeReference is the frame the lipgloss Compositor produces for the same
-// layers: the path composeLayers replaced, kept here as the oracle it has to
+// layers: the path composeLayersIn replaced, kept here as the oracle it has to
 // match byte for byte.
 func composeReference(w, h int, layers []*lipgloss.Layer) string {
 	canvas := lipgloss.NewCanvas(w, h)
@@ -19,7 +19,7 @@ func composeReference(w, h int, layers []*lipgloss.Layer) string {
 	return canvas.Render()
 }
 
-// composeUnderTest is the same frame through composeLayers, drawn twice on one
+// composeUnderTest is the same frame through composeLayersIn, drawn twice on one
 // OS so the second pass runs from the cached cells rather than the parse.
 func composeUnderTest(t *testing.T, w, h int, layers []*lipgloss.Layer) (first, cached string) {
 	t.Helper()
@@ -28,7 +28,7 @@ func composeUnderTest(t *testing.T, w, h int, layers []*lipgloss.Layer) (first, 
 		canvas := &frameCanvas{}
 		canvas.Resize(w, h)
 		canvas.Clear()
-		m.composeLayers(canvas, layers)
+		m.composeLayersIn(canvas, layers, 0)
 		if first == "" {
 			first = canvas.Render()
 		} else {

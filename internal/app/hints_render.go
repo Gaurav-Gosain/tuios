@@ -13,7 +13,7 @@ import (
 // The hints frame is a pass over the composed canvas, the way the scrim is,
 // not a layer and not a change to the pane's own render.
 //
-// composeLayers calls applyHints right after it draws each pane hints mode is
+// composeLayersIn calls applyHints right after it draws each pane hints mode is
 // open on. The pass writes the copied view over the pane's content rectangle
 // (so the text holds still under the labels), dims everything that is not a
 // match, lights the matches, and puts the labels on them. Anything drawn
@@ -22,7 +22,7 @@ import (
 // mode is nothing more than the next frame not running this pass.
 //
 // It runs only while hints mode is open. With it closed the cost is the nil
-// check in composeLayers.
+// check in composeLayersIn.
 
 // hintsInk is the colour of text that names no colour of its own, which is
 // what a dimmed cell is dimmed from.

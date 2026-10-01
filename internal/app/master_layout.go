@@ -187,11 +187,6 @@ func (m *OS) RemoveMaster() int {
 	return m.SetMasterCount(m.masterLayoutFor(m.CurrentWorkspace).Count - 1)
 }
 
-// MasterPositionName is the current workspace's master position.
-func (m *OS) MasterPositionName() string {
-	return m.masterLayoutFor(m.CurrentWorkspace).Position
-}
-
 // masterIndex is the index in m.Windows of the current workspace's first
 // master, or -1 when the workspace has no tiled pane.
 func (m *OS) masterIndex() int {

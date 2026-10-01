@@ -292,7 +292,7 @@ func TestWindowChromeBackgroundPaintsTheSharedBorderLine(t *testing.T) {
 	line := lipgloss.NewStyle().Foreground(ink).Render("│\n│\n│")
 	compose := func() *frameCanvas {
 		canvas := &frameCanvas{Buffer: *uv.NewBuffer(20, 5)}
-		m.composeLayers(canvas, []*lipgloss.Layer{lipgloss.NewLayer(line).X(4).Y(1).Z(5).ID("sep-1-4")})
+		m.composeLayersIn(canvas, []*lipgloss.Layer{lipgloss.NewLayer(line).X(4).Y(1).Z(5).ID("sep-1-4")}, 0)
 		return canvas
 	}
 	if bg := compose().CellAt(4, 2).Style.Bg; !isNilColor(bg) {

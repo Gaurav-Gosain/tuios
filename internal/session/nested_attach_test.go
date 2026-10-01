@@ -348,13 +348,13 @@ func TestEffectiveSizeHasAFloor(t *testing.T) {
 	d := NewDaemon(&DaemonConfig{Version: "test"})
 	addSizedClient(d, "big", "s", 120, 40)
 	addSizedClient(d, "tiny", "s", 1, 1)
-	if w, h := d.calculateEffectiveSize("s"); w != 20 || h != 6 {
+	if w, h, _ := d.calculateSessionSize("s"); w != 20 || h != 6 {
 		t.Errorf("effective size %dx%d, want the floor 20x6", w, h)
 	}
 	d.clientsMu.Lock()
 	delete(d.clients, "tiny")
 	d.clientsMu.Unlock()
-	if w, h := d.calculateEffectiveSize("s"); w != 120 || h != 40 {
+	if w, h, _ := d.calculateSessionSize("s"); w != 120 || h != 40 {
 		t.Errorf("effective size %dx%d with one 120x40 client, want 120x40", w, h)
 	}
 }
@@ -370,11 +370,11 @@ func TestNestedResizeLoopSettles(t *testing.T) {
 
 	// Borders take two columns, and the borders and the dock take four rows.
 	const chromeW, chromeH = 2, 4
-	w, h := d.calculateEffectiveSize("s")
+	w, h, _ := d.calculateSessionSize("s")
 	settled := false
 	for range 200 {
 		nested.width, nested.height = max(w-chromeW, 1), max(h-chromeH, 1)
-		nw, nh := d.calculateEffectiveSize("s")
+		nw, nh, _ := d.calculateSessionSize("s")
 		if nw == w && nh == h {
 			settled = true
 			break

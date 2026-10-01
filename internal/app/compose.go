@@ -24,7 +24,7 @@ import (
 // that is cleared and rebuilt from scratch each frame anyway.
 //
 // What replaces them keeps the observable output byte for byte and drops the
-// rest. frameCanvas is a plain uv.Buffer. composeLayers orders the layers the
+// rest. frameCanvas is a plain uv.Buffer. composeLayersIn orders the layers the
 // way the Compositor did and draws each one either straight from its string,
 // as before, or from a cellLayer: the cells that string parsed to the last
 // time it was seen. A pane's layer keeps its string between keystrokes in
@@ -247,7 +247,7 @@ type composedLayer struct {
 	pane bool
 }
 
-// composeLayers draws layers onto the canvas in ascending z order.
+// composeLayersIn draws layers onto the canvas in ascending z order.
 //
 // The order is the lipgloss Compositor's, reproduced exactly: its root layer
 // takes part in the sort with a z of zero and empty bounds, and the sort is
@@ -255,14 +255,10 @@ type composedLayer struct {
 // always did. A layer with an id is drawn from its cellLayer, parsed the first
 // time its string is seen and kept across frames under that id; a layer
 // without one is parsed straight onto the canvas as before.
-func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
-	m.composeLayersIn(canvas, layers, 0)
-}
-
-// composeLayersIn is composeLayers for a frame whose first paneLayers layers
-// are in the layout frame. While the frame is a view of a larger session
-// (m.sessionView), those are drawn shifted onto the screen and clipped to the
-// view's pane area. Their bounds for the backgrounds stay the layout ones, so
+//
+// The first paneLayers layers are in the layout frame. While the frame is a
+// view of a larger session (m.sessionView), those are drawn shifted onto the
+// screen and clipped to the view's pane area. Their bounds for the backgrounds stay the layout ones, so
 // a pane's fill lands on its own cells wherever the view puts them.
 func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int) {
 	m.composeGen++

@@ -48,15 +48,10 @@ func clampClientSize(w, h int) (int, int) {
 	return max(w, minClientWidth), max(h, minClientHeight)
 }
 
-// calculateEffectiveSize returns the session's size under its window_size
-// policy (see window_size.go): the smallest client, the largest, or the latest.
-// Each client counts at no less than minClientWidth x minClientHeight.
-func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
-	width, height, _ = d.calculateSessionSize(sessionID)
-	return width, height
-}
-
-// calculateSessionSize is calculateEffectiveSize with the policy in force.
+// calculateSessionSize returns the session's size under its window_size
+// policy (see window_size.go): the smallest client, the largest, or the
+// latest, and the policy in force. Each client counts at no less than
+// minClientWidth x minClientHeight.
 func (d *Daemon) calculateSessionSize(sessionID string) (width, height int, policy string) {
 	clients := d.sessionSizedClients(sessionID)
 	policy = d.effectiveWindowSize(d.manager.GetSessionByID(sessionID), clients)
