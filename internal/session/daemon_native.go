@@ -415,9 +415,16 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool, ho
 	for ws, name := range state.WorkspaceNames {
 		workspaceNames[strconv.Itoa(ws)] = name
 	}
+	// The size the daemon settled on and the window_size policy it used, as
+	// distinct from width and height, which are the last size a client
+	// pushed with its state. See window_size.go.
+	sessionWidth, sessionHeight := sess.Size()
 	return map[string]any{
-		"session_name": state.Name,
-		"session_id":   sess.ID,
+		"window_size":    sess.WindowSizePolicy(),
+		"session_width":  sessionWidth,
+		"session_height": sessionHeight,
+		"session_name":   state.Name,
+		"session_id":     sess.ID,
 		// display_name and accent are the session's label, empty when it was never
 		// set. A reader that wants one string falls back to session_name, which is
 		// what it read before these existed.
