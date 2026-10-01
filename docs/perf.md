@@ -2131,8 +2131,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 27,905,000 (raised at 27,873,442) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,330,000 (raised at 26,298,690) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 27,960,000 (raised at 27,930,786) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,395,000 (raised at 26,365,842) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2175,6 +2175,12 @@ brought the build to 27,873,442 and 26,298,690 bytes (Go 1.26.6). Main was
 27,689,122 and 26,148,114 bytes. The feature adds 184,320 and 150,576 bytes:
 a flag for flag port of herdr's CLI, and the pane navigation, swap, zoom,
 process and agent start methods.
+
+The budgets went to 27,960,000 (linux/amd64) and 26,395,000 (darwin/arm64)
+when the pure Go emulator learned to reflow its screen on a resize. That
+brought the build to 27,930,786 and 26,365,842 bytes (Go 1.26.6), 25,786 and
+35,842 bytes over the old budgets. The reflow keeps text that a narrowing
+resize used to cut for good, and carries the padding flag in snapshots.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
