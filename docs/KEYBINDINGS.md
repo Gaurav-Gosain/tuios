@@ -363,8 +363,10 @@ on the workspace on screen.
 | `Ctrl+B L i` | `add_master` | Make one more pane a master pane |
 | `Ctrl+B L d` | `remove_master` | Make one pane fewer a master pane |
 
-The resize keys, such as `<` and `>` in window mode, move the divider between
-the master panes and the stack on every side. The workspace keeps the new size.
+The resize keys move the divider between the master panes and the stack. With
+the master on the left, the right or in the center, the width keys move it,
+such as `<` and `>` in window mode. With the master at the top or the bottom,
+the height keys move it. The workspace keeps the new size.
 
 `set_master_position_left`, `set_master_position_right`,
 `set_master_position_top`, `set_master_position_bottom` and
