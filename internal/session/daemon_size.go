@@ -1,5 +1,11 @@
 package session
 
+import (
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
+
 // getSessionClientCount returns the number of TUI clients attached to a session.
 func (d *Daemon) getSessionClientCount(sessionID string) int {
 	d.clientsMu.RLock()
@@ -42,41 +48,24 @@ func clampClientSize(w, h int) (int, int) {
 	return max(w, minClientWidth), max(h, minClientHeight)
 }
 
-// calculateEffectiveSize returns the minimum dimensions across all clients in a session.
-// This is used for multi-client rendering where all clients need to see the same content.
+// calculateEffectiveSize returns the session's size under its window_size
+// policy (see window_size.go): the smallest client, the largest, or the latest.
 // Each client counts at no less than minClientWidth x minClientHeight.
 func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
-	d.clientsMu.RLock()
-	defer d.clientsMu.RUnlock()
-
-	width, height = 0, 0
-	first := true
-
-	for _, cs := range d.clients {
-		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient
-		cw, ch := cs.width, cs.height
-		cs.mu.Unlock()
-		if !match {
-			continue
-		}
-		if cw == 0 || ch == 0 {
-			continue
-		}
-		cw, ch = clampClientSize(cw, ch)
-		if first {
-			width, height = cw, ch
-			first = false
-		} else {
-			if cw < width {
-				width = cw
-			}
-			if ch < height {
-				height = ch
-			}
-		}
-	}
+	width, height, _ = d.calculateSessionSize(sessionID)
 	return width, height
+}
+
+// calculateSessionSize is calculateEffectiveSize with the policy in force.
+func (d *Daemon) calculateSessionSize(sessionID string) (width, height int, policy string) {
+	clients := d.sessionSizedClients(sessionID)
+	policy = d.effectiveWindowSize(d.manager.GetSessionByID(sessionID), clients)
+	latest := ""
+	if policy == config.WindowSizeLatest {
+		latest = d.pickLatest(sessionID, clients, time.Now())
+	}
+	width, height = sizeForPolicy(policy, clients, latest)
+	return width, height, policy
 }
 
 // calculateSessionReserve returns the chrome reserve that fits every client of
@@ -196,7 +185,7 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 		return 0, 0, LayoutReserve{}
 	}
 
-	newWidth, newHeight := d.calculateEffectiveSize(sessionID)
+	newWidth, newHeight, policy := d.calculateSessionSize(sessionID)
 	if newWidth == 0 || newHeight == 0 {
 		// Nothing known to measure. Report what the session already holds, so a
 		// caller stamping a reply is never handed a zero.
@@ -210,7 +199,8 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 
 	oldWidth, oldHeight := session.Size()
 	oldReserve := session.LayoutReserve()
-	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve {
+	policyChanged := session.swapWindowSizePolicy(policy)
+	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve && !policyChanged {
 		return newWidth, newHeight, newReserve
 	}
 	// Recorded and stamped as one step, under the same lock the whole of this
@@ -224,10 +214,11 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 		ClientCount: d.getSessionClientCount(sessionID),
 		Reserve:     newReserve,
 		Generation:  gen,
+		Policy:      policy,
 	}
 	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
-	LogBasic("Session %s resized to %dx%d, chrome %+v (min of %d clients)",
-		session.Name(), newWidth, newHeight, newReserve, payload.ClientCount)
+	LogBasic("Session %s resized to %dx%d, chrome %+v (%s of %d clients)",
+		session.Name(), newWidth, newHeight, newReserve, policy, payload.ClientCount)
 	return newWidth, newHeight, newReserve
 }
 

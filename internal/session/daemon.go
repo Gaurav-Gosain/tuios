@@ -66,6 +66,13 @@ type Daemon struct {
 	// and the write that follows it cannot interleave with another one. See
 	// recalculateAndBroadcastSize.
 	layoutMu sync.Mutex
+	// windowSize is [daemon] window_size, resolved. A session's own override
+	// from set-option wins over it. See window_size.go.
+	windowSize string
+	// latest is each session's latest client, for the latest policy.
+	latest latestState
+	// attachCount hands out connState.attachSeq.
+	attachCount atomic.Uint64
 
 	// Pending requests: maps requestID to the client that made the request
 	// Used to route command results back to the original requester
@@ -405,6 +412,16 @@ type connState struct {
 	// scratchWS says the client's hello offered scratch workspaces. See
 	// Daemon.refreshTreeOps.
 	scratchWS bool
+	// windowSizeCap says the client's hello offered WindowSize: it reports
+	// activity and can draw a session larger than itself. Set at hello,
+	// read under mu. See window_size.go.
+	windowSizeCap bool
+	// lastActivity is when the person at this client last gave input, from
+	// MsgClientActivity. Guarded by mu.
+	lastActivity time.Time
+	// attachSeq orders the clients by when they attached, for the latest
+	// policy when no client has had input. Guarded by mu.
+	attachSeq uint64
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns
@@ -644,6 +661,9 @@ type DaemonConfig struct {
 	// under which such a pane holds admin, what every pane held before
 	// grants existed. See pane_grants.go.
 	Permissions config.ResolvedPermissions
+	// WindowSize is [daemon] window_size: smallest, largest or latest. An
+	// empty or unknown value is smallest. See window_size.go.
+	WindowSize string
 	// QueueMax is [agents.queue] max: how many messages one pane's delivery
 	// queue holds. Zero means the default. See agent_queue.go.
 	QueueMax int
@@ -670,6 +690,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 		respondFromShell:   cfg.RespondFromShell,
 		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
+		windowSize:         windowSizePolicy(cfg.WindowSize),
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
@@ -933,6 +954,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 // PTYs are closed and their windows are gone, but the socket stays open, so the
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
+	d.forgetLatest(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name())
@@ -1636,6 +1658,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleClientFocus(cs, msg)
 	case MsgClientGraphics:
 		return d.handleClientGraphics(cs, msg)
+	case MsgClientActivity:
+		return d.handleClientActivity(cs)
 	case MsgTypeAtPrompt:
 		return d.handleTypeAtPrompt(cs, msg)
 	case MsgClosePTY:

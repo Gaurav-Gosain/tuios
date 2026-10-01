@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync/atomic"
+	"time"
 )
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
@@ -17,12 +18,17 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
 	cs.scratchWS = payload.ScratchWorkspaces
+	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
+	cs.windowSizeCap = payload.WindowSize
 	attachedTo := cs.sessionID
 	cs.mu.Unlock()
 	// A second hello on an attached connection can change what the client
 	// sends, and with it what the session can run.
 	if changed && attachedTo != "" {
 		d.refreshTreeOps(attachedTo)
+	}
+	if sizeCapChanged && attachedTo != "" {
+		d.recalculateAndBroadcastSize(attachedTo, "")
 	}
 
 	// Refuse a client this daemon cannot serve before it can attach to anything.
@@ -69,6 +75,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		KittyAnimationRefusal: true,
 		// See master_layout.go.
 		MasterLayoutOps: true,
+		// See window_size.go.
+		WindowSize: true,
 	})
 }
 
@@ -173,6 +181,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.height = payload.Height
 	cs.reserve = payload.Reserve
 	cs.isTUIClient = true
+	cs.attachSeq = d.attachCount.Add(1)
+	cs.lastActivity = time.Time{}
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()

@@ -1325,7 +1325,7 @@ func init() {
 			returns: []verbParam{
 				{Name: "key", Type: "string", Description: "The option that was read."},
 				{Name: "value", Type: "string", Description: "The value in effect."},
-				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
+				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "config" for the daemon's config file (daemon.window_size only), "default" for the built-in.`, Accepted: []string{"session", "config", "default"}},
 				{Name: "default", Type: "string", Description: "The built-in default, so a caller can tell an override from a default that happens to match."},
 				{Name: "option_type", Type: "string", Description: "bool, int or string."},
 			},

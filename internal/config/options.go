@@ -803,6 +803,11 @@ var optionSpecs = []Option{
 		Accepted:    daemonLogLevels, Default: "off",
 	},
 	{
+		Path: "daemon.window_size", Type: OptionString, Section: "daemon",
+		Description: "The size of a session with more than one client: the smallest client, the largest client, or the client that last had input",
+		Accepted:    WindowSizeModes, Default: WindowSizeSmallest,
+	},
+	{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",
 		Description: "Detect a pane's foreground agent CLI and set its state glyph",
 		Default:     "true",

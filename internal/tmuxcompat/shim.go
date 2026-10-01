@@ -377,6 +377,14 @@ func (s *Shim) runOne(name string, args []string) (string, []string, error) {
 		}
 		return o, d, err
 	}
+	// set-option window-size is the one option tuios honours: it is the
+	// session's daemon.window_size. Every other option is ignored.
+	if name == "set-option" || name == "set-window-option" {
+		if opt, value, ok := optionAssignment(args); ok && opt == "window-size" {
+			o, err := s.setWindowSize(value)
+			return o, nil, err
+		}
+	}
 	if slices.Contains(ignoredCommands, name) {
 		return OutcomeIgnored, nil, nil
 	}

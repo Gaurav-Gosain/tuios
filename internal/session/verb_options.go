@@ -243,6 +243,25 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 	// Record the option in daemon-owned state so get-option can read it back.
 	sess.SetOption(path, p.Value)
 
+	// daemon.window_size is the daemon's to apply: it decides the session's
+	// size, and no client draws anything from the value itself.
+	if path == optionWindowSize {
+		d.recalculateAndBroadcastSize(sess.ID, "")
+		out := map[string]any{
+			"type":    "option_set",
+			"key":     path,
+			"value":   windowSizePolicy(p.Value),
+			"applied": true,
+			"scope":   "session",
+			"reason":  "the session uses this size policy at once. It is not saved to the config file",
+		}
+		if eff := sess.WindowSizePolicy(); eff != "" && eff != windowSizePolicy(p.Value) && d.getSessionClientCount(sess.ID) > 0 {
+			out["in_force"] = eff
+			out["reason"] = "an attached client is too old for this policy, so the session uses " + eff + " until that client detaches"
+		}
+		return out, nil
+	}
+
 	// When a TUI is attached, also route the change so the live renderer applies
 	// it. A routing failure is not fatal: the option is still recorded, so
 	// applied reflects only whether the live apply succeeded.
@@ -317,6 +336,16 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 	}
 
 	opt, path, known := resolveOptionPath(p.Key)
+	if path == optionWindowSize {
+		if _, ok := sess.GetOption(path); !ok {
+			// Untold, the session follows the daemon's [daemon] window_size,
+			// which is not necessarily the built-in default.
+			return map[string]any{
+				"type": "option", "key": path, "value": d.windowSize,
+				"source": "config", "default": opt.Default, "option_type": opt.Type,
+			}, nil
+		}
+	}
 	if value, ok := sess.GetOption(path); ok {
 		out := map[string]any{"type": "option", "key": path, "value": value, "source": "session"}
 		if known {

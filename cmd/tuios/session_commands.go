@@ -129,7 +129,7 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 			// error, but the shared screen size surprises people who expect
 			// tmux's exclusive attach. Say so rather than letting them wonder
 			// why their window shrank.
-			attachNotices = append(attachNotices, fmt.Sprintf("Session %q already has a client attached. TUIOS shares the session and renders at the smallest client's size.", sessionName))
+			attachNotices = append(attachNotices, sharedSessionNotice(sessionName, attachWindowSize(client, sessionName)))
 		}
 		// Said before the attach, because the attach itself clears the mark. This
 		// is the answer to "why is my session still here after I killed the
@@ -140,6 +140,37 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 		return nil
 	}
 	return explainMissingSession(sessionName, names)
+}
+
+// attachWindowSize reads the window_size policy of a session, or "" when the
+// daemon does not say (a daemon that predates the option).
+func attachWindowSize(client *session.VerbClient, name string) string {
+	raw, err := client.Call("get-option", map[string]any{"session": name, "key": "daemon.window_size"})
+	if err != nil {
+		return ""
+	}
+	var res struct {
+		Value string `json:"value"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return ""
+	}
+	return res.Value
+}
+
+// sharedSessionNotice is what attach says before it joins a session that
+// already has a client. It names the window_size policy, because the policy
+// decides which client's size the session takes.
+func sharedSessionNotice(name, policy string) string {
+	head := fmt.Sprintf("Session %q already has a client attached. TUIOS shares the session.", name)
+	switch policy {
+	case config.WindowSizeLargest:
+		return head + " The session uses the size of the largest client (window_size largest). A smaller client shows part of it."
+	case config.WindowSizeLatest:
+		return head + " The session uses the size of the client that last had input (window_size latest). A smaller client shows part of it."
+	default:
+		return head + " The session uses the size of the smallest client (window_size smallest)."
+	}
 }
 
 // listSessionInfos returns the live sessions over the verb protocol.
