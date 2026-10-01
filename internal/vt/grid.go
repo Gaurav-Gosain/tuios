@@ -219,12 +219,6 @@ func (g *grid) SoftWrapped(y int) bool {
 	return y >= 0 && y < len(g.wrap) && g.wrap[y]&rowWrapped != 0
 }
 
-// padded reports whether row y wrapped early before a wide character, so
-// its last column is padding and not text.
-func (g *grid) padded(y int) bool {
-	return y >= 0 && y < len(g.wrap) && g.wrap[y]&rowPadded != 0
-}
-
 // setSoftWrapped records whether row y carries on to row y+1 by autowrap.
 func (g *grid) setSoftWrapped(y int, wrapped bool) {
 	if y >= 0 && y < len(g.wrap) {
