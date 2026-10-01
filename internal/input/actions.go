@@ -978,10 +978,12 @@ func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
-	o.ToggleLogViewer()
-	if o.ShowLogs && !wasShowing {
+	// Log before the toggle: the line itself moves the bottom of the buffer
+	// down by one, and the toggle lands the view on that new bottom.
+	if !wasShowing {
 		o.LogInfo("Log viewer opened")
 	}
+	o.ToggleLogViewer()
 	return o, nil
 }
 
