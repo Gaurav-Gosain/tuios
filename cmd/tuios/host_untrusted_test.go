@@ -272,7 +272,7 @@ func TestStashGetFromAHostIsMarkedUntrusted(t *testing.T) {
 // plainText removes every invisible class and keeps a line separator as a
 // line break, so the fence's gutter starts the next line.
 func TestPlainTextDropsEveryInvisibleClass(t *testing.T) {
-	in := "a­️\U000E0041᠎\U0001D173b c"
+	in := "a\u00AD\uFE0F\U000E0041\u180E\U0001D173b\u2028c"
 	if got := plainText(in); got != "ab\nc" {
 		t.Fatalf("plainText(%q) = %q, want %q", in, got, "ab\nc")
 	}
