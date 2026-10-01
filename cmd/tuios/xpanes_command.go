@@ -47,6 +47,10 @@ type xpanesOptions struct {
 	noSync      bool
 	force       bool
 	jsonOutput  bool
+	// speedy is how many times -s was given: 0, 1 (-s) or 2 (-ss).
+	speedy int
+	// interval is the wait between panes, in seconds.
+	interval float64
 }
 
 func newXpanesCommand() *cobra.Command {
@@ -61,18 +65,26 @@ tmux-xpanes.
 The items are the arguments. With no arguments, tuios reads one item from each
 line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 
-With -c, each pane runs the command with sh -c. tuios replaces {} with the
-item, in shell quotes. The pane closes when the command stops. To keep the
-pane, end the command with "; exec $SHELL". Without -c, each pane is a shell.
-In a session on another machine, the daemon there chooses the shell, and the
-pane does not get TUIOS_XPANES_ITEM.
+Each pane starts a shell. With -c, tuios types the command into the shell and
+replaces {} with the item, in shell quotes. The shell stays when the command
+stops. In a session on another machine, the daemon there chooses the shell,
+and the pane does not get TUIOS_XPANES_ITEM.
+
+-s is speedy mode: the pane runs the command with sh -c, with no interactive
+shell. When the command stops, the pane shows a message and stays until you
+press Enter. -ss closes the pane when the command stops. --ssh turns on -s.
+
+--interval waits that many seconds between the panes, for example 0.5. With
+-s or -ss, tuios waits between opening the panes. Without them, it opens all
+the panes and waits between typing the commands.
 
 Each pane gets the item in TUIOS_XPANES_ITEM and its number, from 1, in
 TUIOS_XPANES_INDEX. The item is the name of the pane.
 
 tuios opens the panes on the first empty workspace of the session, and shows
 that workspace. Inside a tuios pane, the session is the session of the pane.
-Outside, it is the most recently active session. -s names a different one.
+Outside, it is the most recently active session. --session names a different
+one.
 
 The layout and multifocus need a client attached to the session. The layout
 needs tiling on and the bsp layout. Otherwise tuios opens the panes and tells
@@ -87,7 +99,10 @@ you what it could not do.`,
   ls /var/log/*.log | tuios xpanes -l even-horizontal --no-sync -c 'tail -f {}'
 
   # Two items for each pane
-  tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt`,
+  tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt
+
+  # Speedy mode: no shell, and the pane closes when curl stops, one second apart
+  tuios xpanes -ss --interval 1 -c 'curl -s https://{}/health' web1 web2 web3`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			items, err := xpanesItems(args, cmd.InOrStdin())
@@ -98,13 +113,17 @@ you what it could not do.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVarP(&o.session, "session", "s", "", "Session to open the panes in (default: this pane's session, else the most recently active)")
+	// -s is speedy mode, as in tmux-xpanes, so the session has no short form
+	// here.
+	f.StringVar(&o.session, "session", "", "Session to open the panes in (default: this pane's session, else the most recently active)")
+	f.CountVarP(&o.speedy, "speedy", "s", "Speedy mode: run the command with no interactive shell, and hold the pane until Enter. -ss closes the pane when the command stops")
+	f.Float64Var(&o.interval, "interval", 0, "Seconds to wait between the panes, for example 0.5")
 	f.IntVar(&o.workspace, "workspace", 0, "Workspace to open the panes on. It must be empty (default: the first empty workspace)")
 	f.StringVarP(&o.command, "command", "c", "", "Command to run in each pane, with {} replaced by the item")
 	f.StringVarP(&o.placeholder, "replace", "I", xpanesDefaultPlaceholder, "Text in the command that tuios replaces with the item")
 	f.StringVarP(&o.layout, "layout", "l", layout.ArrangeTiled, "Layout: tiled, even-horizontal or even-vertical (also t, eh, ev)")
 	f.IntVarP(&o.perPane, "items-per-pane", "n", 1, "Number of items for each pane. tuios joins them with spaces")
-	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -c 'ssh -- {}'")
+	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -s -c 'ssh -- {}'")
 	f.BoolVar(&o.noSync, "no-sync", false, "Do not turn multifocus on")
 	f.BoolVar(&o.force, "force", false, fmt.Sprintf("Open more than %d panes", xpanesMaxPanes))
 	f.BoolVar(&o.jsonOutput, "json", false, "Output result as JSON")
@@ -166,8 +185,32 @@ func xpanesLayout(name string) (string, error) {
 type xpanesPane struct {
 	Items []string
 	Title string
-	Argv  []string
+	// Argv is the pane's program. Empty means the daemon's own shell.
+	Argv []string
+	// Line is the command tuios types into the pane's shell, without speedy
+	// mode. Empty means nothing is typed.
+	Line string
 }
+
+// Speedy modes, after tmux-xpanes -s and -ss.
+const (
+	// xpanesInteractive opens a shell and types the command into it. The
+	// shell stays when the command exits.
+	xpanesInteractive = 0
+	// xpanesSpeedy runs the command as the pane's program, then holds the
+	// pane until Enter.
+	xpanesSpeedy = 1
+	// xpanesSpeedyClose runs the command as the pane's program, and the pane
+	// closes when it exits.
+	xpanesSpeedyClose = 2
+)
+
+// xpanesHoldMessage is what a speedy pane shows when its command exits. It is
+// tmux-xpanes' "Pane is dead: Press [Enter] to exit...", in reverse video.
+const xpanesHoldMessage = "The command stopped. Press Enter to close the pane."
+
+// xpanesHold is the sh text that holds a speedy pane until Enter.
+var xpanesHold = `printf '\n\033[7m %s \033[0m\n' '` + xpanesHoldMessage + `' >&2; read _`
 
 // shellSafe matches a word sh reads as itself.
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9@%+=:,./_-]+$`)
@@ -180,10 +223,11 @@ func xpanesQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// xpanesPanes groups the items perPane at a time and builds each pane's argv.
-// command is the -c text, or "" for a shell. With no command and no shell the
-// argv is empty, and the daemon starts its own shell.
-func xpanesPanes(items []string, perPane int, command, placeholder, shell string) []xpanesPane {
+// xpanesPanes groups the items perPane at a time and builds each pane's argv
+// and the line to type. command is the -c text, or "" for a shell. Without
+// speedy mode the pane is the shell, and the command is its typed line. With
+// no shell the argv is empty, and the daemon starts its own shell.
+func xpanesPanes(items []string, perPane int, command, placeholder, shell string, speedy int) []xpanesPane {
 	perPane = max(perPane, 1)
 	var panes []xpanesPane
 	for start := 0; start < len(items); start += perPane {
@@ -194,21 +238,30 @@ func xpanesPanes(items []string, perPane int, command, placeholder, shell string
 			"TUIOS_XPANES_ITEM=" + joined,
 			fmt.Sprintf("TUIOS_XPANES_INDEX=%d", len(panes)+1),
 		}
-		var argv []string
+		line := ""
 		if command != "" {
 			quoted := make([]string, len(group))
 			for i, it := range group {
 				quoted[i] = xpanesQuote(it)
 			}
-			line := command
+			line = command
 			if placeholder != "" {
 				line = strings.ReplaceAll(command, placeholder, strings.Join(quoted, " "))
 			}
-			argv = append(env, "sh", "-c", line)
-		} else if shell != "" {
-			argv = append(env, shell)
 		}
-		panes = append(panes, xpanesPane{Items: group, Title: xpanesTitle(joined), Argv: argv})
+		p := xpanesPane{Items: group, Title: xpanesTitle(joined)}
+		switch {
+		case line != "" && speedy == xpanesSpeedy:
+			p.Argv = append(env, "sh", "-c", line+"\n"+xpanesHold)
+		case line != "" && speedy == xpanesSpeedyClose:
+			p.Argv = append(env, "sh", "-c", line)
+		default:
+			if shell != "" {
+				p.Argv = append(env, shell)
+			}
+			p.Line = line
+		}
+		panes = append(panes, p)
 	}
 	return panes
 }
@@ -220,6 +273,22 @@ func xpanesTitle(item string) string {
 		item = string(r[:59]) + "…"
 	}
 	return item
+}
+
+// xpanesSpeedyMode is the speedy mode the options ask for. --ssh turns on -s,
+// as in tmux-xpanes. Speedy mode runs a command, so it needs one.
+func xpanesSpeedyMode(o xpanesOptions, command string) (int, error) {
+	speedy := o.speedy
+	if o.ssh && speedy == xpanesInteractive {
+		speedy = xpanesSpeedy
+	}
+	switch {
+	case speedy > xpanesSpeedyClose:
+		return 0, errors.New("give -s one or two times: -s holds the pane, -ss closes it")
+	case speedy != xpanesInteractive && command == "":
+		return 0, errors.New("-s and -ss run a command. Add -c or --ssh")
+	}
+	return speedy, nil
 }
 
 // xpanesCommandLine is the command each pane runs: -c, or ssh with --ssh.
@@ -267,6 +336,14 @@ func runXpanes(o xpanesOptions, items []string) error {
 		return errors.New("-n must be 1 or more")
 	}
 	command := xpanesCommandLine(o)
+	speedy, err := xpanesSpeedyMode(o, command)
+	if err != nil {
+		return err
+	}
+	if o.interval < 0 {
+		return errors.New("--interval must be 0 or more seconds")
+	}
+	interval := time.Duration(o.interval * float64(time.Second))
 	sessionName := o.session
 	if sessionName == "" {
 		sessionName = os.Getenv("TUIOS_SESSION")
@@ -279,7 +356,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 	// environment. On another machine this machine's $SHELL path means
 	// nothing, so the daemon there chooses the shell, and the item is only
 	// the pane's name.
-	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")))
+	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")), speedy)
 	if len(panes) > xpanesMaxPanes && !o.force {
 		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
 	}
@@ -318,6 +395,10 @@ func runXpanes(o xpanesOptions, items []string) error {
 		cwd, _ = os.Getwd()
 	}
 	for i, p := range panes {
+		if i > 0 && speedy != xpanesInteractive {
+			// The command starts with its pane, so the wait is here.
+			time.Sleep(interval)
+		}
 		params := map[string]any{
 			"name":      p.Title,
 			"workspace": ws,
@@ -359,6 +440,24 @@ func runXpanes(o xpanesOptions, items []string) error {
 		}
 	}
 	_, _ = t.client.Call("focus-window", t.params(map[string]any{"window": res.Windows[0]}))
+
+	// Without speedy mode each pane is a shell, and the command is typed into
+	// it, as tmux-xpanes does. A shell that is still starting reads the line
+	// when it is ready.
+	typed := 0
+	for i, p := range panes {
+		if p.Line == "" {
+			continue
+		}
+		if typed > 0 {
+			time.Sleep(interval)
+		}
+		typed++
+		params := map[string]any{"window": res.Windows[i], "text": p.Line + "\n"}
+		if _, err := t.client.Call("send-text", t.params(params)); err != nil {
+			res.Warnings = append(res.Warnings, xpanesWarning(fmt.Sprintf("tuios could not type the command into pane %d", i+1), err, name))
+		}
+	}
 
 	if o.jsonOutput {
 		outputJSON(map[string]any{

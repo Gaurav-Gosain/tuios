@@ -1104,21 +1104,30 @@ The items are the arguments. With no arguments, tuios reads one item from each
 line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 
 **Flags:**
-- `-c, --command <cmd>`: Command to run in each pane with `sh -c`. tuios replaces `{}` with the item, in shell quotes
+- `-c, --command <cmd>`: Command for each pane. tuios replaces `{}` with the item, in shell quotes
+- `-s`: Speedy mode. The pane runs the command with `sh -c`, with no interactive shell, and stays until you press Enter
+- `-ss`: Speedy mode. The pane closes when the command stops
+- `--interval <seconds>`: Time to wait between the panes, for example `0.5`
 - `-I, --replace <text>`: Text that tuios replaces with the item (default: `{}`)
-- `--ssh`: Run `ssh` with the item in each pane. This is the same as `-c 'ssh -- {}'`. The `--` makes sure that ssh does not read an item that starts with `-` as an option
+- `--ssh`: Run `ssh` with the item in each pane. This is the same as `-s -c 'ssh -- {}'`. The `--` makes sure that ssh does not read an item that starts with `-` as an option. Add `-ss` to close each pane when its ssh stops
 - `-l, --layout <name>`: `tiled`, `even-horizontal` or `even-vertical`, or `t`, `eh` and `ev` (default: `tiled`)
 - `-n, --items-per-pane <n>`: Number of items for each pane. tuios joins them with spaces (default: 1)
 - `--no-sync`: Do not turn multifocus on
 - `--workspace <n>`: Workspace for the panes. It must be empty (default: the first empty workspace)
-- `-s, --session <name>`: Session for the panes (default: the session of this pane, else the most recently active)
+- `--session <name>`: Session for the panes (default: the session of this pane, else the most recently active). It has no short form, because `-s` is speedy mode, as in tmux-xpanes
 - `--force`: Open more than 64 panes
 - `--json`: Output the result as JSON
 
 **Panes:**
 
-- With `-c`, the pane closes when the command stops. To keep the pane, end the
-  command with `; exec $SHELL`.
+- Each pane starts a shell. With `-c`, tuios types the command into the shell.
+  The shell stays when the command stops. tmux-xpanes does the same.
+- With `-s`, the pane runs the command with no shell. When the command stops,
+  the pane shows "The command stopped. Press Enter to close the pane." Press
+  Enter to close it. With `-ss`, the pane closes when the command stops.
+- With `--interval`, tuios waits between the panes. With `-s` or `-ss`, it
+  waits between opening the panes, because each command starts with its pane.
+  Without them, it opens all the panes and waits between typing the commands.
 - Without `-c`, each pane is a shell. In a session on another machine, the
   daemon there chooses the shell, and the pane does not get
   `TUIOS_XPANES_ITEM` or `TUIOS_XPANES_INDEX`.
@@ -1138,7 +1147,7 @@ also needs tiling on and the `bsp` layout. When tuios cannot do one of them,
 it opens the panes and tells you what it did not do.
 
 `tuios xpanes` uses the verbs `list-workspaces`, `select-workspace`,
-`new-window` and `run-command`. The two client commands `ArrangePanes` and
+`new-window`, `send-text` and `run-command`. The two client commands `ArrangePanes` and
 `SetMultifocus` also work alone with
 [`tuios run-command`](#tuios-run-command).
 
@@ -1148,13 +1157,47 @@ it opens the panes and tells you what it did not do.
 tuios xpanes --ssh host1 host2 host3
 
 # Items from stdin, one command for each
-printf 'a\nb\nc\n' | tuios xpanes -c 'echo {}; exec $SHELL'
+printf 'a\nb\nc\n' | tuios xpanes -c 'echo {}'
+
+# No shell, one second apart, and each pane closes when curl stops
+tuios xpanes -ss --interval 1 -c 'curl -s https://{}/health' web1 web2 web3
+
+# Close all the panes when you are done
+tuios close-workspace 2
 
 # Follow logs side by side, without multifocus
 ls /var/log/*.log | tuios xpanes -l even-horizontal --no-sync -c 'tail -f {}'
 
 # Two items for each pane
 tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt
+```
+
+### `tuios close-workspace`
+
+Close every pane on a workspace, like tmux `kill-window`. Without a number,
+tuios closes the panes of the current workspace.
+
+**Usage:**
+```bash
+tuios close-workspace [flags] [workspace]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: the session of this pane, else the most recently active)
+- `--json`: Output the result as JSON
+
+Scratch panes stay open. To close a scratch group, name its scratch workspace.
+A pane that runs this command needs the `admin` grant. The
+`close_workspace` action does the same from the keyboard. See
+[KEYBINDINGS.md](KEYBINDINGS.md#close-every-pane-on-a-workspace).
+
+**Examples:**
+```bash
+# Close the panes that tuios xpanes opened on workspace 2
+tuios close-workspace 2
+
+# Close the panes of the current workspace
+tuios close-workspace
 ```
 
 ### `tuios ask-human`

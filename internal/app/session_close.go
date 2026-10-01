@@ -127,6 +127,9 @@ func countOf(n int, noun string) string {
 // because the question is being asked of a person: a session renamed to
 // "Payments API" is not recognisable by the name it is addressed by.
 func (m *OS) sessionCloseQuestion() string {
+	if ws := m.SessionCloseWorkspace; ws != 0 {
+		return "Close every pane on " + m.workspaceLabel(ws) + "?"
+	}
 	name := m.sessionCloseTarget()
 	if name == "" {
 		return "Close this session?"
@@ -167,6 +170,7 @@ func (m *OS) OpenSessionCloseFor(sessionID string) {
 func (m *OS) CloseSessionClose() {
 	m.ShowSessionClose = false
 	m.SessionCloseTarget = ""
+	m.SessionCloseWorkspace = 0
 	m.SessionCloseSelected = SessionCloseRowCancel
 }
 
@@ -189,8 +193,13 @@ func (m *OS) SessionCloseMove(delta int) {
 // row when the daemon's next listing says so.
 func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 	target := m.SessionCloseTarget
+	ws := m.SessionCloseWorkspace
 	m.CloseSessionClose()
 	if idx != SessionCloseRowClose {
+		return nil
+	}
+	if ws != 0 {
+		m.CloseWorkspacePanes(ws)
 		return nil
 	}
 	if target != "" {

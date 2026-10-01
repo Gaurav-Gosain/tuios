@@ -1074,6 +1074,19 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"close-window","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbCloseWindow,
 		},
+		"close-workspace": {
+			description: "Close every pane on a workspace, like tmux kill-window. Scratch panes stay unless the workspace named is their scratch workspace. A pane that calls it needs the admin grant.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "Workspace whose panes to close. Omit for the current one."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace whose panes were closed."},
+				{Name: "closed", Type: "[]string", Description: "Ids of the windows that were closed, in window order."},
+			},
+			examples: []string{`{"id":1,"verb":"close-workspace","params":{"session":"work","workspace":2}}`},
+			handler:  (*Daemon).verbCloseWorkspace,
+		},
 		"send-keys": {
 			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window.",
 			params: []verbParam{

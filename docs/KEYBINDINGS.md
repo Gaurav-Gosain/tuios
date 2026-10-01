@@ -350,6 +350,24 @@ command = "printf %s \"$TUIOS_ACTIVE_PANE_CWD\" | (pbcopy || wl-copy || xclip -s
 description = "Copy pane folder"
 ```
 
+## Close every pane on a workspace
+
+The `close_workspace` action closes every pane on the current workspace. It is
+the same as tmux `kill-window`. Use it to close the panes that `tuios xpanes`
+opened. The action has no default key. The command palette has the entry
+"Close workspace". To bind it, add it to a section. This example uses
+`Ctrl+B Alt+X`, because `Ctrl+B X` closes the session:
+
+```toml
+[keybindings.prefix_mode]
+close_workspace = ["alt+x"]
+```
+
+The action asks first. The dialog shows how many panes close and how many
+agents are in them. `Cancel` is the default row. Scratch panes stay open.
+`tuios close-workspace` does the same from a shell. See
+[CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
+
 ## Copy mode
 
 `Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the

@@ -24,6 +24,9 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, sessionCloseRowCount-1)
 
 	toll := m.SessionTollFor(m.SessionCloseTarget)
+	if m.SessionCloseWorkspace != 0 {
+		toll = m.workspaceToll(m.SessionCloseWorkspace)
+	}
 	// The toll is warn-coloured only when an agent is in it. Colouring it always
 	// would spend the one loud thing in the dialog on "three shells are open",
 	// and then have nothing left for the case that matters.
@@ -43,7 +46,7 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	content, geo := overlay.Dialog{
-		Title: "close session",
+		Title: m.sessionCloseTitle(),
 		Width: width,
 		Body:  strings.Join(body, "\n"),
 		Hints: []overlay.Hint{
@@ -81,7 +84,7 @@ func (m *OS) sessionCloseRow(idx, width int, pal overlay.Palette) string {
 
 	label, labelColor := "Cancel", pal.FgDim
 	if idx == SessionCloseRowClose {
-		label, labelColor = "Close session", pal.FgMute
+		label, labelColor = m.sessionCloseLabel(), pal.FgMute
 		if cursor {
 			labelColor = pal.Warn
 		}

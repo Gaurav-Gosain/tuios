@@ -177,6 +177,7 @@ var verbScopes = map[string]scopeKind{
 	"set-layout":           scopeDeny,
 	"run-command":          scopeDeny,
 	"close-window":         scopeDeny,
+	"close-workspace":      scopeDeny,
 	"screenshot":           scopeDeny,
 	"resize":               scopeDeny,
 	"kill-session":         scopeDeny,
