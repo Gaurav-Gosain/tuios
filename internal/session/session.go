@@ -1002,6 +1002,10 @@ type Session struct {
 	discardHistory atomic.Bool
 
 	stateMu sync.RWMutex
+	// herdrSpawnWS is the workspace a window is being made on, keyed by
+	// window id, from just before its shell starts until the shell's
+	// environment is built. See herdrTabFor.
+	herdrSpawnWS sync.Map
 	// snapSeq is the last SnapshotSeq handed out.
 	snapSeq atomic.Uint64
 	// pushSeen is what every snapshot's PushSeen is copied from, guarded by
@@ -1273,7 +1277,7 @@ type SessionConfig struct {
 	// HerdrEnv returns the herdr protocol variables a pane with the given
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.
-	HerdrEnv func(sessionID, windowID string, command []string) []string
+	HerdrEnv func(sessionID, windowID string, workspace int, command []string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -2874,7 +2878,7 @@ func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []s
 	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
 	// socket here, when this pane starts one. See herdr_compat.go.
 	if s.config != nil && s.config.HerdrEnv != nil {
-		env = append(env, s.config.HerdrEnv(s.ID, windowID, command)...)
+		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID), command)...)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.

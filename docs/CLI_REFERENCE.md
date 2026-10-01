@@ -249,8 +249,8 @@ agent loads only what it needs:
   work and waiting for it, reporting its own state, talking to other agents and
   the person safely, and a table of the topics.
 - `tuios --skill TOPIC` prints one topic: `panes`, `state`, `inbox`, `mail`,
-  `fleet`, `hosts`, `events`, `mcp`, `tmux`, `grants`, `config`, `errors` or
-  `recipes`. `recipes` has end-to-end recipes: a fleet of agents, answering
+  `fleet`, `hosts`, `events`, `mcp`, `tmux`, `herdr`, `grants`, `config`,
+  `errors` or `recipes`. `recipes` has end-to-end recipes: a fleet of agents, answering
   from the Inbox, approvals, agents on another machine, MCP setup, the tmux
   shim, scoped grants, a conductor pane and a phone alert.
 - `tuios --skill all` prints the core and every topic.
@@ -2988,6 +2988,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line (`tuios tmux display-message -p '#{pane_id}'`). In a pane, it answers in the caller's session. Outside a pane, every tuios session is a tmux session. A tmux session is a tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
+| `herdr <herdr arguments>` | tuios run through the `herdr` link that the daemon makes beside its socket, which every pane gets as `HERDR_BIN_PATH`. It answers herdr's command line (`pane`, `tab`, `workspace`, `agent`, `worktree`, `notification show`, `api snapshot`), so tools built for herdr work in a tuios pane: `"$HERDR_BIN_PATH" pane split --pane "$HERDR_PANE_ID" --direction right`. It prints herdr's JSON and uses herdr's exit codes. `tuios pane ...` and `tuios notification ...` answer the same two groups. See [herdr's command line](AGENT_STATE.md#herdrs-command-line) |
 | `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |
 | `tuios set-pane-grants` | Give a pane grants (`--grants read,write`), or the default back (`--reset`). See [below](#tuios-pane-grants) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |

@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/google/uuid"
 )
@@ -1045,11 +1046,19 @@ func (d *Daemon) Start() error {
 	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
 		d.herdrListener = l
 		d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
-		// herdr's report commands, for a reporter that runs
-		// "$HERDR_BIN_PATH" pane report-agent, are answered by this
-		// binary. See cmd/tuios/herdr_commands.go.
+		// herdr's command line, for a tool that runs "$HERDR_BIN_PATH"
+		// pane split and the rest, is this binary run as herdr: a link
+		// named herdr beside the daemon socket, as the tmux shim's is.
+		// Where the link cannot be made, the binary itself answers
+		// herdr's pane and notification commands. See internal/herdrcli.
 		if exe, err := d.agentProtoExecutable(); err == nil {
-			d.manager.SetHerdrBin(exe)
+			bin := exe
+			if link, err := herdrcli.InstallLink(HerdrLinkDir(socketPath), exe); err == nil {
+				bin = link
+			} else {
+				log.Printf("The herdr link could not be made: %v. Panes get the tuios binary as HERDR_BIN_PATH, which answers herdr's pane and notification commands only.", err)
+			}
+			d.manager.SetHerdrBin(bin)
 		}
 	}
 

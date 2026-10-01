@@ -163,23 +163,26 @@ func (m *Manager) SetHerdrProtocol(mode string) {
 	m.herdrMode.Store(&mode)
 }
 
-// SetHerdrBin records the program a pane is given as HERDR_BIN_PATH: this
-// tuios, which answers herdr's report commands (tuios pane report-agent and
-// the rest) over the herdr protocol socket. "" gives no HERDR_BIN_PATH.
+// SetHerdrBin records the program a pane is given as HERDR_BIN_PATH: the
+// herdr link to this tuios, which answers herdr's command line (see
+// internal/herdrcli), or this tuios itself when the link could not be made.
+// "" gives no HERDR_BIN_PATH.
 func (m *Manager) SetHerdrBin(path string) {
 	m.herdrBin.Store(&path)
 }
 
 // HerdrEnv is the herdr environment a pane that runs command (nil for the
 // user's shell) is started with, nil for none: HERDR_ENV, HERDR_SOCKET_PATH
-// naming tuios's own socket, HERDR_PANE_ID and HERDR_WORKSPACE_ID naming the
-// pane and its session in herdr's form (herdr_ids.go), and
-// HERDR_BIN_PATH naming this tuios, for a reporter that calls herdr's CLI
-// rather than the socket. A pane gets it when the daemon listens on the
-// socket and [agents] herdr_protocol is not off: every pane by default, as
-// in herdr, or with "agents" only a pane that starts a harness known to
-// report this way. See herdr_compat.go.
-func (m *Manager) HerdrEnv(sessionID, windowID string, command []string) []string {
+// naming tuios's own socket, HERDR_PANE_ID, HERDR_TAB_ID and
+// HERDR_WORKSPACE_ID naming the pane, its workspace and its session in
+// herdr's form (herdr_ids.go), and HERDR_BIN_PATH naming the herdr link, for
+// a tool that runs herdr's CLI rather than the socket. workspace is the tuios
+// workspace the pane starts on, which is herdr's tab; 0 gives no
+// HERDR_TAB_ID. A pane gets it when the daemon listens on the socket and
+// [agents] herdr_protocol is not off: every pane by default, as in herdr, or
+// with "agents" only a pane that starts a harness known to report this way.
+// See herdr_compat.go.
+func (m *Manager) HerdrEnv(sessionID, windowID string, workspace int, command []string) []string {
 	sock := ""
 	if p := m.herdrSocket.Load(); p != nil {
 		sock = *p
@@ -196,6 +199,9 @@ func (m *Manager) HerdrEnv(sessionID, windowID string, command []string) []strin
 	}
 	env := []string{"HERDR_ENV=1", "HERDR_SOCKET_PATH=" + sock, "HERDR_PANE_ID=" + herdrPaneID(sessionID, windowID)}
 	if sessionID != "" {
+		if workspace > 0 {
+			env = append(env, "HERDR_TAB_ID="+herdrTabID(sessionID, workspace))
+		}
 		env = append(env, "HERDR_WORKSPACE_ID="+herdrWorkspaceID(sessionID))
 	}
 	if p := m.herdrBin.Load(); p != nil && *p != "" {

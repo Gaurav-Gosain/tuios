@@ -55,6 +55,11 @@ func main() {
 	if isTmuxName(os.Args[0]) {
 		os.Exit(runAsTmux(os.Args[1:]))
 	}
+	// Run through the herdr link the daemon makes, this binary is herdr's
+	// command line, as tools built for herdr call it. See herdr_commands.go.
+	if isHerdrName(os.Args[0]) {
+		os.Exit(runAsHerdr(os.Args[1:]))
+	}
 
 	rootCmd := newRootCommand()
 	rootCmd.SetArgs(skillArgs(rootCmd, os.Args[1:]))
@@ -2944,7 +2949,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand())
-	rootCmd.AddCommand(newHerdrPaneCommand(), newHerdrNotificationCommand())
+	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 
 	return rootCmd
 }

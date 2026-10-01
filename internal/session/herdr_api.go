@@ -109,6 +109,11 @@ type herdrIn struct {
 	MatchEvent    map[string]any      `json:"match_event"`
 	Subscriptions []herdrSubscription `json:"subscriptions"`
 	Env           map[string]string   `json:"env"`
+	Mode          string              `json:"mode"`
+	SourcePaneID  string              `json:"source_pane_id"`
+	Name          string              `json:"name"`
+	Kind          string              `json:"kind"`
+	Args          []string            `json:"args"`
 }
 
 // label is the label, "" when there is none.
@@ -150,6 +155,13 @@ type herdrResult struct {
 	Revision      *uint64                `json:"revision,omitempty"`
 	MatchedLine   *string                `json:"matched_line,omitempty"`
 	Event         *herdrEvent            `json:"event,omitempty"`
+	ProcessInfo   *herdrProcessInfo      `json:"process_info,omitempty"`
+	Neighbor      *herdrNeighbor         `json:"neighbor,omitempty"`
+	Edges         *herdrEdges            `json:"edges,omitempty"`
+	Focus         *herdrFocusMove        `json:"focus,omitempty"`
+	Swap          *herdrSwap             `json:"swap,omitempty"`
+	Zoom          *herdrZoom             `json:"zoom,omitempty"`
+	Argv          []string               `json:"argv,omitempty"`
 }
 
 // herdrAck is the result of a method that only acknowledges.
@@ -204,6 +216,7 @@ type herdrArgs struct {
 	Branch    string  `json:"branch,omitempty"`
 	Base      string  `json:"base,omitempty"`
 	Force     bool    `json:"force,omitempty"`
+	Command   string  `json:"command,omitempty"`
 }
 
 // herdrMethod answers one method for cs.
@@ -267,6 +280,15 @@ func init() {
 		"worktree.remove": {run: (*Daemon).herdrWorktreeRemove, required: ws},
 
 		"events.wait": {run: (*Daemon).herdrEventsWait, required: []string{"match_event"}},
+
+		"pane.process_info":    {run: (*Daemon).herdrPaneProcessInfo},
+		"pane.neighbor":        {run: (*Daemon).herdrPaneNeighbor, required: []string{"direction"}},
+		"pane.edges":           {run: (*Daemon).herdrPaneEdges},
+		"pane.focus_direction": {run: (*Daemon).herdrPaneFocusDirection, required: []string{"direction"}},
+		"pane.swap":            {run: (*Daemon).herdrPaneSwap},
+		"pane.zoom":            {run: (*Daemon).herdrPaneZoom},
+		"workspace.focus":      {run: (*Daemon).herdrWorkspaceFocus, required: ws},
+		"agent.start":          {run: (*Daemon).herdrAgentStart, required: []string{"name", "kind", "pane_id"}},
 	}
 }
 
@@ -279,11 +301,11 @@ var herdrUnsupported = []string{
 	"server.agent_manifests", "server.reload_agent_manifests",
 	"product_announcement.dismiss", "release_notes.dismiss", "command.invoke",
 	"client.window_title.set", "client.window_title.clear", "client_shell.surface.set",
-	"workspace.focus", "workspace.move", "workspace.move_block", "workspace.report_metadata",
-	"agent.explain", "agent.rename", "agent.view.set", "agent.view.clear", "agent.start",
-	"pane.swap", "pane.move", "pane.zoom", "pane.process_info",
+	"workspace.move", "workspace.move_block", "workspace.report_metadata",
+	"agent.explain", "agent.rename", "agent.view.set", "agent.view.clear",
+	"pane.move",
 	"layout.export", "layout.apply", "layout.set_split_ratio",
-	"pane.neighbor", "pane.edges", "pane.focus_direction", "pane.resize", "pane.scroll",
+	"pane.resize", "pane.scroll",
 	"pane.clear", "pane.edit_scrollback", "pane.selection.read", "pane.copy_motion",
 	"pane.copy_search", "pane.input.set", "pane.link.activate", "pane.link.resolve",
 	"pane.clear_agent_authority", "popup.close",
@@ -931,6 +953,13 @@ func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail s
 	sess, win, ierr := d.herdrFindPane(id)
 	if ierr != nil {
 		return nil, ierr.herdr()
+	}
+	// A tool that wraps its text in bracketed paste itself (terminal-browser
+	// does for text of several lines) sends the markers as text. A paste
+	// removes their escape bytes and would type the rest, so the markers
+	// come off, and the paste puts its own on when the program wants them.
+	if inner, ok := strings.CutPrefix(text, "\x1b[200~"); ok {
+		text = strings.TrimSuffix(inner, "\x1b[201~")
 	}
 	if text != "" {
 		args := herdrWin(sess, win.ID)

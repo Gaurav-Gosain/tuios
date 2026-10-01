@@ -123,6 +123,10 @@ type RemoteCommandMsg struct {
 	RequestID    string   // For response tracking
 }
 
+// remoteSwitchSessionMsg switches this client to another session, after the
+// routed request that asked for it has been answered. See switch_session.
+type remoteSwitchSessionMsg struct{ name string }
+
 // RemoteKeyMsg represents a single key to be processed from a remote send-keys command.
 // Keys are sent one at a time to allow proper sequential processing.
 type RemoteKeyMsg struct {
@@ -2344,6 +2348,27 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 			}
 			return m, relisten
+		case "swap_windows":
+			// herdr's pane.swap: the daemon names the pair. TapeArgs are the
+			// source and the target window ids.
+			if len(msg.TapeArgs) != 2 {
+				err = fmt.Errorf("swap_windows needs two window ids")
+			} else {
+				err = m.SwapWindowsByID(msg.TapeArgs[0], msg.TapeArgs[1])
+			}
+		case "switch_session":
+			// herdr's workspace.focus: show another session. The answer goes
+			// first, because the switch detaches this client from the session
+			// the daemon routed the request through.
+			if len(msg.TapeArgs) != 1 || msg.TapeArgs[0] == "" {
+				err = fmt.Errorf("switch_session needs a session name")
+				break
+			}
+			if m.DaemonClient != nil && msg.RequestID != "" {
+				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
+			}
+			name := msg.TapeArgs[0]
+			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: name} }, relisten)
 		case "refresh_dock":
 			// Re-run one component now, or every one when unnamed.
 			name := ""
@@ -2397,6 +2422,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, tea.Batch(cmd, persistCmd, relisten)
+
+	case remoteSwitchSessionMsg:
+		m.openSession("", msg.name)
+		m.MarkAllDirty()
+		return m, nil
 
 	case RemoteKeyMsg:
 		// Process a single key from a remote send-keys command
