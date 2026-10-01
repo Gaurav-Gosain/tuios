@@ -242,6 +242,11 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Command   []string `json:"command"`
 		Host      string   `json:"host"`
 		Grants    []string `json:"grants"`
+		// CloseOnExit closes the window when its process exits, also with no
+		// client attached. An attached client closes a command window on
+		// exit already. A detached session keeps it until something closes
+		// it, which is right for a shell and wrong for tuios xpanes -ss.
+		CloseOnExit bool `json:"close_on_exit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -288,7 +293,12 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	// PTY and the window set are the daemon's. An attached renderer learns of the
 	// window from the state push and places it, so there is no round trip to the
 	// client that can time out and no second creation path to keep in step.
-	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
+	onExit := func(ptyID string) {
+		d.notifyPTYClosed(sess.ID, ptyID)
+		if p.CloseOnExit {
+			d.closeWindowOfPTY(sess, ptyID)
+		}
+	}
 	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
 		Title:     p.Name,
 		Cwd:       p.Cwd,
@@ -620,6 +630,22 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 		return nil, mapResolveErr(err, sess)
 	}
 	return map[string]any{"type": "ok"}, nil
+}
+
+// closeWindowOfPTY closes the window whose PTY is ptyID, off the caller's
+// goroutine: an exit callback can run where the state lock is held. A window
+// that an attached client closed first is gone already, which is fine.
+func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string) {
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		for _, w := range sess.GetState().Windows {
+			if w.PTYID == ptyID {
+				_, _ = sess.CloseDaemonWindow(w.ID)
+				return
+			}
+		}
+	}()
 }
 
 // verbCloseWorkspace closes every pane on one workspace. A scratch pane is

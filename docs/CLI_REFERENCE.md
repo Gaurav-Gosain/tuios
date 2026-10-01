@@ -1120,8 +1120,10 @@ line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 
 **Panes:**
 
-- Each pane starts a shell. With `-c`, tuios types the command into the shell.
-  The shell stays when the command stops. tmux-xpanes does the same.
+- Each pane starts a shell. With `-c`, tuios types the command into the shell
+  of that pane and presses Enter. tuios waits until the shell shows its
+  prompt, for at most 10 seconds. The shell stays when the command stops.
+  tmux-xpanes does the same. This works with and without a client attached.
 - With `-s`, the pane runs the command with no shell. When the command stops,
   the pane shows "The command stopped. Press Enter to close the pane." Press
   Enter to close it. With `-ss`, the pane closes when the command stops.

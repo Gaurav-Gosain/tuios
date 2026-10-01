@@ -37,7 +37,12 @@ type xpanesRow struct {
 
 func xpanesRows(t *testing.T, base string) []xpanesRow {
 	t.Helper()
-	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", "xp")
+	return xpanesRowsIn(t, base, "xp")
+}
+
+func xpanesRowsIn(t *testing.T, base, sess string) []xpanesRow {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", sess)
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
 	}
@@ -243,4 +248,112 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 		t.Fatalf("close-workspace 2 left %d panes on workspace 1, want 1", n)
 	}
 	alive(t, term, "after close-workspace")
+}
+
+// xpanesHello runs the default-mode repro of the v0.8.3 bug against session
+// sess and checks each pane's own capture: its output line "hello world from
+// <item>", which only the shell prints, and no line meant for another pane.
+func xpanesHello(t *testing.T, base, sess string) {
+	t.Helper()
+	items := []string{"alpha", "beta", "gamma"}
+	args := append([]string{"xpanes", "--session", sess, "-c", `echo "hello world from {}"`}, items...)
+	if out, err := tuiosCLI(t, base, args...); err != nil {
+		t.Fatalf("xpanes: %v\n%s", err, out)
+	}
+	for _, it := range items {
+		var capture string
+		deadline := time.Now().Add(shellTimeout)
+		for {
+			out, err := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", it)
+			capture = out
+			if err == nil && hasLine(out, "hello world from "+it) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("pane %s never printed its own line:\n%s", it, capture)
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+		for _, other := range items {
+			if other != it && strings.Contains(capture, "from "+other) {
+				t.Fatalf("pane %s holds the command for %s:\n%s", it, other, capture)
+			}
+		}
+	}
+}
+
+// hasLine reports whether out has a line that is exactly line, after trailing
+// space. The typed command holds the words too, but after echo and a quote.
+func hasLine(out, line string) bool {
+	for l := range strings.Lines(out) {
+		if strings.TrimRight(l, " \r\n") == line {
+			return true
+		}
+	}
+	return false
+}
+
+// The v0.8.3 repro, with no client attached: tuios xpanes from outside, then
+// each pane's capture. Every command went to the focused pane, and none ran.
+// -ss and --interval are checked here too, since nothing draws the panes.
+func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "demo", "--detach"); err != nil {
+		t.Fatalf("new: %v\n%s", err, out)
+	}
+	xpanesHello(t, base, "demo")
+
+	mark := base + "/ss-"
+	out, err := tuiosCLI(t, base, "xpanes", "--session", "demo", "--no-sync", "-ss", "--interval", "0.3",
+		"-c", "date +%s%N > "+mark+"{}", "x", "y")
+	if err != nil {
+		t.Fatalf("xpanes -ss: %v\n%s", err, out)
+	}
+	var starts []int64
+	for _, it := range []string{"x", "y"} {
+		deadline := time.Now().Add(shellTimeout)
+		for {
+			data, err := os.ReadFile(mark + it)
+			if ns, perr := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil && perr == nil {
+				starts = append(starts, ns)
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the -ss pane for %s never ran", it)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if gap := time.Duration(starts[1] - starts[0]); gap < 250*time.Millisecond {
+		t.Fatalf("the -ss panes started %v apart, want at least 0.25 s", gap)
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		n := 0
+		for _, r := range xpanesRowsIn(t, base, "demo") {
+			if r.Name == "x" || r.Name == "y" {
+				n++
+			}
+		}
+		if n == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d -ss panes are still open", n)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// The same repro with a client attached to the session.
+func TestXpanesDefaultModeWithAClient(t *testing.T) {
+	base := t.TempDir()
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "demo"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "setup")
+	xpanesHello(t, base, "demo")
+	t.Logf("with a client:\n%s", term.Snapshot())
+	alive(t, term, "after xpanes")
 }
