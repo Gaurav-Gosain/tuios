@@ -85,10 +85,11 @@ In the scrolling layout, left and right move between columns. Up and down move b
 ## Neovim pane navigation
 
 The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)
-plugin lets the terminal-mode focus keys move through Neovim splits first. At a
-split edge, TUIOS moves to the adjacent pane instead. The plugin announces when
-it is active, so the same keys keep their normal TUIOS behaviour in shells and
-other programs.
+plugin lets the terminal-mode focus keys move through Neovim splits first. The
+feature is off by default; set `appearance.nvim_navigation = true` to enable
+it. At a split edge, TUIOS moves to the adjacent pane instead. The plugin
+announces when it is active, so the same keys keep their normal TUIOS behaviour
+in shells and other programs.
 
 By default, both projects use `alt+left`, `alt+down`, `alt+up` and
 `alt+right`. If either side is customized, its four mappings must match the
@@ -108,7 +109,7 @@ OSC 7777 ; tuios-nvim-navigator ; focus ; <direction> BEL
 may emit the same messages. TUIOS accepts focus requests only from the focused
 pane in terminal mode, and only immediately after it forwarded the matching
 focus key to that pane. Window-management mode always keeps the focus keys for
-TUIOS itself. Enable the protocol with `appearance.nvim_navigation = true`.
+TUIOS itself.
 
 ## Lists and panels
 
