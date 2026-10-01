@@ -1197,7 +1197,9 @@ func (e *Emulator) Resize(width int, height int) {
 	y := e.scr.cur.Y
 	e.tabstops = uv.DefaultTabStops(width)
 
-	phantom := e.atPhantom && reflowMain && e.scr == main
+	// A cursor left on the last column keeps its pending wrap, whether the
+	// main screen reflowed it there or no reflow moved it.
+	phantom := e.atPhantom && (reflowMain && e.scr == main || x == width-1)
 	e.setCursor(x, y)
 	e.atPhantom = phantom
 
@@ -1220,23 +1222,31 @@ func (e *Emulator) reflowMain(width, height int) {
 
 	var marks []SemanticMarker
 	var points []*reflowPoint
+	// A prompt is open, and the shell is editing it, once it has marked the
+	// prompt's start (A) and the start of the command line (B) and has not
+	// yet run it (C) or finished it (D). A lone A is not enough: a shell
+	// that marks only its prompts leaves A standing over every command's
+	// output, and freezing that would hold the output out of the reflow.
 	prompt := -1
 	if e.semanticMarkers != nil {
 		marks = e.semanticMarkers.Markers()
 		points = make([]*reflowPoint, len(marks))
 		backing := make([]reflowPoint, len(marks))
+		start, typing := -1, false
 		for i, m := range marks {
 			backing[i] = reflowPoint{abs: m.AbsLine, col: m.Col}
 			points[i] = &backing[i]
 			switch m.Type {
 			case MarkerPromptStart:
-				prompt = m.AbsLine
+				start, typing = m.AbsLine, false
+			case MarkerCommandStart:
+				typing = start >= 0
 			case MarkerCommandExecuted, MarkerCommandFinished:
-				prompt = -1
+				start, typing = -1, false
 			}
 		}
-		if prompt > sb.Len()+main.cur.Y {
-			prompt = -1
+		if typing && start <= sb.Len()+main.cur.Y {
+			prompt = start
 		}
 	}
 

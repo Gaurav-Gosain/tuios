@@ -50,6 +50,13 @@ type conserveScript struct {
 	ringCap int
 	// parked says a program left the cursor above text it drew lower down.
 	parked bool
+	// saved says the cursor was saved (DECSC) at the end of the last line
+	// of output, past its text, and has to come back there.
+	saved bool
+	// open says the last prompt is marked open with OSC 133 A and B, so
+	// the reflow keeps it on its rows and clamps a cursor or mark past the
+	// width, which the shell repaints.
+	open bool
 }
 
 func (s conserveScript) String() string {
@@ -70,7 +77,11 @@ func genConserve(seed uint64, widths bool) conserveScript {
 	s := conserveScript{cols: 4 + r.IntN(14), rows: 2 + r.IntN(8)}
 	var b strings.Builder
 	lines := r.IntN(3 * s.rows)
-	for range lines {
+	for i := range lines {
+		if r.IntN(4) == 0 {
+			// A shell's marks: the prompt's start, then the output's.
+			b.WriteString("\x1b]133;A\x07")
+		}
 		switch r.IntN(10) {
 		case 0:
 			// A blank line.
@@ -86,11 +97,26 @@ func genConserve(seed uint64, widths bool) conserveScript {
 		if r.IntN(4) == 0 {
 			b.WriteString("\x1b]8;;\x07\x1b[m")
 		}
+		if r.IntN(4) == 0 {
+			// A mark just past the text, where a shell marks the end of a
+			// command line.
+			b.WriteString("\x1b]133;C\x07")
+		}
+		if i == lines-1 && r.IntN(3) == 0 {
+			b.WriteString("\x1b7")
+			s.saved = true
+		}
 		b.WriteString("\r\n")
 	}
-	b.WriteString("\x1b[m\x1b]8;;\x07$ ")
-	s.checkCursor = true
-	if r.IntN(3) == 0 {
+	b.WriteString("\x1b[m\x1b]8;;\x07")
+	open := r.IntN(3) == 0
+	if open {
+		b.WriteString("\x1b]133;A\x07$ \x1b]133;B\x07")
+	} else {
+		b.WriteString("$ ")
+	}
+	s.checkCursor = !open
+	if !open && r.IntN(3) == 0 {
 		// A program that draws at the bottom and parks the cursor higher up.
 		// A screen too short for the text below the cursor keeps the text
 		// and lets the cursor's row go into the history, as ghostty and
@@ -100,6 +126,9 @@ func genConserve(seed uint64, widths bool) conserveScript {
 		fmt.Fprintf(&b, "\x1b[%d;1Hstatus\x1b[%d;%dH", s.rows, 1+r.IntN(s.rows), 1+r.IntN(s.cols))
 	}
 	s.in = b.String()
+	// A shell's open prompt is where the cursor is, with nothing under it,
+	// so it is not drawn together with a parked cursor.
+	s.open = open
 	if r.IntN(4) == 0 {
 		s.checkCursor = false
 		s.alt = "\x1b[?1049h\x1b[Hfull screen"
@@ -140,9 +169,20 @@ func logicalLines(tm vt.Terminal) []string {
 // logicalLinesCursor is logicalLines, and where the cursor is in them: the
 // line and the number of characters before it in the line.
 func logicalLinesCursor(tm vt.Terminal) ([]string, [2]int) {
-	cursor := [2]int{-1, -1}
 	cy := tm.ScrollbackLen() + tm.CursorPosition().Y
-	cx := tm.CursorPosition().X
+	lines, at := logicalLinesAt(tm, [][2]int{{cy, tm.CursorPosition().X}})
+	return lines, at[0]
+}
+
+// logicalLinesAt is logicalLines, and where each point, a row counted from
+// the oldest history row and a column, is in them: the line and the number
+// of characters before it in the line. A point past a row's last cell is
+// found at that row's end.
+func logicalLinesAt(tm vt.Terminal, points [][2]int) ([]string, [][2]int) {
+	at := make([][2]int, len(points))
+	for i := range at {
+		at[i] = [2]int{-1, -1}
+	}
 	type row struct {
 		cells   uv.Line
 		wrapped bool
@@ -176,9 +216,16 @@ func logicalLinesCursor(tm vt.Terminal) ([]string, [2]int) {
 		if padded && len(r.cells) > 0 && r.cells[0].Width > 1 {
 			cur = cur[:len(cur)-1]
 		}
+		for k, pt := range points {
+			if pt[0] == i && pt[1] >= len(r.cells) {
+				at[k] = [2]int{len(out), len(cur) + (pt[1] - len(r.cells)) + countCells(r.cells)}
+			}
+		}
 		for x, c := range r.cells {
-			if i == cy && x == cx {
-				cursor = [2]int{len(out), len(cur)}
+			for k, pt := range points {
+				if pt[0] == i && pt[1] == x {
+					at[k] = [2]int{len(out), len(cur)}
+				}
 			}
 			if c.Width == 0 && c.Content == "" {
 				continue // the second half of a wide cell
@@ -201,7 +248,29 @@ func logicalLinesCursor(tm vt.Terminal) ([]string, [2]int) {
 	for len(out) > 0 && out[len(out)-1] == "" {
 		out = out[:len(out)-1]
 	}
-	return out, cursor
+	return out, at
+}
+
+// countCells is the number of characters in a row, not counting the second
+// halves of wide ones.
+func countCells(cells uv.Line) int {
+	n := 0
+	for _, c := range cells {
+		if c.Width != 0 || c.Content != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// markPoints is where the terminal's OSC 133 marks are, as points for
+// logicalLinesAt.
+func markPoints(tm vt.Terminal) [][2]int {
+	var pts [][2]int
+	for _, m := range tm.SemanticMarkers().Markers() {
+		pts = append(pts, [2]int{m.AbsLine, m.Col})
+	}
+	return pts
 }
 
 // conserveProblem runs s and returns what it lost, or "".
@@ -214,11 +283,27 @@ func conserveProblem(s conserveScript) string {
 	defer func() { _ = tm.Close() }()
 	_, _ = tm.Write([]byte(s.in))
 	before, curBefore := logicalLinesCursor(tm)
+	_, marksBefore := logicalLinesAt(tm, markPoints(tm))
+	var savedBefore [2]int
+	if s.saved {
+		// Where the saved cursor is, read on a copy: restoring it here would
+		// move the cursor the resizes are to carry.
+		cp := vt.NewWithScrollback(s.cols, s.rows, ringCap)
+		_, _ = cp.Write([]byte(s.in + "\x1b8"))
+		_, savedBefore = logicalLinesCursor(cp)
+		_ = cp.Close()
+	}
 	if s.alt != "" {
 		_, _ = tm.Write([]byte(s.alt))
 	}
 	for _, sz := range s.sizes {
 		tm.Resize(sz[0], sz[1])
+	}
+	if s.open {
+		// An open prompt keeps each of its rows on one row, and what does
+		// not fit a narrower screen waits off the edge for the shell to
+		// repaint. Back at the size it was printed at, it all shows again.
+		tm.Resize(s.cols, s.rows)
 	}
 	if s.leave != "" {
 		_, _ = tm.Write([]byte(s.leave))
@@ -236,6 +321,38 @@ func conserveProblem(s conserveScript) string {
 		if s.checkCursor && curBefore != curAfter {
 			return fmt.Sprintf("the cursor moved off its text: line %d character %d before, line %d character %d after",
 				curBefore[0], curBefore[1], curAfter[0], curAfter[1])
+		}
+		// The libghostty backend does not move the marks with a reflow;
+		// see the report on the backends' resize behaviour.
+		if s.checkCursor && vt.Backend != "ghostty" {
+			_, marksAfter := logicalLinesAt(tm, markPoints(tm))
+			if !slices.Equal(marksBefore, marksAfter) {
+				return fmt.Sprintf("an OSC 133 mark moved off its text: %v before, %v after", marksBefore, marksAfter)
+			}
+		}
+		// The saved cursor is checked where it was saved: on its line, up to
+		// just past the text. A DECSC followed by a scroll names a screen
+		// row, not a line, and lands wherever the scroll left it, so a
+		// position further past the text is not text to follow. DECRC
+		// clamps to the screen, so a saved place just past text that fills
+		// the last row comes back on the last character.
+		if s.saved && s.checkCursor && s.alt == "" && minHeight(s.sizes) >= 2 && vt.Backend != "ghostty" &&
+			savedBefore[0] >= 0 && savedBefore[0] < len(before) &&
+			savedBefore[1] <= lineLen(before[savedBefore[0]]) {
+			// A saved place whose row went into the history at any step
+			// comes back at the top of the screen; that is not a place to
+			// follow either.
+			if savedLeftScreen(s, ringCap, savedBefore) {
+				return ""
+			}
+			_, _ = tm.Write([]byte("\x1b8"))
+			_, savedAfter := logicalLinesCursor(tm)
+			clamped := savedAfter[0] == savedBefore[0] && savedAfter[1] == savedBefore[1]-1 &&
+				savedBefore[1] == lineLen(before[savedBefore[0]]) &&
+				tm.CursorPosition().X == tm.Width()-1
+			if savedAfter != savedBefore && !clamped {
+				return fmt.Sprintf("the saved cursor moved off its text: %v before, %v after", savedBefore, savedAfter)
+			}
 		}
 		return ""
 	}
@@ -366,4 +483,37 @@ func TestGhosttyParkedCursorJoinsLines(t *testing.T) {
 	if after := logicalLines(tm); slices.Equal(before, after) {
 		t.Errorf("libghostty no longer joins the lines; delete this test and ghosttyJoinsLines")
 	}
+}
+
+// minHeight is the shortest of sizes.
+func minHeight(sizes [][2]int) int {
+	h := 1 << 30
+	for _, sz := range sizes {
+		h = min(h, sz[1])
+	}
+	return h
+}
+
+// lineLen is the number of characters in a line logicalLines returned.
+func lineLen(l string) int {
+	if l == "" {
+		return 0
+	}
+	return strings.Count(l, "\x00") + 1
+}
+
+// savedLeftScreen reports whether, at any step of s, the screen's top row
+// was past the saved place, so the saved row had gone into the history.
+func savedLeftScreen(s conserveScript, ringCap int, saved [2]int) bool {
+	tm := vt.NewWithScrollback(s.cols, s.rows, ringCap)
+	defer func() { _ = tm.Close() }()
+	_, _ = tm.Write([]byte(s.in))
+	for _, sz := range s.sizes {
+		tm.Resize(sz[0], sz[1])
+		_, top := logicalLinesAt(tm, [][2]int{{tm.ScrollbackLen(), 0}})
+		if top[0][0] > saved[0] || top[0][0] == saved[0] && top[0][1] > saved[1] {
+			return true
+		}
+	}
+	return false
 }

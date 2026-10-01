@@ -201,20 +201,28 @@ func TestReflowMovesSemanticMarks(t *testing.T) {
 // width exactly, and on SIGWINCH fish repaints it by stepping up the rows it
 // took at the old width. Reflow makes a full-width line one row taller at a
 // narrower width, so without help each narrowing leaves the prompt's first
-// row behind. A prompt the shell marked with OSC 133, and that is still open,
-// is not reflowed, so the repaint lands where it should and no row is added.
+// row behind. A prompt the shell marked open with OSC 133, its start (A) and
+// the start of the command line (B) with no C after, is not reflowed, so the
+// repaint lands where it should and no row is added. A lone A is not an open
+// prompt: a shell that marks only its prompts leaves A over every command's
+// output.
 func TestReflowLeavesAMarkedPromptToTheShell(t *testing.T) {
 	const w, h = 31, 10
-	for _, marked := range []bool{true, false} {
+	for _, tc := range []struct {
+		name     string
+		a, b     string
+		wantRows int
+	}{
+		{"open prompt", "\x1b]133;A\x07", "\x1b]133;B\x07", 0},
+		{"lone A", "\x1b]133;A\x07", "", 4},
+		{"no marks", "", "", 4},
+	} {
 		emu := vt.NewEmulator(w, h)
 		var b strings.Builder
 		for range h + 5 {
 			b.WriteString("row\r\n")
 		}
-		if marked {
-			b.WriteString("\x1b]133;A\x07")
-		}
-		b.WriteString(strings.Repeat("p", w) + "\r\n> ")
+		b.WriteString(tc.a + strings.Repeat("p", w) + "\r\n> " + tc.b)
 		_, _ = emu.WriteString(b.String())
 		start := emu.ScrollbackLen()
 		for i := 1; i <= 4; i++ {
@@ -223,16 +231,82 @@ func TestReflowLeavesAMarkedPromptToTheShell(t *testing.T) {
 			// fish's repaint: up one row onto the prompt, redraw both rows.
 			_, _ = emu.WriteString("\r\r\x1b[A\x1b[K" + strings.Repeat("p", nw) + "\r\n> \x1b[J\r\x1b[2C")
 		}
-		got := emu.ScrollbackLen() - start
-		switch {
-		case marked && got != 0:
-			t.Errorf("a marked prompt left %d rows behind over 4 narrowings, want 0", got)
-		case !marked && got != 4:
-			// The positive half: the same repaint without the marks does
-			// cost a row each time, so the case above is testing the marks.
-			t.Errorf("an unmarked prompt left %d rows behind over 4 narrowings, want 4", got)
+		// The positive halves: without an open prompt the same repaint
+		// costs a row each time, so the first case is testing the marks.
+		if got := emu.ScrollbackLen() - start; got != tc.wantRows {
+			t.Errorf("%s: the prompt left %d rows behind over 4 narrowings, want %d", tc.name, got, tc.wantRows)
 		}
 	}
+}
+
+// TestReflowDoesNotCutOutputUnderALoneA: a shell that marks only its prompt
+// start, as foot's minimal PS1 does, leaves A standing over the output of
+// every command it runs. That output reflows like any other text: narrowing
+// and widening again gives every character back.
+func TestReflowDoesNotCutOutputUnderALoneA(t *testing.T) {
+	long := strings.Repeat("0123456789", 7)
+	emu := vt.NewEmulator(40, 8)
+	_, _ = emu.WriteString("\x1b]133;A\x07$ seq\r\n" + long + "\r\n")
+	emu.Resize(20, 8)
+	emu.Resize(40, 8)
+	if got := emuText(emu); !strings.Contains(got, long) {
+		t.Errorf("the 70-character line did not survive 40 to 20 to 40 columns:\n%s", got)
+	}
+}
+
+// TestReflowKeepsAnOpenPromptRowWhole: an open prompt's row is kept on one
+// row, and what does not fit a narrower screen is held off the edge rather
+// than cut. When the shell does not repaint, as when a drag ends at the size
+// it started at, widening again shows the whole command line.
+func TestReflowKeepsAnOpenPromptRowWhole(t *testing.T) {
+	cmd := "echo TYPED-abcdefghijklmnopqrst"
+	for _, tc := range []struct {
+		name  string
+		sizes [][2]int
+	}{
+		{"narrow and back", [][2]int{{12, 6}, {40, 6}}},
+		{"narrow, shorter, and back", [][2]int{{12, 6}, {9, 2}, {40, 6}}},
+	} {
+		emu := vt.NewEmulator(40, 6)
+		_, _ = emu.WriteString("out\r\n\x1b]133;A\x07$ \x1b]133;B\x07" + cmd)
+		for _, sz := range tc.sizes {
+			emu.Resize(sz[0], sz[1])
+		}
+		if got := emuText(emu); !strings.Contains(got, "$ "+cmd) {
+			t.Errorf("%s: the typed command did not come back whole:\n%s", tc.name, got)
+		}
+		// The shell's next write to the row drops what was held, as it
+		// would after a repaint.
+		emu.Resize(12, 6)
+		_, _ = emu.WriteString("\r\x1b[K$ x")
+		emu.Resize(40, 6)
+		if got := emuText(emu); strings.Contains(got, "TYPED") {
+			t.Errorf("%s: a repainted row kept the cells it held before:\n%s", tc.name, got)
+		}
+	}
+}
+
+// emuText is the history and the screen as text, one line the guest printed
+// to a line of text.
+func emuText(emu *vt.Emulator) string {
+	var b strings.Builder
+	for i := range emu.ScrollbackLen() {
+		for _, c := range emu.ScrollbackLine(i) {
+			b.WriteString(c.Content)
+		}
+		if w, _ := emu.ScrollbackSoftWrapped(i); !w {
+			b.WriteByte('\n')
+		}
+	}
+	for y := range emu.Height() {
+		for x := range emu.Width() {
+			b.WriteString(emu.CellAt(x, y).Content)
+		}
+		if w, _ := emu.RowSoftWrapped(y); !w {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // TestReflowReportsWhereRowsWent: the client places kitty images and
@@ -286,4 +360,33 @@ func TestReflowReportsWhereRowsWent(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestConform_ReflowSavedAndPending(t *testing.T) {
+	runConform(t, []conformCase{
+		{
+			// A program that saves the cursor after a label, and comes back
+			// to it after the pane was narrowed and widened. The label
+			// filled its last row at the narrow width, and the saved place
+			// went to that row's first column, over the label.
+			name: "a saved cursor just past text that fills a row stays after it",
+			cols: 40, rows: 4,
+			in:     "Progress: \x1b7\r\n",
+			resize: [][2]int{{5, 4}, {40, 4}},
+			then:   "\x1b8done",
+			want:   "Progress: done",
+		},
+		{
+			// A resize that does not reflow, here a taller screen with the
+			// cursor above the bottom, kept the column but dropped the
+			// pending wrap, so the next character overwrote the last one.
+			name: "a pending wrap survives a resize that does not reflow",
+			cols: 5, rows: 3,
+			in:     "abcde",
+			resize: [][2]int{{5, 4}},
+			then:   "X",
+			want:   "abcde\nX",
+			cursor: "1,1",
+		},
+	})
 }

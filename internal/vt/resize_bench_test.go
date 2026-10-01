@@ -107,3 +107,48 @@ func BenchmarkResizeFullRingDrag(b *testing.B) {
 func BenchmarkResizeFullRingShortLines(b *testing.B) {
 	benchResizeOn(b, false, func(i int) (int, int) { return benchRingCols - i%2, benchRingRows }, false)
 }
+
+// marksTerminal is a pane whose screen ends a line of 50,000 characters,
+// with marks OSC 133 marks placed through it.
+func marksTerminal(tb testing.TB, marks int) Terminal {
+	tb.Helper()
+	tm := NewWithScrollback(200, 50, benchRingCap)
+	var b strings.Builder
+	const n = 50000
+	every := n
+	if marks > 0 {
+		every = n / marks
+	}
+	for i := range n {
+		if marks > 0 && i%every == 0 {
+			b.WriteString("\x1b]133;C\x07")
+		}
+		b.WriteByte(byte('a' + i%26))
+	}
+	_, _ = tm.Write([]byte(b.String()))
+	return tm
+}
+
+func benchMarks(b *testing.B, marks int) {
+	tm := marksTerminal(b, marks)
+	defer func() { _ = tm.Close() }()
+	var remap func(int) int
+	tm.SetReflowFunc(func(r func(int) int) { remap = r })
+	b.ResetTimer()
+	for i := range b.N {
+		remap = nil
+		tm.Resize(199+i%2, 50)
+		if remap == nil {
+			b.Fatal("the resize did not reflow")
+		}
+		// What the client does with the remap: one call a placement.
+		for p := range 1000 {
+			_ = remap(p)
+		}
+	}
+}
+
+// BenchmarkResizeMarks1000 is a resize step that carries 1,000 marks and
+// remaps 1,000 placements, against BenchmarkResizeMarks0.
+func BenchmarkResizeMarks1000(b *testing.B) { benchMarks(b, 1000) }
+func BenchmarkResizeMarks0(b *testing.B)    { benchMarks(b, 0) }

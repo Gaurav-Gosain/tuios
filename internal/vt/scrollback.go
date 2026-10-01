@@ -557,7 +557,7 @@ func (sb *Scrollback) setWrapped(index int, wrapped bool) {
 		return
 	}
 	if wrapped {
-		sb.wraps[sb.slot(index)] |= rowWrapped
+		sb.wraps[sb.slot(index)] = rowWrapped
 	} else {
 		sb.wraps[sb.slot(index)] = 0
 	}

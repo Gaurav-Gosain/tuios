@@ -53,6 +53,17 @@ func ghosttyRowWrap(term *gh.Terminal, p gh.Point) bool {
 	return err == nil && wrapped
 }
 
+// RowPadded is false: the library keeps its own spacer heads and reflows
+// with them, and does not say which rows end in one.
+func (t *GhosttyTerminal) RowPadded(int) bool { return false }
+
+// ScrollbackPadded is false, as RowPadded.
+func (t *GhosttyTerminal) ScrollbackPadded(int) bool { return false }
+
+// RestorePads does nothing: the library rebuilds its spacer heads when the
+// restore types the rows out.
+func (t *GhosttyTerminal) RestorePads(_, _ []bool) {}
+
 // RestoreSoftWraps buffers the snapshot's soft-wrap flags for the restore
 // synthesis, which reproduces them (see ghosttyRestore). The library clears a
 // screen row's flag when the synthesis erases the screen, so a row the

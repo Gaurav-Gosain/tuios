@@ -87,6 +87,15 @@ type Terminal interface {
 	// screen the snapshot replaced. The screen under an active alternate
 	// screen is cleared too: its flags do not travel.
 	RestoreSoftWraps(screen, history []bool)
+	// RowPadded and ScrollbackPadded report whether a wrapped row ended a
+	// column early because a wide character did not fit in its last column,
+	// so that column is padding and not text. RestorePads sets the flags a
+	// snapshot carries, after RestoreSoftWraps, aligned the same way; it
+	// only marks rows that are wrapped. A backend that does not track it
+	// reports false and ignores the restore.
+	RowPadded(y int) bool
+	ScrollbackPadded(index int) bool
+	RestorePads(screen, history []bool)
 
 	// Scrollback.
 	ScrollbackLen() int
