@@ -143,10 +143,11 @@ func herdrLayoutOf(t *testing.T, base, pane string) (map[string]float64, string,
 // --focus, finds the new pane as the caller's right neighbour, reads the new
 // pane's tab against HERDR_TAB_ID, and runs the browser's command in it.
 //
-// Negative control: with the daemon handing panes the tuios binary as
-// HERDR_BIN_PATH instead of the herdr link (SetHerdrBin(exe) in
-// daemon.go), pane split fails with an unknown command and the split step
-// exits non-zero.
+// Negative controls: with the daemon handing panes the tuios binary as
+// HERDR_BIN_PATH instead of the herdr link (bin = link cut in daemon.go),
+// server reload-config answers tuios's unknown command error instead of
+// herdr's unsupported one. With HERDR_TAB_ID taken out of HerdrEnv, the
+// environment check fails.
 func TestHerdrFrontTerminalBrowserSplit(t *testing.T) {
 	term, base := herdrFrontClient(t)
 	crushPanes(t, base, "caller")
@@ -341,9 +342,10 @@ step edge "$H" pane focus --direction right --pane "$HERDR_PANE_ID"
 // each is refused with herdr's forbidden error and exit 1, and the layout
 // does not change. A read (pane neighbor, pane edges) is still answered.
 //
-// Negative control: with the herdrAdmit calls taken out of
-// herdrPaneSwap, herdrPaneFocusDirection and herdrPaneZoom, the swap, focus
-// and zoom steps exit 0.
+// Negative control: with the herdrAdmit call taken out of herdrPaneSwap,
+// the swap step exits 0 and the layout changes. A focus and a zoom stay
+// refused without their herdrAdmit, because focus-window and run-command
+// check the same grant.
 func TestHerdrFrontHoldsThePaneToItsGrants(t *testing.T) {
 	term, base := herdrFrontClient(t)
 	ids := crushPanes(t, base, "held")
@@ -390,9 +392,8 @@ step zoom "$H" pane zoom --on --pane "$HERDR_PANE_ID"
 // The agent is a stand-in named claude that reports itself at rest through
 // herdr's own report command, as an agent with herdr support does.
 //
-// Negative control: with agent.start and workspace.focus taken out of
-// herdrMethods, agent start and workspace focus answer unsupported and exit
-// 1.
+// Negative controls: with agent.start taken out of herdrMethods, agent start
+// exits 1. With workspace.focus taken out, workspace focus exits 1.
 func TestHerdrFrontStartsAnAgentAndShowsAWorkspace(t *testing.T) {
 	term, base := herdrFrontClient(t)
 	ids := crushPanes(t, base, "bridge", "target")
