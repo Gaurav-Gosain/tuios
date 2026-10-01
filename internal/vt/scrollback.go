@@ -1,7 +1,6 @@
 package vt
 
 import (
-	"bytes"
 	"encoding/binary"
 	"image/color"
 	"reflect"
@@ -734,85 +733,39 @@ func (sb *Scrollback) Clear() {
 	}
 }
 
-// blankWideRunesCutByTheEdge clears a double-width rune that a narrowing
-// resize leaves in what is now the last column of a scrollback line, for the
-// reason Screen.blankWideRunesCutByTheEdge gives.
+// ClipHistoryRow is a scrollback line as it may be drawn in width columns.
 //
-// encodeLine writes a width other than one only behind an sbCell token, and
-// sbCell is a byte UTF-8 never uses. So a line without that byte holds no wide
-// cell and is not walked, which on a resize over a long plain log is nearly
-// every line. The byte can also turn up inside a uvarint or a style, which
-// only sends that line down the walk.
-func (sb *Scrollback) blankWideRunesCutByTheEdge(newWidth int) {
-	x := newWidth - 1
-	if x < 0 {
-		return
+// History keeps the width it was written at, deliberately: this emulator does
+// not re-wrap it, because the program owns its own layout and redraws on
+// SIGWINCH. A pane that narrowed since can then hold a double-width rune whose
+// lead is in its last column. Drawn whole, that rune makes the row one column
+// wider than the pane, and the compositor puts the extra column over the pane
+// next door.
+//
+// The fix belongs where the row is drawn and not in the history. Blanking the
+// rune in the stored line, which a resize once did, lost it for good: a pane
+// that narrowed and widened again showed a space where the character was, and
+// so did every capture of it. So the stored line keeps the rune, and a reader
+// that puts a history row into a grid of the pane's width passes it through
+// here first. The screenshot grid is one. The client's own frame already stops
+// such a row at the pane's border, which e2e/tui/wide_rune_history_test.go
+// checks. The cut cell becomes a blank that keeps its style, so a run of
+// coloured background does not gain a notch.
+//
+// The line is returned as it is when nothing straddles the edge. Otherwise it
+// is a copy, because the line can be the scrollback cache's own slice.
+func ClipHistoryRow(line uv.Line, width int) uv.Line {
+	if width <= 0 || width > len(line) {
+		return line
 	}
-	for i := range sb.Len() {
-		slot := sb.slot(i)
-		if bytes.IndexByte(sb.lines[slot], sbCell) < 0 {
-			continue
-		}
-		w, ok := storedCellWidth(sb.lines[slot], x)
-		if !ok || w <= 1 {
-			continue
-		}
-		line := sb.decodeLine(sb.lines[slot])
-		line[x].Content = " "
-		line[x].Width = 1
-		line[x].Link = uv.Link{}
-		n := len(line)
-		for n > 0 && isBlankCell(&line[n-1]) {
-			n--
-		}
-		sb.lines[slot] = sb.encodeLine(sb.lines[slot][:0], line[:n], len(line))
-		sb.gen++
+	edge := line[width-1]
+	if edge.Width <= 1 {
+		return line
 	}
-}
-
-// storedCellWidth walks the token stream of a stored line to column x and
-// returns that cell's width without decoding the line. It reports false when
-// the line's stored cells end before x, which means the column is blank.
-func storedCellWidth(data []byte, x int) (int, bool) {
-	_, i := binary.Uvarint(data)
-	if i <= 0 {
-		return 0, false
-	}
-	col := 0
-	for i < len(data) {
-		var ok bool
-		switch data[i] {
-		case sbStyle:
-			_, i, ok = readStyle(data, i+1)
-			if !ok {
-				return 0, false
-			}
-			continue
-		case sbLink:
-			if i, ok = skipLink(data, i+1); !ok {
-				return 0, false
-			}
-			continue
-		}
-		w := 1
-		if data[i] == sbCell {
-			if i+1 >= len(data) {
-				return 0, false
-			}
-			w = int(data[i+1])
-			i, ok = skipContent(data, i+2)
-		} else {
-			i, ok = skipContent(data, i)
-		}
-		if !ok {
-			return 0, false
-		}
-		if col == x {
-			return w, true
-		}
-		col++
-	}
-	return 0, false
+	out := make(uv.Line, width)
+	copy(out, line[:width])
+	out[width-1] = uv.Cell{Content: " ", Width: 1, Style: edge.Style}
+	return out
 }
 
 // MaxLines returns the ring's capacity.
