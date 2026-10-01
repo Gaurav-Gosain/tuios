@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
+	"image"
 )
 
 // getRealCursor returns a real terminal cursor for the focused window,
@@ -106,6 +107,14 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	}
 	screenX := window.X + borderOffset + pos.X
 	screenY := window.Y + borderOffset + pos.Y
+	// In a view of a larger session the pane is drawn shifted, and a cursor
+	// the view does not show is not drawn. See pane_view.go.
+	if v := m.sessionView; v.on {
+		screenX, screenY = v.toScreen(screenX, screenY)
+		if !image.Pt(screenX, screenY).In(v.clip) {
+			return nil
+		}
+	}
 
 	cursor := tea.NewCursor(screenX, screenY)
 	cursor.Shape = mapCursorStyle(style)

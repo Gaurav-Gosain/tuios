@@ -48,12 +48,12 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	}
 
 	// Check dock area
-	topMargin := m.GetTopMargin()
+	topMargin := m.ViewTopMargin()
 	if m.Settings.DockbarPosition == "top" && y < topMargin {
 		m.SetPointerShape(PointerDefault)
 		return
 	}
-	if m.Settings.DockbarPosition == "bottom" && y >= topMargin+m.GetUsableHeight() {
+	if m.Settings.DockbarPosition == "bottom" && y >= topMargin+m.ViewUsableHeight() {
 		m.SetPointerShape(PointerDefault)
 		return
 	}

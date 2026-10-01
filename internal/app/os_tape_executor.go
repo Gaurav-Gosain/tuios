@@ -944,6 +944,11 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 	if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
 		return err
 	}
+	// The window size policy is the daemon's to apply, so the session this
+	// client shows is told as well as the file. See session/window_size.go.
+	if path == "daemon.window_size" {
+		m.sendWindowSizeToDaemon(value)
+	}
 	// A level chosen now outranks --no-animations. See SetMotion.
 	if path == "appearance.motion" {
 		m.Settings.NoAnimationsFlag = false

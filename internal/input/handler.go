@@ -23,6 +23,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// line with it afterwards. See SettleMultiCopy.
 	defer o.SettleMultiCopy()
 
+	// A mouse event over the panes of a view of a larger session is handled
+	// in the session's layout frame. See app.MapPointer.
+	msg = o.MapPointer(msg)
+	defer o.SetPointerInLayout(false)
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)

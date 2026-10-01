@@ -241,6 +241,10 @@ type composedLayer struct {
 	layer  *lipgloss.Layer
 	bounds image.Rectangle
 	cells  *cellLayer
+	// pane marks a layer in the layout frame: a pane, its scrollbar, a
+	// separator. In a view of a larger session it is drawn shifted and
+	// clipped. See pane_view.go.
+	pane bool
 }
 
 // composeLayers draws layers onto the canvas in ascending z order.
@@ -252,6 +256,15 @@ type composedLayer struct {
 // time its string is seen and kept across frames under that id; a layer
 // without one is parsed straight onto the canvas as before.
 func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
+	m.composeLayersIn(canvas, layers, 0)
+}
+
+// composeLayersIn is composeLayers for a frame whose first paneLayers layers
+// are in the layout frame. While the frame is a view of a larger session
+// (m.sessionView), those are drawn shifted onto the screen and clipped to the
+// view's pane area. Their bounds for the backgrounds stay the layout ones, so
+// a pane's fill lands on its own cells wherever the view puts them.
+func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int) {
 	m.composeGen++
 	if m.layerCells == nil {
 		m.layerCells = make(map[string]*cellLayer)
@@ -261,11 +274,12 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 	// The Compositor's root: an empty layer at the origin that never draws
 	// but does sort.
 	ordered = append(ordered, composedLayer{bounds: image.Rect(0, 0, 0, 1)})
-	for _, l := range layers {
+	view := m.sessionView
+	for i, l := range layers {
 		if l == nil {
 			continue
 		}
-		entry := composedLayer{layer: l}
+		entry := composedLayer{layer: l, pane: view.on && i < paneLayers}
 		if id := l.GetID(); id != "" {
 			cl := m.layerCells[id]
 			if cl == nil {
@@ -302,7 +316,21 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 
 	area := canvas.Bounds()
 	for _, cl := range ordered {
-		if cl.layer == nil || !cl.bounds.Overlaps(area) {
+		if cl.layer == nil {
+			continue
+		}
+		if cl.pane {
+			at := cl.bounds.Add(image.Pt(view.dx, view.dy))
+			if !at.Overlaps(view.clip) {
+				continue
+			}
+			m.drawPaneLayer(canvas, cl, at, view.clip, painted, &grounds)
+			if m.hints != nil {
+				m.applyHints(canvas, cl.layer.GetID(), &grounds)
+			}
+			continue
+		}
+		if !cl.bounds.Overlaps(area) {
 			continue
 		}
 		if !scrimmed && scrimBehind(cl.layer.GetID()) {
@@ -359,6 +387,64 @@ func (m *OS) drawComposedLayer(canvas *frameCanvas, cl composedLayer, painted bo
 	// id; this keeps one added without from punching a hole.
 	if g := grounds[surfaceDesktop]; g.on() {
 		paintGround(canvas.Lines, cl.bounds.Intersect(area), g)
+	}
+}
+
+// drawPaneLayer draws a layout-frame layer at its place on the screen, at,
+// clipped to the view's pane area. The cell path is the same parse and copy
+// drawComposedLayer makes; only the copy is cut at the clip.
+func (m *OS) drawPaneLayer(canvas *frameCanvas, cl composedLayer, at, clip image.Rectangle, painted bool, grounds *frameGrounds) {
+	if cl.cells == nil {
+		uv.NewStyledString(cl.layer.GetContent()).Draw(&clippedScreen{canvas, clip}, at)
+		return
+	}
+	var fill layerFill
+	if painted {
+		fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), grounds)
+	}
+	cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
+	if at.In(clip) {
+		cl.cells.blit(canvas, at.Min.X, at.Min.Y)
+		return
+	}
+	cl.cells.blitClipped(canvas, at.Min.X, at.Min.Y, clip)
+}
+
+// blitClipped is blit for a layer that crosses the clip: each cell is set on
+// its own, and only inside the clip. A wide cell cut by the clip's right edge
+// is left to the chrome drawn over that edge.
+func (cl *cellLayer) blitClipped(canvas *frameCanvas, x, y int, clip image.Rectangle) {
+	for row := range cl.h {
+		cy := y + row
+		if cy < clip.Min.Y || cy >= clip.Max.Y || cy < 0 || cy >= len(canvas.Lines) {
+			continue
+		}
+		line := canvas.Lines[cy]
+		src := cl.buf.Lines[row]
+		from, to := max(x, clip.Min.X), min(x+cl.w, clip.Max.X)
+		for cx := from; cx < to; cx++ {
+			line.Set(cx, nil)
+		}
+		for cx := from; cx < to; cx++ {
+			c := &src[cx-x]
+			if c.IsZero() {
+				continue
+			}
+			line.Set(cx, c)
+		}
+	}
+}
+
+// clippedScreen is the canvas seen through a clip, for a layer drawn from its
+// string: a cell outside the clip is dropped.
+type clippedScreen struct {
+	*frameCanvas
+	clip image.Rectangle
+}
+
+func (s *clippedScreen) SetCell(x, y int, c *uv.Cell) {
+	if image.Pt(x, y).In(s.clip) {
+		s.frameCanvas.SetCell(x, y, c)
 	}
 }
 

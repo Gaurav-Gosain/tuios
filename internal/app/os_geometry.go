@@ -47,7 +47,7 @@ func (m *OS) SnapZoneAt(x, y int) SnapQuarter {
 	topMargin := m.GetTopMargin()
 	bottomEdge := topMargin + m.GetUsableHeight()
 	leftEdge := m.GetLeftMargin()
-	rightEdge := m.GetRenderWidth() - m.GetRightMargin()
+	rightEdge := m.GetLayoutWidth() - m.GetRightMargin()
 
 	atLeft := x <= leftEdge+edge
 	atRight := x >= rightEdge-edge
@@ -126,7 +126,7 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 	}
 
 	newUsableHeight := m.GetUsableHeight()
-	newRenderWidth := m.GetRenderWidth()
+	newRenderWidth := m.GetLayoutWidth()
 
 	widthScale := float64(newRenderWidth) / float64(oldWidth)
 	heightScale := float64(newUsableHeight) / float64(oldUsableHeight)
@@ -276,13 +276,13 @@ func (m *OS) ClampWindowsToView() {
 // GetTopMargin returns the margin at the top (reserved space for the dockbar
 // when positioned at "top").
 func (m *OS) GetTopMargin() int {
-	return m.clampReserve(m.paneReserve().Top, m.GetRenderHeight())
+	return m.clampReserve(m.paneReserve().Top, m.GetLayoutHeight())
 }
 
 // GetBottomMargin returns the rows reserved below the panes: the dock when it
 // sits at the bottom, or whatever more a peer client reserves there.
 func (m *OS) GetBottomMargin() int {
-	return m.clampReserve(m.paneReserve().Bottom, m.GetRenderHeight())
+	return m.clampReserve(m.paneReserve().Bottom, m.GetLayoutHeight())
 }
 
 // GetDockbarContentYPosition returns the Y position of the dockbar
@@ -313,7 +313,7 @@ func (m *OS) GetTimeYPosition() int {
 // hands it to clipWindowContent as a viewport height, which then slices a line
 // list by a negative bound and panics inside View, outside Update's recover.
 func (m *OS) GetUsableHeight() int {
-	return max(m.GetRenderHeight()-m.GetTopMargin()-m.GetBottomMargin(), 0)
+	return max(m.GetLayoutHeight()-m.GetTopMargin()-m.GetBottomMargin(), 0)
 }
 
 // GetRenderWidth returns the width to use for rendering.
@@ -466,13 +466,13 @@ func (m *OS) paneReserve() session.LayoutReserve {
 // sidebar. The rail itself still draws at GetSidebarWidth; any agreed columns
 // beyond it are left blank.
 func (m *OS) GetLeftMargin() int {
-	return m.clampReserve(m.paneReserve().Left, m.GetRenderWidth())
+	return m.clampReserve(m.paneReserve().Left, m.GetLayoutWidth())
 }
 
 // GetRightMargin returns the columns reserved on the right, on the same terms as
 // GetLeftMargin.
 func (m *OS) GetRightMargin() int {
-	return m.clampReserve(m.paneReserve().Right, m.GetRenderWidth())
+	return m.clampReserve(m.paneReserve().Right, m.GetLayoutWidth())
 }
 
 // clampReserve keeps a reserve from eating the screen it is measured against. A
@@ -494,7 +494,7 @@ func (m *OS) GetContentWidth() int {
 	// clients and this client can be the narrow one, so the subtraction has to
 	// survive a reserve as wide as the viewport rather than hand a negative
 	// extent to a renderer or a tiler.
-	return max(m.GetRenderWidth()-m.GetLeftMargin()-m.GetRightMargin(), 0)
+	return max(m.GetLayoutWidth()-m.GetLeftMargin()-m.GetRightMargin(), 0)
 }
 
 // GetRenderHeight returns the height to use for rendering.

@@ -734,6 +734,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
 	m.msgClock = time.Now()
+	// The person's input is what makes this client the latest one under the
+	// daemon's window_size latest policy. Reported before it is handled, so
+	// a key that also resizes nothing is still counted. See
+	// session.TUIClient.ReportActivity.
+	if m.IsDaemonSession && m.DaemonClient != nil && isActivityInput(msg) {
+		m.DaemonClient.ReportActivity(m.msgClock)
+	}
 	model, cmd := m.handleMsg(msg)
 	m.msgClock = time.Time{}
 	m.recordScrollAnchors()
@@ -1991,7 +1998,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// box privately, and two clients with different chrome laid the same
 		// panes out in different boxes.
 		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height || m.SessionReserve != msg.Reserve {
-			oldWidth, oldHeight := m.GetRenderWidth(), m.GetRenderHeight()
+			oldWidth, oldHeight := m.GetLayoutWidth(), m.GetLayoutHeight()
 			// Only a size change is worth telling the user about. The reserve
 			// moves when somebody opens a rail, which is a thing they can see
 			// happening and not a thing to announce as a resize.
@@ -2003,7 +2010,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Retile if the effective render size changed
 			if m.AutoTiling {
 				m.TileAllWindows()
-			} else if m.GetRenderWidth() < oldWidth || m.GetRenderHeight() < oldHeight {
+			} else if m.GetLayoutWidth() < oldWidth || m.GetLayoutHeight() < oldHeight {
 				// Floating panes keep their own geometry, so a session that
 				// shrank around this client leaves them hanging over an edge
 				// that has moved in. The same clamp the host terminal's own
@@ -2556,6 +2563,22 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 // isPersonInput reports whether msg came from the terminal the client runs
 // in: a key, a click or a paste. Keys send-keys types arrive as RemoteKeyMsg.
+// isActivityInput reports whether a message is the person acting at this
+// client: a key, a paste, a click, a wheel turn, or a drag. A move with no
+// button held is not, so a pointer resting on the other screen does not take
+// the session. Neither is a key release, a focus report, a resize, or any
+// reply the host terminal sends on its own: bubbletea parses each of those
+// into a message of its own type.
+func isActivityInput(msg tea.Msg) bool {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseWheelMsg:
+		return true
+	case tea.MouseMotionMsg:
+		return msg.Button != tea.MouseNone
+	}
+	return false
+}
+
 func isPersonInput(msg tea.Msg) bool {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseReleaseMsg,

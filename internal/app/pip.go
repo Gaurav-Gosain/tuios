@@ -206,8 +206,8 @@ func (m *OS) pipConfig() config.PiPConfig {
 // pipRegion is the rectangle the panes are laid out in, which the box is
 // placed inside. It leaves out the rail and the dock.
 func (m *OS) pipRegion() image.Rectangle {
-	x, y := m.GetLeftMargin(), m.GetTopMargin()
-	return image.Rect(x, y, x+m.GetContentWidth(), y+m.GetUsableHeight())
+	x, y := m.ViewLeftMargin(), m.ViewTopMargin()
+	return image.Rect(x, y, x+m.ViewContentWidth(), y+m.ViewUsableHeight())
 }
 
 // pipKeepClear is the part of the screen the view must not cover: the focused
@@ -221,8 +221,9 @@ func (m *OS) pipKeepClear() image.Rectangle {
 	}
 	left := c.X
 	if w := m.GetFocusedWindow(); w != nil {
-		// The same offset getRealCursor puts the cursor at.
-		left = w.X
+		// The same offset getRealCursor puts the cursor at, on the screen,
+		// as the cursor is.
+		left, _ = m.sessionView.toScreen(w.X, 0)
 		if !w.Tiled {
 			left++
 		}
@@ -348,6 +349,7 @@ func (m *OS) flushPiPNote() {
 
 // PiPAt reports whether the cell at x, y is on the view as it was last drawn.
 func (m *OS) PiPAt(x, y int) bool {
+	x, y = m.ScreenPoint(x, y)
 	return m.pip.windowID != "" && image.Pt(x, y).In(m.pip.rect)
 }
 

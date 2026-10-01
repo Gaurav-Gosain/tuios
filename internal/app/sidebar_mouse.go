@@ -86,12 +86,13 @@ func (m *OS) SidebarActive() bool {
 // sidebar's, even on a blank row, so it never leaks to the pane the sidebar sits
 // in front of.
 func (m *OS) SidebarBandContains(x, y int) bool {
+	x, y = m.ScreenPoint(x, y)
 	w := m.GetSidebarWidth()
 	if w <= 0 {
 		return false
 	}
-	topMargin := m.GetTopMargin()
-	if y < topMargin || y >= topMargin+m.GetUsableHeight() {
+	topMargin := m.ViewTopMargin()
+	if y < topMargin || y >= topMargin+m.ViewUsableHeight() {
 		return false
 	}
 	sidebarX := 0

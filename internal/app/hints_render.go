@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"image/color"
 	"strings"
 
@@ -73,6 +74,12 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 
 	rect := paneContentRect(window)
 	area := canvas.Bounds()
+	// In a view of a larger session the pane is drawn shifted and clipped,
+	// and its labels go with it. See pane_view.go.
+	if v := m.sessionView; v.on {
+		rect = rect.Add(image.Pt(v.dx, v.dy))
+		area = area.Intersect(v.clip)
+	}
 	for y := range p.h {
 		cy := rect.Min.Y + y
 		if cy < area.Min.Y || cy >= area.Max.Y || cy >= len(canvas.Lines) {

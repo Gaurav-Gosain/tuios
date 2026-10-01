@@ -30,8 +30,9 @@ func guestWantsMotion(term vt.Terminal, button tea.MouseButton) bool {
 func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 
-	o.LastMouseX = mouse.X
-	o.LastMouseY = mouse.Y
+	// Kept on the screen: the motion filter compares the next raw event
+	// with it, and the beam and the labels are drawn where it says.
+	o.LastMouseX, o.LastMouseY = o.ScreenPoint(mouse.X, mouse.Y)
 
 	// The host is held in all-motion tracking so hover and focus-follows-mouse
 	// see the pointer, which means motion no longer implies a button is down.
