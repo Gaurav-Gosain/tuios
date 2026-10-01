@@ -1,5 +1,7 @@
 package session
 
+import "slices"
+
 // The verbs of the agent work: reviewing what an agent changed and sending it
 // notes, comparing the attempts of a fan, the Inbox's snooze and undo, an
 // agent's activity, the delivery queue, and reading a held approval whole.
@@ -23,11 +25,11 @@ var (
 	// approvalKinds are the kinds of hold request-approval takes.
 	approvalKinds = []string{AttentionApproval, AttentionPlan}
 	// activityEvents are the entries set-agent-state's activity reports.
-	activityEvents = []string{"prompt", "tool", "tool_done", "tool_failed", "turn_end"}
+	activityEvents = []string{ActivityPrompt, ActivityTool, ActivityToolDone, ActivityToolFailed, ActivityTurnEnd}
 	// reportActivityEvents are the entries report-agent-activity takes: the
 	// same, and the events no state report carries, which set-agent-state
 	// predates.
-	reportActivityEvents = append(append([]string(nil), activityEvents...), "subagent_start", "subagent_stop", "session_start")
+	reportActivityEvents = slices.Concat(activityEvents, []string{ActivitySubagentStart, ActivitySubagentStop, ActivitySessionStart})
 )
 
 // agentWorkVerbs are the registry entries of the verbs above.

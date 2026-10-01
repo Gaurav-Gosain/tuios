@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -152,8 +153,7 @@ func (s *herdrSite) neighbour(side string) string {
 
 // herdrDirection checks a pane direction, in serde's words.
 func herdrDirection(dir string) *herdrError {
-	switch dir {
-	case "left", "right", "up", "down":
+	if _, ok := tlayout.ParseSide(dir); ok {
 		return nil
 	}
 	return herdrErr("invalid_request", "invalid request: unknown variant `"+echoName(dir)+"`, expected one of `left`, `right`, `up`, `down`")
@@ -310,7 +310,7 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			}
 			site, res.Reason = s, "not_found"
 		case serr != nil || derr != nil:
-			site, res.Reason = cmpOr(src, dst), "not_found"
+			site, res.Reason = cmp.Or(src, dst), "not_found"
 		case src.pane.PaneID == dst.pane.PaneID:
 			site, res.Reason = src, "same_pane"
 		case src.pane.TabID != dst.pane.TabID:
@@ -347,14 +347,6 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	}
 	res.FocusedPaneID, res.Layout = site.layout.FocusedPaneID, site.layout
 	return &herdrResult{Type: "pane_swap", Swap: res}, nil
-}
-
-// cmpOr is the first of a and b that is not nil.
-func cmpOr(a, b *herdrSite) *herdrSite {
-	if a != nil {
-		return a
-	}
-	return b
 }
 
 // herdrRouteClient sends one command to the client attached to sess and

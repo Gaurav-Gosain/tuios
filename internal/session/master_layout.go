@@ -70,7 +70,7 @@ func checkMasterLayout(state *SessionState, ws int, st MasterLayoutState) error 
 	if !ok {
 		return fmt.Errorf("workspace %d is out of range", ws)
 	}
-	if st.Count < 1 || st.Count > config.MasterCountMax || !slices.Contains(config.MasterPositions, st.Position) {
+	if st.Count < config.MasterCountMin || st.Count > config.MasterCountMax || !slices.Contains(config.MasterPositions, st.Position) {
 		return fmt.Errorf("master layout %+v is not valid", st)
 	}
 	return nil
@@ -87,7 +87,7 @@ func (s *Session) RestoreMasterLayouts(saved map[int]MasterLayoutState) {
 	}
 	_ = s.mutateState(func(state *SessionState) error {
 		next := make(map[int]MasterLayoutState, len(saved))
-		for ws, st := range maps.Clone(saved) {
+		for ws, st := range saved {
 			if checkMasterLayout(state, ws, st) == nil && len(next) < maxMasterLayouts {
 				next[ws] = st
 			}
@@ -117,7 +117,7 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 			return err
 		}
 		old, had := state.WorkspaceMasterLayout[p.Workspace]
-		if (had && p.IfAbsent) || (had && old == p.Layout) {
+		if had && (p.IfAbsent || old == p.Layout) {
 			return errMasterLayoutSame
 		}
 		if !had && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
