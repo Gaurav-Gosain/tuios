@@ -509,7 +509,7 @@ func toggleNotify(o *app.OS, label string, on bool) {
 }
 
 func handleDebugLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ShowLogs = !o.ShowLogs
+	o.ToggleLogViewer()
 	toggleNotify(o, "Log viewer", o.ShowLogs)
 	return o, nil
 }

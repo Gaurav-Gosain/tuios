@@ -63,7 +63,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.ShowLogs {
-		_, maxScroll := logScrollBounds(o.Height, len(o.LogMessages))
+		_, maxScroll, _ := o.LogViewerBounds()
 
 		switch msg.Button {
 		case tea.MouseWheelUp:

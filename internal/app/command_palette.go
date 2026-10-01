@@ -942,7 +942,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+D l",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowLogs = !m.ShowLogs
+				m.ToggleLogViewer()
 				return m, nil
 			},
 		},

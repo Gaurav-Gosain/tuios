@@ -633,7 +633,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	logsPerPage, maxScroll := logScrollBounds(o.Height, len(o.LogMessages))
+	logsPerPage, maxScroll, _ := o.LogViewerBounds()
 
 	// Scroll up/down
 	if key == "up" || key == "k" {
@@ -690,18 +690,4 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// logScrollBounds computes the scrollable range for the log viewer overlay.
-// Returns logsPerPage (visible capacity) and maxScroll (maximum scroll offset).
-func logScrollBounds(screenHeight, totalLogs int) (logsPerPage, maxScroll int) {
-	maxDisplayHeight := max(screenHeight-8, 8)
 
-	// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
-	fixedLines := 4
-	// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
-	if totalLogs > maxDisplayHeight-fixedLines {
-		fixedLines = 6
-	}
-	logsPerPage = max(maxDisplayHeight-fixedLines, 1)
-	maxScroll = max(totalLogs-logsPerPage, 0)
-	return logsPerPage, maxScroll
-}
