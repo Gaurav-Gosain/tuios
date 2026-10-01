@@ -3385,10 +3385,13 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 		stateCells(t, state, colors, first, end)
 	}
 	screen := make([]bool, state.Height)
+	pads := make([]bool, state.Height)
 	for y := range screen {
 		screen[y], _ = t.RowSoftWrapped(y)
+		pads[y] = t.RowPadded(y)
 	}
 	state.ScreenWraps = wrapBits(screen)
+	state.ScreenPads = wrapBits(pads)
 	return state
 }
 
@@ -3397,6 +3400,11 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 func historyWrap(t vt.Terminal, flags []bool, i int) []bool {
 	w, _ := t.ScrollbackSoftWrapped(i)
 	return append(flags, w)
+}
+
+// historyPad is historyWrap for the padding flag (vt.Terminal.RowPadded).
+func historyPad(t vt.Terminal, flags []bool, i int) []bool {
+	return append(flags, t.ScrollbackPadded(i))
 }
 
 // scrollbackWindow returns the scrollback rows [first, end) a snapshot carries.
@@ -3460,14 +3468,15 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 	// merely starts a new array.
 	state.Scrollback = make([][]CellState, 0)
 	var pool []CellState
-	var wraps []bool
-	defer func() { state.ScrollbackWraps = wrapBits(wraps) }()
+	var wraps, pads []bool
+	defer func() { state.ScrollbackWraps, state.ScrollbackPads = wrapBits(wraps), wrapBits(pads) }()
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
 		wraps = historyWrap(t, wraps, i)
+		pads = historyPad(t, pads, i)
 		if cap(pool) < len(line) {
 			pool = make([]CellState, max(len(line), width*(end-i)))
 		}
@@ -3507,13 +3516,14 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 	state.PackedScreen = grid(t.CellAt)
 
 	b := newPackedRows((end - first) * 32)
-	var wraps []bool
+	var wraps, pads []bool
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
 		wraps = historyWrap(t, wraps, i)
+		pads = historyPad(t, pads, i)
 		if cap(row) < len(line) {
 			row = make([]CellState, len(line))
 		}
@@ -3533,6 +3543,7 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 	}
 	state.PackedScrollback = b.blob()
 	state.ScrollbackWraps = wrapBits(wraps)
+	state.ScrollbackPads = wrapBits(pads)
 
 	if state.IsAltScreen {
 		state.PackedMain = grid(t.MainCellAt)
@@ -3730,6 +3741,10 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	t.RestoreSoftWraps(
 		wrapFlags(state.ScreenWraps, state.Height),
 		wrapFlags(state.ScrollbackWraps, packedRowCount(state.PackedScrollback)),
+	)
+	t.RestorePads(
+		wrapFlags(state.ScreenPads, state.Height),
+		wrapFlags(state.ScrollbackPads, packedRowCount(state.PackedScrollback)),
 	)
 }
 
@@ -3994,6 +4009,16 @@ type TerminalState struct {
 	// lines into one link. See vt.Terminal.RestoreSoftWraps.
 	ScreenWraps     []byte `json:"screen_wraps,omitempty"`
 	ScrollbackWraps []byte `json:"scrollback_wraps,omitempty"`
+
+	// ScreenPads and ScrollbackPads are, in the same layout, the rows that
+	// wrapped a column early because a double-width character did not fit
+	// in the last column, so that column is padding, not a typed space. A
+	// reflow drops it when it joins the row to the next; without the flag
+	// it keeps it, and the client and the daemon then lay the line out
+	// apart. A peer from before these fields sends neither, which reads as
+	// no padding: the line keeps a blank, and no text is lost.
+	ScreenPads     []byte `json:"screen_pads,omitempty"`
+	ScrollbackPads []byte `json:"scrollback_pads,omitempty"`
 }
 
 // wrapBits packs soft-wrap flags into the wire's bitset, or nil when none is
