@@ -46,6 +46,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	}
 	canvas := m.renderCanvas
 
+	// Where this frame's view of a larger session sits, before any layer is
+	// built: the culling below and the compositor both read it, and the
+	// pointer and the cursor read what the last frame drew. See pane_view.go.
+	m.sessionView = m.computeSessionView()
+	// The part of the layout a pane must reach to be drawn at all: the
+	// session's pane area, or only the part of it the view shows.
+	var cullLeft, cullRight, cullTop, cullBottom int
+
 	layersPtr := pool.GetLayerSlice()
 	layers := (*layersPtr)[:0]
 	defer pool.PutLayerSlice(layersPtr)
@@ -68,6 +76,13 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// reserved band, so a pane that overruns into it is covered.
 	leftMargin := m.GetLeftMargin()
 	rightClip := leftMargin + m.GetContentWidth()
+	cullLeft, cullRight = leftMargin, rightClip
+	cullTop, cullBottom = 0, viewportHeight+topMargin
+	if m.sessionView.on {
+		vis := m.sessionView.visible()
+		cullLeft, cullRight = max(cullLeft, vis.Min.X), min(cullRight, vis.Max.X)
+		cullTop, cullBottom = vis.Min.Y, min(cullBottom, vis.Max.Y)
+	}
 
 	// Hoist loop-invariants out of the per-window loop below.
 	// The zoomed pane, if there is one, is the same for every iteration.
@@ -150,10 +165,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			margin = 20
 		}
 
-		isVisible := window.X+window.Width >= leftMargin-margin &&
-			window.X <= rightClip+margin &&
-			window.Y+window.Height >= -margin &&
-			window.Y <= viewportHeight+topMargin+margin
+		isVisible := window.X+window.Width >= cullLeft-margin &&
+			window.X <= cullRight+margin &&
+			window.Y+window.Height >= cullTop-margin &&
+			window.Y <= cullBottom+margin
 
 		if !isVisible {
 			continue
@@ -314,6 +329,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		}
 	}
 
+	// Everything above is the panes, in the layout frame; everything below is
+	// chrome, on the screen. The compositor shifts and clips the first part
+	// when this client shows a view of a larger session.
+	paneLayers := len(layers)
+
 	if render {
 		// The sidebar sits below the floating overlays but, like the dock, is a
 		// reserved-region layer rather than an overlay panel. Compose it before
@@ -350,6 +370,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if label := m.renderLinkLabel(); label != nil {
 			layers = append(layers, label)
 		}
+
+		// The mark that this client shows only part of the session.
+		if mark := m.renderViewMark(); mark != nil {
+			layers = append(layers, mark)
+		}
 	} else {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.
@@ -357,7 +382,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		m.motion.rail = m.motion.rail[:0]
 	}
 
-	m.composeLayers(canvas, layers)
+	m.composeLayersIn(canvas, layers, paneLayers)
 
 	return canvas
 }
@@ -768,6 +793,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.panesBorderless() {
 		return nil, false
 	}
+	// A view of a larger session is the compositor's: the fast path draws the
+	// pane at the origin of the screen, unshifted.
+	if m.ViewCropped() {
+		return nil, false
+	}
 	// The picture-in-picture view is a layer over the pane. The fast path
 	// splices its box into the frame (pipSplice), which is exact while no
 	// background is painted. With one painted, the box's cells would need the
@@ -1152,6 +1182,14 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 			// WindowPositionInfo.LayoutX. Read once per frame, not per window.
 			layoutX, layoutY := m.GetLeftMargin(), m.GetTopMargin()
 			layoutW, layoutH := m.GetContentWidth(), m.GetUsableHeight()
+			// A view of a larger session draws each pane shifted and clips it
+			// to the view's pane area, so an image goes where its pane went
+			// and is cut where the pane is cut. See pane_view.go.
+			view := m.sessionView
+			if view.on {
+				layoutX, layoutY = view.clip.Min.X, view.clip.Min.Y
+				layoutW, layoutH = view.clip.Dx(), view.clip.Dy()
+			}
 			n := 0
 			for _, w := range m.Windows {
 				// Include EVERY window, but mark off-workspace/minimized ones
@@ -1175,8 +1213,8 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 					announcedW, announcedH = w.ContentWidth(), w.ContentHeight()
 				}
 				backing[n] = WindowPositionInfo{
-					WindowX:            w.X,
-					WindowY:            w.Y,
+					WindowX:            w.X + view.dx,
+					WindowY:            w.Y + view.dy,
 					ContentOffsetX:     w.BorderOffset(),
 					ContentOffsetY:     w.BorderOffset(),
 					Width:              w.Width,

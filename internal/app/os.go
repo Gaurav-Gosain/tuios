@@ -158,6 +158,14 @@ type OS struct {
 	terminalMu sync.RWMutex
 	LastMouseX int
 	LastMouseY int
+	// sessionView is where the last frame put the view of a session larger
+	// than this client, and pointerInLayout says the mouse event being
+	// handled was mapped through it. See pane_view.go.
+	sessionView     sessionView
+	pointerInLayout bool
+	// pressInLayout says the button press now held was mapped to the layout
+	// frame, so the drag and the release that follow it are too.
+	pressInLayout bool
 	// pointerSeenX/Y is where the host last reported the pointer, whether or
 	// not that motion reached Update. LastMouseX/Y is the position of the
 	// last motion that did reach it, which is what the filter's "moved a

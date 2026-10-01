@@ -84,7 +84,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// test claims one row too many, and that row is the first row of the topmost
 	// window. With a top dock and any minimized window, an ordinary click on that
 	// row was being swallowed as a dock click.
-	if ((o.Settings.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((o.Settings.DockbarPosition == "top") && (Y < config.DockHeight)) {
+	if o.InDockBand(Y) {
 		// A plain right-click on the dock opens its menu (the dock item's menu
 		// when one is under the pointer). The dock has no drag gesture on the
 		// right button, so the menu can open on the press itself.

@@ -126,6 +126,7 @@ func (m *OS) renderDockWorkspaceTooltip() *lipgloss.Layer {
 // no other reaction to a pointer crossing it, and the arriving motion is the
 // only clock the label has.
 func (m *OS) DockWorkspaceHoverAt(x, y int) bool {
+	x, y = m.ScreenPoint(x, y)
 	ws := m.DockWorkspacePillAt(x, y)
 	m.dockWorkspaceTooltipTrack(ws)
 	return ws > 0

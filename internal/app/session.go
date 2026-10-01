@@ -30,8 +30,8 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		CurrentWorkspace: currentWorkspace,
 		MasterRatio:      m.MasterRatio,
 		AutoTiling:       autoTiling,
-		Width:            m.GetRenderWidth(),
-		Height:           m.GetRenderHeight(),
+		Width:            m.GetLayoutWidth(),
+		Height:           m.GetLayoutHeight(),
 		WorkspaceFocus:   make(map[int]string),
 		FocusHistory:     make(map[int][]string),
 		// Tell the daemon which of its versions this snapshot was built from, so

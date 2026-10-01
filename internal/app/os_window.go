@@ -473,6 +473,9 @@ func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 	// Update: the filter drops the motion nothing reacts to, and a pane that
 	// spawned where a hover last happened to be would land somewhere random.
 	if px, py := m.PointerSeen(); !m.AutoTiling && px > 0 && py > 0 {
+		// The pointer is on the screen and the pane goes in the layout,
+		// which differ in a view of a larger session. See pane_view.go.
+		px, py = m.sessionView.toLayout(px, py)
 		// Spawn at the cursor, kept inside the content region.
 		x = min(px, leftMargin+contentWidth-width)
 		y = min(py, screenHeight-height)

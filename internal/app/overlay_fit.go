@@ -87,5 +87,5 @@ func (m *OS) panelRoomHeight() int {
 	if rh <= 0 {
 		return rh
 	}
-	return max(rh-m.GetTopMargin(), 1)
+	return max(rh-m.ViewTopMargin(), 1)
 }

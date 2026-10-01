@@ -149,6 +149,7 @@ func (m *OS) DockSessionActionAt(x, y int) DockSessionAction {
 // it does not compete with the one beside it, and loud under the pointer so the
 // button about to be clicked is the button that looks clickable.
 func (m *OS) DockSessionHoverAt(x, y int) bool {
+	x, y = m.ScreenPoint(x, y)
 	a := m.DockSessionActionAt(x, y)
 	m.dockSessionHover = a
 	m.dockSessionTooltipTrack(a)

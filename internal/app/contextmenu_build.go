@@ -52,12 +52,16 @@ func (m *OS) OpenContextMenu(x, y int) {
 		m.FocusWindow(windowIndex)
 	}
 
+	// The menu is drawn on the screen, so it is anchored where the pointer
+	// is on the screen, even when (x, y) is a pane's position in the layout
+	// of a larger session. See pane_view.go.
+	ax, ay := m.ScreenPoint(x, y)
 	cm := &ContextMenu{
 		Target:      target,
 		WindowIndex: windowIndex,
 		Workspace:   workspace,
-		AnchorX:     x,
-		AnchorY:     y,
+		AnchorX:     ax,
+		AnchorY:     ay,
 		Selected:    -1,
 		ItemH:       1,
 	}
@@ -119,6 +123,7 @@ func (m *OS) contextMenuTargetAt(x, y int) (target ContextMenuTarget, windowInde
 // on: with the dock at the top that extra row is the first row of the topmost
 // window, which is how the pane menu came to be unreachable there.
 func (m *OS) InDockBand(y int) bool {
+	_, y = m.ScreenPoint(0, y)
 	switch m.Settings.DockbarPosition {
 	case "hidden":
 		return false

@@ -89,7 +89,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, timeLayer)
 	}
 
-	if len(m.GetVisibleWindows()) == 0 && m.GetContentWidth() > 0 && m.GetUsableHeight() > 0 {
+	if len(m.GetVisibleWindows()) == 0 && m.ViewContentWidth() > 0 && m.ViewUsableHeight() > 0 {
 		asciiArt := `████████╗██╗   ██╗██╗ ██████╗ ███████╗
 ╚══██╔══╝██║   ██║██║██╔═══██╗██╔════╝
    ██║   ██║   ██║██║██║   ██║███████╗
@@ -113,7 +113,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// columns and the dock's rows are drawn by someone else, and centering
 		// on the whole screen both overdrew the rail and put the box off-centre
 		// in the part of the screen the user can actually see.
-		contentW, contentH := m.GetContentWidth(), m.GetUsableHeight()
+		contentW, contentH := m.ViewContentWidth(), m.ViewUsableHeight()
 		avail := contentW - boxCols
 		// The same argument applies to the height: the block letters are six
 		// rows of a box that also carries a border, padding, a subtitle and up
@@ -192,7 +192,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		)
 
 		welcomeLayer := lipgloss.NewLayer(centeredContent).
-			X(m.GetLeftMargin()).Y(m.GetTopMargin()).Z(1).ID("welcome")
+			X(m.ViewLeftMargin()).Y(m.ViewTopMargin()).Z(1).ID("welcome")
 
 		layers = append(layers, welcomeLayer)
 	}
@@ -557,8 +557,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// columns showing past its edge. When it does not fit, it is placed on
 		// the screen and then covers the rail whole.
 		regionX, regionW := 0, renderWidth
-		if room := m.GetContentWidth(); overlayWidth+4 <= room {
-			regionX, regionW = m.GetLeftMargin(), room
+		if room := m.ViewContentWidth(); overlayWidth+4 <= room {
+			regionX, regionW = m.ViewLeftMargin(), room
 		}
 		switch m.Settings.WhichKeyPosition {
 		case "top-left":
@@ -583,7 +583,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// A binding list taller than the screen would otherwise be positioned
 		// off the top, hiding the first entries with no way to reach them.
 		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
-		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.GetTopMargin(), 0)
+		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.ViewTopMargin(), 0)
 
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).
