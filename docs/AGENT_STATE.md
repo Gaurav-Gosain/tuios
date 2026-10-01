@@ -1467,12 +1467,19 @@ The second line says the one thing the row's group is about:
   used to keep its last message; that note is old news, and the row's glyph
   already says it is at rest.
 
-Two figures join them. Once the agent's context is 80% full or more, the line
+Three figures join them. Once the agent's context is 80% full or more, the line
 starts with `ctx 84%` in the warning ink, the moment it is worth a look; below
-that it says nothing. And while messages wait in the pane's queue (see
-[Queued messages](#queued-messages)), the right edge of the first line says
-`1 queued` in place of the elapsed time. A row that needs you keeps its wait
-there, since nothing queued is typed until the prompt is answered.
+that it says nothing. While the agent has subagents at work, the line says how
+many, `2 subagents`, on any row. That is the case it is for: an agent that
+hands work to subagents and ends its turn reports `done` and comes to rest,
+and the count is the one sign on its row that the work goes on. When the line
+has no room for the harness as well, as with `ctx 91%` in front of the count
+on a narrow rail, the harness gives way to the count, as it does to what a
+working agent is doing now. And while messages wait in the
+pane's queue (see [Queued messages](#queued-messages)), the right edge of the
+first line says `1 queued` in place of the elapsed time. A row that needs you
+keeps its wait there, since nothing queued is typed until the prompt is
+answered.
 
 ```
 │ agents      2 need you
@@ -1484,6 +1491,8 @@ there, since nothing queued is typed until the prompt is answered.
 │    ctx 84% · Bash: go…
 │ ● web
 │    Edit: src/app.tsx
+│ ○ lead
+│    claude · 3 subagents
 ```
 
 The model and the cost are not on the rail unless you place them: they are in
@@ -1492,11 +1501,14 @@ opens, as `claude · opus 4.7 · 42% ctx · $1.20`.
 
 These are row tokens like the rest (see `[appearance.sidebar.agent_row]` in
 [CONFIGURATION.md](CONFIGURATION.md)): `now` (only while working), `context`
-(only at 80% or more) and `prompt` (the first line of the last prompt you gave
-the agent, not shipped on the row), beside `$model`, `$cost`, `$plan` and
-`$key` for any key, which draw a value on any row. The shipped order is
-`session, need, harness, name, elapsed, context, meta, now, message`: `now`
-comes last so a long command loses its tail before anything else does.
+(only at 80% or more), `subagents` (while any run, on any row; its number is
+the count, for a `gt` or `lt` rule) and `prompt` (the first line of the last
+prompt you gave the agent, not shipped on the row), beside `$model`, `$cost`,
+`$plan` and `$key` for any key, which draw a value on any row. The shipped
+order is `session, need, harness, name, elapsed, context, subagents, meta, now,
+message`: `now` comes last so a long command loses its tail before anything
+else does. A `tokens` list you wrote keeps its own order, and draws the count
+once you add `subagents` to it.
 
 ### Agent metadata
 
@@ -1510,9 +1522,9 @@ tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opu
 The `meta` row token draws every key on the second line, values only, in the
 order the pane first reported them, so write values that read on their own
 (`42% ctx` rather than `42`). It leaves out the keys tuios feeds itself
-(`now`, `prompt`, `model`, `context`, `cost` and `plan`), which have tokens of
-their own, so the model and the cost of every agent are not on every row; it
-drew them until the rich rows landed. `$name` places one key, and `meta` then
+(`now`, `prompt`, `model`, `context`, `cost`, `plan` and `subagents`), which
+have tokens of their own, so the model and the cost of every agent are not on
+every row; it drew them until the rich rows landed. `$name` places one key, and `meta` then
 leaves that key out:
 
 ```toml
@@ -1530,7 +1542,7 @@ the daemon when it runs out, and everything clears when the agent leaves the
 pane. `get-agent-state` and `list-agents` report it as a `meta` object. See
 [the protocol reference](protocol.md#set-agent-meta).
 
-The Claude Code and Codex hooks feed three keys from what the agent does (see
+The Claude Code and Codex hooks feed these keys from what the agent does (see
 [What the agent has been doing](#what-the-agent-has-been-doing)):
 
 - `now`: the tool it is running and on what, such as `Bash: go test ./...` or
@@ -1543,9 +1555,45 @@ The Claude Code and Codex hooks feed three keys from what the agent does (see
 - `prompt`: the first line of the last prompt you gave it.
 - `model`: the model the harness named (Codex names it on every event), unless
   the pane already shows that model from another feed.
+- `subagents`: how many subagents the agent is running, as Claude Code's
+  `SubagentStart` and `SubagentStop` hooks report them: `1 subagent`,
+  `3 subagents`, and no key at all while there are none. A teammate of an
+  agent team counts too, in its lead's pane, while it works: Claude Code fires
+  `SubagentStart` each time a teammate wakes and `SubagentStop` when it goes
+  idle.
 
-`now` and `prompt` are tuios's own: `set-agent-meta` refuses them, and its
-`--clear` leaves them. Writing a key the value it already holds changes
+`subagents` follows a set the daemon keeps per pane: each subagent's id and
+type, from its start until its stop, at most 64 of them (a start past that is
+not kept, so the count stays at 64 until one stops). The hook reports them
+with `report-agent-activity`, which never touches the pane's state (see
+[the protocol reference](protocol.md#report-agent-activity)).
+
+- A stop for a subagent the pane never saw start changes nothing.
+- A start from another conversation (a `claude -p` the agent left running,
+  say) changes nothing either: the hook names the conversation, and the
+  daemon refuses one other than the pane's, at rest too.
+- A teammate whose id holds anything but letters, digits, `_`, `.`, `:`, `@`
+  and `-`, or is longer than 128 bytes, is skipped by the hook and never
+  counted.
+- The set is forgotten when the agent starts a conversation (a `SessionStart`
+  for a new session, a resume or a `/clear`, not a compaction), when the
+  pane's state goes to `none` (a `SessionEnd`, or the agent leaving the pane),
+  and when the pane closes.
+- A subagent the pane hears nothing more of for an hour is dropped, so a stop
+  that never came, after an interrupt, does not leave a count on the row while
+  the agent runs on. Claude Code reports a subagent only when it starts and
+  stops, so one that runs longer than an hour leaves the count early.
+- A pane may report a burst of 64 starts and stops, then 10 a second: each
+  one moves what every attached client draws.
+
+The set lives in daemon memory only, and a daemon restart, which ends every
+program in every pane, starts it empty. `get-agent-state` and `list-agents`
+also give the count as a number, `subagents`, 0 while none run. Like the rest
+of the metadata it changes no state, message or `now`: a pane whose agent
+finished its turn stays `done` while its subagents work.
+
+`now`, `prompt` and `subagents` are tuios's own: `set-agent-meta` refuses
+them, and its `--clear` leaves them. Writing a key the value it already holds changes
 nothing and sends nothing to attached clients, and a TTL is renewed only once
 less than half of it is left, so a status line may write on every tick.
 
@@ -1580,7 +1628,9 @@ polls. The values stay display only.
 
 With the Claude Code or Codex integration installed, each prompt, tool call,
 tool result and finished turn is also kept in the pane's activity ring in the
-daemon: the newest 256 entries per pane, in memory only. Once a pane has a
+daemon: the newest 256 entries per pane, in memory only. With Claude Code the
+ring also keeps each conversation's start and each subagent's start and stop,
+the stop only for a subagent it saw start. Once a pane has a
 ring, the commands its shell finishes (OSC 133) and its state changes join
 it. A pane whose harness has no hooks, and a plain shell, has none and costs
 nothing.
@@ -1596,8 +1646,10 @@ tuios agent-log -w api --json                # the verb's answer, for a script
 14:02:15  tool      Bash: go test ./api/
 14:02:40  failed    Bash: go test ./api/  Exit code 1
 14:03:02  done      Edit: api/retry.go  (wrote api/retry.go)
+14:03:05  subagent  Explore started
 14:05:30  said      Added retry with backoff and tests.
 14:05:30  state     done
+14:06:12  subagent  Explore stopped
 ```
 
 The recap says how many turns finished, which files were written, how many
@@ -2248,8 +2300,9 @@ with their names under it when the section has room. `enter` on it or a
 click shows them until the rail lets go of the keyboard, or, for a click
 while the rail did not have the keyboard, until a click outside the rail or
 a pane is focused. A row that needs
-you, a turn you have not seen, a working agent, the pane you are in and one
-with messages queued never fold, and one row alone does not.
+you, a turn you have not seen, a working agent, the pane you are in, one
+with messages queued and one whose agent has subagents at work (see
+[Agent metadata](#agent-metadata)) never fold, and one row alone does not.
 
 Who may do what: only you, from an attached client. Snooze, wake, unread and
 restore are `mark-attention`, which takes the nonce your client got when it
@@ -2620,6 +2673,11 @@ rewrite it, and refuses when the harness's configuration directory does not
 exist yet (run the harness once first). `--command` names the program the hooks
 run when `tuios` is not on the harness's PATH.
 
+The Claude Code integration is version 3, which adds `SubagentStart` and
+`SubagentStop` entries for the pane's `subagents` count. `tuios integration
+status` reads a version 2 install as out of date, `tuios integration install
+claude-code` replaces it, and uninstall removes the new entries with the rest.
+
 Codex gets hooks rather than the older `notify` command: `notify` takes one
 command only, so it would replace a user's own, and it reports only that a turn
 finished. Hooks are on by default in Codex; `status` notes a `config.toml` that
@@ -2718,11 +2776,14 @@ for the same reason.
 `tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
 arrives as the last argument) and sends one `set-agent-state`, or nothing. A
 report that ends a turn also sends, with `set-agent-meta`, what the pane's
-status line feed held back (see above).
+status line feed held back (see above). A subagent's start or stop sends
+`report-agent-activity` instead, which records the event and moves the pane's
+`subagents` count without touching its state, and a `SessionStart` sends one
+after its `set-agent-state`.
 
 | Claude Code event | Reports |
 | ----------------- | ------- |
-| `SessionStart` | `idle`, with the session id and transcript path. `source: compact` reports nothing |
+| `SessionStart` | `idle`, with the session id and transcript path, then a `session_start` activity with the `source` (`report-agent-activity`), which forgets the pane's subagents. `source: compact` reports nothing |
 | `UserPromptSubmit`, `PreToolUse` | `working`, with the prompt's first line or the tool call as activity |
 | `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox)) |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input`. The first two also carry the tool's result as activity, which is kept whether or not the state applies |
@@ -2736,7 +2797,8 @@ status line feed held back (see above).
 | `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity. A `Stop` without the field (older Claude Code) or with an empty one reports `done` with no message and a `turn_end` activity with no text |
 | `StopFailure` | `errored`, message `stopped on <error_type>` |
 | `SessionEnd` | `none` |
-| `SubagentStop`, anything with `agent_id` | nothing |
+| `SubagentStart`, `SubagentStop` with `agent_id` | no state: a `subagent_start` or `subagent_stop` activity with `agent_id` and `agent_type`, sent with `report-agent-activity`, which moves the pane's `subagents` count (see [Agent metadata](#agent-metadata)). An `agent_id` that is not 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-` reports nothing |
+| any other event with `agent_id` | nothing |
 
 Codex maps the same events the same way, plus `Interrupt` to `idle`, with the
 same activity (its `apply_patch` files come from the patch's header lines, and
@@ -2838,9 +2900,13 @@ which read every `Notification`, `auth_success` included, as `needs_input`, and
 needed `python3`.
 
 Activity is sent only to a daemon whose `set-agent-state` lists it, like the
-other hook fields; an older daemon gets the report without it. Its text, the
-`done` message from `last_assistant_message` included, is the first line only,
-held to the same rule as a message below.
+other hook fields; an older daemon gets the report without it. The events no
+state report carries (`session_start`, `subagent_start`, `subagent_stop`) go
+with `report-agent-activity`, which a daemon older than it answers
+`unknown_verb`: it gets `SessionStart`'s `idle` alone, and nothing for a
+subagent, and `--explain` says so. Its text, the `done` message from
+`last_assistant_message` included, is the first line only, held to the same
+rule as a message below.
 
 A `needs_input` message is cut to 100 characters, with whitespace collapsed and
 anything that looks like a credential replaced by `***`: `NAME=value` where the
@@ -2870,8 +2936,11 @@ reported for. Only panes on the daemon's own machine are matched.
 Hooks are configured per user, so they fire for every harness process, not only
 the one that owns the pane. These filters keep those events off the pane:
 
-- A subagent's events (`agent_id` set, `SubagentStop`, opencode child sessions)
-  are dropped by the reporter.
+- A subagent's own events (`agent_id` set, opencode child sessions) are
+  dropped by the reporter. Claude Code's `SubagentStart` and `SubagentStop`
+  are the exception: they go with `report-agent-activity`, which cannot move
+  the pane's state, and which the daemon refuses for a conversation other
+  than the pane's at rest as well as mid-turn.
 - An event from a harness other than the one `TUIOS_AGENT` names is dropped by
   the reporter. `TUIOS_AGENT` may name any harness tuios recognises, one with
   no integration included, so a Claude Code hook in a pane given to aider is

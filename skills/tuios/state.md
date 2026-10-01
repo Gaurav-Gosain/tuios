@@ -22,8 +22,9 @@ is wrong when you are not the focused pane.
 `get-agent-state` and `list-agents` also report `needs_you` (true for
 `needs_input` and `errored`), `blocked_by` (`approval` or `question`, from
 `--kind`), `completion_seq` (turns the pane has finished), `finished_unread`
-(true while a pane rests after a turn nobody has looked at since) and `queued`
-(messages waiting to be typed to the agent when it comes to rest).
+(true while a pane rests after a turn nobody has looked at since), `queued`
+(messages waiting to be typed to the agent when it comes to rest) and
+`subagents` (subagents its agent started that have not stopped).
 
 Facts that are not a state (model, context use, a one-line summary) go in
 metadata. The rail draws it under your row. It is display only. `key=` removes a
@@ -35,15 +36,16 @@ tuios set-agent-meta -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" summary=
 ```
 
 Writing the values a pane already holds changes nothing, so a feed may write
-on every tick. `now` and `prompt` are tuios's own keys, filled from your hooks,
-and `set-agent-meta` refuses them. `now` is cleared whenever the pane leaves
-`working` and `needs_input`, however it left.
+on every tick. `now`, `prompt` and `subagents` are tuios's own keys, filled
+from your hooks, and `set-agent-meta` refuses them. `now` is cleared whenever
+the pane leaves `working` and `needs_input`, however it left.
 
 The rail's row shows `now` while you work, the first line of your last reply
-once you finish, `ctx 84%` once your context is 80% full or more, and `N
-queued` while messages wait for you. It does not show `model`, `cost`,
-`plan` or `prompt` unless the person placed them, and it shows your other
-keys as they are. The person replies to a finished turn with `r`, which
+once you finish, `ctx 84%` once your context is 80% full or more, `N
+subagents` while subagents you started are at work (Claude Code, even after
+your turn ended), and `N queued` while messages wait for you. It does not
+show `model`, `cost`, `plan` or `prompt` unless the person placed them, and it
+shows your other keys as they are. The person replies to a finished turn with `r`, which
 queues the message as theirs (`by: human` in `tuios queue ls`) and types it
 when you are next at rest.
 
