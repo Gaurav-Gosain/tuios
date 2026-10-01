@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -182,4 +184,163 @@ func sbDivider(t *testing.T, term *tuitest.Terminal) int {
 	}
 	t.Fatalf("no divider on row 10\n%s", term.Snapshot())
 	return 0
+}
+
+// TestScrollbackResizeKeepsOutputUnderALoneA: a shell that marks only the
+// start of its prompt with OSC 133 A, as foot's minimal PS1 does, leaves the
+// mark standing over the output of every command. The output under it must
+// reflow like any other text. Freezing it as a prompt cut the line at the
+// narrow width for good.
+func TestScrollbackResizeKeepsOutputUnderALoneA(t *testing.T) {
+	term, base, w := scrollbackResizeSession(t, "sb-lonea", 140, 30)
+	body := strings.Repeat("abcdefghij", 7)
+	full := "LONGSTART-" + body + "-LONGEND"
+	// The mark, the line, and a sleep so the shell draws no prompt (and no
+	// new mark) while the pane is resized.
+	emit := "\x1b[2J\x1b[H\x1b]133;A\x07$ cmd\r\n" + full + "\r\n"
+	cmd := strings.TrimSuffix(paneEmitCmd(emit), "\n") + "; sleep 60\n"
+	if err := paneSend(base, "sb-lonea", w.ID, cmd); err != nil {
+		t.Fatal(err)
+	}
+	waitDaemonText(t, base, "sb-lonea", w.ID, full)
+	wide, _ := sbGridSize(t, base, "sb-lonea", w.ID)
+	if err := term.Resize(50, 30); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneWidth(t, base, "sb-lonea", func(w, _ int) bool { return w < 60 }, "narrow")
+	time.Sleep(500 * time.Millisecond)
+	if err := term.Resize(140, 30); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneWidth(t, base, "sb-lonea", func(c, _ int) bool { return c == wide }, "widen")
+	time.Sleep(500 * time.Millisecond)
+	hist, err := daemonScrollback(base, "sb-lonea", w.ID, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(hist, "\n"), full) {
+		t.Errorf("output under a lone OSC 133 A lost its tail across 140, 50 and 140 columns:\n%s", lastLines(hist, 12))
+	}
+}
+
+// dragPanes starts a client with two tiled panes, runs cmd in both, and
+// waits for the client to draw ready in both.
+func dragPanes(t *testing.T, session, cmd, ready string) (*tuitest.Terminal, string, daemonWindowList) {
+	t.Helper()
+	base := t.TempDir()
+	term := startIn(t, base, startOpts{cols: 160, rows: 30, args: []string{"new", session}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 2, "drag setup")
+	enableTiling(t, term)
+	time.Sleep(time.Second)
+	wl, err := daemonWindows(base, session)
+	if err != nil || len(wl.Windows) != 2 {
+		t.Fatalf("list-windows: %v %+v", err, wl)
+	}
+	for _, w := range wl.Windows {
+		if err := paneSend(base, session, w.ID, cmd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), ready) >= 2
+	}, shellTimeout); err != nil {
+		t.Fatalf("the client never drew %q in both panes: %v\n%s", ready, err, term.Snapshot())
+	}
+	return term, base, wl
+}
+
+// dragDivider drags the divider between the two panes left by by columns, and
+// then to end columns left of where it started.
+func dragDivider(t *testing.T, term *tuitest.Terminal, by, end int) {
+	t.Helper()
+	div := sbDivider(t, term)
+	const row = 10
+	mousePress(t, term, div, row, tuitest.MouseLeft, 0)
+	for c := div - 1; c >= div-by; c-- {
+		mouseMotion(t, term, c, row, tuitest.MouseLeft, 0)
+	}
+	time.Sleep(300 * time.Millisecond)
+	for c := div - by + 1; c <= div-end; c++ {
+		mouseMotion(t, term, c, row, tuitest.MouseLeft, 0)
+	}
+	mouseRelease(t, term, div-end, row, tuitest.MouseLeft, 0)
+	time.Sleep(2 * time.Second)
+}
+
+// TestScrollbackResizeDragKeepsATypedCommand: a shell's open prompt, marked
+// with OSC 133 A and B, with a command typed on it. A drag that narrows the
+// pane and brings it back sends the shell no SIGWINCH, because the size it
+// ends at is the size the shell already has, so nothing repaints the prompt.
+// The client must still show the whole command, as the daemon holds it.
+func TestScrollbackResizeDragKeepsATypedCommand(t *testing.T) {
+	typed := "echo TYPED-abcdefghijklmnopqrst"
+	emit := "\x1b[2J\x1b[H\x1b]133;A\x07$ \x1b]133;B\x07" + typed
+	cmd := strings.TrimSuffix(paneEmitCmd(emit), "\n") + "; sleep 60\n"
+	term, _, _ := dragPanes(t, "sbtyped", cmd, typed)
+	dragDivider(t, term, 60, 0)
+	if got := strings.Count(term.Screen().Text(), "$ "+typed); got != 2 {
+		t.Errorf("after a drag that ended where it started, %d of 2 panes show the whole typed command\n%s", got, term.Snapshot())
+	}
+}
+
+// TestScrollbackResizeDragAgreesWithTheDaemonAroundAParkedCursor: a program
+// that draws long lines and a footer and parks its cursor above the footer,
+// as an agent's input box does. Whatever the drag does on the way, the client
+// must end up showing what the daemon holds: the same lines whole, the same
+// lines cut by the screen's top, and the footer. A client that reflowed at
+// each motion step and the daemon once at the end laid these out apart.
+func TestScrollbackResizeDragAgreesWithTheDaemonAroundAParkedCursor(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		end  int // columns left of the start the drag ends at
+	}{
+		{"ends where it started", 0},
+		{"ends narrower", 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var b strings.Builder
+			b.WriteString("\x1b[2J\x1b[H")
+			for i := 1; i <= 14; i++ {
+				fmt.Fprintf(&b, "PK%02d-%s-END\r\n", i, strings.Repeat("abcdefghij", 5))
+			}
+			b.WriteString("\x1b[28;1HFOOTERMARK\x1b[20;3H")
+			cmd := strings.TrimSuffix(paneEmitCmd(b.String()), "\n") + "; sleep 60\n"
+			session := "sbpark" + strconv.Itoa(tc.end)
+			term, base, wl := dragPanes(t, session, cmd, "FOOTERMARK")
+			dragDivider(t, term, 45, tc.end)
+
+			// Which marker lines each side shows whole on screen.
+			whole := func(text string) map[string]int {
+				got := map[string]int{}
+				for i := 1; i <= 14; i++ {
+					tag := fmt.Sprintf("PK%02d-%s-END", i, strings.Repeat("abcdefghij", 5))
+					got[tag[:4]] = strings.Count(text, tag)
+				}
+				got["FOOTER"] = strings.Count(text, "FOOTERMARK")
+				return got
+			}
+			var daemonText strings.Builder
+			for _, w := range wl.Windows {
+				got, err := daemonJSON[struct {
+					Content string `json:"content"`
+				}](base, "capture-pane", "-s", session, "-w", w.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// The capture gives the screen as lines; the client's screen
+				// has them side by side, so only whole-line counts compare.
+				daemonText.WriteString(got.Content)
+				daemonText.WriteByte('\n')
+			}
+			client, daemon := whole(term.Screen().Text()), whole(daemonText.String())
+			if fmt.Sprint(client) != fmt.Sprint(daemon) {
+				t.Errorf("the client and the daemon show different lines after the drag\nclient %v\ndaemon %v\n%s",
+					client, daemon, term.Snapshot())
+			}
+		})
+	}
 }

@@ -234,15 +234,20 @@ func (w *Window) Resize(width, height int) {
 // ResizeVisual updates the window dimensions without triggering PTY resize.
 // This is used during mouse drag to provide immediate visual feedback while
 // deferring expensive PTY resize operations until the drag completes.
-// The terminal emulator dimensions are updated to ensure correct rendering.
+//
+// A pane fed by a daemon subscription keeps its emulator at the size the
+// stream gave it, as Resize does: the renderer clips or pads the grid to the
+// pane, and the emulator changes size when the daemon's own does, at the same
+// byte. Resizing it at every motion step reflowed the client through widths
+// the daemon never had, so a drag left the client's screen and history laid
+// out differently from the daemon's, most visibly under a program that parks
+// its cursor above a footer. See docs/REHYDRATION.md. A local pane has no
+// other copy, and its emulator follows the drag.
 func (w *Window) ResizeVisual(width, height int) {
 	w.Width = width
 	w.Height = height
 
-	// Critical: Update terminal emulator dimensions so rendering uses correct bounds.
-	// This prevents the "stuck" height and dimension mismatch issues during drag.
-	// PTY resize is still deferred until mouse release (via pending resizes).
-	if w.Terminal != nil {
+	if w.Terminal != nil && !w.streamOwnsSize.Load() {
 		termWidth, termHeight := w.contentSize(width, height)
 		// ioMu serializes the buffer reallocation with the render reader and
 		// PTY writers; Terminal has no lock of its own.
