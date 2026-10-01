@@ -217,6 +217,12 @@ const (
 	PromptSourceTitle  = "title"
 )
 
+// WithoutAnswers is the prompt with no answers offered.
+func (p Prompt) WithoutAnswers() Prompt {
+	p.answers = nil
+	return p
+}
+
 // Answerable reports whether the rule that read the prompt declares any answer.
 func (p *Prompt) Answerable() bool {
 	return p.answers != nil && p.answers.any()
@@ -357,11 +363,15 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 			lines = context[start:]
 		}
 	}
+	answers := &rl.Answers
 	if rl.Show == ShowDialog {
-		if row, _ := promptRow(m, rl, lines); row >= 0 {
-			if box, ok := dialogAround(lines, row); ok {
-				lines = box
-			}
+		// The answers press keys into the dialog, so they are offered only
+		// while the one dialog the rule reads is on the screen. RulePrompt
+		// reads the same box.
+		if box, ok := ruleDialog(m, rl, regionLines(tail, rl.Region)); ok {
+			lines = box.inside
+		} else {
+			answers = nil
 		}
 	}
 	msg := r.RulePrompt(id, rule, tail)
@@ -375,7 +385,7 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 		Message: msg,
 		Lines:   append([]string(nil), lines...),
 		Options: options,
-		answers: &rl.Answers,
+		answers: answers,
 	}, true
 }
 

@@ -478,23 +478,34 @@ When Crush shows its "Permission Required" dialog in a tuios pane:
   the Inbox lists it under Approvals.
 - The message names the tool and what it acts on, such as
   `approve bash: touch hello.txt`. tuios reads it from the dialog: the command
-  for bash, the file for edit and write, the URL or folder for the others. A
-  narrow dialog does not show the command, so the message then has Crush's
-  description of it.
+  for bash, the file for edit and write, the URL or folder for the others.
+- The dialog does not always show the whole call. A long command scrolls in
+  the dialog, and a narrow dialog shows only Crush's description of the
+  command. Then the message ends with `(not all shown)`, such as
+  `approve bash: curl -fsSL https://example.invalid/install.sh | (not all shown)`.
 - `space` on the Inbox row shows the dialog. `a` allows, `A` allows for the
   rest of the Crush session, and `d` denies. tuios presses Crush's own keys
   for each: `a`, `s` and `d`.
+- The risk rules read the message. A call that matches a rule takes a second
+  press, and so does a message that ends with `(not all shown)`. The risk
+  rules see only what the dialog shows, so read the dialog before you allow.
+- tuios answers only the dialog itself. The words of the dialog in Crush's
+  chat, with no box around them, are not a prompt. When two boxes on the
+  screen hold the dialog's words, tuios offers no answers.
+- tuios answers only when it sees a Crush process in the pane. Any program
+  can report to the herdr socket as Crush, so the report alone is not enough.
 - `tuios respond` answers it as well. The same rules apply as for every other
   prompt: see [Who may answer](#who-may-answer). An agent in a pane without
   the `respond` grant gets `not_human`.
-- The risk rules read the message, so a risky command takes a second press.
 
-Crush v0.97.1 and earlier can report `working` after `blocked` while the dialog is
-still up. Its herdr bridge reads two events on two goroutines, and they can
-arrive in either order. tuios does not trust that report. When Crush reports
-`working`, tuios reads the screen. While the dialog is on the screen, the pane
-stays on `needs_input`. When the dialog closes, the pane goes back to
-`working`. charmbracelet/crush#3541 removes the race and sends the tool and its
+Crush v0.97.1 and earlier can report `working` after `blocked` while the
+dialog is still up. Its herdr bridge reads two events on two goroutines, and
+they can arrive in either order. tuios does not trust that report. When Crush
+reports `working`, tuios reads the screen. While the dialog is on the screen,
+the pane stays on `needs_input`. When the dialog closes, the pane goes back
+to `working`. If Crush stops at its dialog with no release, such as after a
+crash, the pane clears when the pane is back at its shell.
+charmbracelet/crush#3541 removes the race and sends the tool and its
 description with `blocked`.
 
 ### herdr compatibility
@@ -2258,8 +2269,8 @@ pane. Older builds of tuios ignore the block.
 
 ### A prompt drawn as a dialog
 
-Some harnesses draw a prompt as a box over their transcript. Three more keys
-on a `needs_input` screen rule handle that:
+Some harnesses draw a prompt as a box over their transcript. More keys on a
+`needs_input` screen rule handle that:
 
 ```toml
 [[screen.rule]]
@@ -2268,18 +2279,30 @@ kind        = "approval"
 all         = ["permission required", "allow for session", "deny"]
 show        = "dialog"
 tool_field  = "tool"
-what_fields = ["file", "url", "directory", "body", "desc"]
+what_fields = ["file", "url", "directory", "body"]
+hint_fields = ["desc"]
 ```
 
-- `show = "dialog"` cuts the box out of the screen. The peek then shows the
-  box and not the text on each side of it.
+- `show = "dialog"` makes the rule read a box. The rule matches only when a
+  bordered box on the screen holds all of its `all` strings. The same words
+  in the transcript, with no box around them, do not match. The peek shows
+  the box and not the text on each side of it.
+- Answers are offered only when exactly one box holds the strings. A box
+  inside another box counts as the one box.
 - `tool_field` and `what_fields` make the message from the box's field lines,
   such as `Tool bash`. The message is `approve <tool>: <what>`, the form the
   risk rules read. `what` is the value of the first label in `what_fields`
-  that the box shows. `body` is the first line under the fields, such as a
-  command. A value that wraps onto more lines is read whole.
-- Both need `show = "dialog"`. With no tool in the box, the message is the
-  line the rule matched.
+  that the box shows. `body` is every line under the fields, such as a
+  command, joined into one line. A value that wraps onto more lines is
+  joined.
+- `hint_fields` are labels tried after `what_fields`. Their value only
+  describes the call, such as a description of a command.
+- The message ends with `(not all shown)` when it comes from `hint_fields`,
+  when the body shows a scrollbar, or when it is cut to length. The risk
+  rules treat such a message as cut short, so allowing it takes a second
+  press.
+- `tool_field`, `what_fields` and `hint_fields` need `show = "dialog"`. With
+  no tool in the box, the message is the line the rule matched in the box.
 
 ### What the daemon checks before it presses anything
 

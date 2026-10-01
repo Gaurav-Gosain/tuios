@@ -29,7 +29,12 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 	text := newRegionText(tail, m.Screen.FoldCase)
 	return firstMatch(m.Screen.order, m.Screen.Rule, func(rl *ScreenRule) bool {
 		hay, folded, ok := text.get(rl.Region, rl.substrings)
-		return ok && checkRule(rl, hay, folded, nil, strings.Contains)
+		if !ok || !checkRule(rl, hay, folded, nil, strings.Contains) {
+			return false
+		}
+		// A dialog rule reads a dialog: its words in the transcript, with
+		// no box around them, are not one.
+		return rl.Show != ShowDialog || len(dialogsHolding(regionLines(tail, rl.Region), rl.All, m.Screen.FoldCase)) > 0
 	})
 }
 
@@ -65,6 +70,9 @@ type RuleReport struct {
 	// NoRegion marks a rule whose region is not on the screen at all, such as
 	// a prompt_box rule on a screen with no input box.
 	NoRegion bool `json:"no_region,omitempty"`
+	// NoDialog marks a show = "dialog" rule whose strings are on the screen
+	// with no box around them that holds them all.
+	NoDialog bool `json:"no_dialog,omitempty"`
 	// Text is what the rule read: its region's lines joined with newlines, cut
 	// to maxReportText bytes. Omitted for a rule reading the whole tail, which
 	// the caller already has.
@@ -108,6 +116,9 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 		hay, folded, ok := text.get(rl.Region, true)
 		if ok {
 			rep.Matched = checkRule(rl, hay, folded, &rep, strings.Contains)
+			if rep.Matched && rl.Show == ShowDialog && len(dialogsHolding(regionLines(tail, rl.Region), rl.All, m.Screen.FoldCase)) == 0 {
+				rep.Matched, rep.NoDialog = false, true
+			}
 			if rl.Region != "" {
 				rep.Text = reportText(hay)
 			}

@@ -811,7 +811,10 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			lapsed := claim.sawProcess && claim.source != AgentSourceReport
 			// A pane started on the harness itself has the harness as its
 			// "shell", so the foreground must also be a shell by name.
-			if claim.source == AgentSourceReport && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
+			// A blocker the screen took over a herdr report follows the same
+			// reporter, so it lapses the same way.
+			herdrHeld := claim.source == AgentSourceReport || (claim.blocker && claim.prior.source == AgentSourceReport)
+			if herdrHeld && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
 				lapsed = true
 			}
 			if running && info.atShell() && lapsed {

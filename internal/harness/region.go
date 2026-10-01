@@ -282,8 +282,8 @@ func foldLine(s string) string {
 // Crush draws its permission prompt as a bordered box in the middle of the
 // pane, with the chat still showing on either side of it. The lines a rule
 // reads are whole screen rows, so a peek of them shows the chat cut through
-// by the box. dialogAround cuts the box out: its rows, each cut to the
-// columns between its side borders.
+// by the box. dialogBoxes finds each box and cuts it out: its rows, each cut
+// to the columns between its side borders.
 
 // Corners and sides of a box, in the light, heavy, double and rounded sets.
 const (
@@ -321,40 +321,104 @@ func cellAt(c []rune, col int) rune {
 	return c[col]
 }
 
-// dialogAround returns the inside of the bordered box that holds lines[row],
-// without its borders and blank edges, a run of blank rows kept as one. ok is
-// false when no box holds that row.
-func dialogAround(lines []string, row int) ([]string, bool) {
-	if row < 0 || row >= len(lines) {
-		return nil, false
-	}
+// dialogBox is one bordered box on the screen: the rows of its borders, the
+// columns of its sides, and its inside as dialogInside cuts it.
+type dialogBox struct {
+	top, bottom, left, right int
+	inside                   []string
+}
+
+// within reports whether box b lies wholly inside box o.
+func (b dialogBox) within(o dialogBox) bool {
+	return b.top > o.top && b.bottom < o.bottom && b.left > o.left && b.right < o.right
+}
+
+// dialogBoxes finds every bordered box in lines: a top border whose corners
+// stand over a side on every row down to a bottom border with corners in the
+// same columns. Boxes are listed bottom first, since a live dialog is drawn
+// over the transcript and so below what scrolled past.
+func dialogBoxes(lines []string) []dialogBox {
 	grid := make([][]rune, len(lines))
 	for i, l := range lines {
 		grid[i] = cells(l)
 	}
-	inside := grid[row]
-	// The nearest top border above the row whose corners stand over a side
-	// border on the row itself.
-	for top := row - 1; top >= 0 && row-top < maxDialogLines; top-- {
+	var out []dialogBox
+	for top := len(grid) - 1; top >= 0; top-- {
 		for left, r := range grid[top] {
-			if !strings.ContainsRune(dialogTopLeft, r) || !strings.ContainsRune(dialogSides, cellAt(inside, left)) {
+			if !strings.ContainsRune(dialogTopLeft, r) {
 				continue
 			}
 			right := left + 1
 			for right < len(grid[top]) && !strings.ContainsRune(dialogTopRight, grid[top][right]) {
 				right++
 			}
-			if right >= len(grid[top]) || !strings.ContainsRune(dialogSides, cellAt(inside, right)) {
+			if right >= len(grid[top]) {
 				continue
 			}
-			for bottom := row + 1; bottom < len(grid) && bottom-top < maxDialogLines; bottom++ {
-				if strings.ContainsRune(dialogBottomLeft, cellAt(grid[bottom], left)) && strings.ContainsRune(dialogBottomRight, cellAt(grid[bottom], right)) {
-					return dialogInside(grid[top+1:bottom], left, right), true
+			for row := top + 1; row < len(grid) && row-top < maxDialogLines; row++ {
+				l, rr := cellAt(grid[row], left), cellAt(grid[row], right)
+				if strings.ContainsRune(dialogBottomLeft, l) && strings.ContainsRune(dialogBottomRight, rr) {
+					out = append(out, dialogBox{top: top, bottom: row, left: left, right: right,
+						inside: dialogInside(grid[top+1:row], left, right)})
+					break
+				}
+				if !strings.ContainsRune(dialogSides, l) || !strings.ContainsRune(dialogSides, rr) {
+					break
 				}
 			}
 		}
 	}
-	return nil, false
+	return out
+}
+
+// dialogsHolding is the boxes of lines whose inside holds every one of
+// strs, innermost only: a box around another box that holds them is left
+// out, since the inner one is the dialog. Bottom first.
+func dialogsHolding(lines []string, strs []string, foldCase bool) []dialogBox {
+	var hits []dialogBox
+	for _, b := range dialogBoxes(lines) {
+		hay := strings.Join(b.inside, "\n")
+		if foldCase {
+			hay = strings.ToLower(hay)
+		}
+		ok := true
+		for _, s := range strs {
+			if s != "" && !strings.Contains(hay, s) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			hits = append(hits, b)
+		}
+	}
+	var out []dialogBox
+	for i, b := range hits {
+		outer := false
+		for j, o := range hits {
+			if i != j && o.within(b) {
+				outer = true
+				break
+			}
+		}
+		if !outer {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// ruleDialog is the one dialog a show = "dialog" rule reads on lines: the
+// innermost box that holds every all[] string of the rule. ok is false when
+// no box holds them, or when more than one does: a box quoted in the
+// transcript, or drawn by something else, must never be taken for the live
+// dialog, and two candidates cannot be told apart.
+func ruleDialog(m *Manifest, rl *ScreenRule, lines []string) (dialogBox, bool) {
+	boxes := dialogsHolding(lines, rl.All, m.Screen.FoldCase)
+	if len(boxes) != 1 {
+		return dialogBox{}, false
+	}
+	return boxes[0], true
 }
 
 // dialogInside cuts each row to the columns between left and right, trims

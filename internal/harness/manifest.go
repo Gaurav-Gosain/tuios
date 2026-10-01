@@ -289,6 +289,11 @@ type ScreenRule struct {
 	// matched line as usual. Both need show = "dialog".
 	ToolField  string   `toml:"tool_field"`
 	WhatFields []string `toml:"what_fields"`
+	// HintFields are labels tried after WhatFields whose value only
+	// describes the call, such as the model's own words for a command. A
+	// message built from one ends with PartialSuffix, so the risk rules read
+	// it as cut short. It needs tool_field.
+	HintFields []string `toml:"hint_fields"`
 }
 
 // maxWhatFields bounds what_fields.
@@ -413,6 +418,9 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 			return fmt.Errorf("show: only a needs_input screen rule shows a prompt")
 		}
 	}
+	if len(r.HintFields) > 0 && r.ToolField == "" {
+		return fmt.Errorf("hint_fields needs tool_field")
+	}
 	if r.ToolField != "" || len(r.WhatFields) > 0 {
 		if r.Show != ShowDialog {
 			return fmt.Errorf("tool_field and what_fields need show = %q", ShowDialog)
@@ -420,7 +428,10 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 		if len(r.WhatFields) > maxWhatFields {
 			return fmt.Errorf("what_fields: %d labels, limit %d", len(r.WhatFields), maxWhatFields)
 		}
-		labels := append([]string{r.ToolField}, r.WhatFields...)
+		if len(r.WhatFields)+len(r.HintFields) > maxWhatFields {
+			return fmt.Errorf("what_fields and hint_fields: %d labels, limit %d", len(r.WhatFields)+len(r.HintFields), maxWhatFields)
+		}
+		labels := append(append([]string{r.ToolField}, r.WhatFields...), r.HintFields...)
 		for i, f := range labels {
 			f = strings.ToLower(strings.TrimSpace(f))
 			if f == "" || strings.ContainsFunc(f, unicode.IsSpace) {
@@ -428,7 +439,9 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 			}
 			labels[i] = f
 		}
-		r.ToolField, r.WhatFields = labels[0], labels[1:]
+		r.ToolField = labels[0]
+		r.WhatFields = labels[1 : 1+len(r.WhatFields)]
+		r.HintFields = labels[1+len(r.WhatFields):]
 	}
 	switch block {
 	case "notify":
