@@ -324,7 +324,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForSessionKill(m.sessionKillChan()),
 		ListenForNotification(m.ensureNotificationChan()),
 		ListenForCwdChange(m.ensureCwdChangeChan()),
-		listenForFileChange(m.fileWatchChan()),
+		listenForFileChange(m.fileWatchChan(), time.Time{}),
 	}
 
 	// Ask an SSH client's terminal whether it draws sixel. See sixel_probe.go.
@@ -1279,7 +1279,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case fileDirChangedMsg:
 		// The listed folder changed on disk. See sidebar_files_watch.go.
-		return m, tea.Batch(m.refreshChangedFolder(), listenForFileChange(m.fileWatchChan()))
+		return m, tea.Batch(m.refreshChangedFolder(), listenForFileChange(m.fileWatchChan(), msg.at))
 
 	case fileListMsg:
 		// A directory read that finished on its own goroutine. The handler drops

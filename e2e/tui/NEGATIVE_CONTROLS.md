@@ -309,6 +309,7 @@ a working negative control look like a broken one for half an hour.
 | A shell's repaint of a frozen prompt row through the ASCII fast path kept the row's tail, so widening showed text from before the repaint | n/a, cuts the call site | drop `dropTail` from the narrow-run branch of the print path in `internal/vt/utf8.go` | vt `TestReflowOpenPromptRepaintDropsTheTail` | **caught in `internal/vt`** |
 | The cursor on a frozen prompt row came back at the narrow width's last column | n/a, injected | `s.wideCol = false && ...` in `Screen.reflow` | vt `TestReflowCursorOnAnOpenPromptComesBack` (Z at 29, not 34), `TestResizeConservesText` ("the cursor moved off its text") | **caught in `internal/vt`** |
 | A history saved while a prompt was frozen narrower lost the row's tail | n/a, cuts the call site | `captureHistoryRows` without the `MainRowTail` lookup | `TestSavedHistoryKeepsAFrozenPromptsTail` in `internal/session` | **caught in `internal/session`** |
+| A quiet folder refresh rebuilt the rail twice, even with nothing changed, and ran up to ten times a second | whole change | keep the `rail=` count in `internal/app/tick_stats.go` and `sidebar_cache.go`, put the rest of `internal/app` back to the parent commit, and point `TUIOS_E2E_BIN` at that build | `TestRailFilesRefreshIsPaced/rename` (58 rebuilds, budget 25) and `/swap` (71 rebuilds, budget 12); with the change, 17 and 5. Positive half: `/rename` waits for the last name on the rail | **caught** (2 of 2 run) |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

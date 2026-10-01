@@ -71,6 +71,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 
+	m.tickStats.Rail++
 	lines, w := m.sidebarPanelLinesForTree(m.BuildSessionTree())
 
 	m.sidebarCache = sidebarRenderCache{
@@ -201,7 +202,6 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.filesView.Host)
 	mixS(m.filesView.Err)
 	mixB(m.filesView.Loading)
-	mixB(m.filesView.Quiet)
 	mixI(m.SidebarScrollF)
 	mixU(m.filesView.Gen)
 
