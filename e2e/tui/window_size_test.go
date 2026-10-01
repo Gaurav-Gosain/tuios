@@ -90,20 +90,21 @@ func activity(t *testing.T, term *tuitest.Terminal) {
 
 // windowSizePair makes a session with two side by side panes, set to the
 // policy, and attaches a 200x50 client and then an 80x24 one. extraConfig is
-// added to the config file, and smallEnv to the small client's environment.
-func windowSizePair(t *testing.T, policy, extraConfig string, smallEnv []string) (big, small *tuitest.Terminal, base string) {
+// added to the config file, and smallEnv and bigEnv to each client's
+// environment.
+func windowSizePair(t *testing.T, policy, extraConfig string, smallEnv []string, bigEnv ...string) (big, small *tuitest.Terminal, base string) {
 	t.Helper()
 	base = t.TempDir()
 	cfg := extraConfig
 	if policy != "" {
 		cfg = fmt.Sprintf("[daemon]\nwindow_size = %q\n", policy) + cfg
 	}
-	writeConfig(t, base, cfg)
+	writeConfig(t, base, strings.ReplaceAll(cfg, "{BASE}", base))
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", wsSession, "--detach"); err != nil {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
-	big = attachIn(t, base, wsSession, startOpts{cols: wsBigCols, rows: wsBigRows})
+	big = attachIn(t, base, wsSession, startOpts{cols: wsBigCols, rows: wsBigRows, env: bigEnv})
 	newWindow(t, big)
 	waitWindowCount(t, big, 2, "two windows on the big client")
 	enableTiling(t, big)
@@ -258,7 +259,35 @@ func TestWindowSizeViewFollowsCursorAndClicks(t *testing.T) {
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest")
 	waitMark(t, small, true, "the small client under largest")
 
-	left, right := sideBySide(t, base)
+	left, right := viewOverTheSplit(t, base, small)
+
+	// A click on the right pane, as the small client draws it.
+	row, col := findText(t, small, "RIGHTSIDE")
+	if col >= wsSmallCols || focusedWindowID(t, base, wsSession) != left {
+		t.Fatalf("the fixture is wrong: RIGHTSIDE at column %d, focus on %s", col, focusedWindowID(t, base, wsSession))
+	}
+	leftClick(t, small, col+2, row)
+	deadline := time.Now().Add(uiTimeout)
+	for focusedWindowID(t, base, wsSession) != right {
+		if time.Now().After(deadline) {
+			t.Fatalf("a click on the right pane in the small client did not focus it\n%s", small.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if w, h, _ := wsSize(t, base); w != wsBigCols || h != wsBigRows {
+		t.Fatalf("under largest the session moved to %dx%d", w, h)
+	}
+	saveArtifact(t, small, artifactDir(t), "view-after-click")
+}
+
+// viewOverTheSplit puts the small client's view over the split between the
+// two panes, with the focus on the left one. The right pane prints RIGHTSIDE,
+// then the left pane's cursor is moved near its right edge by a long line of
+// L, and the view follows it. On the way it checks that the view starts at
+// the left edge while the cursor is there. It returns the two panes.
+func viewOverTheSplit(t *testing.T, base string, small *tuitest.Terminal) (left, right string) {
+	t.Helper()
+	left, right = sideBySide(t, base)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", wsSession, "-w", right, "echo RIGHT''SIDE\n"); err != nil {
 		t.Fatalf("send-text right: %v\n%s", err, out)
 	}
@@ -287,24 +316,7 @@ func TestWindowSizeViewFollowsCursorAndClicks(t *testing.T) {
 		t.Fatalf("the view never followed the cursor to the right\n%s", small.Snapshot())
 	}
 	saveArtifact(t, small, artifactDir(t), "view-follows-cursor")
-
-	// A click on the right pane, as the small client draws it.
-	row, col := findText(t, small, "RIGHTSIDE")
-	if col >= wsSmallCols || focusedWindowID(t, base, wsSession) != left {
-		t.Fatalf("the fixture is wrong: RIGHTSIDE at column %d, focus on %s", col, focusedWindowID(t, base, wsSession))
-	}
-	leftClick(t, small, col+2, row)
-	deadline := time.Now().Add(uiTimeout)
-	for focusedWindowID(t, base, wsSession) != right {
-		if time.Now().After(deadline) {
-			t.Fatalf("a click on the right pane in the small client did not focus it\n%s", small.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if w, h, _ := wsSize(t, base); w != wsBigCols || h != wsBigRows {
-		t.Fatalf("under largest the session moved to %dx%d", w, h)
-	}
-	saveArtifact(t, small, artifactDir(t), "view-after-click")
+	return left, right
 }
 
 // sideBySide returns the two panes of the session, left first.
@@ -363,9 +375,10 @@ func TestWindowSizeLegacyClient(t *testing.T) {
 // itself with the rail on. The rail and the dock are drawn at the small
 // client's own size, whole, and the panes are cut beside them.
 //
-// NEGATIVE CONTROL: with ViewUsableHeight returning the layout height, the
+// NEGATIVE CONTROLS: with ViewUsableHeight returning the layout height, the
 // rail is laid out the session's 48 rows tall and its footer is drawn off the
-// bottom of the screen.
+// bottom of the screen. With the mark back at the top of the pane area, row
+// 0 carries it and the rule does not.
 func TestWindowSizeRailStaysWhole(t *testing.T) {
 	_, small, base := windowSizePair(t, "largest", "[appearance.sidebar]\nenabled = true\n", nil)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest with the rail")
@@ -373,10 +386,12 @@ func TestWindowSizeRailStaysWhole(t *testing.T) {
 	// The rail heads the screen and ends with its footer (the fold control,
 	// «) on the row above the dock, whose rule runs the full width of the
 	// small client's own screen.
-	rule := strings.Repeat("─", wsSmallCols)
+	// The mark sits at the right end of that rule and nowhere over a pane.
+	rule := strings.Repeat("─", wsSmallCols/2)
 	if err := small.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Line(0), "sessions") && strings.Contains(s.Line(wsSmallRows-3), "«") &&
-			s.Line(wsSmallRows-2) == rule
+			strings.HasPrefix(s.Line(wsSmallRows-2), rule) && strings.Contains(s.Line(wsSmallRows-2), wsMark) &&
+			!strings.Contains(s.Line(0), wsMark)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the rail or the dock is not at the small client's own edges\n%s", small.Snapshot())
 	}
