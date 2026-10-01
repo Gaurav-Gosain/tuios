@@ -38,11 +38,6 @@ import (
 // wait-dir) ends the watch, and the listing is read again when the pane changes
 // folder, as it was before this existed.
 
-// dirWatchSettle is how long a burst of changes is left to settle before it is
-// reported. A `git checkout` or an `rm -r` is thousands of events, and the
-// listing only needs the state they leave behind.
-const dirWatchSettle = 100 * time.Millisecond
-
 // remoteDirWaitMS bounds one wait-dir asked of another machine. The wait is
 // asked again when it ends, so this only bounds how long a far daemon keeps a
 // watch for a near daemon that went away without closing the link.
@@ -116,12 +111,7 @@ func (d *Daemon) handleWatchDir(cs *connState, msg *Message) error {
 // runLocalDirWatch reports each settled change to dir's names until done.
 func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func()) {
 	events := make(chan struct{}, 1)
-	w, err := dirwatch.Watch(dir, func() {
-		select {
-		case events <- struct{}{}:
-		default: // a change is already pending, and one report covers both
-		}
-	})
+	w, err := dirwatch.Watch(dir, func() { dirwatch.Nudge(events) })
 	if err != nil {
 		return
 	}
@@ -134,14 +124,8 @@ func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func(
 			return
 		case <-events:
 		}
-		select {
-		case <-done:
+		if !dirwatch.AfterBurst(events, done) {
 			return
-		case <-time.After(dirWatchSettle):
-		}
-		select {
-		case <-events:
-		default:
 		}
 		notify()
 	}
@@ -225,12 +209,7 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 	dir := filepath.Clean(p.Dir)
 
 	events := make(chan struct{}, 1)
-	w, err := dirwatch.Watch(dir, func() {
-		select {
-		case events <- struct{}{}:
-		default:
-		}
-	})
+	w, err := dirwatch.Watch(dir, func() { dirwatch.Nudge(events) })
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "cannot watch "+echoName(dir)+": "+err.Error())
 	}
@@ -253,13 +232,9 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 	unchanged := map[string]any{"dir": dir, "changed": false}
 	select {
 	case <-events:
-		// Let the burst settle, so the caller reads the folder once.
-		select {
-		case <-time.After(dirWatchSettle):
-		case <-timer.C:
-		case <-gone:
-		case <-ended:
-		}
+		// Let the burst settle, so the caller reads the folder once. The
+		// change is the answer whatever ends the wait during the settle.
+		dirwatch.AfterBurst(events, d.ctx.Done())
 		return map[string]any{"dir": dir, "changed": true}, nil
 	case <-timer.C:
 		return unchanged, nil
