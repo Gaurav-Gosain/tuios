@@ -410,9 +410,13 @@ func (m *OS) drawPaneLayer(canvas *frameCanvas, cl composedLayer, at, clip image
 	cl.cells.blitClipped(canvas, at.Min.X, at.Min.Y, clip)
 }
 
-// blitClipped is blit for a layer that crosses the clip: each cell is set on
-// its own, and only inside the clip. A wide cell cut by the clip's right edge
-// is left to the chrome drawn over that edge.
+// blitClipped is blit for a layer that crosses the clip: only the cells
+// inside the clip are written. A wide cell cut by the clip's right edge is
+// left to the chrome drawn over that edge.
+//
+// As in blit, a row whose clipped span meets no wide cell at either edge, on
+// the canvas or in the layer, is one copy. A wide cell at an edge is split or
+// spilled by Line.Set, so those rows are set a cell at a time.
 func (cl *cellLayer) blitClipped(canvas *frameCanvas, x, y int, clip image.Rectangle) {
 	for row := range cl.h {
 		cy := y + row
@@ -422,6 +426,15 @@ func (cl *cellLayer) blitClipped(canvas *frameCanvas, x, y int, clip image.Recta
 		line := canvas.Lines[cy]
 		src := cl.buf.Lines[row]
 		from, to := max(x, clip.Min.X), min(x+cl.w, clip.Max.X)
+		if from >= to {
+			continue
+		}
+		if from >= 0 && to <= len(line) && !cl.spill[row] &&
+			!isPlaceholder(&line[from]) && (to == len(line) || !isPlaceholder(&line[to])) &&
+			!isPlaceholder(&src[from-x]) && !isPlaceholder(&src[to-x]) {
+			copy(line[from:to], src[from-x:to-x])
+			continue
+		}
 		for cx := from; cx < to; cx++ {
 			line.Set(cx, nil)
 		}
