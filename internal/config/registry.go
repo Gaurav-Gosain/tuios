@@ -600,6 +600,18 @@ var ActionDescriptions = map[string]string{
 	"set_tiling_scheme_alternate":    "Set the workspace's tiling scheme to alternate",
 	"set_tiling_scheme_smart_split":  "Set the workspace's tiling scheme to smart split",
 
+	// Master-stack
+	"cycle_master_position":      "Move the master panes to the next side: left, right, top, bottom, center",
+	"set_master_position_left":   "Put the master panes on the left",
+	"set_master_position_right":  "Put the master panes on the right",
+	"set_master_position_top":    "Put the master panes at the top",
+	"set_master_position_bottom": "Put the master panes at the bottom",
+	"set_master_position_center": "Put the master panes in the center, with the stack on both sides",
+	"add_master":                 "Make one more pane a master pane",
+	"remove_master":              "Make one pane fewer a master pane",
+	"swap_with_master":           "Swap the focused pane with the master pane",
+	"focus_master":               "Focus the master pane",
+
 	// Mode Control
 	"enter_terminal_mode": "Enter terminal mode",
 	"enter_window_mode":   "Enter window management mode",

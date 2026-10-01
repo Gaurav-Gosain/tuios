@@ -163,6 +163,9 @@ type TUIClient struct {
 	// treeOps says the daemon's welcome offered MsgLayoutTree. See
 	// LayoutTreeOps.
 	treeOps atomic.Bool
+	// masterOps says the daemon's welcome offered MsgMasterLayout. See
+	// master_layout.go.
+	masterOps atomic.Bool
 	// daemonRefusesAnimation says the daemon's welcome offered
 	// KittyAnimationRefusal. See DaemonRefusesKittyAnimation.
 	daemonRefusesAnimation atomic.Bool
@@ -350,6 +353,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.noteDaemonBuild(version, welcome.Version)
 	c.focusSupported = welcome.ClientFocus
 	c.treeOps.Store(welcome.LayoutTreeOps)
+	c.masterOps.Store(welcome.MasterLayoutOps)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)

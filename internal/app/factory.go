@@ -242,6 +242,9 @@ func NewOS(opts OSOptions) *OS {
 		lastConfigSharedBorders: seed.SharedBorders,
 		lastConfigPaneGap:       seed.PaneGap,
 		lastConfigScrollWidth:   seed.ScrollColumnWidth,
+		lastConfigMaster: normalMasterLayout(session.MasterLayoutState{
+			Position: seed.MasterPosition, Count: seed.MasterCount, NoGrid: seed.MasterNoGrid,
+		}),
 	}
 
 	// Sidebar order and expand/collapse state survive restarts; a load failure

@@ -67,6 +67,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		LayoutTreeOps:         true,
 		TypeAtPrompt:          true,
 		KittyAnimationRefusal: true,
+		// See master_layout.go.
+		MasterLayoutOps: true,
 	})
 }
 

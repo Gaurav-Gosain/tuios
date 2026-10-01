@@ -61,6 +61,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
 				"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
 				"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
+				"cycle_master_position", "swap_with_master", "focus_master", "add_master", "remove_master",
 			}),
 		},
 		{

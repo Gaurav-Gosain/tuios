@@ -42,6 +42,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
 	// client can either raise the mark or clear it by syncing.
 	incoming.Restored = canonical.Restored
+	// The master-stack shapes are written only by MsgMasterLayout, so the
+	// daemon's copy is the whole answer and a push never moves it. See
+	// master_layout.go.
+	incoming.WorkspaceMasterLayout = canonical.WorkspaceMasterLayout
 	// Global is stamped once, when the session is created, and canonical wins
 	// for the same reason: a bool cannot say "not sent", and no client should
 	// be able to turn an ordinary session into a global one by syncing.

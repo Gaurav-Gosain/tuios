@@ -353,6 +353,21 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.master_position", Type: OptionString, Section: "appearance",
+		Description: "Side the master panes take in the master-stack layout. Center puts the stack on both sides.",
+		Accepted:    MasterPositions, Default: MasterPositionLeft,
+	},
+	{
+		Path: "appearance.master_count", Type: OptionInt, Section: "appearance",
+		Description: "How many panes are master panes in the master-stack layout",
+		Default:     strconv.Itoa(MasterCountDefault), Min: MasterCountMin, Max: MasterCountMax,
+	},
+	{
+		Path: "appearance.master_grid", Type: OptionBool, Section: "appearance",
+		Description: "With one master on the left, show four or more panes as a grid",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.scroll_column_width", Type: OptionInt, Section: "appearance",
 		Description: "Width of a column in the scrolling layout, as a percent of the screen",
 		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthCeiling,

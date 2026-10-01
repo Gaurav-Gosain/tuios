@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/google/uuid"
 )
 
@@ -355,12 +357,21 @@ func (d *Daemon) verbSetLayout(_ *connState, params json.RawMessage) (any, *verb
 		Tiling   *bool  `json:"tiling"`
 		Equalize bool   `json:"equalize"`
 		Rotate   bool   `json:"rotate"`
+		// The master-stack shape of the current workspace.
+		MasterPosition string `json:"master_position"`
+		MasterCount    int    `json:"master_count"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Tiling == nil && !p.Equalize && !p.Rotate {
-		return nil, invalidParam("tiling", "nothing to set: pass tiling, equalize or rotate")
+	if p.Tiling == nil && !p.Equalize && !p.Rotate && p.MasterPosition == "" && p.MasterCount == 0 {
+		return nil, invalidParam("tiling", "nothing to set: pass tiling, equalize, rotate, master_position or master_count")
+	}
+	if p.MasterPosition != "" && !slices.Contains(config.MasterPositions, p.MasterPosition) {
+		return nil, invalidParam("master_position", "use "+strings.Join(config.MasterPositions, ", "))
+	}
+	if p.MasterCount != 0 && (p.MasterCount < config.MasterCountMin || p.MasterCount > config.MasterCountMax) {
+		return nil, invalidParam("master_count", fmt.Sprintf("use a number from %d to %d", config.MasterCountMin, config.MasterCountMax))
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -389,6 +400,16 @@ func (d *Daemon) verbSetLayout(_ *connState, params json.RawMessage) (any, *verb
 			return nil, verr
 		}
 	}
+	if p.MasterPosition != "" {
+		if verr := d.routeTape(sess, "SetMasterPosition", []string{p.MasterPosition}); verr != nil {
+			return nil, verr
+		}
+	}
+	if p.MasterCount != 0 {
+		if verr := d.routeTape(sess, "SetMasterCount", []string{strconv.Itoa(p.MasterCount)}); verr != nil {
+			return nil, verr
+		}
+	}
 
 	return layoutResult(sess), nil
 }
@@ -404,11 +425,20 @@ func layoutResult(sess *Session) map[string]any {
 	if layoutMode == "" {
 		layoutMode = "unknown"
 	}
+	// The daemon holds a shape only for a workspace somebody changed. The
+	// others use the attached client's configured one, which the daemon does
+	// not know.
+	masterPosition, masterCount := "default", 0
+	if ml, ok := state.WorkspaceMasterLayout[state.CurrentWorkspace]; ok {
+		masterPosition, masterCount = ml.Position, ml.Count
+	}
 	return map[string]any{
-		"type":         "layout",
-		"tiling_mode":  mode,
-		"layout_mode":  layoutMode,
-		"master_ratio": state.MasterRatio,
+		"type":            "layout",
+		"tiling_mode":     mode,
+		"layout_mode":     layoutMode,
+		"master_ratio":    state.MasterRatio,
+		"master_position": masterPosition,
+		"master_count":    masterCount,
 	}
 }
 

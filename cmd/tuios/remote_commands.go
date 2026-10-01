@@ -527,9 +527,24 @@ func printWorkspaceList(raw json.RawMessage) error {
 	return nil
 }
 
+// checkSetLayoutMaster refuses a master position or count set-layout cannot
+// take, before anything is sent.
+func checkSetLayoutMaster(position string, masters int, mastersSet bool) error {
+	if position != "" && !slices.Contains(config.MasterPositions, position) {
+		return fmt.Errorf("--master-position takes %s, got %q", strings.Join(config.MasterPositions, ", "), position)
+	}
+	if mastersSet && (masters < config.MasterCountMin || masters > config.MasterCountMax) {
+		return fmt.Errorf("--masters takes a number from %d to %d, got %d", config.MasterCountMin, config.MasterCountMax, masters)
+	}
+	return nil
+}
+
+// masterPositionNames is the accepted --master-position values.
+func masterPositionNames() []string { return slices.Clone(config.MasterPositions) }
+
 // runSetLayout turns tiling on or off and tidies the splits. tiling is a
 // pointer so a call that only equalizes leaves the tiling mode alone.
-func runSetLayout(sessionName string, tiling *bool, equalize, rotate, jsonOutput bool) error {
+func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, masterPosition string, masters int, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -544,6 +559,12 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate, jsonOutput
 	if tiling != nil {
 		params["tiling"] = *tiling
 	}
+	if masterPosition != "" {
+		params["master_position"] = masterPosition
+	}
+	if masters != 0 {
+		params["master_count"] = masters
+	}
 
 	raw, err := client.Call("set-layout", params)
 	if err != nil {
@@ -553,14 +574,20 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate, jsonOutput
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res struct {
-		TilingMode  string  `json:"tiling_mode"`
-		LayoutMode  string  `json:"layout_mode"`
-		MasterRatio float64 `json:"master_ratio"`
+		TilingMode     string  `json:"tiling_mode"`
+		LayoutMode     string  `json:"layout_mode"`
+		MasterRatio    float64 `json:"master_ratio"`
+		MasterPosition string  `json:"master_position"`
+		MasterCount    int     `json:"master_count"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Printf("%s  layout %s  master %.2f\n", res.TilingMode, res.LayoutMode, res.MasterRatio)
+	fmt.Printf("%s  layout %s  master %.2f", res.TilingMode, res.LayoutMode, res.MasterRatio)
+	if res.MasterCount > 0 {
+		fmt.Printf("  %s  masters %d", res.MasterPosition, res.MasterCount)
+	}
+	fmt.Println()
 	return nil
 }
 
@@ -2154,6 +2181,15 @@ func runCommandCatalog() []runCommandEntry {
 		{"SetMultifocus [window...]", "Put exactly these windows in multifocus, or clear it", "tuios run-command SetMultifocus build tests"},
 		{"Screenshot", "Save the focused window as an image", "tuios run-command Screenshot"},
 
+		// Master-stack
+		{"SetMasterPosition " + strings.Join(config.MasterPositions, "|"), "Put the master panes on one side of the workspace", "tuios run-command SetMasterPosition center"},
+		{"SetMasterCount 1-9", "Set how many panes are master panes", "tuios run-command SetMasterCount 2"},
+		{"CycleMasterPosition", "Move the master panes to the next side", "tuios run-command CycleMasterPosition"},
+		{"AddMaster", "Make one more pane a master pane", "tuios run-command AddMaster"},
+		{"RemoveMaster", "Make one pane fewer a master pane", "tuios run-command RemoveMaster"},
+		{"SwapWithMaster", "Swap the focused pane with the master pane", "tuios run-command SwapWithMaster"},
+		{"FocusMaster", "Focus the master pane", "tuios run-command FocusMaster"},
+
 		// Workspace
 		{"SwitchWorkspace 1-9", "Switch to workspace N", "tuios run-command SwitchWorkspace 2"},
 		{"MoveToWorkspace 1-9", "Move focused window to workspace N", "tuios run-command MoveToWorkspace 3"},
@@ -2313,6 +2349,13 @@ func getRunCommandCompletions(toComplete string) []string {
 		"ShowNotification\tShow a notification",
 		"FocusDirection\tFocus window in direction",
 		"Screenshot\tSave the focused window as an image",
+		"SetMasterPosition\tPut the master panes on one side",
+		"SetMasterCount\tSet how many panes are master panes",
+		"CycleMasterPosition\tMove the master panes to the next side",
+		"AddMaster\tMake one more pane a master pane",
+		"RemoveMaster\tMake one pane fewer a master pane",
+		"SwapWithMaster\tSwap the focused pane with the master pane",
+		"FocusMaster\tFocus the master pane",
 	}
 
 	var filtered []string
@@ -2339,6 +2382,14 @@ func getRunCommandArgCompletions(command string, argIndex int, toComplete string
 	case "SetDockbarPosition":
 		if argIndex == 1 {
 			return slices.Clone(config.DockbarPositions)
+		}
+	case "SetMasterPosition":
+		if argIndex == 1 {
+			return slices.Clone(config.MasterPositions)
+		}
+	case "SetMasterCount":
+		if argIndex == 1 {
+			return []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
 		}
 	case "SetBorderStyle":
 		if argIndex == 1 {

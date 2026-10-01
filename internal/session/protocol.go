@@ -133,6 +133,11 @@ const (
 	// the session runs. A client sends it only to a daemon whose welcome set
 	// ClientGraphics. See client_graphics.go.
 	MsgClientGraphics
+	// MsgMasterLayout carries one workspace's master-stack shape (the master
+	// position and count) as an op the daemon applies and versions. A client
+	// sends it only to a daemon whose welcome set MasterLayoutOps. See
+	// master_layout.go.
+	MsgMasterLayout
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -219,6 +224,9 @@ type WelcomePayload struct {
 	// that does not see it (a daemon that predates it) refuses the edit
 	// itself, as every client did before. See Daemon.refreshTreeOps.
 	KittyAnimationRefusal bool `json:"kitty_animation_refusal,omitempty"`
+	// MasterLayoutOps says the daemon reads MsgMasterLayout. A client that
+	// does not see it keeps a master layout change to itself.
+	MasterLayoutOps bool `json:"master_layout_ops,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.

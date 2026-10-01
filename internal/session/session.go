@@ -422,6 +422,13 @@ type SessionState struct {
 	// panes split the height equally, which is what every client did before the
 	// field existed, so an older peer that never sends it changes nothing.
 	WorkspaceStackRatio map[int]float64 `json:"workspace_stack_ratio,omitempty"`
+	// WorkspaceMasterLayout is each workspace's master-stack shape: where the
+	// masters go and how many there are. Only MsgMasterLayout writes it (see
+	// master_layout.go); a push never carries it, and retainDaemonExclusive
+	// keeps the daemon's copy whatever a push holds. A workspace with no entry
+	// is laid out with the configured default, which is what every client did
+	// before the field existed.
+	WorkspaceMasterLayout map[int]MasterLayoutState `json:"workspace_master_layout,omitempty"`
 	// WorkspaceHasCustom says, per workspace, whether the panes there sit where a
 	// user put them rather than where the tiler would. It is what the retile on a
 	// workspace switch is skipped on, and it is the session's answer for the same
@@ -2080,6 +2087,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	if s.state.WorkspaceStackRatio != nil {
 		stateCopy.WorkspaceStackRatio = maps.Clone(s.state.WorkspaceStackRatio)
+	}
+	if s.state.WorkspaceMasterLayout != nil {
+		stateCopy.WorkspaceMasterLayout = maps.Clone(s.state.WorkspaceMasterLayout)
 	}
 	if s.state.WorkspaceHasCustom != nil {
 		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)

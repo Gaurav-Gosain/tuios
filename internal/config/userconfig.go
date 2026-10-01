@@ -300,6 +300,14 @@ type AppearanceConfig struct {
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 	DimMultifocus     bool   `toml:"dim_multifocus"`      // Dim the panes in the multifocus set too (default: false)
+
+	// MasterPosition, MasterCount and MasterGrid shape the master-stack layout
+	// for a workspace nobody has changed at run time. The actions that change
+	// them (cycle_master_position, add_master, remove_master and the rest) act
+	// on the current workspace only, and the session keeps what they set.
+	MasterPosition string `toml:"master_position"` // Side the master panes take: left, right, top, bottom or center (default: left)
+	MasterCount    int    `toml:"master_count"`    // How many panes are masters (default: 1)
+	MasterGrid     *bool  `toml:"master_grid"`     // With one master on the left, show four or more panes as a grid (default: true)
 	// The backgrounds tuios paints on cells that have none of their own. Each
 	// takes off, theme or #RRGGBB. background is the default for every
 	// surface; a surface's own key overrides it, and empty follows it. See
@@ -751,6 +759,8 @@ func DefaultConfig() *UserConfig {
 			ClockFormat:              DefaultClockFormat,
 			TilingScheme:             TilingSchemeSpiral,
 			MasterRatio:              MasterRatioDefault,
+			MasterPosition:           MasterPositionLeft,
+			MasterCount:              MasterCountDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			ScrollColumnMax:          ScrollColumnWidthMax,
 			ZoomSize:                 ZoomSizeDefault,
@@ -1087,6 +1097,14 @@ func DefaultConfig() *UserConfig {
 				"resize_height_70": {"shift+7"},
 				"resize_height_80": {"shift+8"},
 				"resize_height_90": {"shift+9"},
+				// The master-stack keys, after dwm and Hyprland's master
+				// layout: o for orientation, enter for dwm's zoom, i and d for
+				// dwm's incnmaster and decnmaster.
+				"cycle_master_position": {"o"},
+				"swap_with_master":      {"enter"},
+				"focus_master":          {"m"},
+				"add_master":            {"i"},
+				"remove_master":         {"d"},
 			},
 			TerminalMode:  getDefaultTerminalModeKeybinds(),
 			Sidebar:       getDefaultSidebarKeybinds(),
@@ -1994,6 +2012,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ClockFormat = cfg.Appearance.ClockFormat
 	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
 	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
+	// A typo in the position falls back to left, and an unset count to one,
+	// which is the layout as it was before either existed.
+	s.MasterPosition = ValidMasterPosition(cfg.Appearance.MasterPosition)
+	s.MasterCount = ClampMasterCount(cfg.Appearance.MasterCount)
+	s.MasterNoGrid = cfg.Appearance.MasterGrid != nil && !*cfg.Appearance.MasterGrid
 	s.ZoomSize = clampPercent(cfg.Appearance.ZoomSize, ZoomSizeMin, ZoomSizeMax, ZoomSizeDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)

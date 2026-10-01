@@ -459,6 +459,14 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"set_tiling_scheme_alternate":    "palette row, user binding",
 	"set_tiling_scheme_smart_split":  "palette row, user binding",
 
+	// One master position each (#321). cycle_master_position has the key in
+	// the layout prefix; these let a user bind one side directly.
+	"set_master_position_left":   "palette row, user binding",
+	"set_master_position_right":  "palette row, user binding",
+	"set_master_position_top":    "palette row, user binding",
+	"set_master_position_bottom": "palette row, user binding",
+	"set_master_position_center": "palette row, user binding",
+
 	// Two of the three screenshot verbs. The picker is the one with a key.
 	"screenshot":        "run-command verb, user binding",
 	"screenshot_screen": "run-command verb, user binding",

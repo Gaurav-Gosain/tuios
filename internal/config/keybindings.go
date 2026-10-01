@@ -120,6 +120,10 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 			kb("1-4", "Snap window to a corner"),
 			kb("5-9", "Resize focused window width (%)"),
 			kb("Shift+5-9", "Resize focused window height (%)"),
+			kb("o", "Move master to next side"),
+			kb("Enter", "Swap with master"),
+			kb("m", "Focus master"),
+			kb("i/d", "Add/remove master"),
 			kb("Esc", "Cancel"),
 		)
 	}

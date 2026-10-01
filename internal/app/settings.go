@@ -168,6 +168,7 @@ func (m *OS) adoptConfigPaneGeometry() {
 		m.lastConfigScrollWidth = m.Settings.ScrollColumnWidth
 		m.ScrollColumnWidth = m.Settings.ScrollColumnWidth
 	}
+	m.adoptConfigMasterLayout()
 }
 
 // ApplyAppearanceLive is applyAppearanceLive for callers outside the package.
@@ -367,6 +368,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// state and a row reading the config would show a value the layout
 			// is not using.
 			custom("appearance.master_ratio", m.masterRatioItem()),
+			opt("appearance.master_position"),
+			opt("appearance.master_count"),
+			opt("appearance.master_grid"),
 			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
 			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),

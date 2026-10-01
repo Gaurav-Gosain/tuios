@@ -177,6 +177,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	if len(m.WorkspaceStackRatio) > 0 {
 		state.WorkspaceStackRatio = maps.Clone(m.WorkspaceStackRatio)
 	}
+	// The master-stack shapes travel as ops (see master_layout.go), and the
+	// daemon keeps its own copy whatever a push holds. They are here for the
+	// state this client saves without a daemon.
+	if len(m.WorkspaceMasterLayout) > 0 {
+		state.WorkspaceMasterLayout = maps.Clone(m.WorkspaceMasterLayout)
+	}
 	// Which workspaces hold a layout a user arranged, for the reason the ratios
 	// above travel: a peer that has never visited a workspace has no entry for it,
 	// reads that as the tiler owning the workspace, and retiles over a layout
@@ -269,6 +275,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.adoptWorkspaceMasterRatio(state)
 	m.WorkspaceStackRatio = make(map[int]float64, len(state.WorkspaceStackRatio))
 	m.adoptWorkspaceStackRatio(state)
+	// The shapes belong to the session too, and the seeds this client sent
+	// were sent to the session being left.
+	m.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
+	m.masterSeeded = nil
 	// Same for the custom-layout flags, and for the same reason: they belong to
 	// the session being left.
 	m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
@@ -706,6 +716,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.adoptWorkspaceMasterRatio(state)
 	m.adoptWorkspaceStackRatio(state)
 	m.adoptWorkspaceHasCustom(state)
+	masterRetile := m.adoptWorkspaceMasterLayout(state)
 
 	// Update focused window index
 	m.FocusedWindow = -1
@@ -1032,7 +1043,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.settleBorderMode(m.CurrentWorkspace)
 		}
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
-			(geometryChanged || workspaceRetile || zoomRetile || treeRetile || m.tiledLayoutStale() ||
+			(geometryChanged || workspaceRetile || zoomRetile || treeRetile || masterRetile || m.tiledLayoutStale() ||
 				(treeOps && m.bspRectsOffTree())) {
 			m.TileAllWindows()
 		}
@@ -2056,6 +2067,10 @@ func (m *OS) SyncStateToDaemon() {
 		m.daemonWindowIntent = false
 		return
 	}
+
+	// A workspace the session has no shape for gets this client's configured
+	// one, ahead of the push. See seedMasterLayout.
+	m.seedMasterLayout()
 
 	state := m.BuildSessionState()
 	// A daemon that takes the trees as ops is sent them that way, ahead of the

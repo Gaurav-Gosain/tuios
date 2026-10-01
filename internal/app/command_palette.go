@@ -401,6 +401,112 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Cycle master position",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if pos := m.CycleMasterPosition(); pos != "" {
+					m.ShowNotification(MasterPositionMessage(m, pos), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set master position: left",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetMasterPosition(config.MasterPositionLeft) {
+					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionLeft), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set master position: right",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetMasterPosition(config.MasterPositionRight) {
+					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionRight), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set master position: top",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetMasterPosition(config.MasterPositionTop) {
+					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionTop), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set master position: bottom",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetMasterPosition(config.MasterPositionBottom) {
+					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionBottom), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Set master position: center",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.SetMasterPosition(config.MasterPositionCenter) {
+					m.ShowNotification(MasterPositionMessage(m, config.MasterPositionCenter), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Add a master pane",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if n := m.AddMaster(); n > 0 {
+					m.ShowNotification(MasterCountMessage(m, n), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Remove a master pane",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if n := m.RemoveMaster(); n > 0 {
+					m.ShowNotification(MasterCountMessage(m, n), "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Swap with master pane",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.SwapWithMaster()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Focus master pane",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.FocusMaster()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Snap fullscreen",
 			Shortcut: "prefix+z",
 			Category: "Layout",
