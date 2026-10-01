@@ -314,6 +314,7 @@ Geometry belongs to the attached client, so these need one and say
 tuios split-window -s work vertical -w build --name logs
 tuios set-layout -s work --tiling true --equalize
 tuios set-layout -s work --rotate
+tuios set-layout -s work --master-position center --masters 1
 tuios focus-window -s work --direction left
 ```
 

@@ -1296,6 +1296,12 @@ exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 | `Split` | `horizontal` or `vertical` | Split the focused window |
 | `RotateSplit` | | Rotate the split direction |
 | `EqualizeSplits` | | Equalize all split ratios |
+| `SetMasterPosition` | `left`, `right`, `top`, `bottom` or `center` | Put the master panes of the current workspace on that side. With `center`, the stack is on both sides |
+| `SetMasterCount` | `1`-`9` | Set how many panes of the current workspace are master panes |
+| `CycleMasterPosition` | | Move the master panes to the next side |
+| `AddMaster`, `RemoveMaster` | | Make one more pane, or one pane fewer, a master pane |
+| `SwapWithMaster` | | Swap the focused pane with the master pane. Needs the master-stack layout |
+| `FocusMaster` | | Focus the master pane. Needs the master-stack layout |
 | `ArrangePanes` | `<layout> [workspace [window...]]` | Lay out the panes of the workspace again as `tiled`, `even-horizontal` or `even-vertical`. The named windows come first, then the other panes in window order. With a workspace, the command fails when that workspace is not showing. Needs the bsp layout |
 | `SetMultifocus` | `[window...]` | Put exactly these windows in multifocus. Each window must be on the showing workspace and not minimized. From a pane, each window must be one that the pane can type into. With no window, clear multifocus |
 | `Screenshot` | | Save the focused window as an image |
@@ -2934,7 +2940,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
 | `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |
 | `tuios split-window <horizontal\|vertical>` | Divide a pane and open a new one beside it. Needs an attached client and tiling on |
-| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset split ratios (`--equalize`), or flip the focused split (`--rotate`) |
+| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset split ratios (`--equalize`), flip the focused split (`--rotate`), or shape the master-stack layout of the current workspace (`--master-position left\|right\|top\|bottom\|center`, `--masters N`). See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout) |
 
 **Agents:**
 
