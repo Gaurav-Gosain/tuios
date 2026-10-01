@@ -701,7 +701,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 // per message against the focused pane, so this does not have to know anything
 // about the rail.
 //
-// Only for a pane on this client's machine. localCwdPath judges the host in the
+// Only for a pane on this client's machine. The parse judges the host in the
 // report against this machine's name, which is the wrong machine for a pane
 // that runs on another: a report from the pane's own machine reads as a shell
 // that went elsewhere and is dropped, and one that happens to share this
@@ -718,10 +718,14 @@ func (m *OS) recordWindowCwd(windowID, raw string) {
 	if w == nil || !m.paneIsLocal(w) {
 		return
 	}
-	if host, ok := foreignCwdHost(raw); ok && w.Pty != nil {
+	dir, host, ok := session.ParseCwdAnnouncement(raw)
+	if !ok {
+		return
+	}
+	if w.Pty != nil {
 		w.CwdHost = host
 	}
-	if dir, ok := localCwdPath(raw); ok {
+	if host == "" {
 		w.Cwd = dir
 		w.CwdAnnounced = true
 	}

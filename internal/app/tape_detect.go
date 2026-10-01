@@ -1,7 +1,6 @@
 package app
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -192,46 +192,11 @@ func (m *OS) handleTapeDebounce(gen uint64) {
 // carries a file://host/path URI; a bare path is also accepted for shells that
 // emit one. A non-empty, non-local host means a remote shell, which is ignored.
 func localCwdPath(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	path, host, ok := session.ParseCwdAnnouncement(raw)
+	if !ok || host != "" {
 		return "", false
 	}
-	if !strings.HasPrefix(raw, "file://") {
-		// A bare path (no scheme). Only treat an absolute path as usable.
-		if filepath.IsAbs(raw) {
-			return filepath.Clean(raw), true
-		}
-		return "", false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", false
-	}
-	if host := u.Hostname(); host != "" && !isLocalHost(host) {
-		return "", false
-	}
-	if u.Path == "" {
-		return "", false
-	}
-	return filepath.Clean(u.Path), true
-}
-
-// foreignCwdHost reads the machine an OSC 7 report names. ok is false for a
-// report that is not well formed. host is empty for this machine, for a report
-// with no host, and for a bare path.
-func foreignCwdHost(raw string) (host string, ok bool) {
-	raw = strings.TrimSpace(raw)
-	if !strings.HasPrefix(raw, "file://") {
-		return "", filepath.IsAbs(raw)
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Path == "" {
-		return "", false
-	}
-	if h := u.Hostname(); h != "" && !isLocalHost(h) {
-		return h, true
-	}
-	return "", true
+	return path, true
 }
 
 // isLocalHost reports whether an OSC 7 host refers to this machine.

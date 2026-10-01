@@ -185,6 +185,12 @@ func parseCwdReport(raw string) (string, bool) {
 	return path, true
 }
 
+// ParseCwdAnnouncement is parseCwdAnnouncement for a client that judges a
+// report from a pane it runs itself, so both sides read OSC 7 the same way.
+func ParseCwdAnnouncement(raw string) (path, host string, ok bool) {
+	return parseCwdAnnouncement(raw)
+}
+
 // parseCwdAnnouncement reads a report the way parseCwdReport does, and keeps one
 // that names another machine. host is that machine, empty for this one.
 func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
