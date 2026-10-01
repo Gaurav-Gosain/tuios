@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Regions: the part of what a pane shows that a rule reads.
@@ -273,4 +275,113 @@ func foldLine(s string) string {
 		}
 	}
 	return s
+}
+
+// Dialogs: the box a harness draws its prompt in over its transcript.
+//
+// Crush draws its permission prompt as a bordered box in the middle of the
+// pane, with the chat still showing on either side of it. The lines a rule
+// reads are whole screen rows, so a peek of them shows the chat cut through
+// by the box. dialogAround cuts the box out: its rows, each cut to the
+// columns between its side borders.
+
+// Corners and sides of a box, in the light, heavy, double and rounded sets.
+const (
+	dialogTopLeft     = "╭┌┏╔"
+	dialogTopRight    = "╮┐┓╗"
+	dialogBottomLeft  = "╰└┗╚"
+	dialogBottomRight = "╯┘┛╝"
+	dialogSides       = "│┃║"
+)
+
+// maxDialogLines bounds the rows a dialog may span, so a box drawn around a
+// whole screen is not taken for a prompt.
+const maxDialogLines = 60
+
+// cells splits a line into terminal cells: a wide rune takes its cell and
+// leaves the next one empty, so a column in one line is the same column in
+// the next.
+func cells(line string) []rune {
+	out := make([]rune, 0, len(line))
+	for _, r := range line {
+		out = append(out, r)
+		if r >= 0x1100 && ansi.StringWidth(string(r)) == 2 {
+			out = append(out, 0)
+		}
+	}
+	return out
+}
+
+// cellAt is the rune at column col of a line split into cells, 0 when the
+// line is shorter.
+func cellAt(c []rune, col int) rune {
+	if col < 0 || col >= len(c) {
+		return 0
+	}
+	return c[col]
+}
+
+// dialogAround returns the inside of the bordered box that holds lines[row],
+// without its borders and blank edges, a run of blank rows kept as one. ok is
+// false when no box holds that row.
+func dialogAround(lines []string, row int) ([]string, bool) {
+	if row < 0 || row >= len(lines) {
+		return nil, false
+	}
+	grid := make([][]rune, len(lines))
+	for i, l := range lines {
+		grid[i] = cells(l)
+	}
+	inside := grid[row]
+	// The nearest top border above the row whose corners stand over a side
+	// border on the row itself.
+	for top := row - 1; top >= 0 && row-top < maxDialogLines; top-- {
+		for left, r := range grid[top] {
+			if !strings.ContainsRune(dialogTopLeft, r) || !strings.ContainsRune(dialogSides, cellAt(inside, left)) {
+				continue
+			}
+			right := left + 1
+			for right < len(grid[top]) && !strings.ContainsRune(dialogTopRight, grid[top][right]) {
+				right++
+			}
+			if right >= len(grid[top]) || !strings.ContainsRune(dialogSides, cellAt(inside, right)) {
+				continue
+			}
+			for bottom := row + 1; bottom < len(grid) && bottom-top < maxDialogLines; bottom++ {
+				if strings.ContainsRune(dialogBottomLeft, cellAt(grid[bottom], left)) && strings.ContainsRune(dialogBottomRight, cellAt(grid[bottom], right)) {
+					return dialogInside(grid[top+1:bottom], left, right), true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+// dialogInside cuts each row to the columns between left and right, trims
+// the edges, and keeps one blank row of each run.
+func dialogInside(rows [][]rune, left, right int) []string {
+	var out []string
+	blank := true // drops the blank rows at the top
+	for _, c := range rows {
+		var b strings.Builder
+		for col := left + 1; col < right && col < len(c); col++ {
+			if c[col] != 0 {
+				b.WriteRune(c[col])
+			}
+		}
+		line := strings.TrimRight(b.String(), " ")
+		if strings.TrimSpace(line) == "" {
+			if !blank {
+				out = append(out, "")
+			}
+			blank = true
+			continue
+		}
+		out = append(out, line)
+		blank = false
+	}
+	if n := len(out); n > 0 && out[n-1] == "" {
+		out = out[:n-1]
+	}
+	return out
 }

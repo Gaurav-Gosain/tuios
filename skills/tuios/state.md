@@ -91,7 +91,9 @@ Kimi, Pi, oh-my-pi (`omp`) and Qwen report the pane's state. Antigravity, Crush,
 Grok, Hermes and Qoder report only the conversation id, so the pane can be
 resumed, and their state keeps coming from screen rules. Crush reports its
 state by itself over herdr's protocol, which tuios accepts in every pane, also
-when you start it from a shell. An agent that reports to herdr through
+when you start it from a shell. Its permission dialog puts the pane on
+`needs_input` with a message such as `approve bash: touch hello.txt`, and the
+person can answer it from the Inbox. An agent that reports to herdr through
 `"$HERDR_BIN_PATH" pane report-agent` reaches tuios the same way
 (`tuios --skill herdr`).
 

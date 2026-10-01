@@ -327,8 +327,14 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
 		if held && r.Source.rank() < claim.source.rank() && !eventClaimStale(claim, w, r) {
-			if !blockerOverridesClaim(w, r, time.Now()) {
+			if !blockerOverridesClaim(w, r, claim, time.Now()) {
 				effective = w.AgentState
+				if screenNamesPrompt(claim, w, r) {
+					// The claim stays the reporter's; the screen only says
+					// what the prompt it reported is about.
+					w.AgentMessage = ClampDisplayText(r.Message)
+					return nil
+				}
 				return errAgentClaimHeld
 			}
 			override = true
@@ -338,7 +344,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		switch {
 		case override:
 			next.blocker = true
-			next.prior = agentPriorClaim{source: claim.source, state: prev, harness: w.AgentHarness}
+			next.prior = priorOf(claim, prev, w.AgentHarness)
 		case claim.blocker && r.Source == claim.source && r.State == prev:
 			// The same rule matching the same prompt again is the standing
 			// override, not a fresh claim. Forgetting what it displaced here
@@ -353,7 +359,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			// whole turn that followed the answer, because the screen tier
 			// asserts no other state and outranks the detector.
 			next.blocker = true
-			next.prior = agentPriorClaim{source: claim.source, state: prev, harness: w.AgentHarness}
+			next.prior = priorOf(claim, prev, w.AgentHarness)
 		}
 		w.AgentState = r.State
 		w.AgentMessage = ClampDisplayText(r.Message)
@@ -475,6 +481,31 @@ func identityAfterReport(claim agentClaim, r AgentReport, harness string) identi
 	}
 }
 
+// screenNamesPrompt reports whether a screen look may put its words on a
+// prompt a screenWins reporter reported with none of its own: the reporter
+// and the look agree the pane waits, and the reporter's message is the
+// placeholder herdrReport writes for a blocked report with no message
+// (Crush before charmbracelet/crush#3541 sends none). The look reads the
+// tool and what it acts on from the dialog, which the Inbox and the risk
+// rules need.
+func screenNamesPrompt(claim agentClaim, w *WindowState, r AgentReport) bool {
+	return claim.screenWins && r.Source == AgentSourceScreen && r.paneWroteAt != 0 &&
+		r.State == w.AgentState && agentStateBlocks(r.State) && r.Message != "" &&
+		w.AgentMessage == herdrBlockedPlaceholder
+}
+
+// priorOf is what a visible-blocker override keeps of the claim it displaces.
+func priorOf(claim agentClaim, state AgentState, harness string) agentPriorClaim {
+	return agentPriorClaim{
+		source:       claim.source,
+		state:        state,
+		harness:      harness,
+		herdrAt:      claim.herdrAt,
+		herdrAnchors: claim.herdrAnchors,
+		screenWins:   claim.screenWins,
+	}
+}
+
 // agentBlockerOverrideGrace is how long a higher-ranked claim must have stood
 // without being refreshed before a visible blocker may write over it.
 //
@@ -521,9 +552,17 @@ func agentStateBlocks(state AgentState) bool {
 // paneWroteAt is what confines the exception to the daemon's own tier. A caller
 // naming source=screen over the socket has not looked at anything, sends no
 // observation, and so fails the first half of staleness every time.
-func blockerOverridesClaim(w *WindowState, r AgentReport, now time.Time) bool {
+//
+// A claim marked screenWins skips both halves: its reporter is known to say
+// working while its prompt is up, so a prompt on the screen is the newer fact
+// whenever the daemon's own look sees one. paneWroteAt still has to be set,
+// which keeps the exception to the daemon's tier.
+func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now time.Time) bool {
 	if r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || w.AgentState == r.State {
 		return false
+	}
+	if claim.screenWins && r.paneWroteAt != 0 {
+		return true
 	}
 	if r.paneWroteAt <= w.AgentStateAt {
 		return false
@@ -575,9 +614,12 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		s.setAgentClaim(w.ID, agentClaim{
-			source:  claim.prior.source,
-			harness: claim.prior.harness,
-			auto:    claim.auto,
+			source:       claim.prior.source,
+			harness:      claim.prior.harness,
+			auto:         claim.auto,
+			herdrAt:      claim.prior.herdrAt,
+			herdrAnchors: claim.prior.herdrAnchors,
+			screenWins:   claim.prior.screenWins,
 		})
 		released = true
 		return nil

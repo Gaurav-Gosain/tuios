@@ -15,6 +15,16 @@
 // and a model token) and notify (notification.show). crash reports working
 // and exits at once with no release, the way a killed Crush leaves its pane.
 // Each answer is printed on a line of its own, after REPLY.
+//
+// dialog is a permission prompt the way Crush v0.97.1 and earlier shows one when
+// its herdr bridge loses the race between its two permission events: it
+// draws the dialog, reports blocked and then working, and the pane writes
+// nothing more. The dialog's text and the order of the reports were recorded
+// from crush v0.96.1 in tuios panes (the text from capture-pane, a wide pane
+// and a narrow one, the reports from a socket that logged them). The text is
+// drawn without its colours. It then reads one key in raw mode,
+// as the dialog does: a allows, s allows for the session, d denies, and each
+// is printed as ALLOWED, ALLOWED-SESSION or DENIED. The turn ends with idle.
 package main
 
 import (
@@ -24,6 +34,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -53,9 +64,13 @@ func main() {
 		return
 	}
 	seq := uint64(time.Now().UnixNano())
+	quiet := false
 	sendRaw := func(method string, p any) {
 		req := request{ID: fmt.Sprintf("crush:%s:%d", method, time.Now().UnixNano()), Method: method, Params: p}
-		fmt.Println("REPLY " + dialSend(sock, req))
+		reply := dialSend(sock, req)
+		if !quiet {
+			fmt.Println("REPLY " + reply)
+		}
 	}
 	sendMsg := func(method, state, message, paneID string, s uint64) {
 		sendRaw(method, params{PaneID: paneID, Source: "crush", Agent: "crush", State: state, Message: message, Seq: s, AgentSessionID: "fake-session"})
@@ -88,11 +103,109 @@ func main() {
 			})
 		case "notify":
 			sendRaw("notification.show", map[string]any{"title": "Crush finished", "body": "All tests pass"})
+		case "dialog":
+			// Crush writes nothing once the dialog is drawn, so neither
+			// does this: the replies are not printed.
+			quiet = true
+			frame := crushDialogNarrow
+			if columns() >= 66 {
+				frame = crushDialog
+			}
+			fmt.Print("\033[2J\033[H" + strings.ReplaceAll(frame, "\n", "\r\n"))
+			send("pane.report_agent", "blocked", pane, next())
+			send("pane.report_agent", "working", pane, next())
+			answer := readKey()
+			fmt.Print("\033[2J\033[H" + answer + "\r\n")
+			send("pane.report_agent", "idle", pane, next())
+			quiet = false
 		case "crash":
 			send("pane.report_agent", "working", pane, next())
 			os.Exit(3)
 		case "quit":
 			return
+		}
+	}
+}
+
+// crushDialog is the screen of crush v0.96.1 at 80 columns, waiting on a
+// permission request for a bash call, as capture-pane read it. The path is
+// shortened.
+const crushDialog = `  Charm™ HYPERCRUSH ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ ~/proj • 0% • ◆ 98 • ctrl+d open
+
+ │ Use the bash tool to run exactly: touch hello.txt. Nothing else.
+                ╭────────────────────────────────────────────╮
+   ● Bash touch │  Permission Required ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  │
+                │                                            │
+   Requesting pe│ Tool bash                                  │
+                │ Path /tmp/proj                             │
+                │ Desc Create hello.txt                      │
+                │                                            │
+                │                                            │
+                │   touch hello.txt                          │
+                │                                            │
+                │                                            │
+                │   Allow      Allow for Session      Deny   │
+   > Brrrrr...  │                                            │
+ :::            │ ←/→ choose • enter confirm • esc exit      │
+ :::            ╰────────────────────────────────────────────╯
+
+ esc cancel • tab focus chat • shift+tab mode • / or ctrl+p commands …`
+
+// crushDialogNarrow is the same dialog as crush v0.96.1 draws it in a pane
+// 44 columns wide: the box alone, the path wrapped, the command left out and
+// the buttons one under the other.
+const crushDialogNarrow = `
+╭──────────────────────────────────────────╮
+│  Permission Required ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  │
+│                                          │
+│ Tool bash                                │
+│ Path /tmp/claude-                        │
+│     1000/crush/proj                      │
+│ Desc Create hello.txt                    │
+│                                          │
+│                  Allow                   │
+│            Allow for Session             │
+│                   Deny                   │
+│                                          │
+│ ←/→ choose • enter confirm • esc exit …  │
+╰──────────────────────────────────────────╯`
+
+// columns is the terminal's width, 0 when it cannot be read.
+func columns() int {
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	var rows, cols int
+	_, _ = fmt.Sscan(string(out), &rows, &cols)
+	return cols
+}
+
+// readKey reads one key the way the dialog does, with the terminal in raw
+// mode, and names the answer it is.
+func readKey() string {
+	raw := exec.Command("stty", "raw", "-echo")
+	raw.Stdin = os.Stdin
+	_ = raw.Run()
+	defer func() {
+		sane := exec.Command("stty", "sane")
+		sane.Stdin = os.Stdin
+		_ = sane.Run()
+	}()
+	b := make([]byte, 1)
+	for {
+		if _, err := os.Stdin.Read(b); err != nil {
+			return "NO-KEY"
+		}
+		switch b[0] {
+		case 'a', 'A':
+			return "ALLOWED"
+		case 's', 'S':
+			return "ALLOWED-SESSION"
+		case 'd', 'D':
+			return "DENIED"
 		}
 	}
 }

@@ -10,14 +10,21 @@ argv_path = ["@charmland/crush", "/crush/"]
 
 # Crush reports its own state over herdr's pane protocol, which tuios accepts
 # in every pane by default (see internal/session/herdr_compat.go), so the
-# screen carries one rule only: the permission dialog. It is a backstop for a
-# report that says working while the dialog is up. Crush up to v0.97.2 has
-# that race: its permission service publishes a "request started"
-# notification that its herdr bridge can read after the request itself, as
-# the answer. charmbracelet/crush#3541 fixes it. A visible blocker takes over
-# a report only once the report has gone quiet and the pane has drawn since
-# (blockerOverridesClaim), so the rule helps when the dialog is drawn again,
-# and it gives the pane back when the dialog closes.
+# screen carries one rule only: the permission dialog. It does two jobs.
+#
+# It reads the prompt for the Inbox, which answers it with the keys below.
+# Crush's report says only "blocked", with no tool or command.
+#
+# It also corrects a report that says working while the dialog is up. Crush
+# without charmbracelet/crush#3541 (v0.97.1 and earlier) has that race: its permission service publishes a "request
+# started" notification (internal/permission/permission.go), and its herdr
+# bridge reads every notification as the answer (internal/herdr/translate.go)
+# on a goroutine of its own, so working can reach tuios after blocked.
+# charmbracelet/crush#3541 fixes it. A visible blocker takes over Crush's
+# claim at once, with no grace and no new output needed, and tuios looks at
+# the screen when Crush reports working (see crushScreenWins in
+# internal/session/herdr_compat.go). The pane goes back to working when the
+# dialog closes.
 #
 # The dialog, measured on crush v0.97.2 (main at d599625), is drawn in the
 # middle of the pane over the chat, so the rule reads far up:
@@ -37,6 +44,25 @@ priority = 300
 kind     = "approval"
 message  = "Waits for approval of a tool call."
 all      = ["permission required", "allow for session", "deny"]
+# The peek shows the dialog alone: tool, path, description and command,
+# without the chat on either side of it.
+show     = "dialog"
+# The message is the tool and what it acts on, "approve bash: touch
+# hello.txt", the form tuios's hooks report and its risk rules read. The
+# dialog's own fields: File for edit, write and view, URL and File for
+# download, Directory for ls. A bash dialog wide enough shows the command
+# under its fields ("body"). A narrow one leaves it out, and Desc, the
+# model's own words for the command, is the last resort.
+tool_field  = "tool"
+what_fields = ["file", "url", "directory", "body", "desc"]
+
+# The dialog's own keys (internal/ui/dialog/permissions.go in Crush): a
+# allows, s allows for the rest of the session, d denies. Each acts at once,
+# whichever button is selected. esc denies too, and d says so plainly.
+[screen.rule.answers]
+approve        = { keys = ["a"] }
+approve_always = { keys = ["s"] }
+deny           = { keys = ["d"] }
 
 # How a prompt is typed in. Measured on crush v0.96.1: it turns on bracketed
 # paste (DECSET 2004) at start and pushes kitty keyboard flags 1, under which

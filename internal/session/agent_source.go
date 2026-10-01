@@ -162,6 +162,11 @@ type agentClaim struct {
 	// first program above it that is not a shell. The claim stands while any
 	// of them lives.
 	herdrAnchors []herdrAnchor
+	// screenWins lets a prompt the screen tier reads take this claim at once,
+	// with no grace and no output since the claim. It is set on a claim a
+	// reporter holds that is known to say working while its own prompt is
+	// up. See crushScreenWins.
+	screenWins bool
 }
 
 // herdrAnchor is one process a herdr claim follows, named by pid and start
@@ -210,6 +215,11 @@ type agentPriorClaim struct {
 	source  AgentSource
 	state   AgentState
 	harness string
+	// The herdr fields of the claim, so a herdr reporter's claim comes back
+	// still following its harness, and still yielding to its prompt.
+	herdrAt      int64
+	herdrAnchors []herdrAnchor
+	screenWins   bool
 }
 
 // setAgentClaim records a claim, allocating the map on first use. It is called

@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"bufio"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,10 +146,10 @@ func TestHerdrCrushPanesInParallel(t *testing.T) {
 // Then one Crush quits, which releases its pane, and one is killed, which
 // sends nothing, and both panes clear.
 //
-// Use a Crush with charmbracelet/crush#3541. Crush up to v0.97.2 can report
-// working after its own permission request, a race in its herdr bridge that
-// shows with three Crushes at once, and the needs_input wait then fails on
-// the Crush side.
+// A Crush without charmbracelet/crush#3541 can report working after its own
+// permission request, a race in its herdr bridge. The pane still goes to
+// needs_input, since tuios reads the dialog when Crush reports working (see
+// crushScreenWins), so any Crush passes.
 func TestRealCrushInParallelPanes(t *testing.T) {
 	crushBin := os.Getenv("TUIOS_E2E_CRUSH")
 	if crushBin == "" {
@@ -159,23 +158,7 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 	term, base := crushClient(t)
 	log := &stateLog{name: "real-crush-parallel"}
 
-	provider := startFakeProvider(t)
-	cfgDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "crush")
-	mustMkdir(cfgDir)
-	cfg, _ := json.Marshal(map[string]any{
-		"providers": map[string]any{"fake": map[string]any{
-			"type": "openai-compat", "base_url": provider, "api_key": "not-a-key",
-			"models": []any{map[string]any{"id": "fake-model", "name": "Fake", "context_window": 128000, "default_max_tokens": 4096}},
-		}},
-		"models": map[string]any{
-			"large": map[string]any{"model": "fake-model", "provider": "fake"},
-			"small": map[string]any{"model": "fake-model", "provider": "fake"},
-		},
-		"options": map[string]any{"disable_provider_auto_update": true, "disable_metrics": true},
-	})
-	if err := os.WriteFile(filepath.Join(cfgDir, "crush.json"), cfg, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeRealCrushConfig(t, base, startFakeProvider(t))
 
 	names := []string{"crush-a", "crush-b", "crush-c"}
 	ids := crushPanes(t, base, names...)
@@ -208,7 +191,7 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 		}
 		// No key from the machine reaches Crush: the only provider it can
 		// call is the local stand-in.
-		typeIn(t, base, name, "cd "+dir+" && env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u GEMINI_API_KEY -u OPENROUTER_API_KEY -u GROQ_API_KEY -u XAI_API_KEY CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1 CRUSH_DISABLE_METRICS=1 "+bins[name])
+		typeIn(t, base, name, realCrushCommand(dir, bins[name]))
 	}
 	for _, name := range names {
 		waitAgentState(t, base, crushSession, ids[name], "idle", "crush", log, name+" started, idle")

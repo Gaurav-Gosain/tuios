@@ -357,6 +357,13 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 			lines = context[start:]
 		}
 	}
+	if rl.Show == ShowDialog {
+		if row, _ := promptRow(m, rl, lines); row >= 0 {
+			if box, ok := dialogAround(lines, row); ok {
+				lines = box
+			}
+		}
+	}
 	msg := r.RulePrompt(id, rule, tail)
 	if msg == "" {
 		msg = r.RuleMessage(id, rule)

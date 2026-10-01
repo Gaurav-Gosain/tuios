@@ -67,7 +67,9 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   prompt.
 - Keep your prompt on screen with its options numbered. The person can then
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
-  `d` presses the answer your harness's manifest declares).
+  `d` presses the answer your harness's manifest declares). Crush's permission
+  dialog is answered this way too: `a`, `A` and `d` press Crush's `a`, `s`
+  and `d`.
 
 ## Asking the person a question
 

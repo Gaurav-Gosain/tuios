@@ -107,7 +107,7 @@ tuios gets an agent's state in one of these ways, best first:
 | Qwen Code | hook, screen, title | working, needs_input, idle, done | hook E2E, screen fixtures |
 | GitHub Copilot CLI | hook, screen | working, needs_input, idle, done | hook E2E |
 | Cursor Agent | hook, screen | working, needs_input, idle, done | hook E2E |
-| Crush | herdr, a screen rule for the permission dialog, session hook | working, needs_input (approval or question), idle, done | E2E with a real Crush, E2E with a stand-in |
+| Crush | herdr, a screen rule that reads and answers the permission dialog, session hook | working, needs_input (approval or question), idle, done | E2E with a real Crush, E2E with a stand-in |
 | Kiro CLI | herdr (herdr lists it as reporting by itself), screen, title | working, needs_input, idle | screen fixtures |
 | Command Code, Muse Code, Prime Agent | herdr (herdr lists them as reporting by themselves) | working, needs_input, idle | unit and E2E with a stand-in, not with the real agent |
 | Antigravity CLI, Devin CLI, Droid, Qoder CLI | session hook, screen | working, needs_input, idle | screen fixtures |
@@ -359,7 +359,7 @@ The wire is herdr's: one JSON object per connection on one line, `{"id",
 | Method | What tuios does |
 | --- | --- |
 | `pane.report_agent` `state: working` | `working` |
-| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, a message that starts with `Permission`, or no message, is kind `approval`. Any other Crush message (a question, a new login) is kind `question` |
+| `pane.report_agent` `state: blocked` | `needs_input`, with `message` when sent. For Crush, a message that starts with `Permission`, or no message, is kind `approval`. Any other Crush message (a question, a new login) is kind `question`. See [Crush permission prompts](#crush-permission-prompts) |
 | `pane.report_agent` `state: idle` | `done` when the pane is `working` or `needs_input`, and `idle` otherwise |
 | `pane.report_agent` `state: unknown` | nothing |
 | `pane.report_agent_session` | the conversation id, as `set-agent-session` |
@@ -469,6 +469,33 @@ answer, as `tuios pane ...` and `tuios notification ...`.
 
 Use `set-agent-state` and `set-agent-meta` in your own scripts. herdr's
 commands are there for tools that already speak herdr.
+
+### Crush permission prompts
+
+When Crush shows its "Permission Required" dialog in a tuios pane:
+
+- The pane goes to `needs_input`, kind `approval`. The rail row shows it, and
+  the Inbox lists it under Approvals.
+- The message names the tool and what it acts on, such as
+  `approve bash: touch hello.txt`. tuios reads it from the dialog: the command
+  for bash, the file for edit and write, the URL or folder for the others. A
+  narrow dialog does not show the command, so the message then has Crush's
+  description of it.
+- `space` on the Inbox row shows the dialog. `a` allows, `A` allows for the
+  rest of the Crush session, and `d` denies. tuios presses Crush's own keys
+  for each: `a`, `s` and `d`.
+- `tuios respond` answers it as well. The same rules apply as for every other
+  prompt: see [Who may answer](#who-may-answer). An agent in a pane without
+  the `respond` grant gets `not_human`.
+- The risk rules read the message, so a risky command takes a second press.
+
+Crush v0.97.1 and earlier can report `working` after `blocked` while the dialog is
+still up. Its herdr bridge reads two events on two goroutines, and they can
+arrive in either order. tuios does not trust that report. When Crush reports
+`working`, tuios reads the screen. While the dialog is on the screen, the pane
+stays on `needs_input`. When the dialog closes, the pane goes back to
+`working`. charmbracelet/crush#3541 removes the race and sends the tool and its
+description with `blocked`.
 
 ### herdr compatibility
 
@@ -1090,8 +1117,9 @@ Maki, Qwen Code), so an unhooked pane of one of those can say it is back at its
 prompt rather than drifting to `unknown` on the silence timer. Most bundled
 rules are ported from herdr's manifests (Apache-2.0, see
 `internal/harness/manifests/LICENSE-herdr`), and each manifest names the herdr
-version it follows. Aider and Crush have no screen rules: herdr has no manifest
-for them and none has been written against a live session.
+version it follows. Aider has no screen rules: herdr has no manifest for it
+and none has been written against a live session. Crush has one, written
+against a live Crush: its permission dialog.
 
 Every bundled screen rule decides at least one captured or derived screen under
 `internal/harness/testdata/screens`, and the test suite fails for a rule that
@@ -2223,9 +2251,35 @@ it does not know, with more than 8 keys, with an answer that names neither keys
 nor an option, or with an `option` on a title rule (a title has no options)
 fails the manifest's load, and the error names the answers block. The
 bundled manifests declare answers for Claude Code's permission, trust, plan,
-question and workflow menus, and for Codex's approval. Harnesses whose prompts
+question and workflow menus, for Codex's approval, and for Crush's permission
+dialog. Harnesses whose prompts
 tuios cannot read reliably declare none, and their prompts are answered in the
 pane. Older builds of tuios ignore the block.
+
+### A prompt drawn as a dialog
+
+Some harnesses draw a prompt as a box over their transcript. Three more keys
+on a `needs_input` screen rule handle that:
+
+```toml
+[[screen.rule]]
+state       = "needs_input"
+kind        = "approval"
+all         = ["permission required", "allow for session", "deny"]
+show        = "dialog"
+tool_field  = "tool"
+what_fields = ["file", "url", "directory", "body", "desc"]
+```
+
+- `show = "dialog"` cuts the box out of the screen. The peek then shows the
+  box and not the text on each side of it.
+- `tool_field` and `what_fields` make the message from the box's field lines,
+  such as `Tool bash`. The message is `approve <tool>: <what>`, the form the
+  risk rules read. `what` is the value of the first label in `what_fields`
+  that the box shows. `body` is the first line under the fields, such as a
+  command. A value that wraps onto more lines is read whole.
+- Both need `show = "dialog"`. With no tool in the box, the message is the
+  line the rule matched.
 
 ### What the daemon checks before it presses anything
 
