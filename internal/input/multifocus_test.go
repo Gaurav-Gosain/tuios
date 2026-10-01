@@ -121,7 +121,7 @@ func TestMultifocusDoesNotBroadcastNvimNavigationKey(t *testing.T) {
 	active := true
 	o.Update(app.NvimNavigationMsg{WindowID: "a", State: &active})
 
-	o, _ = HandleKeyPress(altArrow("right"), o)
+	_, _ = HandleKeyPress(altArrow("right"), o)
 	if got := sent[0].String(); got == "" {
 		t.Fatal("focused pane did not receive the navigation key")
 	}
