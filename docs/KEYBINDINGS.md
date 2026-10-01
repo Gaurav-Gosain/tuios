@@ -110,6 +110,10 @@ pane in terminal mode, and only immediately after it forwarded the matching
 focus key to that pane. Window-management mode always keeps the focus keys for
 TUIOS itself. Enable the protocol with `appearance.nvim_navigation = true`.
 
+> **Known limit:** TUIOS does not send a terminal focus-in report when a daemon
+> session is reattached. Neovim therefore does not receive `FocusGained`, so
+> the plugin cannot re-announce its active state until Neovim is restarted.
+
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,
