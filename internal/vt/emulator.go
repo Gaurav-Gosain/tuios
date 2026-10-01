@@ -1189,12 +1189,9 @@ func (e *Emulator) Resize(width int, height int) {
 		x = width - 1
 	}
 
-	// A resize cannot leave a double-width rune straddling the new last
-	// column of a scrollback line; the render path would paint it one column
-	// into the pane next door.
-	if width != e.Width() && e.Scrollback() != nil {
-		e.Scrollback().blankWideRunesCutByTheEdge(width)
-	}
+	// History is not touched here. A double-width rune that now straddles the
+	// last column of a scrollback line is clipped where the row is drawn
+	// (ClipHistoryRow), so the rune is still there when the pane widens again.
 
 	e.scrs[0].Resize(width, height)
 	if e.altSized {

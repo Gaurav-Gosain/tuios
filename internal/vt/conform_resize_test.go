@@ -70,7 +70,14 @@ func TestConform_ResizeCuttingAWideCharacter(t *testing.T) {
 }
 
 // TestConform_ResizeCuttingAWideCharacterInScrollback is the same claim for the
-// rows the user has to scroll up to see. They are drawn by the same reader.
+// rows the user has to scroll up to see, read the way a reader that draws
+// them at the pane's width reads them: through ClipHistoryRow.
+//
+// Unlike the screen, history keeps the width it was written at, so the rune
+// the edge cuts is still in the stored line. Widening again has to give it
+// back. A resize that blanked it in the stored line, which this emulator once
+// did, lost the character for good; Collie's mirror of a tuios pane showed it
+// as an emoji that became a space after a client attached at another size.
 func TestConform_ResizeCuttingAWideCharacterInScrollback(t *testing.T) {
 	emu := vt.NewEmulator(6, 2)
 	// Eight rows of wide characters through a two-row screen, so six of them
@@ -84,7 +91,7 @@ func TestConform_ResizeCuttingAWideCharacterInScrollback(t *testing.T) {
 		t.Fatal("nothing scrolled back, so this is not testing what it claims")
 	}
 	for i := range emu.ScrollbackLen() {
-		line := emu.ScrollbackLine(i)
+		line := vt.ClipHistoryRow(emu.ScrollbackLine(i), emu.Width())
 		got := rowDisplayWidth(func(x int) *uv.Cell {
 			if x >= len(line) {
 				return nil
@@ -94,6 +101,13 @@ func TestConform_ResizeCuttingAWideCharacterInScrollback(t *testing.T) {
 		if got > emu.Width() {
 			t.Errorf("scrollback line %d is worth %d display columns on a %d-column screen",
 				i, got, emu.Width())
+		}
+	}
+
+	emu.Resize(6, 2)
+	for i := range emu.ScrollbackLen() {
+		if got := strings.TrimRight(emu.ScrollbackLine(i).String(), " "); got != "世世世" {
+			t.Errorf("after widening back, scrollback line %d is %q, want %q", i, got, "世世世")
 		}
 	}
 }

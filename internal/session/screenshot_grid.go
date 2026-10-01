@@ -47,7 +47,9 @@ func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor boo
 	g := shot.NewGrid(cols, rows+scrollbackRows, palette.FG, palette.BG)
 
 	for i := range scrollbackRows {
-		line := t.ScrollbackLine(held - scrollbackRows + i)
+		// A wide rune across the last column of a line written when the
+		// pane was wider is clipped, so the row stays as wide as the grid.
+		line := vt.ClipHistoryRow(t.ScrollbackLine(held-scrollbackRows+i), cols)
 		row := g.Cells[i]
 		for x := 0; x < cols && x < len(line); x++ {
 			cell := line[x]
