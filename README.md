@@ -24,7 +24,7 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 
 Full documentation is available at **[tuios.dev](https://tuios.dev)** (hosted) or in the [`docs/`](./docs/) folder. To try tuios without installing it, take the guided tour at **[tuios.dev/learn](https://tuios.dev/learn)**: the real app, compiled to WebAssembly, with a practice shell in every pane.
 
-What changed in v0.8.3 is in the [release notes](docs/release-notes/v0.8.3.md).
+What changed in v0.8.4 is in the [release notes](docs/release-notes/v0.8.4.md).
 
 ### Quick Links
 - **[Getting Started](https://tuios.dev/docs/getting-started)**: Install and first session
@@ -74,7 +74,7 @@ yay -S tuios-bin
 
 **Nix:**
 ```bash
-nix run github:Gaurav-Gosain/tuios/v0.8.3#tuios   # a release
+nix run github:Gaurav-Gosain/tuios/v0.8.4#tuios   # a release
 nix run github:Gaurav-Gosain/tuios#tuios          # the latest main
 nix run nixpkgs#tuios                             # the nixpkgs package
 ```
