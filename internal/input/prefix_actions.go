@@ -154,19 +154,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 // this same handler.
 func handleTerminalFocusDirection(dir string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		prev := o.FocusedWindow
-		if o.AutoTiling && o.UseScrollingLayout && (dir == "left" || dir == "right") {
-			if dir == "left" {
-				o.ScrollingFocusLeft()
-			} else {
-				o.ScrollingFocusRight()
-			}
-			return afterFocusCommand(o, prev, focusEnterTargeted)
-		}
-		// A direction with nothing in it is a no-op, which is what stopping at the
-		// edge of the layout looks like.
-		_ = o.FocusDirection(dir)
-		refreshFocusedWindow(o)
+		prev := o.FocusTerminalDirection(dir)
 		return afterFocusCommand(o, prev, focusEnterTargeted)
 	}
 }

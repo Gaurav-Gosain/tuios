@@ -82,20 +82,31 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 		return
 	}
 	m.pendingNvimNavigation = nil
+	previous := m.FocusTerminalDirection(msg.Direction)
+	if m.FocusedWindow != previous {
+		m.RevealFocusedColumn()
+		m.SyncStateToDaemon()
+	}
+}
+
+// FocusTerminalDirection moves terminal focus and refreshes its pane cache.
+func (m *OS) FocusTerminalDirection(direction string) int {
 	previous := m.FocusedWindow
-	if m.AutoTiling && m.UseScrollingLayout && (msg.Direction == "left" || msg.Direction == "right") {
-		if msg.Direction == "left" {
+	if m.AutoTiling && m.UseScrollingLayout && (direction == "left" || direction == "right") {
+		if direction == "left" {
 			m.ScrollingFocusLeft()
 		} else {
 			m.ScrollingFocusRight()
 		}
 	} else {
-		_ = m.FocusDirection(msg.Direction)
+		_ = m.FocusDirection(direction)
 	}
 	if m.FocusedWindow != previous {
-		m.RevealFocusedColumn()
-		m.SyncStateToDaemon()
+		if focused := m.GetFocusedWindow(); focused != nil {
+			focused.InvalidateCache()
+		}
 	}
+	return previous
 }
 
 func (m *OS) clearNvimNavigation(windowID string) {
