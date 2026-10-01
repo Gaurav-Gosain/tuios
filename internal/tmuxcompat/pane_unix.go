@@ -19,53 +19,21 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 	"golang.org/x/term"
 )
 
 // holderSupported reports whether this platform runs pane holders.
 const holderSupported = true
 
-// EnsureDir creates the shim's runtime directory, or checks an existing one:
-// it must be a real directory (not a link), owned by this user, and closed to
-// everyone else, since a socket in it accepts respawn requests.
-func EnsureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
-	}
-	st, err := os.Lstat(dir)
-	if err != nil {
-		return err
-	}
-	if !st.IsDir() {
-		return fmt.Errorf("%s is not a directory", dir)
-	}
-	if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
-		return fmt.Errorf("%s belongs to another user", dir)
-	}
-	if st.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory, which needs the execute bit to be entered
-			return fmt.Errorf("%s is open to other users and could not be closed: %w", dir, err)
-		}
-	}
-	return nil
-}
+// EnsureDir creates the shim's runtime directory, or checks an existing one.
+// See shimlink.EnsureDir.
+func EnsureDir(dir string) error { return shimlink.EnsureDir(dir) }
 
 // InstallLink points <dir>/bin/tmux at exe, replacing whatever was there.
 func InstallLink(dir, exe string) error {
-	bin := BinDir(dir)
-	if err := os.MkdirAll(bin, 0o700); err != nil {
-		return err
-	}
-	link := filepath.Join(bin, "tmux")
-	if cur, err := os.Readlink(link); err == nil && cur == exe {
-		return nil
-	}
-	tmp := fmt.Sprintf("%s.%d", link, os.Getpid())
-	_ = os.Remove(tmp)
-	if err := os.Symlink(exe, tmp); err != nil {
-		return err
-	}
-	return os.Rename(tmp, link)
+	_, err := shimlink.Install(dir, "tmux", exe)
+	return err
 }
 
 // ExecCommand replaces the process with argv, found on the PATH of env and
