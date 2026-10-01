@@ -166,6 +166,11 @@ type OS struct {
 	// pressInLayout says the button press now held was mapped to the layout
 	// frame, so the drag and the release that follow it are too.
 	pressInLayout bool
+	// lastActivity is when the person last gave input at this client, and
+	// wasLatest whether the session's window_size policy was latest on the
+	// last message. See reportActivity.
+	lastActivity time.Time
+	wasLatest    bool
 	// viewMark is the last mark renderViewMark built. See viewMarkCache.
 	viewMark viewMarkCache
 	// pointerSeenX/Y is where the host last reported the pointer, whether or
