@@ -225,9 +225,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// the new shell's first instruction. Without this a pane narrowed on
 		// purpose would come back holding the default, which under open is
 		// admin.
-		sess.herdrSpawnWS.Store(w.ID, w.Workspace)
-		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], onExit)
-		sess.herdrSpawnWS.Delete(w.ID)
+		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], w.Workspace, onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue

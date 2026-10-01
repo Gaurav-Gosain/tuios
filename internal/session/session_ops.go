@@ -323,11 +323,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
-	if opts.Workspace != 0 {
-		s.herdrSpawnWS.Store(windowID, opts.Workspace)
-	}
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, nil, onExit, opts.stdout, opts.extraFiles, opts.Grants)
-	s.herdrSpawnWS.Delete(windowID)
+	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
+		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
+		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants,
+		workspace: opts.Workspace,
+	})
 	if err != nil {
 		return WindowState{}, err
 	}
