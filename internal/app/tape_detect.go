@@ -216,6 +216,24 @@ func localCwdPath(raw string) (string, bool) {
 	return filepath.Clean(u.Path), true
 }
 
+// foreignCwdHost reads the machine an OSC 7 report names. ok is false for a
+// report that is not well formed. host is empty for this machine, for a report
+// with no host, and for a bare path.
+func foreignCwdHost(raw string) (host string, ok bool) {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, "file://") {
+		return "", filepath.IsAbs(raw)
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Path == "" {
+		return "", false
+	}
+	if h := u.Hostname(); h != "" && !isLocalHost(h) {
+		return h, true
+	}
+	return "", true
+}
+
 // isLocalHost reports whether an OSC 7 host refers to this machine.
 func isLocalHost(host string) bool {
 	host = strings.ToLower(host)

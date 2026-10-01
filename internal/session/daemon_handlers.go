@@ -77,6 +77,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		MasterLayoutOps: true,
 		// See window_size.go.
 		WindowSize: true,
+		// See daemon_dirwatch.go.
+		DirWatch: true,
 	})
 }
 

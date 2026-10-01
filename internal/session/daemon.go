@@ -354,6 +354,10 @@ type pendingRequest struct {
 
 // connState tracks state for a connected client.
 type connState struct {
+	// dirWatch is the one folder watch MsgWatchDir keeps for this
+	// connection. See daemon_dirwatch.go.
+	dirWatch dirWatchSlot
+
 	conn     net.Conn
 	clientID string
 	hello    *HelloPayload
@@ -832,19 +836,18 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				if n, ok := pty.takeAgentNotify(); ok {
 					s.applyAgentNotify(ev.PTYID, n, d.agentMatcher.registry)
 				}
-				// Where a pane on another machine is.
+				// Where the pane is.
 				//
-				// It tells nobody when its shell changes directory: there is no
-				// process here to read, and a shell that does not announce over
-				// OSC 7 says nothing to anyone. The only hint that reaches this
-				// machine is that the pane printed something, which is what a
-				// prompt after a cd is.
+				// A shell that does not announce over OSC 7 tells nobody when
+				// it changes directory, and a pane on another machine has no
+				// process here to read either. The only hint is that the pane
+				// printed something, which is what a prompt after a cd is.
 				//
-				// So the ask is made here. It is self-throttled to once a
-				// second and only made for a pane whose bytes are arriving, so
-				// a session sitting idle pays nothing, and a pane of this
-				// daemon's own does not reach the network at all.
-				pty.refreshRemoteCwdOnOutput()
+				// So the look is made here. It is paced to once a second, with
+				// one more look after the pane goes quiet, and only made for a
+				// pane whose bytes are arriving, so a session sitting idle pays
+				// nothing. See pane_cwd_check.go.
+				s.noteCwdOnOutput(pty)
 				// And what it is running, on the same terms and its own
 				// slower clock. A pane that has just written is a pane where
 				// something may have started or finished.
@@ -1502,6 +1505,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		// they observe the disconnect and unwind, and release a lingering event
 		// subscription if the streamer never started (e.g. the ack write failed).
 		cs.closeDone()
+		cs.stopDirWatch()
 		cs.mu.Lock()
 		sub := cs.eventSub
 		cs.eventSub = nil
@@ -1658,6 +1662,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleCreatePTY(cs, msg)
 	case MsgReadDir:
 		return d.handleReadDir(cs, msg)
+	case MsgWatchDir:
+		return d.handleWatchDir(cs, msg)
 	case MsgClientFocus:
 		return d.handleClientFocus(cs, msg)
 	case MsgClientGraphics:

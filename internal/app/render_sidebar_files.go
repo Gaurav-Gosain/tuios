@@ -88,6 +88,13 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 		// nothing. The footer control is where a user who goes looking for it is
 		// told why, by name, once.
 		return nil
+	case m.filesView.Elsewhere != "":
+		// The pane's shell is on another machine. Two rows, because the rail
+		// is about twenty-four cells wide and either half alone is unclear.
+		return []fileRowSpec{
+			{Note: true, Warn: true, Name: "Shell is on " + printableTitle(m.filesView.Elsewhere) + "."},
+			{Note: true, Name: "Its files are not shown."},
+		}
 	case m.filesView.Err != "":
 		// A directory that could not be read says so where its names would have
 		// been, and draws nothing else. There is no listing to scroll and no row
@@ -152,7 +159,7 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 // mean, and refused when the header has no room for it beside its own label,
 // since half a control is half a click target.
 func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
-	if m.fileViewOriginWindow() == nil {
+	if m.fileViewOriginWindow() == nil || m.filesView.Elsewhere != "" {
 		return "", sidebarTokenSpan{}, false
 	}
 	tw := lipgloss.Width(fileTokenCd)

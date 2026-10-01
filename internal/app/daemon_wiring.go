@@ -71,6 +71,9 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a hosts change")
 		}
 	})
+	// A folder the daemon watches for the files section changed. See
+	// sidebar_files_watch.go.
+	client.OnDirChanged(m.fileWatch.remoteDirChanged)
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})
@@ -110,6 +113,7 @@ func (m *OS) UnwireDaemonClient(client *session.TUIClient) {
 	client.OnStateSync(nil)
 	client.OnClientJoined(nil)
 	client.OnAgentMail(nil)
+	client.OnDirChanged(nil)
 	client.OnClientLeft(nil)
 	client.OnSessionResize(nil)
 	client.OnSessionEnded(nil)

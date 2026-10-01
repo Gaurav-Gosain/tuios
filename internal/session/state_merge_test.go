@@ -281,7 +281,12 @@ func TestClientSyncKeepsDaemonExclusiveFields(t *testing.T) {
 	if got.ResurrectionVersion != 2 {
 		t.Errorf("ResurrectionVersion = %d, want 2", got.ResurrectionVersion)
 	}
-	if w := windowByID(t, got, win.ID); w == nil || w.Cwd != "/home/user/project" {
+	// The stored copy, not a snapshot: a snapshot reports where the shell is
+	// now, over the top of what was stored. See fillLiveFacts.
+	sess.stateMu.RLock()
+	stored := sess.snapshotStateLocked()
+	sess.stateMu.RUnlock()
+	if w := windowByID(t, stored, win.ID); w == nil || w.Cwd != "/home/user/project" {
 		t.Errorf("window = %+v, want the daemon-captured cwd to survive", w)
 	}
 }

@@ -359,6 +359,8 @@ var messageTypeNames = [...]string{
 	MsgClientGraphics:   "ClientGraphics",
 	MsgMasterLayout:     "MasterLayout",
 	MsgClientActivity:   "ClientActivity",
+	MsgWatchDir:         "WatchDir",
+	MsgDirChanged:       "DirChanged",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

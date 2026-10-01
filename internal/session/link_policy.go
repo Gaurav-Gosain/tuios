@@ -100,6 +100,7 @@ var verbCapabilities = map[string][]string{
 	"list-attention":       {config.LinkAllowList},
 	"peek-prompt":          {config.LinkAllowList},
 	"read-dir":             {config.LinkAllowList},
+	"wait-dir":             {config.LinkAllowList},
 
 	"send-agent-message":  {config.LinkAllowMail},
 	"read-agent-messages": {config.LinkAllowMail},
@@ -202,6 +203,7 @@ var msgCapabilities = map[MessageType][]string{
 	MsgUnsubscribePTY:   {config.LinkAllowList},
 	MsgGetTerminalState: {config.LinkAllowList},
 	MsgReadDir:          {config.LinkAllowList},
+	MsgWatchDir:         {config.LinkAllowList},
 	MsgGetLogs:          {config.LinkAllowList},
 	MsgAttach:           {config.LinkAllowList, config.LinkAllowWrite},
 	MsgInput:            {config.LinkAllowWrite},
