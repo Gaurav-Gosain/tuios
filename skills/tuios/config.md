@@ -47,6 +47,14 @@ it with `tuios config apply` in a terminal outside tuios. From a pane that
 command is refused. Do not edit config.toml to widen what you hold: it waits
 for the person, and the change tells them what you did.
 
+`daemon.window_size` sets the size of a session with more than one client:
+`smallest` (the default), `largest`, or `latest`, the client that last had
+input. `tuios set-config daemon.window_size latest` applies it to the session
+at once, and `session-info` reports the policy in use as `window_size`. A
+client smaller than the session shows the part around the focused pane's
+cursor, so a pane can be wider than a person's screen. Change it only when the
+person asks.
+
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
 addresses in the focused pane, and a typed label copies one. The
 `hints_all_panes` action, or the `hints.all_panes` option, labels every pane

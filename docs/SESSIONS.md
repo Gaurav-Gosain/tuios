@@ -103,8 +103,8 @@ has been written and the daemon's socket has been removed, so a new daemon can
 be started as soon as it returns.
 
 More than one client can be attached to the same session at once. All of them
-see the same windows and output, and the session renders at the smallest
-attached client's size.
+see the same windows and output. `window_size` in `[daemon]` sets the size of
+the session. See [Session size with more than one client](#session-size-with-more-than-one-client).
 
 Every attached client has full control: it sees all output, sends input, and
 manipulates windows. There is no per-client permission tier, so share a session
@@ -113,6 +113,58 @@ socket's Unix permissions (same user only), SSH clients by SSH authentication,
 and web clients by whatever stands in front of `tuios-web`. See
 [Multi-client sessions](https://tuios.dev/docs/sessions) on the site for
 the full picture.
+
+### Session size with more than one client
+
+A pane has one size, so a session has one size for all of its clients.
+`window_size` in `[daemon]` selects the client that sets it. The values are
+the values of the tmux `window-size` option.
+
+- `smallest` is the default. The session uses the smallest client. Every
+  client shows the full session. A larger client shows empty space around it.
+- `largest`: the session uses the largest client.
+- `latest`: the session uses the client that last had input.
+
+For `latest`, input is a key, a paste, a click, a drag or a turn of the mouse
+wheel. A resize is not input. A focus change is not input. A reply that your
+terminal sends without you, such as a colour reply, is not input. tmux counts a
+resize and a focus change. tuios does not, so a phone that only attaches does
+not take the session from the person who types on a laptop.
+
+A client keeps the session for 1 second after its last input. If two people
+type at the same time, the session does not change size on each key. When one
+person stops, the session goes to the other client 1 second after the last
+key of the first.
+
+The first client that attaches sets the size until another client has input.
+When the latest client detaches, the session goes to the client with the most
+recent input.
+
+A client that is smaller than the session shows a part of it, the part around
+the cursor of the focused pane. This is the rule that tmux uses. If the pane
+hides its cursor, the client shows the top left corner of the pane. A mark in
+the top right corner of the panes shows the size of the session, with arrows
+that point to the parts you cannot see. The rail and the dock stay at the
+edges of your screen. A click on a pane goes to the pane under the pointer.
+
+To change the value for one session while it runs:
+
+```bash
+tuios set-config daemon.window_size latest -s mysession
+tuios session-info -s mysession --json   # window_size, session_width, session_height
+```
+
+Under the tmux shim, `tmux set -g window-size latest` does the same.
+
+A client from a version of tuios before `window_size` cannot show a part of a
+session. While such a client is attached, the session uses `smallest`, and
+`session-info` reports `window_size` as `smallest`. A new client attached to
+an older daemon works as before, at the smallest size.
+
+Native clients, `tuios-web` clients and clients through the SSH server all
+report input in the same way, so each of them can be the latest client. A tool
+that uses the verb socket only, such as Collie, is not a client with a size.
+It does not change the size of the session.
 
 ### In-app session switching
 
