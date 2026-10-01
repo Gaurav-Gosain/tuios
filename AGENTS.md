@@ -137,6 +137,7 @@ tuios/
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
 │   ├── gitstate/           # Branch and upstream drift for the sidebar
+│   ├── dirwatch/           # Tells the rail's files section when the listed folder's entries change
 │   ├── review/             # Reading a worktree's diff, and the notes left on it
 │   ├── diffview/           # Drawing diff lines: chroma highlighting, split layout, changed words
 │   ├── capture/            # Turns a screenshot request and config into what shot renders

@@ -240,6 +240,7 @@ a working negative control look like a broken one for half an hour.
 | The count drops off a narrow row behind the harness and the context warning | n/a, injected, cuts the call site | drop the `sidebarNoteKeepSubagents` call from `sidebarAgentNoteRow` in `internal/app/render_sidebar.go` | `TestSubagentCountOnARestingRow` ("waiting for the count beside the context warning": the row read `claude · ctx 91% · Han…`) | **caught** |
 | A subagent of another conversation is counted on a pane at rest | n/a, injected | drop the session clause from `activityReportGuard` in `internal/session/agent_state.go` | `TestSubagentCountOnARestingRow` ("another conversation's subagent was counted on the pane": `4 subagents`) | **caught** |
 | A resting row with a subagent at work folds into "+N at rest" | n/a, injected, cuts the wiring | drop the subagents check from `sidebarAgentRests` in `internal/app/sidebar_agents.go` | `TestSubagentCountOnARestingRow` ("waiting for the resting row with a subagent out of the fold") | **caught** |
+| The rail's files section keeps a file deleted in the pane (#313) | n/a, injected, cuts the call site | drop the `syncFileWatch` call from `HandleFileList` in `internal/app/sidebar_files.go` | `TestRailFilesSectionFollowsTheDisk/standalone` and `/daemon` (both: "gone.txt stayed on the rail after the pane deleted it"). The v0.8.4 binary fails the same way | **caught** (2 of 2 run) |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
