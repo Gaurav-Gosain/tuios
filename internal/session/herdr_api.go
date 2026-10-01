@@ -961,8 +961,8 @@ func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail s
 	// does for text of several lines) sends the markers as text. A paste
 	// removes their escape bytes and would type the rest, so the markers
 	// come off, and the paste puts its own on when the program wants them.
-	if inner, ok := strings.CutPrefix(text, "\x1b[200~"); ok {
-		text = strings.TrimSuffix(inner, "\x1b[201~")
+	if inner, ok := strings.CutPrefix(text, bracketedPasteStart); ok {
+		text = strings.TrimSuffix(inner, bracketedPasteEnd)
 	}
 	if text != "" {
 		args := herdrWin(sess, win.ID)

@@ -157,10 +157,8 @@ func (s *Session) herdrTabFor(windowID string, spawnWS int) int {
 	if ws == 0 && s.stateMu.TryRLock() {
 		if s.state != nil {
 			ws = s.state.CurrentWorkspace
-			for i := range s.state.Windows {
-				if s.state.Windows[i].ID == windowID {
-					ws = s.state.Windows[i].Workspace
-				}
+			if w, ok := findWindowState(s.state, windowID); ok {
+				ws = w.Workspace
 			}
 		}
 		s.stateMu.RUnlock()

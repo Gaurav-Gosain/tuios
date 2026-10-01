@@ -3418,27 +3418,68 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 	} else {
 		stateCells(t, state, colors, first, end)
 	}
-	screen := make([]bool, state.Height)
-	pads := make([]bool, state.Height)
+	screen := make([]rowFlags, state.Height)
 	for y := range screen {
-		screen[y], _ = t.RowSoftWrapped(y)
-		pads[y] = t.RowPadded(y)
+		screen[y] = screenRowFlags(t, y)
 	}
-	state.ScreenWraps = wrapBits(screen)
-	state.ScreenPads = wrapBits(pads)
+	state.ScreenWraps, state.ScreenPads = rowFlagBits(screen)
 	return state
 }
 
-// historyWrap is the soft-wrap flag of scrollback row i, appended to flags
-// by the capture loops as they send each row, so bit n is the n-th row sent.
-func historyWrap(t vt.Terminal, flags []bool, i int) []bool {
-	w, _ := t.ScrollbackSoftWrapped(i)
-	return append(flags, w)
+// rowFlags is one row's soft-wrap and padding flags (vt.Terminal's
+// RowSoftWrapped and RowPadded). A capture collects them together, and the
+// wire carries each as a bitset of its own, split at encode time
+// (rowFlagBits).
+type rowFlags uint8
+
+const (
+	rowWrapped rowFlags = 1 << iota
+	rowPadded
+)
+
+// newRowFlags is the flags of a row that is wrapped and padded as said.
+func newRowFlags(wrapped, padded bool) rowFlags {
+	var f rowFlags
+	if wrapped {
+		f |= rowWrapped
+	}
+	if padded {
+		f |= rowPadded
+	}
+	return f
 }
 
-// historyPad is historyWrap for the padding flag (vt.Terminal.RowPadded).
-func historyPad(t vt.Terminal, flags []bool, i int) []bool {
-	return append(flags, t.ScrollbackPadded(i))
+// screenRowFlags is the flags of screen row y.
+func screenRowFlags(t vt.Terminal, y int) rowFlags {
+	w, _ := t.RowSoftWrapped(y)
+	return newRowFlags(w, t.RowPadded(y))
+}
+
+// historyRowFlags is the flags of scrollback row i. The capture loops append
+// them as they send each row, so entry n is the n-th row sent.
+func historyRowFlags(t vt.Terminal, i int) rowFlags {
+	w, _ := t.ScrollbackSoftWrapped(i)
+	return newRowFlags(w, t.ScrollbackPadded(i))
+}
+
+// rowFlagBits splits flags into the wire's wrap and pad bitsets, each as
+// wrapBits builds it: nil when no row has the flag.
+func rowFlagBits(flags []rowFlags) (wraps, pads []byte) {
+	for i, f := range flags {
+		if f&rowWrapped != 0 {
+			if wraps == nil {
+				wraps = make([]byte, (len(flags)+7)/8)
+			}
+			wraps[i/8] |= 1 << (i % 8)
+		}
+		if f&rowPadded != 0 {
+			if pads == nil {
+				pads = make([]byte, (len(flags)+7)/8)
+			}
+			pads[i/8] |= 1 << (i % 8)
+		}
+	}
+	return wraps, pads
 }
 
 // scrollbackWindow returns the scrollback rows [first, end) a snapshot carries.
@@ -3502,15 +3543,14 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 	// merely starts a new array.
 	state.Scrollback = make([][]CellState, 0)
 	var pool []CellState
-	var wraps, pads []bool
-	defer func() { state.ScrollbackWraps, state.ScrollbackPads = wrapBits(wraps), wrapBits(pads) }()
+	var flags []rowFlags
+	defer func() { state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags) }()
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
-		wraps = historyWrap(t, wraps, i)
-		pads = historyPad(t, pads, i)
+		flags = append(flags, historyRowFlags(t, i))
 		if cap(pool) < len(line) {
 			pool = make([]CellState, max(len(line), width*(end-i)))
 		}
@@ -3550,14 +3590,13 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 	state.PackedScreen = grid(t.CellAt)
 
 	b := newPackedRows((end - first) * 32)
-	var wraps, pads []bool
+	var flags []rowFlags
 	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
-		wraps = historyWrap(t, wraps, i)
-		pads = historyPad(t, pads, i)
+		flags = append(flags, historyRowFlags(t, i))
 		if cap(row) < len(line) {
 			row = make([]CellState, len(line))
 		}
@@ -3576,8 +3615,7 @@ func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, 
 		b.add(p, r)
 	}
 	state.PackedScrollback = b.blob()
-	state.ScrollbackWraps = wrapBits(wraps)
-	state.ScrollbackPads = wrapBits(pads)
+	state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags)
 
 	if state.IsAltScreen {
 		state.PackedMain = grid(t.MainCellAt)

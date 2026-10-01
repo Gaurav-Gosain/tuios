@@ -460,11 +460,9 @@ type historyRows struct {
 	// under an alternate screen, where the cursor is somewhere else.
 	cursorY      int
 	screen       []uv.Line
-	screenWraps  []bool
-	screenPads   []bool
+	screenFlags  []rowFlags
 	history      []uv.Line
-	historyWraps []bool
-	historyPads  []bool
+	historyFlags []rowFlags
 }
 
 // captureHistory reads the pane's history for saving, with at most lines
@@ -495,11 +493,9 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		// lines into one.
 		r.cursorY = -1
 	} else {
-		r.screenWraps = make([]bool, h)
-		r.screenPads = make([]bool, h)
+		r.screenFlags = make([]rowFlags, h)
 		for y := range h {
-			r.screenWraps[y], _ = t.RowSoftWrapped(y)
-			r.screenPads[y] = t.RowPadded(y)
+			r.screenFlags[y] = screenRowFlags(t, y)
 		}
 	}
 	r.screen = make([]uv.Line, h)
@@ -529,18 +525,15 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 	n := t.ScrollbackLen()
 	first := max(n-max(lines, 0), 0)
 	r.history = make([]uv.Line, 0, n-first)
-	r.historyWraps = make([]bool, 0, n-first)
-	r.historyPads = make([]bool, 0, n-first)
+	r.historyFlags = make([]rowFlags, 0, n-first)
 	for i := first; i < n; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
-		wrapped, _ := t.ScrollbackSoftWrapped(i)
 		line = vt.BlankSixelLine(line)
 		r.history = append(r.history, line[:usedCells(line)])
-		r.historyWraps = append(r.historyWraps, wrapped)
-		r.historyPads = append(r.historyPads, t.ScrollbackPadded(i))
+		r.historyFlags = append(r.historyFlags, historyRowFlags(t, i))
 	}
 	return r
 }
@@ -551,15 +544,13 @@ func (r *historyRows) state(lines int) *TerminalState {
 	lines = min(max(lines, 0), len(r.history))
 	history := r.history[len(r.history)-lines:]
 	st := &TerminalState{
-		Width:           r.width,
-		Height:          r.height,
-		CursorY:         r.cursorY,
-		ScrollbackLen:   len(history),
-		ScreenWraps:     wrapBits(r.screenWraps),
-		ScrollbackWraps: wrapBits(r.historyWraps[len(r.historyWraps)-lines:]),
-		ScreenPads:      wrapBits(r.screenPads),
-		ScrollbackPads:  wrapBits(r.historyPads[len(r.historyPads)-lines:]),
+		Width:         r.width,
+		Height:        r.height,
+		CursorY:       r.cursorY,
+		ScrollbackLen: len(history),
 	}
+	st.ScreenWraps, st.ScreenPads = rowFlagBits(r.screenFlags)
+	st.ScrollbackWraps, st.ScrollbackPads = rowFlagBits(r.historyFlags[len(r.historyFlags)-lines:])
 	colors := colorWireCache{}
 	p := newRowPacker()
 	var row []CellState
@@ -776,18 +767,7 @@ func rowExtent(row []CellState) int {
 }
 
 // blankRow reports whether a row shows nothing.
-func blankRow(row []CellState) bool {
-	for i := range row {
-		c := &row[i]
-		if c.Content != "" && c.Content != " " {
-			return false
-		}
-		if c.StyleState != (StyleState{}) {
-			return false
-		}
-	}
-	return true
-}
+func blankRow(row []CellState) bool { return rowExtent(row) == 0 }
 
 // newRestoredEmulator builds the emulator for a restored pane of width x
 // height: the saved history, when there is one, and the banner.
