@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -363,4 +365,71 @@ func TestMasterDividerDragInTheCenter(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "center-dragged")
 	t.Logf("master %d -> %d wide, right side %d -> %d\n%s%s",
 		master.Width, after[0].Width, right.Width, after[1].Width, describeRects(after), term.Snapshot())
+}
+
+// TestMasterLayoutSurvivesADaemonRestart moves the master at run time, kills
+// the server and attaches to the restored session. The session keeps the side
+// it was given: the daemon saves it with the session and puts it back on
+// restore, so the client does not fall back to its configured left.
+func TestMasterLayoutSurvivesADaemonRestart(t *testing.T) {
+	base := t.TempDir()
+	first := masterSession(t, base, "mrs", "", 3)
+	if out, err := tuiosCLI(t, base, "set-layout", "-s", "mrs", "--master-position", "right"); err != nil {
+		t.Fatalf("set-layout --master-position right: %v\n%s", err, out)
+	}
+	waitForShape(t, base, "mrs", 3, "before the restart", masterShape("right", 1))
+
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v: %s", err, out)
+	}
+	waitExit(t, first, "after kill-server")
+	// Starting any session starts a daemon, and a daemon restores on start.
+	if out, err := tuiosCLI(t, base, "new", "mrs-trigger", "--detach"); err != nil {
+		t.Fatalf("start a fresh daemon: %v: %s", err, out)
+	}
+	waitForSessionInfo(t, base, "mrs")
+
+	second := attachIn(t, base, "mrs", startOpts{cols: 120, rows: 40})
+	time.Sleep(2 * time.Second)
+	rects := waitForShape(t, base, "mrs", 3, "after the restart", masterShape("right", 1))
+	saveArtifact(t, second, artifactDir(t), "right-after-restart")
+	t.Logf("after the restart:\n%s%s", describeRects(rects), second.Snapshot())
+}
+
+// TestFirstClientSettlesTheMasterLayout attaches a client with the default
+// config first and a client whose config puts the master on the right second.
+// The workspace stays as the first client laid it out, on both screens, and a
+// retile on either client keeps it there. Before, the default config offered
+// nothing, so the later client's right side took the workspace from under the
+// first one.
+func TestFirstClientSettlesTheMasterLayout(t *testing.T) {
+	base := t.TempDir()
+	first := masterSession(t, base, "mfc", "", 3)
+	waitForShape(t, base, "mfc", 3, "the first client's default", masterShape("left", 1))
+
+	home := t.TempDir()
+	writeConfigIn(t, home, "[appearance]\nmaster_position = \"right\"\n")
+	second := attachIn(t, base, "mfc", startOpts{cols: 120, rows: 40, env: []string{"XDG_CONFIG_HOME=" + home}})
+	time.Sleep(2 * time.Second)
+	waitForShape(t, base, "mfc", 3, "with the right-hand client attached", masterShape("left", 1))
+
+	for i, term := range []*tuitest.Terminal{first, second} {
+		sendKeys(t, term, tuitest.Ctrl('b'), "L", tuitest.Enter)
+		time.Sleep(time.Second)
+		waitForShape(t, base, "mfc", 3, fmt.Sprintf("after a swap on client %d", i+1), masterShape("left", 1))
+	}
+	saveArtifact(t, second, artifactDir(t), "second-client-left")
+}
+
+// writeConfigIn is writeConfig for a config home of its own, which a second
+// client started with XDG_CONFIG_HOME pointing there reads.
+func writeConfigIn(t *testing.T, home, body string) {
+	t.Helper()
+	dir := filepath.Join(home, "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("writeConfigIn: mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("writeConfigIn: write: %v", err)
+	}
 }
