@@ -27,6 +27,13 @@ var TUIOS string
 //go:embed tuios/*.md
 var files embed.FS
 
+// Courier is the skill for tuios-courier, the separate program that carries
+// agent mail between machines tuios links cannot reach. It is what
+// `tuios-courier --skill` prints.
+//
+//go:embed courier/SKILL.md
+var Courier string
+
 // Topic is one file of the skill besides the core.
 type Topic struct {
 	// Name is what `tuios --skill <name>` takes: the file name without .md.

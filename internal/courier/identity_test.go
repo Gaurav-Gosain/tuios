@@ -45,8 +45,9 @@ func TestIdentityFingerprintAndMailbox(t *testing.T) {
 	if !fp.MatchString(a.Fingerprint()) {
 		t.Fatalf("fingerprint %q has the wrong shape", a.Fingerprint())
 	}
-	if a.Fingerprint() != a.Fingerprint() {
-		t.Fatal("fingerprint is not stable")
+	again, err := ParseIdentity(a.String())
+	if err != nil || again.Fingerprint() != a.Fingerprint() || again.MailboxID() != a.MailboxID() {
+		t.Fatal("fingerprint or mailbox changed across a round trip")
 	}
 	mb := regexp.MustCompile(`^[0-9a-f]{32}$`)
 	if !mb.MatchString(a.MailboxID()) {

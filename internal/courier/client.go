@@ -345,12 +345,21 @@ func (c *Client) Wait(ctx context.Context, f Filter, timeout time.Duration) ([]E
 		if err == nil {
 			lastErr = nil
 			if wait < time.Second {
-				// Less than a second left: nothing can be asked to wait.
-				// One last look at the store, then give up.
+				// Under a second left, which the relay cannot be asked to
+				// wait: sit out the rest here, then look once more.
+				select {
+				case <-ctx.Done():
+				case <-time.After(time.Until(deadline)):
+				}
 				if got := c.store.Deliverable(f); len(got) > 0 {
 					return got, nil
 				}
-				return nil, ErrWaitTimeout
+				if res, err := c.Sync(ctx, 0); err == nil && res.New > 0 {
+					if got := c.store.Deliverable(f); len(got) > 0 {
+						return got, nil
+					}
+				}
+				return nil, errors.Join(ErrWaitTimeout, ctx.Err())
 			}
 			continue
 		}

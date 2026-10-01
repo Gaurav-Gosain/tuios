@@ -509,3 +509,28 @@ func (s *Store) GC() {
 		}
 	}
 }
+
+// ThreadByPrefix finds the one thread id, among mail sent and received, that
+// starts with prefix.
+func (s *Store) ThreadByPrefix(prefix string) (string, bool) {
+	found := map[string]bool{}
+	for _, e := range s.all() {
+		if strings.HasPrefix(e.Msg.Thread, prefix) {
+			found[e.Msg.Thread] = true
+		}
+	}
+	names, _ := os.ReadDir(filepath.Join(s.dir, "sent"))
+	for _, n := range names {
+		thread, _, ok := strings.Cut(n.Name(), "-")
+		if ok && strings.HasSuffix(n.Name(), ".to") && ValidID(thread) && strings.HasPrefix(thread, prefix) {
+			found[thread] = true
+		}
+	}
+	if len(found) != 1 {
+		return "", false
+	}
+	for t := range found {
+		return t, true
+	}
+	return "", false
+}

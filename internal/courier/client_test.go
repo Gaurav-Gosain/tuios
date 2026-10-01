@@ -240,7 +240,15 @@ func TestClientRejectsMailFromOutsideTheRoster(t *testing.T) {
 func TestClientWaitTimesOut(t *testing.T) {
 	w := newWorld(t, "ghaith", "gg")
 	w.introduce("ghaith", "gg", courier.ReleaseAuto)
+	// Under a second: the relay cannot be asked to wait, and Wait still must.
 	start := time.Now()
+	if _, err := w.people["gg"].client.Wait(ctx(t), courier.Filter{}, 700*time.Millisecond); !errors.Is(err, courier.ErrWaitTimeout) {
+		t.Fatalf("a short Wait on nothing: %v", err)
+	}
+	if d := time.Since(start); d < 600*time.Millisecond {
+		t.Fatalf("a 700 ms wait returned after %v", d)
+	}
+	start = time.Now()
 	_, err := w.people["gg"].client.Wait(ctx(t), courier.Filter{}, 1500*time.Millisecond)
 	if !errors.Is(err, courier.ErrWaitTimeout) {
 		t.Fatalf("Wait on nothing: %v", err)

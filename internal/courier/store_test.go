@@ -304,3 +304,21 @@ func TestStorePending(t *testing.T) {
 		t.Fatal("GC kept pending boxes past the relay TTL")
 	}
 }
+
+func TestStoreThreadByPrefix(t *testing.T) {
+	s, clock := newTestStore(t)
+	gg := mustKeys(t)
+	q := testMessage("question")
+	s.RecordSent(SentRecord{Msg: q, To: gg.Identity().String(), Peer: "gg"})
+	rec := testRecord(t, gg, "", "in", clock.Now())
+	s.Put(rec)
+	if got, ok := s.ThreadByPrefix(q.Thread[:8]); !ok || got != q.Thread {
+		t.Fatalf("a sent thread by prefix: %q %v", got, ok)
+	}
+	if got, ok := s.ThreadByPrefix(rec.Msg.Thread[:8]); !ok || got != rec.Msg.Thread {
+		t.Fatalf("a received thread by prefix: %q %v", got, ok)
+	}
+	if _, ok := s.ThreadByPrefix("ffffffffff"); ok && q.Thread[:10] != "ffffffffff" && rec.Msg.Thread[:10] != "ffffffffff" {
+		t.Fatal("found a thread that is not there")
+	}
+}
