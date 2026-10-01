@@ -322,7 +322,11 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 	_ = conn.SetDeadline(time.Now().Add(herdrIOTimeout))
 	cs := &connState{conn: conn, clientID: "herdr-" + newClientID(), done: make(chan struct{}), peerPID: peerPID(conn)}
 	if !d.herdrConns.take(cs.peerPID, herdrConnsPerCaller) {
-		writeHerdr(conn, "", nil, "rate_limited", "this process has too many connections open on the herdr socket. Close some and try again")
+		// Read the request before the refusal. Closing a unix socket with
+		// the request still unread resets it, and an answer sent before the
+		// client writes races that write: either way the client saw a
+		// broken pipe instead of rate_limited.
+		writeHerdr(conn, herdrRequestID(conn), nil, "rate_limited", "this process has too many connections open on the herdr socket. Close some and try again")
 		return
 	}
 	defer d.herdrConns.give(cs.peerPID)
@@ -361,6 +365,17 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 	result, code, msg := d.herdrCall(cs, req)
 	_ = conn.SetWriteDeadline(time.Now().Add(herdrIOTimeout))
 	writeHerdr(conn, req.ID, result, code, msg)
+}
+
+// herdrRequestID reads one request line from conn and returns its id, or ""
+// when the line has none it can read.
+func herdrRequestID(conn net.Conn) string {
+	line, _ := bufio.NewReaderSize(io.LimitReader(conn, herdrMaxRequest), 4096).ReadBytes('\n')
+	var idOnly struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(line, &idOnly)
+	return idOnly.ID
 }
 
 // writeHerdr writes a success or an error in herdr's response shape.
