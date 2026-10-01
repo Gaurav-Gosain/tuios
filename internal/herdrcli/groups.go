@@ -377,6 +377,9 @@ func agentStart(args []string) (*Call, *UsageError) {
 	if _, ok := p["pane_id"]; !ok {
 		return nil, usage("missing required --pane")
 	}
+	if kind, _ := p["kind"].(string); !herdrAgentKind(kind) {
+		return nil, usage("unsupported interactive agent kind: " + kind)
+	}
 	if len(rest) > 0 {
 		p["args"] = append([]string{}, rest...)
 	}
@@ -574,4 +577,31 @@ func parseServer(sub string, args []string, _ Env, _ string) (*Call, *UsageError
 		return local("cli:server:"+sub, "herdr server "+sub+" acts on herdr's own server. tuios's daemon is not stopped or changed this way. Use tuios kill-server"), nil
 	}
 	return nil, &UsageError{Msg: groupHelp["server"], Code: 2}
+}
+
+// herdrAgentKinds are the agent names herdr 0.9.3 starts (lookup_agent in
+// src/detect/mod.rs). herdr refuses any other kind before it sends anything.
+var herdrAgentKinds = []string{
+	"pi", "claude", "claude-code", "codex", "gemini", "cursor", "cursor-agent",
+	"devin", "devin-cli", "devin cli", "agy", "antigravity", "antigravity-cli",
+	"cline", ".cline", "omp", "mastracode", "mastra-code", "mastra code",
+	"opencode", "opencode2", "open-code", "copilot", "github-copilot", "ghcs",
+	"kimi", "kimi-code", "kimi code", "kiro", "kiro-cli", "droid", "amp",
+	"amp-local", "grok", "grok-build", "hermes", "hermes-agent", "kilo",
+	"kilo-code", "kilo code", "qodercli", "qoderclicn", "qoder", "qodercn",
+	"qwen", "qwen-code", "qwen code", "letta", "letta-code", "letta code",
+	"maki", "muse", "muse-code", "muse-cli",
+}
+
+// herdrAgentKind reports whether herdr starts an agent of this kind: a name
+// above, in any case, with any directory before it.
+func herdrAgentKind(kind string) bool {
+	name := strings.ToLower(strings.TrimSpace(kind))
+	if i := strings.LastIndexAny(name, "/\\"); i >= 0 {
+		name = name[i+1:]
+	}
+	if rest, ok := strings.CutPrefix(name, "muse-bin-"); ok && rest != "" && rest[0] >= '0' && rest[0] <= '9' {
+		return true
+	}
+	return contains(herdrAgentKinds, name)
 }

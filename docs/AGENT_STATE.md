@@ -450,10 +450,11 @@ pane, as plugins do:
 ```
 
 These commands answer: `pane` (all of herdr's subcommands), `tab`,
-`workspace`, `agent` (except `attach`), `worktree`, `notification show`,
-`api snapshot` and `server reload-config`. A command runs only if tuios
-answers its method (see [Methods](#methods)). For any other method, the
-socket answers `unsupported`. The commands that do their work on herdr's own
+`workspace`, `agent` (except `attach`), `worktree`, `notification show` and
+`api snapshot`. A command runs only if tuios answers its method (see
+[Methods](#methods)). For any other method, the socket answers
+`unsupported`. `server reload-config` is one of these: tuios does not read
+herdr's config. The commands that do their work on herdr's own
 machine answer herdr's error shape with code `unsupported` and exit 1:
 `status`, `config`, `session`, `terminal`, `machine`, `channel`, `update`,
 `completion`, `plugin`, `integration`, `api schema`, `agent attach` and
@@ -582,14 +583,14 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.split` | `split-window`, else `new-window` | without an attached client, or with `cwd`, the new pane is a window on the same workspace |
 | `pane.close` | `close-window` | |
 | `pane.wait_for_output` | `wait-for window-output` | |
-| `pane.process_info` | `list-windows` | the pane's shell, and the processes in its foreground process group: pid, name, argv and directory. `tty` is not given |
+| `pane.process_info` | `list-windows` | the pane's shell, and the processes in its foreground process group: pid and name. argv, the command line and the directory are given to you, to the pane itself, and to a pane that holds `write` on the pane's session or `admin`. A pane with `read` only gets the pid and the name, because arguments can carry secrets that never show on the screen. `tty` is not given |
 | `pane.neighbor`, `pane.edges` | `list-windows` | from the pane rectangles of the tab's layout. See [Where tuios differs from herdr](#where-tuios-differs-from-herdr) |
 | `pane.focus_direction` | `focus-window` | the pane that `pane.neighbor` names. With none, `changed` is false and `reason` is `no_neighbor` |
 | `pane.swap` | `set-layout` grant, then the attached client | by direction or by `source_pane_id` and `target_pane_id`. The source keeps the focus. A swap that cannot happen answers `reason` `no_neighbor`, `same_pane`, `not_found` or `cross_tab`. Without an attached client it fails with `no_client` |
 | `pane.zoom` | `focus-window`, `run-command ToggleZoom` | `mode` `toggle`, `on` or `off`. The pane is focused first. `reason` is `single_pane`, `already_zoomed` or `already_unzoomed` when nothing changes |
 | `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
 | `agent.wait` | `wait-for agent-state` | |
-| `agent.start` | `send-text` and `send-keys` | types the agent's command at the shell prompt of a pane, and names the pane after the agent. See below |
+| `agent.start` | `start-agent` grant, then `send-text` and `send-keys` | needs `fan` on the session (what `start-agent` needs) and `write` for the typing. Types the agent's command at the shell prompt of a pane, and names the pane after the agent. See below |
 | `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. An agent that works or waits on a prompt fails with `agent_not_idle` |
 | `worktree.list` | `git worktree list` | needs what `list-worktrees` needs |
 | `worktree.create` | `new-worktree` | tuios chooses the path. A `path` fails with `unsupported` |
@@ -613,7 +614,11 @@ Every other herdr method answers error `unsupported`: the `server.*`,
 the answer is `agent_pane_busy`. `kind` is a harness that tuios knows, by
 herdr's name or tuios's (`claude`, `codex`, `gemini` and the rest). The
 answer is `agent_started` with the agent record and the `argv` typed. tuios
-then finds the agent by its process, as for an agent that you start. herdr's
+then finds the agent by its process, as for an agent that you start. The
+arguments are quoted for the pane's shell: sh, bash, zsh and the other POSIX
+shells, or fish. In any other shell, an argument that needs quoting fails
+with `invalid_agent_argument`, and nothing is typed. A `kind` that herdr
+does not start fails in the command line, with exit code 2. herdr's
 `agent start` command waits until the agent is at rest (`idle` or `done`), and
 the front does the same. `herdr agent get <name>` finds the agent by the
 pane's name.
@@ -652,7 +657,13 @@ neighbour.
 
 tuios zooms one pane per workspace, and herdr zooms a tab on its focused
 pane. So `pane.zoom` focuses the pane first, as herdr does, and a zoom on
-another pane of the workspace ends.
+another pane of the workspace ends. The client focuses and zooms the pane in
+one step, and the answer comes when the session's state shows the zoom.
+
+`pane.split` answers when the session's state shows the new pane beside the
+pane it was cut from, so a `pane.swap` or `pane.neighbor` right after it
+reads the new layout. A split that ran never makes a second pane: if the new
+pane is late, the answer is `pane_split_failed`.
 
 `pane.send_text` takes off the bracketed paste markers that a tool puts
 around its own text (terminal-browser does for text of several lines). The
@@ -681,7 +692,10 @@ client in a terminal that shows kitty images (kitty, Ghostty, WezTerm).
 terminal-browser writes `kitty_graphics = true` into herdr's config file
 (`$HERDR_CONFIG_PATH`, else `~/.config/herdr/config.toml`) and then runs
 `herdr server reload-config`. tuios answers that command with
-`unsupported`, and terminal-browser continues.
+`unsupported`, and terminal-browser continues. terminal-browser reads the
+command line of every pane on its workspace with `pane process-info`, which
+needs `write` on the session. Every pane holds it by default (`admin` under
+the default mode `open`, `write` under `strict`).
 
 A tool that a herdr plugin opens in a pane, with no herdr calls of its own,
 runs from a [command key](KEYBINDINGS.md#command-keys). These run this way:
