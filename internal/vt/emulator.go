@@ -1156,30 +1156,13 @@ func (e *Emulator) Resize(width int, height int) {
 	e.openGrapheme = openGrapheme{}
 	e.parkedX = -1
 
-	x, y := e.scr.CursorPosition()
-	oldHeight := e.Height()
+	x, _ := e.scr.CursorPosition()
 
 	if e.atPhantom {
 		if x < width-1 {
 			e.atPhantom = false
 			x++
 		}
-	}
-
-	if y < 0 {
-		y = 0
-	}
-
-	// Auto-scroll to keep cursor visible when height is reduced.
-	// This prevents the prompt from going off-screen below the viewport.
-	if y >= height && oldHeight > height {
-		linesToScroll := y - (height - 1)
-		// Scroll content up (pushes lines to scrollback)
-		e.scr.ScrollUp(linesToScroll)
-		// Cursor moves to bottom of new viewport
-		y = height - 1
-	} else if y >= height {
-		y = height - 1
 	}
 
 	if x < 0 {
@@ -1192,11 +1175,17 @@ func (e *Emulator) Resize(width int, height int) {
 	// History is not touched here. A double-width rune that now straddles the
 	// last column of a scrollback line is clipped where the row is drawn
 	// (ClipHistoryRow), so the rune is still there when the pane widens again.
+	//
+	// A screen that gets shorter keeps its text: each screen drops its blank
+	// rows below its own cursor first and moves the rest into the scrollback
+	// (Screen.shrinkRows), so the cursor row comes out in view and so does the
+	// main screen's prompt under an alternate screen.
 
 	e.scrs[0].Resize(width, height)
 	if e.altSized {
 		e.scrs[1].Resize(width, height)
 	}
+	y := e.scr.cur.Y
 	e.tabstops = uv.DefaultTabStops(width)
 
 	e.setCursor(x, y)

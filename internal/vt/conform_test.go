@@ -38,6 +38,16 @@ type conformCase struct {
 	in    string
 	split []string
 
+	// resize, when set, resizes the screen to each cols x rows in turn after
+	// the input, and then is written. This is how a case pins what a resize
+	// does to what was on the screen.
+	resize [][2]int
+	then   string
+
+	// history, when set, is the expected scrollback, one line per history
+	// line, oldest first, trailing blanks trimmed. Unset means do not compare.
+	history *string
+
 	// want is the expected screen, one line per row, trailing blanks trimmed.
 	// A row of a wide grapheme prints the cluster once, in its lead column.
 	want string
@@ -138,6 +148,29 @@ func dumpScreen(emu *vt.Emulator) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// dumpHistory renders the scrollback the way dumpScreen renders the screen,
+// oldest line first.
+func dumpHistory(emu *vt.Emulator) string {
+	var b strings.Builder
+	for i := range emu.ScrollbackLen() {
+		var line strings.Builder
+		for _, c := range emu.ScrollbackLine(i) {
+			switch {
+			case c.Content == "" && c.Width == 0:
+			case c.Content == "":
+				line.WriteByte(' ')
+			default:
+				line.WriteString(c.Content)
+			}
+		}
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(strings.TrimRight(line.String(), " "))
+	}
+	return b.String()
+}
+
 // normalizeWant tidies a case's expected screen: trailing blank rows and
 // trailing blanks within a row are dropped, matching what dumpScreen produces.
 // Leading blank rows are kept, because a case that expects the top of the
@@ -200,6 +233,14 @@ func newConformEmulator(t *testing.T, tc conformCase) (*vt.Emulator, *unhandledL
 			t.Fatalf("write %q: %v", w, err)
 		}
 	}
+	for _, sz := range tc.resize {
+		emu.Resize(sz[0], sz[1])
+	}
+	if tc.then != "" {
+		if _, err := emu.WriteString(tc.then); err != nil {
+			t.Fatalf("write %q: %v", tc.then, err)
+		}
+	}
 	return emu, log
 }
 
@@ -214,6 +255,12 @@ func conformProblems(emu *vt.Emulator, log *unhandledLog, tc conformCase) []stri
 
 	if got, want := dumpScreen(emu), normalizeWant(tc.want); got != want {
 		add("screen mismatch\n--- got ---\n%s\n--- want ---\n%s\n--- end ---", boxed(got), boxed(want))
+	}
+
+	if tc.history != nil {
+		if got, want := dumpHistory(emu), *tc.history; got != want {
+			add("history mismatch\n--- got ---\n%s\n--- want ---\n%s\n--- end ---", boxed(got), boxed(want))
+		}
 	}
 
 	if tc.cursor != "" {
