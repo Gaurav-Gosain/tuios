@@ -74,14 +74,18 @@ tuios run-command -s work CloseWindow "$id"
 multifocus on, like tmux-xpanes. Items come from the arguments or from stdin:
 
 ```sh
-tuios xpanes --ssh web1 web2 web3                   # ssh to each host
+tuios xpanes --ssh web1 web2 web3                   # ssh to each host, held until Enter
+tuios xpanes -ss --interval 1 -c 'curl -s {}' a b   # no shell, closes on exit, 1 s apart
 printf 'a\nb\n' | tuios xpanes -c 'make test-{}'    # {} is the item, shell quoted
 tuios xpanes --no-sync -l even-horizontal -c 'tail -f {}' app.log db.log
 ```
 
 Each pane gets `TUIOS_XPANES_ITEM` and `TUIOS_XPANES_INDEX`, and is named after
-its item. A `-c` pane closes when its command exits; end the command with
-`; exec $SHELL` to keep it. `--json` prints the window ids. The layout and
+its item. Without `-s`, `-c` is typed into the pane's shell, which stays.
+`-s` runs it with no shell and holds the pane until Enter; `-ss` closes the
+pane when it exits. `--interval` spaces the panes. `--session` names the
+session (`-s` is speedy mode, as in tmux-xpanes). `tuios close-workspace N`
+closes them all, like tmux kill-window. `--json` prints the window ids. The layout and
 multifocus need an attached client; without one the panes open and a warning
 says so. More than 64 panes needs `--force`. For work you drive yourself, open
 panes with `new-window` and keep the ids; xpanes is for a person who wants to

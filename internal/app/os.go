@@ -328,9 +328,12 @@ type OS struct {
 	// SessionCloseTarget is the session it was raised on, by identity, or "" for
 	// the attached one: closing that quits this client, closing any other leaves
 	// this client where it is.
-	ShowSessionClose     bool
-	SessionCloseTarget   string
-	SessionCloseSelected int
+	ShowSessionClose   bool
+	SessionCloseTarget string
+	// SessionCloseWorkspace turns the dialog into close_workspace's: it asks
+	// about the panes of this workspace, not the session. 0 is the session.
+	SessionCloseWorkspace int
+	SessionCloseSelected  int
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the

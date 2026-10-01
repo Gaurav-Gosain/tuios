@@ -622,6 +622,58 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "ok"}, nil
 }
 
+// verbCloseWorkspace closes every pane on one workspace. A scratch pane is
+// left alone unless the workspace named is a scratch workspace: a scratch
+// group is closed only when it is the target.
+func (d *Daemon) verbCloseWorkspace(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session   string `json:"session"`
+		Workspace int    `json:"workspace"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	state := sess.GetState()
+	ws := p.Workspace
+	if ws == 0 {
+		ws = state.CurrentWorkspace
+	}
+	if !state.workspaceAccepts(ws) {
+		return nil, invalidParam("workspace", fmt.Sprintf("workspace %d does not exist. Use a number from 1 to %d", ws, state.workspaceBound()))
+	}
+	ids := WindowsToCloseOnWorkspace(state.Windows, ws)
+	closed := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, err := sess.CloseDaemonWindow(id); err != nil {
+			// A window that closed on its own meanwhile is not a failure.
+			if _, gone := findWindowStateIndex(sess.GetState().Windows, id); gone != nil {
+				continue
+			}
+			return nil, mapResolveErr(err, sess)
+		}
+		closed = append(closed, id)
+	}
+	return map[string]any{"type": "workspace_closed", "workspace": ws, "closed": closed}, nil
+}
+
+// WindowsToCloseOnWorkspace is the windows close-workspace closes on ws, in
+// window order: every window there, and scratch panes only on a scratch
+// workspace.
+func WindowsToCloseOnWorkspace(windows []WindowState, ws int) []string {
+	var ids []string
+	for _, w := range windows {
+		if w.Workspace != ws || (w.Scratch && !IsScratchWorkspace(ws)) {
+			continue
+		}
+		ids = append(ids, w.ID)
+	}
+	return ids
+}
+
 func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

@@ -575,6 +575,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Close workspace",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenWorkspaceClose()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Clear multifocus",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
