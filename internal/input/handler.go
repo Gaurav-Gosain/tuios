@@ -689,5 +689,3 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Ignore other keys when log viewer is active
 	return o, nil
 }
-
-
