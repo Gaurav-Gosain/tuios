@@ -19,6 +19,23 @@ type Screen struct {
 	scrollback *Scrollback
 	// rf holds the reflow's buffers between reflows (reflow.go).
 	rf reflowScratch
+	// wideCol says the cursor stands on a row a reflow left frozen, at
+	// column cur.X only because the row is narrower than where it was:
+	// wideColX is the column it was at in the line. It holds while the
+	// cursor stays at wideColAt and nothing is written, so the next reflow
+	// puts the cursor back where it was. See Screen.cursorCol.
+	wideCol   bool
+	wideColX  int
+	wideColAt uv.Position
+}
+
+// cursorCol is the cursor's column in its line: cur.X, or the column past
+// the width a reflow could not show, while the cursor has not moved.
+func (s *Screen) cursorCol() int {
+	if s.wideCol && s.cur.Position == s.wideColAt {
+		return s.wideColX
+	}
+	return s.cur.X
 }
 
 // NewScreen creates a new screen.
@@ -61,6 +78,7 @@ func (s *Screen) CellAt(x int, y int) *uv.Cell {
 
 // SetCell sets the cell at the given x, y position.
 func (s *Screen) SetCell(x, y int, c *uv.Cell) {
+	s.wideCol = false
 	pre := s.buf.CellAt(x, y)
 	wasPaired := pre != nil && (pre.Width > 1 || (pre.Width == 0 && pre.Content == ""))
 	s.buf.SetCell(x, y, c)
@@ -162,6 +180,9 @@ func (s *Screen) shrinkRows(height int) {
 	// would have the rotation skip the scrollback and drop them.
 	s.scroll = s.buf.Bounds()
 	s.rotateWholeScreenUp(excess, s.scrollback != nil)
+	if s.wideCol && s.cur.Position == s.wideColAt {
+		s.wideColAt.Y = max(s.wideColAt.Y-excess, 0)
+	}
 	s.cur.Y = max(s.cur.Y-excess, 0)
 	s.saved.Y = max(s.saved.Y-excess, 0)
 }

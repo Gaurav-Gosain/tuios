@@ -390,3 +390,45 @@ func TestConform_ReflowSavedAndPending(t *testing.T) {
 		},
 	})
 }
+
+// TestReflowOpenPromptRepaintDropsTheTail: the shell repaints its prompt row
+// after a narrowing, with plain characters and no erase. The cells the row
+// held past the width are from before the repaint, and must not come back
+// when the pane widens.
+func TestReflowOpenPromptRepaintDropsTheTail(t *testing.T) {
+	emu := vt.NewEmulator(40, 4)
+	_, _ = emu.WriteString("\x1b]133;A\x07~/src $ echo " + strings.Repeat("A", 25) + "\r\n> \x1b]133;B\x07")
+	emu.Resize(20, 4)
+	_, _ = emu.WriteString("\x1b[A\r~/src $ echo BBBBBBB")
+	emu.Resize(40, 4)
+	got := emuText(emu)
+	if !strings.Contains(got, "~/src $ echo BBBBBBB") {
+		t.Fatalf("the repainted row is not on the screen, so this tests nothing:\n%s", got)
+	}
+	if strings.Contains(got, "BA") || strings.Contains(got, "AAAA") {
+		t.Errorf("the repainted row came back with cells from before the repaint:\n%s", got)
+	}
+}
+
+// TestReflowCursorOnAnOpenPromptComesBack: the cursor at the end of a long
+// command typed on an open prompt is past a narrower width. It stands on the
+// last column while narrow, and comes back to its own column when the pane
+// widens, so the next character typed goes after the command.
+func TestReflowCursorOnAnOpenPromptComesBack(t *testing.T) {
+	emu := vt.NewEmulator(60, 4)
+	// 2 + 5 + 87 = 94 columns: the second row holds 34, and the cursor
+	// stands at column 34.
+	_, _ = emu.WriteString("\x1b]133;A\x07$ \x1b]133;B\x07echo " + strings.Repeat("x", 87))
+	if p := emu.CursorPosition(); p.X != 34 {
+		t.Fatalf("the cursor is at column %d before the resize, want 34", p.X)
+	}
+	emu.Resize(30, 4)
+	emu.Resize(60, 4)
+	_, _ = emu.WriteString("Z")
+	if p := emu.CursorPosition(); p.X != 35 {
+		t.Errorf("after narrowing and widening the cursor typed Z and stands at column %d, want 35", p.X)
+	}
+	if c := emu.CellAt(34, emu.CursorPosition().Y); c == nil || c.Content != "Z" {
+		t.Errorf("Z is not at column 34:\n%s", emuText(emu))
+	}
+}

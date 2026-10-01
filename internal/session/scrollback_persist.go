@@ -503,6 +503,10 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		}
 	}
 	r.screen = make([]uv.Line, h)
+	// The pure emulator holds the cells of an open prompt's row that do not
+	// fit a narrower pane. They are saved with the row, which then comes
+	// back wider than the pane, into the history (see restoreHistory).
+	tails, _ := t.(interface{ MainRowTail(int) uv.Line })
 	for y := range h {
 		row := make(uv.Line, w)
 		for x := range w {
@@ -512,6 +516,12 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 				vt.BlankSixelCell(&row[x])
 			} else {
 				row[x] = uv.Cell{Content: " ", Width: 1}
+			}
+		}
+		if tails != nil {
+			for _, c := range tails.MainRowTail(y) {
+				vt.BlankSixelCell(&c)
+				row = append(row, c)
 			}
 		}
 		r.screen[y] = row[:usedCells(row)]

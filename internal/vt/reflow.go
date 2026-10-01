@@ -419,7 +419,7 @@ func freezePrompt(rows []reflowRow, start, end int) {
 // case, and a window drag then costs what it did before reflow.
 func (s *Screen) fitsWithoutReflow(width, height int) bool {
 	h0 := s.buf.Height()
-	if s.cur.X >= width || s.saved.X >= width || s.buf.hasTail() {
+	if s.cur.X >= width || s.saved.X >= width || s.buf.hasTail() || s.cursorCol() != s.cur.X {
 		return false
 	}
 	if n := s.scrollback.Len(); n > 0 {
@@ -535,7 +535,7 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 		// The cell under the cursor has to exist after the reflow, even
 		// past the end of the text, where a shell's cursor stands after
 		// its prompt.
-		cl, cat := src.offset(curRow, s.cur.X)
+		cl, cat := src.offset(curRow, s.cursorCol())
 		src.lines[cl].keep = max(src.lines[cl].keep, cat+1)
 
 		// Lines past the cursor's that hold nothing are the unwritten
@@ -596,7 +596,10 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	p := newPlan(src, width, sc)
 	screenRow := n0 - from // the first screen row among the rows taken
 
-	cr, cc := p.locate(screenRow+s.cur.Y, s.cur.X)
+	cr, cc := p.locate(screenRow+s.cur.Y, s.cursorCol())
+	// A cursor on a frozen row can be past the new width. It stands on the
+	// last column, and remembers where it was for the next reflow.
+	wideX := cc
 	cc = min(cc, width-1)
 	newPhantom := false
 	if phantom != nil && *phantom {
@@ -702,6 +705,8 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	sc.spare, sc.block = sc.block, p.cells
 
 	s.cur.X, s.cur.Y = cc, clamp(cr-top, 0, height-1)
+	s.wideCol = wideX > cc && !newPhantom
+	s.wideColX, s.wideColAt = wideX, s.cur.Position
 	if savR < top {
 		// The saved cursor's text went into the history. It comes back to
 		// the top of the screen at its first column, rather than at a

@@ -64,6 +64,13 @@ func (e *Emulator) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	return sb.LineWrapped(index), true
 }
 
+// MainRowTail returns the cells of main screen row y past the width that a
+// reflow held for an open prompt (see freezePrompt), or nil. A reader that
+// keeps a row whole, such as a saved history, appends them.
+func (e *Emulator) MainRowTail(y int) uv.Line {
+	return e.scrs[0].buf.rowTail(y)
+}
+
 // RowPadded reports whether row y of the active screen wrapped a column
 // early before a wide character. See Terminal.RowPadded.
 func (e *Emulator) RowPadded(y int) bool {
