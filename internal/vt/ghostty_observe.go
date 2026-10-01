@@ -342,6 +342,22 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 	case 133:
 		t.handleSemanticZoneOSC(payload)
 		return true
+	case 7777:
+		if direction, ok := parseTuiosNavigation(payload); ok {
+			t.queue(func(cb Callbacks) {
+				if cb.TuiosNavigation != nil {
+					cb.TuiosNavigation(direction)
+				}
+			})
+		}
+		if active, ok := parseTuiosNavigatorState(payload); ok {
+			t.queue(func(cb Callbacks) {
+				if cb.NvimNavigatorState != nil {
+					cb.NvimNavigatorState(active)
+				}
+			})
+		}
+		return false
 	case 4, 104, 10, 11, 12, 110, 111, 112:
 		// Color set/query is owned here so the library does not answer
 		// queries a second time.

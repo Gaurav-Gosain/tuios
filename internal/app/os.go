@@ -920,15 +920,17 @@ type OS struct {
 	// The bubbletea Update loop drains this and calls ShowNotification, mirroring the
 	// PendingClipboardSet path.
 	PendingNotification chan NotificationMsg
+	// fileWatch is the watch on the files section's folder. See
+	// sidebar_files_watch.go.
+	fileWatch fileWatcher
 	// PendingCwdChange receives OSC 7 working-directory changes from windows'
 	// PTY goroutines. The bubbletea Update loop drains it and, for the focused
 	// window only, checks whether the new directory carries a .tuios.tape. This
 	// is the detection half of the project-tape feature; it never executes
 	// anything, it only stats, reads to hash, and surfaces a passive indicator.
-	PendingCwdChange chan CwdChangedMsg
-	// fileWatch is the watch on the files section's folder. See
-	// sidebar_files_watch.go.
-	fileWatch fileWatcher
+	PendingCwdChange      chan CwdChangedMsg
+	PendingNvimNavigation chan NvimNavigationMsg
+	nvimNavigators        map[string]bool
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.

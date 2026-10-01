@@ -83,4 +83,10 @@ type Callbacks struct {
 	// shell sent none. It fires with the emulator's lock held on backends that
 	// have one, so it must only record and never call back into the terminal.
 	SemanticMark func(mark SemanticMarker)
+
+	// TuiosNavigation requests focus of the neighbouring TUIOS pane.
+	TuiosNavigation func(direction string)
+
+	// NvimNavigatorState reports whether a pane handles TUIOS navigation keys.
+	NvimNavigatorState func(active bool)
 }

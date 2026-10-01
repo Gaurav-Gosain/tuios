@@ -339,6 +339,8 @@ type Window struct {
 	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
 	BellFunc          func()                   // Callback for guest bell (BEL)
 	CwdFunc           func(cwd string)         // Callback for the shell's working directory changing (OSC 7)
+	NvimNavFunc       func(direction string)   // Callback for nvim navigation requests (OSC 7777)
+	NvimNavStateFunc  func(active bool)        // Callback for nvim navigation state (OSC 7777)
 	outputChan        chan outputChunk         // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}            // Signal to stop the output writer and render coalescer goroutines
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
@@ -701,6 +703,16 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 		WorkingDirectory: func(cwd string) {
 			if window.CwdFunc != nil {
 				window.CwdFunc(cwd)
+			}
+		},
+		TuiosNavigation: func(direction string) {
+			if window.NvimNavFunc != nil {
+				window.NvimNavFunc(direction)
+			}
+		},
+		NvimNavigatorState: func(active bool) {
+			if window.NvimNavStateFunc != nil {
+				window.NvimNavStateFunc(active)
 			}
 		},
 	})
