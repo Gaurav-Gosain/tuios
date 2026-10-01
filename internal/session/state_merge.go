@@ -190,7 +190,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// a pane, and no client sets it, so canonical wins like the meta. So does
 	// the subagent count, which only the pane's hooks move.
 	queued := make(map[string]int)
-	subagents := make(map[string]int)
+	var subagents map[string]int // most sessions have none
 	// The popup mark and the size the popup was asked for are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
 	// is always the truth and they are carried over by id the way Cwd is.
@@ -273,6 +273,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			queued[w.ID] = w.AgentQueued
 		}
 		if w.AgentSubagents != 0 {
+			if subagents == nil {
+				subagents = make(map[string]int)
+			}
 			subagents[w.ID] = w.AgentSubagents
 		}
 	}
