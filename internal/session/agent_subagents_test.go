@@ -169,9 +169,7 @@ func TestQuietSubagentsExpire(t *testing.T) {
 	sess.stateMu.RLock()
 	seen := sess.agentSubagents[id]["a1"].seen
 	sess.stateMu.RUnlock()
-	sess.subagentMu.Lock()
-	armed := sess.subagentAt
-	sess.subagentMu.Unlock()
+	armed := sess.subagentPrune.due()
 	if want := seen + int64(subagentQuiet); armed != want {
 		t.Fatalf("the prune is armed for %d, want %d, an hour after the start", armed, want)
 	}

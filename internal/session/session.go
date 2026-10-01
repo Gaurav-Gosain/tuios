@@ -1164,19 +1164,13 @@ type Session struct {
 	agentTurns     map[string]agentTurn
 	completionSeen map[string]uint64
 
-	// agentMetaTimer is the one-shot that drops expired agent metadata, due at
-	// agentMetaAt (Unix nanoseconds). Nil when no token has a TTL. Guarded by
-	// agentMetaMu. See agent_meta.go.
-	agentMetaTimer *time.Timer
-	agentMetaAt    int64
-	agentMetaMu    sync.Mutex
+	// agentMetaPrune drops expired agent metadata. Idle when no token has a
+	// TTL. See agent_meta.go.
+	agentMetaPrune pruneTimer
 
-	// subagentTimer is the one-shot that drops subagents gone quiet, due at
-	// subagentAt (Unix nanoseconds). Nil while no pane has subagents. Guarded
-	// by subagentMu. See agent_subagents.go.
-	subagentTimer *time.Timer
-	subagentAt    int64
-	subagentMu    sync.Mutex
+	// subagentPrune drops subagents gone quiet. Idle while no pane has
+	// subagents. See agent_subagents.go.
+	subagentPrune pruneTimer
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -2599,8 +2593,8 @@ func (s *Session) Stop() {
 	// that has already saved and stopped.
 	s.stopAgentHoldTimer()
 	s.idle.stop()
-	s.stopAgentMetaTimer()
-	s.stopSubagentTimer()
+	s.agentMetaPrune.stop()
+	s.subagentPrune.stop()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
