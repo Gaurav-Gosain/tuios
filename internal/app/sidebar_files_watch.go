@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -50,8 +49,8 @@ type fileDirChangedMsg struct {
 // it wants.
 type fileWatcher struct {
 	// want is what the update goroutine last asked for. Read and written only
-	// there, so a sync that changes nothing costs one string comparison.
-	want string
+	// there, so a sync that changes nothing costs one comparison.
+	want fileWatchSpec
 
 	ch chan struct{}
 
@@ -106,17 +105,6 @@ type fileWatchSpec struct {
 	origin string
 }
 
-// key is the spec as the string syncFileWatch compares.
-func (s fileWatchSpec) key() string {
-	if s.dir == "" {
-		return ""
-	}
-	if s.remote == nil {
-		return "local\x00" + s.dir
-	}
-	return fmt.Sprintf("remote\x00%p\x00%s\x00%s", s.remote, s.origin, s.dir)
-}
-
 // fileWatchTarget is where the watch should be: the folder the section is
 // showing, when it was read cleanly. A folder on another machine is watched by
 // the daemon, when there is one to ask.
@@ -139,11 +127,10 @@ func (m *OS) fileWatchTarget() fileWatchSpec {
 func (m *OS) syncFileWatch() {
 	target := m.fileWatchTarget()
 	fw := &m.fileWatch
-	key := target.key()
-	if key == fw.want {
+	if target == fw.want {
 		return
 	}
-	fw.want = key
+	fw.want = target
 	ch := m.fileWatchChan()
 	fw.mu.Lock()
 	fw.latest = target
