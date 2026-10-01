@@ -600,9 +600,10 @@ type fleetConn struct {
 	nextID int
 }
 
-// call sends one request and reads its answer. The caller bounds it by closing
+// call sends one request and reads its answer. An answer that takes longer than
+// budget closes the connection, and the caller can also bound it by closing
 // the connection, which is what the pump's context does.
-func (c *fleetConn) call(verb string, params any) (json.RawMessage, error) {
+func (c *fleetConn) call(verb string, params any, budget time.Duration) (json.RawMessage, error) {
 	c.nextID++
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -617,7 +618,7 @@ func (c *fleetConn) call(verb string, params any) (json.RawMessage, error) {
 	}
 	// A host that takes the request and never answers would hold the pump
 	// forever. Closing the connection ends the read, and the pump starts over.
-	timer := time.AfterFunc(fleetCallBudget, func() { _ = c.rw.Close() })
+	timer := time.AfterFunc(budget, func() { _ = c.rw.Close() })
 	defer timer.Stop()
 	line, err := c.readLine()
 	if err != nil {
@@ -650,12 +651,12 @@ type fleetListing struct {
 
 // listAttention lists a host's Inbox. A host that has none is errFleetOld.
 func (c *fleetConn) listAttention() (fleetListing, error) {
-	raw, err := c.call("list-attention", map[string]any{"host": localAttentionHost})
+	raw, err := c.call("list-attention", map[string]any{"host": localAttentionHost}, fleetCallBudget)
 	var verr *verbError
 	if errors.As(err, &verr) && verr.Code == ErrVerbInvalidParams {
 		// A host from before items of other machines were listed takes no
 		// host param, and lists only its own items anyway.
-		raw, err = c.call("list-attention", map[string]any{})
+		raw, err = c.call("list-attention", map[string]any{}, fleetCallBudget)
 	}
 	if err != nil {
 		if errors.As(err, &verr) && verr.Code == ErrVerbUnknownVerb {
@@ -681,7 +682,7 @@ func (c *fleetConn) subscribe(after uint64, boot string) error {
 		"after_seq": after,
 		"boot_id":   boot,
 		"queue":     1024,
-	})
+	}, fleetCallBudget)
 	var verr *verbError
 	if errors.As(err, &verr) && verr.Code == ErrVerbInvalidParams && verr.Hint != nil && (verr.Hint.Param == "after_seq" || verr.Hint.Param == "boot_id") && strings.Contains(verr.Message, "has no parameter") {
 		return errFleetOld{note: "The tuios on this host cannot resume its event stream, so its agents are polled. Update tuios on the host and restart its daemon."}

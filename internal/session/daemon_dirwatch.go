@@ -30,7 +30,7 @@ import (
 //   - A window on another machine inside a session of this daemon is not. Its
 //     folder is on the machine that runs its process, so this daemon asks that
 //     machine with the wait-dir verb, on a connection of its own over the link,
-//     and asks again each time one wait ends.
+//     and asks again on the same connection each time one wait ends.
 //
 // Nothing polls. A wait on the far machine sleeps in the kernel until the folder
 // changes, and a link connection that carries one costs nothing while it waits.
@@ -48,8 +48,9 @@ const dirWatchSettle = 100 * time.Millisecond
 // watch for a near daemon that went away without closing the link.
 const remoteDirWaitMS = 10 * 60 * 1000
 
-// maxDirWaitReply bounds the far daemon's answer to wait-dir.
-const maxDirWaitReply = 64 * 1024
+// remoteDirWaitBudget is how long the near daemon waits for the answer to one
+// wait-dir: the far side's own bound and a margin for the link.
+const remoteDirWaitBudget = remoteDirWaitMS*time.Millisecond + fleetCallBudget
 
 // dirWatchSlot is a connection's one folder watch.
 type dirWatchSlot struct {
@@ -149,38 +150,31 @@ func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func(
 // runRemoteDirWatch asks host to wait for dir to change, reports each change,
 // and asks again, until done or until a wait fails.
 func (d *Daemon) runRemoteDirWatch(host, dir string, done <-chan struct{}, notify func()) {
-	for {
-		changed, err := d.waitRemoteDir(host, dir, done)
-		select {
-		case <-done:
-			return
-		default:
-		}
-		if err != nil {
-			LogBasic("Stopped watching %s on %s: %v", dir, host, err)
-			return
-		}
-		if changed {
-			notify()
-		}
+	err := d.watchRemoteDir(host, dir, done, notify)
+	select {
+	case <-done:
+	default:
+		LogBasic("Stopped watching %s on %s: %v", dir, host, err)
 	}
 }
 
 // errNoFederation says this daemon has no links to ask another machine over.
 var errNoFederation = errors.New("no link to another machine")
 
-// waitRemoteDir asks host, on a connection of its own, to answer when dir
-// changes. Closing done closes the connection, which ends the wait on the far
-// side too.
-func (d *Daemon) waitRemoteDir(host, dir string, done <-chan struct{}) (bool, error) {
+// watchRemoteDir asks host, on one connection of its own, to answer when dir
+// changes, and asks again on the same connection each time it answers. It
+// returns the error that ended it. Closing done closes the connection, which
+// ends the wait on the far side too. A far daemon of any version takes the
+// next request on the connection, so this needs nothing new of it.
+func (d *Daemon) watchRemoteDir(host, dir string, done <-chan struct{}, notify func()) error {
 	if d.federation == nil {
-		return false, errNoFederation
+		return errNoFederation
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
 	defer cancel()
 	conn, err := d.federation.OpenConnection(ctx, host)
 	if err != nil {
-		return false, err
+		return err
 	}
 	go func() {
 		select {
@@ -189,38 +183,23 @@ func (d *Daemon) waitRemoteDir(host, dir string, done <-chan struct{}) (bool, er
 		}
 		_ = conn.Close()
 	}()
-
-	params, err := json.Marshal(map[string]any{"dir": dir, "timeout": remoteDirWaitMS})
-	if err != nil {
-		return false, err
-	}
-	req, err := json.Marshal(verbRequest{ID: json.RawMessage(`1`), Verb: "wait-dir", Params: params})
-	if err != nil {
-		return false, err
-	}
-	if _, err := conn.Write(append(req, '\n')); err != nil {
-		return false, err
-	}
-	line, err := readLimitedLine(bufio.NewReader(conn), maxDirWaitReply)
-	if err != nil {
-		return false, err
-	}
-	var resp struct {
-		Result *struct {
+	fc := &fleetConn{rw: conn, br: bufio.NewReader(conn)}
+	params := map[string]any{"dir": dir, "timeout": remoteDirWaitMS}
+	for {
+		raw, err := fc.call("wait-dir", params, remoteDirWaitBudget)
+		if err != nil {
+			return err
+		}
+		var res struct {
 			Changed bool `json:"changed"`
-		} `json:"result"`
-		Error *verbError `json:"error"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return fmt.Errorf("an answer this build cannot read: %w", err)
+		}
+		if res.Changed {
+			notify()
+		}
 	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return false, err
-	}
-	if resp.Error != nil {
-		return false, fmt.Errorf("%s: %s", resp.Error.Code, resp.Error.Message)
-	}
-	if resp.Result == nil {
-		return false, errors.New("an answer with no result")
-	}
-	return resp.Result.Changed, nil
 }
 
 // verbWaitDir answers when the names in a directory on this machine change, or
@@ -257,18 +236,37 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	defer w.Close()
 
-	deadline, stop := d.waitDeadline(cs, timeout)
-	defer stop()
+	// The caller going away ends the wait. The watch on the connection
+	// sleeps in the poller, so a far daemon holding a wait for a near one
+	// does no work until the folder or the connection changes.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var gone, ended <-chan struct{}
+	if cs != nil {
+		ended = cs.hostedEnded
+		if cs.conn != nil {
+			var stop func()
+			gone, stop = watchPeerClose(cs.conn)
+			defer stop()
+		}
+	}
+	unchanged := map[string]any{"dir": dir, "changed": false}
 	select {
 	case <-events:
 		// Let the burst settle, so the caller reads the folder once.
 		select {
 		case <-time.After(dirWatchSettle):
-		case <-deadline:
+		case <-timer.C:
+		case <-gone:
+		case <-ended:
 		}
 		return map[string]any{"dir": dir, "changed": true}, nil
-	case <-deadline:
-		return map[string]any{"dir": dir, "changed": false}, nil
+	case <-timer.C:
+		return unchanged, nil
+	case <-gone:
+		return unchanged, nil
+	case <-ended:
+		return unchanged, nil
 	case <-d.ctx.Done():
 		return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 	}

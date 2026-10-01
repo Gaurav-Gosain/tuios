@@ -8,3 +8,6 @@ import "net"
 // connection by, and a wait there ends at its timeout. See
 // conn_closed_unix.go.
 func connPeerClosed(net.Conn) bool { return false }
+
+// watchPeerClose never reports: see connPeerClosed.
+func watchPeerClose(net.Conn) (<-chan struct{}, func()) { return nil, func() {} }
