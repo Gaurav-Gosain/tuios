@@ -91,6 +91,7 @@ type herdrScroll struct {
 // that holds an agent.
 type herdrAgentInfo struct {
 	TerminalID    string             `json:"terminal_id"`
+	Name          string             `json:"name,omitempty"`
 	Agent         string             `json:"agent,omitempty"`
 	Title         string             `json:"title,omitempty"`
 	TerminalTitle string             `json:"terminal_title,omitempty"`
@@ -504,7 +505,7 @@ func (d *Daemon) herdrPaneRecord(sess *Session, st *SessionState, win *WindowSta
 // herdrAgentFromPane is herdr's AgentInfo for a pane that holds an agent.
 func herdrAgentFromPane(p herdrPaneInfo, win *WindowState) herdrAgentInfo {
 	return herdrAgentInfo{
-		TerminalID: p.TerminalID, Agent: p.Agent, Title: p.Title, TerminalTitle: p.TerminalTitle,
+		TerminalID: p.TerminalID, Name: p.Label, Agent: p.Agent, Title: p.Title, TerminalTitle: p.TerminalTitle,
 		AgentStatus: p.AgentStatus, Tokens: p.Tokens, AgentSession: p.AgentSession,
 		WorkspaceID: p.WorkspaceID, TabID: p.TabID, PaneID: p.PaneID, Focused: p.Focused,
 		StateChange: uint64(max(win.AgentStateAt, 0) / int64(time.Millisecond)), CompletionSeq: win.CompletionSeq,

@@ -254,8 +254,9 @@ reporter directly, as `tuios new-window NAME crush`, `start-agent crush` or
 `fan --agent crush` do. `off` gives it to no pane.
 
 A pane with herdr's environment gets `HERDR_ENV=1`, `HERDR_SOCKET_PATH` naming
-tuios's socket, `HERDR_PANE_ID` and `HERDR_WORKSPACE_ID` naming the pane and
-its session, and `HERDR_BIN_PATH` naming tuios. Programs that check
+tuios's socket, `HERDR_PANE_ID`, `HERDR_TAB_ID` and `HERDR_WORKSPACE_ID` naming
+the pane, its workspace and its session, and `HERDR_BIN_PATH` naming a `herdr`
+link to tuios that answers herdr's command line. Programs that check
 `HERDR_ENV` read the pane as a herdr pane. With the default, `herdr` refuses to
 start inside a tuios pane. Set `herdr_protocol = "agents"` to run herdr nested.
 The socket also answers herdr's socket API, so tools built for herdr work with

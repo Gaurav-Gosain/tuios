@@ -92,7 +92,8 @@ Grok, Hermes and Qoder report only the conversation id, so the pane can be
 resumed, and their state keeps coming from screen rules. Crush reports its
 state by itself over herdr's protocol, which tuios accepts in every pane, also
 when you start it from a shell. An agent that reports to herdr through
-`"$HERDR_BIN_PATH" pane report-agent` reaches tuios the same way.
+`"$HERDR_BIN_PATH" pane report-agent` reaches tuios the same way
+(`tuios --skill herdr`).
 
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
 payload on stdin and reports for the pane it runs in: a prompt or tool call is

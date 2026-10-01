@@ -69,6 +69,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -96,6 +97,13 @@ func HerdrSocketPath(socketPath string) string {
 	return socketPath + ".herdr"
 }
 
+// HerdrLinkDir is the directory the herdr link is made in, beside the daemon
+// socket: <dir>/bin/herdr points at tuios. It is private to the user in the
+// same way the socket is.
+func HerdrLinkDir(socketPath string) string {
+	return filepath.Join(filepath.Dir(socketPath), "herdr")
+}
+
 // herdrRequest is one JSON-RPC request in herdr's shape.
 type herdrRequest struct {
 	ID     string          `json:"id"`
@@ -119,9 +127,11 @@ type herdrParams struct {
 
 	// pane.report_metadata. Title and the tokens are display only; see
 	// herdrMetadata.
-	Title  *string         `json:"title"`
-	Tokens json.RawMessage `json:"tokens"`
-	TTLMs  int64           `json:"ttl_ms"`
+	Title *string `json:"title"`
+	// ClearTitle is herdr's CLI's --clear-title, sent with no title.
+	ClearTitle bool            `json:"clear_title"`
+	Tokens     json.RawMessage `json:"tokens"`
+	TTLMs      int64           `json:"ttl_ms"`
 
 	// notification.show, which names no pane: the caller's own is used.
 	Body string `json:"body"`
@@ -401,8 +411,19 @@ var herdrReportMethods = []string{
 	"pane.report_metadata", "notification.show",
 }
 
+// herdrRetiredMethods are the methods herdr 0.9.2 removed, which herdr
+// answers with code unknown_method (src/api/server.rs).
+var herdrRetiredMethods = []string{
+	"pane.graphics.info", "pane.graphics.set", "pane.graphics.clear", "pane.graphics.stream",
+}
+
 // herdrCall carries out one request: a result, or an error code and message.
 func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string) {
+	if strings.HasPrefix(req.Method, "pane.graphics.") && slices.Contains(herdrRetiredMethods, req.Method) {
+		// herdr 0.9.2 took these out and answers them apart from an
+		// unknown variant.
+		return nil, "unknown_method", "unknown method: " + req.Method
+	}
 	if !slices.Contains(herdrReportMethods, req.Method) {
 		out, herr, handled := d.herdrAPICall(cs, req.Method, req.Params)
 		if !handled {
@@ -633,6 +654,9 @@ func (d *Daemon) herdrMetadata(sessName, window string, p herdrParams) (any, str
 			}
 			tokens[k] = v
 		}
+	}
+	if p.ClearTitle && p.Title == nil {
+		tokens["title"] = nil
 	}
 	if p.Title != nil {
 		t := strings.TrimSpace(*p.Title)

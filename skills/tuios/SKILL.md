@@ -1,6 +1,6 @@
 ---
 name: tuios
-description: Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, the Inbox and approvals, mail, other machines, events, MCP, the tmux shim, pane grants, configuration, errors and recipes.
+description: Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, the Inbox and approvals, mail, other machines, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, errors and recipes.
 ---
 
 # Driving tuios from a pane
@@ -283,6 +283,7 @@ Print one with `tuios --skill <topic>`:
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
 | `mcp` | tuios as an MCP server: setup, tools, scope |
 | `tmux` | The tmux shim for tools that only drive tmux |
+| `herdr` | herdr's command line and socket, for tools built for herdr |
 | `grants` | Pane grants: what a pane may do, and giving a helper less |
 | `config` | Options, appearance, themes, glyphs, the dock, hooks and keybindings |
 | `errors` | Every error code and its remedy, and a daemon that is not running |

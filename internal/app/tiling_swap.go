@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -242,4 +244,37 @@ func (m *OS) SwapWindowUp() {
 // SwapWindowDown swaps the focused window with the window below it
 func (m *OS) SwapWindowDown() {
 	m.SwapWindow(DirDown)
+}
+
+// SwapWindowsByID swaps two panes by window id and leaves the focus on the
+// first, at the place the second held. It is herdr's pane.swap, which the
+// daemon routes here because the split tree lives in the client: the daemon
+// picks the pair, and the client moves them.
+func (m *OS) SwapWindowsByID(source, target string) error {
+	si, ti := -1, -1
+	for i, w := range m.Windows {
+		switch w.ID {
+		case source:
+			si = i
+		case target:
+			ti = i
+		}
+	}
+	if si < 0 || ti < 0 {
+		return fmt.Errorf("no pane %s to swap", map[bool]string{true: source, false: target}[si < 0])
+	}
+	if si == ti {
+		return nil
+	}
+	// A pane opened a moment ago is still sliding to its tile. Swapping
+	// rectangles mid-slide would swap the in-between ones, and the slides
+	// would then land each pane back where it started: the client would
+	// draw one order and tell the daemon another. The slides land first,
+	// so the swap trades the rectangles the layout gave.
+	m.landSnapAnimations()
+	m.CancelAnimationsForWindow(m.Windows[si])
+	m.CancelAnimationsForWindow(m.Windows[ti])
+	m.SwapWindowsInstant(si, ti)
+	m.FocusWindow(ti)
+	return nil
 }

@@ -1,0 +1,61 @@
+# herdr's command line and socket
+
+herdr is another multiplexer for coding agents. Tools built for herdr work in a
+tuios pane, because every pane has herdr's environment:
+
+| Variable | Value |
+| --- | --- |
+| `HERDR_SOCKET_PATH` | tuios's herdr socket, which answers herdr's socket API |
+| `HERDR_PANE_ID` | this pane, `w<session>:p<window>` |
+| `HERDR_TAB_ID` | this pane's workspace, `w<session>:t<number>` |
+| `HERDR_WORKSPACE_ID` | this pane's session, `w<session>` |
+| `HERDR_BIN_PATH` | a link named `herdr` to tuios, which answers herdr's command line |
+
+A herdr workspace is a tuios session, a herdr tab is a tuios workspace, and a
+herdr pane is a tuios window.
+
+## The command line
+
+Run herdr's CLI as tools do, through `"$HERDR_BIN_PATH"`:
+
+```sh
+"$HERDR_BIN_PATH" pane list
+"$HERDR_BIN_PATH" pane split --pane "$HERDR_PANE_ID" --direction right --focus
+"$HERDR_BIN_PATH" pane neighbor --pane "$HERDR_PANE_ID" --direction right
+"$HERDR_BIN_PATH" pane run w1a2b3c4d5e6:p0f1e2d3c4b5a "make test"
+"$HERDR_BIN_PATH" agent start helper --kind claude --pane "$HERDR_PANE_ID"
+```
+
+A success prints herdr's answer as one JSON line on stdout and exits 0. An
+error prints the answer on stderr and exits 1. A wrong command line prints
+the usage on stderr and exits 2. `pane send-text`, `pane send-keys`, `pane
+run` and the report commands print nothing when they succeed.
+
+It answers `pane`, `tab`, `workspace`, `agent`, `worktree`,
+`notification show`, `api snapshot` and `server reload-config`. A method that
+tuios does not answer, such as `pane.resize` or `pane.move`, fails with code
+`unsupported`. A command that acts on herdr's own machine (`status`,
+`session`, `plugin`, `server stop` and the rest) fails with code
+`unsupported` and does nothing.
+
+## What it may do
+
+Each call holds your pane's grants, as the tuios verb that does the same work
+does:
+
+- A read (`pane list`, `pane get`, `pane read`, `pane neighbor`, `pane edges`,
+  `pane process-info`) needs `read`.
+- Typing (`pane send-text`, `pane send-keys`, `pane run`) needs `write`, and
+  `respond` to type into a pane that waits on a prompt.
+- A split, close, rename, focus, swap or zoom, and `workspace focus`, need
+  `admin`.
+- `agent start` needs `fan`, and `write` for the typing.
+
+A refused call fails with code `forbidden` and changes nothing.
+
+## Use tuios's own commands
+
+For your own work, use the tuios verbs: `tuios split-window`, `tuios
+send-text`, `tuios wait-for`, `tuios start-agent`. They do more, and their
+errors say what to do next. herdr's command line is for tools that already
+speak herdr.
