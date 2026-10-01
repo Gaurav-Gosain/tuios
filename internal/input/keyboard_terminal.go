@@ -212,6 +212,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if handleTerminalModeBinds(msg, o) {
 		return o, nil
 	}
+	nvimNavigation := false
+	if action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction); isTerminalFocusAction(action) {
+		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(action))
+	}
 
 	// alt+left/right used to navigate the scrolling layout's columns from here,
 	// hardcoded. They are terminal_focus_left/right now, which reach the same
@@ -267,9 +271,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// See MultifocusPeers: slice order keeps the send order stable
 			// across swaps and state sync.
 			// Each peer gets the key encoded for its own keyboard mode.
-			for _, w := range o.MultifocusPeers() {
-				if peer, _ := paneKeyBytes(host, w, o, false); len(peer) > 0 {
-					_ = w.SendInput(peer)
+			if !nvimNavigation {
+				for _, w := range o.MultifocusPeers() {
+					if peer, _ := paneKeyBytes(host, w, o, false); len(peer) > 0 {
+						_ = w.SendInput(peer)
+					}
 				}
 			}
 		}
