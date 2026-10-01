@@ -20,7 +20,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			in:      "a\r\nb\r\nc\r\nd\r\n$ ",
 			resize:  [][2]int{{10, 2}},
 			want:    "d\n$",
-			history: ptr("a\nb\nc"),
+			history: new("a\nb\nc"),
 			cursor:  "2,1",
 		},
 		{
@@ -29,7 +29,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			in:      "a\r\nb\r\n$ ",
 			resize:  [][2]int{{10, 3}},
 			want:    "a\nb\n$",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "2,2",
 		},
 		{
@@ -40,7 +40,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			in:      "a\r\nb\x1b[5;1Hstatus\x1b[1;1H",
 			resize:  [][2]int{{10, 2}},
 			want:    "\nstatus",
-			history: ptr("a\nb\n"),
+			history: new("a\nb\n"),
 			cursor:  "0,0",
 		},
 		{
@@ -52,7 +52,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			in:      "1\r\n2\r\n3\r\n4\r\n5\x1b[2;4r\x1b[5;2H",
 			resize:  [][2]int{{10, 3}},
 			want:    "3\n4\n5",
-			history: ptr("1\n2"),
+			history: new("1\n2"),
 			cursor:  "1,2",
 			region:  "0,0-10,3",
 		},
@@ -68,7 +68,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			resize:  [][2]int{{10, 2}, {10, 3}},
 			then:    "\x1b[?1049l",
 			want:    "main1\nmain2\n$",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "2,2",
 		},
 		{
@@ -78,7 +78,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			resize:  [][2]int{{10, 2}},
 			then:    "\x1b8X",
 			want:    "cX\nd",
-			history: ptr("a\nb"),
+			history: new("a\nb"),
 			cursor:  "2,0",
 		},
 		{
@@ -87,7 +87,7 @@ func TestConform_ResizeRows(t *testing.T) {
 			in:      "\x1b[?1049h\x1b[Ha\r\nb\r\nc\r\nd",
 			resize:  [][2]int{{10, 2}},
 			want:    "c\nd",
-			history: ptr(""),
+			history: new(""),
 			cursor:  "1,1",
 		},
 	})
