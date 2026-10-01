@@ -293,3 +293,25 @@ func TestHerdrLeavesScratchTerminalsOut(t *testing.T) {
 		t.Errorf("the scratch terminal's own report: %s", e)
 	}
 }
+
+// TestHerdrAgentStartRefusesAnUnknownForeground: agent.start types a command
+// into the pane, so it needs the kernel to say the shell holds the terminal.
+// Where the kernel does not say, the pane is busy, as for typing at a prompt.
+func TestHerdrAgentStartRefusesAnUnknownForeground(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	// Set before the daemon starts and put back after it stops, so no
+	// daemon goroutine reads the variable while it changes.
+	real := foregroundPGID
+	t.Cleanup(func() { foregroundPGID = real })
+	foregroundPGID = func(int) (int, bool) { return 0, false }
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "unknownfg")
+	win := sess.GetState().Windows[0]
+	if pty := sess.GetPTY(win.PTYID); pty == nil || pty.ShellPID() <= 0 {
+		t.Fatal("the window has no shell")
+	}
+	reply := herdrDial(t, sp, "agent.start", map[string]any{"name": "helper", "kind": "claude", "pane_id": herdrPaneID(sess.ID, win.ID)})
+	if code := herdrCode(reply); code != "agent_pane_busy" {
+		t.Fatalf("agent.start with an unknown foreground answered %v, want agent_pane_busy", reply)
+	}
+}

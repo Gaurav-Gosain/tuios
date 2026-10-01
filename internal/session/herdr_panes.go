@@ -559,13 +559,9 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 	if pty == nil || pty.IsExited() {
 		return nil, herdrErr("agent_pane_unavailable", "agent target pane "+paneID+" has no live terminal")
 	}
-	busy := win.AgentHarness != "" && win.AgentState != AgentStateNone
-	if shell := pty.ShellPID(); shell <= 0 {
-		busy = true
-	} else if pgid, ok := readForegroundPGID(shell); ok && pgid != shell {
-		busy = true
-	}
-	if busy {
+	// A pane whose foreground the kernel does not report is refused too:
+	// typing an agent's command into an unknown program is not safe.
+	if (win.AgentHarness != "" && win.AgentState != AgentStateNone) || !shellAtPrompt(pty) {
 		return nil, herdrErr("agent_pane_busy", "agent target pane "+paneID+" is not an available shell")
 	}
 	argv := append([]string{command}, in.Args...)

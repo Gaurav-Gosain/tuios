@@ -58,9 +58,13 @@ func shellAtPrompt(pty *PTY) bool {
 	if pid <= 0 {
 		return false
 	}
-	pgid, ok := readForegroundPGID(pid)
+	pgid, ok := foregroundPGID(pid)
 	return ok && pgid == pid
 }
+
+// foregroundPGID is readForegroundPGID, held in a variable so a test can play
+// a platform where the kernel does not say.
+var foregroundPGID = readForegroundPGID
 
 // handleTypeAtPrompt types a cd into a pane of the attached session if the
 // pane's shell is at its prompt, and says whether it did.
