@@ -341,6 +341,7 @@ type Window struct {
 	CwdFunc           func(cwd string)         // Callback for the shell's working directory changing (OSC 7)
 	NvimNavFunc       func(direction string)   // Callback for nvim navigation requests (OSC 7777)
 	NvimNavStateFunc  func(active bool)        // Callback for nvim navigation state (OSC 7777)
+	NvimNavResetFunc  func()                   // Callback when the alternate screen exits
 	outputChan        chan outputChunk         // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}            // Signal to stop the output writer and render coalescer goroutines
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
@@ -673,6 +674,9 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
 				window.SetAltScreen(enabled)
+				if !enabled && window.NvimNavResetFunc != nil {
+					window.NvimNavResetFunc()
+				}
 			}
 		},
 		Title: func(title string) {
