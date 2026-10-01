@@ -130,7 +130,7 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 		})
 	}
 	switch {
-	case m.filesView.Loading && !m.filesView.Quiet:
+	case m.filesView.Loading:
 		// A reload of a directory already on screen keeps the old names up and
 		// says a new answer is coming, rather than blanking the section for as
 		// long as the read takes.

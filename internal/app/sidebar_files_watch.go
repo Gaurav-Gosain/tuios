@@ -32,8 +32,17 @@ import (
 // change, never on an idle client.
 const fileWatchSettle = 100 * time.Millisecond
 
+// fileWatchGap is the least time between two reads of a changed folder. A
+// folder that keeps changing, under a build or an editor's swap files, is
+// read at most twice a second, and once more after the last change.
+const fileWatchGap = 500 * time.Millisecond
+
 // fileDirChangedMsg says the watched folder's entries changed.
-type fileDirChangedMsg struct{}
+type fileDirChangedMsg struct {
+	// at is when the listener let the change through. The next listener
+	// waits fileWatchGap from it.
+	at time.Time
+}
 
 // fileWatcher holds the one directory watch a client keeps. Setting it up and
 // tearing it down are syscalls on a path that can be a hung network mount, so
@@ -68,18 +77,21 @@ func (m *OS) fileWatchChan() chan struct{} {
 }
 
 // listenForFileChange waits for the watched folder to change, lets the burst
-// settle, and hands one message to the loop.
-func listenForFileChange(ch chan struct{}) tea.Cmd {
+// settle, and hands one message to the loop. It waits at least fileWatchGap
+// after last, the previous message. A change made while it waits is covered
+// by the read that follows, and a change after that wakes the next listener,
+// so a burst always ends with one read of the final state.
+func listenForFileChange(ch chan struct{}, last time.Time) tea.Cmd {
 	return func() tea.Msg {
 		if _, ok := <-ch; !ok {
 			return nil
 		}
-		time.Sleep(fileWatchSettle)
+		time.Sleep(max(fileWatchSettle, time.Until(last.Add(fileWatchGap))))
 		select {
 		case <-ch:
 		default:
 		}
-		return fileDirChangedMsg{}
+		return fileDirChangedMsg{at: time.Now()}
 	}
 }
 
@@ -220,8 +232,9 @@ func (fw *fileWatcher) remoteDirChanged(dir string) {
 }
 
 // refreshChangedFolder reads the listed folder again because it changed on
-// disk. It is a quiet read: the names stay up, no "loading" row is drawn, and
-// the scroll position is kept, because nothing the user did asked for it.
+// disk. It is a quiet read: the names stay up, no "loading" row is drawn, the
+// scroll position is kept, and no state the rail draws changes until a
+// different listing comes back, because nothing the user did asked for it.
 func (m *OS) refreshChangedFolder() tea.Cmd {
 	v := m.filesView
 	if v.Dir == "" || v.Want != v.Dir || m.fileWatchTarget().dir == "" {
@@ -229,8 +242,12 @@ func (m *OS) refreshChangedFolder() tea.Cmd {
 		// this client did not read from its own disk.
 		return nil
 	}
-	quiet := !v.Loading || v.Quiet
-	cmd := m.readFileList(v.Dir, v.Origin, v.Pinned)
-	m.filesView.Quiet = quiet
-	return cmd
+	if v.Loading {
+		// A read the user asked for is in flight, and may have read the
+		// folder before this change. It is asked again, and stays the read
+		// the user sees.
+		return m.readFileList(v.Dir, v.Origin, v.Pinned)
+	}
+	m.filesView.QuietReq++
+	return m.fileListCmd(v.Dir, v.Origin, v.Pinned, m.filesView.QuietReq)
 }

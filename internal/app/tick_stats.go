@@ -16,6 +16,9 @@ type tickStats struct {
 	// Motion is every motion clock frame handled (see motion.go). With nothing
 	// moving it stays at zero, because the clock is never armed.
 	Motion uint64
+	// Rail is every rebuild of the rail's rows, a frame the render cache
+	// could not serve. A quiet folder refresh that changed nothing adds none.
+	Rail uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -32,6 +35,6 @@ func (m *OS) DumpTickStats() {
 	if path == "" {
 		return
 	}
-	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d motion=%d\n",
-		m.tickStats.Ticks, m.tickStats.Work, m.tickStats.Render, m.tickStats.Motion)), 0o600)
+	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d\n",
+		m.tickStats.Ticks, m.tickStats.Work, m.tickStats.Render, m.tickStats.Rail, m.tickStats.Motion)), 0o600)
 }

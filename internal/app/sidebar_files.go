@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -89,10 +90,11 @@ type fileViewState struct {
 	Want string
 	// Loading is whether a read is outstanding for Want.
 	Loading bool
-	// Quiet says the outstanding read is a re-read because the folder changed
-	// on disk. It draws no "loading" row: the user asked for nothing, and a
-	// row that blinks on every file a build writes is noise.
-	Quiet bool
+	// QuietReq stamps the latest quiet read: a re-read because the folder
+	// changed on disk. Such a read leaves Gen and Loading alone, so it draws
+	// no "loading" row and the rail is not rebuilt for it. The user asked for
+	// nothing, and a row that blinks on every file a build writes is noise.
+	QuietReq uint64
 	// Origin is the window the listing is tied to, or empty when it was opened
 	// from a link. Only an origin pane can be told to change directory, because
 	// only it is the one the user meant.
@@ -150,7 +152,10 @@ const fileViewMaxEntries = 2000
 
 // fileListMsg is one finished directory read on its way back to the loop.
 type fileListMsg struct {
-	Gen     uint64
+	Gen uint64
+	// Quiet is the QuietReq of a quiet read, zero for a read the user asked
+	// for.
+	Quiet   uint64
 	Dir     string
 	Entries []fileEntry
 	Capped  bool
@@ -434,13 +439,30 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	// A listing the user asked for starts at its top. A quiet re-read of the
 	// same folder goes through readFileList and keeps the scroll.
 	m.SidebarScrollF = 0
-	m.filesView.Quiet = false
 	return m.readFileList(dir, origin, pinned)
 }
 
 // readFileList is requestFileList without the reset of the scroll position.
 func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 	dir = filepath.Clean(dir)
+	m.filesView.Want = dir
+	m.filesView.Origin = origin
+	m.filesView.Host = ""
+	if w := m.windowByID(origin); w != nil {
+		m.filesView.Host = w.Host
+	}
+	m.filesView.Pinned = pinned
+	m.filesView.Elsewhere = ""
+	m.filesView.Loading = true
+	m.filesView.Err = ""
+	m.filesView.Gen++
+	return m.fileListCmd(dir, origin, pinned, 0)
+}
+
+// fileListCmd is the command that reads dir and answers with a fileListMsg
+// stamped with the current Gen and quiet. It changes no state, so a quiet
+// read can send it without touching what the rail draws.
+func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd {
 	// Only a listing the pane steered is checked. A folder the user walked into
 	// by hand is a folder they named, so it is theirs whatever the pane says,
 	// and a pinned listing keeps the verdict of the pane-driven listing it was
@@ -453,18 +475,6 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 			pgid = w.ShellPgid
 		}
 	}
-
-	m.filesView.Want = dir
-	m.filesView.Origin = origin
-	m.filesView.Host = ""
-	if w := m.windowByID(origin); w != nil {
-		m.filesView.Host = w.Host
-	}
-	m.filesView.Pinned = pinned
-	m.filesView.Elsewhere = ""
-	m.filesView.Loading = true
-	m.filesView.Err = ""
-	m.filesView.Gen++
 	gen := m.filesView.Gen
 
 	// The listing is asked of the daemon that holds the session, because that is
@@ -478,12 +488,12 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 	// also the only side that can say whether the pane announced a directory its
 	// shell is not in.
 	client, host := m.DaemonClient, m.AttachedHost
-	return func() tea.Msg {
+	read := func() fileListMsg {
 		if client != nil {
 			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
 			switch {
 			case err == nil && listing.Err != "":
-				return fileListMsg{Gen: gen, Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
+				return fileListMsg{Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
 			case err == nil:
 				entries := make([]fileEntry, 0, len(listing.Entries))
 				for _, e := range listing.Entries {
@@ -495,7 +505,7 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 					})
 				}
 				return fileListMsg{
-					Gen: gen, Dir: dir, Entries: entries,
+					Dir: dir, Entries: entries,
 					Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
 				}
 			case host != "":
@@ -503,7 +513,7 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 				// it. Falling through to read this machine's disk would list a
 				// directory with nothing to do with the pane, which is the bug
 				// this replaced rather than a fallback.
-				return fileListMsg{Gen: gen, Dir: dir, Err: "That machine could not list it."}
+				return fileListMsg{Dir: dir, Err: "That machine could not list it."}
 			}
 			// A local daemon that could not answer falls through: a build older
 			// than this message answers with an error, and reading the disk here
@@ -512,7 +522,7 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 		spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
 		items, capped, err := readDirFunc(dir, fileViewMaxEntries)
 		if err != nil {
-			return fileListMsg{Gen: gen, Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
+			return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
 		}
 		entries := make([]fileEntry, 0, len(items))
 		for _, it := range items {
@@ -534,7 +544,12 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 			}
 			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 		})
-		return fileListMsg{Gen: gen, Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
+		return fileListMsg{Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
+	}
+	return func() tea.Msg {
+		msg := read()
+		msg.Gen, msg.Quiet = gen, quiet
+		return msg
 	}
 }
 
@@ -643,8 +658,23 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 	if msg.Gen != m.filesView.Gen {
 		return
 	}
+	if msg.Quiet != 0 {
+		v := &m.filesView
+		if msg.Quiet != v.QuietReq || v.Loading {
+			// A newer quiet read, or a read the user asked for, is in flight.
+			return
+		}
+		if msg.Dir == v.Dir && msg.Err == v.Err && msg.Capped == v.Capped &&
+			msg.Spoofed == v.Spoofed && slices.Equal(msg.Entries, v.Entries) {
+			// The folder changed and changed back, or changed in a way the
+			// listing does not show: nothing to draw again.
+			return
+		}
+		// Gen is what the rail's cache sees of a new listing. Nothing else is
+		// stamped with it now, so moving it drops no reply.
+		v.Gen++
+	}
 	m.filesView.Loading = false
-	m.filesView.Quiet = false
 	m.filesView.Dir = msg.Dir
 	m.filesView.Err = msg.Err
 	m.filesView.Entries = msg.Entries
