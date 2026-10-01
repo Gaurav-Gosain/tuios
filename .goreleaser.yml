@@ -350,13 +350,20 @@ homebrew_casks:
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     # The binaries are not signed, so Gatekeeper would refuse to run a
-    # quarantined one.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tuios"]
-          end
+    # quarantined one. GoReleaser (as of v2.18) can only emit Homebrew's
+    # `postflight do ... end` stanza via hooks.post.install, and Homebrew 7
+    # deprecated that stanza in favor of `postflight_steps`. custom_block
+    # renders before the other stanzas, so it carries the step instead,
+    # until GoReleaser ships native `hooks.post.install_steps` support
+    # (goreleaser/goreleaser#6870, fixed by goreleaser/goreleaser#6873).
+    # `{{ "{{staged_path}}" }}` escapes Homebrew's own `{{staged_path}}`
+    # token past GoReleaser's own template pass over the rendered cask.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tuios"]
+        end
+      end
 
   - name: tuios-web
     ids:
@@ -371,12 +378,14 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }}-web version {{ .Tag }}"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tuios-web"]
-          end
+    # See the tuios cask above: custom_block stands in for
+    # hooks.post.install_steps until GoReleaser ships it natively.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tuios-web"]
+        end
+      end
 
 # Docker images (optional - uncomment if you want automated Docker builds)
 # dockers:
