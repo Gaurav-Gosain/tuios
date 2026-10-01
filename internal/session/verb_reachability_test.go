@@ -41,10 +41,6 @@ type exampleOutcome struct {
 	blocks bool
 	// why says what about the fixture, not the verb, produces this.
 	why string
-	// slow marks an example that does real work before it can answer, and so
-	// is not covered by a budget written for a verb that reads state and
-	// returns. See slowBudget.
-	slow bool
 }
 
 // exampleOutcomes records every example the fixture cannot make succeed. The
@@ -95,10 +91,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The host filter's example names a host; the fleet is proved with two
 	// daemons in host_fleet_test.go.
 	"list-attention#3": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
-
-	// Rendering and encoding a picture is real work, unlike every other verb
-	// here, and a budget written for a state read is not a budget for it.
-	"screenshot#0": {slow: true, why: "a screenshot renders and encodes a picture"},
 
 	// resize-pane addresses a pane open-pane returned, and the example carries
 	// a literal id rather than one from this run. The pair is proved end to
@@ -196,8 +188,8 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture's shells are not the fake integrated shell, so no pane marks
 	// its commands. run waits a moment for a first prompt before it says so.
 	// The verb is proved against a shell that marks them in verb_run_test.go.
-	"run#0": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
-	"run#1": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
+	"run#0": {errCode: ErrVerbNoShellIntegration, why: "no shell in the fixture marks its commands"},
+	"run#1": {errCode: ErrVerbNoShellIntegration, why: "no shell in the fixture marks its commands"},
 
 	// The fixture's panes sit in a throwaway repository with no fan and no
 	// agent. The review verbs are proved in verb_review_test.go.
@@ -217,23 +209,16 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"mark-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},
 }
 
-// blockBudget is how long a call gets to answer. Every example that answers at
-// all answers in single-digit milliseconds, so this is generous by two orders
-// of magnitude and still keeps the blocking pair cheap.
+// blockBudget is how long an example marked blocks is waited on before it
+// counts as blocking. A handler that stopped waiting answers at once, so this
+// needs no room for a slow runner, and every raise is paid on every run.
 const blockBudget = 750 * time.Millisecond
 
-// slowBudget is what an example marked slow gets instead.
-//
-// The budget above is two orders of magnitude over what a verb that reads
-// state and answers needs, which is every verb but one. Taking a screenshot
-// renders and encodes a picture, so it is the one example whose honest cost is
-// in the same order as the budget, and on a loaded runner it went over: twice
-// in a week the build went red on a timeout that said nothing about the verb.
-//
-// Raising blockBudget for everyone would have been the wrong fix. It is also
-// how long the blocking pair is waited on before they count as blocking, so
-// every raise is paid by the two tests that are meant to time out.
-const slowBudget = 10 * time.Second
+// answerBudget is how long every other example gets to answer. This test
+// proves a verb reaches its handler, not how fast the handler is, so the
+// budget only bounds a hang. A budget sized to a verb's usual speed went red
+// on a loaded runner on timeouts that said nothing about the verb.
+const answerBudget = time.Minute
 
 // TestEveryVerbExampleReachesItsHandler runs every example in the registry
 // against a real daemon.
@@ -281,9 +266,9 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 				skipIfExampleNeedsAMissingProgram(t, example)
 
 				want := exampleOutcomes[key]
-				budget := blockBudget
-				if want.slow {
-					budget = slowBudget
+				budget := answerBudget
+				if want.blocks {
+					budget = blockBudget
 				}
 				resp, err := callOnce(t, socketPath, example, budget)
 				if want.blocks {
