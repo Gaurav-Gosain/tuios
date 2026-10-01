@@ -21,7 +21,6 @@ const (
 	// agentStartDefault is how long agent start waits for the agent, as in
 	// herdr, when --timeout is not given.
 	agentStartDefault = 30 * time.Second
-	agentStartPoll    = 100 * time.Millisecond
 )
 
 // Options are what Main needs from its process.
@@ -181,7 +180,8 @@ func send(path, id, method string, params map[string]any, timeout time.Duration)
 // waitAgentStart waits, after agent.start, for the agent in the pane to be
 // ready for a prompt, as herdr's agent start does: at rest (idle or done)
 // it is ready, blocked is an error, and the wait ends at the timeout. The
-// answer is the start's, with the agent's record as it is now.
+// answer is the start's, with the agent's record as it is now. The server
+// holds the wait (agent.wait), so the wait is one request, not a poll.
 func waitAgentStart(path string, c *Call, started map[string]any) map[string]any {
 	timeout := agentStartDefault
 	if n, ok := c.Params["timeout_ms"].(uint64); ok {
@@ -189,25 +189,33 @@ func waitAgentStart(path string, c *Call, started map[string]any) map[string]any
 	}
 	name, _ := c.Params["name"].(string)
 	pane, _ := c.Params["pane_id"].(string)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		resp, err := send(path, "cli:agent:start", "agent.get", map[string]any{"target": pane}, requestTimeout)
+	timedOut := errorResponse("cli:agent:start", "timeout", "timed out waiting for agent startup")
+	for deadline := time.Now().Add(timeout); ; {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return timedOut
+		}
+		params := map[string]any{"target": pane, "until": []string{"idle", "done", "blocked"}, "timeout_ms": max(left.Milliseconds(), 1)}
+		resp, err := send(path, "cli:agent:start", "agent.wait", params, left+requestTimeout)
 		if err != nil {
 			return map[string]any(err)
 		}
-		if result, ok := resp["result"].(map[string]any); ok {
-			agent, _ := result["agent"].(map[string]any)
-			switch agent["agent_status"] {
-			case "idle", "done":
-				if r, ok := started["result"].(map[string]any); ok {
-					r["agent"] = agent
-				}
-				return started
-			case "blocked":
-				return errorResponse("cli:agent:start", "agent_not_ready", "agent "+name+" is blocked during startup and is not ready for prompts")
-			}
+		// An error is the wait's timeout, or a pane that went away, which
+		// never comes ready either.
+		result, ok := resp["result"].(map[string]any)
+		if !ok {
+			return timedOut
 		}
-		time.Sleep(agentStartPoll)
+		agent, _ := result["agent"].(map[string]any)
+		switch agent["agent_status"] {
+		case "idle", "done":
+			if r, ok := started["result"].(map[string]any); ok {
+				r["agent"] = agent
+			}
+			return started
+		case "blocked":
+			return errorResponse("cli:agent:start", "agent_not_ready", "agent "+name+" is blocked during startup and is not ready for prompts")
+		}
+		// The agent moved on between the wait and its record: wait again.
 	}
-	return errorResponse("cli:agent:start", "timeout", "timed out waiting for agent startup")
 }
