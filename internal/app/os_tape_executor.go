@@ -1089,7 +1089,7 @@ func (m *OS) MasterLayoutExec(command tape.CommandType, args []string) error {
 		}
 	case tape.CommandTypeSetMasterCount:
 		n, err := strconv.Atoi(args[0])
-		if err != nil || n < config.MasterCountMin || n > config.MasterCountMax {
+		if err != nil || !config.ValidMasterCount(n) {
 			return fmt.Errorf("%q is not a master count. Use a number from %d to %d", args[0], config.MasterCountMin, config.MasterCountMax)
 		}
 		m.SetMasterCount(n)

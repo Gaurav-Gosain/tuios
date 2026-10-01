@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
@@ -1774,7 +1775,7 @@ only mean something while the panes are tiled.`,
 	setLayoutCmd.Flags().StringVar(&setLayoutMasterPosition, "master-position", "", "Side the master panes take: left, right, top, bottom or center")
 	setLayoutCmd.Flags().IntVar(&setLayoutMasters, "masters", 0, "How many panes are master panes, 1 to 9")
 	setLayoutCmd.Flags().BoolVar(&setLayoutJSON, "json", false, "Output result as JSON")
-	_ = setLayoutCmd.RegisterFlagCompletionFunc("master-position", fixedCompletions(masterPositionNames()...))
+	_ = setLayoutCmd.RegisterFlagCompletionFunc("master-position", fixedCompletions(config.MasterPositions...))
 	_ = setLayoutCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = setLayoutCmd.RegisterFlagCompletionFunc("tiling", fixedCompletions("true", "false"))
 

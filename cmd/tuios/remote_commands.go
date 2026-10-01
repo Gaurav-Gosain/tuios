@@ -530,17 +530,23 @@ func printWorkspaceList(raw json.RawMessage) error {
 // checkSetLayoutMaster refuses a master position or count set-layout cannot
 // take, before anything is sent.
 func checkSetLayoutMaster(position string, masters int, mastersSet bool) error {
-	if position != "" && !slices.Contains(config.MasterPositions, position) {
+	if position != "" && !config.IsMasterPosition(position) {
 		return fmt.Errorf("--master-position takes %s, got %q", strings.Join(config.MasterPositions, ", "), position)
 	}
-	if mastersSet && (masters < config.MasterCountMin || masters > config.MasterCountMax) {
+	if mastersSet && !config.ValidMasterCount(masters) {
 		return fmt.Errorf("--masters takes a number from %d to %d, got %d", config.MasterCountMin, config.MasterCountMax, masters)
 	}
 	return nil
 }
 
-// masterPositionNames is the accepted --master-position values.
-func masterPositionNames() []string { return slices.Clone(config.MasterPositions) }
+// masterCountNames is the accepted master counts, as completions.
+func masterCountNames() []string {
+	names := make([]string, 0, config.MasterCountMax-config.MasterCountMin+1)
+	for n := config.MasterCountMin; n <= config.MasterCountMax; n++ {
+		names = append(names, strconv.Itoa(n))
+	}
+	return names
+}
 
 // runSetLayout turns tiling on or off and tidies the splits. tiling is a
 // pointer so a call that only equalizes leaves the tiling mode alone.
@@ -2394,7 +2400,7 @@ func getRunCommandArgCompletions(command string, argIndex int, toComplete string
 		}
 	case "SetMasterCount":
 		if argIndex == 1 {
-			return []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+			return masterCountNames()
 		}
 	case "SetBorderStyle":
 		if argIndex == 1 {
