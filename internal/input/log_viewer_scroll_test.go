@@ -24,9 +24,10 @@ func TestLogViewerScrollReachesTheNewestEntries(t *testing.T) {
 				for i := range total {
 					o.Log("INFO", "line %d", i)
 				}
-				// Open through the real toggle, which is what lands the view on
-				// the newest entries.
-				o.ToggleLogViewer()
+				// Open through handleToggleLogs, the keybinding's own path: it
+				// logs "Log viewer opened" first, and that line moves the bottom
+				// the toggle then lands the view on.
+				o, _ = handleToggleLogs(tea.KeyPressMsg{}, o)
 				page, maxScroll, _ := o.LogViewerBounds()
 				if maxScroll != o.LogScrollOffset {
 					t.Fatalf("opening left offset %d, want the bottom %d", o.LogScrollOffset, maxScroll)
