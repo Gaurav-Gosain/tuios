@@ -207,6 +207,12 @@ type DaemonConfig struct {
 	// disk, compressed, in KiB. Zero means 2048. A pane over it saves fewer
 	// lines.
 	PersistScrollbackKB int `toml:"persist_scrollback_kb"`
+	// WindowSize decides the size of a session with more than one client
+	// attached, as tmux's window-size option does: "smallest" (the default)
+	// takes the smallest client, "largest" the largest, and "latest" the
+	// client that last had input. A client smaller than the session shows
+	// the part of it around the focused pane's cursor.
+	WindowSize string `toml:"window_size"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
@@ -218,6 +224,16 @@ const (
 
 // ResumeAgentsModes lists the valid values for daemon.resume_agents.
 var ResumeAgentsModes = []string{ResumeAgentsAsk, ResumeAgentsAuto, ResumeAgentsOff}
+
+// Window size policies. See DaemonConfig.WindowSize.
+const (
+	WindowSizeSmallest = "smallest"
+	WindowSizeLargest  = "largest"
+	WindowSizeLatest   = "latest"
+)
+
+// WindowSizeModes lists the valid values for daemon.window_size.
+var WindowSizeModes = []string{WindowSizeSmallest, WindowSizeLargest, WindowSizeLatest}
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
@@ -793,6 +809,7 @@ func DefaultConfig() *UserConfig {
 		Daemon: DaemonConfig{
 			LogLevel:     "off",
 			ResumeAgents: ResumeAgentsAsk,
+			WindowSize:   WindowSizeSmallest,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,
@@ -2249,6 +2266,9 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	// the person; validation reports an unknown value as a warning.
 	if !slices.Contains(ResumeAgentsModes, cfg.Daemon.ResumeAgents) {
 		cfg.Daemon.ResumeAgents = defaultCfg.Daemon.ResumeAgents
+	}
+	if !slices.Contains(WindowSizeModes, cfg.Daemon.WindowSize) {
+		cfg.Daemon.WindowSize = defaultCfg.Daemon.WindowSize
 	}
 }
 

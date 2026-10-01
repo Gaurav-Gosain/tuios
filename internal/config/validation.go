@@ -120,6 +120,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
 	validateResumeAgents(cfg, result)
+	validateWindowSize(cfg, result)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
@@ -237,6 +238,20 @@ func validateResumeAgents(cfg *UserConfig, result *ValidationResult) {
 		Field:   "daemon",
 		Key:     "resume_agents",
 		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to ask", value, strings.Join(ResumeAgentsModes, ", ")),
+	})
+}
+
+// validateWindowSize warns when daemon.window_size holds a value outside its
+// allowed set. An unknown value falls back to smallest.
+func validateWindowSize(cfg *UserConfig, result *ValidationResult) {
+	value := cfg.Daemon.WindowSize
+	if value == "" || slices.Contains(WindowSizeModes, value) {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field:   "daemon",
+		Key:     "window_size",
+		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to smallest", value, strings.Join(WindowSizeModes, ", ")),
 	})
 }
 

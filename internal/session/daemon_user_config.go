@@ -42,6 +42,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
 	cfg.RespondFromShell = uc.Daemon.RespondFromShell
 	cfg.ResumeAgents = uc.Daemon.ResumeAgents
+	cfg.WindowSize = uc.Daemon.WindowSize
 	cfg.History = ResolveHistoryPolicy(uc.Daemon.PersistScrollback, uc.Daemon.PersistScrollbackLines, uc.Daemon.PersistScrollbackKB)
 	cfg.Hosts = HostsFromConfig(uc)
 	// The same table says what each machine linked to this one may do here.

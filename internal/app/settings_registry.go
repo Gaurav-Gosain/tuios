@@ -84,6 +84,7 @@ var settingLabels = map[string]string{
 	"dock.clock.format":                 "Dock clock format",
 	"debug.show_key_events":             "Show keys",
 	"daemon.log_level":                  "Log level",
+	"daemon.window_size":                "Session size",
 	"tape.auto_review":                  "Auto-open review",
 	"hints.builtins":                    "Hint patterns",
 	"hints.alphabet":                    "Hint letters",

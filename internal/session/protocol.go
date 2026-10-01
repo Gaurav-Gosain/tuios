@@ -138,6 +138,12 @@ const (
 	// sends it only to a daemon whose welcome set MasterLayoutOps. See
 	// master_layout.go.
 	MsgMasterLayout
+	// MsgClientActivity says the person at a TUI client gave input: a key, a
+	// paste, a click, a drag or a wheel turn. The window_size latest policy
+	// reads it to pick the client whose size the session takes. A client
+	// sends it only to a daemon whose welcome set WindowSize. See
+	// window_size.go.
+	MsgClientActivity
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -197,6 +203,12 @@ type HelloPayload struct {
 	// scratch terminal a popup, as that client expects. See
 	// Session.SetScratchWorkspaces.
 	ScratchWorkspaces bool `json:"scratch_workspaces,omitempty"`
+	// WindowSize says the client reports input with MsgClientActivity and
+	// can draw a session larger than its own terminal, as a view that
+	// follows the cursor. While a client without it is attached, the
+	// session takes the smallest client's size whatever window_size says,
+	// which is what that client expects. See window_size.go.
+	WindowSize bool `json:"window_size,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -227,6 +239,11 @@ type WelcomePayload struct {
 	// MasterLayoutOps says the daemon reads MsgMasterLayout. A client that
 	// does not see it keeps a master layout change to itself.
 	MasterLayoutOps bool `json:"master_layout_ops,omitempty"`
+	// WindowSize says the daemon reads MsgClientActivity and can size a
+	// session larger than a client. A client that does not see it (a daemon
+	// that predates it) never draws a session larger than its own terminal
+	// and sends no activity.
+	WindowSize bool `json:"window_size,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -689,6 +706,9 @@ type SessionResizePayload struct {
 	// Zero means a daemon that predates the field, and is never treated as
 	// stale.
 	Generation uint64 `json:"generation,omitempty"`
+	// Policy is the window_size policy the size was settled under:
+	// smallest, largest or latest. Empty from a daemon that predates it.
+	Policy string `json:"policy,omitempty"`
 }
 
 // Error codes

@@ -587,6 +587,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Name: "Daemon",
 		Items: m.resolveRows([]settingsRow{
 			opt("daemon.log_level"),
+			opt("daemon.window_size"),
 			opt("daemon.agent_autodetect"),
 			opt("daemon.agent_detect_seconds"),
 			opt("daemon.resume_agents"),

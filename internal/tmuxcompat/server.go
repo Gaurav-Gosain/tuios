@@ -93,7 +93,67 @@ var options = []option{
 	{"automatic-rename", 'w', fixed("on")},
 	{"pane-base-index", 'w', fixed("0")},
 	{"remain-on-exit", 'w', fixed("off")},
-	{"window-size", 'w', fixed("latest")},
+	{"window-size", 'w', (*Shim).windowSize},
+}
+
+// windowSize is the session's daemon.window_size: smallest, largest or
+// latest, the names tmux uses. A daemon that does not report the option
+// predates it, and the shim then says latest, as it always did, since the
+// pane's size followed the tuios client.
+func (s *Shim) windowSize() string {
+	raw, err := s.Caller.Call("get-option", map[string]any{"session": s.Session, "key": "daemon.window_size"})
+	if err != nil {
+		return "latest"
+	}
+	var res struct {
+		Value json.RawMessage `json:"value"`
+	}
+	var v string
+	if json.Unmarshal(raw, &res) != nil || json.Unmarshal(res.Value, &v) != nil || v == "" {
+		return "latest"
+	}
+	return v
+}
+
+// setWindowSize is set-option window-size: it sets the session's
+// daemon.window_size. tmux's manual has no tuios equivalent and is refused.
+func (s *Shim) setWindowSize(value string) (string, error) {
+	switch value {
+	case "smallest", "largest", "latest":
+	default:
+		return OutcomeError, fmt.Errorf("window-size: %s is not supported, use smallest, largest or latest", value)
+	}
+	if _, err := s.Caller.Call("set-option", map[string]any{"session": s.Session, "key": "daemon.window_size", "value": value}); err != nil {
+		return OutcomeError, fmt.Errorf("window-size: %w", err)
+	}
+	return OutcomeOK, nil
+}
+
+// optionAssignment finds the option name and value in set-option's arguments.
+// Every flag is skipped, and -t with its target. It reports false when -u
+// (unset) is given or no name is found.
+func optionAssignment(args []string) (name, value string, ok bool) {
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			rest = append(rest, args[i+1:]...)
+			i = len(args)
+		case a == "-t":
+			i++
+		case len(a) > 1 && a[0] == '-' && len(rest) == 0:
+			if strings.ContainsRune(a, 'u') {
+				return "", "", false
+			}
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) < 2 {
+		return "", "", false
+	}
+	return rest[0], rest[1], true
 }
 
 // historyLimit is the scrollback length tuios keeps, read from the daemon's

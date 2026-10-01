@@ -176,6 +176,14 @@ type TUIClient struct {
 	typeAtPromptSupported bool
 	// graphicsSupported says the daemon's welcome offered MsgClientGraphics.
 	graphicsSupported bool
+	// windowSize says the daemon's welcome offered WindowSize, and this
+	// client offered it too. See tuiclient_window_size.go.
+	windowSize bool
+	// activityMu and lastActivity throttle MsgClientActivity.
+	activityMu   sync.Mutex
+	lastActivity time.Time
+	// sizePolicy is the window_size policy of the last session resize.
+	sizePolicy atomic.Pointer[string]
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -296,6 +304,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
+	hello.WindowSize = !legacyWindowSize()
 
 	// Send hello with capabilities
 	msg, err := NewMessage(MsgHello, hello)
@@ -356,6 +365,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.masterOps.Store(welcome.MasterLayoutOps)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
+	c.windowSize = welcome.WindowSize && hello.WindowSize
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
@@ -1658,6 +1668,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		if !c.noteSessionLayout(payload.Generation, payload.Reserve) {
 			debugLog("[MULTICLIENT] dropped a stale session resize at generation %d", payload.Generation)
 			return
+		}
+		if payload.Policy != "" {
+			policy := payload.Policy
+			c.sizePolicy.Store(&policy)
 		}
 
 		// Same shape as MsgStateSync above: one lock over the handler read and
