@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"sync"
@@ -36,6 +37,23 @@ func detachHookOS(t *testing.T) (*OS, string) {
 func fired(marker string) bool {
 	_, err := os.Stat(marker)
 	return err == nil
+}
+
+func TestDetachReportsFocusOutOnce(t *testing.T) {
+	win := newTestWindow(t, "focus", 40, 20)
+	win.LockIO()
+	_, _ = win.Terminal.Write([]byte("\x1b[?1004h"))
+	win.UnlockIO()
+	var got bytes.Buffer
+	win.DaemonWriteFunc = func(data []byte) error { _, _ = got.Write(data); return nil }
+
+	m := newTestOS(win)
+	m.FireDetached()
+	m.FireDetached()
+
+	if got.String() != "\x1b[O" {
+		t.Errorf("focus-out reports = %q, want one CSI O", got.String())
+	}
 }
 
 // TestAConnectionThatEndedIsADetach. This is the report: the client never

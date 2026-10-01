@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // daemonClientHandlers lists the TUIClient's session-wide callbacks by
@@ -111,5 +113,67 @@ func TestRestoreAttachedSessionFiresTheAttachHook(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the attach sequence fired no after-attach hook")
+	}
+}
+
+func TestRestoreAttachedSessionReportsFocusToFocusedPane(t *testing.T) {
+	tests := []struct {
+		name       string
+		focusMode  bool
+		wantReport bool
+	}{
+		{name: "requested", focusMode: true, wantReport: true},
+		{name: "not requested"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			win := newTestWindow(t, "focus", 40, 20)
+			if tt.focusMode {
+				win.LockIO()
+				_, _ = win.Terminal.Write([]byte("\x1b[?1004h"))
+				win.UnlockIO()
+			}
+			var got bytes.Buffer
+			win.DaemonWriteFunc = func(data []byte) error {
+				_, _ = got.Write(data)
+				return nil
+			}
+
+			o := newTestOS(win)
+			o.RestoreAttachedSession(nil)
+
+			if want := ""; tt.wantReport {
+				want = "\x1b[I"
+				if got.String() != want {
+					t.Errorf("focus report = %q, want %q", got.String(), want)
+				}
+			} else if got.Len() != 0 {
+				t.Errorf("unexpected input to pane: %q", got.String())
+			}
+		})
+	}
+}
+
+func TestFocusWindowReportsFocusEvents(t *testing.T) {
+	left := newTestWindow(t, "left", 40, 20)
+	right := newTestWindow(t, "right", 40, 20)
+	for _, win := range []*terminal.Window{left, right} {
+		win.LockIO()
+		_, _ = win.Terminal.Write([]byte("\x1b[?1004h"))
+		win.UnlockIO()
+	}
+	var leftInput, rightInput bytes.Buffer
+	left.DaemonWriteFunc = func(data []byte) error { _, _ = leftInput.Write(data); return nil }
+	right.DaemonWriteFunc = func(data []byte) error { _, _ = rightInput.Write(data); return nil }
+
+	o := newTestOS(left)
+	o.Windows = []*terminal.Window{left, right}
+	o.FocusWindow(1)
+
+	if got := leftInput.String(); got != "\x1b[O" {
+		t.Errorf("left focus report = %q, want CSI O", got)
+	}
+	if got := rightInput.String(); got != "\x1b[I" {
+		t.Errorf("right focus report = %q, want CSI I", got)
 	}
 }

@@ -452,6 +452,12 @@ func (w *Window) terminalRef() vt.Terminal {
 	return w.Terminal
 }
 
+// FocusReportingOn reports whether the guest requested DECSET 1004.
+func (w *Window) FocusReportingOn() bool {
+	term := w.terminalRef()
+	return term != nil && term.GetModes()[1004]
+}
+
 // StartDaemonResponseReader starts a goroutine to read and DRAIN responses from
 // the terminal emulator. We don't forward these to the PTY because:
 //  1. Responses were appearing as visible escape sequences in the output

@@ -127,10 +127,13 @@ func (m *OS) FireAttached() {
 // the clients that have no deliberate detach, and one person leaving once is
 // one detach.
 func (m *OS) FireDetached() {
-	if m.HookManager == nil {
+	if !m.detachFired.CompareAndSwap(false, true) {
 		return
 	}
-	if !m.detachFired.CompareAndSwap(false, true) {
+	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+		m.reportPaneFocus(m.Windows[m.FocusedWindow], false)
+	}
+	if m.HookManager == nil {
 		return
 	}
 	m.FireHookContext(hooks.AfterDetach, hooks.Context{})

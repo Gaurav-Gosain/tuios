@@ -369,6 +369,10 @@ func (m *OS) FocusWindow(i int) *OS {
 	// ATOMIC: Set focus and Z-index in one operation
 	m.FocusedWindow = i
 	m.FocusHistory = session.RecordFocus(m.FocusHistory, m.Windows[i].Workspace, m.Windows[i].ID)
+	if oldFocused >= 0 && oldFocused < len(m.Windows) {
+		m.reportPaneFocus(m.Windows[oldFocused], false)
+	}
+	m.reportPaneFocus(m.Windows[i], true)
 
 	// Save focus for current workspace
 	if m.Windows[i].Workspace == m.CurrentWorkspace {
