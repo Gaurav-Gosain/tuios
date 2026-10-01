@@ -53,6 +53,53 @@ type MasterLayoutPayload struct {
 	IfAbsent bool
 }
 
+// maxMasterLayouts caps how many workspaces hold a shape. An ordinary
+// workspace is bounded by the workspace count and a scratch one by the windows
+// on it, so this only stops a client that keeps sending new scratch numbers
+// from growing the state past what a push can carry.
+const maxMasterLayouts = 64
+
+// checkMasterLayout refuses a shape the session cannot hold: a workspace that
+// is not one (0, past the workspace count, or a scratch workspace with no
+// window on it), a side that is not a side, or a count out of range.
+func checkMasterLayout(state *SessionState, ws int, st MasterLayoutState) error {
+	ok := ws >= 1 && ws <= state.workspaceBound()
+	if IsScratchWorkspace(ws) {
+		ok = countOnWorkspace(state, ws) > 0
+	}
+	if !ok {
+		return fmt.Errorf("workspace %d is out of range", ws)
+	}
+	if st.Count < 1 || st.Count > config.MasterCountMax || !slices.Contains(config.MasterPositions, st.Position) {
+		return fmt.Errorf("master layout %+v is not valid", st)
+	}
+	return nil
+}
+
+// RestoreMasterLayouts puts the saved master-stack shapes back on a session a
+// restore just rebuilt. UpdateState keeps the daemon's own copy of the field
+// (see retainDaemonExclusive), and a new session has none, so the restore
+// cannot carry them in the state it pushes. An entry the session could not
+// take from a client is dropped here too.
+func (s *Session) RestoreMasterLayouts(saved map[int]MasterLayoutState) {
+	if len(saved) == 0 {
+		return
+	}
+	_ = s.mutateState(func(state *SessionState) error {
+		next := make(map[int]MasterLayoutState, len(saved))
+		for ws, st := range maps.Clone(saved) {
+			if checkMasterLayout(state, ws, st) == nil && len(next) < maxMasterLayouts {
+				next[ws] = st
+			}
+		}
+		if len(next) == 0 {
+			return nil
+		}
+		state.WorkspaceMasterLayout = next
+		return nil
+	})
+}
+
 // errMasterLayoutSame refuses an op that would not change the state, so it
 // does not advance Version and wake every client for nothing.
 var errMasterLayoutSame = errors.New("master layout op changes nothing")
@@ -66,15 +113,15 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 	}
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
 		s.notePushLocked(p.PushOrigin, p.PushSeq)
-		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
-			return fmt.Errorf("workspace %d is out of range", p.Workspace)
-		}
-		if p.Layout.Count < 1 || p.Layout.Count > config.MasterCountMax || !slices.Contains(config.MasterPositions, p.Layout.Position) {
-			return fmt.Errorf("master layout %+v is not valid", p.Layout)
+		if err := checkMasterLayout(state, p.Workspace, p.Layout); err != nil {
+			return err
 		}
 		old, had := state.WorkspaceMasterLayout[p.Workspace]
 		if (had && p.IfAbsent) || (had && old == p.Layout) {
 			return errMasterLayoutSame
+		}
+		if !had && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
+			return fmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
 		}
 		// The snapshot handed out before this aliases the map, so it is
 		// cloned before the write.
