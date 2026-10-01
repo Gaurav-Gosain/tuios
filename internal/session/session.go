@@ -1056,6 +1056,10 @@ type Session struct {
 	// than a field of state because the saver goroutine reads it and holds no
 	// lock of this session.
 	stateDirty atomic.Bool
+	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
+	// by stateWakeMu, which is never held with another lock taken after it.
+	stateWake   chan struct{}
+	stateWakeMu sync.Mutex
 
 	// eventSink, when set, receives control-plane events raised by this session
 	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
@@ -2267,7 +2271,7 @@ func (s *Session) SetOption(key, value string) {
 		s.state.Options = make(map[string]string)
 	}
 	s.state.Options[key] = value
-	s.stateDirty.Store(true)
+	s.noteStateChangeLocked()
 }
 
 // GetOption reads a daemon-owned session option under stateMu, returning the
@@ -2473,7 +2477,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		}
 	}
 	s.TouchActive()
-	s.stateDirty.Store(true)
+	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return accepted, behind
 }
@@ -2547,7 +2551,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		s.focusMovedVersion = s.state.Version
 	}
 	s.focusIntent = false
-	s.stateDirty.Store(true)
+	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil
 }

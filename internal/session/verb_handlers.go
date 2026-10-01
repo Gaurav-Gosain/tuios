@@ -374,26 +374,25 @@ func (d *Daemon) awaitPlacement(sess *Session, windowID, ptyID string, limit tim
 			cols, rows = pty.Size()
 		}
 	}
-	deadline := time.Now().Add(limit)
-	for time.Now().Before(deadline) {
-		w, ok := findWindowState(sess.GetState(), windowID)
-		if !ok {
-			return false
-		}
-		if w.Unplaced {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		settle := time.Now().Add(placeSettle)
-		for pty != nil && time.Now().Before(settle) {
-			if c, r := pty.Size(); c != cols || r != rows {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		return true
+	gone := false
+	placed := sess.WaitState(limit, func(st *SessionState) bool {
+		w, ok := findWindowState(st, windowID)
+		gone = !ok
+		return gone || !w.Unplaced
+	})
+	if !placed || gone {
+		return false
 	}
-	return false
+	// The size is the terminal's, not the session state's, so no state
+	// change wakes this short wait.
+	settle := time.Now().Add(placeSettle)
+	for pty != nil && time.Now().Before(settle) {
+		if c, r := pty.Size(); c != cols || r != rows {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return true
 }
 
 // verbPopup opens a popup: a floating pane that runs one command and closes
