@@ -131,7 +131,10 @@ func hintOwner(hint string) (string, bool) {
 type Report struct {
 	// SessionOnly makes the report a set-agent-session call: it names the
 	// conversation and says nothing about the pane's state. State is empty.
-	SessionOnly    bool   `json:"session_only,omitempty"`
+	SessionOnly bool `json:"session_only,omitempty"`
+	// State is empty, without SessionOnly, for a report that is its Activity
+	// alone, a report-agent-activity call: a subagent starting or stopping,
+	// which says nothing about what the pane's own agent is doing.
 	State          string `json:"state,omitempty"`
 	Kind           string `json:"kind,omitempty"`
 	Message        string `json:"message,omitempty"`
@@ -142,8 +145,9 @@ type Report struct {
 	IfState string `json:"if_state,omitempty"`
 	// Activity is the hook event itself, for the pane's activity ring: what
 	// was asked, which tool ran on what and how it ended, and what a turn
-	// ended with. It rides the state report and is sent only to a daemon
-	// whose set-agent-state lists it.
+	// ended with. An event StateActivity takes rides the state report, sent
+	// only to a daemon whose set-agent-state lists activity. Any other goes
+	// with report-agent-activity, after the state report when there is one.
 	Activity *Activity `json:"activity,omitempty"`
 }
 
@@ -161,6 +165,10 @@ type Activity struct {
 	OK *bool `json:"ok,omitempty"`
 	// Model is the model the harness named on the event.
 	Model string `json:"model,omitempty"`
+	// AgentID and AgentType name the subagent of a subagent event: the
+	// harness's id for it, which pairs its start with its stop, and its type.
+	AgentID   string `json:"agent_id,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
 }
 
 // Activity events, the values of Activity.Event.
@@ -170,7 +178,50 @@ const (
 	ActivityToolDone   = "tool_done"
 	ActivityToolFailed = "tool_failed"
 	ActivityTurnEnd    = "turn_end"
+	// The three below go with report-agent-activity, which set-agent-state
+	// predates: see StateActivity.
+	ActivitySubagentStart = "subagent_start"
+	ActivitySubagentStop  = "subagent_stop"
+	ActivitySessionStart  = "session_start"
 )
+
+// StateActivity reports whether set-agent-state takes event as the activity
+// of a state report. The others, a subagent starting or stopping and a
+// conversation starting, go with report-agent-activity: a daemon from before
+// them would refuse the whole state report for an event it does not know,
+// and a daemon without the verb refuses it as an unknown verb, which costs
+// nothing.
+func StateActivity(event string) bool {
+	switch event {
+	case ActivityPrompt, ActivityTool, ActivityToolDone, ActivityToolFailed, ActivityTurnEnd:
+		return true
+	}
+	return false
+}
+
+// SubagentIDMax bounds a subagent id, in bytes.
+const SubagentIDMax = 128
+
+// ValidSubagentID reports whether a harness's subagent id is one tuios keeps:
+// 1 to SubagentIDMax bytes of ASCII letters, digits, '_', '.', ':', '@' and
+// '-'. The hook skips a subagent whose id is anything else, and the daemon
+// refuses one. Claude Code's are an "a", the teammate's name if it has one,
+// and 16 hex digits.
+func ValidSubagentID(id string) bool {
+	if id == "" || len(id) > SubagentIDMax {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '_' || c == '.' || c == ':' || c == '@' || c == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // Decision is what one hook event comes to: a report, or the reason there is
 // none. Exactly one of the two is set.

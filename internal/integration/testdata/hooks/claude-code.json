@@ -2,12 +2,17 @@
   {
     "name": "SessionStart startup",
     "payload": {"session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "cwd": "/src", "hook_event_name": "SessionStart", "source": "startup", "model": "claude-opus"},
-    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl"}
+    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "activity": {"event": "session_start", "text": "startup"}}
   },
   {
     "name": "SessionStart resume",
     "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "SessionStart", "source": "resume"},
-    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl"}
+    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl", "activity": {"event": "session_start", "text": "resume"}}
+  },
+  {
+    "name": "SessionStart clear",
+    "payload": {"session_id": "sess-2", "transcript_path": "/t2.jsonl", "hook_event_name": "SessionStart", "source": "clear"},
+    "want": {"state": "idle", "agent_session_id": "sess-2", "transcript_path": "/t2.jsonl", "activity": {"event": "session_start", "text": "clear"}}
   },
   {
     "name": "SessionStart compact",
@@ -170,9 +175,34 @@
     "want": {"state": "none", "agent_session_id": "sess-1"}
   },
   {
+    "name": "SubagentStart",
+    "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "cwd": "/src", "hook_event_name": "SubagentStart", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore", "prompt_id": "p1", "scratchpad_dir": "/tmp/s"},
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_start", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}}
+  },
+  {
+    "name": "SubagentStart for an agent-team teammate",
+    "payload": {"session_id": "sess-1", "hook_event_name": "SubagentStart", "agent_id": "aworker-e-quickfix-3f09c2e71d4b5a68", "agent_type": "worker-e-quickfix"},
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_start", "agent_id": "aworker-e-quickfix-3f09c2e71d4b5a68", "agent_type": "worker-e-quickfix"}}
+  },
+  {
     "name": "SubagentStop",
+    "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "SubagentStop", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore", "agent_transcript_path": "/t/agent-a3f09c2e71d4b5a68.jsonl", "stop_hook_active": false, "background_tasks": [{"agent_type": "Explore", "description": "map the api", "id": "a3f09c2e71d4b5a68", "status": "running", "type": "subagent"}]},
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_stop", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}}
+  },
+  {
+    "name": "SubagentStop with no last message and no type",
     "payload": {"session_id": "sess-1", "hook_event_name": "SubagentStop", "agent_id": "a1"},
-    "skip": "subagent"
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_stop", "agent_id": "a1"}}
+  },
+  {
+    "name": "SubagentStart with an agent_id tuios does not keep",
+    "payload": {"session_id": "sess-1", "hook_event_name": "SubagentStart", "agent_id": "a1; rm -rf ~", "agent_type": "Explore"},
+    "skip": "agent_id is not an id tuios keeps"
+  },
+  {
+    "name": "SubagentStop with no agent_id",
+    "payload": {"session_id": "sess-1", "hook_event_name": "SubagentStop"},
+    "skip": "no agent_id"
   },
   {
     "name": "subagent PreToolUse",

@@ -21,7 +21,10 @@ type fakeDaemon struct {
 	// noActivity stands in for a daemon that has every hook field but
 	// activity: the daemons from before the activity ring.
 	noActivity bool
-	resolved   map[string]any
+	// noActivityVerb stands in for a daemon from before
+	// report-agent-activity, which answers it unknown_verb.
+	noActivityVerb bool
+	resolved       map[string]any
 }
 
 // oldSetAgentStateParams are the params set-agent-state took before the hook
@@ -73,6 +76,11 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		return json.RawMessage(`{"applied":true,"state":"` + p["state"].(string) + `"}`), nil
 	case "set-agent-meta":
 		return json.RawMessage(`{"type":"agent_meta_set"}`), nil
+	case "report-agent-activity":
+		if f.old || f.noActivityVerb {
+			break
+		}
+		return json.RawMessage(`{"type":"agent_activity_reported","state":"done","recorded":true,"subagents":1}`), nil
 	case "set-agent-session":
 		if f.old {
 			break
@@ -80,6 +88,17 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		return json.RawMessage(`{"applied":true,"agent_session_id":"` + p["agent_session_id"].(string) + `"}`), nil
 	}
 	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
+}
+
+// activities are the report-agent-activity calls the hook made.
+func (f *fakeDaemon) activities() []map[string]any {
+	var out []map[string]any
+	for _, c := range f.calls {
+		if c.verb == "report-agent-activity" {
+			out = append(out, c.params)
+		}
+	}
+	return out
 }
 
 func (f *fakeDaemon) reports() []map[string]any {
@@ -189,6 +208,65 @@ func TestAgentHookSendsActivity(t *testing.T) {
 	}
 	if !strings.Contains(h.stderr.String(), `"unsupported":["activity"]`) {
 		t.Fatalf("explain does not name the dropped field: %s", h.stderr.String())
+	}
+}
+
+// TestAgentHookSendsSubagentsWithTheirOwnVerb: a subagent's start says
+// nothing about the pane's state, so it goes with report-agent-activity and
+// never as a set-agent-state, and a SessionStart sends its idle first and its
+// session_start after it, so the new conversation holds the pane by the time
+// the daemon checks the event against it. A daemon from before the verb
+// answers it unknown_verb: the subagent is not reported, and SessionStart's
+// idle still is.
+func TestAgentHookSendsSubagentsWithTheirOwnVerb(t *testing.T) {
+	start := `{"hook_event_name":"SessionStart","session_id":"s1","source":"resume"}`
+	sub := `{"hook_event_name":"SubagentStart","session_id":"s1","agent_id":"a3f09c2e71d4b5a68","agent_type":"Explore"}`
+
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
+	h.run(t, agentHookOptions{}, sub, "claude-code")
+	if r := h.daemon.reports(); len(r) != 0 {
+		t.Fatalf("a subagent's start went as a state report: %v", r)
+	}
+	a := h.daemon.activities()
+	if len(a) != 1 {
+		t.Fatalf("a subagent's start made %d report-agent-activity calls, want 1", len(a))
+	}
+	activity, _ := a[0]["activity"].(map[string]any)
+	if a[0]["agent_session_id"] != "s1" || a[0]["window"] != "w1" ||
+		activity["event"] != "subagent_start" || activity["agent_id"] != "a3f09c2e71d4b5a68" || activity["agent_type"] != "Explore" {
+		t.Fatalf("report-agent-activity = %v", a[0])
+	}
+
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
+	h.run(t, agentHookOptions{}, start, "claude-code")
+	if r := h.daemon.reports(); len(r) != 1 || r[0]["state"] != "idle" || r[0]["activity"] != nil {
+		t.Fatalf("SessionStart's state report = %v, want idle with no activity", r)
+	}
+	var order []string
+	for _, c := range h.daemon.calls {
+		if c.verb == "set-agent-state" || c.verb == "report-agent-activity" {
+			order = append(order, c.verb)
+		}
+	}
+	if len(order) != 2 || order[0] != "set-agent-state" || order[1] != "report-agent-activity" {
+		t.Fatalf("SessionStart called %v, want the state report and then the activity", order)
+	}
+	if activity, _ := h.daemon.activities()[0]["activity"].(map[string]any); activity["event"] != "session_start" || activity["text"] != "resume" {
+		t.Fatalf("SessionStart's activity = %v", activity)
+	}
+
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{noActivityVerb: true}}
+	h.run(t, agentHookOptions{}, sub, "claude-code")
+	if r := h.daemon.reports(); len(r) != 0 || !strings.Contains(h.stderr.String(), "predates report-agent-activity") {
+		t.Fatalf("a daemon without the verb: reports %v, explain %s", r, h.stderr.String())
+	}
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{noActivityVerb: true}}
+	h.run(t, agentHookOptions{}, start, "claude-code")
+	if r := h.daemon.reports(); len(r) != 1 || r[0]["state"] != "idle" {
+		t.Fatalf("SessionStart to a daemon without the verb: %v, want its idle reported", r)
+	}
+	if !strings.Contains(h.stderr.String(), `"applied":true`) || !strings.Contains(h.stderr.String(), `"activity_error":"the running daemon predates report-agent-activity`) {
+		t.Fatalf("explain does not say the state applied and the activity did not: %s", h.stderr.String())
 	}
 }
 
