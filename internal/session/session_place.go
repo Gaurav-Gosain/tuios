@@ -35,6 +35,16 @@ type placeRecord struct {
 	// gen counts cwd changes, so a branch read that finishes after a later
 	// change has already landed is dropped rather than stored over it.
 	gen atomic.Uint64
+	// announced says the shell itself reported cwd over OSC 7, rather than
+	// cwd being the spawn directory it was seeded with. A shell that reports
+	// its directory is the best answer there is; one that never has is read
+	// from its process instead. See Session.livePlaces.
+	announced atomic.Bool
+	// elsewhere names the machine the last OSC 7 report came from, when that
+	// is not this one: the pane is running ssh and the shell on the far end
+	// reported its folder. Empty otherwise. It holds while the program that
+	// made the report holds the terminal; see Session.checkPaneCwd.
+	elsewhere atomic.Pointer[string]
 }
 
 // setCwd records a directory the shell reported (an OSC 7 payload or a bare
@@ -46,8 +56,62 @@ func (r *placeRecord) setCwd(raw string) {
 	if !ok {
 		return
 	}
+	r.setCwdPath(path)
+}
+
+// announce records what the shell reported over OSC 7, and says whether the
+// pane's place changed. Unlike setCwd it keeps a report that names another
+// machine, as the machine the pane's shell is now on.
+func (r *placeRecord) announce(raw string) bool {
+	path, host, ok := parseCwdAnnouncement(raw)
+	if !ok {
+		return false
+	}
+	if host != "" {
+		return r.setElsewhere(host)
+	}
+	moved := r.setElsewhere("")
+	if !r.announced.Swap(true) {
+		moved = true
+	}
+	if r.setCwdPath(path) {
+		moved = true
+	}
+	return moved
+}
+
+// Elsewhere is the machine the pane's shell last reported a folder on, when
+// that is not this one.
+func (r *placeRecord) Elsewhere() string {
+	if p := r.elsewhere.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setElsewhere records the machine, or clears it, and says whether it changed.
+func (r *placeRecord) setElsewhere(host string) bool {
+	if r.Elsewhere() == host {
+		return false
+	}
+	r.elsewhere.Store(&host)
+	return true
+}
+
+// announcedCwd is the directory the shell reported, empty when it has never
+// reported one.
+func (r *placeRecord) announcedCwd() string {
+	if !r.announced.Load() {
+		return ""
+	}
+	return r.Cwd()
+}
+
+// setCwdPath stores a directory and starts one branch read for it. It says
+// whether the directory changed.
+func (r *placeRecord) setCwdPath(path string) bool {
 	if cur := r.cwd.Load(); cur != nil && *cur == path {
-		return
+		return false
 	}
 	r.cwd.Store(&path)
 	// The old branch is wrong the moment the directory changes. Clear it now
@@ -62,6 +126,7 @@ func (r *placeRecord) setCwd(raw string) {
 			r.branch.Store(&b)
 		}
 	}()
+	return true
 }
 
 // Cwd is the directory the shell last reported, or empty when it never has.
@@ -113,24 +178,35 @@ var localHostname = sync.OnceValue(func() string {
 // what the spawn directory and some prompts are. Anything else, including a
 // path on another host, is not a directory here.
 func parseCwdReport(raw string) (string, bool) {
+	path, host, ok := parseCwdAnnouncement(raw)
+	if !ok || host != "" {
+		return "", false
+	}
+	return path, true
+}
+
+// parseCwdAnnouncement reads a report the way parseCwdReport does, and keeps one
+// that names another machine. host is that machine, empty for this one.
+func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", false
+		return "", "", false
 	}
 	if !strings.HasPrefix(raw, "file://") {
 		if filepath.IsAbs(raw) {
-			return filepath.Clean(raw), true
+			return filepath.Clean(raw), "", true
 		}
-		return "", false
+		return "", "", false
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Path == "" {
-		return "", false
+		return "", "", false
 	}
-	if host := strings.ToLower(u.Hostname()); host != "" && host != "localhost" && host != localHostname() {
-		return "", false
+	if h := strings.ToLower(u.Hostname()); h != "" && h != "localhost" && h != localHostname() {
+		// Bounded: it is shown on a rail row, and the pane wrote it.
+		return filepath.Clean(u.Path), ClampDisplayText(u.Hostname()), true
 	}
-	return filepath.Clean(u.Path), true
+	return filepath.Clean(u.Path), "", true
 }
 
 // dirLabel is the short form of a directory for a row: its base name, or "~"

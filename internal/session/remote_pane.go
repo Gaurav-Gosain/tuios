@@ -707,6 +707,20 @@ func (p *remotePane) Cwd() (string, bool) {
 	return cwd, cwd != ""
 }
 
+// askCwd asks the far machine where the pane is now, unless an ask is already
+// out. Unlike Cwd it does not wait out the time to live: its caller paces it
+// (Session.noteCwdOnOutput), and the look that follows a quiet pane has to
+// reach the far machine even when the last answer is younger than a second.
+func (p *remotePane) askCwd() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || p.cwdInflight {
+		return
+	}
+	p.cwdInflight = true
+	go p.refreshCwd()
+}
+
 // refreshCwd asks the far machine where the pane is and stores the answer.
 func (p *remotePane) refreshCwd() {
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)

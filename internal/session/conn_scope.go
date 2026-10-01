@@ -169,6 +169,7 @@ var verbScopes = map[string]scopeKind{
 	"paste-image":          scopeDeny,
 	"paste-pane-image":     scopeDeny,
 	"read-dir":             scopeDeny,
+	"wait-dir":             scopeDeny,
 	"new-window":           scopeDeny,
 	"popup":                scopeDeny,
 	"split-window":         scopeDeny,

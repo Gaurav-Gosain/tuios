@@ -116,6 +116,12 @@ type WindowState struct {
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
 	Cwd string `json:"cwd,omitempty"`
+	// CwdHost names the machine the pane's shell last reported its folder on,
+	// when that is not the machine the pane runs on: the pane is running ssh.
+	// Empty otherwise. A live fact, filled into every snapshot and never
+	// stored. A client lists no files for such a pane, because Cwd is not a
+	// folder on any disk it can reach.
+	CwdHost string `json:"cwd_host,omitempty"`
 	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
 	// nominal box rather than a position anyone chose. The daemon has no viewport
 	// and cannot place a window; a client that receives an unplaced window puts it
@@ -883,6 +889,9 @@ type PTY struct {
 	// place is where the shell is: its directory from OSC 7 (seeded from the
 	// spawn directory) and the git branch there. See session_place.go.
 	place placeRecord
+	// cwdCheck paces the read of where the shell is that output drives. See
+	// pane_cwd_check.go.
+	cwdCheck paneCwdCheck
 	// shell follows the shell's commands through its OSC 133 marks. See
 	// shell_commands.go.
 	shell shellTrack
@@ -979,6 +988,8 @@ type Session struct {
 	cwdCache   map[string]string
 	cwdReadAt  time.Time
 	cwdCacheMu sync.Mutex
+	// placePushQueued coalesces the pushes publishPlaceMove starts.
+	placePushQueued atomic.Bool
 
 	// Session state (serializable)
 	state            *SessionState
@@ -1718,7 +1729,20 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		},
 		// Recorded, not applied: this fires with the terminal lock held, and
 		// the record is two atomics plus one branch read on its own goroutine.
-		WorkingDirectory: func(raw string) { pty.place.setCwd(raw) },
+		//
+		// A pane on another machine keeps the plain record, for the session's
+		// label. Its shell reports a folder on that machine, which this side
+		// would read as a shell that went somewhere else; the machine running
+		// it says where it is instead (remotePane.Cwd).
+		WorkingDirectory: func(raw string) {
+			if _, remote := pty.pty.(*remotePane); remote {
+				pty.place.setCwd(raw)
+				return
+			}
+			if pty.place.announce(raw) {
+				s.publishPlaceMove()
+			}
+		},
 		// Parked rather than applied: this fires with the terminal lock held, and
 		// applying it mutates session state. The read goroutine picks it up on the
 		// output event carrying these same bytes.
@@ -1914,17 +1938,29 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// And fill the directory the same way, for the same reason. A shell that
 	// announces one wins, because it is the shell's own answer and it stays
 	// right when the pane is running something that changed directory without
-	// the process doing so. The read below is what a pane whose shell never
-	// announced gets, and it is the only thing a client on another machine can
-	// be given. This writes into the copy, so the stored state keeps holding
-	// only what was actually announced.
+	// the process doing so. The read of the process is what a pane whose shell
+	// never announced gets, and it is the only thing a client on another
+	// machine can be given. Both are live and both win over the stored value,
+	// which is only where the window was created: a client takes the
+	// directory from here when the pane is not on its machine, so a stored
+	// value that won would keep that client on the first folder for good. This
+	// writes into the copy, so the stored state keeps what it had.
 	cwds := s.liveCwds()
+	places := s.livePlaces()
 	for i := range state.Windows {
-		if state.Windows[i].Cwd != "" {
-			continue
-		}
-		if cwd := cwds[state.Windows[i].PTYID]; cwd != "" {
-			state.Windows[i].Cwd = cwd
+		w := &state.Windows[i]
+		place := places[w.PTYID]
+		w.CwdHost = place.elsewhere
+		switch {
+		case place.cwd != "":
+			w.Cwd = place.cwd
+		case cwds[w.PTYID] != "":
+			w.Cwd = cwds[w.PTYID]
+		case w.Cwd == "" && place.seed != "":
+			// The process read is cached, and a snapshot taken just after
+			// the spawn can come from a read made before it. The folder
+			// the shell was started in is the answer until then.
+			w.Cwd = place.seed
 		}
 	}
 
@@ -1970,6 +2006,42 @@ func (s *Session) liveHostLinks() map[string]hostLinkFact {
 			out = make(map[string]hostLinkFact)
 		}
 		out[id] = hostLinkFact{state: state, until: until.Unix()}
+	}
+	return out
+}
+
+// placeFact is what a pane's shell reported about where it is.
+type placeFact struct {
+	cwd       string
+	elsewhere string
+	// seed is the folder the shell was started in, for a shell that has not
+	// announced one.
+	seed string
+}
+
+// livePlaces is what each pane's shell announced over OSC 7, by PTY id: the
+// folder, and the machine when the report named another one, or else the
+// folder the shell was started in. A pane with none of them is left out. Two atomic loads per pane, so it is not
+// cached the way the process read is.
+func (s *Session) livePlaces() map[string]placeFact {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	var out map[string]placeFact
+	for id, pty := range s.ptys {
+		if _, remote := pty.pty.(*remotePane); remote {
+			continue
+		}
+		fact := placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
+		if fact.cwd == "" {
+			fact.seed = pty.place.Cwd()
+		}
+		if fact == (placeFact{}) {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]placeFact)
+		}
+		out[id] = fact
 	}
 	return out
 }

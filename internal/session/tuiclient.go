@@ -188,6 +188,12 @@ type TUIClient struct {
 	lastActivity time.Time
 	// sizePolicy is the window_size policy of the last session resize.
 	sizePolicy atomic.Pointer[string]
+	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
+	// WatchDir.
+	dirWatchSupported bool
+	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
+	// multiClientMu like the other push handlers.
+	dirChangedHandler func(dir string)
 	// viaHost is the host this client reached the daemon through, or "" for
 	// the daemon on this machine. See ConnectThroughHost.
 	viaHost             string
@@ -370,6 +376,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
+	c.dirWatchSupported = welcome.DirWatch
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
@@ -942,6 +949,29 @@ type HostsChangedHandler func(payload HostsChangedPayload)
 func (c *TUIClient) OnHostsChanged(handler HostsChangedHandler) {
 	c.multiClientMu.Lock()
 	c.hostsChangedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// WatchDir asks the daemon to push MsgDirChanged when the names in dir change,
+// for the folder listed for windowID. It replaces the last watch, and an empty
+// dir ends it. It reports whether the daemon offers the watch at all, so a
+// caller can tell an older daemon from a sent request.
+func (c *TUIClient) WatchDir(windowID, dir string) (bool, error) {
+	if !c.dirWatchSupported {
+		return false, nil
+	}
+	msg, err := NewMessage(MsgWatchDir, &WatchDirPayload{WindowID: windowID, Dir: dir})
+	if err != nil {
+		return true, err
+	}
+	return true, c.send(msg)
+}
+
+// OnDirChanged registers the handler for MsgDirChanged. It runs on the
+// read-loop goroutine, so it only signals.
+func (c *TUIClient) OnDirChanged(handler func(dir string)) {
+	c.multiClientMu.Lock()
+	c.dirChangedHandler = handler
 	c.multiClientMu.Unlock()
 }
 
@@ -1520,6 +1550,19 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.RUnlock()
 		if handler != nil {
 			handler(payload)
+		}
+
+	case MsgDirChanged:
+		var payload DirChangedPayload
+		if err := msg.ParsePayload(&payload); err != nil {
+			debugLog("[CLIENT] Failed to parse a folder change: %v", err)
+			return
+		}
+		c.multiClientMu.RLock()
+		handler := c.dirChangedHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler(payload.Dir)
 		}
 
 	case MsgHostsChanged:

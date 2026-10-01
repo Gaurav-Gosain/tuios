@@ -828,6 +828,19 @@ func init() {
 			examples: []string{`{"id":1,"verb":"read-dir","params":{"dir":"/home/ubuntu"}}`},
 			handler:  (*Daemon).verbReadDir,
 		},
+		"wait-dir": {
+			description: "Wait until the names in a directory on this machine change: a file added, removed or renamed. The daemon that owns a window on another machine asks it, so the rail's file section can follow that machine's disk. It answers changed false when the timeout ends first.",
+			params: []verbParam{
+				{Name: "dir", Type: "string", Required: true, Description: "The directory to watch."},
+				{Name: "timeout", Type: "int", Description: "Milliseconds to wait. Omit for 30 seconds."},
+			},
+			returns: []verbParam{
+				{Name: "dir", Type: "string", Description: "The directory watched."},
+				{Name: "changed", Type: "bool", Description: "The names changed before the timeout ended."},
+			},
+			examples: []string{`{"id":1,"verb":"wait-dir","params":{"dir":"/tmp","timeout":1}}`},
+			handler:  (*Daemon).verbWaitDir,
+		},
 		"list-host-sessions": {
 			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
 			params: []verbParam{

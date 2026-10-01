@@ -144,7 +144,29 @@ const (
 	// sends it only to a daemon whose welcome set WindowSize. See
 	// window_size.go.
 	MsgClientActivity
+	// MsgWatchDir asks the daemon to say when the names in one folder change,
+	// and MsgDirChanged is it saying so. One watch per connection: a new
+	// MsgWatchDir replaces the last, and an empty folder ends it. The rail's
+	// files section asks for it when it lists a folder this client cannot
+	// watch itself, because the folder is on another machine. A client sends
+	// it only to a daemon whose welcome set DirWatch. See daemon_dirwatch.go.
+	MsgWatchDir
+	MsgDirChanged
 )
+
+// WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
+// was listed for, which says which machine the folder is on. An empty Dir ends
+// the watch.
+type WatchDirPayload struct {
+	WindowID string
+	Dir      string
+}
+
+// DirChangedPayload is the body of MsgDirChanged: the folder whose names
+// changed.
+type DirChangedPayload struct {
+	Dir string
+}
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
 type HostsChangedPayload struct {
@@ -244,6 +266,8 @@ type WelcomePayload struct {
 	// that predates it) never draws a session larger than its own terminal
 	// and sends no activity.
 	WindowSize bool `json:"window_size,omitempty"`
+	// DirWatch says the daemon reads MsgWatchDir and sends MsgDirChanged.
+	DirWatch bool `json:"dir_watch,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.

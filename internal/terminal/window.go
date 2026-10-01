@@ -448,6 +448,17 @@ type Window struct {
 	// OSC 7, which fish does out of the box and bash and zsh mostly do not, so
 	// anything reading it has to have an answer for not knowing.
 	Cwd string
+	// DaemonCwd is the last directory the daemon reported for the pane, so a
+	// client that takes the directory from the daemon can tell a new answer
+	// from the same answer sent again. See app.OS.takeDaemonCwd.
+	DaemonCwd string
+	// CwdAnnounced says this client parsed an OSC 7 report from the pane's
+	// shell itself, so Cwd is the shell's own answer and as fresh as any.
+	CwdAnnounced bool
+	// CwdHost names the machine the pane's shell last reported a folder on,
+	// when that is not the machine the pane runs on: the pane is running ssh.
+	// Empty otherwise. Only the daemon reports it.
+	CwdHost string
 
 	// Host is the machine the pane's process runs on, empty for this one.
 	//

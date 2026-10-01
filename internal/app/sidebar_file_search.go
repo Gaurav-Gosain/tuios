@@ -43,11 +43,11 @@ func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
 			origin = window.ID
 		}
 	} else {
-		if window == nil || paneDir(window) == "" {
+		if window == nil || m.paneDir(window) == "" {
 			m.ShowNotification("No pane directory to search.", "info", m.Settings.NotificationDuration)
 			return nil
 		}
-		root, origin = paneDir(window), window.ID
+		root, origin = m.paneDir(window), window.ID
 	}
 	if m.FileViewSpoofed() {
 		m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)

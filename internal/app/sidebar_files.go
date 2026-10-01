@@ -126,6 +126,11 @@ type fileViewState struct {
 	// Spoofed says the pane named this folder over OSC 7 and /proc disagreed.
 	// The listing stays; the file actions do not. See cwdIsSpoofed.
 	Spoofed bool
+	// Elsewhere names the machine the origin pane's shell is on when it is not
+	// the machine the pane runs on: the pane is running ssh. Nothing is listed
+	// then, because the folder is on a disk no daemon here can read, and a
+	// folder of the same name on this disk is a different folder.
+	Elsewhere string
 }
 
 // fileRetryInterval paces retrying a directory that could not be read. Short
@@ -231,7 +236,25 @@ func (m *OS) filesWantDir() string {
 	if m.filesView.Pinned && m.filesView.Origin == window.ID {
 		return m.filesView.Want
 	}
-	return paneDir(window)
+	return m.paneDir(window)
+}
+
+// paneIsLocal reports whether a pane's process runs on this client's machine.
+// Only then can the client read the process, or judge the host an OSC 7 report
+// names against its own.
+func (m *OS) paneIsLocal(w *terminal.Window) bool {
+	return w != nil && w.Host == "" && m.AttachedHost == ""
+}
+
+// paneDir is the directory a pane of this client's session is in. A pane on
+// another machine has only the daemon's answer: the pid the client holds for
+// it is a pid on that machine, and reading it here reads some other process or
+// none.
+func (m *OS) paneDir(w *terminal.Window) string {
+	if w != nil && !m.paneIsLocal(w) {
+		return w.Cwd
+	}
+	return paneDir(w)
 }
 
 // paneDir is the directory a pane is in.
@@ -273,6 +296,13 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 	if !m.filesSectionEnabled() {
 		return nil
 	}
+	if w := m.GetFocusedWindow(); w != nil && w.CwdHost != "" {
+		filesClearElsewhere(w)
+		if w.CwdHost != "" {
+			m.showElsewhere(w)
+			return nil
+		}
+	}
 	want := m.filesWantDir()
 	if want == "" {
 		// There is nothing for the section to be about: no pane is focused, or
@@ -303,6 +333,28 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		return nil
 	}
 	return m.requestFileList(want, origin, false)
+}
+
+// showElsewhere puts the section in its "shell is on another machine" state for
+// w. It writes nothing when the section already says that about w, because the
+// sync runs once per message.
+func (m *OS) showElsewhere(w *terminal.Window) {
+	v := m.filesView
+	if v.Elsewhere == w.CwdHost && v.Origin == w.ID {
+		return
+	}
+	m.filesView = fileViewState{
+		Show: v.Show,
+		Gen:  v.Gen + 1,
+		// Want is what the next sync compares with, so the section asks for
+		// a listing again the moment the pane is back on its own machine. It
+		// is no path, so it never matches one.
+		Want:      "elsewhere:" + w.CwdHost,
+		Origin:    w.ID,
+		Host:      w.Host,
+		Elsewhere: w.CwdHost,
+	}
+	m.syncFileWatch()
 }
 
 // filesShouldRetry reports whether a directory already asked for is worth
@@ -409,6 +461,7 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 		m.filesView.Host = w.Host
 	}
 	m.filesView.Pinned = pinned
+	m.filesView.Elsewhere = ""
 	m.filesView.Loading = true
 	m.filesView.Err = ""
 	m.filesView.Gen++
@@ -617,13 +670,40 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 // the section follows the new directory is FilesSyncCmd's decision, made once
 // per message against the focused pane, so this does not have to know anything
 // about the rail.
+//
+// Only for a pane on this client's machine. localCwdPath judges the host in the
+// report against this machine's name, which is the wrong machine for a pane
+// that runs on another: a report from the pane's own machine reads as a shell
+// that went elsewhere and is dropped, and one that happens to share this
+// machine's name is taken as a folder here. The daemon that runs such a pane
+// judges the report against its own name and sends the answer; see
+// takeDaemonCwd.
+//
+// A pane whose PTY this client holds itself has no daemon to judge a report
+// that names another machine, so it is judged here: CwdHost is that machine
+// until a report from this one, or the shell taking the terminal back, clears
+// it (filesClearElsewhere).
 func (m *OS) recordWindowCwd(windowID, raw string) {
-	dir, ok := localCwdPath(raw)
-	if !ok {
+	w := m.windowByID(windowID)
+	if w == nil || !m.paneIsLocal(w) {
 		return
 	}
-	if w := m.windowByID(windowID); w != nil {
+	if host, ok := foreignCwdHost(raw); ok && w.Pty != nil {
+		w.CwdHost = host
+	}
+	if dir, ok := localCwdPath(raw); ok {
 		w.Cwd = dir
+		w.CwdAnnounced = true
+	}
+}
+
+// filesClearElsewhere clears what an OSC 7 report from another machine left on
+// a pane this client runs itself, once the pane's own shell holds the terminal
+// again: the program that was on the other machine has ended. A daemon pane is
+// left alone, because its daemon makes the same check and sends the answer.
+func filesClearElsewhere(w *terminal.Window) {
+	if w != nil && w.CwdHost != "" && w.Pty != nil && w.ShellAtPrompt() {
+		w.CwdHost = ""
 	}
 }
 
@@ -641,7 +721,7 @@ func (m *OS) ToggleFileView() tea.Cmd {
 		m.ShowNotification("There is no pane to show files for.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	dir := paneDir(window)
+	dir := m.paneDir(window)
 	if dir == "" {
 		m.ShowNotification(
 			"tuios cannot read that pane's directory.",
@@ -980,5 +1060,37 @@ func cdLine(dir string) (string, bool) {
 func adoptWindowCwd(w *terminal.Window, cwd string) {
 	if w != nil && cwd != "" && w.Cwd == "" {
 		w.Cwd = cwd
+	}
+}
+
+// takeDaemonCwd takes what the daemon reports about where a pane is.
+//
+// A pane whose shell this client has heard announce over OSC 7 gets
+// adoptWindowCwd: the client parsed the report as it arrived, so its answer is
+// at least as fresh as the daemon's, and the daemon's only fills a gap.
+//
+// Every other pane takes each new answer the daemon sends. A pane on another
+// machine has nothing else: its reports name a host this client cannot judge,
+// and its pid is a pid over there. Taking only the first answer is what kept
+// the files list on the folder such a pane started in (issue #313). A shell
+// that never announces is the same on this machine once the daemon has said
+// where it is, because a directory in the window is preferred to reading the
+// process. The same answer sent again is not taken, so a value the window
+// holds is replaced only by a newer one and never by a copy of an older one.
+//
+// CwdHost is the daemon's alone, for every pane: only the daemon sees both the
+// report and the process that holds the terminal.
+func (m *OS) takeDaemonCwd(w *terminal.Window, ws *session.WindowState) {
+	if w == nil || ws == nil {
+		return
+	}
+	w.CwdHost = ws.CwdHost
+	if w.CwdAnnounced && m.paneIsLocal(w) {
+		adoptWindowCwd(w, ws.Cwd)
+		return
+	}
+	if ws.Cwd != "" && ws.Cwd != w.DaemonCwd {
+		w.DaemonCwd = ws.Cwd
+		w.Cwd = ws.Cwd
 	}
 }

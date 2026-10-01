@@ -1,11 +1,13 @@
 package app
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/dirwatch"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // # Keeping the listing true to the disk
@@ -17,10 +19,12 @@ import (
 // say when the listed folder's entries change, and the client sleeps until it
 // does. An idle client with the rail open does no work at all, as before.
 //
-// Only a folder on this machine is watched. The client and its daemon share a
-// disk, so a local session's listing is one this process can watch. A pane on
-// another host lists a disk this process cannot see, and keeps the old
-// behaviour: it is read again when the pane changes directory.
+// A folder on this machine is watched here. A folder on another machine, the
+// listing of a pane on another host, is on a disk this process cannot see, so
+// the daemon is asked to watch it and push a change (session/daemon_dirwatch.go).
+// The push lands on the same channel the local watch uses, so the two are read
+// again the same way. A daemon too old to offer the watch leaves such a listing
+// as it was before: read again when the pane changes directory.
 
 // fileWatchSettle is how long a change is left to settle before the folder is
 // read again. A `git checkout` or an `rm -r` is thousands of events, and the
@@ -45,9 +49,12 @@ type fileWatcher struct {
 	mu  sync.Mutex // serialises retargeting, and guards the fields below
 	dir string
 	w   *dirwatch.Watcher
+	// remote is the daemon watching dir for this client, nil when the watch is
+	// local or there is none.
+	remote *session.TUIClient
 	// latest is the most recent target asked for, so a slow setup for a folder
 	// the user has already left does not install itself over a newer one.
-	latest string
+	latest fileWatchSpec
 	// stopped is set when the client exits. The channel is closed then, so no
 	// watch may be made after it.
 	stopped bool
@@ -76,14 +83,43 @@ func listenForFileChange(ch chan struct{}) tea.Cmd {
 	}
 }
 
-// fileWatchTarget is the folder the watch should be on: the one the section is
-// showing, when it was read from this machine's disk and read cleanly.
-func (m *OS) fileWatchTarget() string {
-	v := m.filesView
-	if v.Dir == "" || v.Err != "" || v.Host != "" || m.AttachedHost != "" {
+// fileWatchSpec is where the watch should be: a folder, and the daemon to ask
+// when the folder is not on this machine.
+type fileWatchSpec struct {
+	dir string
+	// remote is the daemon to ask, nil for a folder on this machine.
+	remote *session.TUIClient
+	// origin is the pane the folder was listed for, which tells the daemon
+	// which machine the folder is on.
+	origin string
+}
+
+// key is the spec as the string syncFileWatch compares.
+func (s fileWatchSpec) key() string {
+	if s.dir == "" {
 		return ""
 	}
-	return v.Dir
+	if s.remote == nil {
+		return "local\x00" + s.dir
+	}
+	return fmt.Sprintf("remote\x00%p\x00%s\x00%s", s.remote, s.origin, s.dir)
+}
+
+// fileWatchTarget is where the watch should be: the folder the section is
+// showing, when it was read cleanly. A folder on another machine is watched by
+// the daemon, when there is one to ask.
+func (m *OS) fileWatchTarget() fileWatchSpec {
+	v := m.filesView
+	if v.Dir == "" || v.Err != "" {
+		return fileWatchSpec{}
+	}
+	if v.Host == "" && m.AttachedHost == "" {
+		return fileWatchSpec{dir: v.Dir}
+	}
+	if m.DaemonClient == nil {
+		return fileWatchSpec{}
+	}
+	return fileWatchSpec{dir: v.Dir, remote: m.DaemonClient, origin: v.Origin}
 }
 
 // syncFileWatch points the watch at fileWatchTarget. It is called wherever the
@@ -91,10 +127,11 @@ func (m *OS) fileWatchTarget() string {
 func (m *OS) syncFileWatch() {
 	target := m.fileWatchTarget()
 	fw := &m.fileWatch
-	if target == fw.want {
+	key := target.key()
+	if key == fw.want {
 		return
 	}
-	fw.want = target
+	fw.want = key
 	ch := m.fileWatchChan()
 	fw.mu.Lock()
 	fw.latest = target
@@ -102,17 +139,31 @@ func (m *OS) syncFileWatch() {
 	go fw.retarget(target, ch)
 }
 
-func (fw *fileWatcher) retarget(dir string, ch chan struct{}) {
+func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
-	if fw.stopped || dir != fw.latest || dir == fw.dir {
+	if fw.stopped || target != fw.latest {
 		return
 	}
 	if fw.w != nil {
 		fw.w.Close()
-		fw.w, fw.dir = nil, ""
+		fw.w = nil
 	}
+	if fw.remote != nil && fw.remote != target.remote {
+		// The daemon keeps one watch per connection, so a new remote target
+		// replaces the old one by itself. Only a move off that daemon has to
+		// end it.
+		_, _ = fw.remote.WatchDir("", "")
+	}
+	fw.dir, fw.remote = "", nil
+	dir := target.dir
 	if dir == "" {
+		return
+	}
+	if target.remote != nil {
+		if offered, err := target.remote.WatchDir(target.origin, dir); offered && err == nil {
+			fw.dir, fw.remote = dir, target.remote
+		}
 		return
 	}
 	w, err := dirwatch.Watch(dir, func() {
@@ -144,8 +195,27 @@ func (m *OS) stopFileWatch() {
 		fw.w.Close()
 		fw.w, fw.dir = nil, ""
 	}
+	if fw.remote != nil {
+		_, _ = fw.remote.WatchDir("", "")
+		fw.remote, fw.dir = nil, ""
+	}
 	if fw.ch != nil {
 		close(fw.ch)
+	}
+}
+
+// remoteDirChanged takes the daemon's push that dir changed. It runs on the
+// daemon client's read goroutine, so it only signals, and only for the folder
+// the daemon is watching for this client now.
+func (fw *fileWatcher) remoteDirChanged(dir string) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if fw.stopped || fw.remote == nil || fw.dir != dir || fw.ch == nil {
+		return
+	}
+	select {
+	case fw.ch <- struct{}{}:
+	default:
 	}
 }
 
@@ -154,7 +224,7 @@ func (m *OS) stopFileWatch() {
 // the scroll position is kept, because nothing the user did asked for it.
 func (m *OS) refreshChangedFolder() tea.Cmd {
 	v := m.filesView
-	if v.Dir == "" || v.Want != v.Dir || m.fileWatchTarget() == "" {
+	if v.Dir == "" || v.Want != v.Dir || m.fileWatchTarget().dir == "" {
 		// Nothing listed, a walk to another folder in flight, or a listing
 		// this client did not read from its own disk.
 		return nil

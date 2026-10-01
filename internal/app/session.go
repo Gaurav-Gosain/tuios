@@ -1168,8 +1168,8 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 
 	// Update all properties
 	w.SetTitle(ws.Title)
-	adoptWindowCwd(w, ws.Cwd)
 	adoptWindowHost(w, ws.Host)
+	m.takeDaemonCwd(w, ws)
 	w.HostLink = ws.HostLink
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
@@ -1363,8 +1363,8 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 		m.PTYDataChan,
 		m.Settings.ScrollbackLines,
 	)
-	adoptWindowCwd(window, ws.Cwd)
 	adoptWindowHost(window, ws.Host)
+	m.takeDaemonCwd(window, ws)
 	window.HostLink = ws.HostLink
 
 	caps := m.hostCaps()
