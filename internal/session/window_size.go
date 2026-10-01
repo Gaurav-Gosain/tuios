@@ -52,6 +52,10 @@ import (
 // armed only while two clients contend, so an idle session has none.
 const latestHold = time.Second
 
+// activityRecalcGap is the least time between two reports from one client
+// that each recalculate the session's size. See handleClientActivity.
+const activityRecalcGap = 50 * time.Millisecond
+
 // windowSizePolicy resolves a window_size value. Anything unknown is
 // smallest, the default, which is the policy no client can be surprised by.
 func windowSizePolicy(v string) string {
@@ -108,6 +112,7 @@ type sizedClient struct {
 	id       string
 	w, h     int
 	capable  bool
+	viewOnly bool
 	activity time.Time
 	seq      uint64
 }
@@ -123,7 +128,8 @@ func (d *Daemon) sessionSizedClients(sessionID string) []sizedClient {
 		match := cs.sessionID == sessionID && cs.isTUIClient
 		c := sizedClient{
 			id: cs.clientID, w: cs.width, h: cs.height,
-			capable: cs.windowSizeCap, activity: cs.lastActivity, seq: cs.attachSeq,
+			capable: cs.windowSizeCap, viewOnly: cs.viewOnly,
+			activity: cs.lastActivity, seq: cs.attachSeq,
 		}
 		cs.mu.Unlock()
 		if !match || c.w == 0 || c.h == 0 {
@@ -222,6 +228,27 @@ func (d *Daemon) effectiveWindowSize(s *Session, clients []sizedClient) string {
 	return d.sessionWindowSize(s)
 }
 
+// sizingClients is the clients whose size the policy reads. Under smallest
+// that is every client, as it always was. Under largest and latest a client
+// that sends no input (a read-only viewer) is left out: it cannot make itself
+// the latest, and a viewer's large window should not make the session larger
+// than anyone typing can see. A session of viewers only counts them all.
+func sizingClients(policy string, clients []sizedClient) []sizedClient {
+	if policy == config.WindowSizeSmallest {
+		return clients
+	}
+	out := make([]sizedClient, 0, len(clients))
+	for _, c := range clients {
+		if !c.viewOnly {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return clients
+	}
+	return out
+}
+
 // sizeForPolicy is the session's size under a policy. Each client counts at
 // no less than minClientWidth x minClientHeight.
 func sizeForPolicy(policy string, clients []sizedClient, latest string) (width, height int) {
@@ -253,11 +280,18 @@ func sizeForPolicy(policy string, clients []sizedClient, latest string) (width, 
 func (d *Daemon) handleClientActivity(cs *connState) error {
 	now := time.Now()
 	cs.mu.Lock()
+	previous := cs.lastActivity
 	cs.lastActivity = now
 	sessionID := cs.sessionID
 	attached := cs.isTUIClient
 	cs.mu.Unlock()
 	if sessionID == "" || !attached {
+		return nil
+	}
+	// A client throttles its reports to one per activityInterval. One that
+	// sends faster gets its time recorded and nothing recalculated, so a
+	// flood of reports costs a lock and a clock read each.
+	if now.Sub(previous) < activityRecalcGap {
 		return nil
 	}
 	if d.sessionWindowSize(d.manager.GetSessionByID(sessionID)) != config.WindowSizeLatest {

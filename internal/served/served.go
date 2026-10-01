@@ -58,6 +58,9 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// the terminal this process runs in, so running in a pane of the session
 	// cannot start the resize loop and the daemon does not refuse it.
 	client.Served = true
+	// A viewer whose input is dropped sends no input, so under the largest
+	// and latest window_size policies it does not size the session.
+	client.ViewOnly = opts.ViewOnly
 	// An SSH client could still run in a pane of the session it asks for: ssh
 	// from a pane into this server. Its process is the ssh client in that
 	// pane, which the daemon cannot see, so the probe goes down the channel to

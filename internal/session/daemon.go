@@ -422,6 +422,10 @@ type connState struct {
 	// attachSeq orders the clients by when they attached, for the latest
 	// policy when no client has had input. Guarded by mu.
 	attachSeq uint64
+	// viewOnly says the client's attach marked it as sending no input. Under
+	// largest and latest it does not count toward the session's size.
+	// Guarded by mu.
+	viewOnly bool
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns

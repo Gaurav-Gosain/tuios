@@ -45,6 +45,10 @@ type TUIClient struct {
 	// first one. See AttachPayload.
 	Served      bool
 	AllowNested bool
+	// ViewOnly marks a client whose input is dropped, such as a tuios-web
+	// viewer started with --read-only. It is sent with every attach. See
+	// AttachPayload.ViewOnly.
+	ViewOnly bool
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -415,6 +419,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		Served:      c.Served,
 		AllowNested: c.AllowNested,
 		NestProbe:   probe,
+		ViewOnly:    c.viewOnly(),
 	})
 	if err != nil {
 		return nil, err
@@ -622,6 +627,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		Served:      c.Served,
 		AllowNested: c.AllowNested,
 		NestProbe:   probe,
+		ViewOnly:    c.viewOnly(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)

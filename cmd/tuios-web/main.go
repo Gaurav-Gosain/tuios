@@ -670,6 +670,7 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	// drawing, kitty icat being the usual one, draw at the wrong scale.
 	daemonOpts := opts
 	daemonOpts.SessionName = webServerConfig.defaultSession
+	daemonOpts.ViewOnly = webReadOnly
 	model, err := served.Attach(daemonOpts, webAppearanceOverrides(), version, app.ClientCapabilitiesOf(hostCaps), pickWebSession)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)

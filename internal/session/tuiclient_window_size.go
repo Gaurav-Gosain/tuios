@@ -61,3 +61,9 @@ func (c *TUIClient) ReportActivity(now time.Time) {
 	}
 	_ = c.send(msg)
 }
+
+// viewOnly is what the attach says about the client's input: ViewOnly, or
+// TUIOS_VIEW_ONLY=1, which lets a test attach a native client as a viewer.
+func (c *TUIClient) viewOnly() bool {
+	return c.ViewOnly || os.Getenv("TUIOS_VIEW_ONLY") == "1"
+}
