@@ -50,8 +50,24 @@ type grid struct {
 	// wherever the row moves. A blank or a fill that reaches the row's last
 	// column clears it, since the text that wrapped is gone, and so do DCH
 	// and ECH, which ghostty clears it on too.
-	wrap []bool
+	//
+	// It is a set of rowFlag bits: rowWrapped is that flag, and rowPadded
+	// says the wrap left the last column blank because a wide character did
+	// not fit in it, so the blank is not text. A reflow drops that column.
+	wrap []rowFlag
 }
+
+// rowFlag is what a row records about where its text ends.
+type rowFlag uint8
+
+const (
+	// rowWrapped: the row's text carries on to the next row by autowrap.
+	rowWrapped rowFlag = 1 << iota
+	// rowPadded: the row wrapped early, before a double-width character
+	// that did not fit in its last column, and that column is a blank the
+	// guest never wrote.
+	rowPadded
+)
 
 // gridBlank is the cell CellAt returns for a column of a row that has not
 // been written. It is shared by every grid and must never be written to:
@@ -60,7 +76,7 @@ type grid struct {
 var gridBlank = uv.EmptyCell
 
 func newGrid(width, height int) *grid {
-	return &grid{rows: make([]uv.Line, height), ext: make([]int, height), wrap: make([]bool, height), width: width}
+	return &grid{rows: make([]uv.Line, height), ext: make([]int, height), wrap: make([]rowFlag, height), width: width}
 }
 
 // raiseExt records that row y may hold something other than a blank up to
@@ -176,7 +192,7 @@ func (g *grid) Resize(width, height int) {
 	}
 	if height > len(g.rows) {
 		g.ext = append(g.ext, make([]int, height-len(g.rows))...)
-		g.wrap = append(g.wrap, make([]bool, height-len(g.rows))...)
+		g.wrap = append(g.wrap, make([]rowFlag, height-len(g.rows))...)
 		g.rows = append(g.rows, make([]uv.Line, height-len(g.rows))...)
 	} else if height < len(g.rows) {
 		clear(g.rows[height:])
@@ -200,13 +216,31 @@ func (g *grid) Clear() {
 
 // SoftWrapped reports whether row y carries on to row y+1 by autowrap.
 func (g *grid) SoftWrapped(y int) bool {
-	return y >= 0 && y < len(g.wrap) && g.wrap[y]
+	return y >= 0 && y < len(g.wrap) && g.wrap[y]&rowWrapped != 0
+}
+
+// padded reports whether row y wrapped early before a wide character, so
+// its last column is padding and not text.
+func (g *grid) padded(y int) bool {
+	return y >= 0 && y < len(g.wrap) && g.wrap[y]&rowPadded != 0
 }
 
 // setSoftWrapped records whether row y carries on to row y+1 by autowrap.
 func (g *grid) setSoftWrapped(y int, wrapped bool) {
 	if y >= 0 && y < len(g.wrap) {
-		g.wrap[y] = wrapped
+		if wrapped {
+			g.wrap[y] |= rowWrapped
+		} else {
+			g.wrap[y] = 0
+		}
+	}
+}
+
+// setPadded records that row y, which has just wrapped, wrapped early
+// because a wide character did not fit in its last column.
+func (g *grid) setPadded(y int) {
+	if y >= 0 && y < len(g.wrap) {
+		g.wrap[y] |= rowPadded
 	}
 }
 
@@ -231,7 +265,7 @@ func (g *grid) FillArea(c *uv.Cell, area uv.Rectangle) {
 	// A fill that reaches the last column replaces the text that wrapped.
 	if area.Max.X >= g.width && area.Min.X < g.width {
 		for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.wrap); y++ {
-			g.wrap[y] = false
+			g.wrap[y] = 0
 		}
 	}
 	blank := isBlankFill(c)

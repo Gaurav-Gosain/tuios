@@ -475,6 +475,10 @@ func (t *GhosttyTerminal) SetSixelAdvertised(fn func() bool) {
 	t.sixelAdvertised = fn
 }
 
+// SetReflowFunc is a no-op: libghostty reflows inside the library and does
+// not report where rows went.
+func (t *GhosttyTerminal) SetReflowFunc(func(remap func(absLine int) int)) {}
+
 func (t *GhosttyTerminal) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

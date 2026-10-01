@@ -51,10 +51,15 @@ type Scrollback struct {
 	full bool
 	// wraps holds, per ring slot, whether the line carried on to the next
 	// one by autowrap. It is indexed like lines and grown with it.
-	wraps []bool
+	// It holds the same rowFlag bits a screen row has.
+	wraps []rowFlag
 	// onTrim is called when the ring overwrites its oldest line. The
 	// argument is the number of lines dropped.
 	onTrim func(int)
+	// holdTrims makes a push count the lines it drops in heldTrims instead
+	// of calling onTrim, for a reflow that reports them itself.
+	holdTrims bool
+	heldTrims int
 
 	// Intern table for colour values of a type the packer does not know. It
 	// is capped at internCap entries; past the cap a colour is reduced to RGB
@@ -219,21 +224,34 @@ func (sb *Scrollback) PushBlankLine(width int) {
 // push stores cells, the non-blank prefix of a line of the given width, as
 // the newest line.
 func (sb *Scrollback) push(cells uv.Line, width int) {
+	// Once the ring's storage has reached its capacity, every line lands in
+	// a slot in place: the oldest when the ring is full, or one a reflow
+	// gave back with truncate.
+	inPlace := len(sb.lines) == sb.maxLines
 	var buf []byte
-	if sb.full {
+	if inPlace {
 		buf = sb.lines[sb.tail][:0]
+	} else if len(sb.lines) < cap(sb.lines) {
+		// A slot truncate gave back still holds its line's storage.
+		buf = sb.lines[:len(sb.lines)+1][len(sb.lines)][:0]
 	}
 	if cap(buf) < len(cells)+sbLineSlack {
 		// Sized for a plain line up front, so the common line is one
 		// allocation rather than the run of doublings append would make
-		// from nothing. A styled or non-ASCII line grows past it once.
-		buf = make([]byte, 0, len(cells)+sbLineSlack)
+		// from nothing. A styled or non-ASCII line grows past it once. A
+		// slot that held a line before gets room to spare, because a
+		// reflow pushes rows of other widths into the same slots each step.
+		size := len(cells) + sbLineSlack
+		if cap(buf) > 0 {
+			size = max(size, 2*cap(buf))
+		}
+		buf = make([]byte, 0, size)
 	}
 	buf = sb.encodeLine(buf, cells, width)
 
-	if sb.full {
+	if inPlace {
 		sb.lines[sb.tail] = buf
-		sb.wraps[sb.tail] = false
+		sb.wraps[sb.tail] = 0
 	} else {
 		if len(sb.lines) == cap(sb.lines) {
 			grown := make([][]byte, len(sb.lines), min(sb.maxLines, max(2*cap(sb.lines), 64)))
@@ -241,18 +259,41 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 			sb.lines = grown
 		}
 		sb.lines = append(sb.lines, buf)
-		sb.wraps = append(sb.wraps, false)
+		sb.wraps = append(sb.wraps, 0)
 	}
 
 	sb.tail = (sb.tail + 1) % sb.maxLines
 	if sb.full {
 		sb.head = (sb.head + 1) % sb.maxLines
-		if sb.onTrim != nil {
+		if sb.holdTrims {
+			sb.heldTrims++
+		} else if sb.onTrim != nil {
 			sb.onTrim(1)
 		}
 	}
 	if sb.tail == sb.head {
 		sb.full = true
+	}
+	sb.gen++
+}
+
+// truncate drops the newest lines until n are left. A reflow takes the rows
+// it lays out again this way, and pushes them back at the new width. The
+// storage of a dropped line stays in its slot for the next push to reuse.
+func (sb *Scrollback) truncate(n int) {
+	drop := sb.Len() - max(n, 0)
+	if drop <= 0 {
+		return
+	}
+	if len(sb.lines) < sb.maxLines {
+		// Storage that has not reached capacity holds exactly the lines,
+		// from slot 0, and push appends to it.
+		sb.lines = sb.lines[:len(sb.lines)-drop]
+		sb.wraps = sb.wraps[:len(sb.wraps)-drop]
+		sb.tail = len(sb.lines)
+	} else {
+		sb.tail = (sb.tail - drop + sb.maxLines) % sb.maxLines
+		sb.full = false
 	}
 	sb.gen++
 }
@@ -501,13 +542,12 @@ func (sb *Scrollback) unpackColor(v uint32) color.Color {
 	return nil
 }
 
-// markNewestWrapped records whether the line pushed last carried on to the
-// next line by autowrap.
-func (sb *Scrollback) markNewestWrapped(wrapped bool) {
+// markNewest records the row flags of the line pushed last.
+func (sb *Scrollback) markNewest(f rowFlag) {
 	if sb.Len() == 0 {
 		return
 	}
-	sb.wraps[(sb.tail-1+sb.maxLines)%sb.maxLines] = wrapped
+	sb.wraps[(sb.tail-1+sb.maxLines)%sb.maxLines] = f
 }
 
 // setWrapped records whether the line at index, oldest first, carried on to
@@ -516,7 +556,11 @@ func (sb *Scrollback) setWrapped(index int, wrapped bool) {
 	if index < 0 || index >= sb.Len() {
 		return
 	}
-	sb.wraps[sb.slot(index)] = wrapped
+	if wrapped {
+		sb.wraps[sb.slot(index)] |= rowWrapped
+	} else {
+		sb.wraps[sb.slot(index)] = 0
+	}
 }
 
 // LineWrapped reports whether the line at index, oldest first, carried on to
@@ -525,6 +569,14 @@ func (sb *Scrollback) setWrapped(index int, wrapped bool) {
 func (sb *Scrollback) LineWrapped(index int) bool {
 	if index < 0 || index >= sb.Len() {
 		return false
+	}
+	return sb.wraps[sb.slot(index)]&rowWrapped != 0
+}
+
+// lineFlags returns the row flags of the line at index, oldest first.
+func (sb *Scrollback) lineFlags(index int) rowFlag {
+	if index < 0 || index >= sb.Len() {
+		return 0
 	}
 	return sb.wraps[sb.slot(index)]
 }
@@ -578,8 +630,56 @@ func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 	if n <= 0 {
 		return nil
 	}
-	line := make(uv.Line, width)
+	return sb.decodeInto(make(uv.Line, width), data[n:])
+}
+
+// lineWidth is the width a stored line was written at.
+func lineWidth(data []byte) int {
+	width, n := binary.Uvarint(data)
+	if n <= 0 {
+		return 0
+	}
+	return int(width)
+}
+
+// decodeRows decodes the lines from index from to end-1 into one block of
+// cells, for a reader that wants many lines at once without a decode and an
+// allocation each. The lines do not go through the cache. block and out are
+// reused when they are large enough, and returned for the next call.
+func (sb *Scrollback) decodeRows(from, end int, block []uv.Cell, out []uv.Line) ([]uv.Line, []uv.Cell) {
+	from, end = max(from, 0), min(end, sb.Len())
+	if from >= end {
+		return out[:0], block
+	}
+	total := 0
+	for i := from; i < end; i++ {
+		total += lineWidth(sb.lines[sb.slot(i)])
+	}
+	if cap(block) < total {
+		block = make([]uv.Cell, total)
+	}
+	block = block[:total]
+	out = growCap(out, end-from)
+	at := 0
+	for i := from; i < end; i++ {
+		data := sb.lines[sb.slot(i)]
+		w := lineWidth(data)
+		_, n := binary.Uvarint(data)
+		line := block[at : at+w : at+w]
+		at += w
+		if n > 0 {
+			sb.decodeInto(line, data[n:])
+		}
+		out = append(out, line)
+	}
+	return out, block
+}
+
+// decodeInto decodes the token stream of a stored line, its width header
+// already read, into line.
+func (sb *Scrollback) decodeInto(line uv.Line, data []byte) uv.Line {
 	x := 0
+	n := 0
 	var style uv.Style
 	var link uv.Link
 	var links []uv.Link
@@ -735,9 +835,10 @@ func (sb *Scrollback) Clear() {
 
 // ClipHistoryRow is a scrollback line as it may be drawn in width columns.
 //
-// History keeps the width it was written at, deliberately: this emulator does
-// not re-wrap it, because the program owns its own layout and redraws on
-// SIGWINCH. A pane that narrowed since can then hold a double-width rune whose
+// History keeps the width it was written at, deliberately: a resize reflows
+// only the screen and the history lines it takes back (reflow.go), so that a
+// resize costs what the screen holds and not what the history holds. A pane
+// that narrowed since can then hold a double-width rune whose
 // lead is in its last column. Drawn whole, that rune makes the row one column
 // wider than the pane, and the compositor puts the extra column over the pane
 // next door.
@@ -786,10 +887,10 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	oldLen := sb.Len()
 	newLen := min(oldLen, maxLines)
 	var newLines [][]byte
-	var newWraps []bool
+	var newWraps []rowFlag
 	if newLen > 0 {
 		newLines = make([][]byte, newLen)
-		newWraps = make([]bool, newLen)
+		newWraps = make([]rowFlag, newLen)
 	}
 	startIndex := oldLen - newLen // drop the oldest when shrinking
 	for i := range newLen {

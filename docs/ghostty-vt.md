@@ -129,9 +129,13 @@ deleted.
 The pure emulator now reads SGR 21 as a double underline, as the library does,
 so that entry is gone. These differ by design and have no entry:
 
-- Resize semantics: the library reflows wrapped lines and moves rows
-  between screen and history; the pure emulator clips. Both are valid
-  terminal behaviors; the reflow is what Ghostty itself does.
+- Resize semantics: both backends reflow wrapped lines and move rows
+  between the screen and the history. The library reflows the whole
+  history. The pure emulator reflows the screen and the lines it takes back
+  from the history, and keeps older history at the width it was written at.
+  The pure emulator does not reflow a prompt the shell marked with OSC 133
+  and still shows, so a shell that repaints its prompt on SIGWINCH leaves no
+  row behind. The library does not do this.
 - `SetScrollbackMaxLines` after construction is a no-op on the library
   backend (the limit is a construction option).
 - The pen's open OSC 8 hyperlink is not carried across a wire snapshot

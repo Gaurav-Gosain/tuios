@@ -197,11 +197,18 @@ func TestSharedBorderMotionCostDoesNotScaleWithWindowCount(t *testing.T) {
 		m := benchResizeOS(t, n)
 		startX, startY := m.ResizeStartX, m.ResizeStartY
 		i := 0
-		return testing.AllocsPerRun(200, func() {
+		step := func() {
 			dx := i%6 - 3
 			_, _ = HandleInput(motionAt(startX+dx, startY), m)
 			i++
-		})
+		}
+		// The first pass over each size reflows text into the panes'
+		// history for the first time, which grows the history once. The
+		// cost per event is what follows.
+		for range 60 {
+			step()
+		}
+		return testing.AllocsPerRun(200, step)
 	}
 
 	small, large := motionAllocs(4), motionAllocs(9)

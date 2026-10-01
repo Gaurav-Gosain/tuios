@@ -205,6 +205,9 @@ type Emulator struct {
 
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
+
+	// onReflow is called after a reflow with where rows went.
+	onReflow func(remap func(absLine int) int)
 }
 
 // maxSequenceData is the most bytes of one OSC, DCS or APC payload the
@@ -1156,42 +1159,106 @@ func (e *Emulator) Resize(width int, height int) {
 	e.openGrapheme = openGrapheme{}
 	e.parkedX = -1
 
-	x, _ := e.scr.CursorPosition()
+	main := &e.scrs[0]
+	reflowMain := main.scrollback != nil && main.buf.Width() > 0 &&
+		(width != main.buf.Width() ||
+			height > main.buf.Height() && main.cur.Y == main.buf.Height()-1 && main.scrollback.Len() > 0) &&
+		!main.fitsWithoutReflow(width, height)
 
-	if e.atPhantom {
+	// The active screen's cursor in pending wrap. A reflow of the main
+	// screen carries it; any other resize moves the cursor past the
+	// character when the screen now has room for it.
+	x := e.scr.cur.X
+	if e.atPhantom && !(reflowMain && e.scr == main) {
 		if x < width-1 {
 			e.atPhantom = false
 			x++
 		}
 	}
+	x = clamp(x, 0, width-1)
 
-	if x < 0 {
-		x = 0
+	// The main screen lays its text out again at the new width (reflow.go).
+	// The alternate screen does not, as in ghostty: the program on it
+	// redraws on SIGWINCH. Either way a screen that gets shorter keeps its
+	// text, moving rows into the scrollback where it has one
+	// (Screen.shrinkRows), so the cursor row comes out in view and so does
+	// the main screen's prompt under an alternate screen.
+	if reflowMain {
+		e.reflowMain(width, height)
+		if e.scr == main {
+			x = main.cur.X
+		}
+	} else {
+		main.Resize(width, height)
 	}
-	if x >= width {
-		x = width - 1
-	}
-
-	// History is not touched here. A double-width rune that now straddles the
-	// last column of a scrollback line is clipped where the row is drawn
-	// (ClipHistoryRow), so the rune is still there when the pane widens again.
-	//
-	// A screen that gets shorter keeps its text: each screen drops its blank
-	// rows below its own cursor first and moves the rest into the scrollback
-	// (Screen.shrinkRows), so the cursor row comes out in view and so does the
-	// main screen's prompt under an alternate screen.
-
-	e.scrs[0].Resize(width, height)
 	if e.altSized {
 		e.scrs[1].Resize(width, height)
 	}
 	y := e.scr.cur.Y
 	e.tabstops = uv.DefaultTabStops(width)
 
+	phantom := e.atPhantom && reflowMain && e.scr == main
 	e.setCursor(x, y)
+	e.atPhantom = phantom
 
 	if e.isModeSet(ansi.ModeInBandResize) {
 		_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+	}
+}
+
+// reflowMain reflows the main screen to width x height, carrying the
+// cursor, its pending wrap when the main screen is the active one, and the
+// OSC 133 marks with the text they are on.
+func (e *Emulator) reflowMain(width, height int) {
+	main := &e.scrs[0]
+	sb := main.scrollback
+	var phantom *bool
+	if e.scr == main {
+		phantom = &e.atPhantom
+	}
+	bottom := main.cur.Y == main.buf.Height()-1
+
+	var marks []SemanticMarker
+	var points []*reflowPoint
+	prompt := -1
+	if e.semanticMarkers != nil {
+		marks = e.semanticMarkers.Markers()
+		points = make([]*reflowPoint, len(marks))
+		backing := make([]reflowPoint, len(marks))
+		for i, m := range marks {
+			backing[i] = reflowPoint{abs: m.AbsLine, col: m.Col}
+			points[i] = &backing[i]
+			switch m.Type {
+			case MarkerPromptStart:
+				prompt = m.AbsLine
+			case MarkerCommandExecuted, MarkerCommandFinished:
+				prompt = -1
+			}
+		}
+		if prompt > sb.Len()+main.cur.Y {
+			prompt = -1
+		}
+	}
+
+	// The marks move first and the ring's trims apply to them after, so the
+	// trim callback is held back while the reflow runs.
+	sb.holdTrims, sb.heldTrims = true, 0
+	remap := main.reflow(width, height, bottom, phantom, prompt, points, e.onReflow != nil)
+	trimmed := sb.heldTrims
+	sb.holdTrims, sb.heldTrims = false, 0
+	onTrim := sb.onTrim
+
+	if e.semanticMarkers != nil {
+		for i := range marks {
+			marks[i].AbsLine, marks[i].Col = points[i].abs, points[i].col
+		}
+		e.semanticMarkers.replace(marks)
+	}
+	if trimmed > 0 && onTrim != nil {
+		onTrim(trimmed)
+	}
+	if e.onReflow != nil {
+		e.onReflow(func(abs int) int { return remap(abs) - trimmed })
 	}
 }
 
@@ -1720,6 +1787,12 @@ func (e *Emulator) SetSixelAdvertised(fn func() bool) {
 
 func (e *Emulator) sixelOn() bool {
 	return e.sixelAdvertised != nil && e.sixelAdvertised()
+}
+
+// SetReflowFunc sets the function a reflow calls with where rows went. See
+// Terminal.SetReflowFunc.
+func (e *Emulator) SetReflowFunc(fn func(remap func(absLine int) int)) {
+	e.onReflow = fn
 }
 
 func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {

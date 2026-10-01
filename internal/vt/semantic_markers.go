@@ -64,6 +64,14 @@ func (l *SemanticMarkerList) Markers() []SemanticMarker {
 	return out
 }
 
+// replace swaps in a list the caller built from Markers, such as one a
+// reflow moved.
+func (l *SemanticMarkerList) replace(markers []SemanticMarker) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.markers = markers
+}
+
 // Len returns the number of markers.
 func (l *SemanticMarkerList) Len() int {
 	l.mu.Lock()

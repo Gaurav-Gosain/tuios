@@ -60,15 +60,16 @@ func TestConform_ResizeRows(t *testing.T) {
 			// The main screen under an alternate screen keeps its rows too.
 			// Only the active screen's cursor was kept in view, so the shell
 			// prompt was cut off the bottom of the main screen and the cursor
-			// came back on the row above it.
+			// came back on the row above it. Growing back takes main1 back
+			// from the history, because the main cursor is on the last row.
 			name: "the main screen under an alternate screen keeps its prompt",
 			cols: 10, rows: 3,
 			in:      "main1\r\nmain2\r\n$ \x1b[?1049h\x1b[Hfull",
 			resize:  [][2]int{{10, 2}, {10, 3}},
 			then:    "\x1b[?1049l",
-			want:    "main2\n$",
-			history: ptr("main1"),
-			cursor:  "2,1",
+			want:    "main1\nmain2\n$",
+			history: ptr(""),
+			cursor:  "2,2",
 		},
 		{
 			name: "a saved cursor moves up with the text it was saved on",

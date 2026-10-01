@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// Reflow on resize is the one place the two backends part company on the same
-// bytes: ghostty rewraps logical lines, the pure emulator does not. These
-// tests pin what that costs and what it must never cost.
+// Both backends rewrap logical lines on resize. These tests pin what that
+// costs and what it must never cost. The pure emulator reflows the screen and
+// keeps history at its width; ghostty reflows both.
 //
 // The report behind them: "on every resize, the ghostty pty adds an empty new
 // line". It does, but nothing in the emulator invents the line. A shell that
@@ -93,9 +93,9 @@ func TestGhosttyResizeSplitsAFullWidthLine(t *testing.T) {
 	if got := rowString(p.gh, 2); got != line[w-1:w] {
 		t.Errorf("ghostty row 2 = %q, want the wrapped last column %q", got, line[w-1:w])
 	}
-	// The pure emulator truncates instead, so the character is gone.
-	if got := rowString(p.pure, 2); got == line[w-1:w] {
-		t.Fatalf("the pure emulator now reflows too; fold this into the shared tests")
+	// The pure emulator reflows the same way.
+	if got := rowString(p.pure, 2); got != line[w-1:w] {
+		t.Errorf("pure row 2 = %q, want the wrapped last column %q", got, line[w-1:w])
 	}
 }
 
@@ -132,8 +132,11 @@ func TestGhosttyResizeCostsALinePerShrinkWhenAShellRepaints(t *testing.T) {
 		p.write(t, []byte(shellRepaint(nw)))
 	}
 
-	if got := p.pure.ScrollbackLen() - pureStart; got != 0 {
-		t.Errorf("pure emulator lost %d lines over %d shrinks, want 0", got, shrinks)
+	// The pure emulator reflows too now, so without OSC 133 marks it costs
+	// the same line. With the marks it costs nothing; see
+	// TestPureResizeKeepsAMarkedPromptAcrossShellRepaints.
+	if got := p.pure.ScrollbackLen() - pureStart; got != shrinks {
+		t.Errorf("pure emulator lost %d lines over %d shrinks, want %d like ghostty", got, shrinks, shrinks)
 	}
 	if got := p.gh.ScrollbackLen() - ghStart; got != shrinks {
 		t.Errorf("ghostty lost %d lines over %d shrinks, want %d (one per shrink); "+
