@@ -2131,8 +2131,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 27,710,000 (raised at 27,689,122) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,170,000 (raised at 26,148,114) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 27,905,000 (raised at 27,873,442) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,330,000 (raised at 26,298,690) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2168,6 +2168,13 @@ daemon pushes a pane's new folder, watches a listed folder for a client, and
 answers the wait-dir verb. That brought the build to 27,689,122 and 26,148,114
 bytes (Go 1.26.6), about 50 KB more than main, which had about 30 KB and 33 KB
 of room.
+
+The budgets went to 27,905,000 (linux/amd64) and 26,330,000 (darwin/arm64)
+when the herdr command front (internal/herdrcli) and the herdr pane methods
+brought the build to 27,873,442 and 26,298,690 bytes (Go 1.26.6). Main was
+27,689,122 and 26,148,114 bytes. The feature adds 184,320 and 150,576 bytes:
+a flag for flag port of herdr's CLI, and the pane navigation, swap, zoom,
+process and agent start methods.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
