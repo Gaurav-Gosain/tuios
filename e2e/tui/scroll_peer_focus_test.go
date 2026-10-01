@@ -47,8 +47,12 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 		t.Fatalf("pick the scrolling layout: %v", err)
 	}
 	waitPaletteClosed(t, a, "after picking the scrolling layout")
+	// The strip ends on the focused column, CHARLIE, with BRAVO beside it, so
+	// the far column, ALPHA, is off screen. Waiting for BRAVO to go matched
+	// only a frame of the slide into the strip, and a client that places the
+	// strip in one step never draws that frame.
 	if err := a.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "BRAVO")
+		return !strings.Contains(s.Text(), "ALPHA") && strings.Contains(s.Text(), "CHARLIE")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the first client never took the scrolling layout: %v\n%s", err, a.Snapshot())
 	}

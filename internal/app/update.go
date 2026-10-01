@@ -733,7 +733,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ProcessingRemoteKeys = false
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
+	m.msgClock = time.Now()
 	model, cmd := m.handleMsg(msg)
+	m.msgClock = time.Time{}
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler
 	// itself is one of the things that lengthens a pane's history: a workspace

@@ -74,12 +74,15 @@ func (m *OS) CompleteAllAnimations() {
 
 // UpdateAnimations updates all active animations and applies their effects.
 func (m *OS) UpdateAnimations() {
+	// One clock reading for every animation on this frame, so panes that
+	// started together are drawn at the same progress. See UpdateAt.
+	now := time.Now()
 	// Update animations in reverse order so we can safely remove completed ones
 	for i := len(m.Animations) - 1; i >= 0; i-- {
 		anim := m.Animations[i]
 
 		// Update the animation and check if it's complete
-		isComplete := anim.Update()
+		isComplete := anim.UpdateAt(now)
 
 		// If animation is complete, handle post-animation logic
 		if isComplete {
@@ -122,4 +125,14 @@ func (m *OS) layoutAnimationDuration() time.Duration {
 		return 0
 	}
 	return m.Settings.GetAnimationDuration()
+}
+
+// layoutClock is the start time for a slide armed while handling the current
+// message: one reading for the whole message, so every pane a layout moves in
+// response to one key starts on the same clock. Outside a message it is now.
+func (m *OS) layoutClock() time.Time {
+	if m.msgClock.IsZero() {
+		return time.Now()
+	}
+	return m.msgClock
 }

@@ -141,6 +141,16 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	// deferral exists to stop.
 	deferring := m.resizeDeferralActive()
 
+	// The slide that runs with animations off moves panes and never resizes
+	// them. A pass that changes a column's width is placed in one step instead,
+	// every pane at once: sliding some panes while others jump to their new
+	// width opens the same gap between them that this pass exists to avoid,
+	// and resizing first and sliding after is that gap. Someone who turned
+	// animations off gets the cut they asked for.
+	if animate && m.Settings.GetAnimationDuration() <= 0 && m.scrollingPassResizes(layouts) {
+		animate = false
+	}
+
 	for windowIntID, rect := range layouts {
 		// ComputePositions works in strip coordinates; place the strip inside
 		// the content region.
@@ -172,8 +182,25 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 			win.Tiled = false
 			win.InvalidateCache()
 		}
-		// A changed allowance owes the guest a new box even at the same rectangle.
-		if borderChanged || win.Width != rect.W || win.Height != rect.H {
+		moved := win.X != rect.X || win.Y != rect.Y
+		resized := win.Width != rect.W || win.Height != rect.H
+		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
+		// A pane that slides takes its new width along the way, and the snap
+		// tells the guest the size once when it lands, as every tiler's slide
+		// does. The strip used to resize first and slide only the position, so
+		// a column changing width jumped to it at the old position: when a zoom
+		// moved to the next column, the column losing it shrank at once while
+		// the strip was still on its way, and the screen showed empty ground
+		// between it and its neighbour for the whole slide.
+		//
+		// Not while a host resize is deferred. The pane takes the size visually
+		// now and the real one on the release, as before.
+		slide := animate && alreadyPlaced && !deferring && dur > 0 && (moved || resized)
+		// A changed allowance owes the guest a new box even at the same
+		// rectangle. A slide owes it too, and pays it when it lands: the
+		// snap's last step resizes against the size last announced, which
+		// counts the allowance.
+		if !slide && (borderChanged || resized) {
 			m.resizePane(win, rect.W, rect.H, deferring)
 		}
 
@@ -182,17 +209,28 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		// callers re-run ScrollingSetPositions frequently; without this
 		// guard each call would cancel + recreate the animation from the
 		// current intermediate position, making it stutter.
-		if m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
+		//
+		// A pass placed in one step lands it instead, with the rest.
+		if animate && m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
 			continue
 		}
 
-		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
-		if animate && alreadyPlaced && (win.X != rect.X || win.Y != rect.Y) {
+		if slide || (animate && alreadyPlaced && moved) {
 			m.CancelAnimationsForWindow(win)
 			if anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
+				// Every column that moves on this message starts on one clock.
+				// One key can lay the strip out several times (the focus step,
+				// then the zoom handed to the new column), and columns started
+				// a few microseconds apart can round a shared edge a cell
+				// apart.
+				anim.StartTime = m.layoutClock()
 				m.Animations = append(m.Animations, anim)
 				continue
 			}
+		}
+		if slide {
+			// No snap after all, so nothing else will tell the guest.
+			m.resizePane(win, rect.W, rect.H, deferring)
 		}
 
 		// A snap left over from an earlier placement owns this window's geometry
@@ -210,6 +248,24 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		win.MarkPositionDirty()
 		win.InvalidateCache()
 	}
+}
+
+// scrollingPassResizes reports whether placing the strip's rectangles would
+// change the size of any pane the pass places.
+func (m *OS) scrollingPassResizes(layouts map[int]layout.Rect) bool {
+	for windowIntID, rect := range layouts {
+		win := m.GetWindowByIntID(windowIntID)
+		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
+			continue
+		}
+		if win.Zoomed && !m.zoomUsesLayout(win) {
+			continue
+		}
+		if win.Width != rect.W || win.Height != rect.H {
+			return true
+		}
+	}
+	return false
 }
 
 // windowHasAnimationTo checks if a window has an active animation

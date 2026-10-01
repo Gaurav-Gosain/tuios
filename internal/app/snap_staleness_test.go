@@ -47,6 +47,14 @@ func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {
 			m, _ := newSwitchOS(t, 200, 50, map[int]int{1: 3, 2: 1})
 			m.TileAllWindows()
 			m.EnableScrollingLayout()
+			// Entering the strip changes every pane's size, and with
+			// animations off a pass that resizes is placed in one step. A
+			// step along the strip only moves panes, and that slide runs
+			// with animations off too.
+			m.ScrollingFocusLeft()
+			if len(m.Animations) == 0 {
+				m.ScrollingFocusRight()
+			}
 			if len(m.Animations) == 0 {
 				t.Fatal("the scrolling layout queued no snap; this test has nothing to trample")
 			}
