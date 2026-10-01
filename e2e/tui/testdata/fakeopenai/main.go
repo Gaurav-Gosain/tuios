@@ -10,6 +10,10 @@
 //
 // It listens on 127.0.0.1 at a free port and prints the base URL on its
 // first line.
+//
+// FAKEOPENAI_COMMAND and FAKEOPENAI_DESC set the bash call's command and
+// description, and FAKEOPENAI_REPLY the text of a plain answer, so a test
+// can make Crush show a given command or quote given text in its chat.
 package main
 
 import (
@@ -78,7 +82,7 @@ func main() {
 		toolCall := last.Role == "user" && len(req.Tools) > 0 && strings.Contains(lastUser, "RUN-TOOL")
 		reply := "Done. The command ran."
 		if last.Role != "tool" && !toolCall {
-			reply = "Fake answer"
+			reply = envOr("FAKEOPENAI_REPLY", "Fake answer")
 		}
 		fmt.Fprintf(os.Stderr, "request: last=%s tools=%d toolcall=%v\n", last.Role, len(req.Tools), toolCall)
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -99,7 +103,10 @@ func main() {
 		// A turn that takes a moment, so working is seen.
 		time.Sleep(1500 * time.Millisecond)
 		if toolCall {
-			args, _ := json.Marshal(map[string]string{"command": "touch tuios-e2e-marker", "description": "Create a marker file"})
+			args, _ := json.Marshal(map[string]string{
+				"command":     envOr("FAKEOPENAI_COMMAND", "touch tuios-e2e-marker"),
+				"description": envOr("FAKEOPENAI_DESC", "Create a marker file"),
+			})
 			send(chunk(map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{
 				"index": 0, "id": "call_e2e_1", "type": "function",
 				"function": map[string]any{"name": "bash", "arguments": string(args)},
@@ -117,4 +124,12 @@ func main() {
 		}
 	})
 	_ = http.Serve(l, mux)
+}
+
+// envOr is the variable's value, or def when it is unset or empty.
+func envOr(name, def string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return def
 }

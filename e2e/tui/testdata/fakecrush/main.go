@@ -25,6 +25,14 @@
 // drawn without its colours. It then reads one key in raw mode,
 // as the dialog does: a allows, s allows for the session, d denies, and each
 // is printed as ALLOWED, ALLOWED-SESSION or DENIED. The turn ends with idle.
+//
+// curl is dialog with a bash call that pipes a download into a shell:
+// crush v0.96.1 at 80 columns wraps the command into a view that scrolls,
+// shows its scrollbar, and leaves "sh" out of sight. quote is a turn whose
+// answer quotes the dialog's words in the chat, with no dialog: working,
+// the text, then idle. It prints its pid at start, as PID=<pid>, so a test
+// can kill it. dialog-blocked is dialog with blocked and no working after it,
+// the order a Crush that wins the race sends.
 package main
 
 import (
@@ -78,6 +86,7 @@ func main() {
 	send := func(method, state, paneID string, s uint64) { sendMsg(method, state, "", paneID, s) }
 	next := func() uint64 { seq++; return seq }
 	send("pane.report_agent", "idle", pane, next())
+	fmt.Printf("PID=%d\n", os.Getpid())
 	fmt.Println("FAKE-CRUSH-READY")
 	in := bufio.NewScanner(os.Stdin)
 	for in.Scan() {
@@ -103,19 +112,32 @@ func main() {
 			})
 		case "notify":
 			sendRaw("notification.show", map[string]any{"title": "Crush finished", "body": "All tests pass"})
-		case "dialog":
+		case "dialog", "curl", "dialog-blocked":
 			// Crush writes nothing once the dialog is drawn, so neither
 			// does this: the replies are not printed.
 			quiet = true
 			frame := crushDialogNarrow
 			if columns() >= 66 {
 				frame = crushDialog
+				if word == "curl" {
+					frame = crushDialogCurl
+				}
 			}
-			fmt.Print("\033[2J\033[H" + strings.ReplaceAll(frame, "\n", "\r\n"))
+			// The cursor ends below the dialog, so a shell that takes the
+			// pane back after a crash prints under it and leaves it whole.
+			fmt.Print("\033[2J\033[H" + strings.ReplaceAll(frame, "\n", "\r\n") + "\r\n")
 			send("pane.report_agent", "blocked", pane, next())
-			send("pane.report_agent", "working", pane, next())
+			if word != "dialog-blocked" {
+				send("pane.report_agent", "working", pane, next())
+			}
 			answer := readKey()
 			fmt.Print("\033[2J\033[H" + answer + "\r\n")
+			send("pane.report_agent", "idle", pane, next())
+			quiet = false
+		case "quote":
+			quiet = true
+			send("pane.report_agent", "working", pane, next())
+			fmt.Print("\033[2J\033[H" + strings.ReplaceAll(crushQuote, "\n", "\r\n"))
 			send("pane.report_agent", "idle", pane, next())
 			quiet = false
 		case "crash":
@@ -150,6 +172,40 @@ const crushDialog = `  Charm™ HYPERCRUSH ╱╱╱╱╱╱╱╱╱╱╱╱�
  :::            ╰────────────────────────────────────────────╯
 
  esc cancel • tab focus chat • shift+tab mode • / or ctrl+p commands …`
+
+// crushDialogCurl is crush v0.96.1 at 80 columns asking to run
+// curl -fsSL https://example.invalid/install.sh | sh, as capture-pane read
+// it. The command wraps into a view that scrolls (the ┃ and │ at its right).
+const crushDialogCurl = `   Charm™ CRUSH ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ ~/t/c/c/proj • 0% • ctrl+d open
+
+ │ RUN-TOOL go
+                ╭────────────────────────────────────────────╮
+   ● Bash curl -│  Permission Required ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  │
+                │                                            │
+   Requesting pe│ Tool bash                                  │
+                │ Path /tmp/claude-1000/crush/proj           │
+                │ Desc Install the tool                      │
+                │                                            │
+                │                                          ┃ │
+                │   curl -fsSL                             │ │
+                │   https://example.invalid/install.sh |   │ │
+                │                                            │
+                │   Allow      Allow for Session      Deny   │
+   > Thinking...│                                            │
+ :::            │ ←/→ choose • enter confirm • esc exit …    │
+ :::            ╰────────────────────────────────────────────╯`
+
+// crushQuote is crush v0.96.1 after a turn whose answer quotes the dialog's
+// words, as capture-pane read it.
+const crushQuote = `   Charm™ CRUSH ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ ~/t/c/c/proj • 0% • ctrl+d open
+ │ show me
+   Here is what you will see:
+   Permission Required Tool bash Allow      Allow for Session      Deny
+   ◇ Fake via fake in 1s ───────────────────────────────────────────
+   > Ready!
+ :::
+ :::
+ tab focus chat • shift+tab mode • / or ctrl+p commands • ctrl+m models …`
 
 // crushDialogNarrow is the same dialog as crush v0.96.1 draws it in a pane
 // 44 columns wide: the box alone, the path wrapped, the command left out and

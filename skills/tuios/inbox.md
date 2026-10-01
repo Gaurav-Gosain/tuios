@@ -69,7 +69,8 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
   `d` presses the answer your harness's manifest declares). Crush's permission
   dialog is answered this way too: `a`, `A` and `d` press Crush's `a`, `s`
-  and `d`.
+  and `d`. A Crush message that ends with `(not all shown)` takes a second
+  press.
 
 ## Asking the person a question
 

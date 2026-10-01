@@ -361,6 +361,12 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.blocker = true
 			next.prior = priorOf(claim, prev, w.AgentHarness)
 		}
+		if next.blocker {
+			// A blocker over a herdr reporter's claim still follows the
+			// reporter's process, so a crashed harness clears the pane even
+			// while its last prompt is on the screen (herdrClaimLapsed).
+			next.herdrAt, next.herdrAnchors = claim.herdrAt, claim.herdrAnchors
+		}
 		w.AgentState = r.State
 		w.AgentMessage = ClampDisplayText(r.Message)
 		w.AgentKind = agentKindOf(r)

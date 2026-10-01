@@ -3,6 +3,7 @@ package harness
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // A blocked agent's alert says what the agent wants, not only that it needs
@@ -107,45 +108,71 @@ func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 	}
 	rl := &m.Screen.Rule[rule]
 	lines := regionLines(tail, rl.Region)
-	row, clean := promptRow(m, rl, lines)
-	if rl.Show == ShowDialog && row >= 0 {
-		// The row runs through the box and the chat on either side of it.
-		// Inside the box, the same search finds the words alone.
-		if box, ok := dialogAround(lines, row); ok {
-			if msg := dialogApproval(box, rl.ToolField, rl.WhatFields); msg != "" {
-				return msg
-			}
-			if _, inBox := promptRow(m, rl, box); inBox != "" {
-				return inBox
-			}
+	if rl.Show == ShowDialog {
+		// Only the one dialog the rule reads speaks for the prompt: a line
+		// of the transcript that quotes the dialog's words is not it.
+		box, ok := ruleDialog(m, rl, lines)
+		if !ok {
+			return ""
 		}
+		if msg := dialogApproval(box.inside, rl); msg != "" {
+			return msg
+		}
+		_, inBox := promptRow(m, rl, box.inside)
+		return inBox
 	}
+	_, clean := promptRow(m, rl, lines)
 	return clean
 }
 
-// dialogApproval is the message tool_field and what_fields build from a
-// dialog's lines, "approve <tool>: <what>", or "approve <tool>" when the
-// dialog shows none of what_fields. Empty when the dialog shows no tool.
-func dialogApproval(box []string, toolField string, whatFields []string) string {
-	if toolField == "" {
+// PartialSuffix ends a message built from a dialog that does not show the
+// whole call: the command scrolls or is left out, the message has only the
+// model's description of it, or it was cut to length. The risk rules read
+// such a message as cut short, so allowing it takes a second press.
+const PartialSuffix = " (not all shown)"
+
+// dialogApproval is the message tool_field, what_fields and hint_fields
+// build from a dialog's lines, "approve <tool>: <what>", or "approve <tool>"
+// when the dialog shows none of them. Empty when the dialog shows no tool.
+func dialogApproval(box []string, rl *ScreenRule) string {
+	if rl.ToolField == "" {
 		return ""
 	}
-	tool := dialogField(box, toolField)
+	tool := dialogField(box, rl.ToolField)
 	if tool == "" || strings.ContainsAny(tool, " \t") {
 		return ""
 	}
-	for _, label := range whatFields {
-		what := ""
+	what, partial := "", false
+	for _, label := range rl.WhatFields {
 		if label == WhatBody {
-			what = dialogBody(box, toolField)
+			what, partial = dialogBody(box, rl.ToolField)
 		} else {
 			what = dialogField(box, label)
 		}
 		if what != "" {
-			return CleanPromptLine("approve " + tool + ": " + what)
+			break
 		}
 	}
-	return "approve " + tool
+	if what == "" {
+		for _, label := range rl.HintFields {
+			if what = dialogField(box, label); what != "" {
+				partial = true
+				break
+			}
+		}
+	}
+	if what == "" {
+		return "approve " + tool
+	}
+	msg := "approve " + tool + ": " + what
+	if n := utf8.RuneCountInString(msg); partial || n > maxPromptRunes {
+		keep := maxPromptRunes - utf8.RuneCountInString(PartialSuffix)
+		if r := []rune(msg); len(r) > keep {
+			msg = strings.TrimSpace(string(r[:keep]))
+		}
+		msg += PartialSuffix
+	}
+	return msg
 }
 
 // dialogField is the value of the first field line with this label, cleaned,
@@ -170,23 +197,28 @@ func dialogField(box []string, label string) string {
 			}
 			val += t
 		}
-		return CleanPromptLine(val)
+		return cleanLine(val, maxDialogRunes)
 	}
 	return ""
 }
+
+// maxDialogRunes bounds a value read from a dialog before the message is cut
+// to length, so a cut is seen and marked.
+const maxDialogRunes = 4 * maxPromptRunes
 
 // leadingSpaces counts the spaces a line starts with.
 func leadingSpaces(s string) int {
 	return len(s) - len(strings.TrimLeft(s, " "))
 }
 
-// dialogBody is the first line of the dialog's body: the block of lines,
-// between blank lines, that follows the block holding the first field line,
-// when that block is not one of the dialog's last two. Crush lays a dialog
-// out as a title, its fields, a body, its buttons and a help line, and a
-// narrow dialog leaves the body out. dialogInside keeps one blank line of
-// each run.
-func dialogBody(box []string, firstField string) string {
+// dialogBody is the dialog's body: the blocks of lines, between blank
+// lines, that follow the block holding the first field line and come before
+// the dialog's last two, joined into one line. Crush lays a dialog out as a
+// title, its fields, a body, its buttons and a help line, and a narrow
+// dialog leaves the body out. partial is true when the body shows a
+// scrollbar, so the dialog shows only part of it. dialogInside keeps one
+// blank line of each run.
+func dialogBody(box []string, firstField string) (body string, partial bool) {
 	var blocks [][]string
 	var cur []string
 	for _, line := range box {
@@ -210,14 +242,34 @@ func dialogBody(box []string, firstField string) string {
 				hasField = true
 			}
 		}
-		if hasField {
-			if i+1 < len(blocks)-2 {
-				return CleanPromptLine(blocks[i+1][0])
-			}
-			return ""
+		if !hasField {
+			continue
 		}
+		var parts []string
+		for _, blk := range blocks[min(i+1, len(blocks)):max(len(blocks)-2, i+1)] {
+			for _, line := range blk {
+				if strings.ContainsAny(line, dialogScrollbar) {
+					partial = true
+				}
+				if t := cleanLine(line, maxDialogRunes); t != "" {
+					parts = append(parts, t)
+				}
+			}
+		}
+		return cleanLine(strings.Join(parts, " "), maxDialogRunes), partial
 	}
-	return ""
+	return "", false
+}
+
+// dialogScrollbar is what a dialog draws as the bar of a scrolled view:
+// Crush's thumb and track (internal/ui/styles/styles.go).
+const dialogScrollbar = "┃│"
+
+// RuleShowsDialog reports whether a screen rule reads a dialog (show =
+// "dialog").
+func (r *Registry) RuleShowsDialog(id string, rule int) bool {
+	m := r.Lookup(id)
+	return m != nil && rule >= 0 && rule < len(m.Screen.Rule) && m.Screen.Rule[rule].Show == ShowDialog
 }
 
 // promptRow is the index in lines of the line RulePrompt reads as the prompt,
@@ -247,6 +299,11 @@ func promptRow(m *Manifest, rl *ScreenRule, lines []string) (int, string) {
 // cursor mark in front of it, and the runs of space the box left behind. The
 // result is trimmed and capped at maxPromptRunes.
 func CleanPromptLine(s string) string {
+	return cleanLine(s, maxPromptRunes)
+}
+
+// cleanLine is CleanPromptLine cut to limit runes.
+func cleanLine(s string, limit int) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	space := true // leading space is dropped, so start as if one was just seen
@@ -270,7 +327,7 @@ func CleanPromptLine(s string) string {
 		}
 		b.WriteRune(r)
 		space = false
-		if n++; n >= maxPromptRunes {
+		if n++; n >= limit {
 			break
 		}
 	}

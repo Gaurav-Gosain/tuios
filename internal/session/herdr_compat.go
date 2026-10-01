@@ -497,7 +497,9 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		}
 		out, code, msg := d.herdrReport(sess, window, harness, pid, p)
 		if code == "" {
-			wins := crushScreenWins(harness)
+			// A report names its agent itself, so the name alone earns no
+			// trust: the pane must be running that agent's process.
+			wins := crushScreenWins(harness) && d.windowRunsHarness(window, harness)
 			d.markHerdrClaim(window, d.herdrAnchorsFor(cs, window), wins)
 			if wins && (p.State == "working" || p.State == "blocked") {
 				// working: the dialog can be up already, and only a look
@@ -609,6 +611,31 @@ func (d *Daemon) markHerdrClaim(window string, anchors []herdrAnchor, screenWins
 // before it.
 func crushScreenWins(harness string) bool {
 	return harness == "crush"
+}
+
+// windowRunsHarness reports whether process detection names harness for the
+// window's foreground process, the way the agent detector reads it.
+func (d *Daemon) windowRunsHarness(window, harness string) bool {
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return false
+	}
+	st := sess.GetState()
+	i, err := findWindowStateIndex(st.Windows, window)
+	if err != nil {
+		return false
+	}
+	return d.paneRunsHarness(sess, st.Windows[i].PTYID, harness)
+}
+
+// paneRunsHarness is windowRunsHarness for a pane of a session.
+func (d *Daemon) paneRunsHarness(sess *Session, ptyID, harness string) bool {
+	info, running := d.foregroundResolver(sess)(ptyID)
+	if !running {
+		return false
+	}
+	det, ok := d.agentMatcher.identifyDetail(info)
+	return ok && det.harness == harness
 }
 
 // lookAtScreenNow runs a window's screen look now, rather than when the pane

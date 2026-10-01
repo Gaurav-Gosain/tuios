@@ -51,10 +51,13 @@ show     = "dialog"
 # hello.txt", the form tuios's hooks report and its risk rules read. The
 # dialog's own fields: File for edit, write and view, URL and File for
 # download, Directory for ls. A bash dialog wide enough shows the command
-# under its fields ("body"). A narrow one leaves it out, and Desc, the
-# model's own words for the command, is the last resort.
+# under its fields ("body"), every line of it joined. A narrow one leaves it
+# out, and Desc, the model's own words for the command, is the last resort.
+# A message from Desc, from a body that scrolls, or cut to length ends with
+# "(not all shown)", and the risk rules then ask for a second press.
 tool_field  = "tool"
-what_fields = ["file", "url", "directory", "body", "desc"]
+what_fields = ["file", "url", "directory", "body"]
+hint_fields = ["desc"]
 
 # The dialog's own keys (internal/ui/dialog/permissions.go in Crush): a
 # allows, s allows for the rest of the session, d denies. Each acts at once,

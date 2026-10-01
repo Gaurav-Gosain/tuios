@@ -93,7 +93,9 @@ func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
 	}
 	tool, text := risk.ParseSummary(line)
 	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home})
-	if integration.Clipped(line) {
+	// A line cut to length, or a dialog that shows only part of the call
+	// (harness.PartialSuffix), may hide what a rule would match.
+	if integration.Clipped(line) || strings.HasSuffix(line, harness.PartialSuffix) {
 		hits = append(hits, risk.CutShortHit)
 	}
 	return hits

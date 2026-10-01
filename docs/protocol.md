@@ -601,7 +601,7 @@ without attaching. What changes for an existing caller:
 - The bundled Claude Code and Codex manifests declare answers. Their rules
   match exactly what they matched before; only the block is new.
 - Later, a `needs_input` screen rule gains the optional keys `show`,
-  `tool_field` and `what_fields` (see
+  `tool_field`, `what_fields` and `hint_fields` (see
   [a prompt drawn as a dialog](AGENT_STATE.md#a-prompt-drawn-as-a-dialog)).
   An older build ignores them. The bundled Crush manifest uses them and
   declares answers for its permission dialog.

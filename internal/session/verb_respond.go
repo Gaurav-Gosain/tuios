@@ -182,6 +182,15 @@ func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verb
 		look.reason = "no rule of " + hid + " reads a prompt on the pane now"
 		return look, nil
 	}
+	if look.prompt.Answerable() && crushScreenWins(hid) && !d.paneRunsHarness(sess, w.PTYID, hid) {
+		// The harness was named by a herdr report, which any process in the
+		// pane can send. Keys go into the prompt only while the pane runs
+		// that harness's own process.
+		look.prompt = look.prompt.WithoutAnswers()
+		look.id = promptID(w, hid, look.prompt)
+		look.reason = "tuios does not see " + hid + " running in the pane, so the prompt is answered in the pane"
+		return look, nil
+	}
 	look.id = promptID(w, hid, look.prompt)
 	if !look.prompt.Answerable() {
 		look.reason = "the rule that reads this prompt declares no answers, so it is answered in the pane"

@@ -1957,6 +1957,8 @@ func printRuleReports(w io.Writer, reports []harness.RuleReport, decided int, de
 		fmt.Fprintf(w, " %s rule %d  %s  priority %d%s\n", mark, r.Index, r.State, r.Priority, region)
 		if r.NoRegion {
 			fmt.Fprintf(w, "     region %s is not on the screen\n", orNone(r.Region))
+		} else if r.NoDialog {
+			fmt.Fprintf(w, "     no dialog box on the screen holds all its words\n")
 		} else if r.Text != "" {
 			for line := range strings.SplitSeq(r.Text, "\n") {
 				fmt.Fprintf(w, "     | %s\n", line)

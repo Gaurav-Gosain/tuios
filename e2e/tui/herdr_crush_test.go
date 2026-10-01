@@ -248,13 +248,14 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 
 // startFakeProvider builds and starts the stand-in model provider and returns
 // its base URL. It is stopped when the test ends.
-func startFakeProvider(t *testing.T) string {
+func startFakeProvider(t *testing.T, env ...string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fakeopenai")
 	if out, err := exec.Command("go", "build", "-o", bin, "./testdata/fakeopenai").CombinedOutput(); err != nil {
 		t.Fatalf("build fakeopenai: %v\n%s", err, out)
 	}
 	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
