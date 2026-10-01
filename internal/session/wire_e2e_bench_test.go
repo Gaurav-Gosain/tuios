@@ -236,23 +236,38 @@ func TestIdleConnectionMakesNoReads(t *testing.T) {
 		t.Skip("spawns a shell")
 	}
 	rig := newE2ERig(t)
+	// The shell has started once it runs a command. Its prompt follows the
+	// output, and the drain takes it.
+	rig.run(t, "printf 'rea''dy\\n'", "ready", 10*time.Second)
 	rig.drain(500 * time.Millisecond)
 
+	// A loaded runner can deliver a late frame, or run a timer of its own,
+	// inside any one window. A polling loop reads in every window, so the
+	// test passes on the first quiet window and fails only when none is.
 	const idle = 1500 * time.Millisecond
-	r0 := rig.conn.reads.Load()
-	s0, haveProc := processReadSyscalls()
-	time.Sleep(idle)
-	reads := rig.conn.reads.Load() - r0
-	if reads != 0 {
-		t.Errorf("the client read its socket %d times in %v with nothing arriving; an idle client must not poll", reads, idle)
-	}
-	if haveProc {
-		s1, _ := processReadSyscalls()
-		// A few reads are the runtime's own and the shell's; a 100 ms poll on
-		// either loop is fifteen or more.
-		if got := s1 - s0; got >= 10 {
-			t.Errorf("the process made %d read syscalls in %v while idle; a read loop is polling", got, idle)
+	const windows = 4
+	var reads, sys int64
+	for range windows {
+		r0 := rig.conn.reads.Load()
+		s0, haveProc := processReadSyscalls()
+		time.Sleep(idle)
+		reads = rig.conn.reads.Load() - r0
+		sys = 0
+		if haveProc {
+			s1, _ := processReadSyscalls()
+			sys = s1 - s0
 		}
+		// A few reads are the runtime's own and the shell's; a 100 ms poll
+		// on either loop is fifteen or more.
+		if reads == 0 && sys < 10 {
+			break
+		}
+	}
+	if reads != 0 {
+		t.Errorf("the client read its socket %d times in %v with nothing arriving, in each of %d windows; an idle client must not poll", reads, idle, windows)
+	}
+	if sys >= 10 {
+		t.Errorf("the process made %d read syscalls in %v while idle, in each of %d windows; a read loop is polling", sys, idle, windows)
 	}
 	// Silence is only the right answer from a connection that is still
 	// there. A loop that timed out and gave up is silent too, and the

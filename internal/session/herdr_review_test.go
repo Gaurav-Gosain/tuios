@@ -2,7 +2,9 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -103,23 +105,63 @@ func TestWaitsEndWithTheirClient(t *testing.T) {
 }
 
 // TestHerdrConnectionsPerCallerAreCapped: one process holds at most
-// herdrConnsPerCaller connections on the herdr socket at once.
+// herdrConnsPerCaller connections on the herdr socket at once. The one over
+// the cap is answered rate_limited, and not a broken pipe.
 func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
-	_, sp := startTestDaemon(t)
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "w")
+	pane := herdrPaneID(sess.ID, sess.GetState().Windows[0].ID)
+	// Each held connection is a wait, so it stays counted however slow the
+	// runner is. An idle connection would time out and drop from the count.
+	wait, _ := json.Marshal(map[string]any{"id": "x", "method": "pane.wait_for_output", "params": map[string]any{
+		"pane_id": pane, "source": "recent",
+		"match": map[string]any{"type": "substring", "value": "never-printed-zzz"}, "timeout_ms": 600_000}})
 	var held []net.Conn
 	defer func() {
 		for _, c := range held {
 			_ = c.Close()
 		}
 	}()
-	for range herdrConnsPerCaller {
+	hold := func() net.Conn {
 		c, err := net.Dial("unix", HerdrSocketPath(sp))
 		if err != nil {
 			t.Fatal(err)
 		}
-		held = append(held, c)
+		if _, err := c.Write(append(wait, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		return c
 	}
-	time.Sleep(300 * time.Millisecond)
+	// alive reports whether the daemon still holds c open. On a starved
+	// runner the daemon can drop a wait whose request it did not read
+	// within its I/O timeout.
+	alive := func(c net.Conn) bool {
+		_ = c.SetReadDeadline(time.Now().Add(time.Millisecond))
+		_, err := c.Read(make([]byte, 1))
+		var ne net.Error
+		return errors.As(err, &ne) && ne.Timeout()
+	}
+	for range herdrConnsPerCaller {
+		held = append(held, hold())
+	}
+	count := func() int {
+		d.herdrConns.mu.Lock()
+		defer d.herdrConns.mu.Unlock()
+		return d.herdrConns.n[os.Getpid()]
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for count() < herdrConnsPerCaller {
+		if time.Now().After(deadline) {
+			t.Fatalf("the daemon counted %d of %d connections", count(), herdrConnsPerCaller)
+		}
+		for i, c := range held {
+			if !alive(c) {
+				_ = c.Close()
+				held[i] = hold()
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if code := herdrCode(herdrDial(t, sp, "ping", nil)); code != "rate_limited" {
 		t.Errorf("connection %d answered %q, want rate_limited", herdrConnsPerCaller+1, code)
 	}
@@ -127,12 +169,12 @@ func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
 		_ = c.Close()
 	}
 	held = nil
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(20 * time.Second)
 	for herdrCode(herdrDial(t, sp, "ping", nil)) != "" {
 		if time.Now().After(deadline) {
 			t.Fatal("the count did not come back down after the connections closed")
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
