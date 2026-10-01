@@ -374,6 +374,10 @@ func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessa
 		return
 	}
 	_ = cs.conn.SetDeadline(time.Time{})
+	// Take the baseline before the ack. A client acts as soon as it reads the
+	// ack, and a baseline taken after that would already hold the change, so
+	// the translator would see no change and send no event.
+	tr := d.newHerdrTranslator()
 	if !d.herdrWriteLine(cs, herdrLine{ID: id, Result: &herdrResult{Type: "subscription_started"}}) {
 		return
 	}
@@ -384,7 +388,6 @@ func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessa
 		_, _ = io.Copy(io.Discard, cs.conn)
 		close(gone)
 	}()
-	tr := d.newHerdrTranslator()
 	for {
 		select {
 		case <-gone:
