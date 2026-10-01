@@ -409,22 +409,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// The viewer prefers 80 columns; a narrower screen gets a narrower
 		// viewer rather than a viewer with its right-hand side off the edge.
 		logTextWidth := m.panelWidth(80)
-		totalLogs := len(m.LogMessages)
 
-		hints := []overlay.Hint{
-			{Key: "j/k", Label: "scroll"},
-			{Key: "E", Label: "copy errors"},
-			{Key: "A", Label: "copy all"},
-			{Key: "q", Label: "close"},
-		}
-		// A viewer that scrolls spends two more body lines saying where in the
-		// log it is, so it is measured again with them once it knows it does.
-		logsPerPage, hints := m.panelBody(totalLogs, 0, logTextWidth, nil, hints)
-		if totalLogs > logsPerPage {
-			logsPerPage, hints = m.panelBody(totalLogs, 2, logTextWidth, nil, hints)
-		}
-
-		maxScroll := max(totalLogs-logsPerPage, 0)
+		logsPerPage, maxScroll, hints := m.LogViewerBounds()
 		m.LogScrollOffset = max(0, min(m.LogScrollOffset, maxScroll))
 
 		var logLines []string

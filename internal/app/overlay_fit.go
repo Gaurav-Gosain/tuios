@@ -2,6 +2,35 @@ package app
 
 import "github.com/Gaurav-Gosain/tuios/internal/overlay"
 
+// logViewerHints is the footer the log viewer advertises. It lives here
+// because the row count it wraps to is part of the page-size arithmetic, and
+// the same list has to reach both the renderer and the key handler.
+func logViewerHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: "j/k", Label: "scroll"},
+		{Key: "E", Label: "copy errors"},
+		{Key: "A", Label: "copy all"},
+		{Key: "q", Label: "close"},
+	}
+}
+
+// LogViewerBounds is the log viewer's scrollable range: the body rows it draws
+// and the largest offset the renderer will accept. The key handler, the wheel
+// and the renderer all measure through here, so the range that can be scrolled
+// and the range that is drawn are the same range.
+func (m *OS) LogViewerBounds() (logsPerPage, maxScroll int, hints []overlay.Hint) {
+	logTextWidth := m.panelWidth(80)
+	totalLogs := len(m.LogMessages)
+	hints = logViewerHints()
+	// A viewer that scrolls spends two more body lines saying where in the
+	// log it is, so it is measured again with them once it knows it does.
+	logsPerPage, hints = m.panelBody(totalLogs, 0, logTextWidth, nil, hints)
+	if totalLogs > logsPerPage {
+		logsPerPage, hints = m.panelBody(totalLogs, 2, logTextWidth, nil, hints)
+	}
+	return logsPerPage, max(totalLogs-logsPerPage, 0), hints
+}
+
 // Overlay panels are laid out at a preferred size that suits a desktop terminal
 // and then fitted to the screen they are actually drawn on. A small terminal,
 // 51x37 say, is narrower and shorter than every panel wants to be, and a panel

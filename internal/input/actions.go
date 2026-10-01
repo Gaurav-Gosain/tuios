@@ -978,14 +978,9 @@ func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
-	o.ShowLogs = !o.ShowLogs
+	o.ToggleLogViewer()
 	if o.ShowLogs && !wasShowing {
-		// Opening the log viewer: log the message first
 		o.LogInfo("Log viewer opened")
-
-		// Scroll to bottom to show most recent entries
-		_, maxScroll := logScrollBounds(o.Height, len(o.LogMessages))
-		o.LogScrollOffset = maxScroll
 	}
 	return o, nil
 }

@@ -273,6 +273,18 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	}
 }
 
+// ToggleLogViewer shows or hides the log overlay. Opening it lands on the
+// newest entries: left at its last position, or at the top of the buffer, the
+// viewer shows the oldest thing it holds, which is exactly the wrong place to
+// look for what was missed.
+func (m *OS) ToggleLogViewer() {
+	m.ShowLogs = !m.ShowLogs
+	if m.ShowLogs {
+		_, maxScroll, _ := m.LogViewerBounds()
+		m.LogScrollOffset = maxScroll
+	}
+}
+
 // NotificationExpired reports whether a message has outlived its duration. A
 // sticky one never has.
 func (n Notification) NotificationExpired(now time.Time) bool {
