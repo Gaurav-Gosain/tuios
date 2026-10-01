@@ -21,6 +21,7 @@ type NvimNavigationMsg struct {
 	WindowID  string
 	Direction string
 	State     *bool
+	Reset     bool
 }
 
 func ListenForNvimNavigation(ch chan NvimNavigationMsg) tea.Cmd {
@@ -52,9 +53,19 @@ func (m *OS) setupNvimNavigation(window *terminal.Window) {
 		default:
 		}
 	}
+	window.NvimNavResetFunc = func() {
+		select {
+		case ch <- NvimNavigationMsg{WindowID: id, Reset: true}:
+		default:
+		}
+	}
 }
 
 func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
+	if msg.Reset {
+		m.clearNvimNavigation(msg.WindowID)
+		return
+	}
 	if !m.Settings.NvimNavigation {
 		return
 	}
@@ -84,6 +95,13 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 	if m.FocusedWindow != previous {
 		m.RevealFocusedColumn()
 		m.SyncStateToDaemon()
+	}
+}
+
+func (m *OS) clearNvimNavigation(windowID string) {
+	delete(m.nvimNavigators, windowID)
+	if pending := m.pendingNvimNavigation; pending != nil && pending.WindowID == windowID {
+		m.pendingNvimNavigation = nil
 	}
 }
 

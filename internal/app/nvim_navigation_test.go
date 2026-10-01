@@ -113,3 +113,30 @@ func TestNvimNavigationRejectsExpiredOrDisabledRequests(t *testing.T) {
 		t.Fatal("disabled navigation accepted an active announcement")
 	}
 }
+
+func TestNvimNavigationClearsOnAltScreenExitAndWindowClose(t *testing.T) {
+	left := newTestWindow(t, "left", 40, 20)
+	m := newTestOS(left)
+	m.Settings.NvimNavigation = true
+	m.setupNvimNavigation(left)
+	active := true
+	m.onNvimNavigation(NvimNavigationMsg{WindowID: left.ID, State: &active})
+	m.ArmNvimNavigation("right")
+
+	_, _ = left.Terminal.Write([]byte("\x1b[?1049h\x1b[?1049l"))
+	msg := <-m.PendingNvimNavigation
+	if !msg.Reset {
+		t.Fatal("leaving the alternate screen did not reset navigation")
+	}
+	m.onNvimNavigation(msg)
+	if m.NvimNavigatorActive() || m.pendingNvimNavigation != nil {
+		t.Fatal("alternate-screen exit kept navigation state")
+	}
+
+	m.onNvimNavigation(NvimNavigationMsg{WindowID: left.ID, State: &active})
+	m.ArmNvimNavigation("right")
+	m.DeleteWindow(0)
+	if m.nvimNavigators[left.ID] || m.pendingNvimNavigation != nil {
+		t.Fatal("closing a pane kept navigation state")
+	}
+}

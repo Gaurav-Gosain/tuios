@@ -849,6 +849,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
+	m.clearNvimNavigation(deletedWindow.ID)
 	m.pipSourceClosed(deletedWindow)
 	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title(), i, shortID(deletedWindow.ID))
 

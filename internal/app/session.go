@@ -1433,6 +1433,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 // gone, and a stale BSP id mapping hands a later window an id this one still
 // owns.
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
+	m.clearNvimNavigation(w.ID)
 	m.pipSourceClosed(w)
 	if m.DaemonClient != nil && w.PTYID != "" {
 		m.unsubscribeFromPTY(w)
