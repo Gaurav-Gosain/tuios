@@ -186,7 +186,9 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 // celebrateOrigin is the middle of a window's box, or of the screen.
 func (m *OS) celebrateOrigin(w *terminal.Window) (int, int) {
 	if w != nil && !w.Minimized && w.Width > 0 && w.Height > 0 {
-		return w.X + w.Width/2, w.Y + w.Height/2
+		// The burst is drawn on the screen, where a view of a larger
+		// session puts the pane. See pane_view.go.
+		return m.sessionView.toScreen(w.X+w.Width/2, w.Y+w.Height/2)
 	}
 	return m.GetRenderWidth() / 2, m.GetRenderHeight() / 2
 }

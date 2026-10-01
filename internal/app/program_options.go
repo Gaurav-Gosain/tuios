@@ -258,8 +258,11 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	//
 	// LinkHoverActive keeps one more event flowing after the pointer leaves a
 	// link, and that is the event that clears the underline.
+	// Panes are hit-tested where they are in the layout, which a view of a
+	// larger session shifts. See pane_view.go.
+	paneX, paneY, _ := m.PointerToLayout(mouse.X, mouse.Y)
 	if movedCell {
-		if m.LinkHoverActive() || m.PointerOverLink(mouse.X, mouse.Y) {
+		if m.LinkHoverActive() || m.PointerOverLink(paneX, paneY) {
 			return msg
 		}
 	}
@@ -292,7 +295,7 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 	if m.Settings.WindowButtonStyle == config.WindowButtonStyleDots && !m.Settings.HideWindowButtons {
-		if m.WindowButtonContains(mouse.X, mouse.Y) {
+		if m.WindowButtonContains(paneX, paneY) {
 			return msg
 		}
 	}

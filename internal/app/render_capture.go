@@ -44,10 +44,16 @@ func (m *OS) renderCaptureMode() []*lipgloss.Layer {
 		return nil
 	}
 	// Every window a click can aim at, for CaptureWindowAt to read.
+	// Recorded where each pane is on the screen: capture mode takes the
+	// pointer as the screen reports it, and a view of a larger session draws
+	// the panes shifted and clipped. See pane_view.go.
 	for _, idx := range m.captureVisibleWindows() {
-		w := m.Windows[idx]
+		r, ok := m.paneOnScreen(m.Windows[idx])
+		if !ok {
+			continue
+		}
 		m.captureHits = append(m.captureHits, captureHit{
-			Index: idx, X0: w.X, Y0: w.Y, X1: w.X + w.Width, Y1: w.Y + w.Height,
+			Index: idx, X0: r.Min.X, Y0: r.Min.Y, X1: r.Max.X, Y1: r.Max.Y,
 		})
 	}
 	return m.captureLayers()
@@ -105,7 +111,9 @@ func (m *OS) captureLayers() []*lipgloss.Layer {
 	// captures this" is visible before the click.
 	if !m.Capture.Dragging && m.Capture.Hover >= 0 && m.Capture.Hover < len(m.Windows) {
 		if w := m.Windows[m.Capture.Hover]; w != nil {
-			layers = append(layers, m.captureOutline(pal, w.X, w.Y, w.Width, w.Height, "")...)
+			if r, ok := m.paneOnScreen(w); ok {
+				layers = append(layers, m.captureOutline(pal, r.Min.X, r.Min.Y, r.Dx(), r.Dy(), "")...)
+			}
 		}
 	}
 
