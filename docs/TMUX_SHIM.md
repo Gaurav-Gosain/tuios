@@ -152,15 +152,17 @@ Some values come from tuios facts:
 | `load-buffer`, `set-buffer` | Store text in a paste buffer: from a file, from standard input (`-`), or from the argument. `-b` names the buffer, `set-buffer -a` appends |
 | `paste-buffer` | Types a buffer into a pane as a paste (`send-text` with `paste`). See below |
 | `delete-buffer` | Deletes a buffer |
-| `show-options`, `show-window-options` | Print the options that describe tuios, such as `window-size latest`, `base-index 1` and `history-limit`. `-v` prints the value alone, `-q` hides the error for an unknown option |
+| `show-options`, `show-window-options` | Print the options that describe tuios, such as `window-size`, `base-index 1` and `history-limit`. `window-size` is the session's `daemon.window_size` (`smallest`, `largest` or `latest`), or `latest` from a daemon that does not report it. `-v` prints the value alone, `-q` hides the error for an unknown option |
+| `set-option window-size`, `set-window-option window-size` | Set the session's `daemon.window_size` to `smallest`, `largest` or `latest`. `manual` is refused. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client) |
 | `kill-pane`, `kill-window` | Close a pane, or every pane of a workspace (`close-window`) |
 | `select-pane` | Focuses a pane (`focus-window`), or with `-L -R -U -D` its neighbour. `-T` names the pane (`set-window`) and leaves the focus alone. `-P` (a style) is ignored |
 | `select-window`, `rename-window` | Show a workspace, name a workspace |
 | `respawn-pane -k` | Replaces the process of a pane the shim opened, keeping the pane and its id. See below |
 | `-V` | Prints `tmux 3.4` |
 
-`set-option`, `set-window-option`, `set-hook`, `refresh-client`,
-`select-layout`, `resize-pane` and `start-server` succeed and do nothing.
+`set-option` and `set-window-option` of any option except `window-size`,
+`set-hook`, `refresh-client`, `select-layout`, `resize-pane` and
+`start-server` succeed and do nothing.
 tuios owns the layout, the styling and the options. `kill-session`,
 `kill-server`, `attach-session` (outside control mode), `switch-client` and
 `detach-client` are refused. The shim never attaches a terminal or ends a

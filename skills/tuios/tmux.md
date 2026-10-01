@@ -20,7 +20,9 @@ answers `split-window`, `new-window`, `send-keys`, `capture-pane -p`,
 `display-message -p`, `list-panes`, `list-windows`, `list-sessions`,
 `has-session`, `kill-pane`, `kill-window`, `select-pane`, `select-window`,
 `rename-window` and `respawn-pane -k`. Layout and style commands succeed and do
-nothing, since tuios owns the layout. Commands that start, attach or end a
+nothing, since tuios owns the layout. The one option it honours is
+`set -g window-size smallest|largest|latest`, the session's
+`daemon.window_size`. Commands that start, attach or end a
 session are refused. Anything else fails rather than pretending.
 
 Ask it one question directly, from any tuios pane:

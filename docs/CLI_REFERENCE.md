@@ -337,6 +337,11 @@ tuios attach mysession --theme nord  # Attach with different theme
 tuios attach --host build api  # Attach the session api on the host build
 ```
 
+When the session already has a client, `tuios attach` says so and names the
+`window_size` policy of the session. For example: "The session uses the size of
+the client that last had input (window_size latest)." See
+[SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).
+
 Inside a tuios pane, `tuios attach` refuses to attach the session that holds
 the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
 it does not name a session. To show a different session in the pane, name
@@ -1376,6 +1381,7 @@ name alone. Some of them:
 | `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
 | `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch terminal that `Ctrl+B g` shows (default `80%`) |
 | `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch terminal (default `80%`) |
+| `daemon.window_size` | `smallest`, `largest`, `latest` | The client whose size the session uses: the smallest (default), the largest, or the client that last had input. The daemon applies it to the session at once. It is not saved to the config file |
 
 **Examples:**
 ```bash
@@ -1407,6 +1413,9 @@ tuios set-config appearance.sidebar.background ''
 
 # Target a specific session
 tuios set-config -s mysession dockbar_position hidden
+
+# Give the session the size of the client that last had input
+tuios set-config -s mysession daemon.window_size latest
 ```
 
 ### `tuios wait-for`
@@ -2723,6 +2732,7 @@ workspace      1 of 9
 tiling         tiling
 size           120x40
 attached       true
+window size    smallest
 named          2=review
 ```
 
@@ -2743,12 +2753,15 @@ and `host focus` only while a client is attached.
   "mode": "unknown",
   "num_workspaces": 9,
   "session_id": "2e131c6c-4555-4d08-8c4e-7abb25f5522f",
+  "session_height": 40,
   "session_name": "work",
+  "session_width": 120,
   "success": true,
   "tiling_mode": "tiling",
   "tui_attached": true,
   "width": 120,
   "window_count": 2,
+  "window_size": "smallest",
   "workspace_names": {},
   "workspace_order": null
 }
@@ -2770,7 +2783,9 @@ and `host focus` only while a client is attached.
 | `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling`, or `unknown` before a client has reported one |
 | `master_ratio` | The master pane's share of the width in the `master-stack` layout |
 | `mode` | Always `unknown`. The input mode belongs to the attached client, which the daemon does not ask |
-| `width`, `height` | The session's size in cells |
+| `width`, `height` | The session's size in cells, as the last client sent it with its state |
+| `session_width`, `session_height` | The size the daemon gave the session from its clients |
+| `window_size` | The size policy in use: `smallest`, `largest` or `latest`. It is `smallest` while a client from before the option is attached. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client) |
 | `tui_attached` | Whether a client is attached |
 | `host_focus` | Whether the person can be looking at the session, from the focus events of the attached clients' terminals: `focused` when any client's terminal has focus, `unfocused` when every one reported losing it, `unknown` when none is attached or a terminal never reports focus |
 
@@ -3361,7 +3376,7 @@ ssh -p 2222 localhost attach mysession
 ```
 
 **Multi-Client Behavior:**
-- When multiple clients connect to the same session, the effective terminal size is the minimum of all client dimensions
+- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the smallest client (the default), the largest client, or the client that last had input. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
 - State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
 - Clients are notified when others join or leave the session
 
@@ -3510,7 +3525,7 @@ tuios-web --ephemeral
 ```
 
 **Multi-Client Behavior:**
-- When multiple clients connect to the same session, the effective terminal size is the minimum of all client dimensions
+- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the smallest client (the default), the largest client, or the client that last had input. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
 - State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
 - Clients are notified when others join or leave the session
 

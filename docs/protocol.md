@@ -191,6 +191,21 @@ verbs:
   `set-agent-state` as before and then a `report-agent-activity`
   `session_start`.
 
+**A session's size follows its window_size policy.** The daemon reads
+`[daemon] window_size` and a session's own `daemon.window_size` (see
+[SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)). With the
+default, `smallest`, nothing changes. What changes for a caller:
+
+- `session-info` gains `window_size`, `session_width` and `session_height`.
+- `set-option` of `daemon.window_size` is applied by the daemon, not by a
+  client, and `get-option` of it can answer with `source: "config"`.
+- On the client protocol, a hello and a welcome can carry `WindowSize`. A
+  client that offers it reports input with the new binary message
+  `MsgClientActivity`, and draws a session larger than itself as a view. A
+  daemon uses a policy other than `smallest` only while every attached client
+  offered it. `MsgSessionResize` gains `Policy`. Each side sends nothing new to
+  a peer that did not offer `WindowSize`.
+
 **A call from another machine is held to a link policy.** Every verb and
 every binary message that arrives over a link is checked against what the
 `[hosts]` table on the receiving machine lets the calling machine do, before
@@ -1771,9 +1786,20 @@ Response:
   "width": 120,
   "height": 40,
   "tui_attached": true,
-  "host_focus": "focused"
+  "host_focus": "focused",
+  "window_size": "smallest",
+  "session_width": 120,
+  "session_height": 40
 }}
 ```
+
+`window_size` is the size policy in use for the session: `smallest`,
+`largest` or `latest` (see [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)).
+It is `smallest` while a client from before the option is attached, whatever
+the session is set to. `session_width` and `session_height` are the size the
+daemon gave the session under that policy. `width` and `height` are the size
+the last client sent with its state. A daemon that predates the option omits
+all three.
 
 `host_focus` is whether the person can be looking at the session. Each TUI
 client asks its terminal for focus events (DECSET 1004) and reports every
@@ -3123,6 +3149,13 @@ Response:
 ```
 
 A key that was never set returns an `option_not_found` error.
+
+`daemon.window_size` is the daemon's own. `set-option` applies it to the
+session at once and answers `applied: true` and `scope: "session"`, with no
+client involved. While a client from before the option is attached, the
+answer also has `in_force: "smallest"` and a `reason`. `get-option` of the key
+answers with `source: "config"` and the daemon's `[daemon] window_size` when
+the session has no value of its own.
 
 ### set-agent-state
 
