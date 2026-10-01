@@ -141,11 +141,18 @@ When the latest client detaches, the session goes to the client with the most
 recent input.
 
 A client that is smaller than the session shows a part of it, the part around
-the cursor of the focused pane. This is the rule that tmux uses. If the pane
-hides its cursor, the client shows the top left corner of the pane. A mark in
-the top right corner of the panes shows the size of the session, with arrows
-that point to the parts you cannot see. The rail and the dock stay at the
-edges of your screen. A click on a pane goes to the pane under the pointer.
+the cursor of the focused pane. This is the rule that tmux uses. In copy mode
+the client follows the copy-mode cursor. If a program hides its cursor, the
+client follows the place where the program left it. An agent CLI hides its
+cursor and leaves it in its input box, so you see the input box. tmux shows
+the top left corner of the window instead.
+
+A mark at the right end of the line above the dock shows the size of the
+session, with arrows that point to the parts you cannot see. This line covers
+no pane. With the dock hidden, the mark is in the bottom right corner of the
+panes. The rail and the dock stay at the edges of your screen. A click on a
+pane goes to the pane under the pointer, also in capture mode. The copy-mode
+search prompt and the multi copy "Save to" prompt stay on your screen.
 
 To change the value for one session while it runs:
 
@@ -162,7 +169,13 @@ session. While such a client is attached, the session uses `smallest`, and
 an older daemon works as before, at the smallest size.
 
 Native clients, `tuios-web` clients and clients through the SSH server all
-report input in the same way, so each of them can be the latest client. A tool
+report input in the same way, so each of them can be the latest client.
+
+A client that cannot send input, such as `tuios-web --read-only`, does not set
+the size under `largest` or `latest`. A viewer with a large browser window
+does not make the session larger than the people who type can see. Under
+`smallest` it counts like every other client, so the default does not change.
+If only viewers are attached, they set the size. A tool
 that uses the verb socket only, such as Collie, is not a client with a size.
 It does not change the size of the session.
 

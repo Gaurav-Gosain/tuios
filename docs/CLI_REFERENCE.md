@@ -3412,7 +3412,7 @@ tuios-web [flags]
 **Flags:**
 - `--host <string>`: Web server host (default: "localhost")
 - `--port <string>`: Web server port (default: "7681")
-- `--read-only`: Disable input from clients (view only mode)
+- `--read-only`: Disable input from clients (view only mode). A read-only client does not set the session size under `window_size` `largest` or `latest`. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
 - `--max-connections <int>`: Maximum concurrent connections (default: 0 = unlimited)
 - `--cert <path>`: TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)
 - `--key <path>`: TLS private key in PEM form (required with `--cert`)

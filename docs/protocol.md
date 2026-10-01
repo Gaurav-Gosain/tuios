@@ -204,7 +204,12 @@ default, `smallest`, nothing changes. What changes for a caller:
   `MsgClientActivity`, and draws a session larger than itself as a view. A
   daemon uses a policy other than `smallest` only while every attached client
   offered it. `MsgSessionResize` gains `Policy`. Each side sends nothing new to
-  a peer that did not offer `WindowSize`.
+  a peer that did not offer `WindowSize`. The daemon refuses a
+  `MsgClientActivity` frame over 16 bytes unread, as it does any frame over
+  its type's limit.
+- An attach can carry `ViewOnly`, for a client that sends no input. Under
+  `largest` and `latest` such a client does not count toward the size.
+  `tuios-web --read-only` sets it. An older daemon ignores it.
 
 **A call from another machine is held to a link policy.** Every verb and
 every binary message that arrives over a link is checked against what the
