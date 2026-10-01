@@ -90,6 +90,11 @@ split edge, TUIOS moves to the adjacent pane instead. The plugin announces when
 it is active, so the same keys keep their normal TUIOS behaviour in shells and
 other programs.
 
+By default, both projects use `alt+left`, `alt+down`, `alt+up` and
+`alt+right`. If either side is customized, its four mappings must match the
+`terminal_focus_left`, `terminal_focus_down`, `terminal_focus_up` and
+`terminal_focus_right` bindings in TUIOS.
+
 The plugin uses the private OSC 7777 messages below. They are consumed by
 TUIOS and never shown in pane output:
 
