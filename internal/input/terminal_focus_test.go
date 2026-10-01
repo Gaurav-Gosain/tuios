@@ -164,6 +164,52 @@ func TestNvimNavigatorDoesNotBypassVisualModeFocus(t *testing.T) {
 	}
 }
 
+func TestNvimNavigatorFocusRequestMustFollowForwardedKey(t *testing.T) {
+	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+	o.Settings.NvimNavigation = true
+	o.Windows = append(o.Windows, &terminal.Window{
+		ID: "other", X: 90, Y: 0, Width: 60, Height: 24, Workspace: o.CurrentWorkspace,
+	})
+	active := true
+	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, State: &active})
+
+	// OSC alone cannot move focus.
+	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, Direction: "right"})
+	if got := focusedID(o); got != o.Windows[0].ID {
+		t.Fatalf("unsolicited OSC focused %q", got)
+	}
+
+	// The forwarded key arms the matching reply.
+	o, _ = HandleKeyPress(altArrow("right"), o)
+	if len(pty.got) == 0 {
+		t.Fatal("active Neovim pane did not receive alt+right")
+	}
+	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, Direction: "right"})
+	if got := focusedID(o); got != "other" {
+		t.Fatalf("matching OSC focused %q, want other", got)
+	}
+}
+
+func TestDisabledNvimNavigationKeepsFocusKeysForTuios(t *testing.T) {
+	cfg := config.DefaultConfig()
+	*cfg.Appearance.NvimNavigation = false
+	o, pty := osWithFocusedPane(t, cfg, app.TerminalMode)
+	o.Settings.NvimNavigation = false
+	o.Windows = append(o.Windows, &terminal.Window{
+		ID: "other", X: 90, Y: 0, Width: 60, Height: 24, Workspace: o.CurrentWorkspace,
+	})
+	active := true
+	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, State: &active})
+
+	o, _ = HandleKeyPress(altArrow("right"), o)
+	if got := focusedID(o); got != "other" {
+		t.Fatalf("disabled navigation focused %q, want other", got)
+	}
+	if len(pty.got) != 0 {
+		t.Fatalf("disabled navigation forwarded alt+right: %q", pty.got)
+	}
+}
+
 // TestUnboundAltArrowReachesTheShellUnchanged pins the exact bytes, so an
 // unbind hands the shell the same sequence it would see with no multiplexer in
 // the way rather than something merely non-empty. CSI 1;3 <final> is the xterm

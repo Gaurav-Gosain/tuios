@@ -1,9 +1,20 @@
 package app
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
+
+// nvimNavigationReplyWindow bounds replies to forwarded focus keys.
+const nvimNavigationReplyWindow = 500 * time.Millisecond
+
+type pendingNvimNavigation struct {
+	WindowID  string
+	Direction string
+	ExpiresAt time.Time
+}
 
 // NvimNavigationMsg is a pane's request to leave a Neovim split at its edge.
 type NvimNavigationMsg struct {
@@ -44,6 +55,9 @@ func (m *OS) setupNvimNavigation(window *terminal.Window) {
 }
 
 func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
+	if !m.Settings.NvimNavigation {
+		return
+	}
 	if msg.State != nil {
 		if m.nvimNavigators == nil {
 			m.nvimNavigators = map[string]bool{}
@@ -52,9 +66,11 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 		return
 	}
 	focused := m.GetFocusedWindow()
-	if m.Mode != TerminalMode || focused == nil || focused.ID != msg.WindowID {
+	if m.Mode != TerminalMode || focused == nil || focused.ID != msg.WindowID ||
+		!m.NvimNavigatorActive() || !m.matchesPendingNvimNavigation(msg) {
 		return
 	}
+	m.pendingNvimNavigation = nil
 	previous := m.FocusedWindow
 	if m.AutoTiling && m.UseScrollingLayout && (msg.Direction == "left" || msg.Direction == "right") {
 		if msg.Direction == "left" {
@@ -74,5 +90,25 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 // NvimNavigatorActive reports whether the focused pane owns focus keys.
 func (m *OS) NvimNavigatorActive() bool {
 	focused := m.GetFocusedWindow()
-	return focused != nil && m.nvimNavigators[focused.ID]
+	return m.Settings.NvimNavigation && focused != nil && m.nvimNavigators[focused.ID]
+}
+
+// ArmNvimNavigation permits one matching focus reply.
+func (m *OS) ArmNvimNavigation(direction string) bool {
+	if !m.NvimNavigatorActive() {
+		return false
+	}
+	focused := m.GetFocusedWindow()
+	m.pendingNvimNavigation = &pendingNvimNavigation{
+		WindowID:  focused.ID,
+		Direction: direction,
+		ExpiresAt: time.Now().Add(nvimNavigationReplyWindow),
+	}
+	return true
+}
+
+func (m *OS) matchesPendingNvimNavigation(msg NvimNavigationMsg) bool {
+	pending := m.pendingNvimNavigation
+	return pending != nil && time.Now().Before(pending.ExpiresAt) &&
+		pending.WindowID == msg.WindowID && pending.Direction == msg.Direction
 }

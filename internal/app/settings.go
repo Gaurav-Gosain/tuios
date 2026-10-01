@@ -504,6 +504,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.focus_follows_mouse"),
 			opt("appearance.click_to_type"),
 			opt("appearance.auto_enter_terminal_on_focus"),
+			opt("appearance.nvim_navigation"),
 			opt("appearance.alt_drag"),
 			opt("appearance.right_click_opens_menu"),
 			opt("appearance.new_window_inherit_cwd"),

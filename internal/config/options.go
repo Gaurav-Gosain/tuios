@@ -174,6 +174,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.nvim_navigation", Type: OptionBool, Section: "appearance",
+		Description: "Let the Neovim navigator plugin hand terminal focus keys back to TUIOS",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.focus_follows_mouse", Type: OptionBool, Section: "appearance",
 		Description: "Focus the pane under the cursor as the mouse moves",
 		Default:     "false",

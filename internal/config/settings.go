@@ -386,6 +386,11 @@ type Settings struct {
 	// Set via appearance.copy_on_select config.
 	CopyOnSelect bool
 
+	// NvimNavigation lets tuios and the optional tuios-nvim-navigator plugin
+	// negotiate terminal focus keys through OSC 7777. It is off by default.
+	// Set via appearance.nvim_navigation config.
+	NvimNavigation bool
+
 	// FocusFollowsMouse focuses the pane under the cursor as the mouse moves over
 	// it, without a click and without entering terminal mode. It is a divisive
 	// window-manager habit, so it defaults off and users opt in.
@@ -739,6 +744,7 @@ func DefaultSettings() Settings {
 		ScrollbackLines:             DefaultScrollbackLines,
 		ScrollLines:                 3,
 		CopyOnSelect:                true,
+		NvimNavigation:              false,
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeDouble,

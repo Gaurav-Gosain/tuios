@@ -250,6 +250,7 @@ type AppearanceConfig struct {
 	ScrollbackLines          int                     `toml:"scrollback_lines"`             // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines              int                     `toml:"scroll_lines"`                 // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
+	NvimNavigation           *bool                   `toml:"nvim_navigation"`              // Let the Neovim navigator plugin hand terminal focus keys back to TUIOS (default: false)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
@@ -797,6 +798,7 @@ func DefaultConfig() *UserConfig {
 				MultiFormat: MultiCopyFormatPlain, CopyEntry: CopyEntryCursor,
 				OSC52Write: OSC52WriteFocused,
 			},
+			NvimNavigation: new(false),
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
 				// cannot change the next DefaultConfig.
@@ -2137,6 +2139,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// CopyOnSelect defaults to true (nil means use default)
 	if cfg.Appearance.CopyOnSelect != nil {
 		s.CopyOnSelect = *cfg.Appearance.CopyOnSelect
+	}
+	if cfg.Appearance.NvimNavigation != nil {
+		s.NvimNavigation = *cfg.Appearance.NvimNavigation
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the
