@@ -153,6 +153,7 @@ tuios/
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── tmuxcompat/         # The opt-in tmux shim (tuios tmux-shim) and its pane holder; see docs/TMUX_SHIM.md
+│   ├── shimlink/           # The tmux and herdr links that run tuios as another program
 │   ├── scrollback/         # OSC 133 scrollback browser
 │   ├── overlay/            # Panel and dialog primitives for chrome
 │   ├── sessiontree/        # Sidebar session tree model

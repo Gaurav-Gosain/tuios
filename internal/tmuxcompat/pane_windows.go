@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 )
 
 // holderSupported reports whether this platform runs pane holders. On
@@ -15,12 +17,7 @@ const holderSupported = false
 var errNoHolder = errors.New("the tmux shim's pane holder is not supported on Windows")
 
 // EnsureDir creates the shim's runtime directory.
-func EnsureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
-	}
-	return nil
-}
+func EnsureDir(dir string) error { return shimlink.EnsureDir(dir) }
 
 // InstallLink is not supported on Windows.
 func InstallLink(dir, exe string) error { return errNoHolder }
