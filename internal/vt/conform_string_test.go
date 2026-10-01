@@ -21,6 +21,7 @@ type oscCapture struct {
 	notify      [][2]string
 	progress    []progressReport
 	clipQueried []string
+	navigation  []string
 }
 
 type progressReport struct {
@@ -45,8 +46,19 @@ func newOSCEmulator(t *testing.T, cols, rows int) (*vt.Emulator, *oscCapture) {
 		Progress: func(state vt.ProgressState, percent int) {
 			c.progress = append(c.progress, progressReport{state, percent})
 		},
+		TuiosNavigation: func(direction string) { c.navigation = append(c.navigation, direction) },
 	})
 	return emu, c
+}
+
+func TestConform_OSC7777Navigation(t *testing.T) {
+	emu, c := newOSCEmulator(t, 20, 3)
+	if _, err := emu.WriteString("\x1b]7777;tuios-nvim-navigator;focus;right\x07"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if got, want := strings.Join(c.navigation, ","), "right"; got != want {
+		t.Fatalf("navigation callbacks = %q, want %q", got, want)
+	}
 }
 
 func TestConform_OSCTitleAndDirectory(t *testing.T) {
