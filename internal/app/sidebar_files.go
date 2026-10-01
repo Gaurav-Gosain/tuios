@@ -44,10 +44,9 @@ import (
 // the "loading" row stays up for the request that is actually outstanding.
 //
 // Nothing polls. The listing is read when the focused pane's directory stops
-// matching the one on screen, and at no other time, so a client sitting on an
-// open rail does no filesystem work at all. That is also the whole of what the
-// section knows how to notice: a file written into the directory by something
-// else does not appear until the listing is asked for again.
+// matching the one on screen, and when the kernel says the listed folder's
+// entries changed (sidebar_files_watch.go). A client sitting on an open rail
+// over a folder nobody touches does no filesystem work at all.
 //
 // # What it is not
 //
@@ -90,6 +89,10 @@ type fileViewState struct {
 	Want string
 	// Loading is whether a read is outstanding for Want.
 	Loading bool
+	// Quiet says the outstanding read is a re-read because the folder changed
+	// on disk. It draws no "loading" row: the user asked for nothing, and a
+	// row that blinks on every file a build writes is noise.
+	Quiet bool
 	// Origin is the window the listing is tied to, or empty when it was opened
 	// from a link. Only an origin pane can be told to change directory, because
 	// only it is the one the user meant.
@@ -364,6 +367,7 @@ func (m *OS) fileViewFromLink() bool {
 // a pane that has closed cannot be the one the user meant.
 func (m *OS) clearFileView() {
 	m.filesView = fileViewState{Show: m.filesView.Show, Gen: m.filesView.Gen + 1}
+	m.syncFileWatch()
 }
 
 // requestFileList stamps a new request and returns the command that answers it.
@@ -375,6 +379,15 @@ func (m *OS) clearFileView() {
 // for a listing every time a shell cds. What is taken here on the loop is one
 // int off the window, which is a field written once when the pane was spawned.
 func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
+	// A listing the user asked for starts at its top. A quiet re-read of the
+	// same folder goes through readFileList and keeps the scroll.
+	m.SidebarScrollF = 0
+	m.filesView.Quiet = false
+	return m.readFileList(dir, origin, pinned)
+}
+
+// readFileList is requestFileList without the reset of the scroll position.
+func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 	dir = filepath.Clean(dir)
 	// Only a listing the pane steered is checked. A folder the user walked into
 	// by hand is a folder they named, so it is theirs whatever the pane says,
@@ -398,7 +411,6 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	m.filesView.Pinned = pinned
 	m.filesView.Loading = true
 	m.filesView.Err = ""
-	m.SidebarScrollF = 0
 	m.filesView.Gen++
 	gen := m.filesView.Gen
 
@@ -579,6 +591,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 		return
 	}
 	m.filesView.Loading = false
+	m.filesView.Quiet = false
 	m.filesView.Dir = msg.Dir
 	m.filesView.Err = msg.Err
 	m.filesView.Entries = msg.Entries
@@ -594,6 +607,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 	} else {
 		m.filesView.ErrAt = time.Time{}
 	}
+	m.syncFileWatch()
 }
 
 // recordWindowCwd stores a pane's reported directory.
@@ -661,6 +675,7 @@ func (m *OS) OpenFileView(dir string) bool {
 // it again on the next frame and the control would look broken.
 func (m *OS) CloseFileView() {
 	m.filesView = fileViewState{Show: -1}
+	m.syncFileWatch()
 	// A dialog asking about a file in a listing that is no longer on screen has
 	// nothing to point at. It is dropped with the listing, and an operation
 	// already running is left to finish and report. See sidebar_file_ops.go.

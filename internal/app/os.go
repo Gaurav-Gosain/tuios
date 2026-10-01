@@ -876,6 +876,9 @@ type OS struct {
 	// is the detection half of the project-tape feature; it never executes
 	// anything, it only stats, reads to hash, and surfaces a passive indicator.
 	PendingCwdChange chan CwdChangedMsg
+	// fileWatch is the watch on the files section's folder. See
+	// sidebar_files_watch.go.
+	fileWatch fileWatcher
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.
@@ -1795,6 +1798,7 @@ func (m *OS) Cleanup() {
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	m.endInboxWatch()
+	m.stopFileWatch()
 	// The dock's components are subprocesses this client started, and a push
 	// component is a process that never exits on its own. An ephemeral SSH or
 	// web session is a goroutine inside a long-lived server, so without this

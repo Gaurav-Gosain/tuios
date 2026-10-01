@@ -321,3 +321,71 @@ func TestSidebarFileSearch(t *testing.T) {
 		})
 	}
 }
+
+// TestRailFilesSectionFollowsTheDisk is issue #313: a file deleted from the
+// pane, or added or deleted by another program, stayed on the rail until the
+// listing was asked for again by moving away and back.
+//
+// Every name the test changes is spelled so that the pane never prints it
+// whole. The pane shares the screen with the rail, so a name echoed by the
+// shell would satisfy a wait that is meant to read the rail.
+//
+// Negative control, confirmed red: remove the call to syncFileWatch in
+// HandleFileList and both subtests time out waiting for gone.txt to leave the
+// rail.
+func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
+			dir := fileViewFixture(t)
+			for _, name := range []string{"gone.txt", "kept.txt"} {
+				if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			term, _ := start(t, startOpts{daemonDefault: daemon})
+			waitBoot(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 1, "opening a shell for the listing")
+			enterTerminalMode(t, term)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+			leaveTerminalMode(t, term)
+			toggleSidebarViaPalette(t, term)
+
+			// The positive half: the rail lists the folder, so every wait below
+			// reads a listing that exists.
+			waitForAll(t, term, uiTimeout, "the first listing", "gone.txt", "kept.txt", "brief.txt")
+			dirArt := artifactDir(t)
+			saveArtifact(t, term, dirArt, "before")
+
+			// Deleted from the pane, the way the issue reports it.
+			enterTerminalMode(t, term)
+			runInShell(t, term, "rm g\"\"one.txt && printf 'remo%s\\n' ved", "removed", uiTimeout)
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				txt := s.Text()
+				return !strings.Contains(txt, "gone.txt") && strings.Contains(txt, "kept.txt")
+			}, uiTimeout); err != nil {
+				saveArtifact(t, term, dirArt, "stale-after-pane-delete")
+				t.Fatalf("gone.txt stayed on the rail after the pane deleted it: %v\n%s", err, term.Snapshot())
+			}
+			saveArtifact(t, term, dirArt, "after-pane-delete")
+
+			// Changed by another program, with nothing typed at the pane.
+			if err := os.WriteFile(filepath.Join(dir, "outside.txt"), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(filepath.Join(dir, "brief.txt")); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				txt := s.Text()
+				return strings.Contains(txt, "outside.txt") && !strings.Contains(txt, "brief.txt") &&
+					strings.Contains(txt, "kept.txt")
+			}, uiTimeout); err != nil {
+				saveArtifact(t, term, dirArt, "stale-after-outside-change")
+				t.Fatalf("the rail did not follow a change made outside tuios: %v\n%s", err, term.Snapshot())
+			}
+			saveArtifact(t, term, dirArt, "after-outside-change")
+			alive(t, term, "after the folder changed under the rail")
+		})
+	}
+}
