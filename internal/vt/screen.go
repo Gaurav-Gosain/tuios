@@ -96,6 +96,7 @@ func (s *Screen) Height() int {
 
 // Resize resizes the screen.
 func (s *Screen) Resize(width int, height int) {
+	s.shrinkRows(height)
 	s.buf.Resize(width, height)
 	s.blankWideRunesCutByTheEdge()
 	s.scroll = s.buf.Bounds()
@@ -123,6 +124,53 @@ func (s *Screen) Resize(width int, height int) {
 // places over the pane next door: the guest's text appears somewhere it was
 // never written. Blanking the half left standing is what the insert and delete
 // paths already do to a rune they cut, and what ghostty does.
+// shrinkRows makes room for a screen of height rows by taking rows away
+// without losing any that hold text, the way ghostty does: first the blank
+// rows below the cursor, from the bottom, and then rows off the top, which go
+// into the scrollback where the screen keeps one. The cursor and the saved
+// cursor move up with the text they were on.
+//
+// The grid's own Resize cuts rows off the bottom, which is right only for the
+// rows this has already emptied. Cutting it alone lost every row below the
+// cursor: a program that drew a status line at the bottom and left the cursor
+// at the top lost the status line to a pane that got shorter, and the main
+// screen under an alternate screen lost the shell prompt, since only the
+// active screen's cursor was ever kept in view.
+func (s *Screen) shrinkRows(height int) {
+	excess := s.buf.Height() - height
+	if excess <= 0 {
+		return
+	}
+	for y := s.buf.Height() - 1; excess > 0 && y > s.cur.Y && !s.rowHoldsText(y); y-- {
+		excess--
+		s.buf.rows = s.buf.rows[:y]
+		s.buf.ext = s.buf.ext[:y]
+		s.buf.wrap = s.buf.wrap[:y]
+	}
+	if excess <= 0 {
+		return
+	}
+	// The rows leaving the top go to the scrollback whatever scroll region
+	// the guest set: the region is reset by the resize anyway, and a region
+	// would have the rotation skip the scrollback and drop them.
+	s.scroll = s.buf.Bounds()
+	s.rotateWholeScreenUp(excess, s.scrollback != nil)
+	s.cur.Y = max(s.cur.Y-excess, 0)
+	s.saved.Y = max(s.saved.Y-excess, 0)
+}
+
+// rowHoldsText reports whether row y has any cell that is not a plain blank.
+// A cell blanked in a colour counts as text: the guest painted it.
+func (s *Screen) rowHoldsText(y int) bool {
+	row := s.buf.rows[y]
+	for x := range row[:min(s.buf.ext[y], len(row))] {
+		if !isBlankCell(&row[x]) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Screen) blankWideRunesCutByTheEdge() {
 	x := s.buf.Width() - 1
 	if x < 0 {
