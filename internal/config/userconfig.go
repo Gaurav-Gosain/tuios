@@ -2506,7 +2506,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
-	fillMapDefaults(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
+	fillMapDefaultsYielding(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
 	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
 	// A config written before the global and script sections existed has neither,
 	// so without this the palette and the launcher would come back unbound for
@@ -2630,6 +2630,44 @@ func fillMapDefaults(target, defaults map[string][]string) {
 	for k, v := range defaults {
 		if _, exists := target[k]; !exists {
 			target[k] = v
+		}
+	}
+}
+
+// fillMapDefaultsYielding is fillMapDefaults for a section where a binding
+// the user wrote keeps its key. A default key the user's section already binds
+// to another action is left out, so a new default never takes a key from the
+// user: toggle_tiling = ["o"] under layout_prefix keeps o after o became the
+// default key of cycle_master_position. An action whose every default key is
+// taken is not added.
+//
+// It is not the rule for every section, because some sections reclaim a key
+// on purpose: prefix_settings takes "," back from a config written when ","
+// was a second key for prefix_rename_window (see the migration below), and
+// that needs the default filled in first.
+func fillMapDefaultsYielding(target, defaults map[string][]string) {
+	taken := make(map[string]bool)
+	for _, keys := range target {
+		for _, key := range keys {
+			for _, sp := range keySpellings(key) {
+				taken[sp] = true
+			}
+		}
+	}
+	for k, v := range defaults {
+		if _, exists := target[k]; exists {
+			continue
+		}
+		free := make([]string, 0, len(v))
+		for _, key := range v {
+			if !taken[CanonicalKey(key)] {
+				free = append(free, key)
+			}
+		}
+		if len(free) == len(v) {
+			target[k] = v
+		} else if len(free) > 0 {
+			target[k] = free
 		}
 	}
 }
