@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/google/uuid"
@@ -507,13 +506,10 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 	// waits, bounded, until the state holds the new pane beside the one it
 	// was cut from.
 	created := ""
-	for deadline := time.Now().Add(routedVerbTimeout); ; time.Sleep(20 * time.Millisecond) {
-		st := sess.GetState()
+	sess.WaitState(routedVerbTimeout, func(st *SessionState) bool {
 		created = newWindowID(before, st)
-		if created != "" && splitSettled(st, target, created) || time.Now().After(deadline) {
-			break
-		}
-	}
+		return created != "" && splitSettled(st, target, created)
+	})
 	out := map[string]any{
 		"type":      "window_split",
 		"direction": p.Direction,

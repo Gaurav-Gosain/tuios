@@ -290,6 +290,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}); err != nil {
 		return err
 	}
+	// A verb can be waiting for a client to show this session.
+	session.wakeStateWaiters()
 	if hook := attachReplied.Load(); hook != nil {
 		(*hook)()
 	}

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	tlayout "github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -440,9 +439,7 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		z := herdrZoomedIn(st, site.win.Workspace)
 		return st.FocusedWindowID == site.win.ID && (want && z == site.win.ID || !want && z == "")
 	}
-	for deadline := time.Now().Add(routedVerbTimeout); !done(site.sess.GetState()) && time.Now().Before(deadline); {
-		time.Sleep(20 * time.Millisecond)
-	}
+	site.sess.WaitState(routedVerbTimeout, done)
 	if after, herr := d.herdrSiteOf(cs, site.pane.PaneID); herr == nil {
 		site = after
 	}
@@ -490,9 +487,7 @@ func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, 
 		}
 		// The client answers before it switches, so the answer below waits
 		// for the switch to show.
-		for deadline := time.Now().Add(routedVerbTimeout); d.findTUIClient(sess.ID) == nil && time.Now().Before(deadline); {
-			time.Sleep(20 * time.Millisecond)
-		}
+		sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
 	}
 	return d.herdrWorkspaceInfo(cs, in.WorkspaceID)
 }
