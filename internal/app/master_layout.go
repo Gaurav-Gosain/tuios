@@ -92,11 +92,13 @@ func (m *OS) setMasterLayout(st session.MasterLayoutState) bool {
 }
 
 // seedMasterLayout gives the session this client's configured shape for the
-// workspace on screen when the session has none and the configured one is
-// not the default. Two clients with different defaults would otherwise lay one
-// workspace out two ways and fight over the size of every PTY on it. The op is
-// sent once per workspace, and the daemon applies it only while the workspace
-// still has no shape, so the first client to tile it decides.
+// workspace on screen when the session has none. Two clients with different
+// defaults would otherwise lay one workspace out two ways and fight over the
+// size of every PTY on it. The op is sent once per workspace, and the daemon
+// applies it only while the workspace still has no shape, so the first client
+// to tile it decides. That holds for the default shape too: a client with the
+// default config that tiles first keeps the workspace on the default when a
+// client with another config attaches later.
 func (m *OS) seedMasterLayout() {
 	if !m.inMasterStack() || !m.masterOpsOn() {
 		return
@@ -106,9 +108,6 @@ func (m *OS) seedMasterLayout() {
 		return
 	}
 	st := m.configMasterLayout()
-	if st == normalMasterLayout(session.MasterLayoutState{}) {
-		return
-	}
 	if m.masterSeeded == nil {
 		m.masterSeeded = make(map[int]bool)
 	}
