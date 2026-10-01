@@ -26,17 +26,24 @@ func crushHomeWindow(t *testing.T, base string) string {
 // openCrushPeek opens the Inbox, waits for the one approval, and peeks it:
 // the dialog's tool, what it acts on and the three answers show. what is the
 // command, or the description a narrow dialog shows in its place.
-func openCrushPeek(t *testing.T, term *tuitest.Terminal, what string) {
+func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, what, frame string) {
 	t.Helper()
+	out, err := tuiosCLI(t, base, "list-attention", "--json")
+	if err != nil || !strings.Contains(out, `"summary": "approve bash: `+what+`"`) {
+		t.Fatalf("ASSERTION: the Inbox item does not carry the request (%v):\n%s", err, out)
+	}
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
+	// The row shows the summary beside the pane's name, however long the
+	// name is. The whole summary is in list-attention.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "Approvals 1") && strings.Contains(text, "approve bash: "+what)
+		return strings.Contains(text, "Approvals 1") && strings.Contains(text, "approve bash:")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the Inbox never listed the Crush approval: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the Inbox never listed the Crush approval with its summary: %v\n%s", err, term.Snapshot())
 	}
+	saveFrame(t, term, frame)
 	if err := term.SendKeys(" "); err != nil {
 		t.Fatalf("peek: %v", err)
 	}
@@ -90,6 +97,8 @@ func refusedFromAPane(t *testing.T, base, window string) {
 // blockerOverridesClaim, the pane stays on working and the needs_input wait
 // fails. With the [screen.rule.answers] block taken out of crush.toml, the
 // peek offers no answers and a sends nothing, so the ALLOWED wait fails.
+// With the cap on the name's width taken out of inboxItemRow, the long name
+// fills the row and the summary wait fails.
 func TestCrushPermissionAnsweredFromTheInbox(t *testing.T) {
 	term, base := crushClient(t)
 	crush := buildFakeCrush(t)
@@ -113,11 +122,15 @@ func TestCrushPermissionAnsweredFromTheInbox(t *testing.T) {
 	saveFrame(t, term, "crush-needs-input")
 
 	refusedFromAPane(t, base, win)
+	// Crush's pane is named for its folder, often a long path.
+	if out, err := tuiosCLI(t, base, "set-window", "-s", crushSession, "-w", win, "--name", "crush /home/someone/src/github.com/example/a-project-with-a-long-name"); err != nil {
+		t.Fatalf("set-window: %v\n%s", err, out)
+	}
 	if out, _ := tuiosCLI(t, base, "capture-pane", "-s", crushSession, "-w", win); !strings.Contains(out, "Permission Required") {
 		t.Fatalf("ASSERTION: the refused respond reached Crush:\n%s", out)
 	}
 
-	openCrushPeek(t, term, what)
+	openCrushPeek(t, term, base, what, "crush-inbox-list")
 	saveFrame(t, term, "crush-inbox-peek")
 	if err := term.SendKeys("a"); err != nil {
 		t.Fatalf("approve: %v", err)
@@ -219,7 +232,7 @@ func TestRealCrushAnsweredFromTheInbox(t *testing.T) {
 
 	refusedFromAPane(t, base, win)
 
-	openCrushPeek(t, term, what)
+	openCrushPeek(t, term, base, what, "real-crush-inbox-list")
 	saveFrame(t, term, "real-crush-inbox-peek")
 	if err := term.SendKeys("a"); err != nil {
 		t.Fatalf("approve: %v", err)
