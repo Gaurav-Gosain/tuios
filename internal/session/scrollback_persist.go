@@ -461,8 +461,10 @@ type historyRows struct {
 	cursorY      int
 	screen       []uv.Line
 	screenWraps  []bool
+	screenPads   []bool
 	history      []uv.Line
 	historyWraps []bool
+	historyPads  []bool
 }
 
 // captureHistory reads the pane's history for saving, with at most lines
@@ -494,8 +496,10 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		r.cursorY = -1
 	} else {
 		r.screenWraps = make([]bool, h)
+		r.screenPads = make([]bool, h)
 		for y := range h {
 			r.screenWraps[y], _ = t.RowSoftWrapped(y)
+			r.screenPads[y] = t.RowPadded(y)
 		}
 	}
 	r.screen = make([]uv.Line, h)
@@ -516,6 +520,7 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 	first := max(n-max(lines, 0), 0)
 	r.history = make([]uv.Line, 0, n-first)
 	r.historyWraps = make([]bool, 0, n-first)
+	r.historyPads = make([]bool, 0, n-first)
 	for i := first; i < n; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
@@ -525,6 +530,7 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		line = vt.BlankSixelLine(line)
 		r.history = append(r.history, line[:usedCells(line)])
 		r.historyWraps = append(r.historyWraps, wrapped)
+		r.historyPads = append(r.historyPads, t.ScrollbackPadded(i))
 	}
 	return r
 }
@@ -541,6 +547,8 @@ func (r *historyRows) state(lines int) *TerminalState {
 		ScrollbackLen:   len(history),
 		ScreenWraps:     wrapBits(r.screenWraps),
 		ScrollbackWraps: wrapBits(r.historyWraps[len(r.historyWraps)-lines:]),
+		ScreenPads:      wrapBits(r.screenPads),
+		ScrollbackPads:  wrapBits(r.historyPads[len(r.historyPads)-lines:]),
 	}
 	colors := colorWireCache{}
 	p := newRowPacker()
@@ -695,6 +703,7 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 	}
 	rows := st.Scrollback
 	wraps := wrapFlags(st.ScrollbackWraps, len(st.Scrollback))
+	pads := wrapFlags(st.ScrollbackPads, len(st.Scrollback))
 	used := -1
 	for y, row := range st.Screen {
 		if !blankRow(row) {
@@ -708,6 +717,7 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 	screenWraps := wrapFlags(st.ScreenWraps, len(st.Screen))
 	rows = append(rows[:len(rows):len(rows)], st.Screen[:used+1]...)
 	wraps = append(wraps, screenWraps[:used+1]...)
+	pads = append(pads, wrapFlags(st.ScreenPads, len(st.Screen))[:used+1]...)
 	if len(wraps) > 0 {
 		// The divider goes on the next row, so the last saved row does not
 		// carry on into it.
@@ -738,6 +748,8 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 	}
 	out.ScrollbackWraps = wrapBits(wraps[:split])
 	out.ScreenWraps = wrapBits(wraps[split:])
+	out.ScrollbackPads = wrapBits(pads[:split])
+	out.ScreenPads = wrapBits(pads[split:])
 	ApplyTerminalState(t, out)
 }
 
