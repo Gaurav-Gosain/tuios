@@ -39,10 +39,13 @@ type Message struct {
 	ReplyTo string `json:"reply_to,omitempty"`
 	// Agent labels which of the recipient's agents the message is for. Empty
 	// is any of them.
-	Agent   string    `json:"agent,omitempty"`
-	Subject string    `json:"subject,omitempty"`
-	Body    string    `json:"body"`
-	SentAt  time.Time `json:"sent_at"`
+	Agent string `json:"agent,omitempty"`
+	// FromAgent labels the sender's agent, so a reply can be labeled for it
+	// and reach the agent that asked rather than whichever reads first.
+	FromAgent string    `json:"from_agent,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	Body      string    `json:"body"`
+	SentAt    time.Time `json:"sent_at"`
 }
 
 // NewID is a fresh message id.
@@ -71,6 +74,8 @@ func (m Message) Validate() error {
 		return fmt.Errorf("reply_to %q is not 32 lowercase hex", clip(m.ReplyTo))
 	case !ValidAgentLabel(m.Agent):
 		return fmt.Errorf("agent label %q may hold only letters, digits, '.', '_' and '-', at most 64", clip(m.Agent))
+	case !ValidAgentLabel(m.FromAgent):
+		return fmt.Errorf("from_agent label %q may hold only letters, digits, '.', '_' and '-', at most 64", clip(m.FromAgent))
 	case len(m.Subject) > MaxSubjectBytes:
 		return fmt.Errorf("subject is %d bytes, at most %d", len(m.Subject), MaxSubjectBytes)
 	case m.Body == "":

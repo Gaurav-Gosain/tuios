@@ -40,6 +40,7 @@ func TestMessageValidate(t *testing.T) {
 		"reply_to bad":   func(m *Message) { m.ReplyTo = "zz" },
 		"agent space":    func(m *Message) { m.Agent = "back end" },
 		"agent long":     func(m *Message) { m.Agent = strings.Repeat("a", 65) },
+		"from_agent bad": func(m *Message) { m.FromAgent = "a/b" },
 		"subject long":   func(m *Message) { m.Subject = strings.Repeat("s", MaxSubjectBytes+1) },
 		"body long":      func(m *Message) { m.Body = strings.Repeat("b", MaxBodyBytes+1) },
 		"body empty":     func(m *Message) { m.Body = "" },
