@@ -157,13 +157,16 @@ func (v sessionView) visible() image.Rectangle {
 
 // computeSessionView works out where the view sits for this frame.
 //
-// It follows the focused pane's cursor with tmux's rule (tty_window_offset1):
-// along each axis, a cursor within the first screenful shows the start, one
-// within the last shows the end, and anywhere between puts the cursor in the
-// middle across and on the bottom row down. A pane whose cursor is hidden,
-// or not in terminal use, shows its top left corner instead, where tmux shows
-// the window's: a full-screen program that hides its cursor still gets its
-// own pane on screen.
+// It follows the focused pane's cursor with tmux's rule (tty_window_offset1
+// in tty.c): along each axis, a cursor within the first screenful shows the
+// start, one within the last shows the end, and anywhere between puts the
+// cursor in the middle across and on the bottom row down.
+//
+// Two departures from tmux, both on purpose. tmux shows the window's top left
+// corner (offset 0, 0) when the pane's cursor is hidden (no MODE_CURSOR);
+// tuios follows the hidden cursor's position, see paneCursor. And in copy
+// mode tuios follows the copy-mode cursor. Only a pane with no position to
+// follow shows its own top left corner.
 func (m *OS) computeSessionView() sessionView {
 	if !m.ViewCropped() {
 		return sessionView{}
@@ -220,26 +223,40 @@ func (m *OS) viewTarget() (x, y int, cursor bool) {
 	return w.X, w.Y, false
 }
 
-// paneCursor is a window's cursor in the layout frame, when it is shown. It
-// takes the window's lock only if it is free and otherwise uses the position
-// the last frame read, as getRealCursor does.
+// paneCursor is the position the view follows in a window, in the layout
+// frame: the copy-mode cursor while copy mode is shown, otherwise the
+// terminal's cursor, shown or hidden. It takes the window's lock only if it is
+// free and otherwise uses the position the last frame read, as getRealCursor
+// does.
+//
+// A hidden cursor is followed on purpose. An agent CLI hides the terminal's
+// cursor and draws its own, but it still moves the real one to its input box,
+// so the hidden position is where the person is typing. Falling back to the
+// pane's top left corner showed such a program's header and never its input.
 func paneCursor(w *terminal.Window) (int, int, bool) {
-	if w.Terminal == nil || w.CopyModeVisible() || w.ScrollbackOffset > 0 {
+	if w.Terminal == nil {
 		return 0, 0, false
 	}
-	hidden, pos := w.CachedCursorHidden, w.CachedCursor
+	border := w.BorderOffset()
+	inside := func(x, y int) bool {
+		return x >= 0 && y >= 0 && x < w.ContentWidth() && y < w.ContentHeight()
+	}
+	if w.CopyModeVisible() && w.CopyMode != nil {
+		x, y := w.CopyMode.CursorX, w.CopyMode.CursorY
+		if !inside(x, y) {
+			return 0, 0, false
+		}
+		return w.X + border + x, w.Y + border + y, true
+	}
+	pos := w.CachedCursor
 	if w.TryRLockIO() {
 		if w.Terminal != nil {
-			hidden, pos = w.Terminal.IsCursorHidden(), w.Terminal.CursorPosition()
+			pos = w.Terminal.CursorPosition()
 		}
 		w.RUnlockIO()
 	}
-	if hidden || pos.X < 0 || pos.Y < 0 || pos.X >= w.ContentWidth() || pos.Y >= w.ContentHeight() {
+	if !inside(pos.X, pos.Y) {
 		return 0, 0, false
-	}
-	border := 1
-	if w.Tiled {
-		border = 0
 	}
 	return w.X + border + pos.X, w.Y + border + pos.Y, true
 }
@@ -354,9 +371,14 @@ func (m *OS) pointerOverPanes(x, y int) bool {
 const viewMarkLayerID = "view-mark"
 
 // renderViewMark is the mark that this client shows only part of the
-// session: arrows toward the parts out of view, and the session's size. It
-// sits in the top right corner of the view's pane area, over the panes and
-// under every panel. Nil when the whole session is on the screen.
+// session: arrows toward the parts out of view, and the session's size.
+//
+// It sits at the right end of the dock's rule, the line between the panes and
+// the dock. That row is chrome that carries nothing else, so the mark covers
+// no pane, no title bar and no dock control, and it is always in the same
+// place. With the dock hidden there is no such row, and the mark goes in the
+// bottom right corner of the view's pane area, over pane content, which is the
+// one place left. Nil when the whole session is on the screen.
 func (m *OS) renderViewMark() *lipgloss.Layer {
 	v := m.sessionView
 	if !v.on || v.clip.Empty() {
@@ -383,9 +405,19 @@ func (m *OS) renderViewMark() *lipgloss.Layer {
 	if arrows.Len() > 0 {
 		text = arrows.String() + " " + text
 	}
-	label := tooltipLabel(text, v.clip.Dx(), theme.UI())
-	x := v.clip.Max.X - lipgloss.Width(label)
-	return lipgloss.NewLayer(label).X(max(x, v.clip.Min.X)).Y(v.clip.Min.Y).Z(config.ZIndexDock).ID(viewMarkLayerID)
+	pal := theme.UI()
+	label := tooltipLabel(text, m.GetRenderWidth(), pal)
+	width := lipgloss.Width(label)
+	x, y := m.GetRenderWidth()-width-1, v.clip.Max.Y-1
+	switch m.Settings.DockbarPosition {
+	case "hidden":
+		x = v.clip.Max.X - width
+	case "top":
+		y = m.ViewTopMargin() - 1
+	default:
+		y = m.ViewTopMargin() + m.ViewUsableHeight()
+	}
+	return lipgloss.NewLayer(label).X(max(x, 0)).Y(max(y, 0)).Z(config.ZIndexDock + 1).ID(viewMarkLayerID)
 }
 
 // sendWindowSizeToDaemon sets the window_size policy of the session this
@@ -410,4 +442,34 @@ func (m *OS) sendWindowSizeToDaemon(value string) {
 		defer func() { _ = client.Close() }()
 		_, _ = client.Call("set-option", map[string]any{"session": name, "key": "daemon.window_size", "value": value})
 	}()
+}
+
+// paneOnScreen is the rectangle a pane covers on the screen: its own in the
+// layout, or in a view of a larger session shifted by the view and clipped to
+// the view's pane area. It reports false for a pane the view does not show.
+func (m *OS) paneOnScreen(w *terminal.Window) (image.Rectangle, bool) {
+	r := image.Rect(w.X, w.Y, w.X+w.Width, w.Y+w.Height)
+	v := m.sessionView
+	if !v.on {
+		return r, true
+	}
+	r = r.Add(image.Pt(v.dx, v.dy)).Intersect(v.clip)
+	return r, !r.Empty()
+}
+
+// paneChromeAt places chrome a pane anchors at a layout position (the
+// copy-mode search prompt, the multi copy "Save to" prompt) on the screen. It
+// is the position itself unless the client shows a view of a larger session,
+// when it is shifted by the view and kept inside the view's pane area, so a
+// prompt at the bottom of a pane taller than the view sits on the view's last
+// row. w and h are the size of what is placed.
+func (m *OS) paneChromeAt(x, y, w, h int) (int, int) {
+	v := m.sessionView
+	if !v.on {
+		return x, y
+	}
+	x, y = v.toScreen(x, y)
+	x = max(min(x, v.clip.Max.X-w), v.clip.Min.X)
+	y = max(min(y, v.clip.Max.Y-h), v.clip.Min.Y)
+	return x, y
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"sync"
 	"time"
 
@@ -182,7 +183,7 @@ func (m *OS) RefreshTextSizing() {
 		curState := textSizingWinState{
 			scrollback:   scrollbackLen,
 			scrollOffset: w.ScrollbackOffset,
-			x:            w.X, y: w.Y, w: w.Width, h: w.Height,
+			x:            w.X + m.sessionView.dx, y: w.Y + m.sessionView.dy, w: w.Width, h: w.Height,
 			count: len(placements),
 		}
 		if m.TextSizingState.lastState[w.ID] == curState {
@@ -204,18 +205,24 @@ func (m *OS) RefreshTextSizing() {
 
 		for _, p := range kept {
 			visible := p.AbsLine >= viewportTop && p.AbsLine < viewportBottom
-			hostX := w.X + borderOff + p.GuestX
-			hostY := w.Y + borderOff + (p.AbsLine - viewportTop)
+			// On the screen, where a view of a larger session draws the pane.
+			// See pane_view.go.
+			view := m.sessionView
+			wx, wy := w.X+view.dx, w.Y+view.dy
+			hostX := wx + borderOff + p.GuestX
+			hostY := wy + borderOff + (p.AbsLine - viewportTop)
 			scaledWidth := p.TextLen * p.Scale
 			eraseCols := min(scaledWidth, 120)
 
 			// Clip: must fit entirely within window content area AND screen
 			if visible {
-				if hostY < w.Y+borderOff || hostY+p.Scale > w.Y+w.Height-borderOff {
+				if hostY < wy+borderOff || hostY+p.Scale > wy+w.Height-borderOff {
 					visible = false
-				} else if hostX+scaledWidth > w.X+borderOff+contentWidth {
+				} else if hostX+scaledWidth > wx+borderOff+contentWidth {
 					visible = false
 				} else if hostY < 0 || hostX < 0 || hostY+p.Scale > screenHeight || hostX+scaledWidth > screenWidth {
+					visible = false
+				} else if view.on && !image.Rect(hostX, hostY, hostX+scaledWidth, hostY+p.Scale).In(view.clip) {
 					visible = false
 				}
 			}
@@ -233,8 +240,8 @@ func (m *OS) RefreshTextSizing() {
 				eraseAt(&m.TextSizingState.pendingOutput, p.PlacedAtX, p.PlacedAtY, eraseCols, p.Scale)
 			}
 
-			contentTopY := w.Y + borderOff
-			contentEndX := w.X + borderOff + contentWidth
+			contentTopY := wy + borderOff
+			contentEndX := wx + borderOff + contentWidth
 			emitOSC66(&m.TextSizingState.pendingOutput, hostX, hostY, p.Scale, scaledWidth, contentTopY, contentEndX, p.RawOSC)
 			p.PlacedAtX = hostX
 			p.PlacedAtY = hostY

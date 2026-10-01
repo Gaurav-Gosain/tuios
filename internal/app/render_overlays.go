@@ -637,8 +637,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		renderedSearch := pad + body + pad
 
 		searchOff := focusedWindow.BorderOffset()
-		searchX := focusedWindow.X + searchOff + 1
-		searchY := focusedWindow.Y + focusedWindow.Height - searchOff - 1
+		searchX, searchY := m.paneChromeAt(
+			focusedWindow.X+searchOff+1, focusedWindow.Y+focusedWindow.Height-searchOff-1,
+			lipgloss.Width(renderedSearch), 1)
 
 		searchLayer := lipgloss.NewLayer(renderedSearch).
 			X(searchX).

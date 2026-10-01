@@ -325,7 +325,12 @@ func (m *OS) hintsDrawn(w *terminal.Window) bool {
 // outside it is off the screen or under the dock or the rail.
 func (m *OS) hintsRegion() image.Rectangle {
 	left, top := m.GetLeftMargin(), m.GetTopMargin()
-	return image.Rect(left, top, left+m.GetContentWidth(), top+m.GetUsableHeight())
+	r := image.Rect(left, top, left+m.GetContentWidth(), top+m.GetUsableHeight())
+	// A view of a larger session shows only part of it. See pane_view.go.
+	if v := m.sessionView; v.on {
+		r = r.Intersect(v.visible())
+	}
+	return r
 }
 
 // hintsCenter is the middle of a pane's box.

@@ -115,8 +115,9 @@ func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 		body = pad + info + pad + "\n" + body
 		y--
 	}
+	x, y := m.paneChromeAt(fw.X+off+1, y, lipgloss.Width(body), lipgloss.Height(body))
 	return lipgloss.NewLayer(body).
-		X(fw.X + off + 1).
+		X(x).
 		Y(y).
 		Z(config.ZIndexHelp + 1).
 		ID("multi-copy-save")

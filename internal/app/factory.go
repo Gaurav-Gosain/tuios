@@ -20,6 +20,12 @@ type OSOptions struct {
 	// model nobody named, which is what the tests build.
 	Client ClientKind
 
+	// ViewOnly marks a client whose input is dropped, such as a tuios-web
+	// viewer started with --read-only. served.Attach tells the daemon, which
+	// leaves such a client out of the session's size under the largest and
+	// latest window_size policies.
+	ViewOnly bool
+
 	// KeybindRegistry is required for keybinding support.
 	KeybindRegistry *config.KeybindRegistry
 
