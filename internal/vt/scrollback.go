@@ -747,9 +747,10 @@ func (sb *Scrollback) Clear() {
 // that narrowed and widened again showed a space where the character was, and
 // so did every capture of it. So the stored line keeps the rune, and a reader
 // that puts a history row into a grid of the pane's width passes it through
-// here first. The screenshot grid is one. The client's own frame already stops
-// such a row at the pane's border, which e2e/tui/wide_rune_history_test.go
-// checks. The cut cell becomes a blank that keeps its style, so a run of
+// here first. The screenshot grid is one, and the client's pane renderer is
+// another. The renderer needs it too: the frame does cut an overlong row at
+// the pane's border, but that cut drops the whole wide cell, so the last
+// column lost its background, the copy cursor and any selection. The cut cell becomes a blank that keeps its style, so a run of
 // coloured background does not gain a notch.
 //
 // The line is returned as it is when nothing straddles the edge. Otherwise it

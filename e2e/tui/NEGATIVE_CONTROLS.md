@@ -254,6 +254,7 @@ a working negative control look like a broken one for half an hour.
 | A narrowing resize erases a wide rune from history for good (found through Collie v1.15.0) | n/a, injected, cuts the call site | put back the history blanking call in `vt.Emulator.Resize` | `TestWideRuneInHistorySurvivesANarrowPane` ("the history line \"WRA世…\" holds 29 of its 30 runes") | **caught** |
 | A screenshot draws a history row one column wider than the pane | n/a, injected, cuts the call site | drop the `vt.ClipHistoryRow` call in `gridOf`, `internal/session/screenshot_grid.go` | `TestWideRuneInHistorySurvivesANarrowPane` ("a screenshot row is 49 columns wide in a 48-column pane") | **caught** |
 | A scrolled-back history row spills over the pane's border (the reason the history blanking existed) | n/a | no single call site: on a build without the blanking and without any per-row clip, the client's frame still stops the row at the border, so the test's frame check is a guard on that and has no control | `TestWideRuneInHistorySurvivesANarrowPane` passes | **not applicable** |
+| The pane renderer draws a history row one column wider than the pane, and the frame's width cut drops the whole wide cell at the edge with its background, copy cursor and selection | n/a, injected, cuts the call site | drop the `vt.ClipHistoryRow` call in `renderTerminal`, `internal/app/render_terminal.go` | `TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane` in `internal/app` ("a history row is 13 columns wide in a 12-column pane"). `TestWideRuneInHistorySurvivesANarrowPane` still passes: its frame keeps the background at the edge in that layout | **caught** by the kept render test, **not caught** end to end |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
@@ -443,3 +444,9 @@ Two of them earned their keep during development by failing against the
 *fixed* binary for real reasons, which is documented in the commit history:
 `countWindows` originally misread the dock, and the tiling assertion originally
 waited on a toast that other toasts push off screen.
+
+The frame check in `TestWideRuneInHistorySurvivesANarrowPane` reads the
+pane's border cell, and the last column's background in one layout. It
+cannot see a style lost at the edge in every layout, because the frame cuts
+an overlong row in a way that depends on the render path. The render test in
+`internal/app` is the check for that.
