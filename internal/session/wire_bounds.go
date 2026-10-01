@@ -101,6 +101,11 @@ const maxFrameBytes = 16 * 1024 * 1024
 // origin, two numbers and a short shape, a few hundred bytes of gob at most.
 const maxMasterLayoutFrame = 4 * 1024
 
+// maxClientActivityFrame bounds a MsgClientActivity frame. Its payload is
+// empty, so the frame is the type and codec bytes; the rest is room for a
+// field a later build might add.
+const maxClientActivityFrame = 16
+
 // daemonFrameLimit is the largest frame the daemon reads for a message type:
 // the payload plus the type and codec bytes.
 func daemonFrameLimit(t MessageType) uint32 {
@@ -111,6 +116,8 @@ func daemonFrameLimit(t MessageType) uint32 {
 		return uint32(maxCommandResultBytes) + 2
 	case MsgMasterLayout:
 		return maxMasterLayoutFrame
+	case MsgClientActivity:
+		return maxClientActivityFrame
 	}
 	return maxFrameBytes
 }

@@ -60,6 +60,7 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 func (d *Daemon) calculateSessionSize(sessionID string) (width, height int, policy string) {
 	clients := d.sessionSizedClients(sessionID)
 	policy = d.effectiveWindowSize(d.manager.GetSessionByID(sessionID), clients)
+	clients = sizingClients(policy, clients)
 	latest := ""
 	if policy == config.WindowSizeLatest {
 		latest = d.pickLatest(sessionID, clients, time.Now())

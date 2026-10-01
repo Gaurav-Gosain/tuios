@@ -266,6 +266,11 @@ type AttachPayload struct {
 	// NestProbe is the nonce of the probe the client wrote to its terminal.
 	// See nest_probe.go.
 	NestProbe string `json:"nest_probe,omitempty"`
+	// ViewOnly marks a client that sends no input, such as a tuios-web
+	// viewer started with --read-only. Under the largest and latest
+	// window_size policies it does not count toward the session's size;
+	// under smallest it counts like any client. An older daemon ignores it.
+	ViewOnly bool `json:"view_only,omitempty"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the

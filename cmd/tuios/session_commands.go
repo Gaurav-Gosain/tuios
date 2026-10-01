@@ -142,20 +142,23 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 	return explainMissingSession(sessionName, names)
 }
 
-// attachWindowSize reads the window_size policy of a session, or "" when the
-// daemon does not say (a daemon that predates the option).
+// attachWindowSize reads the window_size policy in force for a session, as
+// session-info reports it, or "" when the daemon does not say (a daemon that
+// predates the option). It is the policy in force and not the one configured:
+// while a client from before the option is attached the session uses
+// smallest, whatever it is set to.
 func attachWindowSize(client *session.VerbClient, name string) string {
-	raw, err := client.Call("get-option", map[string]any{"session": name, "key": "daemon.window_size"})
+	raw, err := client.Call("session-info", map[string]any{"session": name})
 	if err != nil {
 		return ""
 	}
 	var res struct {
-		Value string `json:"value"`
+		WindowSize string `json:"window_size"`
 	}
 	if json.Unmarshal(raw, &res) != nil {
 		return ""
 	}
-	return res.Value
+	return res.WindowSize
 }
 
 // sharedSessionNotice is what attach says before it joins a session that

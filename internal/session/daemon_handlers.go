@@ -182,6 +182,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.reserve = payload.Reserve
 	cs.isTUIClient = true
 	cs.attachSeq = d.attachCount.Add(1)
+	cs.viewOnly = payload.ViewOnly
 	cs.lastActivity = time.Time{}
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
