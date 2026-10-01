@@ -165,6 +165,14 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(k)
 		f64(s.WorkspaceStackRatio[k])
 	}
+	num(len(s.WorkspaceMasterLayout))
+	for _, k := range sortedIntKeys(s.WorkspaceMasterLayout) {
+		num(k)
+		ml := s.WorkspaceMasterLayout[k]
+		str(ml.Position)
+		num(ml.Count)
+		flag(ml.NoGrid)
+	}
 
 	// The custom-layout flags, folded in for the reason the ratios above are: a
 	// peer acts on them, so a push that changes one has something to say and must

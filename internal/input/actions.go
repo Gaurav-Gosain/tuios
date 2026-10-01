@@ -173,6 +173,14 @@ func (d *ActionDispatcher) registerHandlers() {
 	for _, scheme := range config.TilingSchemes {
 		d.Register("set_tiling_scheme_"+scheme, makeSetTilingSchemeHandler(scheme))
 	}
+	d.Register("cycle_master_position", handleCycleMasterPosition)
+	for _, pos := range config.MasterPositions {
+		d.Register("set_master_position_"+pos, makeSetMasterPositionHandler(pos))
+	}
+	d.Register("add_master", handleAddMaster)
+	d.Register("remove_master", handleRemoveMaster)
+	d.Register("swap_with_master", handleSwapWithMaster)
+	d.Register("focus_master", handleFocusMaster)
 	d.Register("preselect_left", handlePreselectLeft)
 	d.Register("preselect_right", handlePreselectRight)
 	d.Register("preselect_up", handlePreselectUp)
@@ -764,6 +772,49 @@ func makeSetTilingSchemeHandler(scheme string) ActionHandler {
 		}
 		return o, nil
 	}
+}
+
+func handleCycleMasterPosition(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if pos := o.CycleMasterPosition(); pos != "" {
+		o.ShowNotification(app.MasterPositionMessage(o, pos), "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+// makeSetMasterPositionHandler returns a handler for set_master_position_<side>,
+// one per config.MasterPositions entry, so a side can be bound directly
+// instead of stepped to with cycle_master_position.
+func makeSetMasterPositionHandler(pos string) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		if o.SetMasterPosition(pos) {
+			o.ShowNotification(app.MasterPositionMessage(o, pos), "info", o.Settings.NotificationDuration)
+		}
+		return o, nil
+	}
+}
+
+func handleAddMaster(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if n := o.AddMaster(); n > 0 {
+		o.ShowNotification(app.MasterCountMessage(o, n), "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handleRemoveMaster(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if n := o.RemoveMaster(); n > 0 {
+		o.ShowNotification(app.MasterCountMessage(o, n), "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handleSwapWithMaster(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.SwapWithMaster()
+	return o, nil
+}
+
+func handleFocusMaster(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.FocusMaster()
+	return o, nil
 }
 
 func handlePreselectLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

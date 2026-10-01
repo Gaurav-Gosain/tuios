@@ -79,6 +79,9 @@ type Executor interface {
 	SetBorderStyle(style string) error
 	ShowNotificationCmd(message, notificationType string) error
 	FocusDirection(direction string) error
+	// MasterLayoutExec runs one of the master-stack commands
+	// (CommandTypeSetMasterPosition and the others) with its arguments.
+	MasterLayoutExec(command CommandType, args []string) error
 }
 
 // CommandExecutor provides a default implementation
@@ -329,6 +332,20 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	// New feature commands
 	case CommandTypeToggleZoom:
 		return ce.executor.ToggleZoomExec()
+
+	case CommandTypeSetMasterPosition:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SetMasterPosition", "left, right, top, bottom or center")
+		}
+		return ce.executor.MasterLayoutExec(cmd.Type, cmd.Args)
+	case CommandTypeSetMasterCount:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SetMasterCount", "a number of master panes")
+		}
+		return ce.executor.MasterLayoutExec(cmd.Type, cmd.Args)
+	case CommandTypeCycleMasterPosition, CommandTypeAddMaster, CommandTypeRemoveMaster,
+		CommandTypeSwapWithMaster, CommandTypeFocusMaster:
+		return ce.executor.MasterLayoutExec(cmd.Type, cmd.Args)
 	case CommandTypeScreenshot:
 		return ce.executor.ScreenshotExec()
 

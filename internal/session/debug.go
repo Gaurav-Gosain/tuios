@@ -357,6 +357,7 @@ var messageTypeNames = [...]string{
 	MsgTypeAtPrompt:     "TypeAtPrompt",
 	MsgPromptTyped:      "PromptTyped",
 	MsgClientGraphics:   "ClientGraphics",
+	MsgMasterLayout:     "MasterLayout",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

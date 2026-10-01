@@ -142,6 +142,9 @@ func hostTapeCommandAllowed(t tape.CommandType) bool {
 		tape.CommandTypeArrangePanes, tape.CommandTypeSetMultifocus,
 		tape.CommandTypeWait, tape.CommandTypeWaitUntilRegex,
 		tape.CommandTypeShowNotification, tape.CommandTypeFocusDirection, tape.CommandTypeToggleZoom,
+		tape.CommandTypeSetMasterPosition, tape.CommandTypeSetMasterCount, tape.CommandTypeCycleMasterPosition,
+		tape.CommandTypeAddMaster, tape.CommandTypeRemoveMaster, tape.CommandTypeSwapWithMaster,
+		tape.CommandTypeFocusMaster,
 		tape.CommandTypeSmartSplit, tape.CommandTypeCommandPalette, tape.CommandTypeComment:
 		return true
 	case "ListWindows", "GetSessionInfo", "GetWindow":

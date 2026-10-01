@@ -1717,12 +1717,17 @@ is showing.`,
 	var setLayoutTiling string
 	var setLayoutEqualize bool
 	var setLayoutRotate bool
+	var setLayoutMasterPosition string
+	var setLayoutMasters int
 	var setLayoutJSON bool
 	setLayoutCmd := &cobra.Command{
 		Use:   "set-layout",
-		Short: "Turn tiling on or off and tidy the splits",
+		Short: "Turn tiling on or off, tidy the splits, and shape the master-stack layout",
 		Long: `Turn tiling on or off, even out the split ratios, and flip the axis of the
 split holding the focused pane.
+
+--master-position and --masters shape the master-stack layout of the current
+workspace. The workspace keeps them until you change them again.
 
 Needs an attached client. Tiling is applied first, because equalize and rotate
 only mean something while the panes are tiled.`,
@@ -1733,7 +1738,13 @@ only mean something while the panes are tiled.`,
   tuios set-layout --equalize
 
   # Flip the split holding the focused pane
-  tuios set-layout --rotate`,
+  tuios set-layout --rotate
+
+  # Put the master pane in the center, with the stack on both sides
+  tuios set-layout --master-position center
+
+  # Use two master panes
+  tuios set-layout --masters 2`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var tiling *bool
@@ -1744,15 +1755,21 @@ only mean something while the panes are tiled.`,
 				}
 				tiling = &parsed
 			}
+			if err := checkSetLayoutMaster(setLayoutMasterPosition, setLayoutMasters, cmd.Flags().Changed("masters")); err != nil {
+				return err
+			}
 			return runSetLayout(setLayoutSession, tiling, setLayoutEqualize,
-				setLayoutRotate, setLayoutJSON)
+				setLayoutRotate, setLayoutMasterPosition, setLayoutMasters, setLayoutJSON)
 		},
 	}
 	setLayoutCmd.Flags().StringVarP(&setLayoutSession, "session", "s", "", "Target session (default: most recently active)")
 	setLayoutCmd.Flags().StringVar(&setLayoutTiling, "tiling", "", "Tile the panes automatically: true or false")
 	setLayoutCmd.Flags().BoolVar(&setLayoutEqualize, "equalize", false, "Reset every split ratio so the panes share the space evenly")
 	setLayoutCmd.Flags().BoolVar(&setLayoutRotate, "rotate", false, "Flip the axis of the split holding the focused pane")
+	setLayoutCmd.Flags().StringVar(&setLayoutMasterPosition, "master-position", "", "Side the master panes take: left, right, top, bottom or center")
+	setLayoutCmd.Flags().IntVar(&setLayoutMasters, "masters", 0, "How many panes are master panes, 1 to 9")
 	setLayoutCmd.Flags().BoolVar(&setLayoutJSON, "json", false, "Output result as JSON")
+	_ = setLayoutCmd.RegisterFlagCompletionFunc("master-position", fixedCompletions(masterPositionNames()...))
 	_ = setLayoutCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = setLayoutCmd.RegisterFlagCompletionFunc("tiling", fixedCompletions("true", "false"))
 

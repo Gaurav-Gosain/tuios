@@ -2,6 +2,7 @@
 package config
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -570,6 +571,54 @@ const (
 // in the layout cannot drift apart.
 func (s *Settings) MasterRatioFraction() float64 {
 	return float64(clampPercent(s.MasterRatioPercent, MasterRatioMin, MasterRatioMax, MasterRatioDefault)) / 100
+}
+
+// Where the master-stack layout puts the master panes. Left is the layout as it
+// was before the position could change. Center puts the masters in a middle
+// column and deals the stack to the right and the left in turn, the way
+// xmonad's ThreeColMid and Hyprland's center orientation do.
+const (
+	MasterPositionLeft   = "left"
+	MasterPositionRight  = "right"
+	MasterPositionTop    = "top"
+	MasterPositionBottom = "bottom"
+	MasterPositionCenter = "center"
+)
+
+// MasterPositions is the accepted set, in the order cycle_master_position
+// steps through them.
+var MasterPositions = []string{
+	MasterPositionLeft,
+	MasterPositionRight,
+	MasterPositionTop,
+	MasterPositionBottom,
+	MasterPositionCenter,
+}
+
+// The master count's range and its default. Nine is as many panes as a
+// workspace can hold before most terminals run out of rows for them.
+const (
+	MasterCountMin     = 1
+	MasterCountMax     = 9
+	MasterCountDefault = 1
+)
+
+// ValidMasterPosition returns pos when it is one of MasterPositions and left
+// otherwise, so a typo lays the panes out as they always were.
+func ValidMasterPosition(pos string) string {
+	if slices.Contains(MasterPositions, pos) {
+		return pos
+	}
+	return MasterPositionLeft
+}
+
+// ClampMasterCount keeps a master count inside its range. Zero and below are
+// unset and mean the default.
+func ClampMasterCount(n int) int {
+	if n <= 0 {
+		return MasterCountDefault
+	}
+	return min(n, MasterCountMax)
 }
 
 // The column width's range and its default. The floor is the narrowest column

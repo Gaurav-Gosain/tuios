@@ -121,7 +121,8 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 	return CalculateMasterStackLayout(n, screenWidth, usableHeight, topMargin, masterRatio, 0, gap)
 }
 
-// CalculateMasterStackLayout returns the master-stack positions for n windows.
+// CalculateMasterStackLayout returns the master-stack positions for n windows
+// with the defaults: one master, on the left, and a grid from four panes up.
 //
 // masterRatio is the master pane's share of the split: its width, or its height
 // when two panes are stacked on a tall screen. stackRatio is the top stacked
@@ -142,92 +143,14 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 // terminal seven panes were each grown to twenty columns inside a region that
 // could give them seventeen, and the frame showed panes on top of each other.
 func CalculateMasterStackLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
-	if n == 0 {
-		return nil
-	}
-
-	layouts := make([]TileLayout, 0, n)
-
-	// Zero is a model that never set a ratio (an OS built by hand, or state
-	// with the field missing), and gets the default split rather than the
-	// narrowest one the clamp allows.
-	if masterRatio <= 0 {
-		masterRatio = float64(config.MasterRatioDefault) / 100
-	}
-	masterRatio = clampSplitRatio(masterRatio)
-
-	// Status bar is an overlay, windows use full usable height starting at Y=0
-	switch n {
-	case 1:
-		// Single window: full screen
-		layouts = append(layouts, TileLayout{
-			X:      0,
-			Y:      topMargin,
-			Width:  screenWidth,
-			Height: usableHeight,
-		})
-
-	case 2:
-		// Two windows, split along whichever axis the screen is longer on as it
-		// is drawn. A cell is about twice as tall as it is wide, so a tall
-		// 51x37 terminal reads as landscape by the numbers while being
-		// obviously upright to the eye; splitting it side by side hands out two
-		// 25 column panes. Compare against the scaled height so the split
-		// follows the shape on screen, and stack when it is taller.
-		if MasterStackSideBySide(screenWidth, usableHeight) {
-			near, far := splitByRatio(0, screenWidth, masterRatio, gap)
-			layouts = append(layouts,
-				TileLayout{X: near.Pos, Y: topMargin, Width: near.Size, Height: usableHeight},
-				TileLayout{X: far.Pos, Y: topMargin, Width: far.Size, Height: usableHeight},
-			)
-			break
-		}
-		near, far := splitByRatio(topMargin, usableHeight, masterRatio, gap)
-		layouts = append(layouts,
-			TileLayout{X: 0, Y: near.Pos, Width: screenWidth, Height: near.Size},
-			TileLayout{X: 0, Y: far.Pos, Width: screenWidth, Height: far.Size},
-		)
-
-	case 3:
-		// Three windows: one left (master), two right stacked
-		master, stack := splitByRatio(0, screenWidth, masterRatio, gap)
-		rows := spans(topMargin, usableHeight, 2, gap)
-		if stackRatio > 0 {
-			top, bottom := splitByRatio(topMargin, usableHeight, clampSplitRatio(stackRatio), gap)
-			rows = []span{top, bottom}
-		}
-		layouts = append(layouts,
-			TileLayout{X: master.Pos, Y: topMargin, Width: master.Size, Height: usableHeight},
-			TileLayout{X: stack.Pos, Y: rows[0].Pos, Width: stack.Size, Height: rows[0].Size},
-			TileLayout{X: stack.Pos, Y: rows[1].Pos, Width: stack.Size, Height: rows[1].Size},
-		)
-
-	default:
-		// A grid. Four windows is the 2x2 case of it, which is why it has no
-		// branch of its own any more: it was the same arithmetic written twice,
-		// and the copy did not get the fixes the general path got.
-		cols := gridColumns(n)
-		rowCount := (n + cols - 1) / cols
-		rows := spans(topMargin, usableHeight, rowCount, gap)
-
-		for row := range rowCount {
-			// The last row carries whatever is left over, which can be fewer
-			// panes than a full row. They share the width between them rather
-			// than leaving a hole where the missing ones would have been.
-			inRow := min(cols, n-row*cols)
-			cells := spans(0, screenWidth, inRow, gap)
-			for col := range inRow {
-				layouts = append(layouts, TileLayout{
-					X:      cells[col].Pos,
-					Y:      rows[row].Pos,
-					Width:  cells[col].Size,
-					Height: rows[row].Size,
-				})
-			}
-		}
-	}
-
-	return layouts
+	return CalculateMasterLayout(n, screenWidth, usableHeight, topMargin, MasterParams{
+		Position:   config.MasterPositionLeft,
+		Count:      1,
+		Ratio:      masterRatio,
+		StackRatio: stackRatio,
+		Grid:       true,
+		Gap:        gap,
+	})
 }
 
 // SplitsBetween returns the separator lines that belong in the gaps between

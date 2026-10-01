@@ -686,6 +686,16 @@ type OS struct {
 	lastConfigSharedBorders bool
 	lastConfigPaneGap       int
 	lastConfigScrollWidth   int
+	// WorkspaceMasterLayout is each workspace's master-stack shape, for the
+	// workspaces somebody changed at run time. See master_layout.go.
+	WorkspaceMasterLayout map[int]session.MasterLayoutState
+	// masterSeeded marks the workspaces this client has offered its configured
+	// shape to the session for. See seedMasterLayout.
+	masterSeeded map[int]bool
+
+	// lastConfigMaster is the configured master-stack shape as this OS last
+	// saw it. See adoptConfigMasterLayout.
+	lastConfigMaster session.MasterLayoutState
 
 	// SessionReserve is the chrome reserve every client attached to this
 	// session lays its panes out around: the largest any of them asks for, as

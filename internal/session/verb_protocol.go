@@ -1040,20 +1040,27 @@ func init() {
 			handler:  (*Daemon).verbListWorkspaces,
 		},
 		"set-layout": {
-			description: "Turn tiling on or off and tidy the splits. Needs an attached client.",
+			description: "Turn tiling on or off, tidy the splits, and shape the master-stack layout. Needs an attached client.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "tiling", Type: "bool", Description: "Tile the panes automatically, or let them float."},
 				{Name: "equalize", Type: "bool", Description: "Reset every split ratio so the panes share the space evenly.", Default: "false"},
 				{Name: "rotate", Type: "bool", Description: "Flip the axis of the split holding the focused pane.", Default: "false"},
+				{Name: "master_position", Type: "string", Description: "Side the master panes take on the current workspace: left, right, top, bottom or center."},
+				{Name: "master_count", Type: "int", Description: "How many panes are master panes on the current workspace, 1 to 9."},
 			},
 			returns: []verbParam{
 				{Name: "tiling_mode", Type: "string", Description: `"tiling" or "floating".`},
 				{Name: "layout_mode", Type: "string", Description: `Which tiling layout is in effect: bsp, master-stack, scrolling, or "unknown" on a session no client has reported one for.`},
 				{Name: "master_ratio", Type: "float", Description: "Fraction of the screen the master pane takes."},
+				{Name: "master_position", Type: "string", Description: `Side the master panes take on the current workspace, or "default" when the workspace uses the client's configured side.`},
+				{Name: "master_count", Type: "int", Description: "How many panes are master panes on the current workspace, or 0 when the workspace uses the client's configured count."},
 			},
-			examples: []string{`{"id":1,"verb":"set-layout","params":{"session":"work","tiling":true,"equalize":true}}`},
-			handler:  (*Daemon).verbSetLayout,
+			examples: []string{
+				`{"id":1,"verb":"set-layout","params":{"session":"work","tiling":true,"equalize":true}}`,
+				`{"id":2,"verb":"set-layout","params":{"session":"work","master_position":"center","master_count":1}}`,
+			},
+			handler: (*Daemon).verbSetLayout,
 		},
 		"run-command": {
 			description: "Run one tape command (the command names the keybindings use). Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",

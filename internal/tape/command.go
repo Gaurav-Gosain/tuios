@@ -140,6 +140,17 @@ const (
 	// CommandTypeFocusDirection focuses a window in a direction.
 	CommandTypeFocusDirection CommandType = "FocusDirection"
 
+	// The master-stack commands. Each one is the action of the same name in
+	// the keymap (set_master_position_<side>, cycle_master_position and the
+	// rest), so run-command reaches every one of them.
+	CommandTypeSetMasterPosition   CommandType = "SetMasterPosition"
+	CommandTypeSetMasterCount      CommandType = "SetMasterCount"
+	CommandTypeCycleMasterPosition CommandType = "CycleMasterPosition"
+	CommandTypeAddMaster           CommandType = "AddMaster"
+	CommandTypeRemoveMaster        CommandType = "RemoveMaster"
+	CommandTypeSwapWithMaster      CommandType = "SwapWithMaster"
+	CommandTypeFocusMaster         CommandType = "FocusMaster"
+
 	// CommandTypeToggleZoom represents the ToggleZoom command.
 	CommandTypeToggleZoom CommandType = "ToggleZoom"
 	// CommandTypeScreenshot represents the Screenshot command, which renders
@@ -243,6 +254,13 @@ var commandTypes = []CommandType{
 	CommandTypeShowNotification,
 	CommandTypeFocusDirection,
 	CommandTypeToggleZoom,
+	CommandTypeSetMasterPosition,
+	CommandTypeSetMasterCount,
+	CommandTypeCycleMasterPosition,
+	CommandTypeAddMaster,
+	CommandTypeRemoveMaster,
+	CommandTypeSwapWithMaster,
+	CommandTypeFocusMaster,
 	CommandTypeScreenshot,
 	CommandTypeSmartSplit,
 	CommandTypeCommandPalette,

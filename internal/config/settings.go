@@ -520,6 +520,17 @@ type Settings struct {
 	// columns a pane gets and a PTY has exactly one size.
 	MasterRatioPercent int
 
+	// MasterPosition, MasterCount and MasterNoGrid are the master-stack shape
+	// a workspace starts with: the side the masters take (one of
+	// MasterPositions), how many panes are masters, and whether one master on
+	// the left stops turning four or more panes into a grid. A workspace
+	// changed at run time keeps its own values in the session. Set via
+	// appearance.master_position, master_count and master_grid. The zero value
+	// of each is the layout as it was before they existed.
+	MasterPosition string
+	MasterCount    int
+	MasterNoGrid   bool
+
 	// ScrollColumnWidth is how wide a column is in the scrolling layout, as a
 	// percent of the screen, before anything resizes it. Session state for the same
 	// reason the master ratio is.
@@ -742,6 +753,8 @@ func DefaultSettings() Settings {
 		LeaderKey:                   DefaultLeaderKey,
 		PaneGap:                     0,
 		MasterRatioPercent:          MasterRatioDefault,
+		MasterPosition:              MasterPositionLeft,
+		MasterCount:                 MasterCountDefault,
 		ScrollColumnWidth:           ScrollColumnWidthDefault,
 		ScrollColumnMax:             ScrollColumnWidthMax,
 		ZoomSize:                    ZoomSizeDefault,

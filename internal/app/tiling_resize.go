@@ -493,19 +493,19 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 // by writing into the tree first; this is the master-stack equivalent, run
 // after the fact because the layout has only ratios to write into.
 //
-// It covers the layouts that have ratios: two panes, side by side or stacked,
-// where the master ratio is the first pane's share, and three panes, where it
-// is the master column's width and the stack ratio is the top stacked pane's
-// height. A grid of four or more panes is equal-share and has nothing to
-// record, so a resize there is still replaced on the next retile. Geometry
-// that is not the shape the tiler would draw (a zoom, or panes out of their
-// slots) is left alone rather than read as a ratio.
+// It reads the ratios back with layout.MasterRatiosFrom, the inverse of the
+// tiler, in every master position and with any master count: the master ratio
+// is the masters' share along the axis between them and the stack, and the
+// stack ratio is the first stack pane's share when the stack holds exactly two
+// panes in one column or row. The default grid of four or more panes is
+// equal-share and has nothing to record, so a resize there is still replaced
+// on the next retile. Geometry that is not the shape the tiler would draw (a
+// zoom, or panes out of their slots) is left alone rather than read as a
+// ratio.
 //
-// The ratios are derived with layout.SplitRatioFor, which reserves the
-// separator gap exactly as the tiler does, so a retile gives the first pane
-// the size the resize left it at. The second pane can come back a cell
-// narrower, because the geometry scan closes the separator gap that the
-// retile opens again.
+// With the masters in the centre a resize moves one side's divider, so the
+// stack on that side ends up wider than the other. The ratio records the
+// masters' new width, and a retile puts them back in the middle.
 //
 // The keyboard path calls this on every press. The mouse path calls it once,
 // on release, before the layout is marked custom and the state is pushed.
@@ -513,36 +513,23 @@ func (m *OS) SyncMasterStackFromGeometry() {
 	if !m.AutoTiling || m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
 		return
 	}
-	left, top := m.PaneLeft(), m.PaneTop()
-	width, height := m.PaneWidth(), m.PaneHeight()
-	right, bottom := left+width, top+height
-	gap := m.separatorGap()
-
+	region := layout.Rect{X: m.PaneLeft(), Y: m.PaneTop(), W: m.PaneWidth(), H: m.PaneHeight()}
 	panes := m.tilablePanes(m.CurrentWorkspace)
-	switch len(panes) {
-	case 2:
-		a, b := panes[0], panes[1]
-		if layout.MasterStackSideBySide(width, height) {
-			if a.X != left || b.X < a.X+a.Width || b.X+b.Width != right {
-				return
-			}
-			m.setMasterRatio(layout.SplitRatioFor(a.Width, width, gap))
-			return
-		}
-		if a.Y != top || b.Y < a.Y+a.Height || b.Y+b.Height != bottom {
-			return
-		}
-		m.setMasterRatio(layout.SplitRatioFor(a.Height, height, gap))
-	case 3:
-		master, upper, lower := panes[0], panes[1], panes[2]
-		if master.X != left || upper.X < master.X+master.Width || upper.X != lower.X ||
-			upper.X+upper.Width != right {
-			return
-		}
-		m.setMasterRatio(layout.SplitRatioFor(master.Width, width, gap))
-		if upper.Y == top && lower.Y >= upper.Y+upper.Height && lower.Y+lower.Height == bottom {
-			m.setWorkspaceStackRatio(m.CurrentWorkspace, layout.SplitRatioFor(upper.Height, height, gap))
-		}
+	rects := make([]layout.Rect, len(panes))
+	for i, w := range panes {
+		rects[i] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
+	}
+	p := m.masterParams()
+	ratio, stackRatio, ok := layout.MasterRatiosFrom(rects, region, p)
+	if !ok {
+		return
+	}
+	m.setMasterRatio(ratio)
+	if stackRatio > 0 {
+		m.setWorkspaceStackRatio(m.CurrentWorkspace, stackRatio)
+	}
+	if p.Position == config.MasterPositionCenter {
+		m.TileAllWindows()
 	}
 }
 

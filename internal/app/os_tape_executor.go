@@ -1070,6 +1070,43 @@ func (m *OS) FocusDirection(direction string) error {
 	return nil
 }
 
+// MasterLayoutExec runs a master-stack command (tape executor interface). An
+// error says what was wrong and what the command takes, because run-command
+// shows it to the caller.
+func (m *OS) MasterLayoutExec(command tape.CommandType, args []string) error {
+	if !m.AutoTiling {
+		return fmt.Errorf("%s needs tiling. Turn tiling on first", command)
+	}
+	switch command {
+	case tape.CommandTypeSetMasterPosition:
+		if !m.SetMasterPosition(args[0]) {
+			return fmt.Errorf("%q is not a master position. Use %s", args[0], strings.Join(config.MasterPositions, ", "))
+		}
+	case tape.CommandTypeSetMasterCount:
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < config.MasterCountMin || n > config.MasterCountMax {
+			return fmt.Errorf("%q is not a master count. Use a number from %d to %d", args[0], config.MasterCountMin, config.MasterCountMax)
+		}
+		m.SetMasterCount(n)
+	case tape.CommandTypeCycleMasterPosition:
+		m.CycleMasterPosition()
+	case tape.CommandTypeAddMaster:
+		m.AddMaster()
+	case tape.CommandTypeRemoveMaster:
+		m.RemoveMaster()
+	case tape.CommandTypeSwapWithMaster:
+		if !m.SwapWithMaster() {
+			return fmt.Errorf("%s needs the master-stack layout and a pane to swap with", command)
+		}
+	case tape.CommandTypeFocusMaster:
+		if !m.FocusMaster() {
+			return fmt.Errorf("%s needs the master-stack layout and a pane", command)
+		}
+	}
+	m.MarkAllDirty()
+	return nil
+}
+
 // ToggleZoomExec toggles zoom on the focused window (tape executor interface).
 func (m *OS) ToggleZoomExec() error {
 	m.ToggleZoom()
