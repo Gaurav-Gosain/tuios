@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // One wiring for the daemon connection, shared by every client.
@@ -175,9 +176,34 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 		m.adoptEmptySessionVersion(state)
 	}
 
+	m.reportFocusedPaneFocusIn()
+
 	// The session is now whole: state restored, PTYs wired, layout applied. A
 	// hook that inspects the session here sees what the user is about to see.
 	m.FireAttached()
+}
+
+// reportFocusedPaneFocusIn tells the focused guest that its terminal gained
+// focus, when it requested DECSET 1004 focus reporting.
+func (m *OS) reportFocusedPaneFocusIn() {
+	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return
+	}
+	m.reportPaneFocus(m.Windows[m.FocusedWindow], true)
+}
+
+// reportPaneFocus tells a guest about a focus change it requested.
+func (m *OS) reportPaneFocus(window *terminal.Window, focused bool) {
+	if window == nil || !window.FocusReportingOn() {
+		return
+	}
+	report := "\x1b[O"
+	if focused {
+		report = "\x1b[I"
+	}
+	if err := window.SendInput([]byte(report)); err != nil {
+		m.LogWarn("Failed to report focus to pane %s: %v", window.ID, err)
+	}
 }
 
 // adoptEmptySessionVersion records the daemon state version of a session that
