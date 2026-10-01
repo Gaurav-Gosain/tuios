@@ -1043,18 +1043,24 @@ func (d *Daemon) herdrPaneSplit(cs *connState, in *herdrIn) (*herdrResult, *herd
 		return nil, ierr.herdr()
 	}
 	const fail = "pane_split_failed"
-	newID := ""
+	newID, split := "", false
 	if in.Cwd == "" && d.findTUIClient(sess.ID) != nil {
 		args := herdrWin(sess, win.ID)
 		args.Direction = dir
 		out, verr := d.callVerb(cs, "split-window", args)
 		if verr == nil {
-			newID = herdrString(out.(map[string]any), "window_id")
+			// The split ran. A new window is made only when it did not:
+			// a split whose pane is late to reach the state is reported,
+			// never answered with a second pane.
+			split = true
+			if newID = herdrString(out.(map[string]any), "window_id"); newID == "" {
+				return nil, herdrErr(fail, "the split ran, and the new pane has not reached the daemon yet. Run pane list to find it")
+			}
 		} else if verr.Code != ErrVerbNeedsClient && verr.Code != ErrVerbCommandFailed {
 			return nil, herdrFromVerb(verr, fail)
 		}
 	}
-	if newID == "" {
+	if !split {
 		out, herr := d.herdrVerb(cs, "new-window", herdrArgs{Session: sess.Name(), Workspace: max(win.Workspace, 1), Focus: &in.Focus, Cwd: in.Cwd}, fail)
 		if herr != nil {
 			return nil, herr

@@ -2356,6 +2356,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			} else {
 				err = m.SwapWindowsByID(msg.TapeArgs[0], msg.TapeArgs[1])
 			}
+		case "zoom_window":
+			// herdr's pane.zoom: TapeArgs are the window id and on or off.
+			if len(msg.TapeArgs) != 2 {
+				err = fmt.Errorf("zoom_window needs a window id and on or off")
+			} else {
+				err = m.ZoomWindowByID(msg.TapeArgs[0], msg.TapeArgs[1] == "on")
+			}
 		case "switch_session":
 			// herdr's workspace.focus: show another session. The answer goes
 			// first, because the switch detaches this client from the session

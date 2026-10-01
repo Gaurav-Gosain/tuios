@@ -2,7 +2,7 @@ package session
 
 import (
 	"encoding/json"
-	"slices"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -179,6 +179,15 @@ func (d *Daemon) herdrPaneProcessInfo(cs *connState, in *herdrIn) (*herdrResult,
 		return nil, herdrErr("pane_not_found", "pane not found")
 	}
 	info := &herdrProcessInfo{PaneID: site.pane.PaneID, ShellPID: pty.ShellPID()}
+	// A command line and a directory can carry what never shows on the
+	// screen: a token passed as an argument, a private path. The read grant
+	// shows the screen, so it gets the pids and names. The arguments and the
+	// directories go to the person, to the pane itself, and to a pane that
+	// may type into this one (write on its session, or admin).
+	full := true
+	if pa := d.paneAuthority(cs); pa != nil && pa.window != site.win.ID {
+		full = (pa.grants.Has(GrantAdmin) || pa.grants.Has(GrantWrite)) && d.paneWriteReach(pa, site.sess.Name()) == ""
+	}
 	if info.ShellPID > 0 {
 		if pgid, ok := readForegroundPGID(info.ShellPID); ok && pgid > 0 {
 			info.ForegroundPGID = pgid
@@ -196,14 +205,17 @@ func (d *Daemon) herdrPaneProcessInfo(cs *connState, in *herdrIn) (*herdrResult,
 				if p.comm == "" && len(p.argv) == 0 {
 					continue
 				}
-				item := herdrProcessItem{PID: p.pid, Name: p.comm, Argv: p.argv, Cmdline: strings.Join(p.argv, " ")}
-				if len(p.argv) > 0 {
-					item.Argv0 = p.argv[0]
-					if item.Name == "" {
-						item.Name = agentBaseName(p.argv[0])
-					}
+				item := herdrProcessItem{PID: p.pid, Name: p.comm}
+				if item.Name == "" && len(p.argv) > 0 {
+					item.Name = agentBaseName(p.argv[0])
 				}
-				item.Cwd, _ = ptyspawn.ProcessCwd(p.pid)
+				if full {
+					item.Argv, item.Cmdline = p.argv, strings.Join(p.argv, " ")
+					if len(p.argv) > 0 {
+						item.Argv0 = p.argv[0]
+					}
+					item.Cwd, _ = ptyspawn.ProcessCwd(p.pid)
+				}
 				info.ForegroundProcesses = append(info.ForegroundProcesses, item)
 			}
 		}
@@ -368,8 +380,11 @@ func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...s
 	return nil
 }
 
-// herdrPaneZoom zooms a pane, the way herdr zooms a tab: the pane is focused
-// first, and a tab is zoomed on its focused pane or not at all.
+// herdrPaneZoom zooms a pane, the way herdr zooms a tab: the pane is focused,
+// and a tab is zoomed on its focused pane or not at all. The client does both
+// in one routed command that names the pane, so the zoom can never land on
+// the pane that had the focus before. The answer waits until the session's
+// state shows the zoom on that pane, or no zoom for off.
 func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	mode := in.Mode
 	switch mode {
@@ -388,65 +403,45 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	}
 	res := &herdrZoom{PaneID: site.pane.PaneID}
 	st := site.sess.GetState()
-	if st.FocusedWindowID != site.win.ID || st.CurrentWorkspace != site.win.Workspace {
-		if _, herr := d.herdrFocusPane(cs, site.pane.PaneID); herr != nil {
-			return nil, herr
-		}
-		res.FocusChanged = true
-		// A focus can end a zoom on the client, so the zoom is read after it.
-		st = site.sess.GetState()
-	}
-	zoomed := ""
-	for _, w := range st.Windows {
-		if w.Workspace == site.win.Workspace && w.Zoomed && !herdrScratch(&w) {
-			zoomed = w.ID
-		}
-	}
-	want := zoomed == ""
+	res.FocusChanged = st.FocusedWindowID != site.win.ID || st.CurrentWorkspace != site.win.Workspace
+	tabZoomed := herdrZoomedIn(st, site.win.Workspace) != ""
+	want := !tabZoomed
 	switch {
 	case len(site.layout.Panes) <= 1:
 		res.Reason = "single_pane"
-	case mode == "on" && zoomed != "":
+	case mode == "on" && tabZoomed:
 		res.Reason = "already_zoomed"
-	case mode == "off" && zoomed == "":
+	case mode == "off" && !tabZoomed:
 		res.Reason = "already_unzoomed"
-	default:
-		if mode != "toggle" {
-			want = mode == "on"
-		}
+	case mode != "toggle":
+		want = mode == "on"
 	}
-	if res.Reason == "" {
-		zoom := func() *herdrError {
-			_, herr := d.herdrVerb(cs, "run-command", herdrArgs{Session: site.sess.Name(), Command: "ToggleZoom"}, "pane_zoom_failed")
-			return herr
-		}
-		switch {
-		case want && zoomed != site.win.ID:
-			// tuios zooms one pane a workspace, so this also ends the
-			// zoom of another pane there.
-			herr = zoom()
-		case !want && zoomed == site.win.ID:
-			herr = zoom()
-		case !want:
-			// The zoom is on another pane. It is ended from that pane, and
-			// the focus comes back.
-			if _, herr = d.herdrFocusPane(cs, herdrPaneID(site.sess.ID, zoomed)); herr == nil {
-				if herr = zoom(); herr == nil {
-					_, herr = d.herdrFocusPane(cs, site.pane.PaneID)
-				}
+	if res.Reason != "" {
+		want = tabZoomed
+		if res.FocusChanged {
+			if _, herr := d.herdrFocusPane(cs, site.pane.PaneID); herr != nil {
+				return nil, herr
 			}
 		}
-		if herr != nil {
+	} else {
+		arg := "off"
+		if want {
+			arg = "on"
+		}
+		if herr := d.herdrRouteClient(site.sess, "zoom_window", "pane_zoom_failed", site.win.ID, arg); herr != nil {
 			return nil, herr
 		}
 		res.ZoomChanged = true
-		// The client reports the zoom in its next state push. The answer
-		// waits a moment for it, so it says what the screen shows.
-		for deadline := time.Now().Add(routedVerbTimeout); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-			if after, herr := d.herdrSiteOf(cs, site.pane.PaneID); herr == nil && after.layout.Zoomed == want {
-				break
-			}
-		}
+	}
+	// The client pushes its state before it answers, but a push from an
+	// earlier change can still be on its way. The answer waits, bounded, for
+	// the state that shows the zoom where it was asked for.
+	done := func(st *SessionState) bool {
+		z := herdrZoomedIn(st, site.win.Workspace)
+		return st.FocusedWindowID == site.win.ID && (want && z == site.win.ID || !want && z == "")
+	}
+	for deadline := time.Now().Add(routedVerbTimeout); !done(site.sess.GetState()) && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
 	}
 	if after, herr := d.herdrSiteOf(cs, site.pane.PaneID); herr == nil {
 		site = after
@@ -454,6 +449,16 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	res.Changed = res.ZoomChanged || res.FocusChanged
 	res.Zoomed, res.FocusedPaneID, res.Layout = site.layout.Zoomed, site.layout.FocusedPaneID, site.layout
 	return &herdrResult{Type: "pane_zoom", Zoom: res}, nil
+}
+
+// herdrZoomedIn is the window zoomed on workspace ws, "" for none.
+func herdrZoomedIn(st *SessionState, ws int) string {
+	for i := range st.Windows {
+		if w := &st.Windows[i]; w.Workspace == ws && w.Zoomed && !herdrScratch(w) {
+			return w.ID
+		}
+	}
+	return ""
 }
 
 // herdrWorkspaceFocus shows a session on the client the caller is shown
@@ -564,9 +569,14 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 		return nil, herdrErr("agent_pane_busy", "agent target pane "+paneID+" is not an available shell")
 	}
 	argv := append([]string{command}, in.Args...)
+	shell := herdrPaneShell(pty.ShellPID())
 	quoted := make([]string, len(argv))
 	for i, a := range argv {
-		quoted[i] = herdrShellQuote(a)
+		q, ok := herdrShellQuote(shell, a)
+		if !ok {
+			return nil, herdrErr("invalid_agent_argument", "agent arguments cannot be encoded safely for the target shell "+echoName(shell)+". Pass plain arguments, or start the agent with tuios start-agent")
+		}
+		quoted[i] = q
 	}
 	// The name goes first, so the pane is found by it as soon as the agent
 	// is. It is part of starting the agent, which the caller was admitted
@@ -595,13 +605,44 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 	return &herdrResult{Type: "agent_started", Agent: &info, Argv: argv}, nil
 }
 
-// herdrShellQuote quotes one word for a POSIX shell, and for fish, unless it
-// needs none.
-func herdrShellQuote(s string) string {
-	if s != "" && !strings.ContainsFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || slices.Contains([]rune("-_./:=+@%,"), r))
-	}) {
-		return s
+// herdrPaneShell is the name of the shell a pane runs: its process name,
+// without the "-" of a login shell. "" when it cannot be read.
+func herdrPaneShell(pid int) string {
+	if pid <= 0 {
+		return ""
 	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	info := readProcessInfo(pid)
+	name := info.comm
+	if len(info.argv) > 0 {
+		name = filepath.Base(info.argv[0])
+	}
+	return strings.TrimPrefix(name, "-")
+}
+
+// herdrPlainWord reports whether s needs no quoting in any shell tuios
+// types into: letters, digits and -_./:+@, and not a leading = (zsh
+// expands =cmd to the path of cmd). A % is quoted, as fish expands %self.
+func herdrPlainWord(s string) bool {
+	return s != "" && s[0] != '=' && !strings.ContainsFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=+@,", r))
+	})
+}
+
+// herdrShellQuote quotes one word for the shell named, so the shell reads it
+// back as the same single word. A POSIX shell (sh, bash, zsh and the rest)
+// takes everything inside single quotes as it is, and a quote is closed,
+// escaped and opened again. fish reads a backslash and a quote as escapes inside single
+// quotes, so both are escaped. Any other shell gets plain words only: ok is
+// false for a word that would need quoting there.
+func herdrShellQuote(shell, s string) (string, bool) {
+	if herdrPlainWord(s) {
+		return s, true
+	}
+	switch shell {
+	case "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "yash", "posh":
+		return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'", true
+	case "fish":
+		return "'" + strings.NewReplacer(`\`, `\\`, "'", `\'`).Replace(s) + "'", true
+	}
+	return "", false
 }

@@ -3,7 +3,9 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -249,6 +251,9 @@ step neighbor "$H" pane neighbor --pane "$NEW" --direction right
 		t.Fatalf("the new pane's right neighbour is %v, want the caller %s", got, callerID)
 	}
 	xs, focused, _ := herdrLayoutOf(t, base, callerID)
+	if len(xs) != 3 {
+		t.Fatalf("the tab holds %d panes after one split, want 3: %v", len(xs), xs)
+	}
 	if xs[newID] >= xs[callerID] || focused != newID {
 		t.Fatalf("after the swap the new pane is at x %v and the caller at %v, focus on %s; want the new pane left of the caller, focused", xs[newID], xs[callerID], focused)
 	}
@@ -298,10 +303,7 @@ func TestHerdrFrontVimNavigation(t *testing.T) {
 	steps := runHerdrSteps(t, base, "nav", "vim", `
 step proc "$H" pane process-info --current
 step edges "$H" pane edges --current
-step zoomon "$H" pane zoom --on
-step zoomoff "$H" pane zoom "$HERDR_PANE_ID" --off
-step focus "$H" pane focus --direction left --pane "$HERDR_PANE_ID"
-step edge "$H" pane focus --direction right --pane "$HERDR_PANE_ID"
+step zoomon "$H" pane zoom "$HERDR_PANE_ID" --on
 `)
 	steps["proc"].ok(t, "pane process-info")
 	if !strings.Contains(steps["proc"].out, `"pane_id":"`+navID+`"`) {
@@ -313,9 +315,34 @@ step edge "$H" pane focus --direction right --pane "$HERDR_PANE_ID"
 		t.Fatalf("pane edges for the right pane: %s", steps["edges"].out)
 	}
 	steps["zoomon"].ok(t, "pane zoom --on")
-	if z := steps["zoomon"].json(t, "pane zoom --on"); dig(z, "result", "zoom", "zoomed") != true || dig(z, "result", "zoom", "zoom_changed") != true {
+	if z := steps["zoomon"].json(t, "pane zoom --on"); dig(z, "result", "zoom", "zoomed") != true || dig(z, "result", "zoom", "zoom_changed") != true || dig(z, "result", "zoom", "focused_pane_id") != navID {
 		t.Fatalf("pane zoom --on: %s", steps["zoomon"].out)
 	}
+	// The pane that asked is the one zoomed: the screen draws one pane, and
+	// its bottom border carries nav's title. The pane focused before the call was the other one.
+	zoomedOnNav := func(s tuitest.Screen) bool {
+		text := s.Text()
+		if strings.Count(text, "╰") != 1 {
+			return false
+		}
+		for line := range strings.SplitSeq(text, "\n") {
+			if strings.Contains(line, "╰") {
+				return strings.Contains(line, " nav ")
+			}
+		}
+		return false
+	}
+	if err := term.WaitFor(zoomedOnNav, uiTimeout); err != nil {
+		t.Fatalf("pane zoom --on from nav did not zoom nav: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "herdr-front-vim-zoomed")
+
+	more := runHerdrSteps(t, base, "nav", "vim2", `
+step zoomoff "$H" pane zoom "$HERDR_PANE_ID" --off
+step focus "$H" pane focus --direction left --pane "$HERDR_PANE_ID"
+step edge "$H" pane focus --direction right --pane "$HERDR_PANE_ID"
+`)
+	maps.Copy(steps, more)
 	steps["zoomoff"].ok(t, "pane zoom --off")
 	if z := steps["zoomoff"].json(t, "pane zoom --off"); dig(z, "result", "zoom", "zoomed") != false {
 		t.Fatalf("pane zoom --off: %s", steps["zoomoff"].out)
@@ -351,6 +378,25 @@ func TestHerdrFrontHoldsThePaneToItsGrants(t *testing.T) {
 	ids := crushPanes(t, base, "held")
 	heldID := herdrPaneByLabel(t, base, "held")["pane_id"].(string)
 	before, focusBefore, _ := herdrLayoutOf(t, base, heldID)
+	otherID := ""
+	for id := range before {
+		if id != heldID {
+			otherID = id
+		}
+	}
+	// The other pane runs a program whose arguments stand for a secret.
+	typeIn(t, base, windowPrefix(otherID), "sleep 7654321")
+	waitForProcInfo := func() map[string]any {
+		for deadline := time.Now().Add(uiTimeout); ; time.Sleep(100 * time.Millisecond) {
+			r := herdrCall(t, base, "pane.process_info", map[string]any{"pane_id": otherID})
+			if b, _ := json.Marshal(r); strings.Contains(string(b), "7654321") || time.Now().After(deadline) {
+				return r
+			}
+		}
+	}
+	if b, _ := json.Marshal(waitForProcInfo()); !strings.Contains(string(b), `"cmdline":"sleep 7654321"`) {
+		t.Fatalf("the person does not see the other pane's command line: %s", b)
+	}
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", crushSession, "-w", ids["held"], "--grants", "read"); err != nil {
 		t.Fatalf("set-pane-grants: %v\n%s", err, out)
 	}
@@ -358,6 +404,8 @@ func TestHerdrFrontHoldsThePaneToItsGrants(t *testing.T) {
 	steps := runHerdrSteps(t, base, "held", "grants", `
 step neighbor "$H" pane neighbor --pane "$HERDR_PANE_ID" --direction left
 step edges "$H" pane edges --current
+step procother "$H" pane process-info --pane `+otherID+`
+step procown "$H" pane process-info --pane "$HERDR_PANE_ID"
 step split "$H" pane split --pane "$HERDR_PANE_ID" --direction right --focus
 step swap "$H" pane swap --pane "$HERDR_PANE_ID" --direction left
 step focus "$H" pane focus --direction left --pane "$HERDR_PANE_ID"
@@ -369,6 +417,16 @@ step zoom "$H" pane zoom --on --pane "$HERDR_PANE_ID"
 		t.Fatalf("pane neighbor from a read-only pane found no neighbour:\n%s", steps["neighbor"].out)
 	}
 	steps["edges"].ok(t, "pane edges")
+	// A read-only pane sees another pane's processes by pid and name, and
+	// not their arguments or directories. Its own pane it sees whole.
+	steps["procother"].ok(t, "pane process-info of another pane")
+	if o := steps["procother"].out; strings.Contains(o, "7654321") || strings.Contains(o, `"cwd"`) || !strings.Contains(o, `"name":"sleep"`) {
+		t.Errorf("pane process-info of another pane from a read-only pane: %s", o)
+	}
+	steps["procown"].ok(t, "pane process-info of its own pane")
+	if !strings.Contains(steps["procown"].out, "steps-grants.sh") {
+		t.Errorf("pane process-info of its own pane lacks its command line: %s", steps["procown"].out)
+	}
 	for _, name := range []string{"split", "swap", "focus", "zoom"} {
 		s := steps[name]
 		var resp map[string]any
@@ -410,6 +468,8 @@ func TestHerdrFrontStartsAnAgentAndShowsAWorkspace(t *testing.T) {
 
 	steps := runHerdrSteps(t, base, "bridge", "bridge", `
 step wslist "$H" workspace list
+step badkind "$H" agent start nobody --kind nope --pane `+ids["target"]+`
+step badopt "$H" --foo
 step start "$H" agent start helper --kind claude --pane `+ids["target"]+` --timeout 20000 -- --model test
 step get "$H" agent get helper
 step create "$H" workspace create --label phone-ws
@@ -417,6 +477,14 @@ WS=$(sed -n 's/.*"workspace_id":"\([^"]*\)".*/\1/p' "$D/create.out" | head -1)
 step focus "$H" workspace focus "$WS"
 `)
 	steps["wslist"].ok(t, "workspace list")
+	// herdr refuses an agent kind it does not know, and an option it does
+	// not have, as usage errors: exit 2, the message on stderr.
+	if b := steps["badkind"]; b.code != 2 || strings.TrimSpace(b.err) != "unsupported interactive agent kind: nope" {
+		t.Errorf("agent start --kind nope: exit %d, stderr %q", b.code, b.err)
+	}
+	if b := steps["badopt"]; b.code != 2 || !strings.HasPrefix(b.err, "unknown option: --foo") {
+		t.Errorf("herdr --foo: exit %d, stderr %q", b.code, b.err)
+	}
 	steps["start"].ok(t, "agent start")
 	start := steps["start"].json(t, "agent start")
 	if dig(start, "result", "type") != "agent_started" || dig(start, "result", "agent", "agent_status") != "idle" {
@@ -442,4 +510,96 @@ step focus "$H" workspace focus "$WS"
 	}
 	saveFrame(t, term, "herdr-front-bridge")
 	alive(t, term, "after the bridge sequence")
+}
+
+// shq quotes s for the POSIX sh the step scripts run in.
+func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// TestHerdrFrontAgentStartQuotesForTheShell starts an agent through
+// "$HERDR_BIN_PATH" agent start in a sh pane and in a fish pane, with
+// arguments built to break out of a shell line: quotes, backslashes, command
+// substitution in both shells' forms, globs, braces and an argument that ends
+// in a backslash. The agent, a stand-in named claude, writes the arguments it
+// got to a file. Each must arrive as it was sent, one word each, and none of
+// the touch commands in them may run.
+//
+// Negative control: with herdrShellQuote quoting fish the POSIX way, the
+// fish pane runs the touch in the first argument and the arguments arrive
+// changed.
+func TestHerdrFrontAgentStartQuotesForTheShell(t *testing.T) {
+	fish, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("fish is not installed")
+	}
+	term, base := herdrFrontClient(t)
+	ids := crushPanes(t, base, "bridge", "shpane")
+	if out, err := tuiosCLI(t, base, "new-window", "fishpane", "-s", crushSession, "--no-focus", "--", fish, "--no-config"); err != nil {
+		t.Fatalf("new-window fish: %v\n%s", err, out)
+	}
+	// fish sets its title to its directory, so the pane is found by the
+	// name it was given.
+	out, _ := tuiosCLI(t, base, "list-windows", "--json", "-s", crushSession)
+	var listing struct {
+		Windows []struct {
+			ID         string `json:"window_id"`
+			CustomName string `json:"custom_name"`
+		} `json:"windows"`
+	}
+	_ = json.Unmarshal([]byte(out), &listing)
+	for _, w := range listing.Windows {
+		if w.CustomName == "fishpane" {
+			ids["fishpane"] = w.ID
+		}
+	}
+	if ids["fishpane"] == "" {
+		t.Fatalf("no fishpane window:\n%s", out)
+	}
+	stubs := filepath.Join(base, "stubs")
+	if err := os.MkdirAll(stubs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$ARGS_OUT\"\necho STUB-ARGS-WRITTEN\n\"$HERDR_BIN_PATH\" pane report-agent \"$HERDR_PANE_ID\" --source stub --agent claude --state idle --seq 1\nsleep 300\n"
+	if err := os.WriteFile(filepath.Join(stubs, "claude"), []byte(stub), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pwned := filepath.Join(base, "PWNED")
+	corpus := []string{
+		`x\'; touch ` + pwned + `; #`,
+		`a'b`,
+		`$(touch ` + pwned + `2)`,
+		"`touch " + pwned + "3`",
+		`(touch ` + pwned + `4)`,
+		`;touch ` + pwned + `5`,
+		`"dq" and spaces`,
+		`*`, `~`, `{a,b}`, `\\`, `=ls`, `%self`, `$HOME`, `-n`, ``,
+		`back\`,
+	}
+	typeIn(t, base, "shpane", "PATH="+stubs+":$PATH; export PATH; ARGS_OUT="+filepath.Join(base, "args-sh")+"; export ARGS_OUT; echo SH-READY")
+	waitJoined(t, base, "shpane", "SH-READY")
+	typeIn(t, base, "fishpane", "set -gx PATH "+stubs+" $PATH; set -gx ARGS_OUT "+filepath.Join(base, "args-fish")+"; echo FISH-READY")
+	waitJoined(t, base, "fishpane", "FISH-READY")
+
+	var args []string
+	for _, a := range corpus {
+		args = append(args, shq(a))
+	}
+	all := strings.Join(args, " ")
+	steps := runHerdrSteps(t, base, "bridge", "quote", `
+step sh "$H" agent start helper-sh --kind claude --pane `+ids["shpane"]+` --timeout 20000 -- `+all+`
+step fish "$H" agent start helper-fish --kind claude --pane `+ids["fishpane"]+` --timeout 20000 -- `+all+`
+`)
+	want := strings.Join(corpus, "\n") + "\n"
+	for _, shell := range []string{"sh", "fish"} {
+		steps[shell].ok(t, "agent start in the "+shell+" pane")
+		got, _ := os.ReadFile(filepath.Join(base, "args-"+shell))
+		if string(got) != want {
+			t.Errorf("the agent in the %s pane got the arguments\n%q\nwant\n%q", shell, got, want)
+		}
+	}
+	matches, _ := filepath.Glob(pwned + "*")
+	if len(matches) > 0 {
+		t.Fatalf("an argument ran a command: %v", matches)
+	}
+	saveFrame(t, term, "herdr-front-agent-start-quoting")
+	alive(t, term, "after the hostile arguments")
 }

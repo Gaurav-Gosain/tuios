@@ -80,6 +80,10 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	}
 	group, rest := args[0], args[1:]
 	if strings.HasPrefix(group, "-") {
+		name, _, _ := strings.Cut(group, "=")
+		if !contains(launchOptions, name) {
+			return nil, usage("unknown option: " + group + "\nrun 'herdr --help' for usage")
+		}
 		return local("cli", group+" is a herdr launch option. tuios's herdr front answers herdr's socket commands only"), nil
 	}
 	parse, ok := groups[group]
@@ -108,6 +112,10 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	}
 	return parse(rest[0], rest[1:], getenv, cwd)
 }
+
+// launchOptions are herdr's options for its own app and server, which the
+// front does not run.
+var launchOptions = []string{"--session", "--machine", "--remote", "--remote-keybindings", "--handoff", "--default-config", "--skill"}
 
 // local is a command herdr runs on its own machine, which tuios answers with
 // herdr's error shape and code unsupported.

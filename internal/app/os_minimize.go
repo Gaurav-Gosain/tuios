@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -675,4 +676,46 @@ func (m *OS) HasMinimizedWindows() bool {
 		}
 	}
 	return false
+}
+
+// ZoomWindowByID focuses the pane with id and sets the zoom of its workspace,
+// on or off. It is herdr's pane.zoom, which the daemon routes here with the
+// pane named: a toggle sent after a focus could reach this client before the
+// focus did, and zoom the pane that had the focus before.
+func (m *OS) ZoomWindowByID(id string, on bool) error {
+	idx := -1
+	for i, w := range m.Windows {
+		if w != nil && w.ID == id {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("no pane %s to zoom", id)
+	}
+	if m.Windows[idx].Workspace != m.CurrentWorkspace {
+		m.SwitchToWorkspace(m.Windows[idx].Workspace)
+	}
+	target := m.Windows[idx]
+	if z := m.zoomedWindow(); z != nil && z != target && !on {
+		// The zoom is on another pane of the workspace. It is ended from
+		// that pane.
+		for i, w := range m.Windows {
+			if w == z {
+				m.FocusWindow(i)
+			}
+		}
+		m.ToggleZoom()
+	}
+	for i, w := range m.Windows {
+		if w == target {
+			m.FocusWindow(i)
+		}
+	}
+	if target.Zoomed != on {
+		m.ToggleZoom()
+	}
+	if target.Zoomed != on {
+		return fmt.Errorf("the pane could not be zoomed %v", map[bool]string{true: "on", false: "off"}[on])
+	}
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/google/uuid"
@@ -491,14 +492,28 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 		}
 	}
 
-	before := windowIDSet(sess.GetState())
+	pre := sess.GetState()
+	before := windowIDSet(pre)
+	target := pre.FocusedWindowID
 	if verr := d.routeTape(sess, "Split", []string{p.Direction}); verr != nil {
 		return nil, verr
 	}
 
 	// The new pane's id is the whole point of the call: without it the caller
-	// has to diff two list-windows and guess which one it just made.
-	created := newWindowID(before, sess.GetState())
+	// has to diff two list-windows and guess which one it just made. The
+	// client answers once the split is made, and its push of the tiled
+	// rectangles can come after: a caller that reads the layout straight
+	// after the answer (herdr's pane swap) read the old one. So the answer
+	// waits, bounded, until the state holds the new pane beside the one it
+	// was cut from.
+	created := ""
+	for deadline := time.Now().Add(routedVerbTimeout); ; time.Sleep(20 * time.Millisecond) {
+		st := sess.GetState()
+		created = newWindowID(before, st)
+		if created != "" && splitSettled(st, target, created) || time.Now().After(deadline) {
+			break
+		}
+	}
 	out := map[string]any{
 		"type":      "window_split",
 		"direction": p.Direction,
@@ -633,3 +648,27 @@ func (d *Daemon) routeTape(sess *Session, command string, args []string) *verbEr
 
 // hasTUIClient reports whether a renderer is attached to the session.
 func (d *Daemon) hasTUIClient(sess *Session) bool { return d.findTUIClient(sess.ID) != nil }
+
+// splitSettled reports whether the state shows the new pane and the pane it
+// was cut from side by side: both with a size, and overlapping by no more
+// than the one shared border cell a layout with shared borders gives them.
+func splitSettled(st *SessionState, from, created string) bool {
+	var a, b *WindowState
+	for i := range st.Windows {
+		switch st.Windows[i].ID {
+		case from:
+			a = &st.Windows[i]
+		case created:
+			b = &st.Windows[i]
+		}
+	}
+	if b == nil || b.Width <= 0 || b.Height <= 0 {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	overX := min(a.X+a.Width, b.X+b.Width) - max(a.X, b.X)
+	overY := min(a.Y+a.Height, b.Y+b.Height) - max(a.Y, b.Y)
+	return a.Width > 0 && a.Height > 0 && (overX <= 1 || overY <= 1)
+}

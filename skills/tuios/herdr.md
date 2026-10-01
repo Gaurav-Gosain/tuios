@@ -12,7 +12,8 @@ tuios pane, because every pane has herdr's environment:
 | `HERDR_BIN_PATH` | a link named `herdr` to tuios, which answers herdr's command line |
 
 A herdr workspace is a tuios session, a herdr tab is a tuios workspace, and a
-herdr pane is a tuios window.
+herdr pane is a tuios window. tuios sets `HERDR_TAB_ID` when the pane's shell
+starts. A pane moved to another workspace keeps the id it started with.
 
 ## The command line
 
@@ -32,8 +33,8 @@ the usage on stderr and exits 2. `pane send-text`, `pane send-keys`, `pane
 run` and the report commands print nothing when they succeed.
 
 It answers `pane`, `tab`, `workspace`, `agent`, `worktree`,
-`notification show`, `api snapshot` and `server reload-config`. A method that
-tuios does not answer, such as `pane.resize` or `pane.move`, fails with code
+`notification show` and `api snapshot`. A method that tuios does not answer,
+such as `pane.resize`, `pane.move` or `server reload-config`, fails with code
 `unsupported`. A command that acts on herdr's own machine (`status`,
 `session`, `plugin`, `server stop` and the rest) fails with code
 `unsupported` and does nothing.
@@ -44,7 +45,8 @@ Each call holds your pane's grants, as the tuios verb that does the same work
 does:
 
 - A read (`pane list`, `pane get`, `pane read`, `pane neighbor`, `pane edges`,
-  `pane process-info`) needs `read`.
+  `pane process-info`) needs `read`. `pane process-info` gives another pane's
+  arguments and directories only with `write` on its session or `admin`.
 - Typing (`pane send-text`, `pane send-keys`, `pane run`) needs `write`, and
   `respond` to type into a pane that waits on a prompt.
 - A split, close, rename, focus, swap or zoom, and `workspace focus`, need
