@@ -263,10 +263,6 @@ func (m *OS) PointerToLayout(x, y int) (int, int, bool) {
 // screen. internal/input sets it around each mouse event.
 func (m *OS) SetPointerInLayout(on bool) { m.pointerInLayout = on }
 
-// PointerInLayout reports whether the mouse event being handled is in the
-// layout frame.
-func (m *OS) PointerInLayout() bool { return m.pointerInLayout }
-
 // screenPoint maps a pointer position back to the screen when the event
 // being handled was mapped to the layout frame, so a chrome hit test is
 // always asked in screen positions.
@@ -276,9 +272,6 @@ func (m *OS) ScreenPoint(x, y int) (int, int) {
 	}
 	return m.sessionView.toScreen(x, y)
 }
-
-// PaneViewOn reports whether the last frame drew a view of a larger session.
-func (m *OS) PaneViewOn() bool { return m.sessionView.on }
 
 // MapPointer maps a mouse event to the layout frame when it belongs to the
 // panes of a cropped view, and returns the event to handle. A press decides

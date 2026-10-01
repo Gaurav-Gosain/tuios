@@ -16,7 +16,7 @@ import (
 // the eye. Every reference app does it (Textual's palette, opencode, Posting,
 // Elia), and it is the cheapest depth cue a terminal has.
 //
-// Where it runs. composeLayers draws the layers in z order, and the scrim is
+// Where it runs. composeLayersIn draws the layers in z order, and the scrim is
 // applied to the canvas once, immediately before the first modal overlay's
 // layer is drawn. Everything under that layer is darkened (panes, borders, the
 // rail, the dock) and nothing the modal draws is, because it has not been drawn
