@@ -1,6 +1,8 @@
 package vt
 
 import (
+	"sort"
+
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -41,6 +43,12 @@ type reflowScratch struct {
 	block, spare []uv.Cell
 	// blank is a read-only blank row for the rows the screen never wrote.
 	blank uv.Line
+	// rowOff holds, for each laid out row, the column of its line the row
+	// starts at, so a position is found by a search instead of a walk.
+	rowOff []int
+	// tails holds, for each laid out row of a frozen prompt, the cells past
+	// the width.
+	tails []uv.Line
 	// cnt is the scratch for counting the rows of history lines a taller
 	// screen takes back.
 	cnt *reflowScratch
@@ -50,6 +58,9 @@ type reflowScratch struct {
 type reflowRow struct {
 	cells uv.Line
 	flags rowFlag
+	// frozen marks a row of an open prompt: a line of its own, laid out on
+	// one row, with what does not fit kept as the row's tail.
+	frozen bool
 }
 
 // reflowPoint is a position a reflow carries across: an OSC 133 mark. abs is
@@ -70,6 +81,12 @@ type logicalLine struct {
 	// keep is the number of columns the line must keep however its text
 	// ends: the cell the cursor stands on has to exist, even past the text.
 	keep int
+	// frozen marks a row of an open prompt (see freezePrompt).
+	frozen bool
+	// carry holds the wrap flags of the line's last row when it carries on
+	// into the next row although the two are laid out apart, because one
+	// of them is frozen. A padding column the row ends in stays, flagged.
+	carry rowFlag
 }
 
 // reflowSource is what a reflow takes in: the lines, and for each row it read
@@ -125,7 +142,13 @@ func joinRows(rows []reflowRow, sc *reflowScratch) reflowSource {
 		src.rowLine[i] = len(src.lines)
 		src.rowStart[i] = cur.cols
 		cells := r.cells
+		cur.frozen = r.frozen
 		wrapped := r.flags&rowWrapped != 0 && i+1 < len(rows)
+		if wrapped && (r.frozen || rows[i+1].frozen) {
+			// A frozen row is laid out on its own, but the text still
+			// carries on across it: the row keeps its wrap flag.
+			wrapped, cur.carry = false, r.flags&(rowWrapped|rowPadded)
+		}
 		if wrapped && r.flags&rowPadded != 0 && len(cells) > 0 &&
 			isBlankCell(&cells[len(cells)-1]) && startsWide(rows[i+1].cells) {
 			cells = cells[:len(cells)-1]
@@ -142,7 +165,7 @@ func joinRows(rows []reflowRow, sc *reflowScratch) reflowSource {
 			continue
 		}
 		cur.segs = all[first:len(all):len(all)]
-		for len(cur.segs) > 0 {
+		for cur.carry == 0 && len(cur.segs) > 0 {
 			seg := cur.segs[len(cur.segs)-1]
 			for len(seg) > 0 && isBlankCell(&seg[len(seg)-1]) {
 				seg = seg[:len(seg)-1]
@@ -202,6 +225,9 @@ func (l *logicalLine) walk(width int, fn func(c *uv.Cell, off, row, col int, ear
 			}
 			w := min(cellCols(c), width)
 			early := false
+			if l.frozen && col+w > width {
+				return row, col // the rest is the row's tail
+			}
 			if col+w > width {
 				early = col < width
 				row++
@@ -220,6 +246,9 @@ func (l *logicalLine) walk(width int, fn func(c *uv.Cell, off, row, col int, ear
 // rows is the number of rows the line takes at width, counting the rows
 // past the text that keep has to hold.
 func (l *logicalLine) rows(width int) int {
+	if l.frozen {
+		return 1
+	}
 	endRow, endCol := l.walk(width, nil)
 	n := endRow + 1
 	if l.keep > l.cols {
@@ -235,6 +264,8 @@ type reflowPlan struct {
 	lineRow []int // the first row of each line, then the total
 	cells   []uv.Cell
 	flags   []rowFlag
+	rowOff  []int     // the column of its line each row starts at
+	tails   []uv.Line // a frozen row's cells past the width, or nil
 }
 
 // newPlan lays out src at width, into one block of cells for all its rows.
@@ -270,17 +301,27 @@ func newPlan(src reflowSource, width int, sc *reflowScratch) reflowPlan {
 	}
 	if sc != nil {
 		sc.flags = grow(sc.flags, total)
-		p.flags = sc.flags
+		sc.rowOff = grow(sc.rowOff, total)
+		sc.tails = grow(sc.tails, total)
+		p.flags, p.rowOff, p.tails = sc.flags, sc.rowOff, sc.tails
 	} else {
 		p.flags = make([]rowFlag, total)
+		p.rowOff = make([]int, total)
+		p.tails = make([]uv.Line, total)
 	}
 	for i := range src.lines {
+		line := &src.lines[i]
 		base := p.lineRow[i]
 		for r := base; r < p.lineRow[i+1]-1; r++ {
 			p.flags[r] = rowWrapped
 		}
-		src.lines[i].walk(width, func(c *uv.Cell, _, row, col int, early bool) bool {
+		placed := 0
+		endRow, endCol := line.walk(width, func(c *uv.Cell, off, row, col int, early bool) bool {
 			r := base + row
+			placed++
+			if col == 0 {
+				p.rowOff[r] = off
+			}
 			if early {
 				// The row before stopped short of the edge, before a wide
 				// character that did not fit: its last column is padding.
@@ -293,8 +334,37 @@ func newPlan(src reflowSource, width int, sc *reflowScratch) reflowPlan {
 			p.row(r).Set(col, &cell)
 			return true
 		})
+		// Rows past the text that keep holds count on from its end.
+		for r := base + endRow + 1; r < p.lineRow[i+1]; r++ {
+			p.rowOff[r] = line.cols + (width - endCol) + (r-base-endRow-1)*width
+		}
+		if line.frozen {
+			p.tails[base] = frozenTail(line, placed)
+		}
+		if line.carry != 0 {
+			p.flags[p.lineRow[i+1]-1] |= line.carry
+		}
 	}
 	return p
+}
+
+// frozenTail copies the cells of a frozen line after the first placed
+// characters: what does not fit on its one row. It is a copy because the
+// cells it comes from are about to be reused.
+func frozenTail(line *logicalLine, placed int) uv.Line {
+	var tail uv.Line
+	n := 0
+	for _, seg := range line.segs {
+		for x := range seg {
+			if !isWideSpacer(&seg[x]) {
+				n++
+			}
+			if n > placed {
+				tail = append(tail, seg[x])
+			}
+		}
+	}
+	return tail
 }
 
 // row is laid out row r.
@@ -302,61 +372,42 @@ func (p *reflowPlan) row(r int) uv.Line { return p.cells[r*p.width : (r+1)*p.wid
 
 // locate is where source row row, column col went, as a laid out row and a
 // column. A column inside a wide character goes to that character. A column
-// past the text counts on from the end of it.
+// past the text counts on from the end of it. One past the last row the line
+// has stays on that row, at a column past its last one: a mark the shell
+// left after the text stays after it, even where the text fills the row, and
+// a saved cursor keeps how far past the text it was. A cursor cannot stand
+// there; the callers clamp as each needs.
+//
+// The row is found by a binary search over where each row starts, so a
+// reflow that carries many marks, or a remap over many placements, costs a
+// search each and not a walk of the line.
 func (p *reflowPlan) locate(row, col int) (int, int) {
 	l, at := p.src.offset(row, col)
 	if last := len(p.src.lines) - 1; l > last {
 		l, at = last, p.src.lines[last].cols
 	}
-	line := &p.src.lines[l]
-	width := p.width
-	fr, fc, found := 0, 0, false
-	endRow, endCol := line.walk(width, func(c *uv.Cell, off, r, cl int, _ bool) bool {
-		if at < off+cellCols(c) {
-			fr, fc, found = r, min(cl+max(at-off, 0), width-1), true
-			return false
-		}
-		return true
-	})
-	if !found {
-		q := endCol + at - line.cols
-		fr, fc = endRow+q/width, q%width
-	}
-	n := p.lineRow[l+1] - p.lineRow[l]
-	return p.lineRow[l] + min(max(fr, 0), n-1), fc
+	a, b := p.lineRow[l], p.lineRow[l+1]
+	r := a + sort.Search(b-a, func(i int) bool { return p.rowOff[a+i] > at }) - 1
+	r = max(r, a)
+	return r, max(at-p.rowOff[r], 0)
 }
 
-// freezePrompt keeps the rows from row start on out of the reflow: each
-// becomes a line of its own, cut at width, and the line above ends before it.
+// freezePrompt keeps rows start to end out of the reflow: each stays one row,
+// and keeps its wrap flag, so the text reads the same across it. What does
+// not fit the new width is kept as the row's tail (grid.tail), not cut, and
+// comes back when the row is laid out wider again, unless the guest writes
+// to the row first.
 //
-// Those rows are the prompt the shell is showing, and the shell repaints it
-// on SIGWINCH. It repaints by stepping up the number of rows the prompt took
-// at the old width, so a prompt that reflow made a row taller leaves its
-// first row behind, once per resize: fish's prompt fills the pane's width
-// exactly and loses a row to every narrowing. ghostty and kitty avoid this
-// the same way, through the shell's OSC 133 marks. Without the marks the
-// prompt reflows like any other text.
-func freezePrompt(rows []reflowRow, start, width int) {
-	if start >= len(rows) {
-		return
-	}
-	if start > 0 {
-		rows[start-1].flags = 0
-	} else {
-		start = 0
-	}
-	for i := start; i < len(rows); i++ {
-		rows[i].flags = 0
-		cells := rows[i].cells
-		if len(cells) <= width {
-			continue
-		}
-		cut := make(uv.Line, width)
-		copy(cut, cells[:width])
-		if last := &cut[width-1]; last.Width > 1 {
-			*last = uv.Cell{Content: " ", Width: 1, Style: last.Style}
-		}
-		rows[i].cells = cut
+// Those rows are a prompt the shell marked with OSC 133 and is still editing,
+// and the shell repaints it on SIGWINCH. It repaints by stepping up the
+// number of rows the prompt took at the old width, so a prompt that reflow
+// made a row taller leaves its first row behind, once per resize: fish's
+// prompt fills the pane's width exactly and loses a row to every narrowing.
+// Without the marks the prompt reflows like any other text.
+func freezePrompt(rows []reflowRow, start, end int) {
+	start, end = max(start, 0), min(end, len(rows)-1)
+	for i := start; i <= end; i++ {
+		rows[i].frozen = true
 	}
 }
 
@@ -368,7 +419,7 @@ func freezePrompt(rows []reflowRow, start, width int) {
 // case, and a window drag then costs what it did before reflow.
 func (s *Screen) fitsWithoutReflow(width, height int) bool {
 	h0 := s.buf.Height()
-	if s.cur.X >= width || s.saved.X >= width {
+	if s.cur.X >= width || s.saved.X >= width || s.buf.hasTail() {
 		return false
 	}
 	if n := s.scrollback.Len(); n > 0 {
@@ -464,18 +515,29 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 				}
 				cells = sc.blank // read only, shared by every unwritten row
 			}
+			if t := s.buf.rowTail(y); len(t) > 0 {
+				cells = append(cells[:len(cells):len(cells)], t...)
+			}
 			rows = append(rows, reflowRow{cells: cells, flags: s.buf.wrap[y]})
 		}
 		sc.rows = rows
+		curRow := n0 - from + s.cur.Y
 		if prompt >= 0 {
-			freezePrompt(rows, prompt-from, width)
+			// The prompt runs from its mark to the end of the line the
+			// cursor is on: the command being typed can carry on past it.
+			end := curRow
+			for end+1 < len(rows) && rows[end].flags&rowWrapped != 0 {
+				end++
+			}
+			freezePrompt(rows, prompt-from, end)
 		}
 		src := joinRows(rows, sc)
 		// The cell under the cursor has to exist after the reflow, even
 		// past the end of the text, where a shell's cursor stands after
 		// its prompt.
-		cl, cat := src.offset(n0-from+s.cur.Y, s.cur.X)
+		cl, cat := src.offset(curRow, s.cur.X)
 		src.lines[cl].keep = max(src.lines[cl].keep, cat+1)
+
 		// Lines past the cursor's that hold nothing are the unwritten
 		// bottom of the screen.
 		last := len(src.lines) - 1
@@ -535,6 +597,7 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	screenRow := n0 - from // the first screen row among the rows taken
 
 	cr, cc := p.locate(screenRow+s.cur.Y, s.cur.X)
+	cc = min(cc, width-1)
 	newPhantom := false
 	if phantom != nil && *phantom {
 		// The cursor in pending wrap stands on the character it drew, with
@@ -564,7 +627,7 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	for _, m := range marks {
 		if r := m.abs - from; m.abs >= from && r < taken {
 			nr, nc := p.locate(r, m.col)
-			m.abs, m.col = from+nr, nc
+			m.abs, m.col = from+nr, min(nc, width)
 		}
 	}
 	if wantRemap {
@@ -590,7 +653,13 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	// ring's trim callback, after the marks have moved.
 	sb.truncate(from)
 	for r := range top {
-		sb.PushLine(p.row(r))
+		cells := p.row(r)
+		if t := p.tails[r]; len(t) > 0 {
+			// History keeps a row at any width, so a frozen row going
+			// into it takes its tail back.
+			cells = append(cells[:len(cells):len(cells)], t...)
+		}
+		sb.PushLine(cells)
 		sb.markNewest(p.flags[r])
 	}
 
@@ -602,6 +671,9 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 		wrap:  grow(s.buf.wrap, height),
 		width: width,
 	}
+	if s.buf.tail != nil {
+		g.tail = grow(s.buf.tail, height)
+	}
 	for y := range height {
 		if top+y >= total {
 			break
@@ -611,13 +683,16 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 		for ext > 0 && isBlankCell(&cells[ext-1]) {
 			ext--
 		}
-		if ext > 0 {
+		if ext > 0 || len(p.tails[top+y]) > 0 {
 			// A full slice expression, so the grid row cannot grow into the
 			// next row of the plan's block.
 			g.rows[y] = cells[:len(cells):len(cells)]
 			g.ext[y] = ext
 		}
 		g.wrap[y] = p.flags[top+y]
+		if t := p.tails[top+y]; len(t) > 0 {
+			g.setTail(y, t)
+		}
 	}
 	// The last screen row cannot carry on into a row below the screen.
 	g.wrap[height-1] = 0
@@ -627,7 +702,17 @@ func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt in
 	sc.spare, sc.block = sc.block, p.cells
 
 	s.cur.X, s.cur.Y = cc, clamp(cr-top, 0, height-1)
-	s.saved.X, s.saved.Y = min(savC, width-1), clamp(savR-top, 0, height-1)
+	if savR < top {
+		// The saved cursor's text went into the history. It comes back to
+		// the top of the screen at its first column, rather than at a
+		// column of whatever row is there now, which the next reflow would
+		// otherwise have to keep room for.
+		savR, savC = top, 0
+	}
+	// The saved column is kept past the width when the text it followed
+	// fills the row: DECRC clamps it, and the next reflow finds the same
+	// place in the line from it.
+	s.saved.X, s.saved.Y = savC, clamp(savR-top, 0, height-1)
 	if phantom != nil {
 		*phantom = newPhantom
 	}

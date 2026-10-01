@@ -64,6 +64,40 @@ func (e *Emulator) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	return sb.LineWrapped(index), true
 }
 
+// RowPadded reports whether row y of the active screen wrapped a column
+// early before a wide character. See Terminal.RowPadded.
+func (e *Emulator) RowPadded(y int) bool {
+	buf := e.scr.buf
+	return y >= 0 && y < len(buf.wrap) && buf.wrap[y]&rowPadded != 0
+}
+
+// ScrollbackPadded is RowPadded for a history line, oldest first.
+func (e *Emulator) ScrollbackPadded(index int) bool {
+	sb := e.scrs[0].Scrollback()
+	return sb != nil && sb.lineFlags(index)&rowPadded != 0
+}
+
+// RestorePads sets the padding flags a snapshot carries. See
+// Terminal.RestorePads.
+func (e *Emulator) RestorePads(screen, history []bool) {
+	buf := e.scr.buf
+	for y := range min(buf.Height(), len(screen)) {
+		if screen[y] && buf.wrap[y]&rowWrapped != 0 {
+			buf.wrap[y] |= rowPadded
+		}
+	}
+	sb := e.scrs[0].Scrollback()
+	if sb == nil || len(history) == 0 {
+		return
+	}
+	base := sb.Len() - len(history)
+	for i, p := range history {
+		if p && base+i >= 0 && sb.lineFlags(base+i)&rowWrapped != 0 {
+			sb.wraps[sb.slot(base+i)] |= rowPadded
+		}
+	}
+}
+
 // RestoreSoftWraps sets the soft-wrap flags a snapshot carries. See
 // Terminal.RestoreSoftWraps.
 func (e *Emulator) RestoreSoftWraps(screen, history []bool) {

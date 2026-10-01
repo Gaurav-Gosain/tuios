@@ -112,7 +112,9 @@ func (s *Screen) Resize(width int, height int) {
 	// and its DECRC.
 	s.cur.X = clamp(s.cur.X, 0, max(s.buf.Width()-1, 0))
 	s.cur.Y = clamp(s.cur.Y, 0, max(s.buf.Height()-1, 0))
-	s.saved.X = clamp(s.saved.X, 0, max(s.buf.Width()-1, 0))
+	// The saved column is left as it is: DECRC clamps it to the screen it
+	// lands on, and a later reflow reads it as a place in the line, which
+	// can be past the width when the text it followed fills the row.
 	s.saved.Y = clamp(s.saved.Y, 0, max(s.buf.Height()-1, 0))
 }
 
@@ -148,6 +150,9 @@ func (s *Screen) shrinkRows(height int) {
 		s.buf.rows = s.buf.rows[:y]
 		s.buf.ext = s.buf.ext[:y]
 		s.buf.wrap = s.buf.wrap[:y]
+		if s.buf.tail != nil {
+			s.buf.tail = s.buf.tail[:y]
+		}
 	}
 	if excess <= 0 {
 		return
@@ -164,6 +169,9 @@ func (s *Screen) shrinkRows(height int) {
 // rowHoldsText reports whether row y has any cell that is not a plain blank.
 // A cell blanked in a colour counts as text: the guest painted it.
 func (s *Screen) rowHoldsText(y int) bool {
+	if len(s.buf.rowTail(y)) > 0 {
+		return true
+	}
 	row := s.buf.rows[y]
 	for x := range row[:min(s.buf.ext[y], len(row))] {
 		if !isBlankCell(&row[x]) {
@@ -516,7 +524,7 @@ func (s *Screen) ScrollUp(n int) {
 		// and have to be copied out before DeleteLine overwrites them.
 		if save {
 			for i := 0; i < n && i < scroll.Dy(); i++ {
-				s.scrollback.PushLine(extractLine(s.buf, scroll.Min.Y+i, width))
+				s.scrollback.PushLine(s.buf.withTail(scroll.Min.Y+i, extractLine(s.buf, scroll.Min.Y+i, width)))
 				s.scrollback.markNewest(s.buf.wrap[scroll.Min.Y+i])
 			}
 		}
@@ -588,7 +596,11 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 			if row == nil {
 				s.scrollback.PushBlankLine(s.buf.Width())
 			} else {
-				s.scrollback.pushTrimmed(row, s.buf.ext[i])
+				if t := s.buf.rowTail(i); len(t) > 0 {
+					s.scrollback.PushLine(s.buf.withTail(i, row))
+				} else {
+					s.scrollback.pushTrimmed(row, s.buf.ext[i])
+				}
 			}
 			s.scrollback.markNewest(s.buf.wrap[i])
 		}

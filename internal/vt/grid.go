@@ -55,6 +55,13 @@ type grid struct {
 	// says the wrap left the last column blank because a wide character did
 	// not fit in it, so the blank is not text. A reflow drops that column.
 	wrap []rowFlag
+	// tail holds, for a row of a shell prompt that a reflow kept on one row
+	// (freezePrompt), the cells past the width. It is nil for every other
+	// row, and the whole slice is nil until a reflow first needs it. Any
+	// write to the row drops its tail: the shell has repainted it. A row that
+	// moves takes its tail with it, and one that goes into the history takes
+	// it there.
+	tail []uv.Line
 }
 
 // rowFlag is what a row records about where its text ends.
@@ -68,6 +75,49 @@ const (
 	// guest never wrote.
 	rowPadded
 )
+
+// rowTail returns row y's tail, or nil.
+func (g *grid) rowTail(y int) uv.Line {
+	if g.tail == nil || y < 0 || y >= len(g.tail) {
+		return nil
+	}
+	return g.tail[y]
+}
+
+// setTail gives row y the tail t.
+func (g *grid) setTail(y int, t uv.Line) {
+	if g.tail == nil {
+		g.tail = make([]uv.Line, len(g.rows))
+	}
+	g.tail[y] = t
+}
+
+// dropTail forgets row y's tail, because the row was written to.
+func (g *grid) dropTail(y int) {
+	if g.tail != nil && y >= 0 && y < len(g.tail) {
+		g.tail[y] = nil
+	}
+}
+
+// hasTail reports whether any row has a tail.
+func (g *grid) hasTail() bool {
+	for _, t := range g.tail {
+		if t != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// withTail is row y with its tail after it, for a reader that keeps a row
+// whole, such as the scrollback. Without a tail it is the row itself.
+func (g *grid) withTail(y int, row uv.Line) uv.Line {
+	t := g.rowTail(y)
+	if len(t) == 0 {
+		return row
+	}
+	return append(row[:len(row):len(row)], t...)
+}
 
 // gridBlank is the cell CellAt returns for a column of a row that has not
 // been written. It is shared by every grid and must never be written to:
@@ -123,6 +173,7 @@ func (g *grid) Row(y int) uv.Line {
 // row returns row y for writing, allocating it if it has not been written.
 // The caller may write any column, so the row's extent becomes its width.
 func (g *grid) row(y int) uv.Line {
+	g.dropTail(y)
 	g.ext[y] = g.width
 	if g.rows[y] == nil {
 		g.rows[y] = newBlankLine(g.width)
@@ -150,6 +201,7 @@ func (g *grid) SetCell(x, y int, c *uv.Cell) {
 	if y < 0 || y >= len(g.rows) {
 		return
 	}
+	g.dropTail(y)
 	if g.rows[y] == nil {
 		if isBlankFill(c) || x < 0 || x >= g.width {
 			return
@@ -189,16 +241,24 @@ func (g *grid) Resize(width, height int) {
 		// Rows are cut or padded, not reflowed, so a row that wrapped at
 		// the old width does not wrap at the new one.
 		clear(g.wrap)
+		g.tail = nil
 	}
 	if height > len(g.rows) {
 		g.ext = append(g.ext, make([]int, height-len(g.rows))...)
 		g.wrap = append(g.wrap, make([]rowFlag, height-len(g.rows))...)
+		if g.tail != nil {
+			g.tail = append(g.tail, make([]uv.Line, height-len(g.rows))...)
+		}
 		g.rows = append(g.rows, make([]uv.Line, height-len(g.rows))...)
 	} else if height < len(g.rows) {
 		clear(g.rows[height:])
 		g.rows = g.rows[:height]
 		g.ext = g.ext[:height]
 		g.wrap = g.wrap[:height]
+		if g.tail != nil {
+			clear(g.tail[height:])
+			g.tail = g.tail[:height]
+		}
 	}
 }
 
@@ -212,6 +272,7 @@ func (g *grid) Clear() {
 		g.ext[y] = 0
 	}
 	clear(g.wrap)
+	clear(g.tail)
 }
 
 // SoftWrapped reports whether row y carries on to row y+1 by autowrap.
@@ -223,7 +284,9 @@ func (g *grid) SoftWrapped(y int) bool {
 func (g *grid) setSoftWrapped(y int, wrapped bool) {
 	if y >= 0 && y < len(g.wrap) {
 		if wrapped {
-			g.wrap[y] |= rowWrapped
+			// A new wrap: a padding flag from what the row held before
+			// does not carry over.
+			g.wrap[y] = rowWrapped
 		} else {
 			g.wrap[y] = 0
 		}
@@ -261,6 +324,9 @@ func (g *grid) FillArea(c *uv.Cell, area uv.Rectangle) {
 		for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.wrap); y++ {
 			g.wrap[y] = 0
 		}
+	}
+	for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.tail); y++ {
+		g.tail[y] = nil
 	}
 	blank := isBlankFill(c)
 	if c != nil && c.Width > 1 {
@@ -320,6 +386,9 @@ func (g *grid) fullWidth(area uv.Rectangle) bool {
 // already.
 func (g *grid) blankRows(y, end int, c *uv.Cell) {
 	clear(g.wrap[y:end])
+	if g.tail != nil {
+		clear(g.tail[y:end])
+	}
 	if isBlankFill(c) {
 		for i := y; i < end; i++ {
 			row := g.rows[i]
@@ -453,8 +522,11 @@ func (g *grid) DeleteLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 // lets blankRows stop at the text they held.
 func (g *grid) rotateExt(y, end, mid int) {
 	rotateLeft(g.ext[y:end], mid-y)
-	// The wrap flags travel with their rows the same way.
+	// The wrap flags travel with their rows the same way, and so do tails.
 	rotateLeft(g.wrap[y:end], mid-y)
+	if g.tail != nil {
+		rotateLeft(g.tail[y:end], mid-y)
+	}
 }
 
 // rotateLeft moves s[k:] to the front of s and s[:k] to the back.
