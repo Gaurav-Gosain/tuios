@@ -395,12 +395,16 @@ the scroll region and the tab stops, which are the guest's. Both sides skip it.
 announced one. They differ only while a resize is still behind output in the
 stream, and a snapshot has to describe the grid it is serializing.
 
-## Known and not fixed
+`Window.ResizeVisual`, the drag path, leaves a streamed pane's emulator at the
+size the stream gave it, as `Window.Resize` does. The renderer clips or pads
+the grid to the pane while the drag runs, and the emulator changes size when
+the daemon's does, at the same byte. It used to resize the emulator at every
+motion step. With reflow, that laid the client's screen and history out through
+widths the daemon never had, and a drag that ended at the size it started at
+told the daemon nothing, so the two stayed apart. The cost is the look of the
+pane during a drag: its content does not rewrap until the drag ends.
 
-`Window.ResizeVisual` still resizes a streamed pane's emulator directly. It is
-the drag path: the PTY resize is deferred to the end of the drag, so ordering it
-against the stream would leave the grid at its pre-drag size for the whole drag.
-Output produced during a drag is laid out at a width the daemon never had.
+## Known and not fixed
 
 `primePaneFromDaemon` announces a pane's size and re-fetches the snapshot
 immediately, and its comment says the resize happens before the snapshot is taken
