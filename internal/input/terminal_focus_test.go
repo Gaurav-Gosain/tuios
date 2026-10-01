@@ -147,6 +147,23 @@ func TestEachAltArrowIsDisabledIndependently(t *testing.T) {
 	}
 }
 
+func TestNvimNavigatorDoesNotBypassVisualModeFocus(t *testing.T) {
+	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.WindowManagementMode)
+	o.Windows = append(o.Windows, &terminal.Window{
+		ID: "other", X: 90, Y: 0, Width: 60, Height: 24, Workspace: o.CurrentWorkspace,
+	})
+	active := true
+	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, State: &active})
+
+	o, _ = HandleKeyPress(altArrow("right"), o)
+	if got := focusedID(o); got != "other" {
+		t.Errorf("alt+right focused %q, want other pane", got)
+	}
+	if len(pty.got) != 0 {
+		t.Errorf("visual mode forwarded alt+right to nvim: %q", pty.got)
+	}
+}
+
 // TestUnboundAltArrowReachesTheShellUnchanged pins the exact bytes, so an
 // unbind hands the shell the same sequence it would see with no multiplexer in
 // the way rather than something merely non-empty. CSI 1;3 <final> is the xterm

@@ -79,6 +79,7 @@ func (m *OS) installPassthroughs(window *terminal.Window) {
 	m.setupReflowRemap(window)
 	m.setupClipboardPassthrough(window)
 	m.setupNotificationPassthrough(window)
+	m.setupNvimNavigation(window)
 	window.UnlockIO()
 }
 

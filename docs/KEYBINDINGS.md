@@ -82,6 +82,28 @@ With tiling off, `h` and `l` snap the focused window to the left or right half o
 
 In the scrolling layout, left and right move between columns. Up and down move between the windows in one column.
 
+## Neovim pane navigation
+
+The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)
+plugin lets the terminal-mode focus keys move through Neovim splits first. At a
+split edge, TUIOS moves to the adjacent pane instead. The plugin announces when
+it is active, so the same keys keep their normal TUIOS behaviour in shells and
+other programs.
+
+The plugin uses the private OSC 7777 messages below. They are consumed by
+TUIOS and never shown in pane output:
+
+```text
+OSC 7777 ; tuios-nvim-navigator ; state ; active BEL
+OSC 7777 ; tuios-nvim-navigator ; state ; inactive BEL
+OSC 7777 ; tuios-nvim-navigator ; focus ; <direction> BEL
+```
+
+`<direction>` is `left`, `down`, `up` or `right`. A custom Neovim integration
+may emit the same messages. TUIOS accepts focus requests only from the focused
+pane in terminal mode; window-management mode always keeps the focus keys for
+TUIOS itself.
+
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,

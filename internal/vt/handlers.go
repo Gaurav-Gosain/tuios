@@ -375,6 +375,10 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		return e.handleNotify777(data)
 	})
 
+	e.RegisterOscHandler(7777, func(data []byte) bool {
+		return e.handleTuiosNavigation(data)
+	})
+
 	// OSC 99: kitty desktop notification
 	e.RegisterOscHandler(99, func(data []byte) bool {
 		return e.handleNotify99(data)
