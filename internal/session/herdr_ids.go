@@ -144,18 +144,17 @@ func (d *Daemon) herdrFindPane(id string) (*Session, WindowState, *herdrIDError)
 }
 
 // herdrTabFor is the workspace a window's shell starts on, for its
-// HERDR_TAB_ID: the one it is being made on, else the one the window is on,
-// else the one showing. 0 for a scratch workspace, which is not a tab. The
-// state is read only when its lock is free at once: a shell can be started
-// while the state is being written, and HERDR_TAB_ID is not worth a wait.
+// HERDR_TAB_ID: spawnWS, the one it is being made on, else the one the window
+// is on, else the one showing. 0 for a scratch workspace, which is not a tab.
+// The state is read only when its lock is free at once: a shell can be
+// started while the state is being written, and HERDR_TAB_ID is not worth a
+// wait.
 //
 // The variable is fixed when the shell starts, as herdr's is. A window moved
 // to another workspace later keeps the id it started with.
-func (s *Session) herdrTabFor(windowID string) int {
-	ws := 0
-	if v, ok := s.herdrSpawnWS.Load(windowID); ok {
-		ws, _ = v.(int)
-	} else if s.stateMu.TryRLock() {
+func (s *Session) herdrTabFor(windowID string, spawnWS int) int {
+	ws := spawnWS
+	if ws == 0 && s.stateMu.TryRLock() {
 		if s.state != nil {
 			ws = s.state.CurrentWorkspace
 			for i := range s.state.Windows {

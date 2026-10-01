@@ -1002,10 +1002,6 @@ type Session struct {
 	discardHistory atomic.Bool
 
 	stateMu sync.RWMutex
-	// herdrSpawnWS is the workspace a window is being made on, keyed by
-	// window id, from just before its shell starts until the shell's
-	// environment is built. See herdrTabFor.
-	herdrSpawnWS sync.Map
 	// snapSeq is the last SnapshotSeq handed out.
 	snapSeq atomic.Uint64
 	// pushSeen is what every snapshot's PushSeen is copied from, guarded by
@@ -1534,7 +1530,7 @@ func (s *Session) forgetBroadcast() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, nil, "", nil, onExit, nil, nil, nil)
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, onExit: onExit})
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1543,21 +1539,41 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", &restoreSpec{}, onExit, nil, nil, nil)
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{}, onExit: onExit})
 }
 
 // restorePTYWithGrants is RestorePTY for a window that was saved with grants
 // of its own, which the new process holds from its first instruction.
 // history, when not nil, is the pane's saved history, which the new emulator
 // shows above the banner.
-func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", &restoreSpec{history: history}, onExit, nil, nil, grants)
+func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, workspace int, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history}, onExit: onExit, grants: grants, workspace: workspace})
 }
 
-// command, when non-empty, is an argv exec'd as the PTY's process in place of
+// ptySpawn is what createPTY starts a pane with, beside its size.
+type ptySpawn struct {
+	// windowID is the client-side window id, exported as TUIOS_WINDOW_ID.
+	windowID string
+	cwd      string
+	command  []string
+	// env is the caller's KEY=VALUE pairs. See createPTY.
+	env        []string
+	host       string
+	restored   *restoreSpec
+	onExit     func(ptyID string)
+	stdout     *os.File
+	extraFiles []*os.File
+	grants     *Grants
+	// workspace is the workspace the window is being made on, for the
+	// shell's HERDR_TAB_ID. 0 takes it from the state. See herdrTabFor.
+	workspace int
+}
+
+// createPTY starts a pane's process. sp.command, when non-empty, is an argv
+// exec'd as the PTY's process in place of
 // the shell. It is deliberately not persisted: a restored window respawns as a
 // shell, because silently rerunning a program the user ran once is not what
-// restoration promises. extraEnv, KEY=VALUE pairs, goes on top of the daemon's
+// restoration promises. sp.env, KEY=VALUE pairs, goes on top of the daemon's
 // environment and under the TUIOS_ variables; see buildEnvWith. It is not
 // persisted either, and a window on another machine ignores it.
 //
@@ -1571,13 +1587,13 @@ func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd s
 // pane is entered in the grant table before its process starts and leaves it
 // when the process exits, so the process is never placed in a pane the table
 // does not know. See pane_grants.go.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored *restoreSpec, onExit func(ptyID string), stdout *os.File, extraFiles []*os.File, grants *Grants) (*PTY, error) {
+func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// A window that was given grants and gets a new process with none named
 	// keeps what it was given, even when its last process has already gone
 	// and taken its entry in the grant table with it. Read before ptysMu is
 	// taken, so the two locks are never held together here.
-	if grants == nil && host == "" && windowID != "" {
-		grants = s.recordedGrants(windowID)
+	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
+		sp.grants = s.recordedGrants(sp.windowID)
 	}
 
 	s.ptysMu.Lock()
@@ -1586,12 +1602,12 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	if host == "" && windowID != "" && s.config != nil && s.config.grants != nil {
+	if sp.host == "" && sp.windowID != "" && s.config != nil && s.config.grants != nil {
 		table := s.config.grants
-		table.add(windowID, id, s.Name(), grants)
-		exit := onExit
-		onExit = func(ptyID string) {
-			table.remove(windowID, ptyID)
+		table.add(sp.windowID, id, s.Name(), sp.grants)
+		exit := sp.onExit
+		sp.onExit = func(ptyID string) {
+			table.remove(sp.windowID, ptyID)
 			if exit != nil {
 				exit(ptyID)
 			}
@@ -1599,7 +1615,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		// A spawn that fails leaves no process to exit.
 		defer func() {
 			if _, ok := s.ptys[id]; !ok {
-				table.remove(windowID, id)
+				table.remove(sp.windowID, id)
 			}
 		}()
 	}
@@ -1626,35 +1642,35 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		cmd         *exec.Cmd
 		err         error
 	)
-	if host != "" {
-		ptyInstance, err = s.openRemotePaneFor(windowID, host, width, height, cwd, command)
+	if sp.host != "" {
+		ptyInstance, err = s.openRemotePaneFor(sp.windowID, sp.host, width, height, sp.cwd, sp.command)
 		if err != nil {
 			cancel()
 			return nil, err
 		}
 		if rp, ok := ptyInstance.(*remotePane); ok && s.onRemotePane != nil {
-			s.onRemotePane(windowID, rp)
+			s.onRemotePane(sp.windowID, rp)
 		}
 	} else {
 		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
 			var cmd *exec.Cmd
-			if len(command) > 0 {
-				cmd = exec.Command(command[0], command[1:]...)
+			if len(sp.command) > 0 {
+				cmd = exec.Command(sp.command[0], sp.command[1:]...)
 			} else {
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnvFor(windowID, restored != nil, extraEnv, command)
+			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
 			// The pane's terminal, so a tuios client can tell whether it runs
 			// on it or only inherited the pane's variables. See
 			// nested_attach.go.
 			if tty != "" {
 				cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
 			}
-			if stdout != nil {
-				cmd.Stdout = stdout
+			if sp.stdout != nil {
+				cmd.Stdout = sp.stdout
 			}
-			if len(extraFiles) > 0 && runtime.GOOS != "windows" {
-				cmd.ExtraFiles = extraFiles
+			if len(sp.extraFiles) > 0 && runtime.GOOS != "windows" {
+				cmd.ExtraFiles = sp.extraFiles
 			}
 			// Start the shell in cwd when one was named and still exists; otherwise
 			// fall back to the shell's default (inherited) directory.
@@ -1664,9 +1680,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			// somewhere else and no indication of it. Restoration and placement are
 			// separate questions: the flag still decides the banner, because that
 			// is what it is about.
-			if cwd != "" {
-				if info, statErr := os.Stat(cwd); statErr == nil && info.IsDir() {
-					cmd.Dir = cwd
+			if sp.cwd != "" {
+				if info, statErr := os.Stat(sp.cwd); statErr == nil && info.IsDir() {
+					cmd.Dir = sp.cwd
 				}
 			}
 			return cmd
@@ -1687,8 +1703,8 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// shell's first prompt; it only touches the daemon-side emulator and never
 	// the real PTY, so the shell is unaffected.
 	var terminal vt.Terminal
-	if restored != nil {
-		terminal = newRestoredEmulator(width, height, s.scrollbackLines(), cwd, restored.history)
+	if sp.restored != nil {
+		terminal = newRestoredEmulator(width, height, s.scrollbackLines(), sp.cwd, sp.restored.history)
 	} else {
 		terminal = vt.NewWithScrollback(width, height, s.scrollbackLines())
 	}
@@ -1696,7 +1712,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	pty := &PTY{
 		ID:           id,
 		sessionID:    s.ID,
-		host:         host,
+		host:         sp.host,
 		pty:          ptyInstance,
 		cmd:          cmd,
 		ctx:          ctx,
@@ -1707,7 +1723,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
 		subscribers:  make(map[string]*ptySubscriber),
 		vtWriteChan:  make(chan vtChunk, 256),
-		onExit:       onExit,
+		onExit:       sp.onExit,
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
 		spawnedAt:    time.Now(),
@@ -1717,7 +1733,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// ID. It routes through the session's event sink so events reach the daemon's
 	// event hub; when no sink is installed it is a cheap no-op.
 	pty.emit = func(ev SessionEvent) {
-		ev.Window = windowID
+		ev.Window = sp.windowID
 		ev.PTYID = id
 		s.emit(ev)
 	}
@@ -1777,7 +1793,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// responses. All other commands flow through the raw PTY broadcast.
 	// The daemon reads only the control keys, so it does not decode the
 	// payload of a frame that only the clients draw.
-	remotePane := host != ""
+	remotePane := sp.host != ""
 	terminal.SetKittyHeaderOnly(true)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
@@ -2803,7 +2819,7 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 
 // buildEnvWith is buildEnvFor a pane that runs the user's shell.
 func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
-	return s.buildEnvFor(windowID, restored, extra, nil)
+	return s.buildEnvFor(windowID, 0, restored, extra, nil)
 }
 
 // buildEnvFor is buildEnv with a caller's own variables, for a pane that runs
@@ -2812,8 +2828,9 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 // TERM and the TUIOS_ contract, is set after them and wins. The caller's
 // variables are checked before they get here (callerEnv), which refuses a
 // TUIOS_ name outright. command decides what a harness started directly is
-// told beyond that: see guestenv.TermProgramFor.
-func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []string) []string {
+// told beyond that: see guestenv.TermProgramFor. workspace is the one the
+// window is being made on, 0 to read it from the state (herdrTabFor).
+func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, extra, command []string) []string {
 	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
 	// inside tmux would otherwise hand every pane the variables that make a
 	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
@@ -2885,7 +2902,7 @@ func (s *Session) buildEnvFor(windowID string, restored bool, extra, command []s
 	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
 	// socket here, when this pane starts one. See herdr_compat.go.
 	if s.config != nil && s.config.HerdrEnv != nil {
-		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID), command)...)
+		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID, workspace), command)...)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.
