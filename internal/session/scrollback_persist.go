@@ -685,7 +685,8 @@ func historyBanner(cwd string, savedAt time.Time) string {
 //
 // The emulator is at the saved size while this happens, and the caller
 // resizes it afterwards, so a pane that comes back at another width reflows
-// its history through the emulator's own reflow rather than being cut.
+// the restored screen through the emulator's own reflow rather than being
+// cut. The pure emulator keeps the older history at its saved width.
 func restoreHistory(t vt.Terminal, h *savedHistory) {
 	st := h.State
 	if err := st.Unpack(); err != nil {

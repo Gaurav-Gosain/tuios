@@ -17,6 +17,8 @@ type Screen struct {
 	scroll uv.Rectangle
 	// scrollback is the scrollback buffer for lines that have scrolled off the top.
 	scrollback *Scrollback
+	// rf holds the reflow's buffers between reflows (reflow.go).
+	rf reflowScratch
 }
 
 // NewScreen creates a new screen.
@@ -515,7 +517,7 @@ func (s *Screen) ScrollUp(n int) {
 		if save {
 			for i := 0; i < n && i < scroll.Dy(); i++ {
 				s.scrollback.PushLine(extractLine(s.buf, scroll.Min.Y+i, width))
-				s.scrollback.markNewestWrapped(s.buf.SoftWrapped(scroll.Min.Y + i))
+				s.scrollback.markNewest(s.buf.wrap[scroll.Min.Y+i])
 			}
 		}
 		s.DeleteLine(n)
@@ -588,7 +590,7 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 			} else {
 				s.scrollback.pushTrimmed(row, s.buf.ext[i])
 			}
-			s.scrollback.markNewestWrapped(s.buf.wrap[i])
+			s.scrollback.markNewest(s.buf.wrap[i])
 		}
 	}
 	copy(lines[height-n:], recycled)

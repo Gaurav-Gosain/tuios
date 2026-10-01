@@ -75,6 +75,7 @@ func (m *OS) installPassthroughs(window *terminal.Window) {
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
 	m.setupTextSizingPassthrough(window)
+	m.setupReflowRemap(window)
 	m.setupClipboardPassthrough(window)
 	m.setupNotificationPassthrough(window)
 	window.UnlockIO()

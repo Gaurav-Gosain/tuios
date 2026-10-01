@@ -44,6 +44,12 @@ type conserveScript struct {
 	// screen for the resizes; leave ends it.
 	alt, leave string
 	sizes      [][2]int
+	// checkCursor says the cursor has to stay on the character it was on.
+	checkCursor bool
+	// ringCap, when set, is the ring's line cap; the oldest lines may go.
+	ringCap int
+	// parked says a program left the cursor above text it drew lower down.
+	parked bool
 }
 
 func (s conserveScript) String() string {
@@ -83,12 +89,19 @@ func genConserve(seed uint64, widths bool) conserveScript {
 		b.WriteString("\r\n")
 	}
 	b.WriteString("\x1b[m\x1b]8;;\x07$ ")
+	s.checkCursor = true
 	if r.IntN(3) == 0 {
 		// A program that draws at the bottom and parks the cursor higher up.
+		// A screen too short for the text below the cursor keeps the text
+		// and lets the cursor's row go into the history, as ghostty and
+		// kitty do, so the cursor is not followed here.
+		s.checkCursor = false
+		s.parked = true
 		fmt.Fprintf(&b, "\x1b[%d;1Hstatus\x1b[%d;%dH", s.rows, 1+r.IntN(s.rows), 1+r.IntN(s.cols))
 	}
 	s.in = b.String()
 	if r.IntN(4) == 0 {
+		s.checkCursor = false
 		s.alt = "\x1b[?1049h\x1b[Hfull screen"
 		s.leave = "\x1b[?1049l"
 	}
@@ -120,6 +133,16 @@ func cellKey(c uv.Cell) string {
 // printed: soft-wrapped rows are joined, trailing blanks are dropped from
 // each line, and trailing blank lines are dropped from the end.
 func logicalLines(tm vt.Terminal) []string {
+	lines, _ := logicalLinesCursor(tm)
+	return lines
+}
+
+// logicalLinesCursor is logicalLines, and where the cursor is in them: the
+// line and the number of characters before it in the line.
+func logicalLinesCursor(tm vt.Terminal) ([]string, [2]int) {
+	cursor := [2]int{-1, -1}
+	cy := tm.ScrollbackLen() + tm.CursorPosition().Y
+	cx := tm.CursorPosition().X
 	type row struct {
 		cells   uv.Line
 		wrapped bool
@@ -149,11 +172,14 @@ func logicalLines(tm vt.Terminal) []string {
 	// did not fit in, not text, and where a row ends with one depends on the
 	// width the line was wrapped at.
 	padded := false
-	for _, r := range rows {
+	for i, r := range rows {
 		if padded && len(r.cells) > 0 && r.cells[0].Width > 1 {
 			cur = cur[:len(cur)-1]
 		}
-		for _, c := range r.cells {
+		for x, c := range r.cells {
+			if i == cy && x == cx {
+				cursor = [2]int{len(out), len(cur)}
+			}
 			if c.Width == 0 && c.Content == "" {
 				continue // the second half of a wide cell
 			}
@@ -175,15 +201,19 @@ func logicalLines(tm vt.Terminal) []string {
 	for len(out) > 0 && out[len(out)-1] == "" {
 		out = out[:len(out)-1]
 	}
-	return out
+	return out, cursor
 }
 
 // conserveProblem runs s and returns what it lost, or "".
 func conserveProblem(s conserveScript) string {
-	tm := vt.NewWithScrollback(s.cols, s.rows, conserveRingCap)
+	ringCap := conserveRingCap
+	if s.ringCap > 0 {
+		ringCap = s.ringCap
+	}
+	tm := vt.NewWithScrollback(s.cols, s.rows, ringCap)
 	defer func() { _ = tm.Close() }()
 	_, _ = tm.Write([]byte(s.in))
-	before := logicalLines(tm)
+	before, curBefore := logicalLinesCursor(tm)
 	if s.alt != "" {
 		_, _ = tm.Write([]byte(s.alt))
 	}
@@ -193,8 +223,20 @@ func conserveProblem(s conserveScript) string {
 	if s.leave != "" {
 		_, _ = tm.Write([]byte(s.leave))
 	}
-	after := logicalLines(tm)
+	after, curAfter := logicalLinesCursor(tm)
+	if s.ringCap > 0 && len(after) <= len(before) && len(after) > 0 {
+		// The oldest lines may have gone. The first line left can be the
+		// tail of a line whose start went, so it is compared as a suffix.
+		tail := before[len(before)-len(after):]
+		if slices.Equal(tail[1:], after[1:]) && strings.HasSuffix(tail[0], after[0]) {
+			return ""
+		}
+	}
 	if slices.Equal(before, after) {
+		if s.checkCursor && curBefore != curAfter {
+			return fmt.Sprintf("the cursor moved off its text: line %d character %d before, line %d character %d after",
+				curBefore[0], curBefore[1], curAfter[0], curAfter[1])
+		}
 		return ""
 	}
 	show := func(ls []string) string {
@@ -238,4 +280,90 @@ func FuzzResizeConservesTextHeights(f *testing.F) {
 			t.Fatalf("seed %d\n%s\n%s", seed, s, p)
 		}
 	})
+}
+
+// ghosttyJoinsLines is the libghostty bug the width property finds: with the
+// cursor parked on a blank row above text, a narrowing that wraps the
+// cursor's row and a widening after it join that row to the line below and
+// drop the blank rows between. TestGhosttyParkedCursorJoinsLines pins it, so
+// the skip goes when the bug does.
+func ghosttyJoinsLines(s conserveScript) bool {
+	return vt.Backend == "ghostty" && s.parked
+}
+
+// TestResizeConservesText changes the width as well. The main screen reflows,
+// so a line wider than a narrower screen wraps instead of losing its tail, and
+// the cursor stays on the character it was on.
+func TestResizeConservesText(t *testing.T) {
+	n := uint64(3000)
+	if testing.Short() {
+		n = 300
+	}
+	for seed := range n {
+		s := genConserve(seed, true)
+		if ghosttyJoinsLines(s) {
+			continue
+		}
+		if p := conserveProblem(s); p != "" {
+			t.Fatalf("seed %d\n%s\n%s", seed, s, p)
+		}
+	}
+}
+
+// FuzzResizeConservesText is the same property under the mutator.
+func FuzzResizeConservesText(f *testing.F) {
+	for seed := range uint64(8) {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		s := genConserve(seed, true)
+		if ghosttyJoinsLines(s) {
+			t.Skip("libghostty joins lines here; see ghosttyJoinsLines")
+		}
+		if p := conserveProblem(s); p != "" {
+			t.Fatalf("seed %d\n%s\n%s", seed, s, p)
+		}
+	})
+}
+
+// TestResizeConservesTextAtRingCap runs the width property on a ring that is
+// full, so the rows a reflow pushes back evict the oldest lines. What is left
+// has to be the newest lines, whole and in order.
+func TestResizeConservesTextAtRingCap(t *testing.T) {
+	n := uint64(2000)
+	if testing.Short() {
+		n = 200
+	}
+	for seed := range n {
+		s := genConserve(seed, true)
+		s.ringCap = 6
+		s.checkCursor = false
+		if ghosttyJoinsLines(s) {
+			continue
+		}
+		if p := conserveProblem(s); p != "" {
+			t.Fatalf("seed %d\n%s\n%s", seed, s, p)
+		}
+	}
+}
+
+// TestGhosttyParkedCursorJoinsLines pins the libghostty bug the width
+// property skips. A blank row holds the cursor in its last column, above a
+// row of text. Narrowing wraps the cursor's row, and a short screen and a
+// widening after it join it to the text below: "status" moves to column 8 of
+// the cursor's row and a blank line is gone. If this starts passing, delete
+// it and ghosttyJoinsLines.
+func TestGhosttyParkedCursorJoinsLines(t *testing.T) {
+	if vt.Backend != "ghostty" {
+		t.Skip("the pure Go emulator keeps these lines apart")
+	}
+	tm := vt.NewWithScrollback(15, 4, conserveRingCap)
+	defer func() { _ = tm.Close() }()
+	_, _ = tm.Write([]byte("$ \x1b[4;1Hstatus\x1b[3;15H"))
+	before := logicalLines(tm)
+	tm.Resize(8, 1)
+	tm.Resize(15, 7)
+	if after := logicalLines(tm); slices.Equal(before, after) {
+		t.Errorf("libghostty no longer joins the lines; delete this test and ghosttyJoinsLines")
+	}
 }

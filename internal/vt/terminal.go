@@ -141,6 +141,11 @@ type Terminal interface {
 	// answer to XTSMGRAPHICS. Nil tells it nothing.
 	SetSixelAdvertised(fn func() bool)
 	SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int))
+	// SetReflowFunc sets a function a resize calls after it reflowed rows.
+	// remap takes a row counted from the oldest history row, as an image
+	// placement records it, and returns where that row's text is now. A
+	// backend that cannot say never calls fn.
+	SetReflowFunc(fn func(remap func(absLine int) int))
 	SetCellSize(width, height int)
 	KittyMainState() *KittyState
 	KittyAltState() *KittyState

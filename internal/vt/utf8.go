@@ -691,6 +691,9 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 		}
 		e.scr.SetCell(x, y, nil)
 		e.noteSoftWrap(left, right)
+		if e.scr.buf.SoftWrapped(y) {
+			e.scr.buf.setPadded(y)
+		}
 		e.index()
 		_, y = e.scr.CursorPosition()
 		x = left
