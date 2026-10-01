@@ -215,14 +215,19 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 // set. An unknown value silently falls back to the safe default ("ask"), so a
 // typo would otherwise go unnoticed. An empty value is left to the default.
 func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
-	value := cfg.Tape.Autorun
-	if value == "" || slices.Contains(TapeAutorunModes, value) {
+	warnEnum(result, "tape", "autorun", cfg.Tape.Autorun, TapeAutorunModes, "default")
+}
+
+// warnEnum warns when field.key holds a value outside allowed, and names the
+// value it falls back to. An empty value is left to the default.
+func warnEnum(result *ValidationResult, field, key, value string, allowed []string, fallback string) {
+	if value == "" || slices.Contains(allowed, value) {
 		return
 	}
 	result.Warnings = append(result.Warnings, ValidationError{
-		Field:   "tape",
-		Key:     "autorun",
-		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(TapeAutorunModes, ", ")),
+		Field:   field,
+		Key:     key,
+		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to %s", value, strings.Join(allowed, ", "), fallback),
 	})
 }
 
@@ -230,29 +235,13 @@ func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
 // its allowed set. An unknown value falls back to "ask", so a typo of "auto"
 // would otherwise go unnoticed until a restart asked instead of resuming.
 func validateResumeAgents(cfg *UserConfig, result *ValidationResult) {
-	value := cfg.Daemon.ResumeAgents
-	if value == "" || slices.Contains(ResumeAgentsModes, value) {
-		return
-	}
-	result.Warnings = append(result.Warnings, ValidationError{
-		Field:   "daemon",
-		Key:     "resume_agents",
-		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to ask", value, strings.Join(ResumeAgentsModes, ", ")),
-	})
+	warnEnum(result, "daemon", "resume_agents", cfg.Daemon.ResumeAgents, ResumeAgentsModes, "ask")
 }
 
 // validateWindowSize warns when daemon.window_size holds a value outside its
 // allowed set. An unknown value falls back to smallest.
 func validateWindowSize(cfg *UserConfig, result *ValidationResult) {
-	value := cfg.Daemon.WindowSize
-	if value == "" || slices.Contains(WindowSizeModes, value) {
-		return
-	}
-	result.Warnings = append(result.Warnings, ValidationError{
-		Field:   "daemon",
-		Key:     "window_size",
-		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to smallest", value, strings.Join(WindowSizeModes, ", ")),
-	})
+	warnEnum(result, "daemon", "window_size", cfg.Daemon.WindowSize, WindowSizeModes, "smallest")
 }
 
 // minReadableNotification is the shortest message lifetime this config will
@@ -330,17 +319,7 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 // typo would otherwise go unnoticed. Empty values are left to the defaults.
 func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum := func(key, value string, allowed []string) {
-		if value == "" {
-			return
-		}
-		if slices.Contains(allowed, value) {
-			return
-		}
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "appearance",
-			Key:     key,
-			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(allowed, ", ")),
-		})
+		warnEnum(result, "appearance", key, value, allowed, "default")
 	}
 
 	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)

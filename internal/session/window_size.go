@@ -259,13 +259,12 @@ func sizeForPolicy(policy string, clients []sizedClient, latest string) (width, 
 			}
 		}
 	}
-	first := true
-	for _, c := range clients {
+	if len(clients) == 0 {
+		return 0, 0
+	}
+	width, height = clampClientSize(clients[0].w, clients[0].h)
+	for _, c := range clients[1:] {
 		cw, ch := clampClientSize(c.w, c.h)
-		if first {
-			width, height, first = cw, ch, false
-			continue
-		}
 		if policy == config.WindowSizeLargest {
 			width, height = max(width, cw), max(height, ch)
 		} else {

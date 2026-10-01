@@ -2631,8 +2631,6 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	m.wasLatest = latest
 }
 
-// isPersonInput reports whether msg came from the terminal the client runs
-// in: a key, a click or a paste. Keys send-keys types arrive as RemoteKeyMsg.
 // isActivityInput reports whether a message is the person acting at this
 // client: a key, a paste, a click, a wheel turn, or a drag. A move with no
 // button held is not, so a pointer resting on the other screen does not take
@@ -2649,6 +2647,8 @@ func isActivityInput(msg tea.Msg) bool {
 	return false
 }
 
+// isPersonInput reports whether msg came from the terminal the client runs
+// in: a key, a click or a paste. Keys send-keys types arrive as RemoteKeyMsg.
 func isPersonInput(msg tea.Msg) bool {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseReleaseMsg,

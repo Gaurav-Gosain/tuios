@@ -1,7 +1,7 @@
 package vt
 
 import (
-	"sort"
+	"slices"
 
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -123,8 +123,8 @@ func joinRows(rows []reflowRow, sc *reflowScratch) reflowSource {
 	var all []uv.Line // every line's segments, in one slice
 	if sc != nil {
 		at = grow(sc.ints[:0], 2*len(rows))
-		lines = growCap(sc.lines[:0], len(rows))
-		all = growCap(sc.segs[:0], len(rows))
+		lines = slices.Grow(sc.lines[:0], len(rows))
+		all = slices.Grow(sc.segs[:0], len(rows))
 		sc.ints, sc.lines, sc.segs = at, lines, all
 	} else {
 		at = make([]int, 2*len(rows))
@@ -192,15 +192,6 @@ func grow[T any](s []T, n int) []T {
 	s = s[:n]
 	clear(s)
 	return s
-}
-
-// growCap returns s emptied, with room for n, reusing its storage when it is
-// large enough.
-func growCap[T any](s []T, n int) []T {
-	if cap(s) < n {
-		return make([]T, 0, n)
-	}
-	return s[:0]
 }
 
 // offset is where point (row, col) of the source rows falls in its line, as
@@ -387,8 +378,13 @@ func (p *reflowPlan) locate(row, col int) (int, int) {
 		l, at = last, p.src.lines[last].cols
 	}
 	a, b := p.lineRow[l], p.lineRow[l+1]
-	r := a + sort.Search(b-a, func(i int) bool { return p.rowOff[a+i] > at }) - 1
-	r = max(r, a)
+	// A line's rows start at strictly increasing columns, so the row holding
+	// at is the one starting at it, or else the one before the insert point.
+	i, found := slices.BinarySearch(p.rowOff[a:b], at)
+	if !found {
+		i--
+	}
+	r := max(a+i, a)
 	return r, max(at-p.rowOff[r], 0)
 }
 
@@ -457,7 +453,7 @@ func historyRows(sb *Scrollback, from, end, extra int, sc *reflowScratch) []refl
 	var rows []reflowRow
 	var lines []uv.Line
 	if sc != nil {
-		rows = growCap(sc.rows[:0], end-from+extra)
+		rows = slices.Grow(sc.rows[:0], end-from+extra)
 		lines, sc.hist = sb.decodeRows(from, end, sc.hist, sc.histRows)
 		sc.histRows = lines
 	} else {

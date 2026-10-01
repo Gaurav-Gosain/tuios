@@ -76,6 +76,15 @@ const (
 	rowPadded
 )
 
+// wrapFlag is the flags of a row that does or does not wrap, with no other
+// flag set.
+func wrapFlag(wrapped bool) rowFlag {
+	if wrapped {
+		return rowWrapped
+	}
+	return 0
+}
+
 // rowTail returns row y's tail, or nil.
 func (g *grid) rowTail(y int) uv.Line {
 	if g.tail == nil || y < 0 || y >= len(g.tail) {
@@ -283,13 +292,9 @@ func (g *grid) SoftWrapped(y int) bool {
 // setSoftWrapped records whether row y carries on to row y+1 by autowrap.
 func (g *grid) setSoftWrapped(y int, wrapped bool) {
 	if y >= 0 && y < len(g.wrap) {
-		if wrapped {
-			// A new wrap: a padding flag from what the row held before
-			// does not carry over.
-			g.wrap[y] = rowWrapped
-		} else {
-			g.wrap[y] = 0
-		}
+		// A new wrap: a padding flag from what the row held before does not
+		// carry over.
+		g.wrap[y] = wrapFlag(wrapped)
 	}
 }
 
