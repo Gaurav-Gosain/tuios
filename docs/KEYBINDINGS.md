@@ -101,8 +101,9 @@ OSC 7777 ; tuios-nvim-navigator ; focus ; <direction> BEL
 
 `<direction>` is `left`, `down`, `up` or `right`. A custom Neovim integration
 may emit the same messages. TUIOS accepts focus requests only from the focused
-pane in terminal mode; window-management mode always keeps the focus keys for
-TUIOS itself.
+pane in terminal mode, and only immediately after it forwarded the matching
+focus key to that pane. Window-management mode always keeps the focus keys for
+TUIOS itself. Enable the protocol with `appearance.nvim_navigation = true`.
 
 ## Lists and panels
 

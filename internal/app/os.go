@@ -931,6 +931,7 @@ type OS struct {
 	PendingCwdChange      chan CwdChangedMsg
 	PendingNvimNavigation chan NvimNavigationMsg
 	nvimNavigators        map[string]bool
+	pendingNvimNavigation *pendingNvimNavigation
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.

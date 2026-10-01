@@ -144,7 +144,7 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 		return false
 	}
 	action := lookupAction(msg, o.KeybindRegistry.GetTerminalModeAction)
-	if o.Mode == app.TerminalMode && o.NvimNavigatorActive() && isTerminalFocusAction(action) {
+	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
 		return false
 	}
 	if _, _, ok := dispatchAction(action, msg, o); ok {
@@ -170,6 +170,10 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 func isTerminalFocusAction(action string) bool {
 	return action == "terminal_focus_left" || action == "terminal_focus_right" ||
 		action == "terminal_focus_up" || action == "terminal_focus_down"
+}
+
+func nvimNavigationDirection(action string) string {
+	return strings.TrimPrefix(action, "terminal_focus_")
 }
 
 // isReservedTerminalChord reports whether a key press is a chord the shell will
