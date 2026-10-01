@@ -107,8 +107,124 @@ func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 	}
 	rl := &m.Screen.Rule[rule]
 	lines := regionLines(tail, rl.Region)
+	row, clean := promptRow(m, rl, lines)
+	if rl.Show == ShowDialog && row >= 0 {
+		// The row runs through the box and the chat on either side of it.
+		// Inside the box, the same search finds the words alone.
+		if box, ok := dialogAround(lines, row); ok {
+			if msg := dialogApproval(box, rl.ToolField, rl.WhatFields); msg != "" {
+				return msg
+			}
+			if _, inBox := promptRow(m, rl, box); inBox != "" {
+				return inBox
+			}
+		}
+	}
+	return clean
+}
+
+// dialogApproval is the message tool_field and what_fields build from a
+// dialog's lines, "approve <tool>: <what>", or "approve <tool>" when the
+// dialog shows none of what_fields. Empty when the dialog shows no tool.
+func dialogApproval(box []string, toolField string, whatFields []string) string {
+	if toolField == "" {
+		return ""
+	}
+	tool := dialogField(box, toolField)
+	if tool == "" || strings.ContainsAny(tool, " \t") {
+		return ""
+	}
+	for _, label := range whatFields {
+		what := ""
+		if label == WhatBody {
+			what = dialogBody(box, toolField)
+		} else {
+			what = dialogField(box, label)
+		}
+		if what != "" {
+			return CleanPromptLine("approve " + tool + ": " + what)
+		}
+	}
+	return "approve " + tool
+}
+
+// dialogField is the value of the first field line with this label, cleaned,
+// or "". A value the dialog wrapped goes on in the lines under it that are
+// indented further than the label; a value with no space in it (a path, a
+// URL) is joined back without one.
+func dialogField(box []string, label string) string {
+	for i, line := range box {
+		word, rest, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || !strings.EqualFold(word, label) {
+			continue
+		}
+		val := strings.TrimSpace(rest)
+		indent := leadingSpaces(line)
+		for _, more := range box[i+1:] {
+			t := strings.TrimSpace(more)
+			if t == "" || leadingSpaces(more) <= indent {
+				break
+			}
+			if strings.Contains(val, " ") {
+				val += " "
+			}
+			val += t
+		}
+		return CleanPromptLine(val)
+	}
+	return ""
+}
+
+// leadingSpaces counts the spaces a line starts with.
+func leadingSpaces(s string) int {
+	return len(s) - len(strings.TrimLeft(s, " "))
+}
+
+// dialogBody is the first line of the dialog's body: the block of lines,
+// between blank lines, that follows the block holding the first field line,
+// when that block is not one of the dialog's last two. Crush lays a dialog
+// out as a title, its fields, a body, its buttons and a help line, and a
+// narrow dialog leaves the body out. dialogInside keeps one blank line of
+// each run.
+func dialogBody(box []string, firstField string) string {
+	var blocks [][]string
+	var cur []string
+	for _, line := range box {
+		if strings.TrimSpace(line) == "" {
+			if cur != nil {
+				blocks = append(blocks, cur)
+				cur = nil
+			}
+			continue
+		}
+		cur = append(cur, line)
+	}
+	if cur != nil {
+		blocks = append(blocks, cur)
+	}
+	for i, b := range blocks {
+		hasField := false
+		for _, line := range b {
+			w, _, _ := strings.Cut(strings.TrimSpace(line), " ")
+			if strings.EqualFold(w, firstField) {
+				hasField = true
+			}
+		}
+		if hasField {
+			if i+1 < len(blocks)-2 {
+				return CleanPromptLine(blocks[i+1][0])
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// promptRow is the index in lines of the line RulePrompt reads as the prompt,
+// with that line cleaned, or -1 and "" when no line holds one.
+func promptRow(m *Manifest, rl *ScreenRule, lines []string) (int, string) {
 	for _, list := range [][]string{rl.All, rl.Any, rl.nestedPositiveStrings()} {
-		for _, line := range lines {
+		for i, line := range lines {
 			hay := line
 			if m.Screen.FoldCase {
 				hay = strings.ToLower(line)
@@ -118,12 +234,12 @@ func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 					continue
 				}
 				if clean := CleanPromptLine(line); clean != "" {
-					return clean
+					return i, clean
 				}
 			}
 		}
 	}
-	return ""
+	return -1, ""
 }
 
 // CleanPromptLine strips what a TUI paints around a prompt so the words can be

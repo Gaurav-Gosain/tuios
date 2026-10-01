@@ -600,6 +600,11 @@ without attaching. What changes for an existing caller:
   not an option `set-option` can change.
 - The bundled Claude Code and Codex manifests declare answers. Their rules
   match exactly what they matched before; only the block is new.
+- Later, a `needs_input` screen rule gains the optional keys `show`,
+  `tool_field` and `what_fields` (see
+  [a prompt drawn as a dialog](AGENT_STATE.md#a-prompt-drawn-as-a-dialog)).
+  An older build ignores them. The bundled Crush manifest uses them and
+  declares answers for its permission dialog.
 
 **Approvals answered from the Inbox.** The new verbs `request-approval` and
 `reply-approval` let a harness hook hold a permission prompt until the person

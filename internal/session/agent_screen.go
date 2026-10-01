@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -95,7 +96,10 @@ func (s *Session) releaseScreenIdle(windowID string) {
 // carries its own words and nothing here touches them.
 func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []string) string {
 	if prompt := reg.RulePrompt(hid, rule, tail); prompt != "" {
-		if kind := reg.RuleKind(hid, rule); kind != "" {
+		// A line already in the form tuios's hooks report an approval in
+		// ("approve <tool>: <what>") says its kind, and the risk rules read
+		// it in that form.
+		if kind := reg.RuleKind(hid, rule); kind != "" && !strings.HasPrefix(prompt, "approve ") {
 			return kind + ": " + prompt
 		}
 		return prompt

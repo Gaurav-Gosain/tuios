@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -272,7 +273,33 @@ type ScreenRule struct {
 	// a person can answer it without attaching. See answers.go. Empty on
 	// every other rule.
 	Answers Answers `toml:"answers"`
+	// Show is what a peek shows of the prompt the rule reads. Empty shows the
+	// rule's region. "dialog" shows only the bordered dialog that holds the
+	// line the rule matched on, cut out of the screen drawn around it, for a
+	// harness that draws its prompt as a box over its transcript (Crush).
+	// Only a needs_input screen rule takes it.
+	Show string `toml:"show"`
+	// ToolField and WhatFields build the rule's message from the dialog's
+	// field lines, a label and its value ("Tool bash"), in the form tuios's
+	// hooks report an approval and its risk rules read: "approve <tool>:
+	// <what>". ToolField is the label of the tool. WhatFields are labels
+	// tried in order for what the tool acts on; the word "body" stands for
+	// the first line of the block under the fields, such as a command, when
+	// the dialog shows one (see dialogBody). With no tool on the dialog the message is the
+	// matched line as usual. Both need show = "dialog".
+	ToolField  string   `toml:"tool_field"`
+	WhatFields []string `toml:"what_fields"`
 }
+
+// maxWhatFields bounds what_fields.
+const maxWhatFields = 8
+
+// WhatBody is the what_fields word for the dialog's first line under its
+// fields.
+const WhatBody = "body"
+
+// ShowDialog is the one Show value: the dialog that holds the prompt line.
+const ShowDialog = "dialog"
 
 // maxScreenPattern bounds one regex pattern's length. RE2 compiles a pattern
 // into a program roughly proportional to its size, and the screen scan runs in
@@ -377,6 +404,31 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 	}
 	if err := r.Answers.check(block, r.State); err != nil {
 		return err
+	}
+	if r.Show = strings.ToLower(strings.TrimSpace(r.Show)); r.Show != "" {
+		if r.Show != ShowDialog {
+			return fmt.Errorf("unknown show %q (%s)", r.Show, ShowDialog)
+		}
+		if block != "screen" || r.State != "needs_input" {
+			return fmt.Errorf("show: only a needs_input screen rule shows a prompt")
+		}
+	}
+	if r.ToolField != "" || len(r.WhatFields) > 0 {
+		if r.Show != ShowDialog {
+			return fmt.Errorf("tool_field and what_fields need show = %q", ShowDialog)
+		}
+		if len(r.WhatFields) > maxWhatFields {
+			return fmt.Errorf("what_fields: %d labels, limit %d", len(r.WhatFields), maxWhatFields)
+		}
+		labels := append([]string{r.ToolField}, r.WhatFields...)
+		for i, f := range labels {
+			f = strings.ToLower(strings.TrimSpace(f))
+			if f == "" || strings.ContainsFunc(f, unicode.IsSpace) {
+				return fmt.Errorf("tool_field and what_fields: %q is not one word", labels[i])
+			}
+			labels[i] = f
+		}
+		r.ToolField, r.WhatFields = labels[0], labels[1:]
 	}
 	switch block {
 	case "notify":

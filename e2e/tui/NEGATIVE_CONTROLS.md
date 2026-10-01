@@ -396,6 +396,8 @@ a working negative control look like a broken one for half an hour.
 | A program that set focus reporting (DECSET 1004) in the focused pane of a daemon session read no focus-in report | the call site | replace `p.noteFocusReporting(focusOn)` in `vtWriter` (`internal/session/session.go`) with `_ = focusOn` | `TestFocusReportOnEnable/daemon` ("focused pane read \"\" after setting 1004"); `/standalone` passes | **caught** |
 | The same in a standalone pane | the gate line | make the `FocusReportingEnabled` edge check in the PTY reader (`internal/terminal/window_io.go`) `if false && ...` | `TestFocusReportOnEnable/standalone` ("focused pane read \"\" after setting 1004"); `/daemon` passes | **caught** |
 | The daemon sent the focus-in report with the host terminal out of focus | the host focus term | make `sessionShown` (`internal/session/focus_report.go`) accept a client that reported losing focus | `TestFocusReportOnEnable/daemon` ("pane read \"\\x1b[I\" with the host out of focus") | **caught** |
+| A Crush permission dialog stays on working when Crush reports working after blocked | n/a, injected, cuts the wiring | drop the `claim.screenWins` branch from `blockerOverridesClaim` in `internal/session/agent_state.go` | `TestCrushPermissionAnsweredFromTheInbox` ("the pane is {State:working ... Source:report ...}, want state needs_input") | **caught** |
+| The Inbox cannot answer a Crush permission dialog | n/a, injected, cuts the wiring | drop the `[screen.rule.answers]` block from `internal/harness/manifests/crush.toml` | `TestCrushPermissionAnsweredFromTheInbox` ("the pane never showed [ALLOWED]") | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

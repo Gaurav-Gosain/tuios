@@ -49,7 +49,7 @@ package session
 //	working   working
 //	blocked   needs_input, with herdr's message when it sends one; for
 //	          Crush, which is blocked only on a permission request, kind
-//	          approval
+//	          approval. The Inbox answers it through Crush's screen rule.
 //	idle      done when the pane is working or in needs_input, since the
 //	          harness went to rest from a turn, and idle otherwise
 //	unknown   nothing
@@ -497,7 +497,13 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		}
 		out, code, msg := d.herdrReport(sess, window, harness, pid, p)
 		if code == "" {
-			d.markHerdrClaim(window, d.herdrAnchorsFor(cs, window))
+			wins := crushScreenWins(harness)
+			d.markHerdrClaim(window, d.herdrAnchorsFor(cs, window), wins)
+			if wins && (p.State == "working" || p.State == "blocked") {
+				// working: the dialog can be up already, and only a look
+				// says so. blocked: the look names what the dialog asks.
+				d.lookAtScreenNow(window)
+			}
 		}
 		return out, code, msg
 	case "pane.report_agent_session":
@@ -567,7 +573,7 @@ func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string
 // crashes sends no pane.release_agent, and without this its last report,
 // working as often as not, would stand for as long as the pane lives. herdr
 // has the same safety net. See detectionPass.
-func (d *Daemon) markHerdrClaim(window string, anchors []herdrAnchor) {
+func (d *Daemon) markHerdrClaim(window string, anchors []herdrAnchor, screenWins bool) {
 	sess := d.sessionHoldingWindow(window)
 	if sess == nil {
 		return
@@ -580,7 +586,46 @@ func (d *Daemon) markHerdrClaim(window string, anchors []herdrAnchor) {
 	}
 	claim.herdrAt = time.Now().UnixNano()
 	claim.herdrAnchors = anchors
+	claim.screenWins = screenWins
 	sess.agentClaims[window] = claim
+}
+
+// crushScreenWins reports whether a herdr reporter's claim yields at once to
+// a prompt the screen tier reads, and whether its working report makes the
+// daemon look at the screen. It is so for Crush.
+//
+// Crush without charmbracelet/crush#3541 (v0.97.1 and earlier) can report
+// working after blocked while its permission dialog is up. Its permission service publishes a "request started"
+// notification before the request (internal/permission/permission.go), its
+// herdr bridge reads every notification as the answer
+// (internal/herdr/translate.go), and the two arrive on goroutines of their
+// own, so either order reaches tuios. When working comes last the dialog is
+// usually drawn already, the pane writes nothing more, and the ordinary
+// override, which waits for output after the claim and a grace, never runs.
+// The pane then showed working for as long as the dialog waited. So the
+// claim is marked to yield, and the screen is read when the report lands.
+// When the dialog closes, the next look gives the claim back as it was.
+// charmbracelet/crush#3541 fixes the race; this stays for the releases
+// before it.
+func crushScreenWins(harness string) bool {
+	return harness == "crush"
+}
+
+// lookAtScreenNow runs a window's screen look now, rather than when the pane
+// next goes quiet.
+func (d *Daemon) lookAtScreenNow(window string) {
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return
+	}
+	st := sess.GetState()
+	i, err := findWindowStateIndex(st.Windows, window)
+	if err != nil {
+		return
+	}
+	if pty := sess.GetPTY(st.Windows[i].PTYID); pty != nil {
+		pty.runScreenLook()
+	}
 }
 
 // herdrAnchorsFor is the processes a herdr claim from cs follows: the
@@ -749,7 +794,7 @@ func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParam
 		if msg == "" {
 			msg = "waits for you"
 			if kind == harnessKindApproval {
-				msg = "waits for approval"
+				msg = herdrBlockedPlaceholder
 			}
 		}
 		_, code, text := d.herdrSetStateKind(sess, window, harness, "needs_input", kind, msg, sid, "", pid)
@@ -775,6 +820,11 @@ func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParam
 	}
 	return map[string]any{"type": "ok"}, "", ""
 }
+
+// herdrBlockedPlaceholder is the message of a blocked report that carries
+// none and waits on an approval. A screen look may replace it with the
+// prompt's own words; see screenNamesPrompt.
+const herdrBlockedPlaceholder = "waits for approval"
 
 // harnessKindApproval and harnessKindQuestion are the kinds of a block.
 const (
