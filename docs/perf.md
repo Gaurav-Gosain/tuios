@@ -2131,8 +2131,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 27,670,000 (raised at 27,639,970) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,130,000 (raised at 26,096,898) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 27,710,000 (raised at 27,689,122) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,170,000 (raised at 26,148,114) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2161,6 +2161,13 @@ when the window_size policy (the daemon's size policy and the view a client
 draws of a larger session) brought the build to 27,639,970 and 26,096,898
 bytes (Go 1.26.6). Main had 33,758 and 30,558 bytes of room before it, and the
 feature adds about 74 KB and 68 KB.
+
+The budgets went to 27,710,000 (linux/amd64) and 26,170,000 (darwin/arm64)
+when the files list learned to follow a pane on another machine (#313): the
+daemon pushes a pane's new folder, watches a listed folder for a client, and
+answers the wait-dir verb. That brought the build to 27,689,122 and 26,148,114
+bytes (Go 1.26.6), about 50 KB more than main, which had about 30 KB and 33 KB
+of room.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
