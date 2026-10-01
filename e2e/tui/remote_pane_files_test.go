@@ -97,6 +97,15 @@ func followCdAndDelete(t *testing.T, term *tuitest.Terminal, inner string, typin
 	railLists(t, term, "a file removed on the far machine stayed on the list",
 		[]string{"inner-keep.txt"}, []string{"inner-gone.txt"})
 	saveArtifact(t, term, artifactDir(t), "after-delete")
+
+	// A second change, so the watch is shown to go on after its first
+	// report.
+	if err := os.WriteFile(filepath.Join(inner, "inner-new.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "a file made on the far machine after a removal never reached the list",
+		[]string{"inner-keep.txt", "inner-new.txt"}, []string{"inner-gone.txt"})
+	saveArtifact(t, term, artifactDir(t), "after-create")
 }
 
 // TestFilesFollowAPaneInASessionOnAHost is the reporter's setup: a session that
