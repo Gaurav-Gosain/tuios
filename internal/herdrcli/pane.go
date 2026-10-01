@@ -1,6 +1,9 @@
 package herdrcli
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // herdr's pane commands, from src/cli/pane.rs at v0.9.3.
 
@@ -8,7 +11,7 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 	switch sub {
 	case "list":
 		p := map[string]any{}
-		err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+		err := walk(args, func(arg string, value valueFn) *UsageError {
 			if arg != "--workspace" {
 				return unknownOption(arg)
 			}
@@ -19,32 +22,23 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:pane:list", "pane.list", p)
+		return call("cli:pane:list", "pane.list", p), nil
 	case "get":
 		if len(args) != 1 {
 			return nil, usage("usage: herdr pane get <pane_id>")
 		}
-		return call("cli:pane:get", "pane.get", map[string]any{"pane_id": args[0]})
+		return call("cli:pane:get", "pane.get", map[string]any{"pane_id": args[0]}), nil
 	case "current":
-		pane := envPane(getenv)
-		err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
-			switch arg {
-			case "--pane":
-				v, err := value(arg)
-				pane = v
-				return err
-			case "--current":
-				pane = envPane(getenv)
-				return nil
-			}
-			return unknownOption(arg)
-		})
+		pane, err := optionalPane(args, getenv)
 		if err != nil {
 			return nil, err
 		}
+		if pane == nil {
+			pane = envPane(getenv)
+		}
 		p := map[string]any{}
 		setOpt(p, "caller_pane_id", pane)
-		return call("cli:pane:current", "pane.current", p)
+		return call("cli:pane:current", "pane.current", p), nil
 	case "layout", "process-info", "edges":
 		pane, err := optionalPane(args, getenv)
 		if err != nil {
@@ -53,25 +47,25 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 		p := map[string]any{}
 		setOpt(p, "pane_id", pane)
 		method := "pane." + strings.ReplaceAll(sub, "-", "_")
-		return call("cli:pane:"+strings.ReplaceAll(sub, "-", "_"), method, p)
+		return call("cli:pane:"+strings.ReplaceAll(sub, "-", "_"), method, p), nil
 	case "neighbor":
 		p, err := paneDirectionArgs(args, "usage: herdr pane neighbor --direction left|right|up|down [--pane ID|--current]", nil)
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:pane:neighbor", "pane.neighbor", p)
+		return call("cli:pane:neighbor", "pane.neighbor", p), nil
 	case "focus":
 		p, err := paneDirectionArgs(args, "", nil)
 		if err != nil {
 			return nil, usage("usage: herdr pane focus --direction left|right|up|down [--pane ID|--current]")
 		}
-		return call("cli:pane:focus", "pane.focus_direction", p)
+		return call("cli:pane:focus", "pane.focus_direction", p), nil
 	case "resize":
 		p, err := paneDirectionArgs(args, "usage: herdr pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]", []string{"--amount"})
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:pane:resize", "pane.resize", p)
+		return call("cli:pane:resize", "pane.resize", p), nil
 	case "zoom":
 		return paneZoom(args)
 	case "rename":
@@ -82,7 +76,7 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 		if len(args) != 2 || args[1] != "--clear" {
 			p["label"] = strings.Join(args[1:], " ")
 		}
-		return call("cli:pane:rename", "pane.rename", p)
+		return call("cli:pane:rename", "pane.rename", p), nil
 	case "read":
 		return paneRead(args)
 	case "input":
@@ -97,22 +91,22 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 		if len(args) != 1 {
 			return nil, usage("usage: herdr pane close <pane_id>")
 		}
-		return call("cli:pane:close", "pane.close", map[string]any{"pane_id": args[0]})
+		return call("cli:pane:close", "pane.close", map[string]any{"pane_id": args[0]}), nil
 	case "send-text":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr pane send-text <pane_id> <text>")
 		}
-		return okCall("cli:request", "pane.send_text", map[string]any{"pane_id": args[0], "text": strings.Join(args[1:], " ")})
+		return okCall("cli:request", "pane.send_text", map[string]any{"pane_id": args[0], "text": strings.Join(args[1:], " ")}), nil
 	case "send-keys":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr pane send-keys <pane_id> <key> [key ...]")
 		}
-		return okCall("cli:request", "pane.send_keys", map[string]any{"pane_id": args[0], "keys": args[1:]})
+		return okCall("cli:request", "pane.send_keys", map[string]any{"pane_id": args[0], "keys": args[1:]}), nil
 	case "run":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr pane run <pane_id> <command>")
 		}
-		return okCall("cli:request", "pane.send_input", map[string]any{"pane_id": args[0], "text": strings.Join(args[1:], " "), "keys": []string{"Enter"}})
+		return okCall("cli:request", "pane.send_input", map[string]any{"pane_id": args[0], "text": strings.Join(args[1:], " "), "keys": []string{"Enter"}}), nil
 	case "wait-output":
 		return paneWaitOutput(args)
 	case "report-agent", "report-agent-session":
@@ -129,7 +123,7 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 // HERDR_PANE_ID.
 func optionalPane(args []string, getenv Env) (any, *UsageError) {
 	var pane any
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--pane":
 			v, err := value(arg)
@@ -149,7 +143,7 @@ func optionalPane(args []string, getenv Env) (any, *UsageError) {
 // amount is allowed. A missing direction is the usage line.
 func paneDirectionArgs(args []string, usageLine string, extra []string) (map[string]any, *UsageError) {
 	p := map[string]any{}
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch {
 		case arg == "--pane":
 			v, err := value(arg)
@@ -166,7 +160,7 @@ func paneDirectionArgs(args []string, usageLine string, extra []string) (map[str
 			d, err := paneDirection(v)
 			p["direction"] = d
 			return err
-		case arg == "--amount" && contains(extra, arg):
+		case arg == "--amount" && slices.Contains(extra, arg):
 			v, err := value(arg)
 			if err != nil {
 				return err
@@ -193,7 +187,7 @@ func paneZoom(args []string) (*Call, *UsageError) {
 		args = args[1:]
 	}
 	seen := false
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--pane":
 			v, err := value(arg)
@@ -215,13 +209,13 @@ func paneZoom(args []string) (*Call, *UsageError) {
 	if err != nil {
 		return nil, err
 	}
-	return call("cli:pane:zoom", "pane.zoom", p)
+	return call("cli:pane:zoom", "pane.zoom", p), nil
 }
 
 func paneRead(args []string) (*Call, *UsageError) {
 	const usageLine = "usage: herdr pane read <pane_id> [--source visible|recent|recent-unwrapped|detection] [--lines N] [--format text|ansi] [--ansi] [--raw]"
 	p := map[string]any{"source": "recent", "format": "text", "strip_ansi": true, "intent": "interactive"}
-	err := walk(expandEquals(args, "--source", "--lines", "--format"), func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(expandEquals(args, "--source", "--lines", "--format"), func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--source":
 			v, err := value(arg)
@@ -236,7 +230,7 @@ func paneRead(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU32("--lines", v)
+			n, err := parseUint("--lines", v, 32)
 			p["lines"] = n
 			return err
 		case "--format":
@@ -275,7 +269,7 @@ func paneRead(args []string) (*Call, *UsageError) {
 func paneInput(args []string, getenv Env) (*Call, *UsageError) {
 	const usageLine = "usage: herdr pane input [<pane_id>|--pane ID|--current] --right-click herdr|pane"
 	p := map[string]any{}
-	err := walk(expandEquals(args, "--pane", "--right-click"), func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(expandEquals(args, "--pane", "--right-click"), func(arg string, value valueFn) *UsageError {
 		_, have := p["pane_id"]
 		switch arg {
 		case "--pane":
@@ -319,7 +313,7 @@ func paneInput(args []string, getenv Env) (*Call, *UsageError) {
 	if p["pane_id"] == nil || p["right_click"] == nil {
 		return nil, usage(usageLine)
 	}
-	return call("cli:pane:input:set", "pane.input.set", p)
+	return call("cli:pane:input:set", "pane.input.set", p), nil
 }
 
 func rightClick(v string) (string, *UsageError) {
@@ -338,7 +332,7 @@ func paneSplit(args []string, getenv Env) (*Call, *UsageError) {
 		args = args[1:]
 	}
 	env := p["env"].(map[string]string)
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--pane":
 			v, err := value(arg)
@@ -399,16 +393,24 @@ func paneSplit(args []string, getenv Env) (*Call, *UsageError) {
 	if _, ok := p["direction"]; !ok {
 		return nil, usage("usage: herdr pane split [<pane_id>|--pane ID|--current] --direction right|down [--ratio FLOAT] [--cwd PATH] [--env KEY=VALUE] [--right-click herdr|pane] [--focus] [--no-focus]")
 	}
-	return call("cli:pane:split", "pane.split", p)
+	return call("cli:pane:split", "pane.split", p), nil
 }
 
 func paneSwap(args []string) (*Call, *UsageError) {
 	p := map[string]any{}
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
-		case "--pane", "--source-pane", "--target-pane":
+		case "--pane":
 			v, err := value(arg)
-			p[map[string]string{"--pane": "pane_id", "--source-pane": "source_pane_id", "--target-pane": "target_pane_id"}[arg]] = v
+			p["pane_id"] = v
+			return err
+		case "--source-pane":
+			v, err := value(arg)
+			p["source_pane_id"] = v
+			return err
+		case "--target-pane":
+			v, err := value(arg)
+			p["target_pane_id"] = v
 			return err
 		case "--current":
 			delete(p, "pane_id")
@@ -433,9 +435,9 @@ func paneSwap(args []string) (*Call, *UsageError) {
 	_, pane := p["pane_id"]
 	switch {
 	case directional && !src && !dst:
-		return call("cli:pane:swap", "pane.swap", p)
+		return call("cli:pane:swap", "pane.swap", p), nil
 	case !directional && src && dst && !pane:
-		return call("cli:pane:swap", "pane.swap", p)
+		return call("cli:pane:swap", "pane.swap", p), nil
 	}
 	return nil, usage("usage: herdr pane swap --direction left|right|up|down [--pane ID|--current]\n       herdr pane swap --source-pane ID --target-pane ID")
 }
@@ -448,7 +450,7 @@ func paneMove(args []string) (*Call, *UsageError) {
 	}
 	f := map[string]any{}
 	focus := true
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--tab", "--workspace", "--target-pane", "--label", "--tab-label":
 			v, err := value(arg)
@@ -518,13 +520,13 @@ func paneMove(args []string) (*Call, *UsageError) {
 		setOpt(dest, "label", f["--label"])
 		setOpt(dest, "tab_label", f["--tab-label"])
 	}
-	return call("cli:pane:move", "pane.move", map[string]any{"pane_id": args[0], "destination": dest, "focus": focus})
+	return call("cli:pane:move", "pane.move", map[string]any{"pane_id": args[0], "destination": dest, "focus": focus}), nil
 }
 
 func paneWaitOutput(args []string) (*Call, *UsageError) {
 	const usageLine = "usage: herdr pane wait-output <pane_id> (--match TEXT | --regex PATTERN) [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--raw]"
 	p := map[string]any{"source": "recent", "strip_ansi": true}
-	err := walk(expandEquals(args, "--match", "--regex", "--source", "--lines", "--timeout"), func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(expandEquals(args, "--match", "--regex", "--source", "--lines", "--timeout"), func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--match", "--regex":
 			v, err := value(arg)
@@ -553,7 +555,7 @@ func paneWaitOutput(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU32("--lines", v)
+			n, err := parseUint("--lines", v, 32)
 			p["lines"] = n
 			return err
 		case "--timeout":
@@ -561,7 +563,7 @@ func paneWaitOutput(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU64("--timeout", v)
+			n, err := parseUint("--timeout", v, 64)
 			p["timeout_ms"] = n
 			return err
 		case "--raw":
@@ -586,7 +588,7 @@ func paneWaitOutput(args []string) (*Call, *UsageError) {
 	if _, ok := p["match"]; !ok {
 		return nil, usage("missing required --match or --regex")
 	}
-	c, _ := call("cli:pane:wait-output", "pane.wait_for_output", p)
+	c := call("cli:pane:wait-output", "pane.wait_for_output", p)
 	c.Wait = true
 	return c, nil
 }
@@ -606,18 +608,18 @@ func paneReportAgent(sub string, args []string) (*Call, *UsageError) {
 	args, resume, hasResume := splitDashDash(args)
 	p := map[string]any{}
 	if hasResume {
-		p["resume_argv"] = append([]string{}, resume...)
+		p["resume_argv"] = slices.Clone(resume)
 	}
-	err := walk(expandEquals(args, values...), func(arg string, value func(string) (string, *UsageError)) *UsageError {
-		if contains(values, arg) {
+	err := walk(expandEquals(args, values...), func(arg string, value valueFn) *UsageError {
+		if slices.Contains(values, arg) {
 			v, err := value(arg)
 			if err != nil {
 				return err
 			}
-			key := strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")
+			key := flagKey(arg)
 			switch arg {
 			case "--seq":
-				n, err := parseU64("--seq", v)
+				n, err := parseUint("--seq", v, 64)
 				p[key] = n
 				return err
 			case "--state":
@@ -652,7 +654,7 @@ func paneReportAgent(sub string, args []string) (*Call, *UsageError) {
 	if _, ok := p["state"]; withState && !ok {
 		return nil, usage("missing required --state")
 	}
-	c, _ := okCall("cli:request", "pane."+strings.ReplaceAll(sub, "-", "_"), p)
+	c := okCall("cli:request", "pane."+strings.ReplaceAll(sub, "-", "_"), p)
 	c.Report = true
 	return c, nil
 }
@@ -672,7 +674,7 @@ func paneReleaseAgent(args []string) (*Call, *UsageError) {
 		return nil, usage("usage: herdr pane release-agent <pane_id> --source ID --agent LABEL [--seq N]")
 	}
 	p := map[string]any{"pane_id": args[0]}
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--source", "--agent":
 			v, err := value(arg)
@@ -683,7 +685,7 @@ func paneReleaseAgent(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU64("--seq", v)
+			n, err := parseUint("--seq", v, 64)
 			p["seq"] = n
 			return err
 		}
@@ -698,7 +700,7 @@ func paneReleaseAgent(args []string) (*Call, *UsageError) {
 	if _, ok := p["agent"]; !ok {
 		return nil, usage("missing required --agent")
 	}
-	c, _ := okCall("cli:request", "pane.release_agent", p)
+	c := okCall("cli:request", "pane.release_agent", p)
 	c.Report = true
 	return c, nil
 }
@@ -710,14 +712,14 @@ func paneReportMetadata(args []string) (*Call, *UsageError) {
 	p := map[string]any{"pane_id": args[0], "clear_title": false, "clear_display_agent": false, "clear_state_labels": false}
 	labels := map[string]string{}
 	tokens := map[string]any{}
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--source", "--agent", "--applies-to-source", "--title", "--display-agent":
 			v, err := value(arg)
-			p[strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")] = v
+			p[flagKey(arg)] = v
 			return err
 		case "--clear-title", "--clear-display-agent", "--clear-state-labels":
-			p[strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")] = true
+			p[flagKey(arg)] = true
 			return nil
 		case "--state-label":
 			v, err := value(arg)
@@ -751,8 +753,8 @@ func paneReportMetadata(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU64(arg, v)
-			p[strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")] = n
+			n, err := parseUint(arg, v, 64)
+			p[flagKey(arg)] = n
 			return err
 		}
 		return unknownOption(arg)
@@ -775,7 +777,7 @@ func paneReportMetadata(args []string) (*Call, *UsageError) {
 		return nil, usage("missing metadata field to set or clear")
 	}
 	p["state_labels"], p["tokens"] = labels, tokens
-	c, _ := okCall("cli:request", "pane.report_metadata", p)
+	c := okCall("cli:request", "pane.report_metadata", p)
 	c.Report = true
 	return c, nil
 }

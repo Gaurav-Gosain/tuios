@@ -1,6 +1,7 @@
 package herdrcli
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -11,11 +12,11 @@ import (
 // name less "--" with "-" made "_", and --focus and --no-focus into focus.
 // --env KEY=VALUE goes into env when env is not nil.
 func valueFlags(args []string, allowed []string, p map[string]any, env map[string]string) *UsageError {
-	return walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	return walk(args, func(arg string, value valueFn) *UsageError {
 		switch {
-		case contains(allowed, arg):
+		case slices.Contains(allowed, arg):
 			v, err := value(arg)
-			p[strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")] = v
+			p[flagKey(arg)] = v
 			return err
 		case arg == "--focus" || arg == "--no-focus":
 			p["focus"] = arg == "--focus"
@@ -52,7 +53,7 @@ func parseTab(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 	switch sub {
 	case "list":
 		p := map[string]any{}
-		err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+		err := walk(args, func(arg string, value valueFn) *UsageError {
 			if arg != "--workspace" {
 				return unknownOption(arg)
 			}
@@ -63,7 +64,7 @@ func parseTab(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:tab:list", "tab.list", p)
+		return call("cli:tab:list", "tab.list", p), nil
 	case "create":
 		env := map[string]string{}
 		p := map[string]any{"focus": false}
@@ -72,18 +73,18 @@ func parseTab(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 		}
 		renameKey(p, "workspace", "workspace_id")
 		p["env"] = env
-		return call("cli:tab:create", "tab.create", p)
+		return call("cli:tab:create", "tab.create", p), nil
 	case "get", "focus", "close":
 		id, err := oneID(args, "usage: herdr tab "+sub+" <tab_id>")
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:tab:"+sub, "tab."+sub, map[string]any{"tab_id": id})
+		return call("cli:tab:"+sub, "tab."+sub, map[string]any{"tab_id": id}), nil
 	case "rename":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr tab rename <tab_id> <label>")
 		}
-		return call("cli:tab:rename", "tab.rename", map[string]any{"tab_id": args[0], "label": strings.Join(args[1:], " ")})
+		return call("cli:tab:rename", "tab.rename", map[string]any{"tab_id": args[0], "label": strings.Join(args[1:], " ")}), nil
 	}
 	return nil, &UsageError{Msg: groupHelp["tab"], Code: 2}
 }
@@ -94,7 +95,7 @@ func parseWorkspace(sub string, args []string, _ Env, _ string) (*Call, *UsageEr
 		if len(args) != 0 {
 			return nil, usage("usage: herdr workspace list")
 		}
-		return call("cli:workspace:list", "workspace.list", nil)
+		return call("cli:workspace:list", "workspace.list", nil), nil
 	case "create":
 		env := map[string]string{}
 		p := map[string]any{"focus": false}
@@ -102,24 +103,24 @@ func parseWorkspace(sub string, args []string, _ Env, _ string) (*Call, *UsageEr
 			return nil, err
 		}
 		p["env"] = env
-		return call("cli:workspace:create", "workspace.create", p)
+		return call("cli:workspace:create", "workspace.create", p), nil
 	case "get", "focus":
 		id, err := oneID(args, "usage: herdr workspace "+sub+" <workspace_id>")
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:workspace:"+sub, "workspace."+sub, map[string]any{"workspace_id": id})
+		return call("cli:workspace:"+sub, "workspace."+sub, map[string]any{"workspace_id": id}), nil
 	case "rename":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr workspace rename <workspace_id> <label>")
 		}
-		return call("cli:workspace:rename", "workspace.rename", map[string]any{"workspace_id": args[0], "label": strings.Join(args[1:], " ")})
+		return call("cli:workspace:rename", "workspace.rename", map[string]any{"workspace_id": args[0], "label": strings.Join(args[1:], " ")}), nil
 	case "close":
 		switch {
 		case len(args) == 1:
-			return call("cli:workspace:close", "workspace.close", map[string]any{"workspace_id": args[0], "close_group": false})
+			return call("cli:workspace:close", "workspace.close", map[string]any{"workspace_id": args[0], "close_group": false}), nil
 		case len(args) == 2 && args[1] == "--group":
-			return call("cli:workspace:close", "workspace.close", map[string]any{"workspace_id": args[0], "close_group": true})
+			return call("cli:workspace:close", "workspace.close", map[string]any{"workspace_id": args[0], "close_group": true}), nil
 		}
 		return nil, usage("usage: herdr workspace close <workspace_id> [--group]")
 	case "report-metadata":
@@ -134,7 +135,7 @@ func workspaceReportMetadata(args []string) (*Call, *UsageError) {
 	}
 	p := map[string]any{"workspace_id": args[0]}
 	tokens := map[string]any{}
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--source":
 			v, err := value(arg)
@@ -157,8 +158,8 @@ func workspaceReportMetadata(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU64(arg, v)
-			p[strings.ReplaceAll(strings.TrimPrefix(arg, "--"), "-", "_")] = n
+			n, err := parseUint(arg, v, 64)
+			p[flagKey(arg)] = n
 			return err
 		}
 		return unknownOption(arg)
@@ -173,7 +174,7 @@ func workspaceReportMetadata(args []string) (*Call, *UsageError) {
 		return nil, usage("missing token to set or clear")
 	}
 	p["tokens"] = tokens
-	return okCall("cli:request", "workspace.report_metadata", p)
+	return okCall("cli:request", "workspace.report_metadata", p), nil
 }
 
 func parseAgent(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
@@ -182,20 +183,20 @@ func parseAgent(sub string, args []string, _ Env, _ string) (*Call, *UsageError)
 		if len(args) != 0 {
 			return nil, usage("usage: herdr agent list")
 		}
-		return call("cli:agent:list", "agent.list", nil)
+		return call("cli:agent:list", "agent.list", nil), nil
 	case "get", "focus":
 		id, err := oneID(args, "usage: herdr agent "+sub+" <target>")
 		if err != nil {
 			return nil, err
 		}
-		return call("cli:agent:"+sub, "agent."+sub, map[string]any{"target": id})
+		return call("cli:agent:"+sub, "agent."+sub, map[string]any{"target": id}), nil
 	case "read":
 		return agentRead(args)
 	case "send-keys":
 		if len(args) < 2 {
 			return nil, usage("usage: herdr agent send-keys <target> <key> [key ...]")
 		}
-		return call("cli:agent:send-keys", "agent.send_keys", map[string]any{"target": args[0], "keys": args[1:]})
+		return call("cli:agent:send-keys", "agent.send_keys", map[string]any{"target": args[0], "keys": args[1:]}), nil
 	case "prompt":
 		return agentPrompt(args)
 	case "rename":
@@ -206,7 +207,7 @@ func parseAgent(sub string, args []string, _ Env, _ string) (*Call, *UsageError)
 		if args[1] != "--clear" {
 			p["name"] = args[1]
 		}
-		return call("cli:agent:rename", "agent.rename", p)
+		return call("cli:agent:rename", "agent.rename", p), nil
 	case "wait":
 		return agentWait(args)
 	case "start":
@@ -224,7 +225,7 @@ func agentRead(args []string) (*Call, *UsageError) {
 		return nil, usage("usage: herdr agent read <target> [--source visible|recent|recent-unwrapped] [--lines N] [--format text|ansi] [--ansi]")
 	}
 	p := map[string]any{"target": args[0], "source": "recent", "format": "text", "strip_ansi": true}
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--source":
 			v, err := value(arg)
@@ -239,7 +240,7 @@ func agentRead(args []string) (*Call, *UsageError) {
 			if err != nil {
 				return err
 			}
-			n, err := parseU32("--lines", v)
+			n, err := parseUint("--lines", v, 32)
 			p["lines"] = n
 			return err
 		case "--format":
@@ -266,7 +267,7 @@ func agentRead(args []string) (*Call, *UsageError) {
 // when wait is not nil.
 func untilTimeout(args []string, p map[string]any, wait *bool) *UsageError {
 	var until []string
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--until":
 			v, err := value(arg)
@@ -281,7 +282,7 @@ func untilTimeout(args []string, p map[string]any, wait *bool) *UsageError {
 			if err != nil {
 				return err
 			}
-			n, err := parseU64("--timeout", v)
+			n, err := parseUint("--timeout", v, 64)
 			p["timeout_ms"] = n
 			return err
 		case "--wait":
@@ -313,7 +314,7 @@ func agentWait(args []string) (*Call, *UsageError) {
 	if err := untilTimeout(args[1:], p, nil); err != nil {
 		return nil, err
 	}
-	c, _ := call("cli:agent:wait", "agent.wait", p)
+	c := call("cli:agent:wait", "agent.wait", p)
 	c.Wait = true
 	return c, nil
 }
@@ -340,7 +341,7 @@ func agentPrompt(args []string) (*Call, *UsageError) {
 	if wait {
 		p["wait"] = opts
 	}
-	c, _ := call("cli:agent:prompt", "agent.prompt", p)
+	c := call("cli:agent:prompt", "agent.prompt", p)
 	c.Wait = wait
 	return c, nil
 }
@@ -351,18 +352,22 @@ func agentStart(args []string) (*Call, *UsageError) {
 	}
 	flags, rest, _ := splitDashDash(args[1:])
 	p := map[string]any{"name": args[0]}
-	err := walk(flags, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(flags, func(arg string, value valueFn) *UsageError {
 		switch arg {
-		case "--kind", "--pane":
+		case "--kind":
 			v, err := value(arg)
-			p[map[string]string{"--kind": "kind", "--pane": "pane_id"}[arg]] = v
+			p["kind"] = v
+			return err
+		case "--pane":
+			v, err := value(arg)
+			p["pane_id"] = v
 			return err
 		case "--timeout":
 			v, err := value(arg)
 			if err != nil {
 				return err
 			}
-			n, err := parseU64("--timeout", v)
+			n, err := parseUint("--timeout", v, 64)
 			p["timeout_ms"] = n
 			return err
 		}
@@ -381,9 +386,9 @@ func agentStart(args []string) (*Call, *UsageError) {
 		return nil, usage("unsupported interactive agent kind: " + kind)
 	}
 	if len(rest) > 0 {
-		p["args"] = append([]string{}, rest...)
+		p["args"] = slices.Clone(rest)
 	}
-	c, _ := call("cli:agent:start", "agent.start", p)
+	c := call("cli:agent:start", "agent.start", p)
 	c.Output, c.Wait = OutAgentStart, true
 	return c, nil
 }
@@ -391,7 +396,7 @@ func agentStart(args []string) (*Call, *UsageError) {
 func agentExplain(args []string) (*Call, *UsageError) {
 	target := ""
 	file := false
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--file", "--agent", "--format":
 			v, err := value(arg)
@@ -426,7 +431,7 @@ func agentExplain(args []string) (*Call, *UsageError) {
 	if target == "" {
 		return nil, usage("usage: herdr agent explain <target> [--json]\nusage: herdr agent explain --file PATH --agent LABEL [--json]")
 	}
-	return call("cli:agent:explain", "agent.explain", map[string]any{"target": target})
+	return call("cli:agent:explain", "agent.explain", map[string]any{"target": target}), nil
 }
 
 func parseWorktree(sub string, args []string, getenv Env, cwd string) (*Call, *UsageError) {
@@ -452,9 +457,9 @@ func parseWorktree(sub string, args []string, getenv Env, cwd string) (*Call, *U
 	if sub == "create" || sub == "open" {
 		p["focus"] = false
 	}
-	err := walk(args, func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args, func(arg string, value valueFn) *UsageError {
 		switch {
-		case contains(allowed, arg):
+		case slices.Contains(allowed, arg):
 			v, err := value(arg)
 			if err != nil {
 				return err
@@ -502,7 +507,7 @@ func parseWorktree(sub string, args []string, getenv Env, cwd string) (*Call, *U
 			p["force"] = false
 		}
 	}
-	return call("cli:worktree:"+sub, "worktree."+sub, p)
+	return call("cli:worktree:"+sub, "worktree."+sub, p), nil
 }
 
 func parseNotification(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
@@ -514,7 +519,7 @@ func parseNotification(sub string, args []string, _ Env, _ string) (*Call, *Usag
 		return nil, usage(usageLine)
 	}
 	p := map[string]any{"title": args[0], "sound": "none"}
-	err := walk(args[1:], func(arg string, value func(string) (string, *UsageError)) *UsageError {
+	err := walk(args[1:], func(arg string, value valueFn) *UsageError {
 		switch arg {
 		case "--body":
 			v, err := value(arg)
@@ -548,7 +553,7 @@ func parseNotification(sub string, args []string, _ Env, _ string) (*Call, *Usag
 	if err != nil {
 		return nil, err
 	}
-	return call("cli:notification:show", "notification.show", p)
+	return call("cli:notification:show", "notification.show", p), nil
 }
 
 func parseAPI(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
@@ -557,7 +562,7 @@ func parseAPI(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 		if len(args) != 0 {
 			return nil, usage("usage: herdr api snapshot")
 		}
-		return call("cli:api:snapshot", "session.snapshot", nil)
+		return call("cli:api:snapshot", "session.snapshot", nil), nil
 	case "schema":
 		return local("cli:api:schema", "herdr api schema prints herdr's own schema file, which tuios does not ship. tuios follows herdr "+Version+": see herdr's docs/next/api/herdr-api.schema.json at that tag"), nil
 	}
@@ -570,9 +575,9 @@ func parseServer(sub string, args []string, _ Env, _ string) (*Call, *UsageError
 		if len(args) != 0 {
 			return nil, usage("usage: herdr server " + sub)
 		}
-		return call("cli:server:"+sub, "server."+strings.ReplaceAll(sub, "-", "_"), nil)
+		return call("cli:server:"+sub, "server."+strings.ReplaceAll(sub, "-", "_"), nil), nil
 	case "agent-manifests":
-		return call("cli:server:agent-manifests", "server.agent_manifests", nil)
+		return call("cli:server:agent-manifests", "server.agent_manifests", nil), nil
 	case "stop", "live-handoff", "update-agent-manifests":
 		return local("cli:server:"+sub, "herdr server "+sub+" acts on herdr's own server. tuios's daemon is not stopped or changed this way. Use tuios kill-server"), nil
 	}
@@ -603,5 +608,5 @@ func herdrAgentKind(kind string) bool {
 	if rest, ok := strings.CutPrefix(name, "muse-bin-"); ok && rest != "" && rest[0] >= '0' && rest[0] <= '9' {
 		return true
 	}
-	return contains(herdrAgentKinds, name)
+	return slices.Contains(herdrAgentKinds, name)
 }

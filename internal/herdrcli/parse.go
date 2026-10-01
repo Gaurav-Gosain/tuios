@@ -3,6 +3,7 @@ package herdrcli
 import (
 	"math"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -81,7 +82,7 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	group, rest := args[0], args[1:]
 	if strings.HasPrefix(group, "-") {
 		name, _, _ := strings.Cut(group, "=")
-		if !contains(launchOptions, name) {
+		if !slices.Contains(launchOptions, name) {
 			return nil, usage("unknown option: " + group + "\nrun 'herdr --help' for usage")
 		}
 		return local("cli", group+" is a herdr launch option. tuios's herdr front answers herdr's socket commands only"), nil
@@ -95,13 +96,8 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	}
 	// herdr prints a command's long help for --help anywhere after it,
 	// before a "--".
-	for _, a := range rest {
-		if a == "--" {
-			break
-		}
-		if a == "--help" || a == "-h" {
-			return &Call{Output: OutText, Text: groupHelp[group]}, nil
-		}
+	if flags, _, _ := splitDashDash(rest); slices.Contains(flags, "--help") || slices.Contains(flags, "-h") {
+		return &Call{Output: OutText, Text: groupHelp[group]}, nil
 	}
 	if len(rest) == 0 {
 		return nil, &UsageError{Msg: groupHelp[group], Code: 2}
@@ -125,19 +121,15 @@ func local(id, msg string) *Call {
 
 type groupParser func(sub string, args []string, getenv Env, cwd string) (*Call, *UsageError)
 
-var groups map[string]groupParser
-
-func init() {
-	groups = map[string]groupParser{
-		"pane":         parsePane,
-		"tab":          parseTab,
-		"workspace":    parseWorkspace,
-		"agent":        parseAgent,
-		"worktree":     parseWorktree,
-		"notification": parseNotification,
-		"api":          parseAPI,
-		"server":       parseServer,
-	}
+var groups = map[string]groupParser{
+	"pane":         parsePane,
+	"tab":          parseTab,
+	"workspace":    parseWorkspace,
+	"agent":        parseAgent,
+	"worktree":     parseWorktree,
+	"notification": parseNotification,
+	"api":          parseAPI,
+	"server":       parseServer,
 }
 
 // localGroups are herdr's commands that do their work on herdr's own
@@ -157,25 +149,28 @@ var localGroups = map[string]string{
 }
 
 // call is a request whose answer is printed whole.
-func call(id, method string, params map[string]any) (*Call, *UsageError) {
+func call(id, method string, params map[string]any) *Call {
 	if params == nil {
 		params = map[string]any{}
 	}
-	return &Call{ID: id, Method: method, Params: params}, nil
+	return &Call{ID: id, Method: method, Params: params}
 }
 
 // okCall is a request herdr makes for its effect: nothing is printed on
 // success.
-func okCall(id, method string, params map[string]any) (*Call, *UsageError) {
-	c, _ := call(id, method, params)
+func okCall(id, method string, params map[string]any) *Call {
+	c := call(id, method, params)
 	c.Output = OutOK
-	return c, nil
+	return c
 }
+
+// valueFn reads the value of the flag it is given: the next argument.
+type valueFn = func(flag string) (string, *UsageError)
 
 // walk calls fn for each argument in turn. fn reads a flag's value with the
 // value func it is given, which takes the next argument, as herdr's parsers
 // do with args.get(index + 1).
-func walk(args []string, fn func(arg string, value func(flag string) (string, *UsageError)) *UsageError) *UsageError {
+func walk(args []string, fn func(arg string, value valueFn) *UsageError) *UsageError {
 	for i := 0; i < len(args); i++ {
 		took := false
 		value := func(flag string) (string, *UsageError) {
@@ -200,7 +195,7 @@ func walk(args []string, fn func(arg string, value func(flag string) (string, *U
 func expandEquals(args []string, valueFlags ...string) []string {
 	out := make([]string, 0, len(args))
 	for _, a := range args {
-		if flag, v, ok := strings.Cut(a, "="); ok && contains(valueFlags, flag) {
+		if flag, v, ok := strings.Cut(a, "="); ok && slices.Contains(valueFlags, flag) {
 			out = append(out, flag, v)
 			continue
 		}
@@ -209,13 +204,10 @@ func expandEquals(args []string, valueFlags ...string) []string {
 	return out
 }
 
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+// flagKey is the params key of a flag: --agent-session-id is
+// agent_session_id.
+func flagKey(flag string) string {
+	return strings.ReplaceAll(strings.TrimPrefix(flag, "--"), "-", "_")
 }
 
 // envPane is HERDR_PANE_ID, nil when it is unset or blank.
@@ -232,16 +224,10 @@ func setOpt(p map[string]any, key string, v any) {
 	}
 }
 
-func parseU32(flag, v string) (uint64, *UsageError) {
-	n, err := strconv.ParseUint(v, 10, 32)
-	if err != nil {
-		return 0, usage("invalid value for " + flag + ": " + v)
-	}
-	return n, nil
-}
-
-func parseU64(flag, v string) (uint64, *UsageError) {
-	n, err := strconv.ParseUint(v, 10, 64)
+// parseUint reads an unsigned integer of the given bits, as herdr's u32
+// and u64 flags do.
+func parseUint(flag, v string, bits int) (uint64, *UsageError) {
+	n, err := strconv.ParseUint(v, 10, bits)
 	if err != nil {
 		return 0, usage("invalid value for " + flag + ": " + v)
 	}
@@ -351,10 +337,8 @@ func absPath(v string, getenv Env, cwd string) string {
 
 // splitDashDash splits args at the first "--".
 func splitDashDash(args []string) ([]string, []string, bool) {
-	for i, a := range args {
-		if a == "--" {
-			return args[:i], args[i+1:], true
-		}
+	if i := slices.Index(args, "--"); i >= 0 {
+		return args[:i], args[i+1:], true
 	}
 	return args, nil, false
 }
