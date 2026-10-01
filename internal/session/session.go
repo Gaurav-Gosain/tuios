@@ -198,7 +198,7 @@ type WindowState struct {
 	// hooks reported them (see agent_subagents.go). Daemon-owned like
 	// AgentQueued and never set by a client. Additive: zero, which is what an
 	// older daemon sends, means none.
-	AgentSubagents int `json:"agent_subagents,omitempty"`
+	AgentSubagents int `json:"agent_subagents,omitzero"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane

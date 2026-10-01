@@ -31,8 +31,8 @@ import (
 // herdrProcessInfo is herdr's PaneProcessInfo.
 type herdrProcessInfo struct {
 	PaneID              string             `json:"pane_id"`
-	ShellPID            int                `json:"shell_pid,omitempty"`
-	ForegroundPGID      int                `json:"foreground_process_group_id,omitempty"`
+	ShellPID            int                `json:"shell_pid,omitzero"`
+	ForegroundPGID      int                `json:"foreground_process_group_id,omitzero"`
 	ForegroundProcesses []herdrProcessItem `json:"foreground_processes,omitempty"`
 }
 
