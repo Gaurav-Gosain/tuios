@@ -27,8 +27,9 @@ import (
 // run:
 //
 //   - while the pane is narrow and scrolled back to the line, the client's
-//     frame stops the row at the pane's border. That is the reason the
-//     blanking existed, and it has to stay true without it.
+//     frame stops the row at the pane's border, and the pane's last column
+//     keeps the line's background. The border is the reason the blanking
+//     existed.
 //   - while the pane is narrow, a text screenshot of the pane with its history
 //     has no row wider than the pane. The screenshot grid clips the row with
 //     vt.ClipHistoryRow.
@@ -45,6 +46,11 @@ import (
 //     the lines.
 //   - drop the vt.ClipHistoryRow call in the screenshot grid: the screenshot
 //     row is one column wider than the pane.
+//
+// The pane renderer clips the row too. Dropping that call is not caught here:
+// in this layout the frame still shows the background at the edge. The
+// renderer's own test, TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane
+// in internal/app, catches it.
 func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 	const (
 		session = "wide-hist"
@@ -68,7 +74,10 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 	}
 	// paneEmitCmd spells every byte in octal, so the echoed command line holds
 	// neither marker and only the printed lines can match.
-	if err := paneSend(base, session, w.ID, paneEmitCmd(lineA+"\n"+lineB+"\n")); err != nil {
+	// Both lines are printed on a blue background, so the frame can show
+	// whether the pane's last column kept the line's style.
+	const blue, reset = "\x1b[44m", "\x1b[0m"
+	if err := paneSend(base, session, w.ID, paneEmitCmd(blue+lineA+reset+"\n"+blue+lineB+reset+"\n")); err != nil {
 		t.Fatalf("print the lines: %v", err)
 	}
 	// Push both lines off the screen and into history.
@@ -147,6 +156,37 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 		if last < right-5 {
 			t.Fatalf("row %d stops at column %d, short of the pane's border at column %d, so it cannot test the edge: %q\n%s",
 				r, last, right, line, term.Snapshot())
+		}
+		// The line's background reaches the pane's last column. A row drawn
+		// one column too wide is cut at the border by the frame, and that cut
+		// drops the whole wide cell, background, copy cursor and selection
+		// with it. The positive half: the line's first cell has the blue.
+		first := -1
+		for c := range right {
+			if s.Cell(c, r).Content == "W" {
+				first = c
+				break
+			}
+		}
+		if c := s.Cell(first, r); first < 0 || c.Bg.Kind == tuitest.ColorDefault {
+			t.Fatalf("row %d: the line's first cell has no background, so the edge check below tests nothing: %q\n%s",
+				r, line, term.Snapshot())
+		}
+		// The pane's own border is the first of the border columns the row
+		// ends in, and its last column is the one before that.
+		edge := right
+		for edge > 0 && s.Cell(edge-1, r).Content == "│" {
+			edge--
+		}
+		// The last column can be the second half of a wide rune, which has no
+		// cell of its own. Its style is the rune's.
+		edgeCol := edge - 1
+		if s.Cell(edgeCol, r).Content == "" {
+			edgeCol--
+		}
+		if c := s.Cell(edgeCol, r); c.Bg.Kind == tuitest.ColorDefault {
+			t.Fatalf("row %d: the pane's last column (%d) lost the line's background, so the history row "+
+				"was drawn wider than the pane and cut: cell %q\n%s", r, edgeCol, c.Content, term.Snapshot())
 		}
 		if c := s.Cell(right, r); c.Content != "│" {
 			t.Fatalf("row %d covers the pane's right border at column %d with %q (width %d): "+

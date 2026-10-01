@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -609,7 +610,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		if sbRow {
 			scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
 			if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
-				sbLine = window.ScrollbackLine(scrollbackIndex)
+				// Clipped to the pane: a wide rune whose lead sits in the
+				// last column would make the row one column too wide, and the
+				// frame's width cut then drops the whole cell with its style,
+				// the copy cursor and any selection on it.
+				sbLine = vt.ClipHistoryRow(window.ScrollbackLine(scrollbackIndex), maxX)
 			}
 		}
 
