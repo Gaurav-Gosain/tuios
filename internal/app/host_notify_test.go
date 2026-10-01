@@ -101,7 +101,7 @@ func TestNotifyTextKeepsTheZeroWidthJoiner(t *testing.T) {
 // Variation selectors, the soft hyphen, other format characters and a joiner
 // outside an emoji draw nothing, and a line separator is a line break.
 func TestNotifyTextDropsEveryInvisibleClass(t *testing.T) {
-	in := "ad‍min­︁\U000E0101᠎￹\U0001D173‌ ok now"
+	in := "ad\u200Dmin\u00AD\uFE01\U000E0101\u180E\uFFF9\U0001D173\u200C ok\u2028now"
 	if got := notifyPlainText(in); got != "admin ok now" {
 		t.Fatalf("notifyPlainText(%q) = %q, want %q", in, got, "admin ok now")
 	}
