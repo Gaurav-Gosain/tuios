@@ -254,37 +254,7 @@ func (s *Session) expireSubagents(now time.Time) int {
 // does for metadata with a TTL. A timer already due sooner stands. It is armed
 // only while a pane has subagents, so a session without them costs nothing.
 func (s *Session) armSubagentPrune(at int64) {
-	if at == 0 {
-		return
-	}
-	s.subagentMu.Lock()
-	defer s.subagentMu.Unlock()
-	if s.subagentTimer != nil && s.subagentAt != 0 && s.subagentAt <= at {
-		return
-	}
-	if s.subagentTimer != nil {
-		s.subagentTimer.Stop()
-	}
-	s.subagentAt = at
-	s.subagentTimer = time.AfterFunc(max(time.Until(time.Unix(0, at)), 0), s.pruneSubagents)
-}
-
-// pruneSubagents is the timer's run: drop what went quiet, and arm the next.
-func (s *Session) pruneSubagents() {
-	s.subagentMu.Lock()
-	s.subagentTimer, s.subagentAt = nil, 0
-	s.subagentMu.Unlock()
-	s.expireSubagents(time.Now())
-}
-
-// stopSubagentTimer cancels a pending prune, for a session that is stopping.
-func (s *Session) stopSubagentTimer() {
-	s.subagentMu.Lock()
-	defer s.subagentMu.Unlock()
-	if s.subagentTimer != nil {
-		s.subagentTimer.Stop()
-		s.subagentTimer, s.subagentAt = nil, 0
-	}
+	s.subagentPrune.arm(at, func() { s.expireSubagents(time.Now()) })
 }
 
 // subagentCount is how many subagents the window's agent is running, as its

@@ -293,29 +293,11 @@ func (s *Session) SetAgentMeta(target string, u AgentMetaUpdate) ([]AgentMetaTok
 // stands. The prune is what makes a TTL mean something to a client: clients
 // only draw what the state sync hands them, so the daemon drops the token and
 // pushes, and no client has to keep a clock of its own for it.
-func (s *Session) armAgentMetaPrune(at int64) {
-	if at == 0 {
-		return
-	}
-	s.agentMetaMu.Lock()
-	defer s.agentMetaMu.Unlock()
-	if s.agentMetaTimer != nil && s.agentMetaAt != 0 && s.agentMetaAt <= at {
-		return
-	}
-	if s.agentMetaTimer != nil {
-		s.agentMetaTimer.Stop()
-	}
-	s.agentMetaAt = at
-	s.agentMetaTimer = time.AfterFunc(max(time.Until(time.Unix(0, at)), 0), s.pruneAgentMeta)
-}
+func (s *Session) armAgentMetaPrune(at int64) { s.agentMetaPrune.arm(at, s.pruneAgentMeta) }
 
 // pruneAgentMeta drops every expired token in the session and arms the next
 // prune.
 func (s *Session) pruneAgentMeta() {
-	s.agentMetaMu.Lock()
-	s.agentMetaTimer, s.agentMetaAt = nil, 0
-	s.agentMetaMu.Unlock()
-
 	var next int64
 	_ = s.mutateState(func(st *SessionState) error {
 		now := time.Now().UnixNano()
@@ -334,16 +316,6 @@ func (s *Session) pruneAgentMeta() {
 		return nil
 	})
 	s.armAgentMetaPrune(next)
-}
-
-// stopAgentMetaTimer cancels a pending prune, for a session that is stopping.
-func (s *Session) stopAgentMetaTimer() {
-	s.agentMetaMu.Lock()
-	defer s.agentMetaMu.Unlock()
-	if s.agentMetaTimer != nil {
-		s.agentMetaTimer.Stop()
-		s.agentMetaTimer, s.agentMetaAt = nil, 0
-	}
 }
 
 // decodeAgentMetaTokens reads the tokens object of a set-agent-meta call in
