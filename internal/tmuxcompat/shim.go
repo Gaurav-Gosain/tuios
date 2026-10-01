@@ -130,6 +130,8 @@ var specs = map[string]spec{
 	"list-clients":        {values: "Ft"},
 	"show-options":        {bools: "AgHpqsvw", values: "t"},
 	"show-window-options": {bools: "gv", values: "t"},
+	"set-option":          {bools: "aFgopqsuUw", values: "t"},
+	"set-window-option":   {bools: "aFgoqu", values: "t"},
 	"new-session":         {bools: "AdDEPX", values: "cefFnstxy"},
 }
 
@@ -380,7 +382,7 @@ func (s *Shim) runOne(name string, args []string) (string, []string, error) {
 	// set-option window-size is the one option tuios honours: it is the
 	// session's daemon.window_size. Every other option is ignored.
 	if name == "set-option" || name == "set-window-option" {
-		if opt, value, ok := optionAssignment(args); ok && opt == "window-size" {
+		if opt, value, ok := optionAssignment(name, args); ok && opt == "window-size" {
 			o, err := s.setWindowSize(value)
 			return o, nil, err
 		}
