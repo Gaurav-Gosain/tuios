@@ -125,14 +125,19 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 // Update updates the animation progress and applies changes to the window.
 // Returns true if the animation is complete, false otherwise.
 func (a *Animation) Update() bool {
+	return a.UpdateAt(time.Now())
+}
+
+// UpdateAt is Update against a given clock reading. A caller stepping several
+// animations for one frame passes them all the same reading, so panes that
+// started together stay at the same progress and their shared edges agree.
+func (a *Animation) UpdateAt(now time.Time) bool {
 	if a.Complete {
 		return true
 	}
 
 	// Don't resize the VT emulator during animation. Wait until it completes.
 	// This prevents content overflow and size mismatch issues
-
-	now := time.Now()
 
 	// Calculate progress (0.0 to 1.0)
 	elapsed := now.Sub(a.StartTime)
@@ -149,8 +154,14 @@ func (a *Animation) Update() bool {
 	// Animate position and visual size for smooth animations
 	newX := interpolate(a.StartX, a.EndX, a.Progress)
 	newY := interpolate(a.StartY, a.EndY, a.Progress)
-	newWidth := interpolate(a.StartWidth, a.EndWidth, a.Progress)
-	newHeight := interpolate(a.StartHeight, a.EndHeight, a.Progress)
+	// The far edges are interpolated rather than the sizes. Two panes that
+	// share an edge at both ends of a slide (a column and its neighbour on the
+	// scrolling strip, two tiles in a split) then round that edge to the same
+	// cell on every frame. Rounding the width on its own let the edge of one
+	// and the start of the next land a cell apart, which drew a one-column gap
+	// or overlap that flickered along the seam.
+	newWidth := max(interpolate(a.StartX+a.StartWidth, a.EndX+a.EndWidth, a.Progress)-newX, 1)
+	newHeight := max(interpolate(a.StartY+a.StartHeight, a.EndY+a.EndHeight, a.Progress)-newY, 1)
 
 	a.Window.X = newX
 	a.Window.Y = newY

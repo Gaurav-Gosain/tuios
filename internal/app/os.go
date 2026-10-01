@@ -1537,6 +1537,9 @@ type OS struct {
 	// layoutInstant places the next layout without animation. See
 	// applyStartupTiling and layoutAnimationDuration.
 	layoutInstant bool
+	// msgClock is the clock reading layoutClock hands out while one message is
+	// handled. Update sets it before each message and clears it after.
+	msgClock time.Time
 
 	// sessionUnarranged records that the session this client attached to had
 	// never been laid out by anybody: every window it carried was still marked
