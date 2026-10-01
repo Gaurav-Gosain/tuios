@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // Answering a permission prompt from the Inbox.
@@ -311,7 +313,7 @@ func printableLine(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !unicode.IsPrint(r) {
+		if !unicode.IsPrint(r) || invisible.Rune(r) {
 			return false
 		}
 	}

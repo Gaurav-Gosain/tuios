@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // Text another machine wrote reaches this terminal from a capture of a pane
@@ -12,8 +12,7 @@ import (
 // than colour text: OSC 52 writes the clipboard, OSC 8 hides a link target,
 // a cursor move overwrites what was printed before it, including the fence.
 // Bidi and zero-width characters make text read differently from what it is:
-// plainText drops them, with session.InvisibleFormatRune, and so does
-// hostStyledText.
+// plainText drops them, with invisible.Strip, and so does hostStyledText.
 
 // hostStyledText is for a capture from another machine that asked for escape
 // codes (--ansi, --resolved). It keeps SGR sequences (CSI ... m), which only
@@ -22,6 +21,9 @@ import (
 // two-byte escapes. Other control characters and invisible format characters
 // are removed as plainText removes them.
 func hostStyledText(s string) string {
+	// Escape sequences are ASCII, so removing invisible characters first
+	// cannot break one.
+	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
@@ -51,7 +53,7 @@ func hostStyledText(s string) string {
 				continue
 			case r == '\n' || r == '\t':
 				b.WriteRune(r)
-			case r < 0x20 || (r >= 0x7f && r < 0xa0) || session.InvisibleFormatRune(r):
+			case r < 0x20 || (r >= 0x7f && r < 0xa0):
 			case r == utf8.RuneError && size == 1:
 			default:
 				b.WriteString(s[i : i+size])

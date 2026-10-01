@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -51,6 +51,10 @@ func sanitizeNotifyText(s string) string {
 // The other C1 controls go too, since a terminal in 8-bit mode reads 0x9b as
 // CSI. A byte that is not valid UTF-8 is dropped rather than passed on.
 func notifyPlainText(s string) string {
+	// Invisible characters would let the text read as something other than
+	// what it holds. invisible.Strip keeps a zero-width joiner between two
+	// emoji, so a family or a profession emoji stays one picture.
+	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
@@ -62,17 +66,6 @@ func notifyPlainText(s string) string {
 		case r == '\n' || r == '\r' || r == '\t':
 			b.WriteRune(' ')
 		case r < 0x20, r >= 0x7f && r <= 0x9f:
-			continue
-		case r == 0x200c || r == 0x200d:
-			// The zero-width joiner and non-joiner build emoji sequences and
-			// shape some scripts. They reorder nothing, so they stay.
-			b.WriteRune(r)
-		case session.InvisibleFormatRune(r):
-			// Zero-width and bidi formatting characters would let the text
-			// read as something other than what it holds.
-			continue
-		case r >= 0xe0000 && r <= 0xe007f:
-			// Tag characters draw nothing and can carry hidden text.
 			continue
 		case r == 0x115f, r == 0x1160, r == 0x3164, r == 0xffa0:
 			// Hangul fillers draw as blank space.

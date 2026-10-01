@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // The transcript: what the pane shows of the conversation.
@@ -44,15 +45,18 @@ const (
 // clean removes every escape sequence and control character from s except the
 // line break and the tab, and replaces invalid UTF-8. A carriage return is
 // dropped, so a CRLF is a line break and a bare CR cannot move the cursor back
-// over what was written.
+// over what was written. Invisible characters go too (invisible.Strip).
 func clean(s string) string {
 	if !strings.ContainsFunc(s, isUnsafe) && utf8.ValidString(s) {
 		return s
 	}
+	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range strings.ToValidUTF8(s, string(utf8.RuneError)) {
-		if isUnsafe(r) {
+		// invisible.Strip has removed every invisible character it does
+		// not keep on purpose (a zero-width joiner between two emoji).
+		if isControl(r) {
 			continue
 		}
 		b.WriteRune(r)
@@ -61,17 +65,20 @@ func clean(s string) string {
 }
 
 // isUnsafe is a rune clean drops: C0 controls but tab and line feed, DEL, the
-// C1 controls, and the bidi format characters that make a line read as
-// something other than what it holds.
+// C1 controls, and the invisible characters (invisible.Rune) that make a line
+// read as something other than what it holds.
 func isUnsafe(r rune) bool {
+	return isControl(r) || invisible.Rune(r)
+}
+
+// isControl is a C0 control but tab and line feed, DEL, or a C1 control.
+func isControl(r rune) bool {
 	switch {
 	case r == '\n' || r == '\t':
 		return false
 	case r < 0x20 || r == 0x7f:
 		return true
 	case r >= 0x80 && r < 0xa0:
-		return true
-	case r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
 		return true
 	}
 	return false
@@ -409,7 +416,7 @@ func printableLine(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !unicode.IsPrint(r) {
+		if !unicode.IsPrint(r) || invisible.Rune(r) {
 			return false
 		}
 	}

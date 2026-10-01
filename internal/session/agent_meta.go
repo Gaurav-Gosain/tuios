@@ -102,7 +102,8 @@ func ValidAgentMetaKey(k string) bool {
 }
 
 // CleanAgentMetaValue makes a value safe to draw: control characters (which
-// include the escape that starts a terminal sequence) become spaces, runs of
+// include the escape that starts a terminal sequence) and line separators
+// become spaces, invisible characters (InvisibleFormatRune) go, runs of
 // space fold to one, the ends are trimmed, and the result is cut to
 // AgentMetaMaxValue characters. It reports whether it cut anything.
 func CleanAgentMetaValue(v string) (string, bool) {
@@ -114,6 +115,10 @@ func CleanAgentMetaValue(v string) (string, bool) {
 	for _, r := range v {
 		if r == utf8.RuneError || unicode.IsControl(r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r) {
 			r = ' '
+		} else if InvisibleFormatRune(r) {
+			// Format characters and variation selectors draw nothing and
+			// can hide words in the value.
+			continue
 		}
 		if unicode.IsSpace(r) {
 			if space || b.Len() == 0 {

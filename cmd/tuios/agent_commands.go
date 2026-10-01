@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -26,10 +27,11 @@ import (
 
 // plainText strips control characters from text another program wrote, so a
 // body that carries an escape sequence cannot reach the terminal this prints
-// to. Zero-width and bidi formatting characters go too: they would let a body
+// to. Invisible characters go too (invisible.Strip): they would let a body
 // read as something other than what it holds. Newlines and tabs stay: they are layout, and the fence around the body
 // is what says the layout is the sender's.
 func plainText(s string) string {
+	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
@@ -37,7 +39,6 @@ func plainText(s string) string {
 		case r == '\n' || r == '\t':
 			b.WriteRune(r)
 		case r < 0x20 || (r >= 0x7f && r < 0xa0):
-		case session.InvisibleFormatRune(r):
 		default:
 			b.WriteRune(r)
 		}
