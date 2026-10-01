@@ -173,9 +173,10 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 				r, line, term.Snapshot())
 		}
 		// The pane's own border is the first of the border columns the row
-		// ends in, and its last column is the one before that.
+		// ends in, and its last column is the one before that. A border
+		// cell beside the scrolled pane can be the scrollbar's thumb.
 		edge := right
-		for edge > 0 && s.Cell(edge-1, r).Content == "│" {
+		for edge > 0 && (s.Cell(edge-1, r).Content == "│" || s.Cell(edge-1, r).Content == "┃") {
 			edge--
 		}
 		// The last column can be the second half of a wide rune, which has no

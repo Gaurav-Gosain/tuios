@@ -297,9 +297,6 @@ func newPlan(src reflowSource, width int, sc *reflowScratch) reflowPlan {
 	return p
 }
 
-// total is the number of rows the plan lays out.
-func (p *reflowPlan) total() int { return p.lineRow[len(p.lineRow)-1] }
-
 // row is laid out row r.
 func (p *reflowPlan) row(r int) uv.Line { return p.cells[r*p.width : (r+1)*p.width] }
 
