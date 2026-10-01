@@ -140,3 +140,21 @@ func TestNvimNavigationClearsOnAltScreenExitAndWindowClose(t *testing.T) {
 		t.Fatal("closing a pane kept navigation state")
 	}
 }
+
+func TestNvimNavigationRefreshesScrollingFocusCache(t *testing.T) {
+	m := scrollingOS(t, 2)
+	m.Mode = TerminalMode
+	m.Settings.NvimNavigation = true
+	m.Windows[1].CachedContent = "stale"
+	active := true
+	m.onNvimNavigation(NvimNavigationMsg{WindowID: m.Windows[0].ID, State: &active})
+	m.ArmNvimNavigation("right")
+	m.onNvimNavigation(NvimNavigationMsg{WindowID: m.Windows[0].ID, Direction: "right"})
+
+	if m.FocusedWindow != 1 {
+		t.Fatalf("focused window = %d, want 1", m.FocusedWindow)
+	}
+	if m.Windows[1].CachedContent != "" {
+		t.Fatal("focused scrolling pane kept its stale cache")
+	}
+}
