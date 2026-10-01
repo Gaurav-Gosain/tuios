@@ -191,7 +191,8 @@ func TestMasterPositionFromConfig(t *testing.T) {
 // time with set-layout and attaches a second client. The second client has
 // the default config, so a client that laid the workspace out from its own
 // config would put the master back on the left and push that geometry over
-// the session's.
+// the session's. A change made with both clients attached reaches the one
+// that did not make it, which a retile on each client shows.
 func TestMasterLayoutIsTheSessions(t *testing.T) {
 	base := t.TempDir()
 	first := masterSession(t, base, "ms", "", 5)
@@ -224,6 +225,15 @@ func TestMasterLayoutIsTheSessions(t *testing.T) {
 	rects = waitForShape(t, base, "ms", 5, "after set-layout --masters 2", masterShape("center", 2))
 	time.Sleep(time.Second)
 	rects = waitForShape(t, base, "ms", 5, "two masters, a moment later", masterShape("center", 2))
+	// Each client lays the panes out itself on a retile, with the shape it
+	// holds. The geometry above can be one client's alone, so a retile from
+	// each client, by a swap with the master, shows that both hold the
+	// session's shape. Only one of them sent the change.
+	for i, term := range []*tuitest.Terminal{first, second} {
+		sendKeys(t, term, tuitest.Ctrl('b'), "L", tuitest.Enter)
+		time.Sleep(time.Second)
+		rects = waitForShape(t, base, "ms", 5, fmt.Sprintf("after a swap on client %d", i+1), masterShape("center", 2))
+	}
 	saveArtifact(t, first, dir, "first-center-2-masters")
 	saveArtifact(t, second, dir, "second-center-2-masters")
 	t.Logf("two masters in the center:\n%s%s", describeRects(rects), first.Snapshot())
