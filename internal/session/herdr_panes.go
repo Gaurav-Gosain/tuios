@@ -393,6 +393,8 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			return nil, herr
 		}
 		res.FocusChanged = true
+		// A focus can end a zoom on the client, so the zoom is read after it.
+		st = site.sess.GetState()
 	}
 	zoomed := ""
 	for _, w := range st.Windows {
@@ -438,6 +440,13 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			return nil, herr
 		}
 		res.ZoomChanged = true
+		// The client reports the zoom in its next state push. The answer
+		// waits a moment for it, so it says what the screen shows.
+		for deadline := time.Now().Add(routedVerbTimeout); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if after, herr := d.herdrSiteOf(cs, site.pane.PaneID); herr == nil && after.layout.Zoomed == want {
+				break
+			}
+		}
 	}
 	if after, herr := d.herdrSiteOf(cs, site.pane.PaneID); herr == nil {
 		site = after
