@@ -3,6 +3,7 @@
 package dirwatch
 
 import (
+	"errors"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -65,7 +66,7 @@ func (w *Watcher) run(notify func()) {
 	events := make([]unix.Kevent_t, 8)
 	for {
 		n, err := unix.Kevent(w.kq, nil, events, nil)
-		if err == unix.EINTR {
+		if errors.Is(err, unix.EINTR) {
 			continue
 		}
 		if err != nil {

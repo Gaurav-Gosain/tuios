@@ -29,12 +29,12 @@ type MasterLayoutState struct {
 	// Position is the side the masters take: one of config.MasterPositions.
 	Position string `json:"position,omitempty"`
 	// Count is how many panes are masters.
-	Count int `json:"count,omitempty"`
+	Count int `json:"count,omitzero"`
 	// NoGrid keeps the masters at four or more panes while they are one pane
 	// on the left, where the default is a grid. See layout.MasterParams.Grid.
 	// The zero value of every field here is the layout as it was before the
 	// field existed.
-	NoGrid bool `json:"no_grid,omitempty"`
+	NoGrid bool `json:"no_grid,omitzero"`
 }
 
 // MasterLayoutPayload is the body of MsgMasterLayout.

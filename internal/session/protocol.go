@@ -230,7 +230,7 @@ type HelloPayload struct {
 	// follows the cursor. While a client without it is attached, the
 	// session takes the smallest client's size whatever window_size says,
 	// which is what that client expects. See window_size.go.
-	WindowSize bool `json:"window_size,omitempty"`
+	WindowSize bool `json:"window_size,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -260,14 +260,14 @@ type WelcomePayload struct {
 	KittyAnimationRefusal bool `json:"kitty_animation_refusal,omitempty"`
 	// MasterLayoutOps says the daemon reads MsgMasterLayout. A client that
 	// does not see it keeps a master layout change to itself.
-	MasterLayoutOps bool `json:"master_layout_ops,omitempty"`
+	MasterLayoutOps bool `json:"master_layout_ops,omitzero"`
 	// WindowSize says the daemon reads MsgClientActivity and can size a
 	// session larger than a client. A client that does not see it (a daemon
 	// that predates it) never draws a session larger than its own terminal
 	// and sends no activity.
-	WindowSize bool `json:"window_size,omitempty"`
+	WindowSize bool `json:"window_size,omitzero"`
 	// DirWatch says the daemon reads MsgWatchDir and sends MsgDirChanged.
-	DirWatch bool `json:"dir_watch,omitempty"`
+	DirWatch bool `json:"dir_watch,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -294,7 +294,7 @@ type AttachPayload struct {
 	// viewer started with --read-only. Under the largest and latest
 	// window_size policies it does not count toward the session's size;
 	// under smallest it counts like any client. An older daemon ignores it.
-	ViewOnly bool `json:"view_only,omitempty"`
+	ViewOnly bool `json:"view_only,omitzero"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the
@@ -421,7 +421,7 @@ type WindowSummary struct {
 	// Subagents is how many subagents the pane's agent is running, so a rail
 	// watching another session can say so. Additive and omitted when zero,
 	// which is what an older peer sends.
-	Subagents int `json:"agent_subagents,omitempty"`
+	Subagents int `json:"agent_subagents,omitzero"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted

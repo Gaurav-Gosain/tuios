@@ -211,7 +211,7 @@ func ValidSubagentID(id string) bool {
 	if id == "" || len(id) > SubagentIDMax {
 		return false
 	}
-	for i := 0; i < len(id); i++ {
+	for i := range len(id) {
 		c := id[i]
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
