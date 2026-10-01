@@ -26,6 +26,16 @@ import (
 func herdrFrontClient(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, base := crushClient(t)
+	// A failure keeps what the screen and the daemon showed at that moment,
+	// so a failure seen once under load can be read afterwards.
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		state, _ := tuiosCLI(t, base, "list-windows", "--json", "-s", crushSession)
+		t.Logf("screen at the failure:\n%s\ndaemon windows:\n%s", term.Snapshot(), state)
+		saveFrame(t, term, fmt.Sprintf("%s-failed-%d", t.Name(), time.Now().UnixNano()))
+	})
 	if out, err := tuiosCLI(t, base, "run-command", "-s", crushSession, "EnableTiling"); err != nil {
 		t.Fatalf("EnableTiling: %v\n%s", err, out)
 	}
