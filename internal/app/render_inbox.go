@@ -342,6 +342,10 @@ func (m *OS) inboxHeadingRow(r inboxRow, bg color.Color, pal overlay.Palette, wi
 	return overlay.Style(bg).Foreground(pal.FgMute).Bold(true).Render(overlay.Truncate(text, width))
 }
 
+// inboxMinWho is the width an Inbox row keeps for its name when the name and
+// the summary do not both fit.
+const inboxMinWho = 16
+
 // inboxItemRow draws one item: its kind's mark, who, what it says, and on the
 // right the session and how long it has waited.
 func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Color, pal overlay.Palette, width int, now time.Time) string {
@@ -398,6 +402,11 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)
 	whoW := min(lipgloss.Width(who), avail)
+	// A long name, such as a title that is a whole path, leaves the summary
+	// some of the row: the summary says what the item wants.
+	if summary != "" {
+		whoW = min(whoW, max(avail*2/5, inboxMinWho))
+	}
 	summaryW := max(avail-whoW-2, 0)
 
 	whoColor := pal.FgDim
