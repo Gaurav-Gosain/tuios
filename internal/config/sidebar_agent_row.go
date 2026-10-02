@@ -69,11 +69,11 @@ var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "nee
 // row at rest is the one sign that work goes on, meta whatever else the pane
 // reported through set-agent-meta, which is nothing unless a hook or
 // statusline feed writes it, and now what a working agent is doing ("Bash: go
-// test ./..."). location rides after elapsed: it draws the pane's address as
-// [session:workspace], the numbers the switch keys use, and nothing when either
-// half is unknown. now comes last because the line cuts its last token first,
-// and a long command is what can best lose its tail.
-var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "location", "context", "subagents", "meta", "now", "message"}
+// test ./..."). workspace rides after elapsed: it draws a named workspace's
+// name, and nothing when the workspace has no name. now comes last because the
+// line cuts its last token first, and a long command is what can best lose its
+// tail.
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "workspace", "context", "subagents", "meta", "now", "message"}
 
 // SidebarContextWarnAt is the percent of its context window an agent must be
 // using before the context token draws. Below it the figure is noise on a
