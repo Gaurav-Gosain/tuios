@@ -201,6 +201,7 @@ func NewOS(opts OSOptions) *OS {
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceMasterRatio: make(map[int]float64),
 		WorkspaceStackRatio:  make(map[int]float64),
+		WorkspaceLayoutMode:  make(map[int]string),
 
 		// Resize tracking
 		PendingResizes: make(map[string][2]int),
