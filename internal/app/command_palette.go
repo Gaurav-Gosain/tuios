@@ -67,6 +67,13 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	cmd := m.ReloadDockComponents(cfg)
 	// A scratch entry the new file renamed or removed has no key any more.
 	m.pruneOrphanScratches()
+	// Keybindings reload the same way, minus the write-back: the edit came
+	// from the file, so persisting it would be the tail wagging the dog.
+	if m.KeybindRegistry != nil {
+		m.KeybindRegistry.Reload(cfg)
+		m.keybinds.report = m.buildKeybindReport()
+		m.keybinds.filtered = nil
+	}
 	// The beam is client-local, so nothing else carries it: without this the
 	// screen and the config disagree about whether it is on, and the next
 	// toggle writes the disagreement back to the file.
