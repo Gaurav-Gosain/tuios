@@ -30,7 +30,7 @@ func sessionRows(rows []string) []string {
 	var out []string
 	in := false
 	for _, r := range rows {
-		text := strings.TrimSpace(r)
+		text := strings.ToLower(strings.TrimSpace(r))
 		switch {
 		case strings.HasPrefix(text, "sessions"):
 			in = true

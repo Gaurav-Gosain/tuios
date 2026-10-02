@@ -58,7 +58,7 @@ import (
 // and subagents says how many subagents the agent is running ("2 subagents")
 // on any row, and nothing while there are none. $now, $prompt and $context
 // draw the raw value on any row.
-var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "subagents", "meta", "message", "session", "host"}
+var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "subagents", "meta", "message", "session", "host", "workspace", "location"}
 
 // SidebarAgentRowDefaultTokens is the row as it ships. state and host are left
 // out because both have a value on every row and the glyph already says the
@@ -69,9 +69,11 @@ var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "nee
 // row at rest is the one sign that work goes on, meta whatever else the pane
 // reported through set-agent-meta, which is nothing unless a hook or
 // statusline feed writes it, and now what a working agent is doing ("Bash: go
-// test ./..."). now comes last because the line cuts its last token first,
-// and a long command is what can best lose its tail.
-var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "context", "subagents", "meta", "now", "message"}
+// test ./..."). workspace rides after elapsed: it draws a named workspace's
+// name, and nothing when the workspace has no name. now comes last because the
+// line cuts its last token first, and a long command is what can best lose its
+// tail.
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "workspace", "context", "subagents", "meta", "now", "message"}
 
 // SidebarContextWarnAt is the percent of its context window an agent must be
 // using before the context token draws. Below it the figure is noise on a

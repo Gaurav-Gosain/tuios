@@ -89,7 +89,7 @@ func TestRailShowsUnreadMail(t *testing.T) {
 	m.noteAgentMail(session.AgentMailPayload{Message: mail(3, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "again", "please")})
 
 	lines := railPlain(t, m, tree)
-	header := lineOf(lines, "agents")
+	header := lineOf(lines, "AGENTS")
 	if header < 0 {
 		t.Fatalf("no agents header:\n%s", strings.Join(lines, "\n"))
 	}

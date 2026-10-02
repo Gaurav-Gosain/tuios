@@ -425,6 +425,8 @@ func (m *OS) fileViewFromLink() bool {
 func (m *OS) clearFileView() {
 	m.filesView = fileViewState{Show: m.filesView.Show, Gen: m.filesView.Gen + 1}
 	m.syncFileWatch()
+	m.fileBack = m.fileBack[:0]
+	m.fileBackOrigin = ""
 }
 
 // requestFileList stamps a new request and returns the command that answers it.
@@ -658,6 +660,21 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 	if msg.Gen != m.filesView.Gen {
 		return
 	}
+	// The directory just left goes on the back stack: a listing that changed
+	// the directory while staying on one pane is one step of a walk. A listing
+	// from another pane says nothing about this walk, so the stack resets and
+	// starts over from the new pane's first directory. Directory changes come
+	// from navigation, which is never a quiet read, so the stack sees them all.
+	if msg.Err == "" && m.filesView.Dir != "" && m.filesView.Dir != msg.Dir {
+		if m.fileBackOrigin != m.filesView.Origin {
+			m.fileBack = m.fileBack[:0]
+		}
+		m.fileBackOrigin = m.filesView.Origin
+		m.fileBack = append(m.fileBack, m.filesView.Dir)
+		if len(m.fileBack) > fileBackMax {
+			m.fileBack = m.fileBack[len(m.fileBack)-fileBackMax:]
+		}
+	}
 	if msg.Quiet != 0 {
 		v := &m.filesView
 		if msg.Quiet != v.QuietReq || v.Loading {
@@ -890,6 +907,49 @@ func (m *OS) followFileRow(name string) {
 	m.sidebarFollowFile = true
 	m.sidebarFollowFileName = name
 	m.sidebarFollowFileGen = m.filesView.Gen
+}
+
+// fileBackMax caps the back stack. A depth the walk cannot outrun keeps the
+// memory honest without ever mattering to a person steering by hand.
+const fileBackMax = 32
+
+// FileBackDir is the directory back would land on, empty when there is none.
+func (m *OS) FileBackDir() string {
+	if !m.filesOn() || len(m.fileBack) == 0 || m.fileBackOrigin != m.filesView.Origin {
+		return ""
+	}
+	return m.fileBack[len(m.fileBack)-1]
+}
+
+// FileViewBack walks the listing back to the directory it was showing before
+// the last step. The cursor lands on the folder just left, the same courtesy
+// Go up pays. With no step behind it, back is a row that does nothing.
+func (m *OS) FileViewBack() tea.Cmd {
+	if !m.filesOn() || m.FileBackDir() == "" {
+		return nil
+	}
+	dir := m.fileBack[len(m.fileBack)-1]
+	m.fileBack = m.fileBack[:len(m.fileBack)-1]
+	left := m.filesView.Dir
+	cmd := m.requestFileList(dir, m.filesView.Origin, true)
+	m.followFileRow(filepath.Base(left))
+	return cmd
+}
+
+// FileViewReturn gives the listing back to the pane. A pinned listing stops
+// following the pane's cwd; returning unpins it and asks for the pane's
+// directory again, after which the sync keeps it following. The fresh read
+// runs even when the two already agree, so the control always shows the pane's
+// current answer.
+func (m *OS) FileViewReturn() tea.Cmd {
+	if !m.filesOn() || m.filesView.Origin == "" || !m.filesView.Pinned {
+		return nil
+	}
+	m.filesView.Pinned = false
+	if cmd := m.FilesSyncCmd(); cmd != nil {
+		return cmd
+	}
+	return m.RefreshFileView()
 }
 
 // FileViewCd sends a cd to the pane the section was opened from, for the
