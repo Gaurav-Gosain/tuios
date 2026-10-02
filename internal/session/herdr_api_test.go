@@ -213,25 +213,32 @@ func TestHerdrReadAndType(t *testing.T) {
 		t.Fatal(err)
 	}
 	pane := herdrPaneID(sess.ID, win.ID)
-	herdrOK(t, "send_text", herdrDial(t, sp, "pane.send_text", map[string]any{"pane_id": pane, "text": "hello, herdr"}))
-	herdrOK(t, "send_keys", herdrDial(t, sp, "pane.send_keys", map[string]any{"pane_id": pane, "keys": []string{"Enter", ",", "x", "Enter"}}))
+	// readUntil polls the pane until the text holds want copies of sub. The
+	// terminal echoes input before cat writes its copy, so each step waits for
+	// cat's copy before the next input goes in.
 	var text string
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		res := herdrOK(t, "read", herdrDial(t, sp, "pane.read", map[string]any{"pane_id": pane, "source": "visible", "lines": 40, "format": "text"}))
-		read := res["read"].(map[string]any)
-		text, _ = read["text"].(string)
-		if strings.Count(text, "hello, herdr") >= 2 && strings.Count(text, ",x") >= 2 {
-			if read["pane_id"] != pane || read["workspace_id"] != herdrWorkspaceID(sess.ID) || read["source"] != "visible" {
-				t.Errorf("read record %v", read)
+	readUntil := func(sub string, want int) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			res := herdrOK(t, "read", herdrDial(t, sp, "pane.read", map[string]any{"pane_id": pane, "source": "visible", "lines": 40, "format": "text"}))
+			read := res["read"].(map[string]any)
+			text, _ = read["text"].(string)
+			if strings.Count(text, sub) >= want {
+				if read["pane_id"] != pane || read["workspace_id"] != herdrWorkspaceID(sess.ID) || read["source"] != "visible" {
+					t.Errorf("read record %v", read)
+				}
+				return
 			}
-			break
+			time.Sleep(50 * time.Millisecond)
 		}
-		time.Sleep(50 * time.Millisecond)
+		t.Fatalf("cat did not echo %q %d times: %q", sub, want, text)
 	}
-	if strings.Count(text, "hello, herdr") < 2 || strings.Count(text, ",x") < 2 {
-		t.Fatalf("cat did not echo the text and keys: %q", text)
-	}
+	herdrOK(t, "send_text", herdrDial(t, sp, "pane.send_text", map[string]any{"pane_id": pane, "text": "hello, herdr"}))
+	herdrOK(t, "send_keys", herdrDial(t, sp, "pane.send_keys", map[string]any{"pane_id": pane, "keys": []string{"Enter"}}))
+	readUntil("hello, herdr", 2)
+	herdrOK(t, "send_keys", herdrDial(t, sp, "pane.send_keys", map[string]any{"pane_id": pane, "keys": []string{",", "x", "Enter"}}))
+	readUntil(",x", 2)
 	recent := herdrOK(t, "read recent", herdrDial(t, sp, "pane.read", map[string]any{"pane_id": pane, "source": "recent", "lines": 1}))["read"].(map[string]any)
 	if strings.Count(recent["text"].(string), "\n") > 1 {
 		t.Errorf("a one-line read gave %q", recent["text"])
