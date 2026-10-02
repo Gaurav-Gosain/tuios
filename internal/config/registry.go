@@ -504,6 +504,7 @@ var ActionDescriptions = map[string]string{
 	"screenshot_screen":  "Screenshot the whole screen",
 	"next_window":        "Next window",
 	"prev_window":        "Previous window",
+	"last_pane":          "Back to the previous pane",
 	"select_window_1":    "Select window 1",
 	"select_window_2":    "Select window 2",
 	"select_window_3":    "Select window 3",
