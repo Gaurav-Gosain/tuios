@@ -777,7 +777,32 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		return
 	}
 
-	if isVideoFrame && kp.hostOut != nil {
+	// A shared memory frame is one command, never chunked, so the test above
+	// never sees one. A guest that sends a=T,t=s again under an id it already
+	// used is streaming frames (a compositor in a pane, mpv with shared
+	// memory), and each frame used to wait in the queue for the render loop to
+	// place it again: an a=t now and an a=p on the next pass. When the last pass
+	// placed the whole image exactly where this frame goes, the frame is that
+	// placement's new picture, so it is written now, as one a=T under the
+	// placement's own id. Anything else (a moved pane, a crop, a window over
+	// it, a guest inside a synchronized update) still goes through the refresh
+	// pass, which is what knows about those.
+	placedNow := false
+	if !isVideoFrame && reusingID && andPlace && cmd.Medium == vt.KittyMediumSharedMemory &&
+		kp.streamFrameFitsPlacement(windowID, hostID, hostX, hostY,
+			displayCols, displayRows, imgCols, imgRows, isAltScreen) {
+		p := kp.placements[windowID][hostID]
+		frame := bytes.Replace(buf.Bytes(), []byte("a=t,"),
+			fmt.Appendf(nil, "a=T,p=%d,C=1,", p.PlacementID), 1)
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b7"...)
+		kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
+		kp.pendingOutput = append(kp.pendingOutput, frame...)
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
+		// Everything queued before it goes first, in the same write, so the
+		// host never takes an older frame after this one.
+		kp.flushToHost()
+		placedNow = true
+	} else if isVideoFrame && kp.hostOut != nil {
 		// Override to a=T for video immediate flush (buf was built with a=t)
 		bufBytes := bytes.Replace(buf.Bytes(), []byte("a=t,"), []byte("a=T,"), 1)
 
@@ -790,7 +815,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			visible = hostY+displayRows <= windowY+contentOffsetY+contentHeight
 		}
 		if visible && kp.screenWidth > 0 && kp.screenHeight > 0 {
-			if hostX+displayCols > kp.screenWidth || hostY+displayRows >= kp.screenHeight-1 {
+			// The last row stays free, as the refresh pass keeps it: an image
+			// that reaches it makes the host scroll. An image that ends on
+			// the row above it fits.
+			if hostX+displayCols > kp.screenWidth || hostY+displayRows > kp.screenHeight-1 {
 				visible = false
 			}
 		}
@@ -839,7 +867,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// which is a whole compositor-in-a-pane frozen on its first paint. So
 		// the data is marked dirty and the render pass re-places it, without the
 		// delete that rebuilding the entry used to imply.
-		existing.DataDirty = true
+		// A frame written at once above is already placed.
+		existing.DataDirty = !placedNow
 		existing.GuestX = cursorX
 		existing.AbsoluteLine = scrollbackLen + cursorY
 		existing.HostX = hostX
@@ -890,6 +919,42 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		ImagePixelHeight: cmd.Height,
 	}
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
+}
+
+// streamFrameFitsPlacement reports whether a streamed frame lands exactly on
+// the placement the last refresh pass made for its image: the whole image, at
+// the same cells, uncropped and unoccluded, on the same screen, with nothing of
+// the guest's held back. Only then can the frame be written at once without the
+// refresh pass. Callers hold kp.mu.
+func (kp *KittyPassthrough) streamFrameFitsPlacement(
+	windowID string, hostID uint32,
+	hostX, hostY, displayCols, displayRows, imgCols, imgRows int,
+	isAltScreen bool,
+) bool {
+	if kp.hostOut == nil || kp.held[windowID] != nil {
+		return false
+	}
+	if probe := kp.syncProbes[windowID]; probe != nil {
+		if open, _ := probe(); open {
+			return false
+		}
+	}
+	p := kp.placements[windowID][hostID]
+	if p == nil || p.Hidden || p.DataDirty || p.PlacementID == 0 {
+		return false
+	}
+	if p.PlacedOnAltScreen != isAltScreen {
+		return false
+	}
+	if len(p.Slices) > 1 || p.placedSlices > 1 || p.ClipTop != 0 || p.ClipBottom != 0 || p.ClipLeft != 0 {
+		return false
+	}
+	if displayCols != imgCols || displayRows != imgRows {
+		return false
+	}
+	return p.HostX == hostX && p.HostY == hostY &&
+		p.Cols == displayCols && p.Rows == imgRows &&
+		p.MaxShowableCols == displayCols && p.MaxShowable == displayRows
 }
 
 // forwardFileTransmitInline handles file / shm / temp-file kitty transmits
