@@ -176,20 +176,66 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 		m.adoptEmptySessionVersion(state)
 	}
 
-	m.reportFocusedPaneFocusIn()
+	m.reportFocusChange()
 
 	// The session is now whole: state restored, PTYs wired, layout applied. A
 	// hook that inspects the session here sees what the user is about to see.
 	m.FireAttached()
 }
 
-// reportFocusedPaneFocusIn tells the focused guest that its terminal gained
-// focus, when it requested DECSET 1004 focus reporting.
-func (m *OS) reportFocusedPaneFocusIn() {
-	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+// reportFocusChange sends the focus reports for a change of the focused
+// pane since the last report: CSI O to the pane that had focus, if it still
+// exists, and CSI I to the pane that has it now.
+//
+// It compares window IDs, not indices. Many paths set FocusedWindow directly
+// (an empty workspace, minimizing the last pane, closing the focused pane)
+// and an index can point at a different pane after a close. Update calls this
+// after every message, so those paths report too, and FocusWindow calls it so
+// that a focus change reports at once.
+func (m *OS) reportFocusChange() {
+	// A client that detached has told the pane it lost focus, and the
+	// messages it handles on its way out must not take that back.
+	if m.detachFired.Load() {
 		return
 	}
-	m.reportPaneFocus(m.Windows[m.FocusedWindow], true)
+	current := ""
+	if w := m.GetFocusedWindow(); w != nil {
+		current = w.ID
+	}
+	if current == m.focusReportedID {
+		return
+	}
+	if old := m.windowByID(m.focusReportedID); m.focusReportedID != "" && old != nil {
+		m.reportPaneFocus(old, false)
+	}
+	m.focusReportedID = current
+	if current != "" {
+		m.reportPaneFocus(m.GetFocusedWindow(), true)
+	}
+}
+
+// reportFocusLost tells the pane that has focus that it lost it, as this
+// client leaves.
+func (m *OS) reportFocusLost() {
+	id := m.focusReportedID
+	if id == "" {
+		if w := m.GetFocusedWindow(); w != nil {
+			id = w.ID
+		}
+	}
+	if w := m.windowByID(id); w != nil {
+		m.reportPaneFocus(w, false)
+	}
+	m.focusReportedID = ""
+}
+
+// adoptFocusReport records the focused pane without a report. A state sync
+// carries a focus change another client made, and that client reported it.
+func (m *OS) adoptFocusReport() {
+	m.focusReportedID = ""
+	if w := m.GetFocusedWindow(); w != nil {
+		m.focusReportedID = w.ID
+	}
 }
 
 // reportPaneFocus tells a guest about a focus change it requested.

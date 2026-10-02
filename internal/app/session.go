@@ -507,6 +507,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 // peer built it, or because the daemon is echoing what some client last
 // pushed, this client included. See adoptTopology below.
 func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) error {
+	defer m.adoptFocusReport()
 	if state == nil {
 		return nil
 	}
