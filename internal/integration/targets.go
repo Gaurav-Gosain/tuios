@@ -389,7 +389,11 @@ var targets = []*Target{
 	{
 		// Version 2 reports a blocking prompt (ui_prompt_start) as
 		// needs_input and its answer (ui_prompt_end) as the end of the block.
-		ID: Pi, Name: "Pi", Binary: "pi", Version: 2, Reports: ReportsState,
+		// Version 3 reports tool_call and tool_result, the per-tool activity
+		// the rail's now line and the activity log read. Version 4 drops the
+		// tool churn and reports the turn's task (before_agent_start's
+		// prompt) instead, which is what the now line then shows all turn.
+		ID: Pi, Name: "Pi", Binary: "pi", Version: 4, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
 		File:      filepath.Join("extensions", "tuios-agent-state.ts"),

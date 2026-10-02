@@ -91,9 +91,13 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "now":
 		// What a working agent is doing. The daemon clears it at rest, and a
 		// pane blocked on a prompt says what it asks in its need and message,
-		// so it draws only while the agent works.
+		// so it draws only while the agent works. A harness that reports no
+		// tool detail (pi names the turn's task instead) says the task.
 		if e.State == "working" {
 			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "now"))
+			if tk.Text == "" {
+				tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "prompt"))
+			}
 		}
 	case "prompt":
 		tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "prompt"))
