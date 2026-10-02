@@ -53,11 +53,33 @@ func (m *OS) applyPopupRect(w *terminal.Window, deferring bool) {
 	// back on the next tick, so it is retired first. The same thing every other
 	// placer does before it sets a box.
 	m.CancelSnapAnimation(w)
+	if w.PopupPlaced {
+		m.clampPopupIntoRegion(w)
+		return
+	}
 	x, y, width, height := m.popupRect(w)
 	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
 		return
 	}
 	m.placePaneAt(w, x, y, width, height, deferring)
+}
+
+// clampPopupIntoRegion pulls a user-placed popup back inside the content
+// region, shrinking it only where the region shrank below it. Everything else
+// about the rectangle is the user's: the box they dragged is the box they get.
+func (m *OS) clampPopupIntoRegion(w *terminal.Window) {
+	left, top := m.PaneLeft(), m.PaneTop()
+	width := min(w.Width, m.PaneWidth())
+	height := min(w.Height, m.PaneHeight())
+	x := min(max(w.X, left), left+m.PaneWidth()-width)
+	y := min(max(w.Y, top), top+m.PaneHeight()-height)
+	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
+		return
+	}
+	w.X, w.Y, w.Width, w.Height = x, y, width, height
+	w.MarkPositionDirty()
+	w.InvalidateCache()
+	m.resizePane(w, width, height, false)
 }
 
 // applyPopupRects re-centres every popup on the current workspace.

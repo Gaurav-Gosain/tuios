@@ -313,6 +313,10 @@ type Window struct {
 	// rather than the box it resolves to, because the box is this client's and
 	// the request is the session's. See session.WindowState.PopupWidth.
 	IsPopup bool
+	// PopupPlaced marks a popup the user moved or resized: its rectangle is
+	// intent now, and applyPopupRect only clamps it back into the content
+	// region instead of restamping the computed box. See session.WindowState.
+	PopupPlaced bool
 	// IsScratch marks a pane of a scratch group, an ordinary window on the
 	// group's own workspace. It is the session's, like IsPopup. See
 	// session.WindowState.Scratch.

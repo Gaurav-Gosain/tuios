@@ -324,6 +324,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		focusedWindow.X = newX
 		focusedWindow.Y = newY
+		focusedWindow.PopupPlaced = focusedWindow.IsPopup
 		focusedWindow.MarkPositionDirty()
 		return o, nil
 	}
@@ -548,6 +549,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX
 			focusedWindow.Y = newY
+			focusedWindow.PopupPlaced = focusedWindow.IsPopup
 			focusedWindow.ResizeVisual(newWidth, newHeight) // Visual resize only
 			focusedWindow.MarkPositionDirty()
 			// Store pending resize so PTY gets resized on mouse release
