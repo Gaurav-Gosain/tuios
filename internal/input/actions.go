@@ -219,6 +219,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
 	d.Register("rename_session", handleRenameSession)
+	d.Register("rename_workspace", handleRenameWorkspace)
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
@@ -353,6 +354,13 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 		o.DeleteWindow(o.FocusedWindow)
 	}
+	return o, nil
+}
+
+// handleRenameWorkspace opens the rename editor on the workspace the session
+// is showing now.
+func handleRenameWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginRenameWorkspace(o.CurrentWorkspace)
 	return o, nil
 }
 
