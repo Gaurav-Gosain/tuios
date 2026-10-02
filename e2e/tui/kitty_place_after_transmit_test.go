@@ -19,7 +19,8 @@ import (
 // part of it was on screen.
 //
 // The stand-in in ./placeonce sends exactly one a=t and one a=p and then
-// nothing. The image must end up placed on the host, at the size its pixels
+// nothing. The png cases send f=100 with no s= or v=, so the size has to come
+// from the PNG's header. The image must end up placed on the host, at the size its pixels
 // give it, and must stay placed.
 func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 	for _, tc := range []struct {
@@ -30,6 +31,9 @@ func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 		{"b64", "b64", false},
 		{"shm", "shm", false},
 		{"daemon-b64", "b64", true},
+		{"png", "png", false},
+		{"pngz", "pngz", false},
+		{"daemon-png", "png", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.transport == "shm" {
@@ -72,14 +76,17 @@ func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 	}
 }
 
-// assertPlacedAndKept finds the host id the 40x40 image was transmitted under
-// and checks that the last command naming it is a placement with a cell count.
+// assertPlacedAndKept finds the host id the 40x40 image (or the PNG) was
+// transmitted under and checks that the last command naming it is a placement
+// with a cell count.
 func assertPlacedAndKept(t *testing.T, stream []byte) {
 	t.Helper()
 	cmds := wireCmds(stream)
 	hostID := 0
 	for _, c := range cmds {
-		if c.action == "t" && c.pixW == 40 && c.pixH == 40 {
+		// A PNG goes out without s= and v=: its size is in its own header.
+		png := strings.Contains(","+c.params+",", ",f=100,")
+		if c.action == "t" && (png || (c.pixW == 40 && c.pixH == 40)) {
 			hostID = c.image
 		}
 	}
