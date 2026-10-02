@@ -5,12 +5,19 @@
 //
 // Usage: placeonce TRANSPORT
 //
-// TRANSPORT is b64 (t=d) or shm (t=s). The image is 40x40 pixels.
+// TRANSPORT is b64 (t=d), shm (t=s), png (t=d,f=100) or pngz (t=d,f=100,o=z).
+// The image is 40x40 pixels. The png transports send no s= or v=, as a PNG
+// sender usually does: the size is only in the PNG's own header.
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,6 +52,28 @@ func main() {
 		defer func() { _ = os.Remove(path) }()
 		transmit = fmt.Sprintf("\x1b_Ga=t,t=s,f=32,s=%d,v=%d,i=%d,q=2;%s\x1b\\",
 			width, height, imageID, base64.StdEncoding.EncodeToString([]byte(name)))
+	case "png", "pngz":
+		img := image.NewNRGBA(image.Rect(0, 0, width, height))
+		for y := range height {
+			for x := range width {
+				img.SetNRGBA(x, y, color.NRGBA{R: byte(x * 6), G: byte(y * 6), B: 128, A: 255})
+			}
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			fmt.Printf("PLACEONCE-ERR %v\n", err)
+			return
+		}
+		payload, extra := buf.Bytes(), ""
+		if transport == "pngz" {
+			var z bytes.Buffer
+			zw := zlib.NewWriter(&z)
+			_, _ = zw.Write(payload)
+			_ = zw.Close()
+			payload, extra = z.Bytes(), ",o=z"
+		}
+		transmit = fmt.Sprintf("\x1b_Ga=t,t=d,f=100%s,i=%d,q=2;%s\x1b\\",
+			extra, imageID, base64.StdEncoding.EncodeToString(payload))
 	default:
 		transmit = fmt.Sprintf("\x1b_Ga=t,t=d,f=32,s=%d,v=%d,i=%d,q=2;%s\x1b\\",
 			width, height, imageID, base64.StdEncoding.EncodeToString(pix))

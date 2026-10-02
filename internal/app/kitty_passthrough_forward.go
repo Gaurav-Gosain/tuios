@@ -9,6 +9,7 @@ import (
 	"hash/crc32"
 	"io"
 	"log"
+	"math"
 	"os"
 	"time"
 
@@ -134,7 +135,16 @@ func (kp *KittyPassthrough) ForwardCommand(
 	// only a command that states both. Image id 0 is kitty's auto-assign
 	// sentinel and names nothing a later a=p could ask for.
 	if cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace {
-		kp.rememberImagePixels(windowID, cmd.ImageID, cmd.Width, cmd.Height)
+		w, h := cmd.Width, cmd.Height
+		// A PNG carries its own size, so f=100 usually comes without s= and
+		// v=. Read it from the IHDR at the head of the first chunk; only a
+		// first chunk states f=, a continuation leaves it at the default.
+		if (w <= 0 || h <= 0) && cmd.Format == vt.KittyFormatPNG && cmd.Medium == vt.KittyMediumDirect {
+			if pw, ph, ok := pngSize(cmd.Data, cmd.Compression == vt.KittyCompressionZlib); ok {
+				w, h = pw, ph
+			}
+		}
+		kp.rememberImagePixels(windowID, cmd.ImageID, w, h)
 	}
 
 	switch cmd.Action {
@@ -1738,6 +1748,37 @@ func (kp *KittyPassthrough) rememberImagePixels(windowID string, guestImageID ui
 		kp.imagePixels[windowID] = make(map[uint32][2]int)
 	}
 	kp.imagePixels[windowID][guestImageID] = [2]int{w, h}
+}
+
+// pngSize reads the width and height from the IHDR chunk of a PNG, which the
+// format puts right after the 8-byte signature: bytes 16 to 24 of the file.
+// data may be only the start of the image, as the first chunk of a chunked
+// transmission is. With zlibbed set the PNG was compressed again for the wire
+// (o=z), and only as much of it is inflated as the header needs.
+func pngSize(data []byte, zlibbed bool) (w, h int, ok bool) {
+	head := data
+	if zlibbed {
+		zr, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return 0, 0, false
+		}
+		defer func() { _ = zr.Close() }()
+		buf := make([]byte, 24)
+		if _, err := io.ReadFull(zr, buf); err != nil {
+			return 0, 0, false
+		}
+		head = buf
+	}
+	if len(head) < 24 || string(head[:8]) != "\x89PNG\r\n\x1a\n" || string(head[12:16]) != "IHDR" {
+		return 0, 0, false
+	}
+	pw := binary.BigEndian.Uint32(head[16:20])
+	ph := binary.BigEndian.Uint32(head[20:24])
+	// The PNG spec caps each side at 2^31-1; a value past that is no PNG.
+	if pw == 0 || ph == 0 || pw > math.MaxInt32 || ph > math.MaxInt32 {
+		return 0, 0, false
+	}
+	return int(pw), int(ph), true
 }
 
 // imagePixelsFor returns the pixel size of a guest's image, preferring what the
