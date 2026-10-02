@@ -99,6 +99,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			// the caller asked for are the session's, the box above is this
 			// client's and a peer declines it. See WindowState.Popup.
 			Popup:       w.IsPopup,
+			PopupPlaced: w.PopupPlaced,
 			PopupWidth:  w.PopupWidth,
 			PopupHeight: w.PopupHeight,
 			Scratch:     w.IsScratch,
@@ -1190,6 +1191,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// A popup is layout intent too. Its box is declined above for the reason the
 	// zoom box is, and applyPopupRects recomputes it here.
 	w.IsPopup = ws.Popup
+	w.PopupPlaced = ws.PopupPlaced
 	w.IsScratch = ws.Scratch
 	w.ScratchName = ws.ScratchName
 	w.PopupWidth = ws.PopupWidth

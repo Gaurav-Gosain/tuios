@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // railRowFor finds the drawn row naming a session, stripped of styling.

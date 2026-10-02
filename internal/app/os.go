@@ -137,9 +137,9 @@ type OS struct {
 	// last_pane toggle. A window ID, not an index: indices shift on close and
 	// reorder.
 	PrevFocusedID string
-	Width               int
-	Height              int
-	Mode                Mode
+	Width         int
+	Height        int
+	Mode          Mode
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
 	// emulator cell data; that is Window.ioMu.

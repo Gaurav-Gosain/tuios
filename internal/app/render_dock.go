@@ -73,7 +73,7 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	pill := body.Render(" " + label + " ")
 	if mark, rest, ok := indexSplit(label); ok {
 		quiet := sidebarStyle(ground, theme.Readable(pal.FgMute, ground))
-		pill = body.Render(" ") + quiet.Render(mark) + body.Render(" " + rest + " ")
+		pill = body.Render(" ") + quiet.Render(mark) + body.Render(" "+rest+" ")
 	}
 	if lc == "" && rc == "" {
 		return pill

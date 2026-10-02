@@ -62,7 +62,7 @@ func TestLastPaneAcrossWorkspaces(t *testing.T) {
 func TestLastPaneDeadTarget(t *testing.T) {
 	m := lastPaneTestOS(t)
 	m.FocusWindow(1)
-	m.FocusWindow(2) // previous is now pane two
+	m.FocusWindow(2)                             // previous is now pane two
 	m.Windows = []*terminal.Window{m.Windows[0]} // two and three closed
 	m.FocusedWindow = 0
 
