@@ -38,7 +38,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 		}
 	}
 	m.dockEngine.Start()
-	return ListenForDockComponents(m.dockEngine.Updates())
+	return ListenForDockComponents(m.dockEngine)
 }
 
 // StopDockComponents kills every component this client started. Components are
@@ -84,16 +84,24 @@ func dockSocketPath() string {
 // ListenForDockComponents blocks on the engine's channel and turns each update
 // into a message. Returns nil when there is no engine, so a model without one
 // arms nothing.
-func ListenForDockComponents(ch <-chan dockComponentUpdate) tea.Cmd {
-	if ch == nil {
+//
+// The listener belongs to one engine and ends when that engine stops. A config
+// reload replaces the engine, and a listener parked on the old channel would
+// otherwise wait forever on a receive nothing answers: one goroutine leaked per
+// reload. The message carries the engine it came from, so Update re-arms only
+// the current engine's listener.
+func ListenForDockComponents(e *dockEngine) tea.Cmd {
+	if e == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		u, ok := <-ch
-		if !ok {
+		select {
+		case u := <-e.updates:
+			u.from = e
+			return dockComponentMsg(u)
+		case <-e.ctx.Done():
 			return nil
 		}
-		return dockComponentMsg(u)
 	}
 }
 

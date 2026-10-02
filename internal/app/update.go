@@ -1207,9 +1207,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// moved costs an execution and no render at all, which is the whole
 		// difference between this and the sixty-frames-a-second clock it
 		// replaced.
+		//
+		// An update from an engine a reload has replaced is dropped and its
+		// listener is not re-armed: the current engine has its own.
+		if msg.from != m.dockEngine {
+			m.renderSkipped = true
+			return m, nil
+		}
 		changed := m.handleDockComponent(msg)
 		m.renderSkipped = !changed
-		return m, ListenForDockComponents(m.dockEngine.Updates())
+		return m, ListenForDockComponents(m.dockEngine)
 
 	case AttachedHostsMsg:
 		m.applyAttachedHosts(msg)

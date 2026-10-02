@@ -54,6 +54,11 @@ type dockComponentUpdate struct {
 	Text string
 	Exit int
 	Err  string
+
+	// from is the engine that sent the update, set by the listener. A reload
+	// replaces the engine, and an update from the old one is not applied to
+	// the new one.
+	from *dockEngine
 }
 
 // dockComponentMsg carries an update into Update. One message per update keeps
