@@ -367,7 +367,10 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		state = "on"
 	}
 	o.ShowNotification("Sidebar "+state, "success", o.Settings.NotificationDuration)
-	return o, nil
+	// A toggle the user asked for survives the client: the next attach reads
+	// the config file, and without this write it reads the state before the
+	// toggle forever.
+	return o, o.PersistSettings()
 }
 
 func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
