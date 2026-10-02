@@ -2131,7 +2131,7 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 28,065,000 (raised at 28,029,090) | 26,681,504 |
+| linux/amd64 | 25,182,370 | 28,095,000 (raised at 28,061,858) | 26,681,504 |
 | darwin/arm64 | 23,834,594 | 26,520,000 (raised at 26,485,042) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
@@ -2203,6 +2203,14 @@ to exit (#207): the signal policy, its grace exit and the termios restore.
 That brought the build to 26,485,042 bytes (Go 1.26.6), 42 bytes over. Main
 was 26,451,762 bytes, and the change adds 33,280 bytes. linux/amd64 grew 8,192
 bytes to 28,041,378 and still fits.
+
+The linux/amd64 budget went to 28,095,000 when Neovim pane navigation (#318)
+landed: OSC 7777, the gate that accepts a focus request only as the answer to
+a forwarded focus key, and DECSET 1004 focus reports to panes. That brought
+the build to 28,061,858 bytes (Go 1.26.6), 3,142 bytes under the old budget,
+which is less than CI can measure above a local build. Main was 28,041,378
+bytes, and the change adds 20,480 bytes. darwin/arm64 grew 17,296 bytes to
+26,502,338 and still fits.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
