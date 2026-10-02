@@ -45,7 +45,7 @@ func TestArrangingMovesNothingThatAddressesAWorkspace(t *testing.T) {
 	if m.CurrentWorkspace != current {
 		t.Errorf("the current workspace moved from %d to %d", current, m.CurrentWorkspace)
 	}
-	if m.WorkspaceLabel(1) != "editor [1]" || m.WorkspaceLabel(3) != "deploy [3]" {
+	if m.WorkspaceLabel(1) != "editor" || m.WorkspaceLabel(3) != "deploy" {
 		t.Errorf("a name followed the arrangement instead of its number: 1=%q 3=%q",
 			m.WorkspaceLabel(1), m.WorkspaceLabel(3))
 	}
