@@ -2504,14 +2504,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.ProcessingRemoteKeys = false
 		m.Settings.AnimationsSuppressed = false
 
-		if m.AutoTiling {
-			// Clear the BSP tree for current workspace to force a full rebuild
-			// This ensures consistent state after multiple rapid operations
-			if m.WorkspaceTrees != nil {
-				m.WorkspaceTrees[m.CurrentWorkspace] = nil
-			}
-			m.TileAllWindows()
-		}
+		// No retile here. Each key has already done what the same key does
+		// when a person presses it, layout included. This used to drop the
+		// workspace's tree and tile it again from nothing, which undid every
+		// layout change the keys had made: a width key resized the PTYs, and
+		// the rebuilt tree put the tiles back to equal halves.
 		m.MarkAllDirty()
 
 		// Send result back
