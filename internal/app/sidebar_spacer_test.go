@@ -143,7 +143,7 @@ func TestWheelOverASpacerScrollsTheSectionAboveIt(t *testing.T) {
 
 	// The middle of the gap the spacer made, which is the run of blanks under
 	// the sessions section.
-	at := lineOf(plain, "terminals")
+	at := lineOf(plain, "TERMINALS")
 	if at < 0 {
 		t.Fatalf("no terminals section:\n%s", strings.Join(plain, "\n"))
 	}

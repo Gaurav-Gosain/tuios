@@ -103,7 +103,7 @@ func (m *OS) sessionPlace(name string) (dir, branch string) {
 // the label it has always shown.
 func (m *OS) WorkspaceLabel(ws int) string {
 	if name := m.WorkspaceNames[ws]; name != "" {
-		return withWorkspaceIndex(name, ws)
+		return name
 	}
 	return strconv.Itoa(ws)
 }

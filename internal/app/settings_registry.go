@@ -75,6 +75,7 @@ var settingLabels = map[string]string{
 	"appearance.global_session":         "Global session",
 	"appearance.git_dirty":              "Git dirty counts",
 	"appearance.links":                  "Links",
+	"appearance.link_label":             "Link label",
 	"appearance.right_click_opens_menu": "Right-click menu",
 	"appearance.new_window_inherit_cwd": "Inherit directory",
 	"appearance.kitty_placeholders":     "Kitty placeholders",
