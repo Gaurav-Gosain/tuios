@@ -89,7 +89,7 @@ func narrowRailAgentRows(t *testing.T, tokens string, state bool) {
 	agentRows := func(s tuitest.Screen) []string {
 		var out []string
 		for y := range rows - 1 {
-			if !strings.HasPrefix(strings.TrimSpace(strings.Trim(railText(s, y), "│ ")), "agents") {
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(strings.Trim(railText(s, y), "│ "))), "agents") {
 				continue
 			}
 			for r := y + 1; r < rows; r++ {
@@ -189,7 +189,7 @@ func TestNarrowRailKeepsTheAgentNameBeforeItsHarness(t *testing.T) {
 	agentRows := func(s tuitest.Screen) []string {
 		var out []string
 		for y := range rows - 1 {
-			if !strings.HasPrefix(strings.TrimSpace(strings.Trim(railText(s, y), "│ ")), "agents") {
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(strings.Trim(railText(s, y), "│ "))), "agents") {
 				continue
 			}
 			for r := y + 1; r < rows; r++ {
