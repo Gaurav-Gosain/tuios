@@ -15,6 +15,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -1832,6 +1833,20 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 // inboxNeedsYou reports whether an item is something a person has to act on,
 // which is what the next-attention key visits. A finished turn is news, not a
 // request, so it is left to the Inbox.
+// daemonIsSlim reports whether the daemon this client is attached to is
+// tuios-slim, which has no Inbox. A daemon that is too old for the Inbox
+// needs a restart, and a slim one needs the full tuios, so the two say
+// different things.
+func (m *OS) daemonIsSlim() bool {
+	return m.DaemonClient != nil && m.DaemonClient.DaemonEdition() == edition.SlimEdition
+}
+
+// inboxSlimLines are what the Inbox says on a tuios-slim daemon.
+var inboxSlimLines = []string{
+	"The daemon is tuios-slim. It has no Inbox.",
+	"To use the Inbox, run tuios kill-server and start the full tuios.",
+}
+
 func inboxNeedsYou(it session.AttentionItem) bool {
 	return it.Kind != session.AttentionFinished && it.Kind != session.AttentionOutbox && !it.Stale
 }
@@ -1850,7 +1865,10 @@ func (m *OS) JumpToNextAttention() tea.Cmd {
 	}
 	if len(todo) == 0 {
 		msg := "Nothing is waiting for you"
-		if !st.Live {
+		switch {
+		case m.daemonIsSlim():
+			msg = inboxSlimLines[0]
+		case !st.Live:
 			msg = "The Inbox is not connected to the daemon"
 		}
 		m.ShowNotification(msg, "info", m.Settings.NotificationDuration)

@@ -603,6 +603,17 @@ first client never followed the session to the smaller size, and the wait
 timed out. The test checks first that the frame starts wider than the size
 it waits for.
 
+The `list-attention` and `wait-for agent-state` cases of
+`TestFullCLIOnASlimDaemon` were run against the slim and full builds of
+`d8fb60e7`. `list-attention` printed the raw refusal with no cause or fix.
+`wait-for agent-state` printed "verb wait-for has no parameter until",
+because the slim daemon checked the parameters before the condition.
+
+`TestFullClientOnASlimDaemonExplainsTheInbox` was run with the full client
+of `d8fb60e7` against the fixed tuios-slim daemon. The Inbox said "Inbox (not
+connected)" and "Restart it with a newer tuios", and the wait for the slim
+line timed out.
+
 `TestSlimPaneCannotAnswerAnotherPanesPrompt` was run against two builds of
 tuios-slim. The first is the slim build of PR #376 as first pushed
 (`d8fb60e7`), which set no prompt state. The second is the fixed tree with

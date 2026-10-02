@@ -53,7 +53,10 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		// one.
 		title += " [select " + st.Select + "]"
 	}
-	if !st.Live {
+	switch {
+	case m.daemonIsSlim():
+		title += " (tuios-slim)"
+	case !st.Live:
 		title += " (not connected)"
 	}
 	var detailFor func(int) []string
@@ -102,6 +105,8 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	if len(rows) == 0 {
 		lines := inboxEmptyLines
 		switch {
+		case m.daemonIsSlim():
+			lines = inboxSlimLines
 		case st.Unsupported:
 			lines = []string{"This daemon has no Inbox.", "Restart it with a newer tuios: tuios kill-server"}
 		case st.Filter == session.AttentionMail:

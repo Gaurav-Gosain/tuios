@@ -6,4 +6,4 @@ package edition
 const Slim = true
 
 // Name is the edition the welcome message and the version report carry.
-const Name = "slim"
+const Name = SlimEdition

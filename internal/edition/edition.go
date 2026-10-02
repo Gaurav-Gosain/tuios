@@ -13,6 +13,10 @@ package edition
 
 import "fmt"
 
+// SlimEdition is the edition name tuios-slim carries in the welcome message
+// and the version report. See Name.
+const SlimEdition = "slim"
+
 // SlimName is the name of the slim binary, as its version line prints it.
 const SlimName = "tuios-slim"
 

@@ -428,3 +428,35 @@ func TestSlimPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 	waitCapture(t, base, sess, "typer", "SECOND=0")
 	waitCapture(t, base, sess, "asker", "INJECTED")
 }
+
+// TestFullClientOnASlimDaemonExplainsTheInbox attaches the full tuios to a
+// daemon that tuios-slim started and opens the Inbox. The Inbox says the
+// daemon is tuios-slim and how to get the full one. It used to say the
+// daemon was too old, which sends the person to restart the same daemon.
+// TUIOS_E2E_FULL_BIN names the full binary.
+func TestFullClientOnASlimDaemonExplainsTheInbox(t *testing.T) {
+	requireSlim(t)
+	full := os.Getenv("TUIOS_E2E_FULL_BIN")
+	if full == "" {
+		t.Skip("TUIOS_E2E_FULL_BIN is not set")
+	}
+	const name = "slim-inbox"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("tuios-slim new: %v\n%s", err, out)
+	}
+	prev := tuiosBin
+	tuiosBin = full
+	term := attachIn(t, base, name, startOpts{})
+	tuiosBin = prev
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	waitText(t, term, "the Inbox on a slim daemon", "The daemon is tuios-slim. It has no Inbox.")
+	if text := term.Screen().Text(); strings.Contains(text, "newer tuios") || strings.Contains(text, "not connected") {
+		t.Fatalf("the Inbox still says the daemon is old or not connected:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "slim-daemon-inbox")
+}
