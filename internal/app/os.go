@@ -133,6 +133,10 @@ type OS struct {
 	ScrollbarGrabOffset int
 	Windows             []*terminal.Window
 	FocusedWindow       int
+	// PrevFocusedID is the window focus came from most recently, for the
+	// last_pane toggle. A window ID, not an index: indices shift on close and
+	// reorder.
+	PrevFocusedID string
 	Width               int
 	Height              int
 	Mode                Mode
