@@ -107,7 +107,8 @@ func runHook(t *testing.T, base, harness, session, window, payload string) strin
 	return out.String()
 }
 
-// windowID is the id of the window named name.
+// windowID is the id of the window named name: by the name it shows, which is
+// a rename's when it has one, or by its title.
 func windowID(t *testing.T, base, session, name string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", session)
@@ -117,7 +118,7 @@ func windowID(t *testing.T, base, session, name string) string {
 	var payload struct {
 		Windows []struct {
 			ID    string `json:"window_id"`
-			Name  string `json:"name"`
+			Name  string `json:"display_name"`
 			Title string `json:"title"`
 		} `json:"windows"`
 	}

@@ -234,6 +234,11 @@ const (
 	// branch it has, and how far that branch has drifted. Off unless the layout
 	// names it, like every other section.
 	sidebarSectionGit
+	// sidebarSectionCustom draws the rows a command of the user's printed,
+	// configured in [appearance.sidebar.custom]. One section, not a family:
+	// the enum sizes every per-section array in this package, and one more
+	// value fits all of them as they are. See sidebar_custom.go.
+	sidebarSectionCustom
 	sidebarSectionCount
 )
 
@@ -1320,12 +1325,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if filesRows == 0 && m.filesSectionEnabled() {
 		filesRows = 1
 	}
+	// The custom section keeps one row for the same reason files does: a
+	// person who put it on the rail and sees no heading reads the feature as
+	// broken rather than as a command that printed nothing.
+	customRows := m.railCustomRows()
+	nC := len(customRows)
+	if nC == 0 && m.railCustomEnabled() {
+		nC = 1
+	}
 	rowsIn := [sidebarSectionCount]int{
 		sidebarSectionSessions:  nS,
 		sidebarSectionTerminals: nT,
 		sidebarSectionAgents:    nA,
 		sidebarSectionFiles:     filesRows,
 		sidebarSectionGit:       len(gitRows),
+		sidebarSectionCustom:    nC,
 	}
 	// The last section in the configured layout is the one pinned to the rail's
 	// bottom: the slack rides above it, and it wears a blank line of its own so
@@ -1348,7 +1362,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	agentRowH := 1
 	// Row heights per section, which is what turns a section's line budget into
 	// the rows it can show and a st.lit() line back into the row under it.
-	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1}
+	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1, 1}
 
 	// The chrome each drawn section costs before a row of it appears: its own
 	// header, plus the floating blank in front of the pinned block.
@@ -1763,6 +1777,30 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 
+	drawCustom := func() {
+		lines = append(lines, compose(sidebarHeaderRow(m.railCustomTitle(), "", cw, pal)))
+		if len(customRows) == 0 {
+			// The title over an empty section: the one notional row draws
+			// as a blank line, so the heading is not the last thing on the
+			// rail with nothing to say it is a section.
+			if count[sidebarSectionCustom] > 0 {
+				lines = append(lines, blank)
+			}
+			return
+		}
+		for i := range count[sidebarSectionCustom] {
+			idx := start[sidebarSectionCustom] + i
+			if idx >= len(customRows) {
+				break
+			}
+			st := m.railRowState(idx == hoverRow[sidebarSectionCustom], false)
+			lines = append(lines, compose(st.mark(pal, m.sidebarCustomRow(customRows[idx], cw, pal, st))))
+		}
+		if h := hidden[sidebarSectionCustom]; h > 0 {
+			lines = append(lines, overflowRow(h, 0))
+		}
+	}
+
 	drawAgents := func() {
 		// No add control here, and the asymmetry is the honest answer: an agent is
 		// a pane running an agent CLI, which is exactly what the terminals section
@@ -1829,6 +1867,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionAgents:    drawAgents,
 		sidebarSectionFiles:     drawFiles,
 		sidebarSectionGit:       drawGit,
+		sidebarSectionCustom:    drawCustom,
 	}
 	for i, p := range plans {
 		if p.Spacer {

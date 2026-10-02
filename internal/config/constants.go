@@ -449,7 +449,13 @@ const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
 // section the rail does not draw, and that is the only way to turn one off:
 // there is no second switch per section, because a switch cannot say where a
 // thing goes and two spacers would have no switch to share.
-var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git"}
+var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git", SidebarSectionCustom}
+
+// SidebarSectionCustom is the rail section whose rows are the output of a
+// command the user writes, configured in [appearance.sidebar.custom]. It is
+// one section and not a family of named ones, because the rail's sections are
+// a fixed enum that sizes its arrays, and one more value fits that as it is.
+const SidebarSectionCustom = "custom"
 
 // SidebarSectionSpacer is the layout's empty block. It draws nothing and takes
 // lines, which is how a person puts a gap between two sections or pushes what

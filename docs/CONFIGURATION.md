@@ -379,6 +379,56 @@ the command fails, and `tuios list-dock-components` says which and why.
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## The rail's custom section
+
+The rail has one section whose rows are the output of a command you write.
+Place `custom` in `appearance.sidebar.sections` like any built-in section and
+describe it in `[appearance.sidebar.custom]`:
+
+```toml
+[appearance.sidebar]
+sections = "sessions:25,terminals,custom:35,agents:30"
+
+[appearance.sidebar.custom]
+title   = "Brief"
+command = "agent-brief render"
+refresh = "event:window-focused,agent-state"
+```
+
+| Key | Meaning |
+|---|---|
+| `title` | The section's heading. Defaults to `Custom`. |
+| `command` | Run through `sh -c`, as dock commands are. Every line of stdout is a row. |
+| `refresh` | `once` (the default), a duration such as `"30s"` with a one-second floor, or `event:TYPE[,TYPE...]` with the dock's event types. `push` is refused: a command that stays running cannot see the focus or the section's size change. |
+
+The command is a dock component that draws on the rail, so the dock's rules
+apply: it runs in the client, under a three second timeout, with bounded
+output; SGR colour survives and every other control sequence is stripped; a
+command that fails, times out or prints nothing leaves the title over an
+empty section, never an earlier run's rows; five failures in a row stop it
+until the config reloads or `tuios refresh-dock rail/custom`; and
+`tuios list-dock-components` lists it as `rail/custom` with why it drew
+nothing. Rows are cut to the rail's width and to the lines the section's
+share gives it, with `… +N` for the ones below the fold.
+
+Each run gets the client's environment plus `TUIOS_SESSION`, `TUIOS_SOCKET`,
+`TUIOS_RAIL_SECTION` (`custom`), `TUIOS_RAIL_WIDTH` (the columns a row may
+use), `TUIOS_RAIL_HEIGHT` (the most rows the section's share can give it; the
+rail may give fewer when other sections need the lines),
+`TUIOS_ACTIVE_PANE_ID` and `TUIOS_ACTIVE_PANE_CWD` (the focused pane and its
+folder, named as `[[keybindings.command]]` names them). They are read for
+each run, and an event that lands while a run is going costs one more run
+after it, so a quick focus change never leaves the old pane's rows on
+screen. `agent-state` fires for the states `[notifications.agent]` alerts on.
+The command does not run while the rail is hidden or folded, so the width it
+is told is never `0`, and it runs again when the rail opens.
+
+`appearance.sidebar.sections` is a settable option, so `tuios set-config` can
+place the section. `[appearance.sidebar.custom]` is read from the file only:
+the command runs outside every pane on every refresh, as dock commands and
+hooks do, and in the default open mode any pane can call `set-option`, so
+the command stays out of its reach, as `daemon.respond_from_shell` does.
+
 ## Turn off agent features
 
 Use this setting if you want only the multiplexer:

@@ -25,6 +25,7 @@ var optionWalkSkips = map[string]string{
 	"notify":                       "where the Inbox's text goes and with which credentials, which a pane must not change over the control protocol",
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
+	"appearance.sidebar.custom":    "the rail section's command, which runs outside every pane on every refresh, as dock commands and hooks do; set-option, a verb any pane can call in the default open mode, must not be able to set it, the way daemon.respond_from_shell is kept out above",
 	"hints.patterns":               "a list of regular expressions, which a value arriving as one string cannot spell",
 	"scratch.session":              "no longer used: read only so a config from the first scratch design loads and validation can say to remove it",
 	// [agents] is file-plane config the daemon reads from the file, like
@@ -111,6 +112,7 @@ func TestSetOptionValueRejectsBadInput(t *testing.T) {
 		{"non-numeric int", "appearance.scroll_lines", "several"},
 		{"out-of-range int", "appearance.scroll_lines", "9999"},
 		{"unparseable bool", "appearance.hide_window_buttons", "maybe"},
+		{"the rail section's command", "appearance.sidebar.custom.command", "echo"},
 	}
 
 	for _, tc := range cases {

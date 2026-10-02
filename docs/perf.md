@@ -2280,6 +2280,15 @@ read on each platform, and the `client-session-changed` event. On Go 1.26.6
 the build measured 28,283,042 and 26,688,242 bytes, 28,042 and 23,242 over
 the old budgets.
 
+The budgets went to 28,340,000 (linux/amd64) and 26,750,000 (darwin/arm64)
+for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
+its parser and validator, the section in the renderer, and the component
+flags, the rail context and the re-run in the dock engine. On Go 1.26.6 the
+build measured 28,311,714 and 26,721,730 bytes, with 8,286 and 3,270 bytes of
+room on the old budgets, which is no more than CI measures above a local
+build. Main was 28,283,042 and 26,688,242 bytes, and the change adds 28,672
+and 33,488 bytes.
+
 The budgets went to 31,092,000 (linux/amd64) and 29,297,000 (darwin/arm64)
 for the October 2026 work, which landed as one series. On Go 1.26.6 main
 (a640011) measured 28,283,042 and 26,688,242 bytes, and the series brings the

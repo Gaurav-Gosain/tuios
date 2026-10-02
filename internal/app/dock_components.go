@@ -278,7 +278,7 @@ func (m *OS) dockCustomWidth(names []string) int {
 type DockComponentInfo struct {
 	Name     string `json:"name"`
 	Side     string `json:"side"`
-	Source   string `json:"source"` // builtin | custom
+	Source   string `json:"source"` // builtin | custom | rail
 	Refresh  string `json:"refresh"`
 	Interval string `json:"interval,omitempty"`
 	Events   string `json:"events,omitempty"`
@@ -375,6 +375,13 @@ func (m *OS) DockComponents() []DockComponentInfo {
 			info.Visible = info.Refresh == "render" || info.Text != ""
 			out = append(out, info)
 		}
+	}
+	// The rail's custom section, after the bar's three sides. It is listed
+	// here because this listing is where a component that draws nothing says
+	// why, and a rail section that drew nothing has the same question to
+	// answer.
+	if m.railCustomEnabled() || m.railCustomConfig().HasCommand() {
+		out = append(out, m.railCustomInfo())
 	}
 	return out
 }

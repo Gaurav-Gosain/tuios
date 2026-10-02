@@ -469,14 +469,20 @@ func (m *OS) PaneHeight() int {
 // scratchDir is the folder the scratch shell starts in: the focused pane's,
 // when it is a folder on this machine, else the home folder.
 func (m *OS) scratchDir() string {
+	raw := ""
 	if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
-		dir := ""
-		if w.Cwd != "" {
-			dir, _ = localCwdPath(w.Cwd)
-		} else {
-			dir = w.CWD()
-		}
-		if info, err := os.Stat(dir); dir != "" && err == nil && info.IsDir() {
+		raw = paneDir(w)
+	}
+	return localFolder(raw)
+}
+
+// localFolder is the folder a command started for a pane on this machine
+// runs in. raw is where the pane says it is, an OSC 7 report or a path; the
+// answer is that folder when it is one here, and the home folder otherwise.
+// It stats the folder, which can block on a network filesystem.
+func localFolder(raw string) string {
+	if dir, _ := localCwdPath(raw); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
 			return dir
 		}
 	}
