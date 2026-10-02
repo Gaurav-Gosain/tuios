@@ -813,6 +813,11 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodeInvalidMessage, "state update refused: "+err.Error())
 	}
 	clampPushedText(&state)
+	// Rectangles tiled in a box the session has moved on from are kept out.
+	// See layout_gen.go.
+	if session.keepRectsOfStaleLayout(&state) {
+		LogBasic("Kept the session's rectangles over a push from %s tiled in an older layout", cs.clientID)
+	}
 
 	// A client running inside a pane is an agent's view, not the person's,
 	// so its focus does not mark a finished turn seen. See human_origin.go.

@@ -170,12 +170,18 @@ func (m *OS) keepSessionSidebar(changed bool) {
 	m.Settings.SidebarEnabled = m.sidebarSession == session.SidebarShown || m.SidebarRevealedForFocus
 }
 
-// joinSessionSidebar takes the rail of a session this client has just
-// attached to or switched to. What this client knew and offered belongs to
-// the session it left, so it is dropped first. A session with no value yet is
+// joinSession takes the rail and the layout generation of a session this
+// client has just attached to or switched to. What this client knew and
+// offered belongs to the session it left, so it is dropped first. A session with no value yet is
 // offered this client's own. Both paths into a session call it: RestoreFromState
 // for a session with windows, and adoptEmptySessionVersion for one without.
-func (m *OS) joinSessionSidebar(state *session.SessionState) {
+func (m *OS) joinSession(state *session.SessionState) {
+	// The layout generations are the session's own, and the ones this client
+	// knew were the session it left. See session/layout_gen.go.
+	m.layoutGenPushed = 0
+	if m.DaemonClient != nil {
+		m.layoutGenApplied = m.DaemonClient.SessionLayoutGeneration()
+	}
 	m.sidebarSeeded = false
 	m.sidebarSession = ""
 	if state != nil {

@@ -460,6 +460,12 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
 		}
 		c.NoteSession(payload.SessionName)
+		// The attach reply starts the session's numbering over: a switch to
+		// another session on this connection comes to a session whose
+		// generations are its own, and can be lower than the last one taken.
+		c.multiClientMu.Lock()
+		c.sessionLayoutGen = 0
+		c.multiClientMu.Unlock()
 		c.noteSessionLayout(payload.Generation, payload.Reserve)
 		c.noteSizePolicy(payload.Policy)
 		return payload.State, nil

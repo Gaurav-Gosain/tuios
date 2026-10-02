@@ -333,6 +333,12 @@ type SessionState struct {
 	// push holds. A client too old to read it keeps its own rail, which is
 	// what every client did before the field existed.
 	Sidebar string `json:"sidebar,omitempty"`
+	// LayoutGen is the layout generation the pushing client tiled its
+	// windows in: the generation of the last session resize it took. The
+	// daemon keeps a push's rectangles out when it is older than the
+	// session's, and clears the field. Zero is a client too old to say. See
+	// layout_gen.go.
+	LayoutGen uint64 `json:"layout_gen,omitempty"`
 	// Accent is an optional accent for the session, recorded verbatim the way
 	// Options are: the daemon has no palette and does not interpret it. Clients
 	// read it as a colour name from the ANSI sixteen or as a hex literal, and an

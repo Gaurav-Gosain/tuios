@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -437,4 +438,78 @@ func TestRailOpenedForTheKeyboardMovesNoPanes(t *testing.T) {
 	waitSpan(t, base, name, "the daemon after the scope closed", func(s paneSpan) bool {
 		return s == before
 	})
+}
+
+// rectStarts is where the daemon's rectangles begin, in the form paneStarts
+// reads a frame in: row,column of each top-left corner, sorted.
+func rectStarts(rects []winRect) []string {
+	starts := make([]string, 0, len(rects))
+	for _, r := range rects {
+		starts = append(starts, fmt.Sprintf("%d,%d", r.Y, r.X))
+	}
+	slices.Sort(starts)
+	return starts
+}
+
+// TestDaemonKeepsTheLayoutTheClientsDraw runs a 200-column and a 75-column
+// client under window_size latest and toggles the rail on each in turn. Each
+// toggle is input, so it also hands the session to the client that toggled,
+// and the session's size, the wide client's rail width and the reserve all
+// move together: the daemon answers several times in a row. After every
+// toggle the daemon's rectangles must settle on what the clients draw.
+//
+// NEGATIVE CONTROL: fails 3 of 3 on 91985c0 (the first round of this change):
+// the client pushed only the layout of the first answer after its own
+// announce, which could be a middle one, and the daemon kept rectangles
+// neither client drew. With the push after a newer generation cut out it fails
+// 2 of 2. With the daemon's stale-generation check removed it passes 5 of 5:
+// each client pushes again for every newer generation, so the last push to
+// land is a current one. The check is covered by
+// TestAPushTiledInAnOlderLayoutKeepsTheSessionsRectangles in internal/session.
+func TestDaemonKeepsTheLayoutTheClientsDraw(t *testing.T) {
+	base := t.TempDir()
+	const name = "railgen"
+	writeConfig(t, base, "[daemon]\nwindow_size = \"latest\"\n"+sessionRailConfig("bsp", true))
+	if out, err := tuiosCLI(t, base, "new", "-d", name); err != nil {
+		t.Fatalf("create the detached session: %v\n%s", err, out)
+	}
+	wide := attachIn(t, base, name, startOpts{cols: 200, rows: 50})
+	waitForSettledGeometryIn(t, base, name, 1)
+	if out, err := tuiosCLI(t, base, "run-command", "-s", name, "NewWindow"); err != nil {
+		t.Fatalf("open the second window: %v\n%s", err, out)
+	}
+	waitForSettledGeometryIn(t, base, name, 2)
+	narrow := attachSmall(t, base, name, startOpts{cols: 75, rows: 24})
+	dir := artifactDir(t)
+
+	const toggles = 20
+	for i := range toggles {
+		term, who := wide, "wide"
+		if i%2 == 1 {
+			term, who = narrow, "narrow"
+		}
+		toggleRail(t, term)
+		// The session follows the client that toggled, so that client draws
+		// the whole session and its frame is the layout to compare with.
+		var last []string
+		deadline := time.Now().Add(shellTimeout)
+		for {
+			rects := waitForSettledGeometryIn(t, base, name, 2)
+			want := rectStarts(rects)
+			got := paneStarts(term.Screen())
+			if slices.Equal(want, got) {
+				break
+			}
+			last = got
+			if time.Now().After(deadline) {
+				saveArtifact(t, wide, dir, fmt.Sprintf("wide-%02d", i))
+				saveArtifact(t, narrow, dir, fmt.Sprintf("narrow-%02d", i))
+				t.Fatalf("toggle %d on the %s client: the daemon holds panes at %v, the client draws them at %v\n%s",
+					i, who, want, last, term.Snapshot())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	saveArtifact(t, wide, dir, "wide-last")
+	saveArtifact(t, narrow, dir, "narrow-last")
 }

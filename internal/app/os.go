@@ -724,11 +724,11 @@ type OS struct {
 		reserve       session.LayoutReserve
 		width, height int
 	}
-	// reserveOwed records that this client told the daemon its chrome moved
-	// and the answer has not come back. The answer is a session resize, and
-	// the layout this client works out from it is pushed, because that is the
-	// layout the daemon has to keep. See AnnounceLayoutReserve.
-	reserveOwed bool
+	// layoutGenApplied is the layout generation of the last session resize
+	// this client laid its panes out for, and layoutGenPushed the one its
+	// last push named. A session resize newer than the last push is pushed.
+	// See session/layout_gen.go.
+	layoutGenApplied, layoutGenPushed uint64
 
 	// lastConfigMaster is the configured master-stack shape as this OS last
 	// saw it. See adoptConfigMasterLayout.
