@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +23,11 @@ func TestEveryHelpRenders(t *testing.T) {
 	var walk func(c *cobra.Command, path []string)
 	walk = func(c *cobra.Command, path []string) {
 		for _, sub := range c.Commands() {
+			// A stub for a command tuios-slim leaves out prints one line for
+			// --help like for anything else. TestSlimStubsPrintOneLine covers it.
+			if edition.Slim && slices.Contains(slimDroppedCommands, sub.Name()) {
+				continue
+			}
 			p := append(append([]string(nil), path...), sub.Name())
 			paths = append(paths, p)
 			walk(sub, p)
