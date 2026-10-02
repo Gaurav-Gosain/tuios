@@ -767,7 +767,7 @@ per style change and two more copies to trim it.
 
 ### What changed
 
-`composeLayers` (`compose.go`) replaces the Compositor and the Canvas. It keeps
+`composeLayersIn` (`compose.go`) replaces the Compositor and the Canvas. It keeps
 the Compositor's order, root and unstable sort included, and draws each layer
 from a `cellLayer`: the cells its string parsed to the last time it was seen,
 kept by layer id while the layer is on screen. A pane's layer keeps its string
@@ -2254,7 +2254,7 @@ or a diff theme is built, which are memoised, and not per cell;
 
 ## 2026-09 modal dim, overlay fade and working-row shimmer
 
-All three are passes over the composed canvas in `composeLayers`, so none of
+All three are passes over the composed canvas in `composeLayersIn`, so none of
 them re-renders a pane or rebuilds the rail: the cached layers are copied in as
 on any frame and the pass edits cells in place through the spotlight's
 16-level blend cache (`cellShade`). Apple M3 Pro, a shared machine, medians of
