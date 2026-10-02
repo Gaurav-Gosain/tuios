@@ -8,12 +8,14 @@
 //
 // Reports Pi's turns to the tuios pane it runs in, through
 // `tuios agent-hook pi`: session_start names the session, agent_start starts
-// work and agent_settled ends it. ui_prompt_start says Pi is waiting on the
-// person in a blocking prompt (a confirm, a choice, a line of input), and
+// work and agent_settled ends it. before_agent_start says what the turn is
+// on, which is the rail's "now" line for the whole turn: the task, not
+// every tool it takes. ui_prompt_start says Pi is waiting on the person in
+// a blocking prompt (a confirm, a choice, a line of input), and
 // ui_prompt_end that the prompt was answered; both say whether a turn is
-// running, so an answered prompt goes back to working or to rest. Only the TUI
-// mode reports, since the print, JSON and RPC modes run with no terminal a
-// pane could show.
+// running, so an answered prompt goes back to working or to rest. Only the
+// TUI mode reports, since the print, JSON and RPC modes run with no
+// terminal a pane could show.
 
 import { spawn } from "node:child_process";
 
@@ -65,6 +67,12 @@ export default function (pi) {
   });
   pi.on("agent_settled", (_event, ctx) => {
     if (tui && ctx?.isIdle?.() !== false) report("agent_settled", ctx, {});
+  });
+  pi.on("before_agent_start", (event, ctx) => {
+    if (!tui) return;
+    report("prompt", ctx, {
+      prompt: typeof event?.prompt === "string" ? event.prompt : "",
+    });
   });
   pi.on("ui_prompt_start", (event, ctx) => {
     if (!tui) return;
