@@ -596,6 +596,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.persist_scrollback_kb"),
 			opt("scratch.width"),
 			opt("scratch.height"),
+			opt("launcher.gui_command"),
 		}),
 	}
 

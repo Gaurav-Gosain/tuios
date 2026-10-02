@@ -117,6 +117,9 @@ func stableSortByBoost(items []LauncherItem, hist *applist.Frecency) {
 // basename again could pick a different file if $PATH has changed since the
 // scan.
 func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
+	if cmd, ok := m.runGUIProgram(e); ok {
+		return cmd
+	}
 	save := m.noteLaunch(e.Name)
 	// The pane is named after the program so the dock and the rail say what is
 	// running in it before the program has printed anything.
