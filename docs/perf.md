@@ -2131,8 +2131,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 27,960,000 (raised at 27,930,786) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,395,000 (raised at 26,365,842) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 28,065,000 (raised at 28,029,090) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,485,000 (raised at 26,451,634) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2187,6 +2187,16 @@ after the graphics fixes (#342, #344) and the session cleanup (#334) landed
 together. That brought the build to 27,959,458 and 26,399,730 bytes
 (Go 1.26.6): 542 bytes under and 4,730 bytes over the old budgets. Each PR fit
 on its own; the sum did not.
+
+The budgets went to 28,065,000 (linux/amd64) and 26,485,000 (darwin/arm64)
+when the daemon learned to pace a kitty graphics pane to its fastest client
+(#345): it cuts a pane's output into text and frames, drops a frame a slow
+client has not taken when a newer one replaces it, and holds the pane only
+while every client is behind. That brought the build to 28,029,090 and
+26,451,634 bytes (Go 1.26.6). Main was 27,992,226 and 26,417,170 bytes, with
+7,774 and 22,830 bytes of room, and the change adds 36,864 and 34,464 bytes.
+CI measured linux/amd64 about 8 KB above a local build, so the budgets leave
+about 35 KB.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
