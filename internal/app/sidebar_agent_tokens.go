@@ -44,6 +44,9 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	tk := sidebarAgentToken{Name: name}
 	switch name {
 	case "session":
+		// Foreign rows say which session they came from; the attached
+		// session's own rows say nothing, because every row already belongs
+		// to it.
 		if e.Foreign {
 			tk.Text = printableTitle(e.SessionLabel)
 		}
@@ -72,6 +75,19 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		tk.Text = m.sidebarAgentNeedText(e, variant, now)
 	case "host":
 		tk.Text = printableTitle(e.Host)
+	case "workspace":
+		// The workspace tag is empty for a pane whose workspace the wire did
+		// not name, so an older daemon's rows stay untagged.
+		if e.Workspace > 0 {
+			tk.Text = m.workspaceTag(e.Workspace)
+		}
+	case "location":
+		// The pane's address as the switch keys name it: session then
+		// workspace, [1:5] opening session 1 and workspace 5. Empty when
+		// either half is unknown, so a foreign pane's row stays untagged.
+		if e.SessionIndex > 0 && e.Workspace > 0 {
+			tk.Text = "[" + strconv.Itoa(e.SessionIndex) + ":" + strconv.Itoa(e.Workspace) + "]"
+		}
 	case "now":
 		// What a working agent is doing. The daemon clears it at rest, and a
 		// pane blocked on a prompt says what it asks in its need and message,

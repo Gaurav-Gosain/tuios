@@ -31,6 +31,11 @@ import (
 // survives a terminal with no nerd font, and the rail is wide enough to say it.
 const fileTokenCd = "cd"
 
+// fileTokenReturn is the header control that gives a steered listing back to
+// the pane: unpin it and ask for the pane's directory again. A word like its
+// neighbour cd, for the same reason.
+const fileTokenReturn = "return"
+
 // fileSpoofRow is the listing's own mark for a folder the pane named and /proc
 // contradicted: the names are still there, and nothing on them can be changed.
 const fileSpoofRow = "read only: wrong folder"
@@ -175,6 +180,31 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 	return sidebarStyle(nil, ink).Render(fileTokenCd), span, true
 }
 
+// sidebarFilesHeaderReturn places the return control left of the cd control,
+// or at the rail's edge when there is no cd control to sit beside. It is drawn
+// whenever the listing belongs to a pane, the same gate cd has: the pair reads
+// as one unit, take the pane there and come back.
+func (m *OS) sidebarFilesHeaderReturn(hasCd bool, cdX0 int, cw int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
+	if m.fileViewOriginWindow() == nil {
+		return "", sidebarTokenSpan{}, false
+	}
+	tw := lipgloss.Width(fileTokenReturn)
+	end := cw - 1
+	if hasCd {
+		end = cdX0 - 1
+	}
+	x0 := end - tw
+	if x0 < sidebarHeaderLabelW(sidebarFilesLabel)+1 {
+		return "", sidebarTokenSpan{}, false
+	}
+	span := sidebarTokenSpan{Kind: sidebarRowFileReturn, X0: x0, X1: x0 + tw}
+	ink := pal.FgMute
+	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
+		ink = pal.Fg
+	}
+	return sidebarStyle(nil, ink).Render(fileTokenReturn), span, true
+}
+
 // sidebarFilesHeaderRow is the section's one line of chrome: the label, the
 // directory being listed, and the cd control.
 //
@@ -191,10 +221,13 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 // filesystem. That is the right answer to "what is in the pane's directory" and
 // there is nothing to correct, but a remote viewer is not looking at their own
 // disk.
-func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay.Palette) string {
+func (m *OS) sidebarFilesHeaderRow(backTok string, hasBack bool, cdTok string, hasCd bool, cw int, pal overlay.Palette) string {
 	room := cw - sidebarHeaderLabelW(sidebarFilesLabel) - 2
 	if hasCd {
 		room -= lipgloss.Width(fileTokenCd) + 1
+	}
+	if hasBack {
+		room -= lipgloss.Width(backTok) + 1
 	}
 	right := ""
 	if room > 0 {
@@ -202,13 +235,19 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 			right = sidebarStyle(nil, pal.FgDim).Render(path)
 		}
 	}
+	if hasBack {
+		if right != "" {
+			right += sidebarStyle(nil, nil).Render(" ")
+		}
+		right += backTok
+	}
 	if hasCd {
 		if right != "" {
 			right += sidebarStyle(nil, nil).Render(" ")
 		}
 		right += cdTok
 	}
-	return sidebarHeaderRow(sidebarFilesLabel, right, cw, pal)
+	return sidebarHeaderRowRuled(sidebarFilesLabel, right, cw, pal, &m.Settings)
 }
 
 // sidebarFilesEmptyRow says why the section is listing nothing.

@@ -10,9 +10,8 @@ import (
 
 // sidebarHeader is the label the sidebar renders above its session list.
 // Asserting on it proves the sidebar panel is actually on screen rather than
-// that a config flag was flipped. Lowercase: the rail's headers are furniture
-// and are drawn as such.
-const sidebarHeader = "sessions"
+// that a config flag was flipped.
+const sidebarHeader = "SESSIONS"
 
 // toggleSidebarViaPalette opens the command palette, runs the "Toggle sidebar"
 // entry, and waits for the palette to close.
