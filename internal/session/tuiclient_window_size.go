@@ -39,6 +39,16 @@ func (c *TUIClient) SessionWindowSize() string {
 	return ""
 }
 
+// noteSizePolicy records the session's window_size policy, from an attach
+// reply. Empty, from a daemon that does not say it, records it as unknown.
+func (c *TUIClient) noteSizePolicy(policy string) {
+	if policy == "" {
+		c.sizePolicy.Store(nil)
+		return
+	}
+	c.sizePolicy.Store(&policy)
+}
+
 // ReportActivity tells the daemon the person at this client gave input. It
 // sends nothing to a daemon that did not offer WindowSize, and at most one
 // message per activityInterval: the first input of a burst goes at once, so

@@ -155,7 +155,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea
 	// placeholder; but leaving them at 0 excludes the client from
-	// calculateEffectiveSize until NotifyTerminalSize arrives, which causes
+	// calculateSessionSize until NotifyTerminalSize arrives, which causes
 	// web clients to be stuck at stale session dimensions from a previously-
 	// attached native client. Trust the attach payload: web/native attach
 	// callers already pass the real client viewport.
@@ -286,6 +286,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Reserve:     effectiveReserve,
 		Generation:  session.LayoutGeneration(),
 		HumanNonce:  humanNonce,
+		Policy:      session.WindowSizePolicy(),
 	}); err != nil {
 		return err
 	}
@@ -580,7 +581,7 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 	// Update client dimensions for multi-client size calculation
 	if payload.PTYID == "" {
 		// This is a client resize, not a PTY-specific resize.
-		// width/height are guarded by cs.mu (read under it in calculateEffectiveSize).
+		// width/height are guarded by cs.mu (read under it in sessionSizedClients).
 		cs.mu.Lock()
 		cs.width = payload.Width
 		cs.height = payload.Height

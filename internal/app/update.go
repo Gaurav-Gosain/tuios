@@ -2616,19 +2616,26 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	if input {
 		m.lastActivity = m.msgClock
 	}
-	// The daemon names the policy only when it resizes the session, so a
-	// client that attached to a session that kept its size does not know
-	// it. Such a client reports, as every client did before.
+	// The policy is unknown against a daemon that does not name it in the
+	// attach reply, and during a session switch until the reply lands. Such
+	// a client reports, as every client did before.
 	policy := m.DaemonClient.SessionWindowSize()
-	latest := policy == "" || policy == config.WindowSizeLatest
+	named := policy == config.WindowSizeLatest
+	// A move to another session is not a policy change. The input that
+	// asked for the move belongs to the session it left, so only input
+	// given since the move is carried.
+	if name := m.DaemonClient.SessionName(); name != m.activitySession {
+		m.activitySession, m.activitySince = name, m.msgClock
+	}
 	switch {
-	case !latest:
+	case policy != "" && !named:
 	case input:
 		m.DaemonClient.ReportActivity(m.msgClock)
-	case !m.wasLatest && !m.lastActivity.IsZero() && m.msgClock.Sub(m.lastActivity) < activityCarry:
+	case named && !m.wasLatest && m.lastActivity.After(m.activitySince) &&
+		m.msgClock.Sub(m.lastActivity) < activityCarry:
 		m.DaemonClient.ReportActivity(m.msgClock)
 	}
-	m.wasLatest = latest
+	m.wasLatest = named
 }
 
 // isActivityInput reports whether a message is the person acting at this
