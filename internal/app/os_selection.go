@@ -36,12 +36,11 @@ func (m *OS) EditScrollbackInEditor() tea.Cmd {
 		editor = "vi"
 	}
 
-	// Use tea.ExecProcess to properly suspend bubbletea while editor runs
+	// Use tea.ExecProcess to properly suspend bubbletea while editor runs.
+	// SGR-pixel reports go off first: the editor does not expect them, and
+	// the terminal comes back in SGR cells.
 	c := exec.Command(editor, tmpFile.Name()) //nolint:gosec
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		if err != nil {
-			return nil
-		}
-		return nil
-	})
+	return tea.Sequence(m.releaseHostPixelMouse(), tea.ExecProcess(c, func(error) tea.Msg {
+		return hostTerminalBackMsg{}
+	}))
 }
