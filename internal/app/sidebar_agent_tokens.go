@@ -450,8 +450,10 @@ func sidebarAgentBudget(dst []railToken, prefix, after []sidebarAgentToken, labe
 // The queued figure is picked inside the budget. The longest form that keeps
 // every token the row would draw without it wins, so a row reads
 // "deploy-the-api-… 2q · working" rather than dropping the state to spell out
-// "2 queued". When every form costs a token, the longest form the budget
-// keeps at all wins, and when none is kept the elapsed time stays.
+// "2 queued". The location token is the one exception: an address the switch
+// keys can re-derive any time yields before the figure degrades to "1q".
+// When every form costs a token, the longest form the budget keeps at all
+// wins, and when none is kept the elapsed time stays.
 //
 // It reports the figure it drew, which tokens the row keeps in
 // sidebarAgentBudget's order, and the cells the name may take. The answer is
@@ -463,6 +465,13 @@ func sidebarAgentFit(s *railScratch, prefix, after []sidebarAgentToken, nameW in
 		return s.keep, nameRoom
 	}
 	labelAt := len(prefix) + len(after)
+	locAt := -1
+	for i, tk := range after {
+		if tk.Name == "location" {
+			locAt = labelAt - len(after) + i
+			break
+		}
+	}
 	figure = label
 	kept := ""
 	for _, q := range queued {
@@ -476,6 +485,9 @@ func sidebarAgentFit(s *railScratch, prefix, after []sidebarAgentToken, nameW in
 		all := true
 		for i, tk := range s.tokens {
 			if tk.Cost > 0 && !tk.Whole && !keep[i] {
+				if i == locAt {
+					continue
+				}
 				all = false
 				break
 			}
