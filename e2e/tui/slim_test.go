@@ -119,6 +119,7 @@ var requiresSlim = map[string]bool{
 	"TestSlimRunsAnInstalledExtension":      true,
 	"TestFullCLIOnASlimDaemon":              true,
 	"TestSlimClientKeepsListeningAfterMail": true,
+	"TestSlimRailListsNoAgents":             true,
 }
 
 // skipIfSlimLacks skips the calling test when the binary under test is
@@ -308,6 +309,15 @@ func TestFullCLIOnASlimDaemon(t *testing.T) {
 			}
 		}
 	}
+	// A global session holds panes from other machines, which tuios-slim
+	// does not link to. The slim daemon refuses it as the slim CLI does.
+	out, err = withFull("new", "--global", "everywhere", "--detach")
+	if err == nil || !strings.Contains(out, "new --global is not in tuios-slim. Install the full tuios to use it.") {
+		t.Errorf("full tuios new --global on the slim daemon: err %v, printed\n%s\nwant the line that says new --global is not in tuios-slim", err, out)
+	}
+	if out, _ := withFull("ls"); strings.Contains(out, "everywhere") {
+		t.Errorf("the slim daemon made the global session:\n%s", out)
+	}
 }
 
 // TestSlimClientKeepsListeningAfterMail attaches tuios-slim to a full
@@ -459,4 +469,75 @@ func TestFullClientOnASlimDaemonExplainsTheInbox(t *testing.T) {
 		t.Fatalf("the Inbox still says the daemon is old or not connected:\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "slim-daemon-inbox")
+}
+
+// TestSlimAgentKeysSayTheyAreMissing presses the prefix keys of the Inbox,
+// agent mail and the next item that needs the person in tuios-slim. Each
+// says the feature is not in tuios-slim, as the screenshot key does. They
+// used to do nothing at all.
+func TestSlimAgentKeysSayTheyAreMissing(t *testing.T) {
+	requireSlim(t)
+	const name = "slim-keys"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("tuios-slim new: %v\n%s", err, out)
+	}
+	for _, c := range []struct{ key, want string }{
+		{"i", "The Inbox is not in tuios-slim."},
+		{"M", "Agent mail is not in tuios-slim."},
+		{"o", "The Inbox is not in tuios-slim."},
+		{"C", "Screenshot is not in tuios-slim."},
+	} {
+		term := attachIn(t, base, name, startOpts{})
+		if err := term.SendKeys(tuitest.Ctrl('b'), c.key); err != nil {
+			t.Fatalf("press the prefix and %s: %v", c.key, err)
+		}
+		waitText(t, term, "the message for prefix "+c.key, c.want)
+		_ = term.Close()
+	}
+}
+
+// TestSlimRailListsNoAgents attaches tuios-slim and the full tuios to a full
+// daemon with the rail open, and has the full CLI report an agent in the
+// pane. The full client lists the agent on its rail. tuios-slim does not:
+// an agent row leads to the Inbox, the review and agent mail, which
+// tuios-slim leaves out. TUIOS_E2E_FULL_BIN names the full binary.
+func TestSlimRailListsNoAgents(t *testing.T) {
+	requireSlim(t)
+	full := os.Getenv("TUIOS_E2E_FULL_BIN")
+	if full == "" {
+		t.Skip("TUIOS_E2E_FULL_BIN is not set")
+	}
+	const name = "slim-rail"
+	base := t.TempDir()
+	withFull := func(f func()) {
+		prev := tuiosBin
+		tuiosBin = full
+		defer func() { tuiosBin = prev }()
+		f()
+	}
+	var fullTerm *tuitest.Terminal
+	withFull(func() {
+		killDaemon(t, base)
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("full tuios new: %v\n%s", err, out)
+		}
+		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", name, "needs_input", "--message", "AGENTROWMARK"); err != nil {
+			t.Fatalf("full tuios set-agent-state: %v\n%s", err, out)
+		}
+		fullTerm = attachIn(t, base, name, startOpts{})
+	})
+	slimTerm := attachIn(t, base, name, startOpts{})
+	for _, term := range []*tuitest.Terminal{fullTerm, slimTerm} {
+		if err := term.SendKeys(tuitest.Ctrl('b'), "b"); err != nil {
+			t.Fatalf("open the rail: %v", err)
+		}
+	}
+	waitText(t, fullTerm, "the agent row on the full client's rail", "AGENTROWMARK")
+	time.Sleep(time.Second)
+	if strings.Contains(slimTerm.Screen().Text(), "AGENTROWMARK") {
+		t.Fatalf("tuios-slim lists an agent on its rail:\n%s", slimTerm.Snapshot())
+	}
+	saveFrame(t, slimTerm, "slim-rail-no-agents")
 }

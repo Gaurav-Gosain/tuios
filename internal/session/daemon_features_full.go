@@ -228,6 +228,10 @@ func (d *Daemon) noteConfigNotice(name, summary string) { d.attention.noteConfig
 // closeConfigNotice closes the Inbox item name.
 func (d *Daemon) closeConfigNotice(name string) { d.attention.closeConfigNotice(name) }
 
+// refuseGlobalSession refuses nothing in the full build, which links to
+// other machines.
+func refuseGlobalSession() string { return "" }
+
 // onPaneOutput runs on every output event of a pane: the agent reports the
 // emulator parked, the pane's directory and foreground, and the agent
 // detector's probe and screen look.

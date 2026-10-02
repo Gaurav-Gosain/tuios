@@ -18,6 +18,10 @@ func (m *OS) agentsSeen() bool {
 	return m.SidebarAgentsSeen || m.agentIntegrationInstalled || m.agentsPresent()
 }
 
+// railListsAgents reports whether the rail has an agents section. The full
+// build has one. See agents_slim.go.
+func railListsAgents() bool { return true }
+
 // agentIntegrationMsg reports that a harness on this machine has tuios's
 // hooks installed.
 type agentIntegrationMsg struct{}

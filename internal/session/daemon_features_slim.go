@@ -139,6 +139,11 @@ func (d *Daemon) onPaneOutput(s *Session, _ SessionEvent, pty *PTY) {
 	s.noteCwdOnOutput(pty)
 }
 
+// refuseGlobalSession refuses new --global from a full client: a global
+// session holds panes from more than one machine, and tuios-slim links to no
+// other machine. The slim CLI refuses the flag itself.
+func refuseGlobalSession() string { return edition.MissingMessage("new --global") }
+
 // applyOneHost: tuios-slim dials no hosts.
 func (d *Daemon) applyOneHost(*config.UserConfig, string) *verbError {
 	return newVerbError(ErrVerbCommandFailed, edition.MissingMessage("apply-config with a host"))

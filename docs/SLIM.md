@@ -111,7 +111,9 @@ ssh is not in tuios-slim. Install the full tuios to use this command.
 ```
 
 The palette, the settings page, the help and the prefix menu do not show the
-features that tuios-slim leaves out.
+features that tuios-slim leaves out. The rail shows no agent rows. The prefix
+keys of the Inbox (`i`, `M` and `o`) and of screenshots (`C`) show a message
+that the feature is not in tuios-slim.
 
 ## Extensions
 
@@ -150,6 +152,8 @@ attach to a tuios-slim daemon.
   `set-agent-state` from a full tuios, and every OSC sequence except the
   OSC 9;4 prompt state.
 - A slim client drops the agent mail a full daemon sends.
+- A slim daemon refuses `new --global` from a full tuios, as the slim CLI does.
+- A full client on a slim daemon says the Inbox is not in tuios-slim.
 
 ## Config
 

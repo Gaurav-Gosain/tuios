@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -64,13 +65,28 @@ type agentMailThread struct {
 
 func (m *OS) agentsSeen() bool { return false }
 
+// railListsAgents is false: the rail's agent rows lead to the Inbox, the
+// review and agent mail, which tuios-slim leaves out. A full daemon still
+// sends agent state, so the rows are left out here.
+func railListsAgents() bool { return false }
+
+// noInbox says the Inbox, or agent mail when filter asks for it, is not in
+// this build.
+func (m *OS) noInbox(filter string) {
+	what := "The Inbox"
+	if filter == session.AttentionMail {
+		what = "Agent mail"
+	}
+	m.ShowNotification(edition.MissingMessage(what), "info", m.Settings.NotificationDuration)
+}
+
 func (m *OS) checkAgentIntegrationCmd() tea.Cmd { return nil }
 
 func (m *OS) OpenAgentMail() tea.Cmd                              { return nil }
 func (m *OS) OpenAgentMailForWindow(string) tea.Cmd               { return nil }
 func (m *OS) OpenAgentMailThread(uint64) tea.Cmd                  { return nil }
-func (m *OS) OpenInbox(string)                                    {}
-func (m *OS) JumpToNextAttention() tea.Cmd                        { return nil }
+func (m *OS) OpenInbox(filter string)                             { m.noInbox(filter) }
+func (m *OS) JumpToNextAttention() tea.Cmd                        { m.noInbox(""); return nil }
 func (m *OS) resetAgentMail()                                     {}
 func (m *OS) inboxReach(session.AttentionItem) bool               { return false }
 func (m *OS) endInboxWatch()                                      {}

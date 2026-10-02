@@ -442,6 +442,11 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid new payload: %w", err)
 	}
 
+	if payload.Global {
+		if why := refuseGlobalSession(); why != "" {
+			return d.sendError(cs, ErrCodeCommandFailed, why)
+		}
+	}
 	cfg := &SessionConfig{Global: payload.Global}
 	if cs.hello != nil {
 		cfg.Term = cs.hello.Term

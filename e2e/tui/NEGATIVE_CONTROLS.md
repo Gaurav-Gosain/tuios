@@ -614,6 +614,14 @@ of `d8fb60e7` against the fixed tuios-slim daemon. The Inbox said "Inbox (not
 connected)" and "Restart it with a newer tuios", and the wait for the slim
 line timed out.
 
+`TestSlimAgentKeysSayTheyAreMissing` was run against the tuios-slim of
+`d8fb60e7`. Prefix `i` did nothing, and the wait for the message timed out.
+`TestSlimRailListsNoAgents` failed on the same build: its rail listed the
+agent the full CLI reported. The positive half is in the same test: the
+full client on the same daemon lists that agent. The `new --global` case of
+`TestFullCLIOnASlimDaemon` failed on the slim daemon of `d8fb60e7`, which
+made the global session.
+
 `TestSlimPaneCannotAnswerAnotherPanesPrompt` was run against two builds of
 tuios-slim. The first is the slim build of PR #376 as first pushed
 (`d8fb60e7`), which set no prompt state. The second is the fixed tree with
