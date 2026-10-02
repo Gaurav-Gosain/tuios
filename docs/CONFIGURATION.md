@@ -279,6 +279,8 @@ folder, named as `[[keybindings.command]]` names them). They are read for
 each run, and an event that lands while a run is going costs one more run
 after it, so a quick focus change never leaves the old pane's rows on
 screen. `agent-state` fires for the states `[notifications.agent]` alerts on.
+The command does not run while the rail is hidden or folded, so the width it
+is told is never `0`, and it runs again when the rail opens.
 
 `appearance.sidebar.sections` is a settable option, so `tuios set-config` can
 place the section. `[appearance.sidebar.custom]` is read from the file only:

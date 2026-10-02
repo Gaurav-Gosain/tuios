@@ -178,6 +178,8 @@ and an event that lands mid-run costs one more run after it. And the
 environment says where the rows go: `TUIOS_RAIL_SECTION=custom`,
 `TUIOS_RAIL_WIDTH`, `TUIOS_RAIL_HEIGHT` (a ceiling), `TUIOS_ACTIVE_PANE_ID`
 and `TUIOS_ACTIVE_PANE_CWD`, beside `TUIOS_SESSION` and `TUIOS_SOCKET`.
+The command does not run while the rail is hidden or folded, so
+`TUIOS_RAIL_WIDTH` is never `0`, and it runs again when the rail opens.
 
 Everything else is the dock's: the timeout, the bounded read, the sanitiser,
 the empty section on failure, the five-failure stop, and
