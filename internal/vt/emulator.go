@@ -181,6 +181,9 @@ type Emulator struct {
 
 	// Kitty graphics passthrough callback
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
+	// kittyHeaderOnly parses graphics commands with ParseKittyHeader and
+	// passes no rawData. See SetKittyHeaderOnly.
+	kittyHeaderOnly bool
 	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
 	// See kitty_placeholder.go.
 	kittyImageIDTranslator KittyImageIDTranslator
@@ -1624,18 +1627,11 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			return false
 		}
 
-		cmd, err := ParseKittyCommand(data[1:])
+		cmd, err := parseKittyCommand(data[1:], e.kittyHeaderOnly)
 		if err != nil || cmd == nil {
 			return false
 		}
-		// Build complete APC sequence: ESC _ G<params>;<payload> ESC \
-		// APC terminator is ESC \ (0x1b 0x5c), not just \
-		rawData := make([]byte, len(data)+4)
-		rawData[0] = '\x1b'
-		rawData[1] = '_'
-		copy(rawData[2:], data)
-		rawData[len(rawData)-2] = '\x1b'
-		rawData[len(rawData)-1] = '\\'
+		rawData := kittyRawAPC(data, e.kittyHeaderOnly)
 
 		// An undecodable payload is answered here, once, whoever renders the
 		// pane: the emulator's responses reach the guest in every mode (and a
@@ -1686,6 +1682,29 @@ func (e *Emulator) SetKittyPlaceholderMode(m KittyPlaceholderMode) {
 
 func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
 	e.kittyPassthroughFunc = fn
+}
+
+// SetKittyHeaderOnly says whether the passthrough acts on the control keys
+// alone. When it does, commands are parsed with ParseKittyHeader and the
+// passthrough gets a nil rawData.
+func (e *Emulator) SetKittyHeaderOnly(on bool) {
+	e.kittyHeaderOnly = on
+}
+
+// kittyRawAPC rebuilds the whole graphics sequence, ESC _ G<params>;<payload>
+// ESC \, for the passthrough, or returns nil when headerOnly says no
+// passthrough reads it.
+func kittyRawAPC(data []byte, headerOnly bool) []byte {
+	if headerOnly {
+		return nil
+	}
+	rawData := make([]byte, len(data)+4)
+	rawData[0] = '\x1b'
+	rawData[1] = '_'
+	copy(rawData[2:], data)
+	rawData[len(rawData)-2] = '\x1b'
+	rawData[len(rawData)-1] = '\\'
+	return rawData
 }
 
 func (e *Emulator) KittyState() *KittyState {

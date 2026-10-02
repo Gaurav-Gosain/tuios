@@ -1771,7 +1771,10 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.
+	// The daemon reads only the control keys, so it does not decode the
+	// payload of a frame that only the clients draw.
 	remotePane := host != ""
+	terminal.SetKittyHeaderOnly(true)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
 			if response := s.kittyQueryResponse(cmd, remotePane); response != nil {

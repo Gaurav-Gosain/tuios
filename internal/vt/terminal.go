@@ -135,6 +135,9 @@ type Terminal interface {
 	GetCallbacks() Callbacks
 	SetScreenClearFunc(f func())
 	SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte))
+	// SetKittyHeaderOnly says whether the passthrough acts on the control
+	// keys alone, so the payload is not decoded. See ParseKittyHeader.
+	SetKittyHeaderOnly(on bool)
 	// SetKittyImageIDTranslator installs the guest-to-host image id mapping
 	// used for kitty Unicode placeholder cells. See kitty_placeholder.go.
 	SetKittyImageIDTranslator(fn KittyImageIDTranslator)

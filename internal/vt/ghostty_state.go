@@ -444,6 +444,14 @@ func (t *GhosttyTerminal) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, raw
 	t.kittyPassthroughFunc = fn
 }
 
+// SetKittyHeaderOnly says whether the passthrough acts on the control keys
+// alone. See Emulator.SetKittyHeaderOnly.
+func (t *GhosttyTerminal) SetKittyHeaderOnly(on bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kittyHeaderOnly = on
+}
+
 // SetKittyPlaceholderMode says whether placeholder cells are kept or dropped.
 func (t *GhosttyTerminal) SetKittyPlaceholderMode(m KittyPlaceholderMode) {
 	t.mu.Lock()
