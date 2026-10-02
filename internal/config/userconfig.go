@@ -45,6 +45,9 @@ type UserConfig struct {
 	// PiP is the [pip] table: the size and corner of the picture-in-picture
 	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
 	PiP PiPConfig `toml:"pip"`
+	// Launcher is the [launcher] table: how the app launcher starts a
+	// graphical program. See launcher.go.
+	Launcher LauncherConfig `toml:"launcher"`
 
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is

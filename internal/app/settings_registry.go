@@ -96,6 +96,7 @@ var settingLabels = map[string]string{
 	"pip.height":                        "Picture-in-picture height",
 	"pip.corner":                        "Picture-in-picture corner",
 	"scratch.height":                    "Scratch height",
+	"launcher.gui_command":              "Launcher GUI command",
 
 	"appearance.sidebar.sections":             "Sections",
 	"appearance.sidebar.file_icons":           "File icons",

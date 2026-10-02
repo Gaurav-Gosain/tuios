@@ -1205,6 +1205,12 @@ var optionSpecs = []Option{
 		Description: "Height of the scratch terminal, in cells (20) or percent (80%)",
 		Default:     ScratchDefaultHeight, BoxSize: true,
 	},
+	// [launcher]. Read each time the launcher starts an entry.
+	{
+		Path: "launcher.gui_command", Type: OptionString, Section: "launcher",
+		Description: "Command that starts a graphical desktop entry instead of a pane; the entry's command is added to it",
+		Default:     "",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller
