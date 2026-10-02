@@ -2182,6 +2182,12 @@ brought the build to 27,930,786 and 26,365,842 bytes (Go 1.26.6), 25,786 and
 35,842 bytes over the old budgets. The reflow keeps text that a narrowing
 resize used to cut for good, and carries the padding flag in snapshots.
 
+The budgets went to 28,000,000 (linux/amd64) and 26,440,000 (darwin/arm64)
+after the graphics fixes (#342, #344) and the session cleanup (#334) landed
+together. That brought the build to 27,959,458 and 26,399,730 bytes
+(Go 1.26.6): 542 bytes under and 4,730 bytes over the old budgets. Each PR fit
+on its own; the sum did not.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
