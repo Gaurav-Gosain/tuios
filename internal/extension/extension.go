@@ -154,8 +154,12 @@ func Check(path, name, hostVersion string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, InfoFlag)
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	// A grandchild that inherits stdout holds the pipe open after the
+	// extension is killed, and Wait would wait for it with no end. WaitDelay
+	// bounds that wait.
+	cmd.WaitDelay = time.Second
+	out := &cappedBuffer{limit: handshakeMaxOutput, over: cancel}
+	cmd.Stdout = out
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%s did not answer the extension handshake: %w. Reinstall it", path, err)
 	}
@@ -168,6 +172,37 @@ func Check(path, name, hostVersion string) error {
 	}
 	return nil
 }
+
+// handshakeMaxOutput is the most the handshake reads from an extension. The
+// answer is one short JSON object. An extension that prints more is not
+// answering it, and reading on would let it fill the host's memory.
+const handshakeMaxOutput = 64 << 10
+
+// errHandshakeTooLong stops the copy from an extension that prints more than
+// handshakeMaxOutput.
+var errHandshakeTooLong = errors.New("the answer is longer than 64 KiB")
+
+// cappedBuffer is a bytes.Buffer that refuses a write past limit and calls
+// over, which kills the extension: one that is printing without end would
+// otherwise run until the timeout. The buffer is a field, not embedded: an
+// embedded bytes.Buffer brings ReadFrom, and io.Copy would read through it
+// past the limit without calling Write.
+type cappedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+	over  func()
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if b.buf.Len()+len(p) > b.limit {
+		b.over()
+		return 0, errHandshakeTooLong
+	}
+	return b.buf.Write(p)
+}
+
+// Bytes returns what the extension printed.
+func (b *cappedBuffer) Bytes() []byte { return b.buf.Bytes() }
 
 // Env is the environment the host adds for an extension.
 func Env(hostVersion, socket string) []string {
