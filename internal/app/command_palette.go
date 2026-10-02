@@ -703,6 +703,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Scroll: maximize column width",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.UseScrollingLayout {
+					m.ScrollingMaximizeColumn()
+				}
+				return m, nil
+			},
+		},
+		{
 			Name:     "Scroll: move window into the column below",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
