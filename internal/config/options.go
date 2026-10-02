@@ -1208,7 +1208,7 @@ var optionSpecs = []Option{
 	// [launcher]. Read each time the launcher starts an entry.
 	{
 		Path: "launcher.gui_command", Type: OptionString, Section: "launcher",
-		Description: "Command that starts a graphical desktop entry instead of a pane; the entry's command is added to it",
+		Description: "Command that starts a graphical desktop entry instead of a pane. The entry's argv is added to it. Use a command that takes an argv, such as \"tuios-wayland launch --\" or \"niri msg action spawn --\". Do not use one that joins its arguments into a shell line, such as \"swaymsg exec --\" or \"hyprctl dispatch exec\".",
 		Default:     "",
 	},
 }
