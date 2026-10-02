@@ -225,8 +225,9 @@ func (e *dockEngine) SetContext(session, socket string) {
 }
 
 // SetRailContext records what the next rail run is told. Read under the lock
-// at the moment the command is built, so a run always sees the values the
-// model had when it started.
+// in the hold that starts the run, so a run always sees the values the model
+// had when it started, and the width it is skipped for is the width it would
+// have been told.
 func (e *dockEngine) SetRailContext(ctx railContext) {
 	if e == nil {
 		return
@@ -527,6 +528,29 @@ func (e *dockEngine) Refresh(name string) error {
 	return nil
 }
 
+// Rerun asks for one more run of a component, debounced and fired the way an
+// event is, so a run in flight keeps it as the one pending re-run rather than
+// dropping it. Unlike Refresh it leaves a give-up alone: it is the client
+// asking, not a person, and only a person asking clears a stop. The rail calls
+// it when it opens, because the runs it skipped while shut left its rows
+// behind the focus.
+func (e *dockEngine) Rerun(name string) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	c, ok := e.comps[name]
+	_, due := e.eventDue[name]
+	wake := ok && !c.stopped && !due
+	if wake {
+		e.eventDue[name] = time.Now().Add(dockEventDebounce)
+	}
+	e.mu.Unlock()
+	if wake {
+		e.replan()
+	}
+}
+
 // RefreshAll re-runs every component. Used by the verb with no argument and by
 // a config reload that kept the same component set.
 func (e *dockEngine) RefreshAll() {
@@ -592,11 +616,12 @@ func dockSupervise(cmd *exec.Cmd) {
 // the last two are the command keys' names (command_keys.go), so a script
 // written for one works for the other.
 //
-// It runs on the run's goroutine, and the folder is resolved after the lock
-// is let go: the stat that checks it can block, and only this run waits.
-func (e *dockEngine) railCommandEnv() []string {
+// rail is the context runOnce read when it started the run. It runs on the
+// run's goroutine, and the folder is resolved after the lock is let go: the
+// stat that checks it can block, and only this run waits.
+func (e *dockEngine) railCommandEnv(rail railContext) []string {
 	e.mu.Lock()
-	session, socket, rail := e.session, e.socket, e.rail
+	session, socket := e.session, e.socket
 	e.mu.Unlock()
 	folder := rail.folder()
 	return append(os.Environ(),
@@ -628,6 +653,20 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 		e.mu.Unlock()
 		return
 	}
+	var rail railContext
+	if c.Name == railCustomComponent {
+		rail = e.rail
+		if rail.Width <= 0 {
+			// The rail is folded or hidden and draws no rows. A command run
+			// here is told a width of zero, and a script that wraps to the
+			// width fails on it, so five triggers while the rail is shut
+			// would stop the section for good. Skipped instead, with no
+			// update: the rows and the failure count stay as they were, and
+			// the rail runs it again when it opens (syncRailContext).
+			e.mu.Unlock()
+			return
+		}
+	}
 	c.running = true
 	command := c.Command
 	e.mu.Unlock()
@@ -639,7 +678,7 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	// the same footing as [hooks]. There is no new trust boundary here.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	if c.Name == railCustomComponent {
-		cmd.Env = e.railCommandEnv()
+		cmd.Env = e.railCommandEnv(rail)
 	} else {
 		cmd.Env = e.commandEnv(c.Name)
 	}

@@ -567,3 +567,148 @@ func TestRailCustomSectionKeepsOnePendingRerun(t *testing.T) {
 		t.Fatalf("three focus events, two of them mid-run, cost %d runs, want 2: the event's own and one pending re-run", n)
 	}
 }
+
+// foldRail folds the rail to its glyph strip with the rail's own narrow key,
+// and hands the keyboard back to the panes.
+func foldRail(t *testing.T, term *tuitest.Terminal, _ string) {
+	t.Helper()
+	railKeys(t, term, "<", "fold the rail")
+}
+
+// unfoldRail opens a folded rail with the rail's widen key.
+func unfoldRail(t *testing.T, term *tuitest.Terminal, _ string) {
+	t.Helper()
+	railKeys(t, term, ">", "unfold the rail")
+}
+
+// toggleRailFromPalette turns the rail off or back on from the palette.
+func toggleRailFromPalette(t *testing.T, term *tuitest.Terminal, _ string) {
+	t.Helper()
+	toggleSidebarViaPalette(t, term)
+}
+
+// placeRail is a step that moves the rail to position through set-config.
+func placeRail(position string) func(*testing.T, *tuitest.Terminal, string) {
+	return func(t *testing.T, _ *tuitest.Terminal, base string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.position", position, "-s", "e2e"); err != nil {
+			t.Fatalf("set-config appearance.sidebar.position %s: %v\n%s", position, err, out)
+		}
+	}
+}
+
+// railKeys gives the rail the keyboard, sends key, and takes the keyboard
+// back, so the focus changes that follow go through the CLI with the panes
+// in charge, as they would for a person who folded the rail and went on.
+func railKeys(t *testing.T, term *tuitest.Terminal, key, why string) {
+	t.Helper()
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatalf("%s: enter the rail: %v", why, err)
+	}
+	if err := term.WaitForText(railPill, uiTimeout); err != nil {
+		t.Fatalf("%s: s did not give the keyboard to the rail: %v\n%s", why, err, term.Snapshot())
+	}
+	if err := term.SendKeys(key, tuitest.Esc); err != nil {
+		t.Fatalf("%s: %v", why, err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), railPill)
+	}, uiTimeout); err != nil {
+		t.Fatalf("%s: esc did not hand the keyboard back: %v\n%s", why, err, term.Snapshot())
+	}
+}
+
+// railWidths is the TUIOS_RAIL_WIDTH of every run so far, one per line of
+// the file the command appends to.
+func railWidths(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(data))
+}
+
+// TestRailCustomSectionWaitsWhileTheRailIsShut: a rail folded to its glyph
+// strip, turned off or placed at hidden has no columns for the rows, so the
+// command does not run there, and opening the rail runs it once with the
+// width it opened to. The command exits 9 on a width of zero, as a script
+// that wraps to the width would fail, so a run while shut would be a failure,
+// and five of them would stop the section for good: it would stay empty after
+// the rail opened.
+//
+// The six focus changes while shut are the negative half. The positive half
+// is in the same fixture: one focus change with the rail open is one run.
+//
+// Negative controls: drop the width check from runOnce
+// (internal/app/dock_engine.go), and the runs while shut see 0. Drop the
+// re-run from syncRailContext (internal/app/sidebar_custom.go), and opening
+// the rail leaves BEFORE on it.
+func TestRailCustomSectionWaitsWhileTheRailIsShut(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		shut, open func(t *testing.T, term *tuitest.Terminal, base string)
+	}{
+		{"folded", foldRail, unfoldRail},
+		{"off", toggleRailFromPalette, toggleRailFromPalette},
+		{"position-hidden", placeRail("hidden"), placeRail("left")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			widths := filepath.Join(dir, "widths")
+			mark := filepath.Join(dir, "mark")
+			setMark := func(text string) {
+				t.Helper()
+				if err := os.WriteFile(mark, []byte(text+"\n"), 0o600); err != nil {
+					t.Fatalf("write mark: %v", err)
+				}
+			}
+			setMark("BEFORE")
+			term, base := railCustomClient(t, "sessions,terminals,custom:40",
+				"command = 'echo \"$TUIOS_RAIL_WIDTH\" >> "+widths+"; [ \"$TUIOS_RAIL_WIDTH\" -gt 0 ] || exit 9; cat "+mark+"'\n"+
+					"refresh = \"event:window-focused\"")
+			renameWindow(t, term, "FIRST")
+			if out, err := tuiosCLI(t, base, "new-window", "SECOND", "-s", "e2e", "--no-focus"); err != nil {
+				t.Fatalf("new-window: %v\n%s", err, out)
+			}
+			waitWindowCount(t, term, 2, "opening the second pane")
+			waitRailShows(t, term, "BEFORE", "the run at attach")
+			// Whatever the attach and the pane setup cost, let it finish and
+			// count from here.
+			time.Sleep(2 * time.Second)
+			settled := len(railWidths(t, widths))
+
+			tc.shut(t, term, base)
+			waitRailLacks(t, term, "BEFORE", "after shutting the rail")
+			setMark("AFTER")
+			names := []string{"SECOND", "FIRST"}
+			for i := range 6 {
+				focusPane(t, base, names[i%2])
+				time.Sleep(500 * time.Millisecond)
+			}
+			time.Sleep(time.Second)
+			if shut := railWidths(t, widths)[settled:]; len(shut) != 0 {
+				t.Fatalf("the command ran %d times while the rail was shut, with widths %v, want none\n%s",
+					len(shut), shut, term.Snapshot())
+			}
+
+			tc.open(t, term, base)
+			waitRailShows(t, term, "AFTER", "after opening the rail")
+			time.Sleep(2 * time.Second)
+			opened := railWidths(t, widths)[settled:]
+			if len(opened) != 1 || opened[0] != "26" {
+				t.Fatalf("opening the rail ran the command with widths %v, want one run at 26\n%s",
+					opened, term.Snapshot())
+			}
+
+			setMark("AGAIN")
+			focusPane(t, base, names[0])
+			waitRailShows(t, term, "AGAIN", "after a focus change with the rail open")
+			time.Sleep(time.Second)
+			if all := railWidths(t, widths)[settled:]; len(all) != 2 || all[1] != "26" {
+				t.Fatalf("one focus change with the rail open ran the command with widths %v after the reopen, want one more run at 26",
+					all[1:])
+			}
+		})
+	}
+}
