@@ -54,6 +54,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// seeing motion over it.
 	if o.ContextMenuActive() {
 		o.ContextMenuHover(mouse.X, mouse.Y)
+		o.ResetPointerShape()
 		return o, nil
 	}
 
@@ -95,11 +96,18 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {
 		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
+			o.ResetPointerShape()
 			return o, nil
 		}
 		// The sidebar band tracks hover the same way the overlays do, and
 		// consumes motion over it so the pane it sits in front of never sees it.
+		//
+		// Consuming the motion also stops the shape updater below from ever
+		// running over the rail, so a resize shape picked up on the pane edge
+		// beside it would ride along and stick. Chrome decides its own shapes
+		// nowhere, so the shape here is always the default.
 		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {
+			o.ResetPointerShape()
 			return o, nil
 		}
 	}
