@@ -97,6 +97,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("restore_all", handleRestoreAll)
 	d.Register("next_window", handleNextWindow)
 	d.Register("prev_window", handlePrevWindow)
+	d.Register("last_pane", handleLastPane)
 
 	// Window selection (1-9)
 	for i := 1; i <= 9; i++ {
@@ -432,6 +433,15 @@ func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	o.CycleToPreviousVisibleWindow()
 	return afterFocusCommand(o, prev, focusEnterCycle)
+}
+
+func handleLastPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
+	if !o.LastPane() {
+		o.ShowNotification("No pane to go back to.", "info", o.Settings.NotificationDuration)
+		return o, nil
+	}
+	return afterFocusCommand(o, prev, focusEnterTargeted)
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index.
