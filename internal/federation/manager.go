@@ -484,7 +484,13 @@ func (m *Manager) OpenConnectionAs(ctx context.Context, host string, info Stream
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return l.openConnection(info)
+	// openConnection returns a nil *Stream with its error. Returned as it is,
+	// that would be a non-nil io.ReadWriteCloser holding a nil pointer.
+	stream, err := l.openConnection(info)
+	if err != nil {
+		return nil, err
+	}
+	return stream, nil
 }
 
 // CallAll runs one read verb on every configured host at once and returns every

@@ -125,7 +125,14 @@ goes wrong on the tuios side.`,
 				stderr:   os.Stderr,
 				getenv:   os.Getenv,
 				dial: func() (verbCaller, error) {
-					return session.DialVerbClientAs(version)
+					// A failed dial returns a nil *VerbClient. Returning it as
+					// it is would put a typed nil in the interface, which a
+					// later io.Closer check takes for a live client (#374).
+					c, err := session.DialVerbClientAs(version)
+					if err != nil {
+						return nil, err
+					}
+					return c, nil
 				},
 				self:     integration.SelfProcess,
 				stampDir: statusLineStampDir,
@@ -266,10 +273,12 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 				return out
 			}
 		}
-		if client, err = sio.dial(); err != nil {
+		dialed, err := sio.dial()
+		if err != nil {
 			out.Error = err.Error()
 			return out
 		}
+		client = dialed
 		out.Session, out.Window, out.PaneBy, err = resolveHookPane(agentHookOptions{}, agentHookIO{getenv: getenv}, client, sid, ancestors)
 		if err != nil {
 			if noPane != "" {
@@ -300,10 +309,12 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 	}
 
 	if client == nil {
-		if client, err = sio.dial(); err != nil {
+		dialed, err := sio.dial()
+		if err != nil {
 			out.Error = err.Error()
 			return out
 		}
+		client = dialed
 	}
 	tokens := values.Tokens()
 	if prev != nil && prev.Session == values.Session {

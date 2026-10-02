@@ -147,7 +147,14 @@ given.`,
 				stderr:   os.Stderr,
 				getenv:   os.Getenv,
 				dial: func() (verbCaller, error) {
-					return session.DialVerbClientAs(version)
+					// A failed dial returns a nil *VerbClient. Returning it as
+					// it is would put a typed nil in the interface, which a
+					// later io.Closer check takes for a live client (#374).
+					c, err := session.DialVerbClientAs(version)
+					if err != nil {
+						return nil, err
+					}
+					return c, nil
 				},
 				self:       integration.SelfProcess,
 				harnessPID: integration.HarnessPID,
