@@ -67,6 +67,9 @@ func pollReadable(fd uintptr, timeout time.Duration) (bool, error) {
 	timeoutMs := max(int(timeout.Milliseconds()), 1)
 
 	n, err := unix.Poll(fds, timeoutMs)
+	if err == unix.EINTR {
+		return false, errPollInterrupted
+	}
 	if err != nil {
 		return false, err
 	}

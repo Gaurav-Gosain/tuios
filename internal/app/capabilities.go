@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -605,6 +606,10 @@ func writeGraphicsProbeFile() (string, error) {
 	return name, nil
 }
 
+// errPollInterrupted is pollReadable's answer when a signal interrupted the
+// wait before the descriptor became readable or the time ran out.
+var errPollInterrupted = errors.New("poll interrupted by a signal")
+
 // readTTYResponse reads from tty with poll-based I/O until done reports the
 // reply is complete, or the timeout expires.
 //
@@ -624,8 +629,15 @@ func readTTYResponse(tty *os.File, timeout time.Duration, done func(string) bool
 			break
 		}
 
-		// Use poll to wait for data with timeout
+		// Use poll to wait for data with timeout. A signal interrupts the
+		// wait and is not the end of the reply: the Go runtime sends SIGURG
+		// to preempt goroutines, so stopping there left the tail of a late
+		// reply to reach the program's input as keys. Wait again for the
+		// time that is left.
 		ready, err := pollReadable(tty.Fd(), remaining)
+		if errors.Is(err, errPollInterrupted) {
+			continue
+		}
 		if err != nil || !ready {
 			break
 		}
