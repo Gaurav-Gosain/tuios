@@ -632,6 +632,12 @@ and `FIRST=0`, where the test wants a refusal. The positive half is in the
 same test: once the prompt state clears, the same send-keys from the same
 pane goes through and INJECTED reaches the program.
 
+`TestSlimRestoredPromptHoldsTheRespondRule` was run against the tuios-slim
+of `47cb90a5`, which dropped an OSC 9;4 report for a window not yet in the
+session state. After the restart, the send-keys into four of the five
+restored panes exited 0, and INJECTED reached their prompts. The fixed build
+refused all five in eight runs.
+
 ## Tests without a specific negative control
 
 `TestScrolledOutputRendersCorrectly`, `TestScrollbackModeShowsEarlierOutput`,

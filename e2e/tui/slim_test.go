@@ -541,3 +541,64 @@ func TestSlimRailListsNoAgents(t *testing.T) {
 	}
 	saveFrame(t, slimTerm, "slim-rail-no-agents")
 }
+
+// TestSlimRestoredPromptHoldsTheRespondRule holds the prompt rule across a
+// daemon restart. Every pane's shell sends the OSC 9;4 warning state as soon
+// as it starts and reads a line. A restore spawns every shell before it adds
+// any window to the session state, so the reports arrive for windows the
+// state does not have yet. A shell window opened after the restart then runs
+// send-keys into each restored pane, and the daemon must refuse every one.
+//
+// Negative control: on tuios-slim at 47cb90a5, which dropped a report for a
+// window not yet in the state, most restored panes kept no prompt state and
+// the send-keys into them exited 0.
+func TestSlimRestoredPromptHoldsTheRespondRule(t *testing.T) {
+	requireSlim(t)
+	const sess = "slim-restored-prompt"
+	base := t.TempDir()
+	killDaemon(t, base)
+	asker := filepath.Join(base, "asker.sh")
+	script := "#!/bin/sh\nprintf '\\033]9;4;4\\007'; echo ASKING; read answer; printf '\\033]9;4;0\\007'; echo \"CLEARED $answer\"; exec cat\n"
+	if err := os.WriteFile(asker, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := workDirIn(t, base)
+	env := []string{"SHELL=" + asker}
+	cli := func(args ...string) {
+		t.Helper()
+		if out, err := tuiosCLIInDir(t, base, dir, env, args...); err != nil {
+			t.Fatalf("tuios-slim %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	cli("new", sess, "--detach")
+	names := []string{"ask1", "ask2", "ask3", "ask4", "ask5"}
+	for _, name := range names {
+		cli("new-window", "-s", sess, "--no-focus", name)
+	}
+	for _, name := range names {
+		waitCapture(t, base, sess, name, "ASKING")
+	}
+
+	cli("kill-server")
+	cli("start-server")
+	for _, name := range names {
+		waitCapture(t, base, sess, name, "ASKING")
+	}
+	cli("new-window", "-s", sess, "--no-focus", "typer", "--", "/bin/sh")
+
+	line := "for w in " + strings.Join(names, " ") + "; do " + tuiosBin +
+		" send-keys -s " + sess + " -w $w --literal INJECTED 2>/dev/null; echo \"$w=$?\"; done; echo DO\"\"NE\n"
+	cli("send-text", "-s", sess, "-w", "typer", line)
+	screen := waitCapture(t, base, sess, "typer", "DONE")
+	for _, name := range names {
+		if !strings.Contains(screen, name+"=1") {
+			t.Errorf("send-keys into restored pane %s was not refused:\n%s", name, screen)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	for _, name := range names {
+		if out := capture(t, base, sess, name); strings.Contains(out, "INJECTED") {
+			t.Errorf("a pane without respond typed into the prompt of %s:\n%s", name, out)
+		}
+	}
+}
