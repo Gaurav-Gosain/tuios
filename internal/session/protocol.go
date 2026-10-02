@@ -276,6 +276,11 @@ type WelcomePayload struct {
 	// the rail is shown as session state. A client that does not see it keeps
 	// its rail to itself, as every client did before.
 	SidebarOps bool `json:"sidebar_ops,omitzero"`
+	// Edition names the build of the daemon: "slim" for tuios-slim, empty
+	// for the full tuios. A daemon that predates the field sends nothing,
+	// which reads as the full build, as it was. A client uses it to say why a
+	// feature the daemon lacks is missing. See internal/edition.
+	Edition string `json:"edition,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.

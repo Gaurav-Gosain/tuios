@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -30,11 +32,6 @@ import (
 // What this daemon does guarantee: the far side gets no channel into this
 // daemon (the link refuses inbound streams), a stream nobody drains is dropped
 // without costing the link, and a frame is never larger than the link's cap.
-
-// ErrVerbHostRefused reports a host whose link is up and cannot take another
-// connection. Its remedy is to close one, which is why it does not share a
-// code with host_unreachable, whose remedy is to fix the link.
-const ErrVerbHostRefused = "host_refused"
 
 // verbOpenHostConnection opens the connection and hands the client's
 // connection to the relay once the reply has been written.

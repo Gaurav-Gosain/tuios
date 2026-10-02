@@ -217,13 +217,6 @@ func runNewSessionDetached(sessionName string) error {
 	return newSessionDetached(sessionName, false)
 }
 
-// runNewGlobalSessionDetached creates a global session: one meant to hold
-// panes from more than one machine. It is created with no windows, since every
-// window in it names the machine it runs on.
-func runNewGlobalSessionDetached(sessionName string) error {
-	return newSessionDetached(sessionName, true)
-}
-
 func newSessionDetached(sessionName string, global bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
@@ -346,8 +339,8 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 			return explainDialError(err)
 		}
 	} else {
-		if _, err := client.ConnectThroughHost(host, version, width, height, clientCaps); err != nil {
-			return explainHostConnectError(host, err)
+		if err := connectThroughHost(client, host, width, height, clientCaps); err != nil {
+			return err
 		}
 	}
 	clientLogf("[CLIENT] Connected to daemon")

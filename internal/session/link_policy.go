@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -46,10 +48,6 @@ import (
 //     checks that already applied to link connections (human_origin.go, the
 //     stash rule for attachments, the link mail caps) still run after this
 //     one.
-
-// linkPolicyVerb is the handshake verb. It is not a capability of its own: it
-// only names the peer, and only on a link connection that has not named one.
-const linkPolicyVerb = "link-peer"
 
 // capRelay marks open-host-connection, which needs every capability.
 const capRelay = "*"

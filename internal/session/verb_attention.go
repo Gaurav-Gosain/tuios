@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -80,29 +82,6 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 		out["select"] = sel.String()
 	}
 	return out, nil
-}
-
-// AttentionSelectorTarget is what a selector reads from an Inbox item on its
-// own. The state is the one the kind stands for: an approval or a question is a
-// pane on needs_input, errored is errored and finished is done. Mail and
-// resume stand for no state. group and cwd are not on an item, and the caller
-// fills them in when it knows the pane.
-func AttentionSelectorTarget(it AttentionItem) SelectorTarget {
-	t := SelectorTarget{
-		Host:    it.Host,
-		Session: it.Session,
-		Name:    it.Name,
-		Harness: it.Harness,
-	}
-	switch it.Kind {
-	case AttentionApproval, AttentionQuestion, AttentionPlan:
-		t.State, t.NeedsYou = AgentStateNeedsInput.Name(), true
-	case AttentionErrored:
-		t.State, t.NeedsYou = AgentStateErrored.Name(), true
-	case AttentionFinished:
-		t.State = AgentStateDone.Name()
-	}
-	return t
 }
 
 // selectAttention keeps the items sel matches. An item of this machine also

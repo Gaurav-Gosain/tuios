@@ -90,8 +90,8 @@ func TestListVerbsAcceptedValuesMatchTheImplementation(t *testing.T) {
 			accepted = append(accepted, v.(string))
 		}
 	}
-	if !slices.Equal(accepted, waitConditions) {
-		t.Fatalf("documented conditions %v do not match the implemented set %v", accepted, waitConditions)
+	if want := servedWaitConditions(); !slices.Equal(accepted, want) {
+		t.Fatalf("documented conditions %v do not match the implemented set %v", accepted, want)
 	}
 
 	// And each documented condition must actually be accepted by the handler:

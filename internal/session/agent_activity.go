@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -109,33 +111,6 @@ const (
 // reservedAgentMetaKeys are the keys set-agent-meta refuses and its clear
 // leaves alone.
 var reservedAgentMetaKeys = []string{AgentMetaNow, AgentMetaPrompt, AgentMetaSubagents}
-
-// AgentActivityEntry is one entry of a pane's activity ring.
-type AgentActivityEntry struct {
-	// Seq numbers the pane's entries from 1. It is per pane and per daemon
-	// start.
-	Seq uint64 `json:"seq"`
-	// At is when the daemon recorded it, in unix nanoseconds.
-	At   int64  `json:"at"`
-	Kind string `json:"kind"`
-	// Tool and Target name a tool call and what it acts on. A command entry
-	// carries its command line in Target.
-	Tool   string `json:"tool,omitempty"`
-	Target string `json:"target,omitempty"`
-	// Files are the files a finished tool call wrote.
-	Files []string `json:"files,omitempty"`
-	// OK says how a tool call ended, nil when nothing said.
-	OK *bool `json:"ok,omitempty"`
-	// Exit is a command's exit status, nil when the shell sent none.
-	Exit *int `json:"exit,omitempty"`
-	// Text is a prompt's first line, a failure, the first line a turn ended
-	// with, or a state entry's new state.
-	Text string `json:"text,omitempty"`
-
-	// turns is how many turns the pane finished with a state entry: its
-	// completion_seq delta. The recap adds them up. Never on the wire.
-	turns uint64
-}
 
 // activityRing is one pane's entries, oldest first, in a circular buffer.
 type activityRing struct {
@@ -633,36 +608,6 @@ type agentActivityParams struct {
 	SinceSeq uint64 `json:"since_seq"`
 	Limit    int    `json:"limit"`
 	Recap    bool   `json:"recap"`
-}
-
-// AgentActivityRecap summarises a pane's activity since a time.
-type AgentActivityRecap struct {
-	// Since is when the recap starts: the time asked for, or the oldest entry
-	// the ring still holds when it has dropped entries newer than that.
-	Since int64 `json:"since"`
-	// Turns is how many turns the pane finished: its completion_seq delta.
-	Turns uint64 `json:"turns"`
-	// Files are the files tool calls wrote, first written first, at most
-	// recapFilesShown of them. FilesTotal counts them all.
-	Files      []string `json:"files"`
-	FilesTotal int      `json:"files_total"`
-	// Commands counts shell tool calls and the shell's own commands.
-	Commands int `json:"commands"`
-	// Tests is the newest command that reads as a test run, nil when none.
-	Tests *AgentActivityTest `json:"tests,omitempty"`
-	// LastSaid is the first line the newest turn ended with.
-	LastSaid string `json:"last_said,omitempty"`
-	// State is the pane's agent state now.
-	State string `json:"state"`
-}
-
-// AgentActivityTest is the newest test run a recap found.
-type AgentActivityTest struct {
-	Cmdline string `json:"cmdline"`
-	// OK is whether it passed, null when nothing said: the tool call has not
-	// finished, or the harness and the shell reported no result.
-	OK *bool `json:"ok"`
-	At int64 `json:"at"`
 }
 
 // shellTools are the tool names harnesses give a shell command: Claude Code

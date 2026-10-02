@@ -279,6 +279,14 @@ func explainVerbError(verb string, err error) error {
 			Err:   err,
 		}
 	}
+	if session.IsSlimDaemonError(err) {
+		return &diagnosticError{
+			What:  callErr.Message,
+			Cause: "the running daemon is tuios-slim, which leaves out " + verb + ".",
+			Fix:   "run 'tuios kill-server', then start the daemon with the full tuios. Saved sessions come back with new shells.",
+			Err:   err,
+		}
+	}
 	if stale := session.StaleDaemonError(verb, err); stale != nil {
 		return &diagnosticError{
 			What:  fmt.Sprintf("The running daemon does not know %s.", verb),

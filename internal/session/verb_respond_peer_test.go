@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build !slim && (linux || darwin)
 
 package session
 

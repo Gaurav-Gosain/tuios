@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -265,45 +267,6 @@ func (d *Daemon) verbPeekPrompt(_ *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 	return peekResult(sess, look, time.Now()), nil
-}
-
-// PromptPeek is the peek-prompt result as a client decodes it. The daemon
-// writes the same fields in peekResult.
-type PromptPeek struct {
-	Session    string           `json:"session"`
-	Window     string           `json:"window"`
-	Name       string           `json:"name"`
-	Harness    string           `json:"harness"`
-	State      string           `json:"state"`
-	StateAt    int64            `json:"state_at"`
-	WaitingMS  int64            `json:"waiting_ms"`
-	Blocked    bool             `json:"blocked"`
-	Found      bool             `json:"found"`
-	Answerable bool             `json:"answerable"`
-	Reason     string           `json:"reason"`
-	Source     string           `json:"source"`
-	Kind       string           `json:"kind"`
-	Message    string           `json:"message"`
-	PromptID   string           `json:"prompt_id"`
-	Lines      []string         `json:"lines"`
-	Options    []harness.Option `json:"options"`
-	Actions    []string         `json:"actions"`
-}
-
-// Offers reports whether the peek lists action among the answers.
-func (p *PromptPeek) Offers(action string) bool {
-	return slices.Contains(p.Actions, action)
-}
-
-// PromptResponse is the respond result as a client decodes it.
-type PromptResponse struct {
-	Window    string `json:"window"`
-	Action    string `json:"action"`
-	Sent      string `json:"sent"`
-	PromptID  string `json:"prompt_id"`
-	SettledBy string `json:"settled_by"`
-	State     string `json:"state"`
-	Message   string `json:"message"`
 }
 
 // peekResult is the peek-prompt answer for a look.

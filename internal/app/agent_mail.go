@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -224,15 +226,6 @@ func agentMailNotThePerson(id, name string) string {
 	return name
 }
 
-// shortWindowLabel is the first eight characters of a window id, which is how
-// list-windows prints one.
-func shortWindowLabel(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
-}
-
 // agentMailSummary is the one line a message is known by: its subject, else
 // the first line of its text.
 func agentMailSummary(m session.AgentMessage) string {
@@ -433,38 +426,6 @@ func (m *OS) agentMailLoad() tea.Cmd {
 	m.AgentMail.LoadingSince = time.Now()
 	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
-
-// verbDialer reaches the daemon that holds the session this client shows:
-// the host's when the client is attached through one, else this machine's.
-func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
-
-// agentMailDialer is how a mailbox command reaches the daemon that holds the
-// ring: this machine's daemon directly, or, while this client is attached to
-// a session on another machine, that machine's daemon through the link. The
-// ring is the session's, so it lives where the session does.
-func (m *OS) agentMailDialer() agentMailDial {
-	host, build := m.AttachedHost, ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func() (*session.VerbClient, error) {
-		if host == "" {
-			return dialVerbLocal()
-		}
-		c, _, err := dialVerbThroughHost(host, build)
-		return c, err
-	}
-}
-
-// dialVerbThroughHost and dialVerbLocal are the two ways verbDialer reaches a
-// daemon, as variables so a test can see which one a command used.
-var (
-	dialVerbThroughHost = session.DialVerbClientThroughHost
-	dialVerbLocal       = session.DialVerbClient
-)
-
-// agentMailDial opens a verb connection to the daemon that holds the ring.
-type agentMailDial func() (*session.VerbClient, error)
 
 // OpenAgentMailThread shows one conversation, the way a dock message about it
 // does when it is clicked. It returns the command that marks the person's mail

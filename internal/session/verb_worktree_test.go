@@ -1,7 +1,8 @@
+//go:build !slim
+
 package session
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -26,11 +27,6 @@ func worktreeFixture(t *testing.T) (*Daemon, string, string) {
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(t.TempDir(), "worktrees"))
 	d, sp := startTestDaemon(t)
 	return d, sp, repo
-}
-
-func jsonParams(v map[string]any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }
 
 // newWorktreeCall makes a worktree session and returns its result.

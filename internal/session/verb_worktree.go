@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -24,20 +26,6 @@ import (
 // discard uncommitted work unless told to in so many words. fan is
 // new-worktree n times with an agent started in each and the prompt typed at
 // it once the agent is ready to read.
-
-// Error codes the worktree verbs raise, on top of the shared ones.
-const (
-	// ErrVerbNotWorktree reports a session that is not in a git worktree, so
-	// there is nothing to remove or diff.
-	ErrVerbNotWorktree = "not_worktree"
-	// ErrVerbWorktreeDirty reports a removal refused because the worktree holds
-	// uncommitted changes and the caller did not say what to do with them.
-	// Nothing was removed. The remedy is stash or force, and the hint says so.
-	ErrVerbWorktreeDirty = "worktree_dirty"
-	// ErrVerbGitFailed reports a git command that failed, with git's own
-	// message. It is final: the repository is as it was.
-	ErrVerbGitFailed = "git_failed"
-)
 
 // fanDefaultReadyTimeout bounds how long a fan-out waits for an agent to be
 // ready before it gives up on typing the prompt. It is long because the wait

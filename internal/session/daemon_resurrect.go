@@ -65,7 +65,7 @@ func (d *Daemon) restoreAllSessions() {
 			continue
 		}
 		// Opened by the caller once the Inbox has loaded; see Daemon.Run.
-		d.pendingResumes = append(d.pendingResumes, offers...)
+		d.queueResumeOffers(offers)
 		log.Printf("Restored session %q (%d windows)", name, len(state.Windows))
 	}
 }
@@ -335,24 +335,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		})
 	}
 	return sess, offers, nil
-}
-
-// restoredWorktree is a saved managed worktree record as a restored session
-// takes it, or nil for a record detection owns. A fan prompt still waiting
-// when the daemon went down is said not to have been sent: nothing resumes the
-// wait across a restart, so a record left pending would say so forever. A
-// check that was running needs nothing here; fanVerifyReport reads it as ended
-// by the restart.
-func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
-	if saved == nil || !saved.Managed {
-		return nil
-	}
-	wt := *saved
-	if PromptWaiting(wt.PromptStatus) {
-		wt.PromptStatus = PromptNotSent
-		wt.PromptNote = "The daemon restarted before the prompt was typed. Send the prompt with send-text."
-	}
-	return &wt
 }
 
 // scratchPane is what a restore re-marks on one scratch pane.

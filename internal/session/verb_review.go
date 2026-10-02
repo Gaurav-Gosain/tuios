@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -57,16 +59,6 @@ import (
 //   - The git calls read. The working state is written as a tree through a
 //     temporary index (review.Build), so the worktree's index and files are
 //     never changed. Every call is bounded by reviewTimeout.
-
-// Error codes the review verbs raise, on top of the shared ones.
-const (
-	// ErrVerbNotRepo reports a pane or session with no git repository under
-	// it, so there is nothing to review. Nothing was read.
-	ErrVerbNotRepo = "not_repo"
-	// ErrVerbNoNotes reports a send-review that found no unsent notes to
-	// send. Nothing was typed.
-	ErrVerbNoNotes = "no_notes"
-)
 
 // reviewTimeout bounds every git call one review verb makes, together.
 const reviewTimeout = 10 * time.Second

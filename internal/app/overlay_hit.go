@@ -1,10 +1,11 @@
 package app
 
 import (
+	"slices"
+
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"slices"
 )
 
 // overlayRowHit is a single interactive body row of an overlay panel, in
@@ -336,3 +337,6 @@ func (m *OS) centeredBoxLayer(box string, z int, id string) *lipgloss.Layer {
 func syncOverlayASCII(s *config.Settings) {
 	overlay.SetASCII(s.UseASCIIOnly)
 }
+
+// overlayKindShot is the preview panel's overlay kind.
+const overlayKindShot = "screenshot"

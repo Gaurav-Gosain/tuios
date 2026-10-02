@@ -1,10 +1,11 @@
+//go:build !slim
+
 package session
 
 import (
 	"bufio"
 	"crypto/subtle"
 	"encoding/json"
-	"path/filepath"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -21,11 +22,6 @@ import (
 // no room left to carry anything out of band. That is the same division
 // open-host-connection already uses, and it is why neither verb needs a new
 // binary message type.
-
-// ErrVerbUnknownPane reports a pane id that this daemon is not running. It is
-// its own code because the remedy differs from a bad parameter: the pane was
-// real and is gone, so the caller should drop it rather than correct it.
-const ErrVerbUnknownPane = "unknown_pane"
 
 // verbOpenPane spawns a process here and hands this connection to the relay.
 // From the reply onward the connection is the pty: every byte written to it
@@ -238,29 +234,4 @@ func (d *Daemon) verbPaneAgent(_ *connState, params json.RawMessage) (any, *verb
 		"pid":       info.pid,
 		"shell_pid": info.shellPID,
 	}, nil
-}
-
-// verbReadDir lists a directory on this machine.
-//
-// It is the far half of the rail's file section for a pane whose process runs
-// here. The section asks the daemon that owns the pane rather than reading a
-// filesystem itself, for the reason it was taught once already: the machine
-// with the process is the machine with the files, and any other answer is a
-// listing of the wrong disk under the right path.
-//
-// It carries no authority the link did not already have. A configured host can
-// be asked for a shell, and reading the names in a directory is strictly less
-// than that.
-func (d *Daemon) verbReadDir(_ *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Dir string `json:"dir"`
-		Max int    `json:"max"`
-	}
-	if verr := decodeParams(params, &p); verr != nil {
-		return nil, verr
-	}
-	if p.Dir == "" {
-		return nil, invalidParam("dir", "read-dir needs a directory to list.")
-	}
-	return listDir(filepath.Clean(p.Dir), p.Max), nil
 }

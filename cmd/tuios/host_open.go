@@ -1,7 +1,8 @@
+//go:build !slim
+
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -249,27 +250,6 @@ func explainRemoteFailure(host, addr string, remote []string, err error) error {
 	}
 }
 
-// holdAfter keeps the terminal open after a failure until enter is pressed,
-// when asked to. A pane the rail opened for this command closes the moment it
-// exits, and a message nobody had time to read is the same as no message.
-func holdAfter(err error, hold bool) error {
-	if !hold || err == nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, err.Error())
-	fmt.Fprint(os.Stderr, "Press enter to close.")
-	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-	return heldError{}
-}
-
-// heldError is what runOnHost returns after it has already printed and held.
-// Its text is empty so main prints nothing more, and its status is the plain
-// failure code.
-type heldError struct{}
-
-func (heldError) Error() string   { return "" }
-func (heldError) ExitStatus() int { return 1 }
-
 // registerHostNameCompletion offers the configured host names for a --host
 // flag, the same set 'tuios hosts remove' completes.
 func registerHostNameCompletion(cmd *cobra.Command, flag string) {
@@ -278,4 +258,20 @@ func registerHostNameCompletion(cmd *cobra.Command, flag string) {
 		// silence the host names the way they do for 'tuios hosts remove'.
 		return completeConfiguredHosts(c, nil, toComplete)
 	})
+}
+
+// connectThroughHost connects client to the daemon on host through this
+// machine's daemon and its link, for an attach to a session on that host.
+func connectThroughHost(client *session.TUIClient, host string, width, height int, caps *session.ClientCapabilities) error {
+	if _, err := client.ConnectThroughHost(host, version, width, height, caps); err != nil {
+		return explainHostConnectError(host, err)
+	}
+	return nil
+}
+
+// runNewGlobalSessionDetached creates a global session: one meant to hold
+// panes from more than one machine. It is created with no windows, since every
+// window in it names the machine it runs on.
+func runNewGlobalSessionDetached(sessionName string) error {
+	return newSessionDetached(sessionName, true)
 }

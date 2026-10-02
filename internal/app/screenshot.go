@@ -1,6 +1,9 @@
+//go:build !slim
+
 package app
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -932,11 +935,6 @@ func shortenPath(p string) string {
 	return "~" + strings.TrimPrefix(p, home)
 }
 
-// IsRemoteClient reports whether this process is running beside the daemon
-// with the user at the far end of a network, rather than on the user's own
-// machine. It gates everything that would otherwise act on the wrong desktop.
-func (m *OS) IsRemoteClient() bool { return m.RemoteClient }
-
 // CaptureHover is the window index capture mode is aiming at, or -1.
 func (m *OS) CaptureHover() int { return m.Capture.Hover }
 
@@ -1038,4 +1036,23 @@ type screenshotPlacementState struct {
 	// flush drew nothing. So the size the picture was drawn at is part of what
 	// makes a drawn picture this one.
 	hostW, hostH int
+}
+
+// ScreenshotExec renders the focused window to a file (tape executor
+// interface).
+func (m *OS) ScreenshotExec() error {
+	cmd := m.ScreenshotFocusedWindow()
+	if cmd == nil {
+		return errors.New("no window to screenshot")
+	}
+	// The tape executor already runs on the Update goroutine, and a tape wants
+	// its steps in order: running the render here rather than handing back a
+	// command means the file exists before the next line of the tape runs, so
+	// a tape can screenshot and then act on the file.
+	msg, ok := cmd().(screenshotResultMsg)
+	if !ok {
+		return nil
+	}
+	m.HandleScreenshotResult(msg)
+	return msg.err
 }

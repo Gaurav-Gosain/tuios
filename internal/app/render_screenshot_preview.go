@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -24,9 +26,6 @@ import (
 // capture in text (see screenshot_graphics.go). Sixel gets the text tier and
 // nothing else, because sixel cannot delete a placement, which is why the
 // launcher icons already skip it.
-
-// overlayKindShot is the preview panel's overlay kind.
-const overlayKindShot = "screenshot"
 
 // shotPreviewWidth is the panel's preferred inner width. A capture is usually
 // 80 columns, so the panel is sized to show most of one without scrolling and

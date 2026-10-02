@@ -1,4 +1,4 @@
-//go:build unix
+//go:build !slim && unix
 
 package session
 

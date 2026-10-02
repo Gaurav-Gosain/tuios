@@ -1,10 +1,10 @@
+//go:build !slim
+
 package session
 
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -28,112 +28,6 @@ import (
 // and the reason is logged, for the same reason the client keeps its running
 // settings: a half-written file caught between an editor's two writes must not
 // tear down a working link.
-
-// startHostsWatch begins following the config file for changes to the [hosts]
-// table. A watcher that cannot be opened is logged once, and the daemon then
-// behaves as it did before this existed: the table is what it was at start.
-func (d *Daemon) startHostsWatch() {
-	if d.configPath == "" {
-		return
-	}
-	// The watch is on the directory, not the file (see internal/config's
-	// watcher.go), so the directory has to exist. On a machine that has never
-	// saved a setting it does not, and that is the machine where the first host
-	// is added.
-	if err := os.MkdirAll(filepath.Dir(d.configPath), 0o750); err != nil {
-		log.Printf("[FEDERATION] The daemon cannot watch the config file. A host change needs a restart: %v", err)
-		return
-	}
-	w, err := config.NewWatcherWithOptions(d.configPath, d.onConfigReload, config.WatcherOptions{
-		// The settings page writes the config from a client that can share this
-		// process, and its write is the change this watcher exists to see.
-		DeliverSelfWrites: true,
-		DeliverUnchanged:  true,
-	})
-	if err != nil {
-		log.Printf("[FEDERATION] The daemon cannot watch the config file. A host change needs a restart: %v", err)
-		return
-	}
-	d.federationMu.Lock()
-	d.hostsWatcher = w
-	d.federationMu.Unlock()
-}
-
-// stopHostsWatch ends the config watch and returns its inotify descriptor.
-func (d *Daemon) stopHostsWatch() {
-	d.federationMu.Lock()
-	w := d.hostsWatcher
-	d.hostsWatcher = nil
-	d.federationMu.Unlock()
-	if w != nil {
-		w.Stop()
-	}
-}
-
-// onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// appearance.preferred_shell, [agents] herdr_protocol, the
-// [agents.approvals], [agents.permissions] and [agents.queue] tables and
-// [agents.recap] test_patterns, and reads nothing else out of the file. A new
-// approval policy applies to the next request; a hold already running keeps
-// the length it started with. A new permission default that narrows applies
-// to the next call from every pane that holds the default; one that widens
-// waits for a restart (reloadPanePermissions).
-func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
-	if err != nil {
-		log.Printf("[FEDERATION] The config file has an error, so the hosts did not change: %v", err)
-		return
-	}
-	d.applyUserConfig(cfg, false)
-}
-
-// applyUserConfig applies what the daemon reads from config.toml while it
-// runs. The file is the user's, and a process in a pane runs as the user and
-// can write it. So from a file change (byPerson false) the parts that bound
-// panes and links apply only where they narrow: [agents.permissions], the
-// link policies of [hosts], and the hosts the daemon dials, since ssh runs
-// what a host entry or ~/.ssh/config says as the daemon's child. What widens
-// waits for tuios config apply from outside every pane (byPerson true), or a
-// daemon restart.
-func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
-	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
-	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
-	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
-	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
-	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
-	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
-	if byPerson {
-		d.manager.SetPanePermissions(perms)
-		// A policy change applies to the next call on every link, including
-		// links already open, so tightening it does not wait for a reconnect.
-		d.SetLinkPolicies(cfg.Hosts)
-		d.ApplyHosts(HostsFromConfig(cfg))
-		d.hostsWaiting.Store(false)
-		d.recordAppliedGrants(perms)
-		d.noteConfigWaiting()
-		return
-	}
-	d.reloadPanePermissions(perms)
-	policyWaits := d.reloadLinkPolicies(cfg.Hosts)
-	hostsWait := d.reloadHosts(HostsFromConfig(cfg))
-	d.hostsWaiting.Store(policyWaits || hostsWait)
-	d.noteConfigWaiting()
-}
-
-// noteConfigWaiting opens the Inbox item that says a change waits for the
-// person, or closes it when nothing waits.
-func (d *Daemon) noteConfigWaiting() {
-	if d.configWaiting() {
-		d.attention.noteConfigNotice(configWaitsNotice, configWaitsNote)
-		return
-	}
-	d.attention.closeConfigNotice(configWaitsNotice)
-}
-
-// configWaiting reports whether config.toml holds a change that widens what
-// panes or links may do and waits for tuios config apply or a restart.
-func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load()
-}
 
 // reloadHosts applies a changed host table only where it dials less: a host
 // that is gone is dropped, and a host that is new or dials another way waits.

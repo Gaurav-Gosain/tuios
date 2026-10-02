@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 // herdr's pane state protocol, accepted as an input, and herdr's socket API.
@@ -90,12 +92,6 @@ const herdrIOTimeout = 2 * time.Second
 // herdrSeqMax bounds the high-water table. Past it the table is cleared,
 // which at worst accepts one stale report per pane.
 const herdrSeqMax = 4096
-
-// HerdrSocketPath is the socket tuios accepts herdr's pane state protocol on,
-// beside the daemon's own socket.
-func HerdrSocketPath(socketPath string) string {
-	return socketPath + ".herdr"
-}
 
 // HerdrLinkDir is the directory the herdr link is made in, beside the daemon
 // socket: <dir>/bin/herdr points at tuios. It is private to the user in the

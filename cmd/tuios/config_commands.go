@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -146,4 +147,31 @@ func previewThemeColors(themeName string) error {
 	}
 
 	return nil
+}
+
+// describeConfigApplied is what tuios config apply prints: each change, then
+// the grant mode in force.
+func describeConfigApplied(raw []byte) string {
+	var res struct {
+		Mode          string   `json:"mode"`
+		DefaultGrants []string `json:"default_grants"`
+		Changes       []string `json:"changes"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return "The daemon applied config.toml.\n"
+	}
+	var b strings.Builder
+	b.WriteString("The daemon applied config.toml.\n")
+	if len(res.Changes) == 0 {
+		b.WriteString("Nothing changed.\n")
+	}
+	for _, c := range res.Changes {
+		b.WriteString(plainLine(c) + "\n")
+	}
+	grants := "no grants"
+	if len(res.DefaultGrants) > 0 {
+		grants = strings.Join(res.DefaultGrants, ", ")
+	}
+	fmt.Fprintf(&b, "Mode %s: a pane started with no grants of its own holds %s.\n", plainLine(res.Mode), plainLine(grants))
+	return b.String()
 }

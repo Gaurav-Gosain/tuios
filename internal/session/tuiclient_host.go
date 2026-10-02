@@ -1,7 +1,8 @@
+//go:build !slim
+
 package session
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -61,27 +62,6 @@ func (c *TUIClient) ConnectThroughHost(host, version string, width, height int, 
 // Host is the host this client reached its daemon through, or "" for the
 // daemon on this machine.
 func (c *TUIClient) Host() string { return c.viaHost }
-
-// HostHandshakeError reports a host whose daemon answered the connection and
-// then refused the binary handshake, or could not be understood. It is the
-// version skew case for an attach: the link is up, the control protocol
-// matched, and the attach protocol did not. The message names the machine.
-type HostHandshakeError struct {
-	Host string
-	Info HostConnectionInfo
-	Err  error
-}
-
-func (e *HostHandshakeError) Error() string {
-	if _, ok := errors.AsType[*ProtocolMismatchError](e.Err); ok {
-		return fmt.Sprintf("tuios on %s speaks a different attach protocol. Upgrade tuios on %s or on this machine. %v",
-			e.Host, e.Host, e.Err)
-	}
-	if isConnectionGone(e.Err) {
-		return fmt.Sprintf("tuios on %s closed the connection before it answered. Its daemon may have stopped. Run 'tuios hosts' to see the link.", e.Host)
-	}
-	return fmt.Sprintf("tuios on %s did not accept this client. %v", e.Host, e.Err)
-}
 
 func (e *HostHandshakeError) Unwrap() error { return e.Err }
 

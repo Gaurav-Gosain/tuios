@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -311,7 +312,7 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 	}
 
 	for key, want := range exampleOutcomes {
-		if !seen[key] {
+		if verb := strings.SplitN(key, "#", 2)[0]; !seen[key] && !verbLeftOut(verb) && !examplesTrimmed(verb) {
 			t.Errorf("exampleOutcomes names %s (%s), which the registry no longer has", key, want.why)
 		}
 	}
@@ -375,7 +376,7 @@ func TestVerbResultSchemasAreDeclaredOrListed(t *testing.T) {
 		}
 	}
 	for name := range verbsWithNoDocumentedResult {
-		if _, ok := verbRegistry[name]; !ok {
+		if _, ok := verbRegistry[name]; !ok && !verbLeftOut(name) {
 			t.Errorf("verbsWithNoDocumentedResult names %q, which the registry does not have", name)
 		}
 	}

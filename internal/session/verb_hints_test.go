@@ -231,6 +231,9 @@ func TestVerbErrorHints(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if verb := requestVerb(tc.req); verbLeftOut(verb) {
+				t.Skip(verb + " is not in tuios-slim")
+			}
 			// A fresh connection per row: some rows leave connection state
 			// (subscriptions) behind, and rows must not influence each other.
 			c := dialVerb(t, socketPath)
@@ -269,4 +272,13 @@ func TestVerbErrorHints(t *testing.T) {
 			}
 		})
 	}
+}
+
+// requestVerb is the verb a request line names.
+func requestVerb(req string) string {
+	var r struct {
+		Verb string `json:"verb"`
+	}
+	_ = json.Unmarshal([]byte(req), &r)
+	return r.Verb
 }

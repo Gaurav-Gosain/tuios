@@ -431,59 +431,6 @@ type paneAuth struct {
 	hosted bool
 }
 
-// addressesHostedPane reports whether a call is one forwardHostedCall sends on
-// to the machine that owns a hosted pane: a report verb whose address names a
-// pane this machine runs for another machine.
-func (d *Daemon) addressesHostedPane(verb string, params json.RawMessage) bool {
-	field, ok := hostedCallVerbs[verb]
-	if !ok || len(params) == 0 {
-		return false
-	}
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(params, &fields) != nil {
-		return false
-	}
-	var addr string
-	if raw, ok := fields[field]; !ok || json.Unmarshal(raw, &addr) != nil {
-		return false
-	}
-	return d.hostedPaneByAddress(addr) != nil
-}
-
-// hostedPaneOfPeer names the hosted pane the caller on cs runs in, by its
-// process ancestry, or "" for none. It is asked only for a caller the pane
-// tests place inside this daemon's panes but in none of its sessions' panes.
-func (d *Daemon) hostedPaneOfPeer(cs *connState) string {
-	if d.hostedPeer != nil {
-		return d.hostedPeer(cs)
-	}
-	if d.approvalPeer.Load() != nil || cs.peerPID <= 0 || !d.connFromPane(cs) {
-		return ""
-	}
-	pids := make(map[int]string)
-	d.hostedPanesMu.Lock()
-	for id, hp := range d.hostedPanes {
-		if hp.cmd != nil && hp.cmd.Process != nil {
-			pids[hp.cmd.Process.Pid] = id
-		}
-	}
-	d.hostedPanesMu.Unlock()
-	if len(pids) == 0 {
-		return ""
-	}
-	for cur, depth := cs.peerPID, 0; depth < paneOriginMaxDepth && cur > 1; depth++ {
-		if id, ok := pids[cur]; ok {
-			return id
-		}
-		ppid, _, ok := readProcLineage(cur)
-		if !ok {
-			break
-		}
-		cur = ppid
-	}
-	return ""
-}
-
 // paneWriteReach reports why the pane may not type into session target, or ""
 // when it may: its own session with write, a session of its fan group with
 // fan, and any session with admin.
@@ -513,7 +460,7 @@ func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
 	}
-	if cs.paneBound.Load() == nil && d.approvalPeer.Load() == nil && !d.connFromPane(cs) {
+	if cs.paneBound.Load() == nil && d.peerPlaceOverride() == nil && !d.connFromPane(cs) {
 		// Placed outside every pane when it connected (pinPeer). A caller
 		// on each keystroke, such as the person's client, costs no read.
 		return nil
@@ -587,7 +534,7 @@ func (d *Daemon) placePaneWindow(cs *connState) (window, via string) {
 	}
 	fromPane, win := d.peerPane(cs)
 	via = "pid"
-	if win == "" && fromPane && d.approvalPeer.Load() == nil && cs.peerPID > 0 {
+	if win == "" && fromPane && d.peerPlaceOverride() == nil && cs.peerPID > 0 {
 		// A process in a pane whose window is not recorded yet names it in
 		// its environment. Only a pane the grant table holds counts, which
 		// is every local pane from before its process started.

@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -402,48 +404,6 @@ var loginShells = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true,
 	"ksh": true, "csh": true, "tcsh": true, "nu": true, "xonsh": true,
 	"elvish": true, "pwsh": true, "powershell": true, "cmd": true,
-}
-
-// foregroundInfo describes a pane's foreground process. The three fields are
-// three different answers to "what is this", and the detector needs all of them;
-// see agentMatcher.isAgent for why none of them is enough alone.
-type foregroundInfo struct {
-	// comm is /proc/<pid>/comm: the process name, truncated at 15 characters and
-	// rewritable by the process itself.
-	comm string
-	// argv is the full command line.
-	argv []string
-	// exe is the resolved /proc/<pid>/exe, empty when it cannot be read. A
-	// process with no permission to read its own target, or a deleted binary,
-	// both yield empty rather than an error.
-	exe string
-	// pid is the foreground process itself, kept so the transcript source can
-	// read its working directory. Zero when the process could not be resolved.
-	pid int
-	// depth is how many processes sit between this one and the foreground
-	// process group leader: 0 for the leader, 1 for its child. It is set by the
-	// group walk and read by the matcher to name the wrappers above a match.
-	depth int
-	// group yields the other members of the foreground process group behind
-	// the leader, depth first and bounded, each with its depth set. It is nil
-	// when there is nothing to walk: the leader is the pane's own shell at its
-	// prompt, or the platform cannot list a process's children. It is read
-	// lazily, so a pane whose leader is itself the agent never pays for it.
-	group func(yield func(foregroundInfo) bool)
-	// hint reads the harness the leader's TUIOS_AGENT names, "" for none. It
-	// is nil for a pane at its shell prompt, and read lazily like group, so a
-	// pane whose process is recognised never reads its environment.
-	hint func() string
-	// shellPID is the pane's shell, not its foreground process. It rides here
-	// because the resolver is handed the shell pid to begin with, so nothing has
-	// to be read to know it, and because this is the one value the detector's
-	// poll already has for every pane. Zero when the pane has no live PTY.
-	//
-	// It is set whether or not the foreground process resolved: a pane whose
-	// foreground group cannot be read still has a shell, and clearing the pid
-	// there would drop the client's only way to check the pane's reported
-	// directory. See WindowState.ShellPID.
-	shellPID int
 }
 
 // proc is the process in the shape both matchers read it in.

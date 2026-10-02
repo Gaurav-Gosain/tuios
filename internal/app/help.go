@@ -131,7 +131,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 // On a daemon that cannot review a pane's changes, the review's keys are left
 // out of the Agents section, since each would do what an unbound key does.
 func (m *OS) HelpCategories() []HelpCategory {
-	cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
+	cats := slimHelpCategories(GetHelpCategories(m.KeybindRegistry, &m.Settings))
 	if !m.agentsSeen() {
 		return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
 	}

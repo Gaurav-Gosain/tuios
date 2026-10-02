@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -7,24 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
-
-// withSpyInputHandler swaps in a handler that records whether it was reached,
-// and puts the old one back afterwards.
-func withSpyInputHandler(t *testing.T) *bool {
-	t.Helper()
-	previous := getInputHandler()
-	reached := false
-	SetInputHandler(func(_ tea.Msg, m *OS) (tea.Model, tea.Cmd) {
-		reached = true
-		return m, nil
-	})
-	t.Cleanup(func() {
-		if previous != nil {
-			SetInputHandler(previous)
-		}
-	})
-	return &reached
-}
 
 func enabledScreensaverConfig(t *testing.T, minutes int) *config.UserConfig {
 	t.Helper()

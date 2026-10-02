@@ -1,9 +1,10 @@
+//go:build !slim
+
 package session
 
 import (
 	"maps"
 	"slices"
-	"strconv"
 	"time"
 )
 
@@ -123,18 +124,6 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 		return 0, true
 	}
 	return len(set), false
-}
-
-// SubagentsText is how n subagents read on the rail and in the subagents
-// key: "1 subagent" or "n subagents", and "" at zero.
-func SubagentsText(n int) string {
-	switch {
-	case n <= 0:
-		return ""
-	case n == 1:
-		return "1 subagent"
-	}
-	return strconv.Itoa(n) + " subagents"
 }
 
 // subagentsMetaValue is the subagents key for n subagents, and nil to remove

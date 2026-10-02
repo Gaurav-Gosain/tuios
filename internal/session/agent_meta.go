@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -38,22 +40,6 @@ const (
 	// AgentMetaMaxTTL is the longest TTL a call may ask for.
 	AgentMetaMaxTTL = 24 * time.Hour
 )
-
-// AgentMetaToken is one key and value a pane reported about its agent.
-//
-// It rides WindowState, so an older peer that does not know the field drops it
-// on decode, and a state with no metadata carries nil, which every reader
-// takes as "the pane said nothing".
-type AgentMetaToken struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	// Source names who wrote it ("claude-statusline", "hook"), so a writer can
-	// clear its own keys without touching another's. Empty when unstated.
-	Source string `json:"source,omitempty"`
-	// Expires is when the daemon drops it, as Unix nanoseconds, or 0 for a
-	// token that lives until it is cleared or the agent leaves the pane.
-	Expires int64 `json:"expires,omitempty"`
-}
 
 // AgentMetaUpdate is one set-agent-meta call, already validated.
 type AgentMetaUpdate struct {

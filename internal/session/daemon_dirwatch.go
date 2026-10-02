@@ -1,8 +1,6 @@
 package session
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,15 +35,6 @@ import (
 // A wait that fails (the link is down, or the far daemon is too old to have
 // wait-dir) ends the watch, and the listing is read again when the pane changes
 // folder, as it was before this existed.
-
-// remoteDirWaitMS bounds one wait-dir asked of another machine. The wait is
-// asked again when it ends, so this only bounds how long a far daemon keeps a
-// watch for a near daemon that went away without closing the link.
-const remoteDirWaitMS = 10 * 60 * 1000
-
-// remoteDirWaitBudget is how long the near daemon waits for the answer to one
-// wait-dir: the far side's own bound and a margin for the link.
-const remoteDirWaitBudget = remoteDirWaitMS*time.Millisecond + fleetCallBudget
 
 // dirWatchSlot is a connection's one folder watch.
 type dirWatchSlot struct {
@@ -145,47 +134,6 @@ func (d *Daemon) runRemoteDirWatch(host, dir string, done <-chan struct{}, notif
 // errNoFederation says this daemon has no links to ask another machine over.
 var errNoFederation = errors.New("no link to another machine")
 
-// watchRemoteDir asks host, on one connection of its own, to answer when dir
-// changes, and asks again on the same connection each time it answers. It
-// returns the error that ended it. Closing done closes the connection, which
-// ends the wait on the far side too. A far daemon of any version takes the
-// next request on the connection, so this needs nothing new of it.
-func (d *Daemon) watchRemoteDir(host, dir string, done <-chan struct{}, notify func()) error {
-	if d.federation == nil {
-		return errNoFederation
-	}
-	ctx, cancel := context.WithCancel(d.ctx)
-	defer cancel()
-	conn, err := d.federation.OpenConnection(ctx, host)
-	if err != nil {
-		return err
-	}
-	go func() {
-		select {
-		case <-done:
-		case <-ctx.Done():
-		}
-		_ = conn.Close()
-	}()
-	fc := &fleetConn{rw: conn, br: bufio.NewReader(conn)}
-	params := map[string]any{"dir": dir, "timeout": remoteDirWaitMS}
-	for {
-		raw, err := fc.call("wait-dir", params, remoteDirWaitBudget)
-		if err != nil {
-			return err
-		}
-		var res struct {
-			Changed bool `json:"changed"`
-		}
-		if err := json.Unmarshal(raw, &res); err != nil {
-			return fmt.Errorf("an answer this build cannot read: %w", err)
-		}
-		if res.Changed {
-			notify()
-		}
-	}
-}
-
 // verbWaitDir answers when the names in a directory on this machine change, or
 // when the timeout ends first.
 func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -245,4 +193,29 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 	case <-d.ctx.Done():
 		return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 	}
+}
+
+// verbReadDir lists a directory on this machine.
+//
+// It is the far half of the rail's file section for a pane whose process runs
+// here. The section asks the daemon that owns the pane rather than reading a
+// filesystem itself, for the reason it was taught once already: the machine
+// with the process is the machine with the files, and any other answer is a
+// listing of the wrong disk under the right path.
+//
+// It carries no authority the link did not already have. A configured host can
+// be asked for a shell, and reading the names in a directory is strictly less
+// than that.
+func (d *Daemon) verbReadDir(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Dir string `json:"dir"`
+		Max int    `json:"max"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Dir == "" {
+		return nil, invalidParam("dir", "read-dir needs a directory to list.")
+	}
+	return listDir(filepath.Clean(p.Dir), p.Max), nil
 }

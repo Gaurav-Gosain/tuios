@@ -276,7 +276,7 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 		cfg.PaneToken = m.PaneToken
 	}
 	if cfg.HerdrEnv == nil {
-		cfg.HerdrEnv = m.HerdrEnv
+		cfg.HerdrEnv = m.herdrEnvHook()
 	}
 	if cfg.history == nil {
 		cfg.history = m.history

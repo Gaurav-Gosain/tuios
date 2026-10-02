@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -1880,33 +1882,6 @@ func (m *OS) JumpToNextAttention() tea.Cmd {
 		m.ShowNotification(strconv.Itoa(next+1)+" of "+strconv.Itoa(len(todo))+" waiting: "+inboxWho(it)+" "+inboxKindWords(it), "info", m.Settings.NotificationDuration)
 	}
 	return nil
-}
-
-// inboxWait is how long an item has waited, in at most three cells.
-func inboxWait(since int64, now time.Time) string {
-	if since <= 0 {
-		return "?"
-	}
-	d := max(now.Sub(time.Unix(0, since)), 0)
-	switch {
-	case d < time.Minute:
-		return strconv.Itoa(int(d.Seconds())) + "s"
-	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m"
-	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + "h"
-	default:
-		return strconv.Itoa(int(d.Hours())/24) + "d"
-	}
-}
-
-// inboxSeen is when a machine that cannot be reached was last heard from, as
-// the Inbox and the rail say it: "seen 3m ago", or "offline" when it never was.
-func inboxSeen(seenAt int64, now time.Time) string {
-	if seenAt <= 0 {
-		return "offline"
-	}
-	return "seen " + inboxWait(seenAt, now) + " ago"
 }
 
 // inboxKindGlyph is the mark an item row wears for its kind. The group

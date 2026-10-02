@@ -1,8 +1,6 @@
 package session
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -258,49 +256,4 @@ func lowerName(s string) string {
 		}
 	}
 	return string(b)
-}
-
-// remoteListing asks the machine a pane runs on to list one of its
-// directories.
-//
-// The rail's file section asks the daemon that owns the pane, which was the
-// whole fix for a pane reached over a link: a client listing its own disk
-// reported that the pane's directory did not exist. A window whose process is
-// on another machine moves that same mistake one step along, because the
-// daemon that owns the window is not the machine that owns the files either.
-// So it asks the one that is.
-//
-// A failure is reported as the listing's error rather than as a message
-// failure. The section has a row to say why it is empty, and "that machine did
-// not answer" is the honest thing to put in it.
-func (d *Daemon) remoteListing(host, dir string, maxEntries int) *DirListingPayload {
-	if d.federation == nil {
-		return &DirListingPayload{Dir: dir, Err: "No link to " + host + "."}
-	}
-	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
-	defer cancel()
-
-	raw, err := d.federation.Call(ctx, host, "read-dir", map[string]any{
-		"dir": dir,
-		"max": maxEntries,
-	})
-	if err != nil {
-		message, _ := federationErrorText(err)
-		if message == "" {
-			message = host + " could not list it."
-		}
-		return &DirListingPayload{Dir: dir, Err: message}
-	}
-	var out DirListingPayload
-	if json.Unmarshal(raw, &out) != nil {
-		return &DirListingPayload{Dir: dir, Err: host + " sent a listing this build cannot read."}
-	}
-	if out.Dir == "" {
-		out.Dir = dir
-	}
-	// The spoof question is never answered for a pane on another machine. It
-	// compares an announced directory against a shell's own, and this daemon
-	// holds neither: the shell is over there and the pid means nothing here.
-	out.Spoofed = false
-	return &out
 }

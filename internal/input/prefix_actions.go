@@ -76,7 +76,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.MinimizePrefixActive = true }))
 	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.TilingPrefixActive = true }))
 	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.DebugPrefixActive = true }))
-	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.TapePrefixActive = true }))
 	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.LayoutPrefixActive = true }))
 
 	// Window prefix (leader, t, ...)
@@ -111,13 +110,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("debug_prefix_showkeys", handleDebugShowkeys)
 	d.Register("debug_prefix_animations", handleDebugAnimations)
 	d.Register("debug_prefix_cancel", handlePrefixCancel)
-
-	// Tape prefix (leader, T, ...)
-	d.Register("tape_prefix_manager", handleToggleTapeManager)
-	d.Register("tape_prefix_review", handleTapeReview)
-	d.Register("tape_prefix_record", handleTapeRecord)
-	d.Register("tape_prefix_stop", handleTapeStop)
-	d.Register("tape_prefix_cancel", handlePrefixCancel)
 
 	// Layout prefix (leader, L, ...). Load and save used to be a hand-written
 	// switch in handleTerminalLayoutPrefix while every other key in the section
@@ -538,37 +530,6 @@ func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // ============================================================================
 // Tape prefix
-// ============================================================================
-
-// handleTapeReview opens the project-tape review/trust dialog for the tape in
-// the focused window's current directory. It is the deliberate action that lets
-// the user read a detected tape and choose to run or trust it.
-func handleTapeReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.OpenTapeReview()
-	return o, nil
-}
-
-func handleTapeRecord(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
-		o.ShowNotification("Already recording", "warning", o.Settings.NotificationDuration)
-		return o, nil
-	}
-	o.TapeManagerStartRecording()
-	o.ShowTapeManager = true // Show the UI for naming
-	return o, nil
-}
-
-func handleTapeStop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
-		o.TapeManagerStopRecording()
-	} else {
-		o.ShowNotification("Not recording", "warning", o.Settings.NotificationDuration)
-	}
-	return o, nil
-}
-
-// ============================================================================
-// Terminal mode direct binds
 // ============================================================================
 
 // handleTerminalNextWindow moves focus forward. In the scrolling layout the

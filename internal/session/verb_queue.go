@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -25,24 +27,6 @@ import (
 // A call a pane on another machine forwards through its report channel
 // (paneOnly) is none of these: paneAuthority places it nowhere, which would
 // read as shell, so both writing verbs refuse it (refuseForwardedPane).
-
-// refuseForwardedPane refuses a queue write from a hosted pane's report
-// channel. Such a call is a pane by construction, but not one of this
-// daemon's, so it has no grants here to check an entry against, and it must
-// not pass for the person's shell. The queue verbs are not forwarded today
-// (hostedCallVerbs); this holds if they ever are.
-func refuseForwardedPane(cs *connState, verb string) *verbError {
-	if cs == nil || !cs.paneOnly {
-		return nil
-	}
-	return hintedVerbError(ErrVerbForbidden, verb+" from a pane on another machine is refused", &VerbHint{
-		Detail: "Nothing changed. A pane that runs here for another machine queues through the machine that owns it.",
-	})
-}
-
-// ErrVerbQueueFull reports a pane whose delivery queue holds as many entries
-// as [agents.queue] max allows. Nothing was queued.
-const ErrVerbQueueFull = "queue_full"
 
 // queueMaxText bounds one queued message, in bytes.
 const queueMaxText = 16 << 10

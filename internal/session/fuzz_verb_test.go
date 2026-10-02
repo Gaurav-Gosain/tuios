@@ -94,6 +94,9 @@ func FuzzVerbDispatch(f *testing.F) {
 		f.Add([]byte(s))
 	}
 	for _, v := range fuzzReadVerbs {
+		if verbLeftOut(v) {
+			continue
+		}
 		if _, ok := verbRegistry[v]; !ok {
 			f.Fatalf("fuzzReadVerbs names %q, which is not a verb", v)
 		}

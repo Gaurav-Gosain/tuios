@@ -75,7 +75,7 @@ func (d *Daemon) checkGrantsSinceLastRun() {
 			if !was.Covers(policyDefaults(now)) {
 				d.grantsWidenedAtStart.Store(true)
 				log.Printf("%s Before: %s. Now: %s.", grantsWidenedNote, was.String(), policyDefaults(now).String())
-				d.attention.noteConfigNotice(configWidenedNotice, grantsWidenedNote)
+				d.noteConfigNotice(configWidenedNotice, grantsWidenedNote)
 			}
 		}
 	}
@@ -92,31 +92,6 @@ const (
 
 // configWaitsNote is the summary of the configWaitsNotice item.
 const configWaitsNote = "Run tuios config apply in a terminal outside tuios. The change gives panes or other machines more, so it waits for you."
-
-// closeConfigNotice closes the Inbox item about config.toml named name.
-func (a *attentionStore) closeConfigNotice(name string) {
-	if a == nil {
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.closeKeyLocked(attentionItemKey(&AttentionItem{Kind: AttentionErrored, Name: name}), AttentionClosedResolved)
-}
-
-// noteConfigNotice opens or updates the Inbox item about config.toml named
-// name, which the person dismisses.
-func (a *attentionStore) noteConfigNotice(name, summary string) {
-	if a == nil {
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.upsertLocked(AttentionItem{
-		Kind:    AttentionErrored,
-		Name:    name,
-		Summary: attentionText(summary, attentionMaxSummary),
-	})
-}
 
 // verbApplyConfig applies config.toml for the person. A file change applies
 // only what narrows (applyUserConfig); this is how the person applies a change
@@ -174,37 +149,6 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	return out, nil
 }
 
-// applyOneHost applies the entry of one host from cfg, or its removal, and
-// nothing else.
-func (d *Daemon) applyOneHost(cfg *config.UserConfig, name string) *verbError {
-	if d.federation == nil {
-		return newVerbError(ErrVerbCommandFailed, "this daemon dials no hosts")
-	}
-	var want *federation.Host
-	for _, h := range HostsFromConfig(cfg) {
-		if strings.TrimSpace(h.Name) == name {
-			h := h
-			want = &h
-		}
-	}
-	cur := d.federation.Table()
-	hosts := make([]federation.Host, 0, cur.Len()+1)
-	for _, n := range cur.Names() {
-		if n == name {
-			continue
-		}
-		if h, err := cur.Lookup(n); err == nil {
-			hosts = append(hosts, h)
-		}
-	}
-	if want != nil {
-		hosts = append(hosts, *want)
-	}
-	d.ApplyHosts(hosts)
-	log.Printf("[FEDERATION] Host %s was applied by the person", name)
-	return nil
-}
-
 // configSnapshot is what apply-config reports a change of.
 type configSnapshot struct {
 	mode   string
@@ -215,17 +159,7 @@ type configSnapshot struct {
 
 func (d *Daemon) configSnapshot() configSnapshot {
 	s := configSnapshot{mode: d.permissionMode(), grants: d.manager.grants.defaults().Names(), hosts: map[string]federation.Host{}}
-	if d.federation != nil {
-		t := d.federation.Table()
-		for _, n := range t.Names() {
-			if h, err := t.Lookup(n); err == nil {
-				s.hosts[n] = h
-			}
-		}
-	}
-	if t := d.linkPolicies.Load(); t != nil {
-		s.links = *t
-	}
+	d.snapshotHosts(&s)
 	return s
 }
 

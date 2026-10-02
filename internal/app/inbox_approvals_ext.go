@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -680,9 +682,3 @@ func (m *OS) paneApprovalWord(windowID, kind string) string {
 	}
 	return kind
 }
-
-// The need words the safer approvals add to approval and question.
-const (
-	inboxWordPlan  = "plan"
-	inboxWordRisky = "risky"
-)

@@ -1,11 +1,14 @@
+//go:build !slim
+
 package app
 
 import (
 	"encoding/json"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 
 	tea "charm.land/bubbletea/v2"
 

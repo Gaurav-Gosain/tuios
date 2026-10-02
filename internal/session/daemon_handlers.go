@@ -5,6 +5,8 @@ import (
 	"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 )
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
@@ -81,6 +83,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DirWatch: true,
 		// See sidebar_visibility.go.
 		SidebarOps: true,
+		Edition:    edition.Name,
 	})
 }
 

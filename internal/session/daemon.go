@@ -11,14 +11,12 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
-	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/google/uuid"
 )
@@ -34,29 +32,8 @@ type Daemon struct {
 	// others in its own [hosts] table.
 	instance string
 	listener net.Listener
-	// linkListener is the second socket, the one `tuios stdio-proxy` dials
-	// for a connection that arrived over another machine's link. Every
-	// connection accepted on it is marked viaLink; see LinkSocketPath.
-	linkListener net.Listener
-	// linkHumanListener is the third socket, the one the proxy dials for a
-	// stream the hub vouched for. See LinkHumanSocketPath.
-	linkHumanListener net.Listener
-	// herdrListener is the socket harnesses that speak herdr's pane state
-	// protocol report to. See herdr_compat.go.
-	herdrListener net.Listener
-	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
-	herdrSeqs herdrSeqs
-	// herdrEvents limits the notifications and metadata each pane sends
-	// over the herdr protocol socket.
-	herdrEvents paneBuckets
-	// activityReports limits the report-agent-activity calls each pane
-	// makes. See verbReportAgentActivity.
-	activityReports paneBuckets
-	// herdrConns counts each caller's open connections on the herdr
-	// protocol socket. See herdrConnLimits.
-	herdrConns herdrConnCount
-	ctx        context.Context
-	cancel     context.CancelFunc
+	ctx      context.Context
+	cancel   context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
@@ -96,136 +73,21 @@ type Daemon struct {
 	// agentHooks holds the settle timers for after-agent-state. Nil when hooks
 	// are not loaded.
 	agentHooks *agentHookGate
-
-	// federation holds the outbound links to the hosts named in config. It is
-	// nil when no hosts are configured, which is the default, and every reader
-	// checks. Links are outbound only: a remote daemon never dials this one and
-	// never gets a channel into it (federation package, section 1 of the design
-	// document).
-	federation *federation.Manager
-	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
-	hostDial federation.Dialer
-	// fleet follows the agents and the Inbox of every linked host over the
-	// links, so the Inbox and the host listings cover every machine. See
-	// host_fleet.go.
-	fleet *hostFleet
 	// federationMu guards federationProblems and the hosts watcher, both of
 	// which a config reload rewrites while a verb is reading them.
 	federationMu sync.Mutex
-	// federationProblems are the config entries that were dropped, kept so the
-	// list-hosts verb can report them instead of leaving the user to wonder
-	// where a host went.
-	federationProblems []string
 	// hostsWatcher follows the config file so an edit to the [hosts] table
 	// reaches the links without a restart. Nil when no config path is set,
 	// which is every test that builds a DaemonConfig by hand.
 	hostsWatcher *config.Watcher
 	// configPath is the file hostsWatcher follows.
 	configPath string
-	// hostsWaiting is set when a config reload changed [hosts] in a way that
-	// dials more or gives a linked machine more, and only what narrows was
-	// applied (reloadHosts, reloadLinkPolicies).
-	hostsWaiting atomic.Bool
 	// grantsWidenedAtStart is set when panes on the default hold more at
 	// this start than at the last run (checkGrantsSinceLastRun).
 	grantsWidenedAtStart atomic.Bool
-
-	// hostedPanes are the panes this daemon runs on another machine's behalf,
-	// keyed by the id open-pane returned. They are held here rather than on a
-	// Session because a hosted pane belongs to no session on this machine: the
-	// session it is a window of is on the daemon that asked for it. See
-	// hosted_pane.go.
-	hostedPanes   map[string]*hostedPane
-	hostedPanesMu sync.Mutex
-
-	// outbox holds mail for machines whose link is down, and delivers it when
-	// the link comes back. See host_outbox.go.
-	outbox *hostOutbox
-
-	// linkPolicies is the [hosts] table the policy for a machine linked to
-	// this one is resolved from. Nil means no table: every link gets the
-	// built-in default. See link_policy.go.
-	linkPolicies linkPolicyPointer
-
-	// agents is the cross-agent mailbox: the bounded per-session message rings
-	// and the in-flight ask graph. It is held here rather than on a Session
-	// because it must never reach disk: SessionState is what resurrection
-	// serialises, and a message that outlived the daemon would be addressed to a
-	// pane whose shell is new. See verb_mailbox.go.
-	agents *agentBus
-
-	// attention is the Inbox: every approval, question, message to the person,
-	// error and unseen finished turn in every session. It is fed from the
-	// session event sinks and the mailbox, and saved beside the session state.
-	// See attention.go.
-	attention *attentionStore
-
-	// responds serialises the respond verb per window and remembers the last
-	// prompt each window was answered on, so two clients answering the same
-	// prompt get one answer through and the other refused. See verb_respond.go.
-	responds respondSlots
-	// fanVerifies holds the verify-fan checks running now, one per fan
-	// session. See verb_fan_compare.go.
-	fanVerifies fanVerifyRuns
-	// respondFromShell is the [daemon] respond_from_shell grant: a caller
-	// outside every pane may call respond without an attach nonce.
-	respondFromShell bool
-
-	// approvals is the [agents.approvals] policy: which harnesses may hold a
-	// permission prompt for an answer from the Inbox, and for how long. It is
-	// swapped whole when the config file changes. See approvals.go.
-	approvals atomic.Pointer[ApprovalPolicy]
-	// activity holds each agent pane's ring of hook events, and recapTests
-	// the [agents.recap] test_patterns its recap reads a test run by. See
-	// agent_activity.go.
-	activity   *activityStore
-	recapTests atomic.Pointer[[]string]
-	// approvalPeer places the process on a connection in a pane, for
-	// request-approval, restrict-connection and fan's launched_from. Unset
-	// uses peerPaneWindow; a test sets it to stand in for a process table.
-	//
-	// It is atomic because a test swaps it while the daemon runs, and the
-	// connection goroutines read it with nothing else ordering the two: the
-	// reply a test waits on is written with writev, which gives the race
-	// detector no happens-before edge.
-	approvalPeer atomic.Pointer[peerPlacer]
-	// hostedPeer names the hosted pane a caller runs in, for pane grants.
-	// Nil walks the process table (hostedPaneOfPeer); a test sets it.
-	hostedPeer func(cs *connState) string
-
-	// protocolPanes holds the windows start-agent --protocol opened, window
-	// id to protocol. See agent_protocol.go.
-	protocolPanes sync.Map
-	// agentProtoExe finds the binary a protocol pane runs. Nil is
-	// os.Executable; a test points it at a built tuios.
-	agentProtoExe func() (string, error)
-
-	// stash is the per-session file store the stash verbs write into. It is held
-	// beside agents for the same reason: it must never reach disk as state, and
-	// its lifetime is the session's. Unlike the ring it does put bytes on disk,
-	// which is why the daemon deletes them on session deletion, on shutdown, and
-	// again on the next start. See stash.go.
-	stash *stashStore
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
-
-	// bundles holds the worktree transfers bundle-worktree has open. Its zero
-	// value is ready. See verb_bundle_worktree.go.
-	bundles bundleStore
-
-	// queue holds the messages waiting to be typed to an agent when it comes
-	// to rest. Its zero value is ready. See agent_queue.go.
-	queue agentQueues
-
-	// reviewNotes holds the review notes left on panes' changes. Its zero
-	// value is ready; Start loads what the last daemon saved. See
-	// review_notes.go.
-	reviewNotes reviewNoteStore
-
-	// promptStallOverride replaces promptStallDefault when set. Only tests set
-	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
-	promptStallOverride time.Duration
 
 	// Goroutine tracking for clean shutdown. Start a tracked goroutine with
 	// goTracked, never with wg.Add or wg.Go directly: see goTracked.
@@ -256,40 +118,20 @@ type Daemon struct {
 	foreground bool
 	logFile    string
 
-	// agentStallTimeout is how long a pane may report working while producing no
-	// output before the stall heuristic demotes it to idle. Zero disables the
-	// heuristic. It is resolved once in NewDaemon from config or the
-	// TUIOS_AGENT_STALL_SECONDS environment override.
-	agentStallTimeout time.Duration
+	// approvalPeer places the process on a connection in a pane, for
+	// request-approval, restrict-connection and fan's launched_from. Unset
+	// uses peerPaneWindow; a test sets it to stand in for a process table.
+	//
+	// It is atomic because a test swaps it while the daemon runs, and the
+	// connection goroutines read it with nothing else ordering the two: the
+	// reply a test waits on is written with writev, which gives the race
+	// detector no happens-before edge.
+	approvalPeer atomic.Pointer[peerPlacer]
 
-	// agentDetectInterval is how often the foreground-process auto-detector polls
-	// each pane to mark or clear a running agent. Zero disables auto-detection. It
-	// is resolved once in NewDaemon from config or the TUIOS_AGENT_DETECT_SECONDS
-	// environment override.
-	agentDetectInterval time.Duration
-
-	// agentMatcher decides whether a pane's foreground process is a known agent
-	// CLI. It merges the built-in agent binary names with any the user added.
-	agentMatcher agentMatcher
-
-	// evidenceClock is the time the detection verbs measure evidence_age_ms
-	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
-	evidenceClock func() time.Time
-
-	// transcriptWatcher is the one filesystem notification the transcript source
-	// runs on, shared by every session. Nil when the kernel would not give the
-	// daemon one, in which case every join reads on its pane's own output
-	// instead and nothing else changes.
-	transcriptWatcher *TranscriptWatcher
-
-	// resumeAgents is the resolved daemon.resume_agents mode: one of the
-	// resumeMode values. See agent_resume.go.
-	resumeAgents string
-
-	// pendingResumes holds the resume offers the start-up restore found, until
-	// the Inbox has loaded its saved items and they can be opened without
-	// taking ids the saved items already hold. See agent_resume.go.
-	pendingResumes []resumeOffer
+	// The state of the features tuios-slim leaves out. See
+	// daemon_features_full.go, and daemon_features_slim.go for the empty slim
+	// counterpart.
+	daemonFeatures
 }
 
 // defaultAgentStallTimeout is the conservative default silence window before a
@@ -311,38 +153,6 @@ const defaultAgentDetectInterval = 2 * time.Second
 // again, and this bound covers a program started with no output at all. At the
 // default two-second tick it is every fifth tick. See PTY.detectScanDue.
 const agentDetectQuietBound = 10 * time.Second
-
-// detectQuietTicks is how many ticks a quiet pane waits between reads at the
-// given poll interval: agentDetectQuietBound in ticks, and never less than one,
-// so a poll slower than the bound reads every pane every tick.
-func detectQuietTicks(interval time.Duration) int32 {
-	if interval <= 0 {
-		return 1
-	}
-	n := int32(agentDetectQuietBound / interval)
-	if n < 1 {
-		return 1
-	}
-	return n
-}
-
-// detectScanDue reports whether the detection poll should read this pane's
-// foreground process on this tick, and records the read if so. A pane that has
-// produced output since its last read is due at once: typing a command echoes
-// it, a program starting or exiting prints, a title change is output. A pane
-// never read before is due at once, since a pane opened on a silent program
-// has no output to flag it. A pane that has been silent is due every
-// quietTicks ticks. now is taken before the read, so output that lands while
-// the read runs makes the next tick due.
-func (p *PTY) detectScanDue(now int64, quietTicks int32) bool {
-	last := p.lastDetectScan.Load()
-	if last == 0 || p.lastOutput.Load() > last || p.detectSkips.Add(1) >= quietTicks {
-		p.lastDetectScan.Store(now)
-		p.detectSkips.Store(0)
-		return true
-	}
-	return false
-}
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
@@ -695,36 +505,31 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		clients:            make(map[string]*connState),
 		pendingRequests:    make(map[string]*pendingRequest),
 		events:             newEventHub(),
-		agents:             newAgentBus(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
 		foreground:         cfg.Foreground,
 		logFile:            cfg.LogFile,
-		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
-		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
-		respondFromShell:   cfg.RespondFromShell,
-		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
 		windowSize:         windowSizePolicy(cfg.WindowSize),
 	}
+	// The agent, attention, queue, stash and herdr state. tuios-slim has
+	// stand-ins that do nothing. See daemon_features_slim.go.
+	d.agents = newAgentBus()
+	d.agentStallTimeout = resolveAgentStallTimeout(cfg.AgentStallTimeout)
+	d.agentMatcher = newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries))
+	d.respondFromShell = cfg.RespondFromShell
+	d.resumeAgents = resolveResumeMode(cfg.ResumeAgents)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
 	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
 	d.SetLinkPolicies(cfg.LinkPolicies)
-	d.manager.SetPanePermissions(cfg.Permissions)
 	d.SetQueueMax(cfg.QueueMax)
 	d.outbox = newHostOutbox(d)
-	// The socket path is read through a closure rather than copied, because the
-	// line below may still change it and the stash root is derived from it.
+	// The socket path is read through a closure rather than copied, because
+	// it may still change and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
-	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
-	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
-	d.manager.SetHistoryPolicy(cfg.History)
-	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
-	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
-	d.loadHooks(cfg)
 
 	// A daemon with no watcher is a working daemon: every transcript join falls
 	// back to reading on its pane's own output. So the error is dropped rather
@@ -733,6 +538,13 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	if w, err := NewTranscriptWatcher(); err == nil {
 		d.transcriptWatcher = w
 	}
+	d.manager.SetPanePermissions(cfg.Permissions)
+	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
+	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
+	d.manager.SetHistoryPolicy(cfg.History)
+	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
+	d.manager.SetPreferredShell(cfg.PreferredShell)
+	d.loadHooks(cfg)
 
 	if cfg.SocketPath != "" {
 		d.manager.SetSocketPath(cfg.SocketPath)
@@ -750,42 +562,6 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.setupFederation(cfg.Hosts)
 
 	return d
-}
-
-// setupFederation builds the host table and the link manager. Nothing is dialed
-// here; Start launches the supervisors.
-//
-// The manager is built even with no hosts configured, which is the default. It
-// costs a struct and no goroutine, and it is what lets a host added later reach
-// a running daemon: a nil manager would have to be built from the config
-// reload, and the verbs read the pointer without a lock.
-func (d *Daemon) setupFederation(hosts []federation.Host) {
-	table, problems := federation.NewTable(hosts)
-	for _, p := range problems {
-		d.federationProblems = append(d.federationProblems, p.Error())
-		log.Printf("[FEDERATION] %v", p)
-	}
-	dial := d.hostDial
-	if dial == nil {
-		// TUIOS_SSH names the ssh program to run. It exists for a machine where
-		// ssh is not on the daemon's PATH, and it is what lets the link layer be
-		// exercised end to end without an ssh server.
-		dial = federation.SSHDialer(os.Getenv("TUIOS_SSH"))
-	}
-	d.federation = federation.New(table, federation.Options{
-		Dial:            dial,
-		ClientName:      "tuios-daemon",
-		ClientVersion:   d.version,
-		VerbProtocol:    VerbProtocolVersion,
-		MinVerbProtocol: MinVerbProtocolVersion,
-		// The name every host this one links to resolves its policy for this
-		// machine from. See link_policy.go.
-		Self: linkSelfName(d.hostedPaneHostName()),
-		Log: func(format string, args ...any) {
-			log.Printf("[FEDERATION] "+format, args...)
-		},
-		OnStatus: d.fleet.onStatus,
-	})
 }
 
 // onSessionCreated installs a session's event and state sinks and publishes a
@@ -830,76 +606,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
 		if ev.Type == EventOutput {
 			if pty := s.GetPTY(ev.PTYID); pty != nil {
-				// An OSC 9;4 the emulator parked while writing these same bytes. It
-				// is applied before the probe and is not throttled: the sequence
-				// only arrives when the harness has something to say, and it is a
-				// better answer than anything the probe can work out.
-				if state, ok := pty.takeAgentProgress(); ok {
-					s.applyPaneProgress(ev.PTYID, ev.Window, state, d.agentMatcher.registry)
-				}
-				// A desktop notification the emulator parked while writing these
-				// bytes, on the same terms: the harness speaking about itself.
-				if n, ok := pty.takeAgentNotify(); ok {
-					s.applyAgentNotify(ev.PTYID, n, d.agentMatcher.registry)
-				}
-				// Where the pane is.
-				//
-				// A shell that does not announce over OSC 7 tells nobody when
-				// it changes directory, and a pane on another machine has no
-				// process here to read either. The only hint is that the pane
-				// printed something, which is what a prompt after a cd is.
-				//
-				// So the look is made here. It is paced to once a second, with
-				// one more look after the pane goes quiet, and only made for a
-				// pane whose bytes are arriving, so a session sitting idle pays
-				// nothing. See pane_cwd_check.go.
-				s.noteCwdOnOutput(pty)
-				// And what it is running, on the same terms and its own
-				// slower clock. A pane that has just written is a pane where
-				// something may have started or finished.
-				pty.remoteForeground()
-				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
-					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
-				}
-				// The screen tier. Throttled like the probe, and armed to run once
-				// more after the pane goes quiet: a harness waiting on a human
-				// paints the prompt in its last chunk and then says nothing at
-				// all, so the scan the throttle swallowed is the only one that
-				// would have seen it.
-				reg := d.agentMatcher.registry
-				if reg != nil {
-					ptyID := ev.PTYID
-					// The transcript read goes first so the screen gets the last
-					// word in a single pass: the file can only say working or
-					// done, and a rule that can see a prompt on the pane right
-					// now must be able to write over that. Running them the
-					// other way round would let a read of a file the agent wrote
-					// a moment ago undo a blocker the screen just matched.
-					// Installed on first use, not at construction: the registry
-					// belongs to the daemon and a PTY is built before the daemon
-					// wires this sink. Guarded so a flooding pane does not build
-					// an identical closure again on every chunk just to store it;
-					// the matcher is fixed for the daemon's life, so the first
-					// one stays correct.
-					if !pty.hasScreenLook() {
-						pty.setScreenLook(func() {
-							// The output event can run before the emulator
-							// has parsed its bytes, so a notification sent in
-							// a pane's last chunk is picked up here, on the
-							// settle look, rather than waiting for output
-							// that may never come.
-							if n, ok := pty.takeAgentNotify(); ok {
-								s.applyAgentNotify(ptyID, n, reg)
-							}
-							s.readTranscriptOnOutput(ptyID)
-							s.scanPaneForAgent(ptyID, reg)
-						})
-					}
-					if pty.screenScanDue(time.Now().UnixNano()) {
-						pty.runScreenLook()
-					}
-					pty.armScreenSettle()
-				}
+				d.onPaneOutput(s, ev, pty)
 			}
 		}
 		// A pane seen, or a new kind or message on a pane whose state did not
@@ -940,51 +647,6 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		})
 	})
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
-}
-
-// onSessionRenamed moves what the daemon keeps by session name to the new
-// name, and tells every event reader and linked machine to list again. It runs on
-// the manager's rename hook, after the session and its state carry the name.
-func (d *Daemon) onSessionRenamed(s *Session, old string) {
-	name := s.Name()
-	d.agents.rename(old, name)
-	d.attention.renameSession(old, name)
-	d.renameQueuedSession(old, name)
-	d.manager.grants.renameSession(old, name)
-	// A listing reader has no event for a rename. The old name closes and the
-	// new one opens, which is what every reader, a linked machine's fleet
-	// cache included, already handles by listing again.
-	d.events.publish(streamEvent{Type: EventSessionClosed, Session: old})
-	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
-}
-
-// onSessionDeleted publishes a session-closed event and tells every client
-// attached to the session that it is gone. It runs on the manager's delete hook,
-// so every deletion path (the kill-session verb, the legacy kill message, and
-// any internal teardown) notifies clients through one place.
-//
-// Without this a killed session leaves its clients attached to nothing: their
-// PTYs are closed and their windows are gone, but the socket stays open, so the
-// client sits in a dead session with no way to learn what happened.
-func (d *Daemon) onSessionDeleted(s *Session) {
-	d.forgetLatest(s.ID)
-	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
-	// A session with no windows has no inboxes, so its ring is dropped with it.
-	d.agents.forget(s.Name())
-	// And so are its panes' activity rings.
-	d.activity.forgetSession(s.ID)
-	// And nothing in it is waiting for anybody any more.
-	d.attention.closeSession(s.Name())
-	// And no message waits for an agent in it.
-	d.forgetQueuedSession(s.Name())
-	// And its stashed files go with it. This is the lifetime the stash promises,
-	// and it runs on the manager's delete hook, so every path that kills a
-	// session takes the files with it.
-	d.stash.forget(s.ID)
-	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
-		SessionName: s.Name(),
-		Reason:      "the session was terminated",
-	}, "")
 }
 
 // Start starts the daemon.
@@ -1040,32 +702,9 @@ func (d *Daemon) Start() error {
 	// serves, and the proxy falls back to the main socket, at the cost of a
 	// message from another machine not being marked as one. The start lock
 	// is held, so a stale file here is a dead daemon's and is removed.
-	d.linkListener = listenLinkSocket(LinkSocketPath(socketPath), "Mail from other machines is not marked.")
-	// The link-human socket is optional in the same way. Without it a proxy
-	// falls back to the plain link socket, and no attach through a link can
-	// verify a reply from human, which is the safe way to lose it.
-	d.linkHumanListener = listenLinkSocket(LinkHumanSocketPath(socketPath), "A reply from human over a link is not verified.")
-	// The herdr protocol socket is optional in the same way. Without it no
-	// pane is told it may report there, and the screen rules carry those
-	// harnesses as before.
-	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
-		d.herdrListener = l
-		d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
-		// herdr's command line, for a tool that runs "$HERDR_BIN_PATH"
-		// pane split and the rest, is this binary run as herdr: a link
-		// named herdr beside the daemon socket, as the tmux shim's is.
-		// Where the link cannot be made, the binary itself answers
-		// herdr's pane and notification commands. See internal/herdrcli.
-		if exe, err := d.agentProtoExecutable(); err == nil {
-			bin := exe
-			if link, err := herdrcli.InstallLink(HerdrLinkDir(socketPath), exe); err == nil {
-				bin = link
-			} else {
-				log.Printf("The herdr link could not be made: %v. Panes get the tuios binary as HERDR_BIN_PATH, which answers herdr's pane and notification commands only.", err)
-			}
-			d.manager.SetHerdrBin(bin)
-		}
-	}
+	// The link sockets other machines reach this daemon through, and the
+	// herdr socket. tuios-slim opens none of them.
+	d.listenFeatureSockets(socketPath)
 
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
@@ -1100,8 +739,6 @@ func (d *Daemon) Start() error {
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
 	d.attention.load(attentionPath(), d.attentionLive)
-	// A default that widened while the daemon was down is said now, when
-	// the Inbox can show it.
 	d.checkGrantsSinceLastRun()
 	// A host entry dropped at start is said now, when the Inbox can show it.
 	d.noteHostProblems(d.configProblems())
@@ -1380,13 +1017,6 @@ func (d *Daemon) acceptLoop() {
 		}
 		go d.handleConnection(conn)
 	}
-}
-
-// acceptLinkLoop is acceptLoop for the link socket. A connection from it is
-// served exactly like any other, with one difference: it is marked as having
-// come over a link before a byte of it is read.
-func (d *Daemon) acceptLinkLoop() {
-	d.acceptLinkOn(d.linkListener, false)
 }
 
 // acceptLinkOn accepts on one of the two link sockets. human marks every
@@ -1756,208 +1386,6 @@ func (d *Daemon) cleanupLoop() {
 				}
 			}
 			d.pendingRequestsMu.Unlock()
-		}
-	}
-}
-
-// resolveAgentStallTimeout picks the stall heuristic's silence window: an
-// explicit positive config wins, a negative config disables the heuristic, and a
-// zero config falls back to the TUIOS_AGENT_STALL_SECONDS environment override
-// (0 or less there disables it) and finally to the default.
-func resolveAgentStallTimeout(cfg time.Duration) time.Duration {
-	if cfg > 0 {
-		return cfg
-	}
-	if cfg < 0 {
-		return 0
-	}
-	if s := os.Getenv("TUIOS_AGENT_STALL_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-			if n <= 0 {
-				return 0
-			}
-			return time.Duration(n) * time.Second
-		}
-	}
-	return defaultAgentStallTimeout
-}
-
-// resolveAgentBinaries returns the extra agent binary names to merge with the
-// built-in defaults: the config list, plus the comma-separated
-// TUIOS_AGENT_BINARIES environment override.
-func resolveAgentBinaries(cfg []string) []string {
-	extra := append([]string(nil), cfg...)
-	if s := os.Getenv("TUIOS_AGENT_BINARIES"); s != "" {
-		for name := range strings.SplitSeq(s, ",") {
-			if name = strings.TrimSpace(name); name != "" {
-				extra = append(extra, name)
-			}
-		}
-	}
-	return extra
-}
-
-// resolveAgentDetectInterval picks the auto-detector's poll interval and, with
-// it, whether auto-detection runs at all. An explicit enable/disable from config
-// wins; then an explicit positive interval wins; a negative interval disables it;
-// a zero interval falls back to the TUIOS_AGENT_DETECT_SECONDS environment
-// override (0 or less there disables it), and finally to the default. A returned
-// zero means auto-detection is off.
-func resolveAgentDetectInterval(enabled *bool, cfg time.Duration) time.Duration {
-	if enabled != nil && !*enabled {
-		return 0
-	}
-	if enabled == nil {
-		if v := strings.TrimSpace(os.Getenv("TUIOS_AGENT_AUTODETECT")); v != "" {
-			switch strings.ToLower(v) {
-			case "0", "false", "no", "off":
-				return 0
-			}
-		}
-	}
-	if cfg > 0 {
-		return cfg
-	}
-	if cfg < 0 {
-		return 0
-	}
-	if s := os.Getenv("TUIOS_AGENT_DETECT_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-			if n <= 0 {
-				return 0
-			}
-			return time.Duration(n) * time.Second
-		}
-	}
-	return defaultAgentDetectInterval
-}
-
-// agentMonitor periodically resolves the foreground process of every pane and
-// marks or clears a running agent, so the status glyph appears without the user
-// running set-agent-state. It is strictly subordinate to explicit reports and to
-// the stall heuristic (see Session.applyAgentDetection). It exits when the daemon
-// context is cancelled, and does nothing at all when auto-detection is disabled.
-func (d *Daemon) agentMonitor() {
-	if d.agentDetectInterval <= 0 {
-		return
-	}
-	ticker := time.NewTicker(d.agentDetectInterval)
-	defer ticker.Stop()
-	quietTicks := detectQuietTicks(d.agentDetectInterval)
-
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-ticker.C:
-			reg := d.agentMatcher.registry
-			now := time.Now().UnixNano()
-			for _, sess := range d.manager.AllSessions() {
-				due := func(ptyID string) bool {
-					pty := sess.GetPTY(ptyID)
-					return pty == nil || pty.detectScanDue(now, quietTicks)
-				}
-				sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, due)
-				// The transcript joins ride this tick rather than one of their
-				// own. It runs only for a pane already known to be running a
-				// harness that has a transcript and that has no join yet, so a
-				// session that is fully joined, or that runs no agent at all,
-				// does nothing here.
-				sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
-			}
-		}
-	}
-}
-
-// paneAgentIdentifier reports the working directory and build version of the
-// agent in a pane, which is what a searched transcript candidate is checked
-// against before it is believed.
-func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) (string, string) {
-	resolve := d.foregroundResolver(sess)
-	return func(ptyID string) (string, string) {
-		info, running := resolve(ptyID)
-		if !running {
-			return "", ""
-		}
-		// The agent's own process, not the wrapper above it: a transcript is
-		// checked against the agent's directory and build, and a shell that
-		// launched it has neither.
-		if det, ok := d.agentMatcher.identifyDetail(info); ok {
-			info = det.proc
-		}
-		return paneAgentIdentity(info)
-	}
-}
-
-// foregroundResolver returns the resolve function the agent detector and the
-// output-driven exit probe share: the foreground process of a pane's controlling
-// terminal, or not-running when the PTY is gone or has exited.
-func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroundInfo, bool) {
-	return func(ptyID string) (foregroundInfo, bool) {
-		pty := sess.GetPTY(ptyID)
-		if pty == nil || pty.IsExited() {
-			return foregroundInfo{}, false
-		}
-		// A pane whose process is on another machine is asked about there.
-		// Reading a pid here would read nothing, because there is no process
-		// on this machine, and every tier that starts from the foreground
-		// process would give up.
-		//
-		// The answer arrives in the same struct the local read produces, so
-		// nothing downstream knows or cares which machine looked: the rules,
-		// the manifests and the user's configuration stay here, with the
-		// window. See remotePane.Foreground.
-		if info, running, remote := pty.remoteForeground(); remote {
-			return info, running
-		}
-		shellPID := pty.ShellPID()
-		info, running := foregroundProcess(shellPID)
-		// Stamped after the resolve, and outside the running check, because the
-		// shell pid is a fact about the pane rather than about what the pane is
-		// running: foregroundProcess reports not-running whenever it cannot read
-		// the foreground group, and the shell is alive either way. See
-		// WindowState.ShellPID.
-		info.shellPID = shellPID
-		return info, running
-	}
-}
-
-// stallMonitor periodically applies the agent-state output-stall heuristic to
-// every live session, demoting panes that reported working but have gone quiet
-// to idle after the screen tier has had a last look at them. It is the fallback
-// for agents that never report their own state and is strictly secondary to
-// explicit reports (see Session.applyStallHeuristic). It exits when the daemon
-// context is cancelled, and does nothing at all when the heuristic is disabled.
-func (d *Daemon) stallMonitor() {
-	if d.agentStallTimeout <= 0 {
-		return
-	}
-	// Tick often enough to demote within a fraction of the timeout, but never
-	// spin: at least once a second, at most once every ten.
-	interval := min(max(d.agentStallTimeout/4, time.Second), 10*time.Second)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-ticker.C:
-			now := time.Now()
-			reg := d.agentMatcher.registry
-			for _, sess := range d.manager.AllSessions() {
-				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
-					if pty := sess.GetPTY(ptyID); pty != nil {
-						return pty.LastOutput()
-					}
-					return 0
-				}, func(ptyID string) bool {
-					// The last look before the pane is called idle. A stalled pane
-					// emits nothing, so the scan the output path would have run is
-					// the one that never happens.
-					return sess.scanStalledPane(ptyID, reg)
-				})
-			}
 		}
 	}
 }

@@ -1,31 +1,11 @@
+//go:build !slim
+
 package session
 
 import (
-	"net"
 	"testing"
 	"time"
 )
-
-// attachTUI attaches a TUI client to session over socketPath, which is the
-// daemon's own socket or its link socket, and returns the client.
-func attachTUI(t *testing.T, socketPath, session string) *TUIClient {
-	t.Helper()
-	conn, err := net.DialTimeout("unix", socketPath, 3*time.Second)
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	c := NewTUIClient()
-	c.conn = conn
-	if err := c.handshake("test", 80, 24, nil); err != nil {
-		_ = conn.Close()
-		t.Fatalf("handshake: %v", err)
-	}
-	t.Cleanup(func() { _ = c.Close() })
-	if _, err := c.AttachSession(session, false, 80, 24); err != nil {
-		t.Fatalf("attach: %v", err)
-	}
-	return c
-}
 
 // sendAsHuman sends a message from human to window on conn, with nonce when it
 // is not empty, and returns the send result and the message as a read gives it
@@ -143,30 +123,6 @@ func TestHumanMailOverALinkIsVerifiedAgainstALinkAttach(t *testing.T) {
 	}
 	if _, m := sendAsHuman(t, local, "work", a, remoteTUI.HumanNonce()); humanMark(m) != "claimed" {
 		t.Errorf("a local reply with the link attach's nonce is %s, want claimed", humanMark(m))
-	}
-}
-
-// TestALinkTheHubDidNotVouchForCannotVerify covers the other half of the link
-// rule. A stream the hub did not vouch for arrives on the plain link socket:
-// its caller runs inside one of the hub's panes, or the hub predates the
-// check. An attach through it is issued no nonce, and a reply sent over it
-// with the nonce of a vouched link attach is still a claim, so an agent on the
-// hub cannot borrow the person's standing on this machine.
-func TestALinkTheHubDidNotVouchForCannotVerify(t *testing.T) {
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	plain := dialLink(t, sp)
-
-	plainTUI := attachTUI(t, LinkSocketPath(sp), "work")
-	if n := plainTUI.HumanNonce(); n != "" {
-		t.Errorf("an attach over the plain link socket was issued nonce %q", n)
-	}
-	vouchedTUI := attachTUI(t, LinkHumanSocketPath(sp), "work")
-	if vouchedTUI.HumanNonce() == "" {
-		t.Fatal("an attach over the link-human socket was issued no nonce")
-	}
-	if _, m := sendAsHuman(t, plain, "work", a, vouchedTUI.HumanNonce()); humanMark(m) != "claimed" {
-		t.Errorf("a reply over the plain link socket with a vouched attach's nonce is %s, want claimed", humanMark(m))
 	}
 }
 

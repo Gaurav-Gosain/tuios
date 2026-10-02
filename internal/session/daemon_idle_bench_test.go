@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 // What the daemon costs when nobody is doing anything.

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -82,9 +81,9 @@ func dialTarget(sessionFlag, windowFlag string) (*verbTarget, error) {
 	if err := ensureDaemon(); err != nil {
 		return nil, err
 	}
-	t.client, _, err = session.DialVerbClientThroughHost(host, version)
+	t.client, err = dialVerbThroughHost(host, sessionFlag, windowFlag)
 	if err != nil {
-		return nil, explainTargetConnectError(host, sessionFlag, windowFlag, err)
+		return nil, err
 	}
 	return t, nil
 }
@@ -214,28 +213,6 @@ func markHostRows(raw json.RawMessage) json.RawMessage {
 		return raw
 	}
 	return out
-}
-
-// explainTargetConnectError is explainHostConnectError with the one thing a
-// qualified target adds: an unknown host may be a session on this machine
-// whose name has a colon, and the fix for that is the local: spelling.
-func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) error {
-	explained := explainHostConnectError(host, err)
-	var connect *session.HostConnectError
-	if !errors.As(err, &connect) || connect.Code != session.ErrVerbUnknownHost {
-		return explained
-	}
-	var d *diagnosticError
-	if !errors.As(explained, &d) {
-		return explained
-	}
-	switch {
-	case strings.HasPrefix(sessionFlag, host+":"):
-		d.Extra = append(d.Extra, fmt.Sprintf("For a session on this machine named %q, write -s %q.", sessionFlag, federation.LocalHostName+":"+sessionFlag))
-	case strings.HasPrefix(windowFlag, host+":"):
-		d.Extra = append(d.Extra, fmt.Sprintf("For a window on this machine named %q, write -w %q.", windowFlag, federation.LocalHostName+"::"+windowFlag))
-	}
-	return d
 }
 
 // thisMachine is the name this machine gives itself when it sends something

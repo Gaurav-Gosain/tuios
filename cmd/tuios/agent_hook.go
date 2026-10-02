@@ -1,3 +1,5 @@
+//go:build !slim
+
 package main
 
 import (
@@ -35,12 +37,6 @@ const agentHookHoldMax = 305 * time.Second
 // timedCaller is a verbCaller whose call can wait longer than the default.
 type timedCaller interface {
 	CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error)
-}
-
-// verbCaller is the one method the hook needs from a verb client, so a test
-// can stand in for the daemon.
-type verbCaller interface {
-	Call(verb string, params any) (json.RawMessage, error)
 }
 
 // agentHookOptions are the flags of tuios agent-hook.

@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -14,29 +16,6 @@ import (
 // connection to its own daemon to turn it into a connection to another
 // machine's daemon. TUIClient.ConnectThroughHost and DialVerbClientThroughHost
 // both start here and then carry on exactly as they would on a local socket.
-
-// HostConnectionInfo is what the local daemon said about the host as it opened
-// the connection. The version and protocol are what the host reported at the
-// link handshake, carried for a message, never trusted for a decision.
-type HostConnectionInfo struct {
-	Host          string `json:"host"`
-	DaemonVersion string `json:"daemon_version"`
-	Protocol      int    `json:"protocol"`
-}
-
-// HostConnectError reports a connection to a host that the local daemon could
-// not open. Code is the daemon's stable error code, so a caller can tell an
-// unknown name from a host that is down, and Host names the machine.
-type HostConnectError struct {
-	Host    string
-	Code    string
-	Message string
-	Hint    *VerbHint
-}
-
-func (e *HostConnectError) Error() string {
-	return e.Message
-}
 
 // maxHostConnectReply bounds the local daemon's reply line. The local daemon is
 // trusted, and a bound costs nothing.

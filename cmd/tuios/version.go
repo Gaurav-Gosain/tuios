@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -12,7 +13,16 @@ import (
 // report that does not say which emulator produced it cannot be placed.
 func versionReport() string {
 	rev, when, dirty := vcsBuildInfo()
-	return formatVersion(version, commit, date, builtBy, rev, when, dirty)
+	return formatVersion(editionVersion(version), commit, date, builtBy, rev, when, dirty)
+}
+
+// editionVersion adds the edition to the version, so tuios-slim says "slim"
+// in its first line. The full build has no edition and prints v unchanged.
+func editionVersion(v string) string {
+	if edition.Name == "" {
+		return v
+	}
+	return v + " " + edition.Name
 }
 
 // formatVersion fills the placeholders the release ldflags would have set with

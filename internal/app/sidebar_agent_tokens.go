@@ -513,3 +513,9 @@ func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, keep []bool, base
 
 // sidebarAgentRowSpec is the spec in force, for callers outside the render.
 func (m *OS) sidebarAgentRowSpec() *config.SidebarAgentRowSpec { return &m.Settings.SidebarAgentRow }
+
+// The need words the safer approvals add to approval and question.
+const (
+	inboxWordPlan  = "plan"
+	inboxWordRisky = "risky"
+)

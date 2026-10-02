@@ -202,3 +202,8 @@ func linkEditor() string {
 	}
 	return "vi"
 }
+
+// IsRemoteClient reports whether this process is running beside the daemon
+// with the user at the far end of a network, rather than on the user's own
+// machine. It gates everything that would otherwise act on the wrong desktop.
+func (m *OS) IsRemoteClient() bool { return m.RemoteClient }

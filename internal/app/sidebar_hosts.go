@@ -1063,3 +1063,30 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	}
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }
+
+// inboxWait is how long an item has waited, in at most three cells.
+func inboxWait(since int64, now time.Time) string {
+	if since <= 0 {
+		return "?"
+	}
+	d := max(now.Sub(time.Unix(0, since)), 0)
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(d.Seconds())) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	default:
+		return strconv.Itoa(int(d.Hours())/24) + "d"
+	}
+}
+
+// inboxSeen is when a machine that cannot be reached was last heard from, as
+// the Inbox and the rail say it: "seen 3m ago", or "offline" when it never was.
+func inboxSeen(seenAt int64, now time.Time) string {
+	if seenAt <= 0 {
+		return "offline"
+	}
+	return "seen " + inboxWait(seenAt, now) + " ago"
+}

@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -24,11 +26,6 @@ import (
 // than what the same caller can already do with new-window and a command, so
 // neither widens a link or pane caller's reach. clone is still checked
 // against the link policy's open capability below.
-
-// ErrVerbRepoNotFound reports a repo_url that matches no checkout on this
-// machine, and no clone was asked for. Its remedy is clone, a repos_root, or
-// a directory, which is why it does not share a code with git_failed.
-const ErrVerbRepoNotFound = "repo_not_found"
 
 // Link capabilities the repository and worktree verbs check at the point they
 // act, on top of the check every verb gets before its handler runs

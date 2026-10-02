@@ -21,6 +21,8 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 // never per frame.
 func (m *OS) rebuildPaletteItems() {
 	static := GetCommandPaletteItems(&m.Settings)
+	// The entries of features tuios-slim leaves out. See edition_slim.go.
+	static = slimPaletteItems(static)
 	// The agent entries wait until an agent has been seen, like the prefix
 	// menu's Inbox lines. Their prefix keys work either way.
 	if !m.agentsSeen() {

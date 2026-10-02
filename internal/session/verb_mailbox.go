@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -46,12 +48,6 @@ const (
 	agentMsgAsk = "ask"
 )
 
-// AgentInboxHuman is the reserved inbox id of the person at the attached
-// client. It is the one address in the mailbox that is not a window: a message
-// to it is read from the client's mail overlay, and a reply from there is sent
-// from it. It cannot be asked, because there is no keyboard behind it.
-const AgentInboxHuman = "human"
-
 // Caps. Every one of these exists because an unread queue with no bound is a
 // memory leak with a friendly name.
 const (
@@ -86,140 +82,10 @@ const (
 	agentMsgMaxHostName = 64
 )
 
-// AgentOriginLink is the Origin of a message that arrived over a link. It is
-// the only value Origin takes: a message from this machine has none.
-const AgentOriginLink = "link"
-
 var (
 	errAttachNotAbsolute = errors.New("attachment path must be absolute")
 	errAttachIsDirectory = errors.New("attachment path is a directory")
 )
-
-// AgentAttachment is a reference to something a message points at, never the
-// bytes themselves. The queue holds a path and the producer keeps the file.
-//
-// Copying is the expensive part: a megabyte image sitting in an in-memory ring
-// nobody reads is the unbounded-growth problem with a bigger constant. Kitty's
-// graphics protocol reached the same conclusion, which is why its t=f and t=s
-// media pass a path or a shared-memory name instead of the pixels.
-//
-// The consequence is stated rather than hidden: the file belongs to the
-// producer, the queue never copies it, and a reader that comes late may find it
-// gone. Missing records that, resolved at read time rather than trusted from
-// send time.
-type AgentAttachment struct {
-	// Kind is the closed set a reader switches on: image or file. It is small on
-	// purpose. Extending it later is adding a name; an untyped blob every reader
-	// has to sniff can never be narrowed again.
-	Kind string `json:"kind"`
-	// Path is absolute and host-local. Sender and reader are both processes on
-	// the daemon's host, so a path means the same thing to both.
-	Path      string `json:"path"`
-	MediaType string `json:"media_type,omitempty"`
-	Bytes     int64  `json:"bytes,omitempty"`
-	Missing   bool   `json:"missing,omitempty"`
-	// Stashed says the daemon owns this file rather than the sender: it was put
-	// in the session's stash, so it is there until the session ends. It is
-	// resolved at send time, when the daemon is already looking at the path, and
-	// it exists so a reader can tell the two kinds of reference apart. A sender-
-	// owned path may be gone by the time it is read; a stashed one may not.
-	Stashed bool `json:"stashed,omitempty"`
-}
-
-// AgentMessage is one entry in a session's ring.
-type AgentMessage struct {
-	ID      uint64 `json:"id"`
-	Kind    string `json:"kind"`
-	Session string `json:"session"`
-	// From is the window id the sender claimed. It is a claim rather than an
-	// identity: the daemon's socket carries no per-pane credential, so any
-	// process that can open it can say it is any window. The loop guards below
-	// are built to stop an accident, not an adversary, and the skill says so.
-	From      string `json:"from,omitempty"`
-	FromLabel string `json:"from_label,omitempty"`
-	// To is the recipient window id, empty for a notice.
-	To      string `json:"to,omitempty"`
-	ToLabel string `json:"to_label,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Text    string `json:"text"`
-
-	// ReplyTo is the id of the message this one answers, zero when it answers
-	// nothing. It is what "acked" means between two agents: no transport
-	// receipt says anything about whether the other side understood, and a
-	// reply does.
-	ReplyTo uint64 `json:"reply_to,omitempty"`
-	// ThreadID is the id of the message the thread started from, and a message
-	// that starts one carries its own id here. It is resolved once, at send
-	// time, rather than walked from ReplyTo at read time: the ring is bounded,
-	// so a walk would stop finding the root the moment the root aged out, and
-	// the same thread would answer to two different ids depending on when it
-	// was read.
-	//
-	// It is not a second namespace. A thread id is a message id, so the number
-	// send prints is the number a filter takes.
-	ThreadID uint64 `json:"thread_id"`
-	// ReplyToMissing records that ReplyTo named a message the ring no longer
-	// held when this one was threaded, so the thread was rooted at the parent's
-	// own id instead of the parent's thread. Refusing the reply would be worse
-	// (a bounded ring forgets, and a reply to something it forgot is still a
-	// reply), and silently starting a fresh thread would be worse still: it
-	// would lose the one fact the reader wanted. This says which happened.
-	ReplyToMissing bool `json:"reply_to_missing,omitempty"`
-
-	Attachments []AgentAttachment `json:"attachments,omitempty"`
-	SentAt      int64             `json:"sent_at"`
-	// ReadAt is zero while the message is unread. Reading marks rather than
-	// consumes: a consumed message leaves nothing behind for a human to look at
-	// afterwards, and the cap already bounds the ring.
-	ReadAt int64 `json:"read_at,omitempty"`
-	// SettledBy is set on an ask record only: which signal ended the wait, as
-	// ask-agent reported it ("agent-state", "idle", "timeout", ...).
-	SettledBy string `json:"settled_by,omitempty"`
-	// Origin is AgentOriginLink when the send arrived on the daemon's link
-	// socket, which is to say from another machine, and empty when it came
-	// from a process on this one. It is set by the daemon from the connection
-	// the send arrived on and never from anything in the request, so a
-	// message cannot claim to be local. OriginHost is what the sender said
-	// its machine is called: a claim, bounded and shown as one. A reader,
-	// human or agent, is told both, because who wrote a message is the
-	// first thing that decides how much of it to believe.
-	Origin     string `json:"origin,omitempty"`
-	OriginHost string `json:"origin_host,omitempty"`
-	// VerifiedHuman and ClaimedHuman say how far a message from human can be
-	// believed, and at most one is set. VerifiedHuman means the send carried
-	// the nonce of a client attached to this session at the time, which is the
-	// mail overlay's reply path. ClaimedHuman means the send said from=human
-	// and carried no such nonce: anything that can open the socket can do that,
-	// so it is a claim. Both are set by the daemon at send time and never taken
-	// from the request. Both false on a message not from human, and on one
-	// stored by an older daemon, which verified nothing.
-	VerifiedHuman bool `json:"verified_human,omitempty"`
-	ClaimedHuman  bool `json:"claimed_human,omitempty"`
-	// Undeliverable is resolved at read time and means the recipient window is
-	// gone. A message is never re-homed onto a new pane that happens to carry
-	// the old one's name, because that pane is a different agent holding
-	// different context.
-	Undeliverable bool `json:"undeliverable,omitempty"`
-	// WasUnread means this read is the first one to see the message. It exists
-	// because ReadAt cannot answer that question on the call that sets it: a
-	// marking read stamps ReadAt before returning, so every message it hands
-	// back looks read, and a reader could not tell the one that just arrived
-	// from the twenty it had already seen.
-	WasUnread bool `json:"was_unread,omitempty"`
-
-	// Held is set on mail from another machine that this machine's link
-	// policy (hold_mail) put in the person's inbox instead of the recipient's.
-	// HeldFor and HeldForLabel are the window it was addressed to, empty for
-	// a notice to the session. Released is set once the person passed it on
-	// with release-agent-message, and ReleasedFrom on the copy that was
-	// delivered, naming the held message. All are set by the daemon and
-	// never taken from a request.
-	Held         bool   `json:"held,omitempty"`
-	HeldFor      string `json:"held_for,omitempty"`
-	HeldForLabel string `json:"held_for_label,omitempty"`
-	Released     bool   `json:"released,omitempty"`
-	ReleasedFrom uint64 `json:"released_from,omitempty"`
-}
 
 // takeHeld marks a held message released and read, and returns it. It
 // reports false for an id that is not a held message the ring still holds, or
@@ -703,15 +569,6 @@ func (b *agentBus) openAskEdges() []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// shortWindowID renders a window id the way list-windows does, so an error
-// message and a listing name the same pane the same way.
-func shortWindowID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
 }
 
 // classifyAttachment fills in the kind, media type and size of a referenced

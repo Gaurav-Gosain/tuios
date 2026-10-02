@@ -194,6 +194,9 @@ type TUIClient struct {
 	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
 	// WatchDir.
 	dirWatchSupported bool
+	// daemonEdition is the edition the daemon's welcome named: "slim" for
+	// tuios-slim, empty for the full build. See DaemonEdition.
+	daemonEdition string
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
 	// multiClientMu like the other push handlers.
 	dirChangedHandler func(dir string)
@@ -381,6 +384,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
 	c.dirWatchSupported = welcome.DirWatch
+	c.daemonEdition = welcome.Edition
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
@@ -392,6 +396,11 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 
 	return nil
 }
+
+// DaemonEdition is the edition the daemon named when this client connected:
+// "slim" for tuios-slim, empty for the full tuios or a daemon that predates
+// editions.
+func (c *TUIClient) DaemonEdition() string { return c.daemonEdition }
 
 // noteDaemonBuild records the daemon's build beside this client's, so a caller
 // can say plainly that the two do not match. A build string of "dev" on both

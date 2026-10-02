@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -5,14 +7,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
@@ -57,78 +57,6 @@ import (
 // the restore that follows every start opens it again from the window's
 // recorded conversation, which is where the fact lives.
 
-// Attention kinds. They are wire values: the kind field of an item and the
-// kind filter of list-attention.
-const (
-	AttentionApproval = "approval"
-	AttentionQuestion = "question"
-	AttentionMail     = "mail"
-	AttentionErrored  = "errored"
-	AttentionFinished = "finished"
-	// AttentionResume is a restored pane whose agent conversation can be
-	// resumed. See agent_resume.go.
-	AttentionResume = "resume"
-	// AttentionOutbox is mail this machine holds for another machine whose
-	// link is down, and deliveries that machine refused, one item per
-	// machine. See host_outbox.go.
-	AttentionOutbox = "outbox"
-	// AttentionAsk is a question an agent or a script put to the person with
-	// ask-human, with the answers it takes in Options. It closes when the
-	// person answers or dismisses it, or the asking pane closes. See
-	// ask_human.go.
-	AttentionAsk = "ask"
-	// AttentionPlan is a plan an agent in plan mode asks the person to
-	// approve before it starts editing, held by the harness hook like an
-	// approval. It shares the pane's blocking key with approval and question,
-	// so it closes when the pane leaves needs_input, and the pane's
-	// blocked_by stays approval for every consumer that reads it.
-	AttentionPlan = "plan"
-)
-
-// AttentionKindNames lists the kinds in the order the Inbox groups them: what
-// blocks an agent first, then what an agent said, then what went wrong, then
-// what a restart left to bring back, then what finished, then mail still
-// waiting to leave. list-attention sorts by it. A plan follows the approvals
-// it is a larger kind of, and an ask sits with them: something is waiting on
-// the answer.
-var AttentionKindNames = []string{AttentionApproval, AttentionPlan, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
-
-// Close reasons an attention event carries on its closing action.
-const (
-	// AttentionClosedResolved: the fact behind the item stopped being true,
-	// such as the pane leaving needs_input.
-	AttentionClosedResolved = "resolved"
-	// AttentionClosedSeen: an attached client focused the pane.
-	AttentionClosedSeen = "seen"
-	// AttentionClosedRead: the person's mail in the thread was read.
-	AttentionClosedRead = "read"
-	// AttentionClosedDismissed: a verified human dismissed it.
-	AttentionClosedDismissed = "dismissed"
-	// AttentionClosedWindow: the pane the item was about closed.
-	AttentionClosedWindow = "window_closed"
-	// AttentionClosedSession: the session the item was in ended.
-	AttentionClosedSession = "session_closed"
-	// AttentionClosedEvicted: the queue was over its cap and this was the oldest.
-	AttentionClosedEvicted = "evicted"
-	// AttentionClosedAnswered: the person answered a held approval from the
-	// Inbox. The closing item carries the answer and who gave it.
-	AttentionClosedAnswered = "answered"
-	// AttentionClosedHostRemoved: the item came from a linked host that was
-	// taken out of the [hosts] table.
-	AttentionClosedHostRemoved = "host_removed"
-	// AttentionClosedSnoozed: the person snoozed the item. It opens again
-	// with the same id and since when the snooze ends or its fact changes.
-	// A client that predates snoozing reads it as any other close.
-	AttentionClosedSnoozed = "snoozed"
-)
-
-// Actions an attention event carries.
-const (
-	AttentionOpened  = "open"
-	AttentionUpdated = "update"
-	AttentionClosed  = "close"
-)
-
 // attentionMaxItems bounds the queue. One item per pane per class and one per
 // mail thread is already bounded by the panes and the ring, so this is only a
 // backstop against a pathological number of sessions.
@@ -142,113 +70,6 @@ const attentionMaxSummary = 160
 // attentionSaveDelay is how long a change waits before the queue is written,
 // so a burst of transitions costs one write.
 const attentionSaveDelay = 500 * time.Millisecond
-
-// AttentionItem is one thing waiting for the person.
-type AttentionItem struct {
-	// ID is stable for the item's life and unique across daemon restarts on
-	// this machine. It is what dismiss-attention takes.
-	ID string `json:"id"`
-	// Kind is one of AttentionKindNames.
-	Kind string `json:"kind"`
-	// Host is the machine the item is on, empty for this one. It is here so a
-	// hub can merge items from linked hosts into the same list; this daemon
-	// only produces its own.
-	Host string `json:"host,omitempty"`
-	// Session is the session name, the one every verb addresses it by.
-	Session string `json:"session"`
-	// Window is the pane the item is about: the blocked or finished agent, or
-	// the pane that sent the mail. Empty when there is none.
-	Window string `json:"window,omitempty"`
-	// Workspace is the pane's workspace when the item last changed.
-	Workspace int `json:"workspace,omitempty"`
-	// Harness is the harness id, when one is known.
-	Harness string `json:"harness,omitempty"`
-	// Name is what to call the pane: its name, else its title, else the
-	// sender's label for mail.
-	Name string `json:"name,omitempty"`
-	// Summary is one line: the question a blocked agent asked, the error, the
-	// note a finished turn carried, or the mail's subject. Control characters
-	// are removed, likely secrets are masked and it is cut to 160 bytes.
-	Summary string `json:"summary,omitempty"`
-	// Options are the answers reply-approval takes for this item, set only
-	// while RequestID is: once, always and deny, or the subset the harness can
-	// honour. See approvals.go.
-	Options []string `json:"options,omitempty"`
-	// RequestID is set while a harness hook is holding its permission prompt
-	// for an answer from the Inbox, and names that request to reply-approval.
-	// It is cleared when the hold ends, whatever ended it, and the item then
-	// stays open as long as the pane is still blocked.
-	RequestID string `json:"request_id,omitempty"`
-	// AlwaysScope is what answering always allows from now on, one rule per
-	// line, set only while RequestID is and Options holds always. A client
-	// shows it beside the key; the daemon refuses to offer always without it.
-	AlwaysScope []string `json:"always_scope,omitempty"`
-	// Expires is when the hold ends, in unix nanoseconds, set with RequestID.
-	Expires int64 `json:"expires,omitempty"`
-	// Answer and AnsweredBy are set only on the item a close event with reason
-	// answered carries: the decision the person made and the client they made
-	// it from, so every other client can say it was answered elsewhere.
-	Answer     string `json:"answer,omitempty"`
-	AnsweredBy string `json:"answered_by,omitempty"`
-	// Since is when the item started waiting, in unix nanoseconds. An update
-	// keeps it, so the wait time an Inbox row shows is the whole wait.
-	Since int64 `json:"since"`
-	// Seq is the queue's revision when the item last changed. It only ever
-	// goes up, across restarts too.
-	Seq uint64 `json:"seq"`
-	// Thread is the mail thread, for a mail item.
-	Thread uint64 `json:"thread,omitempty"`
-	// HeldID is set on a mail item whose newest message is mail from another
-	// machine held for the person (hold_mail): the message id
-	// release-agent-message takes. HeldFor is the name of the window it was
-	// addressed to, empty for a notice to the session.
-	HeldID  uint64 `json:"held_id,omitempty"`
-	HeldFor string `json:"held_for,omitempty"`
-	// ForHost is set on an outbox item: the machine the mail waits for. It is
-	// not Host, which marks an item mirrored from another machine; an outbox
-	// item is this machine's own.
-	ForHost string `json:"for_host,omitempty"`
-	// Count is how many unread messages a mail item stands for, or how many
-	// turns a finished item stands for.
-	Count int `json:"count,omitempty"`
-	// CompletionSeq is the pane's completion_seq when a finished item last
-	// changed. Focusing the pane at that count or later closes it.
-	CompletionSeq uint64 `json:"completion_seq,omitempty"`
-	// Closed is the close reason, set only on the item an attention event
-	// with action close carries.
-	Closed string `json:"closed,omitempty"`
-	// Stale is set on an item from another machine whose link is down. The
-	// item is what that machine said last, and nobody here can check it now.
-	// SeenAt is when this daemon last heard from that machine, in unix
-	// nanoseconds. Both are empty for an item of this machine.
-	Stale  bool  `json:"stale,omitempty"`
-	SeenAt int64 `json:"seen_at,omitempty"`
-
-	// SnoozedUntil is when a snoozed item opens again, in unix nanoseconds,
-	// set on an item listed with include_snoozed. -1 means it waits until its
-	// fact changes. Zero on an item that is not snoozed.
-	SnoozedUntil int64 `json:"snoozed_until,omitempty"`
-	// MarkedUnread is set on a finished item the person reopened with mark
-	// unread after looking at the pane.
-	MarkedUnread bool `json:"marked_unread,omitempty"`
-	// Risk names the risk rules an approval's command matched, set on an
-	// approval or plan item whose request did. An allow from the Inbox then
-	// needs risk_ack naming exactly these. See internal/risk.
-	Risk []string `json:"risk,omitempty"`
-	// DenyMessage is set when the harness takes a reason with a deny, so the
-	// Inbox can offer to type one.
-	DenyMessage bool `json:"deny_message,omitempty"`
-	// PlanLines and PlanSHA describe a plan item's text, which is served by
-	// get-approval rather than carried here: how many lines it has, and the
-	// digest an answer names so it applies only to the plan that was shown.
-	PlanLines int    `json:"plan_lines,omitempty"`
-	PlanSHA   string `json:"plan_sha,omitempty"`
-
-	// remoteSeq is the Seq the machine the item came from gave it, for an
-	// item mirrored from a linked host. It orders that machine's changes,
-	// which can reach this daemon out of order around a relisting.
-	remoteSeq uint64
-}
 
 // attentionStore is the daemon's queue. Its lock is its own and nothing is
 // called under it but the event hub, whose lock is a leaf, so the session event
@@ -937,10 +758,6 @@ func (q attentionQuery) matchHost(itemHost string) bool {
 	}
 }
 
-// localAttentionHost is the host filter that names this machine. It is the
-// name the listings and the rail give it.
-const localAttentionHost = "local"
-
 // list returns the open items in Inbox order, the counts per kind over the
 // whole queue, and the hub seq the listing is current to. The seq is read under
 // the store lock, which every attention event is published under, so every
@@ -990,29 +807,6 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 		seq = a.currentSeq()
 	}
 	return out, counts, seq
-}
-
-// SortAttention puts items in Inbox order: by kind in AttentionKindNames
-// order, then oldest first, then by id so the order is total.
-func SortAttention(items []AttentionItem) {
-	slices.SortFunc(items, func(x, y AttentionItem) int {
-		if c := cmp.Compare(AttentionKindRank(x.Kind), AttentionKindRank(y.Kind)); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(x.Since, y.Since); c != 0 {
-			return c
-		}
-		return cmp.Compare(x.Seq, y.Seq)
-	})
-}
-
-// AttentionKindRank is a kind's place in the Inbox order. An unknown kind
-// sorts last.
-func AttentionKindRank(kind string) int {
-	if i := slices.Index(AttentionKindNames, kind); i >= 0 {
-		return i
-	}
-	return len(AttentionKindNames)
 }
 
 // attentionFile is the on-disk form of the queue.
@@ -1181,65 +975,6 @@ func (a *attentionStore) load(path string, live func(session, window string) boo
 	if opened {
 		a.changedLocked()
 	}
-}
-
-// attentionSecret matches the shapes a command line leaks a credential in:
-// a key=value or key: value whose key names a secret, and an Authorization
-// bearer token. It is a net for the common case, not a guarantee, which is why
-// the summary is also kept short.
-var attentionSecret = regexp.MustCompile(`(?i)\b((?:[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)s?)\s*[=:]\s*|bearer\s+)("[^"]*"|'[^']*'|[^\s"']+)`)
-
-// attentionSecretWords are the words attentionSecret keys on, lower case. A
-// summary with none of them cannot match, and most summaries have none, so the
-// regular expression only runs on the ones that might.
-var attentionSecretWords = []string{"token", "secret", "passw", "key", "credential", "bearer"}
-
-// attentionMaySecret reports whether s holds any of attentionSecretWords.
-func attentionMaySecret(s string) bool {
-	lower := strings.ToLower(s)
-	for _, w := range attentionSecretWords {
-		if strings.Contains(lower, w) {
-			return true
-		}
-	}
-	return false
-}
-
-// attentionText is text an agent reported, made safe to show and to keep: one
-// line, no control characters, likely secrets masked, at most limit bytes.
-func attentionText(s string, limit int) string {
-	var b strings.Builder
-	b.Grow(min(len(s), limit+8))
-	space := false
-	for _, r := range s {
-		switch {
-		case r == '\n' || r == '\t' || r == '\r' || r == ' ':
-			space = true
-			continue
-		case r < 0x20 || (r >= 0x7f && r < 0xa0):
-			continue
-		}
-		if space && b.Len() > 0 {
-			b.WriteByte(' ')
-		}
-		space = false
-		b.WriteRune(r)
-		if b.Len() > limit*4 {
-			break
-		}
-	}
-	out := b.String()
-	if attentionMaySecret(out) {
-		out = attentionSecret.ReplaceAllString(out, "${1}[redacted]")
-	}
-	if len(out) <= limit {
-		return out
-	}
-	cut := limit
-	for cut > 0 && !utf8.RuneStart(out[cut]) {
-		cut--
-	}
-	return strings.TrimSpace(out[:cut])
 }
 
 // renameSession moves every item of the session named old to newName, open

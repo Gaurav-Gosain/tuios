@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -135,14 +137,6 @@ type hostedResume struct {
 	Token  string `json:"token"`
 	Offset int64  `json:"offset"`
 }
-
-// hostedPaneBounds are the sizes a spawn is clamped to. A pane arrives sized by
-// another machine's layout and the number is not checked by anything between
-// there and here, so it is treated as input rather than as fact.
-const (
-	hostedPaneMinDim = 1
-	hostedPaneMaxDim = 10000
-)
 
 // registerHostedPane spawns the process and records it under a fresh id. The
 // id is what resize-pane addresses, because a resize arrives on the link's

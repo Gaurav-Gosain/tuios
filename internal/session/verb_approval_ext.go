@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -16,34 +18,10 @@ import (
 // another session is not found. reply-approval and respond keep their own
 // rules: the person's nonce, or the respond grant for respond.
 
-// ErrVerbRiskUnacknowledged reports an allow for an approval that matched a
-// risk rule, sent without risk_ack naming exactly the rules it matched.
-// Nothing was answered.
-const ErrVerbRiskUnacknowledged = "risk_unacknowledged"
-
 // getApprovalParams are what get-approval takes.
 type getApprovalParams struct {
 	RequestID string `json:"request_id"`
 	Session   string `json:"session"`
-}
-
-// ApprovalDetail is the get-approval result as a client decodes it. The
-// daemon writes the same fields in verbGetApproval.
-type ApprovalDetail struct {
-	RequestID   string     `json:"request_id"`
-	Kind        string     `json:"kind"`
-	Session     string     `json:"session"`
-	Window      string     `json:"window"`
-	Summary     string     `json:"summary"`
-	Tool        string     `json:"tool"`
-	Target      string     `json:"target"`
-	Options     []string   `json:"options"`
-	AlwaysScope []string   `json:"always_scope"`
-	Plan        string     `json:"plan"`
-	PlanSHA     string     `json:"plan_sha"`
-	Risk        []risk.Hit `json:"risk"`
-	DenyMessage bool       `json:"deny_message"`
-	Untrusted   bool       `json:"untrusted"`
 }
 
 // holdDetail copies a running hold and the scope its item shows.

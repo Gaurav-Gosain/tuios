@@ -785,3 +785,11 @@ func newRestoredEmulator(width, height, scrollback int, cwd string, h *savedHist
 	}
 	return t
 }
+
+// hostedPaneBounds are the sizes a spawn is clamped to. A pane arrives sized by
+// another machine's layout and the number is not checked by anything between
+// there and here, so it is treated as input rather than as fact.
+const (
+	hostedPaneMinDim = 1
+	hostedPaneMaxDim = 10000
+)

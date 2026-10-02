@@ -2,8 +2,6 @@ package config
 
 import (
 	"slices"
-
-	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
 
 // ScreensaverConfig is the [screensaver] section: whether the screen animates
@@ -29,9 +27,8 @@ const (
 )
 
 // ScreensaverEffects is what the effect option accepts: the random choice plus
-// every effect the engine has registered. Deriving it from the engine is what
-// stops the list here and the list there drifting apart.
-var ScreensaverEffects = append([]string{ScreensaverRandomEffect}, tfx.Names()...)
+// every effect name. See screensaver_effects_full.go and _slim.go.
+var ScreensaverEffects = append([]string{ScreensaverRandomEffect}, screensaverEffectNames()...)
 
 // retiredScreensaverEffects are names that used to be accepted and are not any
 // more. A config naming one still loads: the name maps to its replacement

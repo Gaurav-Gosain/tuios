@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !js && !slim
 
 package app
 
@@ -6,7 +6,7 @@ import "charm.land/ssh"
 
 // SSHConn is the SSH session a `tuios ssh` client is served over. It is its
 // own name so the browser build, which has no SSH server, can leave the SSH
-// library out of its download. See ssh_conn_js.go.
+// library out of its download. See ssh_conn_none.go.
 type SSHConn = ssh.Session
 
 // sshClientTerm is the TERM the SSH client sent in its pty request.

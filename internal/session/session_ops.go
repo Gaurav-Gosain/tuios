@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
 
@@ -343,9 +342,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		if detectIn == "" {
 			detectIn, _ = pty.ProcessCwd()
 		}
-		if info, ok := worktree.Detect(detectIn); ok {
-			detected = &WorktreeInfo{Info: info}
-		}
+		detected = detectWorktree(detectIn)
 	}
 
 	var win WindowState
@@ -479,8 +476,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		// The window is gone, so nothing owns its agent state any more. The
 		// detector sweeps stale claims on its own tick too, but only when it is
 		// running, and a claim can now come from a source that is not the detector.
-		delete(s.agentClaims, closed.ID)
-		delete(s.agentHarnessPIDs, closed.ID)
+		s.forgetAgentClaimLocked(closed.ID)
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {

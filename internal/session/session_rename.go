@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 )
 
 // A session has one name, and the daemon owns it. rename-session changes it:
@@ -126,5 +128,17 @@ func StaleDaemonError(verb string, err error) error {
 	if _, known := verbRegistry[verb]; !known {
 		return nil
 	}
+	if IsSlimDaemonError(err) {
+		return nil
+	}
 	return fmt.Errorf("the running tuios daemon is older than this tuios and does not know %s. Run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells", verb)
+}
+
+// IsSlimDaemonError reports whether err is a tuios-slim daemon refusing a
+// verb it leaves out. Such a daemon is not older than the caller, so the fix
+// is the full daemon, not a restart of the same one.
+func IsSlimDaemonError(err error) bool {
+	var call *VerbCallError
+	return errors.As(err, &call) && call.Code == ErrVerbUnknownVerb &&
+		strings.Contains(call.Message, " is not in "+edition.SlimName+".")
 }

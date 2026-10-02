@@ -79,6 +79,7 @@ func NewActionDispatcher() *ActionDispatcher {
 		handlers: make(map[string]ActionHandler),
 	}
 	d.registerHandlers()
+	registerFeatureActions(d)
 	return d
 }
 
@@ -259,10 +260,6 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
-
-	// Tape manager actions
-	d.Register("toggle_tape_manager", handleToggleTapeManager)
-	d.Register("stop_recording", handleStopRecording)
 
 	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
@@ -1122,22 +1119,6 @@ func makeRestoreMinimizedHandler(index int) ActionHandler {
 
 // ============================================================================
 // Tape Manager Action Handlers
-// ============================================================================
-
-func handleToggleTapeManager(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ToggleTapeManager()
-	return o, nil
-}
-
-func handleStopRecording(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
-		o.TapeManagerStopRecording()
-	}
-	return o, nil
-}
-
-// ============================================================================
-// Scrolling Tiling Action Handlers (niri-like)
 // ============================================================================
 
 func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

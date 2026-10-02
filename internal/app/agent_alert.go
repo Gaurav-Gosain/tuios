@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -114,16 +116,6 @@ func (m *OS) flushDueAgentAlerts(now time.Time) {
 		}
 		m.fireAgentAlert(w, p.from, p.to, policy)
 	}
-}
-
-// windowByID finds a live window by id, or nil.
-func (m *OS) windowByID(id string) *terminal.Window {
-	for _, w := range m.Windows {
-		if w != nil && w.ID == id {
-			return w
-		}
-	}
-	return nil
 }
 
 // fireAgentAlert writes the alert to every sink the policy leaves on.

@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -74,18 +76,6 @@ const (
 	resumeShellWait  = 10 * time.Second
 	resumeShellQuiet = 300 * time.Millisecond
 )
-
-// resumeOffer is one pane a restore brought back with a conversation that
-// can be resumed.
-type resumeOffer struct {
-	session   string
-	window    string
-	workspace int
-	name      string
-	harness   string
-	sessionID string
-	argv      []string
-}
 
 // resumeHarnessOf is the harness a window's conversation id belongs to: the
 // one recorded with the id, else, for state written before that was recorded,

@@ -1,4 +1,4 @@
-//go:build unix
+//go:build unix && !slim
 
 package main
 

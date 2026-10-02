@@ -1,9 +1,10 @@
+//go:build !slim
+
 package input
 
 import (
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -20,12 +21,6 @@ func inboxInputOS(t *testing.T) *app.OS {
 		{ID: "2", Kind: session.AttentionApproval, Session: "local", Window: "b", Since: 20},
 		{ID: "1", Kind: session.AttentionQuestion, Session: "local", Window: "a", Since: 10},
 	}
-	return o
-}
-
-func leader(o *app.OS, key tea.KeyPressMsg) *app.OS {
-	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}, o)
-	o, _ = HandleKeyPress(key, o)
 	return o
 }
 

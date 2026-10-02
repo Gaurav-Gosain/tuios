@@ -639,11 +639,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	return []settingsCategory{
+	return slimSettingsCategories([]settingsCategory{
 		appearance, backgrounds, sidebar, selection, dock, behavior,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
 		m.hostsCategory(), tape,
-	}
+	})
 }
 
 // themeItem is the theme row. Hand-written because the value is a name from an
@@ -1280,4 +1280,12 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
 	return m.persistSettings()
+}
+
+// screensaverConfig is the [screensaver] section this client holds.
+func (m *OS) screensaverConfig() config.ScreensaverConfig {
+	if m.UserConfig == nil {
+		return config.ScreensaverConfig{}
+	}
+	return m.UserConfig.Screensaver
 }

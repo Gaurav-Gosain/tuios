@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -23,11 +25,6 @@ import (
 // delete could delete a file another agent's message still names. The only
 // deletions are the session ending, the daemon stopping, and the cap forcing a
 // reclaim, and all three are the daemon's own.
-
-// stashTransferMaxBytes bounds a file that crosses the socket as bytes, in
-// either direction. It is under the per-file cap because the bytes travel
-// base64 in one request or reply line, and that line is capped at 16 MiB.
-const stashTransferMaxBytes = 8 << 20
 
 // verbStashPut copies a file into the session's store and answers with the
 // stored path. With content the bytes come in the request, for a file on

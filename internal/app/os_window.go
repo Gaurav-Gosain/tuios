@@ -1012,3 +1012,13 @@ func (m *OS) GetFocusedWindow() *terminal.Window {
 	}
 	return nil
 }
+
+// windowByID finds a live window by id, or nil.
+func (m *OS) windowByID(id string) *terminal.Window {
+	for _, w := range m.Windows {
+		if w != nil && w.ID == id {
+			return w
+		}
+	}
+	return nil
+}

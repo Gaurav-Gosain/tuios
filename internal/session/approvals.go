@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -57,21 +59,6 @@ import (
 // The holds live in the attention store under its lock, beside the items they
 // belong to, so an item and its hold cannot disagree: closing the item ends the
 // hold, and ending the hold clears the item's request.
-
-// Approval decisions. They are wire values: the decision reply-approval takes
-// and request-approval returns.
-const (
-	// ApprovalOnce allows this one call.
-	ApprovalOnce = "once"
-	// ApprovalAlways allows it and tells the harness to stop asking for calls
-	// like it, in whatever way the harness does that.
-	ApprovalAlways = "always"
-	// ApprovalDeny refuses the call.
-	ApprovalDeny = "deny"
-	// ApprovalAsk is not a decision: it ends the hold with none, so the
-	// harness asks in its pane. It is what going to the pane means.
-	ApprovalAsk = "ask"
-)
 
 // approvalDecisions are the decisions a hold can end with.
 var approvalDecisions = []string{ApprovalOnce, ApprovalAlways, ApprovalDeny}
@@ -838,59 +825,6 @@ func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
 	}
 	d.clientsMu.RUnlock()
 	return slices.ContainsFunc(attached, d.mayActAsHuman)
-}
-
-// peerPlacer places the process on a connection: outside every pane, or in
-// one, named by its window when that can be told.
-type peerPlacer func(cs *connState) (fromPane bool, window string)
-
-// peerPane says whether the process on cs runs inside a pane of this daemon,
-// and which pane when that can be told. See peerPaneWindow.
-func (d *Daemon) peerPane(cs *connState) (bool, string) {
-	if place := d.approvalPeer.Load(); place != nil {
-		return (*place)(cs)
-	}
-	return d.peerPaneWindow(cs)
-}
-
-// peerPaneWindow places the process on cs: outside every pane, or in one pane,
-// found the way resolve-pane finds one (an ancestor that is a pane's shell,
-// then the controlling terminal) and last by the TUIOS_PANE_ID in its
-// environment. A process inside a pane that none of these place gets an empty
-// window, which matches no target, so request-approval fails closed on it.
-func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
-	if !d.connFromPane(cs) {
-		return false, ""
-	}
-	if d.peerChanged(cs) {
-		// The pid no longer names the process that connected.
-		return true, ""
-	}
-	pid := cs.peerPID
-	shells := d.localPaneShells()
-	chain := []int{pid}
-	for cur, depth := pid, 0; depth < paneOriginMaxDepth; depth++ {
-		ppid, _, ok := readProcLineage(cur)
-		if !ok || ppid <= 1 {
-			break
-		}
-		chain = append(chain, ppid)
-		cur = ppid
-	}
-	if m, ok := matchPaneByProcess(shells, 0, chain); ok {
-		return true, m.pane.windowID
-	}
-	if _, tty, ok := readProcLineage(pid); ok && tty != 0 {
-		for _, sh := range shells {
-			if _, shTTY, ok := readProcLineage(sh.shellPID); ok && shTTY == tty {
-				return true, sh.windowID
-			}
-		}
-	}
-	if id, ok := readProcEnvVar(pid, "TUIOS_PANE_ID"); ok && id != "" && d.holdsWindow(id) {
-		return true, id
-	}
-	return true, ""
 }
 
 // watchPeerGone reports when the process on the other end of conn goes away

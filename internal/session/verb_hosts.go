@@ -1,3 +1,5 @@
+//go:build !slim
+
 package session
 
 import (
@@ -25,14 +27,6 @@ import (
 // fails the call. That is section 7's failure model expressed as a result
 // shape, and it is why the result is a list of per-host envelopes rather than a
 // flat list that would have nowhere to put a failure.
-
-// ErrVerbHostUnreachable reports a host that is configured and not answering.
-// It is final: the caller reports it, and it does not retry into another name.
-const ErrVerbHostUnreachable = "host_unreachable"
-
-// ErrVerbUnknownHost reports a host name that is not in the configured table.
-// Also final, and its message names every configured host.
-const ErrVerbUnknownHost = "unknown_host"
 
 // federationVerbBudget bounds how long a host verb may take in total. It is
 // under the CLI's own 30 second read deadline with room to spare, and the work

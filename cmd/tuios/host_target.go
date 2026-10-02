@@ -1,3 +1,5 @@
+//go:build !slim
+
 package main
 
 import (
@@ -158,4 +160,36 @@ func explainHostedVerb(t *verbTarget, verb string, err error) error {
 		}
 	}
 	return t.explain(verb, err)
+}
+
+// dialVerbThroughHost connects to the daemon on host through this machine's
+// daemon and its link, for a host-qualified target.
+func dialVerbThroughHost(host, sessionFlag, windowFlag string) (*session.VerbClient, error) {
+	client, _, err := session.DialVerbClientThroughHost(host, version)
+	if err != nil {
+		return nil, explainTargetConnectError(host, sessionFlag, windowFlag, err)
+	}
+	return client, nil
+}
+
+// explainTargetConnectError is explainHostConnectError with the one thing a
+// qualified target adds: an unknown host may be a session on this machine
+// whose name has a colon, and the fix for that is the local: spelling.
+func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) error {
+	explained := explainHostConnectError(host, err)
+	var connect *session.HostConnectError
+	if !errors.As(err, &connect) || connect.Code != session.ErrVerbUnknownHost {
+		return explained
+	}
+	var d *diagnosticError
+	if !errors.As(explained, &d) {
+		return explained
+	}
+	switch {
+	case strings.HasPrefix(sessionFlag, host+":"):
+		d.Extra = append(d.Extra, fmt.Sprintf("For a session on this machine named %q, write -s %q.", sessionFlag, federation.LocalHostName+":"+sessionFlag))
+	case strings.HasPrefix(windowFlag, host+":"):
+		d.Extra = append(d.Extra, fmt.Sprintf("For a window on this machine named %q, write -w %q.", windowFlag, federation.LocalHostName+"::"+windowFlag))
+	}
+	return d
 }

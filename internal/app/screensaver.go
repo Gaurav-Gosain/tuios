@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -66,14 +68,6 @@ type screensaverState struct {
 	// so an effect that runs to an end can be replaced without composing and
 	// re-capturing a screen that is no longer showing.
 	capture [][]tfx.InputCell
-}
-
-// screensaverConfig is the [screensaver] section this client holds.
-func (m *OS) screensaverConfig() config.ScreensaverConfig {
-	if m.UserConfig == nil {
-		return config.ScreensaverConfig{}
-	}
-	return m.UserConfig.Screensaver
 }
 
 // armScreensaver starts the single deferred timer, unless the saver is off,

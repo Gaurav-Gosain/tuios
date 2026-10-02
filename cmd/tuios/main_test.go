@@ -15,8 +15,8 @@ import (
 // tuios mcp process a test started, so the test can speak to the real command
 // over real stdio. See mcp_command_test.go.
 func TestMain(m *testing.M) {
-	if os.Getenv("TUIOS_TEST_MCP_CHILD") == "1" {
-		os.Exit(runMCPChild())
+	if code, ok := runTestChild(); ok {
+		os.Exit(code)
 	}
 	os.Exit(testutil.RunIsolated(m))
 }

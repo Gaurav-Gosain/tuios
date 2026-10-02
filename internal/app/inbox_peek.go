@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -83,46 +85,6 @@ type InboxRespondedMsg struct {
 	Action string
 	Res    *session.PromptResponse
 	Err    error
-}
-
-// inboxVerbCall makes one verb call to this machine's daemon.
-type inboxVerbCall func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
-
-// inboxCaller is how the peek reaches the daemon. Tests set InboxState.call.
-func (m *OS) inboxCaller() inboxVerbCall {
-	if m.Inbox.call != nil {
-		return m.Inbox.call
-	}
-	build := ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = client.Close() }()
-		return client.CallWithTimeout(verb, params, timeout)
-	}
-}
-
-// SetInboxVerbCaller replaces how the peek reaches the daemon and where it
-// reads the attach nonce from. Tests use it; nil for either restores the
-// default.
-func (m *OS) SetInboxVerbCaller(call func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error), nonce func() string) {
-	m.Inbox.call, m.Inbox.nonce = call, nonce
-}
-
-// inboxNonce is this client's attach nonce.
-func (m *OS) inboxNonce() string {
-	if m.Inbox.nonce != nil {
-		return m.Inbox.nonce()
-	}
-	if m.DaemonClient == nil {
-		return ""
-	}
-	return m.DaemonClient.HumanNonce()
 }
 
 // inboxPeekable reports whether an item has a prompt to peek at.

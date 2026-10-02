@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/edition"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -111,6 +112,9 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if edition.Slim && tc.name == "tape_prefix" {
+				t.Skip("tuios-slim has no tape manager")
+			}
 			o := osWithBindings(t, tc.override)
 			tc.arm(o)
 			result, _ := tc.route(press(tc.newKey), o)

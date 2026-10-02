@@ -1,3 +1,5 @@
+//go:build !slim
+
 package app
 
 import (
@@ -18,15 +20,6 @@ import (
 // session the seed window is created asynchronously (the daemon makes it and
 // pushes it back), so the body waits this out before its first keystroke.
 const tapeSeedSettle = 400 * time.Millisecond
-
-// tapeFinishRefreshDelay is how long after a tape finishes the client waits
-// before re-fetching every pane's content from the daemon. It lets the last
-// commands' output land on the daemon first.
-const tapeFinishRefreshDelay = 1200 * time.Millisecond
-
-// tapeLayoutRefreshMsg asks the Update loop to refresh all panes from the daemon
-// after a project tape has built its layout. See refreshAllPanesAfterTape.
-type tapeLayoutRefreshMsg struct{}
 
 // refreshAllPanesAfterTape re-fetches terminal content for every daemon pane in
 // the session and repaints. A project tape creates panes rapidly; a split
