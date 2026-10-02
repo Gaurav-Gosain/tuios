@@ -1202,7 +1202,18 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeY = ws.PreMinimizeY
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
-	w.SetAltScreen(ws.IsAltScreen)
+	// A pane this client streams has its screen flag set by its own emulator,
+	// at the byte the program switched screens. The daemon's copy is only what
+	// some client last pushed, and a client pushes on input, not when a program
+	// switches screens. A program started with `tuios new-window -- prog`
+	// takes the alternate screen after the last push, so every later broadcast
+	// carried the normal screen. Adopting it flipped the flag back mid-stream,
+	// and the graphics passthrough read that as the program having left the
+	// alternate screen: it deleted the program's images, and a program that
+	// sends frames only on damage never placed them again.
+	if !m.SubscribedPTYs[w.PTYID] {
+		w.SetAltScreen(ws.IsAltScreen)
+	}
 	w.AgentMessage = ws.AgentMessage
 	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
