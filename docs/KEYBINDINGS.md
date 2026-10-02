@@ -807,6 +807,22 @@ protocol gives it. A key the protocol has no number for goes in its legacy
 form. Caps Lock, Num Lock and a modifier key pressed alone reach that program
 only when it asks for every key.
 
+### Shift+Up and Shift+Down
+
+`shift+up` and `shift+down` scroll the pane into its history. They do this
+only when all of these are true:
+
+- The program is on the main screen.
+- The program did not turn on a mouse mode.
+
+In other panes, tuios sends the keys to the program. Programs that use the
+full screen, such as nvim, less and htop, get them. When the pane is in copy
+mode, the keys scroll. This is the same rule as the mouse wheel, and the same
+rule as kitty.
+
+To change the keys, set `terminal_scroll_up` and `terminal_scroll_down` in
+`[keybindings.terminal_mode]`.
+
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
@@ -82,7 +83,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// wheel. Handled BEFORE the copy mode check so subsequent presses also
 	// scroll instead of being consumed by the copy mode key handler, and it
 	// enters copy mode the same silent way the wheel does.
-	if focusedWindow != nil {
+	//
+	// Only a pane on the main screen with no mouse mode scrolls, as with the
+	// wheel and as in kitty. A full-screen program (nvim, less, htop, a
+	// compositor) gets the key itself: it has no scrollback to show, and
+	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
+	if focusedWindow != nil && keyScrollsPane(focusedWindow) {
 		scroll := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
 		if scroll == "terminal_scroll_up" || scroll == "terminal_scroll_down" {
 			// Recorded here because this route answers the key itself instead of
@@ -327,4 +333,17 @@ func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LayoutPickerSelected = 0
 	o.LayoutPickerScroll = 0
 	return o, nil
+}
+
+// keyScrollsPane reports whether terminal_scroll_up and terminal_scroll_down
+// act on w, or its key goes to the program in it. They act on a pane in copy
+// mode, and on a pane on the main screen that has no mouse mode on.
+func keyScrollsPane(w *terminal.Window) bool {
+	if w.InCopyMode() {
+		return true
+	}
+	if w.IsAltScreen() {
+		return false
+	}
+	return w.Terminal == nil || !w.Terminal.HasMouseMode()
 }

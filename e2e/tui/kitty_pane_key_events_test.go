@@ -227,3 +227,57 @@ var (
 	keyEchoBin  string
 	keyEchoErr  error
 )
+
+// shiftUp and shiftDown are the keys as a terminal sends them.
+const (
+	shiftUp   = "\x1b[1;2A"
+	shiftDown = "\x1b[1;2B"
+)
+
+// TestShiftUpReachesAFullScreenProgram: Shift+Up and Shift+Down scroll a
+// shell's scrollback, but a program on the alternate screen (nvim, less,
+// htop, a compositor) has no scrollback there and uses the keys itself. tuios
+// used to keep them for every pane.
+func TestShiftUpReachesAFullScreenProgram(t *testing.T) {
+	shiftUpReaches(t, "printf '\\033[?1049h'")
+}
+
+// TestShiftUpReachesAMousePane: a pane on the main screen that turned a mouse
+// mode on (the tuios-wayland viewer does) gets the keys too, as the wheel does.
+func TestShiftUpReachesAMousePane(t *testing.T) {
+	shiftUpReaches(t, "printf '\\033[?1000h'")
+}
+
+func shiftUpReaches(t *testing.T, setup string) {
+	t.Helper()
+	bin := buildKeyEcho(t)
+	base := t.TempDir()
+	log := filepath.Join(base, "pane-bytes")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, setup+"; stty raw -echo; "+bin+" 0 "+log, "KEYECHO-READY", shellTimeout)
+
+	sendRaw(t, term, shiftUp, shiftDown)
+	waitPaneBytes(t, term, log, shiftUp+shiftDown)
+}
+
+// TestShiftUpScrollsTheShell is the other half: on the main screen, with no
+// mouse mode, Shift+Up still scrolls the pane into its history.
+func TestShiftUpScrollsTheShell(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	last := fillScrollback(t, term, "SHIFTUP", 300)
+
+	for range 30 {
+		sendRaw(t, term, shiftUp)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), last)
+	}, uiTimeout); err != nil {
+		t.Fatalf("Shift+Up did not scroll the shell back: %v\n%s", err, term.Snapshot())
+	}
+}
