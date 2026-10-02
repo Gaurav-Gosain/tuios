@@ -581,6 +581,11 @@ func inboxSnoozedWhen(until int64, now time.Time) string {
 // an agent has been seen, so for a person who runs none the key after the
 // prefix reaches the pane as it always did.
 func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
+	// Unhandled with the agent features off, so the key does what an
+	// unbound key does.
+	if !m.agentsOn() {
+		return nil, false
+	}
 	if !m.agentsSeen() {
 		return nil, false
 	}

@@ -12,12 +12,19 @@ import "strings"
 //	mode = "strict"
 //	grants = ["read", "write", "fan"]
 //
-// It is file-plane config, outside the option registry, for the same reason
-// [hosts] is: a list of harness names is not a scalar with one settable path.
-// The daemon reads it at start and again whenever the file changes.
+// Apart from enabled, it is file-plane config, outside the option registry,
+// for the same reason [hosts] is: a list of harness names is not a scalar
+// with one settable path. enabled is a plain bool, so it is in the registry
+// and on the settings page. The daemon reads the table at start and again
+// whenever the file changes.
 
 // AgentsConfig is the [agents] table.
 type AgentsConfig struct {
+	// Enabled turns every agent feature on or off: agent detection, the
+	// agent rows of the rail, the Inbox, agent mail, approvals, attention,
+	// the agent keys and start-agent. Nil means on, the default. False keeps
+	// only the multiplexer. See On.
+	Enabled *bool `toml:"enabled,omitempty"`
 	// Approvals is the [agents.approvals] table. See ApprovalsConfig.
 	Approvals ApprovalsConfig `toml:"approvals,omitempty"`
 	// Permissions is the [agents.permissions] table: what a process in a
@@ -39,6 +46,14 @@ type AgentsConfig struct {
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
 }
+
+// On reports whether the agent features are on. They are unless the file
+// says enabled = false.
+func (a AgentsConfig) On() bool { return a.Enabled == nil || *a.Enabled }
+
+// AgentsOffMessage is the one line a command, a verb or a key prints when it
+// is an agent feature and the agent features are off.
+const AgentsOffMessage = "Agent features are off. Set agents.enabled = true in the config to use this command."
 
 // The values of [agents] herdr_protocol.
 const (

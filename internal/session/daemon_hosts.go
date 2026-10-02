@@ -71,7 +71,7 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// appearance.preferred_shell, [agents] herdr_protocol, the
+// appearance.preferred_shell, [agents] enabled and herdr_protocol, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
 // approval policy applies to the next request; a hold already running keeps
@@ -95,6 +95,11 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 // waits for tuios config apply from outside every pane (byPerson true), or a
 // daemon restart.
 func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
+	// The agent switch applies from a file change too, in both directions.
+	// Off is the stricter state (see agents_switch.go), and on is the state
+	// every daemon runs in by default, so neither widens what a pane may do
+	// beyond what the shipped daemon allows.
+	d.SetAgentsEnabled(cfg.Agents.On())
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))

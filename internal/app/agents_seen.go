@@ -22,6 +22,9 @@ import (
 // daemon this client can see, or through an agent integration installed on
 // this machine.
 func (m *OS) agentsSeen() bool {
+	if !m.agentsOn() {
+		return false
+	}
 	return m.SidebarAgentsSeen || m.agentIntegrationInstalled || m.agentsPresent()
 }
 

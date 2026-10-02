@@ -153,6 +153,12 @@ func reportVerbError(err error, jsonOutput bool) error {
 // verbErrorJSON is the object reportVerbError prints for err under --json.
 func verbErrorJSON(err error) map[string]any {
 	out := map[string]any{"success": false, "error": err.Error()}
+	// The agents-off answer carries the daemon's code, so a program can tell
+	// it from a failure worth retrying.
+	if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbAgentsDisabled {
+		out["error"] = config.AgentsOffMessage
+		out["code"] = call.Code
+	}
 	if h, ok := errors.AsType[*hostError](err); ok {
 		markUntrusted(out, h.host)
 	}

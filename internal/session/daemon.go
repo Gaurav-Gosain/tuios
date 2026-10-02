@@ -272,6 +272,11 @@ type Daemon struct {
 	// CLI. It merges the built-in agent binary names with any the user added.
 	agentMatcher agentMatcher
 
+	// agentsOff is [agents] enabled = false: every agent feature is off. See
+	// agents_switch.go. It is read on every tick, verb and output event, and
+	// written by a config reload, so it is atomic.
+	agentsOff atomic.Bool
+
 	// evidenceClock is the time the detection verbs measure evidence_age_ms
 	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
 	evidenceClock func() time.Time
@@ -681,6 +686,9 @@ type DaemonConfig struct {
 	// QueueMax is [agents.queue] max: how many messages one pane's delivery
 	// queue holds. Zero means the default. See agent_queue.go.
 	QueueMax int
+	// AgentsOff is [agents] enabled = false: the daemon starts with every
+	// agent feature off. See agents_switch.go.
+	AgentsOff bool
 }
 
 // NewDaemon creates a new daemon instance.
@@ -724,6 +732,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
+	d.agentsOff.Store(cfg.AgentsOff)
 	d.loadHooks(cfg)
 
 	// A daemon with no watcher is a working daemon: every transcript join falls
@@ -829,7 +838,18 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// leaves the foreground the shell prompt returns as output, so probe that
 		// pane and clear an auto-detected glyph at once rather than waiting for the
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
-		if ev.Type == EventOutput {
+		if ev.Type == EventOutput && d.agentsOff.Load() {
+			// The agent features are off: the pane's directory is still
+			// followed, and nothing on it is read for an agent. A report the
+			// emulator parked is dropped, so an old one cannot apply when the
+			// features come back on.
+			if pty := s.GetPTY(ev.PTYID); pty != nil {
+				pty.takeAgentProgress()
+				pty.takeAgentNotify()
+				s.noteCwdOnOutput(pty)
+				pty.remoteForeground()
+			}
+		} else if ev.Type == EventOutput {
 			if pty := s.GetPTY(ev.PTYID); pty != nil {
 				// An OSC 9;4 the emulator parked while writing these same bytes. It
 				// is applied before the probe and is not throttled: the sequence
@@ -919,8 +939,13 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.fireSessionHooks(s, ev)
 		// The event goes out before the Inbox change it causes, so a
 		// subscriber sees the transition and then the item it opened.
-		defer d.attention.noteSessionEvent(name, ev)
-		d.noteQueueEvent(name, ev)
+		// With the agent features off an agent event opens no Inbox item
+		// and delivers no queued message. Turning them off closed the
+		// session's items, and the clear it made must not open new ones.
+		if !d.agentsOff.Load() || !isAgentEvent(ev.Type) {
+			defer d.attention.noteSessionEvent(name, ev)
+			d.noteQueueEvent(name, ev)
+		}
 		d.reviewNotes.noteSessionEvent(ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
@@ -1851,6 +1876,11 @@ func (d *Daemon) agentMonitor() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			// With the agent features off the tick reads nothing: no
+			// process table, no transcript. See agents_switch.go.
+			if d.agentsOff.Load() {
+				continue
+			}
 			reg := d.agentMatcher.registry
 			now := time.Now().UnixNano()
 			for _, sess := range d.manager.AllSessions() {
@@ -1944,6 +1974,9 @@ func (d *Daemon) stallMonitor() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			if d.agentsOff.Load() {
+				continue
+			}
 			now := time.Now()
 			reg := d.agentMatcher.registry
 			for _, sess := range d.manager.AllSessions() {

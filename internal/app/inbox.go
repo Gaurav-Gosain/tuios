@@ -216,7 +216,7 @@ func (m *OS) watchesInbox() bool {
 // its first delivery. The queue is this machine's daemon's, whichever session
 // the client is attached to.
 func (m *OS) startInboxWatch() tea.Cmd {
-	if !m.watchesInbox() || m.inboxEvents != nil {
+	if !m.watchesInbox() || m.inboxEvents != nil || !m.agentsOn() {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -435,6 +435,10 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 
 // handleInboxWatch applies one delivery and re-arms the listener.
 func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
+	// A delivery that was on its way when the features went off.
+	if !m.agentsOn() {
+		return nil
+	}
 	var cmd tea.Cmd
 	switch inner := msg.msg.(type) {
 	case InboxSnapshotMsg:
@@ -1086,6 +1090,9 @@ func (m *OS) syncInboxSelectedID() {
 
 // OpenInbox shows the Inbox, narrowed to one kind or to none.
 func (m *OS) OpenInbox(filter string) {
+	if m.refuseAgentsOff() {
+		return
+	}
 	st := &m.Inbox
 	m.ShowInbox = true
 	st.Filter = filter
@@ -1839,6 +1846,9 @@ func inboxNeedsYou(it session.AttentionItem) bool {
 // it starts over, so a run of presses walks everything waiting. It reports
 // whether there was anywhere to go.
 func (m *OS) JumpToNextAttention() tea.Cmd {
+	if m.refuseAgentsOff() {
+		return nil
+	}
 	st := &m.Inbox
 	var todo []session.AttentionItem
 	for _, it := range st.Items {

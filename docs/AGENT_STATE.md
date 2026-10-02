@@ -4,6 +4,10 @@ This is the guide to running coding agents in tuios, and to agents that drive
 tuios. It starts with what you get and how to set it up, then maps every agent
 feature to where it is described, then gives the reference.
 
+To turn off every agent feature and keep only the multiplexer, set
+`[agents] enabled = false`. See
+[Turn off agent features](CONFIGURATION.md#turn-off-agent-features).
+
 An agent reading this from inside a pane wants `tuios --skill` instead: a short
 core, and `tuios --skill TOPIC` for the rest. It ships in the binary, so it
 matches the build.

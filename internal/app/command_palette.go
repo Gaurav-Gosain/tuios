@@ -74,6 +74,8 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// screen and the config disagree about whether it is on, and the next
 	// toggle writes the disagreement back to the file.
 	m.SetSpotlight(cfg.Spotlight.IsEnabled())
+	// The agent switch, which the file can flip as well as the settings page.
+	cmd = tea.Batch(cmd, m.applyAgentsSwitch())
 	m.MarkAllDirty()
 	return cmd
 }

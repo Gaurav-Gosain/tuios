@@ -612,6 +612,9 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	if !ok {
 		return nil, newVerbError(ErrVerbForbidden, "a pane on another machine cannot call "+echoName(verb)+" on the machine that owns it")
 	}
+	if verr := d.agentsOffRefusal(verb, params); verr != nil {
+		return nil, verr
+	}
 	entry, ok := verbRegistry[verb]
 	if !ok {
 		return nil, newVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(verb))

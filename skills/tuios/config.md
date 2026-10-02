@@ -47,6 +47,12 @@ it with `tuios config apply` in a terminal outside tuios. From a pane that
 command is refused. Do not edit config.toml to widen what you hold: it waits
 for the person, and the change tells them what you did.
 
+`agents.enabled` is the person's switch for every agent feature. When it is
+false, every agent verb fails with `agents_disabled`: agent state, mail, the
+Inbox, approvals, `start-agent` and `fan`. A pane without `respond` then cannot
+type into another pane. Do not change this option. If an agent verb fails with
+`agents_disabled`, tell the person and stop.
+
 `daemon.window_size` sets the size of a session with more than one client:
 `smallest` (the default), `largest`, or `latest`, the client that last had
 input. `tuios set-config daemon.window_size latest` applies it to the session

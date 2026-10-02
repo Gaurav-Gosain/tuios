@@ -54,6 +54,9 @@ func (m *OS) agentAlertPolicy() config.AgentAlertPolicy {
 // goroutine inside the state sync, so it does no I/O beyond the host write,
 // which is a single mutex-guarded Write.
 func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
+	if !m.agentsOn() {
+		return
+	}
 	if w == nil {
 		return
 	}

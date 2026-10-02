@@ -11,6 +11,10 @@ import (
 // verbSetAgentMeta records display metadata about the agent in a pane. See
 // agent_meta.go for what it is and why it is display only.
 func (d *Daemon) verbSetAgentMeta(_ *connState, params json.RawMessage) (any, *verbError) {
+	// The herdr socket calls this handler directly, past admitVerb.
+	if !d.agentsEnabled() {
+		return nil, agentsDisabledError()
+	}
 	var p struct {
 		Session string          `json:"session"`
 		Window  string          `json:"window"`

@@ -17,7 +17,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `repo_not_found`, `not_repo`, `no_notes`, `queue_full`,
-`risk_unacknowledged`, `internal`. `internal` is a failure inside the daemon
+`risk_unacknowledged`, `agents_disabled`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
 
@@ -37,6 +37,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `rate_limited` | Stop sending. Two agents are probably answering each other. |
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
 | `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
+| `agents_disabled` | The person turned the agent features off with `[agents] enabled = false`, and the verb is one of them. Nothing was done. Do not retry. Tell the person. |
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
 | `no_notes` | From `send-review`: no unsent notes. Add one with `tuios review note`, or name sent ones with `--id` to send them again. |
 | `forbidden` | Your pane's grants (`tuios --skill grants`), a link's policy on another machine, or sending as `human` from a pane. The message names what was needed. Tell the person; do not look for another way. |

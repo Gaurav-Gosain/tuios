@@ -2064,7 +2064,9 @@ func sidebarTerminalsWithoutAgents(terminals []sidebarTerminalEntry, agents []si
 // others from the cached listing, so agents elsewhere surface here marked
 // Foreign.
 func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
-	if !sidebarLayoutHas(sidebarSectionAgents, &m.Settings) {
+	// With the agent features off the section has no rows, so the rail
+	// drops it, header and all. See agents_off.go.
+	if !m.agentsOn() || !sidebarLayoutHas(sidebarSectionAgents, &m.Settings) {
 		return nil
 	}
 	var agents []sidebarAgentEntry

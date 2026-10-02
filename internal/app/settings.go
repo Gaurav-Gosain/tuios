@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -226,6 +227,8 @@ func (m *OS) persistSettings() tea.Cmd {
 		return nil
 	}
 	if m.ConfigReadOnly {
+		// No file for the daemon to follow, so only this client switches.
+		cmd := m.applyAgentsSwitch()
 		// The Learn tour has no config file to save to, and its settings
 		// panel already says "this session only". A warning on the first
 		// change would read as something going wrong.
@@ -233,7 +236,7 @@ func (m *OS) persistSettings() tea.Cmd {
 			m.configReadOnlyTold = true
 			m.ShowNotification("Settings apply to this session only. The config file is not changed.", "warning", 0)
 		}
-		return nil
+		return cmd
 	}
 	write, err := config.RenderUserConfig(m.UserConfig)
 	if err != nil {
@@ -241,7 +244,10 @@ func (m *OS) persistSettings() tea.Cmd {
 		return nil
 	}
 	apply := m.applyHostsCmd()
-	return func() tea.Msg {
+	// The agent switch applies on this client now. The daemon follows the
+	// file this writes. See agents_off.go.
+	agents := m.applyAgentsSwitch()
+	save := func() tea.Msg {
 		if err := write(); err != nil {
 			return settingsSaveFailedMsg{err: err}
 		}
@@ -252,6 +258,10 @@ func (m *OS) persistSettings() tea.Cmd {
 		}
 		return nil
 	}
+	if agents == nil {
+		return save
+	}
+	return tea.Batch(agents, save)
 }
 
 // settingsSaveFailedMsg carries a failed config write back to the Update
@@ -344,6 +354,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 	appearance := settingsCategory{
 		Name: "Appearance",
 		Items: m.resolveRows([]settingsRow{
+			// First on the page, where a person who wants only the
+			// multiplexer looks for it. See agents_off.go.
+			opt("agents.enabled"),
 			custom("appearance.theme", m.themeItem()),
 			custom("appearance.glyphs", m.glyphItem()),
 			opt("appearance.border_style"),
@@ -413,7 +426,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.position"),
 			opt("appearance.sidebar.width"),
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
-			custom("", m.agentRowItem()),
 			opt("appearance.sidebar.show_glyphs"),
 			opt("appearance.sidebar.show_counts"),
 			opt("appearance.sidebar.file_icons"),
@@ -434,6 +446,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// option in all but its key, like git_dirty above.
 			opt("appearance.global_session"),
 		}),
+	}
+	// The agent row's tokens, under the sections they belong to. With the
+	// agent features off the rail has no agent rows, so the row goes.
+	if m.agentsOn() {
+		sidebar.Items = slices.Insert(sidebar.Items, 4, m.resolveRows([]settingsRow{custom("", m.agentRowItem())})...)
 	}
 	// How long an agent row rests before it folds means nothing until an
 	// agent has run, so the row waits for one like the other agent rows.
@@ -533,9 +550,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.warning_duration"),
 		opt("notifications.error_duration"),
 		opt("notifications.error_sticky"),
-		custom("", m.agentAlertsGroupItem()),
 	}
-	if m.agentAlertsOpen() {
+	// The agent alerts, under their heading row. With the agent features
+	// off both go, heading and all.
+	if m.agentsOn() {
+		alertRows = append(alertRows, custom("", m.agentAlertsGroupItem()))
+	}
+	if m.agentsOn() && m.agentAlertsOpen() {
 		alertRows = append(alertRows, agentAlertRows...)
 		alertRows = append(alertRows, m.mailAlertRows()...)
 	}
@@ -589,9 +610,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("daemon.log_level"),
 			opt("daemon.window_size"),
-			opt("daemon.agent_autodetect"),
-			opt("daemon.agent_detect_seconds"),
-			opt("daemon.resume_agents"),
 			opt("daemon.persist_scrollback"),
 			opt("daemon.persist_scrollback_lines"),
 			opt("daemon.persist_scrollback_kb"),
@@ -599,6 +617,16 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("scratch.height"),
 			opt("launcher.gui_command"),
 		}),
+	}
+
+	// The agent rows of the daemon mean nothing with the agent features
+	// off, so they go with them. The rows below them move up.
+	if m.agentsOn() {
+		daemon.Items = append(daemon.Items[:2:2], append(m.resolveRows([]settingsRow{
+			opt("daemon.agent_autodetect"),
+			opt("daemon.agent_detect_seconds"),
+			opt("daemon.resume_agents"),
+		}), daemon.Items[2:]...)...)
 	}
 
 	tape := settingsCategory{

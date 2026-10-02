@@ -238,6 +238,50 @@ the command fails, and `tuios list-dock-components` says which and why.
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## Turn off agent features
+
+Use this setting if you want only the multiplexer:
+
+```toml
+[agents]
+enabled = false
+```
+
+The default is `true`. You can also change it on the settings page. It is the
+first row, "Agent features". While a tuios client is open, you can also run
+`tuios set-config agents.enabled false`.
+
+When the agent features are off:
+
+- The daemon does not look for agents. It does not read the process table,
+  pane titles, screens or agent transcripts. It ignores the agent state that
+  programs send.
+- The rail shows no agents section. The other sections move up to fill the
+  space.
+- The Inbox, agent mail, approvals and agent alerts are off. The Inbox key
+  shows a message and does nothing else.
+- The prefix menu, the command palette, the help and the settings page do not
+  show agent items.
+- Agent hooks, such as `after-agent-state`, do not run.
+- Agent commands, such as `tuios start-agent`, `tuios fan` and
+  `tuios list-attention`, stop and print this message: "Agent features are
+  off. Set agents.enabled = true in the config to use this command." A
+  program that calls an agent verb gets the error code `agents_disabled`.
+
+The change applies at once. You do not have to restart tuios. When you turn
+the features off, the daemon clears the agent state of every pane and closes
+every Inbox item. A held approval goes back to the agent, which asks in its
+pane. When you turn the features on, the daemon looks at every pane again.
+
+Typing between panes is stricter when the features are off. A pane can answer
+another pane's prompt if it types into that pane. Usually tuios knows which
+pane waits on a prompt. With the features off it does not know. Thus a pane
+that does not hold the `respond` grant cannot type into any other pane. This
+includes `send-keys`, `send-text` and `run` from a script in a pane. Your own
+keys, and commands from a shell outside tuios, are not affected. To let a pane
+type into other panes, give it `respond`. See
+[What a pane may do](#what-a-pane-may-do).
+
 ## Approvals from the Inbox
 
 The `[agents.approvals]` table lets the Inbox answer a harness's permission

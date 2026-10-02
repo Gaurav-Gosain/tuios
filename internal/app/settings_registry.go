@@ -43,6 +43,7 @@ func custom(covers string, item settingItem) settingsRow {
 // settingLabels overrides the label derived from a path's last segment, for the
 // paths where the derived one reads worse than the name the row has always had.
 var settingLabels = map[string]string{
+	"agents.enabled":                    "Agent features",
 	"appearance.sidebar.editor":         "File editor",
 	"appearance.dockbar_position":       "Dock position",
 	"appearance.glyphs":                 "Glyph set",

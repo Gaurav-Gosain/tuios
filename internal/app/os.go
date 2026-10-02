@@ -1046,6 +1046,9 @@ type OS struct {
 	// stopInbox ends the watcher. Both nil until the watcher starts.
 	inboxEvents chan tea.Msg
 	stopInbox   func()
+	// agentsSwitchedOff is the agent switch as applyAgentsSwitch last saw
+	// it, so a config change that did not touch it does nothing.
+	agentsSwitchedOff bool
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string

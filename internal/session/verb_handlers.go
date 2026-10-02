@@ -1150,6 +1150,10 @@ func (d *Daemon) verbSetWorkspaceOrder(_ *connState, params json.RawMessage) (an
 }
 
 func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, *verbError) {
+	// The herdr socket calls this handler directly, past admitVerb.
+	if !d.agentsEnabled() {
+		return nil, agentsDisabledError()
+	}
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`

@@ -398,6 +398,9 @@ func (m *OS) OpenAgentMailForWindow(windowID string) tea.Cmd {
 }
 
 func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
+	if m.refuseAgentsOff() {
+		return nil
+	}
 	if m.learnOff(learnNoteMail) {
 		return nil
 	}
@@ -470,6 +473,9 @@ type agentMailDial func() (*session.VerbClient, error)
 // does when it is clicked. It returns the command that marks the person's mail
 // in it read, or nil when there is none.
 func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
+	if m.refuseAgentsOff() {
+		return nil
+	}
 	st := &m.AgentMail
 	m.ShowAgentMail = true
 	st.Inbox = ""

@@ -26,7 +26,13 @@ var optionWalkSkips = map[string]string{
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
 	"hints.patterns":               "a list of regular expressions, which a value arriving as one string cannot spell",
 	"scratch.session":              "no longer used: read only so a config from the first scratch design loads and validation can say to remove it",
-	"agents":                       "file-plane config the daemon reads from the file, like [hosts]: which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
+	// [agents] is file-plane config the daemon reads from the file, like
+	// [hosts], apart from agents.enabled, which is a plain switch.
+	"agents.approvals":      "which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
+	"agents.permissions":    "what a pane may do through tuios is not for a pane to change over the control protocol",
+	"agents.recap":          "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.queue":          "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.herdr_protocol": "file-plane config the daemon reads from the file, like [hosts]",
 }
 
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the
@@ -176,6 +182,7 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 		"appearance", "sidebar", "dock", "scrollbar", "selection",
 		"startup", "daemon", "notifications", "tape", "debug",
 		"screenshot", "screensaver", "spotlight", "hints", "scratch", "pip", "launcher",
+		"agents",
 	}
 	for _, opt := range optionSpecs {
 		if opt.Description == "" {

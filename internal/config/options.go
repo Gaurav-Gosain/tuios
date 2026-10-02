@@ -798,6 +798,14 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 
+	// [agents]. Only enabled is a scalar; the rest of the table is lists and
+	// tables, which stay in the file.
+	{
+		Path: "agents.enabled", Type: OptionBool, Section: "agents",
+		Description: "Turn off agents, the Inbox, mail and approvals. Keep only the multiplexer.",
+		Default:     "true",
+	},
+
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list. respond_from_shell
 	// is absent too: it grants acting as the person, and set-option is a verb

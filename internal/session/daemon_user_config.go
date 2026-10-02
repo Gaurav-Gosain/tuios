@@ -37,6 +37,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	if GetDebugLevel() == DebugOff && uc.Daemon.LogLevel != "" {
 		SetDebugLevel(ParseDebugLevel(uc.Daemon.LogLevel))
 	}
+	// [agents] enabled = false turns every agent feature off.
+	cfg.AgentsOff = !uc.Agents.On()
 	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
 	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries

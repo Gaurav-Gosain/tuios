@@ -199,6 +199,11 @@ func (d *Daemon) fireSessionHooks(sess *Session, ev SessionEvent) {
 	if !d.hooks.HasEvent(event) {
 		return
 	}
+	// No agent hook runs while the agent features are off, including for
+	// the clear that turning them off makes. See agents_switch.go.
+	if d.agentsOff.Load() && isAgentEvent(ev.Type) {
+		return
+	}
 	if ev.Type == EventAgentState {
 		d.fireAgentStateHook(sess, ev)
 		return

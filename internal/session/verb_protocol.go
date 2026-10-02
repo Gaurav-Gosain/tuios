@@ -2235,6 +2235,11 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		return verbEntry{}, nil, verr
 	}
 
+	// An agent verb while the agent features are off. See agents_switch.go.
+	if verr := d.agentsOffRefusal(verb, params); verr != nil {
+		return verbEntry{}, nil, verr
+	}
+
 	// A call from another machine is held to that machine's link policy
 	// before its handler runs. See link_policy.go.
 	if verr := d.checkLinkVerb(cs, verb); verr != nil {

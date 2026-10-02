@@ -208,6 +208,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves
 	// change ink with them, which is the other half of what the frame shows.
+	mixB(m.agentsOn())
 	mixS(m.sidebarAgentsFilter())
 	mixS(m.sidebarAgentsSort())
 	// The fold of rows at rest: whether it is open, its threshold, and the

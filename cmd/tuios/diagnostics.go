@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
@@ -110,6 +111,11 @@ func exitStatus(err error) int {
 // or wrapping, so piped output and CI logs stay parseable and a path in the
 // message stays on one line.
 func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
+	// An agent command while the agent features are off prints the one line
+	// that says so, however the command wrapped the daemon's answer.
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok && callErr.Code == session.ErrVerbAgentsDisabled {
+		err = errors.New(config.AgentsOffMessage)
+	}
 	if !isTerminalWriter(w) {
 		_, _ = fmt.Fprintln(w, err.Error())
 		return
@@ -271,6 +277,11 @@ func explainVerbError(verb string, err error) error {
 	if !errors.As(err, &callErr) {
 		return err
 	}
+	// The agent features are off. The one line says what to change, and
+	// nothing about the daemon helps more.
+	if callErr.Code == session.ErrVerbAgentsDisabled {
+		return &agentsOffError{call: callErr}
+	}
 	if current, ok := session.RenamedSessionTarget(err); ok {
 		return &diagnosticError{
 			What:  strings.ToUpper(callErr.Message[:1]) + callErr.Message[1:] + ".",
@@ -323,6 +334,16 @@ func explainVerbError(verb string, err error) error {
 	}
 	return d
 }
+
+// agentsOffError is the answer to an agent command while the agent features
+// are off: the one line that says what to change, with the daemon's answer
+// under it, so --json can still name the code.
+type agentsOffError struct {
+	call *session.VerbCallError
+}
+
+func (e *agentsOffError) Error() string { return config.AgentsOffMessage }
+func (e *agentsOffError) Unwrap() error { return e.call }
 
 // nonEmpty returns s, or fallback when s is empty.
 func nonEmpty(s, fallback string) string {

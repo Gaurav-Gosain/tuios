@@ -1380,6 +1380,7 @@ catalog.
 | `no_notes` | `send-review` found no unsent review notes for the pane. Nothing was typed. |
 | `queue_full` | The pane's delivery queue holds `[agents.queue] max` messages. Nothing was queued. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
+| `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client

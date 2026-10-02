@@ -115,6 +115,9 @@ func agentWasLive(w WindowState) bool {
 // saved, no conversation id, a harness with no resume command, or an id that
 // cannot be typed safely.
 func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer, bool) {
+	if !d.agentsEnabled() {
+		return resumeOffer{}, false
+	}
 	if w.AgentSessionID == "" || !agentWasLive(w) {
 		return resumeOffer{}, false
 	}
