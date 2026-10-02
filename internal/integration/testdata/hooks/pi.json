@@ -21,8 +21,56 @@
   },
   {
     "name": "unknown event",
-    "payload": {"hook_event_name": "tool_call", "session_id": "pi-1"},
+    "payload": {"hook_event_name": "mystery_event", "session_id": "pi-1"},
     "skip": "event not mapped"
+  },
+  {
+    "name": "tool_call",
+    "payload": {"hook_event_name": "tool_call", "session_id": "pi-1", "tool_name": "bash", "tool_input": {"command": "go test ./..."}},
+    "want": {
+      "state": "working",
+      "if_state": "working",
+      "agent_session_id": "pi-1",
+      "activity": {"event": "tool", "tool": "bash", "target": "go test ./..."}
+    }
+  },
+  {
+    "name": "tool_result that succeeded",
+    "payload": {"hook_event_name": "tool_result", "session_id": "pi-1", "tool_name": "bash", "tool_input": {"command": "go test ./..."}, "is_error": false},
+    "want": {
+      "state": "working",
+      "if_state": "working",
+      "agent_session_id": "pi-1",
+      "activity": {"event": "tool_done", "tool": "bash", "target": "go test ./...", "ok": true}
+    }
+  },
+  {
+    "name": "tool_result that failed",
+    "payload": {"hook_event_name": "tool_result", "session_id": "pi-1", "tool_name": "edit", "tool_input": {"file_path": "/src/main.go"}, "is_error": true, "error": "permission denied"},
+    "want": {
+      "state": "working",
+      "if_state": "working",
+      "agent_session_id": "pi-1",
+      "activity": {"event": "tool_failed", "tool": "edit", "target": "/src/main.go", "ok": false, "text": "permission denied"}
+    }
+  },
+  {
+    "name": "prompt names the task",
+    "payload": {"hook_event_name": "prompt", "session_id": "pi-1", "prompt": "fix the login bug\nand add a regression test"},
+    "want": {
+      "state": "working",
+      "agent_session_id": "pi-1",
+      "activity": {"event": "prompt", "text": "fix the login bug"}
+    }
+  },
+  {
+    "name": "tool_result with no tool name",
+    "payload": {"hook_event_name": "tool_result", "session_id": "pi-1", "tool_input": {}, "is_error": false},
+    "want": {
+      "state": "working",
+      "if_state": "working",
+      "agent_session_id": "pi-1"
+    }
   },
   {
     "name": "ui_prompt_start for a confirm",

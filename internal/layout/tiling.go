@@ -142,6 +142,55 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 // it is what the fixed pane minimum this used to enforce broke: on a 51x37
 // terminal seven panes were each grown to twenty columns inside a region that
 // could give them seventeen, and the frame showed panes on top of each other.
+// CalculateStackedLayout returns the stacked positions for n windows, one of
+// which holds the focus.
+//
+// focused is the index, in slot order, of the pane the user is working in. The
+// other n-1 panes collapse to a single row, the height of a top bar, and keep
+// their slot order; the focused pane takes every row that is left, wherever
+// its slot sits in the stack. Focus moves heights, never order.
+//
+// gap is the rows kept between neighbours, on the same terms as
+// CalculateMasterStackLayout. A region too tight to hold every bar and gap
+// gives the gaps up first, then the focused pane's height down to one row; a
+// stack of bars alone taller than the region is the caller's problem, and the
+// extra bars run off the bottom of it.
+func CalculateStackedLayout(n int, focused int, screenWidth int, usableHeight int, topMargin int, gap int) []TileLayout {
+	if n == 0 {
+		return nil
+	}
+	if focused < 0 || focused >= n {
+		focused = 0
+	}
+
+	collapsed := 1
+	bars := n - 1
+	// Between-bar gaps go first: two bars touching read as one strip, which
+	// is still a legible layout, while a focused pane squeezed out entirely
+	// is not a layout at all.
+	used := bars*collapsed + bars*gap
+	for gap > 0 && used+1 > usableHeight {
+		gap--
+		used = bars*collapsed + bars*gap
+	}
+	expanded := usableHeight - used
+	if expanded < 1 {
+		expanded = 1
+	}
+
+	layouts := make([]TileLayout, 0, n)
+	y := topMargin
+	for i := range n {
+		h := collapsed
+		if i == focused {
+			h = expanded
+		}
+		layouts = append(layouts, TileLayout{X: 0, Y: y, Width: screenWidth, Height: h})
+		y += h + gap
+	}
+	return layouts
+}
+
 func CalculateMasterStackLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
 	return CalculateMasterLayout(n, screenWidth, usableHeight, topMargin, MasterParams{
 		Position:   config.MasterPositionLeft,

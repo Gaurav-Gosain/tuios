@@ -1094,6 +1094,9 @@ type OS struct {
 	UseBSPLayout     bool            // true = BSP tiling, false = master-stack
 	// announceDepth counts the open settleSizes holds. See announce_batch.go.
 	announceDepth int
+	// Stacked tiling (zellij-like): panes stack vertically and every pane but
+	// the focused one collapses to its top bar.
+	UseStackedLayout bool // true = stacked mode
 	// Scrolling tiling (niri-like) layout
 	UseScrollingLayout        bool                            // true = scrolling columns mode
 	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts
@@ -1245,6 +1248,12 @@ type OS struct {
 	// sections, which is every frame nobody has asked for a listing. See
 	// sidebar_files.go.
 	filesView fileViewState
+	// fileBack is the listing's back stack: the directories shown before the
+	// one on screen, most recent last, and the origin pane the stack belongs
+	// to. A listing from another pane empties it, since back through someone
+	// else's walk is not anywhere. See FileViewBack.
+	fileBack       []string
+	fileBackOrigin string
 
 	// gitView is the rail's git section: the repository the focused pane is in
 	// and how far its branch has drifted. Derived state, never persisted and

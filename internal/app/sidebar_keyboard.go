@@ -170,7 +170,7 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionTerminals
 	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold:
 		return sidebarSectionAgents
-	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
+	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd, sidebarRowFileReturn:
 		return sidebarSectionFiles
 	default:
 		return sidebarSectionCount
@@ -258,6 +258,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
 		m.FileViewCd()
+	case sidebarRowFileReturn:
+		m.queueSidebarCmd(m.FileViewReturn())
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
@@ -429,7 +431,7 @@ func sidebarRowHasMenu(row sidebarNavRow) bool {
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
-	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
+	case sidebarRowFileCd, sidebarRowFileReturn, sidebarRowFileUp, sidebarRowFileEntry:
 		// Every row of the files section points at the section, which is a
 		// thing the menu is about: the header and the ".." row still offer the
 		// two actions that need no name. See fileRowMenu.
