@@ -2124,10 +2124,11 @@ of the bytes), which is upstream.
 ### Binary size budget
 
 `.github/workflows/binary-size.yml` runs `scripts/binary-size.sh` on every pull
-request and push to main. It builds tuios the way the release does
-(`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
-darwin/arm64 with the Go version go.mod names, prints the size, and fails when
-a binary is over its budget.
+request and push to main. It builds tuios and tuios-slim the way the release
+does (`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
+darwin/arm64 with the Go version go.mod names, prints the sizes, and fails when
+a binary is over its budget. tuios-slim is cmd/tuios with the slim build tag;
+see [SLIM.md](SLIM.md).
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
@@ -2203,6 +2204,19 @@ to exit (#207): the signal policy, its grace exit and the termios restore.
 That brought the build to 26,485,042 bytes (Go 1.26.6), 42 bytes over. Main
 was 26,451,762 bytes, and the change adds 33,280 bytes. linux/amd64 grew 8,192
 bytes to 28,041,378 and still fits.
+
+tuios-slim came in under the same budgets. The full build moved its feature
+commands and state behind seams so the slim tag can leave them out. Its
+symbols did not grow.
+
+| binary | target | size (Go 1.26.6) | budget |
+|---|---|---|---|
+| tuios-slim | linux/amd64 | 17,117,346 | 17,630,000 |
+| tuios-slim | darwin/arm64 | 16,281,906 | 16,770,000 |
+
+The tuios-slim budgets are about 3% above the size they were set at. A change
+that puts a dropped feature back into tuios-slim, or that links one of its
+packages again, fails the job.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a

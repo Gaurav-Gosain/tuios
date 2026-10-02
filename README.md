@@ -96,6 +96,8 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)**: Pre-built binaries for Linux, macOS, Windows, FreeBSD and OpenBSD, with a `checksums.txt`. The `tuios-ghostty_*` archives are `tuios` built on the [libghostty-vt emulator](./docs/ghostty-vt.md), for Linux, macOS and Windows on amd64 and arm64.
 
+**tuios-slim** is a smaller build of the multiplexer. It leaves out the agent, host, SSH, MCP, tape, screenshot and update features. It is 16.3 MiB on linux/amd64, where `tuios` is 26.7 MiB. The `tuios-slim_*` archives on the releases page hold it, or build it with `go build -tags slim -o tuios-slim ./cmd/tuios`. [docs/SLIM.md](./docs/SLIM.md) lists what it has and what it leaves out.
+
 **Building from source** needs Go 1.26.6 or newer.
 
 **Updating.** If you installed with the quick install script or a release

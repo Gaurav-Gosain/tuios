@@ -4,6 +4,7 @@ This document provides a complete reference for TUIOS command-line interface.
 
 ## Table of Contents
 
+- [tuios-slim](#tuios-slim)
 - [Overview](#overview)
 - [Installation](#installation)
 - [Usage](#usage)
@@ -32,6 +33,17 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Version Information](#version-information)
 - [Command Migration Guide](#command-migration-guide)
 - [Related Documentation](#related-documentation)
+
+## tuios-slim
+
+tuios-slim has a subset of these commands. A command it leaves out prints one
+line and exits with status 1:
+
+```
+ssh is not in tuios-slim. Run `tuios ext install ssh`, or install tuios.
+```
+
+See [SLIM.md](SLIM.md) for the list.
 
 ## Overview
 

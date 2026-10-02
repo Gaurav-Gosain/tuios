@@ -27,6 +27,7 @@ TUIOS (Terminal UI Operating System) is a terminal-based window manager built in
 # Build from source
 go build -o tuios ./cmd/tuios
 go build -o tuios-web ./cmd/tuios-web
+go build -tags slim -o tuios-slim ./cmd/tuios   # tuios-slim, see docs/SLIM.md
 
 # Run directly
 go run ./cmd/tuios
