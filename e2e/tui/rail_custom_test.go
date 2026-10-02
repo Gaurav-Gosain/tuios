@@ -358,9 +358,11 @@ func TestRailCustomSectionCutsRowsToSize(t *testing.T) {
 // control sequence goes. The red of RED is the positive half, read off the
 // cell; the OSC title and the erase are the negative half.
 //
-// Negative control: in dockLines (internal/app/dock_engine.go) append the
-// raw line instead of dockSanitize(line). The OSC payload lands on the rail
-// as text and the wait for the absence of TITLE fails.
+// Negative control: none at this level. With dockLines (internal/app/dock_engine.go)
+// appending the raw line, this test still passes: the compositor drops the OSC
+// and the erase before they reach the screen or the host terminal, so the rail
+// cannot show the fault. TestDockLinesStripsControlSequences in internal/app
+// holds the boundary and fails on that cut.
 func TestRailCustomSectionStripsControlSequences(t *testing.T) {
 	term, _ := railCustomClient(t, "sessions,terminals,custom:40",
 		"command = \"printf '\\\\033[31mRED\\\\033[0m \\\\033[2J\\\\033]0;TITLE\\\\007PLAIN\\\\n'\"")
@@ -389,9 +391,9 @@ func TestRailCustomSectionStripsControlSequences(t *testing.T) {
 // previous run's rows, and list-dock-components says why. A refresh after
 // the fix brings the rows back, which is the positive half.
 //
-// Negative control: in applyUpdate (internal/app/dock_engine.go) keep text
-// when u.Err is set for a MultiLine component. GOOD stays on the rail after
-// the failure.
+// Negative control: in applyUpdate (internal/app/dock_engine.go) set
+// text = c.text instead of text = "" when u.Err is set, so a failed run
+// keeps the previous run's rows. GOOD stays on the rail after the failure.
 func TestRailCustomSectionEmptyOnFailure(t *testing.T) {
 	t.Run("exit", func(t *testing.T) {
 		flag := filepath.Join(t.TempDir(), "fail")
