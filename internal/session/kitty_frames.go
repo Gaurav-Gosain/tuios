@@ -22,9 +22,11 @@ import (
 //
 // A frame is dropped only when nothing between it and its replacement could
 // depend on it:
-//   - The newer frame names the same image id, which is not zero. Or both
-//     frames have no id, and the newer one is drawn over the older one
-//     exactly: see idless.
+//   - The newer frame names the same image id, which is not zero, on the
+//     same screen. A terminal keeps one image store for the main screen and
+//     one for the alternate screen, so image 1 on one is not image 1 on the
+//     other. Or both frames have no id, and the newer one is drawn over the
+//     older one exactly: see idless.
 //   - No other graphics command came between them. A placement, a delete or
 //     a query may name the image, so any of them keeps every waiting frame.
 //   - The older frame did not move the cursor. An a=T without C=1 or U=1
@@ -51,6 +53,7 @@ type queuedFrame struct {
 
 	// Read and written by broadcast only.
 	id      uint32
+	alt     bool   // sent while the pane was on the alternate screen
 	read    uint64 // the read that queued it, from PTY.reads
 	pinned  bool   // something after it depends on it, so it is never dropped
 	key     string // an id-less frame's place and keys; see idless
@@ -83,6 +86,7 @@ type gfxSeg struct {
 	first bool   // holds the frame's first byte
 	last  bool   // holds the frame's last byte
 	id    uint32 // the frame's image id
+	alt   bool   // the frame was sent on the alternate screen
 	moves bool   // the frame moves the cursor
 	keep  bool   // the frame is never dropped: it moves the cursor or names a file
 	key   string // see queuedFrame
@@ -136,6 +140,12 @@ type gfxScanner struct {
 	ntail        int
 	lastFrameEnd int64
 
+	// alt is whether the pane is on the alternate screen, from the private
+	// modes 47, 1047 and 1049 the scanner has seen. mode holds a private mode
+	// sequence that a read ended inside: see trackScreen.
+	alt  bool
+	mode []byte
+
 	// What classify found in the command in progress.
 	frameID        uint32
 	frameMoves     bool
@@ -163,6 +173,11 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 		s.carry = nil
 	}
 
+	if len(s.mode) > 0 {
+		// A private mode sequence the last read ended inside.
+		s.trackScreen(data, 0)
+	}
+
 	segStart := 0
 	cur := gfxSeg{frame: (s.state == gfxPayload || s.state == gfxPayloadEsc) && s.cmdFrame}
 	emit := func(to int) {
@@ -172,7 +187,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 			segs = append(segs, cur)
 		}
 		segStart = to
-		cur = gfxSeg{frame: cur.frame, id: cur.id, moves: cur.moves, keep: cur.keep, key: cur.key}
+		cur = gfxSeg{frame: cur.frame, id: cur.id, alt: cur.alt, moves: cur.moves, keep: cur.keep, key: cur.key}
 	}
 	endCmd := func(at int) {
 		s.state = gfxGround
@@ -210,6 +225,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 					s.keepTail(buf[:k])
 					return segs, saw
 				}
+				s.trackScreen(buf, k)
 				i = k + 1
 				continue
 			}
@@ -219,6 +235,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 				i = k + 3
 				continue
 			}
+			s.trackScreen(buf, k)
 			i = k + 1
 
 		case gfxHeader:
@@ -269,6 +286,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 					if s.frameIDless && cup != nil {
 						cur.key = string(cup) + "\x00" + string(keys)
 					}
+					cur.alt = s.alt
 				}
 				cur.id, cur.moves, cur.keep = s.frameID, s.frameMoves, s.frameKeep
 				s.inFrame = true
@@ -312,6 +330,56 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	emit(len(buf))
 	s.keepTail(buf)
 	return segs, saw
+}
+
+// maxMode bounds a private mode sequence trackScreen reads.
+const maxMode = 32
+
+// trackScreen reads the escape sequence that starts at buf[at] (an ESC), or
+// for at 0 with s.mode set, the rest of one the last read ended inside. It
+// follows the screen switches: CSI ? 47, 1047 or 1049 with h or l, and RIS
+// (ESC c), which returns to the main screen. Everything else is ignored.
+func (s *gfxScanner) trackScreen(buf []byte, at int) {
+	seq := s.mode
+	if len(seq) == 0 {
+		seq = buf[at : at+1]
+		at++
+	}
+	s.mode = nil
+	for i := at; i < len(buf); i++ {
+		c := buf[i]
+		switch {
+		case len(seq) == 1:
+			if c == 'c' {
+				s.alt = false
+				return
+			}
+			if c != '[' {
+				return
+			}
+		case len(seq) == 2:
+			if c != '?' {
+				return
+			}
+		case c >= '0' && c <= '9', c == ';':
+			if len(seq) >= maxMode {
+				return
+			}
+		case c == 'h', c == 'l':
+			for _, param := range bytes.Split(seq[3:], []byte{';'}) {
+				switch string(param) {
+				case "47", "1047", "1049":
+					s.alt = c == 'h'
+				}
+			}
+			return
+		default:
+			return
+		}
+		seq = append(seq[:len(seq):len(seq)], c)
+	}
+	// The read ended inside the sequence: keep it for the next one.
+	s.mode = append([]byte(nil), seq...)
 }
 
 // keepTail records the last bytes the scan has passed.
@@ -445,7 +513,13 @@ func (s *gfxScanner) classify(keys []byte) {
 //
 // mpv's --vo=kitty sends every frame this way.
 func idless(f, older *queuedFrame) bool {
-	return f.id == 0 && older.id == 0 && f.key != "" && f.follows && f.key == older.key
+	return f.id == 0 && older.id == 0 && f.key != "" && f.follows && f.key == older.key && f.alt == older.alt
+}
+
+// imageKey names one image: its id, on one screen.
+type imageKey struct {
+	id  uint32
+	alt bool
 }
 
 // maxOpenFrame bounds what one client gathers of a frame that is not complete
@@ -539,7 +613,7 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 				p.flushOpen(clientID, sub)
 				sub.passFrame = false
 			}
-			sub.open = &queuedFrame{id: sg.id, pinned: sg.keep, key: sg.key, follows: sg.follows, owner: sub}
+			sub.open = &queuedFrame{id: sg.id, alt: sg.alt, pinned: sg.keep, key: sg.key, follows: sg.follows, owner: sub}
 		}
 		f := sub.open
 		f.parts = append(f.parts, b)
@@ -572,7 +646,7 @@ func (p *PTY) flushOpen(clientID string, sub *ptySubscriber) {
 func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
 	old := sub.lastFrame
 	if f.id != 0 {
-		old = sub.latest[f.id]
+		old = sub.latest[imageKey{f.id, f.alt}]
 	} else if old != nil && !idless(f, old) {
 		old = nil
 	}
@@ -594,9 +668,9 @@ func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
 		return
 	}
 	if sub.latest == nil || len(sub.latest) >= maxLatestFrames {
-		sub.latest = make(map[uint32]*queuedFrame)
+		sub.latest = make(map[imageKey]*queuedFrame)
 	}
-	sub.latest[f.id] = f
+	sub.latest[imageKey{f.id, f.alt}] = f
 }
 
 // enqueueFrame puts a frame on a client's queue as one item.
