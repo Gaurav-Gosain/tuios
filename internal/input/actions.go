@@ -160,6 +160,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("scroll_move_left", handleScrollMoveLeft)
 	d.Register("scroll_move_right", handleScrollMoveRight)
 	d.Register("scroll_cycle_width", handleScrollCycleWidth)
+	d.Register("scroll_maximize", handleScrollMaximize)
 	d.Register("scroll_consume", handleScrollConsume)
 	d.Register("scroll_expel", handleScrollExpel)
 
@@ -1173,6 +1174,13 @@ func handleScrollMoveRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleScrollCycleWidth(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingCycleWidth()
+	}
+	return o, nil
+}
+
+func handleScrollMaximize(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingMaximizeColumn()
 	}
 	return o, nil
 }

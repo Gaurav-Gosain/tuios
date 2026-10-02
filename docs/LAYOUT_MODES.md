@@ -225,7 +225,8 @@ action names yourself in `[keybindings]`:
 
 | Palette command | Action name | What it does |
 |---|---|---|
-| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through 33%, 50%, 55%, 67% and 90% of the screen width |
+| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through 33%, 50%, 55%, 67% and 90% (and 100% when `appearance.scroll_column_max` is 100) of the screen width |
+| Scroll: Maximize Column Width | `scroll_maximize` | Widens the focused column to the configured ceiling, the widest the strip will give it |
 | Scroll: Stack Window Below (consume) | `scroll_consume` | Pulls the window from the next column into the focused column, stacking it below |
 | Scroll: Split to New Column (expel) | `scroll_expel` | Pushes the bottom window of the focused column out into its own new column |
 | (none) | `scroll_focus_left`, `scroll_focus_right` | Focus the column left/right |
@@ -234,7 +235,8 @@ action names yourself in `[keybindings]`:
 A column's width is a proportion of the screen until you resize it with `<` or
 `>`, which pins it to a fixed cell count; cycling the width with
 `scroll_cycle_width` unpins it again. Each press of `<` or `>` changes the width
-by four cells, within a floor of 20 cells and a ceiling of 90% of the screen.
+by four cells, within a floor of 20 cells and a ceiling set by
+`appearance.scroll_column_max` (90% by default, up to 100%).
 
 Windows stacked in one column split its height evenly, less `appearance.gap`
 between them.

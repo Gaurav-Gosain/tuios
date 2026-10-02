@@ -505,6 +505,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Scrolling mode: compute width from horizontal drag delta. All
 			// strip math runs against the content width beside the sidebar band,
 			// matching ScrollingSetPositions.
+			sl := o.GetOrCreateScrollingLayout()
 			viewW := o.ScrollingViewWidth()
 			switch o.ResizeCorner {
 			case app.TopLeft, app.BottomLeft:
@@ -512,11 +513,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			case app.TopRight, app.BottomRight:
 				newWidth = o.PreResizeState.Width + xOffset
 			}
-			maxWidth := viewW * 9 / 10
+			// Cap at the strip's ceiling, the same one the keyboard resize reads.
+			// The hardcoded nine tenths would ignore appearance.scroll_column_max
+			// the way scrollingResizeColumn used to.
+			maxWidth := sl.MaxColumnWidth(viewW)
 			newWidth = max(min(newWidth, maxWidth), config.DefaultWindowWidth)
-
-			// Update column width and reposition all windows visually.
-			sl := o.GetOrCreateScrollingLayout()
 			intID := o.GetWindowIntID(focusedWindow.ID)
 			oldWidth := 0
 			for ci := range sl.Columns {
