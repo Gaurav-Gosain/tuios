@@ -131,6 +131,11 @@ type Settings struct {
 	// via appearance.links.
 	Links string
 
+	// LinkLabel pops up a label naming the address of the link under the
+	// pointer. Turn it off to keep the hover to the underline, the pointer and
+	// the click. Set via appearance.link_label.
+	LinkLabel bool
+
 	// DockbarPosition controls the position of the dockbar
 	// Set via --dockbar-position flag or appearance.dockbar_position config
 	DockbarPosition string
@@ -275,6 +280,10 @@ type Settings struct {
 	// DockWorkspaceTooltip pops the whole name of a workspace whose pill had to cut
 	// it short. Off, a long name stays truncated with no way to read the rest.
 	DockWorkspaceTooltip bool
+
+	// DockWorkspaceLabelMax caps a workspace pill's label in cells. 0 draws the
+	// whole name and lets the strip's scroll arithmetic handle the width.
+	DockWorkspaceLabelMax int
 
 	// DockPillCaps puts powerline half-circle caps back on the dock's mode pill,
 	// workspace tabs and minimized-window pills. Off, each is a flat filled cell:
@@ -680,6 +689,7 @@ func DefaultSettings() Settings {
 		TilingScheme:                TilingSchemeSpiral,
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
+		LinkLabel:                   true,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,
@@ -705,6 +715,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,
+		DockWorkspaceLabelMax:       12,
 		DockPillCaps:                false,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,

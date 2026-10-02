@@ -61,6 +61,12 @@ type Daemon struct {
 	// Connection tracking
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
+	// lastPresence records when a client last attached to or detached from a
+	// session, by session ID. Bare attach prefers it: the session someone was
+	// last looking at is the one they mean to come back to, and keystrokes
+	// agents and scripts type into other sessions' panes must not outrank
+	// it. See findTargetSession.
+	lastPresence map[string]time.Time
 
 	// layoutMu serialises the recalculation of what a session measures (its
 	// effective size and its chrome reserve) so that a read over every client
@@ -684,6 +690,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 
 	d := &Daemon{
 		manager:            NewManager(),
+		lastPresence:       make(map[string]time.Time),
 		instance:           uuid.NewString(),
 		ctx:                ctx,
 		cancel:             cancel,
