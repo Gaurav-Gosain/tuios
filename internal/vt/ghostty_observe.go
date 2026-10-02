@@ -487,16 +487,11 @@ func (t *GhosttyTerminal) handleSemanticZoneOSC(payload []byte) {
 // sequence never reaches libghostty: the passthrough pipeline is its only
 // consumer, exactly as in the pure emulator when a passthrough func is set.
 func (t *GhosttyTerminal) handleKittyAPC(payload []byte) {
-	cmd, err := ParseKittyCommand(payload[1:])
+	cmd, err := parseKittyCommand(payload[1:], t.kittyHeaderOnly)
 	if err != nil || cmd == nil {
 		return
 	}
-	rawData := make([]byte, len(payload)+4)
-	rawData[0] = '\x1b'
-	rawData[1] = '_'
-	copy(rawData[2:], payload)
-	rawData[len(rawData)-2] = '\x1b'
-	rawData[len(rawData)-1] = '\\'
+	rawData := kittyRawAPC(payload, t.kittyHeaderOnly)
 
 	// The same rule as the pure emulator: an undecodable payload is answered
 	// here, and a query is finished by that answer.

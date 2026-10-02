@@ -13,6 +13,28 @@ import (
 // the command is returned with PayloadErr set and no Data or FilePath, so the
 // caller can still answer the guest and drop the transmission it was part of.
 func ParseKittyCommand(data []byte) (*KittyCommand, error) {
+	return parseKittyCommand(data, false)
+}
+
+// ParseKittyHeader parses the body of a kitty graphics APC like
+// ParseKittyCommand, but leaves the payload undecoded: Data and FilePath stay
+// empty, and RawPayload is kept only when it is short enough to be an echoed
+// reply (see IsKittyResponsePayload).
+//
+// It is for a reader that acts on the control keys alone, such as the daemon,
+// which answers queries and refuses animation and never draws. Decoding a
+// 1.5 MB frame there only to throw it away cost more than parsing it.
+//
+// The payload is still decoded when an EINVAL reply would be owed for it (see
+// KittyPayloadErrorResponse), so PayloadErr is set whenever it decides a
+// reply. That is the first chunk of a transmission with an id and without
+// q=2, or a query. The later chunks of a transmission carry no id, and a
+// stream sent with q=2 owes no reply, so neither is decoded.
+func ParseKittyHeader(data []byte) (*KittyCommand, error) {
+	return parseKittyCommand(data, true)
+}
+
+func parseKittyCommand(data []byte, headerOnly bool) (*KittyCommand, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -27,6 +49,16 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 
 	if len(controlPart) > 0 {
 		parseKittyControlParams(string(controlPart), cmd)
+	}
+
+	if len(dataPart) > 0 && headerOnly {
+		if len(dataPart) <= maxKittyResponsePayload {
+			cmd.RawPayload = string(dataPart)
+		}
+		if kittyPayloadErrorOwed(cmd) {
+			_, cmd.PayloadErr = DecodeKittyPayload(dataPart)
+		}
+		return cmd, nil
 	}
 
 	if len(dataPart) > 0 {
@@ -124,16 +156,19 @@ var errKittyPadding = errors.New("misplaced base64 padding")
 // usually a shell that received it as input. Answering that would echo again,
 // forever, so it gets nothing.
 func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
-	if cmd == nil || cmd.PayloadErr == nil || cmd.Quiet >= 2 {
-		return nil
-	}
-	if IsKittyEchoedResponse(cmd) {
-		return nil
-	}
-	if cmd.Action != KittyActionQuery && cmd.ImageID == 0 && cmd.ImageNumber == 0 {
+	if cmd == nil || cmd.PayloadErr == nil || !kittyPayloadErrorOwed(cmd) {
 		return nil
 	}
 	return BuildKittyResponse(false, cmd.ImageID, "EINVAL:payload is not valid base64")
+}
+
+// kittyPayloadErrorOwed reports whether cmd would be answered with EINVAL if
+// its payload did not decode. ParseKittyHeader decodes exactly these.
+func kittyPayloadErrorOwed(cmd *KittyCommand) bool {
+	if cmd.Quiet >= 2 || IsKittyEchoedResponse(cmd) {
+		return false
+	}
+	return cmd.Action == KittyActionQuery || cmd.ImageID != 0 || cmd.ImageNumber != 0
 }
 
 // IsKittyEchoedResponse reports whether a parsed graphics command is a
@@ -151,6 +186,10 @@ func IsKittyEchoedResponse(cmd *KittyCommand) bool {
 	return cmd != nil && !cmd.otherKeys && IsKittyResponsePayload(cmd.RawPayload)
 }
 
+// maxKittyResponsePayload is the longest payload IsKittyResponsePayload takes
+// for an echoed reply.
+const maxKittyResponsePayload = 256
+
 // IsKittyResponsePayload reports whether a graphics payload looks like an
 // echoed kitty protocol response rather than image data.
 //
@@ -165,7 +204,7 @@ func IsKittyEchoedResponse(cmd *KittyCommand) bool {
 // The shape required is ^(OK|E[A-Z]+(:.*)?)$ with a hard length cap so that a
 // legitimate (necessarily longer, mixed-case) base64 payload cannot match.
 func IsKittyResponsePayload(payload string) bool {
-	if len(payload) == 0 || len(payload) > 256 {
+	if len(payload) == 0 || len(payload) > maxKittyResponsePayload {
 		return false
 	}
 	if payload == "OK" {
