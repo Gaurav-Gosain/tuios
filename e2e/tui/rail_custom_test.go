@@ -105,6 +105,9 @@ func railRunNumber(s tuitest.Screen) int {
 
 var runNumberRe = regexp.MustCompile(`RUN-(\d+)`)
 
+// plusCountRe matches the "+N" of an overflow row.
+var plusCountRe = regexp.MustCompile(`\+\d+`)
+
 // waitRailRun waits until the rail shows RUN-n exactly.
 func waitRailRun(t *testing.T, term *tuitest.Terminal, n int, why string) {
 	t.Helper()
@@ -301,9 +304,10 @@ func TestRailCustomSectionRefreshModes(t *testing.T) {
 // the section's lines and the rail's width, and a last line with no newline
 // is still a row.
 //
-// Negative control: in drawCustom (internal/app/render_sidebar.go) draw
-// len(customRows) rows instead of count[sidebarSectionCustom]. ROW40 lands
-// on screen and the pane region carries the rows' tails.
+// Negative controls: in drawCustom (internal/app/render_sidebar.go) draw
+// len(customRows) rows instead of count[sidebarSectionCustom]: ROW40 lands
+// on screen and the +N row is gone. Drop the cut to the rail's width: the
+// digit tails land in the pane region.
 func TestRailCustomSectionCutsRowsToSize(t *testing.T) {
 	t.Run("long", func(t *testing.T) {
 		term, _ := railCustomClient(t, "sessions,terminals,custom:40",
@@ -313,14 +317,26 @@ func TestRailCustomSectionCutsRowsToSize(t *testing.T) {
 		if railRowOf(s, "ROW40") >= 0 {
 			t.Fatalf("the section drew all forty rows on a rail with 40%% of the lines\n%s", term.Snapshot())
 		}
-		if railRowOf(s, "+") < 0 {
-			t.Fatalf("the section hides rows and does not own up to them with +N\n%s", term.Snapshot())
-		}
+		// The overflow row is "+N" below the custom title. The sessions and
+		// terminals headers draw a "+" too, so look only under the title.
+		title := railRowOf(s, "Custom")
 		_, rows := s.Size()
+		found := false
+		for r := title + 1; title >= 0 && r < rows; r++ {
+			if plusCountRe.MatchString(railLine(s, r)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("the section hides rows and does not own up to them with +N below its title\n%s", term.Snapshot())
+		}
+		// Each row is ROWnn- and seventy digits, so anything past the rail's
+		// width that is a long run of digits is a row that was not cut.
 		for r := range rows {
-			line := s.Line(r)
-			if len([]rune(line)) > railWidth && strings.Contains(string([]rune(line)[railWidth:]), "ROW") {
-				t.Fatalf("row %d ran past the rail's width into the panes: %q\n%s", r, line, term.Snapshot())
+			line := []rune(s.Line(r))
+			if len(line) > railWidth && strings.Contains(string(line[railWidth:]), "0123456789") {
+				t.Fatalf("row %d ran past the rail's width into the panes: %q\n%s", r, string(line), term.Snapshot())
 			}
 		}
 	})
@@ -392,9 +408,19 @@ func TestRailCustomSectionEmptyOnFailure(t *testing.T) {
 		waitRailShows(t, term, "GOOD", "after the fix")
 	})
 	t.Run("nothing", func(t *testing.T) {
+		runs := countFile(t)
 		term, base := railCustomClient(t, "sessions,terminals,custom:40",
-			"command = \"true\"")
+			"command = \"echo x >> "+runs+"\"")
 		waitRailShows(t, term, "Custom", "a command that prints nothing")
+		// The zero values of the listing look like a silent run, so wait
+		// for proof that the command ran at all.
+		deadline := time.Now().Add(uiTimeout)
+		for runCount(t, runs) < 1 && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+		}
+		if runCount(t, runs) < 1 {
+			t.Fatalf("the command never ran\n%s", term.Snapshot())
+		}
 		c := waitRailComponent(t, base, "a silent run", func(c railComponent) bool { return c.LastExit == 0 })
 		if c.Text != "" || c.Visible {
 			t.Fatalf("a silent command was reported as drawing: %+v", c)
@@ -422,7 +448,7 @@ func TestRailCustomSectionEmptyOnFailure(t *testing.T) {
 // empty pane id and the id assertion fails.
 func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	term, base := railCustomClient(t, "sessions,terminals,custom:50",
-		"command = \"echo ID=$TUIOS_ACTIVE_PANE_ID; echo CWD=$TUIOS_ACTIVE_PANE_CWD; echo SEC=$TUIOS_RAIL_SECTION; echo W=$TUIOS_RAIL_WIDTH; echo H=$TUIOS_RAIL_HEIGHT\"\nrefresh = \"event:window-focused\"")
+		"command = \"echo ID=$TUIOS_ACTIVE_PANE_ID; echo CWD=${TUIOS_ACTIVE_PANE_CWD##*/}; echo SEC=$TUIOS_RAIL_SECTION; echo W=$TUIOS_RAIL_WIDTH; echo H=$TUIOS_RAIL_HEIGHT\"\nrefresh = \"event:window-focused\"")
 	renameWindow(t, term, "FIRST")
 	dir := t.TempDir()
 	if out, err := tuiosCLI(t, base, "new-window", "SECOND", "-s", "e2e", "--no-focus", "--cwd", dir); err != nil {
@@ -432,7 +458,7 @@ func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	focusPane(t, base, "SECOND")
 	waitRailShows(t, term, "ID="+shortID(windowID(t, base, "e2e", "SECOND")), "after focusing SECOND")
 	s := term.Screen()
-	if railRowOf(s, "CWD="+dir[:min(len(dir), railWidth-8)]) < 0 {
+	if railRowOf(s, "CWD="+filepath.Base(dir)) < 0 {
 		t.Fatalf("the run did not see the focused pane's folder %s\n%s", dir, term.Snapshot())
 	}
 	if railRowOf(s, "SEC=custom") < 0 {
@@ -452,6 +478,9 @@ func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	}
 	focusPane(t, base, "FIRST")
 	waitRailShows(t, term, "ID="+shortID(windowID(t, base, "e2e", "FIRST")), "after focusing FIRST again")
+	if railRowOf(term.Screen(), "CWD="+filepath.Base(dir)) >= 0 {
+		t.Fatalf("FIRST is focused and the run still reports SECOND's folder\n%s", term.Snapshot())
+	}
 }
 
 // TestRailCustomCommandIsNotSettable: set-config refuses the command, and
@@ -492,7 +521,7 @@ func TestRailCustomSectionKeepsOnePendingRerun(t *testing.T) {
 		t.Fatalf("write mark: %v", err)
 	}
 	term, base := railCustomClient(t, "sessions,terminals,custom:40",
-		"command = \"echo x >> "+runs+"; sleep 2; cat "+mark+"\"\nrefresh = \"event:window-focused\"")
+		"command = \"echo x >> "+runs+"; cat "+mark+"; sleep 2\"\nrefresh = \"event:window-focused\"")
 	renameWindow(t, term, "FIRST")
 	if out, err := tuiosCLI(t, base, "new-window", "SECOND", "-s", "e2e", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
