@@ -144,6 +144,24 @@ since they draw the same frame. A screenshot of one pane is drawn on the pane's
 painted colour, and a screen or region capture carries every painted surface
 as it is drawn.
 
+## Graphical programs from the launcher
+
+The launcher starts a desktop entry in a new pane. A graphical program opens
+its own window, so its pane stays empty. Set `launcher.gui_command` to start
+such an entry with another command. The launcher adds the entry's argv to that
+command. Entries with `Terminal=true` and programs from `$PATH` still open in
+a pane.
+
+```toml
+[launcher]
+gui_command = "tuios-wayland launch --"   # or "niri msg action spawn --"
+```
+
+Use only a command that takes an argv and runs it as an argv. Do not use a
+command that joins its arguments into a shell line, such as `swaymsg exec --`
+or `hyprctl dispatch exec`. With such a command, the text of a desktop entry
+becomes shell code. Any installed package can write a desktop entry.
+
 ## Master-stack layout
 
 These options shape the master-stack layout. Each workspace starts with them.

@@ -11,6 +11,12 @@ type LauncherConfig struct {
 	// It exists for a Wayland compositor that shows its windows as panes
 	// (tuios-wayland launch --), and works as well for one that does not
 	// (niri msg action spawn --).
+	//
+	// tuios runs the argv directly, but the command it names may not. A
+	// spawn command that joins its arguments into one shell line (swaymsg
+	// exec --, hyprctl dispatch exec) turns the text of a desktop entry,
+	// which any installed package can write, into shell code. Only commands
+	// that keep the argv as an argv are safe here.
 	GUICommand string `toml:"gui_command"`
 }
 
