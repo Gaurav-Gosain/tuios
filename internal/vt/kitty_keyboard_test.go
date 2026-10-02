@@ -99,7 +99,10 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		{"super+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModSuper}, disambiguate, "\x1b[97;9u"},
 		{"meta+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModMeta}, disambiguate, "\x1b[97;33u"},
 		{"shift+alt+ctrl+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModShift | ModAlt | ModCtrl}, disambiguate, "\x1b[97;8u"},
-		{"enter with disambiguate", KeyPressEvent{Code: KeyEnter}, disambiguate, "\x1b[13u"},
+		// kitty keeps a bare Enter as CR under disambiguate; only a
+		// modifier or report-all-keys makes it CSI 13 u.
+		{"enter with disambiguate stays legacy", KeyPressEvent{Code: KeyEnter}, disambiguate, ""},
+		{"ctrl+enter with disambiguate", KeyPressEvent{Code: KeyEnter, Mod: ModCtrl}, disambiguate, "\x1b[13;5u"},
 		{"escape with disambiguate", KeyPressEvent{Code: KeyEscape}, disambiguate, "\x1b[27u"},
 		{"up arrow without modifiers", KeyPressEvent{Code: KeyUp}, disambiguate, "\x1b[A"},
 		{"shift+up arrow", KeyPressEvent{Code: KeyUp, Mod: ModShift}, disambiguate, "\x1b[1;2A"},
@@ -319,7 +322,11 @@ func TestKittyTextUnderDisambiguate(t *testing.T) {
 		{"ctrl+a, numlock on is still CSI u", "\x1b[97;133u", disambiguate, "\x1b[97;5u"},
 		{"non-ascii text", "\x1b[233u", disambiguate, ""},
 		{"alt+non-ascii is still CSI u", "\x1b[233;3u", disambiguate, "\x1b[233;3u"},
-		{"enter, numlock on, is still its key code", "\x1b[13;129u", disambiguate, "\x1b[13u"},
+		// Enter, Tab and Backspace stay legacy bytes under disambiguate, as
+		// kitty sends them; the caller sends CR.
+		{"enter, numlock on, stays legacy", "\x1b[13;129u", disambiguate, ""},
+		// The lock bits do not reach a pane without report-all-keys.
+		{"up, numlock on, has no lock bits", "\x1b[1;129A", disambiguate, "\x1b[A"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

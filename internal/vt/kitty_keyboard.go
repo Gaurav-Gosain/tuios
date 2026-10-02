@@ -201,6 +201,9 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	if isKittyModifierKey(key.Code) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
 		return ""
 	}
+	if isKittyLegacyTextKey(key, flags) {
+		return ""
+	}
 
 	code := int(key.Code)
 
@@ -532,11 +535,39 @@ func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
 	if isKittyModifierKey(key.Code) && flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
 		return ""
 	}
+	if isKittyLegacyTextKey(key, flags) {
+		return ""
+	}
 	form, ok := kittyKeyForm(key.Code)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[%d;%d:3%c", form.num, kittyModParamFor(key.Mod, flags), form.final)
+	keyField := strconv.Itoa(form.num)
+	if form.final == 'u' && flags&ansi.KittyReportAlternateKeys != 0 {
+		// The release names the same alternate keys as its press, as kitty's
+		// does: CSI 97:65 ; 2:3 u for Shift+a.
+		keyField = kittyAlternateKeys(form.num, key)
+	}
+	return fmt.Sprintf("\x1b[%s;%d:3%c", keyField, kittyModParamFor(key.Mod, flags), form.final)
+}
+
+// isKittyLegacyTextKey reports whether key is Enter, Tab or Backspace with no
+// modifier for a pane that did not ask for every key. kitty sends those three
+// as their legacy bytes (CR, HT, DEL) under disambiguate and event types, and
+// sends no release or repeat event for them. Only the report-all-keys flag, or
+// a modifier, turns them into escape codes.
+func isKittyLegacyTextKey(key KeyPressEvent, flags int) bool {
+	if flags&ansi.KittyReportAllKeysAsEscapeCodes != 0 {
+		return false
+	}
+	if key.Mod&^(ModCapsLock|ModNumLock) != 0 {
+		return false
+	}
+	switch key.Code {
+	case KeyEnter, KeyTab, KeyBackspace:
+		return true
+	}
+	return false
 }
 
 // kittyModParamFor is kittyModParam with the lock modifiers added for a pane
