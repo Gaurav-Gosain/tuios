@@ -29,6 +29,8 @@ import (
 // own process rather than the daemon's.
 func tuiosCLIEnv(t *testing.T, base string, env []string, args ...string) (string, error) {
 	t.Helper()
+	skipIfSlimLacks(t)
+	skipIfSlimRuns(t, args)
 	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")

@@ -1,0 +1,37 @@
+# The end-to-end files the tuios-slim job runs, one per line. The job takes
+# every Test function in them and runs those against the slim binary. A test
+# of a feature tuios-slim leaves out skips itself; see slim_test.go.
+attach_starts_daemon_test.go
+bsp_preselect_test.go
+copy_flash_test.go
+copy_mode_entry_test.go
+daemon_keybind_tiling_test.go
+daemon_persistence_test.go
+daemon_shared_borders_test.go
+daemon_tiling_test.go
+daemon_tiling_variants_test.go
+directional_focus_test.go
+kitty_icat_test.go
+master_position_test.go
+mouse_test.go
+multi_copy_test.go
+multiclient_chrome_test.go
+multiclient_geometry_test.go
+multiclient_mixed_versions_test.go
+multiclient_size_test.go
+multiclient_tree_ops_test.go
+nested_attach_test.go
+pane_grants_test.go
+pip_test.go
+popup_test.go
+reattach_rolled_snapshot_test.go
+restore_cwd_test.go
+scroll_test.go
+scrollback_reflow_test.go
+send_keys_window_test.go
+session_switch_fidelity_test.go
+sidebar_test.go
+sixel_test.go
+slim_test.go
+window_size_test.go
+xpanes_test.go

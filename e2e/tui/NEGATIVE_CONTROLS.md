@@ -581,6 +581,28 @@ alt-screen cache and the unlocked emulator resize: the program under test is a
 separate process, so `-race` on this package instruments the harness and not
 tuios.
 
+## tuios-slim
+
+`TestSlimDroppedCommandSaysSo` was run against a tuios-slim built with no
+stub commands (`addFeatureCommands` in `cmd/tuios/features_slim.go` given an
+empty list). It failed on every command: cobra printed `unknown command "ssh"
+for "tuios"` and a guess at another command, where the test wants the one
+line that names the command and the way to get it.
+
+`TestFullCLIOnASlimDaemon` failed before `explainVerbError` learned the slim
+daemon's refusal. The full CLI read the refusal as an old daemon and printed
+"The running daemon does not know list-agents. Most likely cause: the daemon
+is older than this tuios", which sends the person to restart a daemon that is
+not old. The positive half is in the same test: `ls` and `send-text` from the
+full CLI work on the slim daemon.
+
+`TestSlimClientKeepsListeningAfterMail` was run against a tuios-slim whose
+update loop does not arm the client event listener again after a mail event
+(`return m, nil` in the `AgentMailMsg` case of `internal/app/update.go`). The
+first client never followed the session to the smaller size, and the wait
+timed out. The test checks first that the frame starts wider than the size
+it waits for.
+
 ## Tests without a specific negative control
 
 `TestScrolledOutputRendersCorrectly`, `TestScrollbackModeShowsEarlierOutput`,

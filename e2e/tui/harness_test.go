@@ -192,6 +192,7 @@ func runE2E(m *testing.M) int {
 		}
 	}
 
+	slimBinary = detectSlim(tuiosBin)
 	return m.Run()
 }
 
@@ -284,6 +285,8 @@ var xdgKeys = []string{
 // share one daemon by sharing the root.
 func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	t.Helper()
+	skipIfSlimLacks(t)
+	skipIfSlimRuns(t, o.args)
 
 	// Registered before the child is spawned so cleanup order is: tear the
 	// client down first (tuitest's Close, registered inside StartT below), then
@@ -806,6 +809,8 @@ func waitForAll(t *testing.T, term *tuitest.Terminal, timeout time.Duration, wha
 // living under an isolation root, and returns its combined output.
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	t.Helper()
+	skipIfSlimLacks(t)
+	skipIfSlimRuns(t, args)
 	// A subcommand that loads the config writes the default file when there
 	// is none, and a file written with the shipped values would read as the
 	// test's own choice when the client starts. So the pins go in first here

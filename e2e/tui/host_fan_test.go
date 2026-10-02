@@ -28,6 +28,8 @@ import (
 // repository the person is in.
 func tuiosCLIInDir(t *testing.T, base, dir string, env []string, args ...string) (string, error) {
 	t.Helper()
+	skipIfSlimLacks(t)
+	skipIfSlimRuns(t, args)
 	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = dir

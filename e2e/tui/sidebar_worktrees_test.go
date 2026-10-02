@@ -22,6 +22,8 @@ import (
 // is a worktree session and cannot be the control.
 func tuiosCLIIn(t *testing.T, base, dir string, args ...string) (string, error) {
 	t.Helper()
+	skipIfSlimLacks(t)
+	skipIfSlimRuns(t, args)
 	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = dir
