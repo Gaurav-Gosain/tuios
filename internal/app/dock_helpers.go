@@ -145,9 +145,11 @@ func (m *OS) workspacePillName(n int) string {
 }
 
 // workspacePillLabel is what a pill prints: the name through the configured
-// tab format (so {index} and {name} can be combined), capped. A format that
-// already carries {index} gets the raw name, or the strip would read "2: work
-// [2]" and say the number twice.
+// tab format (so {index} and {name} can be combined), capped by
+// appearance.dock_workspace_label_max. A cap of 0 draws the whole name; the
+// strip's scroll arithmetic is what handles a bar that no longer fits it. A
+// format that already carries {index} gets the raw name, or the strip would
+// read "2: work [2]" and say the number twice.
 func (m *OS) workspacePillLabel(n int) string {
 	var label string
 	if strings.Contains(m.Settings.DockWorkspaceTabFormat, "{index}") {
@@ -155,7 +157,10 @@ func (m *OS) workspacePillLabel(n int) string {
 	} else {
 		label = m.workspacePillName(n)
 	}
-	return overlay.Truncate(label, workspacePillLabelMax)
+	if max := m.Settings.DockWorkspaceLabelMax; max > 0 {
+		label = overlay.Truncate(label, max)
+	}
+	return label
 }
 
 // workspacePillClipped reports whether the pill had to cut its label short,
@@ -163,7 +168,11 @@ func (m *OS) workspacePillLabel(n int) string {
 // through the tab format, because that is what the pill draws: a short name can
 // still be clipped once the format lengthens it.
 func (m *OS) workspacePillClipped(n int) bool {
-	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > workspacePillLabelMax
+	max := m.Settings.DockWorkspaceLabelMax
+	if max <= 0 {
+		return false
+	}
+	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > max
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
