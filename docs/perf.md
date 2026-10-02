@@ -2132,7 +2132,7 @@ a binary is over its budget.
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
 | linux/amd64 | 25,182,370 | 28,065,000 (raised at 28,029,090) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,485,000 (raised at 26,451,634) | 25,265,154 |
+| darwin/arm64 | 23,834,594 | 26,520,000 (raised at 26,485,042) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2197,6 +2197,12 @@ while every client is behind. That brought the build to 28,029,090 and
 7,774 and 22,830 bytes of room, and the change adds 36,864 and 34,464 bytes.
 CI measured linux/amd64 about 8 KB above a local build, so the budgets leave
 about 35 KB.
+
+The darwin/arm64 budget went to 26,520,000 when a signal-wedged client learned
+to exit (#207): the signal policy, its grace exit and the termios restore.
+That brought the build to 26,485,042 bytes (Go 1.26.6), 42 bytes over. Main
+was 26,451,762 bytes, and the change adds 33,280 bytes. linux/amd64 grew 8,192
+bytes to 28,041,378 and still fits.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
