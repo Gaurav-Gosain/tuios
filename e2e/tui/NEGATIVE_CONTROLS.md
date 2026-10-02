@@ -588,6 +588,22 @@ switch, and against this branch with one call site cut at a time.
 | Reload | `applyUserConfig`: the `SetAgentsEnabled` call cut | `TestAgentsSwitchAppliesOnReload` (get-agent-state still served after the switch went off) | **caught** |
 | Detection tick | `agentMonitor`: the `agentsOff` skip cut | `TestAgentsOffShowsNoAgentRow/off` (the pane holds `working`) | **caught** |
 | Client rail gate | `sidebarAgents`: the `agentsOn` term cut | none | **not caught** |
+| Queue drop | `clearAgentsForOff`: the `dropAllQueued` call cut | `TestAgentsOffDropsTheQueue` (the message queued before the switch is typed after it) | **caught** |
+| Inbox watcher after a start with the switch off | `applyAgentsSwitch`: start the watcher only when the switch moved | `TestAgentsOnAfterStartingOffStartsTheInbox` (the Inbox never shows the other session's prompt) | **caught** |
+| Typing into a pane the caller opened | `typingRefusal`: the `offTypingAllowed` term cut | `TestAgentsOffTmuxShimTypesIntoItsOwnPane` (the shim's send-keys is refused) | **caught** |
+| The switch is the person's | `verbSetOption`: the pane check made `if false` | `TestAgentsSwitchIsThePersons` (the pane's set-config exits 0) | **caught** |
+| This machine's switch on a call to another | `VerbClient.CallWithTimeout`: the `HostCallGuard` check made `if false` | `TestAgentsOffHereRefusesACallToAnotherMachine` (list-agents on build:far succeeds) | **caught** |
+| Agent keys in the help | `HelpCategories`: the `withoutAgentHelp` call cut | `TestAgentsOffShowsNoAgentRow/off` (the help search finds "Open the Inbox on its mail") | **caught** |
+| Another machine's agent marks | `withHostGroups`: the `clearAgentMarks` call cut | `TestAgentsOffHidesAnotherMachinesAgentMarks` (the mark stays on build's row) | **caught** |
+
+Two fixes have no end-to-end test. Each closes a race that a test cannot
+time:
+- A `request-approval` admitted just before the switch goes off now closes
+  its own hold.
+- A detection pass that read the switch before it went off clears what it
+  wrote.
+
+The section editor and the length of the notice have no test.
 
 The client rail gate is not caught because the daemon reads the same file
 and holds no agent state, so the rail has nothing to list either way. The
