@@ -19,8 +19,8 @@ budget() {
 	case "$1 $2" in
 	"tuios linux/amd64") echo 28065000 ;;
 	"tuios darwin/arm64") echo 26520000 ;;
-	"tuios-slim linux/amd64") echo 17630000 ;;
-	"tuios-slim darwin/arm64") echo 16770000 ;;
+	"tuios-slim linux/amd64") echo 17207000 ;;
+	"tuios-slim darwin/arm64") echo 16380000 ;;
 	*) echo "no budget for $1 on $2" >&2; return 1 ;;
 	esac
 }

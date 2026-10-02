@@ -2207,16 +2207,18 @@ bytes to 28,041,378 and still fits.
 
 tuios-slim came in under the same budgets. The full build moved its feature
 commands and state behind seams so the slim tag can leave them out. Its
-symbols did not grow.
+symbols did not grow. The seams added 16,384 bytes on linux/amd64 and 480 on
+darwin/arm64, which brought the build to 28,057,762 and 26,485,522 bytes
+(Go 1.26.6), inside the budgets.
 
 | binary | target | size (Go 1.26.6) | budget |
 |---|---|---|---|
-| tuios-slim | linux/amd64 | 17,117,346 | 17,630,000 |
-| tuios-slim | darwin/arm64 | 16,281,906 | 16,770,000 |
+| tuios-slim | linux/amd64 | 17,174,690 | 17,207,000 |
+| tuios-slim | darwin/arm64 | 16,349,410 | 16,380,000 |
 
-The tuios-slim budgets are about 3% above the size they were set at. A change
-that puts a dropped feature back into tuios-slim, or that links one of its
-packages again, fails the job.
+The tuios-slim budgets are about 31 KB above the size they were set at. A
+change that puts a dropped feature back into tuios-slim, or that links one of
+its packages again, fails the job.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a

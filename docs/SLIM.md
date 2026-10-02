@@ -7,8 +7,8 @@ replacement.
 
 | Binary | linux/amd64 | darwin/arm64 |
 |---|---|---|
-| tuios | 28,004,514 bytes (26.7 MiB) | 26,433,826 bytes (25.2 MiB) |
-| tuios-slim | 17,117,346 bytes (16.3 MiB) | 16,281,906 bytes (15.5 MiB) |
+| tuios | 28,057,762 bytes (26.8 MiB) | 26,485,522 bytes (25.3 MiB) |
+| tuios-slim | 17,174,690 bytes (16.4 MiB) | 16,349,410 bytes (15.6 MiB) |
 
 The sizes are for release builds (`-trimpath -ldflags "-s -w"`, Go 1.26.6).
 `scripts/binary-size.sh` measures both binaries and holds each to a budget.
