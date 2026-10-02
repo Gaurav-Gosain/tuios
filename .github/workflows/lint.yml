@@ -77,3 +77,10 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
         run: go vet ./...
+
+      - name: Vet tuios-slim
+        # The slim tag swaps whole files for stubs (see docs/SLIM.md), so a
+        # stub that misses a platform file breaks only this build.
+        env:
+          GOOS: ${{ matrix.goos }}
+        run: go vet -tags slim ./...

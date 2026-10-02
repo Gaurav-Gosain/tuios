@@ -105,3 +105,56 @@ jobs:
         # runner. Never fail the job on this.
         if: always()
         run: pkill -f "$RUNNER_TEMP/tuios" || true
+
+  e2e-slim:
+    # tuios-slim, the multiplexer without the agent, host and other features
+    # (docs/SLIM.md), against the files in e2e/tui/slim_suite.txt: windows,
+    # tiling, copy mode, attach, multi-client and the slim build's own
+    # tests. A test of a feature slim leaves out skips itself with the
+    # reason (e2e/tui/slim_test.go).
+    name: e2e-tui (tuios-slim)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: e2e/tui/go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/tui/go.sum
+
+      - name: Build tuios-slim and tuios
+        # The full binary is for the tests that mix the two on one daemon.
+        run: |
+          go build -tags slim -o "$RUNNER_TEMP/tuios-slim" ./cmd/tuios
+          go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+
+      - name: Run the slim subset
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+          TUIOS_E2E_BIN: ${{ runner.temp }}/tuios-slim
+          TUIOS_E2E_FULL_BIN: ${{ runner.temp }}/tuios
+          # TestMixedVersionsReshapeOneTree: a slim daemon with a full client
+          # and a slim client on one session.
+          TUIOS_E2E_MIX_DAEMON: ${{ runner.temp }}/tuios-slim
+          TUIOS_E2E_MIX_A: ${{ runner.temp }}/tuios
+          TUIOS_E2E_MIX_B: ${{ runner.temp }}/tuios-slim
+        run: |
+          set -euo pipefail
+          names=$(grep -v '^#' slim_suite.txt | xargs grep -ho '^func Test[A-Za-z0-9_]*' | sed 's/^func //' | sort -u)
+          if [ -z "$names" ]; then
+            echo "slim_suite.txt named no tests" >&2
+            exit 1
+          fi
+          echo "$names" | wc -l | xargs printf 'the slim subset runs %s tests\n'
+          go test -count=1 -timeout 25m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./...
+
+      - name: Reap any surviving daemons
+        if: always()
+        run: |
+          pkill -f "$RUNNER_TEMP/tuios-slim" || true
+          pkill -f "$RUNNER_TEMP/tuios" || true

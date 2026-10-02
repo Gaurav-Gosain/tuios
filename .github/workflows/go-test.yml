@@ -93,6 +93,40 @@ jobs:
         # green on code that no longer exists.
         run: go test ./... -count=1 -timeout 20m
 
+  slim:
+    name: tuios-slim
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/go-test.yml
+
+      - name: Vet
+        run: go vet -tags slim ./...
+
+      - name: Build
+        run: go build -tags slim ./... && go build -tags slim -o tuios-slim ./cmd/tuios
+
+      - name: The version says slim
+        run: ./tuios-slim --version | head -1 | grep -q ' slim '
+
+      - name: Test
+        # The packages the slim tag changes. Each keeps the tests of what
+        # tuios-slim has; the tests of the features it leaves out carry the
+        # !slim tag.
+        run: >-
+          go test -tags slim -count=1 -timeout 20m
+          ./cmd/tuios/ ./internal/app/ ./internal/input/ ./internal/config/
+          ./internal/session/ ./internal/edition/ ./internal/extension/
+
   race:
     name: go test -race ./...
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

@@ -89,6 +89,49 @@ builds:
     flags:
       - -trimpath
 
+  # tuios-slim is cmd/tuios built with the slim tag: the multiplexer without
+  # the agent, host, SSH, MCP, tape, screenshot and update features. See
+  # docs/SLIM.md. It is an extra build: the tuios build above keeps every
+  # feature. Same targets as tuios.
+  - id: tuios-slim
+    main: ./cmd/tuios
+    binary: tuios-slim
+    tags:
+      - slim
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+    goarm:
+      - "6"
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: freebsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
   # The ghostty builds link libghostty-vt (static, built by
   # scripts/ghostty-lib.sh at a pinned commit) behind the ghostty build tag.
   # One build per target because cgo needs a per-target compiler; zig is the
@@ -214,6 +257,21 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     ids:
       - tuios-web
+    files:
+      - README.md
+      - LICENSE*
+
+  - id: tuios-slim-archive
+    name_template: >-
+      {{ .ProjectName }}-slim_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    ids:
+      - tuios-slim
     files:
       - README.md
       - LICENSE*
