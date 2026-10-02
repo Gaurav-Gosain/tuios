@@ -728,11 +728,7 @@ Use --ansi to preserve ANSI escape codes (colors, styles).
 Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
 --palette (16 hex colours of your theme, xterm defaults otherwise).
 Use --last-command to read only what the last finished command printed. It
-needs a shell that marks its commands with OSC 133, and it is plain text.
-
-A capture from a session on another machine (-s host:session) is fenced as
-untrusted content. With --ansi or --resolved, only colour and style codes are
-kept from it. With --json the result carries host and "untrusted": true.`,
+needs a shell that marks its commands with OSC 133, and it is plain text.` + capturePaneHostHelp,
 		Example: `  # Capture focused window
   tuios capture-pane
 
@@ -752,10 +748,7 @@ kept from it. With --json the result carries host and "untrusted": true.`,
   tuios capture-pane -w editor --scrollback > pane.txt
 
   # What the last command in the build pane printed, and nothing else
-  tuios capture-pane -w build --last-command
-
-  # Read pane 0 of session api on host build, as JSON
-  tuios capture-pane -w build:api:0 --json`,
+  tuios capture-pane -w build --last-command` + capturePaneHostExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines, capturePaneLastCommand, capturePaneJSON)
 		},

@@ -28,6 +28,12 @@ func hideHostFlags(cmds ...*cobra.Command) {
 	}
 }
 
+// The capture-pane help has no part about other machines in tuios-slim.
+const (
+	capturePaneHostHelp    = ""
+	capturePaneHostExample = ""
+)
+
 func runAttachOnHost(string, string, bool, bool, bool) error {
 	return edition.Missing("attach --host")
 }

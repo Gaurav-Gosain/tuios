@@ -41,6 +41,21 @@ func runAsLinkedProgram(arg0 string, args []string) (code int, ok bool) {
 	return 0, false
 }
 
+// capturePaneHostHelp and capturePaneHostExample are the parts of the
+// capture-pane help about panes on other machines. tuios-slim has no links
+// to other machines, so its help leaves them out. See host_slim.go.
+const (
+	capturePaneHostHelp = `
+
+A capture from a session on another machine (-s host:session) is fenced as
+untrusted content. With --ansi or --resolved, only colour and style codes are
+kept from it. With --json the result carries host and "untrusted": true.`
+	capturePaneHostExample = `
+
+  # Read pane 0 of session api on host build, as JSON
+  tuios capture-pane -w build:api:0 --json`
+)
+
 // hideHostFlags does nothing in the full build, which has every host flag.
 func hideHostFlags(...*cobra.Command) {}
 
