@@ -221,6 +221,10 @@ func (m *OS) applyBorderColors() {
 // a held key spent one per repeat. Reading the config into bytes stays here
 // (memory, and the config is the model's own); the file lands off the Update
 // goroutine, the way the applist history does.
+// PersistSettings is the exported door to persistSettings, for handlers in
+// the input package that change a persisted preference and need the write.
+func (m *OS) PersistSettings() tea.Cmd { return m.persistSettings() }
+
 func (m *OS) persistSettings() tea.Cmd {
 	if m.UserConfig == nil {
 		return nil
