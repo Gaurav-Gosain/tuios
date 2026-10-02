@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,6 +76,16 @@ type dockComponent struct {
 	MaxWidth int
 	Refresh  config.DockRefresh
 
+	// MultiLine keeps every line of stdout, newline separated, rather than
+	// the first. The rail's custom section draws one row per line; a dock
+	// cell has one line to draw.
+	MultiLine bool
+	// Coalesce keeps one pending re-run for an event that lands while the
+	// command is running, where a dock cell drops it. The rail's rows are
+	// about the focused pane, and a focus change dropped mid-run would leave
+	// the old pane's text on screen until the next event.
+	Coalesce bool
+
 	// Everything below is guarded by dockEngine.mu.
 	text     string
 	lastRun  time.Time
@@ -85,6 +96,7 @@ type dockComponent struct {
 	running  bool
 	stopped  bool // gave up after DockCustomFailureLimit consecutive failures
 	reported bool // the failure has already been put in front of the user once
+	pending  bool // an event landed mid-run; run once more when this one ends
 
 	// revive wakes a push reader that has given up. It is a channel rather than
 	// a retry interval because a reader waiting on a timer is a timer, and the
@@ -116,6 +128,12 @@ type dockEngine struct {
 	session string
 	socket  string
 
+	// rail is the environment the rail section's command runs with: the
+	// focused pane and the section's size, read fresh by the model for each
+	// run and handed over here, under mu, because runs start on engine
+	// goroutines that may not touch the model.
+	rail railContext
+
 	// wakes counts scheduler firings and pushed lines. The idle guard reads it;
 	// nothing else should.
 	wakes atomic.Int64
@@ -133,6 +151,14 @@ const dockEngineUpdateBuffer = 64
 // dockEventDebounce is how long a component waits after an event before it
 // re-runs, so a burst of daemon events costs one execution.
 const dockEventDebounce = 200 * time.Millisecond
+
+// railContext is what the rail section's command is told about where it
+// draws and what has the focus.
+type railContext struct {
+	Width, Height int
+	PaneID        string
+	PaneCWD       string
+}
 
 // newDockEngine builds the engine for a set of components and starts the
 // scheduler. The scheduler goroutine exists even with nothing to schedule: it
@@ -178,6 +204,18 @@ func (e *dockEngine) SetContext(session, socket string) {
 	}
 	e.mu.Lock()
 	e.session, e.socket = session, socket
+	e.mu.Unlock()
+}
+
+// SetRailContext records what the next rail run is told. Read under the lock
+// at the moment the command is built, so a run always sees the values the
+// model had when it started.
+func (e *dockEngine) SetRailContext(ctx railContext) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	e.rail = ctx
 	e.mu.Unlock()
 }
 
@@ -384,6 +422,14 @@ func (e *dockEngine) fire(c *dockComponent) {
 		c.nextDue = e.alignedDeadline(c, time.Now())
 	}
 	builtin, running := c.Builtin, c.running
+	if running && c.Coalesce && !builtin {
+		// Not dropped: the run that is going reads the state from before this
+		// event, so one more run after it is the only way the rows catch up.
+		// One, whatever the burst, because the re-run reads the state as it is
+		// then. Set under the same lock hold that saw the run in flight, so the
+		// run cannot end between the check and the flag and lose the re-run.
+		c.pending = true
+	}
 	e.mu.Unlock()
 
 	if builtin {
@@ -523,6 +569,26 @@ func dockSupervise(cmd *exec.Cmd) {
 	cmd.WaitDelay = dockKillGrace
 }
 
+// railCommandEnv is the environment the rail section's command runs in: the
+// client's own, the session and socket every component gets, and the five
+// variables that say where the rows go and what has the focus. The names of
+// the last two are the command keys' names (command_keys.go), so a script
+// written for one works for the other.
+func (e *dockEngine) railCommandEnv() []string {
+	e.mu.Lock()
+	session, socket, rail := e.session, e.socket, e.rail
+	e.mu.Unlock()
+	return append(os.Environ(),
+		"TUIOS_SESSION="+session,
+		"TUIOS_SOCKET="+socket,
+		"TUIOS_RAIL_SECTION="+config.SidebarSectionCustom,
+		"TUIOS_RAIL_WIDTH="+strconv.Itoa(rail.Width),
+		"TUIOS_RAIL_HEIGHT="+strconv.Itoa(rail.Height),
+		"TUIOS_ACTIVE_PANE_ID="+rail.PaneID,
+		"TUIOS_ACTIVE_PANE_CWD="+rail.PaneCWD,
+	)
+}
+
 // runOnce executes a component's command and reports its first line of stdout.
 //
 // The four ways a subprocess misbehaves are all handled here and all end the
@@ -551,7 +617,11 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	// #nosec G204 - the command is the user's own config, run as the user, on
 	// the same footing as [hooks]. There is no new trust boundary here.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	cmd.Env = e.commandEnv(c.Name)
+	if c.Name == railCustomComponent {
+		cmd.Env = e.railCommandEnv()
+	} else {
+		cmd.Env = e.commandEnv(c.Name)
+	}
 	cmd.Stdin = nil
 	cmd.Stderr = nil
 	dockSupervise(cmd)
@@ -573,17 +643,26 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 		}
 		update.Err = err.Error()
 	default:
-		update.Text = dockFirstLine(out)
+		if c.MultiLine {
+			update.Text = dockLines(out)
+		} else {
+			update.Text = dockFirstLine(out)
+		}
 	}
 
 	e.mu.Lock()
 	c.running = false
+	rerun := c.pending
+	c.pending = false
 	e.mu.Unlock()
 
 	if e.ctx.Err() != nil {
 		return
 	}
 	e.emit(update)
+	if rerun {
+		go e.runOnce(c)
+	}
 }
 
 // readPushed keeps a persistent command running and turns each line it writes
@@ -741,7 +820,13 @@ func (e *dockEngine) applyUpdate(u dockComponentUpdate) (changed, newFailure boo
 	} else {
 		c.failures, c.reported = 0, false
 	}
-	if trimmed := dockTruncateCell(text, c.MaxWidth); trimmed != c.text {
+	// The rail's rows are cut to width by the renderer, which knows the rail's
+	// columns on the frame it draws; the engine has no width to cut to.
+	trimmed := text
+	if !c.MultiLine {
+		trimmed = dockTruncateCell(text, c.MaxWidth)
+	}
+	if trimmed != c.text {
 		c.text, changed = trimmed, true
 	}
 	return changed, newFailure
@@ -772,6 +857,23 @@ func dockFirstLine(out []byte) string {
 	s := strings.TrimRight(string(out), "\r\n")
 	line, _, _ := strings.Cut(s, "\n")
 	return dockSanitize(strings.TrimRight(line, "\r"))
+}
+
+// dockLines is every line of a command's stdout, laundered one line at a
+// time and joined with newlines. Split first and sanitise after, because
+// dockSanitize drops control characters and a newline is one; a line's
+// worth of SGR is kept the same way a cell's is. Trailing blank lines go,
+// so a command that ends with a newline does not draw an empty row.
+func dockLines(out []byte) string {
+	s := strings.TrimRight(string(out), "\r\n")
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = dockSanitize(strings.TrimRight(line, "\r"))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // dockSanitize keeps printable text and SGR colour, and drops every other
