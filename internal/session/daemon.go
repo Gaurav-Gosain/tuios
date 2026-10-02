@@ -227,8 +227,13 @@ type Daemon struct {
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration
 
-	// Goroutine tracking for clean shutdown
+	// Goroutine tracking for clean shutdown. Start a tracked goroutine with
+	// goTracked, never with wg.Add or wg.Go directly: see goTracked.
 	wg sync.WaitGroup
+	// wgMu guards wgClosed. shutdown sets wgClosed before it waits on wg, and
+	// goTracked refuses to register once it is set.
+	wgMu     sync.Mutex
+	wgClosed bool
 
 	// shutdownOnce makes shutdown idempotent (Run and Stop can both call it).
 	shutdownOnce sync.Once
@@ -808,7 +813,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if d.ctx.Err() != nil {
 			return
 		}
-		d.wg.Go(func() {
+		d.goTracked(func() {
 			d.serveHostedCalls(s, windowID, p)
 		})
 	})
@@ -1157,6 +1162,21 @@ func (d *Daemon) Run() error {
 	return d.shutdown()
 }
 
+// goTracked runs f on a new goroutine that shutdown waits for. It returns
+// false, and does not run f, once shutdown has started waiting: the
+// sync.WaitGroup rules forbid an Add that starts at a zero count from running
+// concurrently with Wait. Work refused here belongs to a daemon that is going
+// away, so callers drop it.
+func (d *Daemon) goTracked(f func()) bool {
+	d.wgMu.Lock()
+	defer d.wgMu.Unlock()
+	if d.wgClosed {
+		return false
+	}
+	d.wg.Go(f)
+	return true
+}
+
 // Stop signals the daemon to stop and performs cleanup.
 func (d *Daemon) Stop() {
 	d.cancel()
@@ -1286,6 +1306,13 @@ func (d *Daemon) shutdown() error {
 		}
 		d.clients = make(map[string]*connState)
 		d.clientsMu.Unlock()
+
+		// No goroutine registers with wg from here on. An Add that starts at a
+		// zero count must happen before Wait, and a connection handler that
+		// was still finishing a verb could otherwise start one during it.
+		d.wgMu.Lock()
+		d.wgClosed = true
+		d.wgMu.Unlock()
 
 		// Wait for goroutines with timeout
 		done := make(chan struct{})

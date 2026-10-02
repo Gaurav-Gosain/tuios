@@ -207,9 +207,11 @@ func (d *Daemon) startPendingStream(cs *connState) {
 	if sub == nil {
 		return
 	}
-	d.wg.Go(func() {
-		d.streamEvents(cs, sub)
-	})
+	// A daemon that is stopping refuses the streamer. Its connection is
+	// closing, so the subscription only has to be released.
+	if !d.goTracked(func() { d.streamEvents(cs, sub) }) {
+		d.events.unsubscribe(sub)
+	}
 }
 
 // streamEvents pushes events from a subscription to the connection until the

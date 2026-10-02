@@ -393,7 +393,18 @@ harness and not the program under test. Coverage lives in
 `internal/app/state_sync_race_test.go`, which floods a daemon window while
 applying geometry-changing state syncs under `-race`.
 
-Both of those are genuine gaps in *this* suite, not in the project's coverage.
+**The shutdown WaitGroup race** is a data race in the daemon. A subscribe
+writes its ack and then starts the event streamer on the daemon's WaitGroup.
+A client that read the ack and stopped the daemon at once made that `Add` run
+concurrently with shutdown's `Wait`. The same reason as above keeps it out of
+this suite. Coverage lives in
+`internal/session/shutdown_waitgroup_test.go`
+(`TestSubscribeDuringStopRegistersNoGoroutine`), run under `-race`. The control
+put `d.wg.Go` back at the call site in `startPendingStream`, with the
+`goTracked` helper left in place. The test failed in 20 of 20 runs with the
+call site cut and passed in 20 of 20 with the fix.
+
+Those are genuine gaps in *this* suite, not in the project's coverage.
 The general lesson is that end-to-end screen assertions are the right tool for
 bugs whose symptom is a wrong screen that persists, and the wrong tool for bugs
 whose symptom is a narrow timing window or a memory race.

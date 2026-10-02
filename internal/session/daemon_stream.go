@@ -189,9 +189,8 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 
 		debugLog("[DEBUG] notifyPTYClosed: sending to client %s", cs.clientID)
 		// Send in a goroutine to avoid blocking if client is slow
-		d.wg.Add(1)
-		go func(client *connState) {
-			defer d.wg.Done()
+		client := cs
+		d.goTracked(func() {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("PANIC in notifyPTYClosed send goroutine: %v\n%s", r, debug.Stack())
@@ -200,7 +199,7 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 			if err := d.sendMessage(client, MsgPTYClosed, &ClosePTYPayload{PTYID: ptyID}); err != nil {
 				debugLog("[DEBUG] notifyPTYClosed: failed to send to client: %v", err)
 			}
-		}(cs)
+		})
 	}
 }
 
@@ -317,9 +316,8 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 // tree the session had moved on from. what names the caller in the log.
 func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 	ticket := cs.takeBroadcastTicket()
-	d.wg.Add(1)
-	go func(client *connState) {
-		defer d.wg.Done()
+	client := cs
+	started := d.goTracked(func() {
 		defer client.finishBroadcast()
 		defer func() {
 			if r := recover(); r != nil {
@@ -330,5 +328,14 @@ func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 		if err := d.sendEncoded(client, msg); err != nil {
 			debugLog("[DEBUG] %s: failed to send to client %s: %v", what, client.clientID, err)
 		}
-	}(cs)
+	})
+	if !started {
+		// The daemon is stopping, so the message is dropped. The ticket is
+		// still released in its turn: a later ticket that did start waits on
+		// it, and releasing it early would skip the count past that ticket.
+		go func() {
+			client.awaitBroadcastTurn(ticket)
+			client.finishBroadcast()
+		}()
+	}
 }
