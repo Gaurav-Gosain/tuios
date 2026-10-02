@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -40,8 +41,8 @@ import (
 //
 // Ephemeral mode is used so the test is fully isolated: no daemon, no saved
 // session state. No browser is launched; the frames are synthesized and
-// emitted by cat-ing a file of raw kitty APC sequences that reference a real
-// /dev/shm object created by the test.
+// emitted by a shell loop that writes a /dev/shm object and then cats a raw
+// kitty APC sequence that names it, once per frame.
 func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping SSH integration test in short mode")
@@ -80,7 +81,8 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		// skips a re-sent IDENTICAL bitmap (an idle optimisation), so the flood
 		// has to vary to stay a flood, which is exactly what a live stream does.
 		const buffers = 4
-		names := make([]string, buffers)
+		var script strings.Builder
+		script.WriteString("(for i in $(seq 0 " + fmt.Sprint(shape.frames-1) + "); do case $((i % " + fmt.Sprint(buffers) + ")) in\n")
 		for b := range buffers {
 			shmName := fmt.Sprintf("tuios-crash-%d-%d-%d", os.Getpid(), si, b)
 			shmPath := "/dev/shm/" + shmName
@@ -88,34 +90,39 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 			for i := range shmData {
 				shmData[i] = byte(i + b*37) // distinct content per buffer
 			}
+			// The kitty spec makes the terminal delete a t=s object once it
+			// has read it, and tuios does. So, as a guest does, the flood
+			// writes the object again before each frame that names it. The
+			// source copy sits outside /dev/shm, where nothing deletes it.
+			srcPath := filepath.Join(tempDir, fmt.Sprintf("buf-%d-%d.rgba", si, b))
+			if err := os.WriteFile(srcPath, shmData, 0o600); err != nil {
+				t.Fatalf("write frame source: %v", err)
+			}
 			if err := os.WriteFile(shmPath, shmData, 0o600); err != nil {
 				t.Skipf("cannot write /dev/shm object: %v", err)
 			}
 			t.Cleanup(func() { _ = os.Remove(shmPath) })
-			names[b] = shmName
-		}
 
-		// A file of raw kitty a=T shm frames (transmit+place, shared-memory
-		// medium, image id 1), cycling the buffers so adjacent frames differ.
-		// Enough frames that the flood outlasts the watch window.
-		framesPath := filepath.Join(tempDir, fmt.Sprintf("frames-%d.bin", si))
-		var framesBuf []byte
-		for i := 0; i < shape.frames; i++ {
-			nameB64 := base64.StdEncoding.EncodeToString([]byte(names[i%buffers]))
+			// One raw kitty a=T shm frame (transmit+place, shared-memory
+			// medium, image id 1). Cycling the buffers makes adjacent frames
+			// differ.
+			nameB64 := base64.StdEncoding.EncodeToString([]byte(shmName))
+			framePath := filepath.Join(tempDir, fmt.Sprintf("frame-%d-%d.bin", si, b))
 			frame := fmt.Sprintf("\x1b_Ga=T,t=s,i=1,f=32,s=%d,v=%d;%s\x1b\\", shape.pxW, shape.pxH, nameB64)
-			framesBuf = append(framesBuf, frame...)
+			if err := os.WriteFile(framePath, []byte(frame), 0o600); err != nil {
+				t.Fatalf("write frame: %v", err)
+			}
+			fmt.Fprintf(&script, "%d) cp %s %s; cat %s ;;\n", b, srcPath, shmPath, framePath)
 		}
-		if err := os.WriteFile(framesPath, framesBuf, 0o600); err != nil {
-			t.Fatalf("write frames file: %v", err)
-		}
+		script.WriteString("esac; done) &\n")
+		script.WriteString("exec yes " + textMarker + "\n")
 
 		// The command typed into the pane lives in a script so the typed line
 		// needs no quoting: a partially delivered line then cannot leave the
 		// shell's line editor stuck inside an open quote, which would wedge
 		// every following attempt.
 		floodScripts[si] = filepath.Join(tempDir, fmt.Sprintf("flood-%d.sh", si))
-		script := fmt.Sprintf("cat %s &\nexec yes %s\n", framesPath, textMarker)
-		if err := os.WriteFile(floodScripts[si], []byte(script), 0o700); err != nil {
+		if err := os.WriteFile(floodScripts[si], []byte(script.String()), 0o700); err != nil {
 			t.Fatalf("write flood script: %v", err)
 		}
 	}
