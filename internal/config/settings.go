@@ -131,6 +131,11 @@ type Settings struct {
 	// via appearance.links.
 	Links string
 
+	// LinkLabel pops up a label naming the address of the link under the
+	// pointer. Turn it off to keep the hover to the underline, the pointer and
+	// the click. Set via appearance.link_label.
+	LinkLabel bool
+
 	// DockbarPosition controls the position of the dockbar
 	// Set via --dockbar-position flag or appearance.dockbar_position config
 	DockbarPosition string
@@ -680,6 +685,7 @@ func DefaultSettings() Settings {
 		TilingScheme:                TilingSchemeSpiral,
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
+		LinkLabel:                   true,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,
