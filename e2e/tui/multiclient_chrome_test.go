@@ -117,9 +117,15 @@ func TestOneClientsRailDoesNotMoveAnotherClientsPanes(t *testing.T) {
 	// toggle below reaches the second client by the back door, which is not
 	// the situation in the report, where the browser is a separate process with
 	// its own configuration that nothing propagates to.
+	//
+	// The rail is session state now (see TestHidingTheRailHidesItOnEveryClient),
+	// so a current client shows it on both screens. TUIOS_SIDEBAR_LEGACY makes
+	// the second client a build from before that, which keeps its rail to
+	// itself: chrome that differs between two clients is still a case the
+	// session has to handle, against an older client.
 	bare := attachIn(t, base, "chrome", startOpts{
 		cols: bigCols, rows: bigRows,
-		env: []string{"XDG_CONFIG_HOME=" + t.TempDir()},
+		env: []string{"XDG_CONFIG_HOME=" + t.TempDir(), "TUIOS_SIDEBAR_LEGACY=1"},
 	})
 	before := paneBox(railed.Screen())
 	if len(paneStarts(railed.Screen())) != 2 {
@@ -127,9 +133,8 @@ func TestOneClientsRailDoesNotMoveAnotherClientsPanes(t *testing.T) {
 	}
 	waitPaneBox(t, bare, before, "the second client before any chrome differs")
 
-	// One client turns its rail on. Nothing tells the other: the sidebar is a
-	// config switch, not session state, and the second client is a separate
-	// process that already read its own config.
+	// One client turns its rail on. Nothing tells the other: to the older
+	// client the sidebar is a config switch, not session state.
 	toggleSidebarViaPalette(t, railed)
 	if err := railed.WaitFor(func(s tuitest.Screen) bool {
 		return paneBox(s) != before

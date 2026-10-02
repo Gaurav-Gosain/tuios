@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // sidebarDragState is the click-or-drag gesture on a session row. A left press
@@ -47,32 +48,154 @@ type sidebarEdgeState struct {
 // windows into the changed content region, and records the new state on the
 // loaded config so a later save keeps it. This is what the palette entry and the
 // keybind both call.
+//
+// In a daemon session that keeps the rail as session state, the change goes
+// to the daemon as well, and every client of the session shows or hides its
+// rail with this one. See session/sidebar_visibility.go.
 func (m *OS) ToggleSidebar() {
-	m.Settings.SidebarEnabled = !m.Settings.SidebarEnabled
+	on := !m.Settings.SidebarEnabled
+	m.setSidebarShown(on)
 	// The [appearance.sidebar] table, not the legacy flat key: the migration
 	// folds the flat key in only when the table leaves enabled unset, and the
 	// table sets it whenever the file came from a first run, so a toggle
 	// written to the flat key was lost on the next save.
 	if m.UserConfig != nil {
-		v := m.Settings.SidebarEnabled
+		v := on
 		m.UserConfig.Appearance.Sidebar.Enabled = &v
 	}
-	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
-	m.sidebarClearPeek()
-	m.tooltipClear()
+	// A rail shown only to host the keyboard scope is now one the person
+	// asked for, so leaving the scope does not hide it again.
+	m.SidebarRevealedForFocus = false
+	if m.sidebarOpsOn() {
+		m.sidebarSession = sidebarVisibility(on)
+		if err := m.DaemonClient.SendSidebarVisibility(on, false); err != nil {
+			m.LogError("Failed to send the sidebar state: %v", err)
+		}
+	}
+}
+
+// setSidebarShown shows or hides the rail on this client alone and lays the
+// panes out in the content region that leaves. It does not save the config
+// and does not tell the daemon.
+func (m *OS) setSidebarShown(on bool) {
+	if !m.applySidebarFlag(on) {
+		return
+	}
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {
 		m.ClampWindowsToView()
 	}
+}
+
+// applySidebarFlag sets whether the rail is shown and resets what a rail
+// that opens or closes must not keep. It reports whether anything changed.
+// Laying the panes out is the caller's job: a state sync does it once for
+// everything the sync moved.
+func (m *OS) applySidebarFlag(on bool) bool {
+	if m.Settings.SidebarEnabled == on {
+		return false
+	}
+	m.Settings.SidebarEnabled = on
+	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
+	m.sidebarClearPeek()
+	m.tooltipClear()
 	// The listing the rail labels sessions from is polled slowly, or not at
 	// all, while the rail is hidden, and the poll re-plans only when its timer
 	// fires. A rail that opens should read as it is now rather than as of half
 	// a minute ago, so the open asks Update to re-plan the poll; see
 	// foreignSessionReplanCmd.
-	if m.Settings.SidebarEnabled {
+	if on {
 		m.foreignSessionReplan = true
 	}
+	return true
+}
+
+// sidebarOpsOn reports whether showing the rail is session state:
+// the daemon keeps it, and a toggle goes to the daemon as an op.
+func (m *OS) sidebarOpsOn() bool {
+	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.SidebarOps()
+}
+
+// sidebarVisibility is the session's word for a rail that is shown or not.
+func sidebarVisibility(on bool) string {
+	if on {
+		return session.SidebarShown
+	}
+	return session.SidebarHidden
+}
+
+// seedSidebar offers this client's configured visibility to a session that
+// has none yet. The offer applies only if no other client got there first, so
+// the first client to attach settles the rail, as it does the master layout.
+func (m *OS) seedSidebar() {
+	if !m.sidebarOpsOn() || m.sidebarSeeded || m.sidebarSession != "" {
+		return
+	}
+	m.sidebarSeeded = true
+	on := m.Settings.SidebarEnabled && !m.SidebarRevealedForFocus
+	if err := m.DaemonClient.SendSidebarVisibility(on, true); err != nil {
+		m.LogError("Failed to offer the sidebar state: %v", err)
+	}
+}
+
+// syncSidebarToSession sends this client's rail to the session when it was
+// shown or hidden by a path other than ToggleSidebar: the settings panel, or
+// set-config from the command line. A rail shown only for the keyboard scope
+// is this client's own and is not sent, and neither is a rail too narrow to
+// draw, which changes the rail's width and not whether it is shown.
+func (m *OS) syncSidebarToSession() {
+	if !m.sidebarOpsOn() || m.sidebarSession == "" || m.SidebarRevealedForFocus {
+		return
+	}
+	v := sidebarVisibility(m.Settings.SidebarEnabled)
+	if v == m.sidebarSession {
+		return
+	}
+	m.sidebarSession = v
+	if err := m.DaemonClient.SendSidebarVisibility(m.Settings.SidebarEnabled, false); err != nil {
+		m.LogError("Failed to send the sidebar state: %v", err)
+	}
+}
+
+// keepSessionSidebar puts the session's rail back after a config was applied
+// to this client's settings. The config holds this client's own last choice,
+// and applying it for another option (a theme, a border) must not show or
+// hide the rail on every client. A caller that sets the rail's own option
+// passes changed, and settleChrome sends that change to the session.
+func (m *OS) keepSessionSidebar(changed bool) {
+	if changed || !m.sidebarOpsOn() || m.sidebarSession == "" {
+		return
+	}
+	m.Settings.SidebarEnabled = m.sidebarSession == session.SidebarShown || m.SidebarRevealedForFocus
+}
+
+// adoptSidebarVisibility takes whether the rail is shown from the session's
+// state. It acts only when the session's value moved since this client last
+// took it, so a rail this client shows for its own keyboard scope is not
+// hidden by every sync that arrives while it is open. It reports whether the
+// rail changed, which moves the panes' box.
+func (m *OS) adoptSidebarVisibility(state *session.SessionState) bool {
+	if !m.sidebarOpsOn() {
+		m.sidebarSession = ""
+		return false
+	}
+	v := state.Sidebar
+	if v == "" || v == m.sidebarSession {
+		return false
+	}
+	m.sidebarSession = v
+	on := v == session.SidebarShown
+	if on {
+		// Shown for the session now, so leaving the scope keeps it.
+		m.SidebarRevealedForFocus = false
+	} else if m.SidebarFocused {
+		// The keyboard is in the rail. It stays open until the scope is
+		// left, as a rail revealed for the scope does.
+		m.SidebarRevealedForFocus = true
+		return false
+	}
+	return m.applySidebarFlag(on)
 }
 
 // SidebarActive reports whether the sidebar reserves any columns this frame, so

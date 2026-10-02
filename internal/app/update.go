@@ -741,6 +741,8 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.reportActivity(msg)
 	model, cmd := m.handleMsg(msg)
 	m.msgClock = time.Time{}
+	// The one place a moved chrome is noticed. See settleChrome.
+	m.settleChrome()
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler
 	// itself is one of the things that lengthens a pane's history: a workspace
@@ -1805,12 +1807,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// A rename by this client or any other arrives on this push, so
 				// an open switcher follows it without being reopened.
 				m.refreshSwitcherItems()
-
-				// The rail travels with the session, so a sync can have folded
-				// or widened this client's own rail, and the rail is chrome the
-				// session's reserve is settled from. Said here rather than
-				// inside the sync, where nothing may speak at all.
-				m.AnnounceLayoutReserve()
+				// A sync can have folded, shown or hidden this client's rail,
+				// which is chrome the session's reserve is settled from.
+				// settleChrome says so once the sync is applied, outside it,
+				// where nothing may speak at all.
 			}
 		}
 		// Continue listening for more state syncs
@@ -2023,12 +2023,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
 		}
+		// This is the answer to a chrome change this client announced, and the
+		// layout just worked out from it is the one the daemon has to keep.
+		// See AnnounceLayoutReserve.
+		if m.reserveOwed {
+			m.reserveOwed = false
+			m.SyncStateToDaemon()
+		}
 		// A session that changed size can have changed what this client keeps
 		// for itself, because the sidebar's breakpoints are measured against the
-		// render width. Announcing it here is what closes the loop, and it
-		// closes: this client's own reserve is a function of the render width
-		// alone, so the second round finds it unmoved and sends nothing.
-		m.AnnounceLayoutReserve()
+		// render width. settleChrome announces it after this message, and the
+		// loop closes: this client's own reserve is a function of the render
+		// width alone, so the second round finds it unmoved and sends nothing.
 		// Continue listening for more client events
 		return m, ListenForClientEvents(m.ClientEventChan)
 

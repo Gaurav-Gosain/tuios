@@ -963,6 +963,9 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 	// settings panel comes through: writing the process seed here is what used
 	// to give one client's border style to every other client attached.
 	config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
+	// Whether the rail is shown is the session's, and only its own option
+	// changes it. See keepSessionSidebar.
+	m.keepSessionSidebar(path == "appearance.sidebar.enabled" || path == "appearance.sidebar_enabled")
 	// Retile unconditionally: most of what is reachable here changes how much
 	// room the panes have (the sidebar's width and side, the dock's position),
 	// and a retile on a change that did not need one costs a frame.

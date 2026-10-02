@@ -326,6 +326,13 @@ type SessionState struct {
 	// which is the pre-existing behaviour.
 	SidebarWidth     int  `json:"sidebar_width,omitempty"`
 	SidebarCollapsed bool `json:"sidebar_collapsed,omitempty"`
+	// Sidebar is whether the session shows the rail: SidebarShown,
+	// SidebarHidden, or empty when no client has said yet. Only
+	// MsgSidebarVisibility writes it (see sidebar_visibility.go); a push never
+	// carries it, and retainDaemonExclusive keeps the daemon's copy whatever a
+	// push holds. A client too old to read it keeps its own rail, which is
+	// what every client did before the field existed.
+	Sidebar string `json:"sidebar,omitempty"`
 	// Accent is an optional accent for the session, recorded verbatim the way
 	// Options are: the daemon has no palette and does not interpret it. Clients
 	// read it as a colour name from the ANSI sixteen or as a hex literal, and an

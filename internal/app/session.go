@@ -279,11 +279,19 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// were sent to the session being left.
 	m.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	m.masterSeeded = nil
+	// The rail is the session's too, and an offer this client made was made
+	// to the session being left. See seedSidebar.
+	m.sidebarSeeded = false
+	m.sidebarSession = ""
 	// Same for the custom-layout flags, and for the same reason: they belong to
 	// the session being left.
 	m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
 	m.adoptWorkspaceHasCustom(state)
 	m.adoptSidebarState(state)
+	// Taken before the layout below, which is computed against the rail. A
+	// session that has no value yet gets this client's configured one.
+	m.adoptSidebarVisibility(state)
+	m.seedSidebar()
 	// The pane geometry inputs are the session's, adopted before the layout
 	// below is computed so a joining client tiles with the session's arithmetic
 	// rather than its own config's.
@@ -802,6 +810,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
 	m.ApplyLayoutModeName(state.LayoutMode)
 	m.adoptSidebarState(state)
+	// A peer that showed or hid the rail moved the panes' box. See
+	// adoptSidebarVisibility.
+	sidebarRetile := m.adoptSidebarVisibility(state)
 	// Adopted after the layout mode it is folded together with, and before the
 	// staleness check below, which has to run against the inputs the session
 	// agrees on rather than the ones this client walked in with.
@@ -1043,9 +1054,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.settleBorderMode(m.CurrentWorkspace)
 		}
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
-			(geometryChanged || workspaceRetile || zoomRetile || treeRetile || masterRetile || m.tiledLayoutStale() ||
-				(treeOps && m.bspRectsOffTree())) {
+			(geometryChanged || workspaceRetile || zoomRetile || treeRetile || masterRetile || sidebarRetile ||
+				m.tiledLayoutStale() || (treeOps && m.bspRectsOffTree())) {
 			m.TileAllWindows()
+		}
+		// Floating panes keep their own rectangles, so a rail that opened
+		// over them only has to keep them in view.
+		if sidebarRetile && !m.AutoTiling {
+			m.ClampWindowsToView()
 		}
 	})
 
@@ -2100,6 +2116,8 @@ func (m *OS) SyncStateToDaemon() {
 	// A workspace the session has no shape for gets this client's configured
 	// one, ahead of the push. See seedMasterLayout.
 	m.seedMasterLayout()
+	// The same for whether the rail is shown. See seedSidebar.
+	m.seedSidebar()
 
 	state := m.BuildSessionState()
 	// A daemon that takes the trees as ops is sent them that way, ahead of the
@@ -2153,11 +2171,17 @@ func (m *OS) warnOnBuildMismatch() {
 // already carries this client's viewport, so the two halves of "what box do the
 // panes go in" cannot disagree for a frame.
 //
-// It is called from the paths that can change the chrome: a viewport resize,
-// which moves the sidebar's breakpoint; a config reload; and any input, which is
-// how the rail is folded, dragged or turned off. Nothing polls for it: the
-// answer is a pure function of this client's own state, so a call that finds it
-// unmoved costs one comparison and sends nothing.
+// settleChrome calls it after every message, so every path that can move the
+// chrome is covered: a key, a click, a palette entry, a config reload, a tape,
+// a set-config from the command line, and a peer showing or hiding the rail.
+// The answer is a pure function of this client's own state, so a call that
+// finds it unmoved costs one comparison and sends nothing.
+//
+// The daemon answers with a session resize, and the layout this client works
+// out from that answer is the one the daemon has to keep. Nothing else would
+// push it: the retile that follows a session resize sends nothing, so without
+// reserveOwed the daemon, and every reader of its state, kept the rectangles
+// from before the rail moved until the next key.
 func (m *OS) AnnounceLayoutReserve() {
 	if m.DaemonClient == nil || !m.IsDaemonSession {
 		return
@@ -2167,7 +2191,33 @@ func (m *OS) AnnounceLayoutReserve() {
 	}
 	if err := m.DaemonClient.NotifyTerminalSize(m.Width, m.Height); err != nil {
 		m.LogError("Failed to announce layout reserve: %v", err)
+		return
 	}
+	m.reserveOwed = true
+}
+
+// settleChrome runs after every message. When the chrome this client draws
+// moved (the rail shown, hidden, folded, widened or moved to the other side,
+// or the dock moved or hidden) it lays the panes out again if they no longer
+// fill their box, and tells the daemon. A move that came with a new viewport
+// is left to the resize path, which lays out and announces for itself.
+func (m *OS) settleChrome() {
+	m.syncSidebarToSession()
+	r := m.OwnLayoutReserve()
+	w, h := m.GetRenderWidth(), m.GetRenderHeight()
+	seen := m.chromeSeen
+	m.chromeSeen.reserve, m.chromeSeen.width, m.chromeSeen.height = r, w, h
+	if r == seen.reserve {
+		return
+	}
+	if w == seen.width && h == seen.height && w > 0 && len(m.Windows) > 0 {
+		if !m.AutoTiling {
+			m.ClampWindowsToView()
+		} else if m.tiledLayoutStale() {
+			m.TileAllWindows()
+		}
+	}
+	m.AnnounceLayoutReserve()
 }
 
 // forgetSyncedState drops the record of what was last pushed, so the next sync

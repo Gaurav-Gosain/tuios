@@ -46,6 +46,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// daemon's copy is the whole answer and a push never moves it. See
 	// master_layout.go.
 	incoming.WorkspaceMasterLayout = canonical.WorkspaceMasterLayout
+	// Whether the rail is shown is written only by MsgSidebarVisibility, on
+	// the same terms. See sidebar_visibility.go.
+	incoming.Sidebar = canonical.Sidebar
 	// Global is stamped once, when the session is created, and canonical wins
 	// for the same reason: a bool cannot say "not sent", and no client should
 	// be able to turn an ordinary session into a global one by syncing.
