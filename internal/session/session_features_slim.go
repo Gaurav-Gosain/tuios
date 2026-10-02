@@ -2,7 +2,12 @@
 
 package session
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import (
+	"sync"
+	"sync/atomic"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
 
 // sessionFeatures holds only the timers the core session stops when it
 // stops, which never run in tuios-slim. See session_features_full.go.
@@ -18,12 +23,23 @@ type noIdleGate struct{}
 
 func (noIdleGate) stop() {}
 
-// ptyFeatures holds nothing in tuios-slim. See session_features_full.go.
-type ptyFeatures struct{}
+// ptyFeatures holds the one agent report tuios-slim reads: the OSC 9;4
+// progress state, for the prompt rule of the respond grant. See
+// prompt_state_slim.go.
+type ptyFeatures struct {
+	// agentProgress parks the newest OSC 9;4 state as the state plus one, so
+	// zero means none pending.
+	agentProgress atomic.Int64
+	// promptMu orders the goroutines that apply parked reports, so an older
+	// report cannot land after a newer one.
+	promptMu sync.Mutex
+}
 
-// storeAgentProgress drops an OSC 9;4 progress report: tuios-slim follows no
-// agent state.
-func (p *PTY) storeAgentProgress(vt.ProgressState, int) {}
+// storeAgentProgress parks an OSC 9;4 progress state. Called from the VT
+// callback under the terminal lock, so it is a single atomic store.
+func (p *PTY) storeAgentProgress(state vt.ProgressState, _ int) {
+	p.agentProgress.Store(int64(state) + 1)
+}
 
 // storeAgentNotify drops the copy of a desktop notification the full build
 // keeps for the agent rules. The notification itself is still published.

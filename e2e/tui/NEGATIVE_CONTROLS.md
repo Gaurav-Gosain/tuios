@@ -603,6 +603,16 @@ first client never followed the session to the smaller size, and the wait
 timed out. The test checks first that the frame starts wider than the size
 it waits for.
 
+`TestSlimPaneCannotAnswerAnotherPanesPrompt` was run against two builds of
+tuios-slim. The first is the slim build of PR #376 as first pushed
+(`d8fb60e7`), which set no prompt state. The second is the fixed tree with
+the call site cut: the `s.progressParked(pty, sp.windowID)` line in the
+`Progress` callback of `internal/session/session.go` deleted. Both failed at
+the first wait: the pane's send-keys printed "sent 8 keys to window asker"
+and `FIRST=0`, where the test wants a refusal. The positive half is in the
+same test: once the prompt state clears, the same send-keys from the same
+pane goes through and INJECTED reaches the program.
+
 ## Tests without a specific negative control
 
 `TestScrolledOutputRendersCorrectly`, `TestScrollbackModeShowsEarlierOutput`,

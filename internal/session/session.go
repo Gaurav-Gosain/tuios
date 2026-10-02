@@ -1664,6 +1664,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		// output event carrying these same bytes.
 		Progress: func(state vt.ProgressState, percent int) {
 			pty.storeAgentProgress(state, percent)
+			s.progressParked(pty, sp.windowID)
 		},
 		// A desktop notification: published at once, like the bell, and parked
 		// for the read goroutine to match against the harness's rules, like the

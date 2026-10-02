@@ -80,6 +80,11 @@ Some features stay in tuios-slim on purpose:
 - Every theme stays. The theme table is about 22 KB.
 - Pane grants stay. They limit what a program in a pane can do through tuios,
   so a strict config must not lose them.
+- The prompt state stays. A program that sends the OSC 9;4 warning state
+  waits on a prompt. Another pane must hold the respond grant to type into
+  it. Any other OSC 9;4 report ends the prompt state. tuios-slim reads this
+  state on every pane. The full tuios reads it only on a pane that it knows
+  runs an agent.
 
 ## What tuios-slim leaves out
 
@@ -87,7 +92,7 @@ Some features stay in tuios-slim on purpose:
 |---|---|---|
 | The SSH server | `ssh` | Prints the line below. |
 | The MCP server | `mcp` | Prints the line below. |
-| Agents: agent state, the Inbox, mail, approvals, recaps, alerts, agent detection, harness integrations, start-agent, ACP and Codex | `set-agent-state`, `list-agents`, `send-agent-message`, `ask-agent`, `respond`, `queue`, `agent-hook`, `integration`, `start-agent` and the other agent commands | Prints the line below. The daemon ignores agent reports from panes. |
+| Agents: agent state, the Inbox, mail, approvals, recaps, alerts, agent detection, harness integrations, start-agent, ACP and Codex | `set-agent-state`, `list-agents`, `send-agent-message`, `ask-agent`, `respond`, `queue`, `agent-hook`, `integration`, `start-agent` and the other agent commands | Prints the line below. The daemon ignores agent reports from panes, except the prompt state. |
 | Worktrees, fan-out and the review | `worktree`, `fan`, `review` | Prints the line below. |
 | Hosts and links to other machines | `hosts`, `stdio-proxy` | Prints the line below. The `--host`, `--all-hosts` and `--global` flags print `<flag> is not in tuios-slim. Install the full tuios to use it.` |
 | The herdr API and its command line | `pane`, `notification` | Prints the line below. |
@@ -141,8 +146,9 @@ attach to a tuios-slim daemon.
 - A slim daemon answers a verb it does not have with the error code
   `unknown_verb` and the message `<verb> is not in tuios-slim. Install the full
   tuios to use it.`
-- A slim daemon ignores agent reports from panes: OSC sequences, herdr
-  environment variables and `set-agent-state` from a full tuios.
+- A slim daemon ignores agent reports from panes: herdr environment variables,
+  `set-agent-state` from a full tuios, and every OSC sequence except the
+  OSC 9;4 prompt state.
 - A slim client drops the agent mail a full daemon sends.
 
 ## Config

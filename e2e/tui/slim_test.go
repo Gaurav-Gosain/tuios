@@ -367,3 +367,64 @@ func frameWidth(s tuitest.Screen) int {
 	line, _, _ := strings.Cut(s.Text(), "\n")
 	return utf8.RuneCountInString(strings.TrimRight(line, " "))
 }
+
+// TestSlimPaneCannotAnswerAnotherPanesPrompt holds tuios-slim to the respond
+// grant's prompt rule. One window sends the OSC 9;4 warning state, the way a
+// program says it waits on a person, and reads a line. A shell in a second
+// window, which holds admin under the default open mode and not respond,
+// runs send-keys into it. The daemon refuses, and nothing reaches the prompt.
+// The person then answers the prompt from outside every pane, the program
+// clears the state, and the same send-keys goes through.
+//
+// Negative control: on the tuios-slim of PR #376 as first pushed, which set
+// no prompt state, the first send-keys exits 0 and INJECTED reaches the
+// prompt.
+func TestSlimPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
+	requireSlim(t)
+	const sess = "slim-prompt"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("tuios-slim new: %v\n%s", err, out)
+	}
+	asker := []string{"/bin/sh", "-c",
+		`printf '\033]9;4;4\007'; echo ASKING; read answer; printf '\033]9;4;0\007'; echo "CLEARED $answer"; exec cat`}
+	if out, err := tuiosCLI(t, base, append([]string{"new-window", "-s", sess, "--no-focus", "asker", "--"}, asker...)...); err != nil {
+		t.Fatalf("new-window asker: %v\n%s", err, out)
+	}
+	waitCapture(t, base, sess, "asker", "ASKING")
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--no-focus", "typer"); err != nil {
+		t.Fatalf("new-window typer: %v\n%s", err, out)
+	}
+
+	errFile := filepath.Join(base, "typer.err")
+	typeFromPane := func(marker string) {
+		t.Helper()
+		line := tuiosBin + " send-keys -s " + sess + " -w asker --literal INJECTED 2>" + errFile + "; echo " + marker + "=$?\n"
+		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "typer", line); err != nil {
+			t.Fatalf("send-text into typer: %v\n%s", err, out)
+		}
+	}
+
+	// The prompt is up: the pane's send-keys is refused.
+	typeFromPane("FIRST")
+	waitCapture(t, base, sess, "typer", "FIRST=1")
+	refusal, _ := os.ReadFile(errFile)
+	if !strings.Contains(string(refusal), "is waiting on a prompt") || !strings.Contains(string(refusal), "respond grant") {
+		t.Errorf("the refusal does not say the window waits on a prompt and needs respond:\n%s", refusal)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if screen := capture(t, base, sess, "asker"); strings.Contains(screen, "INJECTED") {
+		t.Fatalf("a pane without respond typed into a prompt:\n%s", screen)
+	}
+
+	// The person answers from outside every pane, and the program clears
+	// the state. The same send-keys now goes through.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "asker", "yes\n"); err != nil {
+		t.Fatalf("send-text the answer: %v\n%s", err, out)
+	}
+	waitCapture(t, base, sess, "asker", "CLEARED yes")
+	typeFromPane("SECOND")
+	waitCapture(t, base, sess, "typer", "SECOND=0")
+	waitCapture(t, base, sess, "asker", "INJECTED")
+}

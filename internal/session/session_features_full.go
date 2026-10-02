@@ -160,6 +160,11 @@ func (p *PTY) storeAgentProgress(state vt.ProgressState, percent int) {
 	p.lastProgress.Store((int64(state)+1)<<32 | int64(uint32(int32(percent))))
 }
 
+// progressParked does nothing in the full build: the PTY read goroutine
+// applies the parked report on the output event that carried it (see
+// onPaneOutput). tuios-slim applies it from here.
+func (s *Session) progressParked(*PTY, string) {}
+
 // takeAgentProgress returns the parked OSC 9;4 progress state and clears it,
 // reporting whether one was pending. A burst that parked several states between
 // two output events collapses to the newest, which is the only one still true.
