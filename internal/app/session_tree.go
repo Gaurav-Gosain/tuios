@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strconv"
@@ -246,6 +247,22 @@ func (m *OS) CycleSession(delta int) {
 	}
 	// railNeighbourSession cycles the attached machine's sessions only.
 	m.openSession("", target)
+}
+
+// SwitchToSessionByIndex attaches to the session at the rail position n
+// (0-based), the same order the rail draws the rows in and the same
+// local-only scope CycleSession cycles. Pressing a number past the sessions
+// there are says so instead of failing inside the switch.
+func (m *OS) SwitchToSessionByIndex(n int) {
+	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
+	if n < 0 || n >= len(sessions) {
+		m.ShowNotification(fmt.Sprintf("No session %d", n+1), "info", m.Settings.NotificationDuration)
+		return
+	}
+	if sessions[n].IsCurrent {
+		return
+	}
+	m.openSession("", sessions[n].ID)
 }
 
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
