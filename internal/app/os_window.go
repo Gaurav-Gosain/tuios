@@ -313,6 +313,23 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 	}
 }
 
+// LastPane flips focus back to the window focus came from most recently.
+// Alternating presses walk back and forth between the last two panes, because
+// focusing the previous window makes the current one previous. Reports whether
+// it moved; a dead target (closed pane, nothing recorded yet) says so rather
+// than moving somewhere random.
+func (m *OS) LastPane() bool {
+	if m.PrevFocusedID == "" {
+		return false
+	}
+	idx := m.windowIndexByID(m.PrevFocusedID)
+	if idx < 0 {
+		return false
+	}
+	m.FocusWindow(idx)
+	return true
+}
+
 // FocusWindow sets focus to the window at the specified index.
 func (m *OS) FocusWindow(i int) *OS {
 	// Simple bounds check
@@ -363,6 +380,7 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Leaving an agent pane is when the person looked away from it.
 	if oldFocused >= 0 && oldFocused < len(m.Windows) {
 		m.markAgentSeenAt(m.Windows[oldFocused])
+		m.PrevFocusedID = m.Windows[oldFocused].ID
 	}
 
 	// ATOMIC: Set focus and Z-index in one operation

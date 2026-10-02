@@ -63,16 +63,18 @@ func (m *OS) JumpToNotification() bool {
 	return true
 }
 
-// jumpToNotifTarget lands on a message's source pane. It reuses the rail's own
+// jumpToNotifTarget lands on a message's source pane and reports whether the
+// target was served: jumped, answered, or already reported as gone. It reuses
+// the rail's own
 // focus routine, so a jump from a message and a click on the rail cannot
 // disagree about what "go there" means: FocusWindow already switches workspace,
 // and sidebarFocusWindow already switches session first.
-func (m *OS) jumpToNotifTarget(t NotifTarget) {
+func (m *OS) jumpToNotifTarget(t NotifTarget) bool {
 	// A message that asks to let a pane set the clipboard is answered, not
 	// followed.
 	if t.ClipboardAsk != 0 {
 		m.allowClipboardAsk(t.ClipboardAsk, t.ClipboardVersion)
-		return
+		return true
 	}
 	// A message about mail lands on the thread, where the reply is, rather than
 	// on the pane that wrote. The marking read it may need is queued, since
@@ -81,7 +83,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 		if m.OpenAgentMailThread(t.Thread) != nil {
 			m.QueueClientEvent(ClientEvent{Type: "agent-mail-mark", Mail: session.AgentMailPayload{ReadIDs: []uint64{t.Thread}}})
 		}
-		return
+		return true
 	}
 	// A message about another machine attaches that machine first, landing on
 	// the session, the way the Inbox does.
@@ -91,13 +93,13 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 			it.Host = t.Host
 		}
 		if !m.inboxReach(it) {
-			return
+			return false
 		}
 	}
 	foreign := t.SessionID != "" && t.SessionID != m.sidebarCurrentSessionID()
 	if foreign && !m.sessionCached(t.SessionID) {
 		m.ShowNotification("Source session closed", "info", m.Settings.NotificationDuration)
-		return
+		return false
 	}
 
 	idx := -1
@@ -105,7 +107,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 		idx = m.windowIndexByID(t.WindowID)
 		if idx < 0 {
 			m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
-			return
+			return false
 		}
 	}
 	m.sidebarFocusWindow(sidebarRowHit{
@@ -119,11 +121,12 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	if landed < 0 {
 		// The switch went through but the pane is gone on the other side.
 		m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
-		return
+		return false
 	}
 	// Flash the pane the jump landed on, using the dock's existing time-bounded
 	// highlight, so the eye follows a long-distance focus change.
 	m.Windows[landed].MinimizeHighlightUntil = time.Now().Add(time.Second)
+	return true
 }
 
 // sessionCached reports whether a session is still one the client could attach

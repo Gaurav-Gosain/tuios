@@ -857,9 +857,13 @@ func DefaultConfig() *UserConfig {
 				// Finishing a mouse selection has always told the user to press
 				// 'c' to copy it. Until this binding existed, nothing was
 				// listening.
-				"copy_selection":  {"c"},
-				"next_window":     {"tab"},
-				"prev_window":     {"shift+tab"},
+				"copy_selection": {"c"},
+				"next_window":    {"tab"},
+				"prev_window":    {"shift+tab"},
+				// tmux's last-pane key. Alternating presses flip between the
+				// last two panes, which is how a jump lands back where it left.
+				// 'l' was the other candidate and is snap_right.
+				"last_pane":       {";"},
 				"select_window_1": {"1"},
 				"select_window_2": {"2"},
 				"select_window_3": {"3"},
