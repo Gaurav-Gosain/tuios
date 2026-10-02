@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/mcp"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -63,6 +64,7 @@ tuios integration install <harness> --mcp registers it with a harness.`,
 				PaneToken: os.Getenv("TUIOS_PANE_TOKEN"),
 				Dial:      dialMCPConn,
 				Verbs:     mcpVerbDocs(),
+				Leave:     mcpLeaveAgentTools(),
 				Log: func(format string, args ...any) {
 					fmt.Fprintf(os.Stderr, "tuios mcp: "+format+"\n", args...)
 				},
@@ -146,3 +148,14 @@ func (m mcpConn) ReadEventLine(timeout time.Duration) ([]byte, error) {
 }
 
 func (m mcpConn) Close() error { return m.c.Close() }
+
+// mcpLeaveAgentTools leaves the agent tools out of tools/list while this
+// machine's config has the agent features off: each would only answer
+// agents_disabled. It is read when the server starts.
+func mcpLeaveAgentTools() func(verb string) bool {
+	cfg, err := config.LoadUserConfig()
+	if err != nil || cfg == nil || cfg.Agents.On() {
+		return nil
+	}
+	return func(verb string) bool { return session.AgentOnlyCall(verb, nil) }
+}

@@ -677,3 +677,22 @@ func TestProtocolErrors(t *testing.T) {
 		t.Errorf("batch answer = %v, want one answer for the one request", batch)
 	}
 }
+
+// TestLeaveDropsTheAgentTools: with the agent features off the agent tools
+// are not listed, and the multiplexer tools still are. The positive half is
+// TestDefaultToolsAreReadMostly, which lists them with Leave unset.
+func TestLeaveDropsTheAgentTools(t *testing.T) {
+	agent := map[string]bool{"set-agent-state": true, "send-agent-message": true, "list-agents": true}
+	c := startServer(t, Options{Leave: func(verb string) bool { return agent[verb] }})
+	names := toolNames(c.rpc(1, "tools/list", nil))
+	for _, gone := range []string{"tuios_set_agent_state", "tuios_send_agent_message", "tuios_list_agents"} {
+		if slices.Contains(names, gone) {
+			t.Errorf("tools/list offers %s with the agent features off: %v", gone, names)
+		}
+	}
+	for _, want := range []string{"tuios_list_windows", "tuios_capture_pane"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("tools/list lacks %s with the agent features off: %v", want, names)
+		}
+	}
+}

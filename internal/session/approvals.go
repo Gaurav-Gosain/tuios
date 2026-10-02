@@ -657,6 +657,13 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if hold == nil {
 		return approvalResult("", approvalOutcome{Reason: reason}), nil
 	}
+	// The call was admitted while the agent features were on, and they went
+	// off before the hold started, after the switch closed every item. The
+	// harness gets its prompt back now rather than after the hold.
+	if d.agentsOff.Load() {
+		d.attention.closeAll(AttentionClosedAgentsDisabled)
+		return approvalResult(hold.id, <-hold.done), nil
+	}
 	LogBasic("Approval %s held for %s in %s (%s) for up to %s", hold.id, w.ID, sess.Name(), harnessID, holdFor)
 
 	var gone <-chan struct{}

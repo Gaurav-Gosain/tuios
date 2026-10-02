@@ -773,7 +773,7 @@ func (m *OS) sectionLayoutItem() settingItem {
 		Desc:    "The rail's sections, in the order it stacks them. Press enter to edit.",
 		Control: controlEnum,
 		value: func(m *OS) string {
-			n := sectionCount(m.sectionEntries())
+			n := sectionCount(m.sectionEntries(), m.agentsOn())
 			if n == 1 {
 				return "1 section"
 			}

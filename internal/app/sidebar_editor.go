@@ -138,11 +138,20 @@ func (m *OS) sectionEditorRows() []railEditorRow {
 	if len(entries) == 0 {
 		rows = append(rows, railEditorRow{Kind: railRowEmpty, Name: railListOn, Index: -1})
 	}
+	// With the agent features off the agents section is not offered, and
+	// one already in the layout is not listed: the rail does not draw it.
+	hidden := func(name string) bool { return !m.agentsOn() && name == "agents" }
 	placed := map[string]bool{}
 	last := len(entries) - 1
+	for last >= 0 && hidden(entries[last].Name) {
+		last--
+	}
 	for i, e := range entries {
 		if !e.IsSpacer() {
 			placed[e.Name] = true
+		}
+		if hidden(e.Name) {
+			continue
 		}
 		rows = append(rows, railEditorRow{
 			Kind: railRowPlaced, Name: e.Name, Index: i, Share: e.Share,
@@ -152,7 +161,7 @@ func (m *OS) sectionEditorRows() []railEditorRow {
 
 	rows = append(rows, railEditorRow{Kind: railRowHeader, Name: railListOff, Index: -1})
 	for _, name := range config.SidebarSectionNames {
-		if placed[name] {
+		if placed[name] || hidden(name) {
 			continue
 		}
 		rows = append(rows, railEditorRow{Kind: railRowAvailable, Name: name, Index: -1})
@@ -220,7 +229,7 @@ func (m *OS) SectionEditorToggle() tea.Cmd {
 		if row.Index < 0 || row.Index >= len(entries) {
 			return nil
 		}
-		if !row.Spacer && sectionCount(entries) <= 1 {
+		if !row.Spacer && sectionCount(entries, m.agentsOn()) <= 1 {
 			// The rail has to draw something. An empty layout falls back to the
 			// shipped one on the next parse, so the edit would appear to undo
 			// itself, which is worse than being told no.
@@ -292,10 +301,10 @@ func (m *OS) SectionEditorRevert() tea.Cmd {
 
 // sectionCount is how many real sections a layout has. Spacers do not count:
 // a rail of nothing but empty blocks draws nothing at all.
-func sectionCount(entries []config.SidebarSectionShare) int {
+func sectionCount(entries []config.SidebarSectionShare, agentsOn bool) int {
 	n := 0
 	for _, e := range entries {
-		if !e.IsSpacer() {
+		if !e.IsSpacer() && (agentsOn || e.Name != "agents") {
 			n++
 		}
 	}

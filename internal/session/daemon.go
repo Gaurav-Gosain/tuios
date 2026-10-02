@@ -276,6 +276,12 @@ type Daemon struct {
 	// agents_switch.go. It is read on every tick, verb and output event, and
 	// written by a config reload, so it is atomic.
 	agentsOff atomic.Bool
+	// agentsSwitchMu orders a switch with the clear a racing detection pass
+	// makes after it. See noteSessionScanned.
+	agentsSwitchMu sync.Mutex
+	// paneCreators maps a window id to the window of the pane that opened
+	// it, for the typing rule with the agent features off.
+	paneCreators sync.Map
 
 	// evidenceClock is the time the detection verbs measure evidence_age_ms
 	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
@@ -838,6 +844,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// leaves the foreground the shell prompt returns as output, so probe that
 		// pane and clear an auto-detected glyph at once rather than waiting for the
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
+		if ev.Type == EventWindowClosed {
+			d.paneCreators.Delete(ev.Window)
+		}
 		if ev.Type == EventOutput && d.agentsOff.Load() {
 			// The agent features are off: the pane's directory is still
 			// followed, and nothing on it is read for an agent. A report the
@@ -1895,6 +1904,9 @@ func (d *Daemon) agentMonitor() {
 				// session that is fully joined, or that runs no agent at all,
 				// does nothing here.
 				sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
+				if d.noteSessionScanned(sess) {
+					break
+				}
 			}
 		}
 	}

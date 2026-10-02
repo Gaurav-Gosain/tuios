@@ -802,7 +802,7 @@ var optionSpecs = []Option{
 	// tables, which stay in the file.
 	{
 		Path: "agents.enabled", Type: OptionBool, Section: "agents",
-		Description: "Turn off agents, the Inbox, mail and approvals. Keep only the multiplexer.",
+		Description: "Agents, the Inbox, mail and approvals. Turn off to keep only the multiplexer.",
 		Default:     "true",
 	},
 

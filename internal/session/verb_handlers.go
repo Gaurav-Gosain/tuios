@@ -326,6 +326,10 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		displayName = p.Name
 	}
 
+	// The pane that asked for the window opened it. The typing rule reads
+	// that while the agent features are off.
+	d.notePaneCreator(cs, win.ID)
+
 	// With a client attached, answer once the client has placed the window
 	// and sized its terminal. A program started in the pane straight after
 	// the call otherwise starts at the nominal size and gets a resize while
@@ -1414,6 +1418,10 @@ func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) 
 // verbSetAgentSession stores the conversation id a harness reports for a pane
 // without touching the pane's state. See applyAgentSession.
 func (d *Daemon) verbSetAgentSession(_ *connState, params json.RawMessage) (any, *verbError) {
+	// The herdr socket calls this handler directly, past admitVerb.
+	if !d.agentsEnabled() {
+		return nil, agentsDisabledError()
+	}
 	var p struct {
 		Session        string `json:"session"`
 		Window         string `json:"window"`

@@ -49,8 +49,9 @@ for the person, and the change tells them what you did.
 
 `agents.enabled` is the person's switch for every agent feature. When it is
 false, every agent verb fails with `agents_disabled`: agent state, mail, the
-Inbox, approvals, `start-agent` and `fan`. A pane without `respond` then cannot
-type into another pane. Do not change this option. If an agent verb fails with
+Inbox, approvals, `start-agent` and `fan`. A pane without `respond` then types
+only into a pane it opened or a pane whose shell is at its prompt. Only the
+person can change this option: `set-config` from a pane gets `forbidden`. If an agent verb fails with
 `agents_disabled`, tell the person and stop.
 
 `daemon.window_size` sets the size of a session with more than one client:

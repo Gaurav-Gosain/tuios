@@ -55,6 +55,11 @@ func (a AgentsConfig) On() bool { return a.Enabled == nil || *a.Enabled }
 // is an agent feature and the agent features are off.
 const AgentsOffMessage = "Agent features are off. Set agents.enabled = true in the config to use this command."
 
+// AgentsOffVerbMessage is what the daemon answers an agent verb with while
+// the agent features are off. A verb can come from the CLI, an MCP client or
+// a herdr client, so it names the machine and not a command.
+const AgentsOffVerbMessage = "Agent features are off on this machine. Set agents.enabled = true in its config.toml to turn them on."
+
 // The values of [agents] herdr_protocol.
 const (
 	HerdrProtocolAgents = "agents"

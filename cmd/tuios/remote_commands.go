@@ -159,6 +159,10 @@ func verbErrorJSON(err error) map[string]any {
 		out["error"] = config.AgentsOffMessage
 		out["code"] = call.Code
 	}
+	if here, ok := errors.AsType[*session.AgentsOffHereError](err); ok {
+		out["error"] = here.Error()
+		out["code"] = here.ErrorCode()
+	}
 	if h, ok := errors.AsType[*hostError](err); ok {
 		markUntrusted(out, h.host)
 	}

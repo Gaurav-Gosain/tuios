@@ -563,7 +563,9 @@ func (d *Daemon) deliverQueued(window string) {
 
 	q.mu.Lock()
 	pq := q.panes[window]
-	if pq == nil || pq.delivering || len(pq.entries) == 0 || pq.entries[0].state != queueWaiting {
+	// Nothing is typed while the agent features are off. The switch empties
+	// the queues; this covers a look armed before it did.
+	if d.agentsOff.Load() || pq == nil || pq.delivering || len(pq.entries) == 0 || pq.entries[0].state != queueWaiting {
 		q.mu.Unlock()
 		return
 	}

@@ -323,3 +323,23 @@ socket itself, rather than through the shim, is not held to them, like any
 process that leaves its pane on purpose. For an agent held to its own session,
 use `tuios mcp`, which restricts its connections (see
 [protocol.md](protocol.md#restrict-connection)), or give its pane fewer grants.
+
+## With the agent features off
+
+With `[agents] enabled = false`, tuios does not track which pane waits on a
+prompt. A pane without the `respond` grant can then type only into these
+panes:
+
+- A pane that it opened. Thus `split-window` and then `send-keys` into the
+  new pane work, as in an agent team.
+- A pane whose own shell is at its prompt.
+
+The shim refuses `send-keys` into any other pane, with `forbidden`. To let
+every pane type into other panes, give panes `respond`:
+
+```toml
+[agents.permissions]
+grants = ["admin", "respond"]
+```
+
+See [Turn off agent features](CONFIGURATION.md#turn-off-agent-features).

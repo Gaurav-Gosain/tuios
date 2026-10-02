@@ -155,6 +155,9 @@ func buildTools(opts Options) []*tool {
 		if spec.write && !opts.Write {
 			continue
 		}
+		if opts.Leave != nil && opts.Leave(spec.verb) {
+			continue
+		}
 		doc, ok := docs[spec.verb]
 		if !ok {
 			// A verb this build does not have is not offered.

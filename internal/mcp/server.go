@@ -62,6 +62,9 @@ type Options struct {
 	PaneToken string
 	// Dial opens a connection to the daemon.
 	Dial func() (Conn, error)
+	// Leave, when set, names the verbs whose tools are not listed: the
+	// agent verbs, while this machine has the agent features off.
+	Leave func(verb string) bool
 	// Verbs is the verb table the tools are generated from.
 	Verbs []VerbDoc
 	// Log receives one line per notable event, for stderr. Nil discards.

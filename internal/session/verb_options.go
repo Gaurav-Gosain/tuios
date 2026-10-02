@@ -13,6 +13,9 @@ import (
 // rather than a session. See verbSetOption.
 const optionDaemonLogLevel = "daemon.log_level"
 
+// optionAgentsEnabled is the agent switch, which only the person may set.
+const optionAgentsEnabled = "agents.enabled"
+
 // This file makes the configuration surface reachable and, more to the point,
 // findable. set-option would take any string at all: a misspelled path was
 // recorded, reported as set, and did nothing, and there was no verb that would
@@ -190,6 +193,17 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 			Detail:    "call list-options for each path with its type, default and accepted values.",
 		})
 	}
+	// The agent switch is the person's. A pane that turned it off would
+	// hide its own state and the Inbox from them, and one that turned it on
+	// would undo their choice, so a pane may not set it. The settings page
+	// and the file are where the person sets it.
+	if path == optionAgentsEnabled && d.paneAuthority(cs) != nil {
+		return nil, hintedVerbError(ErrVerbForbidden, "only the person can change agents.enabled. A process in a pane cannot", &VerbHint{
+			Param:  "key",
+			Detail: "Nothing was changed. The person sets it on the settings page or in config.toml.",
+		})
+	}
+
 	// Validate by attempting the set against a throwaway config. Doing it this
 	// way rather than duplicating the type rules here means the check and the
 	// apply can never disagree about what a value means.

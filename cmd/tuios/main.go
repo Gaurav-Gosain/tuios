@@ -62,6 +62,9 @@ func main() {
 		os.Exit(runAsHerdr(os.Args[1:]))
 	}
 
+	// This machine's agent switch governs an agent call to another machine.
+	session.HostCallGuard = refuseAgentCallHere
+
 	rootCmd := newRootCommand()
 	rootCmd.SetArgs(skillArgs(rootCmd, os.Args[1:]))
 

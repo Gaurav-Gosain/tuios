@@ -249,7 +249,7 @@ enabled = false
 
 The default is `true`. You can also change it on the settings page. It is the
 first row, "Agent features". While a tuios client is open, you can also run
-`tuios set-config agents.enabled false`.
+`tuios set-config agents.enabled false` from a shell outside tuios.
 
 When the agent features are off:
 
@@ -266,7 +266,9 @@ When the agent features are off:
 - Agent commands, such as `tuios start-agent`, `tuios fan` and
   `tuios list-attention`, stop and print this message: "Agent features are
   off. Set agents.enabled = true in the config to use this command." A
-  program that calls an agent verb gets the error code `agents_disabled`.
+  program that calls an agent verb gets the error code `agents_disabled`
+  and this message: "Agent features are off on this machine. Set
+  agents.enabled = true in its config.toml to turn them on."
 
 The change applies at once. You do not have to restart tuios. When you turn
 the features off, the daemon clears the agent state of every pane and closes
@@ -276,11 +278,29 @@ pane. When you turn the features on, the daemon looks at every pane again.
 Typing between panes is stricter when the features are off. A pane can answer
 another pane's prompt if it types into that pane. Usually tuios knows which
 pane waits on a prompt. With the features off it does not know. Thus a pane
-that does not hold the `respond` grant cannot type into any other pane. This
-includes `send-keys`, `send-text` and `run` from a script in a pane. Your own
-keys, and commands from a shell outside tuios, are not affected. To let a pane
-type into other panes, give it `respond`. See
-[What a pane may do](#what-a-pane-may-do).
+that does not hold the `respond` grant can type only into these panes:
+
+- A pane that it opened, for example with `tuios new-window` or the tmux
+  shim's `split-window`.
+- A pane whose own shell is at its prompt, with no program running.
+
+It cannot type into other panes. This includes `send-keys`, `send-text` and
+`run` from a script in a pane. Your own keys, and commands from a shell outside
+tuios, are not affected. To let every pane type into other panes, give panes
+`respond`:
+
+```toml
+[agents.permissions]
+grants = ["admin", "respond"]
+```
+
+See [What a pane may do](#what-a-pane-may-do).
+
+Only you can change the switch: on the settings page, in config.toml, or with
+`tuios set-config` from a shell outside tuios. A process in a pane gets
+`forbidden`. `tuios mcp` started with the features off does not list the
+agent tools. An agent command aimed at another machine, such as
+`tuios list-agents -s build:work`, follows this machine's switch.
 
 ## Approvals from the Inbox
 

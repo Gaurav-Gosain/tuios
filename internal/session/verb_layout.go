@@ -450,7 +450,7 @@ func layoutResult(sess *Session) map[string]any {
 // because the division is a geometry, and it goes through the renderer's own
 // splitting path so the new pane lands in the tree the same way one opened from
 // the keyboard does.
-func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
 		Window    string `json:"window"`
@@ -522,6 +522,7 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 		return out, nil
 	}
 	out["window_id"] = created
+	d.notePaneCreator(cs, created)
 	if p.Name != "" {
 		if err := sess.RenameDaemonWindow(created, p.Name); err != nil {
 			return nil, mapResolveErr(err, sess)

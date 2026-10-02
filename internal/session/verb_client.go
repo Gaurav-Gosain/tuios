@@ -190,6 +190,13 @@ func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
 // must widen this deadline too or the connection gives up before the daemon
 // answers, turning a satisfied wait into a read failure.
 func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
+	// A call to another machine is held to this machine's agent switch. See
+	// HostCallGuard.
+	if c.host != "" && HostCallGuard != nil {
+		if err := HostCallGuard(verb, params); err != nil {
+			return nil, err
+		}
+	}
 	c.callMu.Lock()
 	defer c.callMu.Unlock()
 

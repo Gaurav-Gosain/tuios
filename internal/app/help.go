@@ -132,6 +132,9 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 // out of the Agents section, since each would do what an unbound key does.
 func (m *OS) HelpCategories() []HelpCategory {
 	cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
+	if !m.agentsOn() {
+		cats = withoutAgentHelp(cats)
+	}
 	if !m.agentsSeen() {
 		return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
 	}
@@ -917,4 +920,32 @@ func helpHints(inSearch bool) []overlay.Hint {
 		{Key: "↑↓", Label: "scroll"},
 		{Key: "?", Label: "close"},
 	}
+}
+
+// agentHelpActions are the keys outside the Agents tab that act only on an
+// agent feature: the rail's agent controls and mailbox, and the prefix keys
+// of the Inbox and the mail.
+var agentHelpActions = map[string]bool{
+	"agents_filter": true, "agents_sort": true, "mail": true,
+	"prefix_mail": true, "prefix_inbox": true, "prefix_next_attention": true,
+}
+
+// withoutAgentHelp leaves the agent keys out of every tab, for the agent
+// features turned off. See agents_off.go.
+func withoutAgentHelp(cats []HelpCategory) []HelpCategory {
+	out := make([]HelpCategory, 0, len(cats))
+	for _, c := range cats {
+		c.Bindings = slices.DeleteFunc(slices.Clone(c.Bindings), func(b HelpBinding) bool { return agentHelpActions[b.Action] })
+		for i := range c.Bindings {
+			if c.Name == HelpCategorySidebar {
+				if c.Bindings[i].Action == "section" {
+					c.Bindings[i].Description = "Cycle the rail's sections"
+				}
+			}
+		}
+		if len(c.Bindings) > 0 {
+			out = append(out, c)
+		}
+	}
+	return out
 }

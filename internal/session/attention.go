@@ -116,6 +116,9 @@ const (
 	// AttentionClosedHostRemoved: the item came from a linked host that was
 	// taken out of the [hosts] table.
 	AttentionClosedHostRemoved = "host_removed"
+	// AttentionClosedAgentsDisabled: the person turned the agent features
+	// off. A held approval goes back to its harness, which asks in its pane.
+	AttentionClosedAgentsDisabled = "agents_disabled"
 	// AttentionClosedSnoozed: the person snoozed the item. It opens again
 	// with the same id and since when the snooze ends or its fact changes.
 	// A client that predates snoozing reads it as any other close.
@@ -1289,5 +1292,21 @@ func (a *attentionStore) renameSession(old, newName string) {
 	if moved {
 		a.rev++
 		a.changedLocked()
+	}
+}
+
+// closeAll closes every item and drops every snoozed one with reason. A hold
+// on an item ends with it, so its harness asks in its pane.
+func (a *attentionStore) closeAll(reason string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, id := range a.sortedIDsLocked() {
+		a.closeLocked(id, reason)
+	}
+	for _, id := range a.snoozedIDsLocked() {
+		a.dropSnoozedLocked(id, reason)
 	}
 }

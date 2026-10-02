@@ -215,7 +215,21 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 // machine's sessions as the prefix.
 func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
 	tree.Sessions = append(tree.Sessions, m.hostGroupNodes()...)
+	// With the agent features off no row wears an agent mark, a machine's
+	// or a session's on another machine included, whose daemon may still
+	// have them on. See agents_off.go.
+	if !m.agentsOn() {
+		clearAgentMarks(tree.Sessions)
+	}
 	return tree
+}
+
+// clearAgentMarks takes the agent state off every node and its children.
+func clearAgentMarks(nodes []sessiontree.Node) {
+	for i := range nodes {
+		nodes[i].AgentState, nodes[i].AgentKind, nodes[i].DoneSeen = "", "", false
+		clearAgentMarks(nodes[i].Children)
+	}
 }
 
 // railNeighbourSession returns the session delta places from the current one in

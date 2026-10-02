@@ -18,7 +18,7 @@ import (
 
 // agentsOffNotice is the line a key or a click on an agent feature shows
 // while the features are off.
-const agentsOffNotice = "Agent features are off. Turn on Agent features in Settings to use this."
+const agentsOffNotice = "Agent features are off. Turn them on in Settings."
 
 // agentsOn reports whether the agent features are on in this client's
 // config. A client with no config has them on, the default.
@@ -42,14 +42,22 @@ func (m *OS) refuseAgentsOff() bool {
 // starts the watcher again. A call that changes nothing does nothing.
 func (m *OS) applyAgentsSwitch() tea.Cmd {
 	off := !m.agentsOn()
-	if off == m.agentsSwitchedOff {
+	if !off {
+		m.agentsSwitchedOff = false
+		// A client that started with the features off never started the
+		// watcher, so on means start it whenever it is not running, not
+		// only when the switch moved.
+		if m.inboxEvents == nil {
+			m.MarkAllDirty()
+			return m.startInboxWatch()
+		}
 		return nil
 	}
-	m.agentsSwitchedOff = off
-	m.MarkAllDirty()
-	if !off {
-		return m.startInboxWatch()
+	if m.agentsSwitchedOff {
+		return nil
 	}
+	m.agentsSwitchedOff = true
+	m.MarkAllDirty()
 	if m.ShowInbox {
 		m.CloseInbox()
 	}

@@ -91,6 +91,7 @@ func exitStatus(err error) int {
 	if err == nil {
 		return 0
 	}
+	err = agentsOffAnswer(err)
 	code := 1
 	var coded interface{ ExitStatus() int }
 	if errors.As(err, &coded) {
@@ -113,9 +114,7 @@ func exitStatus(err error) int {
 func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
 	// An agent command while the agent features are off prints the one line
 	// that says so, however the command wrapped the daemon's answer.
-	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok && callErr.Code == session.ErrVerbAgentsDisabled {
-		err = errors.New(config.AgentsOffMessage)
-	}
+	err = agentsOffAnswer(err)
 	if !isTerminalWriter(w) {
 		_, _ = fmt.Fprintln(w, err.Error())
 		return
@@ -344,6 +343,34 @@ type agentsOffError struct {
 
 func (e *agentsOffError) Error() string { return config.AgentsOffMessage }
 func (e *agentsOffError) Unwrap() error { return e.call }
+
+// agentsOffAnswer is err as the CLI prints it: an agent command while the
+// agent features are off prints the one line that says so, however the
+// command wrapped the answer. Any other error is returned as it is.
+func agentsOffAnswer(err error) error {
+	if here, ok := errors.AsType[*session.AgentsOffHereError](err); ok {
+		return here
+	}
+	if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbAgentsDisabled {
+		return &agentsOffError{call: call}
+	}
+	return err
+}
+
+// refuseAgentCallHere is session.HostCallGuard for the CLI: an agent call to
+// another machine is refused while this machine's config has the agent
+// features off. The config is read only for an agent call.
+func refuseAgentCallHere(verb string, params any) error {
+	if !session.AgentOnlyCall(verb, params) {
+		return nil
+	}
+	cfg, err := config.LoadUserConfig()
+	if err != nil || cfg == nil || cfg.Agents.On() {
+		return nil
+	}
+	path, _ := config.GetConfigPath()
+	return &session.AgentsOffHereError{Path: path}
+}
 
 // nonEmpty returns s, or fallback when s is empty.
 func nonEmpty(s, fallback string) string {
