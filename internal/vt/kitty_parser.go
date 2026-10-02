@@ -17,9 +17,11 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 }
 
 // ParseKittyHeader parses the body of a kitty graphics APC like
-// ParseKittyCommand, but leaves the payload undecoded: Data and FilePath stay
-// empty, and RawPayload is kept only when it is short enough to be an echoed
-// reply (see IsKittyResponsePayload).
+// ParseKittyCommand, but leaves the image data undecoded: Data stays empty,
+// and RawPayload is kept only when it is short enough to be an echoed reply
+// (see IsKittyResponsePayload). The payload of a shared memory (t=s) or temp
+// file (t=t) transmission is decoded into FilePath, because it is only a name
+// and the daemon deletes the objects no client reads.
 //
 // It is for a reader that acts on the control keys alone, such as the daemon,
 // which answers queries and refuses animation and never draws. Decoding a
@@ -55,7 +57,19 @@ func parseKittyCommand(data []byte, headerOnly bool) (*KittyCommand, error) {
 		if len(dataPart) <= maxKittyResponsePayload {
 			cmd.RawPayload = string(dataPart)
 		}
-		if kittyPayloadErrorOwed(cmd) {
+		switch {
+		case kittyHeaderNamesObject(cmd, dataPart):
+			// The payload of a shared memory or temp file transmission is
+			// only the object's name. The reader still needs it: the daemon
+			// deletes the frames no client reads, and with no name it
+			// deletes nothing and /dev/shm fills up.
+			decoded, err := DecodeKittyPayload(dataPart)
+			if err != nil {
+				cmd.PayloadErr = err
+			} else {
+				cmd.FilePath = string(decoded)
+			}
+		case kittyPayloadErrorOwed(cmd):
 			_, cmd.PayloadErr = DecodeKittyPayload(dataPart)
 		}
 		return cmd, nil
@@ -160,6 +174,17 @@ func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
 		return nil
 	}
 	return BuildKittyResponse(false, cmd.ImageID, "EINVAL:payload is not valid base64")
+}
+
+// maxKittyObjectName bounds the payload ParseKittyHeader decodes as an object
+// name: base64 of PATH_MAX bytes, rounded up. A longer payload is not a name.
+const maxKittyObjectName = 8192
+
+// kittyHeaderNamesObject reports whether ParseKittyHeader decodes the payload
+// of cmd as the name of a shared memory object or temp file.
+func kittyHeaderNamesObject(cmd *KittyCommand, payload []byte) bool {
+	return (cmd.Medium == KittyMediumSharedMemory || cmd.Medium == KittyMediumTempFile) &&
+		len(payload) <= maxKittyObjectName
 }
 
 // kittyPayloadErrorOwed reports whether cmd would be answered with EINVAL if
