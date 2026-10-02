@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The rail's custom section: the rows a command of the user's printed.
@@ -31,6 +32,10 @@ type railCustomState struct {
 	// on records whether the engine was built with the section's command,
 	// so the per-message sync can tell a layout change from a frame.
 	on bool
+	// runnable records whether the config gives the section a command and a
+	// refresh the rail honours. Both change only on a config reload, which
+	// rebuilds the engine, so it is worked out there and not per message.
+	runnable bool
 	// gen counts the updates that changed the rows. The render cache folds
 	// it, so new output redraws the rail and an unchanged value does not.
 	gen uint64
@@ -82,19 +87,25 @@ func (m *OS) sidebarCustomRow(text string, cw int, pal overlay.Palette, st sideb
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(" ")+body, cw, rowBg)
 }
 
-// railCustomWanted reports whether the engine should hold the section's
-// command: the layout names the section, a command is set, and the refresh
-// is one the rail honours.
-func (m *OS) railCustomWanted() bool {
-	if !m.railCustomEnabled() {
-		return false
-	}
+// railCustomRunnable reports whether the config gives the section something
+// to run: a command, and a refresh the rail honours. It parses the refresh,
+// so it is asked when the engine is built and its answer kept in
+// railCustom.runnable.
+func (m *OS) railCustomRunnable() bool {
 	custom := m.railCustomConfig()
 	if !custom.HasCommand() {
 		return false
 	}
 	_, err := config.ParseSidebarCustomRefresh(custom.Refresh)
 	return err == nil
+}
+
+// railCustomWanted reports whether the engine should hold the section's
+// command: the config gives it one and the layout names the section. The
+// flag first, because it is asked once per message and most clients set no
+// command, so they never take the layout's mutex here.
+func (m *OS) railCustomWanted() bool {
+	return m.railCustom.runnable && m.railCustomEnabled()
 }
 
 // railCustomComponent is the engine component for the section, or nil when
@@ -121,16 +132,22 @@ func (m *OS) railCustomComponent() *dockComponent {
 // can give it, before the rail's chrome and the other sections' claims: a
 // ceiling, as shares are, and the docs say so. A rail collapsed to the glyph
 // strip draws no rows, so both are zero there.
+//
+// It runs once per message, so it only copies what the model holds. The
+// folder is left for the run to resolve (railContext.folder).
 func (m *OS) railContextNow() railContext {
 	ctx := railContext{}
 	if w := m.GetFocusedWindow(); w != nil {
 		ctx.PaneID = w.ID
-		// The folder the command keys hand their commands, so a script
-		// written for one works for the other.
-		if m.AttachedHost != "" {
-			ctx.PaneCWD = m.remotePaneDir()
-		} else {
-			ctx.PaneCWD = m.scratchDir()
+		ctx.Remote = m.AttachedHost != ""
+		switch {
+		case ctx.Remote, w.Cwd != "" && w.Host == "":
+			ctx.PaneDir = w.Cwd
+		case w.Host == "":
+			ctx.PanePgid = w.ShellPgid
+		default:
+			// A pane on another machine in a session on this one: nothing
+			// here can say where it is, so the run is told the home folder.
 		}
 	}
 	w := m.GetSidebarWidth()
@@ -146,6 +163,25 @@ func (m *OS) railContextNow() railContext {
 	}
 	ctx.Height = max(lines, 1)
 	return ctx
+}
+
+// folder is TUIOS_ACTIVE_PANE_CWD: the folder the command keys would start a
+// command for the focused pane in, so a script written for one works for the
+// other. Empty with no pane focused. It reads the shell's working directory
+// and stats the folder, so it is called when a run starts, on the run's
+// goroutine, and never on the update goroutine.
+func (ctx railContext) folder() string {
+	switch {
+	case ctx.PaneID == "":
+		return ""
+	case ctx.Remote:
+		return remoteFolder(ctx.PaneDir)
+	}
+	raw := ctx.PaneDir
+	if raw == "" && ctx.PanePgid != 0 {
+		raw, _ = terminal.ShellCWD(ctx.PanePgid)
+	}
+	return localFolder(raw)
 }
 
 // RailCustomSyncCmd keeps the engine in step with the model. It runs once

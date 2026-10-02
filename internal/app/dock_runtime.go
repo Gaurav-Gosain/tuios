@@ -31,6 +31,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	// The rail's custom section is one more component on the same scheduler.
 	// It draws on the rail and not the bar, which is why it is built here and
 	// not in the plan: the plan is the bar's membership.
+	m.railCustom.runnable = m.railCustomRunnable()
 	rail := m.railCustomComponent()
 	m.railCustom.on = rail != nil
 	if rail != nil {

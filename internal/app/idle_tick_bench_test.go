@@ -112,6 +112,75 @@ func BenchmarkIdleTickFoldConfigured(b *testing.B) {
 	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
 }
 
+// railCustomIdleOS is idleOS with the rail on and its custom section placed
+// and loaded in a real dock engine, with a command on an event refresh. The
+// focused pane reports a folder, which is the case that would stat. It
+// returns once the run at start has landed, so a measurement sees only the
+// idle path and not a subprocess starting beside it.
+func railCustomIdleOS(tb testing.TB) *OS {
+	tb.Helper()
+	m := idleOS(tb, 3)
+	m.Settings.SidebarEnabled = true
+	m.Settings.SidebarSections = "sessions,terminals,custom:40"
+	cfg := config.DefaultConfig()
+	cfg.Appearance.Sidebar.Custom = config.SidebarCustomConfig{Command: "true", Refresh: "event:window-focused"}
+	m.UserConfig = cfg
+	m.Windows[0].Cwd = "file://" + tb.TempDir()
+	m.InitDockComponents()
+	tb.Cleanup(m.StopDockComponents)
+	if !m.railCustom.on {
+		tb.Fatal("the engine was built without the rail's custom section")
+	}
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case u := <-m.dockEngine.Updates():
+			if u.Name == railCustomComponent {
+				return m
+			}
+		case <-deadline:
+			tb.Fatal("the section's run at start never landed")
+		}
+	}
+}
+
+// BenchmarkIdleTickRailCustom is BenchmarkIdleTick with the rail's custom
+// section placed and running. Its sync runs on every message, on the update
+// goroutine, so it must cost an idle tick no allocation and no stat beyond
+// what BenchmarkIdleTick pays.
+func BenchmarkIdleTickRailCustom(b *testing.B) {
+	m := railCustomIdleOS(b)
+	m.Update(TickerMsg(time.Now()))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m.Update(TickerMsg(time.Now()))
+	}
+	b.StopTimer()
+
+	_, work, render := m.TickStats()
+	b.ReportMetric(float64(work)/float64(b.N), "work/tick")
+	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
+}
+
+// TestIdleTickRailCustomAllocatesNoMore guards the same budget: an idle tick
+// with the section running allocates no more than one without it. A parse of
+// the refresh or a resolve of the pane's folder that crept back into the
+// per-message sync would be paid ten times a second by an idle client.
+func TestIdleTickRailCustomAllocatesNoMore(t *testing.T) {
+	off, on := idleOS(t, 3), railCustomIdleOS(t)
+	for range 5 {
+		off.Update(TickerMsg(time.Now()))
+		on.Update(TickerMsg(time.Now()))
+	}
+	offAllocs := testing.AllocsPerRun(500, func() { off.Update(TickerMsg(time.Now())) })
+	onAllocs := testing.AllocsPerRun(500, func() { on.Update(TickerMsg(time.Now())) })
+	if onAllocs > offAllocs {
+		t.Fatalf("an idle tick allocates %v times with the rail's custom section running and %v without it", onAllocs, offAllocs)
+	}
+}
+
 // TestIdleTickFoldConfiguredWithoutAgents guards the zero-agent promise of
 // the fold: with it configured and minutes passing, idle ticks with no agent
 // ever seen do no scan work and draw no frame.

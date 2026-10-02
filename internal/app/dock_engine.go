@@ -154,10 +154,24 @@ const dockEventDebounce = 200 * time.Millisecond
 
 // railContext is what the rail section's command is told about where it
 // draws and what has the focus.
+//
+// The pane's folder is carried as the model holds it, not as the command is
+// told it. Turning it into a folder means a stat, and the model builds this
+// on every message on the update goroutine, where a pane sitting in a hung
+// network folder would freeze the client. So the run resolves it when it
+// starts, on its own goroutine (railContext.folder).
 type railContext struct {
 	Width, Height int
 	PaneID        string
-	PaneCWD       string
+	// PaneDir is the folder the pane last reported (OSC 7), unparsed, or
+	// empty when it never reported one.
+	PaneDir string
+	// PanePgid is the pane's shell, for a local pane that reported no folder:
+	// its working directory is the fallback, read at run start.
+	PanePgid int
+	// Remote says the session is on another machine, so PaneDir is a path
+	// there and nothing on this machine can check it.
+	Remote bool
 }
 
 // newDockEngine builds the engine for a set of components and starts the
@@ -574,10 +588,14 @@ func dockSupervise(cmd *exec.Cmd) {
 // variables that say where the rows go and what has the focus. The names of
 // the last two are the command keys' names (command_keys.go), so a script
 // written for one works for the other.
+//
+// It runs on the run's goroutine, and the folder is resolved after the lock
+// is let go: the stat that checks it can block, and only this run waits.
 func (e *dockEngine) railCommandEnv() []string {
 	e.mu.Lock()
 	session, socket, rail := e.session, e.socket, e.rail
 	e.mu.Unlock()
+	folder := rail.folder()
 	return append(os.Environ(),
 		"TUIOS_SESSION="+session,
 		"TUIOS_SOCKET="+socket,
@@ -585,7 +603,7 @@ func (e *dockEngine) railCommandEnv() []string {
 		"TUIOS_RAIL_WIDTH="+strconv.Itoa(rail.Width),
 		"TUIOS_RAIL_HEIGHT="+strconv.Itoa(rail.Height),
 		"TUIOS_ACTIVE_PANE_ID="+rail.PaneID,
-		"TUIOS_ACTIVE_PANE_CWD="+rail.PaneCWD,
+		"TUIOS_ACTIVE_PANE_CWD="+folder,
 	)
 }
 
