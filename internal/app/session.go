@@ -279,19 +279,13 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// were sent to the session being left.
 	m.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	m.masterSeeded = nil
-	// The rail is the session's too, and an offer this client made was made
-	// to the session being left. See seedSidebar.
-	m.sidebarSeeded = false
-	m.sidebarSession = ""
 	// Same for the custom-layout flags, and for the same reason: they belong to
 	// the session being left.
 	m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
 	m.adoptWorkspaceHasCustom(state)
 	m.adoptSidebarState(state)
-	// Taken before the layout below, which is computed against the rail. A
-	// session that has no value yet gets this client's configured one.
-	m.adoptSidebarVisibility(state)
-	m.seedSidebar()
+	// Taken before the layout below, which is computed against the rail.
+	m.joinSessionSidebar(state)
 	// The pane geometry inputs are the session's, adopted before the layout
 	// below is computed so a joining client tiles with the session's arithmetic
 	// rather than its own config's.

@@ -338,3 +338,103 @@ func TestChromeSetFromTheCommandLineRetilesThePanes(t *testing.T) {
 	})
 	saveArtifact(t, term, dir, "rail-off")
 }
+
+// TestAnEmptySessionTakesTheRailOfItsMaker hides the rail, then makes a new
+// session from the switcher. The new session has no windows. It takes the
+// rail as its maker has it, so a second client whose config shows the rail
+// attaches to it with the rail hidden, and the first client keeps it hidden.
+//
+// NEGATIVE CONTROL: fails on 91985c0 (the first round of this change) at
+// "the second client attaching to the empty session". A switch to a session
+// with no windows skipped RestoreFromState, which is where the rail was taken
+// and offered, so the session had no value, the second client settled it from
+// its own config, and the first client's rail came back.
+func TestAnEmptySessionTakesTheRailOfItsMaker(t *testing.T) {
+	base := t.TempDir()
+	const name = "railmaker"
+	a := railSession(t, base, name, "bsp", startOpts{})
+	toggleRail(t, a)
+	waitRail(t, a, false, 0, "the first client after it hid the rail")
+
+	sendKeys(t, a, tuitest.Ctrl('b'), "S")
+	if err := a.WaitForText(name, uiTimeout); err != nil {
+		t.Fatalf("the session switcher never opened: %v\n%s", err, a.Snapshot())
+	}
+	sendKeys(t, a, "zzspawn")
+	time.Sleep(300 * time.Millisecond)
+	sendKeys(t, a, tuitest.Enter)
+	if err := a.WaitForText("Session: zzspawn", uiTimeout); err != nil {
+		t.Fatalf("the first client never switched to the new session: %v\n%s", err, a.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if railShown(a.Screen()) {
+		t.Fatalf("the first client shows the rail in the new session\n%s", a.Snapshot())
+	}
+
+	home := t.TempDir()
+	writeConfigIn(t, home, sessionRailConfig("bsp", true))
+	// attachSmall, because a session with no windows shows the welcome
+	// screen and no mode banner.
+	b := attachSmall(t, base, "zzspawn", startOpts{cols: bigCols, rows: bigRows, env: []string{"XDG_CONFIG_HOME=" + home}})
+	time.Sleep(2 * time.Second)
+	dir := artifactDir(t)
+	saveArtifact(t, a, dir, "maker")
+	saveArtifact(t, b, dir, "second")
+	if railShown(b.Screen()) {
+		t.Fatalf("the second client attaching to the empty session shows the rail\n%s", b.Snapshot())
+	}
+	if railShown(a.Screen()) {
+		t.Fatalf("the first client's rail came back when the second client attached\n%s", a.Snapshot())
+	}
+}
+
+// TestRailOpenedForTheKeyboardMovesNoPanes hides the rail on a session with
+// two clients, then opens the rail's keyboard scope on one of them. The rail
+// opens on that client only, drawn over its panes. No pane moves, on either
+// client or in the daemon, and the other client shows no blank band.
+//
+// NEGATIVE CONTROL: fails on 91985c0 (the first round of this change) at
+// "the daemon with the scope open": the rail opened for the scope counted in
+// the client's reserve, so the session's panes moved right by the rail's
+// width and the other client drew a blank band. With the check of
+// SidebarRevealedForFocus removed from OwnLayoutReserve it fails at the same
+// step.
+func TestRailOpenedForTheKeyboardMovesNoPanes(t *testing.T) {
+	base := t.TempDir()
+	const name = "railscope"
+	a := railSession(t, base, name, "bsp", startOpts{})
+	toggleRail(t, a)
+	waitRail(t, a, false, 0, "the first client after it hid the rail")
+	home := t.TempDir()
+	writeConfigIn(t, home, sessionRailConfig("bsp", true))
+	b := attachIn(t, base, name, startOpts{cols: bigCols, rows: bigRows, env: []string{"XDG_CONFIG_HOME=" + home}})
+	waitRail(t, b, false, 0, "the second client attaching")
+	before := spanOf(waitSpan(t, base, name, "the daemon with the rail hidden", func(s paneSpan) bool {
+		return s.left == 0 && s.right == bigCols
+	}))
+
+	sendKeys(t, a, tuitest.Ctrl('b'), "e")
+	if err := a.WaitFor(railShown, uiTimeout); err != nil {
+		t.Fatalf("the scope never opened the rail: %v\n%s", err, a.Snapshot())
+	}
+	time.Sleep(2 * time.Second)
+	dir := artifactDir(t)
+	saveArtifact(t, a, dir, "a-scope-open")
+	saveArtifact(t, b, dir, "b-scope-open")
+	waitSpan(t, base, name, "the daemon with the scope open", func(s paneSpan) bool {
+		return s == before
+	})
+	if got := paneSpanRight(a.Screen()); got != bigCols {
+		t.Errorf("the client with the scope open draws its panes to column %d, want %d\n%s", got, bigCols, a.Snapshot())
+	}
+	waitRail(t, b, false, 0, "the other client with the scope open")
+
+	sendKeys(t, a, tuitest.Esc)
+	if err := a.WaitFor(func(s tuitest.Screen) bool { return !railShown(s) }, uiTimeout); err != nil {
+		t.Fatalf("leaving the scope never hid the rail: %v\n%s", err, a.Snapshot())
+	}
+	waitRail(t, a, false, 0, "the first client after the scope closed")
+	waitSpan(t, base, name, "the daemon after the scope closed", func(s paneSpan) bool {
+		return s == before
+	})
+}
