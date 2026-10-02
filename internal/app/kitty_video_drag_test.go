@@ -42,6 +42,7 @@ func newVideoDragHarness(t *testing.T, out io.Writer, rec *recWriter) *videoDrag
 
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 98, 28, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 	send() // frame 1: establishes the id via the placement path
