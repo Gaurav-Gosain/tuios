@@ -77,7 +77,13 @@ func main() {
 	wrote := func() {
 		written++
 		if countFile != "" {
-			_ = os.WriteFile(countFile, []byte(strconv.Itoa(written)), 0o644)
+			// Write a temporary file and rename it over the count. A plain
+			// WriteFile truncates first, so a reader could find the file
+			// empty, and a reader that gave up then counted 0 frames.
+			tmp := countFile + ".tmp"
+			if os.WriteFile(tmp, []byte(strconv.Itoa(written)), 0o644) == nil {
+				_ = os.Rename(tmp, countFile)
+			}
 		}
 	}
 

@@ -157,8 +157,9 @@ func startPacedGuest(t *testing.T, transport string) (base string, first *pacing
 }
 
 // guestFrames is how many frames the guest has written. The guest rewrites
-// the file for every frame, so a read can land between the truncate and the
-// write and find it empty: such a read is tried again.
+// the file for every frame through a rename, so a read never finds it empty.
+// A file that cannot be parsed is tried again, and a count of 0 means only that
+// no frame was written yet.
 func guestFrames(count string) int {
 	for range 100 {
 		b, err := os.ReadFile(count)
