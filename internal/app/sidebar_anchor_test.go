@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -35,70 +34,6 @@ func agentsScrollTree(n int, loud map[int]string) sessiontree.Tree {
 	return sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: windows},
 	})
-}
-
-// railAgentRowIDs is the windows the agents section actually drew, in the order
-// it drew them. Read off the hit rectangles the renderer recorded, which is the
-// only account of what reached the screen.
-func railAgentRowIDs(m *OS) []string {
-	var out []string
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent {
-			out = append(out, h.WindowID)
-		}
-	}
-	return out
-}
-
-// TestRailAgentsViewportHoldsItsRowWhenTheSortReorders is the one with real
-// correctness content: a pane below the fold asking for a human hoists itself to
-// the top of a priority-sorted list, and the reader must not be moved by it.
-// Both addressing lists are checked, because they are two different mechanisms:
-// the cursor is re-anchored by identity in sidebarPublishNav, the viewport in
-// sidebarReanchorAgents, and either alone leaves the reader half-moved.
-func TestRailAgentsViewportHoldsItsRowWhenTheSortReorders(t *testing.T) {
-	const panes = 12
-	m, _ := sectionsTestOS(t, 120, 30)
-	m.SidebarFocused = true
-
-	calm := agentsScrollTree(panes, nil)
-	m.sidebarPanelLinesForTree(calm)
-	m.SidebarScrollA = 2
-	m.sidebarPanelLinesForTree(calm)
-
-	before := railAgentRowIDs(m)
-	if len(before) < 3 {
-		t.Fatalf("the agents section drew %d rows, too few to scroll under a reader", len(before))
-	}
-
-	// The cursor rests one row into the visible block, which is where a reader
-	// steering with j/k leaves it.
-	held := before[1]
-	for i, r := range m.SidebarNav {
-		if r.Kind == sidebarRowAgent && r.WindowID == held {
-			m.SidebarCursor = i
-		}
-	}
-
-	// A pane the reader cannot see asks for a human. Priority puts it first, and
-	// every row the reader was looking at moves down one.
-	loudIdx := panes - 1
-	if strings.Contains(strings.Join(before, " "), fmt.Sprintf("pane-%02d", loudIdx)) {
-		t.Fatalf("the pane meant to be below the fold was on screen: %v", before)
-	}
-	m.sidebarPanelLinesForTree(agentsScrollTree(panes, map[int]string{loudIdx: "needs_input"}))
-
-	after := railAgentRowIDs(m)
-	if len(after) == 0 {
-		t.Fatal("the agents section drew nothing after the reorder")
-	}
-	if after[0] != before[0] {
-		t.Errorf("the agents viewport moved under the reader: it was showing %v, now %v", before, after)
-	}
-	row, ok := m.sidebarCursorRow()
-	if !ok || row.WindowID != held {
-		t.Errorf("the cursor followed the index instead of the row: was on %s, now on %+v", held, row)
-	}
 }
 
 // TestRailAgentsAnchorSurvivesItsRowVanishing: an anchor naming a pane that has

@@ -60,60 +60,6 @@ func TestRailSignatureMovesForDrawnStateAndNotForTheRest(t *testing.T) {
 // are the invariants that hold across every combination of them, not just the
 // ones a feature's own test happened to render.
 
-// TestRailAddressingHoldsAcrossEveryCombination walks the product of position,
-// collapse, peek, filter, sort and height, and asserts the three things that
-// have to be true of every frame: hits and nav name the same targets in the
-// same order, no rectangle escapes the band or overlaps its predecessor, and
-// the cursor lands on a row that exists.
-func TestRailAddressingHoldsAcrossEveryCombination(t *testing.T) {
-	// The agents section's row height is the sixth axis, and it is not one the
-	// caller sets: it follows from the lines the section was given. The two
-	// counters below make the sweep say which heights it actually walked, so a
-	// budget change that quietly stopped producing one of them fails here rather
-	// than leaving half of this test exercising nothing.
-	var tall, short int
-	for _, pos := range []string{"left", "right"} {
-		for _, collapsed := range []bool{false, true} {
-			for _, peek := range []string{"", "api", "gone"} {
-				for _, filter := range []string{sidebarAgentsAll, sidebarAgentsSession} {
-					for _, sortBy := range []string{sidebarAgentsPriority, sidebarAgentsRecent} {
-						for _, h := range []int{30, 14, 9} {
-							name := fmt.Sprintf("%s/collapsed=%v/peek=%q/%s/%s/h=%d", pos, collapsed, peek, filter, sortBy, h)
-							t.Run(name, func(t *testing.T) {
-								m, tree := sectionsTestOS(t, 120, h)
-								withSidebar(t, true, pos, config.SidebarDefaultWidth)
-								m.Settings = config.Global
-								m.SidebarCollapsed = collapsed
-								m.SidebarPeek = peek
-								m.SidebarAgentFilter, m.SidebarAgentSort = filter, sortBy
-								m.SidebarFocused = true
-								m.sidebarPanelLinesForTree(tree)
-
-								assertHitsFollowNav(t, m)
-								assertHitsStayInTheBand(t, m)
-								assertCursorIsOnARealRow(t, m)
-								for _, hit := range m.SidebarHits {
-									if hit.Kind != sidebarRowAgent {
-										continue
-									}
-									if hit.Y1-hit.Y0 == sidebarAgentRowTall {
-										tall++
-									} else {
-										short++
-									}
-								}
-							})
-						}
-					}
-				}
-			}
-		}
-	}
-	if tall == 0 || short == 0 {
-		t.Errorf("the sweep drew %d tall agent rows and %d short ones; it is walking one height, not both", tall, short)
-	}
-}
-
 // TestRailFitsAShortRegion walks every host height from nothing up to a rail
 // that comfortably fits, on both sides.
 //

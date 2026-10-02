@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -15,19 +14,6 @@ import (
 // Claude. The harness was detected, merged and carried on the live window, and
 // stopped one layer short of the wire; these are the claims about what it says
 // now that it reaches the row.
-
-// railAgentRow returns the rendered lines of the agents-section row for a
-// window, joined, or "" when the rail drew none. A row is one line or two, and
-// which one a fact landed on is the layout's business rather than these tests'.
-func railAgentRow(m *OS, lines []string, windowID string) string {
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent && h.WindowID == windowID {
-			top := h.Y0 - m.GetTopMargin()
-			return strings.Join(lines[top:min(h.Y1-m.GetTopMargin(), len(lines))], "\n")
-		}
-	}
-	return ""
-}
 
 // TestSidebarAgentPrefixYieldsInOrder pins the ladder a narrowing row walks
 // down, on the budget the row draws with. The session goes before the agent
