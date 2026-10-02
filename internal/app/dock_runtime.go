@@ -28,8 +28,20 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	m.dockEngine.Stop()
 
 	comps := dockRefreshableComponents(m.UserConfig, m.dockPlan, m.Settings.ShowClock, &m.Settings)
+	// The rail's custom section is one more component on the same scheduler.
+	// It draws on the rail and not the bar, which is why it is built here and
+	// not in the plan: the plan is the bar's membership.
+	rail := m.railCustomComponent()
+	m.railCustom.on = rail != nil
+	if rail != nil {
+		comps = append(comps, rail)
+	}
 	m.dockEngine = newDockEngine(comps)
 	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
+	// Before Start, so the first run is told the focus and the size rather
+	// than running with none.
+	m.railCustom.ctx = m.railContextNow()
+	m.dockEngine.SetRailContext(m.railCustom.ctx)
 	// The built-ins are filled here rather than by the engine, because their
 	// values come from model state this goroutine owns.
 	for _, c := range comps {
@@ -47,6 +59,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 func (m *OS) StopDockComponents() {
 	m.dockEngine.Stop()
 	m.dockEngine = nil
+	m.railCustom.on = false
 }
 
 // SyncDockContext re-stamps the session name and socket onto the engine, for
@@ -116,6 +129,19 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 		return m.refreshBuiltinDockComponent(msg.Name)
 	}
 	changed, newFailure := m.dockEngine.applyUpdate(dockComponentUpdate(msg))
+	if msg.Name == railCustomComponent {
+		if changed {
+			// The render cache keys on this, so new rows redraw the rail and
+			// an unchanged value draws nothing, as the bar does.
+			m.railCustom.gen++
+		}
+		if newFailure {
+			m.LogWarn("Rail section %s failed: %s", m.railCustomTitle(), msg.Err)
+			m.ShowNotification("Rail section "+m.railCustomTitle()+": "+dockFailureDetail(msg), "warning", m.Settings.NotificationDuration)
+			return true
+		}
+		return changed
+	}
 	if newFailure {
 		// Quiet on the bar, loud exactly once. A cell that fails is hidden
 		// rather than left showing a value its command can no longer produce,
@@ -123,15 +149,20 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 		// hackability audit kept finding, so the first failure of a streak is
 		// put in front of the person who wrote it.
 		name := strings.TrimPrefix(msg.Name, config.DockCustomPrefix)
-		detail := msg.Err
-		if msg.Exit > 0 {
-			detail = "exit " + strconv.Itoa(msg.Exit)
-		}
 		m.LogWarn("Dock component %s failed: %s", name, msg.Err)
-		m.ShowNotification("Dock component "+name+": "+detail, "warning", m.Settings.NotificationDuration)
+		m.ShowNotification("Dock component "+name+": "+dockFailureDetail(msg), "warning", m.Settings.NotificationDuration)
 		return true
 	}
 	return changed
+}
+
+// dockFailureDetail is the one line a failure notice carries: the exit code
+// when there is one, the error otherwise.
+func dockFailureDetail(msg dockComponentMsg) string {
+	if msg.Exit > 0 {
+		return "exit " + strconv.Itoa(msg.Exit)
+	}
+	return msg.Err
 }
 
 // refreshBuiltinDockComponent re-measures one of the built-ins that move on
@@ -181,6 +212,9 @@ func (m *OS) DockClockText() string {
 // paid for by the thing that happened rather than by a clock, and costs nothing
 // at all when nothing is happening.
 func (m *OS) NotifyDockEvent(eventType string) {
+	// The rail section's run reads the focus when it starts, so the focus
+	// this event is about goes to the engine before the event wakes it.
+	m.syncRailContext()
 	m.dockEngine.NotifyEvent(eventType)
 	// Both spellings resolve. The hook table calls it after-focus-change and
 	// the daemon's event hub calls it window-focused, and a component author
