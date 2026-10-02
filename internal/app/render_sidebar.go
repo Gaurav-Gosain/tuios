@@ -81,6 +81,10 @@ const (
 	// sidebarRowFileCd is the header control that sends a cd to the pane the
 	// listing is tied to. It is drawn only when there is such a pane.
 	sidebarRowFileCd
+	// sidebarRowFileReturn is the header control that walks the listing back to
+	// the directory it showed before the last step. Drawn only while there is
+	// a step behind it.
+	sidebarRowFileReturn
 	// sidebarRowFileUp is the ".." row, drawn everywhere but at the root.
 	sidebarRowFileUp
 	// sidebarRowFileEntry is one name in the listing. It carries the entry's
@@ -1733,7 +1737,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		if hasCd {
 			recordToken(cdSpan, "")
 		}
-		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, cw, pal)))
+		backTok, backSpan, hasBack := m.sidebarFilesHeaderReturn(hasCd, cdSpan.X0, cw, pal, headerHoverX[sidebarSectionFiles],
+			isCursor(sidebarRowFileReturn, "", ""))
+		if hasBack {
+			recordToken(backSpan, "")
+		}
+		lines = append(lines, compose(m.sidebarFilesHeaderRow(backTok, hasBack, cdTok, hasCd, cw, pal)))
 		if len(files) == 0 {
 			if count[sidebarSectionFiles] > 0 {
 				lines = append(lines, compose(sidebarFilesEmptyRow(cw, pal)))
