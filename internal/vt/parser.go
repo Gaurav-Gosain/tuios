@@ -317,6 +317,24 @@ func (p *seqParser) put(b byte) {
 	p.dataLen++
 }
 
+// putRun appends a run of string payload bytes at once. The caller has checked
+// that the parser is in a string state where every byte of the run is a plain
+// PutAction with no state change (see Emulator.Write). It is put() for a
+// slice: the buffer grows towards the cap and bytes past the cap are dropped.
+func (p *seqParser) putRun(b []byte) {
+	if need := p.dataLen + len(b); need > len(p.data) && len(p.data) < p.dataCap {
+		size := max(len(p.data), seqParserInitialData)
+		for size < need && size < p.dataCap {
+			size *= 2
+		}
+		grown := make([]byte, min(size, p.dataCap))
+		copy(grown, p.data[:p.dataLen])
+		p.data = grown
+	}
+	n := copy(p.data[p.dataLen:], b)
+	p.dataLen += n
+}
+
 func (p *seqParser) performAction(action parser.Action, state parser.State, b byte) {
 	switch action {
 	case parser.IgnoreAction:
