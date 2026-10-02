@@ -2131,8 +2131,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 28,135,000 (raised at 28,127,394) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,565,000 (raised at 26,552,978) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 28,205,000 (raised for #387, about 28,172,450) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,620,000 (raised for #387, about 26,587,138) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2227,6 +2227,13 @@ message block, and the linear wrap with its cache. That brought the build to
 28,127,394 and 26,552,978 bytes (Go 1.26.6), with 7,606 and 12,022 bytes of room
 left. Main was 28,094,626 and 26,519,266 bytes, and the change adds 32,768 and
 33,712 bytes.
+
+The budgets went to 28,205,000 (linux/amd64) and 26,620,000 (darwin/arm64)
+for the agent switch, `[agents] enabled = false` (#387): the switch and its
+refusals in internal/session, the client gates in internal/app, and the CLI
+and MCP refusals. Measured with `scripts/binary-size.sh` against main on one
+toolchain, the change adds 45,056 and 34,160 bytes, which puts the build at
+about 28,172,450 and 26,587,138 bytes on Go 1.26.6.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
