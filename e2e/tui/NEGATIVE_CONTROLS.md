@@ -426,6 +426,8 @@ a working negative control look like a broken one for half an hour.
 | The linear `wrapPlain` | n/a, injected | put back the quadratic `wrapPlain` from `origin/main`, cap kept | none. Correct: under the 512 byte cap the quadratic version is fast enough. The PR head row above removes both and is caught | **not caught alone** |
 | An info flood pushes the errors out of the log | n/a, injected | `appendLog` never picks an info entry to drop | unit `TestLogKeepsErrorsThroughAnInfoFlood` ("the error was pushed out by info entries") | **caught** |
 | A pane on one machine typed into a pane on another machine that waits on a prompt: typing verbs over a link skipped `typingRefusal` | the call site | make the `holdLinkTyping` branch at the top of `checkGrants` (`internal/session/pane_grants.go`) `if false && ...` | `TestAPaneOverALinkCannotAnswerAPrompt/without_respond` ("a hub pane typed into a prompt on build without respond", RESP_EXIT=0). Positive half: `with_respond`, the same call with `respond` in build's link policy, passes on both builds, and the person's own send-text over the link reaches the prompted pane | **caught** |
+| The client listing verb is not registered | n/a, cuts the call site | delete the `"list-clients"` entry from `verbRegistry` in `internal/session/verb_protocol.go` | `TestListClientsTracksSwitcherSwitches` (`list-clients failed: unknown verb list-clients.`) | **caught** |
+| Client session switches are not published | n/a, cuts the call site | drop the `EventClientSessionChanged` publish from `handleAttach` in `internal/session/daemon_handlers.go` | `TestListClientsTracksSwitcherSwitches` (`subscribe did not print both switch events`) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

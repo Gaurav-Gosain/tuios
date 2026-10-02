@@ -95,6 +95,7 @@ way. `HOST:SESSION` and `HOST:SESSION:WINDOW` reach another machine
 
 ```sh
 tuios ls
+tuios list-clients
 tuios list-windows -s work
 tuios list-agents -s work
 tuios capture-pane -s work -w build --scrollback --lines 40

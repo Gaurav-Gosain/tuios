@@ -59,7 +59,7 @@ var (
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
 		EventWorkspaceSwitched, EventWorkspaceRenamed, EventAgentState, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
-		EventSessionCreated, EventSessionClosed, EventGap, EventAttention,
+		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 		EventAgentActivity,
 	}

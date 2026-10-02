@@ -34,6 +34,7 @@ through a client except the few that say `needs_client`.
 ```sh
 tuios subscribe --types window-created,window-exit
 tuios subscribe --types agent-state,attention
+tuios subscribe --types client-session-changed
 tuios subscribe --hosts --types agent-state
 ```
 
@@ -47,6 +48,9 @@ subscribe, so subscribe before you start the thing you want to watch. Useful
 types: `agent-state`, `attention` (the Inbox changed), `notification` (a pane
 sent OSC 9, 777 or 99), `command-started`, `command-finished` (with `exit_code`,
 `duration_ms`, `command_seq`), `prompt`, `window-created`, `window-exit`.
+`client-session-changed` carries `client_id`, the kernel peer `pid`, and the
+current `session` (absent after a detach or disconnect); pair it with
+`tuios list-clients --json` to follow daemon connections.
 `tuios list-verbs subscribe` lists them all. `agent-activity` (one entry of
 a pane's activity ring, as `entry`: a prompt, a tool call, its result or a
 finished turn) is opt-in: it arrives only when `--types` names it, and a

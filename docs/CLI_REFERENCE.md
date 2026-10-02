@@ -425,6 +425,25 @@ exists, and for one tuios made, its `base`, its fan `group` and the prompt a
 fan sent it. It is what the rail groups by. `global: true` marks a global session, and
 `restored: true` one rebuilt from saved state that nobody has attached to yet.
 
+### `tuios list-clients`
+
+List every connection to the daemon with its client id, kernel peer pid, and
+current session. The session is empty while the connection is detached. The
+command's own short-lived connection is included.
+
+**Usage:**
+```bash
+tuios list-clients [--json]
+```
+
+`--json` prints an array with one object per connection:
+
+```json
+[
+  {"client_id":"client-1790941960197517900","pid":4242,"session":"work"}
+]
+```
+
 ### `tuios kill-session`
 
 Kill a specific session.

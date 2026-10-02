@@ -1600,6 +1600,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 
 		// Unsubscribe from all PTYs
 		if sessionID != "" {
+			d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: clientID, PID: cs.peerPID})
 			d.forgetPushes(cs, sessionID)
 			if session := d.manager.GetSessionByID(sessionID); session != nil {
 				for _, ptyID := range subs {

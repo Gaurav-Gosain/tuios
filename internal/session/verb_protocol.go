@@ -439,6 +439,14 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"list-sessions"}`},
 			handler:     (*Daemon).verbListSessions,
 		},
+		"list-clients": {
+			description: "List every connection to the daemon and the session it is attached to.",
+			returns: []verbParam{
+				{Name: "clients", Type: "[]object", Description: "One row per connection: client_id, kernel peer pid, and current session name (empty while detached)."},
+			},
+			examples: []string{`{"id":1,"verb":"list-clients"}`},
+			handler:  (*Daemon).verbListClients,
+		},
 		"new-session": {
 			description: "Create a session in the daemon, with its first window. The session runs detached until a client attaches to it.",
 			params: []verbParam{

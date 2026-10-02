@@ -678,6 +678,18 @@ and it never fails the command.`,
 	lsCmd.Flags().BoolVar(&lsAllHosts, "all-hosts", false, "List sessions on this machine and on every host in the [hosts] config table")
 	lsCmd.Flags().StringVar(&lsHost, "host", "", "List sessions on one host by name (\"local\" means this machine)")
 
+	var listClientsJSON bool
+	listClientsCmd := &cobra.Command{
+		Use:   "list-clients",
+		Short: "List daemon client connections",
+		Long:  "List every connection to the TUIOS daemon, its kernel peer pid, and its current session.",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runListClients(listClientsJSON)
+		},
+	}
+	listClientsCmd.Flags().BoolVar(&listClientsJSON, "json", false, "Output as JSON")
+
 	killSessionCmd := &cobra.Command{
 		Use:   "kill-session <session-name>",
 		Short: "Kill a TUIOS session",
@@ -2935,7 +2947,7 @@ command in authorized_keys to make the policy a boundary:
 	stdioProxyCmd.Flags().StringVar(&stdioProxyAs, "as", "", "Name of the machine the link comes from, for its link policy. Overrides the name that machine gives")
 
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
-	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
+	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
