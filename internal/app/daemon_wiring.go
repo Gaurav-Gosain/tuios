@@ -82,7 +82,10 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	// mutation (TileAllWindows, emulator resizes) happens in Update.
 	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		clientLog("Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
-		m.QueueClientEvent(ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve})
+		// Read here, on the client's read loop, where it is this resize's
+		// own: the loop took it just before calling this handler.
+		gen := client.SessionLayoutGeneration()
+		m.QueueClientEvent(ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve, Generation: gen})
 	})
 	// The session killed out from under this client, and the daemon going
 	// away. Both leave nothing to render and nothing to reconnect to, so the
@@ -203,7 +206,7 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	// session with windows, does not run for one without. A new session made
 	// from the switcher is empty, and it has to be offered this client's
 	// rail as any other new session is.
-	m.joinSessionSidebar(state)
+	m.joinSession(state)
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays

@@ -197,6 +197,9 @@ type ClientEvent struct {
 	Reason      string // "refresh"
 	// Reserve is the session's agreed chrome reserve, on "resize".
 	Reserve session.LayoutReserve
+	// Generation is the layout generation of a "resize". See
+	// session/layout_gen.go.
+	Generation uint64
 	// Mail is the push behind an "agent-mail" event.
 	Mail session.AgentMailPayload
 }
@@ -210,6 +213,9 @@ type SessionResizeMsg struct {
 	// out around, settled by the daemon as the largest any client asks for. It
 	// arrives with the size because the panes' box is the size less this.
 	Reserve session.LayoutReserve
+	// Generation numbers the daemon's answer, newer answers higher. Zero is
+	// a daemon that does not number them. See session/layout_gen.go.
+	Generation uint64
 }
 
 // ForceRefreshMsg is sent to force all clients to re-render.
@@ -460,6 +466,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 			Height:      event.Height,
 			ClientCount: event.ClientCount,
 			Reserve:     event.Reserve,
+			Generation:  event.Generation,
 		}
 	case "refresh":
 		return ForceRefreshMsg{Reason: event.Reason}
@@ -1991,6 +1998,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case SessionResizeMsg:
+		// The box the panes are laid out in from here on is this answer's,
+		// so the next push says so. See session/layout_gen.go.
+		m.layoutGenApplied = max(m.layoutGenApplied, msg.Generation)
 		// Effective session size changed (min of all clients)
 		// Set the effective size. GetRenderWidth/Height will use min(terminal, effective)
 		//
@@ -2027,11 +2037,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
 		}
-		// This is the answer to a chrome change this client announced, and the
-		// layout just worked out from it is the one the daemon has to keep.
-		// See AnnounceLayoutReserve.
-		if m.reserveOwed {
-			m.reserveOwed = false
+		// The layout just worked out from this answer is pushed, whoever
+		// caused it, unless this client already pushed one for it. Nothing
+		// else would push it: a retile on a session resize sends nothing,
+		// and the daemon then kept the rectangles from before the box moved
+		// until the next key. The push names its generation, so one tiled
+		// in a box the daemon has since moved on from is kept out. See
+		// session/layout_gen.go.
+		if m.layoutGenApplied > m.layoutGenPushed {
 			m.SyncStateToDaemon()
 		}
 		// A session that changed size can have changed what this client keeps

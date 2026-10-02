@@ -212,6 +212,8 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// place on it, so two clients holding one offset are looking at the same
 	// place. See SessionState.ScrollStrip.
 	state.ScrollStrip = m.ScrollStripState()
+	// The box these rectangles were tiled in. See session/layout_gen.go.
+	state.LayoutGen = m.layoutGenApplied
 
 	return state
 }
@@ -285,7 +287,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.adoptWorkspaceHasCustom(state)
 	m.adoptSidebarState(state)
 	// Taken before the layout below, which is computed against the rail.
-	m.joinSessionSidebar(state)
+	m.joinSession(state)
 	// The pane geometry inputs are the session's, adopted before the layout
 	// below is computed so a joining client tiles with the session's arithmetic
 	// rather than its own config's.
@@ -312,6 +314,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// the attach reply, not anything a peer pushed.
 	if m.DaemonClient != nil {
 		m.SessionReserve = m.DaemonClient.SessionLayoutReserve()
+		m.layoutGenApplied = m.DaemonClient.SessionLayoutGeneration()
 	}
 
 	// Clear existing windows
@@ -2139,6 +2142,7 @@ func (m *OS) SyncStateToDaemon() {
 		return
 	}
 	m.syncedFP, m.syncedFPSet = fp, true
+	m.layoutGenPushed = state.LayoutGen
 }
 
 // warnOnBuildMismatch says so when the daemon is running a different build of
@@ -2172,10 +2176,7 @@ func (m *OS) warnOnBuildMismatch() {
 // finds it unmoved costs one comparison and sends nothing.
 //
 // The daemon answers with a session resize, and the layout this client works
-// out from that answer is the one the daemon has to keep. Nothing else would
-// push it: the retile that follows a session resize sends nothing, so without
-// reserveOwed the daemon, and every reader of its state, kept the rectangles
-// from before the rail moved until the next key.
+// out from that answer is pushed. See the SessionResizeMsg case in update.go.
 func (m *OS) AnnounceLayoutReserve() {
 	if m.DaemonClient == nil || !m.IsDaemonSession {
 		return
@@ -2185,9 +2186,7 @@ func (m *OS) AnnounceLayoutReserve() {
 	}
 	if err := m.DaemonClient.NotifyTerminalSize(m.Width, m.Height); err != nil {
 		m.LogError("Failed to announce layout reserve: %v", err)
-		return
 	}
-	m.reserveOwed = true
 }
 
 // settleChrome runs after every message. When the chrome this client draws
