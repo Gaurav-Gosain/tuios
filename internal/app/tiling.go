@@ -50,6 +50,51 @@ func (m *OS) tileLayoutsIn(n int, bounds layout.Rect) []layout.TileLayout {
 	return layouts
 }
 
+// stackedTileLayouts runs the stacked tiler inside the content region, with
+// the focused pane taken from the workspace's focus. Same box
+// contentTileLayouts hands the master-stack tiler.
+func (m *OS) stackedTileLayouts(n int) []layout.TileLayout {
+	focused := 0
+	wins := m.visibleTiledWindows()
+	if fw := m.focusedWindow(); fw != nil {
+		for i, w := range wins {
+			if w == fw {
+				focused = i
+				break
+			}
+		}
+	}
+	layouts := layout.CalculateStackedLayout(n, focused, m.PaneWidth(), m.PaneHeight(),
+		m.PaneTop(), m.separatorGap())
+	if x := m.PaneLeft(); x != 0 {
+		for i := range layouts {
+			layouts[i].X += x
+		}
+	}
+	return layouts
+}
+
+// focusedWindow returns the focused window, or nil when the index is out of
+// range. Mirrors the guard the callers already keep.
+func (m *OS) focusedWindow() *terminal.Window {
+	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return nil
+	}
+	return m.Windows[m.FocusedWindow]
+}
+
+// visibleTiledWindows returns the workspace's visible, non-floating windows in
+// slot order — the same list tileAllWindows tiles.
+func (m *OS) visibleTiledWindows() []*terminal.Window {
+	var out []*terminal.Window
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 // TileAllWindows arranges all visible windows in a tiling layout
 func (m *OS) TileAllWindows() {
 	m.settleSizes(func() { m.tileAllWindows() })
@@ -178,14 +223,25 @@ func (m *OS) tileAllWindows() {
 			dur = 0
 		}
 
-		layouts := m.contentTileLayouts(len(visibleWindows))
-		// A zoom of part of the screen is a camera over this layout rather than
-		// one pane's own rectangle. The layout is computed again in a larger
-		// box and the screen is panned over it; see zoom_canvas.go for why it
-		// is laid out again rather than stretched.
-		canvas, zoomBounds, ok := m.masterZoomCanvas(visibleWindows, layouts)
-		if ok {
-			layouts = m.tileLayoutsIn(len(visibleWindows), zoomBounds)
+		// The stacked tiler has no camera: a zoom there takes the plain
+		// fullscreen path (zoomUsesLayout declines the mode), so the zoomed pane
+		// is skipped below and no canvas is computed.
+		var canvas zoomCanvas
+		var layouts []layout.TileLayout
+		if m.UseStackedLayout {
+			layouts = m.stackedTileLayouts(len(visibleWindows))
+		} else {
+			layouts = m.contentTileLayouts(len(visibleWindows))
+			// A zoom of part of the screen is a camera over this layout rather than
+			// one pane's own rectangle. The layout is computed again in a larger
+			// box and the screen is panned over it; see zoom_canvas.go for why it
+			// is laid out again rather than stretched.
+			var zoomBounds layout.Rect
+			var ok bool
+			canvas, zoomBounds, ok = m.masterZoomCanvas(visibleWindows, layouts)
+			if ok {
+				layouts = m.tileLayoutsIn(len(visibleWindows), zoomBounds)
+			}
 		}
 		m.zoomCanvasNow = canvas
 		for i, l := range layouts {

@@ -550,11 +550,12 @@ const PaneGapMax = 8
 const (
 	LayoutModeBSP         = "bsp"
 	LayoutModeMasterStack = "master-stack"
+	LayoutModeStacked     = "stacked"
 	LayoutModeScrolling   = "scrolling"
 )
 
 // LayoutModes is the accepted set, for the registry and the validator.
-var LayoutModes = []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling}
+var LayoutModes = []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeStacked, LayoutModeScrolling}
 
 // The master ratio's range and its default. The master-stack tiler clamps to
 // the same range (layout.MinSplitRatio and MaxSplitRatio are read from here),

@@ -1094,6 +1094,9 @@ type OS struct {
 	UseBSPLayout     bool            // true = BSP tiling, false = master-stack
 	// announceDepth counts the open settleSizes holds. See announce_batch.go.
 	announceDepth int
+	// Stacked tiling (zellij-like): panes stack vertically and every pane but
+	// the focused one collapses to its top bar.
+	UseStackedLayout bool // true = stacked mode
 	// Scrolling tiling (niri-like) layout
 	UseScrollingLayout        bool                            // true = scrolling columns mode
 	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts

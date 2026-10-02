@@ -19,7 +19,9 @@ import (
 // this is geometry, and geometry inputs have to be identical on every client of
 // a session (see the field comment in os.go).
 func (m *OS) panesBorderless() bool {
-	return m.SharedBorders && m.AutoTiling && !m.UseScrollingLayout
+	// Stacked mode always merges: a collapsed bar is one row, and a border box
+	// drawn around one row of guest output is not a bar at all.
+	return (m.SharedBorders || m.UseStackedLayout) && m.AutoTiling && !m.UseScrollingLayout
 }
 
 // PanesBorderless is panesBorderless for the input package, whose shared-border
