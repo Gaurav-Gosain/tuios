@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -548,12 +549,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 
 	// Get next split direction if tiling is active
 	if m.AutoTiling {
-		tree := m.WorkspaceTrees[m.CurrentWorkspace]
-		if tree != nil {
-			modeInfo.NextSplit = tree.GetNextSplitDirection()
-		} else {
-			modeInfo.NextSplit = "V" // Default to vertical
-		}
+		modeInfo.NextSplit = m.nextSplitIndicator(focusedWindow)
 	}
 
 	switch {
@@ -936,4 +932,28 @@ func (layout *DockLayout) truncateItems(screenWidth int, allItems []DockItem) {
 		layout.VisibleItems = []DockItem{}
 	}
 	layout.TruncatedCount = len(allItems) - visibleCount
+}
+
+// nextSplitIndicator is the axis the next new window splits the focused pane
+// along: "V" for side by side, "H" for stacked. A preselection decides it when
+// one is set. Otherwise the tree's scheme does, for the focused pane, which is
+// the pane a new window splits.
+func (m *OS) nextSplitIndicator(focused *terminal.Window) string {
+	switch m.PreselectionDir {
+	case layout.PreselectionLeft, layout.PreselectionRight:
+		return "V"
+	case layout.PreselectionUp, layout.PreselectionDown:
+		return "H"
+	}
+	tree := m.WorkspaceTrees[m.CurrentWorkspace]
+	if tree == nil {
+		return "V"
+	}
+	focusedIntID := 0
+	if focused != nil {
+		// A lookup, not GetWindowIntID: this runs while the dock is drawn and
+		// must not hand out IDs.
+		focusedIntID = m.WindowToBSPID[focused.ID]
+	}
+	return tree.NextSplitDirection(focusedIntID, m.GetBSPBounds(), m.separatorGap())
 }

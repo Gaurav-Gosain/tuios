@@ -217,7 +217,7 @@ func (t *BSPTree) FindNode(windowID int) *TileNode {
 	return t.WindowToNode[windowID]
 }
 
-// InsertWindow adds a new window to the tree by splitting the focused window.
+// InsertWindow adds a new window to the tree by splitting focusedWindowID.
 // If direction is SplitNone, uses the auto scheme to determine split direction.
 // The new window is inserted as the right/bottom child.
 func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction SplitType, ratio float64, bounds Rect, gap int) {
@@ -766,8 +766,14 @@ const cellAspect = 2
 func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect, gap int) SplitType {
 	switch t.AutoScheme {
 	case SchemeLongestSide:
-		// Split along the longest dimension as it appears on screen.
-		if bounds.W >= bounds.H*cellAspect {
+		// Split the window being split across its longer side, as it appears
+		// on screen. This read the whole layout box before, which gave every
+		// split the same axis whichever pane was split.
+		r, ok := t.nodeBounds(targetNode, bounds, gap)
+		if !ok {
+			r = bounds
+		}
+		if r.W >= r.H*cellAspect {
 			return SplitVertical
 		}
 		return SplitHorizontal
@@ -971,51 +977,29 @@ func (t *BSPTree) GetAllWindowIDs() []int {
 	return ids
 }
 
-// GetNextSplitDirection returns the direction of the next auto-split ("V" or "H")
-// based on the current tree state and auto scheme. It mirrors determineAutoSplit
-// so the dock indicator agrees with the axis an auto-insert would actually pick.
-func (t *BSPTree) GetNextSplitDirection() string {
-	if t == nil {
-		return "V" // Default to vertical for empty tree
+// NextSplitDirection returns the axis ("V" or "H") the next auto-insert would
+// split along. A new window splits the focused pane, so the prediction is
+// determineAutoSplit on that leaf. When the tree does not hold focusedWindowID
+// it falls back to the last leaf, as the insert does.
+func (t *BSPTree) NextSplitDirection(focusedWindowID int, bounds Rect, gap int) string {
+	if t == nil || t.Root == nil {
+		return "V"
 	}
-
-	if t.AutoScheme == SchemeSpiral {
-		// Spiral alternates on the depth of the window being split. The next
-		// auto-insert splits the deepest (most recently split) leaf, so predict
-		// from that leaf's depth to stay consistent with determineAutoSplit.
-		if t.deepestLeafDepth()%2 == 0 {
+	target := t.WindowToNode[focusedWindowID]
+	if target == nil {
+		ids := t.GetAllWindowIDs()
+		if len(ids) == 0 {
 			return "V"
 		}
+		target = t.WindowToNode[ids[len(ids)-1]]
+	}
+	if target == nil {
+		return "V"
+	}
+	if t.determineAutoSplit(target, bounds, gap) == SplitHorizontal {
 		return "H"
 	}
-
-	// Alternate and the remaining schemes fall back to global split parity.
-	if t.countInternalNodes()%2 == 0 {
-		return "V" // Vertical split (left|right)
-	}
-	return "H" // Horizontal split (top/bottom)
-}
-
-// deepestLeafDepth returns the depth of the deepest leaf in the tree, or 0 if
-// the tree is empty. In a spiral workflow the next window splits the most
-// recently split (deepest) leaf, so its depth predicts the next split axis.
-func (t *BSPTree) deepestLeafDepth() int {
-	return maxLeafDepth(t.Root, 0)
-}
-
-func maxLeafDepth(node *TileNode, depth int) int {
-	if node == nil {
-		return 0
-	}
-	if node.IsLeaf() {
-		return depth
-	}
-	left := maxLeafDepth(node.Left, depth+1)
-	right := maxLeafDepth(node.Right, depth+1)
-	if left > right {
-		return left
-	}
-	return right
+	return "V"
 }
 
 func collectWindowIDs(node *TileNode, ids *[]int) {

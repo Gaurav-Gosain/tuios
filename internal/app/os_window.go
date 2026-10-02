@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -601,8 +602,20 @@ func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 		if m.InScratchView() {
 			ws = m.CurrentWorkspace
 		}
+		// A preselection belongs to the pane focused now, and the window it is
+		// for arrives later through a state sync. Record it for that sync the
+		// way a split key records its direction, and spend it here, so it
+		// applies once. See insertSyncedWindow.
+		if m.pendingSplitTarget == "" && m.PreselectionDir != layout.PreselectionNone {
+			if fw := m.GetFocusedWindow(); fw != nil {
+				m.pendingSplitDir = m.PreselectionDir
+				m.pendingSplitTarget = fw.ID
+			}
+			m.PreselectionDir = layout.PreselectionNone
+		}
 		if err := m.DaemonClient.SendIntentAt(dir, ws, "NewWindow", args...); err != nil {
 			m.LogError("Failed to ask the daemon for a new window: %v", err)
+			m.CancelPendingSplit()
 		} else {
 			// From here until the daemon says what it did, this client does not
 			// know the session's window set, so the state it holds must not be
