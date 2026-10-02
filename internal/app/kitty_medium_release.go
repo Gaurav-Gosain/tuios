@@ -16,10 +16,18 @@ import (
 // When tuios forwards the name, the host terminal is the reader and deletes
 // it. Every other outcome makes tuios the last reader: it read the bytes
 // itself and sent them inline, or it decided not to send the frame at all (a
-// repeat of the frame on screen, a pane that is hidden, a host that is behind,
-// graphics turned off). Each of those has to delete the object, or it stays in
-// /dev/shm, which is memory, for as long as the machine is up. A video stream
-// left this way leaked 3,863 frames, 5.3 GB, in one session.
+// repeat of the frame on screen, a pane that is hidden, a host that is behind).
+// Each of those has to delete the object, or it stays in /dev/shm, which is
+// memory, for as long as the machine is up. A video stream left this way
+// leaked 3,863 frames, 5.3 GB, in one session.
+//
+// With graphics off, tuios deletes nothing: it never looks at the frame, so
+// it has no grounds to believe the name.
+//
+// The name is text the pane printed, and any program in the pane can print the
+// name of an object another program still uses. So an object is deleted only
+// when this user owns it and its size is the one the command describes. See
+// vt.KittyMediumIsFrame.
 //
 // A file named by t=f is the guest's own and is never deleted.
 
@@ -30,13 +38,13 @@ import (
 // The checks the spec asks for before a delete are repeated here, so a path
 // that reaches this function by another route is still never removed outside
 // a temporary directory.
-func releaseKittyMedium(medium vt.KittyGraphicsMedium, path string) {
+func releaseKittyMedium(cmd *vt.KittyCommand, path string) {
 	if path == "" {
 		// A shared memory object on macOS has no path. Deleting it takes
 		// shm_unlink, which Go reaches only through cgo.
 		return
 	}
-	switch medium {
+	switch cmd.Medium {
 	case vt.KittyMediumSharedMemory:
 		if filepath.Dir(path) != "/dev/shm" {
 			return
@@ -48,22 +56,13 @@ func releaseKittyMedium(medium vt.KittyGraphicsMedium, path string) {
 	default:
 		return
 	}
+	// Lstat, not Stat: a symlink is not the frame, and what it points at is
+	// not this function's to delete.
+	info, err := os.Lstat(path)
+	if err != nil || !vt.KittyMediumIsFrame(cmd, info) {
+		return
+	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		kittyPassthroughLog("releaseKittyMedium: remove %s: %v", path, err)
-	}
-}
-
-// releaseDroppedKittyMedium deletes the object a file-medium transmission
-// named when tuios takes the command off the stream without reading it and
-// without forwarding it. Callers hold kp.mu.
-func (kp *KittyPassthrough) releaseDroppedKittyMedium(cmd *vt.KittyCommand) {
-	if cmd.Medium != vt.KittyMediumSharedMemory && cmd.Medium != vt.KittyMediumTempFile {
-		return
-	}
-	if cmd.Action != vt.KittyActionTransmit && cmd.Action != vt.KittyActionTransmitPlace {
-		return
-	}
-	if path, ok := kp.kittyMediumPath(cmd); ok {
-		releaseKittyMedium(cmd.Medium, path)
 	}
 }

@@ -19,7 +19,10 @@ import (
 // a detached pane otherwise fills /dev/shm, which is memory, at the stream's
 // own rate.
 //
-// Only a single name directly in /dev/shm that is a regular file is deleted.
+// Only a single name directly in /dev/shm is deleted, and only when it is the
+// frame the command describes: a regular file this user owns, of the size the
+// command gives (see vt.KittyMediumIsFrame). The name is text the pane
+// printed, and it can name an object another program still uses.
 // A temporary file (t=t) is left to the client: no stream seen so far uses
 // one, and the checks the spec asks for before deleting one are the client's.
 func releaseUnreadKittyMedium(cmd *vt.KittyCommand) {
@@ -38,7 +41,7 @@ func releaseUnreadKittyMedium(cmd *vt.KittyCommand) {
 	// Lstat, not Stat: a symlink in /dev/shm is not a shared memory object,
 	// and what it points at is not this function's to delete.
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil || !vt.KittyMediumIsFrame(cmd, info) {
 		return
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {

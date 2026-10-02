@@ -3,12 +3,13 @@
 // deleted by the guest, because deleting it is the terminal's job once it has
 // read it.
 //
-// Usage: shmstream LOG COUNT FPS DELAYMS same|vary
+// Usage: shmstream LOG COUNT FPS DELAYMS same|vary|big
 //
 // Each object's name is appended to LOG as it is advertised, and DONE when the
 // last one is. The log is a file rather than the screen because the pane may
 // not be on screen. "same" paints every frame alike, "vary" paints each one
-// differently.
+// differently. "big" is "vary" with each object one byte longer than the frame
+// the command describes, the way an object that is not the frame looks.
 package main
 
 import (
@@ -30,7 +31,11 @@ func main() {
 	count, _ := strconv.Atoi(os.Args[2])
 	fps, _ := strconv.Atoi(os.Args[3])
 	delay, _ := strconv.Atoi(os.Args[4])
-	vary := os.Args[5] == "vary"
+	vary := os.Args[5] == "vary" || os.Args[5] == "big"
+	extra := 0
+	if os.Args[5] == "big" {
+		extra = 1
+	}
 	if fps <= 0 {
 		fps = 20
 	}
@@ -42,7 +47,7 @@ func main() {
 	defer func() { _ = logf.Close() }()
 
 	time.Sleep(time.Duration(delay) * time.Millisecond)
-	pix := make([]byte, side*side*4)
+	pix := make([]byte, side*side*4+extra)
 	for i := range pix {
 		pix[i] = byte(i * 7)
 	}

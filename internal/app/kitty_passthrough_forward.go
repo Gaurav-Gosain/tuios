@@ -99,7 +99,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	if !kp.enabled {
 		kittyPassthroughLog("ForwardCommand: DISABLED, returning early")
-		kp.releaseDroppedKittyMedium(cmd)
 		return nil
 	}
 
@@ -643,7 +642,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		}
 		kittyPassthroughLog("forwardFileTransmit: identical frame for hostID=%d, sending nothing", hostID)
 		// The host is not sent this name, so it will not delete the object.
-		releaseKittyMedium(cmd.Medium, filePath)
+		releaseKittyMedium(cmd, filePath)
 		return
 	}
 
@@ -841,7 +840,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			kp.writeHostSequence(posCmd)
 		} else {
 			// The frame is not sent, so the host will not delete its object.
-			releaseKittyMedium(cmd.Medium, filePath)
+			releaseKittyMedium(cmd, filePath)
 			if hostID > 0 {
 				var del []byte
 				del = append(del, syncBegin...)
@@ -984,7 +983,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 ) {
 	// tuios reads this object itself, or drops it unread, so it is the last
 	// reader on every path out of here. See kitty_medium_release.go.
-	defer releaseKittyMedium(cmd.Medium, filePath)
+	defer releaseKittyMedium(cmd, filePath)
 
 	// While a full-screen overlay is up, drop remote video frames so a new frame
 	// cannot redraw over it. SetOverlayActive already deleted the on-screen image
