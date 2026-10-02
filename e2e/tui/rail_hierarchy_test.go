@@ -243,7 +243,7 @@ func TestTheNarrowRailKeepsTheStep(t *testing.T) {
 // and its rows sit exactly where they always did.
 func TestTheRailOfOneMachineIsUnchanged(t *testing.T) {
 	term, _ := railClient(t, "e2e", railConfig(28), startOpts{cols: 120, rows: 30})
-	railShows(t, term, "SESSIONS")
+	railShows(t, term, "sessions")
 
 	s := term.Screen()
 	if railRowOf(s, hostOpen+" local") >= 0 {

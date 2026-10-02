@@ -112,7 +112,7 @@ func waitPanesDrawn(t *testing.T, term *tuitest.Terminal, noDock bool, when stri
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		if strings.Count(text, "$ ") < 2 || !strings.Contains(text, "SESSIONS") {
+		if strings.Count(text, "$ ") < 2 || !strings.Contains(text, "sessions") {
 			return false
 		}
 		return noDock || countWindows(s) == 2

@@ -151,6 +151,12 @@ type Settings struct {
 	// GetSidebarWidth folds this together with the narrow-screen breakpoints.
 	SidebarWidth int
 
+	// RailHeaderCase is how the rail's section headers read: "lowercase"
+	// keeps the quiet furniture look they have always had, "uppercase" draws
+	// the heading treatment (bold, secondary ink, the rule glyph and the
+	// uppercase label). Set via appearance.rail_header_case.
+	RailHeaderCase string
+
 	// SidebarShowGlyphs draws the agent-state glyph on each row.
 	SidebarShowGlyphs bool
 
@@ -690,6 +696,7 @@ func DefaultSettings() Settings {
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,
 		SidebarWidth:                SidebarDefaultWidth,
+		RailHeaderCase:              RailHeaderLowercase,
 		SidebarShowGlyphs:           true,
 		SidebarShowCounts:           true,
 		SidebarMarquee:              true,

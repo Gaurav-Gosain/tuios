@@ -745,6 +745,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
 	},
 	{
+		Path: "appearance.sidebar.header_case", Type: OptionString, Section: "sidebar",
+		Description: "How the rail's section headers read: lowercase keeps the quiet furniture look, uppercase draws them as headings",
+		Accepted:    RailHeaderCases, Default: RailHeaderLowercase,
+	},
+	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
 		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
 		Default:     "",

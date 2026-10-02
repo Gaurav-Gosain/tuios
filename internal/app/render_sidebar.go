@@ -699,20 +699,25 @@ func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
 	return lipgloss.NewStyle().Foreground(rule).Render(s.GetWindowBorderLeft())
 }
 
-// sidebarHeaderRowRuled is sidebarHeaderRow with the rule that marks a heading.
-// Passing settings draws the section header in full: the label goes uppercase
-// and bold in the secondary ink, so the rule and the weight mark it as a
-// heading without it out-shining the rows under it. Nil settings keep the old
-// quiet look, which is what the callers outside the rail still want.
+// sidebarHeaderRowRuled draws a section header on the rail. The default is the
+// quiet furniture look: the label lowercase, muted and unbolded, because the
+// rail spends its one bold voice on a row that wants a human. A header is a
+// label for the rows under it, not a row to act on. Setting
+// appearance.rail_header_case to "uppercase" promotes it to a heading in its
+// own right: the label goes uppercase and bold in the secondary ink, and the
+// rule glyph runs out of it to the rail's edge. Nil settings keep the quiet
+// look, which is what the callers outside the rail still want.
 func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
+	headings := s.GetRailHeaderCase() == config.RailHeaderUppercase
 	labelStyle := sidebarStyle(nil, pal.FgMute)
-	if s != nil {
+	if headings {
 		labelStyle = sidebarStyle(nil, pal.FgDim).Bold(true)
+		label = strings.ToUpper(label)
 	}
 	row := sidebarStyle(nil, nil).Render(" ") +
-		labelStyle.Render(strings.ToUpper(overlay.Truncate(label, max(cw-2, 1))))
+		labelStyle.Render(overlay.Truncate(label, max(cw-2, 1)))
 	rw := lipgloss.Width(right)
-	if s != nil {
+	if headings {
 		pad := 1
 		if rw > 0 {
 			pad = 2
