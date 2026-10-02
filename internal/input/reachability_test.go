@@ -444,6 +444,17 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// surface; a user who wants h/l cycle binds these.
 	"next_workspace":     "user binding",
 	"prev_workspace":     "user binding",
+	// Session jumping ships unbound for the same reason; the switcher and the
+	// rail cover it by default, and opt+N is a user binding.
+	"switch_session_1":   "user binding",
+	"switch_session_2":   "user binding",
+	"switch_session_3":   "user binding",
+	"switch_session_4":   "user binding",
+	"switch_session_5":   "user binding",
+	"switch_session_6":   "user binding",
+	"switch_session_7":   "user binding",
+	"switch_session_8":   "user binding",
+	"switch_session_9":   "user binding",
 	"scroll_cycle_width": "user binding",
 	"scroll_consume":     "user binding",
 	"scroll_expel":       "user binding",

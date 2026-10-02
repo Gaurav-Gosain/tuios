@@ -148,6 +148,7 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 func terminalSafeAction(action string) bool {
 	return strings.HasPrefix(action, "switch_workspace_") ||
 		strings.HasPrefix(action, "move_and_follow_") ||
+		strings.HasPrefix(action, "switch_session_") ||
 		action == "next_session" || action == "prev_session"
 }
 
