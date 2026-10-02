@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"slices"
 	"strings"
@@ -761,22 +762,37 @@ func TestGetWindowIsARead(t *testing.T) {
 		t.Errorf("GetWindow over the client protocol from a read pane: type %d, %+v; want forbidden naming run-command and get-window", resp.Type, e)
 	}
 
-	// The fields are list-windows' entry for the same window.
+	// The fields are list-windows' entry for the same window. The pane's
+	// shell can still be printing, and output between the two reads moves
+	// fields such as revision, so read both again until one pair agrees.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
-	rows := result(t, callP(person, t, "list-windows", map[string]any{"session": "a"}))["windows"].([]any)
-	one := result(t, callP(person, t, "get-window", map[string]any{"session": "a", "window": "Second"}))
-	for _, r := range rows {
-		row := r.(map[string]any)
-		if row["window_id"] != a2 {
-			continue
-		}
-		for k, v := range row {
-			if w, ok := one[k]; !ok || !jsonEqual(w, v) {
-				t.Errorf("get-window %s = %v, list-windows has %v", k, w, v)
+	var diffs []string
+	eventually(t, "get-window to match list-windows", 5*time.Second, func() bool {
+		diffs = diffs[:0]
+		rows := result(t, callP(person, t, "list-windows", map[string]any{"session": "a"}))["windows"].([]any)
+		one := result(t, callP(person, t, "get-window", map[string]any{"session": "a", "window": "Second"}))
+		found := false
+		for _, r := range rows {
+			row := r.(map[string]any)
+			if row["window_id"] != a2 {
+				continue
+			}
+			found = true
+			for k, v := range row {
+				if w, ok := one[k]; !ok || !jsonEqual(w, v) {
+					diffs = append(diffs, fmt.Sprintf("get-window %s = %v, list-windows has %v", k, w, v))
+				}
 			}
 		}
-	}
+		if !found {
+			diffs = append(diffs, fmt.Sprintf("list-windows has no entry for %v", a2))
+		}
+		if len(diffs) > 0 {
+			t.Logf("reads differ: %s", strings.Join(diffs, "; "))
+		}
+		return len(diffs) == 0
+	})
 }
 
 func jsonEqual(a, b any) bool {
