@@ -1063,6 +1063,10 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		}
 	})
 
+	// After the sizes settle, so a pane primed here takes its snapshot at
+	// the size it is shown at.
+	m.reconcilePaneStreams()
+
 	m.MarkAllDirty()
 	return nil
 }
@@ -2044,6 +2048,35 @@ func (m *OS) SubscribeWorkspaceWindows(workspace int) {
 				m.primePaneFromDaemon(w)
 			}
 		}
+	}
+}
+
+// reconcilePaneStreams streams exactly the panes on the shown workspace: it
+// primes and subscribes each one that is not streamed yet, and unsubscribes
+// every other one. The pinned pane keeps its stream; see unsubscribeFromPTY.
+//
+// A local workspace switch moves the streams itself (SwitchToWorkspace). A
+// sync can move the shown workspace too, and so can the move of a pane
+// between workspaces: focus-window on a pane on another workspace, a switch
+// made on another client, move-window from the command line. Those changes
+// arrive as state, and before this ran nothing moved the streams for them.
+// The pane brought on screen was never subscribed and showed nothing it
+// printed, and the panes taken off screen went on streaming.
+func (m *OS) reconcilePaneStreams() {
+	if m.DaemonClient == nil {
+		return
+	}
+	for _, w := range m.Windows {
+		if w == nil || !w.DaemonMode || w.PTYID == "" {
+			continue
+		}
+		if w.Workspace == m.CurrentWorkspace {
+			if !m.SubscribedPTYs[w.PTYID] {
+				m.primePaneFromDaemon(w)
+			}
+			continue
+		}
+		m.unsubscribeFromPTY(w)
 	}
 }
 

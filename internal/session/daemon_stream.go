@@ -185,8 +185,16 @@ func takeChunk(batch []byte, c ptyChunk, sub *ptySubscriber) []byte {
 	return append(batch, c.data...)
 }
 
-// notifyPTYClosed sends MsgPTYClosed to all clients subscribed to the given PTY.
-// This is called when the PTY process exits (e.g., user types exit or Ctrl+D).
+// notifyPTYClosed sends MsgPTYClosed to every client attached to the session
+// that owns the PTY. This is called when the PTY process exits (e.g., user
+// types exit or Ctrl+D).
+//
+// It goes to every attached client, subscribed to the PTY or not. A client
+// streams only the panes on the workspace it shows, and this message is the
+// only way a client learns that a pane's program ended: the client closes
+// the window, and that close is what removes it from the session. Sent to
+// subscribers only, a pane on a hidden workspace outlived its program and
+// stayed listed until somebody showed its workspace and closed it by hand.
 func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 	debugLog("[DEBUG] notifyPTYClosed: sessionID=%s, ptyID=%s", shortID(sessionID), shortID(ptyID))
 
@@ -194,18 +202,13 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
-		// Only notify clients attached to this session and subscribed to this
-		// PTY. Read the guarded fields under cs.mu (clientsMu is already held,
-		// preserving the clientsMu-then-cs.mu order).
+		// Only notify clients attached to this session. Read the guarded
+		// fields under cs.mu (clientsMu is already held, preserving the
+		// clientsMu-then-cs.mu order).
 		cs.mu.Lock()
-		// attached for the same reason as broadcastToSession. A client mid
-		// attach holds no subscriptions either, so this is belt as well as
-		// braces. But the rule is "nothing unsolicited before the reply", and
-		// a rule each call site re-derives is a rule waiting to be missed.
+		// attached for the same reason as broadcastToSession: nothing
+		// unsolicited reaches a client before its attach reply.
 		match := cs.sessionID == sessionID && cs.attached
-		if match {
-			_, match = cs.ptySubscriptions[ptyID]
-		}
 		cs.mu.Unlock()
 		if !match {
 			continue
