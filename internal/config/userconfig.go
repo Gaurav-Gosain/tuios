@@ -243,6 +243,7 @@ type AppearanceConfig struct {
 	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs
 	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
+	LinkLabel                *bool                   `toml:"link_label"`                   // Pop up a label naming the link under the pointer (default: true)
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
 	WindowButtonPosition     string                  `toml:"window_button_position"`       // Which end of the title bar the window controls sit on: right, left (default: left)
@@ -1824,6 +1825,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.Links = cfg.Appearance.Links
 	} else if cfg.Appearance.Links != "" {
 		s.Links = LinksAll
+	}
+	if cfg.Appearance.LinkLabel != nil {
+		s.LinkLabel = *cfg.Appearance.LinkLabel
 	}
 
 	// DockbarPosition defaults to top. A typo lands on that default, which is
