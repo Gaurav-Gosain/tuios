@@ -15,6 +15,7 @@ func ResetTerminal() {
 			"\033[?1003l" + // Disable all motion tracking
 			"\033[?1004l" + // Disable focus tracking
 			"\033[?1006l" + // Disable SGR extended mouse mode
+			"\033[?1016l" + // Disable SGR-pixel mouse reports
 			"\033[?2031l" + // Stop colour scheme (light and dark) reports
 			"\033[?25h" + // Show cursor
 			"\033[?47l" + // Exit alternate screen buffer

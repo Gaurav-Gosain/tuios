@@ -739,7 +739,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.msgClock = time.Now()
 	m.reportActivity(msg)
+	noteCmd := m.noteHostPixelMouse(msg)
 	model, cmd := m.handleMsg(msg)
+	if pixelCmd := m.hostPixelMouseCmd(msg); pixelCmd != nil || noteCmd != nil {
+		cmd = tea.Batch(cmd, noteCmd, pixelCmd)
+	}
 	m.msgClock = time.Time{}
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler

@@ -83,6 +83,7 @@ type Emulator struct {
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
 	cachedHasMouse  atomic.Bool
 	cachedAllMotion atomic.Bool
+	cachedPixelMode atomic.Bool
 	// Thread-safe cached synchronized-output flag (DEC 2026, updated on set/reset)
 	cachedSyncOutput atomic.Bool
 	// Thread-safe cached auto-wrap flag (DECAWM ?7, updated on set/reset).
@@ -1078,6 +1079,13 @@ func (e *Emulator) updateMouseModeCache() {
 	}
 	e.cachedHasMouse.Store(hasMouse)
 	e.cachedAllMotion.Store(e.isModeSet(ansi.ModeMouseAnyEvent))
+	e.cachedPixelMode.Store(hasMouse && e.isModeSet(ansi.ModeMouseExtSgrPixel))
+}
+
+// HasPixelMouseMode reports whether the guest tracks the mouse and asked for
+// SGR-pixel reports (DEC 1016). Thread-safe: reads the atomic cache.
+func (e *Emulator) HasPixelMouseMode() bool {
+	return e.cachedPixelMode.Load()
 }
 
 // HasCellMotionMode returns true if the child app requested mode 1002
@@ -1096,6 +1104,13 @@ func (e *Emulator) SupportsMotionEvents() bool {
 // Returns empty string if no mouse mode is enabled.
 // This is used for daemon mode where mouse events need to be sent through the PTY.
 func (e *Emulator) EncodeMouseEvent(m Mouse) string {
+	return e.EncodeMouseEventAt(m, MousePixel{})
+}
+
+// EncodeMouseEventAt is EncodeMouseEvent with the pointer's pixel position
+// inside the pane, which a guest in SGR-pixel mode is told instead of the cell
+// centre.
+func (e *Emulator) EncodeMouseEventAt(m Mouse, at MousePixel) string {
 	var (
 		enc  ansi.Mode
 		mode ansi.Mode
@@ -1134,7 +1149,7 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 		mouse.Mod.Contains(ModAlt),
 		mouse.Mod.Contains(ModCtrl))
 
-	return e.encodeMouseReport(enc, b, mouse.X, mouse.Y, isRelease)
+	return e.encodeMouseReport(enc, b, mouse.X, mouse.Y, at, isRelease)
 }
 
 // Resize resizes the terminal.

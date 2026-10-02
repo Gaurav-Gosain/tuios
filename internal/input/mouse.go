@@ -10,19 +10,24 @@ import (
 // sendMouseToWindow forwards a mouse event to a window's terminal.
 // In daemon mode, the event is encoded as an escape sequence and written via PTY.
 // In local mode, the event is sent directly to the emulator.
-func sendMouseToWindow(win *terminal.Window, event uv.MouseEvent) {
+//
+// The event carries the pane cell. A guest in SGR-pixel mode is also told the
+// pixel inside the pane, when the host reported the pointer in pixels.
+func sendMouseToWindow(o *app.OS, win *terminal.Window, event uv.MouseEvent) {
 	if win.Terminal == nil {
 		return
 	}
-	// SendMouse/EncodeMouseEvent read the emulator mode map, which the emulator
-	// guards internally against the PTY reader goroutine.
+	mouse := event.Mouse()
+	at := o.PointerPixelIn(win.CellPixelWidth, win.CellPixelHeight, mouse.X, mouse.Y)
+	// SendMouseAt/EncodeMouseEventAt read the emulator mode map, which the
+	// emulator guards internally against the PTY reader goroutine.
 	if win.DaemonMode {
-		seq := win.Terminal.EncodeMouseEvent(event)
+		seq := win.Terminal.EncodeMouseEventAt(event, at)
 		if seq != "" {
 			_ = win.SendInput([]byte(seq))
 		}
 	} else {
-		win.Terminal.SendMouse(event)
+		win.Terminal.SendMouseAt(event, at)
 	}
 }
 

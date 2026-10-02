@@ -140,7 +140,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// tunable through the existing scroll-speed setting.
 				reps := max(o.Settings.ScrollLines, 1)
 				for range reps {
-					sendMouseToWindow(focusedWindow, adjustedMouse)
+					sendMouseToWindow(o, focusedWindow, adjustedMouse)
 				}
 				return o, nil
 			}

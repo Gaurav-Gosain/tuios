@@ -488,6 +488,9 @@ type OS struct {
 	// paneReport the answer panes are given from it. See host_colors.go.
 	host       hostColors
 	paneReport paneReportMemo
+	// hostPixel is the state of SGR-pixel mouse reports from this client's
+	// terminal. See host_pixel_mouse.go.
+	hostPixel hostPixelMouse
 	// fastPaint is the buffer the fullscreen fast path paints its frame into
 	// while a background it draws is on. See background_fast.go.
 	fastPaint fastPainter
