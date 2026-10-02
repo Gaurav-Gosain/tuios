@@ -672,6 +672,10 @@ type SidebarConfig struct {
 	// AgentRestFold is how long an agent row rests before the rail folds it
 	// into one line: a duration, or off (default: 1h).
 	AgentRestFold string `toml:"agent_rest_fold"`
+	// Custom is the [appearance.sidebar.custom] table: the command whose
+	// output the custom section draws, its heading, and when it runs. Read
+	// from the file only; see SidebarCustomConfig for why.
+	Custom SidebarCustomConfig `toml:"custom"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
