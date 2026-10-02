@@ -448,3 +448,10 @@ func agentReturnState(state string) string {
 	}
 	return sidebarStateWords(state)
 }
+
+// agentAwaySince is when this client's user last had the pane in front of
+// them, and false when they never have. The away recap starts here.
+func (m *OS) agentAwaySince(windowID string) (int64, bool) {
+	at, ok := m.SidebarAgentSeenAt[windowID]
+	return at, ok && at > 0
+}

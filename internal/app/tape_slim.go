@@ -12,8 +12,6 @@ import (
 // tape_body.go and tape_detect.go. Single tape commands from run-command and
 // the keybindings still run: the executor in os_tape_executor.go is core.
 
-type tapeDetectState struct{}
-
 type TapeReviewState struct{}
 
 func (m *OS) projectTapeOnCwdChange(CwdChangedMsg) tea.Cmd { return nil }

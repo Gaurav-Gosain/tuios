@@ -307,8 +307,8 @@ func TestCancelQueuedUnnamedLinks(t *testing.T) {
 	}
 
 	// A named machine drops what it queued, on any connection.
-	named := &connState{clientID: "link-three", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
-	again := &connState{clientID: "link-four", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
+	named := &connState{clientID: "link-three", viaLink: true, connFeatures: connFeatures{linkPeer: "laptop"}, done: make(chan struct{})}
+	again := &connState{clientID: "link-four", viaLink: true, connFeatures: connFeatures{linkPeer: "laptop"}, done: make(chan struct{})}
 	id := queue(named, "from laptop")
 	if _, verr := d.verbCancelQueued(again, mustJSON(map[string]any{"session": "work", "id": id})); verr != nil {
 		t.Fatalf("laptop dropping its own entry after reconnecting: %v", verr.Message)

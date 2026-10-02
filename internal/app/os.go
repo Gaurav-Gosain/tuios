@@ -14,7 +14,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -243,32 +242,10 @@ type OS struct {
 	// and never read by tickNeedsWork: it is a static panel.
 	ShotPreview screenshotPreview
 
-	// captureHits are the window rectangles capture mode drew a highlight
-	// around this frame, so the click handler reads what was drawn instead of
-	// recomputing a layout. Reused between frames, never reallocated.
-	captureHits []captureHit
-
-	// shotImagePlaced records that the preview's kitty placement is on the
-	// host, so closing the panel takes it down again. shotImageSent records
-	// that the picture itself is resident, so a panel that only moved costs a
-	// placement and not another upload. shotPlacement is what was last drawn,
-	// so an unchanged frame emits nothing at all.
-	shotImagePlaced bool
-	shotImageSent   bool
-	shotPlacement   screenshotPlacementState
-
-	// shotCaptures counts the captures this client has taken. It is what
-	// names the picture the host holds, because the host holds one picture
-	// under the preview's image id and the only question that matters is
-	// whether that picture is this capture's. The file name cannot answer it:
-	// two captures in one second share a name.
-	shotCaptures int
-
-	// shotDiscarded holds the serials of captures the user dismissed before
-	// their file was written. The result that arrives afterwards removes its
-	// own file and says nothing. Nil when nothing is pending, which is almost
-	// always, so it costs an idle frame nothing.
-	shotDiscarded []int
+	// osFeatures holds the state of the screenshot panel, the project tapes,
+	// the Inbox watcher and the hosts settings, which only the full build
+	// reads. See os_features_full.go.
+	osFeatures //nolint:unused // empty in tuios-slim, which reads none of it
 
 	// BSP tiling state
 	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
@@ -617,9 +594,6 @@ type OS struct {
 	// ArmPrefixRepeat.
 	prefixRepeatUntil time.Time
 
-	tailnetMu         sync.Mutex
-	tailnetAskedAt    time.Time
-	tailnetCandidates []string
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the
@@ -929,10 +903,6 @@ type OS struct {
 	// fileWatch is the watch on the files section's folder. See
 	// sidebar_files_watch.go.
 	fileWatch fileWatcher
-	// tapeDetect holds the project-tape detection state (trust store, session
-	// memory of handled directories, debounce bookkeeping, and the current
-	// passive indicator). See tape_detect.go.
-	tapeDetect tapeDetectState
 	// ShowTapeReview is true when the project-tape review/trust dialog is open.
 	// TapeReview holds its state (path, trust status, reviewed content, header).
 	// See tape_review.go.
@@ -1029,10 +999,6 @@ type OS struct {
 	// it. See inbox.go.
 	ShowInbox bool
 	Inbox     InboxState
-	// inboxEvents carries what the Inbox watcher reads off the daemon, and
-	// stopInbox ends the watcher. Both nil until the watcher starts.
-	inboxEvents chan tea.Msg
-	stopInbox   func()
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
@@ -1061,17 +1027,6 @@ type OS struct {
 	// tick from an older generation is dropped, so the snapshot's re-arm and
 	// the tick's own re-arm cannot leave two loops running.
 	federationTickGen uint64
-	// hostTests are the results of the settings page's last link test, keyed by
-	// host name. A row prefers its test result to the daemon's snapshot: the
-	// test is newer, and it is what the user just asked for.
-	hostTests map[string]federation.HostReport
-	// hostTestRunning is true while a link test is in flight, so the row cannot
-	// start a second one.
-	hostTestRunning bool
-	// hostsToApply are the hosts the person changed on the settings page
-	// since the last save. The daemon applies a file change that dials a
-	// new host only for the person, so the save asks it to (applyHostsCmd).
-	hostsToApply []string
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

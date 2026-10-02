@@ -230,13 +230,6 @@ func (t *shellTrack) expect() {
 	t.expectingLine = t.promptLine
 }
 
-// stopExpecting ends what expect started, when the run call ends.
-func (t *shellTrack) stopExpecting() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.expecting = false
-}
-
 // finishLocked ends the running command. The caller holds mu.
 func (t *shellTrack) finishLocked(code *int, now time.Time) SessionEvent {
 	t.seq++

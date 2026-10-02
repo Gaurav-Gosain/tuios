@@ -24,16 +24,6 @@ const captureLastCommand = "last-command-output"
 // waitCommandFinished is the wait-for condition for a command finishing.
 const waitCommandFinished = "command-finished"
 
-// defaultRunTimeout is how long run waits for the command when the caller
-// names no timeout. It is wait-for's default, so the two read the same.
-const defaultRunTimeout = defaultWaitTimeout
-
-// runFirstPromptWait is how long run waits for a pane that has not sent a
-// mark yet to show its first prompt. A window opened a moment ago has a shell
-// that is still starting, and refusing it would make "open a window, run in
-// it" fail for no reason but timing.
-var runFirstPromptWait = 3 * time.Second
-
 // resolveWindowPTY resolves a window target, the focused window when empty,
 // to the window and its PTY.
 func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *PTY, *verbError) {
@@ -208,16 +198,6 @@ func noShellIntegration(window string) *verbError {
 	})
 }
 
-// promptMarksOnly is the refusal for a pane whose shell marks its prompts and
-// not its commands, so a running command looks like a prompt. what says what
-// happened to the command line.
-func promptMarksOnly(window, what string) *verbError {
-	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" sends prompt marks only: it ran a command without the OSC 133 C mark, so the daemon cannot tell a running command from a prompt", &VerbHint{
-		Command: "tuios doctor shell",
-		Detail:  what + " bash needs 4.4 or newer for the C mark (older bash ignores PS0), and a prompt theme that sends only A needs the full integration. Until then, type with send-text and wait for a marker the command prints.",
-	})
-}
-
 // captureLastCommandOutput is capture-pane with source last-command-output:
 // the plain text the pane's last finished command printed, with the facts the
 // shell reported about it. It is plain only, because the rows are read out
@@ -254,12 +234,4 @@ func captureLastCommandOutput(pty *PTY, window string, styled bool, start, end, 
 		res["exit_code"] = *facts.LastExit
 	}
 	return res, nil
-}
-
-// windowLabelFor is how a refusal names a window: its name when it has one.
-func windowLabelFor(w WindowState) string {
-	if w.CustomName != "" {
-		return w.CustomName
-	}
-	return w.ID
 }

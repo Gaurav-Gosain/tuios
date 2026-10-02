@@ -1,11 +1,9 @@
 package session
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestVerbScopesNameEveryVerb holds the scope table to the registry. A verb the
@@ -147,21 +145,6 @@ func mustSetWorktree(t *testing.T, d *Daemon, session string, info *WorktreeInfo
 	if err := d.manager.GetSession(session).SetWorktree(info); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// readEvent reads one event line from a subscribed connection.
-func readEvent(t *testing.T, c *verbConn) map[string]any {
-	t.Helper()
-	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second * testDeadlineScale))
-	line, err := c.r.ReadBytes('\n')
-	if err != nil {
-		t.Fatalf("read event: %v", err)
-	}
-	var ev map[string]any
-	if err := json.Unmarshal(line, &ev); err != nil {
-		t.Fatalf("decode event %q: %v", line, err)
-	}
-	return ev
 }
 
 func TestPaneTokenIsExportedAndNamesOneWindow(t *testing.T) {

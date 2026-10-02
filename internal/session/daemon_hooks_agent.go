@@ -87,3 +87,29 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 		d.hooks.Fire(hooks.AfterAgentState, ctx)
 	})
 }
+
+// park cancels whatever was waiting for this window and schedules fire after d.
+func (g *agentHookGate) park(key string, d time.Duration, fire func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if t, ok := g.pending[key]; ok {
+		t.Stop()
+		delete(g.pending, key)
+	}
+	g.pending[key] = time.AfterFunc(d, func() {
+		g.mu.Lock()
+		delete(g.pending, key)
+		g.mu.Unlock()
+		fire()
+	})
+}
+
+// cancel drops a parked firing without running it.
+func (g *agentHookGate) cancel(key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if t, ok := g.pending[key]; ok {
+		t.Stop()
+		delete(g.pending, key)
+	}
+}

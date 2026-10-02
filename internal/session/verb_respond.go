@@ -509,3 +509,14 @@ func (d *Daemon) waitPromptAnswered(sess *Session, windowID, answered string, wa
 func isAnswerAction(a string) bool {
 	return slices.Contains(harness.AnswerActions, a)
 }
+
+// paneMayRespond reports whether the caller is a pane holding respond that may
+// answer a prompt in session target. It is the second way past respond's
+// check for the person, after an attach nonce.
+func (d *Daemon) paneMayRespond(cs *connState, target string) bool {
+	pa := d.paneAuthority(cs)
+	if pa == nil || !pa.grants.Has(GrantRespond) {
+		return false
+	}
+	return d.paneWriteReach(pa, target) == ""
+}

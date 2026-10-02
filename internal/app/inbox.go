@@ -1926,3 +1926,31 @@ func inboxKindGlyph(kind string) string {
 	}
 	return agentStateIndicator(inboxAlertState(kind))
 }
+
+// shortWindowLabel is the first eight characters of a window id, which is how
+// list-windows prints one.
+func shortWindowLabel(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+// inboxCaller is how the peek reaches the daemon. Tests set InboxState.call.
+func (m *OS) inboxCaller() inboxVerbCall {
+	if m.Inbox.call != nil {
+		return m.Inbox.call
+	}
+	build := ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = client.Close() }()
+		return client.CallWithTimeout(verb, params, timeout)
+	}
+}

@@ -188,3 +188,37 @@ func (s *Session) forgetAgentClaimLocked(windowID string) {
 	delete(s.agentClaims, windowID)
 	delete(s.agentHarnessPIDs, windowID)
 }
+
+// arm makes sure run runs by at, unix nanoseconds. 0 arms nothing.
+func (p *pruneTimer) arm(at int64, run func()) {
+	if at == 0 {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.t != nil && p.at != 0 && p.at <= at {
+		return
+	}
+	if p.t != nil {
+		p.t.Stop()
+	}
+	p.at = at
+	p.t = time.AfterFunc(max(time.Until(time.Unix(0, at)), 0), func() {
+		p.mu.Lock()
+		p.t, p.at = nil, 0
+		p.mu.Unlock()
+		run()
+	})
+}
+
+// due is the pending deadline, 0 for none.
+func (p *pruneTimer) due() int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.at
+}
+
+// agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
+// pane streaming heavy output probes /proc at most a few times a second while a
+// quit agent still clears well inside one detection poll.
+const agentExitProbeInterval = 250 * time.Millisecond

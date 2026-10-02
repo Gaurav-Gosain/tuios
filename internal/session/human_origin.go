@@ -200,15 +200,6 @@ func (d *Daemon) connFromPane(cs *connState) bool {
 	return cs.fromPane
 }
 
-// humanForbiddenError is the refusal a pane gets for speaking as the person.
-func humanForbiddenError(verb string) *verbError {
-	return hintedVerbError(ErrVerbForbidden, verb+" from human is refused: the caller runs inside a pane of this daemon, and only the person at an attached client can speak as human", &VerbHint{
-		Param:   "from",
-		Command: "tuios send-agent-message -w human --from \"$TUIOS_PANE_ID\" '<your question>'",
-		Detail:  "Nothing was sent. Send as your own pane, with from set to $TUIOS_PANE_ID. To get an answer from the person, send them a message with -w human and wait for their reply with wait-for agent-message; only a reply marked verified_human is theirs.",
-	})
-}
-
 // mayActAsHuman reports whether the caller on cs may act as the person: send
 // or ask from human, be issued an attach nonce, mark the person's mail read, or
 // mark a finished turn seen.

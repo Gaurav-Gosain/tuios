@@ -210,11 +210,7 @@ type verbDoc struct {
 // identityReturn, confidenceReturn and evidenceAgeReturn are the three
 // detection fields get-agent-state, explain-agent-detect and list-agents share,
 // declared once so the three verbs describe them in the same words.
-var (
-	identityReturn    = verbParam{Name: "identity", Type: "string", Description: "What named the agent: report (the harness named itself), manifest (a manifest rule matched the process), list (a name list matched the process) or hint (TUIOS_AGENT in the process environment). Empty when nothing named it.", Accepted: []string{"report", "manifest", "list", "hint", ""}}
-	confidenceReturn  = verbParam{Name: "confidence", Type: "string", Description: "How sure the identity is: certain for report, strong for manifest, list and hint, none when nothing named the agent.", Accepted: []string{"certain", "strong", "none"}}
-	evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Nullable: true, Description: "Milliseconds since the last evidence about the state arrived. For a state the agent or a rule reported, that is the report. For a state the detector or the silence timer inferred (source detect or stall), it is the later of that and the pane's last output. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
-)
+var ()
 
 // sessionParam is the session selector shared by nearly every verb.
 var sessionParam = verbParam{
@@ -232,15 +228,6 @@ var windowParam = verbParam{
 
 // selectorSyntax is the one sentence every select param shares.
 const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home)."
-
-// selectWriteParams are the two params a write addressed by selector takes.
-// what says what the write does to the panes the selector matches.
-func selectWriteParams(what string) []verbParam {
-	return []verbParam{
-		{Name: "select", Type: "string", Description: selectorSyntax + " " + what + " It reaches agent panes on this machine, in every session, and takes no session and no window. Without confirm nothing is sent: the call fails with confirm_required, whose hint lists the panes in available and carries the token in confirm."},
-		{Name: "confirm", Type: "string", Description: "The token for the set of panes the selector matches, from a confirm_required hint or from list-agents with the same selector. The write goes ahead only when the selector still matches exactly that set; otherwise it fails with confirm_required again and the new set."},
-	}
-}
 
 // verbRegistry is the dispatch table for every JSON verb the daemon supports.
 // It is built once at package init so list-verbs and dispatch share one source
@@ -1217,27 +1204,6 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		return verbEntry{}, nil, verr
 	}
 	return entry, scoped, nil
-}
-
-// callVerb runs one verb for cs the way the verb socket does, checks and
-// all, and returns its result. It is how another protocol served by the
-// daemon (the herdr socket) reuses a verb rather than doing its work again.
-// A verb that streams (subscribe) is not called this way.
-func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return nil, newVerbError(ErrVerbInternal, "could not encode params")
-	}
-	entry, admitted, verr := d.admitVerb(cs, verb, raw)
-	if verr != nil {
-		return nil, verr
-	}
-	if result, verr, handled := d.forwardHostedCall(cs, verb, admitted); handled {
-		return result, verr
-	}
-	result, verr := entry.handler(d, cs, admitted)
-	cs.replyFailed = nil
-	return result, verr
 }
 
 // checkParamNames refuses a request carrying a parameter the verb does not

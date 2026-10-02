@@ -391,7 +391,7 @@ func TestTheIntegratedVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 		ErrVerbForbidden, "bundle-worktree from a machine that may open but not write")
 
 	// The call site inside the handlers agrees with the table.
-	cs := &connState{viaLink: true, linkPeer: "opener", linkPeerSet: true}
+	cs := &connState{viaLink: true, connFeatures: connFeatures{linkPeer: "opener", linkPeerSet: true}}
 	if verr := d.checkLinkPolicy(cs, linkCapSpawn, "fan"); verr != nil {
 		t.Errorf("a clone from a machine that may open was refused: %v", verr.Message)
 	}

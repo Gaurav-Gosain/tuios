@@ -1,4 +1,4 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !slim
 
 package session
 
@@ -8,8 +8,6 @@ package session
 // that anything is an agent. Everything above this layer already treats
 // not-running as "auto-detection has no opinion", so a pane on such a platform
 // keeps whatever state a harness reports for itself or the user sets by hand.
-
-func readForegroundPGID(int) (int, bool) { return 0, false }
 
 func readProcessInfo(int) foregroundInfo { return foregroundInfo{} }
 

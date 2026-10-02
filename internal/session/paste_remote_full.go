@@ -116,3 +116,6 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 	}
 	return resp.Result.Path, nil
 }
+
+// maxPasteReply bounds the far daemon's answer to paste-pane-image.
+const maxPasteReply = 64 * 1024

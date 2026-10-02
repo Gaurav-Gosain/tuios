@@ -11,16 +11,6 @@ import (
 // the panel grammar and size themselves from their own content. The helpers
 // here fit them to the screen the same way overlay_fit.go fits the panels.
 
-// dialogRows returns how many scrolling content rows a centered dialog can show
-// given the rows it spends on everything else.
-func (m *OS) dialogRows(preferred, chrome int) int {
-	rh := m.GetRenderHeight()
-	if rh <= 0 {
-		return preferred
-	}
-	return max(min(preferred, rh-chrome), minPanelRows)
-}
-
 // squeezeLines shortens a dialog body to rows lines. The blank spacer lines go
 // first, since a dialog that reads a little tighter is better than one whose
 // last rows are off the bottom of the screen; only if that is not enough does

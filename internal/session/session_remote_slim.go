@@ -5,7 +5,6 @@ package session
 import (
 	"context"
 	"io"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/edition"
 )
@@ -23,9 +22,6 @@ func (p *remotePane) Resize(int, int) error     { return nil }
 func (p *remotePane) Close() error              { return nil }
 func (p *remotePane) Cwd() (string, bool)       { return "", false }
 func (p *remotePane) askCwd()                   {}
-func (p *remotePane) linkState() (string, time.Time) {
-	return "", time.Time{}
-}
 
 func (p *remotePane) pasteImage(context.Context, []byte) (string, error) {
 	return "", edition.Missing("A window on another machine")

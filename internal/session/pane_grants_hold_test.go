@@ -194,26 +194,6 @@ func TestAPaneCannotApplyConfig(t *testing.T) {
 	}
 }
 
-// paneText reads what window shows now.
-func paneText(t *testing.T, c *verbConn, session, window string) string {
-	t.Helper()
-	res := result(t, callP(c, t, "capture-pane", map[string]any{"session": session, "window": window}))
-	return fmt.Sprint(res["content"], res["lines"], res["text"])
-}
-
-// waitPaneText waits up to five seconds for want in window.
-func waitPaneText(c *verbConn, t *testing.T, session, window, want string) bool {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if strings.Contains(paneText(t, c, session, window), want) {
-			return true
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return false
-}
-
 // TestAPaneSendKeysNeverDrivesTheClient: send-keys with no window hands the
 // keys to the attached client, where PREFIX moves focus and opens the Inbox,
 // so the keys after it land somewhere no check saw. From a pane without

@@ -2,7 +2,11 @@
 
 package session
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+	"time"
+)
 
 func TestRestrictedSubscribeCarriesOnlyTheSessionsItReaches(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
@@ -63,4 +67,19 @@ func TestRestrictedResumeFromAnEvictedSeqGivesTheBaseline(t *testing.T) {
 	if ev := readEvent(t, c); ev["session"] != "a" || ev["seq"].(float64) <= seq {
 		t.Fatalf("event after the gap = %v, want a live event of a above seq %v", ev, seq)
 	}
+}
+
+// readEvent reads one event line from a subscribed connection.
+func readEvent(t *testing.T, c *verbConn) map[string]any {
+	t.Helper()
+	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second * testDeadlineScale))
+	line, err := c.r.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read event: %v", err)
+	}
+	var ev map[string]any
+	if err := json.Unmarshal(line, &ev); err != nil {
+		t.Fatalf("decode event %q: %v", line, err)
+	}
+	return ev
 }

@@ -1473,3 +1473,27 @@ func (d *Daemon) herdrWorktreeRemove(cs *connState, in *herdrIn) (*herdrResult, 
 	}
 	return &herdrResult{Type: "worktree_removed", WorkspaceID: in.WorkspaceID, Path: herdrString(out, "path"), Forced: &in.Force}, nil
 }
+
+// herdrIDError is a failed lookup: herdr's code and message.
+type herdrIDError struct{ code, msg string }
+
+// callVerb runs one verb for cs the way the verb socket does, checks and
+// all, and returns its result. It is how another protocol served by the
+// daemon (the herdr socket) reuses a verb rather than doing its work again.
+// A verb that streams (subscribe) is not called this way.
+func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, newVerbError(ErrVerbInternal, "could not encode params")
+	}
+	entry, admitted, verr := d.admitVerb(cs, verb, raw)
+	if verr != nil {
+		return nil, verr
+	}
+	if result, verr, handled := d.forwardHostedCall(cs, verb, admitted); handled {
+		return result, verr
+	}
+	result, verr := entry.handler(d, cs, admitted)
+	cs.replyFailed = nil
+	return result, verr
+}

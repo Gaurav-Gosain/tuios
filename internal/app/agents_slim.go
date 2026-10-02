@@ -25,13 +25,12 @@ import (
 
 // InboxState keeps the fields the core reads. It stays empty.
 type InboxState struct {
-	Items    []session.AttentionItem
-	Live     bool
-	Gen      uint64
-	Peek     *inboxPeek
-	noReview bool
-	call     inboxVerbCall
-	nonce    func() string
+	Items []session.AttentionItem
+	Live  bool
+	Gen   uint64
+	Peek  *inboxPeek
+	call  inboxVerbCall
+	nonce func() string
 }
 
 // inboxPeek is never open.

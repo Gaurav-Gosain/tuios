@@ -28,25 +28,6 @@ func runTestOS(t *testing.T) *OS {
 	}
 }
 
-func fakeEntries(names ...string) []applist.Entry {
-	out := make([]applist.Entry, len(names))
-	for i, n := range names {
-		out[i] = applist.Entry{Name: n, Path: filepath.Join("/usr/bin", n), Dir: "/usr/bin", Source: applist.SourcePath}
-	}
-	return out
-}
-
-// seedLauncher fills the launcher's rows the way a finished scan does, without
-// touching the real $PATH. It goes through applyPathApps so the rows are built
-// and ordered exactly as a real scan builds them.
-func seedLauncher(t *testing.T, m *OS, names ...string) {
-	t.Helper()
-	open := m.ShowLauncher
-	m.ShowLauncher = true
-	m.applyPathApps(fakeEntries(names...))
-	m.ShowLauncher = open
-}
-
 // TestSeedsWaitForTheirOwnPane covers the daemon half, where the pane does not
 // exist when the launch is asked for. Each queued line claims the pane that
 // carries its name and no other, so two launches in flight at once cannot cross

@@ -3,6 +3,8 @@
 package app
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -184,4 +186,60 @@ func agentAlertSep() string {
 		return " - "
 	}
 	return " · "
+}
+
+// detectOuterMultiplexer reports what the client's terminal is running inside.
+//
+// Locally, $TMUX and $STY are the direct answers, set for their own children,
+// and TERM backs them up. With `tuios ssh` the TUI runs on the remote host,
+// where the server's own environment says nothing about the user's terminal:
+// the TERM the client sent in its pty request is what carries the fact, and
+// the server's $TMUX/$STY describe only where the server was started.
+func (m *OS) detectOuterMultiplexer() outerMultiplexer {
+	if m.IsSSHMode && m.SSHSession != nil {
+		if term, ok := sshClientTerm(m.SSHSession); ok {
+			switch {
+			case strings.HasPrefix(term, "tmux"):
+				return outerTmux
+			case strings.HasPrefix(term, "screen"):
+				return outerScreen
+			}
+		}
+		return outerNone
+	}
+	term := os.Getenv("TERM")
+	switch {
+	case os.Getenv("TMUX") != "", strings.HasPrefix(term, "tmux"):
+		return outerTmux
+	case os.Getenv("STY") != "", strings.HasPrefix(term, "screen"):
+		return outerScreen
+	}
+	return outerNone
+}
+
+// showAgentNotification is ShowNotificationFrom for a message announcing an
+// agent state: the dock marks it with that state's own mark.
+func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
+	m.showNotification(message, notifType, agentState, duration, &target)
+}
+
+// agentTransitionNotice is the word and severity a state change earns, or "" for
+// a transition with nothing to say. Which of these actually reaches the user is
+// the [notifications.agent] policy's decision, not this function's: working and
+// idle have words here because they are configurable, and are silent by default
+// because an agent starting is not news and the stall timer guesses at idle.
+func agentTransitionNotice(to string) (string, string) {
+	switch to {
+	case "needs_input":
+		return sidebarStateWords(to), "warning"
+	case "errored":
+		return "errored", "error"
+	case "done":
+		return sidebarStateWords(to), "success"
+	case "working":
+		return "working", "info"
+	case "idle":
+		return "idle", "info"
+	}
+	return "", ""
 }

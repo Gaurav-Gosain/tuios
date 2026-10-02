@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // This file carries the machine-readable remedy surface of the verb protocol.
@@ -31,11 +29,6 @@ var (
 	// against. last-command-output is not one: a wait for a command to finish
 	// is command-finished.
 	waitOutputSources = []string{"visible", "recent"}
-	// screenshotFormats and screenshotFrames are the screenshot verb's closed
-	// sets. They are the config registry's own lists rather than copies, so a
-	// format added to one place cannot be missing from the other.
-	screenshotFormats = config.ScreenshotFormats
-	screenshotFrames  = config.ScreenshotFrames
 	// retiredCaptureSources maps a capture source that was once accepted to the
 	// reason it no longer is, so the rejection can say what happened rather than
 	// only listing what is allowed. "recent-unwrapped" was documented as reserved
@@ -63,8 +56,6 @@ var (
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 		EventAgentActivity,
 	}
-	// knownEventTypes are the event types a subscribe filter can name.
-	knownEventTypes = EventTypeNames
 )
 
 // errorCodeCatalog documents every stable error code for the list-verbs result,

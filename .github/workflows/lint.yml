@@ -42,6 +42,28 @@ jobs:
           version: v2.14.0
           args: --timeout 20m
 
+  golangci-slim:
+    # tuios-slim is the same tree built with the slim tag. Code that only the
+    # full build calls has to be tagged !slim, or this run reports it unused.
+    name: golangci-lint (tuios-slim)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .golangci.yml
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # The same pin as the job above.
+          version: v2.14.0
+          args: --timeout 20m --build-tags slim
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest

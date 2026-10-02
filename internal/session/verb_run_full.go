@@ -176,3 +176,38 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 		}
 	}
 }
+
+// stopExpecting ends what expect started, when the run call ends.
+func (t *shellTrack) stopExpecting() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.expecting = false
+}
+
+// defaultRunTimeout is how long run waits for the command when the caller
+// names no timeout. It is wait-for's default, so the two read the same.
+const defaultRunTimeout = defaultWaitTimeout
+
+// runFirstPromptWait is how long run waits for a pane that has not sent a
+// mark yet to show its first prompt. A window opened a moment ago has a shell
+// that is still starting, and refusing it would make "open a window, run in
+// it" fail for no reason but timing.
+var runFirstPromptWait = 3 * time.Second
+
+// promptMarksOnly is the refusal for a pane whose shell marks its prompts and
+// not its commands, so a running command looks like a prompt. what says what
+// happened to the command line.
+func promptMarksOnly(window, what string) *verbError {
+	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" sends prompt marks only: it ran a command without the OSC 133 C mark, so the daemon cannot tell a running command from a prompt", &VerbHint{
+		Command: "tuios doctor shell",
+		Detail:  what + " bash needs 4.4 or newer for the C mark (older bash ignores PS0), and a prompt theme that sends only A needs the full integration. Until then, type with send-text and wait for a marker the command prints.",
+	})
+}
+
+// windowLabelFor is how a refusal names a window: its name when it has one.
+func windowLabelFor(w WindowState) string {
+	if w.CustomName != "" {
+		return w.CustomName
+	}
+	return w.ID
+}

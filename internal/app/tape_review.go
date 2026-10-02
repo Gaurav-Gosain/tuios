@@ -407,3 +407,13 @@ func shortTapePath(path string) string {
 	}
 	return path
 }
+
+// dialogRows returns how many scrolling content rows a centered dialog can show
+// given the rows it spends on everything else.
+func (m *OS) dialogRows(preferred, chrome int) int {
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return preferred
+	}
+	return max(min(preferred, rh-chrome), minPanelRows)
+}

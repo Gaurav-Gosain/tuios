@@ -134,26 +134,6 @@ type Daemon struct {
 	daemonFeatures
 }
 
-// defaultAgentStallTimeout is the conservative default silence window before a
-// pane that reported working but never reported anything after is assumed idle.
-// It is long on purpose: the heuristic is a fallback for agents that do not
-// report, and demoting a genuinely-busy-but-quiet pane too eagerly is worse than
-// leaving it looking busy a little longer.
-const defaultAgentStallTimeout = 30 * time.Second
-
-// defaultAgentDetectInterval is how often the foreground-process auto-detector
-// polls each pane. It is modest on purpose: agent presence changes on a human
-// timescale, and a per-pane /proc read every couple of seconds is cheap.
-const defaultAgentDetectInterval = 2 * time.Second
-
-// agentDetectQuietBound is the longest a quiet pane goes between two reads of
-// its foreground process. A pane that has printed nothing since it was last
-// read, and holds no agent, is read only every few ticks: nothing a person
-// starts in it goes unechoed, so output is what says it is worth reading
-// again, and this bound covers a program started with no output at all. At the
-// default two-second tick it is every fifth tick. See PTY.detectScanDue.
-const agentDetectQuietBound = 10 * time.Second
-
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
 //
@@ -215,13 +195,16 @@ type connState struct {
 	ptyResume map[string]int64
 
 	// Event stream state (JSON verb protocol). eventSub is the hub subscription
-	// once this connection has issued a subscribe verb; streaming guards against a
-	// second subscribe on the same connection; pendingStream hands the fresh
-	// subscription from the subscribe handler to the dispatch loop, which starts
-	// the streamer only after the ack response has been written.
+	// once this connection has issued a subscribe verb; pendingStream hands the
+	// fresh subscription from the subscribe handler to the dispatch loop, which
+	// starts the streamer only after the ack response has been written.
 	eventSub      *eventSub
 	pendingStream *eventSub
-	streaming     bool
+
+	// connFeatures holds the connection state only the full build reads:
+	// the second-subscribe guard and the link peer. See
+	// daemon_features_full.go.
+	connFeatures //nolint:unused // empty in tuios-slim, which reads none of it
 
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
@@ -271,17 +254,6 @@ type connState struct {
 	// opened it on the hub's machine is not inside one of the hub's panes. It
 	// implies viaLink. See human_origin.go.
 	linkHuman bool
-
-	// linkPeer is the machine a link connection came from, as the link-peer
-	// handshake named it; empty when it named none. linkPeerSet says the
-	// handshake ran, linkPinned that the name was pinned on this machine with
-	// stdio-proxy --as, and linkServed that something other than the
-	// handshake has run, after which the peer can no longer be named. All
-	// four are guarded by mu. See link_policy.go.
-	linkPeer    string
-	linkPeerSet bool
-	linkPinned  bool
-	linkServed  bool
 
 	// peerPID is the pid of the process on the other end, as the kernel
 	// recorded it at connect time, or 0 where the platform does not say. For
@@ -1059,28 +1031,6 @@ func LinkSocketPath(socketPath string) string {
 // always did.
 func LinkHumanSocketPath(socketPath string) string {
 	return socketPath + ".link-human"
-}
-
-// listenLinkSocket opens one of the optional link sockets, owner only, and
-// returns nil after logging what is lost when it cannot. The start lock is
-// held, so a stale file at path is a dead daemon's and is removed.
-func listenLinkSocket(path, lost string) net.Listener {
-	_ = os.Remove(path)
-	ll, err := net.Listen("unix", path)
-	if err != nil {
-		log.Printf("The link socket %s could not be opened: %v. %s", path, err, lost)
-		return nil
-	}
-	if ul, ok := ll.(*net.UnixListener); ok {
-		ul.SetUnlinkOnClose(false)
-	}
-	if err := os.Chmod(path, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
-		_ = ll.Close()
-		_ = os.Remove(path)
-		log.Printf("The link socket %s could not be secured: %v. %s", path, err, lost)
-		return nil
-	}
-	return ll
 }
 
 // shortID returns the first 8 bytes of s, or all of s if it is shorter. IDs

@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && !slim
 
 package session
 
@@ -29,23 +29,6 @@ import (
 // answered wrongly, and a refusal here leaves argv and exe empty. Detection then
 // rests on comm alone, which is what a 16-byte truncated name can honestly
 // support; nothing is guessed to fill the gap.
-
-// readForegroundPGID returns the foreground process group of the process's
-// controlling terminal, the e_tpgid of its kinfo_proc.
-func readForegroundPGID(pid int) (int, bool) {
-	if pid <= 0 {
-		return 0, false
-	}
-	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
-	if err != nil || kp == nil {
-		return 0, false
-	}
-	tpgid := int(kp.Eproc.Tpgid)
-	if tpgid <= 0 {
-		return 0, false
-	}
-	return tpgid, true
-}
 
 // readProcessInfo reads the three descriptions of a process. comm is truncated at
 // MAXCOMLEN by the kernel and rewritable by the process; exe and argv come from

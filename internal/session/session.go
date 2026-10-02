@@ -910,11 +910,6 @@ func (p *PTY) Title() string {
 	return ""
 }
 
-// agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
-// pane streaming heavy output probes /proc at most a few times a second while a
-// quit agent still clears well inside one detection poll.
-const agentExitProbeInterval = 250 * time.Millisecond
-
 // LastOutput returns the unix-nano time this PTY most recently produced output,
 // or 0 if it has produced none. It backs the daemon's agent-state stall
 // heuristic, which demotes a pane that reported working but has gone quiet.

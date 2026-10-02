@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !slim
 
 package session
 
@@ -11,20 +11,6 @@ import (
 // The Linux half of the foreground-process resolver: everything here is procfs.
 // See agent_detect.go for what the three readings are for, and
 // agent_detect_darwin.go for the same four answers from sysctl.
-
-// readForegroundPGID reads field 8 (tpgid) of /proc/<pid>/stat, the foreground
-// process group id of the process's controlling terminal.
-func readForegroundPGID(pid int) (int, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return 0, false
-	}
-	return parseStatTPGID(string(data))
-}
-
-// parseStatTPGID extracts the tpgid (foreground process group id, field 8) from
-// the contents of a /proc/<pid>/stat line.
-func parseStatTPGID(s string) (int, bool) { return parseStatField(s, 8) }
 
 // parseStatPGRP extracts the pgrp (process group id, field 5).
 func parseStatPGRP(s string) (int, bool) { return parseStatField(s, 5) }

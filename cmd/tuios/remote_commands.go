@@ -1412,23 +1412,11 @@ func runWaitForSelect(condition, until, selector string, every bool, timeout int
 	return nil
 }
 
-func yesNo(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
-}
-
 func orNone(s string) string {
 	if s == "" {
 		return "(none)"
 	}
 	return s
-}
-
-// sendAndWaitForResult sends a message and waits for the result (human-readable output).
-func sendAndWaitForResult(client *session.Client, msg *session.Message, requestID string) error {
-	return sendAndWaitForResultWithFormat(client, msg, requestID, false, nil)
 }
 
 // resultRenderer prints a command result's data for a human reader.

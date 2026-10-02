@@ -280,3 +280,145 @@ func TestRestoredSessionRaisesWindowCreated(t *testing.T) {
 		t.Errorf("window-created window = %v, want w1", events[1]["window"])
 	}
 }
+
+// collectEvents reads event lines off a subscribed connection until it has want
+// of them or the read deadline expires. It returns what it managed to read, so a
+// caller can assert on "exactly N and no more" as well as on the contents.
+func collectEvents(t *testing.T, c *verbConn, want int, wait time.Duration) []map[string]any {
+	t.Helper()
+	var got []map[string]any
+	deadline := time.Now().Add(wait)
+	for len(got) < want {
+		_ = c.conn.SetReadDeadline(deadline)
+		line, err := c.r.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		var ev map[string]any
+		if err := json.Unmarshal(line, &ev); err != nil {
+			t.Fatalf("decode event %q: %v", string(line), err)
+		}
+		got = append(got, ev)
+	}
+	return got
+}
+
+// expectNoMoreEvents fails if any further event line arrives within grace. This
+// is how the exactly-once assertions are made: the expected events are drained
+// first, then the stream must be silent.
+func expectNoMoreEvents(t *testing.T, c *verbConn, grace time.Duration) {
+	t.Helper()
+	_ = c.conn.SetReadDeadline(time.Now().Add(grace))
+	line, err := c.r.ReadBytes('\n')
+	if err == nil {
+		t.Fatalf("unexpected extra event: %s", string(line))
+	}
+}
+
+func eventTypes(events []map[string]any) []string {
+	types := make([]string, 0, len(events))
+	for _, ev := range events {
+		s, _ := ev["type"].(string)
+		types = append(types, s)
+	}
+	return types
+}
+
+// subscribeTo opens an event stream filtered to one session and the given types.
+func subscribeTo(t *testing.T, sp, session string, types ...string) *verbConn {
+	t.Helper()
+	c := dialVerb(t, sp)
+	params := map[string]any{"session": session}
+	if len(types) > 0 {
+		params["types"] = types
+	}
+	req, err := json.Marshal(map[string]any{"id": 1, "verb": "subscribe", "params": params})
+	if err != nil {
+		t.Fatalf("marshal subscribe: %v", err)
+	}
+	ack := result(t, c.call(t, string(req)))
+	if ack["type"] != EventSubscribed {
+		t.Fatalf("subscribe ack type = %v, want subscribed", ack["type"])
+	}
+	return c
+}
+
+// lifecycleTypes are the window lifecycle event types under test. PTY-driven
+// types (output, bell, window-exit, mode-changed) are excluded so a live shell's
+// startup chatter cannot make these tests flaky.
+var lifecycleTypes = []string{
+	EventWindowCreated,
+	EventWindowClosed,
+	EventWindowRetitled,
+	EventWindowFocused,
+	EventWindowMoved,
+	EventWindowMinimized,
+	EventWindowRestored,
+	EventWorkspaceSwitched,
+}
+
+// syncingTUI is a fake attached TUI that behaves like the real one: it receives
+// the daemon's state pushes and echoes the state back with UpdateState, which is
+// what a real client does after absorbing a daemon-side change into its layout.
+// It never emits events itself.
+type syncingTUI struct {
+	d    *Daemon
+	sess *Session
+	conn *connState
+}
+
+// attachSyncingTUI registers the fake TUI and drains whatever the daemon pushes
+// at it, so a push can never block a mutation for the rest of the test.
+func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
+	t.Helper()
+	tui, clientSide := newFakeTUI(t, d, sess.ID)
+	s := &syncingTUI{d: d, sess: sess, conn: tui}
+
+	go func() {
+		for {
+			if _, err := ReadMessage(clientSide); err != nil {
+				return
+			}
+		}
+	}()
+	return s
+}
+
+// sync pushes a state snapshot to the daemon exactly as a TUI client does, via
+// the daemon's update-state handler.
+func (s *syncingTUI) sync(state *SessionState) {
+	msg, err := NewMessage(MsgUpdateState, state)
+	if err != nil {
+		return
+	}
+	_ = s.d.handleUpdateState(s.conn, msg)
+}
+
+// newTUIWindow builds the window a TUI would add for a new-window command,
+// including a live PTY, and appends it to state with focus, mirroring
+// AddDaemonWindow.
+func newTUIWindow(t *testing.T, sess *Session, state *SessionState, id, title string) {
+	t.Helper()
+	pty, err := sess.CreatePTY(id, 78, 22, nil)
+	if err != nil {
+		t.Fatalf("CreatePTY: %v", err)
+	}
+	ws := state.CurrentWorkspace
+	if ws < 1 {
+		ws = 1
+		state.CurrentWorkspace = 1
+	}
+	state.Windows = append(state.Windows, WindowState{
+		ID: id, Title: title, Width: 80, Height: 24, Workspace: ws, PTYID: pty.ID,
+	})
+	state.FocusedWindowID = id
+	if state.WorkspaceFocus == nil {
+		state.WorkspaceFocus = make(map[int]string)
+	}
+	state.WorkspaceFocus[ws] = id
+}
+
+func hasKey(m map[string]any, key string) bool {
+	_, ok := m[key]
+	return ok
+}

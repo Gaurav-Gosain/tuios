@@ -440,9 +440,6 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "path": path, "bytes": len(data)}, nil
 }
 
-// maxPasteReply bounds the far daemon's answer to paste-pane-image.
-const maxPasteReply = 64 * 1024
-
 // stashTransferMaxBytes bounds a file that crosses the socket as bytes, in
 // either direction. It is under the per-file cap because the bytes travel
 // base64 in one request or reply line, and that line is capped at 16 MiB.

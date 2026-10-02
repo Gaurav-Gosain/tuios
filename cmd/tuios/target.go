@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -184,50 +183,6 @@ func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 func markUntrusted(fields map[string]any, host string) {
 	fields["host"] = host
 	fields["untrusted"] = true
-}
-
-// markHostRows marks each far host's entry in an aggregated listing
-// (list-host-sessions, list-host-agents) untrusted. This machine's own entry,
-// under federation.LocalHostName, is left as it is. A result that does not
-// have the expected shape is returned unchanged.
-func markHostRows(raw json.RawMessage) json.RawMessage {
-	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return raw
-	}
-	hosts, ok := fields["hosts"].([]any)
-	if !ok {
-		return raw
-	}
-	for _, h := range hosts {
-		entry, ok := h.(map[string]any)
-		if !ok {
-			continue
-		}
-		if name, _ := entry["host"].(string); name != "" && name != federation.LocalHostName {
-			entry["untrusted"] = true
-		}
-	}
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return raw
-	}
-	return out
-}
-
-// thisMachine is the name this machine gives itself when it sends something
-// to another: TUIOS_HOST inside a pane, which the daemon set from the
-// hostname, else the hostname. It is a claim the far side cannot check, and
-// it is shown there as one.
-func thisMachine() string {
-	if h := os.Getenv("TUIOS_HOST"); h != "" {
-		return h
-	}
-	h, err := os.Hostname()
-	if err != nil {
-		return ""
-	}
-	return h
 }
 
 // printVerbResultOn is printVerbResult with the host added to the JSON.

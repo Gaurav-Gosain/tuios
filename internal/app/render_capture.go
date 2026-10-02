@@ -4,12 +4,14 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -250,4 +252,17 @@ func (m *OS) CaptureWindowAt(x, y int) int {
 		}
 	}
 	return top
+}
+
+// paneOnScreen is the rectangle a pane covers on the screen: its own in the
+// layout, or in a view of a larger session shifted by the view and clipped to
+// the view's pane area. It reports false for a pane the view does not show.
+func (m *OS) paneOnScreen(w *terminal.Window) (image.Rectangle, bool) {
+	r := image.Rect(w.X, w.Y, w.X+w.Width, w.Y+w.Height)
+	v := m.sessionView
+	if !v.on {
+		return r, true
+	}
+	r = r.Add(image.Pt(v.dx, v.dy)).Intersect(v.clip)
+	return r, !r.Empty()
 }

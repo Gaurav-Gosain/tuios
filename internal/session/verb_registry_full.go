@@ -1076,3 +1076,18 @@ func missingVerbError(string) *verbError { return nil }
 // missingCallError is nil in the full build, which has every feature of
 // every verb.
 func missingCallError(string, []byte) *verbError { return nil }
+
+var identityReturn = verbParam{Name: "identity", Type: "string", Description: "What named the agent: report (the harness named itself), manifest (a manifest rule matched the process), list (a name list matched the process) or hint (TUIOS_AGENT in the process environment). Empty when nothing named it.", Accepted: []string{"report", "manifest", "list", "hint", ""}}
+
+var confidenceReturn = verbParam{Name: "confidence", Type: "string", Description: "How sure the identity is: certain for report, strong for manifest, list and hint, none when nothing named the agent.", Accepted: []string{"certain", "strong", "none"}}
+
+var evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Nullable: true, Description: "Milliseconds since the last evidence about the state arrived. For a state the agent or a rule reported, that is the report. For a state the detector or the silence timer inferred (source detect or stall), it is the later of that and the pane's last output. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
+
+// selectWriteParams are the two params a write addressed by selector takes.
+// what says what the write does to the panes the selector matches.
+func selectWriteParams(what string) []verbParam {
+	return []verbParam{
+		{Name: "select", Type: "string", Description: selectorSyntax + " " + what + " It reaches agent panes on this machine, in every session, and takes no session and no window. Without confirm nothing is sent: the call fails with confirm_required, whose hint lists the panes in available and carries the token in confirm."},
+		{Name: "confirm", Type: "string", Description: "The token for the set of panes the selector matches, from a confirm_required hint or from list-agents with the same selector. The write goes ahead only when the selector still matches exactly that set; otherwise it fails with confirm_required again and the new set."},
+	}
+}

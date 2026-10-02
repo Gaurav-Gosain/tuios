@@ -3,10 +3,12 @@
 package app
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
 // wrapCase is one list: how to put rows in it, how to move it, and where its
@@ -297,4 +299,23 @@ func TestConfirmationsDoNotWrap(t *testing.T) {
 	if m.filePrompt.Selected != fileConfirmRowCancel {
 		t.Errorf("up from Cancel in the file dialog went to row %d", m.filePrompt.Selected)
 	}
+}
+
+func fakeEntries(names ...string) []applist.Entry {
+	out := make([]applist.Entry, len(names))
+	for i, n := range names {
+		out[i] = applist.Entry{Name: n, Path: filepath.Join("/usr/bin", n), Dir: "/usr/bin", Source: applist.SourcePath}
+	}
+	return out
+}
+
+// seedLauncher fills the launcher's rows the way a finished scan does, without
+// touching the real $PATH. It goes through applyPathApps so the rows are built
+// and ordered exactly as a real scan builds them.
+func seedLauncher(t *testing.T, m *OS, names ...string) {
+	t.Helper()
+	open := m.ShowLauncher
+	m.ShowLauncher = true
+	m.applyPathApps(fakeEntries(names...))
+	m.ShowLauncher = open
 }

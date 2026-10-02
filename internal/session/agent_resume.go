@@ -372,3 +372,15 @@ func (d *Daemon) resumeError(sess *Session, plan resumePlan, err error) *verbErr
 	}
 	return mapResolveErr(err, sess)
 }
+
+// resumeOffer is one pane a restore brought back with a conversation that
+// can be resumed.
+type resumeOffer struct {
+	session   string
+	window    string
+	workspace int
+	name      string
+	harness   string
+	sessionID string
+	argv      []string
+}

@@ -184,23 +184,6 @@ func (s *Selector) Has(key string) bool {
 	return false
 }
 
-// mapValues rewrites every value of the terms on key. The daemon uses it to
-// turn a program name into the harness id it names, and this machine's own
-// name into local.
-func (s *Selector) mapValues(key string, f func(string) string) {
-	if s == nil {
-		return
-	}
-	for i := range s.terms {
-		if s.terms[i].key != key {
-			continue
-		}
-		for j, v := range s.terms[i].values {
-			s.terms[i].values[j] = f(v)
-		}
-	}
-}
-
 // Match reports whether every term matches the target.
 func (s *Selector) Match(t SelectorTarget) bool {
 	if s == nil || len(s.terms) == 0 {

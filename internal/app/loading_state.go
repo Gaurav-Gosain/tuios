@@ -1,13 +1,11 @@
 package app
 
 import (
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Loading states are drawn only once a load has run past overlay.LoadingDelay.
@@ -51,28 +49,4 @@ func (m *OS) loadingFrameCmd() tea.Cmd {
 	}
 	m.loadingFrameAt = due
 	return tea.Tick(due.Sub(now), func(time.Time) tea.Msg { return loadingShownMsg{} })
-}
-
-// emptyPanel draws a panel whose body is an empty state: the message centred
-// in rows rows, with detail wrapped to the panel's width and one key hint
-// under it. It is for overlays that have nothing to list, which used to say
-// so in a line of text at the top left of an otherwise blank panel.
-func (m *OS) emptyPanel(title string, preferredWidth, rows int, message string, detail []string, hint overlay.Hint, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
-	bg := pal.Surface
-	width := m.panelWidth(preferredWidth)
-	var wrapped []string
-	for _, d := range detail {
-		wrapped = append(wrapped, wrapPlain(d, max(width-4, 1))...)
-	}
-	e := overlay.Empty{Message: message, Detail: wrapped, Hint: hint}
-	rows, hints = m.panelBody(max(rows, len(wrapped)+4), 0, width, nil, hints)
-	panel := overlay.Panel{
-		Title: title,
-		Width: width,
-		Body:  strings.Join(e.Lines(width, rows, bg, pal), "\n"),
-		Hints: hints,
-	}
-	content, geo := panel.Render(pal)
-	return content, geo, nil
 }

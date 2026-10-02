@@ -25,10 +25,6 @@ type screenshotPreview struct {
 	Open bool
 }
 
-type captureHit struct{}
-
-type screenshotPlacementState struct{}
-
 // noScreenshots says the feature is not in this build.
 func (m *OS) noScreenshots() {
 	m.ShowNotification(edition.MissingMessage("Screenshot"), "info", m.Settings.NotificationDuration)

@@ -61,22 +61,6 @@ func openFilesOn(t *testing.T, m *OS, dir string) {
 	m.HandleFileList(msg)
 }
 
-// saverSettings is the settings a saver engine is built from, with the frame
-// rate the caller names. NormalFPS is the only field screensaverBuild reads,
-// and it is per session now, so a test says the rate by handing one over
-// instead of writing a package variable another session could read.
-func saverSettings(rate int) *config.Settings {
-	s := config.DefaultSettings()
-	s.NormalFPS = rate
-	return &s
-}
-
-// defaultSaverSettings is saverSettings at the rate a session starts on, for
-// the tests that build an engine but make no claim about its clock.
-func defaultSaverSettings() *config.Settings {
-	return saverSettings(config.DefaultSettings().NormalFPS)
-}
-
 // findSetting locates a setting row by category and label, returning its
 // category/item indices and the item itself.
 func findSetting(m *OS, category, label string) (catIdx, itemIdx int, item settingItem, ok bool) {

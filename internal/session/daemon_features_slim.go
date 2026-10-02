@@ -139,6 +139,14 @@ func (d *Daemon) onPaneOutput(s *Session, _ SessionEvent, pty *PTY) {
 	s.noteCwdOnOutput(pty)
 }
 
+// connFeatures is empty in tuios-slim, which has no subscribe verb and no
+// links. See daemon_features_full.go.
+type connFeatures struct{} //nolint:unused // embedded in connState so both builds share one struct
+
+// resumeOffer stands in for a pane that a restore could resume. tuios-slim
+// resumes no agent conversation, so it never holds one.
+type resumeOffer struct{}
+
 // refuseGlobalSession refuses new --global from a full client: a global
 // session holds panes from more than one machine, and tuios-slim links to no
 // other machine. The slim CLI refuses the flag itself.

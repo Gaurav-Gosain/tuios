@@ -967,17 +967,6 @@ func (d *Daemon) checkGrantMessage(cs *connState, t MessageType) *verbError {
 	return grantForbidden("attach", pa, "the client protocol (attach, input, windows) needs the admin grant")
 }
 
-// paneMayRespond reports whether the caller is a pane holding respond that may
-// answer a prompt in session target. It is the second way past respond's
-// check for the person, after an attach nonce.
-func (d *Daemon) paneMayRespond(cs *connState, target string) bool {
-	pa := d.paneAuthority(cs)
-	if pa == nil || !pa.grants.Has(GrantRespond) {
-		return false
-	}
-	return d.paneWriteReach(pa, target) == ""
-}
-
 // launchGrants decides what a pane that cs starts holds. requested is the
 // call's grants parameter, nil when it named none. The result is nil for a
 // pane that holds the default.

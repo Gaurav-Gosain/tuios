@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -137,35 +136,6 @@ const (
 	outerTmux
 	outerScreen
 )
-
-// detectOuterMultiplexer reports what the client's terminal is running inside.
-//
-// Locally, $TMUX and $STY are the direct answers, set for their own children,
-// and TERM backs them up. With `tuios ssh` the TUI runs on the remote host,
-// where the server's own environment says nothing about the user's terminal:
-// the TERM the client sent in its pty request is what carries the fact, and
-// the server's $TMUX/$STY describe only where the server was started.
-func (m *OS) detectOuterMultiplexer() outerMultiplexer {
-	if m.IsSSHMode && m.SSHSession != nil {
-		if term, ok := sshClientTerm(m.SSHSession); ok {
-			switch {
-			case strings.HasPrefix(term, "tmux"):
-				return outerTmux
-			case strings.HasPrefix(term, "screen"):
-				return outerScreen
-			}
-		}
-		return outerNone
-	}
-	term := os.Getenv("TERM")
-	switch {
-	case os.Getenv("TMUX") != "", strings.HasPrefix(term, "tmux"):
-		return outerTmux
-	case os.Getenv("STY") != "", strings.HasPrefix(term, "screen"):
-		return outerScreen
-	}
-	return outerNone
-}
 
 // writeHostSequence writes raw bytes to the terminal the client is attached to.
 //

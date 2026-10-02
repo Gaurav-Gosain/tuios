@@ -92,32 +92,6 @@ func newAgentHookGate() *agentHookGate {
 	return &agentHookGate{pending: make(map[string]*time.Timer)}
 }
 
-// park cancels whatever was waiting for this window and schedules fire after d.
-func (g *agentHookGate) park(key string, d time.Duration, fire func()) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if t, ok := g.pending[key]; ok {
-		t.Stop()
-		delete(g.pending, key)
-	}
-	g.pending[key] = time.AfterFunc(d, func() {
-		g.mu.Lock()
-		delete(g.pending, key)
-		g.mu.Unlock()
-		fire()
-	})
-}
-
-// cancel drops a parked firing without running it.
-func (g *agentHookGate) cancel(key string) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if t, ok := g.pending[key]; ok {
-		t.Stop()
-		delete(g.pending, key)
-	}
-}
-
 // stop cancels every parked firing. It runs on daemon shutdown.
 func (g *agentHookGate) stop() {
 	g.mu.Lock()

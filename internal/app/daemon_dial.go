@@ -7,15 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// shortWindowLabel is the first eight characters of a window id, which is how
-// list-windows prints one.
-func shortWindowLabel(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
-}
-
 // verbDialer reaches the daemon that holds the session this client shows:
 // the host's when the client is attached through one, else this machine's.
 func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
@@ -43,25 +34,6 @@ type agentMailDial func() (*session.VerbClient, error)
 
 // inboxVerbCall makes one verb call to this machine's daemon.
 type inboxVerbCall func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
-
-// inboxCaller is how the peek reaches the daemon. Tests set InboxState.call.
-func (m *OS) inboxCaller() inboxVerbCall {
-	if m.Inbox.call != nil {
-		return m.Inbox.call
-	}
-	build := ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = client.Close() }()
-		return client.CallWithTimeout(verb, params, timeout)
-	}
-}
 
 // SetInboxVerbCaller replaces how the peek reaches the daemon and where it
 // reads the attach nonce from. Tests use it; nil for either restores the

@@ -448,19 +448,6 @@ func (m *OS) sendWindowSizeToDaemon(value string) {
 	}()
 }
 
-// paneOnScreen is the rectangle a pane covers on the screen: its own in the
-// layout, or in a view of a larger session shifted by the view and clipped to
-// the view's pane area. It reports false for a pane the view does not show.
-func (m *OS) paneOnScreen(w *terminal.Window) (image.Rectangle, bool) {
-	r := image.Rect(w.X, w.Y, w.X+w.Width, w.Y+w.Height)
-	v := m.sessionView
-	if !v.on {
-		return r, true
-	}
-	r = r.Add(image.Pt(v.dx, v.dy)).Intersect(v.clip)
-	return r, !r.Empty()
-}
-
 // paneChromeAt places chrome a pane anchors at a layout position (the
 // copy-mode search prompt, the multi copy "Save to" prompt) on the screen. It
 // is the position itself unless the client shows a view of a larger session,

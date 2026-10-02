@@ -43,27 +43,6 @@ func (m *OS) markAgentSeen(windowID string) {
 	m.saveSidebarState()
 }
 
-// agentTransitionNotice is the word and severity a state change earns, or "" for
-// a transition with nothing to say. Which of these actually reaches the user is
-// the [notifications.agent] policy's decision, not this function's: working and
-// idle have words here because they are configurable, and are silent by default
-// because an agent starting is not news and the stall timer guesses at idle.
-func agentTransitionNotice(to string) (string, string) {
-	switch to {
-	case "needs_input":
-		return sidebarStateWords(to), "warning"
-	case "errored":
-		return "errored", "error"
-	case "done":
-		return sidebarStateWords(to), "success"
-	case "working":
-		return "working", "info"
-	case "idle":
-		return "idle", "info"
-	}
-	return "", ""
-}
-
 // noteAgentState folds one window's agent-state transition into the unread bit
 // and hands it to the alert policy. Leaving done clears the bit; finishing under
 // the user's own eyes counts as seen.
@@ -166,13 +145,6 @@ func (m *OS) markAgentSeenAt(w *terminal.Window) {
 	}
 	m.SidebarAgentSeenAt[w.ID] = agentSeenAtNow()
 	m.saveSidebarState()
-}
-
-// agentAwaySince is when this client's user last had the pane in front of
-// them, and false when they never have. The away recap starts here.
-func (m *OS) agentAwaySince(windowID string) (int64, bool) {
-	at, ok := m.SidebarAgentSeenAt[windowID]
-	return at, ok && at > 0
 }
 
 // markAgentSeenSeq records that a pane was looked at with seq turns finished.

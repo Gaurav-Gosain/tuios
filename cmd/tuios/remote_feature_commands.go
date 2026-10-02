@@ -736,3 +736,15 @@ func maybeCopyScreenshot(path, format string, req screenshotRequest) (bool, []st
 	}
 	return true, nil
 }
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+// sendAndWaitForResult sends a message and waits for the result (human-readable output).
+func sendAndWaitForResult(client *session.Client, msg *session.Message, requestID string) error {
+	return sendAndWaitForResultWithFormat(client, msg, requestID, false, nil)
+}

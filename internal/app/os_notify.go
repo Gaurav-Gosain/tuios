@@ -210,12 +210,6 @@ func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Durat
 	m.showNotification(message, notifType, "", duration, &target)
 }
 
-// showAgentNotification is ShowNotificationFrom for a message announcing an
-// agent state: the dock marks it with that state's own mark.
-func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, agentState, duration, &target)
-}
-
 func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget) {
 	// Always log, even for a message that will not be shown: the log viewer is
 	// where a message that was dropped or has already expired is read.

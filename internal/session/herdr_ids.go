@@ -54,9 +54,6 @@ func herdrPaneID(sessionID, windowID string) string {
 	return herdrWorkspaceID(sessionID) + ":p" + herdrHex(windowID)
 }
 
-// herdrIDError is a failed lookup: herdr's code and message.
-type herdrIDError struct{ code, msg string }
-
 // herdrTabFor is the workspace a window's shell starts on, for its
 // HERDR_TAB_ID: spawnWS, the one it is being made on, else the one the window
 // is on, else the one showing. 0 for a scratch workspace, which is not a tab.
