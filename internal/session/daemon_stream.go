@@ -47,12 +47,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 	// print.
 	var batch []byte
 	sub := pty.subscriberFor(cs.clientID)
-	// took accounts for a chunk taken off the stream, so broadcast can tell
-	// how much this client still holds.
-	took := func(c ptyChunk) {
-		if sub != nil {
-			sub.queued.Add(-int64(len(c.data)))
-		}
+	// take accounts for a chunk taken off the stream, so broadcast can tell
+	// how much this client still holds, and adds its bytes to the batch. A
+	// frame broadcast dropped for a newer one adds nothing.
+	take := func(c ptyChunk) {
+		batch = takeChunk(batch, c, sub)
+		pty.wakePacer()
 	}
 
 	// The frame window: when it opened and how many bytes went out in it.
@@ -60,6 +60,9 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 	var windowStart time.Time
 	windowBytes := 0
 	var hold *time.Timer
+	// resize is a value, not a pointer: taking the address of the receive
+	// variables made them escape, one allocation per chunk.
+	var resize ptyChunk
 
 	for {
 		select {
@@ -70,6 +73,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 		case chunk, ok := <-outputCh:
 			if !ok {
 				return
+			}
+			batch = batch[:0]
+			resize = ptyChunk{}
+			// A dropped frame costs nothing to skip.
+			if chunk.frame != nil && chunk.frame.state.Load() == frameDropped {
+				goto send
 			}
 			// A resize is never held: it carries no bytes and it ends a batch
 			// anyway. Bytes after a full window wait for the window to end, and
@@ -90,47 +99,44 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 					}
 				}
 			}
-			took(chunk)
 			// A resize marks the byte the daemon's emulator changed width at,
 			// so it ends the batch in front of it and is sent on its own.
 			// Coalescing it into the bytes either side would put the client's
 			// emulator at the wrong width for one of them.
-			//
-			// resize is a value, not a pointer: taking the address of the
-			// receive variables made them escape, one allocation per chunk.
-			var resize ptyChunk
 			if chunk.isResize() {
 				resize = chunk
-				batch = batch[:0]
 			} else {
-				batch = append(batch[:0], chunk.data...)
+				take(chunk)
 				for len(batch) < maxBatch {
 					select {
 					case more, ok := <-outputCh:
 						if !ok {
 							goto send
 						}
-						took(more)
 						if more.isResize() {
 							resize = more
 							goto send
 						}
-						batch = append(batch, more.data...)
+						take(more)
 					default:
 						goto send
 					}
 				}
 			}
 		send:
-			if len(batch) > 0 {
+			// A frame can make the batch larger than maxBatch, so it goes out
+			// in pieces of at most maxBatch, each with its own deadline.
+			for out := batch; len(out) > 0; {
+				piece := out[:min(len(out), maxBatch)]
+				out = out[len(piece):]
 				cs.sendMu.Lock()
 				_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				err := WritePTYOutput(cs.conn, pty.ID, batch)
+				err := WritePTYOutput(cs.conn, pty.ID, piece)
 				cs.sendMu.Unlock()
 				if now := time.Now(); now.Sub(windowStart) >= streamFrameInterval {
-					windowStart, windowBytes = now, len(batch)
+					windowStart, windowBytes = now, len(piece)
 				} else {
-					windowBytes += len(batch)
+					windowBytes += len(piece)
 				}
 				if err != nil {
 					// The write failed mid-frame (a slow/stuck client hitting the 5s
@@ -159,6 +165,24 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 			}
 		}
 	}
+}
+
+// takeChunk takes one chunk off a client's stream: it appends the chunk's
+// bytes to batch and settles the accounting broadcast reads. A frame that
+// broadcast dropped for a newer one adds nothing.
+func takeChunk(batch []byte, c ptyChunk, sub *ptySubscriber) []byte {
+	if c.frame != nil {
+		if c.frame.take() {
+			for _, part := range c.frame.parts {
+				batch = append(batch, part...)
+			}
+		}
+		return batch
+	}
+	if sub != nil {
+		sub.queued.Add(-int64(len(c.data)))
+	}
+	return append(batch, c.data...)
 }
 
 // notifyPTYClosed sends MsgPTYClosed to all clients subscribed to the given PTY.

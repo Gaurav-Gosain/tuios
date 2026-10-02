@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("0$%$%")
+byte('\x00')
+byte('?')
+byte('V')

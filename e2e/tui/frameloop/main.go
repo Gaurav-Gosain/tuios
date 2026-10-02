@@ -65,6 +65,20 @@ func main() {
 	if len(os.Args) > 4 && os.Args[4] != "" {
 		transport = os.Args[4]
 	}
+	// countFile, when given, holds how many frames the app has written so far,
+	// so a test can see whether the terminal held the app back. Each count is
+	// written after the frame's write returned.
+	var countFile string
+	if len(os.Args) > 5 {
+		countFile = os.Args[5]
+	}
+	written := 0
+	wrote := func() {
+		written++
+		if countFile != "" {
+			_ = os.WriteFile(countFile, []byte(strconv.Itoa(written)), 0o644)
+		}
+	}
 
 	// One shared memory object per size, and the object is never resized once
 	// advertised: a terminal maps what it is handed, and truncating it under
@@ -97,7 +111,7 @@ func main() {
 			pix[i] = byte((i + gen*37) * 7)
 		}
 		pixW, pixH = w, h
-		if transport == "b64" {
+		if transport == "b64" || transport == "text" {
 			return nil
 		}
 		name := fmt.Sprintf("tuios-frameloop-%d-%d", os.Getpid(), gen)
@@ -159,6 +173,15 @@ func main() {
 	defer func() { _, _ = os.Stdout.WriteString("\x1b[?1049l") }()
 
 	seq := 0
+	if transport == "text" {
+		// A text flood of the same shape: a full screen of text a frame, as
+		// fast as the terminal takes it, and no graphics at all.
+		for {
+			seq++
+			_, _ = os.Stdout.Write(buildTextFrame(seq, cols, rows))
+			wrote()
+		}
+	}
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	defer tick.Stop()
 	// relayout fires when the app has finished re-rendering at a new size. It
@@ -194,6 +217,7 @@ func main() {
 			}
 			if transport == "b64" {
 				_, _ = os.Stdout.Write(buildB64Frame(pix, pixW, pixH))
+				wrote()
 				continue
 			}
 			if shmFile != nil {
@@ -203,6 +227,7 @@ func main() {
 			}
 			fmt.Printf("\x1b[H\x1b_Ga=T,f=32,t=s,s=%d,v=%d,i=1,q=2,C=1;%s\x1b\\",
 				xpx, ypx, encoded)
+			wrote()
 		}
 	}
 }
@@ -234,6 +259,19 @@ func buildB64Frame(pix []byte, w, h int) []byte {
 		}
 		b = append(b, chunk...)
 		b = append(b, "\x1b\\"...)
+	}
+	return b
+}
+
+// buildTextFrame is one screen of coloured text that changes every frame.
+func buildTextFrame(seq, cols, rows int) []byte {
+	b := []byte("\x1b[H")
+	for r := 0; r < rows-1; r++ {
+		b = append(b, fmt.Sprintf("\x1b[3%dm", (seq+r)%8)...)
+		for c := 0; c < cols-1; c++ {
+			b = append(b, byte('a'+(seq+r+c)%26))
+		}
+		b = append(b, "\x1b[0m\r\n"...)
 	}
 	return b
 }

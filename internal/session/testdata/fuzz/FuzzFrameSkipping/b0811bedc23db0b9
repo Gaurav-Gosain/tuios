@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("%01")
+byte('\x13')
+byte('\u0089')
+byte('1')
