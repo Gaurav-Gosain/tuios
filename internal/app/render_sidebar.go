@@ -457,6 +457,13 @@ type sidebarAgentEntry struct {
 	// section folded away: how many, and FoldNames names them. It is no pane.
 	Fold      int
 	FoldNames string
+	// Workspace is the pane's workspace number, 0 when the wire did not say.
+	// The workspace token draws it as the quiet right-hand mark.
+	Workspace int
+	// SessionIndex is the session's 1-based position in the local rail, the
+	// number switch_session_N opens. 0 when the session is not local, so no
+	// number on this machine reaches it.
+	SessionIndex int
 }
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
@@ -2006,7 +2013,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 		// older daemon sends neither field) tags nothing at all rather than
 		// tagging everything.
 		e.workspace = win.Workspace
-		if node.Workspace > 0 && win.Workspace > 0 && win.Workspace != node.Workspace {
+		if node.Workspace > 0 && win.Workspace > 0 {
 			if node.IsCurrent {
 				e.Tag = m.workspaceTag(win.Workspace)
 			} else {
@@ -2068,6 +2075,12 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 		return nil
 	}
 	var agents []sidebarAgentEntry
+	// The same walk SwitchToSessionByIndex does, so the number the token draws
+	// is the number that opens the session.
+	localIndex := make(map[string]int)
+	for i, s := range localSessionNodes(sessions) {
+		localIndex[s.ID] = i + 1
+	}
 	for _, s := range sessions {
 		for _, win := range s.Children {
 			if win.AgentState == "" {
@@ -2092,9 +2105,11 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Queued:       win.Queued,
 				Subagents:    win.Subagents,
 				WindowIndex:  idx,
+				SessionIndex: localIndex[s.ID],
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,
 				Focused:      s.IsCurrent && win.IsCurrent,
+				Workspace:    win.Workspace,
 			})
 		}
 	}
@@ -2407,7 +2422,10 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
 	}
 	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
-	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
+	// The attached session's name is bold. The gutter mark is too quiet a
+	// signal to find "which one am I on" in, and weight on the name is the
+	// one emphasis every row already speaks.
+	name := sidebarStyle(rowBg, fg).Bold(node.IsCurrent || sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)) + branch
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
