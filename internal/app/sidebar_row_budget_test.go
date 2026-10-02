@@ -70,9 +70,9 @@ func TestRailRowFit(t *testing.T) {
 			keep: []bool{false}, room: 12,
 		},
 		{
-			name:  "context is offered its cells after every other token",
+			name:  "context is offered its cells before the facts that give way",
 			nameW: 6, tokens: []railToken{{Cost: 7, Whole: true}, {Cost: 7}}, avail: 14,
-			keep: []bool{false, true}, room: 7,
+			keep: []bool{true, false}, room: 7,
 		},
 		{
 			// A plain token here would come back: 3 cells beside the whole name.

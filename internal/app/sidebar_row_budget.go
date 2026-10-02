@@ -129,10 +129,10 @@ func railRowFitInto(buf []bool, nameW, keepW int, tokens []railToken, avail int)
 		used += c
 		inset = inset || tokens[i].Right
 	}
-	// The tokens that are facts of their own, against the name's keep.
+	// The right-hand figures first: the row's state outranks its notes.
 	for i := len(tokens) - 1; i >= 0; i-- {
 		tk := tokens[i]
-		if tk.Cost <= 0 || tk.Whole {
+		if tk.Cost <= 0 || !tk.Right {
 			continue
 		}
 		if c := cost(tk); reserve+used+c <= avail {
@@ -140,7 +140,9 @@ func railRowFitInto(buf []bool, nameW, keepW int, tokens []railToken, avail int)
 		}
 	}
 	// Then the tokens that are context for the name, against all of it. The
-	// first one that does not fit ends the walk.
+	// first one that does not fit ends the walk: a prefix is only worth its
+	// cells while the whole name it names still fits beside it.
+	wholeKept := false
 	for i := len(tokens) - 1; i >= 0; i-- {
 		tk := tokens[i]
 		if tk.Cost <= 0 || !tk.Whole {
@@ -151,6 +153,24 @@ func railRowFitInto(buf []bool, nameW, keepW int, tokens []railToken, avail int)
 			break
 		}
 		take(i, c)
+		wholeKept = true
+	}
+	// Then the tokens that are facts of their own, against what is left. A
+	// kept context token holds the whole name for the name: an address the
+	// switch keys re-derive any time yields before the row loses the name it
+	// was for.
+	floor := reserve
+	if wholeKept {
+		floor = nameW
+	}
+	for i := len(tokens) - 1; i >= 0; i-- {
+		tk := tokens[i]
+		if tk.Cost <= 0 || tk.Whole || tk.Right {
+			continue
+		}
+		if c := cost(tk); floor+used+c <= avail {
+			take(i, c)
+		}
 	}
 	return keep, avail - used
 }
