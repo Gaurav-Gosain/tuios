@@ -129,7 +129,7 @@ func GetANSIPalette() [16]color.Color {
 	}
 	var pal [16]color.Color
 	for i, c := range ANSIOrder(t) {
-		pal[i] = c
+		pal[i] = AsColor(c)
 	}
 	return pal
 }
@@ -175,7 +175,7 @@ func TerminalFg() color.Color {
 	if t == nil {
 		return lipgloss.Color("#e5e5e5")
 	}
-	return t.Fg
+	return AsColor(t.Fg)
 }
 
 // TerminalBg returns the background color for terminal emulator.
@@ -184,16 +184,30 @@ func TerminalBg() color.Color {
 	if t == nil {
 		return lipgloss.Color("#000000")
 	}
-	return t.Bg
+	return AsColor(t.Bg)
 }
 
-// TerminalCursor returns the color for the terminal cursor.
+// TerminalCursor returns the color for the terminal cursor. It is nil when
+// the theme names no cursor colour, which some built-in themes do not.
 func TerminalCursor() color.Color {
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#00ff00")
 	}
-	return t.Cursor
+	return AsColor(t.Cursor)
+}
+
+// AsColor returns c as a color.Color, and a nil interface when c is nil.
+//
+// A tint leaves a colour it does not name as a nil *tint.Color. Put into a
+// color.Color as it is, that nil pointer makes an interface that is not nil,
+// so a caller's nil check passes and the RGBA call on it panics. An OSC 12
+// query in a pane under a theme with no cursor colour did exactly that.
+func AsColor(c *tint.Color) color.Color {
+	if c == nil {
+		return nil
+	}
+	return c
 }
 
 // borderInk measures a theme-derived border against the pane it frames. A

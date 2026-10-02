@@ -306,7 +306,7 @@ func (m *OS) hostColorsChanged() {
 // chrome ramp's canvas, which every constant ink was picked against.
 func (m *OS) railGround() color.Color {
 	if t := theme.Current(); t != nil {
-		return t.Bg
+		return theme.AsColor(t.Bg)
 	}
 	if m.host.bg != nil {
 		return m.host.bg
