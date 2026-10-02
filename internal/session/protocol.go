@@ -350,6 +350,11 @@ type AttachedPayload struct {
 	// Empty from an older daemon, which verifies nothing; a client then sends
 	// no nonce and its mail is stored as claimed_human.
 	HumanNonce string `json:"human_nonce,omitempty"`
+	// Policy is the window_size policy the size above was settled under. A
+	// client reports input only under latest, and a resize broadcast is not
+	// sent to the client it answers, so the reply has to say it. Empty from
+	// an older daemon, which leaves the client reporting all input.
+	Policy string `json:"policy,omitempty"`
 }
 
 // NewPayload requests creation of a new session.

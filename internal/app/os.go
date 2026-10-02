@@ -167,10 +167,14 @@ type OS struct {
 	// frame, so the drag and the release that follow it are too.
 	pressInLayout bool
 	// lastActivity is when the person last gave input at this client, and
-	// wasLatest whether the session's window_size policy was latest on the
-	// last message. See reportActivity.
-	lastActivity time.Time
-	wasLatest    bool
+	// wasLatest whether the daemon named the session's window_size policy
+	// latest on the last message. activitySession is the session that was
+	// for, and activitySince when this client moved into it. See
+	// reportActivity.
+	lastActivity    time.Time
+	wasLatest       bool
+	activitySession string
+	activitySince   time.Time
 	// viewMark is the last mark renderViewMark built. See viewMarkCache.
 	viewMark viewMarkCache
 	// pointerSeenX/Y is where the host last reported the pointer, whether or

@@ -457,6 +457,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.NoteSession(payload.SessionName)
 		c.noteSessionLayout(payload.Generation, payload.Reserve)
+		c.noteSizePolicy(payload.Policy)
 		return payload.State, nil
 
 	case MsgError:
@@ -550,6 +551,9 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 
 	prevName := c.SessionName()
 	debugLog("[SWITCH] Starting session switch to %q", targetName)
+	// The policy was the old session's. Unknown until the attach reply says
+	// the new one's, so input is reported meanwhile.
+	c.noteSizePolicy("")
 
 	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
 	detachMsg, err := NewMessage(MsgDetach, nil)
@@ -660,6 +664,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
 		}
 		c.NoteSession(payload.SessionName)
+		c.noteSizePolicy(payload.Policy)
 		return payload.State, nil
 
 	case MsgError:

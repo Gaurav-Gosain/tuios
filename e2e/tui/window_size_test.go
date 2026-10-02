@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -38,7 +40,14 @@ const (
 // wsSize is the size the daemon settled on, and the policy it used.
 func wsSize(t *testing.T, base string) (w, h int, policy string) {
 	t.Helper()
-	out, err := tuiosCLI(t, base, "session-info", "-s", wsSession, "--json")
+	return sessionPolicySize(t, base, wsSession)
+}
+
+// sessionPolicySize is the size the daemon settled a session on, and the
+// policy it used.
+func sessionPolicySize(t *testing.T, base, session string) (w, h int, policy string) {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "session-info", "-s", session, "--json")
 	if err != nil {
 		t.Fatalf("session-info: %v\n%s", err, out)
 	}
@@ -241,6 +250,148 @@ func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 	// From there input moves it as usual.
 	activity(t, small)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
+}
+
+// TestWindowSizeSwitchIntoLatestReportsInput moves a client that knows its
+// session is smallest into a session that is latest. The policy it knew was
+// the old session's, so after the switch it has to report its input, and
+// the session has to follow it.
+//
+// NEGATIVE CONTROL: on a build where the attach reply does not carry the
+// policy and a switch does not clear it, the client keeps smallest, sends
+// nothing, and the session stays at 200x50.
+func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
+	const other = "other"
+	base := t.TempDir()
+	writeConfig(t, base, "")
+	killDaemon(t, base)
+	for _, name := range []string{other, wsSession} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v: %s", name, err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "latest", "-s", wsSession); err != nil {
+		t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
+	}
+	attachIn(t, base, wsSession, startOpts{cols: wsBigCols, rows: wsBigRows})
+	waitWSSize(t, base, wsBigCols, wsBigRows, "with the big client alone in ws")
+
+	// The small client attaches to the other session, and learns from a
+	// resize there that it is smallest: a third client shrinks the session
+	// and grows it back.
+	small := attachSmall(t, base, other, startOpts{cols: wsSmallCols, rows: wsSmallRows})
+	third := attachSmall(t, base, other, startOpts{cols: 100, rows: 30})
+	for _, sz := range [][2]int{{70, 20}, {100, 30}} {
+		if err := third.Resize(sz[0], sz[1]); err != nil {
+			t.Fatalf("resize the third client: %v", err)
+		}
+		deadline := time.Now().Add(uiTimeout)
+		want := [2]int{min(sz[0], wsSmallCols), min(sz[1], wsSmallRows)}
+		for {
+			w, h, policy := sessionPolicySize(t, base, other)
+			if w == want[0] && h == want[1] && policy == "smallest" {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s is %dx%d under %s, want %dx%d under smallest", other, w, h, policy, want[0], want[1])
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// The small client moves to ws, where the big client holds the session.
+	if err := small.SendKeys(tuitest.Alt("N")); err != nil {
+		t.Fatalf("next session: %v", err)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, err := tuiosCLI(t, base, "ls", "--json")
+		if err != nil {
+			t.Fatalf("ls: %v\n%s", err, out)
+		}
+		var sessions []struct {
+			Name  string `json:"name"`
+			Width int    `json:"width"`
+		}
+		if err := json.Unmarshal([]byte(out), &sessions); err != nil {
+			t.Fatalf("ls --json printed %q: %v", out, err)
+		}
+		// The third client is alone in the other session once the small
+		// client has left it, so the other session takes its 100 columns.
+		left := false
+		for _, s := range sessions {
+			left = left || (s.Name == other && s.Width == 100)
+		}
+		if left {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the small client never left %s: %s", other, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// The move is not input, so the big client keeps the session.
+	time.Sleep(wsHoldGap)
+	waitWSSize(t, base, wsBigCols, wsBigRows, "after the small client moved into ws")
+
+	time.Sleep(wsHoldGap)
+	activity(t, small)
+	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client, which moved into ws")
+	saveArtifact(t, small, artifactDir(t), "switch-into-latest-small")
+}
+
+// TestWindowSizeSmallestSendsNoActivity counts the activity reports the
+// daemon receives. Under smallest no client reports input, the one that
+// attached second included. Under latest the same input is reported, which
+// is the positive half.
+//
+// NEGATIVE CONTROL: on a build where the attach reply does not carry the
+// policy, the small client never learns smallest and its five keys arrive
+// as reports.
+func TestWindowSizeSmallestSendsNoActivity(t *testing.T) {
+	t.Setenv("TUIOS_LOG_LEVEL", "messages")
+	_, small, base := windowSizePair(t, "", "", nil)
+	waitWSSize(t, base, wsSmallCols, wsSmallRows, "under smallest")
+	reports := func() int {
+		data, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log"))
+		if err != nil {
+			t.Fatalf("read the daemon log: %v", err)
+		}
+		return strings.Count(string(data), "[RECV] ClientActivity")
+	}
+
+	for range 5 {
+		time.Sleep(200 * time.Millisecond)
+		activity(t, small)
+	}
+	time.Sleep(time.Second)
+	if n := reports(); n != 0 {
+		t.Fatalf("under smallest the daemon received %d activity reports, want 0", n)
+	}
+
+	if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "latest", "-s", wsSession); err != nil {
+		t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if _, _, policy := wsSize(t, base); policy == "latest" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the policy never changed to latest")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for range 5 {
+		time.Sleep(200 * time.Millisecond)
+		activity(t, small)
+	}
+	time.Sleep(time.Second)
+	n := reports()
+	t.Logf("activity reports: 0 under smallest, %d under latest", n)
+	if n == 0 {
+		t.Fatal("under latest the daemon received no activity reports")
+	}
 }
 
 // TestWindowSizeLatestDebounce types in both clients in turn, faster than
