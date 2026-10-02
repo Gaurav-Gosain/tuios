@@ -35,7 +35,8 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 	newWindow(t, term)
 	openSettings(t, term)
 
-	// The Appearance tab opens on its first row, Theme. Up wraps to its last.
+	// The Appearance tab opens on its first row, Agent features. Up wraps to
+	// its last.
 	if err := term.SendKeys(tuitest.Up); err != nil {
 		t.Fatalf("up: %v", err)
 	}
@@ -48,9 +49,9 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 		t.Fatalf("down: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return selectedSettingsRow(s, "Theme") != ""
+		return selectedSettingsRow(s, "Agent features") != ""
 	}, uiTimeout); err != nil {
-		t.Fatalf("down on the last row did not go back to the first, Theme: %v\n%s", err, term.Snapshot())
+		t.Fatalf("down on the last row did not go back to the first, Agent features: %v\n%s", err, term.Snapshot())
 	}
 
 	// Confirm quit lives on the Behavior tab; the search finds it from here.
