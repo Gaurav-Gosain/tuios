@@ -1318,6 +1318,23 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 			i = j - 1
 			continue
 		}
+		if st := e.parser.State(); (st == parser.ApcStringState || st == parser.DcsStringState) &&
+			isStringPayload(p[i]) && len(e.grapheme) == 0 {
+			// The payload of an APC or DCS string: a kitty graphics
+			// transmission or a sixel image, megabytes of base64 or sixel
+			// data that the state machine would take one byte at a time with
+			// nothing to decide. Every such byte is a PutAction with no state
+			// change, so the run is handed over whole; the terminator (ESC,
+			// BEL, CAN, SUB) goes through the parser as before.
+			j := i + 1
+			for j < len(p) && isStringPayload(p[j]) {
+				j++
+			}
+			e.parser.putRun(p[i:j])
+			e.lastState = st
+			i = j - 1
+			continue
+		}
 		e.parser.Advance(p[i])
 		state := e.parser.State()
 		// flush grapheme if we transitioned to a non-utf8 state or we have
@@ -1339,6 +1356,14 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		e.lastState = state
 	}
 	return len(p), nil
+}
+
+// isStringPayload reports whether b is plain payload inside an APC or DCS
+// string: printable ASCII, or a byte with the top bit set, which advance()
+// also treats as payload in a string state. Controls and DEL are left to the
+// parser.
+func isStringPayload(b byte) bool {
+	return (b >= 0x20 && b < 0x7f) || b >= 0x80
 }
 
 // WriteString writes a string to the terminal output buffer.
