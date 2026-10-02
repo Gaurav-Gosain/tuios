@@ -928,7 +928,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// teleported back out of its tile into the layout again.
 	switch {
 	case m.AutoTiling && (len(created) > 0 || len(removed) > 0 || placed):
-		m.adoptSyncedWindows(created, removed, placed)
+		m.adoptSyncedWindows(created, removed, placed, focusBefore)
 	case placed:
 		// Untiled, so there is nothing to retile, but the geometry this client
 		// just chose is news to the daemon.
@@ -1547,7 +1547,7 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*term
 // knocked out of the tiling layout back to a raw placement box, which the tree
 // path cannot detect from created/removed alone (the window already exists in
 // the tree); only re-running the layout folds it back in.
-func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, placed bool) {
+func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, placed bool, focusBefore string) {
 	if len(created) == 0 && len(removed) == 0 && !placed {
 		return
 	}
@@ -1585,18 +1585,16 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 			}
 		}
 
-		if m.pendingSplitDir != layout.PreselectionNone {
-			// A forced-direction split (ctrl+b | / -) asked the daemon for this pane
-			// and stashed the direction for exactly this moment. Insert it on the
-			// chosen side of its target before TileAllWindows runs, otherwise the
-			// spiral scheme places it and the direction is lost. Only the single-window
-			// case is a split; anything else clears the request and falls back.
-			if len(created) == 1 {
-				m.applyPendingForcedSplit(created[0])
-			} else if len(created) > 1 {
-				m.pendingSplitDir = layout.PreselectionNone
-				m.pendingSplitTarget = ""
-			}
+		// A new window splits the pane that was focused when it was asked
+		// for, on the side a split key or a preselection recorded. Insert it
+		// before TileAllWindows runs, which would otherwise split the last
+		// pane in the tree with the scheme's direction, whatever had focus.
+		// Only a single new window is a split; anything else clears a
+		// recorded request and falls back.
+		if len(created) == 1 {
+			m.insertSyncedWindow(created[0], focusBefore)
+		} else if len(created) > 1 {
+			m.CancelPendingSplit()
 		}
 	}
 
@@ -1604,28 +1602,48 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 	m.SyncStateToDaemon()
 }
 
-// applyPendingForcedSplit inserts a daemon-created pane into the BSP tree on the
-// side recorded by a forced-direction split, so ctrl+b | / - keep their meaning
-// across the round trip that created the window. The pending request is cleared
-// whether or not it applies. TileAllWindows runs afterwards and, finding every
-// window already in the tree, only re-applies the layout.
-func (m *OS) applyPendingForcedSplit(win *terminal.Window) {
+// insertSyncedWindow puts a daemon-created pane into the BSP tree by splitting
+// the pane that was focused when it was asked for. A split key (ctrl+b | / -)
+// or a preselection records the side and the pane before the request, because
+// the daemon makes the window and it arrives through a state sync. Without a
+// recorded side the tree's scheme picks the axis. The recorded request is
+// cleared whether or not it applies. TileAllWindows runs afterwards and,
+// finding every window already in the tree, only re-applies the layout.
+//
+// focusBefore is the focus before the sync that brought the window, which is
+// the shared focus every client of the session holds, so a peer that did not
+// ask for the window splits the same pane.
+func (m *OS) insertSyncedWindow(win *terminal.Window, focusBefore string) {
 	dir := m.pendingSplitDir
 	targetID := m.pendingSplitTarget
-	m.pendingSplitDir = layout.PreselectionNone
-	m.pendingSplitTarget = ""
+	m.CancelPendingSplit()
+	if targetID == "" {
+		targetID = focusBefore
+	}
 
-	if dir == layout.PreselectionNone || win == nil {
+	if win == nil || targetID == "" || !m.UseBSPLayout || m.UseScrollingLayout {
 		return
 	}
-
-	tree := m.GetOrCreateBSPTree()
+	if win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
+		return
+	}
+	tree := m.WorkspaceTrees[m.CurrentWorkspace]
+	if tree == nil || tree.IsEmpty() {
+		return
+	}
 	windowIntID := m.GetWindowIntID(win.ID)
 	if tree.HasWindow(windowIntID) {
-		return // already in the tree; nothing to force
+		return // already in the tree, from a peer's layout
 	}
 	targetIntID := m.GetWindowIntID(targetID)
-	tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
+	if !tree.HasWindow(targetIntID) {
+		return
+	}
+	if dir != layout.PreselectionNone {
+		tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
+		return
+	}
+	tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode

@@ -428,21 +428,18 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", shortID(window.ID), windowIntID)
 	}
 
-	// Determine the target window for splitting
-	targetIntID := 0
-
-	// If SplitTargetWindowID is set (for explicit splits like Ctrl+B, -), use that
-	if m.SplitTargetWindowID != "" {
-		targetIntID = m.GetWindowIntID(m.SplitTargetWindowID)
-		m.LogInfo("BSP: Using explicit split target (int ID %d)", targetIntID)
-	} else {
-		// Use the last window in the BSP tree as the target
-		// This ensures proper spiral pattern
-		existingIDs := tree.GetAllWindowIDs()
-		if len(existingIDs) > 0 {
-			targetIntID = existingIDs[len(existingIDs)-1]
-			m.LogInfo("BSP: Using last tree window as target (int ID %d)", targetIntID)
+	// The pane to split: an explicit split's target, else the focused pane.
+	// AddWindow focuses the new pane only after this, so the focus is still
+	// the pane the user was on.
+	targetID := m.SplitTargetWindowID
+	if targetID == "" {
+		if fw := m.GetFocusedWindow(); fw != nil && fw.ID != window.ID {
+			targetID = fw.ID
 		}
+	}
+	targetIntID := m.bspSplitTarget(tree, targetID)
+	if verboseLog {
+		m.LogInfo("BSP: Splitting int ID %d", targetIntID)
 	}
 
 	bounds := m.GetBSPBounds()
@@ -464,6 +461,22 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	// floating, which this used to throw away by teleporting it to the middle of
 	// the screen first.
 	m.ApplyBSPLayout()
+}
+
+// bspSplitTarget is the tree leaf a new window splits: the pane named by
+// windowID when the tree holds it, else the last leaf. A new window splits the
+// focused pane, as in bspwm. The last leaf is only the fallback for a window
+// that arrives with no focused pane in this tree.
+func (m *OS) bspSplitTarget(tree *layout.BSPTree, windowID string) int {
+	if windowID != "" {
+		if id := m.GetWindowIntID(windowID); tree.HasWindow(id) {
+			return id
+		}
+	}
+	if ids := tree.GetAllWindowIDs(); len(ids) > 0 {
+		return ids[len(ids)-1]
+	}
+	return 0
 }
 
 // RemoveWindowFromBSPTree removes a window from the BSP tree and reapplies the layout.
@@ -566,6 +579,9 @@ func (m *OS) SplitFocusedHorizontal() {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.pendingSplitDir = layout.PreselectionDown
 		m.pendingSplitTarget = focusedWin.ID
+		// The split's own direction replaces a preselection, as it does on
+		// the local path below.
+		m.PreselectionDir = layout.PreselectionNone
 		// Through NewWindowHere rather than straight to AddWindow, so a split
 		// in a global session asks which machine the pane runs on the same way
 		// every other way of making one does. The recorded direction outlives
@@ -604,6 +620,7 @@ func (m *OS) SplitFocusedVertical() {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.pendingSplitDir = layout.PreselectionRight
 		m.pendingSplitTarget = focusedWin.ID
+		m.PreselectionDir = layout.PreselectionNone
 		// See SplitFocusedHorizontal.
 		m.NewWindowHere()
 		return
