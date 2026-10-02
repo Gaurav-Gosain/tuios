@@ -6,8 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
@@ -240,41 +238,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// Normal terminal mode: pass through all keys
 	if focusedWindow != nil {
-		appCursorKeys := false
-		if focusedWindow.Terminal != nil {
-			appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
-		}
-
 		// The pane gets the key as the host sent it, on either encoding.
 		host := paneMsg(msg, o)
-		paneFlags := 0
-		if focusedWindow.Terminal != nil {
-			paneFlags = focusedWindow.Terminal.KittyKeyboardFlags()
-		}
-		// When kitty keyboard protocol is active, encode as CSI u
-		var rawInput []byte
-		if paneFlags != 0 {
-			encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(host), paneFlags)
-			if len(encoded) > 0 {
-				rawInput = []byte(encoded)
-			}
-		}
-		// Fall back to legacy encoding
-		if len(rawInput) == 0 {
-			rawInput = getRawKeyBytesWithMode(host, appCursorKeys)
-		}
-		// A pane that asked for releases gets one for every press. When the
-		// host is not reporting releases, none will follow this press, so it is
-		// sent now. That is every key on a host without the protocol, and the
-		// keys typed in the moment after the pane takes the keyboard, before
-		// the host has switched to the flags tuios asked for on its behalf. A
-		// compositor in the pane otherwise held the key down, and its client
-		// repeated it until the next key came.
-		releaseNow := ""
-		if len(rawInput) > 0 && paneFlags&ansi.KittyReportEventTypes != 0 && !o.HostReportsReleases() {
-			releaseNow = vt.EncodeKeyReleaseCSIu(vtKeyFromBubbletea(host), paneFlags)
-			rawInput = append(rawInput, releaseNow...)
-		}
+		rawInput, releasedNow := paneKeyBytes(host, focusedWindow, o, true)
 
 		if len(rawInput) > 0 {
 			// Record the keystroke for tape capture here, at the point where it
@@ -283,7 +249,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// shell, so tapes replayed prefix chords and stray characters.
 			recordTerminalKey(o, msg)
 			o.NotePaneKey()
-			if releaseNow == "" {
+			if !releasedNow {
 				o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 			}
 			if err := focusedWindow.SendInput(rawInput); err != nil {
@@ -294,8 +260,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Forward keystrokes to the multifocus set's panes on screen.
 			// See MultifocusPeers: slice order keeps the send order stable
 			// across swaps and state sync.
+			// Each peer gets the key encoded for its own keyboard mode.
 			for _, w := range o.MultifocusPeers() {
-				_ = w.SendInput(rawInput)
+				if peer, _ := paneKeyBytes(host, w, o, false); len(peer) > 0 {
+					_ = w.SendInput(peer)
+				}
 			}
 		}
 	} else {

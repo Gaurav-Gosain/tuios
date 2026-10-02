@@ -33,7 +33,7 @@ func hostAnswer(flags int) string { return fmt.Sprintf("\x1b[?%du", flags) }
 // one with the press. Without it the compositor held the key down and its client
 // typed the letter until the next key came.
 func TestPaneGetsReleaseTheHostCannotSend(t *testing.T) {
-	term, log := startKeyEcho(t)
+	term, log := startKeyEcho(t, 15)
 
 	// Disambiguate, alternate keys and all keys: no event types.
 	sendRaw(t, term, hostAnswer(13))
@@ -46,7 +46,7 @@ func TestPaneGetsReleaseTheHostCannotSend(t *testing.T) {
 // repeats as event type 2. The pane asked for event types, so it must see a
 // repeat, not a second press of a key that is already down.
 func TestPaneGetsRepeatAsRepeat(t *testing.T) {
-	term, log := startKeyEcho(t)
+	term, log := startKeyEcho(t, 15)
 
 	sendRaw(t, term, hostAnswer(31))
 	time.Sleep(insertGuard)
@@ -61,7 +61,7 @@ func TestPaneGetsRepeatAsRepeat(t *testing.T) {
 // desktop turned Num Lock on before the pane had the keyboard. Without them the
 // keypad typed KP_End where the user typed 1.
 func TestPaneGetsLockState(t *testing.T) {
-	term, log := startKeyEcho(t)
+	term, log := startKeyEcho(t, 15)
 
 	sendRaw(t, term, hostAnswer(31))
 	time.Sleep(insertGuard)
@@ -70,10 +70,85 @@ func TestPaneGetsLockState(t *testing.T) {
 	waitPaneBytes(t, term, log, "\x1b[97;129u\x1b[97;129:3u\x1b[57400;129u\x1b[57400;129:3u")
 }
 
+// TestLeaderTwiceGetsItsRelease: the leader pressed twice sends the leader to
+// the pane. That press takes its own route through tuios, and it must carry
+// a release too when the host sends none, like every other key.
+func TestLeaderTwiceGetsItsRelease(t *testing.T) {
+	term, log := startKeyEcho(t, 15)
+
+	sendRaw(t, term, hostAnswer(13))
+	time.Sleep(insertGuard)
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Ctrl('b')); err != nil {
+		t.Fatalf("send the leader twice: %v", err)
+	}
+	waitPaneBytes(t, term, log, "\x1b[98;5u\x1b[98;5:3u")
+}
+
+// TestMultifocusPeerGetsItsOwnEncoding: keys typed in a kitty-protocol pane
+// also go to the shell beside it in the multifocus set. Each pane must get the
+// key in its own keyboard mode. The shell got the focused pane's bytes, so a
+// release sent with each press arrived as text: bash printed
+// "1:3u: command not found".
+func TestMultifocusPeerGetsItsOwnEncoding(t *testing.T) {
+	bin := buildKeyEcho(t)
+	base := spotlightConfigFile(t, multifocusConfig(0, false))
+	log := filepath.Join(t.TempDir(), "pane-bytes")
+	term := startIn(t, base, startOpts{cols: 160, rows: 40})
+	waitBoot(t, term)
+
+	// Pane A: a plain shell.
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo READY\"A\"", "READYA", shellTimeout)
+	leaveTerminalMode(t, term)
+	// Pane B: disambiguate and event types, as nvim asks (CSI >3u).
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "stty raw -echo; "+bin+" 3 "+log, "KEYECHO-READY", shellTimeout)
+
+	leaderKey(t, term, "Y")
+	mfWaitText(t, term, "Multifocus: 2 windows")
+
+	// A host that is not reporting releases: tuios sends one with each press
+	// to the kitty pane, and must not send it to the shell.
+	sendRaw(t, term, hostAnswer(5))
+	time.Sleep(insertGuard)
+	// Typed in pane B, run by the shell in pane A. The marker is split so
+	// only the shell's output can match.
+	if err := term.SendKeys("echo PE''ER-$((40+2))", tuitest.Enter); err != nil {
+		t.Fatalf("type: %v", err)
+	}
+	if err := term.WaitForText("PEER-42", shellTimeout); err != nil {
+		t.Fatalf("the shell peer did not run the line: %v\n%s", err, term.Snapshot())
+	}
+	if text := term.Screen().Text(); strings.Contains(text, ":3u") || strings.Contains(text, "command not found") {
+		t.Fatalf("the shell peer got kitty key events as text:\n%s", term.Snapshot())
+	}
+	// The kitty pane got each letter with its release.
+	b, _ := os.ReadFile(log)
+	if !strings.Contains(string(b), "e\x1b[101;1:3u") {
+		t.Fatalf("the focused pane got %q, want each letter with its release", b)
+	}
+}
+
+// TestNoReleaseForEnterWithoutAllKeys: under disambiguate and event types
+// (CSI >3u, as nvim asks), kitty sends Enter, Tab and Backspace as CR, HT and
+// DEL, and never a release for them. tuios must not invent one when the host
+// sends no releases: the pane would read text it has no key for. A letter
+// still gets its release.
+func TestNoReleaseForEnterWithoutAllKeys(t *testing.T) {
+	term, log := startKeyEcho(t, 3)
+
+	sendRaw(t, term, hostAnswer(5))
+	time.Sleep(insertGuard)
+	sendRaw(t, term, "\r", "\t", "\x7f", "x")
+	waitPaneBytes(t, term, log, "\r\t\x7fx\x1b[120;1:3u")
+}
+
 // startKeyEcho boots tuios, opens a pane, and runs keyecho in it with the
 // compositor's flags. It returns the terminal and the path of the log of bytes
 // the pane receives.
-func startKeyEcho(t *testing.T) (*tuitest.Terminal, string) {
+func startKeyEcho(t *testing.T, flags int) (*tuitest.Terminal, string) {
 	t.Helper()
 	bin := buildKeyEcho(t)
 	base := t.TempDir()
@@ -83,7 +158,7 @@ func startKeyEcho(t *testing.T) (*tuitest.Terminal, string) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "a pane to run keyecho in")
 	enterTerminalMode(t, term)
-	runInShell(t, term, "stty raw -echo; "+bin+" 15 "+log, "KEYECHO-READY", shellTimeout)
+	runInShell(t, term, fmt.Sprintf("stty raw -echo; %s %d %s", bin, flags, log), "KEYECHO-READY", shellTimeout)
 	// The push reaches the pane's emulator with the output that carried the
 	// marker, so the flags are in effect by now.
 	return term, log

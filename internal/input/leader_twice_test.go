@@ -24,7 +24,7 @@ func leaderTwice(t *testing.T, leader, flagsSeq string, msg tea.KeyPressMsg) str
 	win := &terminal.Window{ID: "leader-twice-0001", Terminal: em, Pty: pty, X: 0, Y: 0, Width: 82, Height: 26}
 	settings := config.Global
 	settings.LeaderKey = leader
-	o := &app.OS{Settings: settings, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: settings, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}, KeyboardFlags: hostReportsEvents}
 	HandleTerminalModeKey(msg, o)
 	if !o.PrefixActive {
 		t.Fatalf("the first %s press did not start the prefix", leader)
