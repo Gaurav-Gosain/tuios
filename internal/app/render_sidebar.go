@@ -34,13 +34,13 @@ const sidebarRestoredTag = session.RestoredTag
 // land the whole rail on one: gutter col 0, glyph col 1, text col 3, and any
 // right-aligned figure inset one cell from the rail's own edge.
 //
-// Emphasis is spent on two things and no more, and neither of them paints a
-// standing row. "This is the current one" (the attached session, the focused
-// pane) is an accent mark in the rail's one-cell gutter, the same mark in both
-// places; a state wanting a human takes the same cell in its severity colour,
-// plus the rail's one bold. That leaves the only full-width band on the rail to
-// "this is where the cursor or the pointer is", which is the thing the user is
-// steering.
+// Emphasis comes in three strengths and is spent sparingly. "This is the
+// current one" (the attached session, the focused pane) is an accent mark in
+// the rail's one-cell gutter, the same mark in both places, on the quiet
+// ground of RowSelQuiet; a state wanting a human takes the same cell in its
+// severity colour, plus the rail's one bold. The full-width bands above that
+// quiet ground belong to "this is where the cursor or the pointer is", which
+// is the thing the user is steering.
 
 // sidebarRowKind distinguishes what a sidebar row points at for mouse routing.
 type sidebarRowKind int
@@ -145,6 +145,7 @@ type sidebarRowState struct {
 	Cursor  bool // the keyboard cursor is on this row
 	Hover   bool // the pointer is over this row
 	Focused bool // the rail owns the keyboard
+	Active  bool // this row is the attached session or the focused agent
 }
 
 // lit reports whether the row is drawing any band at all, which is what the
@@ -158,8 +159,10 @@ func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
 }
 
 // railRowState reads the rail's focus once so a row site does not have to.
-func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
-	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.SidebarFocused}
+// active marks the row the rail is standing on: the attached session, the
+// focused agent. It takes the quiet ground whatever else the row is.
+func (m *OS) railRowState(hover, cursor, active bool) sidebarRowState {
+	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.SidebarFocused, Active: active}
 }
 
 // sidebarRowBg is the ground a row paints. Three steps, not one.
@@ -176,6 +179,10 @@ func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 // cursor will be when it gets it back. The mouse wash takes RowSel too, and is
 // told apart from an unfocused cursor by extent rather than by strength.
 //
+// The active row stands on RowSelQuiet, the quietest ground that still reads
+// as a fill, so the attached session and the focused agent are findable at a
+// glance without taking the band away from the pointer and the cursor.
+//
 // The cursor always wins. A row that is both the cursor and st.lit() draws the
 // cursor treatment; the two are never composited, because a row carrying both
 // grounds reads as a third state that means nothing.
@@ -185,6 +192,8 @@ func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
 		return pal.Surface
 	case st.Cursor, st.Hover:
 		return pal.RowSel
+	case st.Active:
+		return pal.RowSelQuiet
 	}
 	return nil
 }
@@ -1662,18 +1671,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if s.Kind == sessiontree.KindRepo {
 				// A repository's group header. It is a nav row like any other,
 				// and activating it folds the group.
-				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
+				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], false, isCursor(sidebarRowRepo, s.ID, ""))
 				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
 				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
 			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false), canCreate, showCounts,
+				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false, false), canCreate, showCounts,
 					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
+			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""), s.IsCurrent)
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
 			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
 		}
@@ -1736,7 +1745,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionTerminals] {
 			idx := start[sidebarSectionTerminals] + i
 			e := terminals[idx]
-			st := m.railRowState(idx == hoverRow[sidebarSectionTerminals], isCursor(sidebarRowWindow, e.SessionID, e.WindowID))
+			st := m.railRowState(idx == hoverRow[sidebarSectionTerminals], false, isCursor(sidebarRowWindow, e.SessionID, e.WindowID))
 			recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
 			lines = append(lines, compose(st.mark(pal, m.sidebarTerminalRow(e, cw, pal, st, peeking))))
 		}
@@ -1766,7 +1775,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionFiles] {
 			idx := start[sidebarSectionFiles] + i
 			row := files[idx]
-			st := m.railRowState(idx == hoverRow[sidebarSectionFiles], false)
+			st := m.railRowState(idx == hoverRow[sidebarSectionFiles], false, false)
 			if row.Kind != 0 {
 				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
@@ -1785,7 +1794,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if idx >= len(gitRows) {
 				break
 			}
-			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false)
+			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false, false)
 			lines = append(lines, compose(st.mark(pal, m.sidebarGitRow(gitRows[idx], cw, pal, st))))
 		}
 	}
@@ -1810,7 +1819,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// it apart from the header's token the cursor could not address it.
 			recordHit(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "", -1, 1)
 			lines = append(lines, compose(m.sidebarAgentsEmptyRow(agentsTotal, cw, pal,
-				m.railRowState(hoverRow[sidebarSectionAgents] == 0,
+				m.railRowState(hoverRow[sidebarSectionAgents] == 0, false,
 					isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "")))))
 			return
 		}
@@ -1818,7 +1827,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			idx := start[sidebarSectionAgents] + i
 			e := agents[idx]
 			if e.Fold > 0 {
-				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgentFold, e.SessionID, ""))
+				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], false, isCursor(sidebarRowAgentFold, e.SessionID, ""))
 				tall := rowH[sidebarSectionAgents] > 1
 				recordHit(sidebarRowAgentFold, e.SessionID, "", -1, rowH[sidebarSectionAgents])
 				lines = append(lines, compose(st.mark(pal, m.sidebarAgentFoldRow(e, cw, pal, st, false))))
@@ -1827,7 +1836,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				}
 				continue
 			}
-			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
+			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID), e.Focused)
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
 			row, bodyW := m.sidebarAgentRow(e, variant, cw, pal, st, tall)
@@ -2345,11 +2354,11 @@ func (m *OS) windowIndexByID(id string) int {
 //	| rolled-up agent glyph, state-colored, a quiet dot when there is none
 //	gutter: the session's own colour, severity when a pane wants a human
 //
-// Emphasis ladder, quietest to loudest: other rows dim; attached session an
-// accent gutter mark and a full-strength name; pointer or keyboard cursor a
-// Surface band; a state wanting a human a severity gutter mark, a coloured
-// glyph and the rail's one bold. No standing fill, so the only band on a
-// resting rail is the one under the pointer.
+// Emphasis ladder, quietest to loudest: other rows dim; attached session a
+// quiet standing fill, an accent gutter mark and a full-strength name; pointer
+// or keyboard cursor a Surface band; a state wanting a human a severity gutter
+// mark, a coloured glyph and the rail's one bold. The standing fill is one step
+// below the pointer's, so the band still moves with what the user is steering.
 //
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
@@ -2830,15 +2839,15 @@ func sidebarNoteSentence(name string) bool {
 // It also returns how many columns the name and the tokens around it take, from
 // sidebarNameCol, which is the span the working shimmer sweeps.
 func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) (string, int) {
-	var rowBg color.Color
+	rowBg := sidebarRowBg(st, pal)
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen || e.Focused {
-		// The session's focused pane is the active agent and reads at full
-		// strength; everything else is dimmed by one step.
+		// The session's focused pane is the active agent: full-strength ink on
+		// the quiet standing fill, so it is findable in a scan of the section
+		// and not only by contrast with its dimmed neighbours.
 		fg = pal.Fg
 	}
 	if st.lit() {
-		rowBg = sidebarRowBg(st, pal)
 		fg = pal.Fg
 	}
 
