@@ -1077,6 +1077,16 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// the size it is shown at.
 	m.reconcilePaneStreams()
 
+	// A focus this sync moved was moved somewhere else: by another client, a
+	// verb or the daemon. The daemon fires the hook for it and this client
+	// stays silent on session-side hooks (see firesHere), so FocusWindow's
+	// notice never happens here. A dock component watching the focus is drawn
+	// by this client and has to refresh in it, whichever side moved the focus.
+	// Last, so the rail section is told the pane and the size this sync left.
+	if focusChanged {
+		m.NotifyDockEvent(string(hooks.AfterFocusChange))
+	}
+
 	m.MarkAllDirty()
 	return nil
 }
