@@ -82,6 +82,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_pill_caps":         "Pill caps",
 	"appearance.dock_workspace_tabs":    "Workspace tabs",
 	"appearance.dock_workspace_tooltip": "Workspace name on hover",
+	"appearance.dock_workspace_label_max": "Workspace label cap",
 	"dock.clock.format":                 "Dock clock format",
 	"debug.show_key_events":             "Show keys",
 	"daemon.log_level":                  "Log level",
