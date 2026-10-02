@@ -105,6 +105,9 @@ func railRunNumber(s tuitest.Screen) int {
 
 var runNumberRe = regexp.MustCompile(`RUN-(\d+)`)
 
+// railHeightRe reads the H=N row the environment test prints.
+var railHeightRe = regexp.MustCompile(`H=(\d+)`)
+
 // plusCountRe matches the "+N" of an overflow row.
 var plusCountRe = regexp.MustCompile(`\+\d+`)
 
@@ -248,10 +251,14 @@ func TestRailCustomSectionPlacementAndEditorRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the config: %v", err)
 	}
-	if !strings.Contains(string(data), `sections = "sessions,terminals,custom"`) {
+	if !editedLayoutRe.Match(data) {
 		t.Fatalf("the editor did not write custom back into the layout:\n%s", data)
 	}
 }
+
+// editedLayoutRe is the layout line the editor round trip leaves in the file.
+// The writer picks the TOML quote style, so either one is the same value.
+var editedLayoutRe = regexp.MustCompile(`(?m)^\s*sections = ['"]sessions,terminals,custom['"]\s*$`)
 
 // TestRailCustomSectionRefreshModes pins each refresh mode on the real
 // binary: once runs at attach and then only on refresh-dock, an interval
@@ -443,9 +450,10 @@ func TestRailCustomSectionEmptyOnFailure(t *testing.T) {
 // and folder, the section's name, and the rail's width and the section's
 // height, read fresh for that run.
 //
-// Negative control: drop the m.dockEngine.SetRailContext call from
-// RailCustomSyncCmd (internal/app/sidebar_custom.go). The first run sees an
-// empty pane id and the id assertion fails.
+// Negative control: drop the m.dockEngine.SetRailContext calls from
+// syncRailContext (internal/app/sidebar_custom.go) and InitDockComponents
+// (internal/app/dock_runtime.go). Every run sees an empty pane id and the id
+// assertion fails.
 func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	term, base := railCustomClient(t, "sessions,terminals,custom:50",
 		"command = \"echo ID=$TUIOS_ACTIVE_PANE_ID; echo CWD=${TUIOS_ACTIVE_PANE_CWD##*/}; echo SEC=$TUIOS_RAIL_SECTION; echo W=$TUIOS_RAIL_WIDTH; echo H=$TUIOS_RAIL_HEIGHT\"\nrefresh = \"event:window-focused\"")
@@ -471,8 +479,13 @@ func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	if hRow < 0 {
 		t.Fatalf("the run did not see TUIOS_RAIL_HEIGHT\n%s", term.Snapshot())
 	}
-	h, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(railLine(s, hRow), " H=")))
-	if err != nil || h <= 0 || h >= 40 {
+	// The rail's line ends in its edge rule, so the number is read by pattern
+	// rather than by trimming.
+	h := 0
+	if m := railHeightRe.FindStringSubmatch(railLine(s, hRow)); m != nil {
+		h, _ = strconv.Atoi(m[1])
+	}
+	if h <= 0 || h >= 40 {
 		t.Fatalf("TUIOS_RAIL_HEIGHT is %q, want a count between 1 and the screen's rows\n%s",
 			railLine(s, hRow), term.Snapshot())
 	}
