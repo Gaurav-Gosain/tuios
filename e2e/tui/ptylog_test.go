@@ -184,7 +184,7 @@ func removeStandInShm(prefix string) {
 // startStream boots tuios against a kitty host and starts the frameloop
 // stand-in at 60 frames a second in one tiled pane, still in terminal mode. It
 // returns the path of the stand-in's geometry file, which is in its argv.
-func startStream(t *testing.T, o startOpts, transport string) (*tuitest.Terminal, string) {
+func startStream(t *testing.T, o startOpts, transport string) (*tuitest.Terminal, *kittyHost, string) {
 	t.Helper()
 	host := newKittyHost()
 	o.cols, o.rows = 120, 40
@@ -199,7 +199,7 @@ func startStream(t *testing.T, o startOpts, transport string) (*tuitest.Terminal
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	geom, _, _, _, _ := startFrameloopOpts(t, term, 0, 60, transport)
-	return term, geom
+	return term, host, geom
 }
 
 // killByArg sends SIGKILL to every process whose argv contains arg.
@@ -229,17 +229,30 @@ func killByArg(t *testing.T, arg string) {
 // write megabytes a second into the log.
 //
 // NEGATIVE CONTROL: with startIn handing tuitest a plain os.Create file, the
-// log grows past the limit and this fails.
+// log grows past the limit and this fails. A log that drops every write past
+// the limit fails it too: the newest bytes are missing.
 func TestPtyLogStaysBounded(t *testing.T) {
 	const limit = 256 << 10
 	var logPath string
-	term, geom := startStream(t, startOpts{logPath: &logPath, logLimit: limit}, "b64")
+	_, host, geom := startStream(t, startOpts{logPath: &logPath, logLimit: limit}, "b64")
 	time.Sleep(3 * time.Second)
 
-	// End the stand-in and print a marker after it, so the newest bytes are
-	// known. A Ctrl+C typed into the pane did not reach it in time on CI.
+	// End the stand-in and wait for the client to go quiet. With no input
+	// sent after that, the newest bytes of the log are the newest bytes the
+	// host was sent.
 	killByArg(t, geom)
-	runInShell(t, term, "echo TA\"\"IL-MARK", "TAIL-MARK", shellTimeout)
+	var stream []byte
+	deadline := time.Now().Add(shellTimeout)
+	for time.Now().Before(deadline) {
+		before := len(host.bytes())
+		time.Sleep(500 * time.Millisecond)
+		stream = host.bytes()
+		if len(stream) == before {
+			break
+		}
+	}
+	newest := stream[max(0, len(stream)-4096):]
+	time.Sleep(200 * time.Millisecond)
 
 	info, err := os.Stat(logPath)
 	if err != nil {
@@ -253,11 +266,11 @@ func TestPtyLogStaysBounded(t *testing.T) {
 	if info.Size() > limit {
 		t.Fatalf("the pty log is %d bytes, over its limit of %d", info.Size(), limit)
 	}
+	if !bytes.Contains(raw, newest) {
+		t.Fatalf("the log lost its newest bytes: the last %d bytes sent to the host are not in it", len(newest))
+	}
 	if !bytes.HasPrefix(raw, []byte("[pty.log: ")) {
 		t.Fatalf("the log never dropped bytes, so the stream did not test the limit: it starts %q", raw[:min(len(raw), 80)])
-	}
-	if !bytes.Contains(raw, []byte("TAIL-MARK")) {
-		t.Fatalf("the log lost its newest bytes: no TAIL-MARK in the last %d bytes", len(raw))
 	}
 }
 
@@ -270,7 +283,7 @@ func TestKittyStandInShmRemovedAfterTest(t *testing.T) {
 	requireDevShm(t)
 	var prefix string
 	t.Run("stream", func(t *testing.T) {
-		_, _ = startStream(t, startOpts{}, "shm")
+		startStream(t, startOpts{}, "shm")
 		prefix = standInShmPrefix(t)
 		matches, _ := filepath.Glob(filepath.Join("/dev/shm", prefix+"*"))
 		if len(matches) == 0 {
