@@ -172,7 +172,7 @@ func agentNameCells(s tuitest.Screen, name string) (row, col int, ok bool) {
 	_, rows := s.Size()
 	for y := range rows {
 		line := []rune(s.Line(y))
-		if railX >= len(line) || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(string(line[railX:]))), "agents") {
+		if railX >= len(line) || !strings.HasPrefix(strings.TrimSpace(string(line[railX:])), "agents") {
 			continue
 		}
 		for r := y + 1; r < min(y+4, rows); r++ {

@@ -171,7 +171,7 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 func screenRowOf(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
 	for r := 0; r < rows; r++ {
-		if strings.Contains(strings.ToLower(s.Line(r)), strings.ToLower(needle)) {
+		if strings.Contains(s.Line(r), needle) {
 			return r
 		}
 	}

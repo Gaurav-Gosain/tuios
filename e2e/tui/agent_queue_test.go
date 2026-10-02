@@ -98,7 +98,7 @@ func TestNarrowRailKeepsTheAgentNameBesideAQueue(t *testing.T) {
 	// The row under the agents section's header, which is the agent's.
 	agentRow := func(s tuitest.Screen) string {
 		for y := range rows - 1 {
-			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(strings.Trim(railText(s, y), "│ "))), "agents") {
+			if strings.HasPrefix(strings.TrimSpace(strings.Trim(railText(s, y), "│ ")), "agents") {
 				return railText(s, y+1)
 			}
 		}
