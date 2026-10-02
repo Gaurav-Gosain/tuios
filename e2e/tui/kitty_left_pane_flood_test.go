@@ -157,7 +157,11 @@ func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int
 	}
 	bin := buildFrameloop(t)
 	geom = filepath.Join(t.TempDir(), "geom")
-	typeLine(t, term, fmt.Sprintf("%s %s %d %d %s", bin, geom, fps, repaintMS, transport))
+	line := fmt.Sprintf("%s %s %d %d %s", bin, geom, fps, repaintMS, transport)
+	if transport == "shm" {
+		line = shmPrefixEnv + "=" + standInShmPrefix(t) + " " + line
+	}
+	typeLine(t, term, line)
 	deadline := time.Now().Add(shellTimeout)
 	for time.Now().Before(deadline) {
 		if sizes := announcedSizes(geom); len(sizes) > 0 {

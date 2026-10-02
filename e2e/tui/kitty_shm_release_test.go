@@ -103,7 +103,7 @@ func streamUnwatched(t *testing.T, paint string) ([]string, map[string]bool, []s
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 
 	logPath := filepath.Join(t.TempDir(), "names")
-	typeLine(t, term, fmt.Sprintf("%s %s 40 20 3000 %s", buildShmStream(t), logPath, paint))
+	typeLine(t, term, fmt.Sprintf("%s=%s %s %s 40 20 3000 %s", shmPrefixEnv, standInShmPrefix(t), buildShmStream(t), logPath, paint))
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
@@ -139,7 +139,7 @@ func assertReleased(t *testing.T, left []string, forwarded map[string]bool) {
 func runShmStream(t *testing.T, term *tuitest.Terminal, count, fps, delayMS int, paint string) []string {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "names")
-	typeLine(t, term, fmt.Sprintf("%s %s %d %d %d %s", buildShmStream(t), logPath, count, fps, delayMS, paint))
+	typeLine(t, term, fmt.Sprintf("%s=%s %s %s %d %d %d %s", shmPrefixEnv, standInShmPrefix(t), buildShmStream(t), logPath, count, fps, delayMS, paint))
 	names := waitShmStream(t, term, logPath)
 	// The last frames are still on their way through the render loop.
 	time.Sleep(time.Second)

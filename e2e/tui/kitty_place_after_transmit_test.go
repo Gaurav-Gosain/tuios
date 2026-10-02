@@ -59,7 +59,11 @@ func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 			runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 
 			host.mark("launch")
-			typeLine(t, term, bin+" "+tc.transport)
+			line := bin + " " + tc.transport
+			if tc.transport == "shm" {
+				line = shmPrefixEnv + "=" + standInShmPrefix(t) + " " + line
+			}
+			typeLine(t, term, line)
 			if err := term.WaitForText("PLACEONCE-DONE", shellTimeout); err != nil {
 				t.Fatalf("the guest never finished: %v\n%s", err, term.Snapshot())
 			}

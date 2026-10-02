@@ -43,7 +43,14 @@ func main() {
 	var transmit string
 	switch transport {
 	case "shm":
-		name := fmt.Sprintf("tuios-placeonce-%d", os.Getpid())
+		// The harness names the object with a prefix of its own, so it can
+		// remove it after a test even when this process dies by a signal and
+		// the deferred removal never runs.
+		prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
+		if prefix == "" {
+			prefix = "tuios-placeonce-"
+		}
+		name := fmt.Sprintf("%s%d", prefix, os.Getpid())
 		path := "/dev/shm/" + name
 		if err := os.WriteFile(path, pix, 0o600); err != nil {
 			fmt.Printf("PLACEONCE-ERR %v\n", err)

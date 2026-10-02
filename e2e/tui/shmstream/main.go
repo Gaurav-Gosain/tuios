@@ -46,6 +46,12 @@ func main() {
 	}
 	defer func() { _ = logf.Close() }()
 
+	// The harness names the objects with a prefix of its own, so it can
+	// remove them after a test even when this process dies by a signal.
+	prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
+	if prefix == "" {
+		prefix = "tuios-shmstream-"
+	}
 	time.Sleep(time.Duration(delay) * time.Millisecond)
 	pix := make([]byte, side*side*4+extra)
 	for i := range pix {
@@ -58,7 +64,7 @@ func main() {
 		if vary {
 			pix[n%len(pix)]++
 		}
-		name := fmt.Sprintf("tuios-shmstream-%d-%d", os.Getpid(), n)
+		name := fmt.Sprintf("%s%d-%d", prefix, os.Getpid(), n)
 		if err := os.WriteFile("/dev/shm/"+name, pix, 0o600); err != nil {
 			fmt.Printf("SHMSTREAM-ERR %v\n", err)
 			return

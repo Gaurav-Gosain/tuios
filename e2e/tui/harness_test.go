@@ -232,6 +232,8 @@ type startOpts struct {
 	// logPath, when set, receives the path of the raw PTY log, for a test
 	// that reads what tuios printed after the TUI gave the screen back.
 	logPath *string
+	// logLimit caps the raw PTY log in bytes. Zero means ptyLogLimit.
+	logLimit int64
 	// wrap runs tuios under another program: argv is wrap followed by the
 	// tuios command line. The host colour tests put a stand-in host terminal
 	// there (testdata/hostterm).
@@ -361,12 +363,26 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		argv = append(argv, "--no-animations")
 	}
 
+	// The log keeps only its newest bytes. A client attached to a pane that
+	// streams kitty graphics writes hundreds of megabytes a minute, and an
+	// unbounded log filled a RAM-backed /tmp.
 	logPath := filepath.Join(t.TempDir(), "pty.log")
-	logFile, err := os.Create(logPath)
+	limit := o.logLimit
+	if limit == 0 {
+		limit = ptyLogLimit
+	}
+	logFile, err := newBoundedLog(logPath, limit)
 	if err != nil {
 		t.Fatalf("start: create pty log: %v", err)
 	}
 	t.Cleanup(func() { _ = logFile.Close() })
+	// Registered before the client starts, so it runs after the client's
+	// teardown and the tail includes the last thing the client wrote.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("last bytes of the pty log:\n%q", logFile.Tail(ptyLogTailOnFailure))
+		}
+	})
 	if o.logPath != nil {
 		*o.logPath = logPath
 	}
