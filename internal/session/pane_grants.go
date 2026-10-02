@@ -66,7 +66,8 @@ import (
 // connection placed in no pane is held to nothing new: the person's CLI, the
 // attached client, and the hooks and dock components the person configured
 // keep full rights. A connection over a link is held to that link's policy
-// instead (link_policy.go), and a report from a pane this machine runs for
+// instead (link_policy.go), and its typing to the prompt rule
+// (holdLinkTyping), and a report from a pane this machine runs for
 // another machine is held there. A process in such a pane that calls this
 // daemon directly holds this machine's default and reaches no session here.
 //
@@ -429,6 +430,10 @@ type paneAuth struct {
 	// hosted marks a process in a pane this machine runs for another
 	// machine. It has no session here.
 	hosted bool
+	// linkTable marks a typing caller over a link that the hub did not vouch
+	// for as the person (linkTypingAuthority). It names the [hosts] table
+	// whose allow list holds the caller, for the refusal to point at.
+	linkTable string
 }
 
 // addressesHostedPane reports whether a call is one forwardHostedCall sends on
@@ -627,6 +632,13 @@ func grantKind(verb string) scopeKind {
 
 // grantForbidden is the refusal for a call a pane's grants do not cover.
 func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
+	if pa.linkTable != "" {
+		return hintedVerbError(ErrVerbForbidden, verb+" is refused for this link: "+why, &VerbHint{
+			Detail: "Nothing was done. The call came over a link from a pane on the other machine, or from a machine that does not say. " +
+				"Pane grants do not travel over a link, so the link policy holds the call. " +
+				"To let such calls answer prompts, add \"respond\" to allow in " + pa.linkTable + " in the config on this machine.",
+		})
+	}
 	source := "the default of [agents.permissions]"
 	if pa.explicit {
 		source = "the grants it was given"
@@ -645,6 +657,9 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 // filled in where the call left them out, or the refusal. A caller held to
 // nothing new (paneAuthority is nil) and a pane holding admin pass unchanged.
 func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage) (json.RawMessage, *verbError) {
+	if cs != nil && cs.viaLink && typingVerbs[verb] {
+		return d.holdLinkTyping(cs, verb, params)
+	}
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return params, nil
 	}
@@ -742,6 +757,53 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		return out, verr
 	}
 	return d.holdTypingTarget(verb, pa, out, deny)
+}
+
+// holdLinkTyping holds a typing call over a link to the rule a pane here is
+// held to (typingRefusal). The link policy already said the peer may write.
+// It did not say whether the caller may answer a prompt: keys typed into a
+// pane on needs_input answer it, which on this machine needs respond.
+func (d *Daemon) holdLinkTyping(cs *connState, verb string, params json.RawMessage) (json.RawMessage, *verbError) {
+	pa := d.linkTypingAuthority(cs)
+	if pa == nil {
+		cs.paneView.Store(nil)
+		return params, nil
+	}
+	cs.paneView.Store(pa)
+	deny := func(why string) *verbError {
+		LogBasic("Link %s (%s) refused %s: %s", cs.clientID, pa.window, verb, why)
+		return grantForbidden(verb, pa, why)
+	}
+	return d.holdTypingTarget(verb, pa, params, deny)
+}
+
+// linkTypingAuthority is what a typing caller over a link holds here, or nil
+// for the person. A stream the hub vouched for (linkHuman) is the person on
+// the hub, typing from outside every pane there, and is held to nothing new.
+//
+// Any other link stream comes from a pane on the hub, from the hub daemon
+// itself, or from a hub too old to vouch. The caller's own pane grants do not
+// travel over the link, so the check fails closed: the caller holds admin,
+// which the link policy's write capability already reaches here, and holds
+// respond only when the link policy allows respond. Such a caller cannot
+// answer another pane's prompt by typing unless the person on this machine
+// let the link answer prompts.
+func (d *Daemon) linkTypingAuthority(cs *connState) *paneAuth {
+	if cs == nil || !cs.viaLink || cs.linkHuman {
+		return nil
+	}
+	policy := d.linkPolicy(cs)
+	g := GrantAdmin
+	if policy.Allows(config.LinkAllowRespond) {
+		g |= GrantRespond
+	}
+	peer, table := policy.Peer, `[hosts."*"]`
+	if peer == "" {
+		peer = "unnamed"
+	} else {
+		table = "[hosts." + peer + "]"
+	}
+	return &paneAuth{window: "link:" + peer, via: "link", grants: g, linkTable: table}
 }
 
 // typingVerbs are the verbs that type into one pane: what they type runs with
