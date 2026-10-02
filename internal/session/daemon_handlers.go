@@ -181,6 +181,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
+	cs.sessionName = session.Name()
 	cs.width = payload.Width
 	cs.height = payload.Height
 	cs.reserve = payload.Reserve
@@ -191,6 +192,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()
+	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name(), Attached: ptr(true)})
 
 	// Before the reply, so a pane that probes the moment this client can see
 	// it is already answered for this client's machine.
@@ -389,6 +391,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	// cs.mu. Unsubscribe and notify after releasing the lock.
 	cs.mu.Lock()
 	sessionID := cs.sessionID
+	sessionName := cs.sessionName
 	if sessionID == "" {
 		cs.mu.Unlock()
 		return false
@@ -399,11 +402,19 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	}
 	cs.ptySubscriptions = make(map[string]struct{})
 	cs.sessionID = ""
+	cs.sessionName = ""
 	cs.width = 0
 	cs.height = 0
 	cs.reserve = LayoutReserve{}
 	cs.attached = false
 	cs.mu.Unlock()
+	d.events.publish(streamEvent{
+		Type:     EventClientSessionChanged,
+		ClientID: cs.clientID,
+		PID:      cs.peerPID,
+		Session:  sessionName,
+		Attached: ptr(false),
+	})
 
 	// Unsubscribe from all PTYs and forget where each stream got to. A resume
 	// position is a claim that the client still holds the pane it drew, and a

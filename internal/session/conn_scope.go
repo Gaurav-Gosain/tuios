@@ -109,6 +109,7 @@ var verbScopes = map[string]scopeKind{
 	"apply-config": scopeDeny,
 
 	"list-sessions":      scopeGlobal,
+	"list-clients":       scopeGlobal,
 	"list-attention":     scopeGlobal,
 	"list-worktrees":     scopeGlobal,
 	"list-hosts":         scopeGlobal,

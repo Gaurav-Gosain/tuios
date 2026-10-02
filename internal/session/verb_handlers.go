@@ -144,6 +144,14 @@ func (d *Daemon) verbListSessions(_ *connState, _ json.RawMessage) (any, *verbEr
 	}, nil
 }
 
+// verbListClients exposes the daemon's current connections to protocol clients.
+func (d *Daemon) verbListClients(_ *connState, _ json.RawMessage) (any, *verbError) {
+	return map[string]any{
+		"type":    "client_list",
+		"clients": d.listClients(),
+	}, nil
+}
+
 func (d *Daemon) verbSessionInfo(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

@@ -109,3 +109,47 @@ func TestOtherSessionsAreUnaffected(t *testing.T) {
 	case <-time.After(750 * time.Millisecond):
 	}
 }
+
+// TestDetachFromKilledSessionNamesIt covers a client that detaches, rather
+// than disconnects, after its session is killed. The manager has already
+// deleted the session then, so the leave event must carry the name the
+// client attached under or a --session reader never sees the client leave.
+func TestDetachFromKilledSessionNamesIt(t *testing.T) {
+	d, _ := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+
+	client := attachTestClient(t, "work")
+	ended := make(chan struct{}, 1)
+	client.OnSessionEnded(func(string, string) { ended <- struct{}{} })
+
+	sub := d.events.subscribe(eventFilter{}, 64)
+	t.Cleanup(func() { d.events.unsubscribe(sub) })
+
+	if err := d.manager.DeleteSession("work"); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no session-ended notification")
+	}
+	if err := client.Detach(); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-sub.ch:
+			if ev.Type != EventClientSessionChanged || ev.Attached == nil || *ev.Attached {
+				continue
+			}
+			if ev.Session != "work" {
+				t.Fatalf("leave event session = %q, want %q", ev.Session, "work")
+			}
+			return
+		case <-deadline:
+			t.Fatal("no leave event after the detach")
+		}
+	}
+}

@@ -54,6 +54,8 @@ const (
 	EventSessionCreated = "session-created" // a session was created
 	EventSessionClosed  = "session-closed"  // a session was terminated
 	EventGap            = "gap"             // slow-subscriber marker: N events were dropped
+	// EventClientSessionChanged reports a client attaching, detaching or switching.
+	EventClientSessionChanged = "client-session-changed"
 	// EventAttention is a change to the Inbox, the daemon's attention queue:
 	// an item opened, updated or closed. Action says which, and Attention
 	// carries the item. See attention.go.
@@ -116,6 +118,12 @@ type streamEvent struct {
 	Window  string `json:"window,omitempty"`
 	PTYID   string `json:"pty_id,omitempty"`
 	Title   string `json:"title,omitempty"`
+	// ClientID identifies the daemon connection whose session changed.
+	ClientID string `json:"client_id,omitempty"`
+	// PID is the kernel peer process of the daemon connection.
+	PID int `json:"pid,omitempty"`
+	// Attached says whether the client entered or left Session.
+	Attached *bool `json:"attached,omitempty"`
 	// Body is a notification event's text. Title carries its title, which
 	// OSC 9 never sets.
 	Body    string `json:"body,omitempty"`

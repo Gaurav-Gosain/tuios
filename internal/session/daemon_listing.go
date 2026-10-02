@@ -1,5 +1,30 @@
 package session
 
+import (
+	"cmp"
+	"slices"
+)
+
+// listClients snapshots daemon connections and their current sessions. The
+// session names are resolved after clientsMu is released.
+func (d *Daemon) listClients() []ClientInfo {
+	d.clientsMu.RLock()
+	clients := make([]ClientInfo, 0, len(d.clients))
+	sessionIDs := make([]string, 0, len(d.clients))
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		sessionIDs = append(sessionIDs, cs.sessionID)
+		cs.mu.Unlock()
+		clients = append(clients, ClientInfo{ClientID: cs.clientID, PID: cs.peerPID})
+	}
+	d.clientsMu.RUnlock()
+	for i := range clients {
+		clients[i].Session = d.sessionNameByID(sessionIDs[i])
+	}
+	slices.SortFunc(clients, func(a, b ClientInfo) int { return cmp.Compare(a.ClientID, b.ClientID) })
+	return clients
+}
+
 // listSessions is the manager's listing plus the one fact only the daemon
 // knows: whether a client is looking at each session.
 //

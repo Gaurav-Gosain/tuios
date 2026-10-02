@@ -406,8 +406,13 @@ type connState struct {
 	// callbacks, size recalculation, command routing). Lock ordering: readers
 	// that also hold d.clientsMu always take d.clientsMu first, then cs.mu; no
 	// path takes cs.mu then d.clientsMu.
-	mu               sync.Mutex
-	sessionID        string // Session they're attached to
+	mu        sync.Mutex
+	sessionID string // Session they're attached to
+	// sessionName is the name of the session sessionID names. The leave
+	// event carries it, and a session killed under its clients is already
+	// gone from the manager when they leave it, so the name cannot be
+	// looked up by ID then. onSessionRenamed keeps it current.
+	sessionName      string
 	ptySubscriptions map[string]struct{}
 	// ptyResume is where each PTY's stream had got to when this client last
 	// unsubscribed, so hiding and showing a pane resumes rather than replays.
@@ -991,6 +996,22 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 	// cache included, already handles by listing again.
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: old})
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+	// A client in the session stays in it under the new name, which changes
+	// the session list-clients reports for it.
+	d.clientsMu.RLock()
+	var moved []streamEvent
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		if cs.sessionID == s.ID {
+			cs.sessionName = name
+			moved = append(moved, streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: name, Attached: ptr(true)})
+		}
+		cs.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
+	for _, ev := range moved {
+		d.events.publish(ev)
+	}
 }
 
 // onSessionDeleted publishes a session-closed event and tells every client
@@ -1592,6 +1613,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		// Snapshot subscriptions and session under cs.mu before unsubscribing.
 		cs.mu.Lock()
 		sessionID := cs.sessionID
+		sessionName := cs.sessionName
 		subs := make([]string, 0, len(cs.ptySubscriptions))
 		for ptyID := range cs.ptySubscriptions {
 			subs = append(subs, ptyID)
@@ -1600,6 +1622,13 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 
 		// Unsubscribe from all PTYs
 		if sessionID != "" {
+			d.events.publish(streamEvent{
+				Type:     EventClientSessionChanged,
+				ClientID: clientID,
+				PID:      cs.peerPID,
+				Session:  sessionName,
+				Attached: ptr(false),
+			})
 			d.forgetPushes(cs, sessionID)
 			if session := d.manager.GetSessionByID(sessionID); session != nil {
 				for _, ptyID := range subs {
