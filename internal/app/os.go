@@ -141,9 +141,13 @@ type OS struct {
 	ScrollbarGrabOffset int
 	Windows             []*terminal.Window
 	FocusedWindow       int
-	Width               int
-	Height              int
-	Mode                Mode
+	// PrevFocusedID is the window focus came from most recently, for the
+	// last_pane toggle. A window ID, not an index: indices shift on close and
+	// reorder.
+	PrevFocusedID string
+	Width         int
+	Height        int
+	Mode          Mode
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
 	// emulator cell data; that is Window.ioMu.
