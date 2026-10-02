@@ -72,3 +72,22 @@ func TestWorkspaceChipLabelIsCapped(t *testing.T) {
 		t.Errorf("an unnamed workspace's chip reads %q, want its number", got)
 	}
 }
+
+// TestWorkspaceChipLabelIsWholeWhenUncapped: a cap of 0 draws the whole name,
+// and a pill drawing all of it has nothing left for the hover to reveal.
+func TestWorkspaceChipLabelIsWholeWhenUncapped(t *testing.T) {
+	m := chipOS(t)
+	name := strings.Repeat("long-", 12)
+	m.adoptSessionLabels(&session.SessionState{
+		WorkspaceNames: map[int]string{2: name},
+	})
+	m.Settings.DockWorkspaceLabelMax = 0
+
+	label := m.workspacePillLabel(2)
+	if !strings.Contains(label, name) {
+		t.Errorf("an uncapped pill renders %q, want the whole name", label)
+	}
+	if m.workspacePillClipped(2) {
+		t.Error("an uncapped pill reports itself clipped")
+	}
+}

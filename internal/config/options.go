@@ -139,6 +139,11 @@ var optionSpecs = []Option{
 		Accepted:    LinkModes, Default: LinksAll,
 	},
 	{
+		Path: "appearance.link_label", Type: OptionBool, Section: "appearance",
+		Description: "Pop up a label naming the address of the link under the pointer",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
 		Description: "Hide the minimize, maximize and close buttons",
 		Default:     "false",
@@ -523,6 +528,11 @@ var optionSpecs = []Option{
 		Path: "appearance.dock_workspace_tooltip", Type: OptionBool, Section: "dock",
 		Description: "Pop a truncated workspace name in full on hover",
 		Default:     "true",
+	},
+	{
+		Path: "appearance.dock_workspace_label_max", Type: OptionInt, Section: "dock",
+		Description: "Cells a workspace pill's label may span before the pill cuts it (0 draws the whole name and scrolls the strip instead)",
+		Default:     "12", Min: 0, Max: 200,
 	},
 	{
 		Path: "appearance.dock_pill_caps", Type: OptionBool, Section: "dock",
