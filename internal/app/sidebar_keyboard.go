@@ -44,8 +44,10 @@ func (m *OS) EnterSidebarFocus() {
 	if m.SidebarFocused {
 		return
 	}
+	// Shown on this client alone: the scope is this person's keyboard, not a
+	// change to the session's rail.
 	if !m.Settings.SidebarEnabled {
-		m.ToggleSidebar()
+		m.setSidebarShown(true)
 		m.SidebarRevealedForFocus = true
 	}
 	m.SidebarFocused = true
@@ -92,9 +94,7 @@ func (m *OS) ExitSidebarFocus() {
 	m.endSidebarReturn()
 	if m.SidebarRevealedForFocus {
 		m.SidebarRevealedForFocus = false
-		if m.Settings.SidebarEnabled {
-			m.ToggleSidebar()
-		}
+		m.setSidebarShown(false)
 	}
 }
 

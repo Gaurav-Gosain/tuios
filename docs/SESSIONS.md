@@ -179,6 +179,27 @@ If only viewers are attached, they set the size. A tool
 that uses the verb socket only, such as Collie, is not a client with a size.
 It does not change the size of the session.
 
+### The sidebar with more than one client
+
+The sidebar is part of the session. When you show or hide it on one client,
+every client of the session shows or hides it. The panes then take the new
+space on every client.
+
+A new session takes the sidebar setting of the first client that attaches,
+from `appearance.sidebar.enabled`. A later client with a different setting
+uses the session's value. When you toggle the sidebar, tuios also keeps the
+new value in your config for the next new session. A reload of the config
+file does not change the sidebar of a session that is running.
+
+The width of the sidebar stays per client. A client too narrow to show the
+sidebar does not change it for the session. When the clients use different
+widths, the panes use the space next to the widest sidebar. A client with a
+narrower sidebar shows the difference as empty space.
+
+A client from a version of tuios before this change keeps its sidebar to
+itself. A new client attached to an older daemon also keeps its sidebar to
+itself.
+
 ### In-app session switching
 
 `Ctrl+B` `S` opens the session switcher. Type to fuzzy-filter, `Enter` to switch
@@ -377,6 +398,7 @@ BSP tree and the layout mode.
 | Scrollback | Yes | Yes, the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
 | Running programs (vim, tail, a build) | Yes | No | No | No |
 | Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
+| Sidebar shown or hidden | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
 | Copy-mode position, selection | No, per-client | No | No | No |
 | Input mode (window vs terminal) | No, per-client | No | No | No |
 

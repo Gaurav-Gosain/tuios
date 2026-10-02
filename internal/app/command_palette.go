@@ -51,14 +51,17 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// Runs on the Bubble Tea goroutine, so applying it to this session's
 	// settings is single-threaded and reaches nobody else's session.
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	// Whether the rail is shown is the session's once the session has a
+	// value. The file's value is what a new session starts with, so a reload
+	// does not show or hide the rail on every client. See keepSessionSidebar.
+	m.keepSessionSidebar(false)
 	// Retiled, not just repainted. The sidebar's width and side, the dock's
 	// position and the pane gap all change how much room the panes have, and
 	// this path had only ever repainted them: a gap edited in the file moved
 	// the global and left the rectangles where they were.
 	m.applyAppearanceLive(true)
 	// The file can move the sidebar and the dock, which is the chrome the
-	// session's reserve is settled from.
-	m.AnnounceLayoutReserve()
+	// session's reserve is settled from. settleChrome announces it.
 	// The dock section is rebuilt here too rather than only at startup. A
 	// feature whose distribution story is "copy a file" that then needed a
 	// restart to see the file would be most of the story missing. This is also

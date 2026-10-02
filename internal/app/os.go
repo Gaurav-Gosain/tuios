@@ -714,6 +714,24 @@ type OS struct {
 	// masterSeeded marks the workspaces this client has offered its configured
 	// shape to the session for. See seedMasterLayout.
 	masterSeeded map[int]bool
+	// sidebarSeeded records that this client has offered its configured
+	// sidebar visibility to the session it is attached to. See seedSidebar.
+	sidebarSeeded bool
+	// sidebarSession is the session's sidebar visibility as this client last
+	// adopted it, or empty when the session has none or the daemon does not
+	// keep it. See adoptSidebarVisibility.
+	sidebarSession string
+	// chromeSeen is the chrome this client drew around the panes, and the
+	// size it drew it on, as of the end of the last Update. See settleChrome.
+	chromeSeen struct {
+		reserve       session.LayoutReserve
+		width, height int
+	}
+	// reserveOwed records that this client told the daemon its chrome moved
+	// and the answer has not come back. The answer is a session resize, and
+	// the layout this client works out from it is pushed, because that is the
+	// layout the daemon has to keep. See AnnounceLayoutReserve.
+	reserveOwed bool
 
 	// lastConfigMaster is the configured master-stack shape as this OS last
 	// saw it. See adoptConfigMasterLayout.

@@ -79,6 +79,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		WindowSize: true,
 		// See daemon_dirwatch.go.
 		DirWatch: true,
+		// See sidebar_visibility.go.
+		SidebarOps: true,
 	})
 }
 

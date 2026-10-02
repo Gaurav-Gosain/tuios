@@ -287,6 +287,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// The master-stack shapes are daemon-owned in the same way. See
 	// RestoreMasterLayouts.
 	sess.RestoreMasterLayouts(state.WorkspaceMasterLayout)
+	// Whether the rail is shown is daemon-owned in the same way. See
+	// RestoreSidebar.
+	sess.RestoreSidebar(state.Sidebar)
 	// The scratch mark is daemon-owned in the same way: UpdateState keeps
 	// only the marks canonical state already has, and a new session has none.
 	if len(scratchPanes) > 0 {

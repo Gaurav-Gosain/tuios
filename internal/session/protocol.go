@@ -152,6 +152,10 @@ const (
 	// it only to a daemon whose welcome set DirWatch. See daemon_dirwatch.go.
 	MsgWatchDir
 	MsgDirChanged
+	// MsgSidebarVisibility says whether the session shows the sidebar rail,
+	// as an op the daemon applies and versions. A client sends it only to a
+	// daemon whose welcome set SidebarOps. See sidebar_visibility.go.
+	MsgSidebarVisibility
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -268,6 +272,10 @@ type WelcomePayload struct {
 	WindowSize bool `json:"window_size,omitzero"`
 	// DirWatch says the daemon reads MsgWatchDir and sends MsgDirChanged.
 	DirWatch bool `json:"dir_watch,omitzero"`
+	// SidebarOps says the daemon reads MsgSidebarVisibility and keeps whether
+	// the rail is shown as session state. A client that does not see it keeps
+	// its rail to itself, as every client did before.
+	SidebarOps bool `json:"sidebar_ops,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.

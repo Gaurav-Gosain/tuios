@@ -289,6 +289,16 @@ a working negative control look like a broken one for half an hour.
 | A master-stack resize is not kept in the ratio on every side (#321) | n/a, injected, cuts the call site | drop `m.setMasterRatio(ratio)` in `SyncMasterStackFromGeometry` | `TestMasterResizeKeepsItsRatio` (the retile takes the master back from 80 to 60 columns), `TestMasterDividerDragInTheCenter` | **caught** |
 | A daemon restart drops each workspace's master layout (#321) | n/a, injected, cuts the call site | drop the `RestoreMasterLayouts` call in `daemon_resurrect.go` | `TestMasterLayoutSurvivesADaemonRestart` (the restored session puts the master back on the left) | **caught** |
 | A client with the default config does not settle the master layout, so a later client with another config moves it (#321) | n/a, injected | `seedMasterLayout` returns early when the configured shape is the default, as it first did | `TestFirstClientSettlesTheMasterLayout` (the right-hand client moves the master to the right on both screens) | **caught** |
+| Hiding the rail leaves the daemon holding the old pane rectangles: the toggle retiled against the stale session reserve, and the retile on the daemon's resize answer was never pushed | whole change | build `origin/main` at `0f70da9d` and point `TUIOS_E2E_BIN` at it | `TestHidingTheRailGrowsThePanes/bsp`, `/master-stack` and `/scrolling` (each at "the daemon after the rail is hidden": the panes still start at column 28) | **caught** (3 of 3 run) |
+| The same, with the rest of the change in place | n/a, injected, cuts the call site | `if false && m.reserveOwed` in the `SessionResizeMsg` case in `internal/app/update.go` | `TestHidingTheRailGrowsThePanes/bsp`, `/master-stack` and `/scrolling`, at the same step | **caught** (3 of 3 run) |
+| Chrome moved by a command (set-config) is never laid out or announced | whole change | as above, main at `0f70da9d` | `TestChromeSetFromTheCommandLineRetilesThePanes` (at "the daemon after the dock is hidden": the panes stay at row 2, 38 rows tall) | **caught** |
+| The same, with the rest of the change in place | n/a, injected, cuts the call site | drop the `m.settleChrome()` call in `OS.Update` | `TestChromeSetFromTheCommandLineRetilesThePanes`, at the same step | **caught** |
+| Whether the rail is shown is each client's own, so hiding it on one client hides it nowhere else | whole change | as above, main at `0f70da9d` | `TestHidingTheRailHidesItOnEveryClient` (at "the second client attaching": it reads its own config and draws no rail) | **caught** |
+| A client does not adopt the session's rail from a state sync | n/a, injected, cuts the call site | `sidebarRetile := false` in place of the `adoptSidebarVisibility` call in `ApplyStateSyncFrom` | `TestHidingTheRailHidesItOnEveryClient` (at "the first client after it hid the rail": the second client keeps its rail, so the session keeps the rail's columns and the first client's panes do not grow) | **caught** |
+| A daemon restart forgets that the rail was hidden | whole change | as above, main at `0f70da9d` | `TestHiddenRailSurvivesADaemonRestart` (at "the daemon before the restart", the stale-rectangle bug above) | **caught** |
+| The same, with the rest of the change in place | n/a, injected, cuts the call site | drop the `RestoreSidebar` call in `daemon_resurrect.go` | `TestHiddenRailSurvivesADaemonRestart` (at "the client after the restart": it shows the rail its config asks for) | **caught** |
+| An old client is made to follow the session's rail | n/a, injected, removes the gate | `c.sidebarOps.Store(welcome.SidebarOps)` in the welcome, ignoring `TUIOS_SIDEBAR_LEGACY` | `TestOldClientKeepsItsOwnRail` (at "the old client after the new one hid its rail": the old client hides its rail too) | **caught** |
+| (the old-client test on main) | whole change | as above, main at `0f70da9d` | `TestOldClientKeepsItsOwnRail` (at "the daemon with both rails hidden", the stale-rectangle bug above) | **caught** |
 | A narrowing resize erases a wide rune from history for good (found through Collie v1.15.0) | n/a, injected, cuts the call site | put back the history blanking call in `vt.Emulator.Resize` | `TestWideRuneInHistorySurvivesANarrowPane` ("the history line \"WRA世…\" holds 29 of its 30 runes") | **caught** |
 | A screenshot draws a history row one column wider than the pane | n/a, injected, cuts the call site | drop the `vt.ClipHistoryRow` call in `gridOf`, `internal/session/screenshot_grid.go` | `TestWideRuneInHistorySurvivesANarrowPane` ("a screenshot row is 49 columns wide in a 48-column pane") | **caught** |
 | A scrolled-back history row spills over the pane's border (the reason the history blanking existed) | n/a | no single call site: on a build without the blanking and without any per-row clip, the client's frame still stops the row at the border, so the test's frame check is a guard on that and has no control | `TestWideRuneInHistorySurvivesANarrowPane` passes | **not applicable** |
@@ -382,6 +392,12 @@ bugs whose symptom is a wrong screen that persists, and the wrong tool for bugs
 whose symptom is a narrow timing window or a memory race.
 
 ## Why the two-client chrome test catches nothing
+
+Since the rail became session state, a current second client shows the rail
+with the first, so the test runs its second client with
+`TUIOS_SIDEBAR_LEGACY=1`, as a build from before that. Chrome that differs
+between two clients is still possible against an older client, and the test
+still guards that case.
 
 `TestOneClientsRailDoesNotMoveAnotherClientsPanes` was written expecting to fail
 with the agreed layout reserve removed, and it does not. It is kept as a

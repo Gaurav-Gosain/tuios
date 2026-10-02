@@ -170,6 +170,9 @@ type TUIClient struct {
 	// masterOps says the daemon's welcome offered MsgMasterLayout. See
 	// master_layout.go.
 	masterOps atomic.Bool
+	// sidebarOps says the daemon's welcome offered MsgSidebarVisibility. See
+	// sidebar_visibility.go.
+	sidebarOps atomic.Bool
 	// daemonRefusesAnimation says the daemon's welcome offered
 	// KittyAnimationRefusal. See DaemonRefusesKittyAnimation.
 	daemonRefusesAnimation atomic.Bool
@@ -373,6 +376,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.focusSupported = welcome.ClientFocus
 	c.treeOps.Store(welcome.LayoutTreeOps)
 	c.masterOps.Store(welcome.MasterLayoutOps)
+	c.sidebarOps.Store(welcome.SidebarOps && !legacySidebar())
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
@@ -2097,10 +2101,16 @@ func (c *TUIClient) CacheGen() uint64 {
 	return c.cacheGen.Load()
 }
 
+// errNoConnection is a send on a client that never connected.
+var errNoConnection = errors.New("not connected to the daemon")
+
 func (c *TUIClient) send(msg *Message) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.conn == nil {
+		return errNoConnection
+	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	return WriteMessage(c.conn, msg)
 }
