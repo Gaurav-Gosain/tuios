@@ -173,3 +173,47 @@ func TestDockOverflowMarkerIsClickableWhereItIsDrawn(t *testing.T) {
 		t.Errorf("the marker stands for %d entries, %d were dropped", m.dockOverflowHit.Overflowed, layout.TruncatedCount)
 	}
 }
+
+// TestDockKeepsTheWholeNameWhileThereIsRoom pins the length ladder's top step:
+// a wide bar draws a minimized entry's name in full, however long it is. The
+// entry used to be cut at a fixed dozen cells with the bar mostly empty around
+// it.
+func TestDockKeepsTheWholeNameWhileThereIsRoom(t *testing.T) {
+	const long = "scooter-import-lets-deploy-sync-generate-apply"
+	m := dockCrowdedOS(t, 200, 1, 1)
+	m.Windows[len(m.Windows)-1].CustomName = long
+	layout := m.CalculateDockLayout()
+	if layout.TruncatedCount != 0 {
+		t.Fatalf("the only entry was dropped on a 200-column dock")
+	}
+	row := dockRow(t, m)
+	if !strings.Contains(row, long) {
+		t.Fatalf("the entry cut %q with room to spare:\n%s", long, row)
+	}
+}
+
+// TestDockShortensNamesTogetherBeforeDroppingAnEntry pins the middle step: when
+// the full names no longer fit, the entries share the bar and every one of them
+// survives at a shorter length. An entry was dropped here before its name gave
+// up a single cell.
+func TestDockShortensNamesTogetherBeforeDroppingAnEntry(t *testing.T) {
+	m := dockCrowdedOS(t, 90, 1, 3)
+	for i, w := range m.Windows {
+		if w.Minimized {
+			w.CustomName = fmt.Sprintf("minimized-pane-number-%d", i)
+		}
+	}
+	layout := m.CalculateDockLayout()
+	if layout.TruncatedCount != 0 {
+		t.Fatalf("%d entries dropped while their names still had cells to give", layout.TruncatedCount)
+	}
+	if len(layout.VisibleItems) != 3 {
+		t.Fatalf("%d entries on the dock, want 3", len(layout.VisibleItems))
+	}
+	for _, it := range layout.VisibleItems {
+		full := dockItemLabel(it.Number, m.Windows[it.WindowIndex].CustomName)
+		if it.Label == full || !strings.Contains(it.Label, "…") {
+			t.Errorf("entry %q did not shorten to fit (full name %q)", it.Label, full)
+		}
+	}
+}
