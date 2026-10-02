@@ -161,14 +161,23 @@ func (m *OS) commandEnv(dir string) map[string]string {
 // names, or "".
 func (m *OS) remotePaneDir() string {
 	w := m.GetFocusedWindow()
-	if w == nil || w.Cwd == "" {
+	if w == nil {
 		return ""
 	}
-	if u, err := url.Parse(w.Cwd); err == nil && u.Scheme == "file" {
+	return remoteFolder(w.Cwd)
+}
+
+// remoteFolder is the path an OSC 7 report names, whatever host it names, or
+// "". Nothing checks it: the folder is on the session's machine, not this one.
+func remoteFolder(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err == nil && u.Scheme == "file" {
 		return u.Path
 	}
-	if filepath.IsAbs(w.Cwd) {
-		return w.Cwd
+	if filepath.IsAbs(raw) {
+		return raw
 	}
 	return ""
 }
