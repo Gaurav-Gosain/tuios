@@ -640,16 +640,14 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 // goroutine: an exit callback can run where the state lock is held. A window
 // that an attached client closed first is gone already, which is fine.
 func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string) {
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	d.goTracked(func() {
 		for _, w := range sess.GetState().Windows {
 			if w.PTYID == ptyID {
 				_, _ = sess.CloseDaemonWindow(w.ID)
 				return
 			}
 		}
-	}()
+	})
 }
 
 // verbCloseWorkspace closes every pane on one workspace. A scratch pane is
