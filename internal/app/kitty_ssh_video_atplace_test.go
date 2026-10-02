@@ -60,6 +60,7 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
@@ -107,6 +108,7 @@ func TestInlineOverlayVideoStaysTransmitOnly(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	for range 2 {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 	// Let any async frame land.
@@ -160,7 +162,9 @@ func TestRemoteVideoFrameIsCompressed(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("o=z") }, 2*time.Second) {
 		t.Fatal("remote video frame was not compressed (no o=z); the ssh link gets raw RGBA")
@@ -181,7 +185,9 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	// Two frames on the alt screen (isAltScreen=true): the second self-places.
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video was never placed")
@@ -225,6 +231,7 @@ func rewriteShm(t *testing.T, name string, w, h int, seed byte) {
 	if err := os.WriteFile("/dev/shm/"+name, data, 0o600); err != nil {
 		t.Fatalf("rewrite shm: %v", err)
 	}
+	shmFrames.Store(name, data)
 }
 
 // sendUntil keeps handing frames to the passthrough until cond holds.
@@ -259,6 +266,7 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
@@ -294,7 +302,9 @@ func TestRemoteVideoCountsInHasPlacements(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video never placed")
@@ -317,6 +327,7 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	}
 
@@ -359,7 +370,9 @@ func TestOverlayCloseReshowsWithoutNewFrame(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video never placed")
@@ -398,6 +411,7 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	for range 2 { // the second frame reuses the id and self-places
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 30, 12, 0, 0, 0, 0, 0, false, func([]byte) {})
 	}
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {

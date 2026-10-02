@@ -44,8 +44,26 @@ func makeShmFrame(t *testing.T, w, h int) string {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Skipf("cannot write /dev/shm object (no shm?): %v", err)
 	}
+	shmFrames.Store(name, data)
 	t.Cleanup(func() { _ = os.Remove(path) })
 	return name
+}
+
+// shmFrames is the content each test object was last written with, by name.
+var shmFrames sync.Map
+
+// resendShm writes a test object again with the content it last had, the way
+// a guest writes each frame's object: the terminal deletes an object once it
+// has read it, so the same name is only there again if the guest puts it back.
+func resendShm(t *testing.T, name string) {
+	t.Helper()
+	data, ok := shmFrames.Load(name)
+	if !ok {
+		t.Fatalf("resendShm: %s was never made", name)
+	}
+	if err := os.WriteFile("/dev/shm/"+name, data.([]byte), 0o600); err != nil {
+		t.Fatalf("resend shm: %v", err)
+	}
 }
 
 // synthShmTransmitPlace builds the exact frame from the captured crash: an a=T
@@ -132,6 +150,7 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 	// goroutine in production; the render path (RefreshAllPlacements +
 	// FlushPending + WriteToHost) runs in View().
 	for range 10 {
+		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID,
 			0, 0, 181, 40, 1, 1, 0, 0, 0, false,
 			func(resp []byte) {})

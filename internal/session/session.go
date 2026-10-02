@@ -766,6 +766,11 @@ type PTY struct {
 	// Subscribers for raw output streaming.
 	subscribers   map[string]*ptySubscriber
 	subscribersMu sync.RWMutex
+	// subscriberCount is len(subscribers), kept beside the map so the
+	// emulator's callbacks can read it. They run under terminalMu, and
+	// subscribeLocked takes terminalMu under subscribersMu, so taking
+	// subscribersMu there would be the other order.
+	subscriberCount atomic.Int32
 
 	// debug mirrors TUIOS_DEBUG_INTERNAL, read once when the PTY is built.
 	// broadcast runs per chunk per subscriber, and a debugLog there costs an
@@ -1784,6 +1789,11 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		}
 		if response := kittyAnimationRefusal(cmd, remotePane, s.kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
+		}
+		// With no client attached to this pane, nothing will read the object
+		// a shared memory frame names. See kitty_medium.go.
+		if !remotePane && pty.subscriberCount.Load() == 0 {
+			releaseUnreadKittyMedium(cmd)
 		}
 	})
 
@@ -3028,6 +3038,7 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	// The channel itself is 160 KiB per (client, pane); at 16384 it was 640.
 	sub := &ptySubscriber{ch: make(chan ptyChunk, 4096)}
 	p.subscribers[clientID] = sub
+	p.subscriberCount.Store(int32(len(p.subscribers)))
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
 	// Send whatever the client has not seen to catch it up.
@@ -3139,6 +3150,7 @@ func (p *PTY) Unsubscribe(clientID string) int64 {
 	// chunk broadcast up to here does reach the client.
 	close(sub.ch)
 	delete(p.subscribers, clientID)
+	p.subscriberCount.Store(int32(len(p.subscribers)))
 	return sub.sent.Load()
 }
 
@@ -4279,6 +4291,7 @@ func (p *PTY) Close() error {
 		close(sub.ch)
 		delete(p.subscribers, id)
 	}
+	p.subscriberCount.Store(0)
 	p.subscribersMu.Unlock()
 
 	// Kill process
