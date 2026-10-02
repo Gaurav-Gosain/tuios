@@ -30,7 +30,9 @@ func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, ms
 	} else {
 		win.Pty = pty
 	}
-	o := &app.OS{Settings: config.Global, Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	// The host answered the flag query with event types in effect, so the
+	// release comes from it rather than with the press.
+	o := &app.OS{Settings: config.Global, Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}, KeyboardFlags: hostReportsEvents}
 	// The press comes first, as it does from a keyboard. Only what the release
 	// sends is returned.
 	HandleInput(tea.KeyPressMsg(msg.Key()), o)
@@ -41,6 +43,11 @@ func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, ms
 	}
 	return string(pty.got)
 }
+
+// hostReportsEvents is a host that answered the flag query with disambiguate,
+// event types, alternate keys, all keys and associated text in effect: it
+// sends every release itself.
+const hostReportsEvents = 31
 
 // pushEventTypes is what a compositor in a pane pushes: disambiguation, event
 // types and all-keys-as-escape-codes (CSI >11u). wlterm pushes exactly this.

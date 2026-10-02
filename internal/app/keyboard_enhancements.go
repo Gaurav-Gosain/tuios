@@ -104,6 +104,17 @@ func (m *OS) PaneKeyboardFlags() int {
 	return window.Terminal.KittyKeyboardFlags()
 }
 
+// HostReportsReleases reports whether the host terminal is sending key
+// releases now: it answered the flag query with event types in effect. A host
+// that never answered sends none, since releases exist only in the kitty
+// keyboard protocol and every terminal that speaks it answers the query.
+//
+// The answer arrives in the same stream as the keys, after the keys the host
+// sent under the old flags, so it is accurate for the key being read.
+func (m *OS) HostReportsReleases() bool {
+	return m.KeyboardFlags&ansi.KittyReportEventTypes != 0
+}
+
 // NoteKeyboardEnhancements records what the host answered the enhancement query
 // with.
 func (m *OS) NoteKeyboardEnhancements(msg tea.KeyboardEnhancementsMsg) {

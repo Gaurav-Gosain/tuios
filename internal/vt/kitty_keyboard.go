@@ -240,8 +240,9 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		return ""
 	}
 	code = form.num
+	mods := kittyModField(key, flags)
 	if form.final != 'u' {
-		return encodeFormCSIu(form, key.Mod)
+		return encodeFormCSIu(form, mods)
 	}
 
 	// For regular keys, encode as CSI code ; modifiers u.
@@ -254,20 +255,32 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	// the unshifted character, so Shift+A types "a", ":" types ";", and any
 	// non-ASCII text is dropped. The field is a colon-separated list of the
 	// produced text's Unicode code points; see the kitty keyboard protocol.
-	modParam := kittyModParam(key.Mod)
 	keyField := strconv.Itoa(code)
 	if flags&ansi.KittyReportAlternateKeys != 0 {
 		keyField = kittyAlternateKeys(code, key)
 	}
 	if flags&ansi.KittyReportAssociatedKeys != 0 {
 		if text := kittyAssociatedText(key.Text); text != "" {
-			return fmt.Sprintf("\x1b[%s;%d;%su", keyField, modParam, text)
+			return fmt.Sprintf("\x1b[%s;%s;%su", keyField, mods, text)
 		}
 	}
-	if modParam > 1 {
-		return fmt.Sprintf("\x1b[%s;%du", keyField, modParam)
+	if mods != "1" {
+		return fmt.Sprintf("\x1b[%s;%su", keyField, mods)
 	}
 	return fmt.Sprintf("\x1b[%su", keyField)
+}
+
+// kittyModField renders the modifier field of a key press for a pane with
+// these flags: the modifier parameter, then ":2" for a repeat when the pane
+// asked for event types. kitty marks a held key's repeats that way, and a pane
+// that tracks presses and releases (a Wayland compositor does) would otherwise
+// read each repeat as a second press of a key that is already down.
+func kittyModField(key KeyPressEvent, flags int) string {
+	field := strconv.Itoa(kittyModParamFor(key.Mod, flags))
+	if key.IsRepeat && flags&ansi.KittyReportEventTypes != 0 {
+		field += ":2"
+	}
+	return field
 }
 
 // kittyAlternateKeys renders the key field for a pane that asked for alternate
@@ -492,10 +505,9 @@ func isKittyKeypadKey(code rune) bool {
 // encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.
 // With no modifiers the sequence is the bare legacy one, which is what every
 // terminal sends and every application already reads.
-func encodeFormCSIu(form csiuForm, mod KeyMod) string {
-	modParam := kittyModParam(mod)
-	if modParam > 1 {
-		return fmt.Sprintf("\x1b[%d;%d%c", form.num, modParam, form.final)
+func encodeFormCSIu(form csiuForm, mods string) string {
+	if mods != "1" {
+		return fmt.Sprintf("\x1b[%d;%s%c", form.num, mods, form.final)
 	}
 	if form.final == '~' {
 		return fmt.Sprintf("\x1b[%d~", form.num)
@@ -524,7 +536,29 @@ func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[%d;%d:3%c", form.num, kittyModParam(key.Mod), form.final)
+	return fmt.Sprintf("\x1b[%d;%d:3%c", form.num, kittyModParamFor(key.Mod, flags), form.final)
+}
+
+// kittyModParamFor is kittyModParam with the lock modifiers added for a pane
+// that asked for every key as an escape code: Caps Lock is 64 and Num Lock is
+// 128, as kitty sends them. Such a pane treats the lock keys as keys, and a
+// compositor among them keeps its own lock state, which it can only bring in
+// line with the host's from these bits: the desktop may have turned Num Lock on
+// before the pane ever had the keyboard. Other panes keep the field they always
+// got, so a Num Lock left on does not turn a plain arrow into CSI 1;129A for
+// them.
+func kittyModParamFor(mod KeyMod, flags int) int {
+	param := kittyModParam(mod)
+	if flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
+		return param
+	}
+	if mod&ModCapsLock != 0 {
+		param += 64
+	}
+	if mod&ModNumLock != 0 {
+		param += 128
+	}
+	return param
 }
 
 // kittyModParam converts modifier flags to the CSI parameter format.
