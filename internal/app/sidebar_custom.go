@@ -131,7 +131,8 @@ func (m *OS) railCustomComponent() *dockComponent {
 // column inset every row has. Height is the most rows the section's share
 // can give it, before the rail's chrome and the other sections' claims: a
 // ceiling, as shares are, and the docs say so. A rail collapsed to the glyph
-// strip draws no rows, so both are zero there.
+// strip, hidden or turned off draws no rows, so both are zero there, and the
+// engine runs nothing while the width is zero (runOnce).
 //
 // It runs once per message, so it only copies what the model holds. The
 // folder is left for the run to resolve (railContext.folder).
@@ -215,13 +216,22 @@ func (m *OS) RailCustomSyncCmd() tea.Cmd {
 // the focus must not wake a run before the new pane is handed over. The sync
 // after the handler would usually win that race, but only because the
 // debounce outlasts the handler.
+//
+// A rail that opens asks for one run. The engine skips every run while the
+// width is zero, so the rows are the last ones from before the rail shut, or
+// none when it was shut from the start, and a once or event section would
+// keep them until its next trigger.
 func (m *OS) syncRailContext() {
 	if !m.railCustom.on {
 		return
 	}
 	if ctx := m.railContextNow(); ctx != m.railCustom.ctx {
+		opened := m.railCustom.ctx.Width <= 0 && ctx.Width > 0
 		m.railCustom.ctx = ctx
 		m.dockEngine.SetRailContext(ctx)
+		if opened {
+			m.dockEngine.Rerun(railCustomComponent)
+		}
 	}
 }
 

@@ -38,6 +38,9 @@ func TestDockEngineCoalescesAnEventMidRun(t *testing.T) {
 		Refresh:   config.DockRefresh{Kind: config.DockRefreshEvent, Events: []string{"window-focused"}},
 	}})
 	t.Cleanup(engine.Stop)
+	// An open rail, as InitDockComponents tells it before Start: the engine
+	// runs nothing for the rail while the width is zero.
+	engine.SetRailContext(railContext{Width: 26, Height: 10})
 	engine.Start()
 
 	first := awaitDockUpdate(t, engine, 5*time.Second, "the run at start")
