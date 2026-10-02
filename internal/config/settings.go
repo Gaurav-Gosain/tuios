@@ -293,6 +293,10 @@ type Settings struct {
 	// it short. Off, a long name stays truncated with no way to read the rest.
 	DockWorkspaceTooltip bool
 
+	// DockWorkspaceLabelMax caps a workspace pill's label in cells. 0 draws the
+	// whole name and lets the strip's scroll arithmetic handle the width.
+	DockWorkspaceLabelMax int
+
 	// DockPillCaps puts powerline half-circle caps on the dock's mode chip,
 	// workspace tabs and minimized-window pills. On by default. Off, each is a
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
@@ -738,6 +742,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,
+		DockWorkspaceLabelMax:       12,
 		DockPillCaps:                true,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,

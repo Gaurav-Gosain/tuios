@@ -127,6 +127,12 @@ question about the screen. Do not change them unless the person asks.
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
+The dock's workspace tabs take two composition knobs of their own:
+`dock_workspace_tab_format` is the format string each tab prints, and
+`appearance.dock_workspace_label_max` caps the label in cells, so one long
+name cannot push the other pills off the bar. The cap is 12; `0` draws the
+whole name and lets the strip scroll.
+
 The options `list-options` prints are scalars, and spacing and composition are
 set with them like any other. Colour and shape are names from an open set, each standing for a
 file in a directory, so each has a verb of its own.
