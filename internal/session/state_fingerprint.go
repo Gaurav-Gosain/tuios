@@ -235,6 +235,11 @@ func StateFingerprint(s *SessionState) uint64 {
 		flag(s.WorkspaceHasCustom[k])
 	}
 
+	// The per-workspace layout modes, folded in for the same reason: a push that
+	// changes only the map has to reach the peer, and without it the push came
+	// out with the same fingerprint as the last one and was dropped as a repeat.
+	hashIntStr(s.WorkspaceLayoutModes)
+
 	num(len(s.WorkspaceOrder))
 	for _, v := range s.WorkspaceOrder {
 		num(v)

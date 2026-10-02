@@ -301,7 +301,12 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// Looking at a workspace clears its dock marks now, not at the next pane
 	// output, which an idle workspace may never send.
 	m.clearViewedWorkspaceMarks()
+	// A switch can change the layout mode: the workspace being shown chose a
+	// different one. The change is announced once the switch has landed, beside
+	// the workspace-switch hook below.
+	layoutModeBefore := m.LayoutModeName()
 	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
+	layoutModeChanged := m.LayoutModeName() != layoutModeBefore
 
 	// A caller-supplied target wins: focus exactly it, so the switch does not fire
 	// the focus hooks for a default window the caller is about to override.
@@ -393,6 +398,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// hears of a scratch workspace.
 	if session.IsScratchWorkspace(workspace) || session.IsScratchWorkspace(oldWorkspace) {
 		return
+	}
+	if layoutModeChanged {
+		m.FireLayoutChanged()
 	}
 	focusedID, focusedName := "", ""
 	if w := m.GetFocusedWindow(); w != nil {

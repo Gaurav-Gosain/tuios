@@ -229,6 +229,7 @@ func (m *OS) renumberLocalWorkspaces(newOf map[int]int) {
 	m.FocusHistory = session.RenumberWorkspaceMap(m.FocusHistory, newOf)
 	m.WorkspaceLayouts = session.RenumberWorkspaceMap(m.WorkspaceLayouts, newOf)
 	m.WorkspaceHasCustom = session.RenumberWorkspaceMap(m.WorkspaceHasCustom, newOf)
+	m.WorkspaceLayoutMode = session.RenumberWorkspaceMap(m.WorkspaceLayoutMode, newOf)
 	m.WorkspaceMasterRatio = session.RenumberWorkspaceMap(m.WorkspaceMasterRatio, newOf)
 	m.WorkspaceStackRatio = session.RenumberWorkspaceMap(m.WorkspaceStackRatio, newOf)
 	m.WorkspaceMasterSplits = session.RenumberWorkspaceMap(m.WorkspaceMasterSplits, newOf)

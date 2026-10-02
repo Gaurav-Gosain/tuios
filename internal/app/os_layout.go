@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -138,9 +139,32 @@ func (m *OS) FireDetached() {
 	m.HookManager.WaitTimeout(hookDrainTimeout)
 }
 
+// recordWorkspaceLayoutMode pins the layout the current workspace is in. Every
+// row that names a layout calls it, so the choice belongs to the workspace that
+// was on screen when it was made and follows that workspace through switches
+// and session state.
+//
+// A scratch group is shown on a scratch workspace, and a choice made while one
+// is up is deliberately not recorded: the entry would sit under the scratch
+// workspace's number and travel to the daemon and saved state as if an ordinary
+// workspace had chosen it. The group always tiles and holds no layout choice of
+// its own.
+func (m *OS) recordWorkspaceLayoutMode() {
+	if session.IsScratchWorkspace(m.CurrentWorkspace) {
+		return
+	}
+	if m.WorkspaceLayoutMode == nil {
+		m.WorkspaceLayoutMode = make(map[int]string)
+	}
+	m.WorkspaceLayoutMode[m.CurrentWorkspace] = m.LayoutModeName()
+}
+
 // ApplyLayoutModeName sets the layout mode from the name session state carries,
 // without retiling or notifying: it is the state-sync half of the Enable*
 // functions, and the caller retiles once it has applied the rest of the sync.
+// It records nothing: the workspace map is written by the rows that choose a
+// layout, and adopting a mode here would pin it to whatever workspace happens
+// to be on screen.
 //
 // An empty or unrecognized name leaves the mode alone. That is what lets the
 // field be additive: a daemon or a peer client that never sets it cannot reset
@@ -153,6 +177,36 @@ func (m *OS) ApplyLayoutModeName(name string) {
 		m.UseScrollingLayout, m.UseBSPLayout = false, true
 	case LayoutModeMasterStack:
 		m.UseScrollingLayout, m.UseBSPLayout = false, false
+	}
+}
+
+// adoptSessionLayoutMode migrates a session that predates the per-workspace
+// map. A state that names a mode but holds no entry for the workspace it is on
+// is one whose map predates the field: the mode it carries is the session's own,
+// so it is recorded for every workspace the state counts. Workspaces still
+// without an entry then take the mode the session was created with rather than
+// the attaching client's [startup] layout, and the mode is kept in
+// sessionLayoutMode for workspaces created after that state was built.
+//
+// Only attach and restore call it. A peer sync names whatever mode the peer
+// happens to be looking at, and letting it migrate would pin that peer's
+// current mode over every workspace that has no entry of its own.
+func (m *OS) adoptSessionLayoutMode(state *session.SessionState) {
+	if state == nil || state.LayoutMode == "" {
+		return
+	}
+	ws := clampWorkspace(state.CurrentWorkspace)
+	if _, ok := m.WorkspaceLayoutMode[ws]; ok {
+		return
+	}
+	m.sessionLayoutMode = state.LayoutMode
+	if m.WorkspaceLayoutMode == nil {
+		m.WorkspaceLayoutMode = make(map[int]string)
+	}
+	for i := 1; i <= state.NumWorkspaces; i++ {
+		if _, ok := m.WorkspaceLayoutMode[i]; !ok {
+			m.WorkspaceLayoutMode[i] = state.LayoutMode
+		}
 	}
 }
 
@@ -186,6 +240,7 @@ func (m *OS) toggleLayoutMode() {
 	if !m.AutoTiling && (m.UseScrollingLayout || m.UseBSPLayout) {
 		m.AutoTiling = true
 	}
+	m.recordWorkspaceLayoutMode()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	}
@@ -227,6 +282,7 @@ func (m *OS) enableScrollingLayout() {
 	}
 	// Clear old scrolling layout to rebuild from current windows
 	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: scrolling (niri)", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
@@ -250,6 +306,7 @@ func (m *OS) enableBSPLayout() {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	}
 	m.WorkspaceTrees[m.CurrentWorkspace] = nil
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: BSP tiling", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
@@ -268,6 +325,7 @@ func (m *OS) enableMasterStackLayout() {
 	if !m.AutoTiling {
 		m.AutoTiling = true
 	}
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: master-stack", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()

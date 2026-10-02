@@ -166,6 +166,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	restored.WorkspaceMasterSplits = cloneMasterSplits(state.WorkspaceMasterSplits)
 	restored.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
+	restored.WorkspaceLayoutModes = maps.Clone(state.WorkspaceLayoutModes)
 	// A display order saved by a build that kept one comes back as the
 	// numbering it showed. See applyLegacyWorkspaceOrder.
 	restored.applyLegacyWorkspaceOrder()

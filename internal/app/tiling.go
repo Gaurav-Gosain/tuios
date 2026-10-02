@@ -554,6 +554,21 @@ func (m *OS) SaveCurrentLayout() {
 
 // RestoreWorkspaceLayout restores saved layout when switching to a workspace
 func (m *OS) RestoreWorkspaceLayout(workspace int) {
+	// The layout mode is per workspace. A workspace that chose a layout goes
+	// back to it on every visit; one that never chose follows the mode the
+	// session was created with, which adoptSessionLayoutMode records for the
+	// workspaces a session brought with it. Only a session with no state at all
+	// falls back to [startup] layout, which is this client's own default for a
+	// session of its own. The retile that follows the switch is what puts the
+	// mode on screen, so this only sets the flags.
+	if name, ok := m.WorkspaceLayoutMode[workspace]; ok {
+		m.ApplyLayoutModeName(name)
+	} else if m.sessionLayoutMode != "" {
+		m.ApplyLayoutModeName(m.sessionLayoutMode)
+	} else if m.UserConfig != nil && m.UserConfig.Startup.Layout != "" {
+		m.ApplyLayoutModeName(m.UserConfig.Startup.Layout)
+	}
+
 	if !m.AutoTiling {
 		return
 	}
