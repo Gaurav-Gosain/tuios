@@ -287,6 +287,7 @@ type AppearanceConfig struct {
 	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
+	DockWorkspaceLabelMax  *int   `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
@@ -1909,6 +1910,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
+	}
+	if cfg.Appearance.DockWorkspaceLabelMax != nil {
+		s.DockWorkspaceLabelMax = max(*cfg.Appearance.DockWorkspaceLabelMax, 0)
 	}
 	if cfg.Appearance.DockPillCaps != nil {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps

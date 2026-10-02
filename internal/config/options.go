@@ -530,6 +530,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.dock_workspace_label_max", Type: OptionInt, Section: "dock",
+		Description: "Cells a workspace pill's label may span before the pill cuts it (0 draws the whole name and scrolls the strip instead)",
+		Default:     "12", Min: 0, Max: 200,
+	},
+	{
 		Path: "appearance.dock_pill_caps", Type: OptionBool, Section: "dock",
 		Description: "Draw powerline caps on the dock's pills instead of flat ends",
 		Default:     "false",
