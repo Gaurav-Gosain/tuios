@@ -86,7 +86,11 @@ func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...strin
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	// The grid is printed once, with the first frame, so read from the launch.
 	host.mark("launch")
-	typeLine(t, term, strings.Join(append([]string{bin, transport, "10"}, extra...), " "))
+	argv := append([]string{bin, transport, "10"}, extra...)
+	if transport == "shm" {
+		argv = append([]string{shmPrefixEnv + "=" + standInShmPrefix(t)}, argv...)
+	}
+	typeLine(t, term, strings.Join(argv, " "))
 	if err := term.WaitForText("PLACEHOLDER-FOOTER", shellTimeout); err != nil {
 		t.Fatalf("the placeholder app never took the pane: %v\n%s", err, term.Snapshot())
 	}

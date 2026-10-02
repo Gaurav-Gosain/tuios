@@ -100,7 +100,14 @@ func main() {
 		if transport == "b64" {
 			return nil
 		}
-		name := fmt.Sprintf("tuios-frameloop-%d-%d", os.Getpid(), gen)
+		// The harness names the objects with a prefix of its own, so it can
+		// remove them after a test even when this process dies by a signal and
+		// the deferred removal never runs.
+		prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
+		if prefix == "" {
+			prefix = "tuios-frameloop-"
+		}
+		name := fmt.Sprintf("%s%d-%d", prefix, os.Getpid(), gen)
 		path := "/dev/shm/" + name
 		if err := os.WriteFile(path, pix, 0o600); err != nil {
 			return err

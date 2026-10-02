@@ -81,7 +81,14 @@ func main() {
 		if transport == "shm" {
 			dir = "/dev/shm"
 		}
-		f, err := os.CreateTemp(dir, "tuios-placeholders-*")
+		// The harness names shared memory objects with a prefix of its own,
+		// so it can remove them after a test even when this process dies by a
+		// signal and the deferred removal never runs.
+		prefix := "tuios-placeholders-"
+		if p := os.Getenv("TUIOS_E2E_SHM_PREFIX"); p != "" && transport == "shm" {
+			prefix = p
+		}
+		f, err := os.CreateTemp(dir, fmt.Sprintf("%s%d-*", prefix, os.Getpid()))
 		if err != nil {
 			fmt.Printf("PLACEHOLDERS-ERR %v\n", err)
 			return
