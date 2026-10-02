@@ -196,6 +196,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("k", "Keybindings"),
 		kb("C", "Screenshot"),
 		kb("j", "Newest message"),
+		kb("N", "Show last message"),
 		kb("?", "Help"),
 	}}
 	agents := KeybindingGroup{Title: "Agents", Bindings: []Keybinding{

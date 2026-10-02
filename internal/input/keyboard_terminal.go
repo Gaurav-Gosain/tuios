@@ -69,6 +69,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleLauncherInput(msg, o)
 	}
 
+	// The message view opens over the log viewer, so it takes the key first.
+	if o.MessageViewOpen() {
+		return handleMessageViewKey(msg, o)
+	}
+
 	// Handle log viewer (takes priority in terminal mode)
 	if o.ShowLogs {
 		return handleLogViewerKey(msg, o)

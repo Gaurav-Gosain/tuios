@@ -55,6 +55,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
+	d.Register("prefix_last_message", handlePrefixLastMessage)
 	d.Register("prefix_mail", handlePrefixMail)
 	d.Register("prefix_inbox", handlePrefixInbox)
 	d.Register("prefix_next_attention", handlePrefixNextAttention)
@@ -361,6 +362,15 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.JumpToNotification() {
 		o.ShowNotification("No message to jump to", "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+// handlePrefixLastMessage opens the newest message the dock showed in the
+// message view.
+func handlePrefixLastMessage(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if !o.OpenLastMessage() {
+		o.ShowNotification("There is no message to show", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }

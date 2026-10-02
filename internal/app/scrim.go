@@ -92,7 +92,8 @@ var modalOverlays = [...]modalOverlay{
 	{id: "help", open: func(m *OS) bool { return m.ShowHelp }, scrim: true},
 	{id: "tape-manager", open: func(m *OS) bool { return m.ShowTapeManager }, scrim: true},
 	{id: "tape-review", open: func(m *OS) bool { return m.ShowTapeReview }, scrim: true},
-	{id: "logs", open: func(m *OS) bool { return m.ShowLogs }, scrim: true},
+	{id: overlayKindLogs, open: func(m *OS) bool { return m.ShowLogs }, scrim: true},
+	{id: overlayKindMessage, open: func(m *OS) bool { return m.msgView.open }, scrim: true},
 	{id: "cache-stats", open: func(m *OS) bool { return m.ShowCacheStats }, scrim: true},
 }
 

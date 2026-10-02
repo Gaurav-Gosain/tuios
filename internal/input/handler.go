@@ -4,6 +4,7 @@
 package input
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"time"
@@ -622,66 +623,66 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := commandKey(msg)
 
-	// Close log viewer with q or esc
-	if key == "q" || key == "esc" {
-		o.ShowLogs = false
-		o.LogScrollOffset = 0
+	switch key {
+	case "q", "esc":
+		o.CloseLogViewer()
 		return o, nil
-	}
-
-	logsPerPage, maxScroll, _ := o.LogViewerBounds()
-
-	// Scroll up/down
-	if key == "up" || key == "k" {
-		if o.LogScrollOffset > 0 {
-			o.LogScrollOffset--
-		}
+	case "enter":
+		o.LogViewerOpenSelected()
 		return o, nil
-	}
-	if key == "down" || key == "j" {
-		if o.LogScrollOffset < maxScroll {
-			o.LogScrollOffset++
-		}
+	case "ctrl+u":
+		o.LogViewerMove(-o.LogViewerPage())
 		return o, nil
-	}
-
-	// Page up/down (scroll by half page)
-	pageSize := max(logsPerPage/2, 1)
-	if key == "pgup" || key == "ctrl+u" {
-		o.LogScrollOffset -= pageSize
-		if o.LogScrollOffset < 0 {
-			o.LogScrollOffset = 0
-		}
+	case "ctrl+d":
+		o.LogViewerMove(o.LogViewerPage())
 		return o, nil
-	}
-	if key == "pgdown" || key == "ctrl+d" {
-		o.LogScrollOffset += pageSize
-		if o.LogScrollOffset > maxScroll {
-			o.LogScrollOffset = maxScroll
-		}
-		return o, nil
-	}
-
-	// Go to top/bottom
-	if key == "g" || key == "home" {
-		o.LogScrollOffset = 0
-		return o, nil
-	}
-	if key == "G" || key == "end" {
-		o.LogScrollOffset = maxScroll
-		return o, nil
-	}
-
 	// The two copy controls the viewer's hints have always advertised. They
 	// were drawn and never handled, so both fell through to the return below
 	// and the viewer kept two promises it could not keep.
-	if key == "A" {
+	case "A":
 		return o, o.CopyLogs()
-	}
-	if key == "E" {
+	case "E":
 		return o, o.CopyLogErrors()
 	}
+	listKey(key, true, o.LogViewerPage(), o.LogViewerMove)
 
 	// Ignore other keys when log viewer is active
+	return o, nil
+}
+
+// handleMessageViewKey handles a key while the message view is open. Every key
+// stops here, the way it does in the log viewer.
+func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	key := commandKey(msg)
+	switch key {
+	case "q", "esc":
+		o.CloseMessageView()
+		return o, nil
+	case "y":
+		return o, o.CopyMessageView()
+	case "enter":
+		o.MessageViewActivate()
+		return o, nil
+	case "ctrl+u":
+		o.MessageViewPage(-1)
+		return o, nil
+	case "ctrl+d", "space":
+		o.MessageViewPage(1)
+		return o, nil
+	}
+	switch listnav.Keys(key, true) {
+	case listnav.Up:
+		o.MessageViewScroll(-1)
+	case listnav.Down:
+		o.MessageViewScroll(1)
+	case listnav.PageUp:
+		o.MessageViewPage(-1)
+	case listnav.PageDown:
+		o.MessageViewPage(1)
+	case listnav.Home:
+		o.MessageViewTop()
+	case listnav.End:
+		o.MessageViewBottom()
+	}
 	return o, nil
 }

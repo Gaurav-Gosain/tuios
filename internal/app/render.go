@@ -758,7 +758,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowAgentMail || m.ShowInbox || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowHostPicker ||
-		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
+		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.msgView.open || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker || m.ShowEffectPicker ||
 		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil ||
 		m.Capture.Active || m.ShotPreview.Open || m.review.open {
@@ -792,6 +792,12 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// The celebration is a pass over the canvas too, for the second or so it
 	// is on screen.
 	if m.celebration.active() {
+		return nil, false
+	}
+	// A hover label is a layer the fast path does not compose. The dock's
+	// labels are drawn over a lone fullscreen pane like any other, so while
+	// one is pending or up the compositor draws the frame.
+	if m.Tooltip.Source != tooltipNone {
 		return nil, false
 	}
 	if m.panesBorderless() {
@@ -1093,7 +1099,7 @@ func (m *OS) flushGraphicsForView() {
 	// puts it back with no round trip to whatever drew it.
 	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowAgentMail || m.ShowInbox ||
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowHostPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
-		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
+		m.ShowLogs || m.msgView.open || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview ||
 		m.ShotPreview.Open || m.review.open
 	if m.KittyPassthrough != nil {

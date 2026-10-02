@@ -420,6 +420,7 @@ func (m *OS) renderDockString() (string, int) {
 		X1:        notifX0 + rightWidth,
 		DismissX0: notifX0 + rightWidth - notif.DismissW,
 		Y:         m.GetDockbarContentYPosition(),
+		Cut:       hasNotif && notif.Cut,
 	}
 	if hasNotif && len(m.Notifications) > 0 {
 		m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])

@@ -32,7 +32,8 @@ func (m *OS) dockSessionTooltipTrack(a DockSessionAction) {
 // the pointer leaving the band is the event that clears it.
 func (m *OS) DockHoverActive() bool {
 	return m.dockSessionHover != DockSessionNone ||
-		m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace
+		m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace ||
+		m.notifPaused() || m.Tooltip.Source == tooltipDockNotif
 }
 
 // renderDockSessionTooltip composes the hovered control's label.
@@ -141,6 +142,11 @@ func (m *OS) DockWorkspaceHoverAt(x, y int) bool {
 // inside one control, does not compose a frame per cell identical to the last.
 // TestDockHoverChangesAtAgreesWithTheHandler holds the two together.
 func (m *OS) dockHoverChangesAt(x, y int) bool {
+	// The message block is tested on its own: it holds the messages as well
+	// as arming a label, and its label is cleared only by its own handler.
+	if m.notifHoverChangesAt(x, y) {
+		return true
+	}
 	a := m.DockSessionActionAt(x, y)
 	if a != m.dockSessionHover {
 		return true
@@ -152,6 +158,9 @@ func (m *OS) dockHoverChangesAt(x, y int) bool {
 		src, key = tooltipDockWorkspace, ws
 	}
 	switch {
+	case src == tooltipNone && m.notifBlockAt(x, y):
+		// The block's own label was weighed above.
+		return false
 	case src == tooltipNone:
 		// Nothing to arm: the handler drops a dock label and leaves any other.
 		return m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace

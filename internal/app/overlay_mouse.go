@@ -213,6 +213,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.QuitMenuSelected = idx
 	case "sessionclose":
 		m.SessionCloseSelected = idx
+	case overlayKindLogs:
+		m.LogSelected = idx
 	case "filedialog":
 		// Hover moves the cursor onto the answer under the pointer. It cannot
 		// run one: the dialog is answered by a click or by enter, and a pointer
@@ -297,6 +299,10 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		}
 	case "quit":
 		m.QuitMenuMove(wheelDelta(up))
+	case overlayKindLogs:
+		m.LogViewerMove(wheelDelta(up))
+	case overlayKindMessage:
+		m.MessageViewScroll(wheelDelta(up))
 	default:
 		return false
 	}
@@ -446,6 +452,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "filedialog":
 		m.filePrompt.Selected = row.Idx
 		return m.FileConfirmActivate(row.Idx)
+	case overlayKindLogs:
+		// A click opens the entry in full, exactly like enter on it.
+		m.LogSelected = row.Idx
+		m.LogViewerOpenSelected()
 	}
 	return nil
 }
@@ -563,6 +573,10 @@ func (m *OS) closeOverlay(kind string) {
 		// Same rule, and it matters more here: the ambiguous gesture must never
 		// be the one that removes a file.
 		m.FilePromptCancel()
+	case overlayKindLogs:
+		m.CloseLogViewer()
+	case overlayKindMessage:
+		m.CloseMessageView()
 	}
 	if m.OverlayDrag.Kind == kind {
 		m.OverlayDrag.Active = false

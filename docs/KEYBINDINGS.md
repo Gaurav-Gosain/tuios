@@ -152,6 +152,33 @@ An empty list says why it is empty in the middle of the panel, with the one key
 worth pressing next under it. A list that is still loading draws nothing for
 its first half second, so a fast load never flashes a "reading" line.
 
+## Messages
+
+A message shows at the right end of the dock. A message that is too long
+for the dock ends with `…` and `more`.
+
+- Put the pointer on a message to hold it. It does not go away while the
+  pointer is on it.
+- Put the pointer on a long message to see its first lines above the dock.
+- Click a long message to read all of it in the message view.
+- Click a short message from a pane to go to that pane.
+
+| Keys | Where | What it does |
+|---|---|---|
+| `ctrl+b N` | anywhere | Show the last message in the message view, also after it went from the dock |
+| `ctrl+b j` | anywhere | Go to the pane of the newest message |
+| `j`, `k`, `up`, `down`, wheel | message view | Scroll one line |
+| `ctrl+d`, `ctrl+u`, `space`, `pgdown`, `pgup` | message view | Scroll half a page |
+| `g`, `G`, `home`, `end` | message view | Go to the first or last line |
+| `y` | message view | Copy the message |
+| `enter` | message view | Go to the pane the message came from |
+| `esc`, `q` | message view | Close the message view |
+
+The log viewer (`ctrl+b D l`) lists every message the dock showed, and every
+warning and error. The entry under the cursor shows wrapped under the list.
+Press `enter`, or click an entry, to read it in the message view. `E` copies
+the errors and `A` copies the whole log.
+
 ## Hints
 
 `Ctrl+B F` puts a short label on each URL, path, hash, address and number in

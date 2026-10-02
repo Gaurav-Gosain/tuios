@@ -690,6 +690,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_toggle_sidebar":     "Toggle the session sidebar",
 	"prefix_explore":            "Focus/leave sidebar",
 	"prefix_jump_notif":         "Jump to newest message",
+	"prefix_last_message":       "Show the last message in full",
 	"prefix_mail":               "Open the Inbox on its mail",
 	"prefix_inbox":              "Open the Inbox",
 	"prefix_next_attention":     "Jump to the oldest item needing you",

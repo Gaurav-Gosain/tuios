@@ -309,7 +309,11 @@ type OS struct {
 	WorkspaceStackRatio    map[int]float64         // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
 	ShowLogs               bool                    // True when showing log overlay
 	LogMessages            []LogMessage            // Store log messages
-	LogScrollOffset        int                     // Scroll offset for log viewer
+	LogScrollOffset        int                     // first log row the viewer draws
+	LogSelected            int                     // the log entry the viewer's cursor is on
+	msgView                messageViewState        // the message view, see message_view.go
+	recentMessages         []messageEntry          // the newest messages the dock showed, for prefix+N
+	notifHoverAt           time.Time               // when the pointer came onto the message block; zero when it is not on it
 	Notifications          []Notification          // Active notifications
 	notifHit               notifHitZones           // where the message block was drawn last frame
 	dockWorkspaceHits      []dockWorkspaceHit      // where the dock's workspace pills were drawn last frame
@@ -1636,6 +1640,10 @@ type Notification struct {
 	// (agentMark), the one the rail and the title bar draw, rather than a
 	// Nerd Font severity icon that said the same thing in a different shape.
 	AgentState string
+
+	// Source names where the message came from, resolved when it was raised.
+	// Empty means tuios itself. See notifSourceName.
+	Source string
 }
 
 // NotifTarget names the pane a message came from. The workspace is deliberately
@@ -1665,6 +1673,9 @@ type LogMessage struct {
 	Time    time.Time
 	Level   string // INFO, WARN, ERROR
 	Message string
+	// Source names where the message came from, when a notification from a
+	// pane wrote it. Empty means tuios itself.
+	Source string
 }
 
 // KeyEvent represents a captured keyboard event for the showkeys overlay.

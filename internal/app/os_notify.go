@@ -11,50 +11,29 @@ import (
 
 // Log adds a new log message to the log buffer.
 func (m *OS) Log(level, format string, args ...any) {
-	message := fmt.Sprintf(format, args...)
-	logMsg := LogMessage{
+	m.appendLog(LogMessage{
 		Time:    time.Now(),
 		Level:   level,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
+	})
+}
+
+// appendLog adds an entry and keeps the buffer at MaxLogMessages.
+//
+// The viewer's cursor follows the newest entry while it is on the newest
+// entry, so an open viewer shows each line as it arrives. A cursor moved up to
+// read an older line stays on that line, and when the oldest lines are dropped
+// it moves with the line it was on.
+func (m *OS) appendLog(entry LogMessage) {
+	atNewest := m.LogSelected >= len(m.LogMessages)-1
+	m.LogMessages = append(m.LogMessages, entry)
+	if over := len(m.LogMessages) - config.MaxLogMessages; over > 0 {
+		m.LogMessages = m.LogMessages[over:]
+		m.LogSelected = max(m.LogSelected-over, 0)
+		m.LogScrollOffset = max(m.LogScrollOffset-over, 0)
 	}
-
-	// Check if we're at the bottom before adding new log
-	wasAtBottom := false
-	if m.ShowLogs {
-		maxDisplayHeight := max(m.Height-8, 8)
-		totalLogs := len(m.LogMessages)
-
-		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
-		fixedLines := 4
-		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
-		if totalLogs > maxDisplayHeight-fixedLines {
-			fixedLines = 6
-		}
-		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
-
-		maxScroll := max(totalLogs-logsPerPage, 0)
-		// Consider "at bottom" if within 2 lines of the end (to handle edge cases)
-		wasAtBottom = m.LogScrollOffset >= maxScroll-2
-	}
-
-	// Keep only last MaxLogMessages messages
-	m.LogMessages = append(m.LogMessages, logMsg)
-	if len(m.LogMessages) > config.MaxLogMessages {
-		m.LogMessages = m.LogMessages[len(m.LogMessages)-config.MaxLogMessages:]
-	}
-
-	// Auto-scroll to bottom if we were already at bottom (sticky scroll)
-	if wasAtBottom && m.ShowLogs {
-		// Recalculate maxScroll with the new log added
-		maxDisplayHeight := max(m.Height-8, 8)
-		totalLogs := len(m.LogMessages)
-		fixedLines := 4
-		if totalLogs > maxDisplayHeight-fixedLines {
-			fixedLines = 6
-		}
-		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
-		maxScroll := max(totalLogs-logsPerPage, 0)
-		m.LogScrollOffset = maxScroll
+	if atNewest {
+		m.LogSelected = len(m.LogMessages) - 1
 	}
 }
 
@@ -217,15 +196,16 @@ func (m *OS) showAgentNotification(message, notifType, agentState string, durati
 }
 
 func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget) {
-	// Always log, even for a message that will not be shown: the log viewer is
-	// where a message that was dropped or has already expired is read.
+	source := m.notifSourceName(target)
+
+	// A warning or an error is always logged, even when it is not shown: the
+	// log viewer is where a message that was dropped or has already expired is
+	// read.
 	switch notifType {
 	case "error":
-		m.LogError("%s", message)
+		m.appendLog(LogMessage{Time: time.Now(), Level: "ERROR", Message: message, Source: source})
 	case "warning", "warn":
-		m.LogWarn("%s", message)
-	default:
-		m.LogInfo("%s", message)
+		m.appendLog(LogMessage{Time: time.Now(), Level: "WARN", Message: message, Source: source})
 	}
 
 	// An empty message has nothing to draw. It reaches here from copy mode,
@@ -249,11 +229,25 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	}
 
 	effective, sticky := notificationLifetime(notifType, duration, &m.Settings)
-	if effective <= 0 && !sticky {
+	shown := effective > 0 || sticky
+
+	// An info or a success message is logged when the dock shows it. It used
+	// to be logged only with verbose logging on, so a message that went by
+	// too fast to read was nowhere to be found afterwards. The ones the dock
+	// does not show (copy mode's state marks, such as "VISUAL") stay out of
+	// the log unless it is verbose, or they would fill it.
+	if notifSeverityRank(notifType) < 2 {
+		if shown {
+			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
+		} else {
+			m.LogInfo("%s", message)
+		}
+	}
+	if !shown {
 		return
 	}
 
-	m.Notifications = append(m.Notifications, Notification{
+	n := Notification{
 		ID:        createID(),
 		Message:   message,
 		Type:      notifType,
@@ -263,7 +257,10 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		Target:    target,
 
 		AgentState: agentState,
-	})
+		Source:     source,
+	}
+	m.Notifications = append(m.Notifications, n)
+	m.rememberMessage(messageEntry{Text: message, Level: notifType, Time: n.StartTime, Source: source, Target: target})
 
 	if len(m.Notifications) > maxLiveNotifications {
 		m.Notifications = m.Notifications[len(m.Notifications)-maxLiveNotifications:]
@@ -280,8 +277,8 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 func (m *OS) ToggleLogViewer() {
 	m.ShowLogs = !m.ShowLogs
 	if m.ShowLogs {
-		_, maxScroll, _ := m.LogViewerBounds()
-		m.LogScrollOffset = maxScroll
+		m.LogSelected = max(len(m.LogMessages)-1, 0)
+		m.LogScrollOffset = m.LogSelected
 	}
 }
 
@@ -305,7 +302,7 @@ func (n Notification) NotificationExpired(now time.Time) bool {
 // tick that retires something uses this result to draw one more frame so the
 // message actually leaves the screen.
 func (m *OS) CleanupNotifications() bool {
-	if len(m.Notifications) == 0 {
+	if len(m.Notifications) == 0 || m.notifPaused() {
 		return false
 	}
 

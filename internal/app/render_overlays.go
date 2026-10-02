@@ -403,55 +403,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	}
 
 	if m.ShowLogs {
-		pal := theme.UI()
-		bg := pal.Surface
-
-		// The viewer prefers 80 columns; a narrower screen gets a narrower
-		// viewer rather than a viewer with its right-hand side off the edge.
-		logTextWidth := m.panelWidth(80)
-
-		logsPerPage, maxScroll, hints := m.LogViewerBounds()
-		m.LogScrollOffset = max(0, min(m.LogScrollOffset, maxScroll))
-
-		var logLines []string
-		startIdx := m.LogScrollOffset
-
-		displayCount := 0
-		for i := startIdx; i < len(m.LogMessages) && displayCount < logsPerPage; i++ {
-			msg := m.LogMessages[i]
-
-			// The severity tokens the rest of the app reads by, so a log line
-			// says the same thing a message in the dock does.
-			levelColor := pal.Success
-			switch msg.Level {
-			case "ERROR":
-				levelColor = pal.Warn
-			case "WARN":
-				levelColor = pal.Warning
-			}
-
-			line := overlay.Style(bg).Foreground(pal.FgDim).Render(msg.Time.Format("15:04:05")+" ") +
-				overlay.Style(bg).Foreground(levelColor).Render(fmt.Sprintf("[%s] ", msg.Level)) +
-				overlay.Style(bg).Foreground(pal.Fg).Render(msg.Message)
-			logLines = append(logLines, clipStyled(line, logTextWidth))
-			displayCount++
-		}
-
-		if maxScroll > 0 {
-			logLines = append(logLines, "", overlay.Style(bg).Foreground(pal.FgDim).Italic(true).
-				Render(fmt.Sprintf("  %d-%d of %d logs", startIdx+1, startIdx+displayCount, len(m.LogMessages))))
-		}
-
-		panel := overlay.Panel{
-			Title: "logs",
-			Width: logTextWidth,
-			Body:  strings.Join(logLines, "\n"),
-			Hints: hints,
-		}
-		content, _ := panel.Render(pal)
-
-		layers = append(layers, m.centeredBoxLayer(content, config.ZIndexLogs, "logs"))
+		content, geo, rows := m.renderListOverlay(m.logViewerList())
+		layers = m.placeOverlayPanel(layers, overlayKindLogs, content, geo, rows)
 	}
+
+	// The message view is drawn after the log viewer, which opens it.
+	layers = m.renderMessageView(layers)
 
 	showScriptIndicator := true
 	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {

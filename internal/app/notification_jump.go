@@ -32,6 +32,8 @@ type notifHitZones struct {
 	// the same thing: a clipboard ask whose text changed after the frame must
 	// not be allowed by a click aimed at the old text.
 	Drawn Notification
+	// Cut says the block showed only the start of the message.
+	Cut bool
 }
 
 // notifTargetedIndex is the newest message carrying a target, or -1. Activation
@@ -156,6 +158,12 @@ func (m *OS) NotificationClick(x, y int) bool {
 // clickVisibleNotification activates the message on top of the dock, if it is
 // the message the last frame drew. A message that changed since then is left
 // as it is, and the next frame shows the new text.
+//
+// A message the block had to cut opens in the message view rather than going
+// to its pane: a message cannot be acted on before it is read. The view goes
+// to the pane on enter. A clipboard ask is cut like any other message, and so
+// a click on a cut one shows the text it asks to set before anything is
+// allowed.
 func (m *OS) clickVisibleNotification() {
 	n := len(m.Notifications)
 	if n == 0 {
@@ -166,6 +174,11 @@ func (m *OS) clickVisibleNotification() {
 		return
 	}
 	m.Notifications = m.Notifications[:n-1]
+	if m.notifHit.Cut {
+		m.notifHoverEnd()
+		m.openMessageView(m.notificationEntry(visible))
+		return
+	}
 	if visible.Target != nil {
 		m.jumpToNotifTarget(*visible.Target)
 	}

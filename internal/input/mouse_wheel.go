@@ -62,18 +62,14 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// The log viewer takes the wheel wherever the pointer is, also on the
+	// frame before its panel has been drawn and hit-tested.
 	if o.ShowLogs {
-		_, maxScroll, _ := o.LogViewerBounds()
-
 		switch msg.Button {
 		case tea.MouseWheelUp:
-			if o.LogScrollOffset > 0 {
-				o.LogScrollOffset--
-			}
+			o.LogViewerMove(-1)
 		case tea.MouseWheelDown:
-			if o.LogScrollOffset < maxScroll {
-				o.LogScrollOffset++
-			}
+			o.LogViewerMove(1)
 		}
 		return o, nil
 	}

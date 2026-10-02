@@ -120,6 +120,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// each call clears only its own surface's hover.
 	o.DockWorkspaceHoverAt(mouse.X, mouse.Y)
 
+	// The message block holds its message while the pointer is on it, so a
+	// long one does not burn down while it is being read, and a cut one shows
+	// its first lines above the dock. Last of the three, so it can take over a
+	// label the other two have just dropped.
+	o.DockNotifHoverAt(mouse.X, mouse.Y)
+
 	// The window controls track the pointer for the same reason: the dots style
 	// draws three unlabelled discs, and hovering them is what names them. Like
 	// the dock's, the motion is not consumed, and clearing the reveal on the way

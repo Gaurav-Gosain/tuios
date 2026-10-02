@@ -1008,6 +1008,9 @@ func DefaultConfig() *UserConfig {
 				"prefix_layout":             {"L"},
 				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
+				// N for notification. It reopens the newest message the dock
+				// showed, in full, also after it has gone from the dock.
+				"prefix_last_message": {"N"},
 				// Capital M: m is the minimize prefix, and a slip into it costs
 				// nothing. It opens the Inbox on its mail filter, one key (m)
 				// from the whole mailbox.

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
-	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -61,6 +60,9 @@ type notifBlock struct {
 	// drawn is what this block shows that can change without a message
 	// arriving: see notifBurnMoved.
 	drawn notifDrawn
+	// Cut says the message did not fit and the block shows only its start.
+	// A click on a cut message opens it in full (see NotificationClick).
+	Cut bool
 }
 
 // notifDrawn is what the last composed frame showed of the live message: which
@@ -180,7 +182,9 @@ func (m *OS) notifStatus() (notifStatus, bool) {
 		return notifStatus{}, false
 	}
 
-	now := time.Now()
+	// Held at the moment the pointer came onto the block, so the burn stops
+	// while the message is being read. See notifPaused.
+	now := m.notifNow()
 	s := notifStatus{
 		msg:    m.Notifications[len(m.Notifications)-1],
 		queued: len(m.Notifications) - 1,
@@ -324,15 +328,26 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	}
 
 	room := budget - notifChromeWidth - lipgloss.Width(meta)
+
+	// A message that does not fit says so in a word as well as with the
+	// ellipsis: "more" is what a click on it gives. The word is given up
+	// before the message is, on a block too narrow to hold both.
+	cut := lipgloss.Width(s.msg.Message) > room
+	more := ""
+	if cut && room-notifMoreWidth >= notifMoreMinText {
+		room -= notifMoreWidth
+		more = "  " + lipgloss.NewStyle().Foreground(theme.Readable(ground.FgDim, bg)).Render(notifMoreLabel)
+	}
+
 	text := notifFit(s.msg.Message, room)
 	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(ground.Fg, bg))
-	if s.msg.Target != nil {
+	if s.msg.Target != nil || cut {
 		// Underline is the one link mark everyone reads without being taught,
-		// costs no columns, and never appears on a message with nowhere to go,
-		// so its absence says something too.
+		// costs no columns, and never appears on a message a click does
+		// nothing with, so its absence says something too.
 		bodyStyle = bodyStyle.Underline(true)
 	}
-	body := "  " + bodyStyle.Render(text)
+	body := "  " + bodyStyle.Render(text) + more
 
 	// The last two columns are bare bar: the gap that keeps the message off
 	// whatever holds the right-hand end of the screen.
@@ -344,6 +359,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		Rule:     notifBurnRule(s, width, &m.Settings, m.railRule()),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
+		Cut:      cut,
 		drawn: notifDrawn{
 			id:     s.msg.ID,
 			queued: s.queued,
@@ -352,6 +368,15 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		},
 	}, true
 }
+
+// notifMoreLabel is the word a cut message ends with, and notifMoreWidth the
+// columns it takes with the gap in front of it. notifMoreMinText is the least
+// message text worth keeping beside it.
+const (
+	notifMoreLabel   = "more"
+	notifMoreWidth   = 2 + len(notifMoreLabel)
+	notifMoreMinText = 12
+)
 
 // notifFit truncates the message, and only the message. The severity mark, the
 // esc affordance and the overflow counter are the parts you cannot afford to
