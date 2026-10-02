@@ -654,6 +654,9 @@ type OS struct {
 	// fires it and the middleware's Cleanup runs afterwards anyway. Atomic
 	// because Cleanup runs after the program has exited, off the UI goroutine.
 	detachFired atomic.Bool
+	// focusReportedID is the pane this client last treated as focused for
+	// DECSET 1004 focus reports. See reportFocusChange.
+	focusReportedID string
 	// QuitRequested records that the user deliberately quit this client, which
 	// in a daemon session also kills the session. The daemon then announces the
 	// session ending and the connection dropping, and both announcements can

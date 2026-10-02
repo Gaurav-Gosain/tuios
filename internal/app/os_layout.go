@@ -130,9 +130,7 @@ func (m *OS) FireDetached() {
 	if !m.detachFired.CompareAndSwap(false, true) {
 		return
 	}
-	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
-		m.reportPaneFocus(m.Windows[m.FocusedWindow], false)
-	}
+	m.reportFocusLost()
 	if m.HookManager == nil {
 		return
 	}

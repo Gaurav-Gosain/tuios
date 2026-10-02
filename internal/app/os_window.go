@@ -369,10 +369,12 @@ func (m *OS) FocusWindow(i int) *OS {
 	// ATOMIC: Set focus and Z-index in one operation
 	m.FocusedWindow = i
 	m.FocusHistory = session.RecordFocus(m.FocusHistory, m.Windows[i].Workspace, m.Windows[i].ID)
-	if oldFocused >= 0 && oldFocused < len(m.Windows) {
-		m.reportPaneFocus(m.Windows[oldFocused], false)
+	// A pane that never got a report still assumes it has focus, as a
+	// program does when it turns 1004 on, so leaving it reports the loss.
+	if m.focusReportedID == "" && oldFocused >= 0 && oldFocused < len(m.Windows) {
+		m.focusReportedID = m.Windows[oldFocused].ID
 	}
-	m.reportPaneFocus(m.Windows[i], true)
+	m.reportFocusChange()
 
 	// Save focus for current workspace
 	if m.Windows[i].Workspace == m.CurrentWorkspace {
