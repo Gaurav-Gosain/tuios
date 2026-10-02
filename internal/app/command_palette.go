@@ -851,7 +851,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 					state = "on"
 				}
 				m.ShowNotification("Sidebar "+state, "success", s.NotificationDuration)
-				return m, nil
+				return m, m.persistSettings()
 			},
 		},
 		{
