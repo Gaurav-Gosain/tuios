@@ -1,6 +1,8 @@
 package input
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -298,6 +300,21 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// landing on text that merely looks like an address.
 	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
 		if link, ok := o.LinkAt(X, Y); ok {
+			if clickedWindowIndex != -1 {
+				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
+			}
+			return o, o.OpenLink(link.URL)
+		}
+	}
+
+	// A plain click on a link on our own scheme acts on it. Shift guards the
+	// click paths that could reach the desktop, where a browser opening over a
+	// selection is a gesture nobody asked for. A tuios:// link cannot do that:
+	// OpenLink resolves it in-process, so the click's action is a focus change
+	// inside the app the click is already in. This is the wait bar's path, and
+	// the bar's whole point is that a click lands on the pane it names.
+	if msg.Button == tea.MouseLeft && msg.Mod == 0 {
+		if link, ok := o.LinkAt(X, Y); ok && strings.HasPrefix(link.URL, "tuios://") {
 			if clickedWindowIndex != -1 {
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			}
