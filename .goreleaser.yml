@@ -349,6 +349,9 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    # Both casks install a `tuios` binary, so only one can be installed.
+    conflicts:
+      - cask: tuios-ghostty
     # The binaries are not signed, so Gatekeeper would refuse to run a
     # quarantined one. GoReleaser (as of v2.18) can only emit Homebrew's
     # `postflight do ... end` stanza via hooks.post.install, and Homebrew 7
@@ -364,6 +367,27 @@ homebrew_casks:
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tuios"]
         end
       end
+
+  # The libghostty-vt build for Linux. The ghostty archive also holds Windows
+  # builds, which a cask ignores. There is no darwin ghostty build, so the cask
+  # has no macOS download. The binary inside the archive is named `tuios`.
+  - name: tuios-ghostty
+    ids:
+      - tuios-ghostty-archive
+    repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/Gaurav-Gosain/tuios
+    description: "TUIOS built with the libghostty-vt terminal engine. Linux only."
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }}-ghostty version {{ .Tag }}"
+    binaries:
+      - tuios
+    conflicts:
+      - cask: tuios
 
   - name: tuios-web
     ids:

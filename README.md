@@ -67,6 +67,11 @@ What changed in v0.8.5 is in the [release notes](docs/release-notes/v0.8.5.md).
 brew install tuios
 ```
 
+**Homebrew, ghostty build (Linux only):** `tuios` built with the [libghostty-vt emulator](./docs/ghostty-vt.md). It replaces the `tuios` cask.
+```bash
+brew install gaurav-gosain/tap/tuios-ghostty
+```
+
 **Arch Linux (AUR):**
 ```bash
 yay -S tuios-bin

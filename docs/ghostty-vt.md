@@ -19,6 +19,16 @@ together in one process; comparing them is the differential harness's job
 both and asserts screens, cursor, scrollback, modes and wire snapshots
 agree.
 
+## Installing with Homebrew (Linux)
+
+```sh
+brew install gaurav-gosain/tap/tuios-ghostty
+```
+
+The cask installs the release `tuios` built with libghostty-vt. It conflicts
+with the `tuios` cask. Uninstall one before you install the other. There is no
+macOS ghostty cask.
+
 ## Installing a local build
 
 `scripts/install.sh` goes from a checkout to a `tuios` on your PATH, and runs

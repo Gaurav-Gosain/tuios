@@ -48,6 +48,12 @@ TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
 brew install tuios
 ```
 
+The ghostty build (the [libghostty-vt emulator](ghostty-vt.md)) is a separate cask for Linux. It conflicts with `tuios`.
+
+```bash
+brew install gaurav-gosain/tap/tuios-ghostty
+```
+
 ### Arch Linux (AUR)
 
 ```bash
