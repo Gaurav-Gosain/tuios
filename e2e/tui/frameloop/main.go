@@ -58,8 +58,9 @@ func main() {
 			repaint = time.Duration(ms) * time.Millisecond
 		}
 	}
-	// transport is "shm" (t=s, the default) or "b64" (t=d, the payload inline
-	// in chunked escapes). The bitmap and the geometry are identical either
+	// transport is "shm" (t=s, the default), "b64" (t=d, the payload inline
+	// in chunked escapes) or "mpv" (the way mpv's --vo=kitty sends a frame: a
+	// cursor move, then f=24 with no image id, inline in chunked escapes). The bitmap and the geometry are identical either
 	// way, so anything that differs downstream is the transport's own.
 	transport := "shm"
 	if len(os.Args) > 4 && os.Args[4] != "" {
@@ -111,7 +112,7 @@ func main() {
 			pix[i] = byte((i + gen*37) * 7)
 		}
 		pixW, pixH = w, h
-		if transport == "b64" || transport == "text" {
+		if transport == "b64" || transport == "mpv" || transport == "text" {
 			return nil
 		}
 		name := fmt.Sprintf("tuios-frameloop-%d-%d", os.Getpid(), gen)
@@ -220,6 +221,11 @@ func main() {
 				wrote()
 				continue
 			}
+			if transport == "mpv" {
+				_, _ = os.Stdout.Write(buildMpvFrame(pix, pixW, pixH))
+				wrote()
+				continue
+			}
 			if shmFile != nil {
 				if _, err := shmFile.WriteAt(pix, 0); err != nil {
 					return
@@ -272,6 +278,36 @@ func buildTextFrame(seq, cols, rows int) []byte {
 			b = append(b, byte('a'+(seq+r+c)%26))
 		}
 		b = append(b, "\x1b[0m\r\n"...)
+	}
+	return b
+}
+
+// buildMpvFrame is the frame as mpv's --vo=kitty sends it: RGB with no alpha
+// (f=24), no image id, the cursor left in place (C=1), in 4096-byte chunks
+// behind a cursor move. With no id, every frame is a new image.
+func buildMpvFrame(pix []byte, w, h int) []byte {
+	rgb := make([]byte, 0, w*h*3)
+	for i := 0; i+3 < len(pix); i += 4 {
+		rgb = append(rgb, pix[i], pix[i+1], pix[i+2])
+	}
+	enc := base64.StdEncoding.EncodeToString(rgb)
+	b := []byte("\x1b[1;1f") // mpv moves the cursor with CSI f
+	first := true
+	for len(enc) > 0 {
+		chunk := enc[:min(len(enc), 4096)]
+		enc = enc[len(chunk):]
+		m := 0
+		if len(enc) > 0 {
+			m = 1
+		}
+		if first {
+			b = append(b, fmt.Sprintf("\x1b_Ga=T,f=24,s=%d,v=%d,C=1,q=2,m=%d;", w, h, m)...)
+			first = false
+		} else {
+			b = append(b, fmt.Sprintf("\x1b_Gm=%d;", m)...)
+		}
+		b = append(b, chunk...)
+		b = append(b, "\x1b\\"...)
 	}
 	return b
 }

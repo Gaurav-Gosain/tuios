@@ -24,7 +24,9 @@ import (
 // read as before.
 //
 // A pane counts as streaming graphics for graphicsStreamWindow after it last
-// wrote a kitty graphics command.
+// wrote a kitty graphics command other than a query. Many programs send one
+// query when they start, to learn whether the terminal draws images, and a
+// text flood after it is read like any text.
 
 var (
 	// graphicsStreamWindow is how long a pane counts as streaming graphics
