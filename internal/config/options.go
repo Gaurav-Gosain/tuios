@@ -139,6 +139,11 @@ var optionSpecs = []Option{
 		Accepted:    LinkModes, Default: LinksAll,
 	},
 	{
+		Path: "appearance.link_label", Type: OptionBool, Section: "appearance",
+		Description: "Pop up a label naming the address of the link under the pointer",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
 		Description: "Hide the minimize, maximize and close buttons",
 		Default:     "false",
