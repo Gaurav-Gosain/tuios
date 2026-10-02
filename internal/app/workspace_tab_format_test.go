@@ -26,7 +26,7 @@ func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 	if len(tabs) < 3 {
 		t.Fatalf("the strip drew %d tabs, want at least three", len(tabs))
 	}
-	want := map[int]string{1: "1: 1", 2: "2: review", 3: "3: 3"}
+	want := map[int]string{1: "1: 1", 2: "2: review […", 3: "3: 3"}
 	for _, tab := range tabs {
 		if tab.Add {
 			continue // the "+" tab is a control, not a workspace label
