@@ -575,6 +575,25 @@ which reads `ps -A -ww -o args=`. That prints every process's untruncated
 command line on both systems. The three rows above were run on macOS against
 the fixed helper; each also passes on the unmodified build.
 
+## The agent switch, `[agents] enabled = false`
+
+`agents_off_test.go` was run against a build of origin/main, which has no
+switch, and against this branch with one call site cut at a time.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No switch at all | build origin/main and point `TUIOS_E2E_BIN` at it | `TestAgentsOffShowsNoAgentRow/off` (the rail lists the fake agent), `TestAgentsOffRefusesAgentCommands` (every command succeeds and start-agent opens a pane), `TestAgentsOffRespondGrantStillHolds` (A answers B's prompt), `TestAgentsSwitchAppliesOnReload` (the agents section stays) | **caught** (4 of 4) |
+| Strict typing rule | `typingRefusal`: the `agentsOff` branch made `if false` | `TestAgentsOffRespondGrantStillHolds` (RESP_EXIT=0 and ANSWERED:y without respond) | **caught** |
+| Verb refusal | `admitVerb`: the `agentsOffRefusal` call cut | `TestAgentsOffRefusesAgentCommands` (list-attention and send-agent-message succeed, no `agents_disabled`) | **caught** |
+| Reload | `applyUserConfig`: the `SetAgentsEnabled` call cut | `TestAgentsSwitchAppliesOnReload` (get-agent-state still served after the switch went off) | **caught** |
+| Detection tick | `agentMonitor`: the `agentsOff` skip cut | `TestAgentsOffShowsNoAgentRow/off` (the pane holds `working`) | **caught** |
+| Client rail gate | `sidebarAgents`: the `agentsOn` term cut | none | **not caught** |
+
+The client rail gate is not caught because the daemon reads the same file
+and holds no agent state, so the rail has nothing to list either way. The
+gate matters only for a client whose config differs from its daemon's, which
+this suite does not set up.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
