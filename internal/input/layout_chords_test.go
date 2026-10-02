@@ -101,6 +101,7 @@ func TestPaneGetsTheHostKey(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
+			o.KeyboardFlags = hostReportsEvents
 			if tc.flags != "" {
 				if _, err := o.Windows[0].Terminal.Write([]byte(tc.flags)); err != nil {
 					t.Fatal(err)

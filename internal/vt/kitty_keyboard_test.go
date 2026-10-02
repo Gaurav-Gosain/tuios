@@ -309,7 +309,9 @@ func TestKittyTextUnderDisambiguate(t *testing.T) {
 		{"shift+keypad plus", "\x1b[57413;2u", disambiguate, ""},
 		{"ctrl+keypad 1 is still CSI u", "\x1b[57400;133u", disambiguate, "\x1b[57400;5u"},
 		{"keypad enter has no text", "\x1b[57414;129u", disambiguate, "\x1b[57414u"},
-		{"keypad 1 under report-all-keys", "\x1b[57400;129u", allKeys, "\x1b[57400u"},
+		// Under report-all-keys the lock bits go through, as kitty sends them:
+		// a pane that treats the lock keys as keys keeps its own lock state.
+		{"keypad 1 under report-all-keys", "\x1b[57400;129u", allKeys, "\x1b[57400;129u"},
 		// The same rule for every text key, not just the keypad: the lock
 		// bits come along from a report-all-keys host and must not count.
 		{"a, numlock on", "\x1b[97;129u", disambiguate, ""},

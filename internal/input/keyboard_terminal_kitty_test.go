@@ -36,7 +36,7 @@ func forwardNative(t *testing.T, flagsSeq string, msg tea.KeyPressMsg) string {
 	}
 	pty := &capturePty{}
 	win := &terminal.Window{ID: "kitty-native-0001", Terminal: em, Pty: pty, X: 0, Y: 0, Width: 82, Height: 26}
-	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}, KeyboardFlags: hostReportsEvents}
 	HandleTerminalModeKey(msg, o)
 	return string(pty.got)
 }
@@ -57,7 +57,7 @@ func forwardDaemon(t *testing.T, flagsSeq string, msg tea.KeyPressMsg) string {
 		DaemonWriteFunc: func(b []byte) error { got = append(got, b...); return nil },
 		X:               0, Y: 0, Width: 82, Height: 26,
 	}
-	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}, KeyboardFlags: hostReportsEvents}
 	HandleTerminalModeKey(msg, o)
 	return string(got)
 }
