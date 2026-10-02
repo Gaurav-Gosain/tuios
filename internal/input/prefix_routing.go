@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // dispatchAction runs the handler for action, if there is one. The third result
@@ -196,23 +195,13 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 		return
 	}
 
-	// The pane gets the key as the host sent it, on either encoding.
-	host := paneMsg(msg, o)
-	var rawInput []byte
-	if focused.Terminal != nil && focused.Terminal.KittyKeyboardFlags() != 0 {
-		if encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(host), focused.Terminal.KittyKeyboardFlags()); encoded != "" {
-			rawInput = []byte(encoded)
-		}
-	}
-	if len(rawInput) == 0 {
-		appCursorKeys := false
-		if focused.Terminal != nil {
-			appCursorKeys = focused.Terminal.ApplicationCursorKeys()
-		}
-		rawInput = getRawKeyBytesWithMode(host, appCursorKeys)
-	}
+	// The pane gets the key as the host sent it, on either encoding, with its
+	// release when the host will send none (see paneKeyBytes).
+	rawInput, released := paneKeyBytes(paneMsg(msg, o), focused, o, true)
 	if len(rawInput) > 0 {
-		o.NotePaneKeyDown(msg.Code, focused.ID)
+		if !released {
+			o.NotePaneKeyDown(msg.Code, focused.ID)
+		}
 		_ = focused.SendInput(rawInput)
 	}
 }
