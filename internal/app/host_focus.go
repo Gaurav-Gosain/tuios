@@ -59,3 +59,17 @@ func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 		return nil
 	}
 }
+
+// notePaneFocus tells each local pane whether it has focus on a screen someone
+// could be looking at, for the focus report a guest is sent when it turns on
+// focus reporting. A terminal that never reports focus counts as looking. A
+// daemon pane is answered by the daemon, which keeps its own record.
+func (m *OS) notePaneFocus() {
+	focused, known := m.HostFocused()
+	looking := focused || !known
+	for i, w := range m.Windows {
+		if w != nil && !w.DaemonMode {
+			w.SetHasFocus(looking && i == m.FocusedWindow)
+		}
+	}
+}

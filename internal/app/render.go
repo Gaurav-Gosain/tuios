@@ -1026,6 +1026,7 @@ func (m *OS) View() tea.View {
 	view.MouseMode = tea.MouseModeAllMotion
 
 	view.ReportFocus = true
+	m.notePaneFocus()
 	view.DisableBracketedPasteMode = false
 	view.KeyboardEnhancements = m.keyboardEnhancements()
 	view.Cursor = m.getRealCursor()

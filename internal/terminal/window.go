@@ -347,6 +347,14 @@ type Window struct {
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 	closed            atomic.Bool              // Set by Close() so the external outputChan sender (WriteOutputAsync) stops before teardown
 
+	// hasFocus is whether this pane has focus on a screen someone could be
+	// looking at, as the app last set it. The PTY reader reads it when the
+	// guest turns on focus reporting. See SetHasFocus.
+	hasFocus atomic.Bool
+	// focusReporting is whether the guest had focus reporting on after the
+	// last PTY read. Only the PTY reader goroutine touches it.
+	focusReporting bool
+
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
@@ -927,4 +935,12 @@ func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 		w.RUnlockIO()
 	}
 	return w.CachedCursor, w.CachedCursorHidden, true
+}
+
+// SetHasFocus records whether this pane has focus on a screen someone could be
+// looking at. A local pane whose guest turns on focus reporting (DECSET 1004)
+// is sent the focus-in report when this is true, as xterm sends the current
+// state on the set. A daemon pane is answered by the daemon instead.
+func (w *Window) SetHasFocus(focused bool) {
+	w.hasFocus.Store(focused)
 }

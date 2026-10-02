@@ -69,6 +69,7 @@ type Terminal interface {
 	RestoreCharsets(ids [4]byte, gl, gr int)
 	ApplicationCursorKeys() bool
 	BracketedPasteEnabled() bool
+	FocusReportingEnabled() bool
 
 	// Soft wraps. RowSoftWrapped reports whether a row of the active screen
 	// carries on to the next row because autowrap moved the text there, as

@@ -820,6 +820,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
+	s.SetHostShownProbe(func() bool { return d.sessionShown(sessionID) })
 	s.SetEventSink(func(ev SessionEvent) {
 		// Read per event, not once at creation: a rename changes it, and
 		// every record made from here must carry the name the session has now.
