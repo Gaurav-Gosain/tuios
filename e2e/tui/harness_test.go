@@ -563,7 +563,10 @@ func settledWindowCount(t *testing.T, term *tuitest.Terminal) int {
 // field is leftmost, and a name pill can never match an all-digit second group
 // unless the user names a window a bare number, which countWindows tolerates by
 // preferring the leftmost match.
-var dockStatus = regexp.MustCompile(`([0-9]+):([0-9]+)`)
+//
+// The rail's rows carry their own bracketed "[w:n]" markers, so the pattern
+// refuses a match whose first digit sits behind an opening bracket.
+var dockStatus = regexp.MustCompile(`(?:^|[^[])([0-9]+):([0-9]+)`)
 
 // countWindows reads the live window count out of the dock status field. Tests
 // use it to wait for a window to actually exist rather than for a frame to
