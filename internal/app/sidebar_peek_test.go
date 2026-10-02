@@ -71,7 +71,7 @@ var _ = sessiontree.Tree{}
 func framePeek(t *testing.T, m *OS, tree sessiontree.Tree) string {
 	t.Helper()
 	lines := railPlain(t, m, tree)
-	h := lineOf(lines, " terminals")
+	h := lineOf(lines, " TERMINALS")
 	if h < 0 {
 		t.Fatalf("no terminals header:\n%s", strings.Join(lines, "\n"))
 	}
