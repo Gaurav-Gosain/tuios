@@ -142,14 +142,18 @@ func captureTerminalState() (restore func()) {
 // forceExit ends a process whose program could not quit, leaving the terminal
 // as usable as it can.
 //
-// The termios restore goes first because it is an ioctl, which cannot block on
-// a terminal that stopped reading output, and it alone takes the terminal out
-// of raw mode. The escape sequences that leave the alternate screen and turn
-// mouse tracking off are output, so they are written under a deadline: when
-// the terminal is still alive (a slow link, a plain kill -TERM) they land, and
-// when it is not the process leaves without them. They are led by CAN, which
-// cancels any escape sequence a frame write left half finished, so the reset
-// is not swallowed into it.
+// The termios restore is the guaranteed part. It goes first because it is an
+// ioctl, which cannot block on a terminal that stopped reading output, and it
+// alone takes the terminal out of raw mode.
+//
+// The reset that leaves the alternate screen and turns mouse tracking off is
+// best effort. It is output, so it is written under a deadline, and it lands
+// only if the terminal is still reading (a slow link, a plain kill -TERM). In
+// the truly wedged case the stuck frame write holds the stdout write lock, the
+// reset waits behind it until the deadline, and the process leaves without it.
+// Running reset in the shell clears whatever is left. The reset is led by CAN,
+// which cancels any escape sequence a frame write left half finished, so the
+// reset is not swallowed into it.
 //
 // The daemon client's detach sync and Close are skipped: both can block on the
 // same wedge, and the session itself lives on in the daemon.
