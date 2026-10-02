@@ -22,18 +22,6 @@ func queueFixture(t *testing.T) (*Daemon, string, *Session, *verbConn, string, s
 	return d, sp, sess, dialVerb(t, sp), a, b
 }
 
-// eventually polls cond until it holds or the deadline passes.
-func eventually(t *testing.T, what string, within time.Duration, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(within * time.Duration(testDeadlineScale))
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s: not within %s", what, within)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 // paneShows reports whether the window's screen or history holds s.
 func paneShows(t *testing.T, d *Daemon, sess *Session, window, s string) bool {
 	t.Helper()

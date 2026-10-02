@@ -503,6 +503,18 @@ func TestGetWindowIsARead(t *testing.T) {
 	})
 }
 
+// eventually polls cond until it holds or the deadline passes.
+func eventually(t *testing.T, what string, within time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(within * time.Duration(testDeadlineScale))
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: not within %s", what, within)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func jsonEqual(a, b any) bool {
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
