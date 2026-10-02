@@ -189,6 +189,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			state.WorkspaceMasterSplits[ws] = sp.Clone()
 		}
 	}
+	// The layout modes travel for the same reason, and have no live value to
+	// fold in either: recording happens when a row names a layout, so the map
+	// is current by the time state is built.
+	if len(m.WorkspaceLayoutMode) > 0 {
+		state.WorkspaceLayoutModes = maps.Clone(m.WorkspaceLayoutMode)
+	}
 	// The master-stack shapes travel as ops (see master_layout.go), and the
 	// daemon keeps its own copy whatever a push holds. They are here for the
 	// state this client saves without a daemon.
@@ -293,6 +299,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.adoptWorkspaceStackRatio(state)
 	m.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(state.WorkspaceMasterSplits))
 	m.adoptWorkspaceMasterSplits(state)
+	m.WorkspaceLayoutMode = make(map[int]string, len(state.WorkspaceLayoutModes))
+	maps.Copy(m.WorkspaceLayoutMode, state.WorkspaceLayoutModes)
 	// The shapes belong to the session too, and the seeds this client sent
 	// were sent to the session being left.
 	m.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
@@ -745,6 +753,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.adoptWorkspaceMasterRatio(state)
 	m.adoptWorkspaceStackRatio(state)
 	m.adoptWorkspaceMasterSplits(state)
+	m.adoptWorkspaceLayoutMode(state)
 	m.adoptWorkspaceHasCustom(state)
 	masterRetile := m.adoptWorkspaceMasterLayout(state)
 
@@ -1151,6 +1160,21 @@ func (m *OS) adoptWorkspaceMasterSplits(state *session.SessionState) {
 	for ws, sp := range state.WorkspaceMasterSplits {
 		m.WorkspaceMasterSplits[ws] = sp.Clone()
 	}
+}
+
+// adoptWorkspaceLayoutMode takes the session's per-workspace layout modes onto
+// this client, merged on the same terms as the ratios beside it: a state that
+// says nothing about a workspace leaves what this client holds alone, and an
+// entry that is present wins. An older peer that never sends the field changes
+// nothing, which is what makes it additive.
+func (m *OS) adoptWorkspaceLayoutMode(state *session.SessionState) {
+	if len(state.WorkspaceLayoutModes) == 0 {
+		return
+	}
+	if m.WorkspaceLayoutMode == nil {
+		m.WorkspaceLayoutMode = make(map[int]string, len(state.WorkspaceLayoutModes))
+	}
+	maps.Copy(m.WorkspaceLayoutMode, state.WorkspaceLayoutModes)
 }
 
 // adoptWorkspaceHasCustom takes the session's custom-layout flags onto this

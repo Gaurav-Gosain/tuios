@@ -540,6 +540,13 @@ type SessionState struct {
 	// client did before the field existed, so an older peer that never sends
 	// it changes nothing.
 	WorkspaceMasterSplits map[int]layout.MasterSplits `json:"workspace_master_splits,omitempty"`
+	// WorkspaceLayoutModes is which tiling layout each workspace chose, keyed by
+	// workspace. A workspace gets an entry when a layout row names it directly,
+	// so a session can run stacked in one workspace and scrolling in another.
+	// Absent, or with no entry for a workspace, means the workspace follows the
+	// session's LayoutMode, which is what every client did before the field
+	// existed, so an older peer that never sends it changes nothing.
+	WorkspaceLayoutModes map[int]string `json:"workspace_layout_modes,omitempty"`
 	// WorkspaceMasterLayout is each workspace's master-stack shape: where the
 	// masters go and how many there are. Only MsgMasterLayout writes it (see
 	// master_layout.go); a push never carries it, and retainDaemonExclusive
