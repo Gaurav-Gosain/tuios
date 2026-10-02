@@ -1520,8 +1520,8 @@ func (kp *KittyPassthrough) forwardPlace(
 
 	// Calculate image dimensions and cap to content area
 	// Note: calculateImageCells returns (rows, cols) in that order
-	imgRows, imgCols := kp.calculateImageCells(cmd)
 	pixelW, pixelH := kp.imagePixelsFor(windowID, cmd.ImageID, cmd.Width, cmd.Height)
+	imgRows, imgCols := kp.placeCells(cmd, pixelW, pixelH)
 	displayCols := imgCols
 	displayRows := imgRows
 	if displayCols > contentWidth && contentWidth > 0 {
@@ -1624,6 +1624,21 @@ func (kp *KittyPassthrough) forwardPlace(
 	// and let a guest ID that numerically equals another image's host ID
 	// silently overwrite that entry.
 	kp.placements[windowID][hostID] = placement
+}
+
+// placeCells is the cell size of a placement. An a=p carries no pixel size,
+// and when it gives no c= or r= either, the image is drawn at its own size,
+// which only the transmission that preceded it knows. Sized from the a=p
+// alone, such a placement had no cells, and the refresh pass took a record
+// with no cells for one with no part on screen and deleted it in the same
+// flush that placed it.
+func (kp *KittyPassthrough) placeCells(cmd *vt.KittyCommand, pixelW, pixelH int) (rows, cols int) {
+	if cmd.Width > 0 && cmd.Height > 0 {
+		return kp.calculateImageCells(cmd)
+	}
+	sized := *cmd
+	sized.Width, sized.Height = pixelW, pixelH
+	return kp.calculateImageCells(&sized)
 }
 
 // deleteAllWindowPlacements removes all placements for a window from the host terminal
