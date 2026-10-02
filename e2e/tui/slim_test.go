@@ -181,7 +181,7 @@ func TestSlimDroppedCommandSaysSo(t *testing.T) {
 		if err == nil {
 			t.Fatalf("tuios-slim %s succeeded:\n%s", strings.Join(args, " "), out)
 		}
-		want := args[0] + " is not in tuios-slim. Run `tuios ext install " + args[0] + "`, or install tuios."
+		want := args[0] + " is not in tuios-slim. Install the full tuios to use this command."
 		if strings.TrimSpace(out) != want {
 			t.Errorf("tuios-slim %s printed\n%q\nwant the one line\n%q", strings.Join(args, " "), out, want)
 		}
@@ -290,7 +290,7 @@ func TestFullCLIOnASlimDaemon(t *testing.T) {
 	if err == nil {
 		t.Fatalf("full tuios list-agents on the slim daemon succeeded:\n%s", out)
 	}
-	if !strings.Contains(out, "list-agents is not in tuios-slim. Install tuios for it.") {
+	if !strings.Contains(out, "list-agents is not in tuios-slim. Install the full tuios to use it.") {
 		t.Errorf("full tuios list-agents on the slim daemon printed\n%s\nwant the line that says the verb is not in tuios-slim", out)
 	}
 }

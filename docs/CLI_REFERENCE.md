@@ -40,7 +40,7 @@ tuios-slim has a subset of these commands. A command it leaves out prints one
 line and exits with status 1:
 
 ```
-ssh is not in tuios-slim. Run `tuios ext install ssh`, or install tuios.
+ssh is not in tuios-slim. Install the full tuios to use this command.
 ```
 
 See [SLIM.md](SLIM.md) for the list.

@@ -32,7 +32,7 @@ func TestSlimLeavesOutFeatureVerbs(t *testing.T) {
 	if verr.Code != ErrVerbUnknownVerb {
 		t.Errorf("code = %q, want %q", verr.Code, ErrVerbUnknownVerb)
 	}
-	if want := "list-agents is not in tuios-slim. Install tuios for it."; verr.Message != want {
+	if want := "list-agents is not in tuios-slim. Install the full tuios to use it."; verr.Message != want {
 		t.Errorf("message = %q, want %q", verr.Message, want)
 	}
 	if missingVerbError("no-such-verb") != nil {

@@ -24,7 +24,7 @@ type MissingError struct {
 
 // Error prints the one line the user reads.
 func (e *MissingError) Error() string {
-	return fmt.Sprintf("%s is not in %s. Install tuios for it.", e.Feature, SlimName)
+	return fmt.Sprintf("%s is not in %s. Install the full tuios to use it.", e.Feature, SlimName)
 }
 
 // Missing returns the error for a feature tuios-slim does not have.
@@ -41,7 +41,7 @@ type MissingCommandError struct {
 
 // Error prints the one line the user reads.
 func (e *MissingCommandError) Error() string {
-	return fmt.Sprintf("%s is not in %s. Run `tuios ext install %s`, or install tuios.", e.Name, SlimName, e.Name)
+	return fmt.Sprintf("%s is not in %s. Install the full tuios to use this command.", e.Name, SlimName)
 }
 
 // MissingCommand returns the error for a command tuios-slim does not have.

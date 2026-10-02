@@ -89,20 +89,20 @@ Some features stay in tuios-slim on purpose:
 | The MCP server | `mcp` | Prints the line below. |
 | Agents: agent state, the Inbox, mail, approvals, recaps, alerts, agent detection, harness integrations, start-agent, ACP and Codex | `set-agent-state`, `list-agents`, `send-agent-message`, `ask-agent`, `respond`, `queue`, `agent-hook`, `integration`, `start-agent` and the other agent commands | Prints the line below. The daemon ignores agent reports from panes. |
 | Worktrees, fan-out and the review | `worktree`, `fan`, `review` | Prints the line below. |
-| Hosts and links to other machines | `hosts`, `stdio-proxy` | Prints the line below. The `--host`, `--all-hosts` and `--global` flags print `<flag> is not in tuios-slim. Install tuios for it.` |
+| Hosts and links to other machines | `hosts`, `stdio-proxy` | Prints the line below. The `--host`, `--all-hosts` and `--global` flags print `<flag> is not in tuios-slim. Install the full tuios to use it.` |
 | The herdr API and its command line | `pane`, `notification` | Prints the line below. |
 | The tmux shim | `tmux`, `tmux-shim`, `tmux-pane` | Prints the line below. |
 | Tape files: playback, recording, the tape manager and project tapes | `tape` | Prints the line below. `run-command` still runs single tape commands. |
 | Screenshots and capture mode | `screenshot` | The screenshot key shows a message. |
 | The screen saver and the effect picker | | The `[screensaver]` section loads and does nothing. |
 | `tuios update` | `update` | Prints the line below. |
-| The agent skill | `--skill` | Prints `--skill is not in tuios-slim. Install tuios for it.` |
+| The agent skill | `--skill` | Prints `--skill is not in tuios-slim. Install the full tuios to use it.` |
 | Event streams and shell runs | `subscribe`, `run` | Prints the line below. |
 
 A command that tuios-slim leaves out prints one line and exits with status 1:
 
 ```
-ssh is not in tuios-slim. Run `tuios ext install ssh`, or install tuios.
+ssh is not in tuios-slim. Install the full tuios to use this command.
 ```
 
 The palette, the settings page, the help and the prefix menu do not show the
@@ -129,7 +129,7 @@ socket, and `TUIOS_EXT_PROTOCOL`, `TUIOS_EXT_HOST_VERSION` and
 `TUIOS_EXT_HOST`. It exits with the status of the extension.
 `internal/extension` holds the protocol.
 
-No extension ships yet. `tuios ext install` comes in a later release.
+No extension ships yet.
 
 ## Mixing tuios and tuios-slim
 
@@ -139,8 +139,8 @@ attach to a tuios-slim daemon.
 - The welcome message carries the daemon's edition. A slim daemon sends
   `slim`. A full daemon sends nothing, as older daemons do.
 - A slim daemon answers a verb it does not have with the error code
-  `unknown_verb` and the message `<verb> is not in tuios-slim. Install tuios
-  for it.`
+  `unknown_verb` and the message `<verb> is not in tuios-slim. Install the full
+  tuios to use it.`
 - A slim daemon ignores agent reports from panes: OSC sequences, herdr
   environment variables and `set-agent-state` from a full tuios.
 - A slim client drops the agent mail a full daemon sends.
