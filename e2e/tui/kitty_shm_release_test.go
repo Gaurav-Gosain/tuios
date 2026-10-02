@@ -64,40 +64,59 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 	// A daemon pane on a workspace that is not shown has no client reading
 	// it, so the daemon is the last reader of every frame.
 	t.Run("daemon-unwatched", func(t *testing.T) {
-		host := newKittyHost()
-		term, base := start(t, startOpts{
-			cols: 120, rows: 40,
-			env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
-			out:           host,
-			daemonDefault: true,
-		})
-		killDaemon(t, base)
-		host.answerProbe(t, term)
-		waitBoot(t, term)
-		newWindow(t, term)
-		enterTerminalMode(t, term)
-		runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
-
-		logPath := filepath.Join(t.TempDir(), "names")
-		typeLine(t, term, fmt.Sprintf("%s %s 40 20 3000 vary", buildShmStream(t), logPath))
-		leaveTerminalMode(t, term)
-		if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
-			t.Fatalf("switch to workspace 2: %v", err)
-		}
-		if err := term.WaitFor(func(s tuitest.Screen) bool {
-			return !strings.Contains(s.Text(), "IMAGEPANE")
-		}, uiTimeout); err != nil {
-			t.Fatalf("workspace 2 still shows the image pane: %v\n%s", err, term.Snapshot())
-		}
-		host.mark("hidden")
-		names := waitShmStream(t, term, logPath)
-		time.Sleep(time.Second)
-
-		forwarded := forwardedShmNames(host.bytes())
-		left := leftInDevShm(names)
+		names, forwarded, left := streamUnwatched(t, "vary")
 		t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm", len(names), len(forwarded), len(left))
 		assertReleased(t, left, forwarded)
 	})
+
+	// The same stream with each object one byte longer than the frame its
+	// command describes. The name is text the pane printed, and an object of
+	// another size may be another program's, so the daemon keeps every one.
+	// "daemon-unwatched" above is the positive half: the same path deletes
+	// objects of the right size.
+	t.Run("daemon-unwatched-wrong-size", func(t *testing.T) {
+		names, forwarded, left := streamUnwatched(t, "big")
+		t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm", len(names), len(forwarded), len(left))
+		if len(left) != len(names) {
+			t.Fatalf("%d of %d objects of the wrong size were deleted", len(names)-len(left), len(names))
+		}
+	})
+}
+
+// streamUnwatched runs the stand-in in a daemon pane on a workspace that is
+// not shown, and returns the names it advertised, the names the host was
+// handed, and the names still in /dev/shm.
+func streamUnwatched(t *testing.T, paint string) ([]string, map[string]bool, []string) {
+	t.Helper()
+	host := newKittyHost()
+	term, base := start(t, startOpts{
+		cols: 120, rows: 40,
+		env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out:           host,
+		daemonDefault: true,
+	})
+	killDaemon(t, base)
+	host.answerProbe(t, term)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+	logPath := filepath.Join(t.TempDir(), "names")
+	typeLine(t, term, fmt.Sprintf("%s %s 40 20 3000 %s", buildShmStream(t), logPath, paint))
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
+		t.Fatalf("switch to workspace 2: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "IMAGEPANE")
+	}, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 still shows the image pane: %v\n%s", err, term.Snapshot())
+	}
+	host.mark("hidden")
+	names := waitShmStream(t, term, logPath)
+	time.Sleep(time.Second)
+	return names, forwardedShmNames(host.bytes()), leftInDevShm(names)
 }
 
 // assertReleased fails for every object still in /dev/shm whose name never
