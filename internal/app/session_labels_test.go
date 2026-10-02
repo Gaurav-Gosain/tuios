@@ -18,8 +18,8 @@ func TestAdoptSessionLabelsCopiesTheMap(t *testing.T) {
 	m.adoptSessionLabels(&session.SessionState{DisplayName: "Payments API", WorkspaceNames: names})
 
 	names[1] = "mutated"
-	if got := m.WorkspaceLabel(1); got != "review" {
-		t.Errorf("workspace label = %q, want review: the model aliased the pushed map", got)
+	if got := m.WorkspaceLabel(1); got != "review [1]" {
+		t.Errorf("workspace label = %q, want review [1]: the model aliased the pushed map", got)
 	}
 	if m.SessionDisplayName != "Payments API" {
 		t.Errorf("SessionDisplayName = %q, want Payments API", m.SessionDisplayName)
@@ -103,8 +103,8 @@ func TestRenameSurvivesAReattach(t *testing.T) {
 	if got := m.SessionLabel("work"); got != "Payments API" {
 		t.Errorf("session label after reattach = %q, want Payments API", got)
 	}
-	if got := m.WorkspaceLabel(2); got != "review" {
-		t.Errorf("workspace label after reattach = %q, want review", got)
+	if got := m.WorkspaceLabel(2); got != "review [2]" {
+		t.Errorf("workspace label after reattach = %q, want review [2]", got)
 	}
 	if m.SessionName != "work" {
 		t.Errorf("SessionName = %q, want the identity work", m.SessionName)
