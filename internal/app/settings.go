@@ -379,6 +379,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),
+			opt("appearance.link_label"),
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
 		}),
