@@ -94,6 +94,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("restore_all", handleRestoreAll)
 	d.Register("next_window", handleNextWindow)
 	d.Register("prev_window", handlePrevWindow)
+	d.Register("last_pane", handleLastPane)
 
 	// Window selection (1-9)
 	for i := 1; i <= 9; i++ {
@@ -209,6 +210,11 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
 
+	// Session switching (1-9), by the rail's own order
+	for i := 1; i <= 9; i++ {
+		d.Register("switch_session_"+string(rune('0'+i)), makeSwitchSessionHandler(i))
+	}
+
 	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
@@ -219,6 +225,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
 	d.Register("rename_session", handleRenameSession)
+	d.Register("rename_workspace", handleRenameWorkspace)
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
@@ -356,6 +363,13 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleRenameWorkspace opens the rename editor on the workspace the session
+// is showing now.
+func handleRenameWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginRenameWorkspace(o.CurrentWorkspace)
+	return o, nil
+}
+
 func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// If showing cache stats, reset them instead
 	if o.ShowCacheStats {
@@ -428,6 +442,15 @@ func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return afterFocusCommand(o, prev, focusEnterCycle)
 }
 
+func handleLastPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
+	if !o.LastPane() {
+		o.ShowNotification("No pane to go back to.", "info", o.Settings.NotificationDuration)
+		return o, nil
+	}
+	return afterFocusCommand(o, prev, focusEnterTargeted)
+}
+
 // makeSelectWindowHandler creates a handler for selecting a window by index.
 // The index comes from the action name, so the binding can be any key.
 func makeSelectWindowHandler(idx int) ActionHandler {
@@ -445,6 +468,13 @@ func makeSelectWindowHandler(idx int) ActionHandler {
 func makeSwitchWorkspaceHandler(workspace int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SwitchToWorkspace(workspace)
+		return o, nil
+	}
+}
+
+func makeSwitchSessionHandler(n int) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.SwitchToSessionByIndex(n - 1)
 		return o, nil
 	}
 }

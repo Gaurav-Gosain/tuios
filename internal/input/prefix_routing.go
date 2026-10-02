@@ -184,6 +184,7 @@ func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 func isTerminalSafeAction(action string) bool {
 	return strings.HasPrefix(action, "switch_workspace_") ||
 		strings.HasPrefix(action, "move_and_follow_") ||
+		strings.HasPrefix(action, "switch_session_") ||
 		action == "next_workspace" || action == "prev_workspace" ||
 		action == "next_session" || action == "prev_session"
 }

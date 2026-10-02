@@ -243,6 +243,7 @@ type AppearanceConfig struct {
 	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs
 	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
+	LinkLabel                *bool                   `toml:"link_label"`                   // Pop up a label naming the link under the pointer (default: true)
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
 	WindowButtonPosition     string                  `toml:"window_button_position"`       // Which end of the title bar the window controls sit on: right, left (default: left)
@@ -289,6 +290,7 @@ type AppearanceConfig struct {
 	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
+	DockWorkspaceLabelMax  *int   `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
@@ -857,6 +859,10 @@ func DefaultConfig() *UserConfig {
 				"copy_selection":  {"c"},
 				"next_window":     {"tab"},
 				"prev_window":     {"shift+tab"},
+				// tmux's last-pane key. Alternating presses flip between the
+				// last two panes, which is how a jump lands back where it left.
+				// 'l' was the other candidate and is snap_right.
+				"last_pane":       {";"},
 				"select_window_1": {"1"},
 				"select_window_2": {"2"},
 				"select_window_3": {"3"},
@@ -1825,6 +1831,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	} else if cfg.Appearance.Links != "" {
 		s.Links = LinksAll
 	}
+	if cfg.Appearance.LinkLabel != nil {
+		s.LinkLabel = *cfg.Appearance.LinkLabel
+	}
 
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer
@@ -1908,6 +1917,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
+	}
+	if cfg.Appearance.DockWorkspaceLabelMax != nil {
+		s.DockWorkspaceLabelMax = max(*cfg.Appearance.DockWorkspaceLabelMax, 0)
 	}
 	if cfg.Appearance.DockPillCaps != nil {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps
