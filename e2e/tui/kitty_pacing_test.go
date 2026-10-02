@@ -191,20 +191,25 @@ func rate(count string, d time.Duration, clients ...*pacingClient) (guest int, g
 }
 
 // pacingTotals adds up the daemon's pacing lines: how many times it held the
-// guest, how many frames it skipped for a client, and how many client streams
-// it cut because their queue filled.
-type pacingTotals struct{ held, skipped, cut int }
+// guest and for how long, how many frames it skipped for a client, and how
+// many client streams it cut because their queue filled.
+type pacingTotals struct {
+	held, skipped, cut int
+	heldFor            time.Duration
+}
 
-var pacingLineRE = regexp.MustCompile(`held (\d+) times .* (\d+) frames skipped, (\d+) streams cut`)
+var pacingLineRE = regexp.MustCompile(`held (\d+) times for (\S+), .* (\d+) frames skipped, (\d+) streams cut`)
 
 func sumPacing(lines []string) pacingTotals {
 	var p pacingTotals
 	for _, l := range lines {
 		if m := pacingLineRE.FindStringSubmatch(l); m != nil {
 			h, _ := strconv.Atoi(m[1])
-			s, _ := strconv.Atoi(m[2])
-			c, _ := strconv.Atoi(m[3])
+			d, _ := time.ParseDuration(m[2])
+			s, _ := strconv.Atoi(m[3])
+			c, _ := strconv.Atoi(m[4])
 			p.held, p.skipped, p.cut = p.held+h, p.skipped+s, p.cut+c
+			p.heldFor += d
 		}
 	}
 	return p
@@ -295,35 +300,54 @@ func TestKittyStuckClientDoesNotSlowTheOthers(t *testing.T) {
 // TestKittySlowClientHoldsTheGuest: the only client reads in bursts, stopped
 // for 150 ms out of every 200. Every client is behind, so the daemon holds the
 // guest in write() instead of reading frames nobody can take.
+//
+// The test reads the time the daemon held the pane, not only the guest's
+// rate. The guest's rate with the client reading is bound by the CPU: on two
+// cores it fell to 68 frames in 3 s, and the burst rate came to 60.3% of it
+// with the pane held. The time held does not depend on how fast the machine
+// is: the client is stopped for 2.25 s of the 3 s, and a pane that is not
+// held is held for none of it.
 func TestKittySlowClientHoldsTheGuest(t *testing.T) {
 	base, client, count := startPacedGuest(t, "b64")
 
 	const window = 3 * time.Second
 	guestFree, gotFree := rate(count, window, client)
 	t.Logf("reading:       guest wrote %d frames, the client got %d in %s", guestFree, gotFree[0], window)
+	before := sumPacing(pacingLog(t, base))
 
 	done := make(chan struct{})
 	go dutyCycle(client, 150*time.Millisecond, 50*time.Millisecond, done)
 	guestSlow, gotSlow := rate(count, window, client)
 	close(done)
 	t.Logf("in bursts:     guest wrote %d frames, the client got %d in %s", guestSlow, gotSlow[0], window)
+	// The daemon writes its pacing line at most every 2 s: wait for the one
+	// that covers the end of the bursts.
+	time.Sleep(pacingReportWait)
 	log := pacingLog(t, base)
 	t.Logf("daemon: %s", strings.Join(log, "\n  "))
+	after := sumPacing(log)
+	heldFor := after.heldFor - before.heldFor
+	t.Logf("held for %s of the %s in bursts", heldFor, window)
 
 	if guestFree < 6 {
 		t.Fatalf("the guest wrote only %d frames in %s with the client reading", guestFree, window)
 	}
-	if guestSlow*10 > guestFree*6 {
-		t.Errorf("the guest wrote %d frames while its only client read in bursts, %d while it read: the pane was not held",
-			guestSlow, guestFree)
+	if heldFor < window/3 {
+		t.Errorf("the daemon held the guest for %s of %s while its only client read in bursts: the pane was not held",
+			heldFor, window)
 	}
-	if sumPacing(log).held == 0 {
-		t.Errorf("the daemon never held a pane whose only client was behind")
+	if guestSlow >= guestFree {
+		t.Errorf("the guest wrote %d frames while its only client read in bursts, %d while it read: the hold cost it nothing",
+			guestSlow, guestFree)
 	}
 	if garbage := base64Rows(client.term.Screen().Text()); len(garbage) > 0 {
 		t.Errorf("image data was printed into the pane as text:\n%s", strings.Join(garbage, "\n"))
 	}
 }
+
+// pacingReportWait is how long a test waits for the daemon to write the pacing
+// line for what it just did: one report interval and a margin.
+const pacingReportWait = 2500 * time.Millisecond
 
 // TestTextFloodPaneIsNeverHeld: the same client in bursts, on a pane that
 // floods text and draws no graphics. A text pane is read as before: the guest

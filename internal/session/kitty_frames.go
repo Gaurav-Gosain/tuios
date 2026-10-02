@@ -22,13 +22,18 @@ import (
 //
 // A frame is dropped only when nothing between it and its replacement could
 // depend on it:
-//   - The newer frame names the same image id, which is not zero.
+//   - The newer frame names the same image id, which is not zero. Or both
+//     frames have no id, and the newer one is drawn over the older one
+//     exactly: see idless.
 //   - No other graphics command came between them. A placement, a delete or
 //     a query may name the image, so any of them keeps every waiting frame.
-//   - The older frame did not move the cursor, or the text after it set the
-//     cursor to an absolute position before anything else was drawn. An a=T
-//     without C=1 or U=1 moves the cursor past the image, and the text
-//     after it is drawn from there.
+//   - The older frame did not move the cursor. An a=T without C=1 or U=1
+//     moves the cursor past the image, and at the bottom row it scrolls the
+//     screen. A cursor move after it does not undo the scroll, so such a
+//     frame is never dropped.
+//   - The older frame did not name a shared memory object or a temporary
+//     file (t=s, t=t). The terminal that reads one deletes it, so a dropped
+//     one would stay on disk.
 
 // queuedFrame is one complete frame on a client's queue. Exactly one side
 // settles it: the stream goroutine takes it, or broadcast drops it for a newer
@@ -45,10 +50,11 @@ type queuedFrame struct {
 	owner *ptySubscriber
 
 	// Read and written by broadcast only.
-	id     uint32
-	read   uint64 // the read that queued it, from PTY.reads
-	moves  bool   // an a=T that moves the cursor past the image
-	pinned bool   // something after it depends on it, so it is never dropped
+	id      uint32
+	read    uint64 // the read that queued it, from PTY.reads
+	pinned  bool   // something after it depends on it, so it is never dropped
+	key     string // an id-less frame's place and keys; see idless
+	follows bool   // only a cursor move came between it and the frame before
 }
 
 const (
@@ -78,6 +84,11 @@ type gfxSeg struct {
 	last  bool   // holds the frame's last byte
 	id    uint32 // the frame's image id
 	moves bool   // the frame moves the cursor
+	keep  bool   // the frame is never dropped: it moves the cursor or names a file
+	key   string // see queuedFrame
+	// follows is set on a frame's first segment when only a cursor move came
+	// between it and the end of the frame before it.
+	follows bool
 
 	// pins marks text that holds a graphics command that is not a frame.
 	pins bool
@@ -110,24 +121,37 @@ type gfxScanner struct {
 	inFrame    bool // a frame's command ended with m=1: the next command continues it
 	otherChunk bool // the same, for a transmission that is not a frame
 
-	// The last few spans the scanner closed, and the one open now: a frame
-	// from its first byte to its last, or one other graphics command. A
-	// client that starts reading inside one would print the rest of it as
-	// text. See spanAt.
-	spans    [32][2]int64
-	nspans   int
+	// The spans the scanner closed that the ring may still hold, oldest
+	// first, and the one open now: a frame from its first byte to its last,
+	// or one other graphics command. A client that starts reading inside one
+	// would print the rest of it as text. See spanAt.
+	spans    [][2]int64
 	spanOpen bool
 	spanFrom int64
+
+	// tail is the last bytes before the scan position, so a cursor move just
+	// in front of a frame is found wherever the reads fall. lastFrameEnd is
+	// the stream position after the last frame's last byte.
+	tail         [maxCUP]byte
+	ntail        int
+	lastFrameEnd int64
 
 	// What classify found in the command in progress.
 	frameID        uint32
 	frameMoves     bool
+	frameKeep      bool
+	frameIDless    bool
 	frameContinues bool
+	cmdQuery       bool // a query, which is not graphics output
+	otherQuery     bool // the chunked transmission in progress is a query
 }
+
+// maxCUP bounds the cursor move scan looks for in front of a frame.
+const maxCUP = 16
 
 // scan cuts data, which ends at stream position end, into segments. The
 // segments cover every byte except a trailing carry. saw reports a kitty
-// graphics command in this read.
+// graphics command other than a query in this read.
 func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	buf := data
 	base := end - int64(len(data))
@@ -148,7 +172,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 			segs = append(segs, cur)
 		}
 		segStart = to
-		cur = gfxSeg{frame: cur.frame, id: cur.id, moves: cur.moves}
+		cur = gfxSeg{frame: cur.frame, id: cur.id, moves: cur.moves, keep: cur.keep, key: cur.key}
 	}
 	endCmd := func(at int) {
 		s.state = gfxGround
@@ -162,6 +186,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 		if s.cmdLast {
 			s.inFrame = false
 			s.closeSpan(base + int64(at))
+			s.lastFrameEnd = base + int64(at)
 		}
 	}
 
@@ -182,6 +207,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 				if bytes.HasPrefix([]byte("\x1b_G"), rest) {
 					emit(k)
 					s.carry = append([]byte(nil), rest...)
+					s.keepTail(buf[:k])
 					return segs, saw
 				}
 				i = k + 1
@@ -201,15 +227,16 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 				emit(cmdStart)
 				s.carry = append([]byte(nil), buf[cmdStart:]...)
 				s.state = gfxGround
+				s.keepTail(buf[:cmdStart])
 				return segs, saw
 			}
-			saw = true
 			s.state = gfxPayload
 			if j < 0 || j+i-cmdStart > maxGfxHeader {
 				// Keys this long are not a command anyone sends. Pass it
 				// through as text that keeps every waiting frame. The test is
 				// the same whether or not the keys end in this read, so where
 				// the reads fall does not change the answer.
+				saw = true
 				cur.pins = true
 				s.cmdFrame = false
 				s.otherChunk = false
@@ -223,7 +250,11 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 				continue
 			}
 			k := i + j
-			s.classify(buf[cmdStart+3 : k])
+			keys := buf[cmdStart+3 : k]
+			s.classify(keys)
+			if !s.cmdQuery {
+				saw = true
+			}
 			if !s.frameContinues {
 				s.openSpan(base + int64(cmdStart))
 			}
@@ -232,8 +263,14 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 				cur.frame = true
 				if !s.frameContinues {
 					cur.first = true
+					cur.key = ""
+					cup, from := s.cupBefore(buf, cmdStart, base)
+					cur.follows = cup != nil && from == s.lastFrameEnd
+					if s.frameIDless && cup != nil {
+						cur.key = string(cup) + "\x00" + string(keys)
+					}
 				}
-				cur.id, cur.moves = s.frameID, s.frameMoves
+				cur.id, cur.moves, cur.keep = s.frameID, s.frameMoves, s.frameKeep
 				s.inFrame = true
 			} else {
 				cur.pins = true
@@ -273,14 +310,53 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 		}
 	}
 	emit(len(buf))
+	s.keepTail(buf)
 	return segs, saw
+}
+
+// keepTail records the last bytes the scan has passed.
+func (s *gfxScanner) keepTail(b []byte) {
+	if len(b) >= maxCUP {
+		s.ntail = copy(s.tail[:], b[len(b)-maxCUP:])
+		return
+	}
+	keep := min(s.ntail, maxCUP-len(b))
+	copy(s.tail[:], s.tail[s.ntail-keep:s.ntail])
+	s.ntail = keep + copy(s.tail[keep:], b)
+}
+
+// cupBefore returns the cursor move (CUP, ESC [ row ; col H or f) that ends
+// right where buf[at] starts, and the stream position it starts at. It returns
+// nil when the bytes in front of at are anything else.
+func (s *gfxScanner) cupBefore(buf []byte, at int, base int64) (cup []byte, from int64) {
+	var w []byte
+	if at >= maxCUP {
+		w = buf[at-maxCUP : at]
+	} else {
+		w = make([]byte, 0, maxCUP)
+		w = append(w, s.tail[max(0, s.ntail-(maxCUP-at)):s.ntail]...)
+		w = append(w, buf[:at]...)
+	}
+	n := len(w)
+	if n < 3 || (w[n-1] != 'H' && w[n-1] != 'f') {
+		return nil, 0
+	}
+	i := n - 2
+	for i >= 0 && (w[i] >= '0' && w[i] <= '9' || w[i] == ';') {
+		i--
+	}
+	if i < 1 || w[i] != '[' || w[i-1] != 0x1b {
+		return nil, 0
+	}
+	cup = w[i-1:]
+	return cup, base + int64(at) - int64(len(cup))
 }
 
 // classify reads one command's keys and decides whether it belongs to a frame.
 func (s *gfxScanner) classify(keys []byte) {
-	var action byte = 't'
+	var action, medium, format byte = 't', 'd', 0
 	var id uint64
-	more, cursorStays := false, false
+	more, cursorStays, cupOnly, otherKeys := false, false, false, false
 	for len(keys) > 0 {
 		kv := keys
 		if c := bytes.IndexByte(keys, ','); c >= 0 {
@@ -289,6 +365,7 @@ func (s *gfxScanner) classify(keys []byte) {
 			keys = nil
 		}
 		if len(kv) < 3 || kv[1] != '=' {
+			otherKeys = true
 			continue
 		}
 		v := kv[2:]
@@ -297,12 +374,25 @@ func (s *gfxScanner) classify(keys []byte) {
 			action = v[0]
 		case 'i':
 			id, _ = strconv.ParseUint(string(v), 10, 32)
+		case 't':
+			medium = v[0]
+		case 'f':
+			if string(v) == "24" {
+				format = 24
+			}
 		case 'm':
 			more = string(v) == "1"
-		case 'C', 'U':
+		case 'C':
+			if string(v) == "1" {
+				cursorStays, cupOnly = true, true
+			}
+		case 'U':
 			if string(v) == "1" {
 				cursorStays = true
 			}
+		case 's', 'v', 'q', 'o', 'S', 'O', 'c', 'r', 'x', 'y', 'w', 'h', 'X', 'Y', 'z':
+		default:
+			otherKeys = true
 		}
 	}
 
@@ -312,18 +402,50 @@ func (s *gfxScanner) classify(keys []byte) {
 		// The next chunk of the frame in progress. Chunks carry m and q only.
 		s.cmdFrame, s.frameContinues = true, true
 		s.cmdLast = !more
+		s.cmdQuery = false
 	case s.otherChunk:
 		s.cmdFrame = false
 		s.otherChunk = more
+		s.cmdQuery = s.otherQuery
 	case (action == 't' || action == 'T') && id > 0:
 		s.cmdFrame = true
 		s.cmdLast = !more
+		s.cmdQuery = false
 		s.frameID = uint32(id)
 		s.frameMoves = action == 'T' && !cursorStays
+		s.frameKeep = s.frameMoves || medium == 's' || medium == 't'
+		s.frameIDless = false
+	case action == 'T' && id == 0 && cupOnly && medium == 'd' && format == 24 && !otherKeys:
+		// A frame with no id, as mpv sends: see idless.
+		s.cmdFrame = true
+		s.cmdLast = !more
+		s.cmdQuery = false
+		s.frameID = 0
+		s.frameMoves, s.frameKeep = false, false
+		s.frameIDless = true
 	default:
 		s.cmdFrame = false
-		s.otherChunk = (action == 't' || action == 'T') && more
+		s.cmdQuery = action == 'q'
+		s.otherChunk = (action == 't' || action == 'T' || action == 'q') && more
+		s.otherQuery = s.cmdQuery
 	}
+}
+
+// idless reports whether a frame with no image id may replace older, the
+// frame with no id before it on the same client's queue. Such a frame is a
+// new image each time, and the terminal keeps every one of them, so a newer
+// one replaces an older one only where it is drawn exactly over it:
+//   - Only a cursor move came between the two frames, and the same cursor
+//     move came right in front of each. Both are placed at the same cell.
+//   - Their keys are the same byte for byte: the same size and the same cells.
+//   - Both are f=24, which has no alpha, so nothing of the older one shows
+//     through.
+//   - Both keep the cursor where it is (C=1), and send their data in the
+//     escape code (t=d).
+//
+// mpv's --vo=kitty sends every frame this way.
+func idless(f, older *queuedFrame) bool {
+	return f.id == 0 && older.id == 0 && f.key != "" && f.follows && f.key == older.key
 }
 
 // maxOpenFrame bounds what one client gathers of a frame that is not complete
@@ -365,18 +487,28 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 				// stands, and its other chunks go out as they arrive.
 				p.flushOpen(clientID, sub)
 			}
+			if sub.skipSpan {
+				// The catch-up began inside a graphics command that is not
+				// a frame: skip the rest of it.
+				end, closed := p.gfx.spanEnd(sub.skipFrom)
+				if !closed || end >= sg.end {
+					sub.skipSpan = !closed || end > sg.end
+					sub.sent.Store(sg.end)
+					continue
+				}
+				sub.skipSpan = false
+				if start := sg.end - int64(len(b)); end > start {
+					b = b[end-start:]
+				}
+			}
 			if sg.pins {
 				sub.pinAll()
-			}
-			if f := sub.cursorFrame; f != nil {
-				if !setsCursor(b) {
-					f.pinned = true
-				}
-				sub.cursorFrame = nil
 			}
 			p.enqueue(clientID, sub, ptyChunk{data: b}, sg.end)
 			continue
 		}
+		// A frame starts only after any command the catch-up began in ended.
+		sub.skipSpan = false
 
 		if sub.skipFrame {
 			// The rest of a frame whose start this client never got.
@@ -390,6 +522,7 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 				continue
 			}
 		}
+
 		if sg.first && !plain {
 			sub.passFrame = false
 		}
@@ -397,6 +530,7 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 			if sg.last {
 				sub.passFrame = false
 			}
+			sub.lastFrame = nil
 			p.enqueue(clientID, sub, ptyChunk{data: b}, sg.end)
 			continue
 		}
@@ -405,13 +539,7 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 				p.flushOpen(clientID, sub)
 				sub.passFrame = false
 			}
-			if f := sub.cursorFrame; f != nil {
-				// A frame straight after one that moved the cursor is placed
-				// where that one left it.
-				f.pinned = true
-				sub.cursorFrame = nil
-			}
-			sub.open = &queuedFrame{id: sg.id, moves: sg.moves, owner: sub}
+			sub.open = &queuedFrame{id: sg.id, pinned: sg.keep, key: sg.key, follows: sg.follows, owner: sub}
 		}
 		f := sub.open
 		f.parts = append(f.parts, b)
@@ -434,31 +562,41 @@ func (p *PTY) flushOpen(clientID string, sub *ptySubscriber) {
 	sub.open = nil
 	f.pinned = true
 	sub.passFrame = true
+	sub.lastFrame = nil
 	p.enqueueFrame(clientID, sub, f)
 }
 
-// commitFrame queues a complete frame, and drops the waiting frame of the same
-// image that it replaces.
+// commitFrame queues a complete frame, and drops the waiting frame it
+// replaces: the one of the same image, or for a frame with no id the one
+// before it that it is drawn exactly over (idless).
 func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
+	old := sub.lastFrame
+	if f.id != 0 {
+		old = sub.latest[f.id]
+	} else if old != nil && !idless(f, old) {
+		old = nil
+	}
 	// Only a frame queued by an earlier read: one queued by this read has not
 	// had a chance to be taken, and its client is not behind.
-	if old := sub.latest[f.id]; old != nil && !old.pinned && old.read < p.reads && old.state.CompareAndSwap(frameWaiting, frameDropped) {
+	if old != nil && !old.pinned && old.read < p.reads && old.state.CompareAndSwap(frameWaiting, frameDropped) {
 		sub.queued.Add(-old.size)
 		sub.framesWaiting.Add(-1)
 		old.parts = nil
 		sub.skipped.Add(1)
 		p.framesSkipped.Add(1)
 	}
+	sub.lastFrame = nil
 	if !p.enqueueFrame(clientID, sub, f) {
+		return
+	}
+	sub.lastFrame = f
+	if f.id == 0 {
 		return
 	}
 	if sub.latest == nil || len(sub.latest) >= maxLatestFrames {
 		sub.latest = make(map[uint32]*queuedFrame)
 	}
 	sub.latest[f.id] = f
-	if f.moves {
-		sub.cursorFrame = f
-	}
 }
 
 // enqueueFrame puts a frame on a client's queue as one item.
@@ -511,7 +649,7 @@ func (sub *ptySubscriber) forgetFrames() {
 	sub.open = nil
 	sub.passFrame = false
 	sub.latest = nil
-	sub.cursorFrame = nil
+	sub.lastFrame = nil
 }
 
 // pinAll keeps every frame a client has waiting.
@@ -520,29 +658,10 @@ func (sub *ptySubscriber) pinAll() {
 		f.pinned = true
 	}
 	sub.latest = nil
-	if sub.cursorFrame != nil {
-		sub.cursorFrame.pinned = true
-		sub.cursorFrame = nil
+	if sub.lastFrame != nil {
+		sub.lastFrame.pinned = true
+		sub.lastFrame = nil
 	}
-}
-
-// setsCursor reports whether b starts by moving the cursor to an absolute
-// position (CUP, ESC [ row ; col H or f), which makes where an earlier image
-// left the cursor irrelevant.
-func setsCursor(b []byte) bool {
-	if len(b) < 3 || b[0] != 0x1b || b[1] != '[' {
-		return false
-	}
-	for _, c := range b[2:] {
-		switch {
-		case c >= '0' && c <= '9', c == ';':
-		case c == 'H', c == 'f':
-			return true
-		default:
-			return false
-		}
-	}
-	return false
 }
 
 func (s *gfxScanner) openSpan(at int64) {
@@ -554,8 +673,25 @@ func (s *gfxScanner) closeSpan(at int64) {
 		return
 	}
 	s.spanOpen = false
-	s.spans[s.nspans%len(s.spans)] = [2]int64{s.spanFrom, at}
-	s.nspans++
+	s.spans = append(s.spans, [2]int64{s.spanFrom, at})
+}
+
+// pruneSpans forgets the spans that end at or before ringStart, which no
+// catch-up can start inside any more. The ring holds 64 KiB and a span is at
+// least five bytes, so what is left stays bounded.
+func (s *gfxScanner) pruneSpans(ringStart int64) {
+	n := 0
+	for n < len(s.spans) && s.spans[n][1] <= ringStart {
+		n++
+	}
+	if n == 0 {
+		return
+	}
+	if n == len(s.spans) {
+		s.spans = s.spans[:0]
+		return
+	}
+	s.spans = s.spans[n:]
 }
 
 // spanAt reports whether stream position pos falls inside a graphics command
@@ -565,10 +701,25 @@ func (s *gfxScanner) spanAt(pos int64) (inside bool, end int64) {
 	if s.spanOpen && pos > s.spanFrom {
 		return true, -1
 	}
-	for i := range min(s.nspans, len(s.spans)) {
-		if sp := s.spans[i]; pos > sp[0] && pos < sp[1] {
+	for _, sp := range s.spans {
+		if pos > sp[0] && pos < sp[1] {
 			return true, sp[1]
 		}
 	}
 	return false, 0
+}
+
+// spanEnd returns where the span that starts at from ends, and false while
+// it is still open.
+func (s *gfxScanner) spanEnd(from int64) (end int64, closed bool) {
+	if s.spanOpen && s.spanFrom == from {
+		return 0, false
+	}
+	for i := len(s.spans) - 1; i >= 0; i-- {
+		if s.spans[i][0] == from {
+			return s.spans[i][1], true
+		}
+	}
+	// Pruned: it ended before the ring's start, so long ago.
+	return from, true
 }

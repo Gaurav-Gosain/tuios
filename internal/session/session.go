@@ -784,8 +784,9 @@ type PTY struct {
 	// subscribeLocked takes terminalMu under subscribersMu, so taking
 	// subscribersMu there would be the other order.
 	subscriberCount atomic.Int32
-	// graphicsAt is when the pane last wrote a kitty graphics command, in
-	// unix nanoseconds, zero if never. See holdForSlowSubscribers.
+	// graphicsAt is when the pane last wrote a kitty graphics command that
+	// is not a query, in unix nanoseconds, zero if never. See
+	// holdForSlowSubscribers.
 	graphicsAt atomic.Int64
 	// gfx cuts the output into text and frames for the subscribers. Used
 	// by broadcast only, under streamMu. See kitty_frames.go.
@@ -3013,13 +3014,18 @@ type ptySubscriber struct {
 	// position this client has been handed or skipped up to. open is the
 	// frame it is gathering, and passFrame sends the rest of a frame as it
 	// arrives. latest is the newest waiting frame of each image, and
-	// cursorFrame a frame that moved the cursor and is not settled yet.
-	seen        int64
-	skipFrame   bool // the catch-up began inside this frame: skip its rest
-	open        *queuedFrame
-	passFrame   bool
-	latest      map[uint32]*queuedFrame
-	cursorFrame *queuedFrame
+	// lastFrame the last frame queued, while nothing but a cursor move has
+	// come after it.
+	seen      int64
+	skipFrame bool // the catch-up began inside this frame: skip its rest
+	// The catch-up began inside a graphics command that is not a frame,
+	// which starts at skipFrom: skip its rest.
+	skipSpan  bool
+	skipFrom  int64
+	open      *queuedFrame
+	passFrame bool
+	latest    map[uint32]*queuedFrame
+	lastFrame *queuedFrame
 }
 
 // ptyChunk is one item on a subscriber's stream: output bytes, or the size the
@@ -3161,6 +3167,7 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 		if end < 0 {
 			start = ringEnd
 			sub.skipFrame = p.gfx.inFrame
+			sub.skipSpan, sub.skipFrom = !p.gfx.inFrame, p.gfx.spanFrom
 		} else if end <= endSeq {
 			start = int(end - bufStart)
 		}
@@ -4732,6 +4739,7 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.reads++
 	p.unbroadcast.Add(-int64(len(chunk.data)))
 	segs, saw := p.gfx.scan(chunk.data, seq)
+	p.gfx.pruneSpans(seq - int64(len(p.outputBuffer)))
 	if saw {
 		p.graphicsAt.Store(time.Now().UnixNano())
 	}
