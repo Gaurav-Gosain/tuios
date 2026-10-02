@@ -182,7 +182,7 @@ func faintIsInvisible(cell *uv.Cell) bool {
 func (m *OS) scrimToward() color.Color {
 	if t := theme.Current(); t != nil {
 		if theme.GroundIsLight(t.Bg) {
-			return t.Bg
+			return theme.AsColor(t.Bg)
 		}
 		return nil
 	}

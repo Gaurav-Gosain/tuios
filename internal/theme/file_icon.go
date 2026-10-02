@@ -35,7 +35,7 @@ import (
 // rail was picked against.
 func RailGround() color.Color {
 	if t := Current(); t != nil {
-		return t.Bg
+		return AsColor(t.Bg)
 	}
 	return uiCanvas
 }

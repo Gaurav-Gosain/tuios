@@ -211,7 +211,7 @@ func parseChromeColor(s string) color.Color {
 			return nil
 		}
 	}
-	return tint.FromHex(s)
+	return AsColor(tint.FromHex(s))
 }
 
 // chromeOr returns the theme's colour for a role, or fallback when the theme

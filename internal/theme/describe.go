@@ -79,13 +79,22 @@ func Describe(id string) (Palette, bool) {
 		Dark:        t.Dark,
 		Bg:          ColorToString(bg),
 		Fg:          ColorToString(t.Fg),
-		Cursor:      ColorToString(t.Cursor),
+	}
+	// A theme may leave the cursor unset. The field stays empty then, so it
+	// does not claim a colour the theme never named.
+	if t.Cursor != nil {
+		p.Cursor = ColorToString(t.Cursor)
 	}
 
 	// The foreground is prose and the cursor is a block, so they are held to
 	// different floors. Both are listed alongside the sixteen rather than
 	// measured separately, because a caller fixing a palette wants one list.
 	add := func(name string, c color.Color, floor float64) {
+		if c == nil {
+			// The theme does not name this colour, so there is nothing to
+			// measure.
+			return
+		}
 		s := Swatch{Name: name, Hex: ColorToString(c), Floor: floor}
 		s.Ratio = roundRatio(ContrastRatio(c, bg))
 		s.Passes = s.Ratio >= floor
@@ -96,7 +105,7 @@ func Describe(id string) (Palette, bool) {
 	}
 
 	add("fg", t.Fg, ContrastFloor)
-	add("cursor", t.Cursor, MarkFloor)
+	add("cursor", AsColor(t.Cursor), MarkFloor)
 	for i, c := range paletteOf(t) {
 		add(ansiNames[i], c, MarkFloor)
 	}
@@ -120,14 +129,14 @@ func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok 
 	if !found || t == nil {
 		return palette, nil, nil, nil, false
 	}
-	return paletteOf(t), t.Fg, t.Bg, t.Cursor, true
+	return paletteOf(t), AsColor(t.Fg), AsColor(t.Bg), AsColor(t.Cursor), true
 }
 
 // paletteOf is GetANSIPalette for a theme that is not the active one.
 func paletteOf(t *tint.Tint) [16]color.Color {
 	var pal [16]color.Color
 	for i, c := range ANSIOrder(t) {
-		pal[i] = c
+		pal[i] = AsColor(c)
 	}
 	return pal
 }
