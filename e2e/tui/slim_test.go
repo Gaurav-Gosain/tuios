@@ -267,6 +267,7 @@ func TestFullCLIOnASlimDaemon(t *testing.T) {
 		t.Skip("TUIOS_E2E_FULL_BIN is not set")
 	}
 	base := t.TempDir()
+	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "mixed", "--detach"); err != nil {
 		t.Fatalf("tuios-slim new: %v\n%s", err, out)
 	}
