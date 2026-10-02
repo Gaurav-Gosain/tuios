@@ -377,13 +377,67 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		bounds: bounds, viewW: viewW, viewH: viewH,
 		rules: rules, border: border, focus: focus,
 		unfocused: unfocusedStr, focused: focusedStr,
+		stackedTitles: m.stackedBarKeys(),
 	}
 	if memo := &m.separatorMemo; memo.valid && memo.key == key &&
 		slices.Equal(memo.splits, splits) && slices.Equal(memo.stack, stack) {
 		return memo.layers
 	}
 	layers := m.buildSeparatorLayers(splits, stack, key)
+	layers = append(layers, m.stackedBarTitleLayers()...)
 	m.separatorMemo = separatorMemo{valid: true, key: key, splits: splits, stack: stack, layers: layers}
+	return layers
+}
+
+// stackedBarKeys joins the collapsed bars' title and agent state for the
+// overlay memo key, so a rename or a state change redraws the bar layers like
+// any other overlay input.
+func (m *OS) stackedBarKeys() string {
+	if !m.UseStackedLayout || !m.AutoTiling {
+		return ""
+	}
+	var keys []string
+	for _, w := range m.visibleTiledWindows() {
+		if w.Height == 1 {
+			keys = append(keys, w.Title()+"\x1f"+m.windowMarkState(w))
+		}
+	}
+	return strings.Join(keys, "\x00")
+}
+
+// stackedBarTitleLayers paints each collapsed bar's header onto its own row.
+//
+// A collapsed stacked pane is a one-row borderless rect; the dividers above and
+// below it come from the ordinary split pass, but nothing else names it. The
+// bar wears the same header an ordinary pane frames itself with — the control
+// pill, the rule, the title badge — built from the same pieces and drawn in the
+// unfocused border colour, so the stack reads as full panes with their bodies
+// taken away rather than as labels. The buttons are paint, not controls: their
+// hit rects are not recorded, so a press on a bar focuses the pane as a whole.
+// The memo key already carries the pane titles and mark states (stackedKeys),
+// so a rename redraws these like any other input.
+func (m *OS) stackedBarTitleLayers() []*lipgloss.Layer {
+	if !m.UseStackedLayout || !m.AutoTiling {
+		return nil
+	}
+	color := theme.BorderUnfocusedOn(m.host.bg)
+	var layers []*lipgloss.Layer
+	for i, w := range m.visibleTiledWindows() {
+		if w.Height != 1 {
+			continue
+		}
+		buttons, _ := m.buildWindowButtons(color, w, true)
+		markState := m.windowMarkState(w)
+		name := windowTitleText(w, markState, i+1, max(w.Width-2, 1), &m.Settings)
+		badge := ""
+		if name != "" {
+			badge = windowTitleBadge(name, markState, color, &m.Settings)
+		}
+		row := layoutBorderRow(badge, buttons, max(w.Width-2, 1), color, true, &m.Settings)
+		layers = append(layers, lipgloss.NewLayer(row.text).
+			X(w.X).Y(w.Y).Z(config.ZIndexSeparators).
+			ID(fmt.Sprintf("stacked-bar-%s", w.ID)))
+	}
 	return layers
 }
 
@@ -398,6 +452,7 @@ type separatorKey struct {
 	border             lipgloss.Border
 	focus              borderPerimeter
 	unfocused, focused string
+	stackedTitles      string
 }
 
 // separatorMemo is the last divider overlay drawn and what it was drawn from.

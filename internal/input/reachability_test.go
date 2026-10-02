@@ -400,6 +400,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"set_session_accent":    "context menu row",
 	"workspace_pill_switch": "context menu row",
 	"settings_sidebar":      "rail mouse row",
+	"rename_workspace":      "user binding",
 
 	// Debug and tape surfaces reached from their own prefix, whose actions are
 	// separate names. These are the bodies both share.
@@ -441,8 +442,19 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_move_right":  "user binding",
 	// Workspace cycling. The numbered keys and the switcher cover the default
 	// surface; a user who wants h/l cycle binds these.
-	"next_workspace":     "user binding",
-	"prev_workspace":     "user binding",
+	"next_workspace": "user binding",
+	"prev_workspace": "user binding",
+	// Session jumping ships unbound for the same reason; the switcher and the
+	// rail cover it by default, and opt+N is a user binding.
+	"switch_session_1":   "user binding",
+	"switch_session_2":   "user binding",
+	"switch_session_3":   "user binding",
+	"switch_session_4":   "user binding",
+	"switch_session_5":   "user binding",
+	"switch_session_6":   "user binding",
+	"switch_session_7":   "user binding",
+	"switch_session_8":   "user binding",
+	"switch_session_9":   "user binding",
 	"scroll_cycle_width": "user binding",
 	"scroll_consume":     "user binding",
 	"scroll_expel":       "user binding",

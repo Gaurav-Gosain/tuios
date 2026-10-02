@@ -44,12 +44,12 @@ func TestAggregateViewNamesTheWorkspaceTheWindowsAreIn(t *testing.T) {
 	frame := ansi.Strip(lipgloss.Sprint(m.GetCanvas(true).Render()))
 
 	for _, ws := range []int{1, 3} {
-		if !strings.Contains(frame, fmt.Sprintf("w%d", ws)) {
-			t.Errorf("no row tagged %q; the panel names a workspace its windows are not in", fmt.Sprintf("w%d", ws))
+		if !strings.Contains(frame, fmt.Sprintf("[%d]", ws)) {
+			t.Errorf("no row tagged [%d]; the panel names a workspace its windows are not in", ws)
 		}
 	}
 	for _, ws := range []int{2, 4} {
-		if strings.Contains(frame, fmt.Sprintf("w%d", ws)) {
+		if strings.Contains(frame, fmt.Sprintf("[%d]", ws)) {
 			t.Errorf("panel tags a row with empty workspace %d", ws)
 		}
 	}

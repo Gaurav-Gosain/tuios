@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,6 +39,27 @@ import (
 //     viewer's clipboard, because OSC 52 rides the same stream the frame does
 //     and lands on the viewer machine, which is the whole point of it.
 
+// tuiosLinkTarget parses a link on our own scheme into a jump target. Two
+// shapes: tuios://window/<id>, which names a pane of the session the viewer
+// is on, and tuios://session/<name>/window/<id>, which names one on another
+// session. The first path segment after the scheme is the URL's host, so the
+// two arrive split differently and are read as one sequence.
+func tuiosLinkTarget(rawURL string) (NotifTarget, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "tuios" {
+		return NotifTarget{}, false
+	}
+	segs := append([]string{}, u.Host)
+	segs = append(segs, strings.Split(strings.Trim(u.Path, "/"), "/")...)
+	if len(segs) == 2 && segs[0] == "window" && segs[1] != "" {
+		return NotifTarget{WindowID: segs[1]}, true
+	}
+	if len(segs) == 4 && segs[0] == "session" && segs[1] != "" && segs[2] == "window" && segs[3] != "" {
+		return NotifTarget{SessionID: segs[1], WindowID: segs[3]}, true
+	}
+	return NotifTarget{}, false
+}
+
 // linkFilePath returns the local filesystem path a file:// link names, and
 // whether it names one. A file:// URL with a host that is not this machine is
 // somebody else's filesystem and gets no special treatment.
@@ -55,6 +77,16 @@ func linkFilePath(rawURL string) (string, bool) {
 // one that says it copied an address.
 func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	if rawURL == "" {
+		return nil
+	}
+
+	// Our own scheme resolves in-process, so a link tuios itself renders —
+	// in a pane, a dock cell, a pi widget — focuses the pane it names. It
+	// never reaches the desktop's URL handler, so nothing has to be
+	// registered for this to work. A dead target is already reported by the
+	// jump itself, so this branch adds no message of its own.
+	if target, ok := tuiosLinkTarget(rawURL); ok {
+		m.jumpToNotifTarget(target)
 		return nil
 	}
 
