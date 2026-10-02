@@ -148,6 +148,10 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 		// and the pinned block is the last entry rather than a fixed section.
 		"agents,files,terminals,sessions",
 		"files,agents:20,spacer:15,terminals,sessions:20",
+		// The custom section, with its one notional row when it has no
+		// command, in the middle and at the pinned end.
+		"sessions,custom:30,terminals",
+		"sessions,terminals,custom:40",
 	} {
 		for h := 4; h <= 40; h++ {
 			withSections(t, spec)
