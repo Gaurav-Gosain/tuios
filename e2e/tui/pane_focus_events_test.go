@@ -65,10 +65,9 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 		}
 		t.Fatalf("%s: the pane read %q, want %q", step, got, want)
 	}
-	// The logger is up once the mode is on. Nothing is reported for it: the
-	// pane has focus, which is what a program assumes.
-	time.Sleep(time.Second)
-	expect("logger started", "")
+	// The logger is up once the mode is on. The pane has focus, so turning
+	// the mode on gets one focus-in report, as xterm, kitty and ghostty send.
+	expect("logger started", "^[[I")
 
 	send := func(keys ...any) {
 		t.Helper()

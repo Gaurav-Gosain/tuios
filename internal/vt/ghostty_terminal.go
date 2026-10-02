@@ -676,6 +676,18 @@ func (t *GhosttyTerminal) BracketedPasteEnabled() bool {
 	return v
 }
 
+// FocusReportingEnabled reports whether the guest has focus event reporting
+// (DECSET 1004) on.
+func (t *GhosttyTerminal) FocusReportingEnabled() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return false
+	}
+	v, _ := t.term.Mode(gh.ModeFocusEvent)
+	return v
+}
+
 // ghosttyProgressState maps libghostty progress states onto the pure
 // emulator's OSC 9;4 states.
 func ghosttyProgressState(s gh.TerminalProgressState) (ProgressState, bool) {

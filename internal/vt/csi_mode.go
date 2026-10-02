@@ -239,3 +239,9 @@ func (e *Emulator) ApplicationCursorKeys() bool {
 func (e *Emulator) BracketedPasteEnabled() bool {
 	return e.isModeSet(ansi.ModeBracketedPaste)
 }
+
+// FocusReportingEnabled reports whether the guest has focus event reporting
+// (DECSET 1004) on.
+func (e *Emulator) FocusReportingEnabled() bool {
+	return e.isModeSet(ansi.ModeFocusEvent)
+}

@@ -52,9 +52,6 @@ const (
 // application has DECSET 1004 on.
 const focusInReport = "\x1b[I"
 
-// modeFocusEvents is DECSET 1004, focus event reporting.
-const modeFocusEvents = 1004
-
 // promptSubmitMaxWait bounds the wait between the paste and the carriage
 // return. herdr waits this long unconditionally; see promptSubmitQuiet for when
 // the wait ends sooner.
@@ -98,7 +95,7 @@ func (p *PTY) BracketedPasteOn() bool {
 func (p *PTY) FocusReportingOn() bool {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return p.terminal != nil && p.terminal.GetModes()[modeFocusEvents]
+	return p.terminal != nil && p.terminal.FocusReportingEnabled()
 }
 
 // inputProfileFor is the input profile of the harness running in a window as
