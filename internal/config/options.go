@@ -779,7 +779,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "startup.tiled", Type: OptionBool, Section: "startup",
-		Description: "Start a new session tiled instead of floating",
+		Description: "Start a new session tiled instead of floating. False when the config file has no [startup] table.",
 		Default:     "true",
 	},
 	{
@@ -794,7 +794,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "startup.daemon", Type: OptionBool, Section: "startup",
-		Description: "Make a bare \"tuios\" attach to a daemon-backed session instead of running standalone. TUIOS_NO_DAEMON=1 or --standalone overrides it",
+		Description: "Make a bare \"tuios\" attach to a daemon-backed session instead of running standalone. TUIOS_NO_DAEMON=1 or --standalone overrides it. False when the config file has no [startup] table.",
 		Default:     "true",
 	},
 

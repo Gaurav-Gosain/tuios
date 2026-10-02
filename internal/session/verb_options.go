@@ -66,7 +66,7 @@ func (d *Daemon) verbListOptions(_ *connState, params json.RawMessage) (any, *ve
 			"type":        opt.Type,
 			"section":     opt.Section,
 			"description": opt.Description,
-			"default":     opt.Default,
+			"default":     config.EffectiveDefault(opt),
 		}
 		if len(opt.Accepted) > 0 {
 			row["accepted"] = opt.Accepted
@@ -356,14 +356,14 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 			// which is not necessarily the built-in default.
 			return map[string]any{
 				"type": "option", "key": path, "value": d.windowSize,
-				"source": "config", "default": opt.Default, "option_type": opt.Type,
+				"source": "config", "default": config.EffectiveDefault(opt), "option_type": opt.Type,
 			}, nil
 		}
 	}
 	if value, ok := sess.GetOption(path); ok {
 		out := map[string]any{"type": "option", "key": path, "value": value, "source": "session"}
 		if known {
-			out["default"] = opt.Default
+			out["default"] = config.EffectiveDefault(opt)
 			out["option_type"] = opt.Type
 		}
 		return out, nil
@@ -372,9 +372,9 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 		return map[string]any{
 			"type":        "option",
 			"key":         path,
-			"value":       opt.Default,
+			"value":       config.EffectiveDefault(opt),
 			"source":      "default",
-			"default":     opt.Default,
+			"default":     config.EffectiveDefault(opt),
 			"option_type": opt.Type,
 		}, nil
 	}
