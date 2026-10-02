@@ -44,8 +44,15 @@ const (
 	// hostPixelMouseOn asks for the cell size, turns 1016 on, and asks which
 	// state 1016 is in. The answers arrive in this order.
 	hostPixelMouseOn = "\x1b[16t\x1b[?1016h\x1b[?1016$p"
-	// hostPixelMouseOff turns 1016 off and asks for its state.
-	hostPixelMouseOff = "\x1b[?1016l\x1b[?1016$p"
+	// hostPixelMouseOff turns 1016 off, puts the SGR encoding (1006) back,
+	// and asks for the state of 1016. 1006 and 1016 are one setting in
+	// ghostty, xterm and kitty, so resetting 1016 alone drops the terminal to
+	// the X10 encoding, not to SGR.
+	hostPixelMouseOff = "\x1b[?1016l\x1b[?1006h\x1b[?1016$p"
+	// hostPixelMouseRelease is hostPixelMouseOff with no query. It is sent
+	// before the terminal goes to another program ($EDITOR), which would read
+	// the answer as input.
+	hostPixelMouseRelease = "\x1b[?1016l\x1b[?1006h"
 	// hostCellSizeQuery asks for one cell's size in pixels.
 	hostCellSizeQuery = "\x1b[16t"
 )
@@ -67,6 +74,31 @@ type hostPixelMouse struct {
 	subX, subY int
 	subOK      bool
 }
+
+// forget drops what the client believes about the terminal's 1016 state.
+func (hp *hostPixelMouse) forget() {
+	hp.requested, hp.active, hp.subOK = false, false, false
+}
+
+// releaseHostPixelMouse turns 1016 off before the terminal goes to another
+// program. Bubble Tea writes its own mouse modes (1006 among them) when it
+// takes the terminal back, so the terminal comes back in SGR cells whatever
+// state 1016 was in. The client forgets 1016 here, reads reports as cells
+// from now on, and asks for 1016 again on the next mouse event.
+func (m *OS) releaseHostPixelMouse() tea.Cmd {
+	hp := &m.hostPixel
+	was := hp.requested || hp.active
+	hp.forget()
+	if !was {
+		return nil
+	}
+	return tea.Raw(hostPixelMouseRelease)
+}
+
+// hostTerminalBackMsg says the terminal is back from another program
+// ($EDITOR). Bubble Tea sends ResumeMsg after a suspend but nothing after
+// ExecProcess, so the exec callback sends this.
+type hostTerminalBackMsg struct{}
 
 // followsHostPixelMouse reports whether this client may turn 1016 on.
 func (m *OS) followsHostPixelMouse() bool {
@@ -112,6 +144,11 @@ func (m *OS) noteHostPixelMouse(msg tea.Msg) tea.Cmd {
 			hp.requested = false
 			return tea.Raw(hostPixelMouseOff)
 		}
+	case tea.ResumeMsg, hostTerminalBackMsg:
+		// The terminal was handed to another program and taken back with
+		// 1006 set. An answer to a 1016 request that was still on its way
+		// when the terminal went may have marked 1016 active again.
+		hp.forget()
 	case uv.CellSizeEvent:
 		if msg.Width > 0 && msg.Height > 0 {
 			hp.cellW, hp.cellH = msg.Width, msg.Height

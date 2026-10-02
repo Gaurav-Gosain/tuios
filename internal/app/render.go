@@ -708,6 +708,10 @@ func (m *OS) composeFrame() string {
 		// The fast path draws no rail, so no working row is on screen and the
 		// shimmer's clock must not go on asking for frames.
 		m.motion.rail = m.motion.rail[:0]
+		// Nor does it draw a panel, so no panel's hit area is on screen. Left
+		// in place, the last panel drawn (a palette closed by its own action,
+		// say) kept taking the motion over its old rectangle from the pane.
+		m.OverlayHits = m.OverlayHits[:0]
 		frame := m.buildFullscreenFrame(window)
 		// Image cells this client never registered, which a pane restored
 		// from the daemon can hold, would reach the host as private-use
