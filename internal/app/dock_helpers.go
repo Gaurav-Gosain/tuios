@@ -19,6 +19,10 @@ type DockItem struct {
 	WindowIndex int
 	Label       string
 	Width       int // Total width including circles
+	// Number and Name are what the label was built from, so the layout can
+	// rebuild it at a shorter length when the bar runs out of room.
+	Number int
+	Name   string
 }
 
 // DockLayout contains calculated layout information for the dock
@@ -523,9 +527,17 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// carried no hit rectangle at all. So the readouts yield their columns
 	// before the entries do. A live message is exempt: it is an event that just
 	// happened, not metering, and it already holds the block for its duration.
+	//
+	// The entries degrade in steps before the readouts lose anything: full
+	// names, then names sharing the bar, then the readouts' columns, then the
+	// entries themselves.
 	room := max(barWidth-layout.LeftWidth, 0)
 	want, yields := m.dockRightWidth()
 	if yields {
+		if dockItemsWidth(allItems) > max(room-want, 0) &&
+			!shortenDockItemNames(max(room-want, 0), allItems) {
+			want = 0
+		}
 		room = max(room-dockItemsWidth(allItems), 0)
 	}
 	layout.RightWidth = min(want, room)
@@ -786,16 +798,17 @@ func (m *OS) dockNotificationBlock(barWidth, room int) (notifBlock, bool) {
 // applied by the render style as a right margin.
 const dockSysInfoMargin = 2
 
-// dockItemNameCells is how much of a window's name a dock pill shows.
-const dockItemNameCells = 12
+// dockItemMinNameCells is the fewest name cells an entry keeps when the names
+// have to share the bar. Below it the entries are dropped instead, which is
+// what the overflow marker stands for.
+const dockItemMinNameCells = 6
 
-// dockItemLabel is the text inside a dock pill. The minimize animation has to
-// fly to the pill it is aiming at, so it measures the same label this builds
-// rather than keeping its own copy of the format, which it did in bytes and got
-// wrong the moment a name held a wide rune.
+// dockItemLabel is the text inside a dock pill, with the name at full length.
+// Fitting happens in the layout: a bar with room draws the whole name, a
+// crowded bar shortens the names together, and only then drops an entry.
 func dockItemLabel(number int, name string) string {
 	if name = printableTitle(name); name != "" {
-		return fmt.Sprintf(" %d:%s ", number, overlay.Truncate(name, dockItemNameCells))
+		return fmt.Sprintf(" %d:%s ", number, name)
 	}
 	return fmt.Sprintf(" %d ", number)
 }
@@ -839,6 +852,8 @@ func (m *OS) getDockItems() []DockItem {
 			WindowIndex: windowIndex,
 			Label:       labelText,
 			Width:       itemWidth,
+			Number:      itemNumber,
+			Name:        printableTitle(window.CustomName),
 		})
 
 		itemNumber++
@@ -849,17 +864,55 @@ func (m *OS) getDockItems() []DockItem {
 
 // calculateItemPositions determines which items fit and their X positions
 func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []DockItem) {
-	// Calculate available space for dock items
-	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - dockItemsWidth(allItems)
-	if availableSpace < 0 {
-		// Items don't fit, so truncate them.
-		layout.truncateItems(screenWidth, allItems)
+	if dockItemsWidth(allItems) <= max(screenWidth-layout.LeftWidth-layout.RightWidth, 0) {
+		// All items fit.
+		layout.VisibleItems = allItems
+		layout.TruncatedCount = 0
+		return
+	}
+	if shortenDockItemNames(max(screenWidth-layout.LeftWidth-layout.RightWidth, 0), allItems) {
+		layout.VisibleItems = allItems
+		layout.TruncatedCount = 0
 		return
 	}
 
-	// All items fit.
-	layout.VisibleItems = allItems
-	layout.TruncatedCount = 0
+	// Items don't fit, so truncate them.
+	layout.truncateItems(screenWidth, allItems)
+}
+
+// shortenDockItemNames spreads the spare cells evenly across the entries'
+// names, rebuilding each label from its full name, and reports whether every
+// entry fit at a length still worth reading. A name cut to the floor is the
+// step before an entry is dropped.
+func shortenDockItemNames(available int, allItems []DockItem) bool {
+	named := 0
+	for i, item := range allItems {
+		if item.Name != "" {
+			named++
+		}
+		if i > 0 {
+			available-- // Space before item
+		}
+		available -= item.Width - lipgloss.Width(item.Label)
+	}
+	budget := 0
+	if named > 0 {
+		budget = available / named
+	}
+	if budget < dockItemMinNameCells {
+		return false
+	}
+	for i := range allItems {
+		item := &allItems[i]
+		name := item.Name
+		if lipgloss.Width(name) > budget {
+			name = overlay.Truncate(name, budget)
+		}
+		label := dockItemLabel(item.Number, name)
+		item.Width += lipgloss.Width(label) - lipgloss.Width(item.Label)
+		item.Label = label
+	}
+	return true
 }
 
 // truncateItems calculates which items fit when space is limited
