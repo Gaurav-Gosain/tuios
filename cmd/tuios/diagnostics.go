@@ -279,10 +279,10 @@ func explainVerbError(verb string, err error) error {
 			Err:   err,
 		}
 	}
-	if session.IsSlimDaemonError(err) {
+	if feature, ok := session.SlimDaemonFeature(err); ok {
 		return &diagnosticError{
 			What:  callErr.Message,
-			Cause: "the running daemon is tuios-slim, which leaves out " + verb + ".",
+			Cause: "the running daemon is tuios-slim, which leaves out " + feature + ".",
 			Fix:   "run 'tuios kill-server', then start the daemon with the full tuios. Saved sessions come back with new shells.",
 			Err:   err,
 		}

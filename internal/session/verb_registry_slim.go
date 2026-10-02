@@ -3,6 +3,7 @@
 package session
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -37,6 +38,22 @@ var slimAgentWaitParams = []string{"any_session", "until", "thread", "select", "
 // isAgentWaitCondition reports a wait-for condition about agents.
 func isAgentWaitCondition(condition string) bool {
 	return condition == "agent-state" || condition == "agent-message"
+}
+
+// missingCallError refuses a wait-for for an agent condition, which
+// tuios-slim leaves out, the way missingVerbError refuses a whole verb. It is
+// nil for any other call.
+func missingCallError(verb string, params json.RawMessage) *verbError {
+	if verb != "wait-for" {
+		return nil
+	}
+	var p struct {
+		Condition string `json:"condition"`
+	}
+	if json.Unmarshal(params, &p) != nil || !isAgentWaitCondition(p.Condition) {
+		return nil
+	}
+	return waitAgentMissing(p.Condition)
 }
 
 // missingVerbError is the error for a verb tuios-slim leaves out: the stable

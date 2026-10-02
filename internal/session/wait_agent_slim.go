@@ -11,8 +11,10 @@ import (
 // tuios-slim follows no agent state and carries no agent mail, so wait-for
 // has neither condition. A call for one says so.
 
+// waitAgentMissing answers with unknown_verb, the code a slim daemon gives
+// every feature it leaves out, so a client reads it as IsSlimDaemonError.
 func waitAgentMissing(condition string) *verbError {
-	return newVerbError(ErrVerbInvalidParams, edition.MissingMessage("wait-for "+condition))
+	return newVerbError(ErrVerbUnknownVerb, edition.MissingMessage("wait-for "+condition))
 }
 
 func refuseSelectFromHostedPane(*connState) *verbError { return nil }

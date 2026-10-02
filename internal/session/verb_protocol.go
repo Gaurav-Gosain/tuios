@@ -1182,6 +1182,12 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		})
 	}
 
+	// A call for a feature of the verb that this build leaves out is refused
+	// before its parameters are checked: the parameters it carries are the
+	// left-out feature's, and "no parameter until" would hide why.
+	if verr := missingCallError(verb, params); verr != nil {
+		return verbEntry{}, nil, verr
+	}
 	if verr := checkParamNames(verb, entry, params); verr != nil {
 		return verbEntry{}, nil, verr
 	}

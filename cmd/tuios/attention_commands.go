@@ -126,7 +126,7 @@ func runListAttention(sessionName, host string, kinds []string, selector string,
 	}
 	raw, err := client.Call("list-attention", params)
 	if err != nil {
-		return reportVerbError(err, jsonOutput)
+		return reportVerbError(explainVerbError("list-attention", err), jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, true)

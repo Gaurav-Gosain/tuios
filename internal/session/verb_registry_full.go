@@ -1072,3 +1072,7 @@ func addFeatureVerbs(m map[string]verbEntry) {
 
 // missingVerbError is nil in the full build, which has every verb.
 func missingVerbError(string) *verbError { return nil }
+
+// missingCallError is nil in the full build, which has every feature of
+// every verb.
+func missingCallError(string, []byte) *verbError { return nil }

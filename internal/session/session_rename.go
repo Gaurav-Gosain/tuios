@@ -135,10 +135,21 @@ func StaleDaemonError(verb string, err error) error {
 }
 
 // IsSlimDaemonError reports whether err is a tuios-slim daemon refusing a
-// verb it leaves out. Such a daemon is not older than the caller, so the fix
-// is the full daemon, not a restart of the same one.
+// verb, or a feature of a verb, it leaves out. Such a daemon is not older
+// than the caller, so the fix is the full daemon, not a restart of the same
+// one.
 func IsSlimDaemonError(err error) bool {
+	_, ok := SlimDaemonFeature(err)
+	return ok
+}
+
+// SlimDaemonFeature returns what a tuios-slim daemon said it leaves out, a
+// verb or a verb with its condition, when err is that refusal.
+func SlimDaemonFeature(err error) (string, bool) {
 	var call *VerbCallError
-	return errors.As(err, &call) && call.Code == ErrVerbUnknownVerb &&
-		strings.Contains(call.Message, " is not in "+edition.SlimName+".")
+	if !errors.As(err, &call) || call.Code != ErrVerbUnknownVerb {
+		return "", false
+	}
+	feature, _, ok := strings.Cut(call.Message, " is not in "+edition.SlimName+".")
+	return feature, ok
 }

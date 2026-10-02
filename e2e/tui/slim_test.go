@@ -287,12 +287,26 @@ func TestFullCLIOnASlimDaemon(t *testing.T) {
 	if out, err := withFull("send-text", "-s", "mixed", "echo hi\n"); err != nil {
 		t.Fatalf("full tuios send-text on the slim daemon: %v\n%s", err, out)
 	}
-	out, err = withFull("list-agents", "-s", "mixed")
-	if err == nil {
-		t.Fatalf("full tuios list-agents on the slim daemon succeeded:\n%s", out)
-	}
-	if !strings.Contains(out, "list-agents is not in tuios-slim. Install the full tuios to use it.") {
-		t.Errorf("full tuios list-agents on the slim daemon printed\n%s\nwant the line that says the verb is not in tuios-slim", out)
+	for _, c := range []struct {
+		args    []string
+		feature string
+	}{
+		{[]string{"list-agents", "-s", "mixed"}, "list-agents"},
+		{[]string{"list-attention"}, "list-attention"},
+		{[]string{"wait-for", "agent-state", "-s", "mixed", "--until", "idle", "--timeout", "1000"}, "wait-for agent-state"},
+	} {
+		out, err = withFull(c.args...)
+		if err == nil {
+			t.Fatalf("full tuios %s on the slim daemon succeeded:\n%s", strings.Join(c.args, " "), out)
+		}
+		for _, want := range []string{
+			c.feature + " is not in tuios-slim. Install the full tuios to use it.",
+			"the running daemon is tuios-slim, which leaves out " + c.feature + ".",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("full tuios %s on the slim daemon printed\n%s\nwant %q", strings.Join(c.args, " "), out, want)
+			}
+		}
 	}
 }
 
