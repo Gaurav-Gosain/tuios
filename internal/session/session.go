@@ -784,6 +784,31 @@ type PTY struct {
 	// subscribeLocked takes terminalMu under subscribersMu, so taking
 	// subscribersMu there would be the other order.
 	subscriberCount atomic.Int32
+	// graphicsAt is when the pane last wrote a kitty graphics command, in
+	// unix nanoseconds, zero if never. See holdForSlowSubscribers.
+	graphicsAt atomic.Int64
+	// gfx cuts the output into text and frames for the subscribers. Used
+	// by broadcast only, under streamMu. See kitty_frames.go.
+	gfx gfxScanner
+	// unbroadcast is how many bytes the ring holds that broadcast has not
+	// cut yet: readOutput appends a read before it broadcasts it.
+	unbroadcast atomic.Int64
+	// reads counts the reads broadcast has cut. Used by broadcast only.
+	reads uint64
+	// framesSkipped counts frames dropped for a client that was behind.
+	framesSkipped atomic.Int64
+	// streamsCut counts the client streams gapped because their queue filled.
+	streamsCut atomic.Int64
+	// The pacing state. See graphics_backpressure.go.
+	paceWake    chan struct{}
+	holding     atomic.Bool
+	holdSpent   bool // readOutput only
+	holds       atomic.Int64
+	holdsRanOut atomic.Int64
+	heldNanos   atomic.Int64
+	// readOutput only: when reportPacing last wrote, and what.
+	pacingReportAt time.Time
+	pacingReported pacingCounts
 
 	// debug mirrors TUIOS_DEBUG_INTERNAL, read once when the PTY is built.
 	// broadcast runs per chunk per subscriber, and a debugLog there costs an
@@ -1734,6 +1759,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		height:       height,
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
 		subscribers:  make(map[string]*ptySubscriber),
+		paceWake:     make(chan struct{}, 1),
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       sp.onExit,
 		debug:        debugEnabled(),
@@ -2973,6 +2999,27 @@ type ptySubscriber struct {
 	// stream used to be a silent hole the client painted the rest of the
 	// stream on top of, until the next workspace switch replaced the screen.
 	gapped atomic.Bool
+
+	// framesWaiting counts the frames on ch that the stream goroutine has not
+	// taken. skipped counts the frames dropped for newer ones. See
+	// kitty_frames.go.
+	framesWaiting atomic.Int32
+	skipped       atomic.Int64
+	// noPace marks a client that never holds the pane: a read-only viewer or
+	// a client on another machine. See holdForSlowSubscribers.
+	noPace atomic.Bool
+
+	// Read and written by broadcast only, under streamMu. seen is the stream
+	// position this client has been handed or skipped up to. open is the
+	// frame it is gathering, and passFrame sends the rest of a frame as it
+	// arrives. latest is the newest waiting frame of each image, and
+	// cursorFrame a frame that moved the cursor and is not settled yet.
+	seen        int64
+	skipFrame   bool // the catch-up began inside this frame: skip its rest
+	open        *queuedFrame
+	passFrame   bool
+	latest      map[uint32]*queuedFrame
+	cursorFrame *queuedFrame
 }
 
 // ptyChunk is one item on a subscriber's stream: output bytes, or the size the
@@ -2981,6 +3028,17 @@ type ptySubscriber struct {
 type ptyChunk struct {
 	data          []byte
 	width, height int // both > 0 marks a resize rather than output
+	// frame is one whole kitty graphics frame instead of data. See
+	// kitty_frames.go.
+	frame *queuedFrame
+}
+
+// size is how many bytes the chunk holds.
+func (c ptyChunk) size() int64 {
+	if c.frame != nil {
+		return c.frame.size
+	}
+	return int64(len(c.data))
 }
 
 // resizeMark records the stream position a resize took effect at. The ring
@@ -3053,7 +3111,10 @@ func (p *PTY) resumeAfterGap(clientID string) (<-chan ptyChunk, *ptySubscriber) 
 	delete(p.subscribers, clientID)
 	debugLog("[DEBUG] PTY %s: client %s fell behind at %d, resuming from the ring", p.ID[:8], clientID, sub.sent.Load())
 	ch := p.subscribeLocked(clientID, sub.sent.Load(), false)
-	return ch, p.subscribers[clientID]
+	next := p.subscribers[clientID]
+	next.noPace.Store(sub.noPace.Load())
+	p.wakePacer()
+	return ch, next
 }
 
 // subscribeLocked is subscribe with subscribersMu held.
@@ -3078,12 +3139,33 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	// A client that fell further behind than the buffer reaches cannot be
 	// resumed exactly, so it gets everything still held rather than a gap.
 	bufStart := p.outputSeq - int64(p.outputPos)
+	// The catch-up ends where broadcast has got to. readOutput appends a read
+	// to the ring before it broadcasts it, so a subscribe can land between
+	// the two: that read goes out through broadcast, which cuts it into text
+	// and frames, rather than in the catch-up, which the cut has not seen.
+	ringEnd := p.outputPos
+	if unscanned := p.unbroadcast.Load(); unscanned > 0 {
+		ringEnd = max(0, p.outputPos-int(unscanned))
+	}
+	endSeq := bufStart + int64(ringEnd)
 	start := 0
 	rolled := fromSeq > 0 && fromSeq < bufStart
 	if fromSeq > bufStart {
-		start = min(int(fromSeq-bufStart), p.outputPos)
+		start = min(int(fromSeq-bufStart), ringEnd)
 	}
-	if n := p.outputPos - start; n > 0 {
+	// A catch-up that starts inside a kitty graphics command would hand the
+	// client the rest of it with no start, and the client prints the payload
+	// as text. Start after it instead. A frame still arriving is skipped as
+	// it arrives (route).
+	if inside, end := p.gfx.spanAt(bufStart + int64(start)); inside {
+		if end < 0 {
+			start = ringEnd
+			sub.skipFrame = p.gfx.inFrame
+		} else if end <= endSeq {
+			start = int(end - bufStart)
+		}
+	}
+	if n := ringEnd - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
 		send := func(c ptyChunk) {
 			select {
@@ -3137,17 +3219,18 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 			segStart = end
 		}
 		for _, m := range p.resizeMarks {
-			if m.seq <= startSeq {
+			if m.seq <= startSeq || m.seq > endSeq {
 				continue
 			}
 			cut(int(m.seq - bufStart))
 			send(ptyChunk{width: m.width, height: m.height})
 		}
-		cut(p.outputPos)
+		cut(ringEnd)
 	} else {
 		debugLog("[DEBUG] PTY %s: no buffered output to send", p.ID[:8])
 	}
-	sub.sent.Store(p.outputSeq)
+	sub.sent.Store(endSeq)
+	sub.seen = endSeq
 	p.outputMu.RUnlock()
 
 	// The size the emulator is at now, behind the catch-up. A resize is only
@@ -3183,6 +3266,7 @@ func (p *PTY) Unsubscribe(clientID string) int64 {
 	close(sub.ch)
 	delete(p.subscribers, clientID)
 	p.subscriberCount.Store(int32(len(p.subscribers)))
+	p.wakePacer()
 	return sub.sent.Load()
 }
 
@@ -4450,6 +4534,11 @@ func (p *PTY) readOutput() {
 		default:
 		}
 
+		// A pane streaming graphics waits here while a client is behind,
+		// so the program waits in write() instead of the client's stream
+		// being cut. See holdForSlowSubscribers.
+		p.holdForSlowSubscribers()
+
 		n, err := p.pty.Read(buf)
 		if err != nil {
 			// A pane on another machine ends here. Its stream stopping is the
@@ -4510,6 +4599,7 @@ func (p *PTY) readOutput() {
 				return
 			}
 			p.streamMu.Unlock()
+			p.reportPacing()
 
 			// Record the activity time for the agent-state stall heuristic before
 			// anything that can block, so a demotion decision is made against when
@@ -4573,6 +4663,7 @@ func (p *PTY) vtWriter() {
 // appendToBuffer records a chunk in the catch-up buffer and returns the stream
 // position it ends at.
 func (p *PTY) appendToBuffer(data []byte) int64 {
+	p.unbroadcast.Add(int64(len(data)))
 	p.outputSeq += int64(len(data))
 	// Marks the ring has rolled past stop being split points, but the newest
 	// of them is still the width the ring's first byte was laid out at, so a
@@ -4603,6 +4694,8 @@ func (p *PTY) appendToBuffer(data []byte) int64 {
 }
 
 // broadcast hands a chunk ending at stream position seq to every subscriber.
+// Output is cut into text and kitty graphics frames on the way, so a client
+// that is behind can skip frames (kitty_frames.go).
 func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
@@ -4610,52 +4703,47 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	if p.debug {
 		debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
 	}
-	for clientID, sub := range p.subscribers {
-		// A chunk appended between a subscriber's catch-up being copied and this
-		// broadcast running is in both, because Subscribe blocks the broadcast
-		// rather than the append. Delivering it again paints it twice at the
-		// seam, which is one duplicated line every time a pane is shown while it
-		// is producing.
-		//
+	if chunk.isResize() {
 		// A resize carries no bytes, so there is no position for it to be
-		// behind and nothing to skip it against: it goes to every subscriber.
-		if !chunk.isResize() && sub.sent.Load() >= seq {
-			continue
-		}
-		// A gapped stream takes nothing more until it is rebuilt from the
-		// ring: queuing past the hole would paint the rest of the stream on
-		// top of it.
-		if sub.gapped.Load() {
-			continue
-		}
-		n := int64(len(chunk.data))
-		if sub.queued.Load()+n > maxSubscriberQueue {
-			sub.gapped.Store(true)
-			if p.debug {
-				debugLog("[DEBUG] PTY %s: %s holds %d bytes unread, gapped", p.ID[:8], clientID, sub.queued.Load())
+		// behind and nothing to skip it against: it goes to every
+		// subscriber. A frame a client is gathering ends before it, so the
+		// frame goes first. A resize leaves sent where the last bytes put
+		// it; it used to store its zero, and a client that switched away
+		// after a resize came back to the whole ring painted over its screen.
+		for clientID, sub := range p.subscribers {
+			if sub.gapped.Load() {
+				continue
 			}
-			continue
-		}
-		select {
-		case sub.ch <- chunk:
-			sub.queued.Add(n)
-			// Only a chunk that was taken counts as reached: a client dropped
-			// here resumes from the gap rather than past it. A resize carries
-			// no position, so it leaves sent where the last bytes put it; it
-			// used to store its zero, and a client that switched away after a
-			// resize came back to the whole ring painted over its screen.
-			if !chunk.isResize() {
-				sub.sent.Store(seq)
+			if sub.open != nil {
+				p.flushOpen(clientID, sub)
 			}
-			if p.debug {
-				debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
-			}
-		default:
-			sub.gapped.Store(true)
-			if p.debug {
-				debugLog("[DEBUG] PTY %s: channel full for %s, gapped", p.ID[:8], clientID)
+			select {
+			case sub.ch <- chunk:
+			default:
+				sub.gapped.Store(true)
+				sub.forgetFrames()
 			}
 		}
+		return
+	}
+
+	// Cut even with nobody subscribed, so the scanner never loses its place
+	// in the stream.
+	p.reads++
+	p.unbroadcast.Add(-int64(len(chunk.data)))
+	segs, saw := p.gfx.scan(chunk.data, seq)
+	if saw {
+		p.graphicsAt.Store(time.Now().UnixNano())
+	}
+	// A chunk appended between a subscriber's catch-up being copied and this
+	// broadcast running is in both, because Subscribe blocks the broadcast
+	// rather than the append. route skips what a subscriber has seen:
+	// delivering it again paints it twice at the seam, which is one
+	// duplicated line every time a pane is shown while it is producing. A
+	// gapped stream takes nothing more until it is rebuilt from the ring:
+	// queuing past the hole would paint the rest of the stream on top of it.
+	for clientID, sub := range p.subscribers {
+		p.route(clientID, sub, segs)
 	}
 }
 

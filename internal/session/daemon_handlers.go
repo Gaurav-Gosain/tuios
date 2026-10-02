@@ -925,6 +925,9 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	if payload.FromSeq > 0 {
 		resume = payload.FromSeq
 	}
+	// A read-only viewer and a client on another machine never hold a pane
+	// that streams graphics. See holdForSlowSubscribers.
+	paces := !cs.viewOnly && !cs.viaLink
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
@@ -936,12 +939,15 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// A client that restored a snapshot before subscribing holds an
 	// authoritative copy of the pane's state at resume, so a rolled catch-up
 	// must replay the tail on top of it rather than clear it (issue #123).
+	var outputCh <-chan ptyChunk
 	if payload.FromSnapshot {
-		outputCh := pty.SubscribeFromSnapshot(cs.clientID, resume)
-		go d.streamPTYOutput(cs, pty, outputCh)
-		return nil
+		outputCh = pty.SubscribeFromSnapshot(cs.clientID, resume)
+	} else {
+		outputCh = pty.Subscribe(cs.clientID, resume)
 	}
-	outputCh := pty.Subscribe(cs.clientID, resume)
+	if !paces {
+		pty.SetPacing(cs.clientID, false)
+	}
 	go d.streamPTYOutput(cs, pty, outputCh)
 
 	return nil

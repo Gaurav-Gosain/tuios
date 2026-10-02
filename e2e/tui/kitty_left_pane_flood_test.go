@@ -84,11 +84,18 @@ const (
 // three graphics probes, and DA1 last because DA1 is what closes the read.
 func (h *kittyHost) answerProbe(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
+	answerKittyProbe(t, term, h.probe, 120, 40)
+}
+
+// answerKittyProbe answers each probe signalled on probe, for a terminal of
+// cols by rows cells.
+func answerKittyProbe(t *testing.T, term *tuitest.Terminal, probe <-chan struct{}, cols, rows int) {
+	t.Helper()
 	go func() {
 		for {
 			select {
-			case <-h.probe:
-				reply := fmt.Sprintf("\x1b[4;%d;%dt\x1b[6;%d;%dt", 40*cellH, 120*cellW, cellH, cellW) +
+			case <-probe:
+				reply := fmt.Sprintf("\x1b[4;%d;%dt\x1b[6;%d;%dt", rows*cellH, cols*cellW, cellH, cellW) +
 					"\x1b_Gi=1;OK\x1b\\" +
 					"\x1b_Gi=2;OK\x1b\\" +
 					"\x1b_Gi=3;OK\x1b\\" +
