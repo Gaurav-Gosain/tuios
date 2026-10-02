@@ -1655,6 +1655,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				break
 			}
 		}
+		sessionIdx := localSessionIndexes(sessions)
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
@@ -1674,7 +1675,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts))))
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -2099,10 +2100,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 	var agents []sidebarAgentEntry
 	// The same walk SwitchToSessionByIndex does, so the number the token draws
 	// is the number that opens the session.
-	localIndex := make(map[string]int)
-	for i, s := range localSessionNodes(sessions) {
-		localIndex[s.ID] = i + 1
-	}
+	localIndex := localSessionIndexes(sessions)
 	for _, s := range sessions {
 		for _, win := range s.Children {
 			if win.AgentState == "" {
@@ -2355,7 +2353,7 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
-func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
+func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	if dragged {
 		// A drag keeps the strongest band on the row riding the pointer.
@@ -2437,7 +2435,16 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		s.tokens = append(s.tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
 	}
 	titleW := lipgloss.Width(title)
-	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent))
+	// The session index leads the name: a muted number, the one
+	// switch_session_N opens, styled like the other chrome the row carries.
+	// Remote sessions have no number on this machine and wear none.
+	mark, markW := "", 0
+	if sessionIdx > 0 {
+		mark = sidebarStyle(rowBg, pal.FgMute).Bold(node.IsCurrent).
+			Render(strconv.Itoa(sessionIdx) + " ")
+		markW = len(strconv.Itoa(sessionIdx)) + 1
+	}
+	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW)
 	s.keep = keep
 	branch := ""
 	if keep[0] {
@@ -2447,7 +2454,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	// The attached session's name is bold. The gutter mark is too quiet a
 	// signal to find "which one am I on" in, and weight on the name is the
 	// one emphasis every row already speaks.
-	name := sidebarStyle(rowBg, fg).Bold(node.IsCurrent || sidebarAttention(node.AgentState)).
+	name := mark + sidebarStyle(rowBg, fg).Bold(node.IsCurrent || sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)) + branch
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
@@ -2568,7 +2575,7 @@ const sidebarHostTagFloor = 8
 
 // workspaceTag is the quiet right-hand mark saying which workspace a pane sits
 // on. A named workspace says its name, because that is the thing the user gave
-// it to be recognised by; an unnamed one keeps the "w4" form, where the bare
+// it to be recognised by; an unnamed one keeps the bracketed number, where the bare
 // digit would read as a session row's window count on the line above. A name
 // too long for the tag says only its index: a cut-off name ("WORKWOR…") is
 // noise where the bare index still points at the pill it belongs to.
@@ -2580,7 +2587,7 @@ func (m *OS) workspaceTag(ws int) string {
 		}
 		return "[" + strconv.Itoa(ws) + "]"
 	}
-	return "w" + strconv.Itoa(ws)
+	return "[" + strconv.Itoa(ws) + "]"
 }
 
 // sidebarWorkspaceTagMax caps a named workspace's tag so the name it fronts can

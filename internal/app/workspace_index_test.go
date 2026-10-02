@@ -8,8 +8,8 @@ func TestWithWorkspaceIndex(t *testing.T) {
 		ws   int
 		want string
 	}{
-		{"work", 2, "work [2]"},
-		{"work [2]", 2, "work [2]"},
+		{"work", 2, "2: work"},
+		{"2: work", 2, "2: work"},
 		{"", 3, ""},
 		{"3", 3, "3"},
 	}
