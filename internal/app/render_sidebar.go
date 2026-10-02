@@ -699,6 +699,21 @@ func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
 	return lipgloss.NewStyle().Foreground(rule).Render(s.GetWindowBorderLeft())
 }
 
+// sidebarHeaderRow renders a quiet section header: the label, lowercase and
+// muted, so it frames its section without competing with it. Lowercase and
+// unbolded because a header is furniture: the rail spends its one bold voice on
+// a row that wants a human, and spending it here would rank a label above them.
+// It carries no count on purpose, because the number only restated the rows
+// printed directly underneath it, and a capped section already owns up to what
+// it hides with its own "+N" line.
+//
+// right is an already-styled trailing element (the peeked session's name, the
+// agents section's controls), inset one cell from the rail's edge so it lands
+// on the same spine the rows' figures do.
+func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
+	return sidebarHeaderRowRuled(label, right, cw, pal, nil)
+}
+
 // sidebarHeaderRowRuled is sidebarHeaderRow with the rule that marks a heading.
 // Passing settings draws the section header in full: the label goes uppercase
 // and bold in the secondary ink, so the rule and the weight mark it as a
