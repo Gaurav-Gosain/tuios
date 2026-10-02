@@ -66,7 +66,7 @@ func FuzzKittyHeader(f *testing.F) {
 		a, b := *full, *head
 		a.Data, a.FilePath, a.RawPayload, a.PayloadErr = nil, "", "", nil
 		b.FilePath, b.RawPayload, b.PayloadErr = "", "", nil
-		if !reflect.DeepEqual(a, b) {
+		if !reflect.DeepEqual(a, b) { //nolint:govet // PayloadErr is cleared on both sides above, so no error is compared
 			t.Fatalf("%q: the control keys differ:\n full   %+v\n header %+v", data, a, b)
 		}
 	})
