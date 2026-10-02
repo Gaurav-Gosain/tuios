@@ -86,7 +86,7 @@ In the scrolling layout, left and right move between columns. Up and down move b
 
 The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)
 plugin lets the terminal-mode focus keys move through Neovim splits first. The
-feature is off by default; set `appearance.nvim_navigation = true` to enable
+feature is off by default. Set `appearance.nvim_navigation = true` to enable
 it. At a split edge, TUIOS moves to the adjacent pane instead. The plugin
 announces when it is active, so the same keys keep their normal TUIOS behaviour
 in shells and other programs.
