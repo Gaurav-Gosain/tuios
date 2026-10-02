@@ -170,6 +170,20 @@ func (m *OS) keepSessionSidebar(changed bool) {
 	m.Settings.SidebarEnabled = m.sidebarSession == session.SidebarShown || m.SidebarRevealedForFocus
 }
 
+// joinSessionSidebar takes the rail of a session this client has just
+// attached to or switched to. What this client knew and offered belongs to
+// the session it left, so it is dropped first. A session with no value yet is
+// offered this client's own. Both paths into a session call it: RestoreFromState
+// for a session with windows, and adoptEmptySessionVersion for one without.
+func (m *OS) joinSessionSidebar(state *session.SessionState) {
+	m.sidebarSeeded = false
+	m.sidebarSession = ""
+	if state != nil {
+		m.adoptSidebarVisibility(state)
+	}
+	m.seedSidebar()
+}
+
 // adoptSidebarVisibility takes whether the rail is shown from the session's
 // state. It acts only when the session's value moved since this client last
 // took it, so a rail this client shows for its own keyboard scope is not

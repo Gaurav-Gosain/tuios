@@ -428,13 +428,19 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 // sidebar rail and its own dock, in its own configuration. It is what this
 // client tells the daemon it needs, never what it lays the panes out around.
 // See GetLeftMargin.
+//
+// A rail opened only to hold the keyboard scope is not in it. It is drawn over
+// the panes for as long as the scope is open, so opening it moves no pane on
+// any client and leaves no blank band on another client's screen.
 func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	var r session.LayoutReserve
-	switch m.Settings.SidebarPosition {
-	case "left":
-		r.Left = m.GetSidebarWidth()
-	case "right":
-		r.Right = m.GetSidebarWidth()
+	if !m.SidebarRevealedForFocus {
+		switch m.Settings.SidebarPosition {
+		case "left":
+			r.Left = m.GetSidebarWidth()
+		case "right":
+			r.Right = m.GetSidebarWidth()
+		}
 	}
 	switch m.Settings.DockbarPosition {
 	case "top":

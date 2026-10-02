@@ -199,6 +199,11 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	m.treeDerived = nil
 	m.sessionTreeOpsOff = state != nil && !state.LayoutTreeOps
 	m.sessionScratchWSOff = state != nil && !state.ScratchWorkspaces
+	// The rail is the session's, and RestoreFromState, which takes it for a
+	// session with windows, does not run for one without. A new session made
+	// from the switcher is empty, and it has to be offered this client's
+	// rail as any other new session is.
+	m.joinSessionSidebar(state)
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays
