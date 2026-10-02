@@ -3013,9 +3013,9 @@ type ptySubscriber struct {
 	// Read and written by broadcast only, under streamMu. seen is the stream
 	// position this client has been handed or skipped up to. open is the
 	// frame it is gathering, and passFrame sends the rest of a frame as it
-	// arrives. latest is the newest waiting frame of each image, and
-	// lastFrame the last frame queued, while nothing but a cursor move has
-	// come after it.
+	// arrives. latest is the newest waiting frame of each image on each
+	// screen, and lastFrame the last frame queued, while nothing but a
+	// cursor move has come after it.
 	seen      int64
 	skipFrame bool // the catch-up began inside this frame: skip its rest
 	// The catch-up began inside a graphics command that is not a frame,
@@ -3024,7 +3024,7 @@ type ptySubscriber struct {
 	skipFrom  int64
 	open      *queuedFrame
 	passFrame bool
-	latest    map[uint32]*queuedFrame
+	latest    map[imageKey]*queuedFrame
 	lastFrame *queuedFrame
 }
 

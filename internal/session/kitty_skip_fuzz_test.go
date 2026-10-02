@@ -20,8 +20,9 @@ import (
 //     order, or loses text.
 //  3. A frame is dropped that something after it depends on: the last frame
 //     of an image, a frame a placement or delete came after, a frame that
-//     moved the cursor, a frame that names a file, or a frame with no id that
-//     the next one is not drawn exactly over.
+//     moved the cursor, a frame that names a file, a frame with no id that
+//     the next one is not drawn exactly over, or a frame of the same id on
+//     the other screen.
 //  4. A client that subscribes partway gets bytes the catch-up gave it again,
 //     or misses bytes between the catch-up and the live stream.
 //  5. The accounting drifts: after everything is taken a client still counts
@@ -46,6 +47,9 @@ func FuzzFrameSkipping(f *testing.F) {
 	f.Add([]byte{9, 9, 9, 9, 9, 9, 4, 9, 9, 9}, uint8(0), uint8(6), uint8(0))
 	// A query between frames.
 	f.Add([]byte{1, 1, 10, 1, 1, 1}, uint8(0), uint8(5), uint8(0))
+	// A frame of image 1 on the main screen, then one on the alternate
+	// screen, and back.
+	f.Add([]byte{2, 2, 11, 2, 2, 11, 1}, uint8(0), uint8(7), uint8(0))
 
 	f.Fuzz(func(t *testing.T, ops []byte, slowEvery, readSize, joinAt uint8) {
 		if err := frameSkipping(ops, slowEvery, readSize, joinAt); err != nil {
@@ -167,7 +171,7 @@ func genPaneStream(ops []byte) []byte {
 			arg = int(ops[i+1])
 		}
 		op := ops[i] % 16
-		if op > 10 {
+		if op > 11 {
 			op %= 8
 		}
 		switch op {
@@ -211,6 +215,14 @@ func genPaneStream(ops []byte) []byte {
 			n++
 			fmt.Fprintf(&b, "\x1b[%d;1H", 1+arg%2)
 			writeFrame(&b, "a=T,f=24,s=1,v=1,C=1,q=2", fmt.Sprintf("MPV%04d", n), 1+arg%3)
+		case 11:
+			// A switch to the alternate screen or back. A terminal keeps
+			// one image store per screen.
+			if arg%2 == 0 {
+				b.WriteString("\x1b[?1049h")
+			} else {
+				b.WriteString("\x1b[?1049l")
+			}
 		case 10:
 			// A query, which a program sends to learn the protocol.
 			fmt.Fprintf(&b, "\x1b_Gi=%d,s=1,v=1,a=q,t=d,f=24,q=2;AAAA\x1b\\", 31+arg%2)
@@ -244,6 +256,7 @@ func checkSkipped(stream, got []byte) error {
 		from, to int
 		frame    bool // a whole frame in one run
 		id       uint32
+		alt      bool
 		keep     bool
 		key      string
 		follows  bool
@@ -259,7 +272,7 @@ func checkSkipped(stream, got []byte) error {
 				j++
 			}
 			if segs[j].last {
-				items = append(items, item{from: from, to: int(segs[j].end), frame: true, id: sg.id, keep: sg.keep, key: sg.key, follows: sg.follows})
+				items = append(items, item{from: from, to: int(segs[j].end), frame: true, id: sg.id, alt: sg.alt, keep: sg.keep, key: sg.key, follows: sg.follows})
 				i = j
 				continue
 			}
@@ -289,7 +302,7 @@ func checkSkipped(stream, got []byte) error {
 				// Only the next frame, with nothing but a cursor move
 				// before it.
 				if next.frame {
-					replaced = next.follows && next.id == 0 && next.key != "" && next.key == it.key
+					replaced = next.follows && next.id == 0 && next.key != "" && next.key == it.key && next.alt == it.alt
 					break
 				}
 				if m > 0 {
@@ -297,7 +310,7 @@ func checkSkipped(stream, got []byte) error {
 				}
 				continue
 			}
-			if next.frame && next.id == it.id {
+			if next.frame && next.id == it.id && next.alt == it.alt {
 				replaced = true
 				break
 			}
@@ -335,11 +348,26 @@ func replayClient(out []byte) string {
 		x, y int
 		data strings.Builder
 	}
-	images := map[uint32]string{}
-	places := map[[2]uint32]bool{}
-	idless := map[string]string{} // place and size of an image with no id
+	// A terminal keeps one image store per screen. [0] is the main screen.
+	type store struct {
+		images map[uint32]string
+		places map[[2]uint32]bool
+		idless map[string]string // place and size of an image with no id
+	}
+	var stores [2]store
+	for i := range stores {
+		stores[i] = store{map[uint32]string{}, map[[2]uint32]bool{}, map[string]string{}}
+	}
+	cur := func() store {
+		if e.IsAltScreen() {
+			return stores[1]
+		}
+		return stores[0]
+	}
 	var ld *loading
 	e.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, _ []byte) {
+		st := cur()
+		images, places, idless := st.images, st.places, st.idless
 		if ld == nil {
 			switch cmd.Action {
 			case vt.KittyActionTransmit, vt.KittyActionTransmitPlace:
@@ -393,8 +421,12 @@ func replayClient(out []byte) string {
 	})
 	_, _ = e.Write(out)
 	pos := e.CursorPosition()
-	return fmt.Sprintf("screen:\n%s\ncursor %d,%d\nimages %s\nplaces %s\nno id %s",
-		e.String(), pos.X, pos.Y, sortedMap(images), sortedMap(places), sortedMap(idless))
+	state := fmt.Sprintf("screen:\n%s\ncursor %d,%d", e.String(), pos.X, pos.Y)
+	for i, st := range stores {
+		state += fmt.Sprintf("\nscreen %d: images %s\nplaces %s\nno id %s",
+			i, sortedMap(st.images), sortedMap(st.places), sortedMap(st.idless))
+	}
+	return state
 }
 
 func sortedMap[K comparable, V any](m map[K]V) string {

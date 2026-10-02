@@ -45,6 +45,8 @@ func FuzzGfxScanner(f *testing.F) {
 	f.Add([]byte("\x1b_Ga=T,i=3;CC\x1b\\\x1b_Ga=T,i=3;DD\x1b\\"), uint64(0xffffffff))
 	f.Add([]byte("\x1b_Ga=T,f=100,m=1;AA\x1b\\\x1b_Gm=0;BB\x1b\\\x1b_Xnot graphics\x1b\\\x1b"), uint64(2))
 	f.Add(append([]byte("\x1b_G"), bytes.Repeat([]byte("k=1,"), 400)...), uint64(5))
+	// A frame on each screen, the switches split across reads.
+	f.Add([]byte(frame(1, "AAAA", 1)+"\x1b[?1049h"+frame(1, "BBBB", 2)+"\x1b[?1;1049l\x1bc\x1b[?47h"+frame(1, "CCCC", 1)), uint64(0x3121))
 
 	f.Fuzz(func(t *testing.T, stream []byte, splits uint64) {
 		whole := scanAll(t, stream, nil)
@@ -84,8 +86,8 @@ func scanAll(t *testing.T, stream []byte, cuts []int) string {
 				t.Fatalf("a frame segment at %d says first=%v while a frame open=%v", end, sg.first, inFrame)
 			}
 			inFrame = !sg.last
-			fmt.Fprintf(&desc, "[%d-%d id=%d moves=%v first=%v last=%v]",
-				end-int64(len(sg.b)), end, sg.id, sg.moves, sg.first, sg.last)
+			fmt.Fprintf(&desc, "[%d-%d id=%d alt=%v moves=%v first=%v last=%v]",
+				end-int64(len(sg.b)), end, sg.id, sg.alt, sg.moves, sg.first, sg.last)
 		}
 		if len(s.carry) > maxGfxHeader+4 {
 			t.Fatalf("the carry holds %d bytes", len(s.carry))
@@ -117,6 +119,7 @@ func joinRuns(d string) string {
 		from, to           int64
 		id                 uint32
 		moves, first, last bool
+		alt                bool
 	}
 	var runs []run
 	for _, part := range bytes.Split([]byte(d), []byte("]")) {
@@ -124,8 +127,8 @@ func joinRuns(d string) string {
 			continue
 		}
 		var r run
-		if _, err := fmt.Sscanf(string(part), "[%d-%d id=%d moves=%t first=%t last=%t",
-			&r.from, &r.to, &r.id, &r.moves, &r.first, &r.last); err != nil {
+		if _, err := fmt.Sscanf(string(part), "[%d-%d id=%d alt=%t moves=%t first=%t last=%t",
+			&r.from, &r.to, &r.id, &r.alt, &r.moves, &r.first, &r.last); err != nil {
 			panic(err)
 		}
 		if n := len(runs); n > 0 && runs[n-1].to == r.from && !runs[n-1].last && !r.first {

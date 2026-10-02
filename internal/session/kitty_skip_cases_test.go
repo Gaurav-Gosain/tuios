@@ -227,3 +227,50 @@ func TestKittyQueryIsNotGraphicsOutput(t *testing.T) {
 		}
 	}
 }
+
+// TestSkippedFrameKeepsTheOtherScreensImage: a terminal keeps one image store
+// for the main screen and one for the alternate screen. A frame of image 1 on
+// the main screen is not replaced by a frame of image 1 on the alternate
+// screen, so a client that falls behind still shows the main screen's image
+// when the program leaves the alternate screen. The same two frames on one
+// screen do replace each other, so the fixture does skip.
+func TestSkippedFrameKeepsTheOtherScreensImage(t *testing.T) {
+	for _, enter := range []string{"\x1b[?1049h", "\x1b[?47h", "\x1b[?1;1047h", ""} {
+		t.Run(fmt.Sprintf("%q", enter), func(t *testing.T) {
+			var b bytes.Buffer
+			writeFrame(&b, "a=T,f=32,s=1,v=1,i=1,C=1,q=2", "MAINIMAGE", 1)
+			b.WriteString(enter)
+			writeFrame(&b, "a=T,f=32,s=1,v=1,i=1,C=1,q=2", "ALTIMAGE", 2)
+			if enter != "" {
+				b.WriteString("\x1b[?1049l")
+			}
+			stream := b.Bytes()
+			// Reads of 8 bytes, so the screen switch is split across them, and a
+			// client that takes nothing until the end.
+			p := queuePTY()
+			fastCh := p.Subscribe("fast", 0)
+			slowCh := p.Subscribe("slow", 0)
+			fast, slow := p.subscriberFor("fast"), p.subscriberFor("slow")
+			var fastOut, slowOut []byte
+			for i := 0; i < len(stream); i += 8 {
+				p.feedRing(stream[i:min(i+8, len(stream))])
+				for len(fastCh) > 0 {
+					fastOut = takeChunk(fastOut, <-fastCh, fast)
+				}
+			}
+			for len(slowCh) > 0 {
+				slowOut = takeChunk(slowOut, <-slowCh, slow)
+			}
+			skipped := p.framesSkipped.Load()
+			if enter == "" {
+				if skipped != 1 {
+					t.Fatalf("%d frames skipped on one screen, want 1", skipped)
+				}
+				return
+			}
+			if fs, ss := replayClient(fastOut), replayClient(slowOut); fs != ss || skipped != 0 {
+				t.Fatalf("%d frames skipped; the client that fell behind ends in another state\n--- kept up\n%s\n--- fell behind\n%s", skipped, fs, ss)
+			}
+		})
+	}
+}
