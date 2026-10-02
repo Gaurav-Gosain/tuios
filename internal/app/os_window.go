@@ -404,6 +404,12 @@ func (m *OS) FocusWindow(i int) *OS {
 		m.LogInfo("[SCROLL-FOCUS] FocusWindow(%d) -> triggering ScrollingOnFocusChange (old=%d)", i, oldFocused)
 		m.ScrollingOnFocusChange()
 	}
+	// Stacked mode retiles on focus by design: the focused pane owns the
+	// remaining height, so a focus move re-cuts the stack. TileAllWindows
+	// never changes focus, so this cannot recurse.
+	if m.AutoTiling && m.UseStackedLayout && oldFocused != i {
+		m.TileAllWindows()
+	}
 
 	return m
 }

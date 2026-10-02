@@ -70,7 +70,7 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 			o.ToggleAutoTiling()
 		}
 	case "layout":
-		for range 3 {
+		for range len(config.LayoutModes) {
 			if o.LayoutModeName() == arg(0) {
 				break
 			}
