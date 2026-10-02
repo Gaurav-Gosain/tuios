@@ -140,9 +140,23 @@ func (m *OS) FireDetached() {
 	m.HookManager.WaitTimeout(hookDrainTimeout)
 }
 
+// recordWorkspaceLayoutMode pins the layout the current workspace is in. Every
+// row that names a layout calls it, so the choice belongs to the workspace that
+// was on screen when it was made and follows that workspace through switches
+// and session state.
+func (m *OS) recordWorkspaceLayoutMode() {
+	if m.WorkspaceLayoutMode == nil {
+		m.WorkspaceLayoutMode = make(map[int]string)
+	}
+	m.WorkspaceLayoutMode[m.CurrentWorkspace] = m.LayoutModeName()
+}
+
 // ApplyLayoutModeName sets the layout mode from the name session state carries,
 // without retiling or notifying: it is the state-sync half of the Enable*
 // functions, and the caller retiles once it has applied the rest of the sync.
+// It records nothing: the workspace map is written by the rows that choose a
+// layout, and adopting a mode here would pin it to whatever workspace happens
+// to be on screen.
 //
 // An empty or unrecognized name leaves the mode alone. That is what lets the
 // field be additive: a daemon or a peer client that never sets it cannot reset
@@ -197,6 +211,7 @@ func (m *OS) toggleLayoutMode() {
 	if !m.AutoTiling && (m.UseScrollingLayout || m.UseBSPLayout || m.UseStackedLayout) {
 		m.AutoTiling = true
 	}
+	m.recordWorkspaceLayoutMode()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	}
@@ -239,6 +254,7 @@ func (m *OS) enableScrollingLayout() {
 	}
 	// Clear old scrolling layout to rebuild from current windows
 	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: scrolling (niri)", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
@@ -263,6 +279,7 @@ func (m *OS) enableBSPLayout() {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	}
 	m.WorkspaceTrees[m.CurrentWorkspace] = nil
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: BSP tiling", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
@@ -282,6 +299,7 @@ func (m *OS) enableStackedLayout() {
 	if !m.AutoTiling {
 		m.AutoTiling = true
 	}
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: stacked", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
@@ -301,6 +319,7 @@ func (m *OS) enableMasterStackLayout() {
 	if !m.AutoTiling {
 		m.AutoTiling = true
 	}
+	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
 	m.ShowNotification("Layout: master-stack", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()

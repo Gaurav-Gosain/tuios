@@ -311,6 +311,7 @@ type OS struct {
 	WorkspaceHasCustom     map[int]bool            // Tracks if workspace has custom layout
 	WorkspaceMasterRatio   map[int]float64         // Stores master ratio per workspace
 	WorkspaceStackRatio    map[int]float64         // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
+	WorkspaceLayoutMode    map[int]string          // Layout mode chosen per workspace; no entry follows the session's
 	ShowLogs               bool                    // True when showing log overlay
 	LogMessages            []LogMessage            // Store log messages
 	LogScrollOffset        int                     // Scroll offset for log viewer
