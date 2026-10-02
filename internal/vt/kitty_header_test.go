@@ -56,17 +56,59 @@ func FuzzKittyHeader(f *testing.F) {
 		if head.PayloadErr != nil && full.PayloadErr == nil {
 			t.Fatalf("%q: the header parse found a payload error the full parse did not: %v", data, head.PayloadErr)
 		}
-		if head.Data != nil || head.FilePath != "" {
-			t.Fatalf("%q: the header parse decoded the payload", data)
+		if head.Data != nil {
+			t.Fatalf("%q: the header parse decoded the image data", data)
+		}
+		if head.FilePath != full.FilePath && (head.FilePath != "" || namesObject(full)) {
+			t.Fatalf("%q: the header parse named %q, the full parse %q", data, head.FilePath, full.FilePath)
 		}
 		// Everything else is the same.
 		a, b := *full, *head
 		a.Data, a.FilePath, a.RawPayload, a.PayloadErr = nil, "", "", nil
-		b.RawPayload, b.PayloadErr = "", nil
+		b.FilePath, b.RawPayload, b.PayloadErr = "", "", nil
 		if !reflect.DeepEqual(a, b) {
 			t.Fatalf("%q: the control keys differ:\n full   %+v\n header %+v", data, a, b)
 		}
 	})
+}
+
+// namesObject reports whether the header parse must name the object of cmd:
+// a shared memory or temp file transmission whose name decodes.
+func namesObject(cmd *vt.KittyCommand) bool {
+	return (cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile) &&
+		len(cmd.RawPayload) <= 8192
+}
+
+// TestKittyHeaderNamesTheObject is the boundary the daemon's shared memory
+// cleanup depends on. The ways it could fail:
+//   - the header parse leaves FilePath empty for t=s, so the daemon has no name
+//     to delete and every unread frame stays in /dev/shm;
+//   - the same for t=t, so unread temp files stay on disk;
+//   - the name decoded for a medium whose payload is image data (t=d), which
+//     throws away the saving the header parse exists for;
+//   - a q=2 command (no reply owed) skipped, which is how a video stream sends.
+func TestKittyHeaderNamesTheObject(t *testing.T) {
+	enc := func(s string) string { return base64.RawStdEncoding.EncodeToString([]byte(s)) }
+	for _, tc := range []struct {
+		body, want string
+	}{
+		{"a=T,t=s,f=32,s=4,v=4,q=2;" + enc("/tuios-shm-1"), "/tuios-shm-1"},
+		{"a=t,t=s,i=7;" + enc("shm-frame"), "shm-frame"},
+		{"a=T,t=t,f=100,q=2;" + enc("/tmp/tty-graphics-protocol-x.png"), "/tmp/tty-graphics-protocol-x.png"},
+		{"a=T,t=d,f=24,s=1,v=1,q=2;" + enc("abc"), ""},
+		{"a=T,t=f,q=2;" + enc("/home/u/pic.png"), ""},
+	} {
+		cmd, err := vt.ParseKittyHeader([]byte(tc.body))
+		if err != nil {
+			t.Fatalf("%q: %v", tc.body, err)
+		}
+		if cmd.FilePath != tc.want {
+			t.Errorf("%q: header parse named %q, want %q", tc.body, cmd.FilePath, tc.want)
+		}
+		if cmd.Data != nil {
+			t.Errorf("%q: header parse decoded image data", tc.body)
+		}
+	}
 }
 
 // kittyStreamChunk is one 4096-byte chunk from the middle of a kitty graphics
