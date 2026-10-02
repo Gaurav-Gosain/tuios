@@ -211,6 +211,14 @@ type WindowState struct {
 	// value is an ordinary window, which is what every older client and older
 	// state reads as.
 	Popup bool `json:"popup,omitempty"`
+	// PopupPlaced marks a popup the user moved or resized. The computed box
+	// stops being authoritative: a client applies the rectangle as it stands,
+	// clamped into its own content region, instead of restamping the box the
+	// PopupWidth/PopupHeight request resolves to. It travels for the reason
+	// the request does — a peer that did not know would snap the pane back on
+	// its next retile. The zero value is a popup whose box is computed, which
+	// is what every older client and older state reads as.
+	PopupPlaced bool `json:"popup_placed,omitempty"`
 	// PopupWidth and PopupHeight are the size the caller asked for, as the
 	// caller wrote it: "60" for cells, "60%" for a share of the content region.
 	// The request travels rather than the resolved box because the box is

@@ -61,30 +61,75 @@ func TestAPopupIsNotInTheWindowCycle(t *testing.T) {
 	}
 }
 
-// TestAPopupCannotBeMinimized is the dock exclusion, made where the dock reads
-// from: the dock lists minimized panes, so a popup that cannot be minimized can
-// never leave a pill behind for a pane that has closed itself.
+// TestAPopupMinimizesAndRestores pins the keyboard path. The minimize prefix
+// used to refuse popups while the daemon's set-window verb accepted them, so
+// the two disagreed about the same pane. A popup minimizes now like any other
+// floating pane: the dock lists it and a restore digit brings it back.
 //
-// Negative control, confirmed red: remove the IsPopup guard at the top of
-// MinimizeWindow. The popup is then minimized and getDockItems lists it.
-func TestAPopupCannotBeMinimized(t *testing.T) {
+// The restore must not land the popup at its pre-minimize box on a client that
+// retiled in between — applyPopupRects recomputes the box, so the pre-minimize
+// four are only for the animation the !AutoTiling branch runs.
+func TestAPopupMinimizesAndRestores(t *testing.T) {
 	m, popup := popupOS(t, "50%", "50%")
 
 	m.MinimizeWindow(1)
-	if popup.Minimized {
-		t.Error("the popup was minimized")
+	if !popup.Minimized {
+		t.Fatal("the popup was not minimized")
 	}
+	listed := false
 	for _, item := range m.getDockItems() {
 		if item.WindowIndex == 1 {
-			t.Error("the popup reached the dock as a pill")
+			listed = true
 		}
 	}
+	if !listed {
+		t.Error("the minimized popup is not on the dock")
+	}
 
-	// The tiled pane beside it still minimizes, so the guard is about popups and
-	// not about minimizing.
+	m.RestoreWindow(1)
+	if popup.Minimized {
+		t.Error("the popup did not restore")
+	}
+
+	// The tiled pane beside it still minimizes, so the change is about popups
+	// being allowed and not about minimizing being broken.
 	m.MinimizeWindow(0)
 	if !m.Windows[0].Minimized {
 		t.Error("an ordinary pane no longer minimizes")
+	}
+}
+
+// TestAResizedPopupKeepsItsBox is the snap-back: applyPopupRects ran on every
+// retile and restamped the box the creation request resolved to, so a popup
+// the user had resized jumped back the next time the host session retiled —
+// on every message a peer sent, since a sync retiles.
+//
+// A popup the user placed keeps the box they made, clamped into the region.
+// The client resize still recentres a popup nobody touched, which
+// TestAPopupRecentresWhenTheClientResizes pins on the other branch.
+func TestAResizedPopupKeepsItsBox(t *testing.T) {
+	m, popup := popupOS(t, "90%", "90%")
+	m.tileAllWindows()
+
+	// The user drags an edge: the mouse path commits the box and marks it placed.
+	popup.PopupPlaced = true
+	popup.X, popup.Y = 10, 3
+	popup.Width, popup.Height = 40, 12
+
+	m.tileAllWindows()
+	if popup.X != 10 || popup.Y != 3 || popup.Width != 40 || popup.Height != 12 {
+		t.Errorf("the retile snapped the popup back to (%d,%d %dx%d), want the user's (10,3 40x12)",
+			popup.X, popup.Y, popup.Width, popup.Height)
+	}
+
+	// A client that shrinks below the box clamps it rather than losing it.
+	m.Width, m.Height = 30, 10
+	m.tileAllWindows()
+	if popup.Width > m.PaneWidth() || popup.Height > m.PaneHeight() {
+		t.Errorf("the clamp left the popup %dx%d in a %dx%d region", popup.Width, popup.Height, m.PaneWidth(), m.PaneHeight())
+	}
+	if popup.X < m.PaneLeft() || popup.Y < m.PaneTop() {
+		t.Errorf("the clamp left the popup at (%d,%d), outside the content region", popup.X, popup.Y)
 	}
 }
 

@@ -17,8 +17,10 @@ import (
 func (m *OS) MinimizeWindow(i int) {
 	// A scratch pane is not minimized either: the scratch key hides its
 	// whole group, and a pane parked on the dock of a group's workspace would
-	// be out of reach once the group hides.
-	if i >= 0 && i < len(m.Windows) && (m.Windows[i].IsPopup || m.Windows[i].IsScratch) {
+	// be out of reach once the group hides. A popup minimizes like any other
+	// floating pane: applyPopupRects skips minimized popups, so the dock and
+	// the restore keys are the only things that reach it while it is down.
+	if i >= 0 && i < len(m.Windows) && m.Windows[i].IsScratch {
 		return
 	}
 	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized {
