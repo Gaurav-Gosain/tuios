@@ -593,6 +593,13 @@ func (t *GhosttyTerminal) HasMouseMode() bool {
 	return t.cachedHasMouse.Load()
 }
 
+// HasPixelMouseMode reports whether the guest tracks the mouse in SGR-pixel
+// mode (1016).
+func (t *GhosttyTerminal) HasPixelMouseMode() bool {
+	t.ensureRestored()
+	return t.cachedHasMouse.Load() && t.cachedMousePx.Load()
+}
+
 // HasAllMotionMode reports whether mode 1003 is enabled.
 func (t *GhosttyTerminal) HasAllMotionMode() bool {
 	t.ensureRestored()

@@ -57,9 +57,24 @@ type MouseWheel = uv.MouseWheelEvent
 // MouseMotion represents a mouse motion event.
 type MouseMotion = uv.MouseMotionEvent
 
+// MousePixel is the pointer's position inside the pane in pixels, measured
+// from the top-left pixel of the pane's first cell. A guest in SGR-pixel mode
+// (DEC 1016) is told this position. OK is false when the host reported the
+// pointer in cells only; the report then falls back to the cell centre.
+type MousePixel struct {
+	X, Y int
+	OK   bool
+}
+
 // SendMouse sends a mouse event to the terminal. This can be any kind of mouse
 // events such as [MouseClick], [MouseRelease], [MouseWheel], or [MouseMotion].
 func (e *Emulator) SendMouse(m Mouse) {
+	e.SendMouseAt(m, MousePixel{})
+}
+
+// SendMouseAt is SendMouse with the pointer's pixel position inside the pane,
+// which a guest in SGR-pixel mode is told instead of the cell centre.
+func (e *Emulator) SendMouseAt(m Mouse, at MousePixel) {
 	// XXX: Support [Utf8ExtMouseMode], [UrxvtExtMouseMode], and
 	// [SgrPixelExtMouseMode].
 	var (
@@ -120,7 +135,7 @@ func (e *Emulator) SendMouse(m Mouse) {
 		mouse.Mod.Contains(ModAlt),
 		mouse.Mod.Contains(ModCtrl))
 
-	_, _ = io.WriteString(e.pipe, e.encodeMouseReport(enc, b, mouse.X, mouse.Y, isRelease))
+	_, _ = io.WriteString(e.pipe, e.encodeMouseReport(enc, b, mouse.X, mouse.Y, at, isRelease))
 }
 
 // encodeMouseReport turns a pane-relative cell position into the wire form the
@@ -134,13 +149,15 @@ func (e *Emulator) SendMouse(m Mouse) {
 // when 1016 is set the cell position is scaled to host pixels; otherwise the
 // existing SGR-cell (1006) or X10 encoding is used unchanged.
 //
-// The pixel is the cell centre, matching the cell->pixel convention a terminal
-// app uses itself when it has only a cell report to work from. Sub-cell
-// precision is not available: the mouse position tuios receives from its own host
-// is already quantised to cells, so a cell centre is the most accurate pixel it
-// can report.
-func (e *Emulator) encodeMouseReport(enc ansi.Mode, b byte, cellX, cellY int, isRelease bool) string {
+// The pixel is the one the host reported (at), when the host reports pixels
+// and tuios asked it to. Otherwise it is the cell centre, matching the
+// cell->pixel convention a terminal app uses itself when it has only a cell
+// report to work from.
+func (e *Emulator) encodeMouseReport(enc ansi.Mode, b byte, cellX, cellY int, at MousePixel, isRelease bool) string {
 	if e.isModeSet(ansi.ModeMouseExtSgrPixel) {
+		if at.OK {
+			return ansi.MouseSgr(b, at.X, at.Y, isRelease)
+		}
 		px, py := e.cellToPixel(cellX, cellY)
 		return ansi.MouseSgr(b, px, py, isRelease)
 	}

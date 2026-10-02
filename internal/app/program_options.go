@@ -126,6 +126,10 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A terminal asked for SGR-pixel reports sends the pointer in pixels.
+	// Everything below, and everything in Update, works in cells.
+	msg = m.convertHostPixelMouse(msg)
+
 	if _, ok := msg.(tea.SuspendMsg); ok && m.RemoteClient {
 		// There is no process at the far end to suspend. wish and sip answer
 		// this the same way, and this filter stands in their slot.

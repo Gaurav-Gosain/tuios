@@ -107,7 +107,15 @@ type Terminal interface {
 	// Input encoding toward the guest.
 	SendMouse(m Mouse)
 	EncodeMouseEvent(m Mouse) string
+	// SendMouseAt and EncodeMouseEventAt also take the pointer's pixel
+	// position inside the pane, which a guest in SGR-pixel mode (1016) is
+	// told instead of the cell centre.
+	SendMouseAt(m Mouse, at MousePixel)
+	EncodeMouseEventAt(m Mouse, at MousePixel) string
 	HasMouseMode() bool
+	// HasPixelMouseMode reports whether the guest tracks the mouse in
+	// SGR-pixel mode (1016).
+	HasPixelMouseMode() bool
 	HasAllMotionMode() bool
 	HasCellMotionMode() bool
 	KittyKeyboardFlags() int

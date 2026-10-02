@@ -155,7 +155,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					Button: uv.MouseButton(mouse.Button),
 					Mod:    uv.KeyMod(mouse.Mod),
 				}
-				sendMouseToWindow(focusedWindow, adjustedMouse)
+				sendMouseToWindow(o, focusedWindow, adjustedMouse)
 				return o, nil
 			}
 		}

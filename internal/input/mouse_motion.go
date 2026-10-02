@@ -216,7 +216,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						Mod:    uv.KeyMod(mouse.Mod),
 					}
 					// Send to the terminal (uses PTY for daemon windows)
-					sendMouseToWindow(focusedWindow, adjustedMouse)
+					sendMouseToWindow(o, focusedWindow, adjustedMouse)
 					return o, nil
 				}
 			}

@@ -388,7 +388,12 @@ func itoa(n int) string {
 // mode selection and motion gating as the pure emulator. DEC 1001 highlight
 // tracking is not tracked by the library and is treated as absent.
 func (t *GhosttyTerminal) SendMouse(m Mouse) {
-	s := t.EncodeMouseEvent(m)
+	t.SendMouseAt(m, MousePixel{})
+}
+
+// SendMouseAt is SendMouse with the pointer's pixel position inside the pane.
+func (t *GhosttyTerminal) SendMouseAt(m Mouse, at MousePixel) {
+	s := t.EncodeMouseEventAt(m, at)
 	if s == "" {
 		return
 	}
@@ -410,6 +415,13 @@ func (t *GhosttyTerminal) SendMouse(m Mouse) {
 // arrive per pointer move across every window, so this path must not call
 // into the library or allocate per event.
 func (t *GhosttyTerminal) EncodeMouseEvent(m Mouse) string {
+	return t.EncodeMouseEventAt(m, MousePixel{})
+}
+
+// EncodeMouseEventAt is EncodeMouseEvent with the pointer's pixel position
+// inside the pane, which a guest in SGR-pixel mode is told instead of the cell
+// centre.
+func (t *GhosttyTerminal) EncodeMouseEventAt(m Mouse, at MousePixel) string {
 	t.ensureRestored()
 	if !t.cachedHasMouse.Load() {
 		return ""
@@ -429,6 +441,9 @@ func (t *GhosttyTerminal) EncodeMouseEvent(m Mouse) string {
 		mouse.Mod.Contains(ModShift),
 		mouse.Mod.Contains(ModAlt),
 		mouse.Mod.Contains(ModCtrl))
+	if pixels && at.OK {
+		return ansi.MouseSgr(b, at.X, at.Y, isRelease)
+	}
 	if pixels {
 		return ansi.MouseSgr(b, mouse.X*cw+cw/2, mouse.Y*ch+ch/2, isRelease)
 	}
