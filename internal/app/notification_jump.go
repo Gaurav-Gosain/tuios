@@ -161,9 +161,12 @@ func (m *OS) NotificationClick(x, y int) bool {
 //
 // A message the block had to cut opens in the message view rather than going
 // to its pane: a message cannot be acted on before it is read. The view goes
-// to the pane on enter. A clipboard ask is cut like any other message, and so
-// a click on a cut one shows the text it asks to set before anything is
-// allowed.
+// to the pane on enter.
+//
+// A clipboard ask is the exception. Its text is always longer than the block,
+// and the view does not allow it, so opening the view would leave the ask with
+// no way to be allowed. A click on it allows it, as it always did; hovering it
+// shows the text it asks to set first.
 func (m *OS) clickVisibleNotification() {
 	n := len(m.Notifications)
 	if n == 0 {
@@ -174,7 +177,7 @@ func (m *OS) clickVisibleNotification() {
 		return
 	}
 	m.Notifications = m.Notifications[:n-1]
-	if m.notifHit.Cut {
+	if m.notifHit.Cut && !isClipboardAsk(visible.Target) {
 		m.notifHoverEnd()
 		m.openMessageView(m.notificationEntry(visible))
 		return
@@ -183,6 +186,9 @@ func (m *OS) clickVisibleNotification() {
 		m.jumpToNotifTarget(*visible.Target)
 	}
 }
+
+// isClipboardAsk reports whether a target is a pane's clipboard ask.
+func isClipboardAsk(t *NotifTarget) bool { return t != nil && t.ClipboardAsk != 0 }
 
 // sameDrawnNotification reports whether a is the message b was drawn from,
 // with the same text and the same target.

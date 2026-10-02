@@ -222,6 +222,12 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 		}
 		return true
 	}
+	// The message view and the log viewer take no text, and they cover the
+	// pane, so a paste while one is open is dropped rather than typed into a
+	// shell nobody can see.
+	if o.MessageViewOpen() || o.ShowLogs {
+		return true
+	}
 	return false
 }
 
@@ -444,7 +450,10 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// it, and a reply typed into it must reach it and not the rail.
 	// The Inbox is the fourth: a prefix chord opens it over the rail, and
 	// its keys must reach it.
-	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
+	// The message view and the log viewer are the last two: ctrl+b N opens the
+	// view over the rail, and its scroll and close keys must reach it.
+	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox &&
+		!o.MessageViewOpen() && !o.ShowLogs && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
 		return HandleSidebarKey(msg, o)
 	}
 
@@ -648,6 +657,15 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Ignore other keys when log viewer is active
 	return o, nil
+}
+
+// viewerTakesKey reports whether an open message view or log viewer takes a
+// key. The leader and the chord after it are let through, so a prefix command
+// works over the viewer the way it does over the rail.
+func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
+	return !isLeaderKey(msg, &o.Settings) && !o.PrefixActive && !o.WorkspacePrefixActive &&
+		!o.MinimizePrefixActive && !o.TilingPrefixActive && !o.DebugPrefixActive &&
+		!o.TapePrefixActive && !o.LayoutPrefixActive
 }
 
 // handleMessageViewKey handles a key while the message view is open. Every key

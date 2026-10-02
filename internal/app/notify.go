@@ -109,6 +109,9 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		if message == "" {
 			return
 		}
+		// Capped here, on the pane's goroutine, so a pane cannot hand the
+		// Update loop more text than any surface will show.
+		message = capText(message, notifTextCap)
 
 		select {
 		case ch <- NotificationMsg{Message: message, Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID}:

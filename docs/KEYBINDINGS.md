@@ -158,14 +158,16 @@ A message shows at the right end of the dock. A message that is too long
 for the dock ends with `…` and `more`.
 
 - Put the pointer on a message to hold it. It does not go away while the
-  pointer is on it.
+  pointer is on it. A key press, or the terminal losing focus, ends the hold.
+  The hold ends after 60 seconds.
 - Put the pointer on a long message to see its first lines above the dock.
-- Click a long message to read all of it in the message view.
+- Click a long message to read all of it in the message view. A click on a
+  pane's request to set the clipboard allows it.
 - Click a short message from a pane to go to that pane.
 
 | Keys | Where | What it does |
 |---|---|---|
-| `ctrl+b N` | anywhere | Show the last message in the message view, also after it went from the dock |
+| `ctrl+b N` | anywhere | Show the last message from a pane, or the last message that was too long for the dock, also after it went from the dock |
 | `ctrl+b j` | anywhere | Go to the pane of the newest message |
 | `j`, `k`, `up`, `down`, wheel | message view | Scroll one line |
 | `ctrl+d`, `ctrl+u`, `space`, `pgdown`, `pgup` | message view | Scroll half a page |

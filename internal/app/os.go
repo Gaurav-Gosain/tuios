@@ -282,54 +282,57 @@ type OS struct {
 	// can honor the direction instead of falling back to the spiral scheme.
 	pendingSplitDir        layout.PreselectionDir
 	pendingSplitTarget     string
-	WindowToBSPID          map[string]int          // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID        map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
-	NextBSPWindowID        int                     // Next BSP window ID to assign (starts at 1)
-	RenameKind             RenameKind              // What the open rename editor targets (RenameNone when closed)
-	RenameBuffer           string                  // Buffer for new window name
-	RenameTargetID         string                  // Window the rename in flight applies to
-	renameHit              overlay.Rect            // Where the dialog was drawn, in screen cells
-	PrefixActive           bool                    // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive  bool                    // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive   bool                    // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive     bool                    // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive      bool                    // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime         time.Time               // Time when prefix was activated
-	HelpScrollOffset       int                     // Scroll offset for help menu
-	HelpCategory           int                     // Current help category index (for left/right navigation)
-	HelpSearchMode         bool                    // True when help search is active
-	HelpSearchQuery        string                  // Current search query in help menu
-	CurrentWorkspace       int                     // Current active workspace (1-9)
-	NumWorkspaces          int                     // Total number of workspaces
-	WorkspaceFocus         map[int]int             // Remembers focused window per workspace
-	FocusHistory           map[int][]string        // Newest-first focus history per workspace
-	WorkspaceLayouts       map[int][]WindowLayout  // Stores custom layouts per workspace
-	WorkspaceHasCustom     map[int]bool            // Tracks if workspace has custom layout
-	WorkspaceMasterRatio   map[int]float64         // Stores master ratio per workspace
-	WorkspaceStackRatio    map[int]float64         // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
-	ShowLogs               bool                    // True when showing log overlay
-	LogMessages            []LogMessage            // Store log messages
-	LogScrollOffset        int                     // first log row the viewer draws
-	LogSelected            int                     // the log entry the viewer's cursor is on
-	msgView                messageViewState        // the message view, see message_view.go
-	recentMessages         []messageEntry          // the newest messages the dock showed, for prefix+N
-	notifHoverAt           time.Time               // when the pointer came onto the message block; zero when it is not on it
-	Notifications          []Notification          // Active notifications
-	notifHit               notifHitZones           // where the message block was drawn last frame
-	dockWorkspaceHits      []dockWorkspaceHit      // where the dock's workspace pills were drawn last frame
-	dockWorkspaceArrowHits []dockWorkspaceArrowHit // where the strip's overflow arrows were drawn last frame
-	dockWorkspaceScroll    int                     // index of the first workspace pill the strip draws
-	dockWorkspaceScrollFor int                     // the workspace that offset was last pulled into view for
-	dockWorkspaceScrollAt  int                     // the viewport width it was pulled into view at
-	dockWorkspaceDrag      dockWorkspaceDragState  // the click-or-drag gesture on a workspace pill
-	dockItemHits           []dockItemHit           // where the dock's minimized entries were drawn last frame
-	dockOverflowHit        dockOverflowHit         // where the entries' overflow marker was drawn last frame
-	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
-	notifDrawn             notifDrawn              // what the last frame showed of the live message
-	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither
-	dockCustomHits         []dockCustomHit         // where the custom components were drawn last frame
-	dockPlan               dockPlan                // which components are on which side, in draw order
-	dockEngine             *dockEngine             // refresh scheduler for the components that move on their own
+	WindowToBSPID          map[string]int                // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID        map[int]string                // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
+	NextBSPWindowID        int                           // Next BSP window ID to assign (starts at 1)
+	RenameKind             RenameKind                    // What the open rename editor targets (RenameNone when closed)
+	RenameBuffer           string                        // Buffer for new window name
+	RenameTargetID         string                        // Window the rename in flight applies to
+	renameHit              overlay.Rect                  // Where the dialog was drawn, in screen cells
+	PrefixActive           bool                          // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive  bool                          // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive   bool                          // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive     bool                          // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive      bool                          // True when Ctrl+B, D was pressed (debug sub-prefix)
+	LastPrefixTime         time.Time                     // Time when prefix was activated
+	HelpScrollOffset       int                           // Scroll offset for help menu
+	HelpCategory           int                           // Current help category index (for left/right navigation)
+	HelpSearchMode         bool                          // True when help search is active
+	HelpSearchQuery        string                        // Current search query in help menu
+	CurrentWorkspace       int                           // Current active workspace (1-9)
+	NumWorkspaces          int                           // Total number of workspaces
+	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace
+	FocusHistory           map[int][]string              // Newest-first focus history per workspace
+	WorkspaceLayouts       map[int][]WindowLayout        // Stores custom layouts per workspace
+	WorkspaceHasCustom     map[int]bool                  // Tracks if workspace has custom layout
+	WorkspaceMasterRatio   map[int]float64               // Stores master ratio per workspace
+	WorkspaceStackRatio    map[int]float64               // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
+	ShowLogs               bool                          // True when showing log overlay
+	LogMessages            []LogMessage                  // Store log messages
+	LogScrollOffset        int                           // first log row the viewer draws
+	LogSelected            int                           // the log entry the viewer's cursor is on
+	msgView                messageViewState              // the message view, see message_view.go
+	recentMessages         []messageEntry                // the newest messages the dock showed, for prefix+N
+	notifHoverAt           time.Time                     // when the pointer came onto the message block; zero when it is not on it
+	notifHoldSpent         bool                          // the hold ended with the pointer still on the block; it starts again only after the pointer leaves
+	wrapCache              [wrapCacheSize]wrapCacheEntry // wrapped message texts, see wrapCached
+	wrapCacheNext          int                           // the slot wrapCached fills next
+	Notifications          []Notification                // Active notifications
+	notifHit               notifHitZones                 // where the message block was drawn last frame
+	dockWorkspaceHits      []dockWorkspaceHit            // where the dock's workspace pills were drawn last frame
+	dockWorkspaceArrowHits []dockWorkspaceArrowHit       // where the strip's overflow arrows were drawn last frame
+	dockWorkspaceScroll    int                           // index of the first workspace pill the strip draws
+	dockWorkspaceScrollFor int                           // the workspace that offset was last pulled into view for
+	dockWorkspaceScrollAt  int                           // the viewport width it was pulled into view at
+	dockWorkspaceDrag      dockWorkspaceDragState        // the click-or-drag gesture on a workspace pill
+	dockItemHits           []dockItemHit                 // where the dock's minimized entries were drawn last frame
+	dockOverflowHit        dockOverflowHit               // where the entries' overflow marker was drawn last frame
+	dockSessionHits        []dockSessionHit              // where the dock's session controls were drawn last frame
+	notifDrawn             notifDrawn                    // what the last frame showed of the live message
+	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
+	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
+	dockPlan               dockPlan                      // which components are on which side, in draw order
+	dockEngine             *dockEngine                   // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.
 	RemoteCommandChan chan RemoteCommandMsg

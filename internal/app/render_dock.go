@@ -424,6 +424,11 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	if hasNotif && len(m.Notifications) > 0 {
 		m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
+		// A message this dock had to cut is one prefix+N can reopen, even a
+		// short notice cut by a narrow screen.
+		if notif.Cut {
+			m.rememberMessage(m.notificationEntry(m.notifHit.Drawn))
+		}
 	}
 
 	// The entries' screen columns, now that the spacer in front of them is known.

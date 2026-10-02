@@ -55,7 +55,7 @@ func (m *OS) logViewerList() listOverlay {
 			if n == 0 {
 				return nil
 			}
-			return logDetail(m.LogMessages[max(0, min(m.LogSelected, n-1))].Message, width)
+			return m.logDetail(m.LogMessages[max(0, min(m.LogSelected, n-1))].Message, width)
 		},
 	}
 }
@@ -77,11 +77,12 @@ func (m *OS) logViewerRow(i int, _ bool, rowBg color.Color, pal overlay.Palette,
 // logDetail is the selected entry wrapped to the panel, in exactly
 // logDetailLines lines. An entry longer than that ends in an ellipsis, and
 // enter shows the rest.
-func logDetail(text string, width int) []string {
+func (m *OS) logDetail(text string, width int) []string {
 	textW := max(width-2, 1)
-	lines := wrapMessage(text, textW)
-	if len(lines) > logDetailLines {
-		lines = lines[:logDetailLines]
+	wrapped := m.wrapCached(text, textW)
+	// A copy: the wrapped lines are the cache's, and these are edited below.
+	lines := append([]string(nil), wrapped[:min(len(wrapped), logDetailLines)]...)
+	if len(wrapped) > logDetailLines {
 		ell := overlay.Ellipsis()
 		last := truncateToWidth(lines[logDetailLines-1], max(textW-len([]rune(ell)), 1))
 		lines[logDetailLines-1] = strings.TrimRight(last, " ") + ell

@@ -23,14 +23,28 @@ import (
 // it is the message view's job, which a click on the block opens.
 const notifTooltipLines = 4
 
+// notifMaxHold is the longest the pointer holds the messages. A pointer left on
+// the block, or a terminal that lost focus without saying so, must not keep a
+// message up for ever.
+const notifMaxHold = 60 * time.Second
+
 // notifPaused reports whether the pointer is holding the live messages. With
 // none left there is nothing to hold, and the hold is dropped, so a message
-// that arrives later starts on the wall clock and not on a stale hold.
+// that arrives later starts on the wall clock and not on a stale hold. A hold
+// past notifMaxHold ends here.
 func (m *OS) notifPaused() bool {
+	if m.notifHoverAt.IsZero() {
+		return false
+	}
 	if len(m.Notifications) == 0 {
 		m.notifHoverAt = time.Time{}
+		return false
 	}
-	return !m.notifHoverAt.IsZero()
+	if time.Since(m.notifHoverAt) >= notifMaxHold {
+		m.notifHoverEnd()
+		return false
+	}
+	return true
 }
 
 // notifNow is the clock the live messages age by: the wall clock, or the
@@ -42,17 +56,40 @@ func (m *OS) notifNow() time.Time {
 	return time.Now()
 }
 
-// notifHoverEnd lets the clock run again and moves every live message's start
-// on by the time it was held, so each one gets the whole of its time.
-func (m *OS) notifHoverEnd() {
-	if !m.notifPaused() {
+// NotifHoldEnd ends the hold for a reason other than the pointer leaving: a
+// key press, or the terminal losing focus. The hold does not start again until
+// the pointer has left the block and come back.
+func (m *OS) NotifHoldEnd() {
+	if m.notifHoverAt.IsZero() {
 		return
 	}
-	held := time.Since(m.notifHoverAt)
+	m.notifHoverEnd()
+	m.notifHoldSpent = true
+}
+
+// notifHoverEnd lets the clock run again and credits each live message with
+// the time it was held: from the later of the hold's start and its own, so a
+// message that arrived during the hold gets only the time it was up, and never
+// more than notifMaxHold.
+func (m *OS) notifHoverEnd() {
+	if m.notifHoverAt.IsZero() {
+		return
+	}
+	end := time.Now()
+	if limit := m.notifHoverAt.Add(notifMaxHold); end.After(limit) {
+		end = limit
+	}
 	for i := range m.Notifications {
-		m.Notifications[i].StartTime = m.Notifications[i].StartTime.Add(held)
+		from := m.notifHoverAt
+		if start := m.Notifications[i].StartTime; start.After(from) {
+			from = start
+		}
+		if held := end.Sub(from); held > 0 {
+			m.Notifications[i].StartTime = m.Notifications[i].StartTime.Add(held)
+		}
 	}
 	m.notifHoverAt = time.Time{}
+	m.notifHoldSpent = true
 	if m.Tooltip.Source == tooltipDockNotif {
 		m.tooltipClear()
 	}
@@ -72,12 +109,13 @@ func (m *OS) DockNotifHoverAt(x, y int) bool {
 	x, y = m.ScreenPoint(x, y)
 	on := m.notifBlockAt(x, y)
 	switch {
-	case on && !m.notifPaused():
-		m.notifHoverAt = time.Now()
 	case !on:
 		m.notifHoverEnd()
+		m.notifHoldSpent = false
+	case !m.notifPaused() && !m.notifHoldSpent:
+		m.notifHoverAt = time.Now()
 	}
-	if on && m.notifHit.Cut {
+	if on && m.notifHit.Cut && !m.notifHoldSpent {
 		m.tooltipTrack(tooltipDockNotif, 0)
 	} else if m.Tooltip.Source == tooltipDockNotif {
 		m.tooltipClear()
@@ -89,10 +127,14 @@ func (m *OS) DockNotifHoverAt(x, y int) bool {
 // the label, for the motion filter. See dockHoverChangesAt.
 func (m *OS) notifHoverChangesAt(x, y int) bool {
 	on := m.notifBlockAt(x, y)
-	if on != m.notifPaused() {
+	paused := m.notifPaused()
+	switch {
+	case !on && (paused || m.notifHoldSpent):
+		return true
+	case on && !paused && !m.notifHoldSpent:
 		return true
 	}
-	wantLabel := on && m.notifHit.Cut && m.tooltipsEnabled(tooltipDockNotif)
+	wantLabel := on && m.notifHit.Cut && !m.notifHoldSpent && m.tooltipsEnabled(tooltipDockNotif)
 	return wantLabel != (m.Tooltip.Source == tooltipDockNotif)
 }
 
@@ -103,7 +145,7 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 		return nil
 	}
 	m.Tooltip.Shown = true
-	if !m.notifHit.Active || len(m.Notifications) == 0 {
+	if !m.notifHit.Active || !m.notifHit.Cut || len(m.Notifications) == 0 {
 		return nil
 	}
 	msg := m.Notifications[len(m.Notifications)-1]
@@ -113,9 +155,9 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	width := max(min(notifBudget(renderW), renderW-2*tooltipPad), 8)
 	textW := width - 2*tooltipPad
 
-	lines := wrapMessage(msg.Message, textW)
+	lines := m.wrapCached(msg.Message, textW)
 	if len(lines) > notifTooltipLines {
-		lines = lines[:notifTooltipLines]
+		lines = append([]string(nil), lines[:notifTooltipLines]...)
 		last := lines[notifTooltipLines-1]
 		ell := overlay.Ellipsis()
 		lines[notifTooltipLines-1] = strings.TrimRight(truncateToWidth(last, textW-lipgloss.Width(ell)), " ") + ell
@@ -128,7 +170,11 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	for _, l := range lines {
 		rows = append(rows, text.Render(pad+l+strings.Repeat(" ", max(textW-lipgloss.Width(l), 0))+pad))
 	}
-	hint := overlay.Truncate("Click to show the full message.", textW)
+	hint := "Click to show the full message."
+	if isClipboardAsk(msg.Target) {
+		hint = "Click to allow it."
+	}
+	hint = overlay.Truncate(hint, textW)
 	rows = append(rows, dim.Render(pad+hint+strings.Repeat(" ", max(textW-lipgloss.Width(hint), 0))+pad))
 
 	label := strings.Join(rows, "\n")

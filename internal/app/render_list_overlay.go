@@ -198,47 +198,66 @@ const simplePanelWidth = 52
 // wrapPlain breaks an unstyled string onto lines of at most width cells,
 // preferring word boundaries. An empty input yields one empty line so blank
 // spacer lines survive.
+//
+// It is linear in the length of s: each word is measured once, the line's
+// width is carried as a running sum, and a word longer than the line is cut by
+// stepping through its grapheme clusters once. The text can be a pane's
+// notification, and it is wrapped on every frame the message view or the
+// hover label is drawn, so a version that measured the line again for every
+// word froze the client on one long OSC 9.
 func wrapPlain(s string, width int) []string {
 	if width < 1 {
 		width = 1
 	}
-	if s == "" || lipgloss.Width(s) <= width {
+	if s == "" || (len(s) <= width && ansi.StringWidth(s) <= width) {
 		return []string{s}
 	}
 	var out []string
-	line := ""
+	var line strings.Builder
+	lineW := 0
 	flush := func() {
-		if line != "" {
-			out = append(out, line)
-			line = ""
+		if lineW > 0 || line.Len() > 0 {
+			out = append(out, line.String())
+			line.Reset()
+			lineW = 0
 		}
 	}
 	for word := range strings.FieldsSeq(s) {
-		// A word longer than the line (a path, say) is broken across lines
-		// rather than dropped.
-		for lipgloss.Width(word) > width {
+		wordW := ansi.StringWidth(word)
+		if wordW > width {
+			// A word longer than the line (a path, say) is broken across
+			// lines rather than dropped. It starts on a line of its own.
 			flush()
-			runes := []rune(word)
-			cut := len(runes)
-			for cut > 1 && lipgloss.Width(string(runes[:cut])) > width {
-				cut--
+			rest := word
+			for rest != "" {
+				cluster, w := ansi.FirstGraphemeCluster(rest, ansi.GraphemeWidth)
+				if cluster == "" {
+					break
+				}
+				if lineW+w > width && lineW > 0 {
+					flush()
+				}
+				line.WriteString(cluster)
+				lineW += w
+				rest = rest[len(cluster):]
 			}
-			out = append(out, string(runes[:cut]))
-			word = string(runes[cut:])
+			continue
 		}
 		switch {
-		case line == "":
-			line = word
-		case lipgloss.Width(line)+1+lipgloss.Width(word) <= width:
-			line += " " + word
+		case lineW == 0 && line.Len() == 0:
+			line.WriteString(word)
+			lineW = wordW
+		case lineW+1+wordW <= width:
+			line.WriteByte(' ')
+			line.WriteString(word)
+			lineW += 1 + wordW
 		default:
 			flush()
-			line = word
+			line.WriteString(word)
+			lineW = wordW
 		}
 	}
-	if line != "" {
-		out = append(out, line)
-	}
+	flush()
 	return out
 }
 

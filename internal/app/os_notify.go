@@ -1,6 +1,7 @@
 package app
 
 import (
+	"charm.land/lipgloss/v2"
 	"fmt"
 	"time"
 
@@ -24,14 +25,32 @@ func (m *OS) Log(level, format string, args ...any) {
 // entry, so an open viewer shows each line as it arrives. A cursor moved up to
 // read an older line stays on that line, and when the oldest lines are dropped
 // it moves with the line it was on.
+//
+// A full buffer drops its oldest info entry first, and its oldest entry only
+// when it holds nothing but warnings and errors. Every message the dock shows
+// is logged at info, so without this a burst of them pushed out the one error
+// the log is opened to find.
 func (m *OS) appendLog(entry LogMessage) {
+	entry.Message = capText(entry.Message, logTextCap)
 	atNewest := m.LogSelected >= len(m.LogMessages)-1
 	m.LogMessages = append(m.LogMessages, entry)
-	if over := len(m.LogMessages) - config.MaxLogMessages; over > 0 {
-		m.LogMessages = m.LogMessages[over:]
-		m.LogSelected = max(m.LogSelected-over, 0)
-		m.LogScrollOffset = max(m.LogScrollOffset-over, 0)
+	for len(m.LogMessages) > config.MaxLogMessages {
+		drop := 0
+		for i, e := range m.LogMessages[:len(m.LogMessages)-1] {
+			if e.Level == "INFO" {
+				drop = i
+				break
+			}
+		}
+		m.LogMessages = append(m.LogMessages[:drop], m.LogMessages[drop+1:]...)
+		if drop < m.LogSelected {
+			m.LogSelected--
+		}
+		if drop < m.LogScrollOffset {
+			m.LogScrollOffset--
+		}
 	}
+	m.LogSelected = max(m.LogSelected, 0)
 	if atNewest {
 		m.LogSelected = len(m.LogMessages) - 1
 	}
@@ -196,6 +215,10 @@ func (m *OS) showAgentNotification(message, notifType, agentState string, durati
 }
 
 func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget) {
+	// A pane writes the text of its own notifications, so it is held to the
+	// size the daemon holds a pane's notification to before anything wraps,
+	// logs or keeps it.
+	message = capText(message, notifTextCap)
 	source := m.notifSourceName(target)
 
 	// A warning or an error is always logged, even when it is not shown: the
@@ -260,7 +283,13 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		Source:     source,
 	}
 	m.Notifications = append(m.Notifications, n)
-	m.rememberMessage(messageEntry{Text: message, Level: notifType, Time: n.StartTime, Source: source, Target: target})
+	// prefix+N reopens a message worth reading again: one from a pane, or one
+	// too long for the dock. tuios's own short notices ("Copied the
+	// message.", the mode names) are not kept, or the key would reopen its
+	// own feedback.
+	if target != nil || lipgloss.Width(message) > config.NotificationMaxWidth-notifChromeWidth {
+		m.rememberMessage(messageEntry{ID: n.ID, Text: message, Level: notifType, Time: n.StartTime, Source: source, Target: target})
+	}
 
 	if len(m.Notifications) > maxLiveNotifications {
 		m.Notifications = m.Notifications[len(m.Notifications)-maxLiveNotifications:]

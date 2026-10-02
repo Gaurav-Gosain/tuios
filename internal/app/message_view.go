@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,9 @@ const maxRecentMessages = 32
 
 // messageEntry is one message as the view shows it.
 type messageEntry struct {
+	// ID is the notification's, empty for a log line. It keeps a message from
+	// being remembered twice.
+	ID    string
 	Text  string
 	Level string // a notification type ("error") or a log level ("ERROR")
 	Time  time.Time
@@ -78,6 +82,9 @@ func (m *OS) OpenLastMessage() bool {
 
 // rememberMessage keeps a shown message for prefix+N.
 func (m *OS) rememberMessage(e messageEntry) {
+	if e.ID != "" && slices.ContainsFunc(m.recentMessages, func(r messageEntry) bool { return r.ID == e.ID }) {
+		return
+	}
 	m.recentMessages = append(m.recentMessages, e)
 	if len(m.recentMessages) > maxRecentMessages {
 		m.recentMessages = m.recentMessages[len(m.recentMessages)-maxRecentMessages:]
@@ -87,6 +94,7 @@ func (m *OS) rememberMessage(e messageEntry) {
 // notificationEntry is a live notification as the view shows it.
 func (m *OS) notificationEntry(n Notification) messageEntry {
 	return messageEntry{
+		ID:     n.ID,
 		Text:   n.Message,
 		Level:  n.Type,
 		Time:   n.StartTime,
@@ -166,6 +174,52 @@ func wrapMessage(text string, width int) []string {
 	return out
 }
 
+// Caps on the text a message carries. A notification is a pane's to write, so
+// its text is held to the size the daemon holds a pane's notification to. A
+// log line can be an error with a stack in it, so it gets more room.
+const (
+	notifTextCap = 512
+	logTextCap   = 4096
+)
+
+// capText trims s to n bytes on a rune boundary, and ends a trimmed text with
+// the ellipsis so the cut shows.
+func capText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := n
+	for cut > 0 && s[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return s[:cut] + overlay.Ellipsis()
+}
+
+// wrapCacheSize is how many wrapped texts are kept. The view, the hover label
+// and the log viewer's detail each wrap one text per frame.
+const wrapCacheSize = 4
+
+// wrapCacheEntry is one wrapped text.
+type wrapCacheEntry struct {
+	text  string
+	width int
+	lines []string
+}
+
+// wrapCached is wrapMessage for a text drawn on every frame: it wraps a text at
+// a width once and keeps the lines until other texts push it out.
+func (m *OS) wrapCached(text string, width int) []string {
+	for _, e := range m.wrapCache {
+		if e.lines != nil && e.width == width && e.text == text {
+			return e.lines
+		}
+	}
+	lines := wrapMessage(text, width)
+	m.wrapCache[m.wrapCacheNext] = wrapCacheEntry{text: text, width: width, lines: lines}
+	m.wrapCacheNext = (m.wrapCacheNext + 1) % wrapCacheSize
+	return lines
+}
+
 // messageViewHints is the view's footer.
 func (m *OS) messageViewHints() []overlay.Hint {
 	hints := []overlay.Hint{
@@ -189,7 +243,7 @@ const messageViewExtra = 2
 // that is drawn.
 func (m *OS) messageViewLayout() (width int, lines []string, rows, maxScroll int, hints []overlay.Hint) {
 	width = m.panelWidth(messageViewWidth)
-	lines = wrapMessage(m.msgView.entry.Text, max(width-2, 1))
+	lines = m.wrapCached(m.msgView.entry.Text, max(width-2, 1))
 	hints = m.messageViewHints()
 	rows, fitted := m.panelBody(len(lines), messageViewExtra, width, nil, hints)
 	if len(lines) > rows {

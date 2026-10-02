@@ -1472,6 +1472,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// release is lost, without a timeout that would cut short a slow drag:
 		// any further motion refreshes it.
 		switch mm := msg.(type) {
+		case tea.KeyPressMsg:
+			// Typing means the person has moved on from the message the
+			// pointer may be resting on, so its hold ends.
+			m.NotifHoldEnd()
 		case tea.MouseWheelMsg:
 			m.notePointerEvent(time.Now())
 		case tea.MouseClickMsg:
@@ -1759,6 +1763,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// will never report its release, so the hold ends here rather than
 		// outliving it.
 		m.EndHold()
+		// The pointer leaves with the focus, and no motion will say so, so
+		// the message hold ends here too.
+		m.NotifHoldEnd()
 		return m, m.noteHostFocus(false)
 
 	case tea.ColorProfileMsg:

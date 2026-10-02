@@ -173,14 +173,15 @@ func TestLogViewerShowsALongEntryInFull(t *testing.T) {
 	}
 }
 
-// TestMessageViewScrolls reads a message many screens long: the keys and the
-// wheel both reach its last line and come back to its first.
+// TestMessageViewScrolls reads a message longer than the view on a small
+// screen: the keys and the wheel both reach its last line and come back to its
+// first. The message stays under the 512 byte cap a notification is held to.
 func TestMessageViewScrolls(t *testing.T) {
-	const cols, rows = 100, 24
+	const cols, rows = 60, 16
 	term, _ := start(t, startOpts{cols: cols, rows: rows})
 	waitBoot(t, term)
 	newWindow(t, term)
-	raiseLongMessage(t, term, 1000, 1400)
+	raiseLongMessage(t, term, 100, 199)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
 		t.Fatalf("send prefix N: %v", err)
@@ -268,5 +269,156 @@ func TestHoverHoldsAMessage(t *testing.T) {
 		return !strings.Contains(dockRow(s), longHead)
 	}, 15*time.Second); err != nil {
 		t.Fatalf("the message stayed after the pointer left it: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestClipboardAskIsAllowedByAClick: a background pane's clipboard write waits
+// on a dock message, and a click on it allows the write. The ask is always
+// longer than the dock, so a click that opened the message view instead left
+// the write with no way to be allowed.
+func TestClipboardAskIsAllowedByAClick(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 110, rows: 30})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	// UFJPQkUzODY= is PROBE386, eight characters.
+	if err := term.SendKeys(`(sleep 4; printf '\033]52;c;UFJPQkUzODY=\007') &`, tuitest.Enter); err != nil {
+		t.Fatalf("start the background write: %v", err)
+	}
+	leaveTerminalMode(t, term)
+	newWindow(t, term)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(dockRow(s), "asks to copy")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the background write raised no ask: %v\n%s", err, term.Snapshot())
+	}
+	longMessageShot(t, term, "1-ask")
+	col, row := dockColumnOf(t, term, "asks to copy")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Copied 8 characters", uiTimeout); err != nil {
+		t.Fatalf("a click on the ask did not allow the write: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestLongNoSpaceMessageKeepsTheClientResponsive raises an 8000 byte OSC 9
+// with no spaces, hovers it and opens it, and the shell still answers at once.
+// Wrapping such a text used to take seconds on every frame.
+func TestLongNoSpaceMessageKeepsTheClientResponsive(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 110, rows: 30})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	cmd := `printf '\033]9;FRZ%s\007' "$(head -c 8000 /dev/zero | tr '\0' x)"; clear`
+	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
+		t.Fatalf("send the notification: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(dockRow(s), "FRZxxx")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the message never reached the dock: %v\n%s", err, term.Snapshot())
+	}
+	col, row := dockColumnOf(t, term, "FRZxxx")
+	mouseHover(t, term, col+2, row)
+	time.Sleep(time.Second)
+	mouseHover(t, term, 5, 5)
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatalf("send prefix N: %v", err)
+	}
+	if err := term.WaitForText("go to source", 3*time.Second); err != nil {
+		t.Fatalf("the message view did not open in time: %v\n%s", err, term.Snapshot())
+	}
+	longMessageShot(t, term, "1-view")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "go to source") }, 3*time.Second); err != nil {
+		t.Fatalf("esc did not close the view in time: %v\n%s", err, term.Snapshot())
+	}
+	// The beat every mode change gets here before typing: closing the view
+	// hands the keyboard back to the pane.
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	runInShell(t, term, `echo $((6*7))ANS`, "42ANS", 3*time.Second)
+}
+
+// TestKeyPressEndsTheHold: a key press ends the hover hold, so the message
+// burns down even with the pointer still on it. TestHoverHoldsAMessage is the
+// positive half.
+func TestKeyPressEndsTheHold(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 110, rows: 30})
+	waitBoot(t, term)
+	newWindow(t, term)
+	raiseLongMessage(t, term, 100, 220)
+
+	col, row := dockColumnOf(t, term, longHead)
+	mouseHover(t, term, col+2, row)
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys("x"); err != nil {
+		t.Fatalf("send a key: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(dockRow(s), longHead)
+	}, 12*time.Second); err != nil {
+		t.Fatalf("the message stayed after a key press: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestViewersOverTheRailAndTheLeader opens the message view with the rail
+// focused, and its keys reach it, the leader included: a prefix chord works
+// over it, and a paste does not reach the pane under it.
+func TestViewersOverTheRailAndTheLeader(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 110, rows: 30})
+	waitBoot(t, term)
+	newWindow(t, term)
+	raiseLongMessage(t, term, 100, 220)
+
+	// A paste while the view is open is dropped.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatalf("send prefix N: %v", err)
+	}
+	if err := term.WaitForText(longTail, uiTimeout); err != nil {
+		t.Fatalf("prefix N did not open the view: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.Paste("PASTE" + "LEAK"); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	// The leader works over the view: ctrl+b D l opens the log viewer.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+		t.Fatalf("open the log viewer: %v", err)
+	}
+	if err := term.WaitForText("copy errors", uiTimeout); err != nil {
+		t.Errorf("the leader did not work over the message view: %v\n%s", err, term.Snapshot())
+	}
+	for _, k := range []tuitest.Key{tuitest.Esc, tuitest.Esc} {
+		if err := term.SendKeys(k); err != nil {
+			t.Fatalf("send esc: %v", err)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), longTail) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the viewers: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	if strings.Contains(term.Screen().Text(), "PASTELEAK") {
+		t.Errorf("a paste made while the view was open reached the pane\n%s", term.Snapshot())
+	}
+
+	// With the rail focused, the view still takes its keys.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatalf("focus the rail: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatalf("send prefix N: %v", err)
+	}
+	if err := term.WaitForText(longTail, uiTimeout); err != nil {
+		t.Fatalf("prefix N did not open the view over the rail: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), longTail) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not reach the view over the rail: %v\n%s", err, term.Snapshot())
 	}
 }
