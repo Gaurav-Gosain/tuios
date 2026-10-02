@@ -590,5 +590,11 @@ type multiCopyFile interface {
 
 // multiCopyCreate creates the save file. It never opens one that exists.
 var multiCopyCreate = func(path string) (multiCopyFile, error) {
-	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	// A failed open returns a nil *os.File. Returned as it is, it would be a
+	// non-nil multiCopyFile holding a nil pointer.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }

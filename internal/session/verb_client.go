@@ -147,9 +147,9 @@ func (c *VerbClient) Host() string { return c.host }
 // built without dialing.
 func (c *VerbClient) Daemon() *DaemonHandshake { return c.daemon }
 
-// Close closes the underlying connection.
+// Close closes the underlying connection. It is safe on a nil client.
 func (c *VerbClient) Close() error {
-	if c.conn == nil {
+	if c == nil || c.conn == nil {
 		return nil
 	}
 	return c.conn.Close()
