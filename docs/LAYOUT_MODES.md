@@ -69,18 +69,18 @@ the requested percentage wherever the layout allows it.
 How a resize is kept depends on the layout:
 
 - **BSP** writes the resize into the split ratios of the tree.
-- **Master-stack** writes it into the workspace's ratios: the master ratio
+- **Master-stack** writes it into the workspace's splits: the master ratio
   (the width of the master column, or the height of the master row when the
-  master is at the top or the bottom) and, when the stack holds two panes, the
-  stack ratio (how the stack splits its space between them). This works on
-  every side the master can take. The keyboard resizes, the percentage resizes
-  and a mouse drag on a divider all do this, so the resize survives a retile.
-  With the master in the center, a resize moves one divider, and the next
-  retile puts the master back in the middle at its new width. Both ratios are
-  session state, so every client attached to the session lays the workspace
-  out the same way. The default grid (four or more panes, one master on the
-  left) has no ratio to keep, so a resize there lasts only until the next
-  retile.
+  master is at the top or the bottom) and the share of every other pane: each
+  master, each stack pane, and each row and pane of the default grid (four or
+  more panes, one master on the left). This works on every side the master can
+  take. The keyboard resizes, the percentage resizes and a mouse drag on a
+  divider all do this, so the resize survives a retile, and a terminal resize
+  is a retile. With the master in the center, a resize moves one divider, and
+  the next retile puts the master back in the middle at its new width. The
+  splits are session state, so every client attached to the session lays the
+  workspace out the same way. When a pane opens or closes, the part of the
+  layout it changes goes back to equal shares.
 - **Scrolling layout: width only.** The width actions reach the focused
   column through the scrolling column resizer, which clamps to the column
   width range; the height actions have no scrolling branch, so

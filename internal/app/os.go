@@ -307,6 +307,7 @@ type OS struct {
 	WorkspaceHasCustom     map[int]bool                  // Tracks if workspace has custom layout
 	WorkspaceMasterRatio   map[int]float64               // Stores master ratio per workspace
 	WorkspaceStackRatio    map[int]float64               // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
+	WorkspaceMasterSplits  map[int]layout.MasterSplits   // Every other master-stack split per workspace, the only copy (see SyncMasterStackFromGeometry)
 	ShowLogs               bool                          // True when showing log overlay
 	LogMessages            []LogMessage                  // Store log messages
 	LogScrollOffset        int                           // first log row the viewer draws

@@ -497,11 +497,11 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 // tiler, in every master position and with any master count: the master ratio
 // is the masters' share along the axis between them and the stack, and the
 // stack ratio is the first stack pane's share when the stack holds exactly two
-// panes in one column or row. The default grid of four or more panes is
-// equal-share and has nothing to record, so a resize there is still replaced
-// on the next retile. Geometry that is not the shape the tiler would draw (a
-// zoom, or panes out of their slots) is left alone rather than read as a
-// ratio.
+// panes in one column or row. Every other split (a third stack pane, a second
+// master, the rows and cells of the default grid) is read with
+// layout.MasterSplitsFrom into WorkspaceMasterSplits. Geometry that is not the
+// shape the tiler would draw (a zoom, or panes out of their slots) is left
+// alone rather than read as a ratio.
 //
 // With the masters in the centre a resize moves one side's divider, so the
 // stack on that side ends up wider than the other. The ratio records the
@@ -520,6 +520,12 @@ func (m *OS) SyncMasterStackFromGeometry() {
 		rects[i] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
 	}
 	p := m.masterParams()
+	// The rest of the splits, the grid's included, which the two ratios below
+	// do not cover. Read first, against the parameters the panes were laid
+	// out with.
+	if splits, ok := layout.MasterSplitsFrom(rects, region, p); ok {
+		m.setWorkspaceMasterSplits(m.CurrentWorkspace, splits)
+	}
 	ratio, stackRatio, ok := layout.MasterRatiosFrom(rects, region, p)
 	if !ok {
 		return
@@ -531,6 +537,16 @@ func (m *OS) SyncMasterStackFromGeometry() {
 	if p.Position == config.MasterPositionCenter {
 		m.TileAllWindows()
 	}
+}
+
+// setWorkspaceMasterSplits records the splits of a workspace's master-stack
+// panes. Like WorkspaceStackRatio, the map is the only copy, and it may be nil
+// in an OS built by hand.
+func (m *OS) setWorkspaceMasterSplits(workspace int, splits layout.MasterSplits) {
+	if m.WorkspaceMasterSplits == nil {
+		m.WorkspaceMasterSplits = make(map[int]layout.MasterSplits)
+	}
+	m.WorkspaceMasterSplits[workspace] = splits
 }
 
 // setMasterRatio sets the master ratio in force and records it for the current

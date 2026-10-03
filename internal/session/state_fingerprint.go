@@ -167,6 +167,17 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(k)
 		f64(s.WorkspaceStackRatio[k])
 	}
+	num(len(s.WorkspaceMasterSplits))
+	for _, k := range sortedIntKeys(s.WorkspaceMasterSplits) {
+		num(k)
+		sp := s.WorkspaceMasterSplits[k]
+		for _, list := range [][]float64{sp.Masters, sp.Stack, sp.Rows, sp.Cells} {
+			num(len(list))
+			for _, v := range list {
+				f64(v)
+			}
+		}
+	}
 	num(len(s.WorkspaceMasterLayout))
 	for _, k := range sortedIntKeys(s.WorkspaceMasterLayout) {
 		num(k)

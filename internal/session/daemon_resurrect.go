@@ -139,6 +139,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
 	restored.WorkspaceMasterRatio = maps.Clone(state.WorkspaceMasterRatio)
 	restored.WorkspaceStackRatio = maps.Clone(state.WorkspaceStackRatio)
+	restored.WorkspaceMasterSplits = cloneMasterSplits(state.WorkspaceMasterSplits)
 	restored.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
 
