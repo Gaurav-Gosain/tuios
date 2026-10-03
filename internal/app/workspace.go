@@ -149,8 +149,14 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		}
 	}
 
-	// Retile if in tiling mode and no custom layout
-	if m.AutoTiling && !m.WorkspaceHasCustom[workspace] {
+	// Retile if in tiling mode, unless the workspace holds a custom layout
+	// that still fills the box. The box moves while a workspace is off
+	// screen: a client resizes, another attaches or leaves, the rail moves.
+	// Rectangles kept from before that fill some other box, and the shells
+	// behind them keep a size no client draws. The tiler keeps the user's
+	// splits (the BSP tree, the master-stack ratios and splits), so the
+	// retile lays the custom layout out again in the new box.
+	if m.AutoTiling && (!m.WorkspaceHasCustom[workspace] || m.tiledLayoutStale()) {
 		m.LogInfo("Auto-tiling workspace %d (no custom layout)", workspace)
 		m.TileVisibleWorkspaceWindows()
 	} else {
