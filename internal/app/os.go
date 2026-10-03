@@ -1819,6 +1819,19 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	// streaming the pane, so the view would show a frozen screen.
 	m.pip = pipState{occluder: m.pip.occluder[:0]}
 
+	// The box the panes go in is the new session's: its size under its own
+	// window_size policy and its clients, and the chrome reserve its clients
+	// agreed on, both from the attach reply. Neither is this client's own
+	// terminal, and neither is the session just left.
+	m.Width, m.Height = savedWidth, savedHeight
+	m.EffectiveWidth, m.EffectiveHeight = savedWidth, savedHeight
+	if state != nil && state.Width > 0 && state.Height > 0 {
+		m.EffectiveWidth, m.EffectiveHeight = state.Width, state.Height
+	}
+	if m.DaemonClient != nil {
+		m.SessionReserve = m.DaemonClient.SessionLayoutReserve()
+	}
+
 	if state == nil || len(state.Windows) == 0 {
 		m.adoptEmptySessionVersion(state)
 		// The labels are the session's, and RestoreFromState, which adopts
@@ -1837,11 +1850,10 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	if err := m.RestoreFromState(state); err != nil {
 		m.LogError("Failed to restore state: %v", err)
 	}
-	// Restore real screen dimensions (RestoreFromState may overwrite with saved values)
+	// RestoreFromState took the session's size for this client's screen too.
+	// The screen is this client's terminal.
 	m.Width = savedWidth
 	m.Height = savedHeight
-	m.EffectiveWidth = savedWidth
-	m.EffectiveHeight = savedHeight
 
 	m.rehydrateWindows()
 	m.TriggerAltScreenRedraws()
