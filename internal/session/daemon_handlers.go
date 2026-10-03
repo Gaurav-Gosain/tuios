@@ -191,7 +191,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()
-	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name()})
+	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name(), Attached: ptr(true)})
 
 	// Before the reply, so a pane that probes the moment this client can see
 	// it is already answered for this client's machine.
@@ -405,7 +405,13 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	cs.reserve = LayoutReserve{}
 	cs.attached = false
 	cs.mu.Unlock()
-	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID})
+	d.events.publish(streamEvent{
+		Type:     EventClientSessionChanged,
+		ClientID: cs.clientID,
+		PID:      cs.peerPID,
+		Session:  d.sessionNameByID(sessionID),
+		Attached: ptr(false),
+	})
 
 	// Unsubscribe from all PTYs and forget where each stream got to. A resume
 	// position is a claim that the client still holds the pane it drew, and a

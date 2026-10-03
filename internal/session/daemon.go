@@ -991,6 +991,21 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 	// cache included, already handles by listing again.
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: old})
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+	// A client in the session stays in it under the new name, which changes
+	// the session list-clients reports for it.
+	d.clientsMu.RLock()
+	var moved []streamEvent
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		if cs.sessionID == s.ID {
+			moved = append(moved, streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: name, Attached: ptr(true)})
+		}
+		cs.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
+	for _, ev := range moved {
+		d.events.publish(ev)
+	}
 }
 
 // onSessionDeleted publishes a session-closed event and tells every client
@@ -1600,7 +1615,13 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 
 		// Unsubscribe from all PTYs
 		if sessionID != "" {
-			d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: clientID, PID: cs.peerPID})
+			d.events.publish(streamEvent{
+				Type:     EventClientSessionChanged,
+				ClientID: clientID,
+				PID:      cs.peerPID,
+				Session:  d.sessionNameByID(sessionID),
+				Attached: ptr(false),
+			})
 			d.forgetPushes(cs, sessionID)
 			if session := d.manager.GetSessionByID(sessionID); session != nil {
 				for _, ptyID := range subs {

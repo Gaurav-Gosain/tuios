@@ -429,7 +429,9 @@ fan sent it. It is what the rail groups by. `global: true` marks a global sessio
 
 List every connection to the daemon with its client id, kernel peer pid, and
 current session. The session is empty while the connection is detached. The
-command's own short-lived connection is included.
+command's own short-lived connection is included. The pid is `0` on Windows and
+the BSDs. An SSH or web client's pid names the local server process, not the
+remote SSH process or browser.
 
 **Usage:**
 ```bash
@@ -443,6 +445,10 @@ tuios list-clients [--json]
   {"client_id":"client-1790941960197517900","pid":4242,"session":"work"}
 ]
 ```
+
+`client-session-changed` carries the session a client entered or left and sets
+`attached` to `true` or `false`. A session rename sends one with the new name
+and `attached: true` for each client in the session.
 
 ### `tuios kill-session`
 

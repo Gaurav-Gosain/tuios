@@ -122,6 +122,8 @@ type streamEvent struct {
 	ClientID string `json:"client_id,omitempty"`
 	// PID is the kernel peer process of the daemon connection.
 	PID int `json:"pid,omitempty"`
+	// Attached says whether the client entered or left Session.
+	Attached *bool `json:"attached,omitempty"`
 	// Body is a notification event's text. Title carries its title, which
 	// OSC 9 never sets.
 	Body    string `json:"body,omitempty"`
