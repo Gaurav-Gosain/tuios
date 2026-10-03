@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"fmt"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // The splits a user makes in the master-stack layout, kept when the layout is
@@ -109,6 +111,69 @@ func TestMasterStackKeepsSplitsAcrossAResize(t *testing.T) {
 			})
 			saveArtifact(t, small, dir, "second-client")
 			saveArtifact(t, term, dir, "first-client-shrunk")
+		})
+	}
+}
+
+// TestEqualizeSplitsInMasterStack is the report: without shared borders,
+// the leader then = did nothing in the master-stack layout. It looked for a
+// BSP tree, which master-stack does not use.
+//
+// The panes are resized with the keys, then equalized. They must go back to
+// the shares they opened with, in the daemon and on a second client, and stay
+// there through a resize of the first client.
+//
+// NEGATIVE CONTROL: fails on main (524e2f46) at "the daemon after the
+// equalize" in every case: the panes keep the shares the keys gave them. With
+// the inMasterStack branch cut from EqualizeSplits it fails at the same step.
+func TestEqualizeSplitsInMasterStack(t *testing.T) {
+	for _, tc := range []struct {
+		name, appearance string
+		panes            int
+	}{
+		{"stack-of-two", "", 3},
+		{"stack-of-three", "master_grid = false\n", 4},
+		{"grid", "", 4},
+		{"shared-borders", "shared_borders = true\nmaster_grid = false\n", 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			const name = "equalize"
+			term := masterSession(t, base, name, tc.appearance, tc.panes)
+			peer := attachIn(t, base, name, startOpts{cols: 120, rows: 40})
+			equal := waitForSettledGeometryIn(t, base, name, tc.panes)
+			sendKeys(t, term, ">", ">", ">", "}", "}", "}")
+			waitForShape(t, base, name, tc.panes, "the daemon after the keys", func(rects []winRect) error {
+				if sameShares(equal, rects, 1) == nil {
+					return fmt.Errorf("the keys resized nothing")
+				}
+				return nil
+			})
+			dir := artifactDir(t)
+			saveArtifact(t, term, dir, "resized")
+
+			sendKeys(t, term, tuitest.Ctrl('b'), "=")
+			waitForShape(t, base, name, tc.panes, "the daemon after the equalize", func(rects []winRect) error {
+				return sameShares(equal, rects, 0)
+			})
+			waitPaneBox(t, peer, paneBox(term.Screen()), "the second client's panes against the first's")
+			saveArtifact(t, term, dir, "equalized")
+			saveArtifact(t, peer, dir, "equalized-peer")
+
+			// Kept as session state: a resize lays the panes out again.
+			if err := term.Resize(140, 44); err != nil {
+				t.Fatalf("resize the client: %v", err)
+			}
+			if err := peer.Resize(140, 44); err != nil {
+				t.Fatalf("resize the second client: %v", err)
+			}
+			waitForShape(t, base, name, tc.panes, "the daemon after the resize", func(rects []winRect) error {
+				if _, _, w, _ := paneBoxOf(rects); w != 140 {
+					return fmt.Errorf("the panes are %d columns wide in all, want 140", w)
+				}
+				return sameShares(equal, rects, 1)
+			})
+			saveArtifact(t, term, dir, "equalized-resized")
 		})
 	}
 }

@@ -80,7 +80,9 @@ How a resize is kept depends on the layout:
   the next retile puts the master back in the middle at its new width. The
   splits are session state, so every client attached to the session lays the
   workspace out the same way. When a pane opens or closes, the part of the
-  layout it changes goes back to equal shares.
+  layout it changes goes back to equal shares. Equalize splits (`Ctrl+B =`) puts the
+  master back at the configured ratio and gives every other pane an equal
+  share.
 - **Scrolling layout: width only.** The width actions reach the focused
   column through the scrolling column resizer, which clamps to the column
   width range; the height actions have no scrolling branch, so
