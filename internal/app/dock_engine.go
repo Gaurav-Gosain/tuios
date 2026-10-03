@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,8 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // The dock's refresh engine.
@@ -556,13 +559,23 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	cmd.Stderr = nil
 	dockSupervise(cmd)
 
-	out, err := cmd.Output()
-	if len(out) > config.DockCustomMaxOutput {
-		out = out[:config.DockCustomMaxOutput]
-	}
+	// The output goes through a capped writer, not cmd.Output. Output reads
+	// everything the command writes and cuts it afterwards, so `yes` filled
+	// gigabytes of heap in the three seconds before the timeout. The writer
+	// keeps one byte past the cap, which is how it knows the cap was passed,
+	// and kills the group the moment it is. A writer rather than a reader on
+	// StdoutPipe, because os/exec then does the copying and WaitDelay still
+	// bounds the wait when a grandchild that escaped the group holds the pipe.
+	out := &dockCappedWriter{limit: config.DockCustomMaxOutput + 1, kill: func() { _ = dockKillGroup(cmd) }}
+	cmd.Stdout = out
+	err := cmd.Run()
 
 	update := dockComponentUpdate{Name: c.Name}
 	switch {
+	case out.overflowed:
+		// Only the first line is used, and it is in the buffer. The kill is
+		// ours, so its error is not the component's failure.
+		update.Text = dockFirstLine(out.buf[:min(len(out.buf), config.DockCustomMaxOutput)])
 	case ctx.Err() == context.DeadlineExceeded:
 		update.Exit = -1
 		update.Err = fmt.Sprintf("timed out after %s", config.DockCustomTimeout)
@@ -573,7 +586,7 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 		}
 		update.Err = err.Error()
 	default:
-		update.Text = dockFirstLine(out)
+		update.Text = dockFirstLine(out.buf)
 	}
 
 	e.mu.Lock()
@@ -584,6 +597,33 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 		return
 	}
 	e.emit(update)
+}
+
+// dockCappedWriter keeps at most limit bytes of a command's output. The first
+// write that would pass the limit marks it overflowed, kills the command and
+// fails, which ends the copy os/exec runs and closes the pipe behind it.
+type dockCappedWriter struct {
+	limit      int
+	buf        []byte
+	overflowed bool
+	kill       func()
+}
+
+var errDockOutputCap = errors.New("dock component output passed the cap")
+
+func (w *dockCappedWriter) Write(p []byte) (int, error) {
+	if w.overflowed {
+		return 0, errDockOutputCap
+	}
+	room := w.limit - len(w.buf)
+	if len(p) <= room {
+		w.buf = append(w.buf, p...)
+		return len(p), nil
+	}
+	w.buf = append(w.buf, p[:room]...)
+	w.overflowed = true
+	w.kill()
+	return room, errDockOutputCap
 }
 
 // readPushed keeps a persistent command running and turns each line it writes
@@ -783,7 +823,16 @@ func dockFirstLine(out []byte) string {
 // would be a component redrawing somebody else's screen. Cell text is drawn on
 // the dock's own Panel ground afterwards, so a reset inside it cannot punch a
 // transparent hole through the bar.
+//
+// Below the escape layer it works on runes. The C1 controls, U+0080 to U+009F,
+// go: U+009B is a one-byte CSI to a terminal that reads them, and the rest are
+// controls of the same family. A byte that is not UTF-8 goes too, since a raw
+// 0x9B is that same CSI. The invisible characters go through internal/invisible,
+// as everywhere else tuios shows another program's text: a bidi override would
+// reorder the bar around the cell, and a zero-width character hides text a
+// person cannot see. Printable text, wide characters and emoji stay.
 func dockSanitize(s string) string {
+	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
@@ -837,8 +886,18 @@ func dockSanitize(s string) string {
 			i++
 			continue
 		}
-		b.WriteByte(c)
-		i++
+		if c < utf8.RuneSelf {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if (r == utf8.RuneError && size == 1) || (r >= 0x80 && r <= 0x9f) {
+			i += size
+			continue
+		}
+		b.WriteString(s[i : i+size])
+		i += size
 	}
 	return b.String()
 }

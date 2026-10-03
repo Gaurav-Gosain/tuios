@@ -181,3 +181,95 @@ refresh = "push"
 	}
 	_ = os.Remove(statsPath)
 }
+
+// dockFloodRSSBudget is the most the client may hold, in KiB, while a dock
+// component floods its stdout. An idle client sits well under 100 MiB. The
+// engine used to read the whole flood before it cut it to 64 KiB, so `yes`
+// put gigabytes on the heap inside the three second timeout.
+const dockFloodRSSBudget = 300 << 10
+
+// TestDockFloodingComponentStaysBounded runs `yes` as a dock component, again
+// every second, and holds the client to a memory budget while it does. The
+// client must also keep answering the keyboard, and the cell must show the
+// first line, which proves the component ran and its output was read.
+//
+// The memory is sampled often and the test stops at the first sample over the
+// budget, so a build without the cap fails fast instead of eating the machine.
+func TestDockFloodingComponentStaysBounded(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `
+[dock]
+left = ["mode", "workspaces", "trail", "custom/flood"]
+
+[dock.custom.flood]
+command = "yes DOCKFLOOD"
+refresh = "1s"
+`)
+	term := startIn(t, base, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+
+	pid := term.Pid()
+	peak := 0
+	sawCell := false
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		rss := rssOf(t, pid)
+		peak = max(peak, rss)
+		if rss > dockFloodRSSBudget {
+			t.Fatalf("the client holds %d KiB while a dock component floods its stdout (budget %d KiB); "+
+				"the engine reads the flood without a cap", rss, dockFloodRSSBudget)
+		}
+		if !sawCell && screenHas(term.Screen(), "DOCKFLOOD") {
+			sawCell = true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Logf("client peak RSS over 8s of a flooding dock component: %d KiB (budget %d KiB)", peak, dockFloodRSSBudget)
+	if !sawCell {
+		t.Fatalf("the flooding component never drew its first line, so its output was never read\n%s", term.Snapshot())
+	}
+
+	// The component still runs every second, so this is typed into a flood.
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ALIVE$((40+2))", "ALIVE42", shellTimeout)
+}
+
+// TestDockComponentCannotSendUnsafeCharacters puts a bidi override, the
+// one-byte CSI (U+009B) and a zero-width space in a component's output. None of
+// them may reach the host terminal. The printable text around them, a wide
+// character and an emoji must still draw, which is the positive half.
+func TestDockComponentCannotSendUnsafeCharacters(t *testing.T) {
+	base := t.TempDir()
+	// printf octal escapes: \342\200\256 is U+202E, \302\233 is U+009B,
+	// \342\200\213 is U+200B. The tail is U+6F22 and U+1F600.
+	writeConfig(t, base, `
+[dock]
+left = ["mode", "workspaces", "trail", "custom/unsafe"]
+
+[dock.custom.unsafe]
+command = '''printf 'SAFE\342\200\256RL\302\233OK\342\200\213ZW \346\274\242\360\237\230\200\n' '''
+refresh = "once"
+`)
+	var wire lockedBuffer
+	term := startIn(t, base, startOpts{out: &wire})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	waitForAll(t, term, uiTimeout, "the component drawing its text", "SAFERLOKZW", "漢")
+
+	sent := wire.String()
+	for _, bad := range []struct{ name, seq string }{
+		{"the bidi override U+202E", "‮"},
+		{"the one-byte CSI U+009B", "\u009b"},
+		{"the zero-width space U+200B", "​"},
+	} {
+		if strings.Contains(sent, bad.seq) {
+			t.Errorf("tuios wrote %s to the host terminal from a dock component", bad.name)
+		}
+	}
+	if !strings.Contains(sent, "\U0001F600") {
+		t.Errorf("the emoji in the component's output never reached the host terminal")
+	}
+}

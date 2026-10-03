@@ -169,6 +169,48 @@ func TestDockSanitizeKeepsColourAndDropsControls(t *testing.T) {
 	}
 }
 
+// TestDockSanitizeDropsUnsafeCharacters is a security boundary: a component's
+// text reaches the host terminal. A bidi control reorders the bar, a C1 control
+// is a control to a terminal that reads them (U+009B is a one-byte CSI), and an
+// invisible character hides text. Each row holds one of them. The last rows are
+// the positive half: wide characters, emoji and joined emoji stay whole.
+func TestDockSanitizeDropsUnsafeCharacters(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"right-to-left override", "a\u202eb", "ab"},
+		{"left-to-right override", "a\u202db", "ab"},
+		{"right-to-left embedding", "a\u202bb", "ab"},
+		{"pop directional formatting", "a\u202cb", "ab"},
+		{"right-to-left isolate", "a\u2067b", "ab"},
+		{"first strong isolate", "a\u2068b", "ab"},
+		{"pop directional isolate", "a\u2069b", "ab"},
+		{"right-to-left mark", "a\u200fb", "ab"},
+		{"arabic letter mark", "a\u061cb", "ab"},
+		{"C1 CSI encoded", "a\u009b31mb", "a31mb"},
+		{"C1 OSC encoded", "a\u009d0;tb", "a0;tb"},
+		{"C1 first", "a\u0080b", "ab"},
+		{"C1 last", "a\u009fb", "ab"},
+		{"C1 CSI as a raw byte", "a\x9b31mb", "a31mb"},
+		{"zero-width space", "a\u200bb", "ab"},
+		{"zero-width non-joiner", "a\u200cb", "ab"},
+		{"word joiner", "a\u2060b", "ab"},
+		{"byte order mark", "a\ufeffb", "ab"},
+		{"tag character", "a\U000E0041b", "ab"},
+		{"line separator", "a\u2028b", "ab"},
+		{"wide characters", "\u6f22\u5b57", "\u6f22\u5b57"},
+		{"emoji", "\U0001F600 ok", "\U0001F600 ok"},
+		{"joined emoji", "\U0001F468\u200d\U0001F4BB", "\U0001F468\u200d\U0001F4BB"},
+		{"accented text", "caf\u00e9 na\u00efve", "caf\u00e9 na\u00efve"},
+		{"colour around a wide character", "\x1b[31m\u6f22\x1b[0m", "\x1b[31m\u6f22\x1b[0m"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dockSanitize(tc.in); got != tc.want {
+				t.Errorf("dockSanitize(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestDockComponentRunsAndLaunders is the contract end to end: a command runs,
 // its first line becomes the cell, colour survives, and everything else that
 // could reach the screen does not.
