@@ -175,14 +175,53 @@ func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
 
 // writeConfigBytes puts already-rendered bytes at configPath, creating the
 // parent directory as needed.
+//
+// The bytes go to a temporary file beside the config and are renamed over
+// it, so a reader sees the old file or the new one and never part of one.
+// The config watcher reads the file 200 ms after the last change it saw. A
+// plain write truncates the file and then fills it, and a writer descheduled
+// between the two for longer than that (a loaded CI runner was enough) had
+// the watcher read an empty or cut file. That parsed, the defaults filled the
+// rest, and the dock or the rail of the running client moved back to its
+// default. The completed write that followed was then dropped as tuios's own
+// save, so the wrong settings stood.
+//
+// The content is noted as a self write before the rename, so the watcher that
+// sees the rename already knows it. A symlinked config is written through to
+// its target, so the link survives, and the file keeps its mode.
 func writeConfigBytes(data []byte, configPath string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+	target := configPath
+	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
+		target = resolved
+	}
+	mode := os.FileMode(0o600)
+	if info, err := os.Stat(target); err == nil {
+		mode = info.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".config.toml.*")
+	if err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
+	tmpPath := tmp.Name()
+	_, werr := tmp.Write(data)
+	if werr == nil {
+		werr = tmp.Chmod(mode)
+	}
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to write config file: %w", werr)
+	}
 	noteSelfWrite(data)
+	if err := os.Rename(tmpPath, target); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
 	return nil
 }
 
