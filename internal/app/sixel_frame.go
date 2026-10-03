@@ -374,14 +374,12 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 	for _, r := range f.rects {
 		next[r] = true
 	}
-	for r, pid := range f.placements {
-		if !next[r] || f.force {
-			if e := sp.images[r.id]; e != nil && e.kittyID != 0 {
-				out = kittyDeletePlacement(out, e.kittyID, pid)
-			}
-			delete(f.placements, r)
-		}
-	}
+	// Place first, then delete. A rectangle whose image is still being
+	// compressed is not placed this frame, and the placement it replaces has
+	// to stay up until it is: deleting it now leaves the cells empty for a
+	// frame. A program that sends a new image for every frame, a browser
+	// drawing a page as sixel, then blinks between the picture and nothing.
+	var waiting []sixelRect
 	for _, r := range f.rects {
 		if _, placed := f.placements[r]; placed {
 			continue
@@ -399,6 +397,9 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 				sp.startJobLocked(r.id, e,
 					func() []byte { return kittyTransmitRGBA(nil, id, img) },
 					func(b []byte) { ent.kittyPayload = b })
+			}
+			if e.kittyPayload == nil {
+				waiting = append(waiting, r)
 				continue
 			}
 			e.kittyID = sixelKittyIDBase + r.id
@@ -419,9 +420,32 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 			e.kittyID, pid, src.Min.X, src.Min.Y, src.Dx(), src.Dy(), r.cols(), r.rows())
 		out = append(out, "\x1b8"...)
 	}
+	for r, pid := range f.placements {
+		if next[r] && !f.force {
+			continue
+		}
+		if !f.force && overlapsAny(r, waiting) {
+			continue
+		}
+		if e := sp.images[r.id]; e != nil && e.kittyID != 0 {
+			out = kittyDeletePlacement(out, e.kittyID, pid)
+		}
+		delete(f.placements, r)
+	}
 	f.shown = next
 	f.force = false
 	return out
+}
+
+// overlapsAny reports whether r covers a host cell that one of rs covers.
+func overlapsAny(r sixelRect, rs []sixelRect) bool {
+	for _, o := range rs {
+		if r.x < o.x+o.cols() && o.x < r.x+r.cols() &&
+			r.y < o.y+o.rows() && o.y < r.y+r.rows() {
+			return true
+		}
+	}
+	return false
 }
 
 // takeDownLocked removes everything this passthrough put on a kitty host, for

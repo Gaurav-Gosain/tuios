@@ -203,7 +203,7 @@ func (m *OS) ApplyBSPLayout() {
 		//
 		// Under a camera it is placed like every other pane: it is not holding
 		// a box of its own, it is simply the pane the camera is on.
-		if win.Zoomed && !canvas.on {
+		if win.Zoomed && !m.zoomUsesLayout(win) {
 			continue
 		}
 		// A pane the pointer is dragging keeps its rectangle; the slot is
