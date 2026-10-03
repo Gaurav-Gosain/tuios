@@ -545,6 +545,51 @@ type lsEntry struct {
 	Saved bool `json:"saved,omitempty"`
 }
 
+// runListClients prints the daemon's current client connections.
+func runListClients(jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("list-clients", nil)
+	if err != nil {
+		return explainVerbError("list-clients", err)
+	}
+	var listed struct {
+		Clients []session.ClientInfo `json:"clients"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		return fmt.Errorf("failed to parse clients: %w", err)
+	}
+	if jsonOutput {
+		return printJSON(listed.Clients)
+	}
+
+	rows := make([][]string, 0, len(listed.Clients))
+	for _, c := range listed.Clients {
+		rows = append(rows, []string{c.ClientID, fmt.Sprintf("%d", c.PID), c.Session})
+	}
+	fmt.Println(table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("CLIENT ID", "PID", "SESSION").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			baseStyle := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return baseStyle.Bold(true).Foreground(lipgloss.Color("12"))
+			}
+			if col == 2 {
+				return baseStyle.Foreground(lipgloss.Color("3")).Bold(true)
+			}
+			return baseStyle.Foreground(lipgloss.Color("8"))
+		}).Render())
+	fmt.Printf("\n%d client(s)\n", len(rows))
+	return nil
+}
+
 func runListSessions(jsonOutput bool) error {
 	diag := session.DiagnoseDaemon()
 	if !diag.Running() {

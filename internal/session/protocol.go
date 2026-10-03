@@ -446,6 +446,13 @@ type WindowSummary struct {
 	Scratch bool `json:"scratch,omitempty"`
 }
 
+// ClientInfo describes one daemon connection for listing.
+type ClientInfo struct {
+	ClientID string `json:"client_id"` // Daemon-assigned connection ID
+	PID      int    `json:"pid"`       // Kernel peer process ID
+	Session  string `json:"session"`   // Current session name, empty while detached
+}
+
 // SessionInfo describes a single session for listing.
 type SessionInfo struct {
 	Name        string `json:"name"`         // Session name

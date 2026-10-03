@@ -1544,7 +1544,7 @@ What a restricted connection may call:
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
@@ -1769,6 +1769,32 @@ Response:
   {"name": "work", "id": "5f...", "window_count": 3, "attached": true, "width": 120, "height": 40}
 ]}}
 ```
+
+### list-clients
+
+List every connection to the daemon. No params. Each row carries the daemon's
+client id, the peer pid recorded by the kernel, and the current session name.
+The session is empty while the connection is detached. The pid is zero on
+Windows and the BSDs. For SSH and web clients it names the local server process,
+not the remote SSH process or browser.
+
+Request:
+
+```json
+{"verb": "list-clients"}
+```
+
+Response:
+
+```json
+{"result": {"type": "client_list", "clients": [
+  {"client_id": "client-1790941960197517900", "pid": 4242, "session": "work"}
+]}}
+```
+
+`client-session-changed` carries the session a client entered or left and sets
+`attached` to `true` or `false`. A session rename sends one with the new name
+and `attached: true` for each client in the session.
 
 ### session-info
 
@@ -4530,6 +4556,7 @@ Event types:
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
+| `client-session-changed` | A daemon connection attached, detached or switched sessions. `session` is the session entered or left. `attached` is `true` when entering and `false` when leaving, including a disconnect while attached. A rename sends `attached: true` with the new name to each client in the session. | `client_id`, `pid`, `session`, `attached` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed`, `agents_disabled` (the person turned the agent features off) or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
 | `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
@@ -4814,7 +4841,7 @@ printf '{"verb":"subscribe","params":{"types":["output","bell","window-exit"]}}\
 `tuios subscribe` does the last one without socat, and resumes with
 `--after-seq` and `--boot-id`.
 
-The tuios CLI speaks this protocol directly. `tuios ls`, `tuios kill-session`,
-`tuios send-keys`, `tuios capture-pane`, `tuios list-windows`,
-`tuios session-info`, `tuios set-config`, and `tuios get-config` are all verb
-protocol clients.
+The tuios CLI speaks this protocol directly. `tuios ls`, `tuios list-clients`,
+`tuios kill-session`, `tuios send-keys`, `tuios capture-pane`,
+`tuios list-windows`, `tuios session-info`, `tuios set-config`, and
+`tuios get-config` are all verb protocol clients.
