@@ -75,6 +75,9 @@ func (d *Daemon) verbListOptions(_ *connState, params json.RawMessage) (any, *ve
 			row["min"] = opt.Min
 			row["max"] = opt.Max
 		}
+		if opt.Auto {
+			row["auto"] = true
+		}
 		if opt.Deprecated != "" {
 			row["deprecated"] = opt.Deprecated
 		}

@@ -138,6 +138,10 @@ func clampInt(v, lo, hi int) int {
 // immediately; when retile is set it also reflows the tiling layout for
 // changes that affect window geometry (dock position, borders, title bars).
 func (m *OS) applyAppearanceLive(retile bool) {
+	// max_fps may have moved, and auto may have just been chosen with no rate
+	// found yet.
+	m.applyFrameRate()
+	m.detectDisplayRate(false)
 	m.adoptConfigPaneGeometry()
 	m.refreshKittyPlaceholderMode()
 	m.MarkAllDirty()
@@ -305,10 +309,13 @@ func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 
 const themeNone = "none"
 
-// fpsOptions are the frame caps the settings row offers. 144 is gone: it is
-// above the renderer's ceiling, so offering it was offering a number that could
-// not be honoured. See config.MaxFPSCap.
-var fpsOptions = []string{"30", "60", "90", "120", "unlimited"}
+// fpsOptions are the frame caps the settings row offers: auto, then the rates
+// displays are sold at. A rate configured in the file that is not here (75,
+// say) still shows as itself, and the next step goes to the first entry.
+var fpsOptions = []string{fpsAutoLabel, "30", "60", "90", "120", "144", "165", "240"}
+
+// fpsAutoLabel is how the row spells max_fps = "auto".
+const fpsAutoLabel = "Auto"
 
 // boolPtr returns a pointer to b, for the *bool config fields.
 func boolPtr(b bool) *bool { return &b }
@@ -818,26 +825,34 @@ func (m *OS) agentRowItem() settingItem {
 	}
 }
 
-// maxFPSItem is the frame-rate cap. Hand-written because the row says
-// "unlimited" for a number: the config holds an int, and a stepper walking to
-// the cap one frame at a time is not how anyone sets this.
+// maxFPSItem is the frame-rate cap. Hand-written for two reasons: the config
+// holds a number or "auto", and a stepper walking to 240 one frame at a time is
+// not how anyone sets this; and auto shows the rate it picked, "Auto (144)",
+// which is not a value the config holds.
 func (m *OS) maxFPSItem() settingItem {
-	item := enumItem("Max FPS", "Highest frame rate tuios draws at. A higher value applies at the next start.", fpsOptions,
-		func() string {
-			if m.Settings.NormalFPS >= config.MaxFPSCap {
-				return "unlimited"
-			}
-			return strconv.Itoa(m.Settings.NormalFPS)
-		},
+	// A number shows the rate in force, so 0 reads as 60 and a value past
+	// the cap reads as the cap.
+	current := func(m *OS) string {
+		if strings.EqualFold(m.optionValue("appearance.max_fps"), config.FPSAuto) {
+			return fpsAutoLabel
+		}
+		return strconv.Itoa(m.Settings.NormalFPS)
+	}
+	item := enumItem("Max FPS", "Highest frame rate tuios draws at. Your terminal and monitor can show fewer frames. A value above that is not smoother.", fpsOptions,
+		func() string { return current(m) },
 		func(m *OS, v string) {
-			fps := config.MaxFPSCap
-			if v != "unlimited" {
-				if n, err := strconv.Atoi(v); err == nil {
-					fps = n
-				}
+			if v == fpsAutoLabel {
+				v = config.FPSAuto
 			}
-			m.setOption("appearance.max_fps", strconv.Itoa(fps))
+			m.setOption("appearance.max_fps", v)
 		})
+	item.value = func(m *OS) string {
+		v := current(m)
+		if v == fpsAutoLabel {
+			return fpsAutoLabel + " (" + strconv.Itoa(m.Settings.NormalFPS) + ")"
+		}
+		return v
+	}
 	item.differs = differsFromDefault("appearance.max_fps", func(m *OS) string { return m.optionValue("appearance.max_fps") })
 	return item
 }

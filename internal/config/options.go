@@ -72,6 +72,9 @@ type Option struct {
 	// BoxSize marks a string option whose value is a size in cells (60) or
 	// percent (80%), read by ParseBoxSize. An empty value means the default.
 	BoxSize bool `json:"box_size,omitempty"`
+	// Auto marks an int option that also takes the word "auto". Its config
+	// field is a string type, such as FPSLimit, that can hold either.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // UnsetText is how a reader is told an option is unset and what it follows,
@@ -302,9 +305,11 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.max_fps", Type: OptionInt, Section: "appearance",
-		Description: fmt.Sprintf("Highest frame rate tuios draws at. 0 uses 60. The range is %d to %d.",
-			MinConfiguredFPS, MaxFPSCap),
-		Default: "0", Min: 0, Max: MaxFPSCap,
+		Description: fmt.Sprintf("Highest frame rate tuios draws at. Your terminal and monitor can show fewer frames. "+
+			"A value above what they can show does not make tuios smoother. "+
+			"0 uses %d. auto uses the refresh rate of your display. The range is %d to %d.",
+			DefaultFPS, MinConfiguredFPS, MaxFPSCap),
+		Default: "0", Min: 0, Max: MaxFPSCap, Auto: true,
 	},
 	{
 		Path: "appearance.session_colors", Type: OptionBool, Section: "appearance",
@@ -1341,12 +1346,31 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 		}
 		optionTarget(field).SetBool(parsed)
 	case OptionInt:
+		if opt.Auto && strings.EqualFold(strings.TrimSpace(value), FPSAuto) {
+			if optionKind(field) != reflect.String {
+				return fmt.Errorf("%s: registry says int or auto, config field is %s", path, optionKind(field))
+			}
+			optionTarget(field).SetString(FPSAuto)
+			return nil
+		}
 		parsed, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
+			if opt.Auto {
+				return fmt.Errorf("%s: %q is not a whole number or auto", path, value)
+			}
 			return fmt.Errorf("%s: %q is not a whole number", path, value)
 		}
 		if opt.Max > 0 && (parsed < opt.Min || parsed > opt.Max) {
 			return fmt.Errorf("%s: %d is outside %d..%d", path, parsed, opt.Min, opt.Max)
+		}
+		if opt.Auto && optionKind(field) == reflect.String {
+			// 0 is stored as the empty value, the one spelling a reload gives.
+			stored := ""
+			if parsed != 0 {
+				stored = strconv.Itoa(parsed)
+			}
+			optionTarget(field).SetString(stored)
+			return nil
 		}
 		if optionKind(field) != reflect.Int {
 			return fmt.Errorf("%s: registry says int, config field is %s", path, optionKind(field))
@@ -1388,6 +1412,17 @@ func GetOptionValue(cfg *UserConfig, path string) (string, bool) {
 	case reflect.Int:
 		return strconv.FormatInt(field.Int(), 10), true
 	case reflect.String:
+		if opt.Auto {
+			// An auto-or-int option reads back as the int or "auto", never
+			// as the empty string an unset field holds.
+			if v := strings.TrimSpace(field.String()); v != "" {
+				if strings.EqualFold(v, FPSAuto) {
+					return FPSAuto, true
+				}
+				return v, true
+			}
+			return opt.Default, true
+		}
 		return field.String(), true
 	default:
 		return "", false

@@ -345,6 +345,10 @@ func newModel(options Options) *Model {
 //
 //	model := tuios.New()
 //	p := tea.NewProgram(model, tuios.ProgramOptions()...)
+//	model.BindProgram(p)
+//
+// BindProgram lets the frame rate follow max_fps while the program runs,
+// including a max_fps above the 120 Bubble Tea allows on its own.
 func ProgramOptions() []tea.ProgramOption {
 	return app.ProgramOptions()
 }

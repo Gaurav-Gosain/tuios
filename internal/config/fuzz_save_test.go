@@ -42,6 +42,11 @@ func FuzzConfigSaveRoundTrip(f *testing.F) {
 		"[daemon]\nlog_level = \"debug\"\n",
 		"[appearance]\ntitle_format = \"\\u0000\\\"'''\"\n",
 		"[hooks]\n",
+		// max_fps takes a number or a string, and writes its own TOML.
+		"[appearance]\nmax_fps = 0\n",
+		"[appearance]\nmax_fps = \"AUTO\"\n",
+		"[appearance]\nmax_fps = \"0144\"\n",
+		"[appearance]\nmax_fps = \"fa\\\"st\\u0000/\"\n",
 	} {
 		f.Add(s)
 	}

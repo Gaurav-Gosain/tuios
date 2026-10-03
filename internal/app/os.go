@@ -105,6 +105,10 @@ type WindowLayout struct {
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
+	// frameRate drives the program's frame ticker from NormalFPS and finds the
+	// display's rate for max_fps = "auto". See frame_rate.go.
+	frameRate frameRate
+
 	Dragging                 bool
 	Resizing                 bool
 	BorderResizing           bool // a pane-border drag is moving one edge

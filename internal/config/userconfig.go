@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -285,23 +286,23 @@ type AppearanceConfig struct {
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
 	// prefix command, in milliseconds, so ctrl+b then left left left walks
 	// three columns. Zero turns it off. This is tmux's repeat-time.
-	PrefixRepeatTime       *int   `toml:"prefix_repeat_time"`
-	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS: 0 uses 60, otherwise 10 to 120
-	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
-	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
-	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
-	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
-	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
-	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
-	GlobalSession          *bool  `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
-	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
-	NiriHoverReveals       *bool  `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
-	ZoomAnimation          *bool  `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
-	ZoomFollowsFocus       *bool  `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
-	WindowButtonZoom       *bool  `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
-	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
-	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
-	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
+	PrefixRepeatTime       *int     `toml:"prefix_repeat_time"`
+	MaxFPS                 FPSLimit `toml:"max_fps"`                   // Maximum render FPS: 0 uses 60, "auto" follows the display, otherwise 10 to 240
+	DockWorkspaceTabs      *bool    `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
+	DockWorkspaceTabFormat string   `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
+	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
+	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
+	SessionColors          *bool    `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
+	SessionBorder          *bool    `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
+	GlobalSession          *bool    `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
+	NiriClickReveals       *bool    `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
+	NiriHoverReveals       *bool    `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
+	ZoomAnimation          *bool    `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
+	ZoomFollowsFocus       *bool    `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
+	WindowButtonZoom       *bool    `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
+	SidebarGitDirty        *bool    `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
+	Glyphs                 string   `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
+	Gap                    int      `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
 	// TilingScheme is the BSP insertion scheme a workspace starts with the
 	// first time it is tiled: spiral, longest_side, alternate or smart_split.
 	// See TilingSchemes. A workspace that already has a tree keeps its own
@@ -1623,6 +1624,9 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+	// go-toml sets a quoted max_fps straight into the string field, past
+	// UnmarshalText, so the spelling is settled here for both forms.
+	cfg.Appearance.MaxFPS = cfg.Appearance.MaxFPS.canonical()
 	defaultCfg := DefaultConfig()
 	fillMissingAppearance(&cfg, defaultCfg)
 	fillMissingDaemon(&cfg, defaultCfg)
@@ -2068,8 +2072,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
 
-	if cfg.Appearance.MaxFPS > 0 {
-		s.NormalFPS = clampMaxFPS(cfg.Appearance.MaxFPS)
+	s.MaxFPSAuto = cfg.Appearance.MaxFPS.IsAuto()
+	if s.MaxFPSAuto {
+		s.NormalFPS = AutoFPS(s.DisplayFPS)
+	} else if n, ok := cfg.Appearance.MaxFPS.Number(); ok && n > 0 {
+		s.NormalFPS = clampMaxFPS(n)
+	} else {
+		// 0 and a value that is not a number both mean the default. Set rather
+		// than left alone, so a reload from auto or from 144 back to 0 lands.
+		s.NormalFPS = DefaultFPS
 	}
 
 	// LeaderKey lives in [keybindings] rather than [appearance], but it is a
@@ -2236,6 +2247,90 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 // order) for cmd/tuios.
 func clampMaxFPS(fps int) int {
 	return max(min(fps, MaxFPSCap), MinConfiguredFPS)
+}
+
+// AutoFPS is the frame rate max_fps = "auto" draws at for a display that
+// refreshes at displayHz: that rate inside the configured range, or DefaultFPS
+// when the rate is not known (0).
+func AutoFPS(displayHz int) int {
+	if displayHz <= 0 {
+		return DefaultFPS
+	}
+	return clampMaxFPS(displayHz)
+}
+
+// FPSAuto is the max_fps value that follows the display's refresh rate.
+const FPSAuto = "auto"
+
+// FPSLimit is appearance.max_fps: a whole number of frames a second, or
+// "auto". The file may spell a number either bare (max_fps = 144) or quoted;
+// go-toml hands both to UnmarshalText.
+type FPSLimit string
+
+// UnmarshalText reads a bare number into one spelling for each value: the
+// number in decimal with 0 as empty, and auto in lower case. go-toml calls it
+// for a bare number only; ParseUserConfig settles a quoted value the same way. A save and a
+// reload then give back the value that was loaded. Anything else is kept as
+// written, so validation can name it; ApplyAppearanceConfig reads it as 0.
+func (f *FPSLimit) UnmarshalText(text []byte) error {
+	*f = FPSLimit(strings.TrimSpace(string(text))).canonical()
+	return nil
+}
+
+// canonical is the one spelling of f. See UnmarshalText.
+func (f FPSLimit) canonical() FPSLimit {
+	if f.IsAuto() {
+		return FPSAuto
+	}
+	n, ok := f.Number()
+	switch {
+	case !ok:
+		return f
+	case n == 0:
+		return ""
+	default:
+		return FPSLimit(strconv.Itoa(n))
+	}
+}
+
+// MarshalTOML writes a number bare and auto quoted, so a file tuios saves
+// reads the way a person would have written it. A value that is neither stays
+// as it was written, quoted, so saving does not quietly change it. It takes
+// effect through MarshalUserConfig.
+func (f FPSLimit) MarshalTOML() ([]byte, error) {
+	if f.IsAuto() {
+		return []byte(`"` + FPSAuto + `"`), nil
+	}
+	if n, ok := f.Number(); ok {
+		return []byte(strconv.Itoa(n)), nil
+	}
+	// A JSON string is a TOML basic string: the same quotes and escapes, and
+	// encoding/json never writes the one escape TOML lacks (\/).
+	return json.Marshal(string(f))
+}
+
+// IsAuto reports whether the value is "auto", in any case.
+func (f FPSLimit) IsAuto() bool {
+	return strings.EqualFold(strings.TrimSpace(string(f)), FPSAuto)
+}
+
+// Number is the value as a whole number. The empty value is 0, the default.
+func (f FPSLimit) Number() (int, bool) {
+	s := strings.TrimSpace(string(f))
+	if s == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
+// Valid reports whether the value is auto or a whole number.
+func (f FPSLimit) Valid() bool {
+	if f.IsAuto() {
+		return true
+	}
+	_, ok := f.Number()
+	return ok
 }
 
 // ApplyNotificationConfig applies the [notifications] section to the package

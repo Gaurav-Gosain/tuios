@@ -8,7 +8,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/pelletier/go-toml/v2"
 )
 
 func printConfigPath() error {
@@ -87,7 +86,7 @@ func resetConfigToDefaults() error {
 	var sb strings.Builder
 	sb.WriteString(config.ConfigFileHeader(configPath))
 
-	data, err := toml.Marshal(defaultCfg)
+	data, err := config.MarshalUserConfig(defaultCfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}

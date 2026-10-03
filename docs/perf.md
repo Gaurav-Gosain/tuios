@@ -535,6 +535,35 @@ with now takes effect at the next start (the settings row says so). It is its
 own commit so it can be reverted alone. The real fix is upstream, a bubbletea
 ticker that idles when nothing is pending.
 
+**max_fps goes to 240, and a change applies while tuios runs.** bubbletea
+clamps its ticker to 120 in `NewProgram`. `OS.BindProgram` now sets the
+ticker's rate after `NewProgram`, past that clamp, and resets it each time
+`NormalFPS` changes: a config reload, the settings row, or the display rate
+arriving for `max_fps = "auto"`. That also ends the "takes effect at the next
+start" rule above. Detection for auto is one short process (`hyprctl`, `niri`,
+`wlr-randr`, `xrandr` or `system_profiler`) in a goroutine, so it adds nothing
+to the startup path; until it answers, auto draws at 60.
+
+Real binary, one idle shell at 207x55, 10 s, voluntary context switches summed
+over every thread (the earlier rows read the main thread's counter), three runs
+each:
+
+| | voluntary ctx switches / s | CPU |
+|---|---|---|
+| before, default (60) | 389 / 369 / 385 | 0.4 / 0.3 / 0.3% |
+| before, max_fps 120 | 573 / 589 / 569 | 0.4 / 0.5 / 0.4% |
+| after, default (60) | 363 / 367 / 387 | 0.3 / 0.3 / 0.3% |
+| after, max_fps 120 | 585 / 624 / 624 | 0.4 / 0.4 / 0.4% |
+| after, max_fps 240 | 1028 / 1074 / 1037 | 0.5 / 0.7 / 0.7% |
+
+The default is unchanged. 240 is the cost of a ticker that does not idle, and
+it is opt-in. Frames on the wire with a pane printing as fast as it can
+(`TestMaxFPS240DrawsPastTheOldClamp`, run with `TUIOS_E2E_PERF=1`): before,
+max_fps 240 drew 120 frames a second; after, 236, and auto on a stand-in
+240 Hz display drew 227. The `internal/app` benchmarks (`IdleTick`,
+`ClientFrame`, `KeystrokeFrame`, `PointerSweep`, six runs each) show no
+regression: every change is within noise or faster, and allocations match.
+
 **Keys typed right after entering terminal mode reach the pane.**
 `HandleTerminalModeKey` dropped every unmodified printable key for 150 ms
 after entering terminal mode, a guard against mouse-sequence fragments from a

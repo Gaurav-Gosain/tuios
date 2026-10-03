@@ -323,6 +323,13 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	}
 
 	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)
+	if !cfg.Appearance.MaxFPS.Valid() {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "max_fps",
+			Message: fmt.Sprintf("'%s' is not a number or auto; read as %d", cfg.Appearance.MaxFPS, DefaultFPS),
+		})
+	}
 	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition, DockbarPositions)
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position, SidebarPositions)
 	for _, problem := range SidebarSectionProblems(cfg.Appearance.Sidebar.Sections) {

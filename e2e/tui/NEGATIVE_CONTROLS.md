@@ -623,6 +623,27 @@ and holds no agent state, so the rail has nothing to list either way. The
 gate matters only for a client whose config differs from its daemon's, which
 this suite does not set up.
 
+## max_fps up to 240, and auto
+
+Each control cut one line, built the binary, and ran `TestMaxFPS` (the frame
+rate test with `TUIOS_E2E_PERF=1`).
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The cap | `MaxFPSCap` back to 120 | `TestMaxFPSLoadsAndShows` (list-options says 120, the row never shows 240), `TestMaxFPSAutoReadsTheDisplay` (the row never shows `Auto (144)`) | **caught** |
+| Detection at startup | `BindProgram`: the `detectDisplayRate` call cut | `TestMaxFPSAutoReadsTheDisplay` (the row never shows `Auto (144)`) | **caught** |
+| The answer reaching the model | `Update`: the `displayRateMsg` case cut | `TestMaxFPSAutoReadsTheDisplay` | **caught** |
+| No detection over SSH | `Detect`: the `Local` check cut | `TestMaxFPSAutoReadsTheDisplay` (the SSH client shows `Auto (144)`, not `Auto (60)`; the local client is the positive half) | **caught** |
+| Binding the attached client | `session_commands.go`: the `BindProgram` call cut | `TestMaxFPSAutoReadsTheDisplay` | **caught** |
+| A save writes a number bare and auto quoted | `MarshalUserConfig`: `EnableMarshalerInterface` cut | `TestMaxFPSLoadsAndShows` (the file never has `max_fps = 240`) | **caught** |
+| The detected rate reaching the ticker | `handleDisplayRate`: the `applyFrameRate` call cut | `TestMaxFPS240DrawsPastTheOldClamp` (auto on a 240 Hz display draws 60 frames a second) | **caught** |
+| The 120 clamp lifted | build origin/main and point `TUIOS_E2E_BIN` at it | `TestMaxFPS240DrawsPastTheOldClamp` (max_fps 240 draws 120 frames a second) | **caught** |
+
+The frame rate test needs a machine that composes a frame in well under 4 ms,
+so it runs only with `TUIOS_E2E_PERF` set. The served-client gate in
+`detectsDisplay` (`ClientLocal`) has no control: the suite cannot run an SSH
+server client next to a desktop.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

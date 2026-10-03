@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -146,7 +147,7 @@ func configFileHeader(configPath string) string {
 // touches memory only, which is what lets a caller that must not block do this
 // half of a save itself.
 func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
-	data, err := toml.Marshal(cfg)
+	data, err := MarshalUserConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -157,6 +158,19 @@ func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to write config data: %w", err)
 	}
 	return []byte(sb.String()), nil
+}
+
+// MarshalUserConfig is cfg as TOML, the way every config file tuios writes is
+// encoded. It differs from toml.Marshal in one thing: a field may write its own
+// TOML, which is how max_fps comes out as a bare 144 or a quoted "auto" from
+// one field. toml.Marshal would quote both.
+func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := toml.NewEncoder(&buf).SetIndentSymbol("  ").EnableMarshalerInterface()
+	if err := enc.Encode(cfg); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // writeConfigBytes puts already-rendered bytes at configPath, creating the
