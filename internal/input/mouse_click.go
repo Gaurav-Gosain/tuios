@@ -29,6 +29,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The log viewer is modal to the keyboard: while it is up, every key goes
+	// to it in terminal mode and window-management mode alike. The mouse keeps
+	// the same contract, so a click cannot focus or select a pane the viewer
+	// sits in front of.
+	if o.ShowLogs {
+		return o, nil
+	}
+
 	// Ctrl or shift + right-click opens the context menu on a pane, on the press
 	// itself. This is the only way in over a pane whose app requested mouse
 	// tracking, where the right button belongs to that app; elsewhere a plain
