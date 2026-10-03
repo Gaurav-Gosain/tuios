@@ -1244,6 +1244,7 @@ type OS struct {
 	SidebarScrollA int
 	SidebarScrollF int
 	SidebarScrollG int
+	SidebarScrollC int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
@@ -1287,6 +1288,10 @@ type OS struct {
 	// and how far its branch has drifted. Derived state, never persisted and
 	// never synced, refreshed off the render path. See sidebar_git.go.
 	gitView gitView
+	// railCustom is the rail's custom section: whether its command is loaded
+	// in the dock engine, a generation the render cache keys on, and the
+	// per-run context last handed to the engine. See sidebar_custom.go.
+	railCustom railCustomState
 	// filePrompt is the file action dialog: the create prompt, the rename
 	// prompt, or the delete confirmation. Zero when none is up, which is every
 	// frame nobody has pressed a file action key on. See sidebar_file_ops.go.

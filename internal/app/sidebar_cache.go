@@ -204,6 +204,10 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScrollF)
 	mixU(m.filesView.Gen)
+	// The custom section: its rows change when its command's output does,
+	// which is the generation, and the section scrolls like the others.
+	mixU(m.railCustom.gen)
+	mixI(m.SidebarScrollC)
 
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves

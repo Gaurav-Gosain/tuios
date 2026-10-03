@@ -768,6 +768,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pane's directory is what both are about, and every handler that can move
 	// it is covered by one comparison here rather than by a hook in each.
 	gitSync := m.GitSyncCmd()
+	// The rail's custom section on the same beat: the focused pane and the
+	// rail's size are what its command is told, and the layout is what says
+	// whether it runs at all.
+	railSync := m.RailCustomSyncCmd()
 	// Same shape as the files sync: the rail opening is one of the fifty
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
@@ -779,10 +783,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// overlay opened by any of the handlers starts its fade on the frame it
 	// first appears in. See motion.go.
 	motion := m.motionCmd()
-	if sync == nil && replan == nil && gitSync == nil && loading == nil && motion == nil {
+	if sync == nil && replan == nil && gitSync == nil && railSync == nil && loading == nil && motion == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync, loading, motion)
+	return model, tea.Batch(cmd, sync, replan, gitSync, railSync, loading, motion)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.

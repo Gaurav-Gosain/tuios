@@ -78,11 +78,12 @@ type sidebarSectionPlan struct {
 // The spacer is not in it: it is not a section, it may appear more than once,
 // and sidebarLayoutFor turns it into a plan entry of its own.
 var sidebarSectionByName = map[string]sidebarSection{
-	"sessions":  sidebarSectionSessions,
-	"terminals": sidebarSectionTerminals,
-	"agents":    sidebarSectionAgents,
-	"files":     sidebarSectionFiles,
-	"git":       sidebarSectionGit,
+	"sessions":                  sidebarSectionSessions,
+	"terminals":                 sidebarSectionTerminals,
+	"agents":                    sidebarSectionAgents,
+	"files":                     sidebarSectionFiles,
+	"git":                       sidebarSectionGit,
+	config.SidebarSectionCustom: sidebarSectionCustom,
 }
 
 // sidebarSectionFloors is the least each section is shrunk to, in rows, before
@@ -97,6 +98,9 @@ var sidebarSectionFloors = [sidebarSectionCount]int{
 	// Two, because the section is a repository name and its branch, and one
 	// without the other says half of what it is for.
 	sidebarSectionGit: 2,
+	// Two, so a section the user put on the rail is never shrunk to only its
+	// title while another section grows.
+	sidebarSectionCustom: 2,
 }
 
 // The parsed layout, cached against the string it came from. The rail parses it
@@ -396,5 +400,6 @@ func (m *OS) sidebarScrollOffsets() [sidebarSectionCount]*int {
 		sidebarSectionAgents:    &m.SidebarScrollA,
 		sidebarSectionFiles:     &m.SidebarScrollF,
 		sidebarSectionGit:       &m.SidebarScrollG,
+		sidebarSectionCustom:    &m.SidebarScrollC,
 	}
 }
