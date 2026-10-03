@@ -57,7 +57,7 @@ func cmdAgent(s *shell, args []string, _ string) int {
 	t.Print(agentOrange + "╭" + strings.Repeat("─", w-2) + "╮" + reset + "\r\n")
 	t.Print(boxLine(w, agentOrange+"✻"+reset+" Welcome to "+bold+"Claude Code"+reset+" (tuios demo)"))
 	t.Print(boxLine(w, ""))
-	t.Print(boxLine(w, agentGrey+"  A pretend agent. Nothing leaves this tab."+reset))
+	t.Print(boxLine(w, agentGrey+"  A pretend agent. "+text("Nothing leaves this tab.")+reset))
 	t.Print(agentOrange + "╰" + strings.Repeat("─", w-2) + "╯" + reset + "\r\n\r\n")
 	t.Print(agentGrey + "> " + reset + task + "\r\n\r\n")
 

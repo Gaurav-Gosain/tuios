@@ -105,6 +105,12 @@ func (m *OS) learnOff(note string) bool {
 }
 
 func (m *OS) showLearnNote(note string) {
+	if r, ok := m.LearnNotes[note]; ok {
+		if r == "" {
+			return
+		}
+		note = r
+	}
 	m.ShowNotification(note, "info", 2*m.Settings.NotificationDuration)
 	m.MarkAllDirty()
 }
