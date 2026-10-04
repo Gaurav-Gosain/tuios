@@ -107,7 +107,8 @@ type cellWant struct {
 	underline  *uv.Underline
 	attrs      *uint8
 
-	link *string // hyperlink URL; nil means do not compare
+	link       *string // hyperlink URL; nil means do not compare
+	linkParams *string // hyperlink parameters; nil means do not compare
 }
 
 // dumpScreen renders the visible screen as plain text: one line per row, every
@@ -326,6 +327,9 @@ func cellProblems(emu *vt.Emulator, cw cellWant) []string {
 	}
 	if cw.link != nil && c.Link.URL != *cw.link {
 		add("cell(%d,%d).Link.URL = %q, want %q", cw.x, cw.y, c.Link.URL, *cw.link)
+	}
+	if cw.linkParams != nil && c.Link.Params != *cw.linkParams {
+		add("cell(%d,%d).Link.Params = %q, want %q", cw.x, cw.y, c.Link.Params, *cw.linkParams)
 	}
 	return problems
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -414,6 +415,12 @@ func (e *Emulator) handleHyperlink(cmd int, data []byte) {
 
 	e.scr.cur.Link.Params = StripControls(string(parts[1]))
 	e.scr.cur.Link.URL = StripControls(string(parts[2]))
+	// An empty URI closes the link, whatever parameters came with it. Keeping
+	// the parameters would leave every following cell carrying a link value
+	// with no address, which no reader of a cell expects.
+	if e.scr.cur.Link.URL == "" {
+		e.scr.cur.Link = uv.Link{}
+	}
 }
 
 // StripControls returns s without C0 controls, DEL, C1 controls (as raw bytes

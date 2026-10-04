@@ -167,6 +167,42 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			},
 		},
 		{
+			// Programs reopen a link without closing the last one when they
+			// redraw. The second open replaces the first; it does not nest.
+			name: "a second open replaces the first without a close",
+			cols: 10,
+			in:   "\x1b]8;;" + url + "\x07a\x1b]8;;https://example.invalid/y\x07b\x1b]8;;\x07c",
+			want: "abc",
+			cells: []cellWant{
+				{x: 0, y: 0, content: "a", link: ptr(url)},
+				{x: 1, y: 0, content: "b", link: ptr("https://example.invalid/y")},
+				{x: 2, y: 0, content: "c", link: ptr("")},
+			},
+		},
+		{
+			// The URI is everything after the second semicolon, so a query
+			// with semicolons and colons stays whole, and parameters with
+			// colons (id=a:foo=b) stay parameters.
+			name: "a URI keeps its semicolons and colons",
+			cols: 10,
+			in:   "\x1b]8;id=a:x=y;https://example.invalid/p;q=1:2\x1b\\b\x1b]8;;\x1b\\",
+			want: "b",
+			cells: []cellWant{
+				{x: 0, y: 0, content: "b", link: ptr("https://example.invalid/p;q=1:2"), linkParams: ptr("id=a:x=y")},
+			},
+		},
+		{
+			// An empty URI closes the link whatever parameters come with it.
+			name: "an empty URI with parameters closes the link",
+			cols: 10,
+			in:   "\x1b]8;id=n1;" + url + "\x07a\x1b]8;id=n1;\x07b",
+			want: "ab",
+			cells: []cellWant{
+				{x: 0, y: 0, content: "a", link: ptr(url)},
+				{x: 1, y: 0, content: "b", link: ptr(""), linkParams: ptr("")},
+			},
+		},
+		{
 			name: "a link survives a wrap onto the next row",
 			cols: 4,
 			in:   "\x1b]8;;" + url + "\x07abcdef\x1b]8;;\x07",
