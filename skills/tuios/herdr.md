@@ -57,6 +57,20 @@ log. You cannot enable, disable, link or unlink a plugin from a pane: the
 call fails with code `forbidden` and changes nothing. Ask the person to run
 `tuios plugins enable PLUGIN_ID` from a terminal outside tuios.
 
+## What works
+
+77 of herdr's 102 socket methods answer. The rest fail with code
+`unsupported`: `layout.*`, `workspace.move`, `agent.view.*`, `pane.scroll`,
+`pane.clear`, the copy and selection methods, `integration.*` and the
+`server.*` methods that act on herdr's own server.
+
+These plugins run unchanged once the person enables them: terminal-browser,
+terminal-code, vim-herdr-navigation, herdr-splits.nvim, herdr-nvim-nav,
+herdr-nvim, herdr-file-viewer, herdr-sidebar, herdr-plus and
+herdr-auto-title. A plugin's `[[link_handlers]]` do not run.
+`plugin install` fails: the person clones the plugin and runs
+`tuios plugins link DIR`.
+
 ## What it may do
 
 Each call holds your pane's grants, as the tuios verb that does the same work

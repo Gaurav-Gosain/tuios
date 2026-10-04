@@ -758,10 +758,21 @@ install it as its README says and run its command.
 | [herdr-watch](https://github.com/Unayung/herdr-watch) | `HERDR_SOCKET_PATH="$XDG_RUNTIME_DIR/tuios/tuios.sock.herdr" node bridge.js` | the socket: `agent.list`, `pane.read`, `agent.prompt` |
 | [herdr-telegram-agents](https://github.com/permgps/herdr-telegram-agents) | its service, with `HERDR_SOCKET_PATH` set as for herdr-watch | the socket: `agent.*`, `events.subscribe`, `tab.*`, `workspace.list`, `agent.start` |
 
-These Vim plugins also install a herdr key binding that moves from a shell
-pane into Vim. That binding is a herdr key binding, and tuios does not read
-herdr's key bindings. In tuios, move into the Vim pane with the directional
-focus keys.
+These Vim plugins also have herdr actions that move from a shell pane into
+Vim. herdr binds the actions to keys in its own config, which tuios does not
+read. In tuios, link and enable the plugin, and bind each action to a
+[command key](KEYBINDINGS.md#command-keys) of type `shell`:
+
+```toml
+[[keybindings.command]]
+key = "ctrl+h"
+type = "shell"
+command = "tuios plugins run vim-herdr-navigation left"
+description = "Navigate left (Vim/tuios)"
+```
+
+Add one entry for each of `left`, `down`, `up` and `right`. The key then
+works in every pane. In a pane that runs Vim, the action sends the key to Vim.
 
 terminal-browser and terminal-code draw with kitty graphics. Run the tuios
 client in a terminal that shows kitty images (kitty, Ghostty, WezTerm).
@@ -887,6 +898,35 @@ caller runs in, else the popup of the focused session.
 
 `plugin.list` lists every plugin that tuios found. A plugin whose manifest
 does not load has a warning that starts with `manifest unavailable:`.
+
+#### Plugins tested with tuios
+
+These plugins ran unchanged in tuios's plugin host, each in an
+isolated daemon. "Before" is tuios without the plugin host.
+
+| Plugin | What ran | Before | Now |
+| --- | --- | --- | --- |
+| [terminal-browser](https://github.com/zenbu-labs/terminal-browser) | the `open-split` action | did not run | opens a split that runs the browser |
+| [terminal-code](https://github.com/zenbu-labs/terminal-code) | the `open-split` action | did not run | opens a split that runs `tode` |
+| [vim-herdr-navigation](https://github.com/paulbkim-dev/vim-herdr-navigation) | its actions, from a shell and from Neovim, and from a command key | did not run | moves the tuios focus from a shell. Sends the key to Neovim. Neovim at its last split moves the tuios focus |
+| [herdr-splits.nvim](https://github.com/lmilojevicc/herdr-splits.nvim) | its navigation and resize actions | did not run | the same as vim-herdr-navigation, and the resize moves a border |
+| [herdr-nvim-nav](https://github.com/aimdevlee/herdr-nvim-nav) | `tuios plugins build`, then its actions | did not run | the same as vim-herdr-navigation |
+| [herdr-nvim](https://github.com/ChmaraX/herdr-nvim) | `tuios plugins build`, then the `toggle` action | did not run | opens the Neovim sidebar in a split |
+| [herdr-file-viewer](https://github.com/smarzban/herdr-file-viewer) | `tuios plugins build`, then its open action | did not run | opens its pane in a split |
+| [herdr-sidebar](https://github.com/alexarthurs/herdr-sidebar) | `tuios plugins build`, then its `workspace.created` hook | did not run | the hook opens the sidebar pane in a new session |
+| [herdr-plus](https://github.com/cloudmanic/herdr-plus) | `tuios plugins build`, then the `quick-actions` action | did not run | opens its picker |
+| [herdr-auto-title](https://github.com/kryptamine/herdr-auto-title) | `tuios plugins build`, then its startup service | did not run | names the tab after the folder and the program in it |
+
+tuios reads all 113 manifests of the 115 most starred herdr plugins. These
+parts of a plugin do not run yet:
+
+- `[[link_handlers]]`.
+- `herdr plugin install` and `uninstall`: link a cloned folder with
+  `tuios plugins link DIR`.
+- A client of herdr's terminal protocol (`terminal.attach`, `herdr agent
+  attach`), such as the phone and web clients.
+- The methods in [What tuios does not answer](#what-tuios-does-not-answer).
+  77 of herdr's 102 methods answer.
 
 #### Events
 
