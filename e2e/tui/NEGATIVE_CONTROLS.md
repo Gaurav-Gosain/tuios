@@ -810,6 +810,34 @@ refused keep is followed by one that merges. A push that is not a
 fast-forward, a squash or ff-only merge, a pull request that is already
 open, and gh missing or not logged in have no end-to-end test.
 
+## Mode legends in the dock, and messages cut at a word
+
+Hints mode said its keys in a message, and the dock cut it in the middle of a
+word: at 80 columns the base build shows `Type a label to copy. Shift+labe…`,
+and once the message burnt down the dock showed no keys at all while hints
+mode stayed open. Copy mode, multi copy mode and hints mode now show a legend
+in the dock, fitted by whole keys. Each control cut one call site from the
+current tree in a copy of it, built the binary, and ran the named tests. The
+positive half of the fitting control is the 200-column run, which passes on
+the broken build because the whole legend fits there. The positive half of the
+word-cut control is the 80 and 81 column runs, where a cut by width falls on a
+word boundary by chance and passes.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Hints mode shows its keys in the dock | the `m.hints != nil` branch in `modeLegend` (`internal/app/mode_legend.go`) | `TestHintsModeLegend` 60x20, 80x24 and 200x50 ("no hints legend on the dock") | **caught** (3 of 3) |
+| The legend is fitted by whole keys, and esc stays | `renderModeLegend` draws `overlay.HintStrip` unfitted, so the dock's generic cut ends it | `TestHintsModeLegend/80x24` ("the dock shows "ope", which is not a whole key or label", "the dock does not show esc"), `/60x20` ("the dock lost the key "esc""); `TestCopyModeLegend/60x20` and `/80x24` (no legend with its exit key); both 200x50 runs pass | **caught** |
+| `?` in hints mode shows all of its keys | the `r == '?'` branch in `handleHintsKey` (`internal/input/hints_input.go`) | `TestHintsHelpKeyListsAllKeys` ("? did not open the help on hints mode's keys") | **caught** |
+
+Copy mode also said its keys in a message ("Copy mode (hjkl, q to exit)"),
+which held the dock's right end over the legend for twice the message time.
+No control is recorded for its removal. The legend tests wait up to the UI
+timeout, which is longer than the message lasts, so they pass with it put back.
+Five tests waited for that message as the sign that copy mode opened, and now
+wait for `y yank` in the legend. Two of them, `TestScrollbackModeShowsEarlierOutput`
+and `TestSessionSwitchKeepsScrollback`, were missed at first and failed on
+every run of the whole suite until they were changed too.
+
 ## The session-list poll tick composes no frame
 
 The poll tick stopped composing a frame to save idle CPU. The rail draws

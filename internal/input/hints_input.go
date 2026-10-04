@@ -29,6 +29,7 @@ func handleOpenHintsAllPanes(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 //     pane, whichever pane the match is on
 //   - the same letter with Ctrl opens it
 //   - backspace takes back a letter
+//   - ? closes hints and opens the help on hints mode's keys
 //   - esc and the leader close. q closes when q is not a label letter, and
 //     ctrl+c and ctrl+g close when c and g are not label letters; when they
 //     are, they are Ctrl and a label letter like any other.
@@ -72,6 +73,10 @@ func handleHintsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case key.Text == "":
 		r = key.Code
 	case size != len(key.Text):
+		return o, nil
+	}
+	if r == '?' {
+		o.HintsShowKeys()
 		return o, nil
 	}
 	if r == 'q' && !o.HintsUsesLetter('q') {

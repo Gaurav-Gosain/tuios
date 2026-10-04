@@ -564,6 +564,11 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		// go, and the pill is the only place that says so.
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
 		modeLabel = m.Settings.GetDockModeIconWindow() + " HOLD"
+	case m.hints != nil:
+		// Hints mode owns the keyboard, so the pill names it. The legend at
+		// the dock's other end says what its keys do.
+		modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
+		modeLabel = "HINTS"
 	case focusedWindow != nil && m.MultiCopy.Has(focusedWindow.ID):
 		// Multi copy mode is held from either mode, so it names itself in
 		// both: how many panes it drives, and after a search how many matched.
@@ -665,68 +670,6 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	return modeLabel, trail, tape, width, modeInfo
 }
 
-// copyModeHelpTiers returns the dock's copy-mode help for a sub-state, longest
-// first. The renderer takes the longest tier that fits the room the dock has;
-// on a narrow screen that is the shortest of them, which still names the keys
-// that matter. Shared with the width calculation so the space reserved matches
-// the line actually drawn.
-//
-// They are key/label pairs rather than a "hjkl:move" string because the dock is
-// the one place left saying what a key does in its own format. Rendered through
-// the same strip a panel footer uses, copy mode reads like the rest of the app.
-func copyModeHelpTiers(state terminal.CopyModeState) [][]overlay.Hint {
-	switch state {
-	case terminal.CopyModeNormal:
-		return [][]overlay.Hint{
-			{
-				{Key: "hjkl", Label: "move"}, {Key: "w/b/e", Label: "word"},
-				{Key: "f/t", Label: "char"}, {Key: "/", Label: "search"},
-				{Key: "n/N", Label: "next"}, {Key: "v", Label: "visual"},
-				{Key: "y", Label: "yank"}, {Key: "q", Label: "quit"},
-			},
-			{
-				{Key: "hjkl", Label: "move"}, {Key: "/", Label: "search"},
-				{Key: "v", Label: "visual"}, {Key: "y", Label: "yank"},
-				{Key: "q", Label: "quit"},
-			},
-			{{Key: "hjkl", Label: "move"}, {Key: "y", Label: "yank"}, {Key: "q", Label: "quit"}},
-		}
-	case terminal.CopyModeSearch:
-		return [][]overlay.Hint{
-			{
-				{Key: "type", Label: "search"}, {Key: "n/N", Label: "next"},
-				{Key: overlay.EnterKey(), Label: "done"}, {Key: "esc", Label: "cancel"},
-			},
-			{{Key: "n/N", Label: "next"}, {Key: overlay.EnterKey(), Label: "done"}, {Key: "esc", Label: "cancel"}},
-		}
-	case terminal.CopyModeVisualChar:
-		return [][]overlay.Hint{
-			{
-				{Key: "hjkl", Label: "extend"}, {Key: "w/b/e", Label: "word"},
-				{Key: "%", Label: "bracket"}, {Key: "y", Label: "yank"},
-				{Key: "esc", Label: "cancel"},
-			},
-			{{Key: "hjkl", Label: "extend"}, {Key: "y", Label: "yank"}, {Key: "esc", Label: "cancel"}},
-		}
-	case terminal.CopyModeVisualLine:
-		return [][]overlay.Hint{
-			{{Key: "jk", Label: "extend"}, {Key: "y", Label: "yank"}, {Key: "esc", Label: "cancel"}},
-			{{Key: "jk", Label: "extend"}, {Key: "y", Label: "yank"}},
-		}
-	}
-	return nil
-}
-
-// renderCopyModeHelp draws one tier as the dock's help block: the footer's own
-// strip, on the Panel step the block rests on, with a column either side.
-func renderCopyModeHelp(hints []overlay.Hint, pal overlay.Palette) string {
-	if len(hints) == 0 {
-		return ""
-	}
-	pad := overlay.Style(pal.Panel).Render(" ")
-	return pad + overlay.HintStrip(hints, pal.Panel, pal) + pad
-}
-
 // dockItemsWidth is the room every minimized entry needs laid out at once,
 // including the single column between two of them. It is what the renderer
 // builds, so the layout pass reserves against the same number the draw uses.
@@ -759,27 +702,32 @@ func (m *OS) dockRightWidth() (width int, yields bool) {
 	if block, ok := m.dockNotificationBlock(m.GetRenderWidth(), 0); ok {
 		return block.Width, false
 	}
+	// A mode's legend does not yield either. It is up only while the mode is,
+	// and it says how to get out of the mode, which a minimized entry does
+	// not. It asks for the room of every key, and the draw fits it to the
+	// room it gets (see renderModeLegend).
+	if legend := m.dockModeLegend(); len(legend) > 0 {
+		return modeLegendWidth(legend), false
+	}
 	return m.calculateDockRightWidth(), true
 }
 
+// dockModeLegend is the mode legend the dock draws (see mode_legend.go), or
+// nil when the dock does not list the copy-help component, which is the one
+// that carries every mode's keys.
+func (m *OS) dockModeLegend() []overlay.Hint {
+	m.ensureDockPlan()
+	if !m.dockPlan.Has(config.DockComponentCopyHelp) {
+		return nil
+	}
+	return m.modeLegend()
+}
+
 // calculateDockRightWidth calculates the width of the right side of the dock
-// when no message holds it: the copy-mode help line or the system meters.
+// when neither a message nor a mode legend holds it: the system meters and
+// the custom cells.
 func (m *OS) calculateDockRightWidth() int {
 	m.ensureDockPlan()
-
-	focusedWindow := m.GetFocusedWindow()
-
-	if focusedWindow.CopyModeVisible() && m.dockPlan.Has(config.DockComponentCopyHelp) {
-		// In copy mode the help line is the right-hand block. Measure the
-		// longest variant rather than guessing at it, so a terminal with room
-		// for it reserves exactly enough and one without falls to a shorter
-		// line instead of being one cell short of the full one.
-		tiers := m.copyModeHelp(focusedWindow)
-		if len(tiers) == 0 {
-			return 0
-		}
-		return lipgloss.Width(renderCopyModeHelp(tiers[0], m.groundUI()))
-	}
 
 	// The meters reserve the room they will draw in, and nothing when they are
 	// off, which is the default. A flat 32 columns held for a readout the user

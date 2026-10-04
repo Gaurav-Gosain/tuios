@@ -120,7 +120,7 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
 	}
-	if err := second.WaitForText("Copy mode", uiTimeout); err != nil {
+	if err := second.WaitForText("y yank", uiTimeout); err != nil {
 		t.Fatalf("copy mode never opened: %v\n%s", err, second.Snapshot())
 	}
 	if err := second.SendKeys("g", "g"); err != nil {

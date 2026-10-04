@@ -7,7 +7,9 @@ Hints mode can also put labels on all panes at the same time. See
 
 ## Use it
 
-1. Press `Ctrl+B F`. The labels show and the rest of the pane goes dim.
+1. Press `Ctrl+B F`. The labels show and the rest of the pane goes dim. The
+   mode pill in the dock shows `HINTS`, and the other end of the dock shows
+   the keys.
 2. Type a label. tuios copies the text and closes hints mode.
 
 | Keys | What it does |
@@ -16,6 +18,7 @@ Hints mode can also put labels on all panes at the same time. See
 | the label with `Shift`, such as `A` | Copy the text and type it into the pane |
 | the label with `Ctrl`, such as `Ctrl+A` | Open a URL or a path |
 | `backspace` | Remove the last letter you typed |
+| `?` | Close hints mode and show all of its keys in the help |
 | `esc`, or the leader key | Close hints mode |
 | `q` | Close hints mode, when `q` is not a label letter |
 | `Ctrl+C`, `Ctrl+G` | Close hints mode, when `c` or `g` is not a label letter |

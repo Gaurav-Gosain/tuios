@@ -84,8 +84,10 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			Bindings: generateAgentBindings(registry, s),
 		},
 		{
-			Name:     "Copy Mode",
-			Bindings: generateCopyModeBindings(s),
+			// Hints mode's keys ride along here rather than in a tab of their
+			// own, for the reason the list keys ride in Modes below.
+			Name:     HelpCategoryCopyMode,
+			Bindings: append(generateCopyModeBindings(s), generateHintsBindings(registry, s)...),
 		},
 		{
 			Name: "Modes",
@@ -540,6 +542,40 @@ func generateCopyModeBindings(s *config.Settings) []HelpBinding {
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
 	}
+}
+
+// HelpCategoryCopyMode is the section listing copy mode's keys and hints
+// mode's. The ? key in hints mode opens the help on it, because the dock's
+// legend has room for only some of hints mode's keys on a narrow screen.
+const HelpCategoryCopyMode = "Copy Mode"
+
+// helpHintsPrefix starts every hints mode line of the Copy Mode section, so
+// HintsShowKeys can find the first of them.
+const helpHintsPrefix = "Hints: "
+
+// generateHintsBindings lists hints mode's keys. The keys that open it are
+// read from the config. The keys inside it are not bindings (see
+// handleHintsKey in internal/input).
+func generateHintsBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
+	const cat = HelpCategoryCopyMode
+	var bindings []HelpBinding
+	presses := config.PressesByAction(registry)
+	for _, open := range []struct{ action, desc string }{
+		{"hints", helpHintsPrefix + "label the text on the pane"},
+		{"hints_all_panes", helpHintsPrefix + "label the text on all panes"},
+	} {
+		if keys := presses[open.action]; len(keys) > 0 {
+			bindings = append(bindings, HelpBinding{Action: open.action, Keys: keys, Description: open.desc, Category: cat})
+		}
+	}
+	return append(bindings,
+		HelpBinding{Keys: []string{"label"}, Description: helpHintsPrefix + "copy the text the label is on", Category: cat},
+		HelpBinding{Keys: []string{"shift+label"}, Description: helpHintsPrefix + "copy the text and type it into the pane", Category: cat},
+		HelpBinding{Keys: []string{"ctrl+label"}, Description: helpHintsPrefix + "open the link or the file, or copy other text", Category: cat},
+		HelpBinding{Keys: []string{"backspace"}, Description: helpHintsPrefix + "remove the last letter you typed", Category: cat},
+		HelpBinding{Keys: []string{hintsHelpKey}, Description: helpHintsPrefix + "close hints and show these keys", Category: cat},
+		HelpBinding{Keys: []string{"esc", "q", s.LeaderKey}, Description: helpHintsPrefix + "close hints. q closes only when no label uses q", Category: cat},
+	)
 }
 
 // generateDebugBindings generates debug keybindings

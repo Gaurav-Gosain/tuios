@@ -171,7 +171,7 @@ func TestMultiCopyHelpFollowsTheLead(t *testing.T) {
 	m.FocusedWindow = 0
 	m.MultiCopy = &MultiCopy{IDs: []string{"wa", "wb"}, Format: config.MultiCopyFormatPlain,
 		Parked: map[string]bool{"wa": true}}
-	if help := hintsText(m.copyModeHelp(a)[0]); !strings.Contains(help, "hjkl extend") {
+	if help := hintsText(m.copyModeHelp(a)); !strings.Contains(help, "hjkl extend") {
 		t.Errorf("help %q does not follow the lead pane in visual mode", help)
 	}
 }

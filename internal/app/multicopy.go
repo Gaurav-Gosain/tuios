@@ -119,8 +119,9 @@ func (m *OS) EnterCopyModeFocused() {
 	}
 	if fw := m.GetFocusedWindow(); fw != nil {
 		m.ExitMultiCopyMode()
+		// No message says the keys: the dock's legend does, for as long as
+		// copy mode is open (see mode_legend.go).
 		m.enterCopyMode(fw)
-		m.ShowNotification("Copy mode (hjkl, q to exit)", "info", 2*m.Settings.NotificationDuration)
 	}
 }
 
@@ -151,8 +152,9 @@ func (m *OS) EnterMultiCopyMode() bool {
 		m.enterCopyMode(w)
 		mc.IDs = append(mc.IDs, w.ID)
 	}
+	// The mode pill says "MULTI" and the pane count, and the dock's legend
+	// says the keys, so no message repeats either over the legend.
 	m.MultiCopy = mc
-	m.ShowNotification(fmt.Sprintf("Multi copy mode: %d panes", len(panes)), "info", m.Settings.NotificationDuration)
 	return true
 }
 

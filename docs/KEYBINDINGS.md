@@ -144,9 +144,21 @@ opens a further menu. On a screen too narrow for every column, the
 descriptions are cut before any key is left out.
 
 The key hints at the foot of a panel stay on one row. When they do not fit,
-they shorten in steps: `ctrl+` becomes `^`, `alt+` becomes `M-` and `shift+`
-becomes `S-`; then labels are dropped from the last hint backwards, keeping the
-keys; then the last hints are dropped for `…`.
+they shorten in steps. First, `ctrl+` becomes `^`, `alt+` becomes `M-` and
+`shift+` becomes `S-`. Then the least important hints go, one whole hint at a
+time. The way out, such as `esc`, stays. Only when the most important hints
+still do not fit do their labels go, from the last hint back. A hint is never
+cut in the middle of a word.
+
+### Mode keys in the dock
+
+Copy mode, multi copy mode and hints mode show their keys at the right end of
+the dock while the mode is open. The keys follow the rule for panel footers
+above, so a narrow screen shows fewer keys and never part of one. The main
+action and the way out of the mode always show. In hints mode, `?` shows all of
+its keys in the help. A message that arrives while a mode is open shows in the
+place of the keys until the message goes. The dock component for the keys is
+`copy-help`.
 
 An empty list says why it is empty in the middle of the panel, with the one key
 worth pressing next under it. A list that is still loading draws nothing for
@@ -186,7 +198,8 @@ the errors and `A` copies the whole log.
 `Ctrl+B F` puts a short label on each URL, path, hash, address and number in
 the focused pane. Type a label to copy the text. Type it with `Shift` to copy
 the text and type it into the pane. Type it with `Ctrl` to open a URL or a
-path. `esc` closes. See [HINTS.md](HINTS.md) for the patterns and the
+path. `?` shows all of the keys of hints mode. `esc` closes. The dock shows
+the keys while the labels show. See [HINTS.md](HINTS.md) for the patterns and the
 `[hints]` settings. The action is `hints`, so you can bind it to a different
 key.
 

@@ -121,8 +121,6 @@ type hintsState struct {
 	// and dimmed holds the colours already worked out for it.
 	dim    int
 	dimmed map[[2]uint32]color.Color
-	// noticeID is the dock message that says the keys, taken down on close.
-	noticeID string
 }
 
 // HintsOpen reports whether hints mode is open on a pane that is still there,
@@ -272,15 +270,10 @@ func (m *OS) openHints(all bool) {
 		}
 		return
 	}
+	// The keys are not said in a message. The dock shows them as a legend
+	// for as long as the labels are up (see mode_legend.go).
 	m.hints = state
 	m.CancelCopyFlash()
-	// The keys are said while the labels are up and taken back when they go,
-	// so opening hints a few times does not queue a message per open.
-	before := len(m.Notifications)
-	m.ShowNotification("Type a label to copy. Shift+label types it. Ctrl+label opens it. Esc closes.", "info", m.Settings.NotificationDuration)
-	if len(m.Notifications) > before {
-		state.noticeID = m.Notifications[len(m.Notifications)-1].ID
-	}
 }
 
 // hintsWindows is every pane the all-panes form labels: the focused pane
@@ -417,16 +410,8 @@ func (m *OS) CloseHints() {
 	if m.hints == nil {
 		return
 	}
-	panes, notice := m.hints.panes, m.hints.noticeID
+	panes := m.hints.panes
 	m.hints = nil
-	if notice != "" {
-		for i, n := range m.Notifications {
-			if n.ID == notice {
-				m.Notifications = append(m.Notifications[:i], m.Notifications[i+1:]...)
-				break
-			}
-		}
-	}
 	for _, p := range panes {
 		if w := m.windowByID(p.windowID); w != nil {
 			w.ContentDirty = true
@@ -466,6 +451,30 @@ func (m *OS) hintsPaneWindow(p *hintsPane) *terminal.Window {
 		return nil
 	}
 	return w
+}
+
+// hintsHelpKey closes hints mode and opens the help on its keys. It is not a
+// letter, so no label alphabet can take it.
+const hintsHelpKey = "?"
+
+// HintsShowKeys is the hintsHelpKey: hints mode closes, and the help opens on
+// the section that lists all of its keys, scrolled to them. The dock's legend
+// shows only the keys that fit, and this is the way to the rest.
+func (m *OS) HintsShowKeys() {
+	m.CloseHints()
+	m.OpenHelpAtCategory(HelpCategoryCopyMode)
+	cats := m.HelpCategories()
+	if m.HelpCategory < 0 || m.HelpCategory >= len(cats) {
+		return
+	}
+	for i, b := range cats[m.HelpCategory].Bindings {
+		if strings.HasPrefix(b.Description, helpHintsPrefix) {
+			// The render clamps this to the last page, which holds
+			// every hints line when they are the last in the section.
+			m.HelpScrollOffset = i
+			return
+		}
+	}
 }
 
 // HintsUsesLetter reports whether r is one of the letters labels are made

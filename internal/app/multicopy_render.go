@@ -28,22 +28,21 @@ func (m *OS) multiCopyPill() (string, bool) {
 	return fmt.Sprintf(" MULTI %d ", total), true
 }
 
-// copyModeHelp is the dock's copy-mode help for the focused pane: the plain
-// copy-mode keys, or in multi copy mode the keys that act on the whole set
-// first, with the current format among them.
-func (m *OS) copyModeHelp(focused *terminal.Window) [][]overlay.Hint {
+// copyModeHelp is the copy-mode legend for the focused pane (see
+// mode_legend.go): the plain copy-mode keys, or in multi copy mode the keys
+// that act on the whole set first, with the current format among them.
+func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	mc := m.MultiCopy
 	if !mc.Has(focused.ID) {
-		return copyModeHelpTiers(focused.CopyMode.State)
+		return copyModeLegend(focused.CopyMode.State)
 	}
 	format := overlay.Hint{Key: "tab", Label: "format: " + mc.Format}
 	if mc.Save != nil {
-		return [][]overlay.Hint{
-			{
-				{Key: overlay.EnterKey(), Label: "save"}, format,
-				{Key: "ctrl+u", Label: "clear"}, {Key: "esc", Label: "cancel"},
-			},
-			{{Key: overlay.EnterKey(), Label: "save"}, format, {Key: "esc", Label: "cancel"}},
+		return []overlay.Hint{
+			{Key: overlay.EnterKey(), Label: "save", Priority: overlay.HintEssential},
+			format,
+			{Key: "ctrl+u", Label: "clear", Priority: overlay.HintOptional},
+			{Key: "esc", Label: "cancel"},
 		}
 	}
 	// The lead's state is what the keys mean, so it is what the help says.
@@ -52,24 +51,24 @@ func (m *OS) copyModeHelp(focused *terminal.Window) [][]overlay.Hint {
 		state = lead.CopyMode.State
 	}
 	if state == terminal.CopyModeSearch {
-		return copyModeHelpTiers(state)
+		return copyModeLegend(state)
 	}
-	yank := overlay.Hint{Key: "y", Label: "yank all"}
-	save := overlay.Hint{Key: "Y", Label: "save to file"}
+	yank := overlay.Hint{Key: "y", Label: "yank all", Priority: overlay.HintEssential}
+	save := overlay.Hint{Key: "Y", Label: "save to file", Priority: overlay.HintOptional}
+	format.Priority = overlay.HintEssential
 	if state == terminal.CopyModeNormal {
-		return [][]overlay.Hint{
-			{
-				{Key: "/", Label: "search all"}, {Key: "n/N", Label: "next"},
-				{Key: "v/V", Label: "select"}, yank, save, format, {Key: "q", Label: "quit"},
-			},
-			{{Key: "/", Label: "search all"}, {Key: "V", Label: "select"}, yank, format},
-			{yank, format},
+		return []overlay.Hint{
+			{Key: "/", Label: "search all"},
+			{Key: "n/N", Label: "next", Priority: overlay.HintOptional},
+			{Key: "v/V", Label: "select"},
+			yank, save, format,
+			{Key: "q/esc", Label: "quit", Priority: overlay.HintEssential},
 		}
 	}
-	return [][]overlay.Hint{
-		{{Key: "hjkl", Label: "extend"}, yank, save, format, {Key: "esc", Label: "cancel"}},
-		{yank, save, format},
-		{yank, format},
+	return []overlay.Hint{
+		{Key: "hjkl", Label: "extend", Priority: overlay.HintOptional},
+		yank, save, format,
+		{Key: "esc", Label: "cancel"},
 	}
 }
 
