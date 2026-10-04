@@ -196,6 +196,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// agent. The review verbs are proved in verb_review_test.go.
 	"review-diff#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-2 does not exist here"},
 	"send-review#0": {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
+	// No agent finished a turn in the fixture, so no pane has a checkpoint.
+	// The checkpoints are proved in e2e/tui/checkpoint_test.go.
+	"checkpoint-diff#0":    {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 2"},
+	"restore-checkpoint#0": {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 1"},
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},

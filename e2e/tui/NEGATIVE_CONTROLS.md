@@ -713,6 +713,25 @@ kitty steps for modifyOtherKeys, and the main-screen step for the kitty flags.
 | A kitty flag stack for each screen | `setAltScreenMode` in `internal/vt/csi_mode.go`: the `SetAltScreen` call cut | `TestPaneKittyFlagsPerScreen/standalone` and `/daemon`: the alt step reads `CSI 97 ; 5 u`. The main step passes | **caught** (2 of 2 run) |
 | The 1005 form writes a button of 128 or more (back, forward) as UTF-8, as xterm does | `mouseReport.encode` in `internal/vt/mouse_encode.go`: the button written as one raw byte again | unit `TestConform_MouseEncoding` ("UTF-8 form, the back button is UTF-8" and "forward with ctrl"). The X10 back button case passes, its positive half | **caught in `internal/vt`** |
 
+## Turn checkpoints and undo
+
+Each test in `checkpoint_test.go` writes the `tuios` calls it made and their
+output to `transcript.txt` in its artifact directory. Each control cut one
+call site from the current tree, built a binary, and ran the named test
+against it.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No checkpoint at the end of a turn | the session event sink: the `noteCheckpointEvent` call cut | `TestCheckpointUndoesATurn` ("after turn 1 the pane has 0 checkpoints, want 1") | **caught** |
+| No safety checkpoint before a restore | `verbRestoreCheckpoint`: the safety `SaveCheckpoint` call replaced by the newest checkpoint | `TestCheckpointUndoesATurn` (the restore names checkpoint 2 as the undo, and the list has no safety checkpoint 3) | **caught** |
+| The restore uses the person's index | `RestoreTree`: the temporary `GIT_INDEX_FILE` dropped from `read-tree` and `checkout-index` | `TestCheckpointUndoesATurn` (the index holds `notes.txt` after the restore) | **caught** |
+| A removed worktree keeps its checkpoints | `verbRemoveWorktree`: the `dropCheckpointsOf` call cut | `TestCheckpointsGoWithTheirWorktree` (both refs are still there) | **caught** |
+
+The positive halves are in the same tests: the refused restore while the
+agent works runs after restores that succeed, and the main checkout's
+checkpoint stays after the worktree's goes. The pruning to `keep` and the
+refusal of a checkpoint taken in another work tree have no end-to-end test.
+
 ## Copy-mode search columns in the scrollback
 
 Copy-mode search now reads the history as text cells and takes a match's

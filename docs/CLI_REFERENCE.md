@@ -1911,6 +1911,36 @@ tuios review note -s api-fan-retry-2 --hunk '@@ -88,4 +100,6 @@' api/retry.go 'w
 tuios review send -s api-fan-retry-2
 ```
 
+### `tuios checkpoint`
+
+List, read and restore the checkpoints of an agent's turns. The daemon saves
+a pane's git work tree each time its agent finishes a turn that changed a
+file. The index, `HEAD`, the branch and the stash do not change. See
+[Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
+
+**Usage:**
+```bash
+tuios checkpoint list [-s <session>] [-w <window>] [--json]
+tuios checkpoint diff [N] [-s <session>] [-w <window>] [--stat] [--path <path>]... [--context <n>] [--json]
+tuios checkpoint restore N [-s <session>] [-w <window>] [--force] [--json]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session of the pane (default: this pane's, else the most recently active)
+- `-w, --window <target>`: The pane, by name or ID (default: the focused pane)
+- `--stat` (`diff`): The list of changed files with their counts, without the diff
+- `--path <path>` (`diff`): Only this path, relative to the repository root. Repeatable
+- `--context <n>` (`diff`): Lines of context around each change, 0 to 20 (default 3)
+- `--force` (`restore`): Restore while the agent is working or waiting on a prompt
+- `--json`: Output the verb result as JSON
+
+`checkpoint list` prints one row per checkpoint: its number, the turn, the
+agent state, the time, the commit and the label. `checkpoint diff N` shows
+what turn N changed, against the checkpoint before it. Without N it shows the
+newest. `checkpoint restore N` saves the work tree as a safety checkpoint, then
+puts the files back as checkpoint N holds them. It prints the number of the
+safety checkpoint. Restore that number to undo the restore.
+
 ### `tuios set-agent-state`
 
 Report a pane's agent state so the session can show which panes need

@@ -224,6 +224,10 @@ type Daemon struct {
 	// review_notes.go.
 	reviewNotes reviewNoteStore
 
+	// checkpoints saves a pane's work tree when its agent finishes a turn.
+	// Its zero value is on. See checkpoints.go.
+	checkpoints checkpointer
+
 	// promptStallOverride replaces promptStallDefault when set. Only tests set
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration
@@ -704,6 +708,10 @@ type DaemonConfig struct {
 	// QueueMax is [agents.queue] max: how many messages one pane's delivery
 	// queue holds. Zero means the default. See agent_queue.go.
 	QueueMax int
+	// Checkpoints is [agents.checkpoints]: whether a pane's work tree is
+	// saved when its agent finishes a turn, and how many are kept. The zero
+	// value is on with the default keep. See checkpoints.go.
+	Checkpoints config.CheckpointsConfig
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
@@ -739,6 +747,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetLinkPolicies(cfg.LinkPolicies)
 	d.manager.SetPanePermissions(cfg.Permissions)
 	d.SetQueueMax(cfg.QueueMax)
+	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
@@ -954,6 +963,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)
+		// A finished turn in a git work tree gets a checkpoint, taken off
+		// this path. With the agent features off no turn finishes.
+		if !d.agentsOff.Load() {
+			d.noteCheckpointEvent(s, ev)
+		}
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.

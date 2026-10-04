@@ -16,7 +16,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `no_shell_integration`, `not_at_prompt`, `confirm_required`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
-`repo_not_found`, `not_repo`, `no_notes`, `queue_full`,
+`repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `queue_full`,
 `risk_unacknowledged`, `agents_disabled`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
@@ -40,6 +40,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `agents_disabled` | The person turned the agent features off with `[agents] enabled = false`, and the verb is one of them. Nothing was done. Do not retry. Tell the person. |
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
 | `no_notes` | From `send-review`: no unsent notes. Add one with `tuios review note`, or name sent ones with `--id` to send them again. |
+| `no_checkpoint` | From `checkpoint-diff` and `restore-checkpoint`: the pane has no checkpoint by that number. The hint lists the ones it has. Nothing was changed. |
 | `forbidden` | Your pane's grants (`tuios --skill grants`), a link's policy on another machine, or sending as `human` from a pane. The message names what was needed. Tell the person; do not look for another way. |
 | `not_human` | Only the person may do this: `dismiss-attention`, `respond` (unless your pane holds `respond`) and `reply-approval`. Change your own state, or ask the person. |
 | `prompt_changed` | The prompt moved or was answered before `respond` landed. Nothing was pressed. |

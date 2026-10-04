@@ -208,6 +208,7 @@ may do there; answering prompts is off by default. See
 - [Harness integrations](#harness-integrations)
 - [Headless agents over a protocol](#headless-agents-over-a-protocol)
 - [Typing a prompt](#typing-a-prompt)
+- [Turn checkpoints](#turn-checkpoints)
 - [Environment](#environment)
 - [Alerts](#alerts)
 - [Who can act as the person](#who-can-act-as-the-person)
@@ -3708,6 +3709,66 @@ Who acts:
 - Reviewing a pane on another machine, or from a client attached to another
   machine's session, is refused in the dock before anything is asked: attach
   there and review it there.
+
+## Turn checkpoints
+
+The daemon saves the work tree of an agent's pane at the end of each turn.
+You can read what one turn changed, and you can undo it.
+
+```bash
+tuios checkpoint list -w build            # one row per saved turn
+tuios checkpoint diff -w build 2          # what turn 2 changed
+tuios checkpoint restore -w build 1       # put the files back as turn 1 left them
+```
+
+The verbs are `list-checkpoints`, `checkpoint-diff` and `restore-checkpoint`
+([protocol.md](protocol.md#list-checkpoints)).
+
+**When a checkpoint is taken.** A pane goes from `working` to `done`,
+`idle` or `needs_input`. A pane can also go to `unknown` at the end of a
+counted turn (see [Finished turns](#finished-turns)). The pane's directory
+must be in a git work tree, found as for `review-diff`. The daemon then saves
+the work tree as a commit under `refs/tuios/checkpoints/<window id>/<n>`. A
+turn that changed no file since the last checkpoint gets no checkpoint.
+
+**What a checkpoint holds.** Tracked files as they are on disk, and
+untracked files that git does not ignore. Ignored files are not in it. The
+commit's parent is `HEAD` at that time. The message records the turn number,
+the time, the agent state and a short label. The label is the turn's prompt,
+or the line the turn ended with, or the state's message.
+
+**What does not change.** The daemon writes the tree through a temporary
+index. Your index, `HEAD`, your branch and the stash stay as they are. Git
+does not push `refs/tuios`, because no default refspec names it.
+
+**Restore.** `checkpoint restore N` first saves the work tree as a `safety`
+checkpoint. To undo the restore, restore that checkpoint. Then the daemon
+writes the files that differ and removes the files that checkpoint N does
+not have. It does not touch ignored files, the index or `HEAD`. `git status`
+then shows the restored files as changes. The restore stops while the agent
+is `working` or `needs_input`, because the agent would write over the files.
+Wait for the turn to end, or use `--force`.
+
+**Diff.** `checkpoint diff N` compares checkpoint N with the pane's checkpoint
+before it. The first checkpoint compares with `HEAD` at the time it was
+taken. The caps of `review-diff` apply.
+
+**Cost and limits.** The git commands run off the daemon's event path, one
+at a time, with a limit of 30 seconds each. On a work tree of 50,000 files a
+checkpoint takes about 100 ms. Each pane keeps the newest 50 checkpoints.
+Removing a worktree with `worktree rm` or `fan keep` deletes the checkpoints
+taken in it. Checkpoints of a pane on another machine are not available here.
+Attach to that machine to use them.
+
+```toml
+[agents.checkpoints]
+enabled = true   # set false to take no checkpoints
+keep = 50        # checkpoints per pane, 1 to 1000
+```
+
+**Grants.** From a pane, `list-checkpoints` and `checkpoint-diff` need
+`read`. `restore-checkpoint` needs `write`. A pane can restore only a pane
+that holds no grant it does not hold.
 
 ## Environment
 

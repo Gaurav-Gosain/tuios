@@ -161,6 +161,30 @@ or `v` in the Inbox), and compares a fan's attempts there. Notes they leave or
 send there arrive as "from the person"; the notes you left show under their
 lines, labelled as your pane's.
 
+### Turn checkpoints: undo a turn
+
+```sh
+tuios checkpoint list -s api-fan-add-retry-backoff-http-2
+tuios checkpoint diff -s api-fan-add-retry-backoff-http-2 3
+tuios checkpoint restore -s api-fan-add-retry-backoff-http-2 2
+```
+
+When an agent's turn ends (`working` to `done`, `idle` or `needs_input`) and
+its pane is in a git work tree, the daemon saves the work tree as a
+checkpoint: a commit under `refs/tuios/checkpoints/<window id>/<n>`. It holds
+tracked and untracked files, not ignored ones. The index, `HEAD`, the branch
+and the stash do not change. A turn that changed no file gets no checkpoint.
+`checkpoint list` (`list-checkpoints`) shows each one with its turn, state and
+label (the prompt). `checkpoint diff N` (`checkpoint-diff`) shows what turn N
+changed. `checkpoint restore N` (`restore-checkpoint`) first saves the work
+tree as a `safety` checkpoint, then puts the files back as N holds them.
+Restore the safety checkpoint to undo it. A restore is refused with
+`not_ready` while the agent is `working` or `needs_input`. `--force` overrides
+it. From a pane, the list and the diff need `read`, and a restore needs `write`
+on a pane that holds nothing you do not. Checkpoints work on this machine's
+panes only. `[agents.checkpoints]` turns them off or sets how many a pane
+keeps (50).
+
 ## One agent beside you: start-agent
 
 `start-agent` opens a pane with an agent in the session you are in and returns

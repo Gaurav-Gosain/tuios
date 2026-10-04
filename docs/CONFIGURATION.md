@@ -447,6 +447,10 @@ test_patterns = ["go test", "pytest"]
 
 [agents.queue]
 max = 8
+
+[agents.checkpoints]
+enabled = true
+keep = 50
 ```
 
 - `hold_plans` also hands a plan an agent in plan mode asks to have approved
@@ -483,6 +487,11 @@ max = 8
   reads it at start and again when the file changes; a queue already longer
   keeps what it holds. The queue is built: see
   [AGENT_STATE.md](AGENT_STATE.md#queued-messages).
+- `[agents.checkpoints]` saves the git work tree of an agent's pane each time
+  the agent finishes a turn that changed a file (`tuios checkpoint`).
+  `enabled` is true by default. `keep` is how many checkpoints one pane keeps:
+  50 by default, at most 1000. The daemon reads both at start and again when
+  the file changes. See [Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
 
 One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long
 an agent row rests (idle, unknown, or done and already seen) before the rail

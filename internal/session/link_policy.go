@@ -193,6 +193,13 @@ var verbCapabilities = map[string][]string{
 	"keep-fan":       {config.LinkAllowWrite},
 	"verify-fan":     {config.LinkAllowOpen, config.LinkAllowWrite},
 	"mark-attention": {config.LinkAllowRespond},
+
+	// The checkpoints. The listing carries states and the agent's prompts,
+	// which list reaches. The diff carries file contents, and a restore
+	// writes files, so both need write, as review-diff does.
+	"list-checkpoints":   {config.LinkAllowList},
+	"checkpoint-diff":    {config.LinkAllowWrite},
+	"restore-checkpoint": {config.LinkAllowWrite},
 }
 
 // msgCapabilities is what each binary message needs on a link connection.

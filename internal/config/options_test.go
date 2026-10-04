@@ -32,6 +32,7 @@ var optionWalkSkips = map[string]string{
 	"agents.permissions":    "what a pane may do through tuios is not for a pane to change over the control protocol",
 	"agents.recap":          "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.queue":          "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.checkpoints":    "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.herdr_protocol": "file-plane config the daemon reads from the file, like [hosts]",
 }
 

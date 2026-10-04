@@ -2072,6 +2072,8 @@ func init() {
 	// The verbs of the agent review, triage, queue and approval work, kept in
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(verbRegistry, agentWorkVerbs())
+	// The checkpoint verbs. See verb_checkpoint.go.
+	maps.Copy(verbRegistry, checkpointVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

@@ -129,6 +129,10 @@ type Options struct {
 	// AgainstDir is another worktree of the same repository whose working
 	// state is the old side instead of Base.
 	AgainstDir string
+	// Tree, when set, is the new side instead of Dir's working state: a tree
+	// written earlier, such as a checkpoint's. Base.SHA may then be a tree
+	// too. Dir is still where git runs.
+	Tree string
 	// Paths keeps only these paths, relative to the worktree's root. Each is
 	// taken literally, never as a pattern.
 	Paths []string
@@ -146,9 +150,13 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	if lim.Files <= 0 {
 		lim = DefaultLimits
 	}
-	tree, err := worktree.SnapshotTree(ctx, opt.Dir)
-	if err != nil {
-		return nil, err
+	tree := opt.Tree
+	var err error
+	if tree == "" {
+		tree, err = worktree.SnapshotTree(ctx, opt.Dir)
+		if err != nil {
+			return nil, err
+		}
 	}
 	d := &Diff{TreeSHA: tree, Files: []File{}}
 	from := opt.Base.SHA
@@ -179,7 +187,7 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	if err != nil {
 		return nil, err
 	}
-	if opt.AgainstDir == "" {
+	if opt.AgainstDir == "" && opt.Tree == "" {
 		markUntracked(ctx, opt.Dir, files, spec)
 	}
 	for i := range files {

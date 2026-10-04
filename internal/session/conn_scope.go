@@ -236,6 +236,14 @@ var verbScopes = map[string]scopeKind{
 	"verify-fan":     scopeLaunch,
 	"keep-fan":       scopeDeny,
 	"mark-attention": scopeDeny,
+
+	// From the checkpoint work (verb_checkpoint.go). Listing and reading a
+	// pane's checkpoints are reads of its session. A restore writes the
+	// files the pane's agent works on, which the handler holds to the panes
+	// the caller could type into.
+	"list-checkpoints":   scopeRead,
+	"checkpoint-diff":    scopeRead,
+	"restore-checkpoint": scopeWrite,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.

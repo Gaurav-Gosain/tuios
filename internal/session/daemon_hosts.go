@@ -105,6 +105,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
+	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
 	if byPerson {
 		d.manager.SetPanePermissions(perms)

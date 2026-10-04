@@ -36,6 +36,9 @@ type AgentsConfig struct {
 	// Queue is the [agents.queue] table: messages waiting to be typed to an
 	// agent when it comes to rest. See agents_work.go.
 	Queue QueueConfig `toml:"queue,omitempty"`
+	// Checkpoints is the [agents.checkpoints] table: the state of a pane's
+	// git work tree saved at the end of each agent turn. See agents_work.go.
+	Checkpoints CheckpointsConfig `toml:"checkpoints,omitempty"`
 	// HerdrProtocol says which panes are told about the socket tuios accepts
 	// herdr's pane state protocol on, which Crush and other harnesses report
 	// to by themselves: "always" (the default) for every pane, the way herdr
