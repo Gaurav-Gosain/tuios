@@ -161,64 +161,17 @@ or `v` in the Inbox), and compares a fan's attempts there. Notes they leave or
 send there arrive as "from the person"; the notes you left show under their
 lines, labelled as your pane's.
 
-### Turn checkpoints: undo a turn
+### Undo a turn, and ship the one you keep
+
+Each finished turn of an agent in a git work tree leaves a checkpoint you can
+diff and restore (`tuios --skill checkpoints`). `tuios ship` commits, merges,
+pushes and opens a pull request for an attempt (`tuios --skill ship`):
 
 ```sh
 tuios checkpoint list -s api-fan-add-retry-backoff-http-2
-tuios checkpoint diff -s api-fan-add-retry-backoff-http-2 3
-tuios checkpoint restore -s api-fan-add-retry-backoff-http-2 2
-```
-
-When an agent's turn ends (`working` to `done`, `idle` or `needs_input`) and
-its pane is in a git work tree, the daemon saves the work tree as a
-checkpoint: a commit under `refs/tuios/checkpoints/<window id>/<n>`. It holds
-tracked and untracked files, not ignored ones. The index, `HEAD`, the branch
-and the stash do not change. A turn that changed no file gets no checkpoint.
-`checkpoint list` (`list-checkpoints`) shows each one with its turn, state and
-label (the prompt). `checkpoint diff N` (`checkpoint-diff`) shows what turn N
-changed. `checkpoint restore N` (`restore-checkpoint`) first saves the work
-tree as a `safety` checkpoint, then puts the files back as N holds them.
-Restore the safety checkpoint to undo it. A restore is refused with
-`not_ready` while the agent is `working` or `needs_input`. `--force` overrides
-it. From a pane, the list and the diff need `read`, and a restore needs `write`
-on a pane that holds nothing you do not. Checkpoints work on this machine's
-panes only. `[agents.checkpoints]` turns them off or sets how many a pane
-keeps (50).
-
-### Shipping an attempt: commit, merge, push, pull request
-
-```sh
 tuios ship commit -s api-fan-add-retry-backoff-http-2 -m 'Add a retry with backoff'
-tuios ship merge -s api-fan-add-retry-backoff-http-2
-tuios ship pr -s api-fan-add-retry-backoff-http-2 --draft
-tuios ship status -s api-fan-add-retry-backoff-http-2 --refresh
 tuios fan keep api-fan-add-retry-backoff-http-2 --merge --squash
 ```
-
-`ship commit` (`ship-commit`) stages everything in the pane's work tree and
-commits it on its branch with the person's own git identity, signing and
-hooks. The message is yours, and nothing is added. Without `-m` it is the pane's
-last prompt. It is refused with `not_ready` while the agent works, and with
-`nothing_to_commit` on a clean tree. `ship merge` (`ship-merge`) merges the
-branch into its base in the main checkout. A conflict is undone and fails with
-`merge_conflict`, the files in the hint. A main checkout with changes, or on
-another branch, is `checkout_dirty`. Nothing is forced. `fan keep --merge`
-merges the kept attempt first, and removes nothing when that fails.
-
-`ship push` (`ship-push`) and `ship pr` (`ship-pr`) send work off the machine.
-The first call sends nothing: it is `confirm_required`, with what would be
-sent in `available` and a token in `confirm`. From a pane, or on a restricted
-connection, the call with the token then puts `Push BRANCH (SHA) to REMOTE?` in the
-person's Inbox and waits for `allow`. A timeout is `not_ready` with a
-`request_id` to wait on again. A `deny` is `forbidden`: do not ask again
-unless the person tells you to. `ship pr` runs the person's `gh`.
-`gh_unavailable` means gh is missing or not logged in, which only the person
-can fix. From a pane, `ship-commit` and `ship-merge` need `write` on a pane
-that holds nothing you do not, and `ship-status` needs `read`.
-
-The pull request shows on the session's agent rows in the rail (`PR #12 open
-pass`) and as `pr` in `worktree ls --json` and `ls --json`. The daemon reads
-an open one again every minute while a client is attached.
 
 ## One agent beside you: start-agent
 

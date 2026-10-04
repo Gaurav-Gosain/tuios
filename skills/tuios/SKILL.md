@@ -1,6 +1,6 @@
 ---
 name: tuios
-description: Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, the Inbox and approvals, mail, other machines, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, errors and recipes.
+description: Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, turn checkpoints, shipping a worktree, the Inbox and approvals, push notifications, mail, other machines, clients, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, agent features off, errors and recipes.
 ---
 
 # Driving tuios from a pane
@@ -268,6 +268,8 @@ inbox` covers the Inbox, `ask-human` and approvals.
   call. Both describe this build exactly.
 - Read a whole error before retrying. Failures name the cause and the fix, and
   retrying a refusal unchanged fails the same way (`tuios --skill errors`).
+- An `agents_disabled` error means the person turned agent features off. Stop
+  using agent verbs and tell them (`tuios --skill agents-off`).
 
 ## Topics
 
@@ -279,12 +281,17 @@ Print one with `tuios --skill <topic>`:
 | `state` | Reporting state, harness hooks, metadata, sources and precedence, detection, resuming after a restart |
 | `inbox` | The person's Inbox, `ask-human`, reading a blocked prompt, approvals answered from the Inbox |
 | `mail` | Messages between agents, threads, attachments, the stash, `ask-agent` in full, loops, trust |
-| `fleet` | Selectors, worktrees, `fan`, comparing and reviewing attempts, turn checkpoints and undo, shipping (commit, merge, push, pull request), `start-agent`, headless agents over ACP or the Codex app-server |
+| `fleet` | Selectors, worktrees, `fan`, comparing and reviewing attempts, `start-agent`, headless agents over ACP or the Codex app-server |
+| `checkpoints` | The checkpoint of each finished turn: list, diff, restore and undo the restore |
+| `ship` | Commit, merge, push and open a pull request for a worktree, and the Inbox question a push asks |
 | `hosts` | Other machines: hosts, remote sessions, hosted panes, agents and worktrees there |
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
+| `clients` | `list-clients`: which client shows which session, and the `client-session-changed` event |
 | `mcp` | tuios as an MCP server: setup, tools, scope |
 | `tmux` | The tmux shim for tools that only drive tmux |
 | `herdr` | herdr's command line and socket, for tools built for herdr |
+| `notify` | Push notifications from the Inbox to the person's phone, and `notify test` |
+| `agents-off` | What works and what fails with `agents_disabled` when the person turns agent features off |
 | `grants` | Pane grants: what a pane may do, and giving a helper less |
 | `config` | Options, appearance, themes, glyphs, the dock, hooks and keybindings |
 | `errors` | Every error code and its remedy, and a daemon that is not running |

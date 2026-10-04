@@ -51,7 +51,7 @@ sent OSC 9, 777 or 99), `command-started`, `command-finished` (with `exit_code`,
 `client-session-changed` carries `client_id`, the kernel peer `pid`, and the
 `session` the client entered or left. `attached` is true when entering and false
 when leaving, including a disconnect while attached. Pair it with
-`tuios list-clients --json` to follow daemon connections. A session rename
+`tuios list-clients --json` to follow daemon connections (`tuios --skill clients`). A session rename
 sends one with the new name for each client in the session.
 `tuios list-verbs subscribe` lists them all. `agent-activity` (one entry of
 a pane's activity ring, as `entry`: a prompt, a tool call, its result or a

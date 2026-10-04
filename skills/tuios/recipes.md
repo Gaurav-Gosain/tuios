@@ -180,8 +180,9 @@ loop.
 ## An alert on your phone
 
 The `[notify]` table sends an Inbox item to ntfy, Pushover or a webhook, with
-no script. It sends only while nobody types at an attached client, and the
-link opens tuios-web on the item. `tuios notify test` checks each provider:
+no script. It holds a notification while the person types at an attached
+client, and the link opens tuios-web on the item. `tuios notify test` checks
+each provider (`tuios --skill notify`):
 
 ```toml
 [notify]

@@ -18,17 +18,22 @@ and every `tmux` call from that shell goes to the shim.
 A tmux window is a workspace (`@N`) and a pane is a tuios window (`%N`). It
 answers `split-window`, `new-window`, `send-keys`, `capture-pane -p`,
 `display-message -p`, `list-panes`, `list-windows`, `list-sessions`,
-`has-session`, `kill-pane`, `kill-window`, `select-pane`, `last-pane`,
-`select-window`, `next-window`, `previous-window`, `rename-window`,
-`rename-session`, `break-pane`, `join-pane`, `respawn-pane -k`,
-`display-popup` (so `fzf --tmux` works), `run-shell`, `if-shell`, `wait-for`,
-the buffer commands and `show-environment`/`set-environment`. A command can be
-shortened to any prefix that names one command, and formats take tmux's
-modifiers (`#{=10:pane_title}`, `#{?cond,a,b}`, `#{s/a/b/:...}`). Layout and
-style commands succeed and do nothing, since tuios owns the layout. The one option it honours is
-`set -g window-size smallest|largest|latest`, the session's
-`daemon.window_size`. Commands that start, attach or end a
-session are refused. Anything else fails rather than pretending.
+`list-clients`, `has-session`, `kill-pane`, `kill-window`, `select-pane`,
+`last-pane`, `select-window`, `next-window`, `previous-window`,
+`rename-window`, `rename-session`, `break-pane`, `join-pane`, `move-pane`,
+`respawn-pane -k`, `display-popup` (so `fzf --tmux` works), `run-shell`,
+`if-shell`, `wait-for` (channels and locks), the paste buffer commands,
+`show-environment`, `set-environment` and `show-options`. A command can be
+shortened to any prefix that names one command, and formats take tmux 3.4's
+modifiers (`#{=10:pane_title}`, `#{?cond,a,b}`, `#{s/a/b/:...}`).
+
+Layout and style commands succeed and do nothing, since tuios owns the layout.
+Split flags such as `-h` and `-l` are accepted and do not change where a pane
+goes. The one option it sets is `window-size smallest|largest|latest`, the
+session's `daemon.window_size`. `swap-pane` is refused. `new-session -d` works
+outside a pane and is refused inside one. `tmux -C` and `-CC` start a control
+client, whose `%output` lines carry no bytes: read the pane with
+`capture-pane`. Anything else fails rather than pretending.
 
 Ask it one question directly, from any tuios pane:
 

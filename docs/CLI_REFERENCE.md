@@ -260,8 +260,8 @@ agent loads only what it needs:
   work and waiting for it, reporting its own state, talking to other agents and
   the person safely, and a table of the topics.
 - `tuios --skill TOPIC` prints one topic: `panes`, `state`, `inbox`, `mail`,
-  `fleet`, `hosts`, `events`, `mcp`, `tmux`, `herdr`, `grants`, `config`,
-  `errors` or `recipes`. `recipes` has end-to-end recipes: a fleet of agents, answering
+  `fleet`, `checkpoints`, `ship`, `hosts`, `events`, `clients`, `mcp`, `tmux`,
+  `herdr`, `notify`, `agents-off`, `grants`, `config`, `errors` or `recipes`. `recipes` has end-to-end recipes: a fleet of agents, answering
   from the Inbox, approvals, agents on another machine, MCP setup, the tmux
   shim, scoped grants, a conductor pane and a phone alert.
 - `tuios --skill all` prints the core and every topic.

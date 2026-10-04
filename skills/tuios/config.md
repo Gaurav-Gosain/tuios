@@ -37,7 +37,7 @@ something for someone: there is a control they can adjust.
 Tables are not scalar options and are edited in config.toml:
 `[appearance.sidebar.agent_row]` (which tokens an agent row draws, their looks
 and value rules; `now`, `context`, `subagents` and `prompt` read what the hooks
-and status line feed, and `meta` leaves those keys out), `[dock]`, `[hooks]`, `[hosts]`, `[agents.approvals]`,
+and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[hosts]`, `[notify]`, `[agents.approvals]`, `[agents.checkpoints]`,
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 
@@ -48,11 +48,9 @@ command is refused. Do not edit config.toml to widen what you hold: it waits
 for the person, and the change tells them what you did.
 
 `agents.enabled` is the person's switch for every agent feature. When it is
-false, every agent verb fails with `agents_disabled`: agent state, mail, the
-Inbox, approvals, `start-agent` and `fan`. A pane without `respond` then types
-only into a pane it opened or a pane whose shell is at its prompt. Only the
-person can change this option: `set-config` from a pane gets `forbidden`. If an agent verb fails with
-`agents_disabled`, tell the person and stop.
+false, every agent verb fails with `agents_disabled`. Only the person can
+change it: `set-config` from a pane gets `forbidden`. `tuios --skill
+agents-off` says what still works.
 
 `daemon.window_size` sets the size of a session with more than one client:
 `smallest` (the default), `largest`, or `latest`, the client that last had
@@ -69,6 +67,36 @@ on the workspace. `hints.builtins`, `hints.alphabet`, `hints.open`,
 `hints.dim` and `hints.all_panes` are options. `hints.patterns`
 is a list of Go regular expressions in the file. It is for the person at the
 keyboard: to read a pane, use `capture-pane`.
+
+## What the person sees
+
+These are for the person at the keyboard. Know them so you can answer a
+question about the screen. Do not change them unless the person asks.
+
+- `appearance.max_fps` is the highest frame rate the client draws at: 10 to
+  240, `0` for 60, or `auto` for the display's refresh rate.
+- The spotlight (`B` in window mode, `Ctrl+B B` anywhere) dims the screen
+  outside a beam. The dock shows a Spotlight chip with the key that turns it
+  off. `[spotlight]` options set its size and dimming. It changes nothing a
+  pane prints, so `capture-pane` is unaffected.
+- Copy mode, multi copy mode and hints mode show a legend of their
+  keys in the dock while the mode is open.
+- A dock message that is too long ends with `more`. A click on it, or
+  `Ctrl+B N` for the last message, opens the message view with the whole text.
+  A notice you post with `send-agent-message` to the session can show there.
+- `Ctrl+click` on a link opens it. `appearance.links`,
+  `appearance.link_click` and `appearance.link_opener` set which links,
+  which click and which opener.
+- The rail's custom section shows the rows a command prints. The person sets
+  it in `[appearance.sidebar.custom]` in the file, and places it with
+  `appearance.sidebar.sections`. `set-config` cannot set its command.
+  `tuios refresh-dock rail/custom` runs it again, and `list-dock-components`
+  lists it as `rail/custom`.
+- In the rail's files section, `Y` or the folder menu's Copy path copies a
+  path to the person's clipboard.
+- `Ctrl+B =` (or `tuios set-layout --equalize`) gives tiled panes equal
+  shares. In the master-stack layout it puts the master back at its
+  configured ratio.
 
 ## Ricing: the four surfaces
 

@@ -10,7 +10,7 @@ it always matches the daemon you run.
 For Claude Code, Codex, Gemini CLI and opencode, tuios registers it for you:
 
 ```sh
-tuios integration install claude-code --mcp        # read-only tools
+tuios integration install claude-code --mcp        # tools that do not type into panes
 tuios integration install claude-code --mcp-write  # plus the tools that type
 tuios integration status claude-code
 ```

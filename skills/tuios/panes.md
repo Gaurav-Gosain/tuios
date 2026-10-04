@@ -318,6 +318,11 @@ tuios set-layout -s work --master-position center --masters 1
 tuios focus-window -s work --direction left
 ```
 
+`--equalize` gives every tiled pane an equal share. In the master-stack layout
+it puts the master back at its configured ratio and shares the rest equally.
+`tuios list-clients` says whether a client shows the session
+(`tuios --skill clients`).
+
 Reading, writing, waiting, creating and moving never need a client, and neither
 does anything to do with agents.
 
