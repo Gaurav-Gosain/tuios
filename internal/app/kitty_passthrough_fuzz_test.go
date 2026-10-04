@@ -64,6 +64,8 @@ var (
 	hostAPCBody = regexp.MustCompile(`^[A-Za-z0-9=,\-]*(;[A-Za-z0-9+/=]*)?$`)
 	hostCUP     = regexp.MustCompile(`^\x1b\[[0-9]+;[0-9]+H`)
 	apcImageID  = regexp.MustCompile(`(?:^|,)i=([0-9]+)`)
+	// apcFreesImage matches a delete that frees the image data, d=I.
+	apcFreesImage = regexp.MustCompile(`^a=d,(?:.*,)?d=I(?:,|$)`)
 )
 
 // hostTokens splits host output into the sequences the passthrough may send
@@ -207,8 +209,10 @@ func FuzzKittyPassthrough(f *testing.F) {
 		//
 		// A closed pane's ids below lowHostIDs go back to a free list and the
 		// next allocation takes one from there instead of counting a new id
-		// out. So a close gives up ownership of the ids it freed, and an id
-		// that left the free list during a step belongs to that step's pane.
+		// out. So a close gives up ownership of a freed id once it has sent
+		// the host a d=I delete for it, and an unowned id that left the free
+		// list during a step belongs to that step's pane. An id freed without
+		// that delete keeps its owner, so reusing it fails the target.
 		owner := map[uint64]string{}
 		freeIDs := func() map[uint32]struct{} {
 			kp.mu.Lock()
@@ -223,7 +227,9 @@ func FuzzKittyPassthrough(f *testing.F) {
 			}
 			for id := range freeBefore {
 				if _, still := kp.freeLowIDs[id]; !still {
-					owner[uint64(id)] = win
+					if _, taken := owner[uint64(id)]; !taken {
+						owner[uint64(id)] = win
+					}
 				}
 			}
 			for _, h := range kp.imageIDMap[win] {
@@ -268,12 +274,16 @@ func FuzzKittyPassthrough(f *testing.F) {
 				if bad != "" {
 					t.Fatalf("step %d (%s of %s): host got %s", n, st.op, win[:6], bad)
 				}
+				deleted := map[uint64]bool{}
 				for _, body := range apcs {
 					m := apcImageID.FindStringSubmatch(body)
 					if m == nil {
 						continue
 					}
 					hostID, _ := strconv.ParseUint(m[1], 10, 32)
+					if apcFreesImage.MatchString(body) {
+						deleted[hostID] = true
+					}
 					got := owner[hostID]
 					// A refresh redraws every pane, so an id there only has to
 					// be one tuios allocated. A close or clear is about one pane.
@@ -282,8 +292,13 @@ func FuzzKittyPassthrough(f *testing.F) {
 							n, st.op, win[:6], hostID, got, body)
 					}
 				}
+				// A freed id stops being the pane's only once the host has
+				// been told to delete it. An id freed without that delete
+				// keeps its owner, so handing it to another pane fails.
 				for id := range freeIDs() {
-					delete(owner, uint64(id))
+					if deleted[uint64(id)] {
+						delete(owner, uint64(id))
+					}
 				}
 				continue
 			}
