@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -83,5 +84,30 @@ func TestAPCPayloadCostsAboutACopy(t *testing.T) {
 	t.Logf("one kitty frame: %d ns through the parser, %d ns to copy", apc, cp)
 	if apc > 40*cp {
 		t.Errorf("the parser takes %d ns for an APC payload, over 40 times the %d ns of a copy", apc, cp)
+	}
+}
+
+// TestKittyFrameCopiesPayloadOnce is the allocation budget for a kitty frame
+// with a passthrough reading it, as the client has: one copy of the sequence
+// for the passthrough, which RawPayload shares, and the decoded image, about
+// three quarters of the base64. RawPayload used to be a second copy, three
+// times the frame in all.
+func TestKittyFrameCopiesPayloadOnce(t *testing.T) {
+	data := kittyFrame()
+	e := vt.NewEmulator(80, 24)
+	e.SetKittyPassthroughFunc(func(*vt.KittyCommand, []byte) {})
+	_, _ = e.Write(data)
+	const frames = 4
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range frames {
+		_, _ = e.Write(data)
+	}
+	runtime.ReadMemStats(&after)
+	alloced := (after.TotalAlloc - before.TotalAlloc) / frames
+	per := float64(alloced) / float64(len(data))
+	t.Logf("one kitty frame of %d bytes allocates %d bytes (%.2fx)", len(data), alloced, per)
+	if per > 2.4 {
+		t.Errorf("a kitty frame allocates %.2f times its size, want at most 2.4", per)
 	}
 }

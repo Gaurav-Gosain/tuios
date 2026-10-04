@@ -164,6 +164,8 @@ type Terminal interface {
 	SetCallbacks(cb Callbacks)
 	GetCallbacks() Callbacks
 	SetScreenClearFunc(f func())
+	// SetKittyPassthroughFunc installs the reader of every graphics
+	// command. fn must not write to rawData: cmd.RawPayload shares its bytes.
 	SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte))
 	// SetKittyHeaderOnly says whether the passthrough acts on the control
 	// keys alone, so the payload is not decoded. See ParseKittyHeader.

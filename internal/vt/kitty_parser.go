@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 // ParseKittyCommand parses the body of a kitty graphics APC, the bytes after
@@ -13,7 +14,7 @@ import (
 // the command is returned with PayloadErr set and no Data or FilePath, so the
 // caller can still answer the guest and drop the transmission it was part of.
 func ParseKittyCommand(data []byte) (*KittyCommand, error) {
-	return parseKittyCommand(data, false)
+	return parseKittyCommand(data, false, false)
 }
 
 // ParseKittyHeader parses the body of a kitty graphics APC like
@@ -33,10 +34,31 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 // q=2, or a query. The later chunks of a transmission carry no id, and a
 // stream sent with q=2 owes no reply, so neither is decoded.
 func ParseKittyHeader(data []byte) (*KittyCommand, error) {
-	return parseKittyCommand(data, true)
+	return parseKittyCommand(data, true, false)
 }
 
-func parseKittyCommand(data []byte, headerOnly bool) (*KittyCommand, error) {
+// parseKittyAPC parses the data of a graphics APC, from its leading 'G', and
+// returns with the command the whole sequence for the passthrough (see
+// kittyRawAPC), nil when headerOnly says no passthrough reads it.
+//
+// The sequence is the one copy of the payload made here: the command is
+// parsed from it rather than from data, and RawPayload is a view of its
+// payload bytes instead of a second copy. A 1.5 MB frame cost three copies
+// before, the sequence, RawPayload and the decoded image.
+func parseKittyAPC(data []byte, headerOnly bool) (*KittyCommand, []byte, error) {
+	if headerOnly {
+		cmd, err := parseKittyCommand(data[1:], true, false)
+		return cmd, nil, err
+	}
+	rawData := kittyRawAPC(data)
+	cmd, err := parseKittyCommand(rawData[3:len(rawData)-2], false, true)
+	return cmd, rawData, err
+}
+
+// parseKittyCommand parses an APC body after its 'G'. owned says data is
+// never written again, so RawPayload may share its bytes instead of copying
+// them.
+func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -77,7 +99,13 @@ func parseKittyCommand(data []byte, headerOnly bool) (*KittyCommand, error) {
 
 	if len(dataPart) > 0 {
 		// Always preserve raw payload for passthrough (avoids decode→re-encode cycle)
-		cmd.RawPayload = string(dataPart)
+		if owned {
+			// #nosec G103 - the caller guarantees data is never written
+			// again; see parseKittyAPC.
+			cmd.RawPayload = unsafe.String(&dataPart[0], len(dataPart))
+		} else {
+			cmd.RawPayload = string(dataPart)
+		}
 
 		decoded, err := DecodeKittyPayload(dataPart)
 		if err != nil {

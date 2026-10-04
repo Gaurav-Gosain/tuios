@@ -1665,11 +1665,10 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			return false
 		}
 
-		cmd, err := parseKittyCommand(data[1:], e.kittyHeaderOnly)
+		cmd, rawData, err := parseKittyAPC(data, e.kittyHeaderOnly)
 		if err != nil || cmd == nil {
 			return false
 		}
-		rawData := kittyRawAPC(data, e.kittyHeaderOnly)
 
 		// An undecodable payload is answered here, once, whoever renders the
 		// pane: the emulator's responses reach the guest in every mode (and a
@@ -1718,6 +1717,8 @@ func (e *Emulator) SetKittyPlaceholderMode(m KittyPlaceholderMode) {
 	e.kittyPlaceholderMode = m
 }
 
+// SetKittyPassthroughFunc installs the reader of every graphics command. fn
+// must not write to rawData: cmd.RawPayload shares its bytes.
 func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
 	e.kittyPassthroughFunc = fn
 }
@@ -1730,12 +1731,8 @@ func (e *Emulator) SetKittyHeaderOnly(on bool) {
 }
 
 // kittyRawAPC rebuilds the whole graphics sequence, ESC _ G<params>;<payload>
-// ESC \, for the passthrough, or returns nil when headerOnly says no
-// passthrough reads it.
-func kittyRawAPC(data []byte, headerOnly bool) []byte {
-	if headerOnly {
-		return nil
-	}
+// ESC \, for the passthrough.
+func kittyRawAPC(data []byte) []byte {
 	rawData := make([]byte, len(data)+4)
 	rawData[0] = '\x1b'
 	rawData[1] = '_'
