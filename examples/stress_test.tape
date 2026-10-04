@@ -68,13 +68,13 @@ Sleep 150ms
 # Fast minimize/restore cycle
 MinimizeWindow
 Sleep 100ms
-RestoreWindow
+Action restore_all
 Sleep 100ms
 NextWindow
 Sleep 50ms
 MinimizeWindow
 Sleep 100ms
-RestoreWindow
+Action restore_all
 Sleep 100ms
 
 # Workspace migration stress test

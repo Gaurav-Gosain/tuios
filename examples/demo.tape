@@ -80,7 +80,9 @@ Sleep 1s
 MinimizeWindow
 Sleep 500ms
 
-RestoreWindow
+# Minimizing moves focus to another window, so restore every minimized one
+# by action rather than the focused window.
+Action restore_all
 Sleep 500ms
 
 # Final navigation and cleanup

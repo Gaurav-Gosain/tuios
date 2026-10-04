@@ -82,6 +82,18 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Example tapes validate
+        # Every example under examples/ is held to the parser the release
+        # ships. A tape the parser grew stricter about fails here, in the
+        # change that made it stricter, instead of on a reader's machine.
+        run: |
+          go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+          status=0
+          for f in examples/*.tape; do
+            "$RUNNER_TEMP/tuios" tape validate "$f" > /dev/null || status=1
+          done
+          exit $status
+
       - name: Test
         # No -race here. internal/app takes over ten minutes under the detector
         # on a developer machine and longer on a runner, and a job that times

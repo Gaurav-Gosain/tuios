@@ -88,12 +88,8 @@ Sleep 200ms
 MinimizeWindow
 Sleep 300ms
 
-# Restore them
-RestoreWindow
-Sleep 300ms
-PrevWindow
-Sleep 200ms
-RestoreWindow
+# Restore them. Minimizing moved focus away, so restore_all brings both back.
+Action restore_all
 Sleep 300ms
 
 # Switch to workspace 3 and create dev environment
