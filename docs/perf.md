@@ -2400,3 +2400,66 @@ M3 Pro.
   checks which modal overlays are open after every message. The clock is read
   only when that set changes, and the loading-frame check reads it only while
   a load is out; before that change the tick was 386 ns.
+
+## 2026-10 bulk history readers
+
+Measured on a shared 4-core Xeon at 2.1 GHz with `GOMAXPROCS=2`, three runs
+each, before and after in the same session. Times carry the noise of a shared
+machine. Bytes are exact.
+
+### What changed
+
+`Scrollback.Line` decodes a stored line into a fresh `uv.Line` of 112-byte
+cells and keeps the newest 256 in a cache for the renderer. Every reader of
+the whole history went through it: copy-mode search on every key, the history
+save, the snapshot sent on attach, the ANSI capture and the image sweep. A
+full 10,000-line ring at 207 columns is 251 MB of cells, and the cache was left
+holding about 5 MB of them per pane until the pane next printed.
+
+`vt.Terminal` now has three readers that go round the cache. `ScrollbackRows`
+decodes each line into one buffer it reuses. `ScrollbackText` hands out each
+cell's content and width and builds no cell. `CopyScrollback` copies the lines
+in their encoded form, a byte or so a cell, for a reader that decodes them
+after it releases the emulator's lock. The ghostty backend reads each line
+through the library as `ScrollbackLine` does and does not cache it. The cache
+is also bounded at 65,536 cells, about 7 MB, as well as 256 lines.
+
+- Copy-mode search reads the history as text cells and takes a match's
+  columns from the cells. It used to count runes as columns, so a cell of
+  several runes before a match put the cursor right of it. A key that extends
+  the query searches only the lines the last search matched, when the history
+  has not changed and the last search was not cut at the match limit.
+- The history save copies the encoded rows under `terminalMu` and decodes
+  and packs them after.
+- The packed snapshot packs the screen under `terminalMu`, copies the history
+  and the main screen under an alternate screen, and packs those after.
+- The cell snapshot, the ANSI capture, the tape capture, the command output
+  read and the image sweep use the row or text reader.
+
+### Numbers
+
+| Benchmark | before | after |
+|---|---|---|
+| `ScrollbackLineString/w207` (the cached path, unchanged) | 168 ms, 251 MB | 165 ms, 251 MB |
+| `ScrollbackRows/w207` (new) | | 64 ms, 5.7 MB |
+| `ScrollbackText/w207` (new) | | 1.06 ms, 4.4 KB |
+| `CopyModeSearchKey` (one key, 207x55, full ring) | 150 ms, 271 MB | 11 ms, 0.40 MB |
+| `CopyModeSearchTyping` (16 keys) | 1.30 s, 2.37 GB | 36 ms, 8.5 MB |
+| `HistoryCaptureLocked/buildlog/1000` | 11.8 ms, 25.8 MB | 0.79 ms, 1.36 MB |
+| `HistoryCaptureLocked/buildlog/5000` | 67 ms, 124 MB | 1.05 ms, 1.89 MB |
+| `HistorySave/buildlog` | 21.0 ms, 28.0 MB | 11.5 ms, 3.57 MB |
+| `HistorySave20BusyPanes` | 515 ms, 562 MB | 231 ms, 72 MB |
+| `HistorySave20BusyPanes` max-wait | 61 to 72 ms | 4 to 12 ms |
+| `HistorySave20BusyPanes` heap-after (new metric) | 159 MB | 51 MB |
+| `WireTerminalState/scrollback-1000` (cell form) | 68 ms, 68.8 MB | 53 ms, 44.2 MB |
+| `WireTerminalStatePacked/scrollback-1000` (new) | 26 ms, 27.6 MB | 14 ms, 3.2 MB |
+| `WireTerminalStatePacked/scrollback-1000` locked-ms | 26 ms | 0.9 ms |
+
+The before row of `WireTerminalStatePacked` timed `GetTerminalStatePacked`,
+which held the lock for the whole read. At depth 0 the packed snapshot
+allocates 25 KB more than before: the one history row is decoded where the
+benchmark's repeated reads used to find it in the cache.
+
+`TestCopyModeSearchKeyBudget` holds one search key to 4 MB, and
+`TestHistoryCaptureBudget` holds the locked part of a history save to 4 MB.
+Both fail on the tree before this change, at 258 MB and 24.7 MB.
