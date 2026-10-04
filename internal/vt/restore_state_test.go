@@ -68,7 +68,7 @@ func TestGetModesCapturesAllStickyDECModes(t *testing.T) {
 	if !dst.ApplicationCursorKeys() {
 		t.Fatal("restored emulator lost DECCKM")
 	}
-	// SGR-pixel drives encodeMouseReport directly: with 1016 restored, a
+	// SGR-pixel drives the mouse encoder directly: with 1016 restored, a
 	// report must carry pixel coordinates, not cell indices.
 	dst.SetCellSize(10, 20)
 	report := dst.EncodeMouseEvent(MouseClick{Button: MouseLeft, X: 4, Y: 2})

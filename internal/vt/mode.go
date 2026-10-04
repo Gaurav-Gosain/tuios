@@ -18,8 +18,8 @@ import "github.com/charmbracelet/x/ansi"
 //
 // The list is also the whole of what the emulator recognises. A mode missing
 // from it is never stored, whatever the guest sends (see handleMode), so
-// DECRQM cannot report set for a mode nothing acts on, such as UTF-8 mouse
-// encoding (?1005) or a number nobody defines. A guest that probes before it
+// DECRQM cannot report set for a mode nothing acts on, such as DECCOLM (?3)
+// or a number nobody defines. A guest that probes before it
 // enables a feature reads that answer and keeps its fallback.
 var defaultModes = []struct {
 	mode    ansi.Mode
@@ -37,7 +37,9 @@ var defaultModes = []struct {
 	{ansi.ModeMouseButtonEvent, ansi.ModeReset},     // ?1002
 	{ansi.ModeMouseAnyEvent, ansi.ModeReset},        // ?1003
 	{ansi.ModeFocusEvent, ansi.ModeReset},           // ?1004
+	{ansi.ModeMouseExtUtf8, ansi.ModeReset},         // ?1005
 	{ansi.ModeMouseExtSgr, ansi.ModeReset},          // ?1006
+	{ansi.ModeMouseExtUrxvt, ansi.ModeReset},        // ?1015
 	{ansi.ModeMouseExtSgrPixel, ansi.ModeReset},     // ?1016
 	{modeAltScreenLegacy, ansi.ModeReset},           // ?47
 	{ansi.ModeAltScreen, ansi.ModeReset},            // ?1047

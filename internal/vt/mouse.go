@@ -75,26 +75,8 @@ func (e *Emulator) SendMouse(m Mouse) {
 // SendMouseAt is SendMouse with the pointer's pixel position inside the pane,
 // which a guest in SGR-pixel mode is told instead of the cell centre.
 func (e *Emulator) SendMouseAt(m Mouse, at MousePixel) {
-	// XXX: Support [Utf8ExtMouseMode], [UrxvtExtMouseMode], and
-	// [SgrPixelExtMouseMode].
-	var (
-		enc  ansi.Mode
-		mode ansi.Mode
-	)
-
-	for _, m := range []ansi.DECMode{
-		ansi.ModeMouseX10,         // Button press
-		ansi.ModeMouseNormal,      // Button press/release
-		ansi.ModeMouseHighlight,   // Button press/release/hilight
-		ansi.ModeMouseButtonEvent, // Button press/release/cell motion
-		ansi.ModeMouseAnyEvent,    // Button press/release/all motion
-	} {
-		if e.isModeSet(m) {
-			mode = m
-		}
-	}
-
-	if mode == nil {
+	r, mode, ok := e.mouseReportFor(m, at)
+	if !ok {
 		return
 	}
 
@@ -102,73 +84,77 @@ func (e *Emulator) SendMouseAt(m Mouse, at MousePixel) {
 	// Mode 1000/1001 (Normal/Highlight) only supports click/release.
 	// Mode 1002 (ButtonEvent) supports motion while a button is pressed.
 	// Mode 1003 (AnyEvent) supports all motion.
-	if _, isMotion := m.(MouseMotion); isMotion {
+	if r.motion {
 		switch mode {
 		case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseHighlight:
 			// These modes don't support motion events at all
 			return
 		case ansi.ModeMouseButtonEvent:
 			// CellMotion: only forward motion if a button is pressed
-			if m.Mouse().Button == MouseNone {
+			if r.button == MouseNone {
 				return
 			}
 		}
 		// ModeMouseAnyEvent: forward all motion
 	}
 
-	for _, mm := range []ansi.DECMode{
-		// ansi.Utf8ExtMouseMode,
-		ansi.ModeMouseExtSgr,
-		// ansi.UrxvtExtMouseMode,
-	} {
-		if e.isModeSet(mm) {
-			enc = mm
-		}
+	if s := r.encode(); s != "" {
+		_, _ = io.WriteString(e.pipe, s)
 	}
-
-	// Encode button
-	mouse := m.Mouse()
-	_, isMotion := m.(MouseMotion)
-	_, isRelease := m.(MouseRelease)
-	b := ansi.EncodeMouseButton(mouse.Button, isMotion,
-		mouse.Mod.Contains(ModShift),
-		mouse.Mod.Contains(ModAlt),
-		mouse.Mod.Contains(ModCtrl))
-
-	_, _ = io.WriteString(e.pipe, e.encodeMouseReport(enc, b, mouse.X, mouse.Y, at, isRelease))
 }
 
-// encodeMouseReport turns a pane-relative cell position into the wire form the
-// guest asked for.
+// mouseReportFor builds the report for a mouse event from the guest's modes:
+// the tracking mode in force, which is also returned, and the encoding. ok is
+// false when the guest tracks no mouse at all.
 //
 // SGR-pixel (DEC mode 1016) takes precedence over every other encoding when the
 // guest enabled it: a web page rendered by a kitty-graphics app (terminal-browser,
 // awrit) probes 1016 and, once it sees it enabled, reads every mouse report as
 // pixels. Reporting cell indices at that point places the pointer a cell-count of
 // pixels from the origin, which is why hover and clicks land in the top-left. So
-// when 1016 is set the cell position is scaled to host pixels; otherwise the
-// existing SGR-cell (1006) or X10 encoding is used unchanged.
+// when 1016 is set the cell position is scaled to host pixels.
 //
 // The pixel is the one the host reported (at), when the host reports pixels
 // and tuios asked it to. Otherwise it is the cell centre, matching the
 // cell->pixel convention a terminal app uses itself when it has only a cell
 // report to work from.
-func (e *Emulator) encodeMouseReport(enc ansi.Mode, b byte, cellX, cellY int, at MousePixel, isRelease bool) string {
-	if e.isModeSet(ansi.ModeMouseExtSgrPixel) {
-		if at.OK {
-			return ansi.MouseSgr(b, at.X, at.Y, isRelease)
+func (e *Emulator) mouseReportFor(m Mouse, at MousePixel) (r mouseReport, mode ansi.Mode, ok bool) {
+	for _, mm := range []ansi.DECMode{
+		ansi.ModeMouseX10,         // Button press
+		ansi.ModeMouseNormal,      // Button press/release
+		ansi.ModeMouseHighlight,   // Button press/release/hilight
+		ansi.ModeMouseButtonEvent, // Button press/release/cell motion
+		ansi.ModeMouseAnyEvent,    // Button press/release/all motion
+	} {
+		if e.isModeSet(mm) {
+			mode = mm
 		}
-		px, py := e.cellToPixel(cellX, cellY)
-		return ansi.MouseSgr(b, px, py, isRelease)
 	}
-	switch enc {
-	// XXX: Support [ansi.HighlightMouseMode] and [ansi.Utf8ExtMouseMode],
-	// [ansi.UrxvtExtMouseMode].
-	case ansi.ModeMouseExtSgr: // SGR mouse encoding
-		return ansi.MouseSgr(b, cellX, cellY, isRelease)
-	default: // X10 mouse encoding
-		return ansi.MouseX10(b, cellX, cellY)
+	if mode == nil {
+		return r, nil, false
 	}
+
+	mouse := m.Mouse()
+	_, r.motion = m.(MouseMotion)
+	_, r.release = m.(MouseRelease)
+	r.button = mouse.Button
+	r.shift, r.alt, r.ctrl = mouse.Mod.Contains(ModShift), mouse.Mod.Contains(ModAlt), mouse.Mod.Contains(ModCtrl)
+	r.x10Only = mode == ansi.ModeMouseX10
+	r.encoding = pickMouseEncoding(
+		e.isModeSet(ansi.ModeMouseExtUtf8),
+		e.isModeSet(ansi.ModeMouseExtUrxvt),
+		e.isModeSet(ansi.ModeMouseExtSgr),
+		e.isModeSet(ansi.ModeMouseExtSgrPixel),
+	)
+	r.x, r.y = mouse.X, mouse.Y
+	if r.encoding == mouseEncSGRPixel {
+		if at.OK {
+			r.x, r.y = at.X, at.Y
+		} else {
+			r.x, r.y = e.cellToPixel(mouse.X, mouse.Y)
+		}
+	}
+	return r, mode, true
 }
 
 // cellToPixel maps a pane-relative cell position to the host pixel position at

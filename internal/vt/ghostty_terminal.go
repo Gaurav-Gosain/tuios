@@ -110,6 +110,9 @@ type GhosttyTerminal struct {
 	cachedCellMotion atomic.Bool
 	cachedMouseSGR   atomic.Bool
 	cachedMousePx    atomic.Bool
+	cachedMouseUTF8  atomic.Bool
+	cachedMouseURXVT atomic.Bool
+	cachedMouseX10   atomic.Bool // mode 9 alone: presses only
 	cachedAltScreen  atomic.Bool
 	cachedSyncOutput atomic.Bool
 	syncSetAtNanos   atomic.Int64
@@ -552,6 +555,11 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	px, _ := t.term.Mode(gh.ModeSGRPixelsMouse)
 	t.cachedMouseSGR.Store(sgr)
 	t.cachedMousePx.Store(px)
+	utf8Mouse, _ := t.term.Mode(gh.ModeUTF8Mouse)
+	urxvt, _ := t.term.Mode(gh.ModeURxvtMouse)
+	t.cachedMouseUTF8.Store(utf8Mouse)
+	t.cachedMouseURXVT.Store(urxvt)
+	t.cachedMouseX10.Store(x10 && !normal && !button && !any)
 
 	alt47, _ := t.term.Mode(gh.ModeAltScreenLegacy)
 	alt1047, _ := t.term.Mode(gh.ModeAltScreen)

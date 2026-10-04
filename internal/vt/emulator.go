@@ -1141,45 +1141,11 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 // inside the pane, which a guest in SGR-pixel mode is told instead of the cell
 // centre.
 func (e *Emulator) EncodeMouseEventAt(m Mouse, at MousePixel) string {
-	var (
-		enc  ansi.Mode
-		mode ansi.Mode
-	)
-
-	for _, mm := range []ansi.DECMode{
-		ansi.ModeMouseX10,
-		ansi.ModeMouseNormal,
-		ansi.ModeMouseHighlight,
-		ansi.ModeMouseButtonEvent,
-		ansi.ModeMouseAnyEvent,
-	} {
-		if e.isModeSet(mm) {
-			mode = mm
-		}
-	}
-
-	if mode == nil {
+	r, _, ok := e.mouseReportFor(m, at)
+	if !ok {
 		return ""
 	}
-
-	for _, mm := range []ansi.DECMode{
-		ansi.ModeMouseExtSgr,
-	} {
-		if e.isModeSet(mm) {
-			enc = mm
-		}
-	}
-
-	// Encode button
-	mouse := m.Mouse()
-	_, isMotion := m.(MouseMotion)
-	_, isRelease := m.(MouseRelease)
-	b := ansi.EncodeMouseButton(mouse.Button, isMotion,
-		mouse.Mod.Contains(ModShift),
-		mouse.Mod.Contains(ModAlt),
-		mouse.Mod.Contains(ModCtrl))
-
-	return e.encodeMouseReport(enc, b, mouse.X, mouse.Y, at, isRelease)
+	return r.encode()
 }
 
 // Resize resizes the terminal.

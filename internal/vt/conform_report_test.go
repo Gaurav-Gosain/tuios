@@ -239,6 +239,10 @@ func TestConform_DECRQM(t *testing.T) {
 		// that probes before enabling takes the answer at its word.
 		{"mode 47 reports reset by default", "\x1b[?47$p", "\x1b[?47;2$y"},
 		{"mode 47 reports set while in it", "\x1b[?47h\x1b[?47$p", "\x1b[?47;1$y"},
+		{"UTF-8 mouse reports reset by default", "\x1b[?1005$p", "\x1b[?1005;2$y"},
+		{"UTF-8 mouse reports set after ?1005h", "\x1b[?1005h\x1b[?1005$p", "\x1b[?1005;1$y"},
+		{"urxvt mouse reports reset by default", "\x1b[?1015$p", "\x1b[?1015;2$y"},
+		{"urxvt mouse reports set after ?1015h", "\x1b[?1015h\x1b[?1015$p", "\x1b[?1015;1$y"},
 		{"SGR pixel mouse reports reset by default", "\x1b[?1016$p", "\x1b[?1016;2$y"},
 		{"SGR pixel mouse reports set after ?1016h", "\x1b[?1016h\x1b[?1016$p", "\x1b[?1016;1$y"},
 		{"in-band resize reports reset by default", "\x1b[?2048$p", "\x1b[?2048;2$y"},
@@ -255,8 +259,6 @@ func TestConform_DECRQM(t *testing.T) {
 		// that set, probed and trusted the answer used an encoding or a
 		// feature nothing here produces.
 		{"an unknown private mode set first still reports not recognised", "\x1b[?9999h\x1b[?9999$p", "\x1b[?9999;0$y"},
-		{"UTF-8 mouse (?1005) set first reports not recognised", "\x1b[?1005h\x1b[?1005$p", "\x1b[?1005;0$y"},
-		{"urxvt mouse (?1015) set first reports not recognised", "\x1b[?1015h\x1b[?1015$p", "\x1b[?1015;0$y"},
 		{"DECCOLM set first reports not recognised", "\x1b[?3h\x1b[?3$p", "\x1b[?3;0$y"},
 		{"reverse wrap set first reports not recognised", "\x1b[?45h\x1b[?45$p", "\x1b[?45;0$y"},
 		{"an unknown ANSI mode set first reports not recognised", "\x1b[2h\x1b[2$p", "\x1b[2;0$y"},

@@ -434,22 +434,27 @@ func (t *GhosttyTerminal) EncodeMouseEventAt(m Mouse, at MousePixel) string {
 		t.mu.Unlock()
 	}
 	mouse := m.Mouse()
-	_, isMotion := m.(MouseMotion)
-	_, isRelease := m.(MouseRelease)
-	b := ansi.EncodeMouseButton(mouse.Button, isMotion,
-		mouse.Mod.Contains(ModShift),
-		mouse.Mod.Contains(ModAlt),
-		mouse.Mod.Contains(ModCtrl))
-	if pixels && at.OK {
-		return ansi.MouseSgr(b, at.X, at.Y, isRelease)
+	r := mouseReport{
+		button:  mouse.Button,
+		shift:   mouse.Mod.Contains(ModShift),
+		alt:     mouse.Mod.Contains(ModAlt),
+		ctrl:    mouse.Mod.Contains(ModCtrl),
+		x:       mouse.X,
+		y:       mouse.Y,
+		x10Only: t.cachedMouseX10.Load(),
+		encoding: pickMouseEncoding(t.cachedMouseUTF8.Load(), t.cachedMouseURXVT.Load(),
+			sgr, pixels),
 	}
+	_, r.motion = m.(MouseMotion)
+	_, r.release = m.(MouseRelease)
 	if pixels {
-		return ansi.MouseSgr(b, mouse.X*cw+cw/2, mouse.Y*ch+ch/2, isRelease)
+		if at.OK {
+			r.x, r.y = at.X, at.Y
+		} else {
+			r.x, r.y = mouse.X*cw+cw/2, mouse.Y*ch+ch/2
+		}
 	}
-	if sgr {
-		return ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease)
-	}
-	return ansi.MouseX10(b, mouse.X, mouse.Y)
+	return r.encode()
 }
 
 func (t *GhosttyTerminal) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
