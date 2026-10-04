@@ -665,6 +665,18 @@ so it runs only with `TUIOS_E2E_PERF` set. The served-client gate in
 `detectsDisplay` (`ClientLocal`) has no control: the suite cannot run an SSH
 server client next to a desktop.
 
+## wait-for window-output slowed a flooding pane
+
+A pending `wait-for window-output` captured the whole scrollback on every
+output event. A flooding pane raises one event per PTY read. The perf budget
+for this is a unit test in `internal/session`, because it times the daemon's
+emulator and not a client. It runs the same flood with and without a waiter
+in one fixture, so the run without the waiter is its positive half.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A capture per output event | `waitWindowOutput` in `internal/session/verb_subscribe.go`: the `waitOutputMinGap` coalescing cut, so the `sub.ch` case calls `matches()` on every event | `TestWaitForOutputDoesNotSlowFlood` ("a pending wait-for made the flood 3.37x slower", then 3.27x and 3.57x, against 0.92x to 0.98x with the fix) | **caught in `internal/session`** (3 of 3 run) |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
