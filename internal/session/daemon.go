@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/google/uuid"
 )
 
@@ -1826,6 +1827,10 @@ func (d *Daemon) cleanupLoop() {
 				}
 			}
 			d.pendingRequestsMu.Unlock()
+			// A flood of output that has ended leaves its garbage and its
+			// peak heap goal behind, and an idle daemon runs no collection to
+			// lower either. memtrim trims only when the daemon is quiet.
+			memtrim.Request()
 		}
 	}
 }

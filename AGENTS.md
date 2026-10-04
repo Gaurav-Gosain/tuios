@@ -144,6 +144,7 @@ tuios/
 │   ├── shot/               # Renders a cell grid to SVG, PNG, ANSI, HTML or text
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
+│   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
 │   ├── harness/            # Agent harness manifests and detection
 │   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)
 │   ├── mcp/                # The MCP server behind tuios mcp

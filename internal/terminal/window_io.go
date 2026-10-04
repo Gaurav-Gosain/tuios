@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -1005,4 +1006,8 @@ func (w *Window) Close() {
 		w.CopyMode.SearchCache.Matches = nil
 		w.CopyMode = nil
 	}
+
+	// Give the window's memory back once the client settles. A burst of
+	// closes is one trim. See memtrim.
+	memtrim.Request()
 }

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/refreshrate"
 )
 
@@ -105,6 +106,10 @@ func (m *OS) idleFrameTicker(now time.Time) {
 	if setProgramFPS(fr.program, config.IdleFPS) {
 		fr.idle = true
 	}
+	// The end of a burst of frames is also when a flood of pane output has
+	// ended. memtrim gives the heap it left behind back, at most twice a
+	// minute and only when there is enough of it.
+	memtrim.Request()
 }
 
 // noteFrame records that the client composed a frame, or took input that is

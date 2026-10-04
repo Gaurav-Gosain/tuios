@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -4575,6 +4576,10 @@ func (p *PTY) Close() error {
 
 	// No held window size may be written once the descriptor is closed.
 	p.closeWinsize()
+
+	// The pane's emulator and scrollback are garbage now. A burst of closes
+	// is one trim, once the daemon settles. See memtrim.
+	memtrim.Request()
 
 	// Close PTY. This unblocks readOutput's pending Read, which then closes
 	// vtWriteChan so vtWriter exits.
