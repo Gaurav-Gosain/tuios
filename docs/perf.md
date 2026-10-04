@@ -2161,7 +2161,7 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 31,133,858 | 31,170,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,174,818 | 31,210,000 |
 | darwin/arm64 | 23,834,594 | 25,265,154 | 29,375,090 | 29,415,000 |
 
 The first budgets were about 3% above the size they were set at and below the
@@ -2331,6 +2331,12 @@ list` (#434): its rows, the JSON output, the scoped descriptions and the fixed
 key groups shared with the help overlay. On Go 1.26.6 the build measured
 29,375,090 bytes, 30,090 over the old budget. linux/amd64 stayed under its
 budget at 31,162,530 bytes.
+
+The linux/amd64 budget went to 31,210,000 for the refreshed skill (#429): the
+new `checkpoints`, `ship`, `notify`, `clients` and `agents-off` topics that
+`tuios --skill` prints from the binary. On Go 1.26.6 the build measured
+31,174,818 bytes, 4,818 over the old budget. darwin/arm64 stayed under its
+budget at 29,375,138 bytes.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
