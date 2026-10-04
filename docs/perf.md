@@ -2161,8 +2161,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 31,051,938 | 31,092,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 29,257,058 | 29,297,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,092,898 | 31,130,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 29,307,394 | 29,345,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2280,15 +2280,6 @@ read on each platform, and the `client-session-changed` event. On Go 1.26.6
 the build measured 28,283,042 and 26,688,242 bytes, 28,042 and 23,242 over
 the old budgets.
 
-The budgets went to 28,340,000 (linux/amd64) and 26,750,000 (darwin/arm64)
-for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
-its parser and validator, the section in the renderer, and the component
-flags, the rail context and the re-run in the dock engine. On Go 1.26.6 the
-build measured 28,311,714 and 26,721,730 bytes, with 8,286 and 3,270 bytes of
-room on the old budgets, which is no more than CI measures above a local
-build. Main was 28,283,042 and 26,688,242 bytes, and the change adds 28,672
-and 33,488 bytes.
-
 The budgets went to 31,092,000 (linux/amd64) and 29,297,000 (darwin/arm64)
 for the October 2026 work, which landed as one series. On Go 1.26.6 main
 (a640011) measured 28,283,042 and 26,688,242 bytes, and the series brings the
@@ -2322,6 +2313,12 @@ The net/http row is 70% of the growth. tuios linked neither net/http nor
 crypto/tls before it. The maintainer accepted the 1.9 MB so that tuios needs
 no curl at run time: notifications and `tuios update` used to run curl from
 PATH, and a machine without it could not send either.
+
+The budgets went to 31,130,000 (linux/amd64) and 29,345,000 (darwin/arm64)
+for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
+its parser and validator, the section in the renderer, and the rail context
+and re-run in the dock engine. On Go 1.26.6 the build measured 31,092,898 and
+29,307,394 bytes, 898 and 10,394 over the old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
