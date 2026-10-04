@@ -677,6 +677,28 @@ in one fixture, so the run without the waiter is its positive half.
 | --- | --- | --- | --- |
 | A capture per output event | `waitWindowOutput` in `internal/session/verb_subscribe.go`: the `waitOutputMinGap` coalescing cut, so the `sub.ch` case calls `matches()` on every event | `TestWaitForOutputDoesNotSlowFlood` ("a pending wait-for made the flood 3.37x slower", then 3.27x and 3.57x, against 0.92x to 0.98x with the fix) | **caught in `internal/session`** (3 of 3 run) |
 
+## The tmux shim: prefixes, formats and the commands tools send
+
+Each test in `tmux_shim_compat_test.go` writes the `tuios tmux` calls it made
+and their output to `transcript.txt` in its artifact directory. The bug
+fixes were cut at their call sites, one build each. The new commands were
+checked against origin/main (a640011), which answers each of them with
+`unknown command`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No change at all | build origin/main and point `TUIOS_E2E_BIN` at it | all nine `TestTmuxShim*` tests in the file: `show-option`, `wait-for`, `run-shell`, `show-buffer`, `last-pane` and `display-popup` are unknown commands, `pane_pid` is empty, `select-pane -L` needs a client, and the control client answers for `e2e-ctrlp` | **caught** (9 of 9) |
+| Command prefixes | `lookupCommand`: a name matches only when it is the whole word | `TestTmuxShimCommandPrefixes` (`unknown command: show-option`) | **caught** |
+| pane_pid and pane_tty | `addOnePaneMeta`: the `pid` and `tty` lines cut | `TestTmuxShimPaneFormats` (`pane_pid = ""`) | **caught** |
+| history-limit printed `""` | `historyLimit`: the string case cut and `""` returned when the daemon does not say, as before | `TestTmuxShimPaneFormats` (`history-limit = ""`) | **caught** |
+| select-pane direction on a detached session, and from the target | `selectPane`: the `selectDirection` call replaced by the old `focus-window` direction call | `TestTmuxShimMovesPanes` (needs an attached client), `TestTmuxShimSelectPaneDirection` (`no window right of the focused one`) | **caught** (2 of 2) |
+| Control mode used the wrong session | `runControl`: the `s.attached = c.session` line cut | `TestTmuxShimControlModeTargetsItsSession` (answers for `e2e-ctrlp`) | **caught** |
+| set-environment reaches new panes | `splitWindow`: `paneEnvFor` cut from the pane's environment | `TestTmuxShimBuffersAndEnvironment` (the pane sees `/`) | **caught** |
+
+`TestExpandMatchesTmux` in `internal/tmuxcompat` is the wire-compatibility
+table for the format language: every expected string is what tmux 3.4
+printed for the same format and values. It has no e2e counterpart.
+
 ## Copy-mode search columns in the scrollback
 
 Copy-mode search now reads the history as text cells and takes a match's
