@@ -40,14 +40,15 @@ func newGateRig(t *testing.T) *gateRig {
 		conn:             server,
 		clientID:         "gate-client",
 		done:             make(chan struct{}),
-		ptySubscriptions: make(map[string]struct{}),
+		ptySubscriptions: make(map[string]*ptySubscriber),
 	}
 	pty := &PTY{
 		ID:           "ptytest-00000003",
 		subscribers:  make(map[string]*ptySubscriber),
 		outputBuffer: make([]byte, 256*1024),
 	}
-	cs.ptySubscriptions[pty.ID] = struct{}{}
+	sub := pty.subscribeSub(cs.clientID, 0, false)
+	cs.ptySubscriptions[pty.ID] = sub
 
 	rig := &gateRig{pty: pty, frames: make(chan gateFrame, 64)}
 	go func() {
@@ -67,7 +68,7 @@ func newGateRig(t *testing.T) *gateRig {
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		d.streamPTYOutput(cs, pty, pty.Subscribe(cs.clientID, 0))
+		d.streamPTYOutput(cs, pty, sub)
 	}()
 	// Runs before the cleanup that puts the interval back, and waits for the
 	// stream to return so nothing still reads the interval when it changes.

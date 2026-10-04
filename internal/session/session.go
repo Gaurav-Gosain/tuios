@@ -3112,9 +3112,17 @@ func (p *PTY) SubscribeFromSnapshot(clientID string, fromSeq int64) <-chan ptyCh
 }
 
 func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) <-chan ptyChunk {
+	return p.subscribeSub(clientID, fromSeq, fromSnapshot).ch
+}
+
+// subscribeSub is Subscribe returning the subscriber itself. A stream
+// goroutine holds on to it, so that when the goroutine ends it releases its
+// own subscription and not a newer one the same client has made since.
+func (p *PTY) subscribeSub(clientID string, fromSeq int64, fromSnapshot bool) *ptySubscriber {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
-	return p.subscribeLocked(clientID, fromSeq, fromSnapshot)
+	p.subscribeLocked(clientID, fromSeq, fromSnapshot)
+	return p.subscribers[clientID]
 }
 
 // subscriberFor returns the client's stream, or nil when it has none. The
@@ -3125,15 +3133,18 @@ func (p *PTY) subscriberFor(clientID string) *ptySubscriber {
 	return p.subscribers[clientID]
 }
 
-// resumeAfterGap rebuilds a gapped stream once it has drained. The new stream
-// resumes at the position the old one reached, so the client is handed what
-// it missed from the ring, behind a clear when the ring has rolled past it. It
-// returns nil when the stream is not gapped or still holds chunks.
-func (p *PTY) resumeAfterGap(clientID string) (<-chan ptyChunk, *ptySubscriber) {
+// resumeAfterGap rebuilds the gapped stream cur once it has drained. The new
+// stream resumes at the position the old one reached, so the client is handed
+// what it missed from the ring, behind a clear when the ring has rolled past
+// it. It returns nil when cur is not gapped, still holds chunks, or is no
+// longer the client's stream: a client that unsubscribed and subscribed again
+// while cur's goroutine was still draining has a new stream, and rebuilding
+// over it would close the channel its new goroutine reads.
+func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (<-chan ptyChunk, *ptySubscriber) {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 	sub, ok := p.subscribers[clientID]
-	if !ok || !sub.gapped.Load() || len(sub.ch) > 0 {
+	if !ok || sub != cur || !sub.gapped.Load() || len(sub.ch) > 0 {
 		return nil, nil
 	}
 	close(sub.ch)
@@ -3284,11 +3295,27 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 // Unsubscribe removes a subscriber and returns the stream position it reached,
 // to hand back to Subscribe when the client returns.
 func (p *PTY) Unsubscribe(clientID string) int64 {
+	return p.unsubscribe(clientID, nil)
+}
+
+// unsubscribeSub is Unsubscribe for one stream: it removes the client's
+// subscriber only while that is still sub. A stream goroutine ends some time
+// after the client has let its subscription go, and by then the client may
+// have subscribed again. Removing by client ID alone took the new
+// subscription with it, and the pane stopped updating until it was hidden and
+// shown once more.
+func (p *PTY) unsubscribeSub(clientID string, sub *ptySubscriber) {
+	p.unsubscribe(clientID, sub)
+}
+
+// unsubscribe removes the client's subscriber, when only is nil or is that
+// subscriber.
+func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
 	sub, ok := p.subscribers[clientID]
-	if !ok {
+	if !ok || (only != nil && sub != only) {
 		return 0
 	}
 	// Closing lets the streaming goroutine drain what is still queued, so every

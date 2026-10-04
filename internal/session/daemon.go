@@ -412,8 +412,14 @@ type connState struct {
 	// event carries it, and a session killed under its clients is already
 	// gone from the manager when they leave it, so the name cannot be
 	// looked up by ID then. onSessionRenamed keeps it current.
-	sessionName      string
-	ptySubscriptions map[string]struct{}
+	sessionName string
+	// ptySubscriptions holds, for each PTY this client streams, the
+	// subscriber its stream goroutine owns. The entry is nil from the moment
+	// the subscribe handler claims the PTY until it has the subscriber. A
+	// stream goroutine that ends clears the entry only while it still names
+	// that goroutine's subscriber, so a goroutine outliving a quick
+	// unsubscribe and subscribe leaves the new stream's entry alone.
+	ptySubscriptions map[string]*ptySubscriber
 	// ptyResume is where each PTY's stream had got to when this client last
 	// unsubscribed, so hiding and showing a pane resumes rather than replays.
 	// It lives on the connection because that is what owns its lifetime: the
@@ -1567,7 +1573,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		conn:             conn,
 		clientID:         clientID,
 		done:             make(chan struct{}),
-		ptySubscriptions: make(map[string]struct{}),
+		ptySubscriptions: make(map[string]*ptySubscriber),
 		ptyResume:        make(map[string]int64),
 		viaLink:          viaLink,
 		linkHuman:        viaLink && linkHuman,

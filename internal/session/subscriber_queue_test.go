@@ -68,7 +68,7 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatal("a gapped stream was handed another chunk, which would paint past the hole")
 	}
 
-	nch, nsub := p.resumeAfterGap("client-1")
+	nch, nsub := p.resumeAfterGap("client-1", p.subscriberFor("client-1"))
 	if nch == nil || nsub == nil {
 		t.Fatal("a drained gapped stream was not rebuilt")
 	}
@@ -116,10 +116,10 @@ func TestResumeAfterGapWaitsForTheDrain(t *testing.T) {
 	if !p.subscriberFor("client-1").gapped.Load() {
 		t.Fatal("the stream is not gapped")
 	}
-	if ch, _ := p.resumeAfterGap("client-1"); ch != nil {
+	if ch, _ := p.resumeAfterGap("client-1", p.subscriberFor("client-1")); ch != nil {
 		t.Fatal("a gapped stream that still holds chunks was rebuilt over them")
 	}
-	if ch, _ := p.resumeAfterGap("nobody"); ch != nil {
+	if ch, _ := p.resumeAfterGap("nobody", p.subscriberFor("client-1")); ch != nil {
 		t.Fatal("a client with no stream was given one")
 	}
 }

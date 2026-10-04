@@ -478,7 +478,7 @@ func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn
 		conn:             serverSide,
 		clientID:         "fake-tui",
 		done:             make(chan struct{}),
-		ptySubscriptions: make(map[string]struct{}),
+		ptySubscriptions: make(map[string]*ptySubscriber),
 		sessionID:        sessionID,
 		isTUIClient:      true,
 		// A real client is marked attached once its attach reply is written,

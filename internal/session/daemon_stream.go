@@ -29,15 +29,27 @@ var (
 // Multiple channel reads are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
 // write per batch instead of one per read).
-func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChunk) {
+//
+// sub is the subscription this goroutine owns. It is replaced only by
+// resumeAfterGap, and everything the goroutine releases it releases by
+// identity, never by client ID alone.
+func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	// On any exit, stop receiving from the PTY and drop the subscription entry so
 	// the connState is left coherent: a later re-subscribe must not be blocked by
 	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps
 	// broadcasting into an unread channel.
+	//
+	// Both act only while they still refer to this goroutine's subscriber. A
+	// pane hidden and shown quickly unsubscribes and subscribes again while
+	// this goroutine is still blocked in a write. Cleaning up by client ID then
+	// removed the new subscription and its entry, so the new goroutine's
+	// channel was closed under it and the pane stopped updating.
 	defer func() {
-		pty.Unsubscribe(cs.clientID)
+		pty.unsubscribeSub(cs.clientID, sub)
 		cs.mu.Lock()
-		delete(cs.ptySubscriptions, pty.ID)
+		if cs.ptySubscriptions[pty.ID] == sub {
+			delete(cs.ptySubscriptions, pty.ID)
+		}
 		cs.mu.Unlock()
 	}()
 
@@ -46,7 +58,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 	// 256 KiB for every client and pane pair, including panes that never
 	// print.
 	var batch []byte
-	sub := pty.subscriberFor(cs.clientID)
+	var outputCh <-chan ptyChunk = sub.ch
 	// take accounts for a chunk taken off the stream, so broadcast can tell
 	// how much this client still holds, and adds its bytes to the batch. A
 	// frame broadcast dropped for a newer one adds nothing.
@@ -160,7 +172,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 			// by the time the channel is empty. Rebuild it from where it got
 			// to, so the client is handed what it missed instead of the rest
 			// of the stream painted over a hole.
-			if ch, next := pty.resumeAfterGap(cs.clientID); ch != nil {
+			if ch, next := pty.resumeAfterGap(cs.clientID, sub); ch != nil {
+				cs.mu.Lock()
+				if cs.ptySubscriptions[pty.ID] == sub {
+					cs.ptySubscriptions[pty.ID] = next
+				}
+				cs.mu.Unlock()
 				outputCh, sub = ch, next
 			}
 		}

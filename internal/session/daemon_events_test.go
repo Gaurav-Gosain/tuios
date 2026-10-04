@@ -42,7 +42,7 @@ func TestStreamEventsEmitsGapMarker(t *testing.T) {
 		conn:             client,
 		clientID:         "gap-client",
 		done:             make(chan struct{}),
-		ptySubscriptions: make(map[string]struct{}),
+		ptySubscriptions: make(map[string]*ptySubscriber),
 	}
 
 	sub := d.events.subscribe(eventFilter{}, 2)

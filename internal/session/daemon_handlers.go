@@ -400,7 +400,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	for ptyID := range cs.ptySubscriptions {
 		subs = append(subs, ptyID)
 	}
-	cs.ptySubscriptions = make(map[string]struct{})
+	cs.ptySubscriptions = make(map[string]*ptySubscriber)
 	cs.sessionID = ""
 	cs.sessionName = ""
 	cs.width = 0
@@ -927,7 +927,8 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		debugLog("[DEBUG] PTY %s already subscribed for client %s", payload.PTYID, cs.clientID)
 		return nil
 	}
-	cs.ptySubscriptions[payload.PTYID] = struct{}{}
+	// Claimed now, filled in with the subscriber below.
+	cs.ptySubscriptions[payload.PTYID] = nil
 	// A client that restored a snapshot names the position that snapshot ends
 	// at, and that beats anything recorded here: the recorded position is where
 	// this connection's stream last got to, which is older than the snapshot and
@@ -950,16 +951,20 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// A client that restored a snapshot before subscribing holds an
 	// authoritative copy of the pane's state at resume, so a rolled catch-up
 	// must replay the tail on top of it rather than clear it (issue #123).
-	var outputCh <-chan ptyChunk
-	if payload.FromSnapshot {
-		outputCh = pty.SubscribeFromSnapshot(cs.clientID, resume)
-	} else {
-		outputCh = pty.Subscribe(cs.clientID, resume)
+	sub := pty.subscribeSub(cs.clientID, resume, payload.FromSnapshot)
+	cs.mu.Lock()
+	// Only this connection's own goroutine claims or releases an entry, and a
+	// stream goroutine clears only an entry naming its own subscriber, so the
+	// claim is still here. Checked anyway rather than adding back an entry
+	// something else has let go.
+	if s, claimed := cs.ptySubscriptions[payload.PTYID]; claimed && s == nil {
+		cs.ptySubscriptions[payload.PTYID] = sub
 	}
+	cs.mu.Unlock()
 	if !paces {
 		pty.SetPacing(cs.clientID, false)
 	}
-	go d.streamPTYOutput(cs, pty, outputCh)
+	go d.streamPTYOutput(cs, pty, sub)
 
 	return nil
 }

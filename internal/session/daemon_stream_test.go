@@ -18,7 +18,7 @@ func newFailingConnState(t *testing.T) *connState {
 		conn:             client,
 		clientID:         "test-client",
 		done:             make(chan struct{}),
-		ptySubscriptions: make(map[string]struct{}),
+		ptySubscriptions: make(map[string]*ptySubscriber),
 	}
 }
 
@@ -57,9 +57,10 @@ func TestStreamPTYOutputDropsOnWriteError(t *testing.T) {
 	}
 
 	cs := newFailingConnState(t)
-	cs.ptySubscriptions[pty.ID] = struct{}{}
+	sub := pty.subscribeSub(cs.clientID, 0, false)
+	cs.ptySubscriptions[pty.ID] = sub
 
-	go d.streamPTYOutput(cs, pty, pty.Subscribe(cs.clientID, 0))
+	go d.streamPTYOutput(cs, pty, sub)
 
 	select {
 	case <-cs.done:

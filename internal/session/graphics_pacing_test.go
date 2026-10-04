@@ -102,7 +102,7 @@ func TestPacingHoldEndsWhenTheClientLeaves(t *testing.T) {
 					for len(ch) > 0 {
 						takeChunk(nil, <-ch, sub)
 					}
-					p.resumeAfterGap("stuck")
+					p.resumeAfterGap("stuck", sub)
 				}
 			})
 			if took > time.Second {
