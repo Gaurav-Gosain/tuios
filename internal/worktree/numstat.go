@@ -39,6 +39,12 @@ type Numstat struct {
 // from a copy (a split index keeps part of itself beside the original), starts
 // from HEAD instead, which hashes every tracked file.
 func SnapshotTree(ctx context.Context, path string) (string, error) {
+	return snapshotTreeExcluding(ctx, path, nil)
+}
+
+// snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
+// to path, left out. They are never read, so a large file costs nothing.
+func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (string, error) {
 	tmp, err := os.CreateTemp("", "tuios-index-*")
 	if err != nil {
 		return "", err
@@ -48,7 +54,7 @@ func SnapshotTree(ctx context.Context, path string) (string, error) {
 	defer func() { _ = os.Remove(index) }()
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if copyIndex(ctx, path, index) {
-		if tree, err := addAndWriteTree(ctx, path, env); err == nil {
+		if tree, err := addAndWriteTree(ctx, path, env, exclude); err == nil {
 			return tree, nil
 		} else if ctx.Err() != nil {
 			return "", err
@@ -63,7 +69,7 @@ func SnapshotTree(ctx context.Context, path string) (string, error) {
 			return "", err
 		}
 	}
-	return addAndWriteTree(ctx, path, env)
+	return addAndWriteTree(ctx, path, env, exclude)
 }
 
 // copyIndex copies the index of the worktree at path over dest, and reports
@@ -100,9 +106,22 @@ func copyIndex(ctx context.Context, path, dest string) bool {
 
 // addAndWriteTree stages every file of the worktree at path into the index env
 // names and writes it as a tree.
-func addAndWriteTree(ctx context.Context, path string, env []string) (string, error) {
-	if _, err := runCtx(ctx, path, env, "add", "--all", "--", "."); err != nil {
-		return "", err
+func addAndWriteTree(ctx context.Context, path string, env []string, exclude []string) (string, error) {
+	if len(exclude) == 0 {
+		if _, err := runCtx(ctx, path, env, "add", "--all", "--", "."); err != nil {
+			return "", err
+		}
+	} else {
+		// The exclusions go on standard input, so any number of them fits,
+		// each matched literally.
+		specs := []string{"."}
+		for _, p := range exclude {
+			specs = append(specs, ":(exclude,literal)"+p)
+		}
+		stdin := strings.Join(specs, "\x00") + "\x00"
+		if _, err := runStdin(ctx, path, env, stdin, "add", "--all", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
+			return "", err
+		}
 	}
 	out, err := runCtx(ctx, path, env, "write-tree")
 	if err != nil {

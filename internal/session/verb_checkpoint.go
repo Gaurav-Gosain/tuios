@@ -33,7 +33,7 @@ const ErrVerbNoCheckpoint = "no_checkpoint"
 
 // checkpointVerbs are the registry entries of the checkpoint verbs.
 func checkpointVerbs() map[string]verbEntry {
-	checkpointFields := "n, ref, commit, tree, head, kind (turn or safety), pane, session, turn, state, label, worktree and at (Unix nanoseconds)"
+	checkpointFields := "n, ref, commit, tree, head, kind (turn or safety), pane, session, turn, state, label, worktree, at (Unix nanoseconds), and skipped and skipped_count (the untracked files left out as larger than max_untracked_mb, omitted when none)"
 	return map[string]verbEntry{
 		"list-checkpoints": {
 			description: "List the checkpoints of a pane: the state of its git work tree, saved each time its agent finished a turn that changed a file, and before each restore. Oldest first. The labels are the agent's prompts, so the result is marked untrusted.",
@@ -329,12 +329,13 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 		})
 	}
 	safety, _, err := worktree.SaveCheckpoint(ctx, repo.root, worktree.CheckpointMeta{
-		Kind:    worktree.CheckpointSafety,
-		Pane:    target.ID,
-		Session: sess.Name(),
-		Turn:    target.CompletionSeq,
-		State:   target.AgentState.Name(),
-		Label:   "before restoring checkpoint " + strconv.Itoa(cp.N),
+		Kind:         worktree.CheckpointSafety,
+		Pane:         target.ID,
+		Session:      sess.Name(),
+		Turn:         target.CompletionSeq,
+		State:        target.AgentState.Name(),
+		Label:        "before restoring checkpoint " + strconv.Itoa(cp.N),
+		MaxUntracked: d.checkpoints.maxUntracked.Load(),
 	}, 0)
 	if err != nil {
 		return nil, checkpointGitFailed(err, false)

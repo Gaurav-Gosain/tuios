@@ -643,6 +643,7 @@ max = 8
 [agents.checkpoints]
 enabled = true
 keep = 50
+max_untracked_mb = 50
 ```
 
 - `hold_plans` also hands a plan an agent in plan mode asks to have approved
@@ -682,8 +683,11 @@ keep = 50
 - `[agents.checkpoints]` saves the git work tree of an agent's pane each time
   the agent finishes a turn that changed a file (`tuios checkpoint`).
   `enabled` is true by default. `keep` is how many checkpoints one pane keeps:
-  50 by default, at most 1000. The daemon reads both at start and again when
-  the file changes. See [Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
+  50 by default, at most 1000. `max_untracked_mb` leaves an untracked file
+  larger than this many megabytes out of a checkpoint: 50 by default, and a
+  negative value means no limit. `tuios checkpoint list` names the files left
+  out, and a restore does not change them. The daemon reads these at start
+  and again when the file changes. See [Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
 
 One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long
 an agent row rests (idle, unknown, or done and already seen) before the rail

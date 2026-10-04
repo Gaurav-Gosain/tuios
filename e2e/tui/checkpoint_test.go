@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -182,6 +183,77 @@ func TestCheckpointRestoreKeepsIgnoredFiles(t *testing.T) {
 		t.Errorf("the refused restore changed .gitignore to %q", got)
 	}
 	tr.log("the restore over the ignored .env was refused and .env kept the person's values")
+}
+
+// TestCheckpointLeavesOutLargeUntrackedFiles sets max_untracked_mb = 1. A
+// turn writes a 2 MiB untracked file and a small one. The checkpoint holds
+// the small one and not the large one, git's object store never gets the
+// large one, and checkpoint list names it as left out. A restore of the
+// checkpoint leaves the large file where it is.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with SaveCheckpoint snapshotting
+// through SnapshotTree again, with no exclusions, the large file is in the
+// checkpoint's diff and in the object store.
+func TestCheckpointLeavesOutLargeUntrackedFiles(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[agents.checkpoints]\nmax_untracked_mb = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := testutil.GitRepo(t)
+	tr := newCheckpointTranscript(t, base, repo)
+	if out, err := tuiosCLIIn(t, base, repo, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session in the repository: %v: %s", err, out)
+	}
+	large := filepath.Join(repo, "data", "large.bin")
+	small := filepath.Join(repo, "small.txt")
+	turn := func(n int, content string) {
+		t.Helper()
+		tr.ok("set-agent-state", "-s", "agent", "working")
+		if n == 1 {
+			if err := os.MkdirAll(filepath.Dir(large), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(large, []byte(strings.Repeat("0123456789abcdef", 2<<16)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(small, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tr.ok("set-agent-state", "-s", "agent", "done", "-m", fmt.Sprintf("turn %d", n))
+		tr.waitCheckpoints(n)
+	}
+	turn(1, "one\n")
+
+	out := tr.ok("checkpoint", "diff", "-s", "agent", "1")
+	if !strings.Contains(out, "small.txt") {
+		t.Errorf("checkpoint 1 lacks the small untracked file:\n%s", out)
+	}
+	if strings.Contains(out, "large.bin") {
+		t.Errorf("checkpoint 1 holds the 2 MiB untracked file over a 1 MB limit:\n%s", out)
+	}
+	sha := testutil.Git(t, repo, "hash-object", large)
+	if err := exec.Command("git", "-C", repo, "cat-file", "-e", sha).Run(); err == nil {
+		t.Errorf("the object store holds the large file's blob %s, so it was read and written", sha[:7])
+	}
+	if out := tr.ok("checkpoint", "list", "-s", "agent"); !strings.Contains(out, "Checkpoint 1 left out 1 untracked file") || !strings.Contains(out, "data/large.bin") {
+		t.Errorf("checkpoint list does not name the file left out:\n%s", out)
+	}
+
+	turn(2, "two\n")
+	tr.ok("checkpoint", "restore", "-s", "agent", "1")
+	if got := readFile(t, small); got != "one\n" {
+		t.Errorf("after restore 1, small.txt = %q, want %q", got, "one\n")
+	}
+	if info, err := os.Stat(large); err != nil || info.Size() != 2<<20 {
+		t.Errorf("the restore touched the file the checkpoints left out: %v", err)
+	}
+	tr.log("the 2 MiB untracked file stayed out of every checkpoint and was left in place")
 }
 
 // TestCheckpointsGoWithTheirWorktree: a checkpoint taken in a worktree

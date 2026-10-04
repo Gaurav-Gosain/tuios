@@ -170,6 +170,25 @@ type CheckpointsConfig struct {
 	// Keep is how many checkpoints one pane keeps. Zero means the default,
 	// 50; values past 1000 read as 1000.
 	Keep int `toml:"keep,omitempty"`
+	// MaxUntrackedMB is the size past which an untracked file is left out
+	// of a checkpoint, in megabytes. Zero means the default, 50. A negative
+	// value means no limit.
+	MaxUntrackedMB int `toml:"max_untracked_mb,omitempty"`
+}
+
+// DefaultCheckpointMaxUntrackedMB is the default of max_untracked_mb.
+const DefaultCheckpointMaxUntrackedMB = 50
+
+// MaxUntrackedBytes is MaxUntrackedMB in bytes with its default applied, and
+// zero for no limit.
+func (c CheckpointsConfig) MaxUntrackedBytes() int64 {
+	switch {
+	case c.MaxUntrackedMB < 0:
+		return 0
+	case c.MaxUntrackedMB == 0:
+		return DefaultCheckpointMaxUntrackedMB << 20
+	}
+	return int64(c.MaxUntrackedMB) << 20
 }
 
 // On reports whether checkpoints are taken.

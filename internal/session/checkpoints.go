@@ -39,6 +39,9 @@ type checkpointer struct {
 	off atomic.Bool
 	// keep is [agents.checkpoints] keep; zero reads as the default.
 	keep atomic.Int64
+	// maxUntracked is [agents.checkpoints] max_untracked_mb in bytes, zero
+	// for no limit.
+	maxUntracked atomic.Int64
 
 	// gitMu runs one checkpoint or restore at a time, so a restore never
 	// reads a work tree a checkpoint is writing a tree of, and the daemon
@@ -63,6 +66,7 @@ type checkpointDue struct {
 func (d *Daemon) SetCheckpoints(c config.CheckpointsConfig) {
 	d.checkpoints.off.Store(!c.On())
 	d.checkpoints.keep.Store(int64(c.KeepCount()))
+	d.checkpoints.maxUntracked.Store(c.MaxUntrackedBytes())
 }
 
 // checkpointKeep is how many checkpoints a pane keeps.
@@ -167,12 +171,13 @@ func (d *Daemon) takeTurnCheckpoint(s *Session, window string, job checkpointDue
 	defer d.checkpoints.gitMu.Unlock()
 	start := time.Now()
 	cp, saved, err := worktree.SaveCheckpoint(ctx, repo.root, worktree.CheckpointMeta{
-		Kind:    worktree.CheckpointTurn,
-		Pane:    window,
-		Session: s.Name(),
-		Turn:    job.turn,
-		State:   job.state,
-		Label:   label,
+		Kind:         worktree.CheckpointTurn,
+		Pane:         window,
+		Session:      s.Name(),
+		Turn:         job.turn,
+		State:        job.state,
+		Label:        label,
+		MaxUntracked: d.checkpoints.maxUntracked.Load(),
 	}, d.checkpointKeep())
 	if err != nil {
 		LogBasic("Checkpoint of window %s in %s failed: %v", shortWindowID(window), repo.root, err)

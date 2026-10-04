@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -179,7 +180,36 @@ func printCheckpointList(w io.Writer, sess, window, root, on string, enabled boo
 		}
 		fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\t%s\n", cp.N, cp.Turn, state, taken, commit, checkpointWhat(cp))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	// The untracked files a checkpoint left out are not undone by a restore
+	// of it, so the list says which they are.
+	for _, cp := range list {
+		if cp.SkippedCount == 0 && len(cp.Skipped) == 0 {
+			continue
+		}
+		n := max(cp.SkippedCount, len(cp.Skipped))
+		names := make([]string, len(cp.Skipped))
+		for i, p := range cp.Skipped {
+			names[i] = plainLine(p)
+		}
+		more := ""
+		if n > len(names) {
+			more = fmt.Sprintf(", and %d more", n-len(names))
+		}
+		fmt.Fprintf(w, "Checkpoint %d left out %d untracked %s over agents.checkpoints.max_untracked_mb: %s%s\n",
+			cp.N, n, fileWord(n), strings.Join(names, ", "), more)
+	}
+	return nil
+}
+
+// fileWord is "file" or "files" for n.
+func fileWord(n int) string {
+	if n == 1 {
+		return "file"
+	}
+	return "files"
 }
 
 // newCheckpointDiffCommand builds `tuios checkpoint diff`.

@@ -73,6 +73,11 @@ type Checkpoint struct {
 	Worktree string `json:"worktree"`
 	// At is when the checkpoint was taken, in Unix nanoseconds.
 	At int64 `json:"at"`
+	// Skipped are untracked files left out because they were larger than
+	// the limit, at most checkpointSkippedShown of them. SkippedCount is how
+	// many there were.
+	Skipped      []string `json:"skipped,omitempty"`
+	SkippedCount int      `json:"skipped_count,omitempty"`
 }
 
 // CheckpointMeta is what SaveCheckpoint records about a checkpoint.
@@ -84,6 +89,40 @@ type CheckpointMeta struct {
 	State   string
 	Label   string
 	At      time.Time
+	// MaxUntracked is the size in bytes past which an untracked file is left
+	// out of the checkpoint. Zero is no limit.
+	MaxUntracked int64
+	// skipped is what SaveCheckpoint left out, for the message.
+	skipped []string
+}
+
+// checkpointSkippedShown bounds the skipped paths a checkpoint's message
+// names.
+const checkpointSkippedShown = 20
+
+// largeUntracked lists the untracked files of the work tree at root that are
+// not ignored and are larger than limit bytes, sorted. Untracked is against
+// the work tree's own index.
+func largeUntracked(ctx context.Context, root string, limit int64) ([]string, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	out, err := runCtx(ctx, root, nil, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+	var large []string
+	for p := range strings.SplitSeq(out, "\x00") {
+		if p == "" {
+			continue
+		}
+		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(p)))
+		if err == nil && info.Mode().IsRegular() && info.Size() > limit {
+			large = append(large, p)
+		}
+	}
+	slices.Sort(large)
+	return large, nil
 }
 
 // ErrNoCheckpoint reports a checkpoint number the pane has no ref for.
@@ -190,6 +229,10 @@ func parseCheckpoint(ref, commit, tree, parents, msg string) (Checkpoint, bool) 
 			cp.Label = value
 		case "Worktree":
 			cp.Worktree = value
+		case "Skipped":
+			cp.Skipped = append(cp.Skipped, value)
+		case "Skipped-Count":
+			cp.SkippedCount, _ = strconv.Atoi(value)
 		case "Time":
 			if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
 				cp.At = t.UnixNano()
@@ -244,6 +287,12 @@ func checkpointMessage(n int, root string, m CheckpointMeta) string {
 		fmt.Fprintf(&b, "Label: %s\n", label)
 	}
 	fmt.Fprintf(&b, "Worktree: %s\n", oneLine(root, 4096))
+	if len(m.skipped) > 0 {
+		fmt.Fprintf(&b, "Skipped-Count: %d\n", len(m.skipped))
+		for _, p := range m.skipped[:min(len(m.skipped), checkpointSkippedShown)] {
+			fmt.Fprintf(&b, "Skipped: %s\n", oneLine(p, 4096))
+		}
+	}
 	fmt.Fprintf(&b, "Time: %s\n", m.At.UTC().Format(time.RFC3339Nano))
 	return b.String()
 }
@@ -267,7 +316,12 @@ func SaveCheckpoint(ctx context.Context, root string, m CheckpointMeta, keep int
 	if err != nil {
 		return Checkpoint{}, false, err
 	}
-	tree, err := SnapshotTree(ctx, root)
+	skipped, err := largeUntracked(ctx, root, m.MaxUntracked)
+	if err != nil {
+		return Checkpoint{}, false, err
+	}
+	m.skipped = skipped
+	tree, err := snapshotTreeExcluding(ctx, root, skipped)
 	if err != nil {
 		return Checkpoint{}, false, err
 	}
