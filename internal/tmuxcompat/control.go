@@ -38,6 +38,7 @@ import (
 //
 // Not implemented: %output carries no bytes, since the daemon's event stream
 // says that a pane printed and not what (read the pane with capture-pane).
+// docs/TMUX_SHIM.md, "What real %output needs", has the plan for it.
 // The flow control of tmux 3.2 (%pause, %continue, %extended-output,
 // refresh-client -A and -f pause-after), format subscriptions (refresh-client
 // -B, %subscription-changed), %pane-mode-changed, %client-session-changed,
@@ -107,6 +108,9 @@ type control struct {
 func (s *Shim) runControl(full []string, g Global, words []string, detail []string) int {
 	s.control = true
 	c := &control{s: s, out: s.Stdout, pending: map[string]bool{}, outcome: OutcomeOK, detail: detail}
+	// Commands without a target act on the session the client attached
+	// to, not on the session the caller runs in.
+	s.attached = c.session
 	if g.Control == 2 {
 		// -CC: the DCS that tells iTerm2 a control client starts.
 		fmt.Fprint(c.out, "\x1bP1000p")

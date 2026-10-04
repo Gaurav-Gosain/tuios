@@ -80,6 +80,9 @@ type Shim struct {
 	// asks for #{pid}.
 	daemonPID int
 	pidRead   bool
+	// attached finds the session a control client attached to in a view,
+	// nil outside control mode.
+	attached func(*view) *sessionView
 	// depth counts the command lines run inside one another by if-shell
 	// and run-shell -C.
 	depth int
@@ -396,6 +399,19 @@ func (s *Shim) println(line string) { fmt.Fprintln(s.Stdout, line) }
 // callerPane is the pane an empty target means: TMUX_PANE, then the caller's
 // tuios window, then the focused pane of the default session.
 func (s *Shim) callerPane(v *view) *pane {
+	// A control client that attached to a session works in that session,
+	// as tmux's commands from an attached client do, whatever pane the
+	// client itself runs in.
+	if s.attached != nil {
+		if sv := s.attached(v); sv != nil {
+			if p := sv.byWindowID(sv.focused); p != nil && p.Workspace == sv.current {
+				return p
+			}
+			if p := sv.active(sv.current); p != nil {
+				return p
+			}
+		}
+	}
 	if strings.HasPrefix(s.TmuxPane, "%") {
 		if p, err := v.paneByID(s.TmuxPane[1:]); err == nil {
 			return p
