@@ -595,25 +595,13 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 		n = height
 	}
 
-	// Lift the rows leaving the top, slide the rest up, and put the lifted
-	// slices back at the bottom to be blanked. The scrollback packs its own
-	// copy of each departing row, so the row's storage stays with the screen
-	// and the common case (one line, printing output) allocates only what
-	// the ring keeps. The scratch array means only a large CSI S needs the
-	// heap for the slice of line headers.
-	var scratch [16]uv.Line
-	var recycled []uv.Line
-	if n <= len(scratch) {
-		recycled = scratch[:n]
-	} else {
-		recycled = make([]uv.Line, n)
-	}
-	copy(recycled, lines[:n])
-	copy(lines, lines[n:])
+	// The rows leaving the top go to the scrollback first, while they and
+	// their extents, wrap flags and tails are still at the top. The
+	// scrollback packs its own copy of each, so the row's storage stays with
+	// the screen and comes back as a blank row at the bottom, and the common
+	// case (one line, printing output) allocates only what the ring keeps.
 	if save {
-		// ext still describes the departing rows here: they have moved in
-		// lines but not yet in ext, which is rotated below.
-		for i, row := range recycled {
+		for i, row := range lines[:n] {
 			if row == nil {
 				s.scrollback.PushBlankLine(s.buf.Width())
 			} else {
@@ -626,8 +614,7 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 			s.scrollback.markNewest(s.buf.wrap[i])
 		}
 	}
-	copy(lines[height-n:], recycled)
-	s.buf.rotateExt(0, height, n)
+	s.buf.scrollWindow(n)
 
 	s.buf.blankRows(height-n, height, s.blankCell())
 	return true

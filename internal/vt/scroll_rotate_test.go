@@ -216,6 +216,95 @@ func TestScrollUpFillsScrollback(t *testing.T) {
 	}
 }
 
+// TestScrollWindowKeepsEveryRowInOrder drives the whole-screen scroll far past
+// the point where its row window runs out of room and moves back to the start
+// of its backing array, several times, with the screen made shorter and taller
+// on the way (each change hands the window a table it has to adopt) and with
+// lines long enough to wrap. Every row printed has to come out once, in order,
+// across the scrollback and the screen.
+func TestScrollWindowKeepsEveryRowInOrder(t *testing.T) {
+	const w = 30
+	e := NewEmulator(w, 8)
+	e.SetScrollbackMaxLines(10000)
+
+	var want []string
+	for i := range 400 {
+		switch i {
+		case 90:
+			e.Resize(w, 5)
+		case 170:
+			e.Resize(w, 13)
+		case 260:
+			e.Resize(w, 7)
+		}
+		line := fmt.Sprintf("line-%03d", i) + strings.Repeat("=", (i*7)%45)
+		fmt.Fprintf(e, "%s\r\n", line)
+		for len(line) > w {
+			want = append(want, line[:w])
+			line = line[w:]
+		}
+		want = append(want, line)
+	}
+
+	text := func(line uv.Line) string {
+		var b strings.Builder
+		for _, c := range line {
+			b.WriteString(c.Content)
+		}
+		return strings.TrimRight(b.String(), " ")
+	}
+	var got []string
+	for i := range e.ScrollbackLen() {
+		got = append(got, text(e.ScrollbackLine(i)))
+	}
+	for y := range e.Height() {
+		var b strings.Builder
+		for x := range w {
+			if c := e.CellAt(x, y); c != nil {
+				b.WriteString(c.Content)
+			}
+		}
+		got = append(got, strings.TrimRight(b.String(), " "))
+	}
+	for len(got) > 0 && got[len(got)-1] == "" {
+		got = got[:len(got)-1]
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%d rows came out, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("row %d is %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// The alternate screen keeps no scrollback and never reflows, so a
+	// taller screen there is the grid growing its own tables, which the
+	// window has to notice are no longer the ones it handed out.
+	alt := NewEmulator(w, 8)
+	alt.WriteString("\x1b[?1049h")
+	n := 0
+	for _, h := range []int{8, 5, 13, 6, 11} {
+		alt.Resize(w, h)
+		for range 3*h + 2 {
+			fmt.Fprintf(alt, "\r\nalt-%04d", n)
+			n++
+		}
+		for y := range h {
+			var b strings.Builder
+			for x := range w {
+				if c := alt.CellAt(x, y); c != nil {
+					b.WriteString(c.Content)
+				}
+			}
+			want := fmt.Sprintf("alt-%04d", n-h+y)
+			if got := strings.TrimRight(b.String(), " "); got != want {
+				t.Fatalf("alternate screen %d rows high: row %d is %q, want %q", h, y, got, want)
+			}
+		}
+	}
+}
+
 // TestScrollUpAllocatesOnlyTheRetainedLine pins the allocation cost of a
 // whole-screen scroll at exactly the line being retained.
 //

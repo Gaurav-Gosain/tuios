@@ -62,6 +62,72 @@ type grid struct {
 	// moves takes its tail with it, and one that goes into the history takes
 	// it there.
 	tail []uv.Line
+	// The windows a whole-screen scroll slides rows, ext, wrap and tail
+	// through. See scrollWindow.
+	rowsWin rowWindow[uv.Line]
+	extWin  rowWindow[int]
+	wrapWin rowWindow[rowFlag]
+	tailWin rowWindow[uv.Line]
+}
+
+// rowWindow keeps a table indexed by row (the row headers, extents, wrap
+// flags, tails) as a window into a backing array twice its length, so that a
+// scroll of the whole screen moves the window instead of every entry.
+//
+// Sliding the table up one row was a copy of every entry but the first, and
+// for the row headers a copy with a write barrier per pointer: a pane printing
+// as fast as it can scrolls once per line, and those copies were 11% of the
+// daemon in a `yes` flood. Here the rows leaving the top are written once into
+// the free slots past the window's end, the window starts n slots later, and
+// only when it reaches the end of the backing array is it copied back to the
+// start, once every len(table) scrolls.
+//
+// The table the window hands out has its capacity cut at its length, so an
+// append reallocates rather than writing into the free slots. Every other
+// change to the table (a resize, a reflow, cutting rows off the bottom) either
+// keeps its start, which the window recognises, or gives it a new one, which
+// the window adopts at the next scroll.
+type rowWindow[T any] struct {
+	base []T
+	off  int
+}
+
+// scroll returns cur with its first n entries moved to its end, the rest
+// moved up n places, as slices.Concat(cur[n:], cur[:n]) would but in place
+// when it can.
+func (w *rowWindow[T]) scroll(cur []T, n int) []T {
+	h := len(cur)
+	if n <= 0 || n >= h {
+		return cur
+	}
+	if w.off+h > len(w.base) || &w.base[w.off] != &cur[0] {
+		// A table the window did not hand out: start a backing array for it.
+		w.base = make([]T, 2*h)
+		copy(w.base, cur)
+		w.off = 0
+	} else if w.off+h+n > len(w.base) {
+		// No room past the end: move the window back to the start, and
+		// clear what it leaves behind so no row header is held twice.
+		copy(w.base, w.base[w.off:w.off+h])
+		clear(w.base[h:])
+		w.off = 0
+	}
+	copy(w.base[w.off+h:w.off+h+n], w.base[w.off:w.off+n])
+	clear(w.base[w.off : w.off+n])
+	w.off += n
+	return w.base[w.off : w.off+h : w.off+h]
+}
+
+// scrollWindow scrolls every row of the grid up n rows, the rows leaving the
+// top coming back at the bottom with their extents, wrap flags and tails
+// unchanged, for the caller to blank.
+func (g *grid) scrollWindow(n int) {
+	g.rows = g.rowsWin.scroll(g.rows, n)
+	g.ext = g.extWin.scroll(g.ext, n)
+	g.wrap = g.wrapWin.scroll(g.wrap, n)
+	if g.tail != nil {
+		g.tail = g.tailWin.scroll(g.tail, n)
+	}
 }
 
 // rowFlag is what a row records about where its text ends.
