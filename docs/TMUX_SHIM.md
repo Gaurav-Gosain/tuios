@@ -108,22 +108,48 @@ or a prefix of it at least four characters long), or the tmux way:
 fails with `can't find session`, as it does on a tmux server that does not
 hold it.
 
-Format strings (`-F`, `display-message -p`) support `#{name}`, the one-letter
-aliases (`#D #F #H #h #I #P #S #T #W`), `##`, `#{?cond,then,else}`,
-`#{==:a,b}` and `#{!=:a,b}`. The variables: `session_name`, `session_id`,
+A command name can be shortened to any prefix that names one tmux command,
+as in tmux: `show-option` is `show-options` and `list-pa` is `list-panes`. A
+prefix of more than one command fails with tmux's error, for example
+`ambiguous command: kill-se, could be: kill-server, kill-session`.
+
+Format strings (`-F`, `display-message -p`) follow tmux 3.4's format
+language:
+
+- `#{name}`, the one-letter aliases (`#D #F #H #h #I #P #S #T #W`), and the
+  escapes `##`, `#,` and `#}`.
+- Conditionals: `#{?cond,then,else}`.
+- Comparisons: `#{==:a,b}`, `#{!=:a,b}`, `#{<:a,b}`, `#{>:a,b}`,
+  `#{<=:a,b}`, `#{>=:a,b}`, `#{||:a,b}` and `#{&&:a,b}`.
+- Matches: `#{m:pattern,text}`, with `m/r` for a regular expression and `i`
+  to ignore case.
+- Modifiers: `l` (literal), `b` and `d` (base and directory name), `=N`,
+  `=-N` and `=/N/marker` (truncate), `pN` and `p-N` (pad), `n` (length), `w`
+  (width), `q` (quote for the shell), `E` and `T` (expand again), `t` and
+  `t/p` (time), `a` (a character), and `s/pattern/with/flags` (substitute).
+  Join several with `;`, for example `#{=10;s/x/y/:pane_title}`.
+
+The loop modifiers (`S`, `W`, `P`, `L`), `N`, `C`, `c`, `e`, `q/e` and the
+strftime form of `t` are not supported. They expand to nothing and are
+logged. `#(command)` runs no command.
+
+The variables: `session_name`, `session_id`,
 `session_windows`, `session_attached`, `session_activity`, `session_created`,
 `session_path`, `window_id`, `window_index`, `window_name`, `window_active`,
 `window_panes`, `window_flags`, `window_width`, `window_height`,
+`window_zoomed_flag`, `window_layout`, `window_visible_layout`,
 `automatic-rename`, `pane_id`, `pane_index`, `pane_title`,
 `pane_current_path`, `pane_current_command`, `pane_active`, `pane_width`,
 `pane_height`, `pane_left`, `pane_top`, `pane_right`, `pane_bottom`,
-`pane_dead`, `pane_in_mode`, `pane_marked`, `pane_synchronized`,
-`history_size`, `host`, `host_short`, `pid`, `version`, `socket_path`, and
-`tuios_window_id`, the tuios id of the pane. `list-clients` adds
-`client_name`, `client_session`, `client_control_mode`, `client_activity`,
-`client_tty`, `client_width`, `client_height`, `client_termname` and
-`client_flags`. A variable the shim cannot fill expands to nothing, as in
-tmux, and is logged.
+`pane_at_left`, `pane_at_top`, `pane_at_right`, `pane_at_bottom`,
+`pane_pid`, `pane_tty`, `pane_dead`, `pane_in_mode`, `pane_marked`,
+`pane_synchronized`, `history_size`, `host`, `host_short`, `pid`, `version`,
+`socket_path`, and `tuios_window_id`, the tuios id of the pane.
+`list-clients` adds `client_name`, `client_session`, `client_control_mode`,
+`client_activity`, `client_tty`, `client_width`, `client_height`,
+`client_termname` and `client_flags`. `list-buffers` adds `buffer_name`,
+`buffer_size`, `buffer_sample` and `buffer_created`. A variable the shim
+cannot fill expands to nothing, as in tmux, and is logged.
 
 Some values come from tuios facts:
 
@@ -132,6 +158,20 @@ Some values come from tuios facts:
   prompt it is the base name of `$SHELL`.
 - `history_size` is the number of scrollback lines above the screen. A daemon
   that does not report `history_rows` leaves it empty.
+- `pane_pid` is the process the pane started, and `pane_tty` its terminal
+  device, both from the daemon. A pane the shim opened runs its pane holder
+  first, so its `pane_pid` is the holder's. A pane on another machine has
+  neither.
+- `pid` is the daemon's pid: the daemon is the shim's tmux server.
+- `pane_at_left` and the others are 1 for a pane on that edge of the box
+  around its workspace's panes. `window_zoomed_flag` is 1 when a pane of the
+  workspace is zoomed, and `window_flags` then holds `Z`.
+- `window_layout` is a tmux layout string. A tiled workspace becomes the
+  split tree tmux would hold: columns where a vertical line crosses no pane,
+  else rows. Panes that no straight line separates, such as overlapping
+  floating windows, are listed side by side in one container at their own
+  positions and sizes. tmux cannot describe that layout exactly.
+  `select-layout` with such a string changes nothing.
 - `automatic-rename` is 1 for a workspace with no name of its own. Such a
   workspace takes the name of its active pane.
 - `client_tty` is empty. tuios does not name its clients' terminals.
@@ -155,9 +195,20 @@ Some values come from tuios facts:
 | `show-options`, `show-window-options` | Print the options that describe tuios, such as `window-size`, `base-index 1` and `history-limit`. `window-size` is the session's `daemon.window_size` (`smallest`, `largest` or `latest`), or `latest` from a daemon that does not report it. `-v` prints the value alone, `-q` hides the error for an unknown option |
 | `set-option window-size`, `set-window-option window-size` | Set the session's `daemon.window_size` to `smallest`, `largest` or `latest`. `manual` is refused. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client) |
 | `kill-pane`, `kill-window` | Close a pane, or every pane of a workspace (`close-window`) |
-| `select-pane` | Focuses a pane (`focus-window`), or with `-L -R -U -D` its neighbour. `-T` names the pane (`set-window`) and leaves the focus alone. `-P` (a style) is ignored |
+| `select-pane` | Focuses a pane (`focus-window`), or with `-L -R -U -D` the target's neighbour. The neighbour is found from the panes' positions, as tmux finds it, so a session with no client attached answers too. `-T` names the pane (`set-window`) and leaves the focus alone. `-P` (a style) is ignored |
+| `last-pane` | Focuses the pane that was active in the window before the current one, from the workspace's focus history. `no last pane` when there is none |
 | `select-window`, `rename-window` | Show a workspace, name a workspace |
+| `next-window`, `previous-window` | Show the next or previous workspace that holds panes, wrapping around (`select-workspace`) |
+| `break-pane` | Moves a pane to the lowest empty workspace, or the empty one `-t` names (`move-window`). `-d` keeps the view where it is, `-n` names the workspace, `-P -F` prints the pane |
+| `join-pane`, `move-pane` | Move the `-s` pane to the workspace of the `-t` pane (`move-window`). Where it lands is the tuios layout's answer: `-b`, `-f`, `-h`, `-v` and `-l` do not change it |
+| `swap-pane` | Refused. tuios has no verb that exchanges two panes' places |
+| `rename-session` | Renames a session (`rename-session` verb) |
 | `respawn-pane -k` | Replaces the process of a pane the shim opened, keeping the pane and its id. See below |
+| `display-popup` | Opens a tuios popup that runs the command and returns when it exits (`popup` verb). See below |
+| `run-shell`, `if-shell` | Run a shell command as the caller. See below |
+| `wait-for` | Waits on a channel, signals it (`-S`), or locks (`-L`) and unlocks (`-U`) it. See below |
+| `show-buffer`, `save-buffer`, `list-buffers` | Print a buffer, write it to a file (`-` is standard output, `-a` appends), list the buffers newest first |
+| `show-environment`, `set-environment` | See below |
 | `-V` | Prints `tmux 3.4` |
 
 `set-option` and `set-window-option` of any option except `window-size`,
@@ -169,6 +220,79 @@ tuios owns the layout, the styling and the options. `kill-session`,
 session. Every other command fails with `unknown command`. Every flag not
 listed for a command fails with `unknown flag`. The shim does not accept a
 flag and then ignore it.
+
+`show-options history-limit` is the session's `appearance.scrollback_lines`,
+or 10000, the shipped default, when nothing set it.
+
+### display-popup
+
+`display-popup` opens a tuios popup on the target pane's workspace and
+returns when the popup's command exits, as tmux does. This is what
+`fzf --tmux` needs: fzf sees `TMUX`, runs itself in the popup, and reads the
+choice when the `tmux` call returns. One argument is a shell command line,
+several are an argv, and none is your shell. `-d` sets the directory, `-w`
+and `-h` the size (cells, or a percentage such as `80%`), `-T` the name, and
+`-e` the environment.
+
+The popup needs a tuios client attached to the session, as a tmux popup
+needs a client to draw on. A tuios popup always closes when its command
+exits. tuios places it and draws its border, so `-x`, `-y`, `-b`, `-B`, `-s`
+and `-S` are accepted and logged. `-C` is refused.
+
+### run-shell and if-shell
+
+`run-shell` runs a shell command with `/bin/sh` and prints its output.
+`-C` runs a tmux command line instead. `-b` starts the command and returns
+at once. `-d` waits that many seconds first. A command that fails prints
+`'command' returned N` and the shim exits with N, as tmux does.
+
+`if-shell` runs its first tmux command when the shell command succeeds, or
+with `-F` when the format is true, and the second, if given, when it does
+not. The shim waits for the shell command even with `-b`, since it has no
+server to finish the job after it exits. This is logged.
+
+tmux runs these commands in its server. The shim runs them itself, as you,
+from the process that called it, in its directory and environment. So they
+reach nothing you could not reach by running the command yourself, and
+they do not go through the daemon. A read-only control client cannot run
+them. Formats in the command are expanded first, as in tmux. A value that a
+program in a pane sets, such as a title, lands in the command as it is.
+Quote such a value with `#{q:...}`.
+
+tmux shows the output of `run-shell` in the pane's view mode. The shim has
+none, so it prints the output where tmux prints it when there is no pane to
+show it in.
+
+### wait-for
+
+`wait-for CHANNEL` blocks until another call signals the channel with
+`wait-for -S CHANNEL`. A signal sent while nobody waits is kept for the next
+wait, as in tmux. `wait-for -L CHANNEL` takes the channel's lock and blocks
+while another call holds it. `wait-for -U CHANNEL` hands the lock to the
+call that asked first, or frees it. A channel that is not locked fails with
+`channel NAME not locked`.
+
+A channel is a directory in `tmux/w/` beside the daemon socket, which only
+you can open. The calls meet there, since each `tmux` call is a process of
+its own.
+
+### Environment
+
+`set-environment NAME VALUE` sets a variable for the panes the shim opens in
+the session (`-g`: in every session). `-r` marks it to be removed from new
+panes, `-u` forgets it, `-h` hides it from `show-environment` without `-h`,
+and `-F` expands the value as a format. The panes that `split-window`,
+`new-window`, `respawn-pane`, `new-session` and `display-popup` start get
+the global variables, then the session's, then the ones `-e` gives.
+
+`show-environment` prints one variable or all of them: `NAME=value`,
+`-NAME` for a removed one, or with `-s` as shell commands. The global
+environment is your environment with the variables set on top. A session's
+environment holds only what was set on it: tuios copies nothing into it when
+a client attaches, so tmux's `update-environment` has no counterpart.
+
+The variables are kept in `tmux/env/` beside the daemon socket, readable
+only by you.
 
 A line may hold several commands separated by `;` (`tmux a \; b`).
 
@@ -195,6 +319,12 @@ The paste goes through `send-text`, so the daemon holds it to the caller's
 pane grants. A pane without `write` cannot paste into another pane. When the
 daemon refuses the paste, nothing is typed and the buffer stays.
 
+`save-buffer` writes the file as you, from the process that called it, so it
+reaches only files you could write yourself. A relative path is taken from
+the caller's directory. A new file is readable only by you. A path in the
+shim's own directory (`tmux/` beside the daemon socket) is refused, so a
+buffer cannot overwrite the shim's state.
+
 ### Control mode
 
 `tmux -C` and `tmux -CC` start a control client, as in tmux. The client reads
@@ -209,6 +339,10 @@ on the command line. A read-only client (`attach-session -r` or
 `-f read-only`) can run only commands that change nothing.
 `attach-session -f no-output` stops the `%output` lines. `-CC` wraps the
 output in the DCS sequence that iTerm2 expects.
+
+A command with no target acts on the session the client attached to, and on
+that session's active pane, as a command from an attached tmux client does.
+The session that the person's tuios client shows does not change this.
 
 The client sends these notifications. The shim reads them from the daemon's
 event stream (`subscribe`) and reads the sessions again every 2 seconds:
@@ -235,6 +369,40 @@ flow control (`refresh-client -A`, `-f pause-after`) or format subscriptions
 (`refresh-client -B`). `refresh-client -C` succeeds and changes nothing,
 because a tuios client sets the size. `%output` carries no bytes, because
 the daemon's event stream says that a pane printed, not what it printed.
+So a client that draws panes from `%output`, such as iTerm2 with `-CC`,
+shows each pane as it was when it last read it with `capture-pane`.
+
+#### What real `%output` needs
+
+This is the plan for `%output` with the pane's bytes. It is not built yet.
+
+- The daemon gets a verb that streams one pane's output on a connection of
+  its own: each chunk as a JSON line with its stream position and the bytes
+  in base64. It subscribes to the pane's PTY as an attached client does
+  (`PTY.Subscribe`), with pacing off, so a slow control client never holds
+  the pane's program back. It is a read, held to the same grants as
+  `capture-pane`, and it needs entries in the connection scope table, the
+  link policy and `list-verbs`.
+- When the subscriber falls behind and the PTY marks a gap, the verb sends a
+  gap line and starts again from the ring's tail. The graphics frames the
+  PTY can drop for a newer one are resolved as `streamPTYOutput` resolves
+  them for a client.
+- The shim's control loop opens one stream for each pane of the attached
+  session, and opens or closes streams when a refresh sees panes come and
+  go. It writes `%output %N` with the bytes escaped as tmux escapes them:
+  each byte below a space, and the backslash, as a backslash and three
+  octal digits. A line goes out between command blocks, never inside a
+  `%begin` and `%end` pair.
+- After a gap, the client's copy of the pane is wrong. tmux has no
+  notification that says so. With `refresh-client -f pause-after` the shim
+  can send `%pause` and `%continue`, after which the client reads the pane
+  again. Without it, which notification makes iTerm2 read the pane again
+  must be checked against iTerm2.
+
+It was not built with the rest of the shim's commands because it adds a
+second consumer of the daemon's output path, whose pacing, gap and frame
+logic is tied to the client connection, and because iTerm2 is not
+available here to check the result end to end.
 
 ### respawn-pane and the pane holder
 
@@ -265,7 +433,7 @@ refused command. That file is the list of what to add next. `--log-all`
 records every call.
 
 ```json
-{"time":"2026-09-23T16:19:27Z","argv":["tmux","wait-for","<1 redacted>"],"outcome":"unsupported","detail":["unknown command: wait-for"]}
+{"time":"2026-09-23T16:19:27Z","argv":["tmux","bind-key","<2 redacted>"],"outcome":"unsupported","detail":["unknown command: bind-key"]}
 ```
 
 `outcome` is `ok`, `ignored` (a command that does nothing here), `partial`
@@ -291,10 +459,14 @@ The shim grants nothing. It runs as you, dials the daemon socket you could
 dial with the tuios CLI, and calls verbs the CLI already has: `list-sessions`,
 `session-info`, `list-windows`, `list-workspaces`, `new-window`,
 `new-session`, `send-text`, `capture-pane`, `close-window`, `set-window`,
-`focus-window`, `select-workspace`, `set-workspace-name`, `get-option` and
-`subscribe`. In a pane, it adds confinement: every call names the caller's own
-session, and every target is resolved inside it. So a stray `-t` cannot touch
-another session.
+`focus-window`, `move-window`, `select-workspace`, `set-workspace-name`,
+`rename-session`, `popup`, `get-option`, `hello` and `subscribe`. In a pane,
+it adds confinement: every call names the caller's own session, and every
+target is resolved inside it. So a stray `-t` cannot touch another session.
+
+`run-shell`, `if-shell`, `save-buffer` and `wait-for` do not go through the
+daemon. They run in the process that called the shim, as you, and reach what
+that process could reach without the shim.
 
 The holder takes respawn requests on a unix socket in `tmux/p/`, beside the
 daemon socket. The shim creates that directory owned by you and mode 0700,

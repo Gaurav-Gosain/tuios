@@ -18,9 +18,14 @@ and every `tmux` call from that shell goes to the shim.
 A tmux window is a workspace (`@N`) and a pane is a tuios window (`%N`). It
 answers `split-window`, `new-window`, `send-keys`, `capture-pane -p`,
 `display-message -p`, `list-panes`, `list-windows`, `list-sessions`,
-`has-session`, `kill-pane`, `kill-window`, `select-pane`, `select-window`,
-`rename-window` and `respawn-pane -k`. Layout and style commands succeed and do
-nothing, since tuios owns the layout. The one option it honours is
+`has-session`, `kill-pane`, `kill-window`, `select-pane`, `last-pane`,
+`select-window`, `next-window`, `previous-window`, `rename-window`,
+`rename-session`, `break-pane`, `join-pane`, `respawn-pane -k`,
+`display-popup` (so `fzf --tmux` works), `run-shell`, `if-shell`, `wait-for`,
+the buffer commands and `show-environment`/`set-environment`. A command can be
+shortened to any prefix that names one command, and formats take tmux's
+modifiers (`#{=10:pane_title}`, `#{?cond,a,b}`, `#{s/a/b/:...}`). Layout and
+style commands succeed and do nothing, since tuios owns the layout. The one option it honours is
 `set -g window-size smallest|largest|latest`, the session's
 `daemon.window_size`. Commands that start, attach or end a
 session are refused. Anything else fails rather than pretending.
