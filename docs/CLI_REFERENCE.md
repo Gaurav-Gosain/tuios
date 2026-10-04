@@ -3767,7 +3767,7 @@ tuios notify test [--json]
 This command sends from its own process, not from the daemon. It reads a
 `token_env` variable from your shell. The daemon reads it from its own
 environment. The output shows the host of each provider and never a token
-or the full address. It sends with `curl`, as the daemon does. The command
+or the full address. It sends the same way the daemon does. The command
 exits with 1 when a provider fails.
 
 **Output:**
@@ -3833,9 +3833,10 @@ are not.
 Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
 never required and no token is created for you.
 
-The lookup and the download run through `curl`, which must be on `PATH`. It
-honours `HTTPS_PROXY` and `NO_PROXY`, and the token is handed to it on stdin,
-not on its command line.
+The lookup and the download need no other program. They honour `HTTPS_PROXY`
+and `NO_PROXY`. A download follows redirects to `https` addresses only. The
+token goes in a request header and is not sent to the host a download
+redirects to.
 
 ---
 

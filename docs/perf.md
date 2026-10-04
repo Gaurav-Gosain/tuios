@@ -1842,8 +1842,9 @@ five patterns, which would otherwise fail only on first use).
   `ValidateKey` change it would save about 0.4 ms per TUI start, and it adds
   hidden state that goes stale when the settings page edits the config.
 - **CoreFoundation and Security**, loaded by dyld because crypto/x509 is
-  linked: about 0.9 ms per exec. Removing it means a CLI binary without
-  net/http and crypto/tls.
+  linked: about 0.9 ms per exec. Removing it would mean a CLI binary without
+  net/http and crypto/tls. Notifications and `tuios update` now link them on
+  purpose, to drop the runtime need for curl.
 - **encoding/gob init**, 0.12 ms: the standard library scanning typelinks.
 - **gopsutil/cpu init**, 0.06 ms, which calls host_processor_info twice. On
   darwin gopsutil/process imports it for `ProcessCwd`.

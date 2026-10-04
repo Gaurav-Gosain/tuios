@@ -466,10 +466,10 @@ Pushover uses `user`, `user_env` and `user_file` for the user key in the
 same way. tuios reads the value each time it sends, so a new token in the
 file applies at once.
 
-tuios sends each notification with `curl`, so `curl` must be on the PATH of
-the daemon. curl uses `HTTPS_PROXY`, `NO_PROXY` and the system certificates.
-tuios gives curl the address, the token and the message on its standard
-input, not as arguments, so other users cannot see them in `ps`.
+tuios sends each notification itself and needs no other program. It uses
+`HTTPS_PROXY`, `NO_PROXY` and the system certificates. Each send waits at
+most 10 seconds. It follows at most 3 redirects. The token goes in a request
+header and is never logged.
 
 tuios does not write a secret to its logs or its output. The address is
 also secret on a public ntfy server, so logs and `tuios notify test` show
