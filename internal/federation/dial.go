@@ -67,6 +67,15 @@ func SSHDialer(sshBinary string) Dialer {
 
 // linkArgs is the argv SSHDialer runs, split out so a test can read it.
 func linkArgs(h Host) []string {
+	return SSHArgs(h, h.remoteCommand(true, "stdio-proxy"))
+}
+
+// SSHArgs is the ssh argv, without the program name, that runs remoteCmd on
+// h with the options every link uses: BatchMode, the host's connect timeout,
+// no pseudo-terminal, the host's own SSHOptions and the keepalives. tuios
+// hosts sync runs its own commands through it, so they reach the host exactly
+// the way the link does.
+func SSHArgs(h Host, remoteCmd string) []string {
 	secs := max(int(h.connectTimeout().Seconds()), 1)
 	args := []string{
 		"-o", "BatchMode=yes",
@@ -83,7 +92,7 @@ func linkArgs(h Host) []string {
 	// configured.
 	// -- ends ssh's options. Without it ssh reads options after the host
 	// name as well, so a command starting with a dash would be one.
-	return append(args, "--", h.Addr, h.remoteCommand(true, "stdio-proxy"))
+	return append(args, "--", h.Addr, remoteCmd)
 }
 
 // The keepalive settings.

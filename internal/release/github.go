@@ -5,8 +5,10 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -137,6 +139,24 @@ func (g *GitHub) Latest(ctx context.Context, withPrerelease bool) (Release, erro
 		}
 	}
 	return Release{}, ErrNoRelease
+}
+
+// Tag is the release published under one tag, such as "v0.8.0". It is what
+// tuios hosts sync asks for: the release that matches the running binary,
+// which is not always the newest one. A draft is reported as ErrNoRelease, for
+// the reason Latest skips it.
+func (g *GitHub) Tag(ctx context.Context, tag string) (Release, error) {
+	var rel ghRelease
+	if err := g.getJSON(ctx, g.baseURL()+"/repos/"+g.repo()+"/releases/tags/"+url.PathEscape(tag), &rel); err != nil {
+		if httpErr, ok := errors.AsType[*HTTPError](err); ok && httpErr.Status == 404 {
+			return Release{}, ErrNoRelease
+		}
+		return Release{}, err
+	}
+	if rel.TagName == "" || rel.Draft {
+		return Release{}, ErrNoRelease
+	}
+	return rel.toRelease(), nil
 }
 
 // Fetch implements Source.

@@ -22,6 +22,7 @@ what does and does not come back after each kind of interruption.
 - [Windows on Another Machine](#windows-on-another-machine)
 - [Agents and Worktrees on Another Machine](#agents-and-worktrees-on-another-machine)
 - [Global Sessions](#global-sessions)
+- [Keeping Hosts on One Version](#keeping-hosts-on-one-version)
 - [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
 - [Limitations](#limitations)
@@ -775,6 +776,24 @@ any session is, but where it is held says nothing about where its panes run.
 
 Turn the group off with `global_session = false` in the config. Sessions that
 already exist stay listed.
+
+## Keeping Hosts on One Version
+
+`tuios hosts sync` installs the tuios version of this machine on every host in
+the `[hosts]` table that runs another one. A release build sends its own
+release, `--dev` sends a build of the checkout, and `--binary` sends a file.
+
+```sh
+tuios hosts sync --dry-run    # see what would change
+tuios hosts sync --dev        # install a build of this checkout everywhere
+```
+
+The daemon on a host keeps running the old version, and its sessions keep
+running. The row for the host gives the command to restart it. Add
+`--restart` to restart them in the same run: sync lists the sessions and the
+programs that a restart ends, and asks first. The sessions come back after the
+restart with their layouts and new shells. See
+[`tuios hosts sync`](CLI_REFERENCE.md#tuios-hosts-sync).
 
 ## Machines on a Tailnet
 

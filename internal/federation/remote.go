@@ -106,6 +106,37 @@ func remoteProbeScript(announce bool) string {
 		}
 		b.WriteString(s)
 	}
+	for _, s := range findBinaryStatements() {
+		write(s)
+	}
+
+	// Run it, or say that nothing was found. 127 is what a shell exits with
+	// for a command it could not find, so a caller that already keys on it
+	// reads this the same way.
+	if announce {
+		write(`if [ -n "$p" ]; then echo "` + linkCommandPrefix + `$p"; exec "$p" "$@"; fi`)
+		write(`echo "` + linkNoCommand + `"`)
+	} else {
+		write(`if [ -n "$p" ]; then exec "$p" "$@"; fi`)
+		write(`echo "` + RemoteBinary + ` was not found on this host" >&2`)
+	}
+	write(`exit 127`)
+	return b.String()
+}
+
+// FindBinaryScript is the part of the link's probe that finds tuios: sh
+// statements, joined by "; ", that leave the path in $p, or $p empty when
+// nothing was found. It obeys the same quoting rules as the probe, so a caller
+// can put it inside single quotes for any login shell. tuios hosts sync uses
+// it, so it looks for the binary exactly where the link does.
+func FindBinaryScript() string {
+	return strings.Join(findBinaryStatements(), "; ")
+}
+
+// findBinaryStatements are the three lookups, in order.
+func findBinaryStatements() []string {
+	var out []string
+	write := func(s string) { out = append(out, s) }
 
 	// 1. The PATH. The result is trusted only when it is an executable
 	// absolute path: `command -v` can also name a function or an alias.
@@ -128,19 +159,7 @@ func remoteProbeScript(announce bool) string {
 	write(`first() { while IFS= read -r l; do case $l in /*) if [ -x "$l" ]; then printf "%s" "$l"; return; fi;; esac; done; }`)
 	write(`if [ -z "$p" ]; then for s in "$SHELL" sh; do p=$("$s" -l -c "command -v ` + RemoteBinary +
 		`" </dev/null 2>/dev/null | first); if [ -n "$p" ]; then break; fi; done; fi`)
-
-	// Run it, or say that nothing was found. 127 is what a shell exits with
-	// for a command it could not find, so a caller that already keys on it
-	// reads this the same way.
-	if announce {
-		write(`if [ -n "$p" ]; then echo "` + linkCommandPrefix + `$p"; exec "$p" "$@"; fi`)
-		write(`echo "` + linkNoCommand + `"`)
-	} else {
-		write(`if [ -n "$p" ]; then exec "$p" "$@"; fi`)
-		write(`echo "` + RemoteBinary + ` was not found on this host" >&2`)
-	}
-	write(`exit 127`)
-	return b.String()
+	return out
 }
 
 // remoteCommand is the command string ssh runs on the far side to start tuios
@@ -154,8 +173,23 @@ func (h Host) remoteCommand(announce bool, args ...string) string {
 	if h.Command != "" {
 		return strings.Join(append([]string{h.Command}, args...), " ")
 	}
-	parts := []string{"sh", "-c", "'" + remoteProbeScript(announce) + "'", "sh"}
+	return ShellCommand(remoteProbeScript(announce), args...)
+}
+
+// ShellCommand is the command string that runs script under sh on the far
+// side with args as its positional parameters: sh -c '<script>' sh <args>.
+// script must follow remoteProbeScript's rules (no single quote, backslash,
+// newline or exclamation mark), and every arg must already be safe for the
+// remote shell; see SafeRemoteArg.
+func ShellCommand(script string, args ...string) string {
+	parts := []string{"sh", "-c", "'" + script + "'", "sh"}
 	return strings.Join(append(parts, args...), " ")
+}
+
+// SafeRemoteArg reports whether s can be sent to the remote shell as one
+// plain word.
+func SafeRemoteArg(s string) bool {
+	return remoteArgPattern.MatchString(s)
 }
 
 // cacheableRemotePath reports whether a path the probe found can be sent back

@@ -132,7 +132,7 @@ asks about a host key. Run ssh to the machine once by hand to accept its key.`,
 		},
 	}
 
-	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand()}
+	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand()}
 }
 
 // runHostAdd writes one [hosts.NAME] table.

@@ -13,6 +13,8 @@ tuios hosts remove build                # drop it
 tuios hosts                             # every host and its link state
 tuios hosts tailnet                     # machines on a Tailscale tailnet
 tuios hosts add gpu --tailnet           # the tailnet machine named gpu
+tuios hosts sync --dry-run --json      # which hosts run another tuios version
+tuios hosts sync --dev                  # install a build of this checkout on each host
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
@@ -20,6 +22,13 @@ tuios list-agents --all-hosts
 `hosts add` also takes `--command PATH` for the tuios binary on the host,
 `--ssh-option ARG` for extra ssh arguments, `--connect-timeout SECONDS`, and
 `--repos-root DIR` for where its checkouts live. A change takes effect at once.
+
+`hosts sync` installs the version of this machine where a host differs. It never
+restarts a daemon unless given `--restart`, and a restart ends every program in
+the panes of that daemon. Without a terminal, `--restart` also needs `--yes`.
+Do not pass either unless the person asked for a restart. Each row of `--json`
+has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
+the panes a restart would end.
 
 The daemon follows each host's agents and Inbox over the link as they change, so
 `list-attention` and the person's Inbox cover every machine, and

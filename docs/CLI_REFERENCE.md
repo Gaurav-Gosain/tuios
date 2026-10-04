@@ -3212,6 +3212,7 @@ An enabled plugin runs with your rights. See
 | `tuios hosts remove <name>` | Remove a machine |
 | `tuios hosts test <name>` | Open one link to a host and report what happened |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
+| `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
 | `tuios stdio-proxy [--as NAME]` | Hidden. What the other machine's daemon runs over ssh for a link. `--as` pins the name this machine's link policy is resolved for, whatever the other machine calls itself: put it in a forced command in `authorized_keys` (`command="tuios stdio-proxy --as laptop",restrict ...`) to make the policy a boundary. See [What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here) |
 
 A call over a link that the far machine's policy does not allow fails with
@@ -3243,6 +3244,65 @@ there.
 | `tuios tape show <name>` | Display the contents of a tape file |
 | `tuios tape delete <name>` | Delete a tape recording |
 | `tuios tape dir` | Show the tape recordings directory path |
+
+### `tuios hosts sync`
+
+Install the tuios version of this machine on the hosts in the `[hosts]` table.
+
+```sh
+tuios hosts sync --dry-run          # the plan, and no change
+tuios hosts sync --dev              # install a build of this checkout on every host
+tuios hosts sync build lab          # only these hosts
+tuios hosts sync build --restart    # install, then restart the daemon on build
+tuios hosts sync --restart --yes --json
+```
+
+| Flag | What it does |
+|------|--------------|
+| `--dev` | Build the binary from a tuios checkout: `--src DIR`, or else the folder you are in. The version is `dev+COMMIT`, and `dev+COMMIT-dirty.HASH` for a tree with changes |
+| `--src DIR` | The checkout to build. Sets `--dev` |
+| `--binary PATH` | Send this binary. A host with a different system fails |
+| `--restart` | Restart each daemon whose version is different |
+| `--yes`, `-y` | Restart without a question. Needed for `--restart` without a terminal |
+| `--dry-run` | Show the plan and change nothing |
+| `--json` | Print the result as JSON |
+| `--local` | Sync this machine too. Naming `local` does the same |
+| `--ghostty` | Refused: the ghostty backend cannot be cross-compiled |
+
+First, sync reads every host over ssh at once, four at a time: the system
+(`uname -sm`), the tuios that the link finds there, its version, and the
+daemon over a link of its own. It reads the sessions of the daemon and the
+panes that run a program. A pane runs a program when the foreground process of
+its terminal is not its shell, or when the pane process is not a shell.
+
+The binary for a release build is the archive of that release for each host
+system. sync checks it against the published `checksums.txt` and sends it
+over ssh, so the host needs no internet. Without a release, the command
+builds the checkout you are in, or asks for `--src` or `--binary`. A build
+for each system is made once, with the release flags (`CGO_ENABLED=0`,
+`-trimpath`, `-ldflags "-s -w"`), and only for the systems that need it.
+
+The binary goes where the host has tuios, when you can write that folder, and
+a configured `command` is where it goes. Otherwise it goes to
+`~/.local/bin/tuios`, and sync warns when a login shell on the host does not
+find it there. sync never uses sudo. It writes the binary to a temporary file
+in the same folder, checks its size and sha256, runs `--version` on it, and
+then renames it into place. A daemon that runs the old file keeps running.
+
+sync never restarts a daemon by default. The row says that the daemon still
+runs the old version, and gives the command that restarts it. A client of the
+new version can refuse to connect to an old daemon when the protocol changed.
+With `--restart`, sync lists the sessions on each daemon that it will restart
+and the panes with a running program, and asks. A restart is `kill-server`,
+which saves every session, then `start-server`, which restores them. The
+layouts come back with new shells, and the programs in them end. A daemon with
+no sessions restarts without a question. A daemon that already runs the new
+version is never restarted. On this machine, sync does not restart the daemon
+of the pane it runs in.
+
+One host that fails does not stop the others. The exit status is 1 when a host
+failed. The table has one row per host: the system, the version before and
+after, the daemon, and what was done.
 
 ### `tuios pane-grants`
 
@@ -4467,8 +4527,8 @@ Any value silences the agent alert sounds, whatever
 ### `TUIOS_SSH`
 
 The ssh program to run instead of `ssh` on `PATH`: for the daemon's links to
-the `[hosts]` machines (set it where the daemon starts), and for `--ssh` and
-`tuios hosts test`.
+the `[hosts]` machines (set it where the daemon starts), and for `--ssh`,
+`tuios hosts test` and `tuios hosts sync`.
 
 ### `TUIOS_HOST_RECONNECT_BUDGET`
 
