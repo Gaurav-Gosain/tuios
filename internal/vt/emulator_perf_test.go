@@ -100,6 +100,26 @@ func BenchmarkEmulatorShortLineScroll(b *testing.B) {
 	})
 }
 
+// BenchmarkSemanticMarkerTrim is the cost a full scrollback ring pays per
+// dropped line to keep the OSC 133 marks pointing at their lines. It runs once
+// per line of a flood, so it has to be constant, whatever the number of marks
+// a long shell session has left behind.
+func BenchmarkSemanticMarkerTrim(b *testing.B) {
+	for _, marks := range []int{0, 1000} {
+		b.Run(fmt.Sprintf("markers-%d", marks), func(b *testing.B) {
+			l := vt.NewSemanticMarkerList(10000)
+			for i := range marks {
+				// Far enough down that no trim in the run removes one.
+				l.Add(vt.SemanticMarker{Type: vt.MarkerPromptStart, AbsLine: 1<<40 + i})
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				l.AdjustForScrollbackTrim(1)
+			}
+		})
+	}
+}
+
 // BenchmarkEmulatorScrollThroughput measures sustained scrolling, where every
 // line written pushes one into scrollback. Scrollback retention is what makes
 // this different from a plain write: the cost per line includes moving a line
