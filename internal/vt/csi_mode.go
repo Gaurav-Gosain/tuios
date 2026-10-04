@@ -66,6 +66,11 @@ func (e *Emulator) setAltScreenMode(on bool) {
 	// window is never left holding a stale frame (e.g. when an app exits without
 	// closing its synchronized update).
 	e.cachedSyncOutput.Store(false)
+	// Each screen has its own kitty keyboard stack.
+	if e.kittyKbd != nil {
+		e.kittyKbd.SetAltScreen(on)
+		e.updateKittyKeyboardCache()
+	}
 	if e.cb.AltScreen != nil {
 		e.cb.AltScreen(on)
 	}

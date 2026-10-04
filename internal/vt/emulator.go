@@ -829,6 +829,13 @@ func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 			e.scr = &e.scrs[0]
 		}
 	}
+	// The kitty keyboard stack follows the screen, without the reset a live
+	// switch gives the alternate one: RestoreKittyKeyboardState puts back the
+	// stack that was in use.
+	if e.kittyKbd != nil {
+		e.kittyKbd.SelectScreen(enabled)
+		e.updateKittyKeyboardCache()
+	}
 	// NOTE: We don't modify e.modes[] here to avoid concurrent map access.
 	// The modes will be updated naturally when PTY output is processed.
 }

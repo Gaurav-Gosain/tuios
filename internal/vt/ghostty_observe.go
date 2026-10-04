@@ -247,6 +247,9 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 				}
 			}
 			t.cachedAltScreen.Store(set)
+			// Each screen has its own kitty keyboard stack, as in the
+			// pure emulator and in libghostty itself.
+			t.kittyKbd.SetAltScreen(set)
 			t.queue(func(cb Callbacks) {
 				if cb.AltScreen != nil {
 					cb.AltScreen(set)

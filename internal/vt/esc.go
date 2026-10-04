@@ -150,6 +150,7 @@ func (e *Emulator) fullReset() {
 	// Reset kitty keyboard protocol state
 	if e.kittyKbd != nil {
 		e.kittyKbd.Reset()
+		e.kittyKbd.SelectScreen(e.scr == &e.scrs[1])
 		e.updateKittyKeyboardCache()
 	}
 }

@@ -11,44 +11,106 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// maxKittyKeyboardStack is how many entries one screen's flag stack holds.
+// The protocol asks for a limit so a guest that pushes without popping cannot
+// grow it without bound. kitty and ghostty both hold eight, and evict the
+// oldest entry to make room for a new one, which is what Push does here.
+const maxKittyKeyboardStack = 8
+
 // kittyKeyboardState tracks the kitty keyboard protocol state for a terminal.
-// The protocol uses a stack of flag sets that can be pushed/popped by applications.
+// The protocol uses a stack of flag sets that can be pushed/popped by
+// applications, and the main and alternate screens each have their own: a
+// full-screen program that pushes flags on the alternate screen and exits
+// without popping them leaves the shell's keyboard as it found it.
 type kittyKeyboardState struct {
-	stack []int // Stack of keyboard flag bitmasks
+	main, alt []int // flag stacks, oldest first; never empty
+	onAlt     bool  // the alternate screen is the active one
 }
 
 // newKittyKeyboardState creates a new kitty keyboard state with an empty stack.
 func newKittyKeyboardState() *kittyKeyboardState {
 	return &kittyKeyboardState{
-		stack: []int{0}, // Always have at least one entry (the base)
+		main: []int{0}, // Always have at least one entry (the base)
+		alt:  []int{0},
 	}
+}
+
+// active returns the stack of the screen in use.
+func (k *kittyKeyboardState) active() *[]int {
+	if k.onAlt {
+		return &k.alt
+	}
+	return &k.main
+}
+
+// Stack returns the active screen's stack, oldest entry first. The caller
+// must not modify it.
+func (k *kittyKeyboardState) Stack() []int {
+	return *k.active()
+}
+
+// SetStack replaces the active screen's stack, keeping the newest entries
+// when there are more than the limit allows. An empty stack is the base entry.
+func (k *kittyKeyboardState) SetStack(stack []int) {
+	if len(stack) > maxKittyKeyboardStack {
+		stack = stack[len(stack)-maxKittyKeyboardStack:]
+	}
+	if len(stack) == 0 {
+		stack = []int{0}
+	}
+	*k.active() = slices.Clone(stack)
+}
+
+// SetAltScreen follows a switch between the main and the alternate screen.
+// Entering the alternate screen starts it with an empty stack, as it starts
+// with an empty screen: flags a previous program left there are not the next
+// one's. The main screen's stack is kept as it was.
+func (k *kittyKeyboardState) SetAltScreen(on bool) {
+	if on && !k.onAlt {
+		k.alt = []int{0}
+	}
+	k.onAlt = on
+}
+
+// SelectScreen points the state at the main or the alternate screen without
+// touching either stack. It is for a restore, which puts back a stack that
+// was saved on whichever screen was in use.
+func (k *kittyKeyboardState) SelectScreen(alt bool) {
+	k.onAlt = alt
 }
 
 // CurrentFlags returns the currently active keyboard flags.
 func (k *kittyKeyboardState) CurrentFlags() int {
-	if len(k.stack) == 0 {
+	st := *k.active()
+	if len(st) == 0 {
 		return 0
 	}
-	return k.stack[len(k.stack)-1]
+	return st[len(st)-1]
 }
 
-// Push pushes a new set of flags onto the stack.
+// Push pushes a new set of flags onto the stack. A full stack drops its
+// oldest entry first.
 func (k *kittyKeyboardState) Push(flags int) {
-	k.stack = append(k.stack, flags)
+	st := k.active()
+	if len(*st) >= maxKittyKeyboardStack {
+		*st = append((*st)[:0], (*st)[1:]...)
+	}
+	*st = append(*st, flags)
 }
 
-// Pop removes n entries from the top of the stack.
-// It always keeps at least one entry (the base).
+// Pop removes n entries from the top of the stack. Popping every entry, or
+// more, leaves no flags set, as in kitty, where popping past the bottom is
+// how a program gets back to the legacy encoding whatever was pushed.
 func (k *kittyKeyboardState) Pop(n int) {
 	if n <= 0 {
 		n = 1
 	}
-	for range n {
-		if len(k.stack) <= 1 {
-			break
-		}
-		k.stack = k.stack[:len(k.stack)-1]
+	st := k.active()
+	if n >= len(*st) {
+		*st = append((*st)[:0], 0)
+		return
 	}
+	*st = (*st)[:len(*st)-n]
 }
 
 // Set modifies the current flags based on the mode:
@@ -68,16 +130,20 @@ func (k *kittyKeyboardState) Set(flags, mode int) {
 	default:
 		current = flags
 	}
-	if len(k.stack) == 0 {
-		k.stack = append(k.stack, current)
+	st := k.active()
+	if len(*st) == 0 {
+		*st = append(*st, current)
 	} else {
-		k.stack[len(k.stack)-1] = current
+		(*st)[len(*st)-1] = current
 	}
 }
 
-// Reset clears the stack back to the base entry.
+// Reset clears both stacks back to the base entry and selects the main
+// screen, which is where a hard reset leaves the terminal.
 func (k *kittyKeyboardState) Reset() {
-	k.stack = []int{0}
+	k.main = []int{0}
+	k.alt = []int{0}
+	k.onAlt = false
 }
 
 // HasDisambiguate returns true if the disambiguate flag is set.
@@ -155,8 +221,8 @@ func (e *Emulator) KittyKeyboardFlags() int {
 	return int(e.cachedKittyFlags.Load())
 }
 
-// KittyKeyboardStack returns a copy of the kitty keyboard flag stack, base
-// entry first. It exists for daemon state sync: a guest negotiates the
+// KittyKeyboardStack returns a copy of the kitty keyboard flag stack of the
+// screen in use, base entry first. It exists for daemon state sync: a guest negotiates the
 // protocol once (CSI > u push or CSI = u set) and never repeats it, so a
 // reattaching client must be handed the stack rather than rediscover it from
 // the output buffer. Call from the goroutine that feeds the emulator, or with
@@ -165,18 +231,19 @@ func (e *Emulator) KittyKeyboardStack() []int {
 	if e.kittyKbd == nil {
 		return nil
 	}
-	return slices.Clone(e.kittyKbd.stack)
+	return slices.Clone(e.kittyKbd.Stack())
 }
 
 // RestoreKittyKeyboardState replaces the kitty keyboard flag stack from a
 // saved state and refreshes the cache KittyKeyboardFlags reads. Used when
 // reconnecting to a daemon session; a nil or empty stack is a no-op so state
-// from an older daemon leaves the default (empty) state untouched.
+// from an older daemon leaves the default (empty) state untouched. The stack
+// goes to the screen in use, so restore the alternate screen first.
 func (e *Emulator) RestoreKittyKeyboardState(stack []int) {
 	if e.kittyKbd == nil || len(stack) == 0 {
 		return
 	}
-	e.kittyKbd.stack = slices.Clone(stack)
+	e.kittyKbd.SetStack(stack)
 	e.updateKittyKeyboardCache()
 }
 

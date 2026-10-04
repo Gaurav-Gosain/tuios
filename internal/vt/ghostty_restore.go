@@ -307,9 +307,11 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	// early on an empty stack.
 	if len(r.kittyKbdStack) > 0 {
 		t.kittyKbd.Reset()
-		t.kittyKbd.stack = append([]int(nil), r.kittyKbdStack...)
+		t.kittyKbd.SelectScreen(altActive)
+		t.kittyKbd.SetStack(r.kittyKbdStack)
 	} else if !extend {
 		t.kittyKbd.Reset()
+		t.kittyKbd.SelectScreen(altActive)
 	}
 
 	t.term.VTWrite(seq.Bytes())
