@@ -25,6 +25,92 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+## Opening links
+
+tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a
+program marked, such as `ls --hyperlink`, `gcc`, `delta`, `gh` or an agent
+CLI. Its text and its target can be different. A bare URL is plain text that
+starts with `http://`, `https://`, `ftp://`, `ftps://`, `file://`, `ssh://` or
+`git://`. Hints mode and the pointer use the same URL detector.
+
+```toml
+[appearance]
+links = "all"          # off, marked (OSC 8 only), all
+link_click = "both"    # both, ctrl, shift, off
+link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `links` | `all` | The links that tuios finds. `marked` finds only OSC 8 links. |
+| `link_click` | `both` | The click that opens a link. `both` is `Ctrl+click` and `Shift+click`. |
+| `link_opener` | empty | The command that opens a web link. tuios puts the URL where `%s` is, or at the end. If this is empty, tuios uses `$BROWSER`, then the system opener. |
+
+The system opener is `open` on macOS, `rundll32` on Windows, `wslview` under
+WSL, and `xdg-open` on other systems. tuios runs no shell. It gives the URL to
+the opener as one argument. If the opener fails, tuios shows a message and
+puts the URL on your clipboard.
+
+### Which machine opens the link
+
+- A local client opens the link on your machine.
+- Under `ssh`, tuios does not use the system opener, because it would open the
+  browser on the remote machine. tuios puts the URL on your clipboard. Set
+  `$BROWSER` or `link_opener` to a command that forwards the URL, if you have
+  one.
+- A remote client (`tuios ssh`, the web client) puts the URL on your
+  clipboard.
+- A Linux machine with no `DISPLAY` and no `WAYLAND_DISPLAY` has no desktop.
+  tuios puts the URL on your clipboard.
+
+In all these cases, tuios also sends each link to your terminal as OSC 8. Use
+the link click of your terminal to open it on your machine.
+
+### Safety
+
+- Only `http`, `https`, `mailto`, `ftp` and `ftps` links go to the opener.
+  tuios copies other links, such as `javascript:`, `data:` or the scheme of an
+  application.
+- A `file://` link opens in an editor pane only when the file is on this
+  machine. A `file://` link with the name of another host does not open.
+- tuios refuses an address with control characters or spaces.
+- The hover label shows the target. After a click, the message names the host.
+  tuios does not ask before it opens a link. The label and the scheme list
+  give the protection, and a prompt on each click teaches people to accept it.
+
+### OSC 8 in the output of tuios
+
+tuios draws each pane into its own frame, so your terminal sees the output of
+tuios and not the output of the program. tuios writes every link in the
+focused pane as OSC 8. An OSC 8 link keeps its URI and its `id=`. A bare URL
+gets an `id=` from tuios, so a URL that wraps to the next row is one link.
+Your terminal can then show and open the real target. In a pane that is not
+focused, tuios writes the OSC 8 links of the program. Your terminal finds the
+bare URLs itself.
+
+### Terminals
+
+A terminal sends a click to tuios only when the terminal does not use the
+click itself. Most terminals keep `Shift+click` for their own selection when
+a program reads the mouse. That is why `Ctrl+click` is the main click.
+
+| Terminal | `Shift+click` gets to tuios | `Ctrl+click` gets to tuios | The terminal opens OSC 8 links |
+|---|---|---|---|
+| kitty | No. kitty opens the URL under the pointer. | Yes | Yes, with `Shift+click` or `Ctrl+Shift+click` |
+| Ghostty | No. Ghostty extends its selection. | Yes. On a link, Ghostty opens it. | Yes, with `Ctrl+click` (Linux) or `Cmd+click` (macOS) |
+| WezTerm | No. `Shift` bypasses mouse reporting. | Yes | Yes |
+| Alacritty | No. Alacritty opens a hinted URL. | Yes | Yes, with `Shift+click` |
+| foot | No. `Shift` bypasses mouse reporting. | Yes | Yes, in URL mode (`Ctrl+Shift+O`) |
+| iTerm2 | Yes | Yes | Yes, with `Cmd+click` |
+| Windows Terminal | No. `Shift` bypasses mouse mode. | Yes | Yes, with `Ctrl+click` when it gets the click |
+| xterm | No. `Shift` bypasses mouse reporting. | Yes | No |
+
+`Cmd` is not part of the mouse protocol, so tuios never sees `Cmd+click`. On
+macOS, `Cmd+click` opens a link through the terminal, from the OSC 8 that
+tuios writes. In Ghostty, a program can ask for `Shift+click` with
+`XTSHIFTESCAPE`, or you can set `mouse-shift-capture = true`. tuios does not
+ask, because that takes `Shift` selection away from you.
+
 ## Neovim pane navigation
 
 `appearance.nvim_navigation` is `false` by default. Set it to `true` to enable

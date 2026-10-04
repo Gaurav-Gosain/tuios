@@ -210,6 +210,18 @@ the text into the focused pane. This action has no default key. Bind it, or
 run it from the command palette. Set `hints.all_panes = true` to make
 `Ctrl+B F` do the same.
 
+## Links
+
+`Ctrl+click` on a link opens it. `Shift+click` also opens it, but most
+terminals keep `Shift+click` for their own selection. Hover a link to see
+where it goes. The label under the pointer shows the real target, also when
+the text on the screen is different.
+
+`Ctrl+click` and drag still moves the pane. A link opens only when the
+pointer does not move. `appearance.link_click` sets which click opens a
+link. See [CONFIGURATION.md](CONFIGURATION.md#opening-links) for the
+settings, the opener and a table of terminals.
+
 ## Scratch terminal
 
 `Ctrl+B g` shows the scratch terminal, a small layout of panes in a box over
