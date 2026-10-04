@@ -111,7 +111,7 @@ func setPluginsKey(path, key string, values []string) error {
 			out = append(out, "")
 		}
 		out = append(out, "[plugins]", line)
-		return writeConfigBytes([]byte(joinLines(out)), path)
+		return writePluginsEdit(out, path, key, values)
 	}
 	from, to := keySpan(lines[start+1:end], key)
 	if from < 0 {
@@ -124,7 +124,29 @@ func setPluginsKey(path, key string, values []string) error {
 		out = append(out, line)
 		out = append(out, lines[to:]...)
 	}
-	return writeConfigBytes([]byte(joinLines(out)), path)
+	return writePluginsEdit(out, path, key, values)
+}
+
+// writePluginsEdit writes an edited file only when it reads back with the
+// key at the values asked for. A file that sets plugins in another form,
+// such as plugins.enabled = [...] at the top or an inline table, is not
+// one the line edit knows, and writing it could break the file.
+func writePluginsEdit(lines []string, path, key string, values []string) error {
+	data := []byte(joinLines(lines))
+	var doc struct {
+		Plugins PluginsConfig `toml:"plugins"`
+	}
+	if err := toml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand: %w", path, err)
+	}
+	got := doc.Plugins.Enabled
+	if key == "dirs" {
+		got = doc.Plugins.Dirs
+	}
+	if !slices.Equal(got, values) && !(len(got) == 0 && len(values) == 0) {
+		return fmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand", path)
+	}
+	return writeConfigBytes(data, path)
 }
 
 // keySpan finds the lines key = [...] takes in a table body, an array that
