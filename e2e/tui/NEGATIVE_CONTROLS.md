@@ -784,6 +784,32 @@ written: fmt prints a pointer field with `%s` or `%q` through its error path,
 which skips `String` and `Format`, so a token in `[notify.ntfy]` printed whole.
 The provider tables now format themselves.
 
+## Shipping a worktree: commit, merge, push, pull request
+
+The tests in `ship_test.go` use a throwaway repository with a bare
+repository as its origin, a fake `gh` on `PATH` that records its arguments
+and answers with canned JSON, and a fake `gpg` that signs anything. Each
+writes its `tuios` calls to `transcript.txt`, and the main test writes the
+fake `gh`'s calls to `gh-calls.txt`. Each control cut one line from the
+current tree, built a binary, and ran the named test against it.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A conflicting merge left in place | `abortMerge`: the `git reset --merge` call cut | `TestShipFromWorktreeToPullRequest` (the main checkout changed, is not clean, has `MERGE_HEAD`, and README holds conflict markers) | **caught** |
+| A push without a confirmation | `shipOutboundGate`: the confirm token check made false | `TestShipFromWorktreeToPullRequest` ("the unconfirmed push reached the origin: refs/heads/feat/ship") | **caught** |
+| The poll not started on attach | `handleAttach`: the `kickPRPoll` call cut | `TestShipFromWorktreeToPullRequest` (the badge stays `PR #7 open pending` after gh says the checks passed) | **caught** |
+| A commit that is not the person's | `CommitAll`: the commit run with the checkpoint identity and `--no-gpg-sign` | `TestShipFromWorktreeToPullRequest` (the commit is by `tuios`, and has no `gpgsig`) | **caught** |
+| A push from a pane with no question | `shipCallerIsPerson`: answers true for every caller | `TestShipPushFromAPaneAsksThePerson` (the wait for the Inbox question times out, and the push has already gone out) | **caught** |
+| `fan keep --merge` that does not merge | `verbKeepFan`: the `if p.Merge` block made false | `TestFanKeepMergesTheKeptAttempt` (the keep into a dirty main checkout is not refused) | **caught** |
+
+The positive halves are in the same tests: the commit refused while the
+agent works is followed by one that succeeds, the push refused without a
+confirmation is followed by one with `--yes` that reaches the origin, the
+conflicting and dirty merges follow a fast-forward that lands, and the
+refused keep is followed by one that merges. A push that is not a
+fast-forward, a squash or ff-only merge, a pull request that is already
+open, and gh missing or not logged in have no end-to-end test.
+
 ## The session-list poll tick composes no frame
 
 The poll tick stopped composing a frame to save idle CPU. The rail draws
