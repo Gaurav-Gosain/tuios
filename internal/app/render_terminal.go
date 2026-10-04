@@ -383,9 +383,20 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// once, which is the whole cost of the feature on them.
 	findBare := m.Settings.Links == config.LinksAll
 	var bareRows [][]paneBareSpan
-	lineTop, lineStart := 0, 0 // the logical line's first row and its offset in builder
-	lineScanned := false       // the line's URLs are in bareRows
-	schemeState := 0           // characters of "://" seen in a row
+	// lineTop is the first row of the logical line the loop is in, or -1 when
+	// it is not known. It is looked up only for a line that has to be scanned:
+	// asking the emulator whether a row wraps costs allocations on the ghostty
+	// backend, so a line with nothing to find is never asked about.
+	lineTop := 0
+	lineScanned := false // the line's URLs are in bareRows
+	scannedEnd := -1     // the last row of the line lineScanned is about
+	// rowStart is where each row begins in builder, so a line can be drawn
+	// again from a first row found after it was drawn.
+	var rowStart []int
+	if findBare {
+		rowStart = make([]int, maxY)
+	}
+	schemeState := 0 // characters of "://" seen in a row
 	lineHasScheme := false
 	// A logical line the viewport cuts may hold a URL whose "://" is off
 	// screen. The first line is cut when the row above the viewport wraps
@@ -629,8 +640,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		if y > 0 {
 			builder.WriteRune('\n')
 		}
-		if y == lineTop {
-			lineStart = builder.Len()
+		if findBare {
+			rowStart[y] = builder.Len()
 		}
 		schemeState = 0
 
@@ -954,30 +965,47 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			openLink = uv.Link{}
 		}
 
-		if findBare {
-			wraps := y+1 < maxY && paneRowWraps(window, y)
-			// The logical line ends on this row and holds "://": find its
-			// URLs and draw it again from its first row.
-			cut := (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow)
-			if !wraps && (lineHasScheme || cut) && !lineScanned {
-				if bareRows == nil {
-					bareRows = make([][]paneBareSpan, maxY)
-				}
-				bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY)
-				lineScanned = true
-				builder.Truncate(lineStart)
-				y = lineTop - 1
-				// The newline in front of the first row is before lineStart,
-				// so the redrawn row must not write another.
-				if lineTop > 0 {
-					builder.Truncate(lineStart - 1)
-				}
-				continue
-			}
-			if !wraps {
+		switch {
+		case !findBare:
+		case lineScanned:
+			// The line was drawn again with its URLs. Past its last row the
+			// next line starts.
+			if y == scannedEnd {
 				lineTop = y + 1
 				lineScanned, lineHasScheme = false, false
 			}
+		case lineHasScheme || (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow):
+			// The line holds "://", or the viewport cuts it: it has to be
+			// scanned once it ends.
+			if lineTop < 0 {
+				lineTop = y
+				for lineTop > 0 && paneRowWraps(window, lineTop-1) {
+					lineTop--
+				}
+			}
+			if y+1 < maxY && paneRowWraps(window, y) {
+				break
+			}
+			// The line ends on this row: find its URLs and draw it again
+			// from its first row.
+			if bareRows == nil {
+				bareRows = make([][]paneBareSpan, maxY)
+			}
+			bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY)
+			lineScanned, scannedEnd = true, y
+			lineStart := rowStart[lineTop]
+			builder.Truncate(lineStart)
+			y = lineTop - 1
+			// The newline in front of the first row is before lineStart,
+			// so the redrawn row must not write another.
+			if lineTop > 0 {
+				builder.Truncate(lineStart - 1)
+			}
+			continue
+		default:
+			// Nothing to find on the line so far. Where it began is looked up
+			// if a later row of it turns out to hold "://".
+			lineTop = -1
 		}
 	}
 
