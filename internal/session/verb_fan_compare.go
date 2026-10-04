@@ -663,6 +663,12 @@ type keepFanParams struct {
 	Session string `json:"session"`
 	Stash   bool   `json:"stash"`
 	Force   bool   `json:"force"`
+	// Merge merges the kept attempt's branch into its base first, the way
+	// ship-merge does, with MergeMode and Into as ship-merge takes mode and
+	// into. A merge that fails stops the keep before any sibling is removed.
+	Merge     bool   `json:"merge"`
+	MergeMode string `json:"merge_mode"`
+	Into      string `json:"into"`
 }
 
 // verbKeepFan answers keep-fan: every sibling of the kept session is removed
@@ -688,6 +694,36 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 			Command: "tuios worktree rm " + kept.Name(),
 			Detail:  "Nothing was removed. remove-worktree removes one worktree.",
 		})
+	}
+	if !p.Merge && (p.MergeMode != "" || p.Into != "") {
+		return nil, invalidParam("merge", "merge_mode and into apply only with merge")
+	}
+	if p.MergeMode != "" && !containsString(shipMergeModes, p.MergeMode) {
+		return nil, invalidParam("merge_mode", "merge_mode is merge, squash or ff-only", shipMergeModes...)
+	}
+	if p.Into != "" {
+		if err := worktree.ValidBranch(p.Into); err != nil {
+			return nil, invalidParam("into", err.Error())
+		}
+	}
+	var merged map[string]any
+	if p.Merge {
+		// The merge comes first: when it fails, every attempt is still there
+		// to choose from again.
+		recorded := info.Base
+		if recorded == "" && info.Managed {
+			if b, err := worktree.CurrentBranch(info.RepoRoot); err == nil && b != info.Branch {
+				recorded = b
+			}
+		}
+		res, verr := d.shipMerge(kept.Name(), info.Path, info.RepoRoot, recorded, p.Into, p.MergeMode, "")
+		if verr != nil {
+			if verr.Hint != nil {
+				verr.Hint.Detail += " No sibling was removed."
+			}
+			return nil, verr
+		}
+		merged = res
 	}
 	removed := []map[string]any{}
 	left := 0
@@ -717,7 +753,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		out["removed"] = true
 		removed = append(removed, out)
 	}
-	return map[string]any{
+	out := map[string]any{
 		"type":    "fan_kept",
 		"kept":    kept.Name(),
 		"branch":  info.Branch,
@@ -725,5 +761,9 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		"repo":    info.Repo,
 		"removed": removed,
 		"left":    left,
-	}, nil
+	}
+	if merged != nil {
+		out["merge"] = merged
+	}
+	return out, nil
 }

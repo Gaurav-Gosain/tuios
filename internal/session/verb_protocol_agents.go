@@ -166,11 +166,14 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbVerifyFan,
 		},
 		"keep-fan": {
-			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Branches are never deleted.",
+			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Branches are never deleted. With merge, the kept attempt's branch is first merged into its base, as ship-merge does.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "The attempt to keep."},
 				{Name: "stash", Type: "bool", Description: "Stash a sibling's uncommitted changes before removing it.", Default: "false"},
 				{Name: "force", Type: "bool", Description: "Discard a sibling's uncommitted changes.", Default: "false"},
+				{Name: "merge", Type: "bool", Description: "First merge the kept attempt's branch into its base in the main checkout, as ship-merge does. A merge that conflicts or is refused stops the call before any sibling is removed.", Default: "false"},
+				{Name: "merge_mode", Type: "string", Description: "With merge: merge, squash or ff-only, as ship-merge takes mode.", Accepted: shipMergeModes, Default: "merge"},
+				{Name: "into", Type: "string", Description: "With merge: the branch to merge into. Omit for the base the attempt was made from."},
 			},
 			returns: []verbParam{
 				{Name: "kept", Type: "string", Description: "The session kept."},
@@ -178,10 +181,12 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "group", Type: "string", Description: "The fan's group."},
 				{Name: "removed", Type: "[]object", Description: "One per sibling: session and removed, with remove-worktree's result when it was removed, or note and code when it was not."},
 				{Name: "left", Type: "int", Description: "How many siblings were not removed."},
+				{Name: "merge", Type: "object", Description: "With merge: what ship-merge returns for the kept attempt. Omitted without merge."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"keep-fan","params":{"session":"api-fan-retry-1"}}`,
 				`{"id":1,"verb":"keep-fan","params":{"session":"api-fan-retry-1","stash":true}}`,
+				`{"id":1,"verb":"keep-fan","params":{"session":"api-fan-retry-1","merge":true,"merge_mode":"squash"}}`,
 			},
 			handler: (*Daemon).verbKeepFan,
 		},

@@ -208,6 +208,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"verify-fan#0":    {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#0":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#1":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
+	"keep-fan#2":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	// The fixture's panes sit in the main checkout of a throwaway repository
 	// with no change, no worktree and no remote. The ship verbs are proved in
 	// e2e/tui/ship_test.go.
