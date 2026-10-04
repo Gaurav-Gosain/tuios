@@ -839,6 +839,31 @@ wait for `y yank` in the legend. Two of them, `TestScrollbackModeShowsEarlierOut
 and `TestSessionSwitchKeepsScrollback`, were missed at first and failed on
 every run of the whole suite until they were changed too.
 
+## Opening links, OSC 8 in the frame, and the URL detector
+
+Each control cut one call site from the current tree, built the binary, and
+ran the named test against it. The opener in these tests is a script set
+through `appearance.link_opener` that appends its argument to a file, so a
+link that opened is a line in that file and a link that was refused is none.
+The positive halves are in the same fixtures: the refused file and script
+links come before a shift+click that must open, the `link_click = "ctrl"`
+test ends with a ctrl+click that must open, and the markdown test copies a
+Wikipedia URL that keeps its brackets.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Ctrl+click opens a link (shift+click never reaches tuios in most terminals) | whole change: build the tree before it | `TestCtrlClickOpensLinksWithTheirTarget` ("ctrl+click on an OSC 8 label: the opener was started with [], want [https://example.com/real-target]") | **caught** |
+| The ctrl+click release opens the link | `handleMouseRelease` in `internal/input/mouse_release.go`: the `CtrlClickLink` branch made unreachable | `TestCtrlClickOpensLinksWithTheirTarget` (same message) | **caught** |
+| A focused pane sends its links to the outer terminal as OSC 8 | the cell loop of `renderTerminal`: the link transition made unreachable, which is the old behaviour | `TestCtrlClickOpensLinksWithTheirTarget`: no OSC 8 for the labelled link, the `id=` link, the bare URL and the wrapped bare URL | **caught** (4 of 4 assertions) |
+| A logical line with "://" is drawn again with its bare URLs as OSC 8 | the cell loop of `renderTerminal`: `lineHasScheme` never set | `TestCtrlClickOpensLinksWithTheirTarget`: no OSC 8 for the bare URL and the wrapped bare URL. The two marked links pass, which is the positive half | **caught** |
+| A `file://` link with a foreign host does not open here | `linkFilePath` takes any host as this machine | `TestCtrlClickOpensLinksWithTheirTarget` (the link opens `/etc/hostname` in a new editor pane, which covers the fixture: "\"script link\" is not on screen") | **caught** |
+| A `javascript:` link does not reach the opener | `"javascript"` added to `linkOpenSchemes` | `TestCtrlClickOpensLinksWithTheirTarget` (the record holds the script address) | **caught** |
+| Hovering one run of an `id=` link lights every run | `hoverByID` forced false in `renderTerminal` | `TestHoverLightsEveryRunOfAnIDLink` (the wait for part-two's underline times out) | **caught** |
+| `link_click` is read | `linkClickAllows` returns true for shift under `ctrl` | `TestLinkClickSettingIsHonoured` (the record holds the URL twice) | **caught** |
+| A closing bracket the URL did not open ends it | `urlEnd` in `internal/hints/urls.go`: the `)` and `]` cases cut | `TestHintsFindURLsInMarkdown` (the clipboard got `https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B81N8V1R)`) | **caught** |
+| `</p>` is not a path | the rooted-path check in the path pattern made false | `TestHintsFindURLsInMarkdown` ("column 1 of \"</p>\" is drawn as a hint label") | **caught** |
+| A daemon snapshot carries OSC 8 targets | n/a, never broken | none: `TestLinkOpensFromARehydratedPane` passes on both builds | **guard, not a control** |
+
 ## The session-list poll tick composes no frame
 
 The poll tick stopped composing a frame to save idle CPU. The rail draws
