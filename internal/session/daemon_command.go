@@ -33,6 +33,10 @@ var daemonOwnedCommands = map[string]bool{
 	"NewWindow": true,
 }
 
+// tapeResultTTL is how long the daemon keeps a tape exec's request open for
+// the result. The CLI gives up sooner when its own --timeout is shorter.
+const tapeResultTTL = 6 * time.Hour
+
 // clientQueryCommands are the read-only names the attached client answers
 // itself, beside the tape commands. They are commands a caller can name too.
 var clientQueryCommands = map[string]bool{
@@ -50,25 +54,33 @@ var clientQueryCommands = map[string]bool{
 // executor ran it as nothing and reported success: run-command toggle_zoom
 // said "command executed" and changed nothing, on the path the docs call the
 // escape hatch for a binding that has no verb.
-func resolveCommandName(name string) (string, bool) {
+//
+// Any other keybinding action, the name config.toml binds a key to, runs as
+// the tape's Action command with the name as its argument, so every action a
+// key can run is reachable here. It returns the arguments the command runs
+// with, which change only for an action.
+func resolveCommandName(name string, args []string) (string, []string, bool) {
 	if clientQueryCommands[name] {
-		return name, true
+		return name, args, true
 	}
 	if ct, ok := tape.ResolveCommandName(name); ok {
-		return string(ct), true
+		return string(ct), args, true
 	}
 	for query := range clientQueryCommands {
 		if strings.EqualFold(strings.ReplaceAll(name, "_", ""), query) {
-			return query, true
+			return query, args, true
 		}
 	}
-	return "", false
+	if tape.IsActionName(name) && len(args) == 0 {
+		return string(tape.CommandTypeAction), []string{name}, true
+	}
+	return "", nil, false
 }
 
 // unknownCommandMessage says what a caller can do about a name that is not a
 // command.
 func unknownCommandMessage(name string) string {
-	return fmt.Sprintf("unknown command %q. Run 'tuios run-command --list' for the command names", name)
+	return fmt.Sprintf("unknown command %q. Run 'tuios run-command --list' for the command names, or 'tuios keybinds list' for the action names", name)
 }
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.
@@ -93,11 +105,11 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 
 	if payload.TapeScript == "" {
-		canonical, ok := resolveCommandName(payload.CommandType)
+		canonical, args, ok := resolveCommandName(payload.CommandType, payload.Args)
 		if !ok {
 			return d.sendCommandResult(cs, payload.RequestID, false, unknownCommandMessage(payload.CommandType))
 		}
-		payload.CommandType = canonical
+		payload.CommandType, payload.Args = canonical, args
 	}
 	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
@@ -157,7 +169,13 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	forwarded := cs.clientID != tuiClient.clientID
 	if forwarded {
 		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
+		pr := &pendingRequest{requester: cs, created: time.Now()}
+		if payload.TapeScript != "" {
+			// The client answers a tape when it ends. The CLI waits as long
+			// as its --timeout says; the daemon keeps the request that long.
+			pr.ttl = tapeResultTTL
+		}
+		d.pendingRequests[payload.RequestID] = pr
 		d.pendingRequestsMu.Unlock()
 	}
 

@@ -1030,14 +1030,16 @@ func (d *Daemon) refuseMultifocusInto(cs *connState, sess *Session, command stri
 
 // typingTapeCommands are the tape commands that press keys or type, in the
 // focused pane or the window manager, and the ones that do so by other means:
-// Source runs another tape file, and LoadLayout types a cd line into panes.
+// Source runs another tape file, LoadLayout types a cd line into panes, and
+// an Action can be a command key that runs a program.
 var typingTapeCommands = map[tape.CommandType]bool{
 	tape.CommandTypeType: true, tape.CommandTypeEnter: true, tape.CommandTypeSpace: true,
 	tape.CommandTypeBackspace: true, tape.CommandTypeDelete: true, tape.CommandTypeTab: true,
 	tape.CommandTypeEscape: true, tape.CommandTypeUp: true, tape.CommandTypeDown: true,
 	tape.CommandTypeLeft: true, tape.CommandTypeRight: true, tape.CommandTypeHome: true,
 	tape.CommandTypeEnd: true, tape.CommandTypeKeyCombo: true, tape.CommandTypeSource: true,
-	tape.CommandTypeLoadLayout: true,
+	tape.CommandTypeLoadLayout: true, tape.CommandTypeAction: true, tape.CommandTypePress: true,
+	tape.CommandTypeRun: true,
 }
 
 // refuseTapeTyping checks a run-command from the caller on cs. The attached

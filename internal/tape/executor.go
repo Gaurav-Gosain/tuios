@@ -82,6 +82,15 @@ type Executor interface {
 	// MasterLayoutExec runs one of the master-stack commands
 	// (CommandTypeSetMasterPosition and the others) with its arguments.
 	MasterLayoutExec(command CommandType, args []string) error
+
+	// RunAction runs a keybinding action by its registry name.
+	RunAction(name string) error
+	// PressKeys presses keys through the app's own key handling. Each
+	// argument is one key or a sequence of them split by spaces or commas.
+	PressKeys(keys []string) error
+	// CheckCondition reports whether c holds now. The error says what was
+	// seen instead when it does not hold.
+	CheckCondition(c Condition) error
 }
 
 // CommandExecutor provides a default implementation
@@ -120,11 +129,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
 
 	case CommandTypeEnter:
-		// Windows requires \r\n, Unix accepts \n
-		if runtime.GOOS == "windows" {
-			return sendRepeated([]byte{'\r', '\n'})
-		}
-		return sendRepeated([]byte{'\n'})
+		return sendRepeated(enterBytes())
 
 	case CommandTypeSpace:
 		return sendRepeated([]byte{' '})
@@ -185,7 +190,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypePrevWindow:
 		return ce.executor.PrevWindow()
 
-	case CommandTypeFocusWindow:
+	case CommandTypeFocusWindow, CommandTypeFocus:
 		if len(cmd.Args) == 0 || cmd.Args[0] == "" {
 			return errMissingArg("Focus", "a window name or id")
 		}
@@ -408,10 +413,72 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		}
 		return ce.executor.FocusDirection(strings.ToLower(cmd.Args[0]))
 
-	// Other command types are handled elsewhere or ignored
-	default:
+	case CommandTypeAction:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Action", "an action name")
+		}
+		return ce.executor.RunAction(cmd.Args[0])
+
+	case CommandTypePress:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Press", "keys to press")
+		}
+		return ce.executor.PressKeys(cmd.Args)
+
+	case CommandTypeRun:
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Run", "a command line")
+		}
+		id := ce.executor.GetFocusedWindowID()
+		if err := ce.executor.SendToWindow(id, []byte(cmd.Args[0])); err != nil {
+			return err
+		}
+		return ce.executor.SendToWindow(id, enterBytes())
+
+	case CommandTypeExpect:
+		cond, err := ParseCondition(cmd)
+		if err != nil {
+			return err
+		}
+		if err := ce.executor.CheckCondition(cond); err != nil {
+			return fmt.Errorf("Expect %s failed: %w", cond, err)
+		}
 		return nil
+
+	case CommandTypeWaitFor:
+		// The player waits across ticks and never hands WaitFor to Execute.
+		// Anything that does is running one command on its own, with nothing
+		// to wait in.
+		return fmt.Errorf("WaitFor works only in a tape. From a shell, use tuios wait-for")
+
+	case CommandTypeSet:
+		if len(cmd.Args) < 2 {
+			return errMissingArg("Set", "a config path and a value")
+		}
+		return ce.executor.SetConfig(cmd.Args[0], cmd.Args[1])
+
+	case CommandTypeSource:
+		// A tape loaded from a file has its Source lines replaced by the file
+		// they name (see LoadFile). One that reaches here came as text, with
+		// no directory to find the file in.
+		return fmt.Errorf("Source works only in a tape file run with tuios tape play or tuios tape exec")
+
+	case CommandTypeSleep, CommandTypeComment:
+		return nil
+
+	default:
+		// Every command the parser produces has a case above. A new one
+		// that does not is reported, never run as nothing.
+		return fmt.Errorf("%s cannot run here", cmd.Type)
 	}
+}
+
+// enterBytes is the Enter key as the focused pane's shell expects it.
+func enterBytes() []byte {
+	if runtime.GOOS == "windows" {
+		return []byte{'\r', '\n'}
+	}
+	return []byte{'\n'}
 }
 
 // errMissingArg reports a tape command that was given no argument to act on.

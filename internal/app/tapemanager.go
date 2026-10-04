@@ -363,30 +363,30 @@ func (m *OS) TapeManagerPlaySelected() {
 
 	selected := m.TapeManager.Files[m.TapeManager.SelectedIndex]
 
-	// Read the tape file
-	content, err := os.ReadFile(selected.Path)
+	if m.scriptBusy() {
+		m.TapeManager.ErrorMessage = "A tape is already playing"
+		m.TapeManager.MessageTime = time.Now()
+		return
+	}
+
+	// Read the tape file, with its Source lines resolved
+	script, err := tape.LoadFile(selected.Path)
 	if err != nil {
 		m.TapeManager.ErrorMessage = fmt.Sprintf("Failed to read tape: %s", err)
 		m.TapeManager.MessageTime = time.Now()
 		return
 	}
-
-	// Parse the tape
-	lexer := tape.New(string(content))
-	parser := tape.NewParser(lexer)
-	commands := parser.Parse()
-
-	// Create and start player
-	player := tape.NewPlayer(commands)
-	m.ScriptPlayer = player
-	m.ScriptMode = true
-	m.ScriptPaused = false
-	m.ScriptFinishedTime = time.Time{}
-	m.ScriptAwaitWindows = 0
-	m.ScriptAwaitDeadline = time.Time{}
-
-	// Create executor
-	m.ScriptExecutor = tape.NewCommandExecutor(m)
+	// A tape with errors does not play. It used to play whatever parsed and
+	// skip the rest without a word.
+	if len(script.Errors) > 0 {
+		m.TapeManager.ErrorMessage = fmt.Sprintf("Tape has %d error(s). The first is at %s", len(script.Errors), script.Errors[0])
+		m.TapeManager.MessageTime = time.Now()
+		return
+	}
+	if m.ScriptMode {
+		m.exitScriptMode()
+	}
+	m.startTapePlayback(script.Commands, 0)
 
 	// Close the manager UI
 	m.ShowTapeManager = false

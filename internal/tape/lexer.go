@@ -30,22 +30,33 @@ func New(input string) *Lexer {
 	return l
 }
 
-// readChar reads the next character and updates position tracking
+// readChar reads the next character and updates position tracking.
+//
+// line and column always describe l.ch, the character about to be read. The
+// position moves when a character is left behind, not when the next one is
+// read: leaving a newline starts the next line at column 1. Counting it the
+// other way round put the newline itself on the line after it, and every
+// token past the first line one column to the right of where it is.
 func (l *Lexer) readChar() {
+	if l.pos < l.nextPos { // a character is being left behind
+		if l.ch == '\n' {
+			l.line++
+			l.column = 1
+		} else {
+			l.column++
+		}
+	} else {
+		l.column = 1
+	}
+
 	if l.nextPos >= len(l.input) {
 		l.ch = 0 // EOF
 	} else {
 		l.ch = l.input[l.nextPos]
 	}
 
-	if l.nextPos > 0 && l.ch == '\n' {
-		l.line++
-		l.column = 0
-	}
-
 	l.pos = l.nextPos
 	l.nextPos++
-	l.column++
 }
 
 // peekChar returns the next character without consuming it
@@ -159,7 +170,10 @@ func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
 // readIdentifier reads an identifier or keyword
 func (l *Lexer) readIdentifier() string {
 	var sb strings.Builder
-	for isIdentifierChar(l.ch) {
+	// After its first character a word may hold dots and dashes, so a config
+	// path (appearance.border_style), a file name (lib.tape) and a value
+	// such as even-horizontal or tokyo-night are each one word.
+	for isIdentifierChar(l.ch) || ((l.ch == '.' || l.ch == '-') && sb.Len() > 0) {
 		sb.WriteByte(l.ch)
 		l.readChar()
 	}
@@ -214,10 +228,13 @@ func (l *Lexer) readRegex() string {
 // NextToken returns the next token in the input
 func (l *Lexer) NextToken() Token {
 	var tok Token
-	tok.Line = l.line
-	tok.Column = l.column
 
 	l.skipWhitespace()
+
+	// The position is taken after the blanks, so it names the token's first
+	// character and an error can point at it.
+	tok.Line = l.line
+	tok.Column = l.column
 
 	switch l.ch {
 	case 0:

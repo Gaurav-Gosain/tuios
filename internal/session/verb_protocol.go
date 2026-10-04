@@ -1085,10 +1085,10 @@ func init() {
 			handler: (*Daemon).verbSetLayout,
 		},
 		"run-command": {
-			description: "Run one tape command (the command names the keybindings use). Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",
+			description: "Run one tape command, or any keybinding action by the name config.toml binds it to. Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "command", Type: "string", Required: true, Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft". The keymap's name for the same action, e.g. "toggle_zoom", is accepted too.`},
+				{Name: "command", Type: "string", Required: true, Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft", or a keybinding action name, e.g. "toggle_spotlight" (tuios keybinds list prints them). An action runs on an attached client and takes no args.`},
 				{Name: "args", Type: "[]string", Description: "Arguments for the command."},
 			},
 			returns: []verbParam{

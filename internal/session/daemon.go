@@ -383,6 +383,9 @@ type pendingRequest struct {
 	requester *connState
 	resultCh  chan *CommandResultPayload
 	created   time.Time
+	// ttl, when set, replaces pendingRequestTTL for this request. A tape
+	// answers when it ends, which can be long after two minutes.
+	ttl time.Duration
 }
 
 // connState tracks state for a connected client.
@@ -1863,7 +1866,11 @@ func (d *Daemon) cleanupLoop() {
 			now := time.Now()
 			d.pendingRequestsMu.Lock()
 			for id, pr := range d.pendingRequests {
-				if now.Sub(pr.created) > pendingRequestTTL {
+				ttl := pendingRequestTTL
+				if pr.ttl > 0 {
+					ttl = pr.ttl
+				}
+				if now.Sub(pr.created) > ttl {
 					delete(d.pendingRequests, id)
 				}
 			}

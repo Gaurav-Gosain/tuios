@@ -421,20 +421,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ScriptMode && showScriptIndicator {
 		var scriptStatus string
 
-		// Check for remote script progress first (tape exec), then local player (tape play)
+		// tuios tape play, tuios tape exec and the tape manager all play
+		// through the one player.
 		var currentCmd, totalCmds, progress int
 		var isFinished bool
 
-		if m.RemoteScriptTotal > 0 {
-			// Remote script execution (tape exec)
-			currentCmd = m.RemoteScriptIndex
-			totalCmds = m.RemoteScriptTotal
-			if totalCmds > 0 {
-				progress = (currentCmd * 100) / totalCmds
-			}
-			isFinished = !m.ScriptFinishedTime.IsZero()
-		} else if player := m.ScriptPlayer; player != nil {
-			// Local script playback (tape play)
+		if player := m.ScriptPlayer; player != nil {
 			progress = player.Progress()
 			currentCmd = player.CurrentIndex()
 			totalCmds = player.TotalCommands()
@@ -442,7 +434,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 
 		if totalCmds > 0 {
-			if isFinished {
+			if isFinished && m.ScriptFailure != "" {
+				// Where it stopped. The notification carries why.
+				where, _, _ := strings.Cut(m.ScriptFailure, ": ")
+				scriptStatus = "FAILED • " + where
+			} else if isFinished {
 				scriptStatus = fmt.Sprintf("DONE • %d/%d commands", totalCmds, totalCmds)
 			} else {
 				barWidth := 15

@@ -284,6 +284,23 @@ func (c *Client) getTerminalSize() (width, height int) {
 	return width, height
 }
 
+// SendControlMessageWait is SendControlMessage with a read deadline of wait
+// instead of thirty seconds, for a request whose answer comes when the work
+// is done: a tape answers when it ends.
+func (c *Client) SendControlMessageWait(msg *Message, wait time.Duration) (*Message, error) {
+	if err := c.send(msg); err != nil {
+		return nil, fmt.Errorf("failed to send message: %w", err)
+	}
+	c.recvMu.Lock()
+	defer c.recvMu.Unlock()
+	_ = c.conn.SetReadDeadline(time.Now().Add(wait))
+	resp, err := ReadMessage(c.conn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to receive response: %w", err)
+	}
+	return resp, nil
+}
+
 // SendControlMessage sends a control message to the daemon and waits for a response.
 // This is used for CLI commands that need to send messages without attaching to a session.
 func (c *Client) SendControlMessage(msg *Message) (*Message, error) {

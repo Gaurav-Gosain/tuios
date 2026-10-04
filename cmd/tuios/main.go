@@ -2317,10 +2317,16 @@ number. The number stays the workspace's identity. Pass no name to clear it.`,
 	}
 
 	var tapeExecSession string
+	var tapeExecTimeout time.Duration
 	tapeExecCmd := &cobra.Command{
 		Use:   "exec <file.tape>",
 		Short: "Execute a tape file in a running session",
 		Long: `Execute a tape file in a running TUIOS session.
+
+The session needs an attached client, which plays the tape. The command
+returns when the tape ends. It exits non-zero when the tape has an error or
+a command fails, such as a WaitFor that times out or an Expect that does not
+hold. The message gives the file and line.
 
 For single tape commands, use: tuios run-command <Command> [args...]`,
 		Example: `  # Execute a tape file
@@ -2331,10 +2337,11 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
   tuios tape exec --session mysession demo.tape`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTapeExec(tapeExecSession, args[0])
+			return runTapeExec(tapeExecSession, args[0], tapeExecTimeout)
 		},
 	}
 	tapeExecCmd.Flags().StringVarP(&tapeExecSession, "session", "s", "", "Target session (default: most recently active)")
+	tapeExecCmd.Flags().DurationVar(&tapeExecTimeout, "timeout", 30*time.Minute, "How long to wait for the tape to end")
 	_ = tapeExecCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add exec to tape command group

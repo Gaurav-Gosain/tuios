@@ -2046,26 +2046,26 @@ func ruleRefusals(r harness.RuleReport) []string {
 	return out
 }
 
-// runTapeExec executes a tape file in a running TUIOS session.
-func runTapeExec(sessionName, filePath string) error {
+// runTapeExec plays a tape file in a running TUIOS session and returns when
+// the tape has ended. A tape that fails returns the failure, placed at the
+// file and line it came from.
+func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 	if err := requireDaemon(); err != nil {
 		return err
 	}
 
-	// Read the tape file
-	content, err := os.ReadFile(filePath)
+	script, err := tape.LoadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read tape file: %w", err)
 	}
-	script := string(content)
-
-	// Validate the script first
-	lexer := tape.New(script)
-	parser := tape.NewParser(lexer)
-	commands := parser.Parse()
-
-	if len(commands) == 0 {
-		return fmt.Errorf("tape script has no commands or contains errors")
+	if len(script.Errors) > 0 {
+		for _, e := range script.Errors {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", filePath, e)
+		}
+		return fmt.Errorf("the tape has errors, listed above. Run 'tuios tape validate %s' after you fix them", filePath)
+	}
+	if len(script.Commands) == 0 {
+		return fmt.Errorf("the tape has no commands")
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -2079,21 +2079,44 @@ func runTapeExec(sessionName, filePath string) error {
 
 	requestID := uuid.New().String()
 
-	// Send the execute command with tape script
+	// The tape goes with its Source lines resolved: the session cannot read
+	// the files they name.
 	msg, err := session.NewMessage(session.MsgExecuteCommand, &session.ExecuteCommandPayload{
 		SessionName: sessionName,
-		TapeScript:  script,
+		TapeScript:  script.Text,
 		RequestID:   requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create message: %w", err)
 	}
 
-	if err := sendAndWaitForResult(client, msg, requestID); err != nil {
-		return err
+	resp, err := client.SendControlMessageWait(msg, timeout)
+	if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return fmt.Errorf("the tape did not finish in %s. It may still be playing. Use --timeout to wait longer", timeout)
+		}
+		return fmt.Errorf("failed to run the tape: %w", err)
 	}
-
-	return nil
+	switch resp.Type {
+	case session.MsgCommandResult:
+		var result session.CommandResultPayload
+		if err := resp.ParsePayload(&result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if !result.Success {
+			return fmt.Errorf("the tape failed: %s", script.Locate(result.Message))
+		}
+		fmt.Printf("Tape finished: %d commands\n", len(script.Commands))
+		return nil
+	case session.MsgError:
+		var errPayload session.ErrorPayload
+		if err := resp.ParsePayload(&errPayload); err == nil && errPayload.Message != "" {
+			return fmt.Errorf("the tape did not run: %s", errPayload.Message)
+		}
+		return fmt.Errorf("the tape did not run, and the daemon did not say why. Run 'tuios logs' to read what it logged")
+	default:
+		return fmt.Errorf("unexpected response from the daemon: %v", resp.Type)
+	}
 }
 
 // sendAndWaitForResult sends a message and waits for the result (human-readable output).
@@ -2264,6 +2287,12 @@ func runCommandCatalog() []runCommandEntry {
 		{"SetBorderStyle style", "Change window border style", "tuios run-command SetBorderStyle rounded"},
 		{"SetTheme themename", "Change the color theme", "tuios run-command SetTheme dracula"},
 		{"ShowNotification message [type]", "Show a notification", "tuios run-command ShowNotification \"Hello!\" info"},
+
+		// Any keybinding action, and keys through tuios's own key handling
+		{"<action>", "Run a keybinding action by name (tuios keybinds list prints them)", "tuios run-command toggle_spotlight"},
+		{"Action <action>", "The same, spelled as a tape writes it", "tuios run-command Action toggle_scratch"},
+		{"Press <keys>", "Press keys as a person would: prefixes, copy mode, dialogs", "tuios run-command Press \"ctrl+b ?\""},
+		{"Run <command line>", "Type a command line into the focused window and press Enter", "tuios run-command Run \"make test\""},
 
 		// Inspection commands
 		{"ListWindows", "List all windows (use --json)", "tuios list-windows --json"},

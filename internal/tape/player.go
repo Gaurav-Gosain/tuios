@@ -40,6 +40,12 @@ func (p *Player) Advance() {
 	}
 }
 
+// Stop ends playback where it is: the commands not yet played never run.
+func (p *Player) Stop() {
+	p.index = len(p.commands)
+	p.finished = true
+}
+
 // IsFinished returns true if all commands have been executed
 func (p *Player) IsFinished() bool {
 	return p.finished

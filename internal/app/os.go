@@ -906,9 +906,25 @@ type OS struct {
 	LayoutPrefixActive bool              // True when Ctrl+B, L was pressed (layout sub-prefix)
 	// Remote command processing
 	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
-	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
-	RemoteScriptIndex int // Current command index (0-based)
-	RemoteScriptTotal int // Total commands in remote script
+	// ScriptWait is the WaitFor playback is holding for, nil when none is.
+	ScriptWait *scriptWait
+	// ScriptFailure says where and why the last tape stopped, empty when it
+	// ran to the end. It outlives script mode, so tuios tape play can exit
+	// with it after the person quits.
+	ScriptFailure string
+	// scriptInFlight is true from the tick that hands a tape command to
+	// Update until Update has run it, so the next command waits for the one
+	// before it. Without it a tick could send the next command before a
+	// NewWindow had armed the wait for its pane.
+	scriptInFlight bool
+	// scriptRequestID is the tuios tape exec waiting for this tape's result.
+	scriptRequestID string
+	// scriptRestoreAnimations is true when the running tape turned
+	// animations off and has to turn them back on when it ends.
+	scriptRestoreAnimations bool
+	// scriptCmds are the commands the current tape command's actions and keys
+	// returned, for Update to return. See queueScriptCmd.
+	scriptCmds []tea.Cmd
 	// Kitty Graphics Protocol passthrough for forwarding to host terminal
 	KittyPassthrough *KittyPassthrough
 	// Sixel Graphics passthrough for forwarding to host terminal

@@ -1,6 +1,8 @@
 package tape
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -205,7 +207,7 @@ func TestParserErrorHandling(t *testing.T) {
 	}{
 		{
 			name:        "Valid script",
-			input:       `Type "hello"\nEnter`,
+			input:       "Type \"hello\"\nEnter",
 			expectError: false,
 			errorCount:  0,
 		},
@@ -262,27 +264,29 @@ Type "line3"`
 	}
 }
 
+// TestParserDelayModifier: an @ delay is the pause between the keys a command
+// sends, so the parser expands it into the keys and the Sleeps between them.
+// It used to be stored on the command and never read.
 func TestParserDelayModifier(t *testing.T) {
-	input := `Type@100ms "hello"
+	input := `Type@100ms "hi"
 Enter@50ms
 Backspace@200ms 3`
 
-	commands, _ := ParseFile(input)
-
-	if len(commands) != 3 {
-		t.Errorf("Expected 3 commands, got %d", len(commands))
+	commands, errs := ParseFile(input)
+	if len(errs) > 0 {
+		t.Fatalf("parse errors: %v", errs)
 	}
-
-	expectedDelays := []time.Duration{
-		100 * time.Millisecond,
-		50 * time.Millisecond,
-		200 * time.Millisecond,
+	var got []string
+	for _, c := range commands {
+		got = append(got, fmt.Sprintf("%s%v", c.Type, c.Args))
 	}
-
-	for i, expectedDelay := range expectedDelays {
-		if commands[i].Delay != expectedDelay {
-			t.Errorf("Command %d: expected delay %v, got %v", i, expectedDelay, commands[i].Delay)
-		}
+	want := []string{
+		"Type[h]", "Sleep[100ms]", "Type[i]",
+		"Enter[]",
+		"Backspace[]", "Sleep[200ms]", "Backspace[]", "Sleep[200ms]", "Backspace[]",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("expanded to\n  %v\nwant\n  %v", got, want)
 	}
 }
 

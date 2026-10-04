@@ -586,11 +586,11 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	// The keymap's name for an action reaches the same command as the tape's
 	// name, and a name that is neither is an error here rather than a success
 	// the client reports for running nothing. See resolveCommandName.
-	canonical, ok := resolveCommandName(p.Command)
+	canonical, args, ok := resolveCommandName(p.Command, p.Args)
 	if !ok {
 		return nil, invalidParam("command", unknownCommandMessage(p.Command))
 	}
-	p.Command = canonical
+	p.Command, p.Args = canonical, args
 	// The client runs the command in whatever pane is focused, as the
 	// person. A pane without respond may not type or press keys that way:
 	// see refuseTapeTyping, which the client protocol's run-command has too.

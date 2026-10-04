@@ -73,152 +73,128 @@ func (p *Parser) parseCommand() (Command, bool) {
 		return p.parseTypeCommand()
 	case TokenSleep:
 		return p.parseSleepCommand()
-	case TokenEnter:
-		return p.parseBasicCommand(CommandTypeEnter)
-	case TokenSpace:
-		return p.parseBasicCommand(CommandTypeSpace)
-	case TokenBackspace:
-		return p.parseBasicCommand(CommandTypeBackspace)
-	case TokenDelete:
-		return p.parseBasicCommand(CommandTypeDelete)
-	case TokenTab:
-		return p.parseBasicCommand(CommandTypeTab)
-	case TokenEscape:
-		return p.parseBasicCommand(CommandTypeEscape)
-	case TokenUp:
-		return p.parseBasicCommand(CommandTypeUp)
-	case TokenDown:
-		return p.parseBasicCommand(CommandTypeDown)
-	case TokenLeft:
-		return p.parseBasicCommand(CommandTypeLeft)
-	case TokenRight:
-		return p.parseBasicCommand(CommandTypeRight)
-	case TokenHome:
-		return p.parseBasicCommand(CommandTypeHome)
-	case TokenEnd:
-		return p.parseBasicCommand(CommandTypeEnd)
-	case TokenCtrl, TokenAlt, TokenShift:
-		return p.parseKeyComboCommand()
-	case TokenTerminalMode:
-		return p.parseBasicCommand(CommandTypeTerminalMode)
-	case TokenWindowManagementMode:
-		return p.parseBasicCommand(CommandTypeWindowManagementMode)
-	case TokenNewWindow:
-		return p.parseBasicCommand(CommandTypeNewWindow)
-	case TokenCloseWindow:
-		return p.parseBasicCommand(CommandTypeCloseWindow)
-	case TokenNextWindow:
-		return p.parseBasicCommand(CommandTypeNextWindow)
-	case TokenPrevWindow:
-		return p.parseBasicCommand(CommandTypePrevWindow)
-	case TokenFocusWindow:
-		return p.parseWindowIDCommand(CommandTypeFocusWindow)
-	case TokenRenameWindow:
-		return p.parseWindowRenameCommand()
-	case TokenMinimizeWindow:
-		return p.parseBasicCommand(CommandTypeMinimizeWindow)
-	case TokenRestoreWindow:
-		return p.parseBasicCommand(CommandTypeRestoreWindow)
-	case TokenToggleTiling:
-		return p.parseBasicCommand(CommandTypeToggleTiling)
-	case TokenEnableTiling:
-		return p.parseBasicCommand(CommandTypeEnableTiling)
-	case TokenDisableTiling:
-		return p.parseBasicCommand(CommandTypeDisableTiling)
-	case TokenSnapLeft:
-		return p.parseBasicCommand(CommandTypeSnapLeft)
-	case TokenSnapRight:
-		return p.parseBasicCommand(CommandTypeSnapRight)
-	case TokenSnapFullscreen:
-		return p.parseBasicCommand(CommandTypeSnapFullscreen)
-	case TokenSwitchWS:
-		return p.parseSwitchWorkspaceCommand()
-	case TokenMoveToWS:
-		return p.parseMoveToWorkspaceCommand()
-	case TokenMoveAndFollowWS:
-		return p.parseMoveAndFollowWorkspaceCommand()
-	case TokenSplit:
-		return p.parseBasicCommand(CommandTypeSplit)
-	case TokenRotateSplit:
-		return p.parseBasicCommand(CommandTypeRotateSplit)
-	case TokenEqualizeSplits:
-		return p.parseBasicCommand(CommandTypeEqualizeSplits)
-	case TokenToggleZoom:
-		return p.parseBasicCommand(CommandTypeToggleZoom)
-	case TokenScreenshot:
-		return p.parseBasicCommand(CommandTypeScreenshot)
-	case TokenSmartSplit:
-		return p.parseBasicCommand(CommandTypeSmartSplit)
-	case TokenCommandPalette:
-		return p.parseBasicCommand(CommandTypeCommandPalette)
-	case TokenSaveLayout:
-		return p.parseSaveLayoutCommand()
-	case TokenLoadLayout:
-		return p.parseLoadLayoutCommand()
-	case TokenFocus:
-		return p.parseFocusCommand()
 	case TokenWait:
 		return p.parseWaitCommand()
 	case TokenWaitUntilRegex:
 		return p.parseWaitUntilRegexCommand()
-	case TokenSet:
-		return p.parseSetCommand()
-	case TokenOutput:
-		return p.parseOutputCommand()
-	case TokenSource:
-		return p.parseSourceCommand()
-	case TokenEnableAnimations:
-		return p.parseBasicCommand(CommandTypeEnableAnimations)
-	case TokenDisableAnimations:
-		return p.parseBasicCommand(CommandTypeDisableAnimations)
-	case TokenToggleAnimations:
-		return p.parseBasicCommand(CommandTypeToggleAnimations)
-	default:
-		p.addError(fmt.Sprintf("unexpected token: %v", p.curTok.Type))
-		p.skipToNextLine()
-		return cmd, false
+	case TokenCtrl, TokenAlt, TokenShift:
+		return p.parseKeyComboCommand()
 	}
+	if ct, ok := commandForToken(p.curTok); ok {
+		return p.parseGenericCommand(ct)
+	}
+	p.addError(fmt.Sprintf("unknown command %q. For a keybinding action, write Action and its name", p.curTok.Literal))
+	p.skipToNextLine()
+	return cmd, false
 }
 
-// parseBasicCommand parses simple commands with optional repeat count
-func (p *Parser) parseBasicCommand(cmdType CommandType) (Command, bool) {
-	cmd := Command{
-		Type:   cmdType,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
+// commandForToken says which command a line's first token starts. A keyword
+// token names its command. A plain word names one through
+// ResolveCommandName, which is how the commands with no keyword token of their
+// own (Action, Press, ArrangePanes and the rest) are reached.
+func commandForToken(tok Token) (CommandType, bool) {
+	if tok.Type.IsCommand() {
+		return CommandType(tok.Type), true
 	}
+	if tok.Type != TokenIdentifier {
+		return "", false
+	}
+	ct, ok := ResolveCommandName(tok.Literal)
+	if !ok || ct == CommandTypeKeyCombo || ct == CommandTypeComment {
+		return "", false
+	}
+	return ct, true
+}
 
-	cmdName := p.curTok.Literal
+// parseGenericCommand reads a command and every argument on its line, then
+// holds the arguments to the command's argSpec. An argument is any token: a
+// quoted string, a word, a number or a duration. A word joined to the next by
+// "+" is one argument, so Press ctrl+b reads as the key it names.
+func (p *Parser) parseGenericCommand(ct CommandType) (Command, bool) {
+	cmd := Command{Type: ct, Line: p.curTok.Line, Column: p.curTok.Column}
+	name := p.curTok.Literal
 	p.nextToken()
 
-	// Check for optional delay modifier (@<duration>)
 	if p.curTok.Type == TokenAt {
-		p.nextToken()
-		if p.curTok.Type == TokenDuration {
-			duration, err := ParseDuration(p.curTok.Literal)
-			if err != nil {
-				p.addError(fmt.Sprintf("invalid duration: %s", p.curTok.Literal))
-			}
-			cmd.Delay = duration
-			p.nextToken()
-		} else {
-			p.addError("expected duration after @")
+		if !p.parseDelay(&cmd) {
+			return cmd, false
 		}
 	}
 
-	// Check for optional repeat count (number)
-	if p.curTok.Type == TokenNumber {
-		cmd.Args = append(cmd.Args, p.curTok.Literal)
+	var argToks []Token
+	for p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
+		tok := p.curTok
+		switch {
+		case tok.Type == TokenIllegal:
+			p.addError(fmt.Sprintf("unexpected character %q", tok.Literal))
+			p.skipToNextLine()
+			return cmd, false
+		case tok.Type == TokenPlus && len(cmd.Args) > 0:
+			cmd.Args[len(cmd.Args)-1] += "+"
+			p.nextToken()
+			if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
+				cmd.Args[len(cmd.Args)-1] += p.curTok.Literal
+				p.nextToken()
+			}
+			continue
+		}
+		cmd.Args = append(cmd.Args, tok.Literal)
+		argToks = append(argToks, tok)
 		p.nextToken()
 	}
 
-	cmd.Raw = cmdName
-	skipToNextLine := p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF
-	if skipToNextLine {
-		p.skipToNextLine()
+	raw := []string{name}
+	for i, a := range cmd.Args {
+		if argToks[i].Type == TokenString {
+			a = fmt.Sprintf("%q", a)
+		}
+		raw = append(raw, a)
 	}
+	cmd.Raw = strings.Join(raw, " ")
 
+	if i, err := checkArgs(&cmd); err != nil {
+		at := Token{Line: cmd.Line, Column: cmd.Column}
+		if i >= 0 && i < len(argToks) {
+			at = argToks[i]
+		}
+		p.addErrorAt(at, err.Error())
+		return cmd, false
+	}
+	if cmd.Delay > 0 && !takesDelay(ct) {
+		p.addErrorAt(Token{Line: cmd.Line, Column: cmd.Column}, fmt.Sprintf("%s does not take an @ delay. It works on Type and on the key commands, such as Down@100ms 3", ct))
+		return cmd, false
+	}
 	return cmd, true
+}
+
+// parseDelay reads the "@<duration>" after a command name into cmd.Delay. The
+// current token is the "@".
+func (p *Parser) parseDelay(cmd *Command) bool {
+	p.nextToken()
+	if p.curTok.Type != TokenDuration {
+		p.addError("expected a duration after @, as in Type@50ms")
+		p.skipToNextLine()
+		return false
+	}
+	d, err := ParseDuration(p.curTok.Literal)
+	if err != nil || d <= 0 {
+		p.addError(fmt.Sprintf("invalid duration: %s", p.curTok.Literal))
+		p.skipToNextLine()
+		return false
+	}
+	cmd.Delay = d
+	p.nextToken()
+	return true
+}
+
+// takesDelay reports whether a command honours an @ delay: the pause between
+// the keys it sends.
+func takesDelay(ct CommandType) bool {
+	if ct == CommandTypeType {
+		return true
+	}
+	spec, ok := argSpecs[ct]
+	return ok && spec.usage == keyRepeat.usage
 }
 
 // parseTypeCommand parses Type "text" commands
@@ -231,19 +207,9 @@ func (p *Parser) parseTypeCommand() (Command, bool) {
 
 	p.nextToken() // consume Type
 
-	// Check for optional speed modifier (@<duration>)
-	if p.curTok.Type == TokenAt {
-		p.nextToken()
-		if p.curTok.Type == TokenDuration {
-			duration, err := ParseDuration(p.curTok.Literal)
-			if err != nil {
-				p.addError(fmt.Sprintf("invalid duration: %s", p.curTok.Literal))
-			}
-			cmd.Delay = duration
-			p.nextToken()
-		} else {
-			p.addError("expected duration after @")
-		}
+	// The optional typing speed (@<duration>), the pause between characters.
+	if p.curTok.Type == TokenAt && !p.parseDelay(&cmd) {
+		return cmd, false
 	}
 
 	// Expect a string argument
@@ -257,11 +223,7 @@ func (p *Parser) parseTypeCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
+	return cmd, p.endOfLine(cmd.Type)
 }
 
 // parseSleepCommand parses Sleep <duration> commands
@@ -289,11 +251,7 @@ func (p *Parser) parseSleepCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
+	return cmd, p.endOfLine(cmd.Type)
 }
 
 // parseKeyComboCommand parses Ctrl+X, Alt+X, etc.
@@ -321,6 +279,8 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 	// (TokenEOF has an empty literal) must not panic on Literal[0].
 	if p.curTok.Type == TokenIdentifier || p.curTok.Type.IsNavigationKey() ||
 		p.curTok.Type == TokenEnter || p.curTok.Type == TokenSpace ||
+		p.curTok.Type == TokenTab || p.curTok.Type == TokenEscape ||
+		p.curTok.Type == TokenBackspace || p.curTok.Type == TokenDelete ||
 		p.curTok.Type == TokenNumber ||
 		(len(p.curTok.Literal) > 0 && isDigit(p.curTok.Literal[0])) {
 		comboParts = append(comboParts, p.curTok.Literal)
@@ -336,179 +296,7 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 	cmd.Args = []string{comboStr}
 	cmd.Raw = comboStr
 
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseFocusCommand parses Focus <target> commands
-func (p *Parser) parseFocusCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeFocus,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume Focus
-
-	if p.curTok.Type == TokenIdentifier || p.curTok.Type == TokenNumber {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("Focus %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError("Focus command expects an identifier or number")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseSwitchWorkspaceCommand parses SwitchWorkspace <n> or Alt+N commands
-func (p *Parser) parseSwitchWorkspaceCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeSwitchWS,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume SwitchWorkspace
-
-	if p.curTok.Type == TokenNumber {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("SwitchWorkspace %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError(fmt.Sprintf("SwitchWorkspace expects a number, got %v", p.curTok.Type))
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseMoveToWorkspaceCommand parses MoveToWorkspace <n> commands
-func (p *Parser) parseMoveToWorkspaceCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeMoveToWS,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume MoveToWorkspace
-
-	if p.curTok.Type == TokenNumber {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("MoveToWorkspace %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError(fmt.Sprintf("MoveToWorkspace expects a number, got %v", p.curTok.Type))
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseMoveAndFollowWorkspaceCommand parses MoveAndFollowWorkspace <n> commands
-func (p *Parser) parseMoveAndFollowWorkspaceCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeMoveAndFollowWS,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume MoveAndFollowWorkspace
-
-	if p.curTok.Type == TokenNumber {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("MoveAndFollowWorkspace %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError(fmt.Sprintf("MoveAndFollowWorkspace expects a number, got %v", p.curTok.Type))
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseWindowIDCommand parses commands that take a window ID like FocusWindow <id>
-func (p *Parser) parseWindowIDCommand(cmdType CommandType) (Command, bool) {
-	cmd := Command{
-		Type:   cmdType,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume command name
-
-	switch p.curTok.Type {
-	case TokenIdentifier, TokenNumber:
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("%s %s", cmdType, p.curTok.Literal)
-		p.nextToken()
-	default:
-		p.addError(fmt.Sprintf("%s expects a window ID, got %v", cmdType, p.curTok.Type))
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseWindowRenameCommand parses RenameWindow <name> commands
-func (p *Parser) parseWindowRenameCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeRenameWindow,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume RenameWindow
-
-	switch p.curTok.Type {
-	case TokenString:
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("RenameWindow %q", p.curTok.Literal)
-		p.nextToken()
-	case TokenIdentifier:
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("RenameWindow %s", p.curTok.Literal)
-		p.nextToken()
-	default:
-		p.addError("RenameWindow expects a window name")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
+	return cmd, p.endOfLine(cmd.Type)
 }
 
 // parseWaitCommand parses Wait <duration> commands. Wait is an alias for Sleep:
@@ -537,11 +325,7 @@ func (p *Parser) parseWaitCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
+	return cmd, p.endOfLine(cmd.Type)
 }
 
 // parseWaitUntilRegexCommand parses WaitUntilRegex <regex> [timeout] commands
@@ -576,159 +360,7 @@ func (p *Parser) parseWaitUntilRegexCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseSetCommand parses Set <key> <value> commands
-func (p *Parser) parseSetCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeSet,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume Set
-
-	// Get key
-	if p.curTok.Type == TokenIdentifier {
-		key := p.curTok.Literal
-		p.nextToken()
-
-		// Get value
-		if p.curTok.Type == TokenIdentifier || p.curTok.Type == TokenString ||
-			p.curTok.Type == TokenNumber || p.curTok.Type == TokenDuration {
-			value := p.curTok.Literal
-			cmd.Args = []string{key, value}
-			cmd.Raw = fmt.Sprintf("Set %s %s", key, value)
-			p.nextToken()
-		} else {
-			p.addError("Set command expects a value")
-			p.skipToNextLine()
-			return cmd, false
-		}
-	} else {
-		p.addError("Set command expects a key")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseOutputCommand parses Output <file> commands
-func (p *Parser) parseOutputCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeOutput,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume Output
-
-	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("Output %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError("Output command expects a filename")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseSourceCommand parses Source <file> commands
-func (p *Parser) parseSourceCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeSource,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume Source
-
-	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("Source %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError("Source command expects a filename")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseSaveLayoutCommand parses SaveLayout <name> commands
-func (p *Parser) parseSaveLayoutCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeSaveLayout,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume SaveLayout
-
-	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("SaveLayout %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError("SaveLayout command expects a layout name")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
-}
-
-// parseLoadLayoutCommand parses LoadLayout <name> commands
-func (p *Parser) parseLoadLayoutCommand() (Command, bool) {
-	cmd := Command{
-		Type:   CommandTypeLoadLayout,
-		Line:   p.curTok.Line,
-		Column: p.curTok.Column,
-	}
-
-	p.nextToken() // consume LoadLayout
-
-	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("LoadLayout %s", p.curTok.Literal)
-		p.nextToken()
-	} else {
-		p.addError("LoadLayout command expects a layout name")
-		p.skipToNextLine()
-		return cmd, false
-	}
-
-	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		p.skipToNextLine()
-	}
-
-	return cmd, true
+	return cmd, p.endOfLine(cmd.Type)
 }
 
 // skipToNextLine skips tokens until the next newline
@@ -738,9 +370,27 @@ func (p *Parser) skipToNextLine() {
 	}
 }
 
-// addError adds an error to the parser's error list
+// endOfLine reports whether the command just read ends its line. Anything
+// left over is an error: it used to be skipped without a word, so a tape that
+// validated could carry arguments that did nothing.
+func (p *Parser) endOfLine(ct CommandType) bool {
+	if p.curTok.Type == TokenNewline || p.curTok.Type == TokenEOF {
+		return true
+	}
+	p.addError(fmt.Sprintf("unexpected %q after %s", p.curTok.Literal, ct))
+	p.skipToNextLine()
+	return false
+}
+
+// addError adds an error at the current token.
 func (p *Parser) addError(msg string) {
-	p.errors = append(p.errors, fmt.Sprintf("line %d: %s", p.curTok.Line, msg))
+	p.addErrorAt(p.curTok, msg)
+}
+
+// addErrorAt adds an error at tok, with its line and column, so an editor or
+// a person can go straight to it.
+func (p *Parser) addErrorAt(tok Token, msg string) {
+	p.errors = append(p.errors, fmt.Sprintf("line %d, column %d: %s", tok.Line, tok.Column, msg))
 }
 
 // Errors returns the list of parser errors
@@ -748,10 +398,50 @@ func (p *Parser) Errors() []string {
 	return p.errors
 }
 
-// ParseFile parses a tape file from a string
+// ParseFile parses a tape file from a string. An @ delay is expanded here into
+// the commands it stands for, so every player runs it the same way.
 func ParseFile(content string) ([]Command, []string) {
 	l := New(content)
 	p := NewParser(l)
 	commands := p.Parse()
-	return commands, p.Errors()
+	return expandDelays(commands), p.Errors()
+}
+
+// expandDelays turns each command with an @ delay into the keys it sends,
+// one at a time, with a Sleep of the delay between them: Type@50ms "ab" is
+// Type "a", Sleep 50ms, Type "b", and Down@100ms 3 is three Downs 100ms
+// apart. The delay was parsed and then ignored before, so Down@100ms 3 sent
+// all three at once.
+func expandDelays(commands []Command) []Command {
+	var out []Command
+	for _, c := range commands {
+		if c.Delay <= 0 || c.Type == CommandTypeSleep || c.Type == CommandTypeWait {
+			out = append(out, c)
+			continue
+		}
+		var steps []Command
+		switch {
+		case c.Type == CommandTypeType && len(c.Args) == 1:
+			for _, r := range c.Args[0] {
+				step := c
+				step.Args = []string{string(r)}
+				steps = append(steps, step)
+			}
+		default:
+			step := c
+			step.Args = nil
+			for range repeatCount(&c) {
+				steps = append(steps, step)
+			}
+		}
+		for i, step := range steps {
+			step.Delay = 0
+			if i > 0 {
+				out = append(out, Command{Type: CommandTypeSleep, Delay: c.Delay, Args: []string{c.Delay.String()},
+					Line: c.Line, Column: c.Column, File: c.File, Raw: "Sleep " + c.Delay.String()})
+			}
+			out = append(out, step)
+		}
+	}
+	return out
 }

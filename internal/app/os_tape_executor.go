@@ -64,8 +64,14 @@ func (m *OS) exitScriptMode() {
 	m.ScriptWaitDeadline = time.Time{}
 	m.ScriptAwaitWindows = 0
 	m.ScriptAwaitDeadline = time.Time{}
-	m.RemoteScriptIndex = 0
-	m.RemoteScriptTotal = 0
+	m.ScriptWait = nil
+	m.scriptInFlight = false
+	m.scriptCmds = nil
+	// A tape left while a tuios tape exec still waits on it has ended, and
+	// the caller is told so rather than left to time out.
+	if m.scriptRequestID != "" {
+		m.reportScriptResult(false, "the tape was stopped before it finished")
+	}
 }
 
 // The following methods implement the tape.Executor interface for
@@ -1244,47 +1250,6 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 			Key:           firstKey,
 			RemainingKeys: remaining,
 			RequestID:     requestID,
-		}
-	}, nil
-}
-
-// executeTapeScript parses and executes a tape script remotely.
-// Commands are processed one at a time via RemoteTapeCommandMsg.
-func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error) {
-	// Parse the tape script
-	lexer := tape.New(script)
-	parser := tape.NewParser(lexer)
-	commands := parser.Parse()
-
-	if len(commands) == 0 {
-		return nil, fmt.Errorf("tape script has no commands or contains errors")
-	}
-
-	// Disable animations during script execution
-	m.ProcessingRemoteKeys = true
-	m.Settings.AnimationsSuppressed = true
-
-	// Set up script mode for progress display
-	m.ScriptMode = true
-	m.ScriptPaused = false
-	m.ScriptFinishedTime = time.Time{}
-	// Note: We don't use ScriptPlayer for remote exec. We track progress via message fields
-
-	// Start processing the first command
-	totalCmds := len(commands)
-	firstCmd := commands[0]
-	var remaining []tape.Command
-	if len(commands) > 1 {
-		remaining = commands[1:]
-	}
-
-	return func() tea.Msg {
-		return RemoteTapeCommandMsg{
-			Command:           firstCmd,
-			RemainingCommands: remaining,
-			RequestID:         requestID,
-			CommandIndex:      0,
-			TotalCommands:     totalCmds,
 		}
 	}, nil
 }

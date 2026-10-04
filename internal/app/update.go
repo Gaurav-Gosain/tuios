@@ -141,21 +141,6 @@ type RemoteKeysDoneMsg struct {
 	RequestID string
 }
 
-// RemoteTapeCommandMsg represents a single tape command from a remote script.
-// Commands are processed one at a time to allow proper sequential execution.
-type RemoteTapeCommandMsg struct {
-	Command           tape.Command   // The command to execute
-	RemainingCommands []tape.Command // Commands still to be processed
-	RequestID         string         // For response tracking on last command
-	CommandIndex      int            // 0-based index of current command (for progress display)
-	TotalCommands     int            // Total number of commands in script
-}
-
-// RemoteTapeScriptDoneMsg signals that all tape commands have been processed.
-type RemoteTapeScriptDoneMsg struct {
-	RequestID string
-}
-
 // Multi-client message types for daemon mode
 
 // StateSyncMsg is a session state arriving from the daemon. SourceID names the
@@ -1081,6 +1066,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					return m, TickCmd(&m.Settings)
 				}
 
+				// Hold the next command until Update has run the one before
+				// it. See OS.scriptInFlight.
+				if m.scriptInFlight {
+					return m, TickCmd(&m.Settings)
+				}
+
+				// Hold for a WaitFor until its condition holds. A wait that
+				// runs out of time fails the tape, which stops the player.
+				if m.ScriptWait != nil && !m.checkScriptWait() {
+					return m, TickCmd(&m.Settings)
+				}
+
 				// Check if we're blocking on a WaitUntilRegex condition from a
 				// previously dispatched command.
 				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
@@ -1110,8 +1107,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 						// Don't dispatch it to the executor.
 						m.startScriptWaitRegex(nextCmd)
 						player.Advance()
+					case nextCmd.Type == tape.CommandTypeWaitFor:
+						m.startScriptWait(nextCmd)
+						player.Advance()
 					default:
 						// Queue the command as a message instead of executing directly
+						m.scriptInFlight = true
 						cmds = append(cmds, func() tea.Msg {
 							return ScriptCommandMsg{Command: nextCmd}
 						})
@@ -1123,6 +1124,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Script just finished: record the time if not already set
 				if m.ScriptFinishedTime.IsZero() {
 					m.ScriptFinishedTime = time.Now()
+					m.reportScriptResult(true, "")
 					// A tape that builds a layout creates panes whose early output
 					// (a split pane's shell prompt, an echo) can land before the
 					// client subscribed, leaving an unfocused pane blank on screen
@@ -2255,18 +2257,23 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ScriptCommandMsg:
+		m.scriptInFlight = false
+		// A tape that failed, or was left, while this command was on its
+		// way has nothing more to run.
+		if !m.ScriptMode || m.ScriptFailure != "" {
+			return m, nil
+		}
 		// Execute tape command through the executor
 		if executor := m.ScriptExecutor; executor != nil {
 			if err := executor.Execute(msg.Command); err != nil {
-				// Log error but continue playback
-				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", m.Settings.NotificationDuration)
+				m.failScript(msg.Command, err)
 			} else {
 				// Tape playback mutates the model outside the input handler, so
 				// it has to push the result like any other mutation would.
 				m.SyncStateToDaemon()
 			}
 		}
-		return m, nil
+		return m, m.takeScriptCmds()
 
 	case RemoteCommandMsg:
 		// Execute remote command from CLI. The listener is re-armed on every
@@ -2332,6 +2339,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				executor := tape.NewCommandExecutor(m)
 				err = executor.Execute(tapeCmd)
+				cmd = m.takeScriptCmds()
 			}
 			// Retile if in tiling mode after command execution
 			if m.AutoTiling {
@@ -2470,10 +2478,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Execute a full tape script
 			notificationMsg = "Remote: running a tape"
 
-			// Parse and execute the tape script
+			// Parse the tape and start the player. The result is sent when
+			// the tape ends, by reportScriptResult.
 			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)
 			if err == nil {
-				// Script will be processed via RemoteTapeCommandMsg
 				m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
 				return m, tea.Batch(cmd, relisten)
 			}
@@ -2572,101 +2580,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Send result back
 		if m.DaemonClient != nil && msg.RequestID != "" {
 			_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "keys sent")
-		}
-
-		return m, nil
-
-	case RemoteTapeCommandMsg:
-		// Process a single tape command from a remote script
-
-		// Update progress tracking for display
-		m.RemoteScriptIndex = msg.CommandIndex
-		m.RemoteScriptTotal = msg.TotalCommands
-
-		// Handle Sleep commands specially: they just wait
-		if msg.Command.Type == tape.CommandTypeSleep && msg.Command.Delay > 0 {
-			// For remote execution, we use tea.Tick to wait
-			nextIndex := msg.CommandIndex + 1
-			waitCmd := tea.Tick(msg.Command.Delay, func(t time.Time) tea.Msg {
-				// After sleep, continue with remaining commands or done
-				if len(msg.RemainingCommands) > 0 {
-					nextCmd := msg.RemainingCommands[0]
-					remaining := msg.RemainingCommands[1:]
-					return RemoteTapeCommandMsg{
-						Command:           nextCmd,
-						RemainingCommands: remaining,
-						RequestID:         msg.RequestID,
-						CommandIndex:      nextIndex,
-						TotalCommands:     msg.TotalCommands,
-					}
-				}
-				return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
-			})
-			return m, waitCmd
-		}
-
-		// Execute the tape command
-		executor := tape.NewCommandExecutor(m)
-		if err := executor.Execute(&msg.Command); err != nil {
-			// Log error but continue with remaining commands
-			m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", m.Settings.NotificationDuration)
-		}
-
-		// Retile if in tiling mode after command execution
-		if m.AutoTiling {
-			m.TileAllWindows()
-		}
-
-		// If there are more commands, schedule the next one with a delay
-		// The delay allows the UI to render the current command's effects before moving on
-		if len(msg.RemainingCommands) > 0 {
-			nextCmd := msg.RemainingCommands[0]
-			remaining := msg.RemainingCommands[1:]
-			nextIndex := msg.CommandIndex + 1
-			// Use tea.Tick with a delay to allow rendering to catch up
-			// 50ms gives enough time for window creation and basic rendering
-			nextCmdFunc := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-				return RemoteTapeCommandMsg{
-					Command:           nextCmd,
-					RemainingCommands: remaining,
-					RequestID:         msg.RequestID,
-					CommandIndex:      nextIndex,
-					TotalCommands:     msg.TotalCommands,
-				}
-			})
-			return m, nextCmdFunc
-		}
-
-		// Last command: schedule cleanup with a delay for final render
-		doneCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-			return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
-		})
-		return m, doneCmd
-
-	case RemoteTapeScriptDoneMsg:
-		// All tape commands have been processed: do final cleanup
-		// Re-enable animations
-		m.ProcessingRemoteKeys = false
-		m.Settings.AnimationsSuppressed = false
-
-		// Mark script finish time for progress display
-		m.ScriptFinishedTime = time.Now()
-
-		// Update progress to show completion
-		m.RemoteScriptIndex = m.RemoteScriptTotal
-
-		if m.AutoTiling {
-			// Clear the BSP tree for current workspace to force a full rebuild
-			if m.WorkspaceTrees != nil {
-				m.WorkspaceTrees[m.CurrentWorkspace] = nil
-			}
-			m.TileAllWindows()
-		}
-		m.MarkAllDirty()
-
-		// Send result back
-		if m.DaemonClient != nil && msg.RequestID != "" {
-			_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "script executed")
 		}
 
 		return m, nil

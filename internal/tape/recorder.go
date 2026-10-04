@@ -188,7 +188,11 @@ func (r *Recorder) RecordModeSwitch(cmdType CommandType) {
 	r.lastEventTime = now
 }
 
-// actionToCommand maps action names to tape command types and raw output
+// actionToCommand maps an action to the tape command that does the same
+// thing, for the ones where the two are the same. Every other action is
+// recorded as Action and its name, which replays exactly what the key did.
+// restore_all, snap_fullscreen and select_window_N used to be recorded as
+// RestoreWindow, SnapFullscreen and FocusWindow N, which do something else.
 var actionToCommand = map[string]struct {
 	cmdType CommandType
 	raw     string
@@ -198,11 +202,26 @@ var actionToCommand = map[string]struct {
 	"next_window":     {CommandTypeNextWindow, "NextWindow"},
 	"prev_window":     {CommandTypePrevWindow, "PrevWindow"},
 	"minimize_window": {CommandTypeMinimizeWindow, "MinimizeWindow"},
-	"restore_all":     {CommandTypeRestoreWindow, "RestoreWindow"},
 	"toggle_tiling":   {CommandTypeToggleTiling, "ToggleTiling"},
-	"snap_left":       {CommandTypeSnapLeft, "SnapLeft"},
-	"snap_right":      {CommandTypeSnapRight, "SnapRight"},
-	"snap_fullscreen": {CommandTypeSnapFullscreen, "SnapFullscreen"},
+}
+
+// recordableAction reports whether an action belongs in a recording. Left out
+// are the ones that drive the recorder or the player, the ones whose effect
+// is recorded by other means (a mode switch, a workspace switch), and the ones
+// that only open a prefix, whose follow-up action is recorded on its own.
+func recordableAction(action string) bool {
+	switch action {
+	case "toggle_tape_manager", "stop_recording", "script_pause",
+		"enter_terminal_mode", "enter_window_mode", "terminal_exit_mode", "prefix_exit_mode", "hold_window_mode",
+		"prefix_workspace", "prefix_minimize", "prefix_window", "prefix_debug", "prefix_tape", "prefix_layout":
+		return false
+	}
+	for _, prefix := range []string{"tape_prefix_", "switch_workspace_"} {
+		if strings.HasPrefix(action, prefix) {
+			return false
+		}
+	}
+	return !strings.HasSuffix(action, "_cancel")
 }
 
 // RecordAction records a window management action
@@ -211,9 +230,7 @@ func (r *Recorder) RecordAction(action string, args ...string) {
 		return
 	}
 
-	// Skip tape control actions and mode switch actions (mode switches are recorded separately)
-	switch action {
-	case "toggle_tape_manager", "stop_recording", "enter_terminal_mode", "enter_window_mode":
+	if !recordableAction(action) {
 		return
 	}
 
@@ -226,25 +243,16 @@ func (r *Recorder) RecordAction(action string, args ...string) {
 	var cmdType CommandType
 	var raw string
 
-	// Check if we have a mapping for this action
 	if mapping, ok := actionToCommand[action]; ok {
 		cmdType = mapping.cmdType
 		raw = mapping.raw
-	} else if len(action) > 17 && action[:17] == "switch_workspace_" {
-		// Handle workspace switching: switch_workspace_1 -> SwitchWorkspace 1
-		ws := action[17:]
-		cmdType = CommandTypeSwitchWS
-		raw = "SwitchWorkspace " + ws
-		args = []string{ws}
-	} else if len(action) > 14 && action[:14] == "select_window_" {
-		// Handle window selection: select_window_1 -> FocusWindow 1
-		win := action[14:]
-		cmdType = CommandTypeFocusWindow
-		raw = "FocusWindow " + win
-		args = []string{win}
 	} else {
-		// Unknown action, skip
-		return
+		// Every other action replays by name. Before Action existed these
+		// were dropped, so a recording kept only the ten actions above and
+		// lost the rest of what the person did.
+		cmdType = CommandTypeAction
+		raw = "Action " + action
+		args = []string{action}
 	}
 
 	cmd := Command{
@@ -308,7 +316,7 @@ func (r *Recorder) String(header string) string {
 	// Write commands
 	for _, cmd := range r.commands {
 		if cmd.Delay > 0 && cmd.Delay.Milliseconds() > 100 {
-			fmt.Fprintf(&sb, "Sleep %v\n", cmd.Delay)
+			fmt.Fprintf(&sb, "Sleep %v\n", cmd.Delay.Round(time.Millisecond))
 		}
 
 		sb.WriteString(cmd.Raw)

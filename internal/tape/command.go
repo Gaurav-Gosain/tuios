@@ -165,6 +165,26 @@ const (
 	CommandTypeSaveLayout CommandType = "SaveLayout"
 	// CommandTypeLoadLayout represents the LoadLayout command.
 	CommandTypeLoadLayout CommandType = "LoadLayout"
+
+	// CommandTypeAction runs a keybinding action by its registry name, the
+	// name config.toml binds keys to: Action toggle_spotlight. It is the one
+	// command that reaches every action the app has, so a feature needs no
+	// tape command of its own to be scriptable.
+	CommandTypeAction CommandType = "Action"
+	// CommandTypePress presses keys through tuios's own key handling, as a
+	// person at the keyboard would: Press "ctrl+b q". Unlike a key combo,
+	// which writes bytes to the focused pane, the keys reach the leader, the
+	// prefixes, copy mode, the rail and any open dialog.
+	CommandTypePress CommandType = "Press"
+	// CommandTypeWaitFor holds playback until a condition holds, and fails the
+	// tape when it does not hold before the timeout. See Condition.
+	CommandTypeWaitFor CommandType = "WaitFor"
+	// CommandTypeExpect checks a condition once and fails the tape when it
+	// does not hold. See Condition.
+	CommandTypeExpect CommandType = "Expect"
+	// CommandTypeRun types a command line into the focused pane and presses
+	// Enter, as the project tape language already spells it.
+	CommandTypeRun CommandType = "Run"
 )
 
 // Command represents a parsed tape command
@@ -175,6 +195,20 @@ type Command struct {
 	Line   int           // Source line number
 	Column int           // Source column number
 	Raw    string        // Original raw command text
+	// File is the tape the command came from when it is not the one that was
+	// run: a command a Source line brought in. Empty for the tape itself.
+	File string
+}
+
+// Where says where the command is in its source, for an error message:
+// "line 4, column 1", or "lib.tape line 4, column 1" for a command a Source
+// line brought in.
+func (c *Command) Where() string {
+	where := fmt.Sprintf("line %d, column %d", c.Line, c.Column)
+	if c.File != "" {
+		where = c.File + " " + where
+	}
+	return where
 }
 
 // String returns a string representation of the command
@@ -266,6 +300,19 @@ var commandTypes = []CommandType{
 	CommandTypeCommandPalette,
 	CommandTypeSaveLayout,
 	CommandTypeLoadLayout,
+	CommandTypeAction,
+	CommandTypePress,
+	CommandTypeWaitFor,
+	CommandTypeExpect,
+	CommandTypeRun,
+}
+
+// commandAliases are other names a command answers to. Notify is the name the
+// rest of tuios uses for a notification (tuios notify), and Focus is what a
+// project tape writes for FocusWindow.
+var commandAliases = map[string]CommandType{
+	"notify": CommandTypeShowNotification,
+	"focus":  CommandTypeFocusWindow,
 }
 
 // commandTypeSet is commandTypes as a set, and commandTypesByKey is the same
@@ -312,7 +359,10 @@ func ResolveCommandName(name string) (CommandType, bool) {
 	if ct := CommandType(name); ct.IsCommand() {
 		return ct, true
 	}
-	ct, ok := commandTypesByKey[commandKey(name)]
+	if ct, ok := commandTypesByKey[commandKey(name)]; ok {
+		return ct, true
+	}
+	ct, ok := commandAliases[commandKey(name)]
 	return ct, ok
 }
 

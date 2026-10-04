@@ -17,19 +17,18 @@ import (
 )
 
 func runTapeInteractive(tapeFile string) error {
-	content, err := os.ReadFile(tapeFile)
+	script, err := tape.LoadFile(tapeFile)
 	if err != nil {
 		return fmt.Errorf("failed to read tape file: %w", err)
 	}
-
-	commands, parseErrors := tape.ParseFile(string(content))
-	if len(parseErrors) > 0 {
+	if len(script.Errors) > 0 {
 		fmt.Fprintf(os.Stderr, "Tape parsing errors:\n")
-		for _, err := range parseErrors {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
+		for _, err := range script.Errors {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", tapeFile, err)
 		}
 		return fmt.Errorf("the tape file has errors, listed above. Fix them, then run it again")
 	}
+	commands := script.Commands
 
 	fmt.Printf("Preparing tape script: %s\n", tapeFile)
 	fmt.Printf("Total commands: %d\n", len(commands))
@@ -86,7 +85,9 @@ func runTapeInteractive(tapeFile string) error {
 
 	finalModel, err := p.Run()
 
+	failure := ""
 	if finalOS, ok := finalModel.(*app.OS); ok {
+		failure = finalOS.ScriptFailure
 		finalOS.Cleanup()
 	}
 
@@ -106,21 +107,25 @@ func runTapeInteractive(tapeFile string) error {
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)
 	}
+	if failure != "" {
+		return fmt.Errorf("the tape stopped at %s: %s", tapeFile, failure)
+	}
 
 	return nil
 }
 
 func validateTapeFile(tapeFile string) error {
-	content, err := os.ReadFile(tapeFile)
+	script, err := tape.LoadFile(tapeFile)
 	if err != nil {
 		return fmt.Errorf("failed to read tape file: %w", err)
 	}
 
-	commands, parseErrors := tape.ParseFile(string(content))
+	commands, parseErrors := script.Commands, script.Errors
 	if len(parseErrors) > 0 {
 		fmt.Fprintf(os.Stderr, "Parsing errors found:\n")
+		// file:line, column: the shape an editor's error list can jump to.
 		for _, err := range parseErrors {
-			fmt.Fprintf(os.Stderr, "  ✗ %s\n", err)
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", tapeFile, err)
 		}
 		return fmt.Errorf("the tape file has errors, listed above. Fix them, then validate it again")
 	}
