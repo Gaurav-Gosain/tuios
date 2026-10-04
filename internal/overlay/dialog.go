@@ -145,6 +145,23 @@ func HintStrip(hints []Hint, bg color.Color, pal Palette) string {
 	return s
 }
 
+// FitHintStrip is HintStrip no wider than width. It fits the hints by the
+// tiers a panel footer uses (see fitHints): modifier names shortened, then
+// whole hints dropped by priority. A key or a label is never cut in the
+// middle, and the esc hint stays. It returns the strip and its width. It is
+// for a surface with a fixed room for a mode's keys, such as the dock.
+func FitHintStrip(hints []Hint, width int, bg color.Color, pal Palette) (string, int) {
+	if len(hints) == 0 || width <= 0 {
+		return "", 0
+	}
+	return renderHints(fitHints(hints, width, dialogSep), dialogSep, bg, pal)
+}
+
+// HintStripWidth is the width HintStrip draws hints at, with none dropped.
+func HintStripWidth(hints []Hint) int {
+	return hintsWidth(hints, dialogSep, false)
+}
+
 // Render assembles the dialog and returns the rendered string plus the geometry
 // of its interactive regions in dialog-relative coordinates.
 func (d Dialog) Render(pal Palette) (string, Geometry) {
