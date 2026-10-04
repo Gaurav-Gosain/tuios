@@ -451,10 +451,18 @@ func (d *Daemon) herdrPluginActionInvoke(cs *connState, params json.RawMessage) 
 	return map[string]any{"type": "plugin_action_invoked", "action": info, "context": ctx, "log": log}, nil
 }
 
-func (d *Daemon) herdrPluginLogList(_ *connState, params json.RawMessage) (any, *herdrError) {
+func (d *Daemon) herdrPluginLogList(cs *connState, params json.RawMessage) (any, *herdrError) {
 	in, herr := decodePluginIn(params)
 	if herr != nil {
 		return nil, herr
+	}
+	// A log holds what plugin commands printed, about any session. A pane
+	// that may not run a plugin command may not read what one printed.
+	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
+		return nil, herdrErr("forbidden", "reading plugin logs needs the admin grant, and this pane holds "+pa.grants.String())
+	}
+	if cs != nil && cs.viaLink {
+		return nil, herdrErr("forbidden", "plugin logs are not read from another machine")
 	}
 	id, herr := pluginIDParam(in.PluginID)
 	if herr != nil {

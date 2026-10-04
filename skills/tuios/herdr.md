@@ -52,10 +52,10 @@ a pane you can run an enabled plugin's action and open its panes:
 "$HERDR_BIN_PATH" plugin log list --plugin PLUGIN_ID
 ```
 
-To run an action or open a plugin pane needs `admin`. You cannot enable,
-disable, link or unlink a plugin from a pane: the call fails with code
-`forbidden` and changes nothing. Ask the person to run `tuios plugins enable
-PLUGIN_ID` from a terminal outside tuios.
+You need `admin` to run an action, open a plugin pane or read the plugin
+log. You cannot enable, disable, link or unlink a plugin from a pane: the
+call fails with code `forbidden` and changes nothing. Ask the person to run
+`tuios plugins enable PLUGIN_ID` from a terminal outside tuios.
 
 ## What it may do
 

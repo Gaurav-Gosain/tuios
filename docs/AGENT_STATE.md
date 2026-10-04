@@ -854,7 +854,8 @@ found on `PATH`.
 
 A background command runs in the plugin folder, with no terminal and stdin
 closed. tuios keeps the first 64 KiB of its stdout and stderr in a log of 200
-runs. `tuios plugins log` shows it. At most 32 commands run at once, and at
+runs. `tuios plugins log` shows it. A pane reads the log only with
+`admin`, because a command can print what the pane may not see. At most 32 commands run at once, and at
 most 8 for one plugin. tuios kills an action or event command after 10
 minutes. One plugin runs at most 20 event hooks in 10 seconds. tuios drops
 and logs the hooks past that limit.
