@@ -54,6 +54,14 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			if newProgram == nil {
 				return
 			}
+			// The explorers behind tuios help -i, config browse and keybinds
+			// browse are not clients. They draw no panes, run their own small
+			// model, and keep Bubble Tea's signal handler, so a kill still
+			// gives the terminal back. ProgramOptions removes that handler,
+			// because a client's command owns its signals.
+			if path == "internal/explore/explore.go" {
+				return
+			}
 			sites++
 			where := fmt.Sprintf("%s:%d", path, fset.Position(newProgram.Pos()).Line)
 			if shared == nil {
