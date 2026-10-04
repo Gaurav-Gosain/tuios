@@ -1893,6 +1893,10 @@ the numbers [capture-pane](#capture-pane) reports. A reader can compare
 `revision` with the one it last captured and skip the panes that did not
 change.
 
+A window whose process runs on this machine also has `pid`, the process the
+pane started, and `tty`, the path of its terminal device. A zoomed window has
+`zoomed: true`.
+
 ### get-window
 
 Describe one window, as the client protocol's `GetWindow` command does. With

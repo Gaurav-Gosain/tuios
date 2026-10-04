@@ -106,18 +106,30 @@ func addShellFacts(sess *Session, data map[string]any) {
 
 // addPaneMeta adds each window's history_rows and revision to a
 // list-windows result, the numbers capture-pane reports beside its content.
-// A window with no pane on this daemon has neither.
+// A window with no pane on this daemon has neither. A pane whose process runs
+// here also gets pid, the process the pane started, and tty, its terminal
+// device: the tmux shim reports them as pane_pid and pane_tty.
 func addPaneMeta(sess *Session, data map[string]any) {
 	windows, _ := data["windows"].([]map[string]any)
 	for _, w := range windows {
 		id, _ := w["pty_id"].(string)
-		pty := sess.GetPTY(id)
-		if pty == nil {
-			continue
+		if pty := sess.GetPTY(id); pty != nil {
+			addOnePaneMeta(pty, w)
 		}
-		m := pty.Meta()
-		w["history_rows"] = m.HistoryRows
-		w["revision"] = m.Revision
+	}
+}
+
+// addOnePaneMeta adds one pane's history_rows, revision, pid and tty to its
+// window's entry. get-window uses it too, so the two reads agree.
+func addOnePaneMeta(pty *PTY, w map[string]any) {
+	m := pty.Meta()
+	w["history_rows"] = m.HistoryRows
+	w["revision"] = m.Revision
+	if pid := pty.ShellPID(); pid > 0 {
+		w["pid"] = pid
+	}
+	if tty := pty.TTYName(); tty != "" {
+		w["tty"] = tty
 	}
 }
 

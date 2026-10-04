@@ -324,6 +324,11 @@ func (d *Daemon) verbListWorkspaces(_ *connState, params json.RawMessage) (any, 
 		if state.WorkspaceFocus != nil {
 			entry["focused_window_id"] = state.WorkspaceFocus[ws]
 		}
+		// The windows focused there, newest first, so a caller can name the
+		// one before the current (tmux's last-pane).
+		if history := state.FocusHistory[ws]; len(history) > 0 {
+			entry["focus_history"] = history
+		}
 		spaces = append(spaces, entry)
 	}
 

@@ -888,7 +888,7 @@ func init() {
 			handler:     (*Daemon).verbSessionInfo,
 		},
 		"list-windows": {
-			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it.",
+			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed.",
 			params:      []verbParam{sessionParam},
 			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
 			handler:     (*Daemon).verbListWindows,
@@ -1053,7 +1053,7 @@ func init() {
 			description: "List every workspace with its name, how many windows it holds, and which one is showing.",
 			params:      []verbParam{sessionParam},
 			returns: []verbParam{
-				{Name: "workspaces", Type: "[]object", Description: "One row per workspace: workspace, name, window_count, focused_window_id, current."},
+				{Name: "workspaces", Type: "[]object", Description: "One row per workspace: workspace, name, window_count, focused_window_id, current, and focus_history, the windows focused there, newest first."},
 				{Name: "current_workspace", Type: "int", Description: "Workspace showing."},
 				{Name: "order", Type: "[]int", Description: "Display order, empty when the workspaces are in their plain ascending order."},
 			},

@@ -341,6 +341,10 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// A zoomed window fills its workspace. Omitted when it is not.
+	if w.Zoomed {
+		info["zoomed"] = true
+	}
 	// The scratch terminal is listed, marked, so a script can tell it from
 	// the panes the user placed. minimized true on it means hidden.
 	if w.Scratch {

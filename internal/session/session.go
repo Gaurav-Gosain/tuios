@@ -4617,6 +4617,16 @@ func (p *PTY) ShellPID() int {
 	return p.cmd.Process.Pid
 }
 
+// TTYName returns the path of the pane's terminal device, such as /dev/pts/3.
+// It is empty for a pane on another machine, and on a platform whose PTY has
+// no device name (ConPTY).
+func (p *PTY) TTYName() string {
+	if named, ok := p.pty.(interface{ SlaveName() string }); ok {
+		return named.SlaveName()
+	}
+	return ""
+}
+
 // IsExited returns true if the shell process has exited.
 func (p *PTY) IsExited() bool {
 	p.exitedMu.RLock()
