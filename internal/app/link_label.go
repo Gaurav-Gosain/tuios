@@ -1,6 +1,7 @@
 package app
 
 import (
+	"runtime"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -27,14 +28,25 @@ import (
 
 // linkLabelHint is what the label says about acting on the run. It is the only
 // place in the interface that names the gesture, so it follows
-// appearance.link_click. With both clicks on it names ctrl+click, because that
+// appearance.link_click. With both clicks on (the default) it names ctrl+click, because that
 // is the one most outer terminals pass on to tuios.
-func linkLabelHint(s *config.Settings) string {
+//
+// A Mac is the exception. macOS reads ctrl+click as a right click, and
+// Terminal.app and iTerm2 open their own menu instead of passing it on. The
+// frame carries every link as OSC 8 (link_emit.go), so cmd+click in the outer
+// terminal opens it there. Only a client on this machine knows it is a Mac; a
+// served client keeps the default, since the viewer's machine is unknown.
+func linkLabelHint(s *config.Settings, onMac bool) string {
 	switch s.LinkClick {
 	case config.LinkClickOff:
 		return ""
 	case config.LinkClickShift:
 		return "shift+click to open"
+	case config.LinkClickCtrl:
+		return "ctrl+click to open"
+	}
+	if onMac {
+		return "cmd+click to open"
 	}
 	return "ctrl+click to open"
 }
@@ -58,7 +70,7 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 
 	body := overlay.Truncate(sanitizeLinkText(link.URL), linkLabelMax)
 	text := body
-	if hint := linkLabelHint(&m.Settings); hint != "" {
+	if hint := linkLabelHint(&m.Settings, runtime.GOOS == "darwin" && m.Client == ClientLocal); hint != "" {
 		text += "  " + hint
 	}
 	label := tooltipLabel(text, max(renderW-2, 1), pal)

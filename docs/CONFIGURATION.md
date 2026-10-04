@@ -43,7 +43,7 @@ link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
 | Key | Default | What it does |
 |---|---|---|
 | `links` | `all` | The links that tuios finds. `marked` finds only OSC 8 links. |
-| `link_click` | `both` | The click that opens a link. `both` is `Ctrl+click` and `Shift+click`. |
+| `link_click` | `both` | The click that opens a link. `both` is `Ctrl+click` and `Shift+click`. On macOS, use `Cmd+click`: the terminal opens the link itself. macOS reads `Ctrl+click` as a right click. |
 | `link_opener` | empty | The command that opens a web link. tuios puts the URL where `%s` is, or at the end. If this is empty, tuios uses `$BROWSER`, then the system opener. |
 
 The system opener is `open` on macOS, `rundll32` on Windows, `wslview` under
