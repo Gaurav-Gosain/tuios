@@ -2463,3 +2463,71 @@ benchmark's repeated reads used to find it in the cache.
 `TestCopyModeSearchKeyBudget` holds one search key to 4 MB, and
 `TestHistoryCaptureBudget` holds the locked part of a history save to 4 MB.
 Both fail on the tree before this change, at 258 MB and 24.7 MB.
+
+## 2026-10 emulator allocations, scroll window, idle ticker, memory trim
+
+Measured on a shared 4-core Xeon at 2.1 GHz with `GOMAXPROCS=2`, three runs
+each, before and after in the same session. Emulator numbers come from a
+207x55 pane with 10,000 lines of history, fed in 16 KiB writes. Real-binary
+numbers come from `tuios attach` in a 207x57 tmux pane, read from `/proc`
+over 20 s after 10 s of settling.
+
+### What changed
+
+- A truecolor cell that misses the 256-slot colour cache boxes its colour
+  into a 64-colour slab, not a heap value of its own. The value has the same
+  dynamic type, so `==` and type switches behave as before.
+- A non-ASCII cluster comes from a 1,024-slot table of recent clusters. A run
+  of new clusters copies the rest of the run once after four misses.
+- A kitty graphics command is parsed from the one copy of the sequence the
+  passthrough gets. `RawPayload` shares those bytes. A passthrough must not
+  write to `rawData`.
+- A scroll of the whole screen moves a window over a backing array twice the
+  screen height. It does not slide every row header, extent and wrap flag.
+- The client drops the Bubble Tea frame ticker to `IdleFPS` after 500 ms
+  with no composed frame. Input, a raw write or a composed frame wakes it
+  with a 1 ms tick for 4 ms, then the normal rate.
+- The session-list poll tick no longer composes a frame. It changes nothing
+  on screen. The refresh it starts composes one only when the listing it
+  fetched changed, since the rail draws other sessions from that listing.
+- `internal/memtrim` calls `debug.FreeOSMemory` 2 s after a burst of pane
+  closes, after the client goes idle, and from the daemon's 30 s sweep. It
+  trims only when the process is quiet and holds 32 MB or more of heap past
+  its live data, and at most once in 30 s.
+
+### Numbers
+
+| Benchmark | before | after |
+|---|---|---|
+| truecolor per character, 7.6 MB | 96 ms, 417,520 allocs | 92 ms, 18,849 allocs |
+| CJK and emoji, 2.5 MB | 153 ms, 190,137 allocs | 150 ms, 55,113 allocs |
+| `WriteKittyAPC` (1.97 MB frame) | 3.79 ms, 5.90 MB, 2,405 allocs | 3.08 ms, 3.93 MB, 1,924 allocs |
+| `yes`, 1 MB | 61.5 ms | 55.1 ms |
+| `seq 1 100000` | 23.8 ms | 21.5 ms |
+| `EmulatorShortLineScroll/with-scrollback` | 345 ns | 325 ns |
+
+CJK throughput did not move. Its time is grapheme segmentation, not
+allocation.
+
+| Real binary | before | after |
+|---|---|---|
+| Client idle CPU, 1 pane | 0.95% | 0.40% |
+| Client idle CPU, 10 panes | 1.23% | 0.47% |
+| Client voluntary context switches a second | 355 to 364 | 112 to 118 |
+| Daemon RSS 5 s after 49 of 50 panes close | 57 to 77 MB | 41 to 49 MB |
+| Client RSS 5 s after 49 of 50 panes close | 58 to 60 MB | 59 to 60 MB |
+
+The ticker change alone gave 0.56% and 0.59%. The poll tick composed a frame
+every 3 s, and each frame woke the ticker for 500 ms. The client's own
+scavenger already returned its free pages in these runs, so the client trim
+did not run.
+
+`TestIdleCostStaysLow` holds 0 idle wire bytes. `TestPerfInputLatency` is
+16.7 ms at p50 and 18.4 ms at p95 for 1, 4 and 8 panes, before and after.
+The `TestLatency*` tests in `internal/terminal`, `internal/input` and
+`internal/app` are within noise.
+
+`TestTruecolorGradientAllocatesPerSlab`, `TestRepeatedClustersAllocateNothing`,
+`TestNovelClusterRunAllocatesBoundedly` and `TestKittyFrameCopiesPayloadOnce`
+hold the budgets. Each fails on the tree before its change. The kitty one
+measures 2.99 times the frame size there.
