@@ -685,7 +685,9 @@ func (m *OS) SnapByDirection(direction string) error {
 	case "right":
 		quarter = SnapRight
 	case "fullscreen":
-		m.Snap(m.FocusedWindow, SnapTopLeft)
+		// It snapped to the top-left quarter, which is what the key's
+		// snap_fullscreen action has never done.
+		m.Snap(m.FocusedWindow, SnapFullScreen)
 		m.MarkAllDirty()
 		return nil
 	default:

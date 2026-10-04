@@ -34,6 +34,8 @@ import (
 //     command".
 //   - TestTapeRecordingReplaysActions: the Action branch cut from
 //     Recorder.RecordAction: the saved tape holds no Action line.
+//   - TestTapeSnapFullscreenFillsTheScreen: the tree before the fix: the
+//     window is a quarter of the screen.
 
 // tapeSession starts a daemon session named name with one pane and an
 // attached client, and returns the client's terminal and the isolation root.
@@ -257,4 +259,23 @@ func TestExampleTapeRuns(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "after the example")
 	saveArtifact(t, term, artifactDir(t), "example")
+}
+
+// TestTapeSnapFullscreenFillsTheScreen: SnapFullscreen in a tape snapped the
+// window to the top-left quarter, unlike the key's snap_fullscreen.
+func TestTapeSnapFullscreenFillsTheScreen(t *testing.T) {
+	term, base := tapeSession(t, "snap")
+	path := writeTape(t, base, "snap.tape", "DisableTiling\nSnapFullscreen\n")
+	if out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "snap", path); err != nil {
+		t.Fatalf("tape exec: %v\n%s%s\n%s", err, out, errOut, term.Snapshot())
+	}
+	var rects []winRect
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		rects = waitForSettledGeometryIn(t, base, "snap", 1)
+		return rects[0].Width > 100 && rects[0].Height > 30
+	}, uiTimeout); err != nil {
+		t.Errorf("after SnapFullscreen the window is %dx%d of a 120x40 screen, want it to fill the screen\n%s",
+			rects[0].Width, rects[0].Height, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "snap-fullscreen")
 }
