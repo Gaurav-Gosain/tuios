@@ -2160,8 +2160,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 28,255,000 (raised for #403 and #405) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,665,000 (raised for #403 and #405) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 28,320,000 (raised for #391) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,725,000 (raised for #391) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2271,6 +2271,12 @@ and the session state that carries them. On the CI toolchain #403 alone put
 the build at 28,213,410 and 26,620,498 bytes, 8,410 and 498 over. Measured
 with `scripts/binary-size.sh` against main on one toolchain, #403 adds 28,672
 and 16,800 bytes and #405 adds 4,096 and 0.
+
+The budgets went to 28,320,000 (linux/amd64) and 26,725,000 (darwin/arm64)
+for the client list (#391): the `list-clients` verb and command, the peer pid
+read on each platform, and the `client-session-changed` event. On Go 1.26.6
+the build measured 28,283,042 and 26,688,242 bytes, 28,042 and 23,242 over
+the old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
