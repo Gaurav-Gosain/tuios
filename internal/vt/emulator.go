@@ -682,8 +682,10 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 //
 // Reporting the method actually in use is the fix. Honouring mode 2027 would
 // mean changing placement to match, which is a different and much larger
-// change than making the answer true. For the same reason 2027 defaults to
-// set, so DECRQM tells a program the truth before it resets the mode.
+// change than making the answer true. For the same reason 2027 is permanently
+// set: DECRQM answers 3, and a guest that resets it is ignored, so the answer
+// stays true after the guest asks to change it. The ghostty backend does honour
+// a reset of 2027, and its DECRQM answer says so.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
 }
@@ -970,6 +972,12 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 	for modeNum, enabled := range modes {
 		// Convert int back to Mode
 		mode := ansi.DECMode(modeNum)
+		// A snapshot from another backend or an older build can carry modes
+		// this emulator does not implement, or a value for one it fixes.
+		// Neither is taken, so DECRQM stays truthful after a reattach.
+		if !modeRecognised(mode) || modePermanent(mode) {
+			continue
+		}
 
 		if enabled {
 			e.modes[mode] = ansi.ModeSet

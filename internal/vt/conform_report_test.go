@@ -292,6 +292,25 @@ func TestConform_DECRQM(t *testing.T) {
 		// claim and one a guest acts on.
 		{"an unknown private mode reports not recognised", "\x1b[?9999$p", "\x1b[?9999;0$y"},
 
+		// Setting a mode does not make the emulator recognise it. Storing
+		// whatever the guest set had DECRQM report these as set, so a guest
+		// that set, probed and trusted the answer used an encoding or a
+		// feature nothing here produces.
+		{"an unknown private mode set first still reports not recognised", "\x1b[?9999h\x1b[?9999$p", "\x1b[?9999;0$y"},
+		{"UTF-8 mouse (?1005) set first reports not recognised", "\x1b[?1005h\x1b[?1005$p", "\x1b[?1005;0$y"},
+		{"urxvt mouse (?1015) set first reports not recognised", "\x1b[?1015h\x1b[?1015$p", "\x1b[?1015;0$y"},
+		{"DECCOLM set first reports not recognised", "\x1b[?3h\x1b[?3$p", "\x1b[?3;0$y"},
+		{"reverse wrap set first reports not recognised", "\x1b[?45h\x1b[?45$p", "\x1b[?45;0$y"},
+		{"an unknown ANSI mode set first reports not recognised", "\x1b[2h\x1b[2$p", "\x1b[2;0$y"},
+		{"a soft reset does not make KAM recognised", "\x1b[!p\x1b[2$p", "\x1b[2;0$y"},
+
+		// Widths are always measured by grapheme cluster (see WidthMethod),
+		// whatever the guest asks, so 2027 is permanently set: 3, before and
+		// after a reset, and after a RIS.
+		{"grapheme clustering reports permanently set", "\x1b[?2027$p", "\x1b[?2027;3$y"},
+		{"grapheme clustering stays permanently set after ?2027l", "\x1b[?2027l\x1b[?2027$p", "\x1b[?2027;3$y"},
+		{"grapheme clustering stays permanently set after RIS", "\x1bc\x1b[?2027$p", "\x1b[?2027;3$y"},
+
 		// The ANSI form has no private marker and is a separate table.
 		// Reset, not "not recognised": this emulator implements IRM, and
 		// telling a guest otherwise would send it down a fallback path it

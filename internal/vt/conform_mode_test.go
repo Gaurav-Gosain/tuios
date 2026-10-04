@@ -239,9 +239,10 @@ func TestConform_SaveRestoreCarriesTheWrapFlag(t *testing.T) {
 	})
 }
 
-// TestConform_ModesThisEmulatorIgnores pins the modes that are recorded and
-// acted on by nothing, so that a half-implementation cannot appear without a
-// test noticing.
+// TestConform_ModesThisEmulatorIgnores pins modes this emulator does not
+// implement, so that a half-implementation cannot appear without a test
+// noticing. They are not stored either, so DECRQM reports them as not
+// recognised (see TestConform_DECRQM).
 //
 // Each one is a deliberate call, not an oversight:
 //
@@ -257,14 +258,16 @@ func TestConform_SaveRestoreCarriesTheWrapFlag(t *testing.T) {
 func TestConform_ModesThisEmulatorIgnores(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			name:   "DECCOLM does not clear the screen or reset the margins",
-			in:     "abc\x1b[2;3r\x1b[?3h",
-			want:   "abc",
-			region: "0,1-6,3",
+			name:      "DECCOLM does not clear the screen or reset the margins",
+			in:        "abc\x1b[2;3r\x1b[?3h",
+			want:      "abc",
+			region:    "0,1-6,3",
+			unhandled: true,
 		}, {
-			name: "DECSCNM changes nothing on the grid",
-			in:   "\x1b[?5hab",
-			want: "ab",
+			name:      "DECSCNM changes nothing on the grid",
+			in:        "\x1b[?5hab",
+			want:      "ab",
+			unhandled: true,
 		}, {
 			name:   "reverse wrap does not carry a backspace to the line above",
 			in:     "abcdef\x1b[2;1H\bX",

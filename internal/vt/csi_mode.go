@@ -20,13 +20,18 @@ func (e *Emulator) handleMode(params ansi.Params, set, isAnsi bool) {
 			mode = ansi.ANSIMode(param)
 		}
 
-		setting := e.modeSetting(mode)
-		if setting == ansi.ModePermanentlyReset || setting == ansi.ModePermanentlySet {
-			// Permanently set modes are ignored.
+		// A mode the emulator does not implement is not stored. Storing it
+		// made DECRQM report it set, and a guest that probes before it
+		// enables a feature believed a mode nothing acts on.
+		if !modeRecognised(mode) {
+			e.logf("unhandled sequence: mode %d (ansi=%v, set=%v)", param, isAnsi, set)
+			continue
+		}
+		if modePermanent(mode) {
 			continue
 		}
 
-		setting = ansi.ModeReset
+		setting := ansi.ModeReset
 		if set {
 			setting = ansi.ModeSet
 		}

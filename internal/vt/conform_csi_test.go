@@ -89,10 +89,11 @@ func TestConform_CSIParameters(t *testing.T) {
 			want:   "\n\n  X",
 		},
 		{
-			name:   "an unknown private mode is recorded, not printed",
-			in:     "\x1b[?9999hAB",
-			cursor: "2,0",
-			want:   "AB",
+			name:      "an unknown private mode is ignored, not printed",
+			in:        "\x1b[?9999hAB",
+			cursor:    "2,0",
+			want:      "AB",
+			unhandled: true,
 		},
 		{
 			// DEL is ignored wherever it appears inside a sequence, so this

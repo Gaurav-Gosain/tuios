@@ -409,13 +409,33 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 		"\x1b[?47$p", "\x1b[?47h\x1b[?47$p",
 		"\x1b[?1016$p", "\x1b[?1016h\x1b[?1016$p",
 		"\x1b[?2048$p",
-		"\x1b[?2027$p", "\x1b[?2027l\x1b[?2027$p", "\x1bc\x1b[?2027$p",
+		// A mode neither backend defines.
+		"\x1b[?9999h\x1b[?9999$p",
 	} {
 		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
 			p := newDiffPair(t, 20, 5)
 			p.write(t, []byte(in))
 			if a, g := readReply(p.pure), readReply(p.gh); a != g {
 				t.Errorf("reply pure=%q ghostty=%q", a, g)
+			}
+		})
+	}
+
+	// Mode 2027 is answered differently on purpose, and each answer is true
+	// for its own backend. The pure emulator always measures by grapheme
+	// cluster, so it reports 3 (permanently set) and ignores a reset. The
+	// library honours a reset and stops clustering, so it reports 1 and then
+	// 2. See TestGhosttyGraphemeClusteringDefault for the layout half.
+	for _, tc := range []struct{ in, pure, gh string }{
+		{"\x1b[?2027$p", "\x1b[?2027;3$y", "\x1b[?2027;1$y"},
+		{"\x1b[?2027l\x1b[?2027$p", "\x1b[?2027;3$y", "\x1b[?2027;2$y"},
+		{"\x1bc\x1b[?2027$p", "\x1b[?2027;3$y", "\x1b[?2027;1$y"},
+	} {
+		t.Run(fmt.Sprintf("%q", tc.in), func(t *testing.T) {
+			p := newDiffPair(t, 20, 5)
+			p.write(t, []byte(tc.in))
+			if a, g := readReply(p.pure), readReply(p.gh); a != tc.pure || g != tc.gh {
+				t.Errorf("reply pure=%q ghostty=%q, want pure=%q ghostty=%q", a, g, tc.pure, tc.gh)
 			}
 		})
 	}

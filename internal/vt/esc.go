@@ -60,15 +60,6 @@ func (e *Emulator) restoreCharsets() {
 	e.gsingle = 0
 }
 
-// decModeReverseWrap and decModeReverseWrapExt are the two spellings of reverse
-// wraparound. Nothing here acts on them, but a guest can set them and the modes
-// map is carried in a session snapshot, so a soft reset has to clear them or
-// they outlive it on both the daemon and the client.
-const (
-	decModeReverseWrap    = ansi.DECMode(45)
-	decModeReverseWrapExt = ansi.DECMode(1045)
-)
-
 // softReset performs a soft terminal reset as in [ansi.DECSTR].
 //
 // The difference from RIS is what it leaves alone. A soft reset is what a
@@ -79,12 +70,12 @@ const (
 //
 // The list is the one DEC documents for the VT510, restricted to the state this
 // emulator actually keeps: the cursor enabled, insert/replace back to replace,
-// origin mode absolute, the keyboard unlocked, the keypad numeric, normal arrow
-// keys, the scroll region back to the full page, the left and right margins
-// with it, G0 to G3 and GL and GR back to their defaults, SGR back to normal,
-// and the saved cursor to home. The modes DEC also lists but this emulator has
-// no notion of, DECNRCM, DECSCA, DECSASD, DECKPM, DECRLM and DECPCTERM, are
-// left out rather than stored unread.
+// origin mode absolute, the keypad numeric, normal arrow keys, the scroll
+// region back to the full page, the left and right margins with it, G0 to G3
+// and GL and GR back to their defaults, SGR back to normal, and the saved
+// cursor to home. The modes DEC also lists but this emulator has no notion of,
+// KAM, DECNRCM, DECSCA, DECSASD, DECKPM, DECRLM and DECPCTERM, are left out:
+// a guest cannot set them (see handleMode), so there is nothing to clear.
 //
 // Two things it deliberately does not do, both of which programs depend on: it
 // does not move the cursor, and it does not clear the screen.
@@ -104,12 +95,9 @@ func (e *Emulator) softReset() {
 	e.setMode(ansi.ModeTextCursorEnable, ansi.ModeSet)
 	e.setMode(ansi.ModeInsertReplace, ansi.ModeReset)
 	e.setMode(ansi.ModeOrigin, ansi.ModeReset)
-	e.setMode(ansi.ModeKeyboardAction, ansi.ModeReset)
 	e.setMode(ansi.ModeNumericKeypad, ansi.ModeReset)
 	e.setMode(ansi.ModeCursorKeys, ansi.ModeReset)
 	e.setMode(ansi.ModeLeftRightMargin, ansi.ModeReset)
-	e.setMode(decModeReverseWrap, ansi.ModeReset)
-	e.setMode(decModeReverseWrapExt, ansi.ModeReset)
 
 	// The region, and with it both pairs of margins.
 	e.scr.scroll = e.scr.buf.Bounds()
