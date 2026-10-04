@@ -1058,8 +1058,8 @@ uses both.
 
 ## herdr plugins
 
-`TestHerdrPluginTrustAndHooks`, `TestHerdrPluginActions` and
-`TestHerdrPluginPanes` run the stand-in plugins in
+`TestHerdrPluginTrustAndHooks`, `TestHerdrPluginActions`,
+`TestHerdrPluginPanes` and `TestHerdrPluginPalette` run the stand-in plugins in
 `testdata/herdrplugins`. Each control cut one line in a shared clone of the
 branch, built the binary, and ran the one test named.
 
@@ -1077,6 +1077,11 @@ person enables it.
 | The plugin folder as the working folder | `Runner.Start`: `cmd.Dir = j.Plugin.PluginRoot` cut | `TestHerdrPluginActions` ("the action saw cwd=... want .../actions") | **caught** |
 | The plugin variables of a pane | `herdrPluginPaneOpen`: `Env: env` cut from the window options | `TestHerdrPluginPanes` (the popup's marker never shows: the script has no state folder to write to) | **caught** |
 | The popup placement | `herdrPluginPaneOpen`: `opts.Popup = true` cut | `TestHerdrPluginPanes` ("the plugin popup is 38 rows, want the 12 its entry names") | **caught** |
+| The person's change applies only to the plugin it names | `writePlugins`: apply the table read back from config.toml in place of `d.plugins.applied()` with the change | `TestHerdrPluginTrustAndHooks` ("the person's enable of e2e.hooks also enabled e2e.actions, which a pane wrote into config.toml") | **caught** |
+| A process a plugin leaves behind is not the person | `baseEnv`: the `TUIOS_SOCKET` entry cut | `TestHerdrPluginTrustAndHooks` ("a process the startup command left behind enabled a plugin") | **caught** |
+| The plugin rows in the palette | `rebuildPaletteItems`: the `pluginPaletteItems` call cut | `TestHerdrPluginPalette` ("the palette never listed the plugin action") | **caught** |
+| A plugin that is off has no palette row | `pluginPaletteItems`: `!e.Runnable()` made `e.Plugin == nil` | `TestHerdrPluginPalette` ("the palette offers an action of a plugin that is off") | **caught** |
+| The grant check on the plugin log | `herdrPluginLogList`: the admin check never refuses | `TestHerdrPluginActions` ("plugin log from a read-only pane: exit 0" with the action's output) | **caught** |
 
 ## What this harness structurally cannot observe
 
