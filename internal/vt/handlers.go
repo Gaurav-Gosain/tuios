@@ -1074,6 +1074,12 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			response := ansi.WindowOp(8, e.Height(), e.Width())
 			debugLog(fmt.Sprintf("responding to CSI 18 t with: %q", response))
 			_, _ = io.WriteString(e.pipe, response)
+		case 22: // Push the icon name and the window title
+			which, _, _ := params.Param(1, 0)
+			return e.pushTitle(which)
+		case 23: // Pop the icon name and the window title
+			which, _, _ := params.Param(1, 0)
+			return e.popTitle(which)
 		default:
 			// Other XTWINOPS commands are not supported
 			debugLog(fmt.Sprintf("unsupported command CSI %d t", n))

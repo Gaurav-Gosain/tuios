@@ -136,6 +136,9 @@ func (e *Emulator) fullReset() {
 	e.colors = [256]color.Color{}
 	e.refreshPaletteClaims()
 
+	// Titles a guest saved with XTWINOPS 22 are not restored past a reset.
+	e.titleStack = nil
+
 	e.gl, e.gr = 0, 1
 	e.gsingle = 0
 	e.charsets = [4]CharSet{}

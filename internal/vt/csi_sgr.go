@@ -259,6 +259,11 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			pen.Fg = e.PaletteColor(int(param - 90 + 8)) // 8-15 are bright colors
 		case 100, 101, 102, 103, 104, 105, 106, 107: // Set bright background
 			pen.Bg = e.PaletteColor(int(param - 100 + 8)) // 8-15 are bright colors
+		case 53, 55: // Overline on and off
+			// The cell style has no overline attribute to store, so a guest
+			// that asks for one gets nothing. That is reported as unhandled
+			// rather than dropped quietly, because it is not implemented.
+			e.logf("unhandled sequence: SGR %d", param)
 		default:
 			// Delegate any scalar attribute code this switch does not
 			// special-case to the canonical uv reader, so the themed path

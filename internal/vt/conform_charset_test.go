@@ -33,8 +33,13 @@ func TestConform_CharsetDesignation(t *testing.T) {
 			// The UK set differs from ASCII in exactly one place, which is the
 			// only way to tell it was selected at all.
 			name: "ESC ( A designates the UK set as G0",
-			in:   "\x1b(Aa$b",
+			in:   "\x1b(Aa#b",
 			want: "a£b",
+		}, {
+			// The dollar sign is the same in both sets.
+			name: "the UK set leaves the dollar sign alone",
+			in:   "\x1b(A$#",
+			want: "$£",
 		}, {
 			// A designator this emulator does not carry has to say so rather
 			// than silently leaving the previous set in place, because a guest
@@ -114,7 +119,7 @@ func TestConform_SingleShifts(t *testing.T) {
 			// The single shift has to give GL back, not leave it pointing at
 			// G2 forever.
 			name: "SS2 does not disturb the locking shift underneath it",
-			in:   "\x1b)0\x1b*A\x0eq\x1bN$q",
+			in:   "\x1b)0\x1b*A\x0eq\x1bN#q",
 			want: "─£─",
 		}, {
 			name: "the eight-bit SS2 means the same thing",

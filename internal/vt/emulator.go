@@ -158,6 +158,8 @@ type Emulator struct {
 
 	// The terminal's icon name and title.
 	iconName, title string
+	// titleStack holds what XTWINOPS 22 saved, oldest first. See pushTitle.
+	titleStack []savedTitle
 	// The current reported working directory. This is not validated.
 	cwd string
 
