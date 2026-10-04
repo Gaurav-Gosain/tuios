@@ -98,6 +98,7 @@ type Client struct {
 var (
 	errRedirectHTTP  = errors.New("redirect to plain http")
 	errRedirectLimit = errors.New("too many redirects")
+	errRedirectHost  = errors.New("redirect to another host")
 )
 
 // maxResponseBody bounds how much of an answer is read. The body is not shown,
@@ -105,14 +106,20 @@ var (
 const maxResponseBody = 4 << 10
 
 // NewClient is the client every provider sends with. It follows at most
-// three redirects, and only to https unless allowHTTP, so a redirect cannot
-// send the message and its token on in plain text.
+// three redirects, only to the host the request was sent to, and only to
+// https unless allowHTTP. A redirect cannot send the message and its token on
+// in plain text, or to another host. net/http drops the Authorization header
+// on a redirect to another host, but a 307 or 308 sends the body again, and
+// the Pushover token is in the body.
 func NewClient(allowHTTP bool) *Client {
 	return &Client{http: &http.Client{
 		Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > maxRedirects {
 				return errRedirectLimit
+			}
+			if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+				return errRedirectHost
 			}
 			if req.URL.Scheme != "https" && !allowHTTP {
 				return errRedirectHTTP
@@ -167,6 +174,8 @@ func describeTransport(ctx context.Context, err error) error {
 	switch {
 	case errors.Is(err, errRedirectHTTP):
 		return errors.New("the server redirected to a plain http address. Set notify.allow_http_redirects = true to allow it")
+	case errors.Is(err, errRedirectHost):
+		return errors.New("the server redirected to another host, and tuios sends a notification only to the host in the url. Set the url to the address the server redirects to")
 	case errors.Is(err, errRedirectLimit):
 		return fmt.Errorf("the server redirected more than %d times. Check the url", maxRedirects)
 	case ctx.Err() != nil, errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():

@@ -560,7 +560,9 @@ header and is never logged.
 tuios does not write a secret to its logs or its output. The address is
 also secret on a public ntfy server, so logs and `tuios notify test` show
 only the host. A redirect to a plain `http` address is refused, unless you
-set `allow_http_redirects`.
+set `allow_http_redirects`. A redirect to another host is always refused,
+because the message and its token would go there. Set the url to the
+address the server redirects to.
 
 ### Apply a change
 
