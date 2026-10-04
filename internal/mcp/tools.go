@@ -46,6 +46,9 @@ type toolSpec struct {
 	// self names the parameters that are the caller's own pane: filled in by
 	// the daemon under scope own, and from TUIOS_PANE_ID here under scope all.
 	self []string
+	// hints are the MCP annotations of a tool that is not read-only. A nil
+	// hints is a read-only tool.
+	hints *toolHints
 	// note is appended to the verb's description.
 	note string
 	// untrusted results carry another program's text and get the note that
@@ -60,6 +63,31 @@ type toolSpec struct {
 	base time.Duration
 }
 
+// toolHints are the annotations of a tool that changes something, with the
+// meaning the MCP specification gives them. Clients auto-approve a read-only
+// tool, so a tool that changes anything must not be left without hints.
+type toolHints struct {
+	// destructive: the call may overwrite or discard what exists, or run
+	// arbitrary commands. Without it the call only adds.
+	destructive bool
+	// idempotent: calling again with the same arguments changes nothing more.
+	idempotent bool
+	// openWorld: the call reaches programs outside tuios, which can act on
+	// the rest of the machine and the network.
+	openWorld bool
+}
+
+var (
+	// hintsOwnRecord is for a tool that sets a field of the caller's own
+	// record. The next report replaces it, so it destroys nothing of value.
+	hintsOwnRecord = &toolHints{idempotent: true}
+	// hintsMail is for a tool that adds a message and changes nothing else.
+	hintsMail = &toolHints{}
+	// hintsPaneInput is for a tool that makes a program in a pane do
+	// something, with every power that program has.
+	hintsPaneInput = &toolHints{destructive: true, openWorld: true}
+)
+
 // catalog is every tool the server can list. The short list is on purpose:
 // every tool costs context in every harness session that loads the server.
 var catalog = []toolSpec{
@@ -73,24 +101,26 @@ var catalog = []toolSpec{
 	},
 	{name: "tuios_peek_prompt", verb: "peek-prompt", untrusted: true},
 	{name: "tuios_wait_for", verb: "wait-for", hideOwn: []string{"any_session"}, waits: []string{"timeout"}},
-	{name: "tuios_read_agent_messages", verb: "read-agent-messages", self: []string{"to"}, untrusted: true},
-	{name: "tuios_send_agent_message", verb: "send-agent-message", hide: []string{"human_nonce", "from_host"}, self: []string{"from"}},
-	{name: "tuios_set_agent_state", verb: "set-agent-state", self: []string{"window"}},
-	{name: "tuios_set_agent_meta", verb: "set-agent-meta", self: []string{"window"}},
+	{name: "tuios_read_agent_messages", verb: "read-agent-messages", self: []string{"to"}, untrusted: true,
+		// Naming an inbox marks the messages it returns as read.
+		hints: &toolHints{idempotent: true}},
+	{name: "tuios_send_agent_message", verb: "send-agent-message", hide: []string{"human_nonce", "from_host"}, self: []string{"from"}, hints: hintsMail},
+	{name: "tuios_set_agent_state", verb: "set-agent-state", self: []string{"window"}, hints: hintsOwnRecord},
+	{name: "tuios_set_agent_meta", verb: "set-agent-meta", self: []string{"window"}, hints: hintsOwnRecord},
 
-	{name: "tuios_send_text", verb: "send-text", write: true},
-	{name: "tuios_send_keys", verb: "send-keys", write: true},
+	{name: "tuios_send_text", verb: "send-text", write: true, hints: hintsPaneInput},
+	{name: "tuios_send_keys", verb: "send-keys", write: true, hints: hintsPaneInput},
 	{
-		name: "tuios_ask_agent", verb: "ask-agent", write: true,
+		name: "tuios_ask_agent", verb: "ask-agent", write: true, hints: hintsPaneInput,
 		hide: []string{"from_host"}, self: []string{"from"},
 		untrusted: true, waits: []string{"ready_timeout", "timeout"},
 	},
 	{
-		name: "tuios_respond", verb: "respond", write: true, hide: []string{"human_nonce"},
+		name: "tuios_respond", verb: "respond", write: true, hints: hintsPaneInput, hide: []string{"human_nonce"},
 		waits: []string{"timeout"},
 		note:  "Only the person may answer a prompt: from inside a pane this is always refused, and from outside every pane only when the daemon runs with [daemon] respond_from_shell.",
 	},
-	{name: "tuios_fan", verb: "fan", write: true, base: 2 * time.Minute},
+	{name: "tuios_fan", verb: "fan", write: true, hints: hintsPaneInput, base: 2 * time.Minute},
 }
 
 // tool is one listed tool.
@@ -271,14 +301,26 @@ func (s *Server) toolList() []any {
 			"description": t.description,
 			"inputSchema": t.schema,
 		}
-		ann := map[string]any{"readOnlyHint": !t.spec.write, "openWorldHint": false}
-		if t.spec.write {
-			ann["destructiveHint"] = false
-		}
-		entry["annotations"] = ann
+		entry["annotations"] = t.annotations()
 		out = append(out, entry)
 	}
 	return out
+}
+
+// annotations is the tool's MCP annotation object. The spec gives
+// destructiveHint and idempotentHint a meaning only when readOnlyHint is
+// false, so a read-only tool lists neither.
+func (t *tool) annotations() map[string]any {
+	h := t.spec.hints
+	if h == nil {
+		return map[string]any{"readOnlyHint": true, "openWorldHint": false}
+	}
+	return map[string]any{
+		"readOnlyHint":    false,
+		"destructiveHint": h.destructive,
+		"idempotentHint":  h.idempotent,
+		"openWorldHint":   h.openWorld,
+	}
 }
 
 // caller is the pane the daemon placed this server in, from the
