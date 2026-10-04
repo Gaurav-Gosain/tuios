@@ -40,85 +40,65 @@ type overlayPanelHit struct {
 //
 // "effectpicker" and "sectioneditor" were missing the same way, and a settings
 // row opens each of them over the panel too. The guard against a fourth is
-// TestEveryOverlayKindHasAPlaceInTheStack, which reads openOverlayKinds itself
+// TestEveryOverlayKindHasAPlaceInTheStack, which reads eachOverlayGate itself
 // rather than a second copy of this list.
 var overlayKindOrder = []string{"help", "palette", "launcher", "session", "agentmail", "inbox", "workspace", "layout", "hostpicker", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog", overlayKindLogs, overlayKindMessage}
+
+// overlayGate pairs a draggable overlay kind with whether it is shown.
+type overlayGate struct {
+	kind string
+	open bool
+}
+
+// eachOverlayGate calls yield with every draggable overlay kind and whether it
+// is shown, and stops early when yield returns false. It is the one list of
+// overlay kinds: openOverlayKinds and AnyOverlayOpen both read it, and
+// TestEveryOverlayKindHasAPlaceInTheStack parses it. The table is an array, so
+// asking costs no allocation; AnyOverlayOpen runs on every mouse motion and
+// every frame.
+func (m *OS) eachOverlayGate(yield func(kind string, open bool) bool) {
+	gates := [...]overlayGate{
+		{overlayKindShot, m.ShotPreview.Open},
+		{"help", m.ShowHelp},
+		{"palette", m.ShowCommandPalette},
+		{"launcher", m.ShowLauncher},
+		{"session", m.ShowSessionSwitcher},
+		{"agentmail", m.ShowAgentMail},
+		{"inbox", m.ShowInbox},
+		{"workspace", m.ShowWorkspaceSwitcher},
+		{"layout", m.ShowLayoutPicker},
+		{"hostpicker", m.ShowHostPicker},
+		{"aggregate", m.ShowAggregateView},
+		{"settings", m.ShowSettings},
+		{"keybinds", m.ShowKeybindManager},
+		{"themepicker", m.ShowThemePicker},
+		{"glyphpicker", m.ShowGlyphPicker},
+		{"effectpicker", m.ShowEffectPicker},
+		{"dockeditor", m.ShowDockEditor},
+		{"sectioneditor", m.ShowSectionEditor},
+		{"accent", m.ShowAccentPicker},
+		{"quit", m.ShowQuitMenu},
+		{"sessionclose", m.ShowSessionClose},
+		{"filedialog", m.FilePromptOpen()},
+		{overlayKindLogs, m.ShowLogs},
+		{overlayKindMessage, m.msgView.open},
+	}
+	for _, g := range gates {
+		if !yield(g.kind, g.open) {
+			return
+		}
+	}
+}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
 	open := map[string]bool{}
-	if m.ShotPreview.Open {
-		open[overlayKindShot] = true
-	}
-	if m.ShowHelp {
-		open["help"] = true
-	}
-	if m.ShowCommandPalette {
-		open["palette"] = true
-	}
-	if m.ShowLauncher {
-		open["launcher"] = true
-	}
-	if m.ShowSessionSwitcher {
-		open["session"] = true
-	}
-	if m.ShowAgentMail {
-		open["agentmail"] = true
-	}
-	if m.ShowInbox {
-		open["inbox"] = true
-	}
-	if m.ShowWorkspaceSwitcher {
-		open["workspace"] = true
-	}
-	if m.ShowLayoutPicker {
-		open["layout"] = true
-	}
-	if m.ShowHostPicker {
-		open["hostpicker"] = true
-	}
-	if m.ShowAggregateView {
-		open["aggregate"] = true
-	}
-	if m.ShowSettings {
-		open["settings"] = true
-	}
-	if m.ShowKeybindManager {
-		open["keybinds"] = true
-	}
-	if m.ShowThemePicker {
-		open["themepicker"] = true
-	}
-	if m.ShowGlyphPicker {
-		open["glyphpicker"] = true
-	}
-	if m.ShowEffectPicker {
-		open["effectpicker"] = true
-	}
-	if m.ShowDockEditor {
-		open["dockeditor"] = true
-	}
-	if m.ShowSectionEditor {
-		open["sectioneditor"] = true
-	}
-	if m.ShowAccentPicker {
-		open["accent"] = true
-	}
-	if m.ShowQuitMenu {
-		open["quit"] = true
-	}
-	if m.ShowSessionClose {
-		open["sessionclose"] = true
-	}
-	if m.FilePromptOpen() {
-		open["filedialog"] = true
-	}
-	if m.ShowLogs {
-		open[overlayKindLogs] = true
-	}
-	if m.msgView.open {
-		open[overlayKindMessage] = true
-	}
+	m.eachOverlayGate(func(kind string, on bool) bool {
+		if on {
+			open[kind] = true
+		}
+		return true
+	})
 	return open
 }
 
@@ -126,7 +106,12 @@ func (m *OS) openOverlayKinds() map[string]bool {
 // whether its hit geometry has been recorded yet this frame. The hover and
 // focus-follows-mouse routing use it so an overlay guards its first frame too.
 func (m *OS) AnyOverlayOpen() bool {
-	return len(m.openOverlayKinds()) > 0
+	found := false
+	m.eachOverlayGate(func(_ string, on bool) bool {
+		found = on
+		return !on
+	})
+	return found
 }
 
 // reconcileOverlayZOrder drops closed overlays from the stacking order and

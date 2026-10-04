@@ -12,8 +12,9 @@ import (
 	"testing"
 )
 
-// openOverlayKindsSource reads the body of openOverlayKinds out of this
-// package's own source and returns every kind it can put in the set.
+// openOverlayKindsSource reads the gate table in eachOverlayGate out of this
+// package's own source and returns every kind it lists. openOverlayKinds and
+// AnyOverlayOpen both read that table.
 //
 // It reads the source instead of calling the function because the gates are not
 // all reachable from a test: one is a method, one is a field of another struct,
@@ -21,7 +22,7 @@ import (
 // flags it could think of by hand, which is the same kind of hand-kept list the
 // bug is about, and it missed two kinds for exactly that reason. A parse of the
 // function cannot miss one: a new overlay has to write its key here to open at
-// all, and that is the line this reads.
+// all, and that is the row this reads.
 func openOverlayKindsSource(t *testing.T) []string {
 	t.Helper()
 
@@ -67,56 +68,63 @@ func openOverlayKindsSource(t *testing.T) []string {
 					}
 				}
 			case *ast.FuncDecl:
-				if d.Name.Name == "openOverlayKinds" && d.Body != nil {
+				if d.Name.Name == "eachOverlayGate" && d.Body != nil {
 					fn = d
 				}
 			}
 		}
 	}
 	if fn == nil {
-		t.Fatal("openOverlayKinds not found in the package source; this guard reads it and cannot check anything without it")
+		t.Fatal("eachOverlayGate not found in the package source; this guard reads it and cannot check anything without it")
 	}
 
-	// Every `open[key] = ...` in the body. The key is the overlay kind.
+	// Every row of the gate table in the body. The first field is the kind.
 	var kinds []string
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		as, ok := n.(*ast.AssignStmt)
+		table, ok := n.(*ast.CompositeLit)
 		if !ok {
 			return true
 		}
-		for _, lhs := range as.Lhs {
-			ix, ok := lhs.(*ast.IndexExpr)
-			if !ok {
+		if at, ok := table.Type.(*ast.ArrayType); !ok || !isIdent(at.Elt, "overlayGate") {
+			return true
+		}
+		for _, elt := range table.Elts {
+			row, ok := elt.(*ast.CompositeLit)
+			if !ok || len(row.Elts) == 0 {
+				t.Errorf("eachOverlayGate has a row this guard cannot read: %s", fset.Position(elt.Pos()))
 				continue
 			}
-			if id, ok := ix.X.(*ast.Ident); !ok || id.Name == "" {
-				continue
-			}
-			switch key := ix.Index.(type) {
+			switch key := row.Elts[0].(type) {
 			case *ast.BasicLit:
 				if s, ok := stringLit(key); ok {
 					kinds = append(kinds, s)
 					continue
 				}
-				t.Errorf("openOverlayKinds writes a key this guard cannot read: %s", fset.Position(key.Pos()))
+				t.Errorf("eachOverlayGate has a kind this guard cannot read: %s", fset.Position(key.Pos()))
 			case *ast.Ident:
 				if s, ok := consts[key.Name]; ok {
 					kinds = append(kinds, s)
 					continue
 				}
-				t.Errorf("openOverlayKinds writes the key %q, which is not a string constant this guard can resolve: %s",
+				t.Errorf("eachOverlayGate has the kind %q, which is not a string constant this guard can resolve: %s",
 					key.Name, fset.Position(key.Pos()))
 			default:
-				t.Errorf("openOverlayKinds writes a key this guard cannot read: %s", fset.Position(ix.Index.Pos()))
+				t.Errorf("eachOverlayGate has a kind this guard cannot read: %s", fset.Position(row.Elts[0].Pos()))
 			}
 		}
-		return true
+		return false
 	})
 	if len(kinds) == 0 {
-		t.Fatal("read no kinds out of openOverlayKinds; the guard is not looking at what it thinks it is")
+		t.Fatal("read no kinds out of eachOverlayGate; the guard is not looking at what it thinks it is")
 	}
 	slices.Sort(kinds)
 	return kinds
+}
+
+// isIdent reports whether e is the identifier name.
+func isIdent(e ast.Expr, name string) bool {
+	id, ok := e.(*ast.Ident)
+	return ok && id.Name == name
 }
 
 // stringLit returns the value of an untyped string literal.
@@ -139,7 +147,7 @@ func stringLit(e ast.Expr) (string, bool) {
 // base index tie, and the tie goes to whichever was recorded first, which is how
 // clicks inside a picker landed on the settings row behind it.
 //
-// Both sides come from the code: the kinds from a parse of openOverlayKinds,
+// Both sides come from the code: the kinds from a parse of eachOverlayGate,
 // the order from overlayKindOrder itself. Neither is retyped here, so an
 // eleventh overlay cannot repeat this quietly.
 func TestEveryOverlayKindHasAPlaceInTheStack(t *testing.T) {
@@ -160,7 +168,7 @@ func TestEveryOverlayKindHasAPlaceInTheStack(t *testing.T) {
 	}
 	for _, kind := range overlayKindOrder {
 		if !canOpen[kind] {
-			t.Errorf("%q is in overlayKindOrder but openOverlayKinds never opens it, so the entry is dead", kind)
+			t.Errorf("%q is in overlayKindOrder but eachOverlayGate never opens it, so the entry is dead", kind)
 		}
 	}
 }

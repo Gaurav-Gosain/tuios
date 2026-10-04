@@ -274,9 +274,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// it here, before the lock is taken, so the two acquisitions never nest.
 	useRealCursor := m.getRealCursor() != nil
 
-	// Hoisted deliberately. AnyOverlayOpen builds a map, and the cursor test
-	// below runs once per cell, so asking per cell cost about a thousand
-	// allocations per composed frame and tripped the compositor's damage guard.
+	// Hoisted deliberately. AnyOverlayOpen walks every overlay gate, and the
+	// cursor test below runs once per cell. When it built a map, asking per
+	// cell cost about a thousand allocations per composed frame and tripped
+	// the compositor's damage guard.
 	overlayOpen := m.AnyOverlayOpen()
 
 	// The emulator cell buffer is written by the PTY reader and daemon paths
