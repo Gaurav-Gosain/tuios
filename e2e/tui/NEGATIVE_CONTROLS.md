@@ -976,6 +976,19 @@ ran the five `TestEmptyWorkspace` tests or the one named.
 `TestEmptyWorkspaceStaysWhenTheSettingIsOff` passes on origin/main, because
 it holds the old behaviour.
 
+## CLI output for scripts, and names that do not exist
+
+The tests are in `cli_scripting_test.go`. One build cut the three checks
+below at once. Each assertion reads one of them, so each failure names its
+cut.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (4f6232b3) | `TestCLIListsPrintJSON` (`layout list --json` exits 1 on the unknown flag), every `TestCLIRefusesNamesThatDoNotExist` case (`layout delete nope` and `--preview-theme nope` exit 0, `layout export` and `tape show` do not name the list command) | **caught** |
+| A missing layout | `layout delete`: the `findLayoutTemplate` check made `&& false` | `TestCLIRefusesNamesThatDoNotExist/layout_delete_nope` (exits 0) | **caught** |
+| An unknown theme | `previewThemeColors`: the `AvailableThemes` check made `false &&` | `TestCLIRefusesNamesThatDoNotExist/--preview-theme_nope` (prints the default palette and exits 0) | **caught** |
+| A value only recorded | `runSetConfig`: the `Not applied` print cut | `TestCLIListsPrintJSON` (stderr is empty with no client attached) | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
