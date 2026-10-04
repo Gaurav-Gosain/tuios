@@ -51,6 +51,9 @@ type Match struct {
 type pattern struct {
 	kind string
 	re   *regexp.Regexp
+	// find, when set, is used instead of re and returns whole-match ranges.
+	// The url pattern uses it, so hints and the pointer share one detector.
+	find func(line string) [][2]int
 	// group is the index of the submatch to copy, or 0 for the whole match.
 	group int
 	// line, when set, must match the whole line for this pattern to be tried.
@@ -172,7 +175,15 @@ func collect(patterns []pattern, line string) []candidate {
 		if p.line != nil && !p.line.MatchString(line) {
 			continue
 		}
-		for _, loc := range p.re.FindAllStringSubmatchIndex(line, -1) {
+		var locs [][]int
+		if p.find != nil {
+			for _, r := range p.find(line) {
+				locs = append(locs, []int{r[0], r[1]})
+			}
+		} else {
+			locs = p.re.FindAllStringSubmatchIndex(line, -1)
+		}
+		for _, loc := range locs {
 			cs, ce := loc[0], loc[1]
 			s, e := cs, ce
 			if p.group > 0 {
@@ -249,32 +260,6 @@ func isolated(line string, start, end int, extra string) bool {
 	return true
 }
 
-// trimURL gives trailing sentence punctuation back to the sentence and drops
-// a closing bracket that was never opened inside the URL, so "(see
-// https://x.org/a)." ends where a reader says it ends.
-func trimURL(s string) string {
-	for len(s) > 0 {
-		last := s[len(s)-1]
-		if strings.IndexByte(".,;:!?'\"", last) >= 0 {
-			s = s[:len(s)-1]
-			continue
-		}
-		var open byte
-		switch last {
-		case ')':
-			open = '('
-		case ']':
-			open = '['
-		}
-		if open != 0 && strings.Count(s, string(open)) < strings.Count(s, string(last)) {
-			s = s[:len(s)-1]
-			continue
-		}
-		break
-	}
-	return s
-}
-
 // trimPath drops the punctuation that ends a sentence rather than a path.
 func trimPath(s string) string {
 	for len(s) > 1 && strings.IndexByte(".,;:", s[len(s)-1]) >= 0 {
@@ -329,13 +314,15 @@ const wordChars = `\p{L}\p{M}\p{N}_`
 var builtinPatterns = sync.OnceValue(func() []pattern {
 	return []pattern{
 		{
+			// Scheme URLs come from the detector the pointer uses too. See
+			// urls.go.
 			kind: URL,
-			re:   regexp.MustCompile(`(?:https?|ftps?|file|ssh|git)://[^\s<>"'` + "`" + `|^{}\\]+|\bgit@[\w.-]+:[\w./~-]+`),
-			trim: trimURL,
-			valid: func(line string, s, e int) bool {
-				// A scheme needs something after it.
-				return !strings.HasSuffix(line[s:e], "://")
-			},
+			find: URLs,
+		},
+		{
+			// A remote in scp form, which has no scheme for URLs to find.
+			kind: URL,
+			re:   regexp.MustCompile(`\bgit@[\w.-]+:[\w./~-]+`),
 		},
 		{
 			// The two sides of a diff header, copied without their a/ and b/.
@@ -421,6 +408,13 @@ var builtinPatterns = sync.OnceValue(func() []pattern {
 				}
 				// "//" is a URL's, a comment's, or nothing.
 				if strings.HasPrefix(text, "//") {
+					return false
+				}
+				// A rooted path glued to the byte before it is markup or the
+				// tail of a word: the "/p" in "</p>", the "/x" in "a</x>".
+				// A path a person would open starts after a space, a quote,
+				// a bracket or the start of the line.
+				if text[0] == '/' && s > 0 && (line[s-1] == '<' || wordByte(line[s-1])) {
 					return false
 				}
 				return true

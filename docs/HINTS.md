@@ -100,6 +100,16 @@ all_panes = true
 `path` and `email` accept letters in all scripts, with accents and
 combining marks. The other built-in patterns use only ASCII.
 
+A URL ends at a space, a quote, a backtick or an angle bracket. A `)` or a
+`]` ends the URL when the URL did not open it. A pair that the URL opens
+stays in it, as in `https://en.wikipedia.org/wiki/Go_(language)`. tuios
+removes `.,;:!?` from the end. So the markdown badge
+`[![x](https://a.example/b.svg)](https://a.example/c)` gives two URLs. The
+pointer uses the same rules to find a link.
+
+A path that starts with `/` must not come directly after `<`, a letter, a
+digit or `_`. So `</p>` in HTML is not a path.
+
 Hints mode reads only the text on the screen. If you scroll the pane back, it
 reads the lines you scrolled to. A URL that wraps onto the next row is one
 match. tuios joins two rows only when the terminal wrapped the text. A line

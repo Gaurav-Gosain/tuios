@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -218,7 +219,7 @@ func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 		return PaneLink{}, false
 	}
 
-	s, e, ok := ScanBareURL(b.String(), cursor)
+	s, e, ok := hints.URLAt(b.String(), cursor)
 	if !ok {
 		return PaneLink{}, false
 	}
