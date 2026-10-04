@@ -1025,6 +1025,24 @@ The tests are in `event_types_test.go`. Each control is its own build.
 The positive halves are in the same tests: `--types window-created` streams
 the event of a new window, and `keep` is still listed after `build` closes.
 
+## Tapes: actions, condition waits, failures and recording
+
+The tests are in `tape_exec_test.go`. Each control is its own build, made by
+cutting one call site from the tree the tests were written against.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| WaitFor never armed | the `CommandTypeWaitFor` case cut from the player's tick in `internal/app/update.go` | `TestTapeExecPlaysActionsAndWaits` (WaitFor reaches `Execute`, which refuses it, and exec exits 1) | **caught** |
+| Action never run | the `CommandTypeAction` case cut from `CommandExecutor.Execute` | `TestTapeExecPlaysActionsAndWaits` (exec exits 1 at the Action line) | **caught** |
+| A timed-out wait does not fail the tape | the `failScript` call cut from `checkScriptWait` | `TestTapeExecStopsAtTheFailedLine` (exec exits 0, and the line after the wait runs) | **caught** |
+| A failure placed on the sent text | `script.Locate` cut from `runTapeExec` | `TestTapeExecStopsAtTheFailedLine` (the message names line 3, not `lib.tape line 2`) | **caught** |
+| run-command knows only tape commands | the `IsActionName` fallback in `resolveCommandName` made `false &&` | `TestRunCommandRunsAnyAction` (`run-command open_settings` exits 1) | **caught** |
+| A recording drops actions | the Action branch of `Recorder.RecordAction` made to return | `TestTapeRecordingReplaysActions` (the saved tape has no `Action open_settings`) | **caught** |
+
+`TestExampleTapeRuns` plays `examples/actions_and_waits.tape` and has no
+control of its own: it fails on any of the first two cuts, since the example
+uses both.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
