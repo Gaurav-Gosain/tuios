@@ -248,7 +248,7 @@ func (m *OS) checkScriptWait() bool {
 		return false
 	}
 	m.ScriptWait = nil
-	m.failScript(&w.cmd, fmt.Errorf("WaitFor %s timed out after %s: %w", w.cond, w.cond.Timeout, err))
+	m.failScript(&w.cmd, fmt.Errorf("the wait for %s timed out after %s: %w", w.cond, w.cond.Timeout, err))
 	return true
 }
 

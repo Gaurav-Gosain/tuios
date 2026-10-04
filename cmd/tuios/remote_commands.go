@@ -2119,11 +2119,6 @@ func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 	}
 }
 
-// sendAndWaitForResult sends a message and waits for the result (human-readable output).
-func sendAndWaitForResult(client *session.Client, msg *session.Message, requestID string) error {
-	return sendAndWaitForResultWithFormat(client, msg, requestID, false, nil)
-}
-
 // resultRenderer prints a command result's data for a human reader.
 type resultRenderer func(map[string]any) error
 

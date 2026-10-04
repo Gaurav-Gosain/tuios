@@ -441,7 +441,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return err
 		}
 		if err := ce.executor.CheckCondition(cond); err != nil {
-			return fmt.Errorf("Expect %s failed: %w", cond, err)
+			return fmt.Errorf("the condition %s does not hold: %w", cond, err)
 		}
 		return nil
 
@@ -449,7 +449,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		// The player waits across ticks and never hands WaitFor to Execute.
 		// Anything that does is running one command on its own, with nothing
 		// to wait in.
-		return fmt.Errorf("WaitFor works only in a tape. From a shell, use tuios wait-for")
+		return fmt.Errorf("a WaitFor line works only in a tape. From a shell, use tuios wait-for")
 
 	case CommandTypeSet:
 		if len(cmd.Args) < 2 {
@@ -461,7 +461,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		// A tape loaded from a file has its Source lines replaced by the file
 		// they name (see LoadFile). One that reaches here came as text, with
 		// no directory to find the file in.
-		return fmt.Errorf("Source works only in a tape file run with tuios tape play or tuios tape exec")
+		return fmt.Errorf("a Source line works only in a tape file run with tuios tape play or tuios tape exec")
 
 	case CommandTypeSleep, CommandTypeComment:
 		return nil
