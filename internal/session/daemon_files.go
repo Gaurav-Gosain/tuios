@@ -33,11 +33,11 @@ const dirListingMax = 2000
 func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	var payload ReadDirPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return d.sendError(cs, ErrCodeInvalidMessage, "invalid read-dir payload")
+		return d.replyError(cs, msg, ErrCodeInvalidMessage, "invalid read-dir payload")
 	}
 	dir := filepath.Clean(payload.Dir)
 	if dir == "" || dir == "." {
-		return d.sendMessage(cs, MsgDirListing, &DirListingPayload{
+		return d.reply(cs, msg, MsgDirListing, &DirListingPayload{
 			Dir: payload.Dir, Err: "There is no folder to show.",
 		})
 	}
@@ -51,7 +51,7 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	//
 	// This daemon is not that machine, so it says so rather than guessing.
 	if host := d.windowHost(cs.sessionID, payload.WindowID); host != "" {
-		return d.sendMessage(cs, MsgDirListing, d.remoteListing(host, dir, payload.Max))
+		return d.reply(cs, msg, MsgDirListing, d.remoteListing(host, dir, payload.Max))
 	}
 
 	out := listDir(dir, payload.Max)
@@ -62,7 +62,7 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	if spoofCheckWanted(payload) {
 		out.Spoofed = d.paneIsSpoofed(cs.sessionID, payload.WindowID, dir)
 	}
-	return d.sendMessage(cs, MsgDirListing, out)
+	return d.reply(cs, msg, MsgDirListing, out)
 }
 
 // spoofCheckWanted reports whether a listing should be judged against the

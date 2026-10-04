@@ -154,6 +154,9 @@ type FrameTooLargeError struct {
 	Type  MessageType
 	Size  uint32
 	Limit uint32
+	// ReqID is the request id the frame carried, so the refusal can be sent
+	// as the answer to it. Zero for an untagged frame.
+	ReqID uint64
 }
 
 func (e *FrameTooLargeError) Error() string {

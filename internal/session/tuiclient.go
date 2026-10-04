@@ -212,18 +212,29 @@ type TUIClient struct {
 	disconnectOnce      sync.Once // gates the single disconnect notification
 	multiClientMu       sync.RWMutex
 
-	// Request/response handling for synchronous calls after readLoop starts
-	pendingResponses   map[MessageType]chan *Message
+	// Request/response handling for synchronous calls after readLoop starts.
+	// pendingByID holds the round trip waiting on each request id, for a
+	// daemon that tags its replies (requestIDs). pendingResponses holds a
+	// waiter by reply type: every round trip to a daemon that does not tag,
+	// and the detach of a session switch, which is not tagged either way.
+	pendingResponses   map[MessageType]*pendingReply
+	pendingByID        map[uint64]*pendingReply
 	pendingResponsesMu sync.Mutex
 
+	// requestIDs is set when the daemon's welcome said it tags replies (see
+	// Message.ReqID). nextReqID numbers this client's requests from 1.
+	requestIDs atomic.Bool
+	nextReqID  atomic.Uint64
+
 	// roundTripMu keeps at most one sendAndWaitResponse outstanding at a time.
-	// The read loop demuxes replies by MessageType alone, so two overlapping
-	// round-trips awaiting a shared type (MsgError, which every request can
-	// return, or the MsgSessionList shared by list/kill/refresh) would overwrite
-	// each other's pendingResponses slot and misroute a reply. The background
-	// session poll runs on its own goroutine, so it is the one caller that can
-	// overlap a UI-goroutine round-trip; serializing here removes the collision
-	// without threading a correlation id through the protocol.
+	// To a daemon that does not tag replies, the read loop demuxes them by
+	// MessageType alone, so two overlapping round-trips awaiting a shared type
+	// (MsgError, which every request can return, or the MsgSessionList shared
+	// by list/kill/refresh) would overwrite each other's pendingResponses slot
+	// and misroute a reply. The background session poll runs on its own
+	// goroutine, so it is the one caller that can overlap a UI-goroutine
+	// round-trip. Tagged replies cannot collide, but the order of round trips
+	// is kept the same for both kinds of daemon.
 	roundTripMu sync.Mutex
 
 	// State
@@ -239,7 +250,8 @@ func NewTUIClient() *TUIClient {
 		ptyHandlers:       make(map[string]func([]byte)),
 		ptyClosedHandlers: make(map[string]func()),
 		ptyResizeHandlers: make(map[string]func(int, int)),
-		pendingResponses:  make(map[MessageType]chan *Message),
+		pendingResponses:  make(map[MessageType]*pendingReply),
+		pendingByID:       make(map[uint64]*pendingReply),
 		done:              make(chan struct{}),
 	}
 }
@@ -382,6 +394,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.windowSize = welcome.WindowSize && hello.WindowSize
 	c.dirWatchSupported = welcome.DirWatch
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
+	c.requestIDs.Store(welcome.RequestIDs)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -587,7 +600,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	// Register for detach response before sending
 	detachResp := make(chan *Message, 1)
 	c.pendingResponsesMu.Lock()
-	c.pendingResponses[MsgDetached] = detachResp
+	c.pendingResponses[MsgDetached] = &pendingReply{ch: detachResp}
 	c.pendingResponsesMu.Unlock()
 
 	if err := c.send(detachMsg); err != nil {
@@ -1379,16 +1392,46 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 		return nil, err
 	}
 
-	resp, err := c.sendAndWaitResponse(msg, MsgTerminalState, MsgError)
+	// A daemon that tags its replies answers this request and no other with
+	// the id it carries. One that does not answers by type alone, so a state
+	// is checked for the pane it is about: a reply to a request that already
+	// gave up waiting is for another pane, and painting it here would put one
+	// pane's screen in another. It is dropped and the wait goes on. The check
+	// decodes the state, so the decoded copy is kept rather than decoded again.
+	var checked *TerminalStatePayload
+	forThisPane := func(m *Message) bool {
+		if m.Type != MsgTerminalState {
+			return true
+		}
+		var p TerminalStatePayload
+		if err := m.ParsePayload(&p); err != nil {
+			return true // reported by the caller below
+		}
+		if p.PTYID != ptyID {
+			debugLog("[CLIENT] dropped a terminal state for %s while waiting for %s", shortID(p.PTYID), shortID(ptyID))
+			return false
+		}
+		checked = &p
+		return true
+	}
+	resp, err := c.sendAndWaitMatching(msg, forThisPane, MsgTerminalState, MsgError)
 	if err != nil {
 		return nil, err
 	}
 
 	switch resp.Type {
 	case MsgTerminalState:
-		var payload TerminalStatePayload
-		if err := resp.ParsePayload(&payload); err != nil {
-			return nil, err
+		payload := checked
+		if payload == nil {
+			payload = &TerminalStatePayload{}
+			if err := resp.ParsePayload(payload); err != nil {
+				return nil, err
+			}
+		}
+		if payload.PTYID != ptyID {
+			// A tagged reply is the answer to this request, so this is a
+			// daemon fault, and the state is not applied to the wrong pane.
+			return nil, fmt.Errorf("get terminal state: the daemon answered for pane %s, not %s", shortID(payload.PTYID), shortID(ptyID))
 		}
 		// The cells were asked for packed and stay packed: ApplyTerminalState
 		// reads them in that form. They are checked here, so a malformed
@@ -1453,19 +1496,11 @@ func (c *TUIClient) readLoop() {
 			return
 		}
 
-		// Check if there's a pending response channel for this message type
-		c.pendingResponsesMu.Lock()
-		if respChan, ok := c.pendingResponses[msg.Type]; ok {
-			delete(c.pendingResponses, msg.Type)
-			c.pendingResponsesMu.Unlock()
-			// Send to the waiting caller
-			select {
-			case respChan <- msg:
-			default:
-			}
+		// A reply goes to the round trip waiting for it, and a stale one, the
+		// answer to a request that gave up waiting, goes nowhere.
+		if c.routeReply(msg) != replyNone {
 			continue
 		}
-		c.pendingResponsesMu.Unlock()
 
 		// Handle message normally
 		c.handleMessage(msg)
@@ -2144,9 +2179,76 @@ func (c *TUIClient) reader() *bufio.Reader {
 // 256 KiB output batch in four. Larger only holds memory.
 const clientReadBuffer = 64 * 1024
 
+// pendingReply is one round trip waiting for its answer.
+type pendingReply struct {
+	ch chan *Message
+	// accept, when set, is asked about a reply matched by type before it is
+	// delivered. A reply it refuses is stale, the answer to an earlier request
+	// that gave up waiting, and is dropped. A tagged reply is matched by its
+	// id and needs no such check.
+	accept func(*Message) bool
+}
+
+// replyRoute is what the read loop did with a message.
+type replyRoute int
+
+const (
+	replyNone      replyRoute = iota // not a reply anyone waits for: handle it
+	replyDelivered                   // handed to the round trip waiting for it
+	replyStale                       // a reply nobody waits for any more: dropped
+)
+
+// routeReply hands msg to the round trip waiting for it.
+//
+// A tagged message is a reply by construction, so one whose request is no
+// longer waited on is dropped rather than handled: it is an answer that came
+// after its request timed out, and taking it for anything else is how one
+// pane's screen ended up painted into another. An untagged message is a reply
+// only to a round trip registered by type, which is every round trip to a
+// daemon that does not tag, and the detach of a session switch.
+func (c *TUIClient) routeReply(msg *Message) replyRoute {
+	c.pendingResponsesMu.Lock()
+	defer c.pendingResponsesMu.Unlock()
+
+	var p *pendingReply
+	if msg.ReqID != 0 {
+		p = c.pendingByID[msg.ReqID]
+		if p == nil {
+			debugLog("[CLIENT] dropped %s answering request %d, which nothing waits for", MessageTypeName(msg.Type), msg.ReqID)
+			return replyStale
+		}
+		delete(c.pendingByID, msg.ReqID)
+	} else {
+		p = c.pendingResponses[msg.Type]
+		if p == nil {
+			return replyNone
+		}
+		if p.accept != nil && !p.accept(msg) {
+			return replyStale
+		}
+		delete(c.pendingResponses, msg.Type)
+	}
+	select {
+	case p.ch <- msg:
+	default:
+	}
+	return replyDelivered
+}
+
 // sendAndWaitResponse sends a message and waits for a response of the expected type.
 // This works even after readLoop has started by registering a pending response channel.
 func (c *TUIClient) sendAndWaitResponse(msg *Message, expectedTypes ...MessageType) (*Message, error) {
+	return c.sendAndWaitMatching(msg, nil, expectedTypes...)
+}
+
+// sendAndWaitMatching is sendAndWaitResponse with a check for a reply matched
+// by type; see pendingReply.accept.
+//
+// To a daemon that tags replies, msg goes out with a fresh request id and only
+// the reply carrying that id is taken, whatever its type. An error the daemon
+// sends about some other message, such as a subscribe that failed, carries
+// another id or none, so it cannot be taken as this request's answer.
+func (c *TUIClient) sendAndWaitMatching(msg *Message, accept func(*Message) bool, expectedTypes ...MessageType) (*Message, error) {
 	// Serialize round-trips so no two overlap on a shared response type. The read
 	// loop never takes this lock and delivers replies before dispatching handlers,
 	// and no handler issues a round-trip, so holding it across the wait cannot
@@ -2154,29 +2256,57 @@ func (c *TUIClient) sendAndWaitResponse(msg *Message, expectedTypes ...MessageTy
 	c.roundTripMu.Lock()
 	defer c.roundTripMu.Unlock()
 
+	tagged := c.requestIDs.Load()
+	if tagged {
+		msg.ReqID = c.nextReqID.Add(1)
+	}
+
 	// If readLoop isn't running, use simple recv
 	if !c.readLoopRunning {
 		if err := c.send(msg); err != nil {
 			return nil, err
 		}
-		return c.recv()
+		for {
+			resp, err := c.recv()
+			if err != nil {
+				return nil, err
+			}
+			if resp.ReqID != 0 && resp.ReqID != msg.ReqID {
+				continue // the answer to an earlier request
+			}
+			if resp.ReqID == 0 && accept != nil && slices.Contains(expectedTypes, resp.Type) && !accept(resp) {
+				continue
+			}
+			return resp, nil
+		}
 	}
 
 	// Create a channel to receive the response
 	respChan := make(chan *Message, 1)
+	p := &pendingReply{ch: respChan, accept: accept}
 
-	// Register for all expected response types
 	c.pendingResponsesMu.Lock()
-	for _, t := range expectedTypes {
-		c.pendingResponses[t] = respChan
+	if tagged {
+		c.pendingByID[msg.ReqID] = p
+	} else {
+		// Register for all expected response types
+		for _, t := range expectedTypes {
+			c.pendingResponses[t] = p
+		}
 	}
 	c.pendingResponsesMu.Unlock()
 
 	// Clean up when done
 	defer func() {
 		c.pendingResponsesMu.Lock()
-		for _, t := range expectedTypes {
-			delete(c.pendingResponses, t)
+		if tagged {
+			delete(c.pendingByID, msg.ReqID)
+		} else {
+			for _, t := range expectedTypes {
+				if c.pendingResponses[t] == p {
+					delete(c.pendingResponses, t)
+				}
+			}
 		}
 		c.pendingResponsesMu.Unlock()
 	}()
@@ -2190,7 +2320,7 @@ func (c *TUIClient) sendAndWaitResponse(msg *Message, expectedTypes ...MessageTy
 	select {
 	case resp := <-respChan:
 		return resp, nil
-	case <-time.After(30 * time.Second):
+	case <-time.After(roundTripTimeout):
 		return nil, fmt.Errorf("timeout waiting for response")
 	case <-c.done:
 		return nil, fmt.Errorf("client closed")

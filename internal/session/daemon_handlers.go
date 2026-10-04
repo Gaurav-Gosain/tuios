@@ -35,7 +35,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	if protocolMismatch(payload.Protocol) {
 		LogBasic("Client %s refused: speaks protocol %d, this daemon serves %d..%d",
 			cs.clientID, peerProtocol(payload.Protocol), MinProtocolVersion, ProtocolVersion)
-		return d.sendError(cs, ErrCodeInvalidMessage, clientProtocolRefusal(d.version, &payload))
+		return d.replyError(cs, msg, ErrCodeInvalidMessage, clientProtocolRefusal(d.version, &payload))
 	}
 
 	// Store client's graphics capabilities for PTY pixel size reporting
@@ -81,6 +81,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DirWatch: true,
 		// See sidebar_visibility.go.
 		SidebarOps: true,
+		// See Message.ReqID.
+		RequestIDs: true,
 	})
 }
 
@@ -119,7 +121,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		// Which session an unnamed attach lands on is the daemon's choice, and
 		// from a pane it is usually the pane's own. Asking for a name is
 		// clearer than refusing only some of the time.
-		return d.refuseNestedAttach(cs, inside, nil, insideWhy)
+		return d.refuseNestedAttach(cs, msg, inside, nil, insideWhy)
 	}
 
 	if payload.SessionName == "" {
@@ -133,9 +135,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 			// person who types it has an old name in mind and should learn
 			// the new one.
 			if renamed, ok := d.manager.ResolveSession(payload.SessionName); ok && renamed != nil {
-				return d.sendError(cs, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
+				return d.replyError(cs, msg, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
 			}
-			return d.sendError(cs, ErrCodeSessionNotFound, fmt.Sprintf("session '%s' not found", payload.SessionName))
+			return d.replyError(cs, msg, ErrCodeSessionNotFound, fmt.Sprintf("session '%s' not found", payload.SessionName))
 		}
 	}
 
@@ -145,7 +147,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// Refused when the target is the client's own session, or is shown,
 	// through a chain of clients, inside it.
 	if inside != nil && !payload.AllowNested && d.shownInside(inside.ID, session.ID, cs.clientID) {
-		return d.refuseNestedAttach(cs, inside, session, insideWhy)
+		return d.refuseNestedAttach(cs, msg, inside, session, insideWhy)
 	}
 
 	// Record what the attaching client's host terminal can display so shells
@@ -280,7 +282,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
-	if err := d.sendAttachReply(cs, &AttachedPayload{
+	if err := d.sendAttachReply(cs, msg, &AttachedPayload{
 		SessionName: session.Name(),
 		SessionID:   session.ID,
 		Width:       effectiveWidth,
@@ -374,9 +376,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	return nil
 }
 
-func (d *Daemon) handleDetach(cs *connState) error {
+func (d *Daemon) handleDetach(cs *connState, msg *Message) error {
 	if !d.detachClient(cs) {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 	return d.sendMessage(cs, MsgDetached, nil)
 }
@@ -465,7 +467,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	sess, err := d.manager.CreateSession(name, cfg, payload.Width, payload.Height)
 	if err != nil {
 		if err.Error() == fmt.Sprintf("session '%s' already exists", name) {
-			return d.sendError(cs, ErrCodeSessionExists, err.Error())
+			return d.replyError(cs, msg, ErrCodeSessionExists, err.Error())
 		}
 		return fmt.Errorf("failed to create session: %w", err)
 	}
@@ -478,17 +480,17 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		sessionID := sess.ID
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
 		if _, err := sess.AddDaemonWindow("", onExit); err != nil {
-			return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create initial window: %v", err))
+			return d.replyError(cs, msg, ErrCodeInternal, fmt.Sprintf("failed to create initial window: %v", err))
 		}
 		log.Printf("Created detached session %q with an initial window", name)
 	}
 
-	return d.handleList(cs)
+	return d.handleList(cs, msg)
 }
 
-func (d *Daemon) handleList(cs *connState) error {
+func (d *Daemon) handleList(cs *connState, msg *Message) error {
 	sessions := d.listSessions()
-	return d.sendMessage(cs, MsgSessionList, &SessionListPayload{
+	return d.reply(cs, msg, MsgSessionList, &SessionListPayload{
 		Sessions: sessions,
 	})
 }
@@ -501,12 +503,12 @@ func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 
 	if err := d.manager.DeleteSession(payload.SessionName); err != nil {
 		if renamed, ok := d.manager.ResolveSession(payload.SessionName); ok && renamed != nil {
-			return d.sendError(cs, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
+			return d.replyError(cs, msg, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
 		}
-		return d.sendError(cs, ErrCodeSessionNotFound, err.Error())
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, err.Error())
 	}
 
-	return d.handleList(cs)
+	return d.handleList(cs, msg)
 }
 
 func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
@@ -516,25 +518,25 @@ func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
 	}
 
 	if payload.SessionName == "" {
-		return d.sendError(cs, ErrCodeInvalidMessage, "session name required")
+		return d.replyError(cs, msg, ErrCodeInvalidMessage, "session name required")
 	}
 
 	// Already live (e.g. auto-restored on start): nothing to do, report success.
 	if d.manager.GetSession(payload.SessionName) != nil {
-		return d.handleList(cs)
+		return d.handleList(cs, msg)
 	}
 
 	state, err := LoadResurrectionState(payload.SessionName)
 	if err != nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, err.Error())
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, err.Error())
 	}
 
 	if _, err := d.restoreSession(state); err != nil {
-		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to restore session: %v", err))
+		return d.replyError(cs, msg, ErrCodeInternal, fmt.Sprintf("failed to restore session: %v", err))
 	}
 
 	log.Printf("Resurrected session %q on demand (%d windows)", payload.SessionName, len(state.Windows))
-	return d.handleList(cs)
+	return d.handleList(cs, msg)
 }
 
 func (d *Daemon) handleInput(cs *connState, msg *Message) error {
@@ -558,7 +560,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 
 	if ptyID != "" {
 		if why := d.refuseTypingInto(cs, session, ptyID); why != "" {
-			_ = d.sendError(cs, ErrCodeForbidden, "input is refused for this pane: "+why)
+			_ = d.replyError(cs, msg, ErrCodeForbidden, "input is refused for this pane: "+why)
 			return nil
 		}
 		if pty := session.GetPTY(ptyID); pty != nil {
@@ -620,13 +622,13 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 
 	if cs.sessionID == "" {
 		debugLog("[DEBUG] handleCreatePTY: client not attached")
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
 		debugLog("[DEBUG] handleCreatePTY: session not found")
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var payload CreatePTYPayload
@@ -656,7 +658,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	pty, err := session.CreatePTY(payload.WindowID, width, height, onExit)
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)
-		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
+		return d.replyError(cs, msg, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
 	}
 
 	// Set pixel dimensions from client's terminal capabilities
@@ -665,7 +667,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	}
 
 	debugLog("[DEBUG] PTY created: %s", pty.ID)
-	return d.sendMessage(cs, MsgPTYCreated, &PTYCreatedPayload{
+	return d.reply(cs, msg, MsgPTYCreated, &PTYCreatedPayload{
 		ID:    pty.ID,
 		Title: payload.Title,
 	})
@@ -673,12 +675,12 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 
 func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var payload ClosePTYPayload
@@ -692,7 +694,7 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	cs.mu.Unlock()
 
 	if err := session.ClosePTY(payload.PTYID); err != nil {
-		return d.sendError(cs, ErrCodePTYNotFound, err.Error())
+		return d.replyError(cs, msg, ErrCodePTYNotFound, err.Error())
 	}
 
 	return d.sendMessage(cs, MsgPTYClosed, &ClosePTYPayload{PTYID: payload.PTYID})
@@ -802,12 +804,12 @@ func (d *Daemon) notePushOrigin(cs *connState, session *Session, origin string) 
 
 func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var state SessionState
@@ -826,7 +828,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		LogError("Refused a state update from %s: %v", cs.clientID, err)
 		// Counted all the same: the client counts every push it sends.
 		session.NotePush(state.PushOrigin, state.PushSeq)
-		return d.sendError(cs, ErrCodeInvalidMessage, "state update refused: "+err.Error())
+		return d.replyError(cs, msg, ErrCodeInvalidMessage, "state update refused: "+err.Error())
 	}
 	clampPushedText(&state)
 	// Rectangles tiled in a box the session has moved on from are kept out.
@@ -904,12 +906,12 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	debugLog("[DEBUG] handleSubscribePTY called for client %s", cs.clientID)
 
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var payload SubscribePTYPayload
@@ -921,7 +923,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	pty := session.GetPTY(payload.PTYID)
 	if pty == nil {
 		debugLog("[DEBUG] PTY %s not found", payload.PTYID)
-		return d.sendError(cs, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
+		return d.replyError(cs, msg, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
 	cs.mu.Lock()
@@ -978,12 +980,12 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 	debugLog("[DEBUG] handleUnsubscribePTY called for client %s", cs.clientID)
 
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var payload UnsubscribePTYPayload
@@ -1015,12 +1017,12 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 
 func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 
 	var payload GetTerminalStatePayload
@@ -1030,7 +1032,7 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 
 	pty := session.GetPTY(payload.PTYID)
 	if pty == nil {
-		return d.sendError(cs, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
+		return d.replyError(cs, msg, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
 	// Both request fields were parsed and then ignored, so every state request
@@ -1045,7 +1047,7 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 	} else {
 		state = pty.GetTerminalState(maxScrollback, payload.HaveScrollback)
 	}
-	return d.sendMessage(cs, MsgTerminalState, &TerminalStatePayload{
+	return d.reply(cs, msg, MsgTerminalState, &TerminalStatePayload{
 		PTYID: payload.PTYID,
 		State: state,
 	})

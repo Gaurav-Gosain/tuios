@@ -189,7 +189,7 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	// sender is told too. See wire_bounds.go.
 	if err := checkResultData(payload.Data); err != nil {
 		LogError("Refused command result %s from %s: %v", payload.RequestID, cs.clientID, err)
-		_ = d.sendError(cs, ErrCodeInvalidMessage, "command result refused: "+err.Error())
+		_ = d.replyError(cs, msg, ErrCodeInvalidMessage, "command result refused: "+err.Error())
 		payload.Success, payload.Data = false, nil
 		payload.Message = "the client's result was refused: " + err.Error()
 	}

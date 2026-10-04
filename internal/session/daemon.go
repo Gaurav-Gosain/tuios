@@ -1708,9 +1708,9 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 			// A frame over its type's limit was skipped unread, so the stream
 			// is still in step: tell the sender and go on serving it. See
 			// wire_bounds.go.
-			if _, ok := errors.AsType[*FrameTooLargeError](err); ok {
+			if tooLarge, ok := errors.AsType[*FrameTooLargeError](err); ok {
 				LogError("Refused a message from %s: %v", clientID, err)
-				_ = d.sendError(cs, ErrCodeInvalidMessage, "refused: "+err.Error())
+				_ = d.replyError(cs, &Message{ReqID: tooLarge.ReqID}, ErrCodeInvalidMessage, "refused: "+err.Error())
 				continue
 			}
 			var netErr net.Error
@@ -1727,19 +1727,19 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 		// A binary message on a link connection is held to the peer's policy
 		// like a verb is. See link_policy.go.
 		if verr := d.checkLinkMessage(cs, msg.Type); verr != nil {
-			_ = d.sendError(cs, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
+			_ = d.replyError(cs, msg, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
 			continue
 		}
 		markLinkServed(cs)
 		// A pane that does not hold admin may not use the client protocol.
 		// See pane_grants.go.
 		if verr := d.checkGrantMessage(cs, msg.Type); verr != nil {
-			_ = d.sendError(cs, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
+			_ = d.replyError(cs, msg, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
 			continue
 		}
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)
-			_ = d.sendError(cs, ErrCodeInternal, err.Error())
+			_ = d.replyError(cs, msg, ErrCodeInternal, err.Error())
 		}
 	}
 }
@@ -1751,11 +1751,11 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	case MsgAttach:
 		return d.handleAttach(cs, msg)
 	case MsgDetach:
-		return d.handleDetach(cs)
+		return d.handleDetach(cs, msg)
 	case MsgNew:
 		return d.handleNew(cs, msg)
 	case MsgList:
-		return d.handleList(cs)
+		return d.handleList(cs, msg)
 	case MsgKill:
 		return d.handleKill(cs, msg)
 	case MsgResurrect:

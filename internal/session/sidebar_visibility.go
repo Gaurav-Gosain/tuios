@@ -112,11 +112,11 @@ func (s *Session) RestoreSidebar(saved string) {
 // take.
 func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 	var p SidebarVisibilityPayload
 	if err := msg.ParsePayload(&p); err != nil {

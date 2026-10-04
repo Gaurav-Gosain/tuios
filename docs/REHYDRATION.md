@@ -319,6 +319,23 @@ Two things had to be true for that rule to hold, and neither was:
   cannot reproduce is the newest history row carrying on into the screen,
   which it reads as ending. `TestApplyTerminalStateClearsStaleWraps` and
   `TestApplyTerminalStateCarriesWraps` run on both backends.
+- **A snapshot is matched to the request it answers.** The client matched
+  replies by message type, and the daemon answers a failed subscribe, which
+  nothing waits for, with `MsgError`. So during a restore the error about pane
+  A answered pane B's state request, and B's real snapshot then went to
+  whichever request was waiting next, which painted B's screen into pane C. A
+  reply after its request timed out did the same. A request the client waits
+  for now carries a request id in the frame header (`Message.ReqID`, codec byte
+  2), and the daemon puts the same id on everything it sends in answer,
+  `MsgError` included. A tagged reply nothing waits for is dropped. A client
+  tags only for a daemon whose welcome sets `RequestIDs`, and the daemon tags
+  only the answer to a tagged request, so neither side writes a tagged frame to
+  a peer that would misread it. Against an older daemon the client still
+  matches by type, and drops a snapshot about any pane but the one it asked
+  for. An error from such a daemon cannot be told apart, so the A-for-B error
+  is still possible there. `TestSubscribeErrorDoesNotAnswerAStateRequest`,
+  `TestLateReplyIsNotTakenByTheNextRequest` and
+  `TestRequestIDsAcrossPeerVintages` hold this.
 
 ## A resize is a point in the stream
 

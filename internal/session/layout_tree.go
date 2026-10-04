@@ -393,11 +393,11 @@ func (s *Session) missedMutationLocked(base, current int) bool {
 // showing a tree the session did not take.
 func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
 	}
 	session := d.manager.GetSessionByID(cs.sessionID)
 	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+		return d.replyError(cs, msg, ErrCodeSessionNotFound, "session not found")
 	}
 	var p LayoutTreePayload
 	if err := msg.ParsePayload(&p); err != nil {

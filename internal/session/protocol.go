@@ -185,11 +185,19 @@ type HostsChangedPayload struct {
 
 // Message is the base protocol message structure.
 // Wire format (v2): [4 bytes length][1 byte type][1 byte codec][payload]
-// The codec byte is always 0 (gob). The value 1 once meant JSON and stays
-// reserved; readers ignore the byte.
+// The codec byte is 0 (gob) or 2 (gob after an 8-byte request id, see
+// wireCodecGobTagged). The value 1 once meant JSON and stays reserved.
 type Message struct {
 	Type    MessageType
 	Payload []byte
+	// ReqID ties a reply to the request it answers. A client sets it on a
+	// request it waits for, and the daemon copies it onto every message it
+	// sends in answer, MsgError included. Zero is a message that answers
+	// nothing in particular: a broadcast, a push, or anything to or from a
+	// peer that does not read request ids. It travels in the frame header
+	// (wireCodecGobTagged), outside the payload, so a reply is matched to its
+	// request without decoding it.
+	ReqID uint64
 }
 
 // HelloPayload is sent by client on initial connection.
@@ -276,6 +284,10 @@ type WelcomePayload struct {
 	// the rail is shown as session state. A client that does not see it keeps
 	// its rail to itself, as every client did before.
 	SidebarOps bool `json:"sidebar_ops,omitzero"`
+	// RequestIDs says the daemon reads tagged frames and tags its answer to a
+	// tagged request with the same id (see Message.ReqID). A client that does
+	// not see it matches replies by message type, as every client did before.
+	RequestIDs bool `json:"request_ids,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -790,17 +802,25 @@ const (
 // 1.3us instead of 2.2us and a 4 KiB frame 1.65us instead of 2.2us. At 64 KiB
 // and above the copy into the socket dominates and the two are within noise of each other.
 func WriteMessage(w io.Writer, msg *Message) error {
-	var hdr [6]byte
-	// Length counts the type and codec bytes plus the payload.
+	var hdr [6 + reqIDLen]byte
+	head := hdr[:6]
+	// Length counts the type and codec bytes plus the payload, and the
+	// request id when there is one.
 	binary.BigEndian.PutUint32(hdr[:4], uint32(2+len(msg.Payload)))
 	hdr[4], hdr[5] = byte(msg.Type), wireCodecGob
+	if msg.ReqID != 0 {
+		binary.BigEndian.PutUint32(hdr[:4], uint32(2+reqIDLen+len(msg.Payload)))
+		hdr[5] = wireCodecGobTagged
+		binary.BigEndian.PutUint64(hdr[6:], msg.ReqID)
+		head = hdr[:]
+	}
 
 	if len(msg.Payload) == 0 {
-		if _, err := w.Write(hdr[:]); err != nil {
+		if _, err := w.Write(head); err != nil {
 			return fmt.Errorf("failed to write message header: %w", err)
 		}
 	} else {
-		bufs := net.Buffers{hdr[:], msg.Payload}
+		bufs := net.Buffers{head, msg.Payload}
 		if _, err := bufs.WriteTo(w); err != nil {
 			return fmt.Errorf("failed to write message: %w", err)
 		}
@@ -895,7 +915,8 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 		return nil, fmt.Errorf("message too small: %d bytes", totalLen)
 	}
 
-	// Read type and codec. The codec byte is always gob and is ignored.
+	// Read type and codec. The codec byte is gob, with or without a request
+	// id in front of the payload.
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
 		return nil, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
@@ -905,15 +926,32 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 
 	// Read payload
 	payloadLen := totalLen - 2
+	tagged := header[1] == wireCodecGobTagged
+	if tagged && payloadLen < reqIDLen {
+		// Too short to hold the id it says it carries, which no sender writes:
+		// the same fault as a frame too small for its header.
+		return nil, fmt.Errorf("tagged message too small: %d bytes", totalLen)
+	}
+
+	var reqID uint64
+	if tagged {
+		var id [reqIDLen]byte
+		if _, err := io.ReadFull(r, id[:]); err != nil {
+			return nil, fmt.Errorf("failed to read request id (len=%d, type=%d): %w", payloadLen, msgType, err)
+		}
+		reqID = binary.BigEndian.Uint64(id[:])
+		payloadLen -= reqIDLen
+	}
 
 	// A frame over its own type's limit is skipped before any of it is
-	// decoded, which is the point of the limit: see wire_bounds.go.
+	// decoded, which is the point of the limit: see wire_bounds.go. The
+	// request id was read first so the refusal can answer the request.
 	if limit != nil {
 		if typeMax := limit(msgType); totalLen > typeMax {
 			if _, err := io.CopyN(io.Discard, r, int64(payloadLen)); err != nil {
 				return nil, fmt.Errorf("failed to skip oversized message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
 			}
-			return nil, &FrameTooLargeError{Type: msgType, Size: totalLen, Limit: typeMax}
+			return nil, &FrameTooLargeError{Type: msgType, Size: totalLen, Limit: typeMax, ReqID: reqID}
 		}
 	}
 
@@ -928,6 +966,7 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 	msg := &Message{
 		Type:    msgType,
 		Payload: payload,
+		ReqID:   reqID,
 	}
 
 	// Debug logging

@@ -278,6 +278,34 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 	})
 }
 
+// reply sends msgType as the answer to req, tagged with req's request id so
+// the client can tell it from the answer to any other request. Everything a
+// handler sends in answer to the message it is handling goes through here or
+// replyError; a broadcast or push that happens to share a type does not.
+//
+// A client matched replies by type alone before ids existed, so an error a
+// fire-and-forget subscribe drew was taken as the answer to whatever state
+// request was waiting, and the state that request was really answered with
+// went to the next one. See requestIDs on TUIClient.
+func (d *Daemon) reply(cs *connState, req *Message, msgType MessageType, payload any) error {
+	msg, err := NewMessage(msgType, payload)
+	if err != nil {
+		return err
+	}
+	if req != nil {
+		msg.ReqID = req.ReqID
+	}
+	return d.sendEncoded(cs, msg)
+}
+
+// replyError is sendError as the answer to req. See reply.
+func (d *Daemon) replyError(cs *connState, req *Message, code int, message string) error {
+	return d.reply(cs, req, MsgError, &ErrorPayload{
+		Code:    code,
+		Message: message,
+	})
+}
+
 // sendAttachReply writes the attach reply and opens this client to the
 // session's broadcasts, in that order and with no gap between them.
 //
@@ -293,11 +321,12 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 // all) is dropped on the floor. The window is a few instructions and has not
 // been caught in the act; it is closed here because it costs one lock to close
 // and nothing about it is bounded by how narrow it happens to be today.
-func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error {
+func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedPayload) error {
 	msg, err := NewMessage(MsgAttached, payload)
 	if err != nil {
 		return err
 	}
+	msg.ReqID = req.ReqID
 
 	cs.sendMu.Lock()
 	cs.mu.Lock()

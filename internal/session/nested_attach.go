@@ -371,7 +371,7 @@ func nestedRefusalText(inside, target *Session) string {
 // refuseNestedAttach sends the refusal for an attach that would show a session
 // inside itself. target is nil for an unnamed attach, and inside itself when
 // the client runs in a pane of the session it asks for.
-func (d *Daemon) refuseNestedAttach(cs *connState, inside, target *Session, why string) error {
+func (d *Daemon) refuseNestedAttach(cs *connState, req *Message, inside, target *Session, why string) error {
 	unnamed := target == nil
 	msg := NestedAttachMessage(inside.Name(), true)
 	if !unnamed {
@@ -379,7 +379,7 @@ func (d *Daemon) refuseNestedAttach(cs *connState, inside, target *Session, why 
 	}
 	LogBasic("Refused attach from client %s (pid %d): it runs in a pane of session %s (%s)",
 		cs.clientID, cs.peerPID, inside.Name(), why)
-	return d.sendMessage(cs, MsgError, &ErrorPayload{
+	return d.reply(cs, req, MsgError, &ErrorPayload{
 		Code:    ErrCodeNestedAttach,
 		Message: msg,
 		Session: inside.Name(),

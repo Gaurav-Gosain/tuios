@@ -77,7 +77,7 @@ var foregroundPGID = readForegroundPGID
 func (d *Daemon) handleTypeAtPrompt(cs *connState, msg *Message) error {
 	var p TypeAtPromptPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return d.sendMessage(cs, MsgPromptTyped, &PromptTypedPayload{Refused: "invalid request"})
+		return d.reply(cs, msg, MsgPromptTyped, &PromptTypedPayload{Refused: "invalid request"})
 	}
 	out := PromptTypedPayload{}
 	line, ok := CdLine(p.Dir)
@@ -111,7 +111,7 @@ func (d *Daemon) handleTypeAtPrompt(cs *connState, msg *Message) error {
 			sess.TouchActive()
 		}
 	}
-	return d.sendMessage(cs, MsgPromptTyped, &out)
+	return d.reply(cs, msg, MsgPromptTyped, &out)
 }
 
 // CdAtPrompt asks the daemon to type a cd to dir into a pane only if the
