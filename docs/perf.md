@@ -2160,8 +2160,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
 |---|---|---|---|
-| linux/amd64 | 25,182,370 | 28,320,000 (raised for #391) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,725,000 (raised for #391) | 25,265,154 |
+| linux/amd64 | 25,182,370 | 28,340,000 (raised for #399) | 26,681,504 |
+| darwin/arm64 | 23,834,594 | 26,750,000 (raised for #399) | 25,265,154 |
 
 The budgets are about 3% above the size they were set at and below the size
 before the size cuts, so undoing those cuts fails the job.
@@ -2277,6 +2277,15 @@ for the client list (#391): the `list-clients` verb and command, the peer pid
 read on each platform, and the `client-session-changed` event. On Go 1.26.6
 the build measured 28,283,042 and 26,688,242 bytes, 28,042 and 23,242 over
 the old budgets.
+
+The budgets went to 28,340,000 (linux/amd64) and 26,750,000 (darwin/arm64)
+for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
+its parser and validator, the section in the renderer, and the component
+flags, the rail context and the re-run in the dock engine. On Go 1.26.6 the
+build measured 28,311,714 and 26,721,730 bytes, with 8,286 and 3,270 bytes of
+room on the old budgets, which is no more than CI measures above a local
+build. Main was 28,283,042 and 26,688,242 bytes, and the change adds 28,672
+and 33,488 bytes.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
