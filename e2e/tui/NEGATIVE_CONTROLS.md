@@ -677,6 +677,23 @@ in one fixture, so the run without the waiter is its positive half.
 | --- | --- | --- | --- |
 | A capture per output event | `waitWindowOutput` in `internal/session/verb_subscribe.go`: the `waitOutputMinGap` coalescing cut, so the `sub.ch` case calls `matches()` on every event | `TestWaitForOutputDoesNotSlowFlood` ("a pending wait-for made the flood 3.37x slower", then 3.27x and 3.57x, against 0.92x to 0.98x with the fix) | **caught in `internal/session`** (3 of 3 run) |
 
+## Copy-mode search columns in the scrollback
+
+Copy-mode search now reads the history as text cells and takes a match's
+columns from the cells. It used to count runes as columns, so a cell of
+several runes before a match moved the cursor right of it. The ASCII needle
+in the same fixture is the positive half: the column check passes on both
+builds for a line of one rune a cell. The memory budgets for the search and
+for the history save are unit tests in `internal/input` and
+`internal/session`, because they measure bytes and not a screen.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Search columns counted in runes | whole change: build the tree before it and point `TUIOS_E2E_BIN` at it | `TestCopyModeSearchColumnInScrollback` ("needle-cm: the copy cursor is at row 10 column 40, want the match's column 36"); the `needle-ascii` half passes | **caught** |
+| A search key decoded every history line | whole change, same build | unit `TestCopyModeSearchKeyBudget` ("one search key allocated 258.1 MB, the budget is 4 MB") | **caught in `internal/input`** |
+| A history save decoded its rows under the pane's lock | whole change, same build | unit `TestHistoryCaptureBudget` ("the capture allocated 24.7 MB under the pane's lock, the budget is 4 MB") | **caught in `internal/session`** |
+| The line cache bounded by its line count only | whole change, same build | unit `TestScrollbackCacheIsBounded` ("cache holds 102400 decoded cells after a walk of a 400-column ring, want at most 65536") | **caught in `internal/vt`** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

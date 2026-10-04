@@ -150,3 +150,98 @@ func TestCopyModeSearchBackwardBinding(t *testing.T) {
 		t.Fatalf("n after ? did not move up to needle-one (row %d)\n%s", one, term.Snapshot())
 	}
 }
+
+// colOfText is the column on row where text starts, one ASCII character a
+// cell, or -1.
+func colOfText(s tuitest.Screen, row int, text string) int {
+	cols, _ := s.Size()
+	for c := 0; c+len(text) <= cols; c++ {
+		k := 0
+		for k < len(text) && s.Cell(c+k, row).Content == text[k:k+1] {
+			k++
+		}
+		if k == len(text) {
+			return c
+		}
+	}
+	return -1
+}
+
+// A search match in the scrollback puts the copy cursor on the column the
+// match is drawn in, after cells of several runes too.
+//
+// How this could pass wrongly, written down first:
+//   - The match could be on the screen and not in the scrollback, which is
+//     read by another path. Sixty lines follow the needles, so both are in
+//     the history when the search runs.
+//   - The cursor column could be compared with a column found the same wrong
+//     way. The expected column is read from the screen's own cells.
+//   - The column check could be wrong for any line. The ASCII needle is the
+//     positive half: the same check on a line of one rune a cell.
+//
+// The search used to count runes as columns, so each "e" with a combining
+// accent before the match, one cell of two runes, put the cursor one column
+// to the right of the match.
+func TestCopyModeSearchColumnInScrollback(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, copyCursorConfig+
+		"\n[keybindings.prefix_mode]\ncopy_mode_search_backward = [\"g\"]\n")
+	term := startIn(t, base, copyColorOpts)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term,
+		`printf 'abcd nee''dle-ascii\ne\314\201e\314\201e\314\201e\314\201 nee''dle-cm\n'; seq 1 60; echo 'fil''led'`,
+		"filled", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+
+	for _, needle := range []string{"needle-ascii", "needle-cm"} {
+		if err := term.SendKeys(tuitest.Ctrl('b'), "g"); err != nil {
+			t.Fatalf("send prefix+g: %v", err)
+		}
+		// The prompt opens on the prompt row, the pane's last, at the cursor,
+		// and covers the copy cursor there.
+		err := term.WaitFor(func(s tuitest.Screen) bool {
+			r := lastRowWith(s, "filled")
+			return r >= 0 && strings.Contains(s.Line(r+1), "$ ?")
+		}, uiTimeout)
+		if err != nil {
+			t.Fatalf("prefix+g did not open a backward search prompt: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(needle); err != nil {
+			t.Fatalf("type query: %v", err)
+		}
+		err = term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "?"+needle) && strings.Contains(s.Text(), "[1/1]")
+		}, uiTimeout)
+		if err != nil {
+			t.Fatalf("%s: the search found no single match: %v\n%s", needle, err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Enter); err != nil {
+			t.Fatalf("send enter: %v", err)
+		}
+		var row, col, want int
+		err = term.WaitFor(func(s tuitest.Screen) bool {
+			var ok bool
+			row, col, ok = copyCursorCell(s)
+			if !ok {
+				return false
+			}
+			want = colOfText(s, row, needle)
+			return want >= 0 && col == want
+		}, uiTimeout)
+		if err != nil {
+			t.Fatalf("%s: the copy cursor is at row %d column %d, want the match's column %d\n%s",
+				needle, row, col, want, term.Snapshot())
+		}
+		if err := term.SendKeys("q"); err != nil {
+			t.Fatalf("send q: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			_, _, ok := copyCursorCell(s)
+			return !ok
+		}, uiTimeout); err != nil {
+			t.Fatalf("q did not leave copy mode\n%s", term.Snapshot())
+		}
+	}
+}

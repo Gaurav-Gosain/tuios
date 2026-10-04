@@ -529,6 +529,19 @@ type SearchCache struct {
 	Matches   []SearchMatch
 	CacheTime time.Time
 	Valid     bool
+
+	// What the search was made over, so the next one can tell whether it
+	// may search only the lines this one matched. See narrowedLines in
+	// internal/input. CaseSensitive is the setting it ran with. Capped is
+	// set when it stopped at MaxSearchMatches, so Matches may not be all
+	// of them. HistoryGen and HistoryLen are the history's generation and
+	// length, and HistoryKnown is false when the terminal keeps no
+	// generation.
+	CaseSensitive bool
+	Capped        bool
+	HistoryKnown  bool
+	HistoryGen    uint64
+	HistoryLen    int
 }
 
 // CopyMode holds all state for vim-style copy/scrollback mode

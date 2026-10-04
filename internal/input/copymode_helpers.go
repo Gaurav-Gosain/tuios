@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	vt "github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -52,29 +50,6 @@ func getCellAtCursor(cm *terminal.CopyMode, window *terminal.Window) *uv.Cell {
 
 	screenY := absY - scrollbackLen
 	return window.Terminal.CellAt(cm.CursorX, screenY)
-}
-
-// byteIndexToCharIndex converts a byte index in a UTF-8 string to a character (rune) index
-// This is needed because strings.Index returns byte positions, not character positions
-func byteIndexToCharIndex(s string, byteIdx int) int {
-	if byteIdx <= 0 {
-		return 0
-	}
-	if byteIdx >= len(s) {
-		return len([]rune(s))
-	}
-
-	// Count runes up to the byte index
-	charIdx := 0
-	byteCount := 0
-	for _, r := range s {
-		if byteCount >= byteIdx {
-			break
-		}
-		byteCount += utf8.RuneLen(r)
-		charIdx++
-	}
-	return charIdx
 }
 
 // extractLineTextFromCells builds text string from cell array
@@ -136,48 +111,6 @@ func getScreenLineCells(term vt.Terminal, y int) []uv.Cell {
 	}
 
 	return cells
-}
-
-// charIndexToColumn converts a character index in the text string to a column position
-// accounting for wide characters (emoji, nerd fonts, CJK, etc.)
-//
-// The cells array is structured so that each cell index IS the column position.
-// For wide characters (Width=2), the next cell is a continuation (Width=0).
-// Example:
-//
-//	Columns:  0  1  2  3  4  5
-//	Cells:   [🎨][] [f][i][l][e]
-//	Width:    2  0  1  1  1  1
-//	Text (skipping Width=0): "🎨file"
-//	Character index 1 ('f') → Column 2
-func charIndexToColumn(cells []uv.Cell, charIndex int) int {
-	if charIndex <= 0 {
-		return 0
-	}
-
-	if len(cells) == 0 {
-		return 0
-	}
-
-	charsProcessed := 0
-
-	for col, cell := range cells {
-		// Skip continuation cells (Width=0) when counting characters
-		if cell.Width == 0 {
-			continue
-		}
-
-		// If we've reached the target character index, return the column
-		// (which is the cell index)
-		if charsProcessed == charIndex {
-			return col
-		}
-
-		charsProcessed++
-	}
-
-	// Past the end: return the last column
-	return len(cells)
 }
 
 // isBlankLine returns true if a line contains only whitespace
