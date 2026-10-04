@@ -69,6 +69,9 @@ type mouseReport struct {
 //   - The X10 form writes each coordinate as one raw byte. A value of 128 or
 //     more went out as a two-byte UTF-8 character, which is the 1005 encoding
 //     and not the one the guest asked for.
+//   - The 1005 form writes the button as UTF-8 too, as xterm does. The back
+//     and forward buttons are 128 and up, and went out as one raw byte that
+//     is not valid UTF-8.
 //   - A release has no button in any form but SGR: it is reported as button
 //     3, with the modifiers, as xterm does.
 //
@@ -103,7 +106,11 @@ func (r mouseReport) encode() string {
 		if x > mouseUTF8Limit || y > mouseUTF8Limit {
 			return ""
 		}
-		out := []byte{0x1b, '[', 'M', 32 + b}
+		// xterm writes the button the same way as a coordinate: a value of
+		// 128 or more, such as the back and forward buttons (128 and 129),
+		// is a two-byte UTF-8 character. A raw byte there is not valid UTF-8.
+		out := []byte{0x1b, '[', 'M'}
+		out = utf8.AppendRune(out, rune(32+int(b)))
 		out = utf8.AppendRune(out, rune(32+1+x))
 		out = utf8.AppendRune(out, rune(32+1+y))
 		return string(out)

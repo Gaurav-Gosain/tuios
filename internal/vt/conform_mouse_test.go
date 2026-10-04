@@ -6,8 +6,8 @@ package vt_test
 //   - X10 form (no extension mode): CSI M Cb Cx Cy, each one byte, 32 + value
 //     (and + 1 for a coordinate). A coordinate past 222 does not fit in a byte
 //     and the event is not reported. Nothing is ever UTF-8 encoded.
-//   - 1005, UTF-8: as X10, but each coordinate is a UTF-8 character, which
-//     carries one up to 2014.
+//   - 1005, UTF-8: as X10, but the button and each coordinate are UTF-8
+//     characters, which carry a coordinate up to 2014.
 //   - 1015, urxvt: CSI Cb ; Cx ; Cy M in decimal, the button still offset by 32.
 //   - 1006, SGR: CSI < Cb ; Cx ; Cy M, or m for a release.
 //
@@ -55,6 +55,10 @@ func TestConform_MouseEncoding(t *testing.T) {
 		{"UTF-8 form at the origin", "\x1b[?1000h\x1b[?1005h", click(0, 0, left, 0), "\x1b[M !!"},
 		{"UTF-8 form, column 95 is two bytes", "\x1b[?1000h\x1b[?1005h", click(95, 0, left, 0), "\x1b[M \u0080!"},
 		{"UTF-8 form, column 250", "\x1b[?1000h\x1b[?1005h", click(249, 0, left, 0), "\x1b[M Ě!"},
+		// Back is button 128: 32 + 128 is U+00A0, two bytes in UTF-8.
+		{"UTF-8 form, the back button is UTF-8", "\x1b[?1000h\x1b[?1005h", click(0, 0, vt.MouseBackward, 0), "\x1b[M\u00a0!!"},
+		{"UTF-8 form, forward with ctrl is UTF-8", "\x1b[?1000h\x1b[?1005h", click(0, 0, vt.MouseForward, vt.ModCtrl), "\x1b[M\u00b1!!"},
+		{"X10 form, the back button is one raw byte", "\x1b[?1000h", click(0, 0, vt.MouseBackward, 0), x10(0xa0, '!', '!')},
 		{"UTF-8 form, a release is button 3", "\x1b[?1000h\x1b[?1005h", release(0, 0, left, 0), "\x1b[M#!!"},
 
 		{"urxvt form", "\x1b[?1000h\x1b[?1015h", click(0, 0, left, 0), "\x1b[32;1;1M"},
