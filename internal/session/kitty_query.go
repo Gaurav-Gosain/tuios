@@ -12,11 +12,20 @@ const kittyFileMediumRefusal = "ENOTSUPPORTED:the path would be read on another 
 //
 // The daemon answers queries itself, because an answer that has to go out to
 // a client and back is late enough that a probing guest gives up first. That
-// leaves it answering for clients it cannot ask, so it answers for the one
-// thing it knows: where a path the guest sends will be read.
+// leaves it answering for clients it cannot ask, so it answers from what the
+// clients told it when they attached, and from where a path the guest sends
+// will be read.
 //
-// Direct transmission (t=d) always works. The bytes are in the stream, and
-// every client that draws the pane receives them.
+// A query is not answered at all while no attached client's terminal draws
+// kitty graphics (see SetKittyAdvertised): such a client drops the image, and
+// silence is what a terminal without kitty graphics gives, so a guest that
+// probes the way kitty documents (a query, then DA1) falls back to text or
+// sixel. The rule is the one DA1 follows for sixel: any attached client that
+// shows the image is enough, and with no client attached the last answer
+// stands. A standalone tuios on such a terminal is silent too.
+//
+// Otherwise direct transmission (t=d) always works. The bytes are in the
+// stream, and every client that draws the pane receives them.
 //
 // A file medium names something on the machine the guest runs on, and the
 // client that draws the pane reads it there, or hands the path to its host
@@ -39,6 +48,9 @@ const kittyFileMediumRefusal = "ENOTSUPPORTED:the path would be read on another 
 // Quiet is honoured as kitty honours it: q=1 suppresses an OK and still sends
 // an error, q=2 suppresses both.
 func (s *Session) kittyQueryResponse(cmd *vt.KittyCommand, remotePane bool) []byte {
+	if !s.kittyAdvertised.Load() {
+		return nil
+	}
 	ok := true
 	msg := ""
 	if cmd.Medium.IsFile() && (remotePane || s.linkedViewer.Load()) {

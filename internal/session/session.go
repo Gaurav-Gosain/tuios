@@ -1250,6 +1250,9 @@ type Session struct {
 	// sixel. Read from the VT's DA1 handler, so it is atomic. See
 	// SetSixelAdvertised.
 	sixelAdvertised atomic.Bool
+	// kittyAdvertised says a kitty image a pane draws will be shown. Read
+	// from the VT callback, so it is atomic. See SetKittyAdvertised.
+	kittyAdvertised atomic.Bool
 	// fed is the link manager a window on another machine is opened over. It is
 	// nil unless the daemon installed one, and every reader checks. See
 	// remote_pane.go.
@@ -1295,6 +1298,16 @@ func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
 // yazi learns whether to draw sixel or fall back to text. A client with neither
 // protocol is shown a placeholder box where the image is.
 func (s *Session) SetSixelAdvertised(ok bool) { s.sixelAdvertised.Store(ok) }
+
+// SetKittyAdvertised records whether a kitty image a pane draws will be
+// shown: true while any attached client's terminal draws kitty graphics.
+// Daemon.refreshTreeOps counts it with SetSixelAdvertised, by the same rule.
+//
+// It decides whether the daemon answers a guest's kitty graphics query (see
+// kittyQueryResponse). A client whose terminal has no kitty graphics drops
+// the image, so a guest told OK draws nothing where it would have drawn a
+// text fallback.
+func (s *Session) SetKittyAdvertised(ok bool) { s.kittyAdvertised.Store(ok) }
 
 // SixelAdvertised reports what SetSixelAdvertised last recorded.
 func (s *Session) SixelAdvertised() bool { return s.sixelAdvertised.Load() }

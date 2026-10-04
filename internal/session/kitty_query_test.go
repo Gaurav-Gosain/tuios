@@ -42,6 +42,7 @@ func TestKittyQueryResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Session{}
+			s.SetKittyAdvertised(true)
 			s.SetLinkedViewer(tt.linkedViewer)
 			for i, p := range probes {
 				cmd, err := vt.ParseKittyCommand([]byte(p.apc))
@@ -111,6 +112,7 @@ func TestKittyQueryResponseQuiet(t *testing.T) {
 				t.Fatalf("parse: %v", err)
 			}
 			s := &Session{}
+			s.SetKittyAdvertised(true)
 			if got := string(s.kittyQueryResponse(cmd, tt.remotePane)); got != tt.want {
 				t.Errorf("answered %q, want %q", got, tt.want)
 			}

@@ -753,14 +753,20 @@ file (`t=t`) or a shared memory object (`t=s`). A path means something only on
 the machine it was written on, so where it gets read decides whether it works.
 
 - **Standalone.** The pane and tuios are on one machine. When the host
+  terminal draws no kitty graphics, `a=q` gets no answer. When the host
   terminal can read files there (the capability probe's `i=2` answer), tuios
   hands it the path. When it cannot (a browser, an SSH client), tuios reads the
   file itself and sends the bytes inline. The `a=q` answer says which: file
   media are refused when the host cannot read files, so a guest that asks,
   such as icat, streams the bytes instead.
 - **Daemon.** The daemon answers `a=q` itself, before any client sees the
-  query, so it answers for the one thing it knows: whether the path will be
-  read on the machine it names a file on. File media are refused for a pane
+  query, from what the attached clients told it. While no attached client's
+  host draws kitty graphics, the query gets no answer, which is what a
+  terminal without kitty graphics gives. The rule is the one DA1 follows for
+  sixel (see below): any attached client that shows the image is enough, and
+  with no client attached the last answer stands. Otherwise the answer says
+  whether the path will be read on the machine it names a file on. File
+  media are refused for a pane
   whose process runs on another machine over a link, and while any client
   attached over a link is drawing the session. Everywhere else they are
   accepted, and each client handles the path as in standalone. Direct

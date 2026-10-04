@@ -735,7 +735,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	defer session.treeOpsMu.Unlock()
 	on, scratchWS := true, true
 	animate, tuiClients := true, 0
-	images := false
+	images, kittyImages := false, false
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
@@ -753,6 +753,9 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 			if cs.sixelGraphics || cs.kittyGraphics {
 				images = true
 			}
+			if cs.kittyGraphics {
+				kittyImages = true
+			}
 		}
 		cs.mu.Unlock()
 	}
@@ -760,9 +763,11 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	session.SetKittyAnimation(animate && tuiClients > 0)
 	// With nobody attached the last answer stands: a program started in a
 	// detached session is drawing for whoever attaches next, most likely the
-	// terminal that was just there.
+	// terminal that was just there. The kitty graphics query follows the same
+	// rule, so a guest learns the same thing from either protocol.
 	if tuiClients > 0 {
 		session.SetSixelAdvertised(images)
+		session.SetKittyAdvertised(kittyImages)
 	}
 	if hook := treeOpsCounted.Load(); hook != nil {
 		(*hook)()
