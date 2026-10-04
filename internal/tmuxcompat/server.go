@@ -147,13 +147,25 @@ func optionAssignment(cmd string, args []string) (name, value string, ok bool) {
 }
 
 // historyLimit is the scrollback length tuios keeps, read from the daemon's
-// appearance.scrollback_lines. It is empty when the daemon does not say.
+// appearance.scrollback_lines. get-option gives a value set on the session
+// as a number and the registry's default as a string, so both are read. A
+// daemon that does not say is taken to use the shipped default, as tmux
+// prints its default rather than nothing.
 func (s *Shim) historyLimit() string {
-	var n int64
-	if s.daemonOption(map[string]any{"key": "appearance.scrollback_lines"}, &n) {
-		return strconv.FormatInt(n, 10)
+	var v any
+	if s.daemonOption(map[string]any{"session": s.Session, "key": "appearance.scrollback_lines"}, &v) {
+		switch n := v.(type) {
+		case float64:
+			if n > 0 {
+				return strconv.FormatInt(int64(n), 10)
+			}
+		case string:
+			if i, err := strconv.Atoi(n); err == nil && i > 0 {
+				return n
+			}
+		}
 	}
-	return ""
+	return strconv.Itoa(config.DefaultScrollbackLines)
 }
 
 // showOptions prints options: one by name, or every one of a scope.
