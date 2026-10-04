@@ -244,6 +244,17 @@ var verbScopes = map[string]scopeKind{
 	"list-checkpoints":   scopeRead,
 	"checkpoint-diff":    scopeRead,
 	"restore-checkpoint": scopeWrite,
+
+	// From the ship work (verb_ship.go). A commit and a merge write the
+	// files a pane's agent works on, as a restore does. A push and a pull
+	// request send work off this machine: they are writes here, and the
+	// handler also asks the person in the Inbox for any caller on a
+	// restricted connection. The status is a read.
+	"ship-commit": scopeWrite,
+	"ship-merge":  scopeWrite,
+	"ship-push":   scopeWrite,
+	"ship-pr":     scopeWrite,
+	"ship-status": scopeRead,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.

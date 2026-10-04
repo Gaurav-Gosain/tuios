@@ -231,6 +231,14 @@ type Daemon struct {
 	// Its zero value is on. See checkpoints.go.
 	checkpoints checkpointer
 
+	// shipMu runs one commit, merge or push of the ship verbs at a time,
+	// shipAsks remembers the Inbox questions the outbound ones put, and prs
+	// polls the open pull requests. All three zero values are ready. See
+	// verb_ship.go and pr_poll.go.
+	shipMu   sync.Mutex
+	shipAsks shipAsks
+	prs      prPoller
+
 	// promptStallOverride replaces promptStallDefault when set. Only tests set
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration

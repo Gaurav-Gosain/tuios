@@ -2074,6 +2074,8 @@ func init() {
 	maps.Copy(verbRegistry, agentWorkVerbs())
 	// The checkpoint verbs. See verb_checkpoint.go.
 	maps.Copy(verbRegistry, checkpointVerbs())
+	// The ship verbs. See verb_ship.go.
+	maps.Copy(verbRegistry, shipVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

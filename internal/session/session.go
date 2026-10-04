@@ -2238,8 +2238,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	// SetWorktree replacing the whole pointer, but the fan prompt writes the
 	// status fields through the pointer under stateMu, and the snapshot is
 	// encoded for the wire after stateMu is released. Copying the record here
-	// is what makes the snapshot a snapshot. WorktreeInfo is all value fields,
-	// so one level is the whole of it.
+	// is what makes the snapshot a snapshot. WorktreeInfo is value fields
+	// apart from Verify and PR, which are only ever replaced whole, so one
+	// level is the whole of it.
 	if s.state.Worktree != nil {
 		wt := *s.state.Worktree
 		stateCopy.Worktree = &wt

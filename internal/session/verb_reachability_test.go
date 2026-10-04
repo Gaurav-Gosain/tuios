@@ -208,7 +208,15 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"verify-fan#0":    {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#0":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"keep-fan#1":      {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
-	"get-approval#0":  {errCode: ErrVerbInvalidParams, why: "no approval is held in the fixture"},
+	// The fixture's panes sit in the main checkout of a throwaway repository
+	// with no change, no worktree and no remote. The ship verbs are proved in
+	// e2e/tui/ship_test.go.
+	"ship-commit#0":  {errCode: ErrVerbNothingToCommit, why: "the fixture's repository has no change"},
+	"ship-merge#0":   {errCode: ErrVerbNotWorktree, why: "build is in the main checkout, not a worktree"},
+	"ship-merge#1":   {errCode: ErrVerbNotWorktree, why: "build is in the main checkout, not a worktree"},
+	"ship-push#0":    {errCode: ErrVerbNoRemote, why: "the fixture's repository has no remote"},
+	"ship-pr#0":      {errCode: ErrVerbNoRemote, why: "the fixture's repository has no remote"},
+	"get-approval#0": {errCode: ErrVerbInvalidParams, why: "no approval is held in the fixture"},
 	// The person's proof comes first, so the nonce the example names is
 	// what refuses it, as for dismiss-attention.
 	"mark-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},

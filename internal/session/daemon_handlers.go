@@ -195,6 +195,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.missedStateSync = false
 	cs.mu.Unlock()
 	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name(), Attached: ptr(true)})
+	// A client can now see a pull request's state, so an open one is polled
+	// again. With none recorded this is a scan of the sessions and no more.
+	d.kickPRPoll()
 
 	// Before the reply, so a pane that probes the moment this client can see
 	// it is already answered for this client's machine.

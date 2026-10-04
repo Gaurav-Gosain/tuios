@@ -200,6 +200,16 @@ var verbCapabilities = map[string][]string{
 	"list-checkpoints":   {config.LinkAllowList},
 	"checkpoint-diff":    {config.LinkAllowWrite},
 	"restore-checkpoint": {config.LinkAllowWrite},
+
+	// The ship verbs. A commit and a merge write files, so they need write.
+	// A push and a pull request are refused over any link by their handler:
+	// the person on the machine the repository is on allows those. The
+	// status carries a state and a URL, which list reaches.
+	"ship-commit": {config.LinkAllowWrite},
+	"ship-merge":  {config.LinkAllowWrite},
+	"ship-push":   {config.LinkAllowWrite},
+	"ship-pr":     {config.LinkAllowWrite},
+	"ship-status": {config.LinkAllowList},
 }
 
 // msgCapabilities is what each binary message needs on a link connection.

@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -64,6 +65,11 @@ type WorktreeInfo struct {
 	// it. Replaced whole, never edited in place, so a copy of the info can
 	// share it. See verb_fan_compare.go.
 	Verify *FanVerify `json:"verify,omitempty"`
+	// PR is the pull request of the branch, nil when tuios knows of none. It
+	// is set when ship-pr opens one or ship-status finds one, and kept fresh
+	// by the poll in pr_poll.go. Saved with the session. Additive: an older
+	// client drops it. Replaced whole, never edited in place, like Verify.
+	PR *ghpr.PR `json:"pr,omitempty"`
 }
 
 // FanVerify is one verify-fan check in one fan sibling: the command, and what
