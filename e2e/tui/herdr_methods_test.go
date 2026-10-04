@@ -100,7 +100,8 @@ step held "$H" pane resize --direction left --amount 0.2 --pane "$HERDR_PANE_ID"
 // reports what the detector saw. A workspace token reported with a seq
 // shows on the workspace, and an older seq is dropped. The client takes the
 // terminal title a tool sets. status server says the server runs, in
-// herdr's text and JSON, and session list names the herdr socket.
+// herdr's text and JSON, session list names the herdr socket, and server
+// agent-manifests lists the agents tuios knows.
 //
 // Negative controls: with server.reload_config back in herdrUnsupported, the
 // reload step exits 1. With the move-window call taken out of herdrPaneMove,
@@ -132,6 +133,7 @@ step title "$H" terminal title set "tuios e2e title"
 step status "$H" status server
 step statusjson "$H" status server --json
 step sessions "$H" session list --json
+step manifests "$H" server agent-manifests
 `)
 	steps["reload"].ok(t, "server reload-config")
 	if r := steps["reload"].json(t, "server reload-config"); dig(r, "result", "type") != "config_reload" || dig(r, "result", "status") != "applied" {
@@ -194,6 +196,11 @@ step sessions "$H" session list --json
 	if sl := steps["sessions"].json(t, "session list --json"); dig(sl, "sessions") == nil || len(dig(sl, "sessions").([]any)) != 1 ||
 		dig(dig(sl, "sessions").([]any)[0].(map[string]any), "socket_path") != herdrSocket(base) {
 		t.Fatalf("session list --json does not name the herdr socket %s: %s", herdrSocket(base), steps["sessions"].out)
+	}
+	// The bridges list the agents the server knows.
+	steps["manifests"].ok(t, "server agent-manifests")
+	if !strings.Contains(steps["manifests"].out, `"agent":"claude"`) || !strings.Contains(steps["manifests"].out, `"type":"agent_manifest_status"`) {
+		t.Fatalf("server agent-manifests does not list claude: %s", steps["manifests"].out)
 	}
 	saveFrame(t, term, "herdr-front-reload-move-rename")
 	alive(t, term, "after the reload, move and rename sequence")

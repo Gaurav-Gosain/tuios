@@ -649,6 +649,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `agent.explain` | `explain-agent-detect` | `explain` is what tuios's detector reports for the pane. It is tuios's report, not herdr's |
 | `workspace.report_metadata` | `set-session-accent` grant | the tokens show under `tokens` in `workspace.list`, `workspace.get` and the snapshot, until a `ttl_ms` runs out or the session closes. herdr's limits and words apply. A token is keyed by its name: a later report replaces it, and `null` clears it. A report with a `seq` at or below the last one from its `source` changes nothing. tuios keeps the tokens in memory and does not draw them |
 | `client.window_title.set`, `client.window_title.clear` | `run-command` grant, then the attached client | sets or clears the title of the terminal that the tuios client runs in. The client is the one that shows the caller's session, else the one that shows the active workspace. Without one, `changed` is false and `reason` is `no_foreground_client`, as in herdr. Control characters are taken out, and the title is cut to 256 characters |
+| `server.agent_manifests` | none | lists the agents tuios knows, under herdr's names. `source` is `bundled`, or the path of your own manifest file with `source_kind` `local override`. tuios fetches no manifests from the network, so the remote fields are left out |
 | `server.reload_config` | none | answers `config_reload` with status `applied` and a diagnostic. tuios does not read herdr's `config.toml`, and it reads its own config file when the file changes, so nothing is reloaded |
 | `pane.clear_agent_authority` | the pane reports | a pane may clear only itself. A state that a report holds clears, and detection reads the pane again. A state that the detector holds stays |
 | `release_notes.dismiss`, `product_announcement.dismiss` | none | fail with `stale_release_notes` and `stale_announcement`, as herdr does when none is current. tuios shows none of herdr's |
@@ -704,7 +705,7 @@ These methods answer error `unsupported`. Each row says why.
 | `pane.scroll`, `pane.clear`, `pane.edit_scrollback` | tuios scrolls a pane in the client, in copy mode. It does not move the view, or clear the screen, for another program |
 | `pane.selection.read`, `pane.copy_motion`, `pane.copy_search`, `pane.input.set`, `pane.link.activate`, `pane.link.resolve`, `command.invoke`, `client_shell.surface.set` | herdr's own client calls these to draw its screen. A tuios client does this work itself |
 | `integration.list`, `integration.install`, `integration.uninstall` | they install herdr's agent hooks. Use `tuios integration` |
-| `server.stop`, `server.live_handoff`, `server.ssh_agent.register`, `server.agent_manifests`, `server.reload_agent_manifests` | they act on herdr's own server and its agent manifests. Use `tuios kill-server` and `tuios explain-agent-detect` |
+| `server.stop`, `server.live_handoff`, `server.ssh_agent.register`, `server.reload_agent_manifests` | they act on herdr's own server. Use `tuios kill-server`. tuios reads its harness manifests when it starts |
 
 #### Where tuios differs from herdr
 

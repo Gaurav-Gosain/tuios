@@ -175,6 +175,7 @@ type herdrResult struct {
 	MoveResult    *herdrMove             `json:"move_result,omitempty"`
 	Changed       *bool                  `json:"changed,omitempty"`
 	Reason        string                 `json:"reason,omitempty"`
+	Manifests     *[]herdrManifestInfo   `json:"manifests,omitempty"`
 }
 
 // herdrAck is the result of a method that only acknowledges.
@@ -304,6 +305,7 @@ func init() {
 		"agent.start":               {run: (*Daemon).herdrAgentStart, required: []string{"name", "kind", "pane_id"}},
 		"pane.resize":               {run: (*Daemon).herdrPaneResize, required: []string{"direction"}},
 		"server.reload_config":      {run: (*Daemon).herdrReloadConfig},
+		"server.agent_manifests":    {run: (*Daemon).herdrAgentManifests},
 		"agent.rename":              {run: (*Daemon).herdrAgentRename, required: target},
 		"pane.move":                 {run: (*Daemon).herdrPaneMove, required: []string{"pane_id", "destination"}},
 		"workspace.report_metadata": {run: (*Daemon).herdrWorkspaceReportMetadata, required: []string{"workspace_id", "source", "tokens"}},
@@ -323,7 +325,7 @@ func init() {
 // invalid_request, "unknown variant".
 var herdrUnsupported = []string{
 	"server.stop", "server.live_handoff", "server.ssh_agent.register",
-	"server.agent_manifests", "server.reload_agent_manifests",
+	"server.reload_agent_manifests",
 	"command.invoke",
 	"client_shell.surface.set",
 	"workspace.move", "workspace.move_block",

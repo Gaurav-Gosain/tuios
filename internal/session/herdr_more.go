@@ -547,3 +547,33 @@ func (d *Daemon) herdrWorkspaceReportMetadata(cs *connState, in *herdrIn) (*herd
 	}
 	return herdrAck, nil
 }
+
+// herdrManifestInfo is herdr's AgentManifestInfo.
+type herdrManifestInfo struct {
+	Agent                        string `json:"agent"`
+	Source                       string `json:"source"`
+	SourceKind                   string `json:"source_kind"`
+	LocalOverrideShadowingRemote bool   `json:"local_override_shadowing_remote"`
+}
+
+// herdrAgentManifests answers server.agent_manifests with tuios's harness
+// manifests: the agents tuios knows, each under herdr's name for it, from
+// the bundled set or from the person's own file. tuios does not fetch
+// manifests from the network, so there is no remote check to report.
+func (d *Daemon) herdrAgentManifests(_ *connState, _ *herdrIn) (*herdrResult, *herdrError) {
+	out := []herdrManifestInfo{}
+	if reg := d.agentMatcher.registry; reg != nil {
+		for _, id := range reg.IDs() {
+			m := reg.Lookup(id)
+			if m == nil {
+				continue
+			}
+			info := herdrManifestInfo{Agent: herdrAgentLabel(id), Source: "bundled", SourceKind: "bundled"}
+			if src, _ := m.Source(); src != "" && src != "bundled" {
+				info.Source, info.SourceKind = src, "local override"
+			}
+			out = append(out, info)
+		}
+	}
+	return &herdrResult{Type: "agent_manifest_status", Manifests: &out}, nil
+}
