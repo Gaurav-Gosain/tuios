@@ -38,6 +38,10 @@ type ghosttyRestore struct {
 	penLink          uv.Link
 	hasPen           bool
 	kittyKbdStack    []int
+	// modifyOtherKeys is the XTMODKEYS level, when hasModifyOtherKeys says
+	// the snapshot carried one.
+	modifyOtherKeys    int
+	hasModifyOtherKeys bool
 	// screenWraps and historyWraps are the soft-wrap flags the snapshot
 	// carries (see RestoreSoftWraps). The library keeps a wrap flag only for
 	// a row it wrapped itself, so the synthesis reproduces each one by
@@ -213,6 +217,10 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		fmt.Fprintf(&seq, "\x1b[=%d;1u", top)
 	}
 
+	if r.hasModifyOtherKeys {
+		fmt.Fprintf(&seq, "\x1b[>4;%dm", r.modifyOtherKeys)
+	}
+
 	// Modes. Origin mode last: enabling it homes the cursor, and the
 	// cursor restore below compensates for it.
 	decom := false
@@ -305,6 +313,11 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	// emulator's flags alone, on both backends: the library was sent nothing
 	// for them, and the pure emulator's RestoreKittyKeyboardState returns
 	// early on an empty stack.
+	if r.hasModifyOtherKeys {
+		t.modifyOtherKeys.Store(int32(r.modifyOtherKeys)) //nolint:gosec // bounded by RestoreModifyOtherKeys
+	} else if !extend {
+		t.modifyOtherKeys.Store(0)
+	}
 	if len(r.kittyKbdStack) > 0 {
 		t.kittyKbd.Reset()
 		t.kittyKbd.SelectScreen(altActive)

@@ -219,6 +219,10 @@ type Emulator struct {
 	// Kitty keyboard protocol state
 	kittyKbd *kittyKeyboardState
 
+	// modifyOtherKeys is the level XTMODKEYS set: 0, 1 or 2. Atomic because
+	// the input path reads it from the UI goroutine.
+	modifyOtherKeys atomic.Int32
+
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
 
@@ -290,6 +294,7 @@ func NewEmulator(w, h int) *Emulator {
 
 	t.kittyKbd = newKittyKeyboardState()
 	t.registerKittyKeyboardHandlers()
+	t.registerModifyOtherKeysHandlers()
 
 	t.semanticMarkers = NewSemanticMarkerList(10000)
 

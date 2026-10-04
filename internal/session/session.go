@@ -3570,6 +3570,9 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 		IsAltScreen:   t.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
 		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
 		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
+		// Set once by an editor at start, like the kitty flags, so it
+		// cannot be recovered from the output buffer either.
+		ModifyOtherKeys: t.ModifyOtherKeys(),
 	}
 
 	// None of these is recoverable from the cells. They are what the guest set
@@ -3908,6 +3911,12 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// client encodes keys in legacy form for a pane that negotiated the
 	// protocol.
 	t.RestoreKittyKeyboardState(state.KittyKbdStack)
+	// modifyOtherKeys is the other way a guest asks for keys the legacy
+	// encoding cannot tell apart (vim sends CSI > 4 ; 2 m once at start). Zero
+	// is what an older daemon sends, and it is also the default.
+	if state.ModifyOtherKeys > 0 {
+		t.RestoreModifyOtherKeys(state.ModifyOtherKeys)
+	}
 
 	// The rendition the guest left in force, which paints everything that
 	// arrives after this snapshot. Without it the stream resuming on top of a
@@ -4261,11 +4270,15 @@ type TerminalState struct {
 	// because zero then means "this snapshot does not say", which is what a
 	// client restoring from an older daemon gets, and it leaves the pane on the
 	// default instead of forcing a blinking block onto it.
-	CursorShape   int           `json:"cursor_shape,omitempty"`
-	Modes         map[int]bool  `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
-	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
-	Screen        [][]CellState `json:"screen"`
-	Scrollback    [][]CellState `json:"scrollback,omitempty"`
+	CursorShape   int          `json:"cursor_shape,omitempty"`
+	Modes         map[int]bool `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
+	KittyKbdStack []int        `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
+	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
+	// XTMODKEYS, 0 to 2. Zero, the default, is also what an older daemon
+	// sends.
+	ModifyOtherKeys int           `json:"modify_other_keys,omitempty"`
+	Screen          [][]CellState `json:"screen"`
+	Scrollback      [][]CellState `json:"scrollback,omitempty"`
 	// MainScreen is the normal screen, carried only while the alternate one is
 	// active. It is the shell's screen underneath a full-screen program, which
 	// quitting that program puts back on display. The alternate screen needs no

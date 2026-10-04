@@ -143,6 +143,10 @@ type Terminal interface {
 	KittyKeyboardFlags() int
 	KittyKeyboardStack() []int
 	RestoreKittyKeyboardState(stack []int)
+	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
+	// XTMODKEYS (CSI > 4 ; n m): 0 off, 1 or 2. See EncodeModifyOtherKeys.
+	ModifyOtherKeys() int
+	RestoreModifyOtherKeys(level int)
 
 	// Colors.
 	SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color)

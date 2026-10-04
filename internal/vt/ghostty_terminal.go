@@ -103,6 +103,10 @@ type GhosttyTerminal struct {
 	savedGL, savedGR int
 	scrollRegion     uv.Rectangle
 	kittyKbd         *kittyKeyboardState
+	// modifyOtherKeys mirrors the XTMODKEYS level the guest set, for the
+	// input path. libghostty keeps its own copy for its key encoder, which
+	// tuios does not use.
+	modifyOtherKeys atomic.Int32
 
 	// Lock-free getter caches, refreshed after every write.
 	cachedHasMouse   atomic.Bool
@@ -657,6 +661,25 @@ func (t *GhosttyTerminal) noteSyncOutput(sync bool) {
 func (t *GhosttyTerminal) KittyKeyboardFlags() int {
 	t.ensureRestored()
 	return int(t.cachedKittyFlags.Load())
+}
+
+// ModifyOtherKeys returns the modifyOtherKeys level the guest set.
+func (t *GhosttyTerminal) ModifyOtherKeys() int {
+	t.ensureRestored()
+	return int(t.modifyOtherKeys.Load())
+}
+
+// RestoreModifyOtherKeys puts back a level saved from another emulator. The
+// library is told too, so it answers a query with the same level.
+func (t *GhosttyTerminal) RestoreModifyOtherKeys(level int) {
+	if level < 0 || level > 2 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	r := t.pendingRestore()
+	r.modifyOtherKeys = level
+	r.hasModifyOtherKeys = true
 }
 
 func (t *GhosttyTerminal) KittyKeyboardStack() []int {

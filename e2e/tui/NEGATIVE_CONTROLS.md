@@ -699,6 +699,20 @@ checked against origin/main (a640011), which answers each of them with
 table for the format language: every expected string is what tmux 3.4
 printed for the same format and values. It has no e2e counterpart.
 
+## Pane input encoding: mouse forms, modifyOtherKeys, kitty flags per screen
+
+Each control removed one fix from the current tree, built the binary, and ran
+the named test, standalone and against a daemon. Each test has a positive
+half in the same fixture: the SGR step for the mouse forms, the plain and
+kitty steps for modifyOtherKeys, and the main-screen step for the kitty flags.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Mouse reports in the X10, UTF-8 (1005) and urxvt (1015) forms | `mouseReport.encode` in `internal/vt/mouse_encode.go`: every non-SGR encoding sent through the old `ansi.MouseX10` call | `TestPaneMouseReportEncoding/standalone` and `/daemon`: the x10 step reads column 101 as UTF-8 and column 231 as BEL, the utf8 and urxvt steps read the X10 form. The sgr step passes | **caught** (2 of 2 run) |
+| modifyOtherKeys reaching the pane | `paneKeyBytes` in `internal/input/pane_key.go`: the `EncodeModifyOtherKeys` call cut | `TestPaneModifyOtherKeys/standalone` and `/daemon`: the level1 and level2 steps read the legacy bytes. The plain and kitty steps pass | **caught** (2 of 2 run) |
+| A kitty flag stack for each screen | `setAltScreenMode` in `internal/vt/csi_mode.go`: the `SetAltScreen` call cut | `TestPaneKittyFlagsPerScreen/standalone` and `/daemon`: the alt step reads `CSI 97 ; 5 u`. The main step passes | **caught** (2 of 2 run) |
+| The 1005 form writes a button of 128 or more (back, forward) as UTF-8, as xterm does | `mouseReport.encode` in `internal/vt/mouse_encode.go`: the button written as one raw byte again | unit `TestConform_MouseEncoding` ("UTF-8 form, the back button is UTF-8" and "forward with ctrl"). The X10 back button case passes, its positive half | **caught in `internal/vt`** |
+
 ## Copy-mode search columns in the scrollback
 
 Copy-mode search now reads the history as text cells and takes a match's

@@ -147,6 +147,10 @@ func (e *Emulator) fullReset() {
 	e.lastCluster, e.lastClusterWidth = "", 0
 	e.lastState = parser.GroundState
 
+	// xterm's RIS puts the key modifier resources back to their initial
+	// values, and modifyOtherKeys starts off.
+	e.modifyOtherKeys.Store(0)
+
 	// Reset kitty keyboard protocol state
 	if e.kittyKbd != nil {
 		e.kittyKbd.Reset()

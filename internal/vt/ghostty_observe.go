@@ -91,6 +91,7 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.savedGL, t.savedGR = 0, 0
 	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
 	t.kittyKbd.Reset()
+	t.modifyOtherKeys.Store(0)
 	t.semanticMarkers.Clear()
 }
 
@@ -153,6 +154,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 	case final == 'u' && prefix == '=':
 		flags, mode := csiTwoParams(params, 0, 1)
 		t.kittyKbd.Set(flags, mode)
+	case (final == 'm' || final == 'n') && prefix == '>' && inter == 0:
+		t.observeModifyOtherKeys(final, params)
 	case final == 'p' && inter == '!':
 		// DECSTR resets margins and charsets among its soft-reset set.
 		t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
@@ -166,6 +169,29 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		t.answerSixelGraphics(params)
 	case final == 'n' && prefix == '?' && inter == 0:
 		t.answerDecStatusReport(params)
+	}
+}
+
+// observeModifyOtherKeys follows XTMODKEYS for the input path, as the pure
+// emulator reads it: CSI > 4 ; n m sets the level, CSI > 4 m and CSI > 4 n
+// turn it off, and CSI > m resets every resource. The library sees the same
+// bytes and keeps its own copy.
+func (t *GhosttyTerminal) observeModifyOtherKeys(final byte, params []byte) {
+	if len(params) == 0 {
+		if final == 'm' {
+			t.modifyOtherKeys.Store(0)
+		}
+		return
+	}
+	res, level := csiTwoParams(params, -1, 0)
+	if res != modifyOtherKeysResource {
+		return
+	}
+	if final == 'n' {
+		level = 0
+	}
+	if level >= 0 && level <= 2 {
+		t.modifyOtherKeys.Store(int32(level)) //nolint:gosec // bounded above
 	}
 }
 

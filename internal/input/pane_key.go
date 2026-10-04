@@ -37,6 +37,16 @@ func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused b
 			raw = []byte(encoded)
 		}
 	}
+	// modifyOtherKeys is xterm's older way to ask for keys the legacy encoding
+	// cannot tell apart. The kitty flags win when a pane set both: the
+	// protocol says so, and a pane with flags set has chosen CSI u.
+	if len(raw) == 0 && flags == 0 && w.Terminal != nil {
+		if level := w.Terminal.ModifyOtherKeys(); level > 0 {
+			if encoded := vt.EncodeModifyOtherKeys(key, level); encoded != "" {
+				raw = []byte(encoded)
+			}
+		}
+	}
 	if len(raw) == 0 {
 		raw = getRawKeyBytesWithMode(host, appCursorKeys)
 	}

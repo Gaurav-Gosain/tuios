@@ -14,7 +14,8 @@ records where the implementations differ.
 daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
-alternate-screen flag and up to 1000 scrollback rows. `ApplyTerminalState` reads it back, and
+modifyOtherKeys level, the alternate-screen flag and up to 1000 scrollback rows.
+`ApplyTerminalState` reads it back, and
 `OS.restoreTerminalContent` (`internal/app/session.go`) is the window around
 that. It is a snapshot of *now*: applying it is idempotent and carries no
 history.
@@ -56,7 +57,8 @@ For every route, once the route has completed and the pane is quiet:
    does not have at that offset.
 3. **Cursor.** The client's cursor is at the daemon's cursor, in the shape the
    guest asked for.
-4. **Modes.** Alternate-screen flag, DEC modes and the kitty keyboard stack match.
+4. **Modes.** Alternate-screen flag, DEC modes, the kitty keyboard stack and the
+   modifyOtherKeys level match.
 5. **No duplication.** Content the pane produced once appears once.
 6. **What paints the next byte.** The pen, the scroll region and the character
    set selection match. None of these can be read back off the cells, and each
