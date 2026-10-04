@@ -456,18 +456,17 @@ pane, as plugins do:
 ```
 
 These commands answer: `pane` (all of herdr's subcommands), `tab`,
-`workspace`, `agent` (except `attach`), `worktree`, `notification show` and
-`api snapshot`. A command runs only if tuios answers its method (see
-[Methods](#methods)). For any other method, the socket answers
-`unsupported`. `server reload-config` is one of these: tuios does not read
-herdr's config. The commands that do their work on herdr's own
-machine answer herdr's error shape with code `unsupported` and exit 1:
-`status`, `config`, `session`, `terminal`, `machine`, `channel`, `update`,
-`completion`, `plugin`, `integration`, `api schema`, `agent attach` and
-`server stop`. So a plugin that calls one of them fails cleanly and can
-continue. tuios does not host herdr plugins, so `plugin` does not install,
-link or run a plugin. Run the plugin's command yourself (see
-[herdr tools in tuios](#herdr-tools-in-tuios)).
+`workspace`, `agent` (except `attach`), `worktree`, `notification show`,
+`api snapshot`, `server reload-config` and `terminal title`. A command runs
+only if tuios answers its method (see [Methods](#methods)). For any other
+method, the socket answers `unsupported`. The commands that do their work on
+herdr's own machine answer herdr's error shape with code `unsupported` and
+exit 1: `status`, `config`, `session`, `terminal attach`, `terminal
+session`, `machine`, `channel`, `update`, `completion`, `plugin`,
+`integration`, `api schema`, `agent attach` and `server stop`. So a plugin
+that calls one of them fails cleanly and can continue. tuios does not host
+herdr plugins, so `plugin` does not install, link or run a plugin. Run the
+plugin's command yourself (see [herdr tools in tuios](#herdr-tools-in-tuios)).
 
 When the daemon cannot make the link, for example on Windows,
 `HERDR_BIN_PATH` names the tuios binary. Then only `pane` and `notification`
@@ -594,7 +593,9 @@ holds the pane's [grants](#what-a-pane-may-do):
 - `pane.send_text`, `pane.send_keys` and `pane.send_input` need `write`. A pane
   may not type into a pane that waits on a prompt without `respond`, because
   the keys answer the prompt. `admin` does not give `respond`.
-- A create, close, rename, focus, swap, zoom or move needs `admin`.
+- A create, close, rename, focus, swap, zoom, resize or move needs `admin`.
+  So does a change to the title of the client's terminal, and a workspace
+  metadata report.
 - `agent.start` needs what `start-agent` needs (`fan`), and its typing needs
   `write`, as for `pane.send_text`.
 
@@ -632,10 +633,19 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.focus_direction` | `focus-window` | the pane that `pane.neighbor` names. With none, `changed` is false and `reason` is `no_neighbor` |
 | `pane.swap` | `set-layout` grant, then the attached client | by direction or by `source_pane_id` and `target_pane_id`. The source keeps the focus. A swap that cannot happen answers `reason` `no_neighbor`, `same_pane`, `not_found` or `cross_tab`. Without an attached client it fails with `no_client` |
 | `pane.zoom` | `focus-window`, `run-command ToggleZoom` | `mode` `toggle`, `on` or `off`. The pane is focused first. `reason` is `single_pane`, `already_zoomed` or `already_unzoomed` when nothing changes |
+| `pane.resize` | `set-layout` grant, then the attached client | moves one border of the pane by `amount`, a share of the tab (0.05 when not given, 0.5 at most, one cell at least). `right` and `down` move a border right or down, `left` and `up` move it left or up. The border is the one on that side of the pane, or the other one when the pane is at the edge of the tab there. `changed` is false and `reason` is `unchanged` when nothing moves, as in a floating or scrolling layout. Without an attached client it fails with `no_client` |
+| `pane.move` | `move-window` | to a tab of the pane's own workspace, or to a new tab there. tuios places the pane in the tab's layout itself, so `target_pane_id`, `split` and `ratio` are not followed. The pane keeps its id. A tab of another workspace, and `new_workspace`, fail with `unsupported`, because a tuios window stays in its session. `reason` is `same_tab` or `zoomed_tab` when nothing moves |
 | `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
 | `agent.wait` | `wait-for agent-state` | |
 | `agent.start` | `start-agent` grant, then `send-text` and `send-keys` | needs `fan` on the session (what `start-agent` needs) and `write` for the typing. Types the agent's command at the shell prompt of a pane, and names the pane after the agent. See below |
 | `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. An agent that works or waits on a prompt fails with `agent_not_idle` |
+| `agent.rename` | `set-window` | names the pane that holds the agent. No `name` clears it. `agent.get` and the other agent methods then find the agent by the new name |
+| `agent.explain` | `explain-agent-detect` | `explain` is what tuios's detector reports for the pane. It is tuios's report, not herdr's |
+| `workspace.report_metadata` | `set-session-accent` grant | the tokens show under `tokens` in `workspace.list`, `workspace.get` and the snapshot, until a `ttl_ms` runs out or the session closes. herdr's limits and words apply. A token is keyed by its name: a later report replaces it, and `null` clears it. A report with a `seq` at or below the last one from its `source` changes nothing. tuios keeps the tokens in memory and does not draw them |
+| `client.window_title.set`, `client.window_title.clear` | `run-command` grant, then the attached client | sets or clears the title of the terminal that the tuios client runs in. The client is the one that shows the caller's session, else the one that shows the active workspace. Without one, `changed` is false and `reason` is `no_foreground_client`, as in herdr. Control characters are taken out, and the title is cut to 256 characters |
+| `server.reload_config` | none | answers `config_reload` with status `applied` and a diagnostic. tuios does not read herdr's `config.toml`, and it reads its own config file when the file changes, so nothing is reloaded |
+| `pane.clear_agent_authority` | the pane reports | a pane may clear only itself. A state that a report holds clears, and detection reads the pane again. A state that the detector holds stays |
+| `release_notes.dismiss`, `product_announcement.dismiss` | none | fail with `stale_release_notes` and `stale_announcement`, as herdr does when none is current. tuios shows none of herdr's |
 | `worktree.list` | `git worktree list` | needs what `list-worktrees` needs |
 | `worktree.create` | `new-worktree` | tuios chooses the path. A `path` fails with `unsupported` |
 | `worktree.open` | `new-session` in the checkout | a checkout that a session shows answers `already_open: true` |
@@ -644,11 +654,8 @@ A refused call answers error `forbidden`, and nothing changes.
 | `events.wait` | `wait-for agent-state` | answers only a `pane_agent_status_changed` match, as herdr does |
 | the pane reports | `set-agent-state` and the rest | see [herdr's pane state protocol](#herdrs-pane-state-protocol) |
 
-Every other herdr method answers error `unsupported`: the `server.*`,
-`plugin.*`, `integration.*`, `client.*` and `layout.*` methods, and
-`workspace.move`, `workspace.move_block`, `workspace.report_metadata`,
-`agent.rename`, `agent.explain`, `agent.view.*`, `pane.resize`, `pane.move`,
-`pane.scroll`, `pane.clear` and the copy, selection and link methods. The
+Every other herdr method answers error `unsupported`. See
+[What tuios does not answer](#what-tuios-does-not-answer). The
 `pane.graphics.*` methods, which herdr 0.9.2 removed, answer
 `unknown_method`, as herdr does. A method that herdr does not have answers
 `invalid_request`, as herdr does.
@@ -677,6 +684,21 @@ Past that the answer is `rate_limited`.
 `invalid_request` with serde's words, for example ``missing field `pane_id` ``.
 An id that finds nothing answers `workspace_not_found`, `tab_not_found` or
 `pane_not_found`.
+
+#### What tuios does not answer
+
+These methods answer error `unsupported`. Each row says why.
+
+| Methods | Why |
+| --- | --- |
+| `plugin.*`, `popup.close` | tuios does not host herdr plugins |
+| `workspace.move`, `workspace.move_block` | tuios lists its sessions in the order they were made. It has no order to change |
+| `layout.export`, `layout.apply`, `layout.set_split_ratio` | herdr's layout is a split tree. tuios tiles its panes in the client and does not export a tree |
+| `agent.view.set`, `agent.view.clear` | they set how herdr's sidebar sorts and filters agents. The tuios rail has no such view, so tuios does not pretend to apply one |
+| `pane.scroll`, `pane.clear`, `pane.edit_scrollback` | tuios scrolls a pane in the client, in copy mode. It does not move the view, or clear the screen, for another program |
+| `pane.selection.read`, `pane.copy_motion`, `pane.copy_search`, `pane.input.set`, `pane.link.activate`, `pane.link.resolve`, `command.invoke`, `client_shell.surface.set` | herdr's own client calls these to draw its screen. A tuios client does this work itself |
+| `integration.list`, `integration.install`, `integration.uninstall` | they install herdr's agent hooks. Use `tuios integration` |
+| `server.stop`, `server.live_handoff`, `server.ssh_agent.register`, `server.agent_manifests`, `server.reload_agent_manifests` | they act on herdr's own server and its agent manifests. Use `tuios kill-server` and `tuios explain-agent-detect` |
 
 #### Where tuios differs from herdr
 
@@ -723,7 +745,7 @@ install it as its README says and run its command.
 | [terminal-browser](https://github.com/zenbu-labs/terminal-browser) | `terminal-browser open URL --split right` (or `left`, `down`, `up`) | `pane split`, `pane swap`, `pane run`, `pane neighbor`, `pane process-info`, `HERDR_TAB_ID` |
 | [terminal-code](https://github.com/zenbu-labs/terminal-code) | `tode --split right` | the same as terminal-browser |
 | [vim-herdr-navigation](https://github.com/paulbkim-dev/vim-herdr-navigation) | install its Vim or Neovim part. In Vim, `Ctrl+h/j/k/l` at the last split moves the tuios focus to the next pane | `pane focus --direction --pane` |
-| [herdr-splits.nvim](https://github.com/lmilojevicc/herdr-splits.nvim) | install the Neovim plugin. The same moves as above | `pane edges`, `pane focus --direction`. Its resize keys fail, because tuios does not answer `pane.resize` |
+| [herdr-splits.nvim](https://github.com/lmilojevicc/herdr-splits.nvim) | install the Neovim plugin. The same moves as above, and its resize keys | `pane edges`, `pane focus --direction`, `pane resize` |
 | [herdr-watch](https://github.com/Unayung/herdr-watch) | `HERDR_SOCKET_PATH="$XDG_RUNTIME_DIR/tuios/tuios.sock.herdr" node bridge.js` | the socket: `agent.list`, `pane.read`, `agent.prompt` |
 | [herdr-telegram-agents](https://github.com/permgps/herdr-telegram-agents) | its service, with `HERDR_SOCKET_PATH` set as for herdr-watch | the socket: `agent.*`, `events.subscribe`, `tab.*`, `workspace.list`, `agent.start` |
 
@@ -735,8 +757,8 @@ terminal-browser and terminal-code draw with kitty graphics. Run the tuios
 client in a terminal that shows kitty images (kitty, Ghostty, WezTerm).
 terminal-browser writes `kitty_graphics = true` into herdr's config file
 (`$HERDR_CONFIG_PATH`, else `~/.config/herdr/config.toml`) and then runs
-`herdr server reload-config`. tuios answers that command with
-`unsupported`, and terminal-browser continues. terminal-browser reads the
+`herdr server reload-config`. tuios answers that the reload is done, and
+terminal-browser continues. tuios does not read herdr's config file. terminal-browser reads the
 command line of every pane on its workspace with `pane process-info`, which
 needs `write` on the session. Every pane holds it by default (`admin` under
 the default mode `open`, `write` under `strict`).

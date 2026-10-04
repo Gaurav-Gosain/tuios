@@ -33,9 +33,9 @@ the usage on stderr and exits 2. `pane send-text`, `pane send-keys`, `pane
 run` and the report commands print nothing when they succeed.
 
 It answers `pane`, `tab`, `workspace`, `agent`, `worktree`,
-`notification show` and `api snapshot`. A method that tuios does not answer,
-such as `pane.resize`, `pane.move` or `server reload-config`, fails with code
-`unsupported`. A command that acts on herdr's own machine (`status`,
+`notification show`, `api snapshot`, `server reload-config` and `terminal
+title`. A method that tuios does not answer, such as `layout.apply` or
+`workspace.move`, fails with code `unsupported`. A command that acts on herdr's own machine (`status`,
 `session`, `plugin`, `server stop` and the rest) fails with code
 `unsupported` and does nothing.
 
@@ -49,8 +49,8 @@ does:
   arguments and directories only with `write` on its session or `admin`.
 - Typing (`pane send-text`, `pane send-keys`, `pane run`) needs `write`, and
   `respond` to type into a pane that waits on a prompt.
-- A split, close, rename, focus, swap or zoom, and `workspace focus`, need
-  `admin`.
+- A split, close, rename, focus, swap, zoom, resize or move, `workspace
+  focus`, `workspace report-metadata` and `terminal title`, need `admin`.
 - `agent start` needs `fan`, and `write` for the typing.
 
 A refused call fails with code `forbidden` and changes nothing.
