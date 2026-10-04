@@ -506,7 +506,7 @@ func TestHistoryPackingReadsOnlyTheCapturedRows(t *testing.T) {
 	writePane(p, "BEFORE\r\n")
 	rows, _ := p.captureHistory(100)
 	writePane(p, "AFTER\r\n")
-	st := rows.state(len(rows.history))
+	st := rows.state(rows.history.Len())
 	if err := st.Unpack(); err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,4 +126,12 @@ func BenchmarkHistorySave20BusyPanes(b *testing.B) {
 	stop.Store(true)
 	wg.Wait()
 	b.ReportMetric(float64(maxWait.Load())/1e6, "max-wait-ms")
+	// What the save leaves behind: the live heap once it is over, with the
+	// panes and their histories still held. A save that leaves decoded
+	// copies of the rows it read in a cache shows here.
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	b.ReportMetric(float64(ms.HeapAlloc)/(1<<20), "heap-after-MB")
+	runtime.KeepAlive(s)
 }

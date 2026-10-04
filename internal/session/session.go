@@ -3514,15 +3514,21 @@ func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 // GetTerminalState followed by Pack, without building every cell of the screen
 // and the history as a CellState first: for a screen that was 1.4 MB of
 // garbage per request, allocated under terminalMu.
+//
+// The history rows are copied in their encoded form under terminalMu and
+// packed after it is released, so the pane's output waits for a copy of a
+// few bytes a cell and not for the packing: 1000 rows of a 207-column pane
+// held it for about 50 ms.
 func (p *PTY) GetTerminalStatePacked(maxScrollback, have int) *TerminalState {
 	p.terminalMu.RLock()
-	defer p.terminalMu.RUnlock()
-
 	if p.terminal == nil {
+		p.terminalMu.RUnlock()
 		return nil
 	}
-	state := terminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have, true)
+	state, finish := beginTerminalState(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have, true)
 	state.Seq = p.vtSeq
+	p.terminalMu.RUnlock()
+	finish()
 	return state
 }
 
@@ -3544,6 +3550,16 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 // terminalStateOf is TerminalStateOf, with the cells packed as they are read
 // when packed is set (see GetTerminalStatePacked).
 func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, packed bool) *TerminalState {
+	state, finish := beginTerminalState(t, width, height, maxScrollback, have, packed)
+	finish()
+	return state
+}
+
+// beginTerminalState is terminalStateOf in two halves. It reads the emulator
+// and returns the state with finish, which completes it without reading the
+// emulator again, so a caller can release the emulator's lock before it calls
+// finish. The state is complete only once finish has run.
+func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, packed bool) (*TerminalState, func()) {
 	state := &TerminalState{
 		Width:         width,
 		Height:        height,
@@ -3583,8 +3599,9 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 	// thousand per screen, for what is usually a few dozen distinct colours.
 	colors := colorWireCache{}
 	first, end := scrollbackWindow(t.ScrollbackLen(), maxScrollback, have)
+	finish := func() {}
 	if packed {
-		packStateCells(t, state, colors, first, end)
+		finish = packStateCells(t, state, colors, first, end)
 	} else {
 		stateCells(t, state, colors, first, end)
 	}
@@ -3593,7 +3610,7 @@ func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, pack
 		screen[y] = screenRowFlags(t, y)
 	}
 	state.ScreenWraps, state.ScreenPads = rowFlagBits(screen)
-	return state
+	return state, finish
 }
 
 // rowFlags is one row's soft-wrap and padding flags (vt.Terminal's
@@ -3713,14 +3730,8 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 	// merely starts a new array.
 	state.Scrollback = make([][]CellState, 0)
 	var pool []CellState
-	var flags []rowFlags
-	defer func() { state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags) }()
-	for i := first; i < end; i++ {
-		line := t.ScrollbackLine(i)
-		if line == nil {
-			continue
-		}
-		flags = append(flags, historyRowFlags(t, i))
+	end = min(end, t.ScrollbackLen())
+	t.ScrollbackRows(first, end, func(i int, line uv.Line) bool {
 		if cap(pool) < len(line) {
 			pool = make([]CellState, max(len(line), width*(end-i)))
 		}
@@ -3730,7 +3741,13 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 			row[x] = colors.cellState(&line[x])
 		}
 		state.Scrollback = append(state.Scrollback, row)
+		return true
+	})
+	var flags []rowFlags
+	for i := first; i < end; i++ {
+		flags = append(flags, historyRowFlags(t, i))
 	}
+	state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags)
 }
 
 // packStateCells is stateCells followed by Pack, done a row at a time through
@@ -3738,59 +3755,82 @@ func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, firs
 // packed in the order Pack packs them (screen, scrollback, main screen), which
 // is what makes the style table, and so every byte, the same as Pack's.
 // TestDirectPackMatchesPack holds it to that.
-func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, first, end int) {
+//
+// It packs the screen and copies what the rest needs from the emulator, and
+// returns finish, which packs the history and the main screen from those
+// copies without reading the emulator. The history is copied in its encoded
+// form, a few bytes a cell, rather than decoded: 1000 rows of a 207-column
+// pane read through ScrollbackLine were 23 MB of cells, and the line cache
+// kept the last 256 of them.
+func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, first, end int) (finish func()) {
 	width, height := state.Width, state.Height
 	p := newRowPacker()
 	row := make([]CellState, width)
-	grid := func(at func(x, y int) *uv.Cell) []byte {
-		b := newPackedRows(height * 32)
-		for y := range height {
-			for x := range width {
-				if cell := at(x, y); cell != nil {
-					row[x] = colors.cellState(cell)
-				} else {
-					row[x] = CellState{}
-				}
+	readRow := func(at func(x, y int) *uv.Cell, y int, row []CellState) {
+		for x := range width {
+			if cell := at(x, y); cell != nil {
+				row[x] = colors.cellState(cell)
+			} else {
+				row[x] = CellState{}
 			}
-			b.add(p, row[:width])
 		}
-		return b.blob()
 	}
 
-	state.PackedScreen = grid(t.CellAt)
-
-	b := newPackedRows((end - first) * 32)
-	var flags []rowFlags
-	for i := first; i < end; i++ {
-		line := t.ScrollbackLine(i)
-		if line == nil {
-			continue
-		}
-		flags = append(flags, historyRowFlags(t, i))
-		if cap(row) < len(line) {
-			row = make([]CellState, len(line))
-		}
-		r := row[:len(line)]
-		// A history row is mostly blank tail, and the packer drops that tail
-		// anyway, so only the cells before it are converted. The rest are
-		// written as the blank the packer compares against, which keeps the
-		// bytes identical to Pack's.
-		used := usedCells(line)
-		for x := range used {
-			r[x] = colors.cellState(&line[x])
-		}
-		for x := used; x < len(r); x++ {
-			r[x] = blankCellState
-		}
-		b.add(p, r)
+	b := newPackedRows(height * 32)
+	for y := range height {
+		readRow(t.CellAt, y, row)
+		b.add(p, row[:width])
 	}
-	state.PackedScrollback = b.blob()
-	state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags)
+	state.PackedScreen = b.blob()
 
+	end = min(end, t.ScrollbackLen())
+	history := t.CopyScrollback(first, end)
+	// The main screen under an alternate one is packed after the history,
+	// so its cells are read now.
+	var main []CellState
 	if state.IsAltScreen {
-		state.PackedMain = grid(t.MainCellAt)
+		main = make([]CellState, width*height)
+		for y := range height {
+			readRow(t.MainCellAt, y, main[y*width:(y+1)*width])
+		}
 	}
-	state.Styles = p.styles
+
+	return func() {
+		n := history.Len()
+		b := newPackedRows(n * 32)
+		flags := make([]rowFlags, n)
+		history.Rows(0, n, func(i int, line uv.Line) bool {
+			flags[i] = newRowFlags(history.Wrapped(i), history.Padded(i))
+			if cap(row) < len(line) {
+				row = make([]CellState, len(line))
+			}
+			r := row[:len(line)]
+			// A history row is mostly blank tail, and the packer drops that
+			// tail anyway, so only the cells before it are converted. The
+			// rest are written as the blank the packer compares against,
+			// which keeps the bytes identical to Pack's.
+			used := usedCells(line)
+			for x := range used {
+				r[x] = colors.cellState(&line[x])
+			}
+			for x := used; x < len(r); x++ {
+				r[x] = blankCellState
+			}
+			b.add(p, r)
+			return true
+		})
+		state.PackedScrollback = b.blob()
+		state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags)
+
+		if main != nil {
+			b := newPackedRows(height * 32)
+			for y := range height {
+				b.add(p, main[y*width:(y+1)*width])
+			}
+			state.PackedMain = b.blob()
+		}
+		state.Styles = p.styles
+	}
 }
 
 // blankCellState is a never-written cell as the wire holds it: the cell the
@@ -4116,15 +4156,15 @@ func (p *PTY) captureContentRaw(scrollback, ansi bool) string {
 				sb.WriteString(content)
 				return sb.String()
 			}
-			for i := range scrollbackLen {
-				line := p.terminal.ScrollbackLine(i)
+			p.terminal.ScrollbackRows(0, scrollbackLen, func(_ int, line uv.Line) bool {
 				if ansi {
 					sb.WriteString(line.Render())
 				} else {
 					sb.WriteString(line.String())
 				}
 				sb.WriteByte('\n')
-			}
+				return true
+			})
 			sb.WriteString(content)
 			content = sb.String()
 		}

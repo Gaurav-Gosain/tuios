@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // A shell's commands, followed through its OSC 133 marks.
@@ -354,29 +355,34 @@ func readTerminalLines(term vt.Terminal, c, d vt.SemanticMarker) ([]string, bool
 		to = last
 	}
 	var lines []string
-	for abs := from; abs <= to; abs++ {
-		var b strings.Builder
-		if abs < sbLen {
-			b.WriteString(vt.StripSixelMarkers(term.ScrollbackLine(abs).String()))
-		} else {
-			y := abs - sbLen
-			for x := 0; x < width; x++ {
-				cell := term.MainCellAt(x, y)
-				if cell == nil || cell.Content == "" {
-					b.WriteByte(' ')
-					continue
-				}
-				b.WriteString(cell.Content)
-				if cell.Width > 1 {
-					x += cell.Width - 1
-				}
-			}
-		}
-		line := b.String()
+	add := func(abs int, line string) {
 		if abs == d.AbsLine && d.Col > 0 {
 			line = truncateCells(line, d.Col)
 		}
 		lines = append(lines, strings.TrimRight(line, " "))
+	}
+	// The history rows are read in one pass that keeps no decoded copy.
+	if from < sbLen {
+		term.ScrollbackRows(from, min(to+1, sbLen), func(abs int, line uv.Line) bool {
+			add(abs, vt.StripSixelMarkers(line.String()))
+			return true
+		})
+	}
+	for abs := max(from, sbLen); abs <= to; abs++ {
+		var b strings.Builder
+		y := abs - sbLen
+		for x := 0; x < width; x++ {
+			cell := term.MainCellAt(x, y)
+			if cell == nil || cell.Content == "" {
+				b.WriteByte(' ')
+				continue
+			}
+			b.WriteString(cell.Content)
+			if cell.Width > 1 {
+				x += cell.Width - 1
+			}
+		}
+		add(abs, b.String())
 	}
 	return lines, cut
 }

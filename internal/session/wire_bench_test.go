@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -76,6 +77,33 @@ func BenchmarkWireTerminalState(b *testing.B) {
 			}
 			b.StopTimer()
 			b.ReportMetric(float64(len(data)), "wire-bytes")
+		})
+	}
+}
+
+// BenchmarkWireTerminalStatePacked is the packed form of the same message,
+// which is what a current client asks for, and how long its read holds the
+// pane's emulator lock: locked-ms is the time the pane's output would wait.
+func BenchmarkWireTerminalStatePacked(b *testing.B) {
+	for _, depth := range []int{0, 1000} {
+		b.Run(fmt.Sprintf("scrollback-%d", depth), func(b *testing.B) {
+			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
+			var locked time.Duration
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				t0 := time.Now()
+				pty.terminalMu.RLock()
+				state, finish := beginTerminalState(pty.terminal, pty.terminal.Width(), pty.terminal.Height(), depth, 0, true)
+				pty.terminalMu.RUnlock()
+				locked += time.Since(t0)
+				finish()
+				if _, err := encodePayload(&TerminalStatePayload{PTYID: pty.ID, State: state}); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(locked)/float64(b.N)/1e6, "locked-ms")
 		})
 	}
 }

@@ -33,8 +33,11 @@ func TestSixelCellsLeaveAsBlanks(t *testing.T) {
 			t.Errorf("%s carries image markers", name)
 		}
 	}
-	rows := captureHistoryRows(term, 50)
-	for _, line := range append(rows.screen, rows.history...) {
+	st := historyStateOf(term, 50)
+	if err := st.Unpack(); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range append(st.Screen, st.Scrollback...) {
 		for _, c := range line {
 			if vt.IsSixelMarker(c.Content) {
 				t.Fatalf("the saved history holds an image marker")

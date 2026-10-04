@@ -301,7 +301,7 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 	if rows == nil {
 		return seq, nil
 	}
-	lines := len(rows.history)
+	lines := rows.history.Len()
 	var data []byte
 	for range 4 {
 		var err error
@@ -452,17 +452,21 @@ func (p *PTY) consumedSeq() int64 {
 }
 
 // historyRows is a pane's history as read from its emulator, before it is
-// packed. The lines are the emulator's own decoded rows, which neither backend
-// changes after handing them out, cut to their used cells.
+// packed. The screen rows are copies cut to their used cells. The history
+// rows are a copy of the emulator's encoded lines, a byte or so a cell, which
+// state decodes a row at a time after the emulator's lock is released.
+//
+// They were decoded under the lock into rows of 112-byte cells: 1000 rows of
+// a 200-column pane were 26 MB and 12 ms of a pane's output held up, and a
+// save of 20 busy panes allocated 562 MB.
 type historyRows struct {
 	width, height int
 	// cursorY is the cursor's row, -1 when the screen saved is the main one
 	// under an alternate screen, where the cursor is somewhere else.
-	cursorY      int
-	screen       []uv.Line
-	screenFlags  []rowFlags
-	history      []uv.Line
-	historyFlags []rowFlags
+	cursorY     int
+	screen      []uv.Line
+	screenFlags []rowFlags
+	history     *vt.ScrollbackCopy
 }
 
 // captureHistory reads the pane's history for saving, with at most lines
@@ -523,57 +527,61 @@ func captureHistoryRows(t vt.Terminal, lines int) *historyRows {
 		r.screen[y] = row[:usedCells(row)]
 	}
 	n := t.ScrollbackLen()
-	first := max(n-max(lines, 0), 0)
-	r.history = make([]uv.Line, 0, n-first)
-	r.historyFlags = make([]rowFlags, 0, n-first)
-	for i := first; i < n; i++ {
-		line := t.ScrollbackLine(i)
-		if line == nil {
-			continue
-		}
-		line = vt.BlankSixelLine(line)
-		r.history = append(r.history, line[:usedCells(line)])
-		r.historyFlags = append(r.historyFlags, historyRowFlags(t, i))
-	}
+	r.history = t.CopyScrollback(max(n-max(lines, 0), 0), n)
 	return r
 }
 
 // state packs the screen and the newest lines of the history rows into the
 // form the file holds. It reads nothing from the emulator.
 func (r *historyRows) state(lines int) *TerminalState {
-	lines = min(max(lines, 0), len(r.history))
-	history := r.history[len(r.history)-lines:]
+	held := r.history.Len()
+	lines = min(max(lines, 0), held)
+	first := held - lines
 	st := &TerminalState{
 		Width:         r.width,
 		Height:        r.height,
 		CursorY:       r.cursorY,
-		ScrollbackLen: len(history),
+		ScrollbackLen: lines,
 	}
 	st.ScreenWraps, st.ScreenPads = rowFlagBits(r.screenFlags)
-	st.ScrollbackWraps, st.ScrollbackPads = rowFlagBits(r.historyFlags[len(r.historyFlags)-lines:])
+	flags := make([]rowFlags, lines)
+	for k := range flags {
+		flags[k] = newRowFlags(r.history.Wrapped(first+k), r.history.Padded(first+k))
+	}
+	st.ScrollbackWraps, st.ScrollbackPads = rowFlagBits(flags)
 	colors := colorWireCache{}
 	p := newRowPacker()
 	var row []CellState
-	pack := func(lines []uv.Line) []byte {
-		b := newPackedRows(len(lines) * 32)
-		for _, line := range lines {
-			row = row[:0]
-			for x := range line {
-				row = append(row, colors.cellState(&line[x]))
-			}
-			// The blank tail was cut when the rows were read. Put back to
-			// the pane's width it records the row's width, as a snapshot
-			// does, and the packer drops it again.
-			for len(row) < r.width {
-				row = append(row, blankCellState)
-			}
-			b.add(p, row)
+	add := func(b *packedRows, line uv.Line) {
+		row = row[:0]
+		for x := range line {
+			row = append(row, colors.cellState(&line[x]))
 		}
-		return b.blob()
+		// The blank tail is cut. Put back to the pane's width it records
+		// the row's width, as a snapshot does, and the packer drops it
+		// again.
+		for len(row) < r.width {
+			row = append(row, blankCellState)
+		}
+		b.add(p, row)
 	}
 	// Screen first and then history, the order Pack packs them in.
-	st.PackedScreen = pack(r.screen)
-	st.PackedScrollback = pack(history)
+	b := newPackedRows(len(r.screen) * 32)
+	for _, line := range r.screen {
+		add(&b, line)
+	}
+	st.PackedScreen = b.blob()
+	b = newPackedRows(lines * 32)
+	r.history.Rows(first, held, func(_ int, line uv.Line) bool {
+		// The row is the copy's reused buffer, so the image cells are
+		// blanked in place: a saved history holds no image.
+		for x := range line {
+			vt.BlankSixelCell(&line[x])
+		}
+		add(&b, line[:usedCells(line)])
+		return true
+	})
+	st.PackedScrollback = b.blob()
 	st.Styles = p.styles
 	return st
 }
@@ -582,7 +590,7 @@ func (r *historyRows) state(lines int) *TerminalState {
 // holds the emulator itself.
 func historyStateOf(t vt.Terminal, lines int) *TerminalState {
 	r := captureHistoryRows(t, lines)
-	return r.state(len(r.history))
+	return r.state(r.history.Len())
 }
 
 func encodeHistory(h *savedHistory) ([]byte, error) {
