@@ -1,7 +1,7 @@
 package app
 
 import (
-	"strings"
+	"bytes"
 	"sync/atomic"
 	"time"
 
@@ -102,33 +102,17 @@ func sixelRefs(w *terminal.Window) map[uint32]bool {
 			}
 		}
 	}
-	// The pure emulator writes its scrollback as text without decoding each
-	// line into cells, which is far cheaper; a marker is found in the text.
-	if texter, ok := term.(interface{ AppendScrollbackText(*strings.Builder) }); ok {
-		var b strings.Builder
-		texter.AppendScrollbackText(&b)
-		text := b.String()
-		for {
-			i := strings.Index(text, vt.SixelMarkerLead)
-			if i < 0 {
-				break
+	// The history is read as text cells, which builds no cell and allocates
+	// nothing for a cell that is not a marker.
+	lead := []byte(vt.SixelMarkerLead)
+	term.ScrollbackText(0, term.ScrollbackLen(), func(_, _ int, cells []vt.TextCell) bool {
+		for _, c := range cells {
+			if bytes.HasPrefix(c.Content, lead) {
+				note(string(c.Content))
 			}
-			text = text[i:]
-			// The marker and its four marks, each a multibyte rune.
-			end := len(vt.SixelMarkerLead)
-			for end < len(text) && end < 32 && text[end] >= 0x80 && !strings.HasPrefix(text[end:], vt.SixelMarkerLead) {
-				end++
-			}
-			note(text[:end])
-			text = text[end:]
 		}
-		return refs
-	}
-	for i := range term.ScrollbackLen() {
-		for _, c := range term.ScrollbackLine(i) {
-			note(c.Content)
-		}
-	}
+		return true
+	})
 	return refs
 }
 

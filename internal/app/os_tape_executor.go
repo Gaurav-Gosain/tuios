@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // scriptDoneLinger is how long the "DONE" completion indicator stays on screen
@@ -1588,15 +1589,15 @@ func (m *OS) capturePane(windowTarget, flags string) (string, error) {
 		scrollbackLen := win.Terminal.ScrollbackLen()
 		if scrollbackLen > 0 {
 			var sb strings.Builder
-			for i := range scrollbackLen {
-				line := win.Terminal.ScrollbackLine(i)
+			win.Terminal.ScrollbackRows(0, scrollbackLen, func(_ int, line uv.Line) bool {
 				if includeANSI {
 					sb.WriteString(line.Render())
 				} else {
 					sb.WriteString(vt.StripSixelMarkers(line.String()))
 				}
 				sb.WriteByte('\n')
-			}
+				return true
+			})
 			sb.WriteString(content)
 			content = sb.String()
 		}
