@@ -147,6 +147,7 @@ tuios/
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
 │   ├── harness/            # Agent harness manifests and detection
+│   ├── herdrplugin/        # herdr plugins: manifest, discovery, the command runner (the host is internal/session/plugin_host.go)
 │   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)
 │   ├── mcp/                # The MCP server behind tuios mcp
 │   ├── risk/               # Marks an approval risky by the shipped and configured rules

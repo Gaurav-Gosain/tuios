@@ -692,6 +692,38 @@ when it starts and again when the file changes. A change applies to the next
 pane. [AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
 accepted.
 
+## herdr plugins
+
+tuios runs herdr plugins: folders with a `herdr-plugin.toml`. The `[plugins]`
+table says which plugins run and where tuios finds more of them:
+
+```toml
+[plugins]
+enabled = ["example.notes"]          # the ids of the plugins that run
+dirs = ["~/src/my-herdr-plugin"]     # more plugin folders, or manifests
+```
+
+tuios also finds plugins in `$XDG_CONFIG_HOME/tuios/plugins/<folder>/` and in
+herdr's own `plugins.json` and managed checkouts. To find a plugin runs
+nothing. A plugin runs only when its id is in `enabled`.
+
+An enabled plugin runs its commands with your rights, outside every pane.
+Enable only plugins that you trust.
+
+Use the commands to change the table. They change only the `enabled` or
+`dirs` line and keep the rest of the file:
+
+```bash
+tuios plugins enable example.notes
+tuios plugins disable example.notes
+tuios plugins link ~/src/my-herdr-plugin
+```
+
+You must run them from a terminal outside tuios. A change to the file that
+removes a plugin from `enabled` applies at once. A change that adds one waits
+for `tuios plugins enable`, `tuios config apply` or a daemon restart.
+[AGENT_STATE.md](AGENT_STATE.md#herdr-plugins) says what runs and when.
+
 ## Plans, risk rules, the recap and the queue
 
 These tables configure the agent review, triage, reply and approval work,

@@ -461,18 +461,18 @@ pane, as plugins do:
 
 These commands answer: `pane` (all of herdr's subcommands), `tab`,
 `workspace`, `agent` (except `attach`), `worktree`, `notification show`,
-`api snapshot`, `server reload-config`, `terminal title`, `status` and
-`session list`. A command runs
-only if tuios answers its method (see [Methods](#methods)). For any other
-method, the socket answers `unsupported`. The commands that do their work on
-herdr's own machine answer herdr's error shape with code `unsupported` and
-exit 1: `config`, `session attach`, `session stop`, `session delete`,
-`terminal attach`, `terminal
-session`, `machine`, `channel`, `update`, `completion`, `plugin`,
-`integration`, `api schema`, `agent attach` and `server stop`. So a plugin
-that calls one of them fails cleanly and can continue. tuios does not host
-herdr plugins, so `plugin` does not install, link or run a plugin. Run the
-plugin's command yourself (see [herdr tools in tuios](#herdr-tools-in-tuios)).
+`api snapshot`, `server reload-config`, `terminal title`, `status`,
+`session list` and `plugin`. A command runs only if tuios answers its method
+(see [Methods](#methods)). For any other method, the socket answers
+`unsupported`. The commands that do their work on herdr's own machine answer
+herdr's error shape with code `unsupported` and exit 1: `config`, `session
+attach`, `session stop`, `session delete`, `terminal attach`, `terminal
+session`, `machine`, `channel`, `update`, `completion`, `integration`, `api
+schema`, `agent attach`, `server stop`, `plugin install` and `plugin
+uninstall`. So a plugin that calls one of them fails cleanly and can
+continue. The other `plugin` commands go to the plugin host (see [herdr
+plugins](#herdr-plugins)). `plugin config-dir` prints the plugin's config
+folder.
 
 When the daemon cannot make the link, for example on Windows,
 `HERDR_BIN_PATH` names the tuios binary. Then only `pane` and `notification`
@@ -661,6 +661,9 @@ A refused call answers error `forbidden`, and nothing changes.
 | `events.wait` | `wait-for agent-state` | answers only a `pane_agent_status_changed` match, as herdr does |
 | the pane reports | `set-agent-state` and the rest | see [herdr's pane state protocol](#herdrs-pane-state-protocol) |
 
+The `plugin.*` methods and `popup.close` are answered by the plugin host. See
+[herdr plugins](#herdr-plugins).
+
 Every other herdr method answers error `unsupported`. See
 [What tuios does not answer](#what-tuios-does-not-answer). The
 `pane.graphics.*` methods, which herdr 0.9.2 removed, answer
@@ -698,7 +701,6 @@ These methods answer error `unsupported`. Each row says why.
 
 | Methods | Why |
 | --- | --- |
-| `plugin.*`, `popup.close` | tuios does not host herdr plugins |
 | `workspace.move`, `workspace.move_block` | tuios lists its sessions in the order they were made. It has no order to change |
 | `layout.export`, `layout.apply`, `layout.set_split_ratio` | herdr's layout is a split tree. tuios tiles its panes in the client and does not export a tree |
 | `agent.view.set`, `agent.view.clear` | they set how herdr's sidebar sorts and filters agents. The tuios rail has no such view, so tuios does not pretend to apply one |
@@ -757,8 +759,9 @@ install it as its README says and run its command.
 | [herdr-telegram-agents](https://github.com/permgps/herdr-telegram-agents) | its service, with `HERDR_SOCKET_PATH` set as for herdr-watch | the socket: `agent.*`, `events.subscribe`, `tab.*`, `workspace.list`, `agent.start` |
 
 These Vim plugins also install a herdr key binding that moves from a shell
-pane into Vim. That binding is a herdr plugin action, and tuios does not run
-it. In tuios, move into the Vim pane with the directional focus keys.
+pane into Vim. That binding is a herdr key binding, and tuios does not read
+herdr's key bindings. In tuios, move into the Vim pane with the directional
+focus keys.
 
 terminal-browser and terminal-code draw with kitty graphics. Run the tuios
 client in a terminal that shows kitty images (kitty, Ghostty, WezTerm).
@@ -787,11 +790,100 @@ command = "zoe"
 description = "Agent flow graph"
 ```
 
-A plugin that needs herdr's plugin host does not run: its `[[actions]]`,
-`[[panes]]`, `[[events]]` and `[[startup]]` entries in `herdr-plugin.toml`
-are herdr's, and tuios does not read that file. A client for herdr's
-terminal protocol (`terminal.attach`, `herdr agent attach`) does not connect,
+A plugin that has a `herdr-plugin.toml` runs in tuios's plugin host. See
+[herdr plugins](#herdr-plugins). A client for herdr's terminal protocol (`terminal.attach`, `herdr agent attach`) does not connect,
 because tuios does not serve that protocol.
+
+#### herdr plugins
+
+tuios runs herdr plugins: a folder with a `herdr-plugin.toml` manifest, in
+herdr 0.9.3's format. You do not change the plugin.
+
+**Where tuios finds plugins.** tuios looks in four places, in this order:
+
+1. The folders and manifests that `[plugins] dirs` in `config.toml` names.
+   `tuios plugins link DIR` adds one.
+2. The tuios plugins folder: `$XDG_CONFIG_HOME/tuios/plugins/<folder>/`.
+3. herdr's registry: `$XDG_CONFIG_HOME/herdr/plugins.json`, else
+   `~/.config/herdr/plugins.json`.
+4. herdr's managed checkouts: `~/.config/herdr/plugins/github/*`.
+
+tuios only reads herdr's files. It does not write to them. When two places
+have the same plugin id, the first one wins. `tuios plugins list` shows the
+other one with the error `plugin_id_shadowed`.
+
+**Nothing runs until you enable it.** To find and list a plugin runs none of
+its code. A plugin runs only when its id is in `[plugins] enabled`. herdr's
+own `enabled` flag has no effect in tuios.
+
+```bash
+tuios plugins list
+tuios plugins info example.notes
+tuios plugins enable example.notes
+tuios plugins disable example.notes
+```
+
+You must enable and disable a plugin from a terminal outside tuios. The
+daemon refuses `plugin.enable`, `plugin.disable`, `plugin.link` and
+`plugin.unlink` from a pane, from a process that a plugin started, and from
+another machine. A change to `config.toml` that removes a plugin from
+`enabled` applies at once. A change that adds a plugin waits for
+`tuios plugins enable`, `tuios config apply` or a daemon restart.
+
+**An enabled plugin runs with your rights.** Its startup commands, actions
+and event hooks run outside every pane, as your user, as they do in herdr.
+Enable only plugins that you trust. When such a process calls tuios, it
+holds the default pane grants (`[agents.permissions]`). It cannot enable a
+plugin. A plugin pane is an ordinary pane. It holds the grants that a pane
+started by its caller holds.
+
+**What runs:**
+
+| Entry | When it runs |
+| --- | --- |
+| `[[build]]` | Only when you run `tuios plugins build ID`. tuios shows each command before it runs it. |
+| `[[startup]]` | Once, when the daemon starts, and when you enable the plugin while the daemon runs. Disable the plugin or stop the daemon to stop it. |
+| `[[actions]]` | From the command palette, `tuios plugins run ID ACTION`, `herdr plugin action invoke` or `plugin.action.invoke`. |
+| `[[events]]` | When the herdr event stream sends the event that the entry names. See [Events](#events). |
+| `[[panes]]` | From the command palette, `tuios plugins open ID PANE`, `herdr plugin pane open` or `plugin.pane.open`. |
+| `[[link_handlers]]` | Not yet. `tuios plugins info` lists them. |
+
+A command is an argv array. No shell reads it. A program with a `/` in its
+name is found from the plugin folder, as in herdr. A program without one is
+found on `PATH`.
+
+A background command runs in the plugin folder, with no terminal and stdin
+closed. tuios keeps the first 64 KiB of its stdout and stderr in a log of 200
+runs. `tuios plugins log` shows it. At most 32 commands run at once, and at
+most 8 for one plugin. tuios kills an action or event command after 10
+minutes. One plugin runs at most 20 event hooks in 10 seconds. tuios drops
+and logs the hooks past that limit.
+
+The commands get herdr's variables: `HERDR_PLUGIN_ID`, `HERDR_PLUGIN_ROOT`,
+`HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`,
+`HERDR_PLUGIN_CONTEXT_JSON`, `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH` and
+`HERDR_ENV`. An action also gets `HERDR_PLUGIN_ACTION_ID`. A hook gets
+`HERDR_PLUGIN_EVENT` and `HERDR_PLUGIN_EVENT_JSON`. A pane gets
+`HERDR_PLUGIN_ENTRYPOINT_ID`. The herdr link is first on `PATH`, so a plugin
+that runs `herdr` reaches tuios. The config folder is
+`$XDG_CONFIG_HOME/tuios/plugin-config/<id>` and the state folder is
+`$XDG_STATE_HOME/tuios/plugins/<id>`. tuios does not share them with herdr.
+
+**Pane placement:**
+
+| herdr placement | In tuios |
+| --- | --- |
+| `popup` | A popup, at the `width` and `height` of the entry |
+| `overlay` | A popup, 90% by 90% |
+| `split` | A new pane on the workspace of the target pane. A tiling client puts it beside the focused pane. |
+| `zoomed` | As `split`, then zoomed |
+| `tab` | A new pane on the first empty workspace |
+
+A popup needs an attached client. `popup.close` closes the popup that the
+caller runs in, else the popup of the focused session.
+
+`plugin.list` lists every plugin that tuios found. A plugin whose manifest
+does not load has a warning that starts with `manifest unavailable:`.
 
 #### Events
 

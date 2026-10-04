@@ -3182,6 +3182,24 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |
 
+**herdr plugins:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios plugins list [--json]` | List the herdr plugins tuios finds, with the state of each: `on`, `off` or `error`. Reads the files only. It runs no plugin code |
+| `tuios plugins info ID [--json]` | Show a plugin's build and startup commands, actions, panes, event hooks and link handlers |
+| `tuios plugins enable ID` | Add the plugin to `[plugins] enabled`. A running daemon starts it at once. Refused inside a pane |
+| `tuios plugins disable ID` | Remove the plugin from `[plugins] enabled` and stop its processes. Refused inside a pane |
+| `tuios plugins link DIR [--enable]` | Add a plugin folder to `[plugins] dirs`. The plugin stays off unless you add `--enable`. Refused inside a pane |
+| `tuios plugins unlink ID` | Remove a linked folder from `[plugins] dirs` and disable the plugin. Refused inside a pane |
+| `tuios plugins build ID` | Run the plugin's `[[build]]` commands in its folder. Each command is shown before it runs. Refused inside a pane |
+| `tuios plugins run ID ACTION [--wait]` | Run an action of an enabled plugin. `--wait` waits for it to end and prints its output |
+| `tuios plugins open ID PANE [--placement P]` | Open a pane of an enabled plugin. `P` is `overlay`, `popup`, `split`, `tab` or `zoomed` |
+| `tuios plugins log [ID] [--limit N] [--json]` | Show the last runs of plugin commands, with their exit codes and output |
+
+An enabled plugin runs with your rights. See
+[herdr plugins](AGENT_STATE.md#herdr-plugins).
+
 **Other machines:**
 
 | Command | What it does |

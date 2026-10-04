@@ -1056,6 +1056,28 @@ cutting one call site from the tree the tests were written against.
 control of its own: it fails on any of the first two cuts, since the example
 uses both.
 
+## herdr plugins
+
+`TestHerdrPluginTrustAndHooks`, `TestHerdrPluginActions` and
+`TestHerdrPluginPanes` run the stand-in plugins in
+`testdata/herdrplugins`. Each control cut one line in a shared clone of the
+branch, built the binary, and ran the one test named.
+
+The trust test carries its positive half in the same fixture: the plugin
+that runs nothing while it is off runs its startup and its hook after the
+person enables it.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The enabled check on startup | `runStartups`: `!e.Runnable()` made `e.Plugin == nil` | `TestHerdrPluginTrustAndHooks` ("a disabled plugin ran") | **caught** |
+| The person-only gate on enable | `herdrPluginSetEnabled`: the `herdrPluginTrust` call cut | `TestHerdrPluginTrustAndHooks` ("cli from a pane was not refused: exit 0") | **caught** |
+| The host's start | `Daemon.Start`: `d.plugins.start()` cut | `TestHerdrPluginTrustAndHooks` (startup.log never holds the startup line) | **caught** |
+| The event hooks | `pluginHost.start`: `go h.followEvents()` cut | `TestHerdrPluginTrustAndHooks` (events.log never holds the new pane) | **caught** |
+| The plugin methods on the herdr socket | `herdrAPICall`: the `herdrPluginCall` branch cut | `TestHerdrPluginActions` ("plugins run --wait: exit status 1") | **caught** |
+| The plugin folder as the working folder | `Runner.Start`: `cmd.Dir = j.Plugin.PluginRoot` cut | `TestHerdrPluginActions` ("the action saw cwd=... want .../actions") | **caught** |
+| The plugin variables of a pane | `herdrPluginPaneOpen`: `Env: env` cut from the window options | `TestHerdrPluginPanes` (the popup's marker never shows: the script has no state folder to write to) | **caught** |
+| The popup placement | `herdrPluginPaneOpen`: `opts.Popup = true` cut | `TestHerdrPluginPanes` ("the plugin popup is 38 rows, want the 12 its entry names") | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
