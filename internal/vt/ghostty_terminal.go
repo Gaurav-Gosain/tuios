@@ -288,8 +288,9 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		}),
 		// XTVERSION names tuios. The library's default, "libghostty", is the
 		// name of a terminal the pane is not in: yazi reads it as Ghostty and
-		// draws kitty graphics on a host that may only draw sixel.
-		gh.WithXtversion(func(_ *gh.Terminal) string { return "tuios" }),
+		// draws kitty graphics on a host that may only draw sixel. The text
+		// is the one the pure emulator sends, version included.
+		gh.WithXtversion(func(_ *gh.Terminal) string { return XTVersionName() }),
 		gh.WithDeviceAttributes(func(_ *gh.Terminal) (gh.DeviceAttributes, bool) {
 			return ghosttyDeviceAttributes(t.sixelOn()), true
 		}),

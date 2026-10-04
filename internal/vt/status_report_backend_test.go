@@ -63,8 +63,10 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"DA1", "\x1b[c", "\x1b[?62;22c"},
 		{"DA1 with 0", "\x1b[0c", "\x1b[?62;22c"},
 		{"DA2", "\x1b[>c", pick("\x1b[>1;10;0c", "\x1b[>0;0;0c")},
-		{"DA3", "\x1b[=c", pick("", "\x1bP!|00000000\x1b\\")},
-		{"XTVERSION", "\x1b[>0q", pick("", "\x1bP>|tuios\x1b\\")},
+		// The same on both backends: the pure emulator answers with the
+		// text libghostty sends, and libghostty is handed vt.XTVersionName.
+		{"DA3", "\x1b[=c", "\x1bP!|00000000\x1b\\"},
+		{"XTVERSION", "\x1b[>0q", "\x1bP>|tuios\x1b\\"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := backendReply(t, tc.in); got != tc.want {

@@ -67,10 +67,10 @@ func (e *Emulator) handleRequestMode(params ansi.Params, isAnsi bool) {
 // hears nothing waits out a timeout before deciding, and a zero tells it
 // immediately.
 //
-// Only the two margin settings are reported. They are the ones this emulator
-// holds exactly, in the form the guest would send them back. SGR and the cursor
-// style would have to be serialised from state that is not stored the way the
-// sequence spells it, and a wrong answer is worse than a refusal.
+// The settings reported are the ones this emulator holds exactly: the margins,
+// the pen (SGR) and the cursor shape (DECSCUSR). Each value is written so that
+// sending it back recreates the state it was read from. DECSCA is refused,
+// because nothing here protects cells.
 func (e *Emulator) reportSetting(req string) {
 	r := e.scr.ScrollRegion()
 	var value string
@@ -79,6 +79,10 @@ func (e *Emulator) reportSetting(req string) {
 		value = fmt.Sprintf("%d;%dr", r.Min.Y+1, r.Max.Y)
 	case "s": // DECSLRM
 		value = fmt.Sprintf("%d;%ds", r.Min.X+1, r.Max.X)
+	case "m": // SGR
+		value = sgrReport(e.scr.cur.Pen) + "m"
+	case " q": // DECSCUSR
+		value = fmt.Sprintf("%d q", cursorStyleReport(e.cursorStyle, e.cursorSteady))
 	default:
 		_, _ = io.WriteString(e.pipe, "\x1bP0$r\x1b\\")
 		return

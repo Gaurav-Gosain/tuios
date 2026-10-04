@@ -208,6 +208,7 @@ func (e *Emulator) registerDefaultHandlers() {
 	e.registerDefaultCsiHandlers()
 	e.registerDefaultEscHandlers()
 	e.registerDefaultOscHandlers()
+	e.registerReportHandlers()
 }
 
 // registerDefaultCcHandlers registers the default control character handlers.

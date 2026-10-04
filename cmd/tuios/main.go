@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/Gaurav-Gosain/tuios/skills"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
@@ -50,6 +51,8 @@ func main() {
 	// A crash report that cannot say which build produced it cannot be placed
 	// against a commit, and internal/app cannot read these vars itself.
 	app.SetBuildStamp(version, commit)
+	// XTVERSION names the build to the programs in a pane.
+	vt.SetBuildVersion(version)
 
 	// Run through the `tmux` link that tuios tmux-shim installs, this binary
 	// is tmux: the shim answers, or hands the call to the real tmux.
