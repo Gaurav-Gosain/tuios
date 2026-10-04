@@ -747,6 +747,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.msgClock = time.Now()
 	m.reportActivity(msg)
+	// Input wakes the frame ticker before it is handled, so the frame it
+	// makes does not wait on a slow tick. So does a raw write, which Bubble
+	// Tea flushes on the same ticker.
+	if isPersonInput(msg) {
+		m.noteFrame()
+	} else if _, raw := msg.(tea.RawMsg); raw {
+		m.noteFrame()
+	}
 	noteCmd := m.noteHostPixelMouse(msg)
 	model, cmd := m.handleMsg(msg)
 	if pixelCmd := m.hostPixelMouseCmd(msg); pixelCmd != nil || noteCmd != nil {
@@ -979,6 +987,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
 		// Does NOT trigger rendering unless animations/interactions are active.
 		m.tickStats.Ticks++
+		m.idleFrameTicker(time.Time(msg))
 
 		// Idle diet: when nothing periodic needs attention the per-tick scans have
 		// no work, so skip them, hold the frame, and re-arm the slow tick. Process

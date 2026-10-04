@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"reflect"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -25,7 +26,26 @@ type frameRate struct {
 	// detecting is set while a detection is running, and detected once one
 	// has returned. Only the Update goroutine reads or writes them.
 	detecting, detected bool
+	// idle is set while the ticker runs at IdleFPS because no frame has been
+	// composed for idleTickerAfter, and lastFrame is when one last was. See
+	// idleFrameTicker.
+	idle      bool
+	lastFrame time.Time
+	// burst is the cancel flag of the wake burst in flight, if any. See
+	// noteFrame.
+	burst *atomic.Bool
 }
+
+// idleTickerAfter is how long the client goes without composing a frame
+// before the program's frame ticker drops to IdleFPS.
+const idleTickerAfter = 500 * time.Millisecond
+
+// wakeTick and wakeBurst shape the ticker's first few ticks when it wakes: a
+// tick every wakeTick for wakeBurst, then the normal rate again. See noteFrame.
+const (
+	wakeTick  = time.Millisecond
+	wakeBurst = 4 * time.Millisecond
+)
 
 // displayRateMsg carries the refresh rate a detection found, 0 for none.
 type displayRateMsg struct{ hz int }
@@ -53,7 +73,74 @@ func (m *OS) applyFrameRate() {
 	}
 	if setProgramFPS(m.frameRate.program, fps) {
 		m.frameRate.applied = fps
+		// The ticker is at the new rate now, idle or not: count from here.
+		m.frameRate.idle = false
+		m.frameRate.lastFrame = time.Now()
 	}
+}
+
+// idleFrameTicker drops the program's frame ticker to IdleFPS once the client
+// has gone idleTickerAfter without composing a frame. The maintenance tick
+// calls it, so it runs at least IdleFPS times a second while the client is idle.
+//
+// Bubble Tea flushes frames from a ticker that runs at the frame rate for the
+// life of the program, frame or no frame. At idle each of those ticks finds
+// nothing to write, but waking for it was most of an idle client's CPU: about
+// 1.1% at 60 Hz, with nothing on the screen moving. At IdleFPS a change the
+// client did not compose a frame for, such as the cursor alone, still reaches
+// the terminal within a tenth of a second.
+func (m *OS) idleFrameTicker(now time.Time) {
+	fr := &m.frameRate
+	if fr.idle || fr.program == nil || fr.applied <= config.IdleFPS ||
+		now.Sub(fr.lastFrame) < idleTickerAfter {
+		return
+	}
+	if fr.burst != nil {
+		fr.burst.Store(true)
+		fr.burst = nil
+	}
+	// The fps field moves with the ticker, so a renderer that restarts while
+	// idle (after a suspend or an exec) starts slow too, and wakes with the
+	// next frame like this one.
+	if setProgramFPS(fr.program, config.IdleFPS) {
+		fr.idle = true
+	}
+}
+
+// noteFrame records that the client composed a frame, or took input that is
+// about to make one, and wakes the frame ticker if it was idle.
+//
+// A ticker reset to the normal rate would deliver its first tick a whole frame
+// period later, where a running ticker delivers the next one half a period
+// later on average: the first keystroke after a pause would be the slowest.
+// So the waking ticker first ticks every wakeTick for wakeBurst, which flushes
+// the frame being composed now, and then goes back to the normal rate.
+func (m *OS) noteFrame() {
+	fr := &m.frameRate
+	if fr.program == nil {
+		return
+	}
+	fr.lastFrame = time.Now()
+	if !fr.idle {
+		return
+	}
+	fr.idle = false
+	fps := fr.applied
+	if !setProgramFPS(fr.program, fps) {
+		return
+	}
+	ticker := programTicker(fr.program)
+	if ticker == nil {
+		return
+	}
+	ticker.Reset(wakeTick)
+	cancel := new(atomic.Bool)
+	fr.burst = cancel
+	time.AfterFunc(wakeBurst, func() {
+		if !cancel.Load() {
+			ticker.Reset(time.Second / time.Duration(fps))
+		}
+	})
 }
 
 // detectsDisplay reports whether this client may look for the display's
@@ -127,12 +214,19 @@ func setProgramFPS(p *tea.Program, fps int) bool {
 	}
 	// #nosec G103 - the field's own address, checked above to be an int.
 	*(*int)(unsafe.Pointer(rate.UnsafeAddr())) = fps
-	tick := v.FieldByName("ticker")
-	if tick.IsValid() && tick.Type() == reflect.TypeFor[*time.Ticker]() {
-		// #nosec G103 - the field's own address, checked above to be a *time.Ticker.
-		if ticker := *(**time.Ticker)(unsafe.Pointer(tick.UnsafeAddr())); ticker != nil {
-			ticker.Reset(time.Second / time.Duration(fps))
-		}
+	if ticker := programTicker(p); ticker != nil {
+		ticker.Reset(time.Second / time.Duration(fps))
 	}
 	return true
+}
+
+// programTicker returns a Bubble Tea program's frame ticker, nil before Run
+// starts it or when a release renamed the field (see setProgramFPS).
+func programTicker(p *tea.Program) *time.Ticker {
+	tick := reflect.ValueOf(p).Elem().FieldByName("ticker")
+	if !tick.IsValid() || tick.Type() != reflect.TypeFor[*time.Ticker]() {
+		return nil
+	}
+	// #nosec G103 - the field's own address, checked above to be a *time.Ticker.
+	return *(**time.Ticker)(unsafe.Pointer(tick.UnsafeAddr()))
 }

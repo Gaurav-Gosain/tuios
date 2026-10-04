@@ -1006,6 +1006,8 @@ func (m *OS) View() tea.View {
 			return m.crashView()
 		}
 		m.cachedViewContent = content
+		// A frame to flush: the frame ticker runs at the frame rate again.
+		m.noteFrame()
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather
 		// than on the motion path so a frame composed for any other reason (a
