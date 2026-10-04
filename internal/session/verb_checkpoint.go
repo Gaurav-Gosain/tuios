@@ -97,6 +97,7 @@ func checkpointVerbs() map[string]verbEntry {
 				{Name: "safety", Type: "object", Description: "The checkpoint that holds the work tree as it was before the restore. Restore it to undo."},
 				{Name: "written", Type: "[]string", Description: "The files written from the checkpoint."},
 				{Name: "removed", Type: "[]string", Description: "The files removed, which the checkpoint does not have."},
+				{Name: "skipped", Type: "[]string", Description: "The submodules that differ from the checkpoint. A restore does not change a submodule."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"restore-checkpoint","params":{"session":"work","window":"build","n":1}}`,
@@ -339,7 +340,15 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 		return nil, checkpointGitFailed(err, false)
 	}
 	res, err := worktree.RestoreTree(ctx, repo.root, safety.Tree, cp.Tree)
-	if err != nil {
+	var blocked *worktree.OverwriteError
+	switch {
+	case errors.As(err, &blocked):
+		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
+			Param:     "n",
+			Available: blocked.Paths,
+			Detail:    "Nothing in the work tree was changed. These files are ignored or new, so no checkpoint holds them, and the restore would lose them. Move them out of the way, then restore again.",
+		})
+	case err != nil:
 		return nil, checkpointGitFailed(err, true)
 	}
 	// The keep bound is applied after the restore, so the safety checkpoint
@@ -361,6 +370,9 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	if res.Removed == nil {
 		res.Removed = []string{}
 	}
+	if res.Skipped == nil {
+		res.Skipped = []string{}
+	}
 	LogBasic("Restored checkpoint %d of window %s in %s (safety checkpoint %d)", cp.N, shortWindowID(target.ID), repo.root, safety.N)
 	return map[string]any{
 		"type":     "checkpoint_restored",
@@ -371,5 +383,6 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 		"safety":   safety,
 		"written":  res.Written,
 		"removed":  res.Removed,
+		"skipped":  res.Skipped,
 	}, nil
 }

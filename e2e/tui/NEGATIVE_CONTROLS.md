@@ -726,6 +726,7 @@ against it.
 | No safety checkpoint before a restore | `verbRestoreCheckpoint`: the safety `SaveCheckpoint` call replaced by the newest checkpoint | `TestCheckpointUndoesATurn` (the restore names checkpoint 2 as the undo, and the list has no safety checkpoint 3) | **caught** |
 | The restore uses the person's index | `RestoreTree`: the temporary `GIT_INDEX_FILE` dropped from `read-tree` and `checkout-index` | `TestCheckpointUndoesATurn` (the index holds `notes.txt` after the restore) | **caught** |
 | A removed worktree keeps its checkpoints | `verbRemoveWorktree`: the `dropCheckpointsOf` call cut | `TestCheckpointsGoWithTheirWorktree` (both refs are still there) | **caught** |
+| A restore writes over an ignored file | `RestoreTree`: the `blockingPath` check absent (the tree before the fix) | `TestCheckpointRestoreKeepsIgnoredFiles` (the restore succeeds, and `.env` holds turn 1's text) | **caught** |
 
 The positive halves are in the same tests: the refused restore while the
 agent works runs after restores that succeed, and the main checkout's

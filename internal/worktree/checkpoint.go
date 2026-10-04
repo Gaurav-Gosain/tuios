@@ -393,6 +393,55 @@ type RestoreResult struct {
 	// the checkpoint does not have, both relative to the root.
 	Written []string `json:"written"`
 	Removed []string `json:"removed"`
+	// Skipped are the submodules that differ, which a restore leaves as they
+	// are.
+	Skipped []string `json:"skipped,omitempty"`
+}
+
+// OverwriteError is a restore refused because it would write over files that
+// no checkpoint holds, such as ignored ones. Nothing was changed.
+type OverwriteError struct {
+	// Paths are the files in the way, relative to the root.
+	Paths []string
+}
+
+func (e *OverwriteError) Error() string {
+	shown := e.Paths
+	if len(shown) > dirtyShown {
+		shown = shown[:dirtyShown]
+	}
+	return fmt.Sprintf("the restore would write over %d %s that no checkpoint holds: %s", len(e.Paths), plural(len(e.Paths), "file", "files"), strings.Join(shown, ", "))
+}
+
+// blockingPath is the path that keeps the checkpoint's file at path from
+// being written without losing what is on disk, or "": path itself when
+// something is there, or a leading component that is not a directory and
+// is not one of the paths the restore removes first.
+func blockingPath(root, path string, removed map[string]bool) string {
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		prefix := strings.Join(parts[:i+1], "/")
+		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(prefix)))
+		if err != nil {
+			return ""
+		}
+		last := i == len(parts)-1
+		if last && info.IsDir() {
+			// A directory where the checkpoint has a file: it is in the way
+			// only when it holds something the restore does not remove.
+			if dirHoldsOnly(root, prefix, removed) {
+				return ""
+			}
+			return prefix
+		}
+		if last || !info.IsDir() {
+			if removed[prefix] {
+				return ""
+			}
+			return prefix
+		}
+	}
+	return ""
 }
 
 // RestoreTree makes the files of the work tree at root match tree, where
@@ -404,19 +453,49 @@ type RestoreResult struct {
 // changed against what the index holds.
 func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult, error) {
 	var res RestoreResult
-	out, err := runCtx(ctx, root, nil, "diff-tree", "-r", "-z", "--no-renames", "--name-status", current, tree)
+	// The raw format, for the modes: a submodule (mode 160000) is another
+	// repository, which a checkpoint holds only the commit of, so it is
+	// neither removed nor written.
+	out, err := runCtx(ctx, root, nil, "diff-tree", "-r", "-z", "--no-renames", current, tree)
 	if err != nil {
 		return res, err
 	}
-	var write []string
+	var write, added []string
+	removed := map[string]bool{}
 	fields := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
 	for i := 0; i+1 < len(fields); i += 2 {
-		status, path := fields[i], fields[i+1]
-		if status == "D" {
+		meta, path := strings.Fields(fields[i]), fields[i+1]
+		if len(meta) != 5 {
+			return res, fmt.Errorf("git diff-tree: unexpected line %q", fields[i])
+		}
+		oldMode, newMode, status := strings.TrimPrefix(meta[0], ":"), meta[1], meta[4]
+		if oldMode == "160000" || newMode == "160000" {
+			res.Skipped = append(res.Skipped, path)
+			continue
+		}
+		switch status {
+		case "D":
 			res.Removed = append(res.Removed, path)
-		} else {
+			removed[path] = true
+		case "A":
+			added = append(added, path)
+			write = append(write, path)
+		default:
 			write = append(write, path)
 		}
+	}
+	// A path the current tree does not have, but the disk does, is a file no
+	// checkpoint holds: an ignored one, or one made since the safety
+	// checkpoint was taken. Writing the checkpoint's file there would lose
+	// it for good, so the restore is refused before anything changes.
+	var blocked []string
+	for _, path := range added {
+		if p := blockingPath(root, path, removed); p != "" {
+			blocked = append(blocked, p)
+		}
+	}
+	if len(blocked) > 0 {
+		return RestoreResult{}, &OverwriteError{Paths: blocked}
 	}
 	// Removals first: a path that was a file and is now a directory, or the
 	// other way, needs the old entry gone before the new one is written.
@@ -480,6 +559,26 @@ func removeInside(root, path string) error {
 		}
 	}
 	return nil
+}
+
+// dirHoldsOnly reports whether every file under the directory dir (relative to
+// root) is one of removed. It stops at the first that is not.
+func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
+	errOther := errors.New("holds another file")
+	err := filepath.WalkDir(filepath.Join(root, filepath.FromSlash(dir)), func(p string, e os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if e.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil || !removed[filepath.ToSlash(rel)] {
+			return errOther
+		}
+		return nil
+	})
+	return err == nil
 }
 
 // runStdin is runCtx with stdin.

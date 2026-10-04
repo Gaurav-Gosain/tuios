@@ -131,6 +131,59 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 	}
 }
 
+// TestCheckpointRestoreKeepsIgnoredFiles: turn 1 leaves a .env file that is
+// not ignored yet, so checkpoint 1 holds it. Turn 2 ignores it, and the
+// person then puts their own values in it. No checkpoint holds those, the
+// safety checkpoint of a restore included, since it leaves ignored files
+// out. Restoring checkpoint 1 would write turn 1's .env over them, and the
+// restore of the safety checkpoint that undoes it would delete the file. So
+// the restore is refused, names the file, and changes nothing.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the blockingPath check cut
+// from RestoreTree, the restore succeeds and .env holds turn 1's text.
+func TestCheckpointRestoreKeepsIgnoredFiles(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	tr := newCheckpointTranscript(t, base, repo)
+	if out, err := tuiosCLIIn(t, base, repo, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session in the repository: %v: %s", err, out)
+	}
+	env := filepath.Join(repo, ".env")
+	turn := func(n int, write func()) {
+		t.Helper()
+		tr.ok("set-agent-state", "-s", "agent", "working")
+		write()
+		tr.ok("set-agent-state", "-s", "agent", "done", "-m", fmt.Sprintf("turn %d", n))
+		tr.waitCheckpoints(n)
+	}
+	turn(1, func() {
+		if err := os.WriteFile(env, []byte("TOKEN=from-turn-1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	turn(2, func() {
+		if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err := os.WriteFile(env, []byte("TOKEN=the-persons-own\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := tr.run("checkpoint", "restore", "-s", "agent", "1")
+	if err == nil || !strings.Contains(out, ".env") {
+		t.Errorf("checkpoint restore 1 over an ignored .env = %v:\n%s\nwant a refusal that names .env", err, out)
+	}
+	if got := readFile(t, env); got != "TOKEN=the-persons-own\n" {
+		t.Fatalf("after the restore, .env = %q: the person's own values are gone", got)
+	}
+	if got := readFile(t, filepath.Join(repo, ".gitignore")); got != ".env\n" {
+		t.Errorf("the refused restore changed .gitignore to %q", got)
+	}
+	tr.log("the restore over the ignored .env was refused and .env kept the person's values")
+}
+
 // TestCheckpointsGoWithTheirWorktree: a checkpoint taken in a worktree
 // session is a ref of the whole repository, so removing the worktree removes
 // its refs too, and leaves the refs of a pane in the main checkout.

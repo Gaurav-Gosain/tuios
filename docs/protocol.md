@@ -3042,7 +3042,13 @@ differ between the two trees and removes the files the checkpoint does not
 have, through a temporary index. The index, `HEAD`, the branch and the stash
 do not change, and ignored files are in no checkpoint and are not touched,
 so nothing git can see is lost. `git status` afterwards shows the restored
-files as changes against the index.
+files as changes against the index. A submodule that differs is left as it
+is and listed in `skipped`.
+
+The checkpoint can have a file where the disk has one that no checkpoint
+holds, such as an ignored file. Then the restore is `invalid_params`,
+`available` lists those paths, and nothing changes. Writing over such a file
+would lose it.
 
 Params: `session`, `window`, `n` (required), `force`. While the pane's agent
 is `working` or `needs_input` the restore is `not_ready` and changes nothing,
@@ -3058,7 +3064,7 @@ fails after the safety checkpoint, the hint says to restore that one).
 ```json
 {"result": {"type": "checkpoint_restored", "session": "work", "window": "4be1c09a-...", "worktree": "/src/api",
  "restored": {"n": 1, "...": "..."}, "safety": {"n": 3, "kind": "safety", "...": "..."},
- "written": ["notes.txt"], "removed": []}}
+ "written": ["notes.txt"], "removed": [], "skipped": []}}
 ```
 
 A restore writes the files the pane's agent works on, so a pane without
