@@ -827,14 +827,16 @@ You must enable and disable a plugin from a terminal outside tuios. The
 daemon refuses `plugin.enable`, `plugin.disable`, `plugin.link` and
 `plugin.unlink` from a pane, from a process that a plugin started, and from
 another machine. A change to `config.toml` that removes a plugin from
-`enabled` applies at once. A change that adds a plugin waits for
-`tuios plugins enable`, `tuios config apply` or a daemon restart.
+`enabled` applies at once. A change that adds a plugin, or a folder to
+`dirs`, waits for `tuios config apply` or a daemon restart.
+`tuios plugins enable ID` applies only the plugin that it names.
 
 **An enabled plugin runs with your rights.** Its startup commands, actions
 and event hooks run outside every pane, as your user, as they do in herdr.
-Enable only plugins that you trust. When such a process calls tuios, it
-holds the default pane grants (`[agents.permissions]`). It cannot enable a
-plugin. A plugin pane is an ordinary pane. It holds the grants that a pane
+Enable only plugins that you trust. A process that a plugin starts cannot
+enable a plugin or answer as you, also after its command exits. While the
+command runs, its processes hold the default pane grants
+(`[agents.permissions]`). A plugin pane is an ordinary pane. It holds the grants that a pane
 started by its caller holds.
 
 **What runs:**

@@ -29,6 +29,9 @@ const (
 	// its process group is killed. A startup command has no timeout: it is
 	// often a service that runs for as long as the plugin is on.
 	DefaultTimeout = 10 * time.Minute
+	// waitDelay is how long the runner reads a command's output after the
+	// command exits, when a process it left behind holds the output open.
+	waitDelay = 2 * time.Second
 )
 
 // Log statuses.
@@ -149,6 +152,10 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	var stdout, stderr capBuffer
 	stdout.cap, stderr.cap = OutputCap, OutputCap
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	// A process the command leaves behind can hold its output open. Wait
+	// then stops reading a moment after the command exits, so the run ends
+	// and frees its slot.
+	cmd.WaitDelay = waitDelay
 	detach(cmd)
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -181,6 +188,9 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 			}()
 		}
 		werr := cmd.Wait()
+		// Stop the timeout before anything else: once Wait has reaped the
+		// command, its process group id may name another group.
+		cancel()
 		if onPID != nil {
 			onPID(cmd.Process.Pid, false)
 		}
@@ -292,7 +302,7 @@ func cleanEnv(env []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(k, "HERDR_") || k == "TUIOS_PANE_ID" || k == "TUIOS_WINDOW_ID" || k == "TUIOS_PANE_TOKEN" || k == "TUIOS_SESSION" {
+		if strings.HasPrefix(k, "HERDR_") || k == "TUIOS_PANE_ID" || k == "TUIOS_WINDOW_ID" || k == "TUIOS_PANE_TOKEN" || k == "TUIOS_SESSION" || k == "TUIOS_SOCKET" {
 			continue
 		}
 		out = append(out, kv)

@@ -196,7 +196,7 @@ func (d *Daemon) herdrPluginSetEnabled(cs *connState, params json.RawMessage, on
 	if herr := d.writePlugins(func(path string) error {
 		_, err := config.SetPluginEnabledInFile(path, id, on)
 		return err
-	}); herr != nil {
+	}, func(cfg *config.PluginsConfig) { setPluginEnabled(cfg, id, on) }); herr != nil {
 		return nil, herr
 	}
 	e = herdrplugin.Find(d.plugins.entries(true), id)
@@ -214,9 +214,12 @@ func cmpHerr(a, b *herdrError) *herdrError {
 	return b
 }
 
-// writePlugins edits config.toml with edit and applies its [plugins] table
-// as the person's.
-func (d *Daemon) writePlugins(edit func(path string) error) *herdrError {
+// writePlugins edits config.toml with edit, and applies change to the
+// [plugins] table the daemon runs. The daemon's own table is changed, not the
+// table read back from the file: an entry that a pane or a plugin wrote into
+// the file waits for the person, and the person's change to one plugin must
+// not apply it.
+func (d *Daemon) writePlugins(edit func(path string) error, change func(*config.PluginsConfig)) *herdrError {
 	path := d.configPath
 	if path == "" {
 		p, err := config.GetConfigPath()
@@ -228,13 +231,22 @@ func (d *Daemon) writePlugins(edit func(path string) error) *herdrError {
 	if err := edit(path); err != nil {
 		return herdrErr("plugin_registry_save_failed", err.Error())
 	}
-	cfg, err := config.PluginsInFile(path)
-	if err != nil {
-		return herdrErr("plugin_registry_load_failed", err.Error())
+	next := d.plugins.applied()
+	change(&next)
+	d.plugins.apply(next, true)
+	if file, err := config.PluginsInFile(path); err == nil {
+		d.pluginsWaiting.Store(d.plugins.waits(file))
 	}
-	d.plugins.apply(cfg, true)
-	log.Printf("[PLUGINS] the person applied [plugins]: enabled %v", cfg.Enabled)
+	log.Printf("[PLUGINS] the person applied [plugins]: enabled %v", next.Enabled)
 	return nil
+}
+
+// setPluginEnabled puts id on the enabled list of cfg, or takes it off.
+func setPluginEnabled(cfg *config.PluginsConfig, id string, on bool) {
+	cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(s string) bool { return s == id })
+	if on {
+		cfg.Enabled = append(cfg.Enabled, id)
+	}
 }
 
 // herdrPluginLink is plugin.link: list a plugin folder, as [plugins] dirs,
@@ -262,6 +274,13 @@ func (d *Daemon) herdrPluginLink(cs *connState, params json.RawMessage) (any, *h
 			return err
 		}
 		return nil
+	}, func(cfg *config.PluginsConfig) {
+		if !slices.Contains(cfg.Dirs, dir) {
+			cfg.Dirs = append(cfg.Dirs, dir)
+		}
+		if enable {
+			setPluginEnabled(cfg, p.PluginID, true)
+		}
 	}); herr != nil {
 		return nil, herr
 	}
@@ -288,7 +307,7 @@ func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, 
 		return nil, cmpHerr(herr, herdrErr("invalid_plugin_id", "invalid plugin id"))
 	}
 	removed := false
-	var dirs []string
+	var dirs, dropped []string
 	for _, e := range d.plugins.entries(true) {
 		if e.ID == id && e.Origin == herdrplugin.OriginConfig {
 			dirs = append(dirs, filepath.Dir(e.Path), e.Path)
@@ -300,7 +319,8 @@ func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, 
 			return err
 		}
 		for _, dir := range cur.Dirs {
-			if abs, err := filepath.Abs(dir); err == nil && slices.Contains(dirs, abs) || slices.Contains(dirs, dir) {
+			if slices.ContainsFunc(dirs, func(d string) bool { return herdrplugin.SamePath(d, dir) }) {
+				dropped = append(dropped, dir)
 				if ok, err := config.RemovePluginDirInFile(path, dir); err != nil {
 					return err
 				} else if ok {
@@ -311,6 +331,9 @@ func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, 
 		ok, err := config.SetPluginEnabledInFile(path, id, false)
 		removed = removed || ok
 		return err
+	}, func(cfg *config.PluginsConfig) {
+		cfg.Dirs = slices.DeleteFunc(cfg.Dirs, func(dir string) bool { return slices.Contains(dropped, dir) })
+		setPluginEnabled(cfg, id, false)
 	}); herr != nil {
 		return nil, herr
 	}

@@ -131,6 +131,22 @@ func (h *pluginHost) isEnabled(id string) bool {
 	return slices.Contains(h.enabled, id)
 }
 
+// applied is the [plugins] table the daemon runs.
+func (h *pluginHost) applied() config.PluginsConfig {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return config.PluginsConfig{Enabled: slices.Clone(h.enabled), Dirs: slices.Clone(h.dirs)}
+}
+
+// waits reports whether cfg, read from config.toml, enables a plugin or
+// names a folder that the daemon does not run.
+func (h *pluginHost) waits(cfg config.PluginsConfig) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.ContainsFunc(cfg.Enabled, func(id string) bool { return !slices.Contains(h.enabled, id) }) ||
+		slices.ContainsFunc(cfg.Dirs, func(dir string) bool { return !slices.Contains(h.dirs, dir) })
+}
+
 // start runs the startup commands of the enabled plugins and starts
 // following the event stream. It runs once, when the daemon is up.
 func (h *pluginHost) start() {
@@ -261,6 +277,12 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []string {
 	sock := HerdrSocketPath(h.d.manager.SocketPath())
 	env := []string{
+		// TUIOS_SOCKET places a plugin's process, and what it starts, as
+		// automation of this daemon and not the person (human_origin.go).
+		// Without it a service that a startup command leaves behind, once
+		// its parent exits, has no tie to the daemon, and it could enable
+		// plugins or answer as the person.
+		"TUIOS_SOCKET=" + h.d.manager.SocketPath(),
 		"HERDR_ENV=1",
 		"HERDR_SOCKET_PATH=" + sock,
 		"HERDR_PLUGIN_ID=" + p.PluginID,

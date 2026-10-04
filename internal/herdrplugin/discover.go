@@ -269,3 +269,20 @@ func expandHome(p string) string {
 	}
 	return p
 }
+
+// SamePath reports whether two plugin paths name the same file: each with
+// ~ expanded, made absolute, and with its links resolved where it exists.
+func SamePath(a, b string) bool {
+	return canonical(a) == canonical(b)
+}
+
+func canonical(p string) string {
+	p = expandHome(p)
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	return p
+}

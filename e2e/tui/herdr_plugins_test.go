@@ -135,7 +135,11 @@ func envValue(text, key string) string {
 // Runnable check cut from runStartups, the startup log appears while the
 // plugin is off; with the herdrPluginTrust call cut from
 // herdrPluginSetEnabled, the pane's enable succeeds; with d.plugins.start()
-// cut from Daemon.Start, no hook runs after the enable.
+// cut from Daemon.Start, no hook runs after the enable; with writePlugins
+// applying the table read back from config.toml, the person's enable also
+// enables the plugin the test wrote into the file; with TUIOS_SOCKET cut
+// from the plugin variables, the process the startup command leaves behind
+// enables a plugin.
 func TestHerdrPluginTrustAndHooks(t *testing.T) {
 	_, base := pluginClient(t, pluginsConfig(t, nil, "hooks", "actions", "broken"))
 	const id = "e2e.hooks"
@@ -196,12 +200,30 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 		t.Fatalf("the plugin ran after a refused enable:\n%s", got)
 	}
 
+	// A pane can still write config.toml itself. Its entry waits, and the
+	// person's enable of another plugin does not apply it.
+	cfgPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	if err := os.WriteFile(cfgPath, []byte(strings.Replace(string(cfg), "enabled = []", `enabled = ["e2e.actions"]`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+
 	// The person enables it: startup runs once, and the hook runs on a new
 	// pane, with herdr's event name, pane id and event JSON.
 	if out, err := tuiosCLI(t, base, "plugins", "enable", id); err != nil {
 		t.Fatalf("plugins enable: %v\n%s", err, out)
 	}
 	waitPluginFile(t, base, id, "startup.log", "startup startup e2e.hooks")
+	if out, err := tuiosCLI(t, base, "plugins", "run", "e2e.actions", "hello", "--wait"); err == nil || !strings.Contains(out, "plugin_disabled") {
+		t.Fatalf("the person's enable of %s also enabled e2e.actions, which a pane wrote into config.toml: %v\n%s", id, err, out)
+	}
+	// The startup command left a process behind, outside every pane, that
+	// tries to enable e2e.actions. It is the plugin's, not the person's.
+	orphan := waitPluginFile(t, base, id, "orphan.out", "code=")
+	if !strings.Contains(orphan, "forbidden") || strings.Contains(orphan, "code=0") {
+		t.Fatalf("a process the startup command left behind enabled a plugin:\n%s", orphan)
+	}
+	savePluginArtifact(t, base, id, "orphan.out")
 	crushPanes(t, base, "w2")
 	w2 := herdrPaneByLabel(t, base, "w2")["pane_id"].(string)
 	events := waitPluginFile(t, base, id, "events.log", "pane.created "+w2+" ")
