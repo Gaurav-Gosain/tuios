@@ -28,8 +28,13 @@ func newBufferedPTY(t *testing.T) *PTY {
 	return p
 }
 
-// appendAndBroadcast mirrors what readOutput does with one chunk of PTY output.
+// appendAndBroadcast mirrors what readOutput does with one chunk of PTY output,
+// under the same streamMu readOutput holds. broadcast's per-subscriber state
+// is guarded by streamMu alone, so a test that feeds a live PTY (one whose
+// readOutput also broadcasts) races it without the lock.
 func (p *PTY) appendAndBroadcast(data []byte) {
+	p.streamMu.Lock()
+	defer p.streamMu.Unlock()
 	p.outputMu.Lock()
 	seq := p.appendToBuffer(data)
 	p.outputMu.Unlock()
