@@ -984,8 +984,12 @@ a pane that set its own `XDG_RUNTIME_DIR`), the command runs against the daemon
 
 ## Limitations
 
-- **Screen contents and scrollback never survive the daemon.** They are held in
-  the daemon's memory, not on disk. Only a detach preserves them.
+- **Screen contents and scrollback survive a daemon restart only as saved
+  history.** The daemon keeps them in memory and saves them to disk. A restored
+  pane shows the saved history above a divider, with a new shell under it. After
+  a crash, the history is as old as the last save. The setting
+  `persist_scrollback = false` turns the save off, and then only a detach keeps
+  them. A running program and its live screen never survive the daemon.
 - **Working directory capture needs Linux or macOS.** The daemon reads where
   each shell is from the process itself: `/proc/<pid>/cwd` on Linux, and
   `proc_pidinfo` (libproc) on macOS, which needs no cgo. On other platforms
