@@ -98,7 +98,7 @@ func TestListClientsTracksSwitcherSwitches(t *testing.T) {
 	is := func(event clientRow, session string, attached bool) bool {
 		return event.ClientID == clientID && event.Session == session && event.Attached != nil && *event.Attached == attached
 	}
-	all := subscribe("--count", "3")
+	all := subscribe("--count", "4")
 	filtered := subscribe("--session", "client-one", "--count", "1")
 
 	openSwitcherOn(t, term, "client-two", "client-two")
@@ -126,11 +126,25 @@ func TestListClientsTracksSwitcherSwitches(t *testing.T) {
 	if ev := next(all, "the rename event"); !is(ev, "client-renamed", true) {
 		t.Fatalf("rename event = %+v, want client %s in client-renamed", ev, clientID)
 	}
+	renamed := false
 	for _, row := range list() {
-		if row.ClientID == clientID && row.Session == "client-renamed" {
-			saveArtifact(t, term, artifactDir(t), "client-switched")
-			return
-		}
+		renamed = renamed || row.ClientID == clientID && row.Session == "client-renamed"
 	}
-	t.Fatalf("client %s is not listed in client-renamed", clientID)
+	if !renamed {
+		t.Fatalf("client %s is not listed in client-renamed", clientID)
+	}
+	saveArtifact(t, term, artifactDir(t), "client-switched")
+
+	// A killed session is gone from the daemon before its clients leave it, so
+	// the leave event has to carry the name the client attached under.
+	killed := subscribe("--session", "client-renamed", "--count", "1")
+	if out, err := tuiosCLI(t, base, "kill-session", "client-renamed"); err != nil {
+		t.Fatalf("kill client-renamed: %v\n%s", err, out)
+	}
+	if ev := next(all, "the kill event"); !is(ev, "client-renamed", false) {
+		t.Fatalf("kill event = %+v, want client %s leaving client-renamed", ev, clientID)
+	}
+	if ev := next(killed, "the kill event to a --session client-renamed reader"); !is(ev, "client-renamed", false) {
+		t.Fatalf("session-filtered kill event = %+v, want client %s leaving client-renamed", ev, clientID)
+	}
 }

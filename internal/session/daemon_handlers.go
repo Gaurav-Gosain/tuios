@@ -181,6 +181,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
+	cs.sessionName = session.Name()
 	cs.width = payload.Width
 	cs.height = payload.Height
 	cs.reserve = payload.Reserve
@@ -390,6 +391,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	// cs.mu. Unsubscribe and notify after releasing the lock.
 	cs.mu.Lock()
 	sessionID := cs.sessionID
+	sessionName := cs.sessionName
 	if sessionID == "" {
 		cs.mu.Unlock()
 		return false
@@ -400,6 +402,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	}
 	cs.ptySubscriptions = make(map[string]struct{})
 	cs.sessionID = ""
+	cs.sessionName = ""
 	cs.width = 0
 	cs.height = 0
 	cs.reserve = LayoutReserve{}
@@ -409,7 +412,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 		Type:     EventClientSessionChanged,
 		ClientID: cs.clientID,
 		PID:      cs.peerPID,
-		Session:  d.sessionNameByID(sessionID),
+		Session:  sessionName,
 		Attached: ptr(false),
 	})
 
