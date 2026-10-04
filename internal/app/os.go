@@ -105,6 +105,10 @@ type WindowLayout struct {
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
+	// ClientTitle is the title of the terminal this client runs in, set
+	// through herdr's client.window_title.set. Empty sets none.
+	ClientTitle string
+
 	// frameRate drives the program's frame ticker from NormalFPS and finds the
 	// display's rate for max_fps = "auto". See frame_rate.go.
 	frameRate frameRate

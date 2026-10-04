@@ -9,7 +9,7 @@
 // It prints what it was told, sends Crush's first report (idle), and then
 // reads one word per line from its terminal and sends that report: working,
 // blocked, idle, release, stale (a seq below the last one), foreign (another
-// pane's id) and unsupported (pane.resize, a method tuios does not answer). The words
+// pane's id) and unsupported (layout.apply, a method tuios does not answer). The words
 // charmbracelet/crush#3541 adds are permission and question (blocked with the
 // message that Crush sends for each), meta (pane.report_metadata with a title
 // and a model token) and notify (notification.show). crash reports working
@@ -100,7 +100,7 @@ func main() {
 		case "foreign":
 			send("pane.report_agent", "working", "not-this-pane", next())
 		case "unsupported":
-			send("pane.resize", "", pane, next())
+			send("layout.apply", "", pane, next())
 		case "permission":
 			sendMsg("pane.report_agent", "blocked", "Permission: bash - go test ./...", pane, next())
 		case "question":

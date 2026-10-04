@@ -28,6 +28,7 @@ type herdrWorkspace struct {
 	TabCount    int                     `json:"tab_count"`
 	ActiveTabID string                  `json:"active_tab_id"`
 	AgentStatus string                  `json:"agent_status"`
+	Tokens      map[string]string       `json:"tokens,omitempty"`
 	Worktree    *herdrWorkspaceWorktree `json:"worktree,omitempty"`
 }
 
@@ -359,6 +360,7 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	w := herdrWorkspace{
 		WorkspaceID: wsID, Number: number, Label: label, Focused: active,
 		ActiveTabID: activeTab, AgentStatus: "unknown",
+		Tokens: d.herdrWorkspaceMeta.tokens(sess.ID, time.Now()),
 	}
 	if wt := st.Worktree; wt != nil && wt.RepoRoot != "" {
 		w.Worktree = &herdrWorkspaceWorktree{

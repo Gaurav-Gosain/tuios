@@ -19,6 +19,7 @@ Usage:
   herdr notification show <title> ...
   herdr api snapshot
   herdr server reload-config
+  herdr terminal title set <title>
   herdr --version
 
 Run herdr <command> help for the subcommands of one command.
@@ -92,6 +93,10 @@ var groupHelp = map[string]string{
 	"api": `herdr api commands:
   herdr api snapshot
   herdr api schema [--json | --output PATH]`,
+	"terminal": `herdr terminal commands:
+  herdr terminal title set <title>
+  herdr terminal title clear
+  herdr terminal attach and herdr terminal session use herdr's client protocol, which tuios does not serve`,
 	"server": `herdr server commands:
   herdr server reload-config
   herdr server agent-manifests [--json]

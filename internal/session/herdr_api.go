@@ -114,6 +114,12 @@ type herdrIn struct {
 	Name          string              `json:"name"`
 	Kind          string              `json:"kind"`
 	Args          []string            `json:"args"`
+	Amount        *float64            `json:"amount"`
+	Destination   herdrMoveDest       `json:"destination"`
+	Title         string              `json:"title"`
+	Tokens        map[string]*string  `json:"tokens"`
+	Seq           *uint64             `json:"seq"`
+	TTLMS         *int64              `json:"ttl_ms"`
 }
 
 // label is the label, "" when there is none.
@@ -162,6 +168,13 @@ type herdrResult struct {
 	Swap          *herdrSwap             `json:"swap,omitempty"`
 	Zoom          *herdrZoom             `json:"zoom,omitempty"`
 	Argv          []string               `json:"argv,omitempty"`
+	Resize        *herdrResize           `json:"resize,omitempty"`
+	Status        string                 `json:"status,omitempty"`
+	Diagnostics   *[]string              `json:"diagnostics,omitempty"`
+	Explain       map[string]any         `json:"explain,omitempty"`
+	MoveResult    *herdrMove             `json:"move_result,omitempty"`
+	Changed       *bool                  `json:"changed,omitempty"`
+	Reason        string                 `json:"reason,omitempty"`
 }
 
 // herdrAck is the result of a method that only acknowledges.
@@ -281,14 +294,26 @@ func init() {
 
 		"events.wait": {run: (*Daemon).herdrEventsWait, required: []string{"match_event"}},
 
-		"pane.process_info":    {run: (*Daemon).herdrPaneProcessInfo},
-		"pane.neighbor":        {run: (*Daemon).herdrPaneNeighbor, required: []string{"direction"}},
-		"pane.edges":           {run: (*Daemon).herdrPaneEdges},
-		"pane.focus_direction": {run: (*Daemon).herdrPaneFocusDirection, required: []string{"direction"}},
-		"pane.swap":            {run: (*Daemon).herdrPaneSwap},
-		"pane.zoom":            {run: (*Daemon).herdrPaneZoom},
-		"workspace.focus":      {run: (*Daemon).herdrWorkspaceFocus, required: ws},
-		"agent.start":          {run: (*Daemon).herdrAgentStart, required: []string{"name", "kind", "pane_id"}},
+		"pane.process_info":         {run: (*Daemon).herdrPaneProcessInfo},
+		"pane.neighbor":             {run: (*Daemon).herdrPaneNeighbor, required: []string{"direction"}},
+		"pane.edges":                {run: (*Daemon).herdrPaneEdges},
+		"pane.focus_direction":      {run: (*Daemon).herdrPaneFocusDirection, required: []string{"direction"}},
+		"pane.swap":                 {run: (*Daemon).herdrPaneSwap},
+		"pane.zoom":                 {run: (*Daemon).herdrPaneZoom},
+		"workspace.focus":           {run: (*Daemon).herdrWorkspaceFocus, required: ws},
+		"agent.start":               {run: (*Daemon).herdrAgentStart, required: []string{"name", "kind", "pane_id"}},
+		"pane.resize":               {run: (*Daemon).herdrPaneResize, required: []string{"direction"}},
+		"server.reload_config":      {run: (*Daemon).herdrReloadConfig},
+		"agent.rename":              {run: (*Daemon).herdrAgentRename, required: target},
+		"pane.move":                 {run: (*Daemon).herdrPaneMove, required: []string{"pane_id", "destination"}},
+		"workspace.report_metadata": {run: (*Daemon).herdrWorkspaceReportMetadata, required: []string{"workspace_id", "source", "tokens"}},
+		"agent.explain":             {run: (*Daemon).herdrAgentExplain, required: target},
+
+		"client.window_title.set":   {run: herdrClientTitle(false), required: []string{"title"}},
+		"client.window_title.clear": {run: herdrClientTitle(true)},
+
+		"release_notes.dismiss":        {run: (*Daemon).herdrDismissReleaseNotes, required: []string{"version"}},
+		"product_announcement.dismiss": {run: (*Daemon).herdrDismissAnnouncement, required: []string{"version", "id"}},
 	}
 }
 
@@ -297,18 +322,17 @@ func init() {
 // method herdr does not have at all is answered as herdr answers it: code
 // invalid_request, "unknown variant".
 var herdrUnsupported = []string{
-	"server.stop", "server.live_handoff", "server.reload_config", "server.ssh_agent.register",
+	"server.stop", "server.live_handoff", "server.ssh_agent.register",
 	"server.agent_manifests", "server.reload_agent_manifests",
-	"product_announcement.dismiss", "release_notes.dismiss", "command.invoke",
-	"client.window_title.set", "client.window_title.clear", "client_shell.surface.set",
-	"workspace.move", "workspace.move_block", "workspace.report_metadata",
-	"agent.explain", "agent.rename", "agent.view.set", "agent.view.clear",
-	"pane.move",
+	"command.invoke",
+	"client_shell.surface.set",
+	"workspace.move", "workspace.move_block",
+	"agent.view.set", "agent.view.clear",
 	"layout.export", "layout.apply", "layout.set_split_ratio",
-	"pane.resize", "pane.scroll",
+	"pane.scroll",
 	"pane.clear", "pane.edit_scrollback", "pane.selection.read", "pane.copy_motion",
 	"pane.copy_search", "pane.input.set", "pane.link.activate", "pane.link.resolve",
-	"pane.clear_agent_authority", "popup.close",
+	"popup.close",
 	"integration.list", "integration.install", "integration.uninstall",
 	"plugin.link", "plugin.list", "plugin.unlink", "plugin.enable", "plugin.disable",
 	"plugin.action.list", "plugin.action.invoke", "plugin.log.list",

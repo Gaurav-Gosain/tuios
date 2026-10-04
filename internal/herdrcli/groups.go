@@ -610,3 +610,27 @@ func herdrAgentKind(kind string) bool {
 	}
 	return slices.Contains(herdrAgentKinds, name)
 }
+
+// terminalTitleUsage is herdr's usage of terminal title.
+const terminalTitleUsage = "usage: herdr terminal title set <title>\n       herdr terminal title clear"
+
+// parseTerminal is herdr's terminal command. title sets the title of the
+// terminal the tuios client runs in. attach and session use herdr's client
+// protocol, which tuios does not serve.
+func parseTerminal(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
+	switch sub {
+	case "title":
+		switch {
+		case len(args) == 2 && args[0] == "set":
+			return call("cli:terminal:title:set", "client.window_title.set", map[string]any{"title": args[1]}), nil
+		case len(args) == 1 && args[0] == "clear":
+			return call("cli:terminal:title:clear", "client.window_title.clear", nil), nil
+		case len(args) == 1 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h"):
+			return nil, &UsageError{Msg: terminalTitleUsage, Code: 0}
+		}
+		return nil, usage(terminalTitleUsage)
+	case "attach", "session":
+		return local("cli:terminal:"+sub, "herdr terminal "+sub+" uses herdr's client protocol, which tuios does not serve. Use tuios attach"), nil
+	}
+	return nil, &UsageError{Msg: groupHelp["terminal"], Code: 2}
+}

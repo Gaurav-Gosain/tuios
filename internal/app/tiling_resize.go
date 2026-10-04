@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -631,4 +634,76 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// ResizeWindowByID moves one border of a tiled pane by a share of the pane
+// region, as herdr's pane.resize does, and reports whether the pane's
+// rectangle changed. dir names the way the border moves: right and down move
+// it right or down, left and up move it left or up. The border is the one on
+// that side of the pane, or the one on the other side when the pane is at the
+// region's edge there. So "right" grows a pane that has a neighbour on its
+// right, and shrinks one at the right edge from its left. amount is the share
+// of the region's width or height, at least one cell. The focus does not
+// move. A floating layout, a scrolling layout, or a pane on a workspace that
+// is not shown has no border to move: nothing changes.
+func (m *OS) ResizeWindowByID(id, dir string, amount float64) (bool, error) {
+	idx := m.windowIndexByID(id)
+	if idx < 0 {
+		return false, fmt.Errorf("no pane %s to resize", id)
+	}
+	w := m.Windows[idx]
+	if !m.AutoTiling || m.UseScrollingLayout || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsPopup {
+		return false, nil
+	}
+	m.landSnapAnimations()
+	m.CancelAnimationsForWindow(w)
+	horizontal := dir == "left" || dir == "right"
+	span := m.PaneHeight()
+	if horizontal {
+		span = m.PaneWidth()
+	}
+	delta := max(int(math.Round(amount*float64(span))), 1)
+	if dir == "left" || dir == "up" {
+		delta = -delta
+	}
+	x, y, width, height := w.X, w.Y, w.Width, w.Height
+	atLeft := x <= m.PaneLeft()+edgeTolerance
+	atRight := x+width >= m.PaneLeft()+m.PaneWidth()-edgeTolerance
+	atTop := y <= m.PaneTop()+edgeTolerance
+	atBottom := y+height >= m.PaneTop()+m.PaneHeight()-edgeTolerance
+	near, far := atRight, atLeft
+	if dir == "left" {
+		near, far = atLeft, atRight
+	}
+	if !horizontal {
+		near, far = atBottom, atTop
+		if dir == "up" {
+			near, far = atTop, atBottom
+		}
+	}
+	// The border on the side the move goes toward, else the far one.
+	moveFar := near
+	if near && far {
+		return false, nil
+	}
+	nx, ny, nw, nh := x, y, width, height
+	switch {
+	case horizontal && (dir == "right") != moveFar:
+		// The right border.
+		nw = width + delta
+	case horizontal:
+		// The left border.
+		nx, nw = x+delta, width-delta
+	case (dir == "down") != moveFar:
+		// The bottom border.
+		nh = height + delta
+	default:
+		// The top border.
+		ny, nh = y+delta, height-delta
+	}
+	if nw < 1 || nh < 1 {
+		return false, nil
+	}
+	m.AdjustTilingNeighbors(w, nx, ny, nw, nh)
+	return w.X != x || w.Y != y || w.Width != width || w.Height != height, nil
 }

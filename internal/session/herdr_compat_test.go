@@ -180,8 +180,8 @@ func TestHerdrPaneReportsOnlyForItself(t *testing.T) {
 		}
 	}
 	f.caller = f.a
-	if _, e := f.call(t, "pane.resize", map[string]any{"pane_id": f.a}); !strings.HasPrefix(e, "unsupported") {
-		t.Fatalf("pane.resize answered %q, want unsupported", e)
+	if _, e := f.call(t, "layout.apply", map[string]any{"pane_id": f.a}); !strings.HasPrefix(e, "unsupported") {
+		t.Fatalf("layout.apply answered %q, want unsupported", e)
 	}
 }
 

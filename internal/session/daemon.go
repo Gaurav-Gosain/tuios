@@ -47,6 +47,9 @@ type Daemon struct {
 	herdrListener net.Listener
 	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
 	herdrSeqs herdrSeqs
+	// herdrWorkspaceMeta holds the tokens tools report on a session with
+	// herdr's workspace.report_metadata. See herdr_more.go.
+	herdrWorkspaceMeta herdrWsMeta
 	// herdrEvents limits the notifications and metadata each pane sends
 	// over the herdr protocol socket.
 	herdrEvents paneBuckets
@@ -1072,6 +1075,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
 	d.forgetLatest(s.ID)
+	d.herdrWorkspaceMeta.forget(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name())

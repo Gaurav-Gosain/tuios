@@ -408,7 +408,7 @@ func writeHerdr(w io.Writer, id string, result any, code, msg string) {
 // herdrReportMethods are the methods a pane reports its own agent with.
 var herdrReportMethods = []string{
 	"pane.report_agent", "pane.report_agent_session", "pane.release_agent",
-	"pane.report_metadata", "notification.show",
+	"pane.report_metadata", "notification.show", "pane.clear_agent_authority",
 }
 
 // herdrRetiredMethods are the methods herdr 0.9.2 removed, which herdr
@@ -516,6 +516,16 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		if _, verr := d.verbSetAgentSession(nil, raw); verr != nil {
 			return nil, "report_failed", verr.Message
 		}
+	case "pane.clear_agent_authority":
+		// herdr drops what the pane's hooks reported, and its detector
+		// decides again. tuios clears a state that a report holds, and
+		// detection then reads the pane as for any other. A state the
+		// detector holds is not a report's, and stays.
+		if held := d.reportClaimHarness(window); held != nil {
+			if _, code, msg := d.herdrSetState(sess, window, *held, "none", "", "", "", 0); code != "" {
+				return nil, code, msg
+			}
+		}
 	case "pane.release_agent":
 		if d.herdrYields(window, harness, p.Source) {
 			return map[string]any{"type": "ok"}, "", ""
@@ -528,6 +538,22 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		}
 	}
 	return map[string]any{"type": "ok"}, "", ""
+}
+
+// reportClaimHarness is the harness of the claim a report holds on window,
+// nil when no report holds it.
+func (d *Daemon) reportClaimHarness(window string) *string {
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return nil
+	}
+	sess.stateMu.RLock()
+	defer sess.stateMu.RUnlock()
+	claim, held := sess.agentClaims[window]
+	if !held || claim.source != AgentSourceReport {
+		return nil
+	}
+	return &claim.harness
 }
 
 // herdrHarness is the harness a herdr agent label names: tuios's id for a

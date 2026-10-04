@@ -130,6 +130,7 @@ var groups = map[string]groupParser{
 	"notification": parseNotification,
 	"api":          parseAPI,
 	"server":       parseServer,
+	"terminal":     parseTerminal,
 }
 
 // localGroups are herdr's commands that do their work on herdr's own
@@ -142,7 +143,6 @@ var localGroups = map[string]string{
 	"channel":     "herdr channel picks herdr's update channel. tuios does not update herdr",
 	"machine":     "herdr machine manages herdr's SSH machines. Use tuios hosts",
 	"session":     "herdr session manages herdr's named servers. Use tuios ls and tuios attach",
-	"terminal":    "herdr terminal attaches herdr's client protocol, which tuios does not serve",
 	"update":      "herdr update installs herdr. tuios does not update herdr",
 	"plugin":      "tuios does not host herdr plugins. Run the plugin's command in a tuios pane: its herdr calls reach tuios",
 	"integration": "herdr integration installs herdr's agent hooks. Use tuios integration",

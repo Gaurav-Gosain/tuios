@@ -158,7 +158,7 @@ func herdrLayoutOf(t *testing.T, base, pane string) (map[string]float64, string,
 // Negative controls: with the daemon handing panes the tuios binary as
 // HERDR_BIN_PATH instead of the herdr link (bin = link cut in daemon.go),
 // server reload-config answers tuios's unknown command error instead of
-// herdr's unsupported one. With HERDR_TAB_ID taken out of HerdrEnv, the
+// herdr's config_reload answer. With HERDR_TAB_ID taken out of HerdrEnv, the
 // environment check fails.
 func TestHerdrFrontTerminalBrowserSplit(t *testing.T) {
 	term, base := herdrFrontClient(t)
@@ -182,10 +182,9 @@ step get "$H" pane get "$NEW"
 		t.Fatalf("the pane's HERDR_PANE_ID and HERDR_TAB_ID are %q, want %s %v", env, callerID, caller["tab_id"])
 	}
 
-	// terminal-browser ignores a failed reload. herdr's error shape and exit
-	// code let it.
-	if r := steps["reload"]; r.code != 1 || !strings.Contains(r.err, `"code":"unsupported"`) {
-		t.Fatalf("server reload-config: exit %d, stderr %q, want herdr's unsupported error and exit 1", r.code, r.err)
+	// The reload succeeds: tuios has no herdr config to read again.
+	if r := steps["reload"]; r.code != 0 || !strings.Contains(r.out, `"type":"config_reload"`) {
+		t.Fatalf("server reload-config: exit %d, stdout %q, stderr %q, want herdr's config_reload answer and exit 0", r.code, r.out, r.err)
 	}
 	steps["list"].ok(t, "pane list")
 	found := false

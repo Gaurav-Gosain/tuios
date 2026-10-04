@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -2452,6 +2453,32 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			} else {
 				err = m.ZoomWindowByID(msg.TapeArgs[0], msg.TapeArgs[1] == "on")
 			}
+		case "resize_window":
+			// herdr's pane.resize: TapeArgs are the window id, the way the
+			// border moves, and the share of the pane region it moves by.
+			// The answer says whether the pane changed.
+			if len(msg.TapeArgs) != 3 {
+				err = fmt.Errorf("resize_window needs a window id, a direction and an amount")
+				break
+			}
+			amount, perr := strconv.ParseFloat(msg.TapeArgs[2], 64)
+			if perr != nil {
+				err = fmt.Errorf("resize_window: bad amount %q", msg.TapeArgs[2])
+				break
+			}
+			var changed bool
+			if changed, err = m.ResizeWindowByID(msg.TapeArgs[0], msg.TapeArgs[1], amount); err == nil {
+				resultData = map[string]any{"changed": changed}
+			}
+		case "set_client_title":
+			// herdr's client.window_title.set and .clear: TapeArgs are the
+			// title, or nothing to clear it. The daemon cleaned the title.
+			title := ""
+			if len(msg.TapeArgs) > 0 {
+				title = msg.TapeArgs[0]
+			}
+			resultData = map[string]any{"changed": m.ClientTitle != title}
+			m.ClientTitle = title
 		case "switch_session":
 			// herdr's workspace.focus: show another session. The answer goes
 			// first, because the switch detaches this client from the session

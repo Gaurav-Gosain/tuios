@@ -1038,6 +1038,9 @@ func (m *OS) View() tea.View {
 	view.DisableBracketedPasteMode = false
 	view.KeyboardEnhancements = m.keyboardEnhancements()
 	view.Cursor = m.getRealCursor()
+	// The title of the terminal tuios runs in, when a tool set one through
+	// herdr's client.window_title.set. Empty leaves the title alone.
+	view.WindowTitle = m.ClientTitle
 
 	// Flush graphics AFTER setting view content. bubbletea will render the
 	// text first, then we write graphics. This keeps them in the same frame
