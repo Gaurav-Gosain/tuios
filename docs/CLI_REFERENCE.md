@@ -20,6 +20,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
+  - [tuios notify test](#tuios-notify-test)
   - [tuios update](#tuios-update)
   - [tuios layout](#tuios-layout)
   - [tuios completion](#tuios-completion)
@@ -3749,6 +3750,35 @@ You can do both from inside tuios as well. Open the keybind manager with the
 leader key then `k`, or from the command palette, and press `ctrl+d` on a
 binding to remove it or `ctrl+x` to take its key off every action. Typing `#`
 in the command palette searches actions rather than commands.
+
+---
+
+### `tuios notify test`
+
+Send a test notification through each provider in the `[notify]` table, and
+say the result for each provider. See
+[CONFIGURATION.md](CONFIGURATION.md#push-notifications-to-your-phone).
+
+**Usage:**
+```bash
+tuios notify test [--json]
+```
+
+This command sends from its own process, not from the daemon. It reads a
+`token_env` variable from your shell. The daemon reads it from its own
+environment. The output shows the host of each provider and never a token
+or the full address. It sends with `curl`, as the daemon does. The command
+exits with 1 when a provider fails.
+
+**Output:**
+```
+ntfy (ntfy.sh): sent.
+pushover (api.pushover.net): sent.
+webhook (hooks.example.com): failed. The server answered 401 Unauthorized. Check the token.
+```
+
+**Flags:**
+- `--json`: Output a list with `provider`, `host`, `ok` and `error` for each provider
 
 ---
 
