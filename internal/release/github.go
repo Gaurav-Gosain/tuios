@@ -164,7 +164,7 @@ func (g *GitHub) getJSON(ctx context.Context, url string, into any) error {
 }
 
 func (g *GitHub) do(ctx context.Context, url, accept string) (*response, error) {
-	resp, err := curlGet(ctx, url, accept, g.Token)
+	resp, err := httpGet(ctx, url, accept, g.Token)
 	if err != nil {
 		return nil, err
 	}
