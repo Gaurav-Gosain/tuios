@@ -448,7 +448,7 @@ a working negative control look like a broken one for half an hour.
 | A client detach event does not name the session it left | n/a, cuts the call site | drop `Session` from the `EventClientSessionChanged` publish in `detachClient` in `internal/session/daemon_handlers.go` | `TestListClientsTracksSwitcherSwitches` (`first switch event = {... Session: ...}, want client ... leaving client-one`) | **caught** |
 | A session rename does not tell its clients' readers the new name | n/a, cuts the call site | drop the publish loop over `moved` from `onSessionRenamed` in `internal/session/daemon.go` | `TestListClientsTracksSwitcherSwitches` (`subscribe did not print the rename event`) | **caught** |
 | A client leave event looks the session name up after a kill-session deleted the session | n/a, injected | set `Session` to `d.sessionNameByID(sessionID)` in the leave publish of the disconnect path in `handleConnectionOn` (`internal/session/daemon.go`) | `TestListClientsTracksSwitcherSwitches` (`kill event = {... Session: ...}, want client ... leaving client-renamed`) | **caught** |
-| The same, in `detachClient` | n/a, injected | the same lookup in the leave publish of `detachClient` (`internal/session/daemon_handlers.go`) | none. The TUI client disconnects when its session is killed and never sends a detach, so this path is not reached | **not caught** |
+| The same, in `detachClient` | n/a, injected | the same lookup in the leave publish of `detachClient` (`internal/session/daemon_handlers.go`) | unit `TestDetachFromKilledSessionNamesIt` (`leave event session = "", want "work"`). The e2e test does not reach this path: the TUI client disconnects when its session is killed | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
