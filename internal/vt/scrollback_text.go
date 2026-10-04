@@ -21,6 +21,16 @@ func (e *Emulator) AppendScrollbackText(buf *strings.Builder) {
 	if sb == nil {
 		return
 	}
+	// A line's text is never longer than its record: ASCII cells are one
+	// byte in both, other content is stored inline, and styles and links
+	// only add tokens. Growing by the records' total once replaces the
+	// doublings that copied a 450 kB capture about twenty times. The screen
+	// the capture writes next gets room as well, at one byte a cell.
+	size := sb.Len() + e.Height()*(e.Width()+1)
+	for i := range sb.Len() {
+		size += len(sb.lines[sb.slot(i)])
+	}
+	buf.Grow(size)
 	for i := range sb.Len() {
 		sb.appendLineText(buf, sb.lines[sb.slot(i)])
 		buf.WriteByte('\n')
