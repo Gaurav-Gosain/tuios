@@ -3772,6 +3772,7 @@ Manage TUIOS configuration file.
 - `tuios config edit`: Edit configuration in $EDITOR
 - `tuios config reset`: Reset configuration to defaults
 - `tuios config apply`: Apply `config.toml` to the running daemon now
+- `tuios config browse`: Search the settable options and set one, in an explorer
 
 #### `tuios config apply`
 
@@ -3811,6 +3812,25 @@ export EDITOR=vim
 tuios config edit
 ```
 
+#### `tuios config browse`
+
+Open the settable options in an explorer you can search. Each option shows its
+type, default, current value and source. These are what
+`tuios list-options --json` and `tuios get-config --json` print. Press `enter`
+on an option to set it. The explorer sets it the way `tuios set-config` does,
+with the same refusals, and shows the error `set-config` prints. It needs a
+running daemon.
+
+```bash
+tuios config browse [-s session]
+```
+
+Press `/` to search, the arrow keys or `j` and `k` to move, and `tab` or a
+click on a tab to show one group. `J` and `K` scroll the detail pane. `q` or
+`esc` leaves it. An explorer opens only with its own flag or subcommand, never
+because the output is a terminal, so a script or an agent in a pane always gets
+the plain output.
+
 #### `tuios config reset`
 
 Reset the configuration file to default settings.
@@ -3835,6 +3855,7 @@ List the keybindings, check them for conflicts, and change them in
 **Subcommands:**
 - `tuios keybinds list`: List every keybinding and the action it runs
 - `tuios keybinds list-custom`: List the keybindings that differ from the defaults
+- `tuios keybinds browse [search]`: Search the keybindings in an explorer
 - `tuios keybinds doctor`: Report each key that two actions claim, and each key tuios takes from the pane
 - `tuios keybinds explain <key>`: Say what tuios does with one key
 - `tuios keybinds unbind <action> [key]`: Take a key off one action
@@ -3887,6 +3908,23 @@ An action that a config leaves with no key shows `(none)` in its scope.
 - `unbound`: true for an action with no key
 - `shadowed`: keys that the config gives the action, which a different action
   in the scope takes first
+
+#### `tuios keybinds browse`
+
+Open every keybinding in an explorer you can search. The rows are the rows of
+`tuios keybinds list --json`, and the tabs are their scopes. A search given on
+the command line starts the explorer with it.
+
+```bash
+tuios keybinds browse
+tuios keybinds browse spotlight
+```
+
+Press `/` to search, the arrow keys or `j` and `k` to move, and `tab` or a
+click on a tab to show one group. `J` and `K` scroll the detail pane. `q` or
+`esc` leaves it. An explorer opens only with its own flag or subcommand, never
+because the output is a terminal, so a script or an agent in a pane always gets
+the plain output.
 
 #### `tuios keybinds list-custom`
 
@@ -4161,14 +4199,29 @@ Get help about any command.
 
 **Usage:**
 ```bash
-tuios help [command]
+tuios help [command] [--json] [-i]
 ```
+
+**Flags:**
+
+- `--json`: Print the command and every command under it as JSON: each
+  command's path, usage line, short and long help, examples, aliases and flags
+- `-i`, `--interactive`: Open the same command tree in an explorer you can
+  search. The detail pane shows the command's usage, help and flags
+
+Press `/` to search, the arrow keys or `j` and `k` to move, and `tab` or a
+click on a tab to show one group. `J` and `K` scroll the detail pane. `q` or
+`esc` leaves it. An explorer opens only with its own flag or subcommand, never
+because the output is a terminal, so a script or an agent in a pane always gets
+the plain output.
 
 **Examples:**
 ```bash
 tuios help              # Show general help
 tuios help ssh          # Show help for ssh command
 tuios help config edit  # Show help for config edit subcommand
+tuios help --json       # Every command as JSON
+tuios help -i           # Search the commands in an explorer
 ```
 
 ---

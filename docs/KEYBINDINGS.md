@@ -35,6 +35,12 @@ that a different action takes first is in `shadowed`.
 tuios keybinds list --json | jq -r '.[] | select(.action == "toggle_tiling") | .keys[]'
 ```
 
+`tuios keybinds browse` opens the same rows in an explorer. Press `/` to
+search, and `tab` or a click on a tab to show one scope. The detail pane shows
+the keys, the action, the scope and the description. `q` or `esc` leaves it.
+It opens only when you run `browse`. `tuios keybinds list` stays plain text,
+on a terminal too.
+
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, then select a file.

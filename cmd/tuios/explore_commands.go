@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/explore"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -22,6 +23,9 @@ func addExplorers(root *cobra.Command) {
 	root.SetHelpCommand(newHelpCommand())
 	if cfg, _, err := root.Find([]string{"config"}); err == nil && cfg != root {
 		cfg.AddCommand(newConfigBrowseCommand())
+	}
+	if kb, _, err := root.Find([]string{"keybinds"}); err == nil && kb != root {
+		kb.AddCommand(newKeybindsBrowseCommand())
 	}
 }
 
@@ -373,4 +377,77 @@ func configExplorer(sessionName string, opts []configOption) explore.Config {
 			},
 		},
 	}
+}
+
+// newKeybindsBrowseCommand opens the keybinding list in an explorer.
+func newKeybindsBrowseCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "browse [search]",
+		Short: "Search the keybindings in an explorer",
+		Long: `Open every keybinding in an explorer you can search.
+
+The rows are the rows of tuios keybinds list --json: each action with its keys
+in each scope, and its description. Press / to search, and tab or a click on a
+tab to show one scope. Press q or esc to leave it.`,
+		Example: `  tuios keybinds browse
+  tuios keybinds browse spotlight`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
+			cfg, err := config.LoadUserConfig()
+			if err != nil {
+				cfg = config.DefaultConfig()
+			}
+			c := keybindsExplorer(keybindRows(cfg))
+			c.Query = strings.Join(args, " ")
+			return explore.Run(c)
+		},
+	}
+}
+
+// keybindsExplorer is the explorer config for the keybinding rows.
+func keybindsExplorer(rows []keybindRow) explore.Config {
+	var groups []string
+	items := make([]explore.Item, 0, len(rows))
+	for _, r := range rows {
+		scope := r.ScopeName
+		if scope == "" {
+			scope = r.Scope
+		}
+		if !slices.Contains(groups, scope) {
+			groups = append(groups, scope)
+		}
+		keys := strings.Join(r.Keys, ", ")
+		if r.Unbound {
+			keys = "(no key)"
+		}
+		detail := []string{"Keys: " + keys}
+		if r.Action != "" {
+			detail = append(detail, "Action: "+r.Action)
+		}
+		detail = append(detail, "Scope: "+scope)
+		if r.Chord != "" {
+			detail = append(detail, "Reached with: "+r.Chord)
+		}
+		if r.Section != "" {
+			detail = append(detail, "Config table: "+r.Section)
+		}
+		if len(r.Shadowed) > 0 {
+			detail = append(detail, "Shadowed: "+strings.Join(r.Shadowed, ", ")+". Another action in this scope takes these keys first.")
+		}
+		if r.Fixed {
+			detail = append(detail, "Fixed: tuios reads this key itself. No config table binds it.")
+		}
+		if r.Description != "" {
+			detail = append(detail, r.Description)
+		}
+		items = append(items, explore.Item{
+			Name:   keys,
+			Note:   r.Description,
+			Group:  scope,
+			Detail: detail,
+			Search: r.Action + " " + r.Scope,
+			Key:    r.Scope + "\x00" + r.Action + "\x00" + keys,
+		})
+	}
+	return explore.Config{Title: "tuios keybindings", Items: items, Groups: groups, NameWidth: 28}
 }

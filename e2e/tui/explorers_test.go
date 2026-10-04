@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,9 @@ func explorerShot(t *testing.T, term *tuitest.Terminal, name string) {
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, name)
 	t.Logf("frame %s saved under %s", name, dir)
 }
+
+// ansiCodes matches a CSI sequence.
+var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 
 // startExplorer runs tuios with args in a terminal of its own, against the
 // isolation root base.
@@ -104,7 +108,8 @@ func assertPlainOnTTY(t *testing.T, base string, args ...string) {
 	lines := strings.Split(strings.TrimSpace(plain), "\n")
 	lines = lines[max(len(lines)-8, 0):]
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		// The colour codes a listing writes are not text on the screen.
+		line = strings.TrimSpace(ansiCodes.ReplaceAllString(line, ""))
 		if line == "" || len(line) > 150 {
 			continue
 		}
@@ -297,8 +302,15 @@ func TestConfigExplorer(t *testing.T) {
 	if cliErr == nil {
 		t.Fatalf("set-config accepted sideways:\n%s", cliOut)
 	}
-	if first := strings.TrimSpace(strings.SplitN(strings.TrimSpace(cliOut), "\n", 2)[0]); first != "" && !strings.Contains(term.Snapshot(), strings.TrimPrefix(first, "Error: ")[:min(30, len(strings.TrimPrefix(first, "Error: ")))]) {
-		t.Errorf("ASSERTION: the explorer's refusal differs from set-config's:\nset-config: %s\nexplorer:\n%s", first, term.Snapshot())
+	// The explorer shows set-config's own error: its first sentence is on
+	// the screen.
+	first := strings.TrimSpace(strings.SplitN(strings.TrimSpace(cliOut), "\n", 2)[0])
+	first = strings.TrimPrefix(first, "Error: ")
+	if cut := strings.Index(first, ". "); cut > 0 {
+		first = first[:cut]
+	}
+	if !strings.Contains(strings.Join(strings.Fields(term.Snapshot()), " "), first) {
+		t.Errorf("ASSERTION: the explorer's refusal differs from set-config's:\nset-config: %s\nexplorer:\n%s", cliOut, term.Snapshot())
 	}
 
 	// A value it accepts.
@@ -322,10 +334,12 @@ func TestConfigExplorer(t *testing.T) {
 
 	// A click on a section tab filters the list to it.
 	// Open the search and clear it, which leaves the explorer open.
+	// A bare esc right before the next key reads as alt and that key, so
+	// the search is cleared with ctrl+u and closed with enter.
 	if err := term.Type("/"); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.SendKeys(tuitest.Esc); err != nil {
+	if err := term.SendKeys(tuitest.Ctrl('u'), tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
 	col, row, ok := tuitest.Find(term.Screen(), " daemon ")
@@ -349,4 +363,96 @@ func TestConfigExplorer(t *testing.T) {
 
 	assertPlainOnTTY(t, base, "config")
 	assertPlainOnTTY(t, base, "list-options", "--section", "daemon")
+}
+
+// TestKeybindsExplorer opens tuios keybinds browse, searches for the
+// spotlight, reads a row's keys and description in the detail pane, moves
+// to the Copy mode tab with tab presses, and leaves with q. The rows are
+// the rows of keybinds list --json. Then keybinds list and keybinds on a
+// terminal are checked to be the plain commands.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the AddCommand of browse
+// cut from addExplorers, keybinds browse prints the keybinds help and
+// exits, and the wait for the explorer's title fails.
+func TestKeybindsExplorer(t *testing.T) {
+	base := t.TempDir()
+	out, err := tuiosCLI(t, base, "keybinds", "list", "--json")
+	if err != nil {
+		t.Fatalf("keybinds list --json: %v\n%s", err, out)
+	}
+	var rows []struct {
+		Action      string   `json:"action"`
+		Keys        []string `json:"keys"`
+		Description string   `json:"description"`
+		ScopeName   string   `json:"scope_name"`
+	}
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("keybinds list --json is not JSON: %v", err)
+	}
+	var spot string
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.Description), "spotlight") && len(r.Keys) > 0 {
+			spot = r.Description
+			break
+		}
+	}
+	if spot == "" {
+		t.Fatalf("keybinds list --json has no spotlight row:\n%s", out)
+	}
+
+	term := startExplorer(t, base, "keybinds", "browse")
+	if err := term.WaitFor(explorerShows("tuios keybindings", "All", "Window mode"), uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: keybinds browse did not open: %v\n%s", err, term.Snapshot())
+	}
+	explorerShot(t, term, "keybinds-open")
+
+	if err := term.Type("/spotlight"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Keys: ") && strings.Contains(text, "Scope: ") &&
+			strings.Contains(strings.ToLower(text), "spotlight") && !strings.Contains(text, "Copy the selection")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the search for spotlight did not narrow the list and show a detail: %v\n%s", err, term.Snapshot())
+	}
+	explorerShot(t, term, "keybinds-search")
+
+	// Clear the search, then step through the tabs to Copy mode.
+	// A bare esc right before the next key reads as alt and that key, so
+	// the search is cleared with ctrl+u and closed with enter.
+	if err := term.Type("/"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('u'), tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	reached := false
+	for range 40 {
+		if err := term.SendKeys(tuitest.Tab); err != nil {
+			t.Fatal(err)
+		}
+		if term.WaitFor(explorerShows("Scope: Copy mode"), 300*time.Millisecond) == nil {
+			reached = true
+			break
+		}
+	}
+	if !reached {
+		t.Fatalf("ASSERTION: tab never reached the Copy mode scope\n%s", term.Snapshot())
+	}
+	if strings.Contains(term.Snapshot(), "Scope: Window mode") {
+		t.Errorf("ASSERTION: the Copy mode tab still shows Window mode rows\n%s", term.Snapshot())
+	}
+	explorerShot(t, term, "keybinds-copy-mode")
+
+	if err := term.Type("q"); err != nil {
+		t.Fatal(err)
+	}
+	explorerExits(t, term, "keybinds browse after q")
+
+	assertPlainOnTTY(t, base, "keybinds", "list")
+	assertPlainOnTTY(t, base, "keybinds")
 }
