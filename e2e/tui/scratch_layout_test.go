@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -31,6 +32,37 @@ func scratchCount(t *testing.T, base, name string) int {
 		}
 	}
 	return n
+}
+
+// waitSessionScratch waits until the built-in scratch group of session has n
+// panes. waitScratchCount reads the session "work" only.
+func waitSessionScratch(t *testing.T, term *tuitest.Terminal, base, session string, n int, what string) {
+	t.Helper()
+	count := func() int {
+		out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", session)
+		if err != nil {
+			return -1
+		}
+		var res struct {
+			Windows []commandRow `json:"windows"`
+		}
+		_ = json.Unmarshal([]byte(out), &res)
+		c := 0
+		for _, r := range res.Windows {
+			if r.Scratch && r.ScratchName == "scratch" {
+				c++
+			}
+		}
+		return c
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if count() == n {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("%s: the scratch group of %s has %d panes, want %d\n%s", what, session, count(), n, term.Snapshot())
 }
 
 // waitScratchCount waits until the group name has n panes.
@@ -161,9 +193,13 @@ func TestScratchGroupSurvivesADaemonRestart(t *testing.T) {
 	}
 	time.Sleep(insertGuard + 150*time.Millisecond)
 
+	// Wait for each pane of the group before typing into it. Typed at once,
+	// the text can reach the pane the focus was on before.
 	toggleScratch(t, first)
+	waitSessionScratch(t, first, base, session, 1, "the group shown")
 	typeUntil(t, first, "echo PANEONE-$((1+1))", "PANEONE-2")
 	prefix(t, first, "|")
+	waitSessionScratch(t, first, base, session, 2, "the group split")
 	typeUntil(t, first, "echo PANETWO-$((2+3))", "PANETWO-5")
 	allOnScreen(t, first, "the group before the restart", "PANEONE-2", "PANETWO-5")
 	toggleScratch(t, first)

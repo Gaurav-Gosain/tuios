@@ -948,6 +948,18 @@ Each control cut one line, built the binary, and ran
 | The action | `handleSidebarFileAction`: the `file_copy_path` case cut | `TestSidebarFolderCopyPath/standalone` and `/daemon` (the menu row writes nothing) | **caught** |
 | The key | `getDefaultSidebarFilesKeybinds`: `Y` cut | `TestSidebarFolderCopyPath/standalone` and `/daemon` (`Y` on the listing writes nothing) | **caught** |
 
+## The scratch group before a daemon restart
+
+`TestScratchGroupSurvivesADaemonRestart` typed into the scratch group as soon
+as it pressed the scratch key. The group opens through the daemon, so the
+text could reach the pane that had the focus before. The hide then left that
+marker on screen, and the test failed (main, run 37025035958). The test now
+waits for each pane of the group before it types.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A slow scratch open | `createScratch`: sleep 1.5 s before `scratchOpener`; run the test as it was | `TestScratchGroupSurvivesADaemonRestart` ("the group hidden before the restart: [PANEONE-2 PANETWO-5] still on screen"), the same message as CI. With the waits: passes with the sleep, and 10 of 10 without it | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
