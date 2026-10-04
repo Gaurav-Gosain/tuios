@@ -1035,6 +1035,7 @@ type optionRow struct {
 	Accepted    []string `json:"accepted"`
 	Min         int      `json:"min"`
 	Max         int      `json:"max"`
+	Auto        bool     `json:"auto"`
 	Deprecated  string   `json:"deprecated"`
 	SessionVal  string   `json:"session_value"`
 }
@@ -1121,7 +1122,11 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 			fmt.Fprintf(w, "  %-*s  one of: %s\n", width, "", strings.Join(opt.Accepted, ", "))
 		}
 		if opt.Max > 0 {
-			fmt.Fprintf(w, "  %-*s  range: %d to %d\n", width, "", opt.Min, opt.Max)
+			auto := ""
+			if opt.Auto {
+				auto = ", or auto"
+			}
+			fmt.Fprintf(w, "  %-*s  range: %d to %d%s\n", width, "", opt.Min, opt.Max, auto)
 		}
 		if opt.SessionVal != "" {
 			fmt.Fprintf(w, "  %-*s  this session: %s\n", width, "", opt.SessionVal)

@@ -300,6 +300,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions()...)
 			opts = append(opts, tea.WithOutput(frames))
 			program := tea.NewProgram(model, opts...)
+			model.BindProgram(program)
 
 			ctx, cancel := context.WithCancel(sess.Context())
 			go func() {

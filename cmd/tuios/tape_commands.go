@@ -77,6 +77,7 @@ func runTapeInteractive(tapeFile string) error {
 	initialOS.ScriptExecutor = tape.NewCommandExecutor(initialOS)
 
 	p := tea.NewProgram(initialOS, app.ProgramOptions()...)
+	initialOS.BindProgram(p)
 
 	// A quit the event loop cannot carry out still has to end the process;
 	// finish runs once the cleanup below is done. See armSignalQuit.

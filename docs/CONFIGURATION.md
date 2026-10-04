@@ -59,6 +59,61 @@ To change the value of one session while it runs, use `tuios set-config daemon.w
 
 `[[keybindings.command]]` binds a key to a command that you write: a scratch terminal, a popup, a pane or a command with no window. A mistake in an entry is a warning, and tuios ignores that entry. See [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
 
+## Frame rate
+
+`appearance.max_fps` is the highest frame rate tuios draws at. Your terminal
+and your monitor can show fewer frames. A value above what they can show does
+not make tuios smoother.
+
+```toml
+[appearance]
+max_fps = 144     # a number from 10 to 240
+# max_fps = "auto"  # the refresh rate of your display
+# max_fps = 0       # 60, the default
+```
+
+| Value | Frame rate |
+| --- | --- |
+| `0` | 60. This is the default. |
+| `10` to `240` | That number. A value outside the range moves to the nearest end. |
+| `"auto"` | The refresh rate of your display, from 10 to 240. If tuios cannot find the rate, it uses 60. |
+
+The settings page offers Auto, 30, 60, 90, 120, 144, 165 and 240. With Auto
+selected, the row shows the rate in use, for example `Auto (144)`. A change
+applies at once, with no restart.
+
+**What limits the frames you see.** tuios sends a frame to your terminal. The
+terminal then draws the frame on its own schedule. kitty and ghostty draw at
+most once for each refresh of the monitor, so a 60 Hz monitor shows at most 60
+frames a second, whatever max_fps is. Over SSH, the network and the remote
+terminal set the limit too.
+
+**What it costs.** tuios draws only when something on the screen changes.
+The terminal library under it still wakes at max_fps while tuios is idle. An
+idle tuios at 240 wakes about three times as often as at 60. See
+[perf.md](perf.md) for the measured numbers.
+
+**How auto finds the rate.** tuios looks once, in the background, when it
+starts. It looks again when the config file is reloaded. It never delays the
+first frame. Until the answer arrives, tuios draws at 60.
+
+- Linux on Wayland: tuios asks `hyprctl` on Hyprland, `niri` on niri, and
+  `wlr-randr` on other wlroots compositors. It reads the current mode of each
+  output that is on.
+- Linux on X11, or on a Wayland compositor that none of these tools speaks
+  for: tuios asks `xrandr --current`. Under XWayland the answer comes from the
+  compositor and can be less exact.
+- macOS: tuios asks `system_profiler SPDisplaysDataType`. Some built-in
+  displays do not report a rate. tuios then uses 60.
+- Windows: tuios does not look, and uses 60.
+
+A terminal window cannot tell which display it is on. With several displays,
+auto uses the highest rate among them.
+
+Auto looks only when tuios runs on the same machine as your desktop. Over SSH,
+in tuios-web and in the SSH server, auto uses 60, because the displays on the
+machine are not the ones you see.
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

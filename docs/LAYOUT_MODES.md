@@ -69,18 +69,20 @@ the requested percentage wherever the layout allows it.
 How a resize is kept depends on the layout:
 
 - **BSP** writes the resize into the split ratios of the tree.
-- **Master-stack** writes it into the workspace's ratios: the master ratio
+- **Master-stack** writes it into the workspace's splits: the master ratio
   (the width of the master column, or the height of the master row when the
-  master is at the top or the bottom) and, when the stack holds two panes, the
-  stack ratio (how the stack splits its space between them). This works on
-  every side the master can take. The keyboard resizes, the percentage resizes
-  and a mouse drag on a divider all do this, so the resize survives a retile.
-  With the master in the center, a resize moves one divider, and the next
-  retile puts the master back in the middle at its new width. Both ratios are
-  session state, so every client attached to the session lays the workspace
-  out the same way. The default grid (four or more panes, one master on the
-  left) has no ratio to keep, so a resize there lasts only until the next
-  retile.
+  master is at the top or the bottom) and the share of every other pane: each
+  master, each stack pane, and each row and pane of the default grid (four or
+  more panes, one master on the left). This works on every side the master can
+  take. The keyboard resizes, the percentage resizes and a mouse drag on a
+  divider all do this, so the resize survives a retile, and a terminal resize
+  is a retile. With the master in the center, a resize moves one divider, and
+  the next retile puts the master back in the middle at its new width. The
+  splits are session state, so every client attached to the session lays the
+  workspace out the same way. When a pane opens or closes, the part of the
+  layout it changes goes back to equal shares. Equalize splits (`Ctrl+B =`) puts the
+  master back at the configured ratio and gives every other pane an equal
+  share.
 - **Scrolling layout: width only.** The width actions reach the focused
   column through the scrolling column resizer, which clamps to the column
   width range; the height actions have no scrolling branch, so
@@ -225,7 +227,8 @@ action names yourself in `[keybindings]`:
 
 | Palette command | Action name | What it does |
 |---|---|---|
-| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through 33%, 50%, 55%, 67% and 90% of the screen width |
+| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through 33%, 50%, 55%, 67% and 90% (and 100% when `appearance.scroll_column_max` is 100) of the screen width |
+| Scroll: Maximize Column Width | `scroll_maximize` | Widens the focused column to the configured ceiling, the widest the strip will give it |
 | Scroll: Stack Window Below (consume) | `scroll_consume` | Pulls the window from the next column into the focused column, stacking it below |
 | Scroll: Split to New Column (expel) | `scroll_expel` | Pushes the bottom window of the focused column out into its own new column |
 | (none) | `scroll_focus_left`, `scroll_focus_right` | Focus the column left/right |
@@ -234,7 +237,8 @@ action names yourself in `[keybindings]`:
 A column's width is a proportion of the screen until you resize it with `<` or
 `>`, which pins it to a fixed cell count; cycling the width with
 `scroll_cycle_width` unpins it again. Each press of `<` or `>` changes the width
-by four cells, within a floor of 20 cells and a ceiling of 90% of the screen.
+by four cells, within a floor of 20 cells and a ceiling set by
+`appearance.scroll_column_max` (90% by default, up to 100%).
 
 Windows stacked in one column split its height evenly, less `appearance.gap`
 between them.

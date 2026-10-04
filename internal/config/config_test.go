@@ -136,7 +136,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	cfg.Appearance.ShowRAM = true
 	cfg.Appearance.NiriReverseScroll = true
 	cfg.Appearance.ScrollbackLines = 12345
-	cfg.Appearance.MaxFPS = 30
+	cfg.Appearance.MaxFPS = "30"
 	cfg.Keybindings.LeaderKey = "ctrl+a"
 	cfg.Appearance.ClickToType = config.ClickToTypeDouble
 	cfg.Appearance.WindowButtonStyle = config.WindowButtonStyleDots

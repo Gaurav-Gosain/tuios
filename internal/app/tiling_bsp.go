@@ -203,7 +203,7 @@ func (m *OS) ApplyBSPLayout() {
 		//
 		// Under a camera it is placed like every other pane: it is not holding
 		// a box of its own, it is simply the pane the camera is on.
-		if win.Zoomed && !canvas.on {
+		if win.Zoomed && !m.zoomUsesLayout(win) {
 			continue
 		}
 		// A pane the pointer is dragging keeps its rectangle; the slot is
@@ -735,9 +735,21 @@ func (m *OS) RotateFocusedSplit() {
 	m.ApplyBSPLayout()
 }
 
-// EqualizeSplits resets all split ratios to 0.5 (equal splits)
+// EqualizeSplits resets the splits of the layout on screen: every BSP split
+// ratio to 0.5, or the master-stack splits to the configured master ratio and
+// equal shares for every other pane.
 func (m *OS) EqualizeSplits() {
 	if !m.AutoTiling {
+		return
+	}
+	if m.inMasterStack() {
+		m.equalizeMasterStack()
+		return
+	}
+	// The scrolling layout keeps no splits to reset. A BSP tree left from
+	// before the layout changed is not on screen, and laying it out here
+	// would put the panes in the wrong layout.
+	if !m.UseBSPLayout {
 		return
 	}
 
@@ -750,6 +762,23 @@ func (m *OS) EqualizeSplits() {
 
 	// Reapply layout
 	m.ApplyBSPLayout()
+}
+
+// equalizeMasterStack is EqualizeSplits for the master-stack layout. It
+// looked only for a BSP tree, which master-stack does not use, so it did
+// nothing there.
+//
+// Each value is written rather than deleted. The session merges these maps
+// by union and keeps an entry a push leaves out, so a deleted entry would
+// come back from the daemon. A zero stack ratio and empty splits both mean
+// equal shares.
+func (m *OS) equalizeMasterStack() {
+	ws := m.CurrentWorkspace
+	m.setMasterRatio(m.Settings.MasterRatioFraction())
+	m.setWorkspaceStackRatio(ws, 0)
+	m.setWorkspaceMasterSplits(ws, layout.MasterSplits{})
+	m.TileAllWindows()
+	m.SyncStateToDaemon()
 }
 
 // tilingSchemeCycle is the fixed order cycle_tiling_scheme steps through,

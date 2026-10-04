@@ -3,6 +3,8 @@ package session
 import (
 	"maps"
 	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
 // Merging a client state sync into daemon-owned state.
@@ -129,6 +131,17 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		for ws, ratio := range canonical.WorkspaceStackRatio {
 			if _, ok := incoming.WorkspaceStackRatio[ws]; !ok {
 				incoming.WorkspaceStackRatio[ws] = ratio
+			}
+		}
+	}
+	// And the splits of every other pane, on the same terms again.
+	if len(canonical.WorkspaceMasterSplits) > 0 {
+		if incoming.WorkspaceMasterSplits == nil {
+			incoming.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(canonical.WorkspaceMasterSplits))
+		}
+		for ws, sp := range canonical.WorkspaceMasterSplits {
+			if _, ok := incoming.WorkspaceMasterSplits[ws]; !ok {
+				incoming.WorkspaceMasterSplits[ws] = sp.Clone()
 			}
 		}
 	}

@@ -177,6 +177,13 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	if len(m.WorkspaceStackRatio) > 0 {
 		state.WorkspaceStackRatio = maps.Clone(m.WorkspaceStackRatio)
 	}
+	// The other splits travel on the same terms.
+	if len(m.WorkspaceMasterSplits) > 0 {
+		state.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(m.WorkspaceMasterSplits))
+		for ws, sp := range m.WorkspaceMasterSplits {
+			state.WorkspaceMasterSplits[ws] = sp.Clone()
+		}
+	}
 	// The master-stack shapes travel as ops (see master_layout.go), and the
 	// daemon keeps its own copy whatever a push holds. They are here for the
 	// state this client saves without a daemon.
@@ -277,6 +284,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.adoptWorkspaceMasterRatio(state)
 	m.WorkspaceStackRatio = make(map[int]float64, len(state.WorkspaceStackRatio))
 	m.adoptWorkspaceStackRatio(state)
+	m.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(state.WorkspaceMasterSplits))
+	m.adoptWorkspaceMasterSplits(state)
 	// The shapes belong to the session too, and the seeds this client sent
 	// were sent to the session being left.
 	m.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
@@ -721,6 +730,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.adoptWorkspaceMasterRatio(state)
 	m.adoptWorkspaceStackRatio(state)
+	m.adoptWorkspaceMasterSplits(state)
 	m.adoptWorkspaceHasCustom(state)
 	masterRetile := m.adoptWorkspaceMasterLayout(state)
 
@@ -1100,6 +1110,20 @@ func (m *OS) adoptWorkspaceStackRatio(state *session.SessionState) {
 		m.WorkspaceStackRatio = make(map[int]float64, len(state.WorkspaceStackRatio))
 	}
 	maps.Copy(m.WorkspaceStackRatio, state.WorkspaceStackRatio)
+}
+
+// adoptWorkspaceMasterSplits is adoptWorkspaceStackRatio for the splits of the
+// other master-stack panes, merged on the same terms.
+func (m *OS) adoptWorkspaceMasterSplits(state *session.SessionState) {
+	if len(state.WorkspaceMasterSplits) == 0 {
+		return
+	}
+	if m.WorkspaceMasterSplits == nil {
+		m.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(state.WorkspaceMasterSplits))
+	}
+	for ws, sp := range state.WorkspaceMasterSplits {
+		m.WorkspaceMasterSplits[ws] = sp.Clone()
+	}
 }
 
 // adoptWorkspaceHasCustom takes the session's custom-layout flags onto this

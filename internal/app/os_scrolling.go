@@ -317,6 +317,17 @@ func (m *OS) ScrollingCycleWidth() {
 	m.ScrollingSetPositions()
 }
 
+// ScrollingMaximizeColumn widens the focused column to its widest allowed
+// width. The widest allowed width is set by scroll_column_max: 90% by default,
+// 100% when the user has raised it. It is the one-key path to the 1.0 preset
+// the cycle width chain walks past 0.9 to reach.
+func (m *OS) ScrollingMaximizeColumn() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.MaximizeColumn()
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+	m.ScrollingSetPositions()
+}
+
 // ScrollingConsumeWindow absorbs the next column's window into the focused
 // column. Focus follows the window that moved, so the keyboard is where the
 // user is looking; without the sync the OS focus stayed on a pane in a column
@@ -666,9 +677,13 @@ func (m *OS) scrollingResizeColumn(delta int) {
 		return
 	}
 	col := &sl.Columns[sl.FocusedCol]
-	// Get current width and apply delta, capped at 90% of the content width
+	// Cap at scroll_column_max, not the nine tenths the strip used to write
+	// here: somebody who set scroll_column_max = 100 wants a full-width column
+	// from the resize keys, not a stuck one at 90%. The other layouts'
+	// resize_width_N actions accept up to 90, which mirrors that ceiling; the
+	// strip's wider is what a pane on a strip needs to take the screen.
 	viewW := m.ScrollingViewWidth()
-	maxWidth := viewW * 9 / 10
+	maxWidth := sl.MaxColumnWidth(viewW)
 	currentWidth := sl.ResolveColumnWidth(sl.FocusedCol, viewW)
 	newWidth := max(min(currentWidth+delta, maxWidth), 20)
 	col.FixedWidth = newWidth

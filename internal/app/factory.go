@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
@@ -195,12 +196,13 @@ func NewOS(opts OSOptions) *OS {
 		NumWorkspaces:     numWorkspaces,
 
 		// Workspace state maps
-		WorkspaceFocus:       make(map[int]int),
-		FocusHistory:         make(map[int][]string),
-		WorkspaceLayouts:     make(map[int][]WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		WorkspaceStackRatio:  make(map[int]float64),
+		WorkspaceFocus:        make(map[int]int),
+		FocusHistory:          make(map[int][]string),
+		WorkspaceLayouts:      make(map[int][]WindowLayout),
+		WorkspaceHasCustom:    make(map[int]bool),
+		WorkspaceMasterRatio:  make(map[int]float64),
+		WorkspaceStackRatio:   make(map[int]float64),
+		WorkspaceMasterSplits: make(map[int]layout.MasterSplits),
 
 		// Resize tracking
 		PendingResizes: make(map[string][2]int),

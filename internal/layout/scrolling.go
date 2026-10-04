@@ -74,7 +74,7 @@ type ScrollingLayout struct {
 func NewScrollingLayout() *ScrollingLayout {
 	return &ScrollingLayout{
 		DefaultWidth: 0.55,
-		PresetWidths: []float64{0.333, 0.5, 0.55, 0.667, 0.9},
+		PresetWidths: []float64{0.333, 0.5, 0.55, 0.667, 0.9, 1.0},
 		ZoomedCol:    -1,
 	}
 }
@@ -167,6 +167,10 @@ func (s *ScrollingLayout) MoveColumnRight() {
 }
 
 // CycleWidth cycles the focused column through preset widths.
+//
+// Presets above the ceiling are skipped, so the cycle never offers a width the
+// strip will cap. A default ceiling reaches the 0.9 preset (the cap is 0.9, so
+// 1.0 would resolve to 0.9 anyway); a raised ceiling adds it to the chain.
 func (s *ScrollingLayout) CycleWidth() {
 	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) || len(s.PresetWidths) == 0 {
 		return
@@ -180,14 +184,30 @@ func (s *ScrollingLayout) CycleWidth() {
 	// Proportion; clear it so the cycled preset proportion takes effect.
 	col.FixedWidth = 0
 
-	// Find next preset
+	ceiling := s.Ceiling()
 	for i, w := range s.PresetWidths {
+		if w > ceiling+0.01 {
+			continue
+		}
 		if w > current+0.01 {
 			col.Proportion = s.PresetWidths[i]
 			return
 		}
 	}
 	col.Proportion = s.PresetWidths[0]
+}
+
+// MaximizeColumn widens the focused column to the configured ceiling, the widest
+// the strip will give it. The ceiling is MaxProportion, which a user setting
+// (scroll_column_max) raises up to 1.0 for a full-width column. Cycling past
+// 0.9 lands on the same place via the 1.0 preset.
+func (s *ScrollingLayout) MaximizeColumn() {
+	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) {
+		return
+	}
+	col := &s.Columns[s.FocusedCol]
+	col.FixedWidth = 0
+	col.Proportion = s.Ceiling()
 }
 
 // ConsumeWindow moves the window from the next column into the focused column.
@@ -250,7 +270,7 @@ func (s *ScrollingLayout) ResolveColumnWidth(colIndex, screenWidth int) int {
 	return s.resolveWidthAt(colIndex, s.Columns[colIndex], screenWidth)
 }
 
-// maxColumnWidth is the widest a column may be resolved to, in cells.
+// MaxColumnWidth is the widest a column may be resolved to, in cells.
 //
 // The cap used to be nine tenths of the screen, written here as a literal. That
 // is where the next column stops peeking in at the edge, which is the only
@@ -258,17 +278,32 @@ func (s *ScrollingLayout) ResolveColumnWidth(colIndex, screenWidth int) int {
 // somebody else's decision to make for a person who wants one column and the
 // whole screen: appearance.scroll_column_max is theirs, and MaxProportion is
 // how it reaches this far.
-func (s *ScrollingLayout) maxColumnWidth(screenWidth int) int {
+//
+// Exported so the resize keys and the like-scroll cap live in one place.
+func (s *ScrollingLayout) MaxColumnWidth(screenWidth int) int {
+	return max(int(float64(screenWidth)*s.Ceiling()), 10)
+}
+
+// Ceiling is the widest a column may be as a share of the screen, defaulted to
+// 0.9 if MaxProportion is unset or out of range.
+//
+// Every width calculation the strip does against the ceiling reads through
+// this helper, so a Settings built by hand with a zero MaxProportion still gets
+// the nine tenths the strip always showed before a user could raise it.
+//
+// Exported so the cycle and the maximize action can ask the strip what its
+// ceiling is without re-reading the settings row.
+func (s *ScrollingLayout) Ceiling() float64 {
 	p := s.MaxProportion
 	if p <= 0 || p > 1 {
-		p = 0.9
+		return 0.9
 	}
-	return max(int(float64(screenWidth)*p), 10)
+	return p
 }
 
 // resolveWidth returns the width in cells for a column.
 func (s *ScrollingLayout) resolveWidth(col ScrollColumn, screenWidth int) int {
-	maxWidth := s.maxColumnWidth(screenWidth)
+	maxWidth := s.MaxColumnWidth(screenWidth)
 	if col.FixedWidth > 0 {
 		return min(col.FixedWidth, maxWidth)
 	}

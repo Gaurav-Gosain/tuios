@@ -447,28 +447,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 
 	switch resp.Type {
 	case MsgAttached:
-		var payload AttachedPayload
-		if err := resp.ParsePayload(&payload); err != nil {
-			return nil, err
-		}
-		c.sessionID = payload.SessionID
-		c.setSessionName(payload.SessionName)
-		c.humanNonce.Store(&payload.HumanNonce)
-		c.startPushes()
-		c.appliedSeq.Store(stateSeq(payload.State))
-		if err := validateSessionState(payload.State); err != nil {
-			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
-		}
-		c.NoteSession(payload.SessionName)
-		// The attach reply starts the session's numbering over: a switch to
-		// another session on this connection comes to a session whose
-		// generations are its own, and can be lower than the last one taken.
-		c.multiClientMu.Lock()
-		c.sessionLayoutGen = 0
-		c.multiClientMu.Unlock()
-		c.noteSessionLayout(payload.Generation, payload.Reserve)
-		c.noteSizePolicy(payload.Policy)
-		return payload.State, nil
+		return c.takeAttachReply(resp)
 
 	case MsgError:
 		var errPayload ErrorPayload
@@ -478,6 +457,40 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
 	}
+}
+
+// takeAttachReply takes the daemon's answer to an attach, for the first
+// attach and for a session switch alike. A switch is an attach to another
+// session on the same connection, so the two must take the same things.
+//
+// The switch used to take less. It kept the layout generation and the chrome
+// reserve of the session it left. Generations are numbered per session, so a
+// session with a lower count than the one left had every resize answer
+// dropped as stale until its count caught up, and the panes kept the box they
+// were given at the switch: hiding the rail there gave its columns to nobody.
+func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
+	var payload AttachedPayload
+	if err := resp.ParsePayload(&payload); err != nil {
+		return nil, err
+	}
+	c.sessionID = payload.SessionID
+	c.setSessionName(payload.SessionName)
+	c.humanNonce.Store(&payload.HumanNonce)
+	c.startPushes()
+	c.appliedSeq.Store(stateSeq(payload.State))
+	if err := validateSessionState(payload.State); err != nil {
+		return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
+	}
+	c.NoteSession(payload.SessionName)
+	// The attach reply starts the session's numbering over: a switch to
+	// another session on this connection comes to a session whose
+	// generations are its own, and can be lower than the last one taken.
+	c.multiClientMu.Lock()
+	c.sessionLayoutGen = 0
+	c.multiClientMu.Unlock()
+	c.noteSessionLayout(payload.Generation, payload.Reserve)
+	c.noteSizePolicy(payload.Policy)
+	return payload.State, nil
 }
 
 // attachRefused reports an attach the daemon answered and declined, as opposed
@@ -645,6 +658,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
+		Reserve:     c.OwnLayoutReserve(),
 		Served:      c.Served,
 		AllowNested: c.AllowNested,
 		NestProbe:   probe,
@@ -661,21 +675,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 
 	switch resp.Type {
 	case MsgAttached:
-		var payload AttachedPayload
-		if err := resp.ParsePayload(&payload); err != nil {
-			return nil, err
-		}
-		c.sessionID = payload.SessionID
-		c.setSessionName(payload.SessionName)
-		c.humanNonce.Store(&payload.HumanNonce)
-		c.startPushes()
-		c.appliedSeq.Store(stateSeq(payload.State))
-		if err := validateSessionState(payload.State); err != nil {
-			return nil, fmt.Errorf("attach: the session state the daemon sent was refused: %w", err)
-		}
-		c.NoteSession(payload.SessionName)
-		c.noteSizePolicy(payload.Policy)
-		return payload.State, nil
+		return c.takeAttachReply(resp)
 
 	case MsgError:
 		var errPayload ErrorPayload

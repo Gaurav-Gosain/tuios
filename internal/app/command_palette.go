@@ -51,6 +51,10 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// Runs on the Bubble Tea goroutine, so applying it to this session's
 	// settings is single-threaded and reaches nobody else's session.
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	// A reload is the one time the display's rate is looked for again, after
+	// startup: the person may have changed the monitor's mode. Started before
+	// applyAppearanceLive below, which would otherwise keep the first answer.
+	m.detectDisplayRate(true)
 	// Whether the rail is shown is the session's once the session has a
 	// value. The file's value is what a new session starts with, so a reload
 	// does not show or hide the rail on every client. See keepSessionSidebar.
@@ -700,6 +704,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.UseScrollingLayout {
 					m.ScrollingCycleWidth()
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Scroll: maximize column width",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.UseScrollingLayout {
+					m.ScrollingMaximizeColumn()
 				}
 				return m, nil
 			},

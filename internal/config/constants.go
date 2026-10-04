@@ -66,20 +66,19 @@ const (
 
 var (
 
-	// MaxFPSCap is the ceiling the renderer is allowed to reach. The tick loop
-	// throttles actual work to NormalFPS; this is the upper bound so raising
-	// NormalFPS at runtime (including the "unlimited" setting, which pins it to
-	// this value) can take effect without a restart.
+	// MaxFPSCap is the highest max_fps tuios accepts, and the most a display
+	// sold today refreshes at.
 	//
-	// It is the renderer's own ceiling and not a number of our choosing. Bubble
-	// Tea clamps to 120 in NewProgram, so a larger value here was accepted by
-	// the setting, offered by the settings row, handed to tea.WithFPS and then
-	// quietly ignored: the tick loop really did run faster while the screen did
-	// not, so the setting said one thing and the display did another. Matching
-	// the renderer is the honest of the two fixes, because the other one is to
-	// keep offering a number and explain in the row that part of it does
-	// nothing.
-	MaxFPSCap = 120
+	// Bubble Tea clamps its own frame ticker to 120 in NewProgram, which is
+	// what this cap used to match: a larger value was accepted, handed to
+	// tea.WithFPS and quietly ignored. OS.BindProgram now sets the ticker after
+	// NewProgram, past that clamp, so every value up to this cap is one the
+	// screen really gets.
+	MaxFPSCap = 240
+
+	// DefaultFPS is the frame rate for max_fps = 0, and for "auto" when the
+	// display's rate cannot be found.
+	DefaultFPS = 60
 
 	// MinConfiguredFPS is the floor a configured max_fps is clamped to. Below it
 	// the UI stops feeling like it is responding to the keyboard at all.

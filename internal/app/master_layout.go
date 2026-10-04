@@ -52,6 +52,7 @@ func (m *OS) masterParams() layout.MasterParams {
 		Count:      st.Count,
 		Ratio:      m.MasterRatio,
 		StackRatio: m.WorkspaceStackRatio[m.CurrentWorkspace],
+		Splits:     m.WorkspaceMasterSplits[m.CurrentWorkspace],
 		Grid:       !st.NoGrid,
 		Gap:        m.separatorGap(),
 	}

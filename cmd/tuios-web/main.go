@@ -435,6 +435,7 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 		opts = append(opts, tea.WithOutput(frames))
 	}
 	program := tea.NewProgram(started, opts...)
+	model.BindProgram(program)
 	// Tear down after the program has fully stopped, the way the SSH server
 	// does. Closing on the session context instead ran Cleanup while the last
 	// frames were still going out.

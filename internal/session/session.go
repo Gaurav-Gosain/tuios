@@ -26,6 +26,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -441,6 +442,14 @@ type SessionState struct {
 	// panes split the height equally, which is what every client did before the
 	// field existed, so an older peer that never sends it changes nothing.
 	WorkspaceStackRatio map[int]float64 `json:"workspace_stack_ratio,omitempty"`
+	// WorkspaceMasterSplits is the size of every other master-stack pane a
+	// user resized, keyed by workspace: the masters' shares, the stack's, and
+	// the grid's rows and cells. See layout.MasterSplits. It is session state
+	// for the reason WorkspaceMasterRatio is and follows the same rules. A
+	// workspace with no entry shares that space equally, which is what every
+	// client did before the field existed, so an older peer that never sends
+	// it changes nothing.
+	WorkspaceMasterSplits map[int]layout.MasterSplits `json:"workspace_master_splits,omitempty"`
 	// WorkspaceMasterLayout is each workspace's master-stack shape: where the
 	// masters go and how many there are. Only MsgMasterLayout writes it (see
 	// master_layout.go); a push never carries it, and retainDaemonExclusive
@@ -2247,6 +2256,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	if s.state.WorkspaceStackRatio != nil {
 		stateCopy.WorkspaceStackRatio = maps.Clone(s.state.WorkspaceStackRatio)
+	}
+	if s.state.WorkspaceMasterSplits != nil {
+		stateCopy.WorkspaceMasterSplits = cloneMasterSplits(s.state.WorkspaceMasterSplits)
 	}
 	if s.state.WorkspaceMasterLayout != nil {
 		stateCopy.WorkspaceMasterLayout = maps.Clone(s.state.WorkspaceMasterLayout)

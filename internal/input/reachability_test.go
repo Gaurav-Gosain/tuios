@@ -446,6 +446,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_cycle_width": "user binding",
 	"scroll_consume":     "user binding",
 	"scroll_expel":       "user binding",
+	"scroll_maximize":    "user binding",
 
 	// BSP has one split it does not ship a key for.
 	"smart_split": "user binding",

@@ -45,6 +45,15 @@ type Settings struct {
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
 
+	// MaxFPSAuto is set when appearance.max_fps is "auto": NormalFPS then
+	// follows DisplayFPS.
+	MaxFPSAuto bool
+
+	// DisplayFPS is the refresh rate the client found for this machine's
+	// displays, or 0 before it has looked or when it cannot tell. It is not
+	// read from the config, so a reload keeps it.
+	DisplayFPS int
+
 	// UseASCIIOnly controls whether to use ASCII fallback characters instead
 	// of Nerd Fonts. It is the effective answer: set by --ascii-only
 	// (ASCIIRequested), or by a terminal whose locale is not UTF-8 when no
@@ -671,7 +680,7 @@ func DefaultSettings() Settings {
 		NotificationWarningDuration: 8 * time.Second,
 		NotificationErrorDuration:   15 * time.Second,
 		NotificationErrorSticky:     true,
-		NormalFPS:                   60,
+		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,
 		ModalDim:                    ModalDimDefault,

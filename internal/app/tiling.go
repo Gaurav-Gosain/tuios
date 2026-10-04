@@ -193,7 +193,7 @@ func (m *OS) tileAllWindows() {
 				// A zoomed pane keeps its slot and loses its rectangle to the
 				// zoom box. See the same skip in ApplyBSPLayout. Under a camera
 				// it is placed like every other pane.
-				if visibleWindows[i].Zoomed && !canvas.on {
+				if visibleWindows[i].Zoomed && !m.zoomUsesLayout(visibleWindows[i]) {
 					continue
 				}
 				if r := canvas.apply(layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}); canvas.on {

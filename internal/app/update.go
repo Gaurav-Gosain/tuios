@@ -2141,6 +2141,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		_, cmd := m.Update(msg.msg)
 		return m, tea.Batch(cmd, listenForConfigReload(m.configReloads))
 
+	case displayRateMsg:
+		m.handleDisplayRate(msg)
+		return m, nil
+
 	case ConfigReloadedMsg:
 		// Apply the config parsed by the watcher goroutine here, on the Bubble
 		// Tea goroutine, so the render loop never reads this session's settings

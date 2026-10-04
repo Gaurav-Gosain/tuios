@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
 // The master-stack shape of a workspace as an op.
@@ -201,4 +202,17 @@ func (c *TUIClient) SendMasterLayout(ws int, st MasterLayoutState, ifAbsent bool
 	}
 	c.pushSeq.Store(seq)
 	return nil
+}
+
+// cloneMasterSplits copies a session's master-stack splits deep, so a copy of
+// the state shares no list with the session's own.
+func cloneMasterSplits(m map[int]layout.MasterSplits) map[int]layout.MasterSplits {
+	if m == nil {
+		return nil
+	}
+	out := make(map[int]layout.MasterSplits, len(m))
+	for ws, sp := range m {
+		out[ws] = sp.Clone()
+	}
+	return out
 }
