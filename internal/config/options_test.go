@@ -23,6 +23,7 @@ var optionWalkSkips = map[string]string{
 	"dock.custom":                  "a free-form map of component name to its command and refresh",
 	"hosts":                        "a map of host name to its address, which no single settable path can spell",
 	"notify":                       "where the Inbox's text goes and with which credentials, which a pane must not change over the control protocol",
+	"plugins":                      "which plugins run outside every pane with the person's rights, which set-option, a verb any pane can call, must not be able to change",
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
 	"appearance.sidebar.custom":    "the rail section's command, which runs outside every pane on every refresh, as dock commands and hooks do; set-option, a verb any pane can call in the default open mode, must not be able to set it, the way daemon.respond_from_shell is kept out above",

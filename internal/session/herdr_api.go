@@ -334,11 +334,7 @@ var herdrUnsupported = []string{
 	"pane.scroll",
 	"pane.clear", "pane.edit_scrollback", "pane.selection.read", "pane.copy_motion",
 	"pane.copy_search", "pane.input.set", "pane.link.activate", "pane.link.resolve",
-	"popup.close",
 	"integration.list", "integration.install", "integration.uninstall",
-	"plugin.link", "plugin.list", "plugin.unlink", "plugin.enable", "plugin.disable",
-	"plugin.action.list", "plugin.action.invoke", "plugin.log.list",
-	"plugin.pane.open", "plugin.pane.focus", "plugin.pane.close",
 }
 
 // herdrAPICall answers a method that is not a pane report. handled is false
@@ -346,6 +342,11 @@ var herdrUnsupported = []string{
 func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessage) (any, *herdrError, bool) {
 	m, ok := herdrMethods[method]
 	if !ok {
+		// The plugin methods are answered by the plugin host. See
+		// herdr_plugins.go.
+		if out, herr, handled := d.herdrPluginCall(cs, method, params); handled {
+			return out, herr, true
+		}
 		if slices.Contains(herdrUnsupported, method) {
 			return nil, herdrErr("unsupported", "tuios does not answer "+method+". See the herdr compatibility section of docs/AGENT_STATE.md for what it answers"), true
 		}

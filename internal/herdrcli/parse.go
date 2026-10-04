@@ -42,6 +42,9 @@ const (
 	// OutSessions pings the socket and prints herdr's session list: the one
 	// tuios daemon behind the socket. Params["json"] asks for JSON.
 	OutSessions
+	// OutPluginConfigDir sends nothing. Text is a plugin id, and its config
+	// folder is made and printed, as herdr plugin config-dir does.
+	OutPluginConfigDir
 )
 
 // Call is one parsed herdr command: the request it sends and how its answer
@@ -146,6 +149,7 @@ var groups = map[string]groupParser{
 	"terminal":     parseTerminal,
 	"status":       parseStatus,
 	"session":      parseSession,
+	"plugin":       parsePlugin,
 }
 
 // localGroups are herdr's commands that do their work on herdr's own
@@ -157,7 +161,6 @@ var localGroups = map[string]string{
 	"channel":     "herdr channel picks herdr's update channel. tuios does not update herdr",
 	"machine":     "herdr machine manages herdr's SSH machines. Use tuios hosts",
 	"update":      "herdr update installs herdr. tuios does not update herdr",
-	"plugin":      "tuios does not host herdr plugins. Run the plugin's command in a tuios pane: its herdr calls reach tuios",
 	"integration": "herdr integration installs herdr's agent hooks. Use tuios integration",
 }
 

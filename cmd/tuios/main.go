@@ -3043,6 +3043,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
+	rootCmd.AddCommand(newPluginsCommand())
 
 	return rootCmd
 }

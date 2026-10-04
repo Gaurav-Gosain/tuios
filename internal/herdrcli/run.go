@@ -33,6 +33,9 @@ type Options struct {
 	// Socket is the herdr socket to dial when HERDR_SOCKET_PATH is not set:
 	// tuios's own, beside the daemon socket.
 	Socket func() (string, error)
+	// PluginConfigDir makes and returns a plugin's config folder, for herdr
+	// plugin config-dir. Nil answers that command unsupported.
+	PluginConfigDir func(id string) (string, error)
 }
 
 // Main runs one herdr command line, without the program name, and returns
@@ -64,6 +67,18 @@ func Main(args []string, o Options) int {
 	case OutLocal:
 		printJSON(o.Stderr, errorResponse(c.ID, "unsupported", c.Text))
 		return 1
+	case OutPluginConfigDir:
+		if o.PluginConfigDir == nil {
+			printJSON(o.Stderr, errorResponse(c.ID, "unsupported", "this herdr front has no plugin folders"))
+			return 1
+		}
+		dir, err := o.PluginConfigDir(c.Text)
+		if err != nil {
+			fmt.Fprintln(o.Stderr, "herdr: "+err.Error())
+			return 1
+		}
+		fmt.Fprintln(o.Stdout, dir)
+		return 0
 	}
 	path := o.Getenv("HERDR_SOCKET_PATH")
 	if path == "" && o.Socket != nil {
@@ -322,4 +337,27 @@ func printSessions(o Options, path string, c *Call) int {
 	fmt.Fprintf(o.Stdout, "%-20s %-8s %-48s socket\n", "name", "status", "directory")
 	fmt.Fprintf(o.Stdout, "%-20s %-8s %-48s %s\n", "default", status, dir, path)
 	return 0
+}
+
+// Request sends one method to the herdr socket at path and returns the
+// response line as an object: a result or an error. A socket that cannot
+// be reached is an error in herdr's server_not_running shape. tuios's own
+// commands use it to reach the plugin host.
+func Request(path, method string, params map[string]any, timeout time.Duration) (map[string]any, error) {
+	resp, cerr := send(path, "tuios:"+method, method, params, timeout)
+	if cerr != nil {
+		return nil, cerr
+	}
+	return resp, nil
+}
+
+// NotRunning reports whether err is a socket nobody listens on.
+func NotRunning(err error) bool {
+	var c connError
+	if errors.As(err, &c) {
+		if e, ok := c["error"].(map[string]any); ok {
+			return e["code"] == "server_not_running"
+		}
+	}
+	return false
 }

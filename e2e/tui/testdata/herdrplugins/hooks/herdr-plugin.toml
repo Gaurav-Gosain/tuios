@@ -1,0 +1,12 @@
+id = "e2e.hooks"
+name = "E2E hooks"
+version = "1.0.0"
+min_herdr_version = "0.9.0"
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["sh", "./startup.sh"]
+
+[[events]]
+on = "pane.created"
+command = ["sh", "./event.sh"]

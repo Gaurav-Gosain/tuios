@@ -1,0 +1,4 @@
+id = "e2e.broken"
+name = "E2E broken"
+version = "1.0.0"
+min_herdr_version = "9.0.0"

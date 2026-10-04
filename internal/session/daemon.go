@@ -126,6 +126,11 @@ type Daemon struct {
 	hostsWatcher *config.Watcher
 	// configPath is the file hostsWatcher follows.
 	configPath string
+	// plugins runs the enabled herdr plugins. See plugin_host.go.
+	plugins *pluginHost
+	// pluginsWaiting is true while config.toml enables a plugin the person
+	// has not applied.
+	pluginsWaiting atomic.Bool
 	// notify sends the Inbox's push notifications ([notify]). See
 	// daemon_notify.go.
 	notify *pushNotifier
@@ -743,6 +748,9 @@ type DaemonConfig struct {
 	// Notify is the [notify] table: where the Inbox's push notifications go.
 	// The zero value has no provider and sends nothing. See daemon_notify.go.
 	Notify config.NotifyConfig
+	// Plugins is the [plugins] table: the herdr plugins the daemon runs.
+	// See plugin_host.go.
+	Plugins config.PluginsConfig
 }
 
 // NewDaemon creates a new daemon instance.
@@ -811,6 +819,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetRenameHook(d.onSessionRenamed)
 
 	d.configPath = cfg.ConfigPath
+	d.plugins = newPluginHost(d, cfg.Plugins)
 	d.hostDial = cfg.HostDial
 	d.fleet = newHostFleet(d)
 	d.setupFederation(cfg.Hosts)
@@ -1237,6 +1246,9 @@ func (d *Daemon) Start() error {
 	d.startHostsWatch()
 	// The Inbox's push notifications follow the event stream from here on.
 	d.notify.start()
+	// The enabled plugins' startup commands run once the daemon is up, and
+	// their event hooks follow the stream from here on.
+	d.plugins.start()
 
 	go d.handleSignals()
 	go d.acceptLoop()
@@ -1367,6 +1379,8 @@ func (d *Daemon) shutdown() error {
 			_ = d.linkHumanListener.Close()
 			_ = os.Remove(LinkHumanSocketPath(d.manager.SocketPath()))
 		}
+		// The plugins' processes stop with the daemon that started them.
+		d.plugins.stop()
 		if d.herdrListener != nil {
 			d.manager.SetHerdrSocket("")
 			_ = d.herdrListener.Close()

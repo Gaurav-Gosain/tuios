@@ -77,6 +77,9 @@ type UserConfig struct {
 	// by the daemon. Outside the option registry for the same reason as
 	// [hosts]. See notify.go.
 	Notify NotifyConfig `toml:"notify,omitempty"`
+	// Plugins is the [plugins] table: the herdr plugins tuios runs. Outside
+	// the option registry for the same reason as [hosts]. See plugins.go.
+	Plugins PluginsConfig `toml:"plugins,omitempty"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

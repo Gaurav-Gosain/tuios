@@ -31,7 +31,7 @@ func isHerdrName(arg0 string) bool {
 
 // runAsHerdr answers a herdr command line.
 func runAsHerdr(args []string) int {
-	return herdrcli.Main(args, herdrcli.Options{Socket: herdrSocketPath})
+	return herdrcli.Main(args, herdrcli.Options{Socket: herdrSocketPath, PluginConfigDir: pluginConfigDir})
 }
 
 // herdrSocketPath is the herdr socket beside this user's daemon socket, for a
@@ -58,7 +58,7 @@ func newHerdrGroupCommand(group string) *cobra.Command {
 				return cmd.Help()
 			}
 			code := herdrcli.Main(append([]string{group}, args...), herdrcli.Options{
-				Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr(), Socket: herdrSocketPath,
+				Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr(), Socket: herdrSocketPath, PluginConfigDir: pluginConfigDir,
 			})
 			if code != 0 {
 				os.Exit(code)

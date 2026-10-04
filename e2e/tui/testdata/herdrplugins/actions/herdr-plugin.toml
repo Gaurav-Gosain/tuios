@@ -1,0 +1,10 @@
+id = "e2e.actions"
+name = "E2E actions"
+version = "1.0.0"
+min_herdr_version = "0.9.3"
+
+[[actions]]
+id = "hello"
+title = "Say hello"
+contexts = ["pane"]
+command = ["./bin/hello.sh", "arg one"]

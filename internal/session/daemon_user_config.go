@@ -88,6 +88,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
+	// The daemon runs the herdr plugins, so it reads which ones.
+	cfg.Plugins = uc.Plugins
 	// The daemon spawns every pane, so it decides which are told about the
 	// herdr protocol socket.
 	cfg.HerdrProtocol = uc.Agents.HerdrProtocol

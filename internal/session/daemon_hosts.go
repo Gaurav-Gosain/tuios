@@ -111,6 +111,10 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
+	// A plugin put on the enabled list waits for the person, like a new
+	// host. One taken off stops now. See plugin_host.go.
+	pluginsWait := d.plugins != nil && d.plugins.apply(cfg.Plugins, byPerson)
+	d.pluginsWaiting.Store(pluginsWait)
 	if byPerson {
 		d.manager.SetPanePermissions(perms)
 		// A policy change applies to the next call on every link, including
@@ -142,7 +146,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host
