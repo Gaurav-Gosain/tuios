@@ -132,14 +132,18 @@ func paneEnv(base []string, dir, window string, extra []string) []string {
 }
 
 // mergeEnv returns base with every KEY=VALUE of extra set, replacing any
-// entry of base for the same key.
+// entry of base for the same key. An entry -KEY, with no "=", removes KEY:
+// it is how set-environment -r reaches a new pane.
 func mergeEnv(base, extra []string) []string {
 	if len(extra) == 0 {
 		return base
 	}
 	keys := map[string]bool{}
 	for _, kv := range extra {
-		k, _, _ := strings.Cut(kv, "=")
+		k, _, set := strings.Cut(kv, "=")
+		if !set {
+			k = strings.TrimPrefix(k, "-")
+		}
 		keys[k] = true
 	}
 	out := make([]string, 0, len(base)+len(extra))
@@ -149,5 +153,10 @@ func mergeEnv(base, extra []string) []string {
 			out = append(out, kv)
 		}
 	}
-	return append(out, extra...)
+	for _, kv := range extra {
+		if strings.Contains(kv, "=") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

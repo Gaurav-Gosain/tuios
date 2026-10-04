@@ -254,7 +254,7 @@ func (s *Shim) newSession(name string, args []string) (string, []string, error) 
 	if cwd != "" {
 		params["cwd"] = cwd
 	}
-	if argv := s.paneCommand(p.Args, p.Values('e')); len(argv) > 0 {
+	if argv := s.paneCommand(p.Args, append(s.paneEnvFor(nil), p.Values('e')...)); len(argv) > 0 {
 		params["command"] = argv
 	}
 	raw, err := s.Caller.Call("new-session", params)

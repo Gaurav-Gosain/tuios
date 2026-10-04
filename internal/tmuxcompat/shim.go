@@ -46,6 +46,9 @@ type Shim struct {
 	// HolderEnv is extra KEY=VALUE for the processes of new panes, beyond
 	// what the holder sets itself. The launcher passes the log settings here.
 	HolderEnv []string
+	// Environ is the caller's environment, the base of the global
+	// environment show-environment -g lists.
+	Environ []string
 	// Shell is the panes' shell ($SHELL). Its base name is
 	// pane_current_command when nothing else runs in a pane.
 	Shell string
@@ -65,6 +68,9 @@ type Shim struct {
 	respawn func(dir, windowID string, req RespawnRequest) error
 	// memBuffers are the paste buffers of a shim with no runtime directory.
 	memBuffers []buffer
+	// memEnv is the set-environment state of a shim with no runtime
+	// directory, by scope (see envScope).
+	memEnv map[string][]envVar
 	// control is set while the shim answers a control-mode client.
 	control bool
 	// created is the session new-session made last, for control mode to
@@ -105,6 +111,19 @@ var commands = map[string]handler{
 	"show-options":        (*Shim).showOptions,
 	"show-window-options": (*Shim).showOptions,
 	"new-session":         (*Shim).newSession,
+	"last-pane":           (*Shim).lastPane,
+	"next-window":         (*Shim).nextWindow,
+	"previous-window":     (*Shim).previousWindow,
+	"break-pane":          (*Shim).breakPane,
+	"join-pane":           (*Shim).joinPane,
+	"move-pane":           (*Shim).joinPane,
+	"swap-pane":           (*Shim).swapPane,
+	"rename-session":      (*Shim).renameSession,
+	"show-buffer":         (*Shim).showBuffer,
+	"save-buffer":         (*Shim).saveBuffer,
+	"list-buffers":        (*Shim).listBuffers,
+	"show-environment":    (*Shim).showEnvironment,
+	"set-environment":     (*Shim).setEnvironment,
 }
 
 // specs are the flags each command accepts. A tmux flag missing here is
@@ -137,6 +156,19 @@ var specs = map[string]spec{
 	"set-option":          {bools: "aFgopqsuUw", values: "t"},
 	"set-window-option":   {bools: "aFgoqu", values: "t"},
 	"new-session":         {bools: "AdDEPX", values: "cefFnstxy"},
+	"last-pane":           {bools: "Z", values: "t"},
+	"next-window":         {values: "t"},
+	"previous-window":     {values: "t"},
+	"break-pane":          {bools: "dP", values: "Fnst"},
+	"join-pane":           {bools: "bdfhv", values: "lst"},
+	"move-pane":           {bools: "bdfhv", values: "lst"},
+	"swap-pane":           {bools: "dDUZ", values: "st"},
+	"rename-session":      {values: "t"},
+	"show-buffer":         {values: "b"},
+	"save-buffer":         {bools: "a", values: "b"},
+	"list-buffers":        {values: "Ff"},
+	"show-environment":    {bools: "ghs", values: "t"},
+	"set-environment":     {bools: "Fghru", values: "t"},
 }
 
 // textCommands carry text as their positional arguments: keys to type or a
@@ -400,7 +432,9 @@ func (s *Shim) paneCommand(cmd, env []string) []string {
 	}
 	argv := []string{s.Exe, "tmux-pane", "--dir", s.Dir}
 	for _, e := range append(slices.Clone(s.HolderEnv), env...) {
-		argv = append(argv, "--env", e)
+		// One word, so an entry that removes a variable (-NAME) is not
+		// read as a flag.
+		argv = append(argv, "--env="+e)
 	}
 	argv = append(argv, "--")
 	return append(argv, cmd...)
@@ -477,7 +511,7 @@ func (s *Shim) splitWindow(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, err
 	}
 	cwd, _ := p.Value('c')
-	id, err := s.newPane(target.sess.name, target.Workspace, !p.Has('d'), cwd, p.Args, p.Values('e'))
+	id, err := s.newPane(target.sess.name, target.Workspace, !p.Has('d'), cwd, p.Args, append(s.paneEnvFor(target.sess), p.Values('e')...))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
@@ -542,7 +576,7 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 		}
 	}
 	cwd, _ := p.Value('c')
-	id, err := s.newPane(sv.name, ws, !p.Has('d'), cwd, p.Args, p.Values('e'))
+	id, err := s.newPane(sv.name, ws, !p.Has('d'), cwd, p.Args, append(s.paneEnvFor(sv), p.Values('e')...))
 	if err != nil {
 		return OutcomeError, nil, err
 	}
@@ -1053,7 +1087,7 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, fmt.Errorf("respawn pane failed: %w", err)
 	}
 	cwd, _ := p.Value('c')
-	req := RespawnRequest{Command: p.Args, Cwd: cwd, Env: p.Values('e')}
+	req := RespawnRequest{Command: p.Args, Cwd: cwd, Env: append(s.paneEnvFor(target.sess), p.Values('e')...)}
 	send := s.respawn
 	if send == nil {
 		send = RequestRespawn

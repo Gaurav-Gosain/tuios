@@ -75,7 +75,7 @@ var lifecycleEvents = []string{
 var readOnlyCommands = []string{
 	"list-sessions", "list-windows", "list-panes", "list-clients", "has-session",
 	"display-message", "capture-pane", "show-options", "show-window-options",
-	"refresh-client", "detach-client",
+	"refresh-client", "detach-client", "show-buffer", "list-buffers", "show-environment",
 }
 
 // control is one control-mode client.
