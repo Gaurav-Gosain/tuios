@@ -363,19 +363,35 @@ const (
 	eventsQuiet = 250 * time.Millisecond
 )
 
-// eventTypes are the stream's event types tuios_events offers. output is left
-// out by default: it fires on every write to a pane.
-var eventTypes = []string{
+// EventTypes are the event types tuios_events accepts: every type the
+// daemon's subscribe verb takes (session.EventTypeNames, which this package
+// does not import). A test in cmd/tuios holds the two lists equal. The list
+// used to be twelve of them, so a caller could not ask for command, prompt,
+// workspace or host events at all.
+var EventTypes = []string{
+	"window-created", "window-closed", "window-exit", "window-retitled",
+	"window-focused", "window-moved", "window-minimized", "window-restored",
+	"workspace-switched", "workspace-renamed", "agent-state", "agent-message",
+	"output", "bell", "notification", "mode-changed",
+	"session-created", "session-closed", "client-session-changed", "gap", "attention",
+	"host-changed", "prompt", "command-started", "command-finished",
+	"agent-activity",
+}
+
+// defaultEventTypes are the types a call that names none gets: what an agent
+// waits for. output and agent-activity fire on every write to a pane and are
+// left out, as are the focus and layout events a person's every key makes.
+var defaultEventTypes = []string{
 	"agent-state", "agent-message", "notification", "attention", "bell",
 	"window-created", "window-closed", "window-exit", "window-retitled",
-	"session-created", "session-closed", "output",
+	"session-created", "session-closed", "command-finished",
 }
 
 func eventsTool(opts Options) *tool {
 	props := map[string]any{
 		"after_seq":  map[string]any{"type": "integer", "description": "The last_seq a previous call returned. Events after it that the daemon still holds are returned first, so nothing is missed between calls. Omit on the first call to start from now."},
 		"boot_id":    map[string]any{"type": "string", "description": "The boot_id a previous call returned, with after_seq. When the daemon restarted since, the answer starts with a gap event with reason boot_changed."},
-		"types":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Event types to return. Accepted: " + strings.Join(eventTypes, ", ") + ". Default: every type but output, which fires on every write to a pane."},
+		"types":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Event types to return. Accepted: " + strings.Join(EventTypes, ", ") + ". Default: " + strings.Join(defaultEventTypes, ", ") + "."},
 		"wait_ms":    map[string]any{"type": "integer", "description": "Milliseconds to wait for the first event. Default: 30000. At most 120000."},
 		"max_events": map[string]any{"type": "integer", "description": "Return at most this many events. Default: 100. At most 1000."},
 	}
@@ -431,11 +447,7 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 			}
 		}
 	} else {
-		for _, name := range eventTypes {
-			if name != "output" {
-				types = append(types, name)
-			}
-		}
+		types = append(types, defaultEventTypes...)
 	}
 	params["types"] = types
 	after, resuming := in["after_seq"].(float64)

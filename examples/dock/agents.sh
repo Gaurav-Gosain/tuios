@@ -22,7 +22,8 @@ states=$(tuios list-windows --json 2>/dev/null |
 [ -n "$states" ] || exit 0
 
 working=$(printf '%s\n' "$states" | grep -c '^working$' || true)
-waiting=$(printf '%s\n' "$states" | grep -c '^waiting$' || true)
+# list-windows reports the raw state: needs_input is the one "waiting" means.
+waiting=$(printf '%s\n' "$states" | grep -c '^needs_input$' || true)
 done_=$(printf '%s\n' "$states" | grep -c '^done$' || true)
 
 out=""

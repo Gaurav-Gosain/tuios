@@ -65,7 +65,7 @@ Close what you open. On a detached session a window whose shell has exited
 stays in the list until something closes it:
 
 ```sh
-tuios run-command -s work CloseWindow "$id"
+tuios close-window -s work "$id"
 ```
 
 ## Many panes at once

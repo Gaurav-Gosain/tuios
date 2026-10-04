@@ -147,6 +147,15 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 			filter.sess = live
 		}
 	}
+	// A type no event has made the stream silent with no error: a typo, or a
+	// hook name such as after-new-window, subscribed to nothing. A link from
+	// another machine is let through, since a newer daemon there may name a
+	// type this one does not have yet, and its other types still apply.
+	if !cs.viaLink {
+		if verr := checkEventTypes(p.Types); verr != nil {
+			return nil, verr
+		}
+	}
 	if len(p.Types) > 0 {
 		filter.types = make(map[string]bool, len(p.Types))
 		for _, t := range p.Types {
@@ -957,4 +966,21 @@ func agentMessageMatch(inbox string, m AgentMessage) map[string]any {
 		"reply_to":   m.ReplyTo,
 		"thread_id":  m.ThreadID,
 	})
+}
+
+// checkEventTypes refuses a subscribe filter that names a type no event has.
+// A hook name is answered with the event it corresponds to.
+func checkEventTypes(types []string) *verbError {
+	for _, t := range types {
+		if slices.Contains(knownEventTypes, t) {
+			continue
+		}
+		for ev, hook := range sessionHookEvents {
+			if string(hook) == t {
+				return invalidParam("types", fmt.Sprintf("%s is a hook name. The event it fires on is %s", echoName(t), ev), knownEventTypes...)
+			}
+		}
+		return invalidParam("types", "unknown event type "+echoName(t), knownEventTypes...)
+	}
+	return nil
 }

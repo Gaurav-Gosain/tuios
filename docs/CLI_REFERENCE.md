@@ -1232,6 +1232,29 @@ ls /var/log/*.log | tuios xpanes -l even-horizontal --no-sync -c 'tail -f {}'
 tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt
 ```
 
+### `tuios close-window`
+
+Close one pane and stop its program. Name the pane by its name, its id or the
+number `list-windows` prints. It works with no client attached.
+
+**Usage:**
+```bash
+tuios close-window [flags] <window>
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: the session of this pane, else the most recently active)
+- `--json`: Output the result as JSON
+
+**Examples:**
+```bash
+# Close the pane named build
+tuios close-window build
+
+# Close a pane by id in the session work
+tuios close-window -s work 86e5e19f
+```
+
 ### `tuios close-workspace`
 
 Close every pane on a workspace, like tmux `kill-window`. Without a number,

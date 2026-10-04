@@ -89,9 +89,11 @@ In order of preference, because the order is also the order of cost:
   going to redraw anyway. The types are the hook events
   (`after-focus-change`, `after-agent-state`, `after-workspace-switch`,
   `after-new-window`, `after-close-window`, `after-layout-change`,
-  `after-attach`, `after-detach`, `after-resize`) and their event-hub spellings
-  (`window-focused`, `agent-state`, `workspace-switched`, `window-created`,
-  `window-closed`, `layout-changed`, `attached`, `detached`, `resized`).
+  `after-attach`, `after-detach`, `after-resize`) and other names for them.
+  `window-focused`, `agent-state`, `workspace-switched`, `window-created` and
+  `window-closed` are the names `tuios subscribe` uses. `layout-changed`,
+  `attached`, `detached` and `resized` are names only the dock knows: the
+  daemon sends no event by those names.
   Several at once: `refresh = "event:after-focus-change,after-new-window"`.
 - **`push`** keeps your command running and takes each line it writes as an
   update. Bring your own `inotifywait`, `upower --monitor`, or a loop around
