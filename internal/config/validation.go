@@ -365,6 +365,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("zen_mode", cfg.Appearance.ZenMode, ZenModeModes)
 	checkEnum("motion", cfg.Appearance.Motion, MotionLevels)
 	checkEnum("links", cfg.Appearance.Links, LinkModes)
+	checkEnum("link_click", cfg.Appearance.LinkClick, LinkClickModes)
 	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
 	checkEnum("tiling_scheme", cfg.Appearance.TilingScheme, TilingSchemes)
 	checkEnum("master_position", cfg.Appearance.MasterPosition, MasterPositions)

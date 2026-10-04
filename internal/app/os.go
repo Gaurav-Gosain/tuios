@@ -1536,6 +1536,10 @@ type OS struct {
 	CtrlDragPending bool
 	CtrlDragging    bool
 	CtrlDragIndex   int
+	// CtrlClickLink is the link under a ctrl + left press, when the press
+	// was on one and link_click allows ctrl. A release before the drag
+	// threshold opens it; a drag clears it. See handleMouseRelease.
+	CtrlClickLink string
 	// CtrlDragWasTerminal remembers that the grab started in terminal mode, so
 	// dropping the window puts the user back where they were instead of leaving
 	// them in window management. Moving a pane is not a request to stop typing.

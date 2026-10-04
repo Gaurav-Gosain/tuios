@@ -140,6 +140,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CtrlDragPending {
 		if mouse.Mod&tea.ModCtrl == 0 {
 			o.CtrlDragPending = false
+			// Ctrl let go on a link: the press was a ctrl+click on it, and
+			// the release that would open it may now arrive without the
+			// grab pending.
+			if url := o.CtrlClickLink; url != "" {
+				o.CtrlClickLink = ""
+				return o, o.OpenLink(url)
+			}
 			if o.CtrlDragIndex >= 0 && o.CtrlDragIndex < len(o.Windows) {
 				o.ToggleMultifocus(o.CtrlDragIndex)
 			}
@@ -147,6 +154,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		if abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) >= ctrlDragThreshold {
 			o.CtrlDragPending = false
+			o.CtrlClickLink = ""
 			o.CtrlDragging = true
 			// beginWindowDrag leaves window management on, which is right for a
 			// title-bar grab but not here: a ctrl-drag from a pane the user is

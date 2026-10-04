@@ -92,6 +92,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// press. A committed ctrl-drag falls through to the normal window-drop below.
 	if o.CtrlDragPending {
 		o.CtrlDragPending = false
+		// The press was on a link and nothing moved far enough to be a
+		// drag, so this was a ctrl+click on the link.
+		if url := o.CtrlClickLink; url != "" {
+			o.CtrlClickLink = ""
+			if o.CtrlDragIndex >= 0 && o.CtrlDragIndex < len(o.Windows) {
+				o.FocusWindowFromClick(o.CtrlDragIndex, o.DragStartX, o.DragStartY)
+			}
+			return o, o.OpenLink(url)
+		}
 		return o, nil
 	}
 	o.CtrlDragging = false

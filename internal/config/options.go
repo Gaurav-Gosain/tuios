@@ -142,6 +142,16 @@ var optionSpecs = []Option{
 		Accepted:    LinkModes, Default: LinksAll,
 	},
 	{
+		Path: "appearance.link_click", Type: OptionString, Section: "appearance",
+		Description: "The click that opens a link: ctrl or shift, ctrl only, shift only, or none",
+		Accepted:    LinkClickModes, Default: LinkClickBoth,
+	},
+	{
+		Path: "appearance.link_opener", Type: OptionString, Section: "appearance",
+		Description: "The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener.",
+		Default:     "",
+	},
+	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
 		Description: "Hide the minimize, maximize and close buttons",
 		Default:     "false",

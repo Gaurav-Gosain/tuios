@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -57,9 +58,27 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	if rawURL == "" {
 		return nil
 	}
+	// A control byte or a space has no place in an address. The emulator
+	// strips control bytes from OSC 8 already; this also covers a URL that
+	// reached here some other way, and refuses rather than repairs it.
+	if !linkTextClean(rawURL) {
+		m.ShowNotification("tuios did not open the link. Its address has control characters or spaces.",
+			"warning", m.Settings.NotificationDuration)
+		return nil
+	}
 
 	if path, ok := linkFilePath(rawURL); ok {
 		return m.openLocalPath(path, rawURL)
+	}
+
+	// A file:// link that linkFilePath turned down names a file on another
+	// machine (file://otherhost/path). That file is not here to open, and
+	// handing the address to the desktop would open whatever this machine
+	// has at the same path.
+	if strings.HasPrefix(strings.ToLower(rawURL), "file:") {
+		m.ShowNotification("That file link names another machine. tuios did not open it. The address is on your clipboard.",
+			"warning", m.Settings.NotificationDuration)
+		return tea.SetClipboard(rawURL)
 	}
 
 	// The scheme decides whether this is handed to the desktop at all. See
@@ -76,14 +95,49 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 			"info", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
-	if err := openInOSViewer(rawURL); err != nil {
-		m.LogError("Failed to open link %s: %v", rawURL, err)
-		m.ShowNotification("Could not open the link. It is on your clipboard.",
+	argv, err := linkOpenerArgv(m.Settings.LinkOpener, rawURL)
+	if errors.Is(err, errNoDesktop) {
+		m.ShowNotification("Copied the link. This machine has no desktop to open it. Use the link click of your terminal.",
+			"info", m.Settings.NotificationDuration)
+		return tea.SetClipboard(rawURL)
+	}
+	if err != nil {
+		m.LogError("Could not read the link opener: %v", err)
+		m.ShowNotification("tuios can not read the link opener command. Change appearance.link_opener.",
 			"error", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
-	m.ShowNotification("Opened the link.", "success", m.Settings.NotificationDuration)
-	return nil
+	watch, err := startLinkOpener(argv, rawURL)
+	if err != nil {
+		m.LogError("Failed to open link %s with %s: %v", rawURL, argv[0], err)
+		m.ShowNotification("Could not start "+sanitizeLinkText(argv[0])+". The link is on your clipboard.",
+			"error", m.Settings.NotificationDuration)
+		return tea.SetClipboard(rawURL)
+	}
+	m.ShowNotification("Opening "+linkHostLabel(rawURL)+".", "success", m.Settings.NotificationDuration)
+	return watch
+}
+
+// linkTextClean reports whether an address holds no control byte and no
+// space.
+func linkTextClean(s string) bool {
+	for _, r := range s {
+		if r <= 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return false
+		}
+	}
+	return true
+}
+
+// linkHostLabel names where a link goes, for the message that confirms it.
+// The host is what tells a user whether the click went where they meant, and
+// for a link whose text differs from its target it is the second place the
+// target is shown, after the hover label.
+func linkHostLabel(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
+		return sanitizeLinkText(u.Host)
+	}
+	return "the link"
 }
 
 // A link's address is attacker-controlled. Any program running in a pane can

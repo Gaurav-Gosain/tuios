@@ -236,6 +236,7 @@ func (m *OS) EndPointerGrabs() {
 	m.SidebarDrag = sidebarDragState{}
 	m.dockWorkspaceDrag = dockWorkspaceDragState{}
 	m.CtrlDragPending = false
+	m.CtrlClickLink = ""
 	// A capture drag whose release went missing would otherwise leave the
 	// marquee tracking a bare hover for ever.
 	m.Capture.Dragging = false

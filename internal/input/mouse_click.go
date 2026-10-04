@@ -216,6 +216,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.CtrlDragPending = true
 			o.CtrlDragIndex = clickedWindowIndex
 			o.DragStartX, o.DragStartY = X, Y
+			// A press on a link may be a ctrl+click that opens it. The
+			// release decides: below the drag threshold it opens the link,
+			// past it the pane moves. See linkClickAllows.
+			o.CtrlClickLink = ""
+			if linkClickAllows(o, tea.ModCtrl) {
+				if link, ok := o.LinkAt(X, Y); ok {
+					o.CtrlClickLink = link.URL
+				}
+			}
 			return o, nil
 		}
 		o.FocusWindowFromClick(clickedWindowIndex, X, Y)
@@ -286,17 +295,19 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Shift and the left button on a link acts on it.
 	//
-	// Shift is the terminal's own "this click is mine, not the program's"
-	// modifier, which xterm has meant by it for decades, so it is the one
-	// modifier a user already expects to reach past a program that is tracking
-	// the mouse. That is also why this sits above the forwarding below rather
-	// than under it: holding shift is the user saying the click is tuios's.
+	// Shift is the xterm "this click is the terminal's" modifier, so most
+	// outer terminals keep shift+click for their own selection while tuios
+	// tracks the mouse, and the click never arrives here. Ctrl+click (the
+	// ctrl branch above, on release) is the gesture that reaches tuios in
+	// most terminals. Shift+click stays for the terminals that pass it on.
+	// It sits above the forwarding below because holding a modifier is the
+	// user saying the click is tuios's, not the program's.
 	//
 	// A plain click is deliberately not this. A left press on a pane is already
 	// how you focus it, start typing in it, and select text in it, and a browser
 	// opening on top of any of those three would be a gesture nobody asked for
 	// landing on text that merely looks like an address.
-	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
+	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift && linkClickAllows(o, tea.ModShift) {
 		if link, ok := o.LinkAt(X, Y); ok {
 			if clickedWindowIndex != -1 {
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
@@ -623,4 +634,18 @@ func untilePaneForDrag(win *terminal.Window) {
 func finalizeCtrlDrag(o *app.OS, x, y int) (*app.OS, tea.Cmd) {
 	o.CtrlDragging = false
 	return handleMouseRelease(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
+}
+
+// linkClickAllows reports whether appearance.link_click lets a left click
+// with this modifier open a link.
+func linkClickAllows(o *app.OS, mod tea.KeyMod) bool {
+	switch o.Settings.LinkClick {
+	case config.LinkClickOff:
+		return false
+	case config.LinkClickCtrl:
+		return mod == tea.ModCtrl
+	case config.LinkClickShift:
+		return mod == tea.ModShift
+	}
+	return mod == tea.ModCtrl || mod == tea.ModShift
 }

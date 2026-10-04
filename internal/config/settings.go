@@ -140,6 +140,14 @@ type Settings struct {
 	// via appearance.links.
 	Links string
 
+	// LinkClick is the click that opens a link: one of the LinkClick*
+	// constants. Set via appearance.link_click.
+	LinkClick string
+
+	// LinkOpener is the command that opens a web link. Empty uses $BROWSER,
+	// then the system opener. Set via appearance.link_opener.
+	LinkOpener string
+
 	// DockbarPosition controls the position of the dockbar
 	// Set via --dockbar-position flag or appearance.dockbar_position config
 	DockbarPosition string
@@ -694,6 +702,7 @@ func DefaultSettings() Settings {
 		TilingScheme:                TilingSchemeSpiral,
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
+		LinkClick:                   LinkClickBoth,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,

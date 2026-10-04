@@ -1296,6 +1296,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			ListenForClipboardSet(m.PendingClipboardSet),
 		)
 
+	case linkOpenFailedMsg:
+		return m, m.handleLinkOpenFailed(msg)
+
 	case NotificationMsg:
 		// Guest desktop notification or bell delivered off the PTY goroutine;
 		// apply it here on the Bubble Tea goroutine where notification state is

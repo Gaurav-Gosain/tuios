@@ -248,6 +248,8 @@ type AppearanceConfig struct {
 	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs
 	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
+	LinkClick                string                  `toml:"link_click"`                   // The click that opens a link: both, ctrl, shift, off (default: both)
+	LinkOpener               string                  `toml:"link_opener"`                  // Command that opens a web link; empty uses $BROWSER, then the system opener
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
 	WindowButtonPosition     string                  `toml:"window_button_position"`       // Which end of the title bar the window controls sit on: right, left (default: left)
@@ -464,19 +466,41 @@ var ZenModeModes = []string{ZenModeDisabled, ZenModeAlways, ZenModeMouse}
 // pick up. A program that emits OSC 8 has said outright that a run of cells is
 // a link and where it points, so "marked" trusts only that. Almost no program
 // does, though, and the links a person actually reads in a pane are plain text,
-// so "all" also finds bare http, https and file URLs. "off" is for anyone who
+// so "all" also finds bare URLs (http, https, ftp, file, ssh, git) in plain
+// text, with the detector hints mode uses. "off" is for anyone who
 // wants the pointer to leave pane content alone.
 const (
 	// LinksOff finds no links at all.
 	LinksOff = "off"
 	// LinksMarked finds only OSC 8 hyperlinks.
 	LinksMarked = "marked"
-	// LinksAll also finds bare http, https and file URLs in plain text.
+	// LinksAll also finds bare URLs in plain text.
 	LinksAll = "all"
 )
 
 // LinkModes lists the valid values for appearance.links.
 var LinkModes = []string{LinksOff, LinksMarked, LinksAll}
+
+// Link clicks. See AppearanceConfig.LinkClick.
+//
+// The click has to reach tuios to do anything, and the outer terminal decides
+// that. Every common terminal keeps shift+click for itself while a program
+// tracks the mouse (it is the xterm "bypass" modifier), so shift+click alone
+// opened links only in terminals that pass it on. Ctrl+click reaches tuios in
+// most terminals, which is why both is the default.
+const (
+	// LinkClickBoth opens a link on ctrl+click and on shift+click.
+	LinkClickBoth = "both"
+	// LinkClickCtrl opens a link on ctrl+click only.
+	LinkClickCtrl = "ctrl"
+	// LinkClickShift opens a link on shift+click only.
+	LinkClickShift = "shift"
+	// LinkClickOff never opens a link from a click. Hints still can.
+	LinkClickOff = "off"
+)
+
+// LinkClickModes lists the valid values for appearance.link_click.
+var LinkClickModes = []string{LinkClickBoth, LinkClickCtrl, LinkClickShift, LinkClickOff}
 
 // Window control styles. See AppearanceConfig.WindowButtonStyle.
 const (
@@ -766,6 +790,7 @@ func DefaultConfig() *UserConfig {
 			BorderStyle:              "rounded",
 			ZenMode:                  ZenModeDisabled,
 			Links:                    LinksAll,
+			LinkClick:                LinkClickBoth,
 			HideWindowButtons:        false,
 			WindowButtonStyle:        WindowButtonStyleDots,
 			WindowButtonPosition:     WindowButtonPositionLeft,
@@ -1691,6 +1716,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Links == "" {
 		cfg.Appearance.Links = defaultCfg.Appearance.Links
 	}
+	if cfg.Appearance.LinkClick == "" {
+		cfg.Appearance.LinkClick = defaultCfg.Appearance.LinkClick
+	}
 
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
@@ -1838,6 +1866,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	} else if cfg.Appearance.Links != "" {
 		s.Links = LinksAll
 	}
+	if slices.Contains(LinkClickModes, cfg.Appearance.LinkClick) {
+		s.LinkClick = cfg.Appearance.LinkClick
+	} else if cfg.Appearance.LinkClick != "" {
+		s.LinkClick = LinkClickBoth
+	}
+	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
 
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer
