@@ -187,6 +187,16 @@ func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
 	r.kittyKbdStack = append([]int(nil), stack...)
 }
 
+func (t *GhosttyTerminal) RestoreKittyKeyboardMainStack(stack []int) {
+	if len(stack) == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	r := t.pendingRestore()
+	r.kittyKbdMainStack = append([]int(nil), stack...)
+}
+
 // SetThemeColors mirrors the pure emulator: default fg/bg/cursor and the
 // sixteen ANSI slots, with nil fg and bg dropping the theme entirely.
 func (t *GhosttyTerminal) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color) {

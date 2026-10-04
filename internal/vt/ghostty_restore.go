@@ -38,6 +38,9 @@ type ghosttyRestore struct {
 	penLink          uv.Link
 	hasPen           bool
 	kittyKbdStack    []int
+	// kittyKbdMainStack is the main screen's stack, carried while the
+	// alternate screen is in use.
+	kittyKbdMainStack []int
 	// modifyOtherKeys is the XTMODKEYS level, when hasModifyOtherKeys says
 	// the snapshot carried one.
 	modifyOtherKeys    int
@@ -325,6 +328,9 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	} else if !extend {
 		t.kittyKbd.Reset()
 		t.kittyKbd.SelectScreen(altActive)
+	}
+	if len(r.kittyKbdMainStack) > 0 {
+		t.kittyKbd.SetMainStack(r.kittyKbdMainStack)
 	}
 
 	t.term.VTWrite(seq.Bytes())

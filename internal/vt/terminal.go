@@ -143,6 +143,11 @@ type Terminal interface {
 	KittyKeyboardFlags() int
 	KittyKeyboardStack() []int
 	RestoreKittyKeyboardState(stack []int)
+	// KittyKeyboardMainStack is the main screen's flag stack while the
+	// alternate screen is in use, nil otherwise. RestoreKittyKeyboardMainStack
+	// puts it back.
+	KittyKeyboardMainStack() []int
+	RestoreKittyKeyboardMainStack(stack []int)
 	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
 	// XTMODKEYS (CSI > 4 ; n m): 0 off, 1 or 2. See EncodeModifyOtherKeys.
 	ModifyOtherKeys() int

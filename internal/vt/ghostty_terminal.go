@@ -688,6 +688,12 @@ func (t *GhosttyTerminal) KittyKeyboardStack() []int {
 	return append([]int(nil), t.kittyKbd.Stack()...)
 }
 
+func (t *GhosttyTerminal) KittyKeyboardMainStack() []int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]int(nil), t.kittyKbd.MainStack()...)
+}
+
 func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

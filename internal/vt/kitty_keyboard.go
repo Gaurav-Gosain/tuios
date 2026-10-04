@@ -61,6 +61,29 @@ func (k *kittyKeyboardState) SetStack(stack []int) {
 	*k.active() = slices.Clone(stack)
 }
 
+// MainStack returns the main screen's stack while the alternate screen is in
+// use, and nil while the main screen is: the stack a snapshot taken on the
+// alternate screen has to carry besides the active one. The caller must not
+// modify it.
+func (k *kittyKeyboardState) MainStack() []int {
+	if !k.onAlt {
+		return nil
+	}
+	return k.main
+}
+
+// SetMainStack replaces the main screen's stack, with the limits SetStack
+// applies, whichever screen is in use.
+func (k *kittyKeyboardState) SetMainStack(stack []int) {
+	if len(stack) > maxKittyKeyboardStack {
+		stack = stack[len(stack)-maxKittyKeyboardStack:]
+	}
+	if len(stack) == 0 {
+		stack = []int{0}
+	}
+	k.main = slices.Clone(stack)
+}
+
 // SetAltScreen follows a switch between the main and the alternate screen.
 // Entering the alternate screen starts it with an empty stack, as it starts
 // with an empty screen: flags a previous program left there are not the next
@@ -232,6 +255,28 @@ func (e *Emulator) KittyKeyboardStack() []int {
 		return nil
 	}
 	return slices.Clone(e.kittyKbd.Stack())
+}
+
+// KittyKeyboardMainStack returns a copy of the main screen's kitty keyboard
+// flag stack while the alternate screen is in use, and nil otherwise. A
+// snapshot carries it with KittyKeyboardStack: a client that restores only
+// the alternate screen's stack has the main one empty when the program quits,
+// and encodes keys in legacy form for a shell that negotiated the protocol.
+func (e *Emulator) KittyKeyboardMainStack() []int {
+	if e.kittyKbd == nil {
+		return nil
+	}
+	return slices.Clone(e.kittyKbd.MainStack())
+}
+
+// RestoreKittyKeyboardMainStack replaces the main screen's flag stack from a
+// saved state. A nil or empty stack is a no-op.
+func (e *Emulator) RestoreKittyKeyboardMainStack(stack []int) {
+	if e.kittyKbd == nil || len(stack) == 0 {
+		return
+	}
+	e.kittyKbd.SetMainStack(stack)
+	e.updateKittyKeyboardCache()
 }
 
 // RestoreKittyKeyboardState replaces the kitty keyboard flag stack from a

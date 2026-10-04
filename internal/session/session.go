@@ -3571,9 +3571,12 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 		IsAltScreen:   t.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
 		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
 		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
+		// The main screen's stack, under a program on the alternate one.
+		KittyKbdMainStack: t.KittyKeyboardMainStack(),
 		// Set once by an editor at start, like the kitty flags, so it
 		// cannot be recovered from the output buffer either.
-		ModifyOtherKeys: t.ModifyOtherKeys(),
+		ModifyOtherKeys:      t.ModifyOtherKeys(),
+		ModifyOtherKeysKnown: true,
 	}
 
 	// None of these is recoverable from the cells. They are what the guest set
@@ -3912,10 +3915,18 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// client encodes keys in legacy form for a pane that negotiated the
 	// protocol.
 	t.RestoreKittyKeyboardState(state.KittyKbdStack)
+	// Each screen has its own stack, and the one above is the alternate
+	// screen's while a program runs there. Without the main one a client
+	// that attached under the program left the shell's flags behind when it
+	// quit.
+	t.RestoreKittyKeyboardMainStack(state.KittyKbdMainStack)
 	// modifyOtherKeys is the other way a guest asks for keys the legacy
-	// encoding cannot tell apart (vim sends CSI > 4 ; 2 m once at start). Zero
-	// is what an older daemon sends, and it is also the default.
-	if state.ModifyOtherKeys > 0 {
+	// encoding cannot tell apart (vim sends CSI > 4 ; 2 m once at start). It
+	// is applied when it is off too: an emulator that survived a workspace
+	// switch still holds the level of an editor that quit while the pane was
+	// hidden, and Ctrl+C then reached the shell as CSI 27 ; 5 ; 99 ~. An older
+	// daemon reports nothing, and the level the emulator has stays.
+	if state.ModifyOtherKeysKnown || state.ModifyOtherKeys > 0 {
 		t.RestoreModifyOtherKeys(state.ModifyOtherKeys)
 	}
 
@@ -4275,11 +4286,18 @@ type TerminalState struct {
 	Modes         map[int]bool `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
 	KittyKbdStack []int        `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
-	// XTMODKEYS, 0 to 2. Zero, the default, is also what an older daemon
-	// sends.
-	ModifyOtherKeys int           `json:"modify_other_keys,omitempty"`
-	Screen          [][]CellState `json:"screen"`
-	Scrollback      [][]CellState `json:"scrollback,omitempty"`
+	// XTMODKEYS, 0 to 2. ModifyOtherKeysKnown says the daemon reported it:
+	// a level of 0 is then the guest turning it off, which a client emulator
+	// that kept an older level has to take, and not an older daemon that
+	// says nothing.
+	// KittyKbdMainStack is the main screen's kitty keyboard flag stack,
+	// carried only while the alternate screen is active, when KittyKbdStack
+	// is the alternate screen's.
+	KittyKbdMainStack    []int         `json:"kitty_kbd_main_stack,omitempty"`
+	ModifyOtherKeys      int           `json:"modify_other_keys,omitempty"`
+	ModifyOtherKeysKnown bool          `json:"modify_other_keys_known,omitempty"`
+	Screen               [][]CellState `json:"screen"`
+	Scrollback           [][]CellState `json:"scrollback,omitempty"`
 	// MainScreen is the normal screen, carried only while the alternate one is
 	// active. It is the shell's screen underneath a full-screen program, which
 	// quitting that program puts back on display. The alternate screen needs no
