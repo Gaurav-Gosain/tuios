@@ -36,6 +36,8 @@ import (
 //     Recorder.RecordAction: the saved tape holds no Action line.
 //   - TestTapeSnapFullscreenFillsTheScreen: the tree before the fix: the
 //     window is a quarter of the screen.
+//   - TestLayoutExportValidates: the tree before the fix: the exported tape
+//     has an unquoted command after Type and does not parse.
 
 // tapeSession starts a daemon session named name with one pane and an
 // attached client, and returns the client's terminal and the isolation root.
@@ -278,4 +280,38 @@ func TestTapeSnapFullscreenFillsTheScreen(t *testing.T) {
 			rects[0].Width, rects[0].Height, term.Snapshot())
 	}
 	saveArtifact(t, term, artifactDir(t), "snap-fullscreen")
+}
+
+// TestLayoutExportValidates: a layout with a command exported a tape that
+// did not parse, because the command line went out unquoted after Type.
+func TestLayoutExportValidates(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	dir, _, err := splitCLI(t, base, "layout", "dir")
+	if err != nil {
+		t.Fatalf("layout dir: %v", err)
+	}
+	dir = strings.TrimSpace(dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tmpl := `{"name":"dev","version":2,"auto_tiling":true,"created_at":"2026-01-02T03:04:05Z",` +
+		`"windows":[{"custom_name":"top","command":"htop","args":["-d","10"]},{"custom_name":"shell"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "dev.json"), []byte(tmpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script, errOut, err := splitCLI(t, base, "layout", "export", "dev")
+	if err != nil {
+		t.Fatalf("layout export dev: %v\n%s", err, errOut)
+	}
+	path := writeTape(t, base, "dev.tape", script)
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "dev.tape"), []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, errOut, err := splitCLI(t, base, "tape", "validate", path); err != nil {
+		t.Fatalf("the exported layout does not validate: %v\n%s%s\n--- tape ---\n%s", err, out, errOut, script)
+	}
+	if !strings.Contains(script, `"htop -d 10"`) {
+		t.Errorf("the exported tape does not run the pane's command:\n%s", script)
+	}
 }

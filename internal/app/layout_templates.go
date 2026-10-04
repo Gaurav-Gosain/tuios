@@ -390,7 +390,9 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 			if len(w.Args) > 0 {
 				cmd += " " + strings.Join(w.Args, " ")
 			}
-			fmt.Fprintf(&sb, "Type %s\nEnter\n", cmd)
+			// Quoted: Type takes a string, and an unquoted command line did
+			// not parse, so an exported layout with a command never played.
+			fmt.Fprintf(&sb, "Run %q\n", cmd)
 		}
 		sb.WriteString("Sleep 200ms\n")
 	}

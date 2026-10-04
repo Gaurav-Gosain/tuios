@@ -1038,6 +1038,7 @@ cutting one call site from the tree the tests were written against.
 | A failure placed on the sent text | `script.Locate` cut from `runTapeExec` | `TestTapeExecStopsAtTheFailedLine` (the message names line 3, not `lib.tape line 2`) | **caught** |
 | run-command knows only tape commands | the `IsActionName` fallback in `resolveCommandName` made `false &&` | `TestRunCommandRunsAnyAction` (`run-command open_settings` exits 1) | **caught** |
 | A recording drops actions | the Action branch of `Recorder.RecordAction` made to return | `TestTapeRecordingReplaysActions` (the saved tape has no `Action open_settings`) | **caught** |
+| An exported layout that does not parse | the tree before the `GenerateTapeScript` fix | `TestLayoutExportValidates` (`Type command expects a string, got IDENTIFIER` at the command line) | **caught** |
 | SnapFullscreen snaps to a quarter | the tree before the `SnapByDirection` fix | `TestTapeSnapFullscreenFillsTheScreen` (the window is 60x19 of 120x40) | **caught** |
 
 `TestExampleTapeRuns` plays `examples/actions_and_waits.tape` and has no
