@@ -13,6 +13,10 @@ import (
 // internal/session/herdr_api.go).
 const Version = "0.9.3"
 
+// protocolVersion is herdr's private protocol at Version, which the daemon
+// reports in a pong (herdrTargetProtocol in internal/session/herdr_api.go).
+const protocolVersion = 22
+
 // Output is what a call prints when it is answered.
 type Output int
 
@@ -32,6 +36,9 @@ const (
 	OutLocal
 	// OutText sends nothing. Text is printed on stdout and the exit code is 0.
 	OutText
+	// OutStatus pings the socket and prints herdr's status report. Text is
+	// the scope: "", "server" or "client". Params["json"] asks for JSON.
+	OutStatus
 )
 
 // Call is one parsed herdr command: the request it sends and how its answer
@@ -99,6 +106,9 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	if flags, _, _ := splitDashDash(rest); slices.Contains(flags, "--help") || slices.Contains(flags, "-h") {
 		return &Call{Output: OutText, Text: groupHelp[group]}, nil
 	}
+	if group == "status" {
+		return statusCall(rest)
+	}
 	if len(rest) == 0 {
 		return nil, &UsageError{Msg: groupHelp[group], Code: 2}
 	}
@@ -131,12 +141,12 @@ var groups = map[string]groupParser{
 	"api":          parseAPI,
 	"server":       parseServer,
 	"terminal":     parseTerminal,
+	"status":       parseStatus,
 }
 
 // localGroups are herdr's commands that do their work on herdr's own
 // machine, with what tuios says about each.
 var localGroups = map[string]string{
-	"status":      "herdr status reads herdr's own client and server. tuios does not run them. Run tuios ls for tuios's sessions",
 	"completion":  "tuios's herdr front has no shell completions",
 	"completions": "tuios's herdr front has no shell completions",
 	"config":      "herdr config edits herdr's own config.toml. tuios does not read it",

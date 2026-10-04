@@ -99,7 +99,8 @@ step held "$H" pane resize --direction left --amount 0.2 --pane "$HERDR_PANE_ID"
 // names the agent and agent get finds it by the new name, and agent explain
 // reports what the detector saw. A workspace token reported with a seq
 // shows on the workspace, and an older seq is dropped. The client takes the
-// terminal title a tool sets.
+// terminal title a tool sets. status server says the server runs, in
+// herdr's text and JSON.
 //
 // Negative controls: with server.reload_config back in herdrUnsupported, the
 // reload step exits 1. With the move-window call taken out of herdrPaneMove,
@@ -128,6 +129,8 @@ step meta "$H" workspace report-metadata "$HERDR_WORKSPACE_ID" --source auto-tit
 step stale "$H" workspace report-metadata "$HERDR_WORKSPACE_ID" --source auto-title --token "$OLD_TOPIC" --seq 1
 step wsget "$H" workspace get "$HERDR_WORKSPACE_ID"
 step title "$H" terminal title set "tuios e2e title"
+step status "$H" status server
+step statusjson "$H" status server --json
 `)
 	steps["reload"].ok(t, "server reload-config")
 	if r := steps["reload"].json(t, "server reload-config"); dig(r, "result", "type") != "config_reload" || dig(r, "result", "status") != "applied" {
@@ -174,6 +177,16 @@ step title "$H" terminal title set "tuios e2e title"
 	steps["title"].ok(t, "terminal title set")
 	if ti := steps["title"].json(t, "terminal title set"); dig(ti, "result", "type") != "client_window_title" || dig(ti, "result", "changed") != true || dig(ti, "result", "reason") != "set" {
 		t.Fatalf("terminal title set: %s", steps["title"].out)
+	}
+	// Tools check that a server answers with status server, by its text or
+	// its JSON.
+	steps["status"].ok(t, "status server")
+	if !strings.HasPrefix(steps["status"].out, "status: running\n") {
+		t.Fatalf("status server: %q", steps["status"].out)
+	}
+	steps["statusjson"].ok(t, "status server --json")
+	if st := steps["statusjson"].json(t, "status server --json"); st["running"] != true || st["protocol"] != float64(22) {
+		t.Fatalf("status server --json: %s", steps["statusjson"].out)
 	}
 	saveFrame(t, term, "herdr-front-reload-move-rename")
 	alive(t, term, "after the reload, move and rename sequence")

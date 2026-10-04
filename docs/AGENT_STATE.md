@@ -440,7 +440,10 @@ prints:
 
 `pane send-text`, `pane send-keys`, `pane run` and the report commands print
 nothing when they succeed. `pane read` and `agent read` print the text read.
-`herdr --version` prints `herdr 0.9.3+tuios`.
+`herdr --version` prints `herdr 0.9.3+tuios`. `herdr status server` says
+`status: running` when the socket answers, and `status: not running` when
+it does not. `--json` gives the same in herdr's JSON. `endpoint_compatible`
+is always false, because tuios does not serve herdr's client protocol.
 
 The daemon makes the link when it starts, beside its socket:
 `$XDG_RUNTIME_DIR/tuios/herdr/bin/herdr`, or `/tmp/tuios-<uid>/herdr/bin/herdr`
@@ -457,11 +460,11 @@ pane, as plugins do:
 
 These commands answer: `pane` (all of herdr's subcommands), `tab`,
 `workspace`, `agent` (except `attach`), `worktree`, `notification show`,
-`api snapshot`, `server reload-config` and `terminal title`. A command runs
+`api snapshot`, `server reload-config`, `terminal title` and `status`. A command runs
 only if tuios answers its method (see [Methods](#methods)). For any other
 method, the socket answers `unsupported`. The commands that do their work on
 herdr's own machine answer herdr's error shape with code `unsupported` and
-exit 1: `status`, `config`, `session`, `terminal attach`, `terminal
+exit 1: `config`, `session`, `terminal attach`, `terminal
 session`, `machine`, `channel`, `update`, `completion`, `plugin`,
 `integration`, `api schema`, `agent attach` and `server stop`. So a plugin
 that calls one of them fails cleanly and can continue. tuios does not host

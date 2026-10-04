@@ -20,12 +20,14 @@ Usage:
   herdr api snapshot
   herdr server reload-config
   herdr terminal title set <title>
+  herdr status [server|client] [--json]
   herdr --version
 
 Run herdr <command> help for the subcommands of one command.
 Commands that act on herdr's own machine answer error unsupported.`
 
 var groupHelp = map[string]string{
+	"status": statusUsage,
 	"pane": `herdr pane commands:
   herdr pane list [--workspace <workspace_id>]
   herdr pane current [--pane ID|--current]

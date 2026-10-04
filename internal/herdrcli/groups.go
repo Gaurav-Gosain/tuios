@@ -634,3 +634,37 @@ func parseTerminal(sub string, args []string, _ Env, _ string) (*Call, *UsageErr
 	}
 	return nil, &UsageError{Msg: groupHelp["terminal"], Code: 2}
 }
+
+// statusUsage is herdr's help for status.
+const statusUsage = "herdr status commands:\n  herdr status [--json]         show local client and running server status\n  herdr status server [--json]  show running server status\n  herdr status client [--json]  show local client binary status"
+
+// parseStatus is herdr's status command. Tools run `herdr status server` to
+// learn whether a server answers, so the front pings tuios's herdr socket
+// and reports what it finds in herdr's words.
+func parseStatus(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
+	return statusCall(append([]string{sub}, args...))
+}
+
+// statusCall reads status's arguments, after the command name.
+func statusCall(all []string) (*Call, *UsageError) {
+	scope, json := "", false
+	switch {
+	case len(all) == 0:
+	case len(all) == 1 && all[0] == "--json":
+		json = true
+	case all[0] == "server" || all[0] == "client":
+		scope = all[0]
+		switch {
+		case len(all) == 1:
+		case len(all) == 2 && all[1] == "--json":
+			json = true
+		default:
+			return nil, usage("usage: herdr status " + scope + " [--json]")
+		}
+	case len(all) == 1 && (all[0] == "help" || all[0] == "--help" || all[0] == "-h"):
+		return nil, &UsageError{Msg: statusUsage, Code: 0}
+	default:
+		return nil, usage(statusUsage)
+	}
+	return &Call{ID: "cli:status", Method: "ping", Params: map[string]any{"json": json}, Output: OutStatus, Text: scope}, nil
+}

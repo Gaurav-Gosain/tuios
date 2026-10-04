@@ -33,11 +33,11 @@ the usage on stderr and exits 2. `pane send-text`, `pane send-keys`, `pane
 run` and the report commands print nothing when they succeed.
 
 It answers `pane`, `tab`, `workspace`, `agent`, `worktree`,
-`notification show`, `api snapshot`, `server reload-config` and `terminal
-title`. A method that tuios does not answer, such as `layout.apply` or
-`workspace.move`, fails with code `unsupported`. A command that acts on herdr's own machine (`status`,
-`session`, `plugin`, `server stop` and the rest) fails with code
-`unsupported` and does nothing.
+`notification show`, `api snapshot`, `server reload-config`, `terminal
+title` and `status`. A method that tuios does not answer, such as
+`layout.apply` or `workspace.move`, fails with code `unsupported`. A command
+that acts on herdr's own machine (`session`, `plugin`, `server stop` and the
+rest) fails with code `unsupported` and does nothing.
 
 ## What it may do
 
