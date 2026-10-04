@@ -1423,8 +1423,10 @@ var CopyEntries = []string{CopyEntryCursor, CopyEntryCenter}
 // says so on the dock when the text holds a line break or a control character. A write from any other pane waits for the
 // user to allow it, which is what ask does for every pane.
 //
-// Whatever the mode, the pane keeps its own copy, so the program that set it
-// reads it back with an OSC 52 query.
+// Whatever the mode, a pane that runs without the daemon keeps its own copy,
+// so the program that set it reads it back with an OSC 52 query. A pane under
+// the daemon keeps none: the daemon's emulator has no clipboard callback, so
+// every OSC 52 query there is answered with an empty string.
 const (
 	OSC52WriteOff     = "off"
 	OSC52WriteAsk     = "ask"

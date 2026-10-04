@@ -928,8 +928,9 @@ the dock shows one line for that pane. A one-line copy shows nothing. A click
 on an ask copies only the text that the dock showed. If the text changes
 first, click the new message.
 
-In each mode, the pane keeps its own copy. The program reads it back with an
-OSC 52 query.
+A pane that runs without the daemon keeps its own copy of the text. The
+program reads it back with an OSC 52 query. A pane under the daemon keeps no
+copy. An OSC 52 query in that pane always gets an empty answer.
 
 ```toml
 [appearance.selection]
