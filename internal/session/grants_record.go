@@ -91,7 +91,7 @@ const (
 )
 
 // configWaitsNote is the summary of the configWaitsNotice item.
-const configWaitsNote = "Run tuios config apply in a terminal outside tuios. The change gives panes or other machines more, so it waits for you."
+const configWaitsNote = "Run tuios config apply in a terminal outside tuios. The change gives panes, other machines or a notification address more, so it waits for you."
 
 // closeConfigNotice closes the Inbox item about config.toml named name.
 func (a *attentionStore) closeConfigNotice(name string) {

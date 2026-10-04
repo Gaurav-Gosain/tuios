@@ -70,6 +70,10 @@ type UserConfig struct {
 	// panes. Outside the option registry for the same reason as the tables
 	// above. See agents.go.
 	Agents AgentsConfig `toml:"agents,omitempty"`
+	// Notify is the [notify] table: push notifications for the Inbox, sent
+	// by the daemon. Outside the option registry for the same reason as
+	// [hosts]. See notify.go.
+	Notify NotifyConfig `toml:"notify,omitempty"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

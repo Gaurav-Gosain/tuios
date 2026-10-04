@@ -2024,6 +2024,11 @@ filter says `here`. An item of a machine whose link is down is not counted.
 Without the Inbox (an older daemon, or while reconnecting) the header counts its
 rows, as it did before.
 
+The daemon can also send an Inbox item to your phone, through ntfy, Pushover
+or a webhook. It sends the item when nobody is at an attached client, and the
+link in the notification opens tuios-web on the item. See
+[Push notifications to your phone](CONFIGURATION.md#push-notifications-to-your-phone).
+
 ### Questions an agent asks you
 
 An agent, or any script, that needs a decision calls `tuios ask-human` with a

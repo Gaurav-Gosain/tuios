@@ -386,6 +386,110 @@ run `tuios integration install claude-code` (or `opencode`, `kilo`, `qwen`)
 again after upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
 a prompt is held, answered and handed back.
 
+## Push notifications to your phone
+
+The `[notify]` table sends a push notification when the Inbox gets an item
+that waits for you. The daemon sends it, so it works when no client is
+attached. Set one provider or more. Each provider gets every notification.
+
+```toml
+[notify]
+web_url = "https://term.example.com/"   # tuios-web, for a link to the item
+content = "summary"                     # or "title"
+quiet_active_seconds = 120
+cooldown_seconds = 60
+max_per_hour = 30
+
+[notify.triggers]
+approval = true
+plan = true
+question = true
+ask = true
+mail = false
+errored = false
+finished = false
+
+[notify.ntfy]
+url = "https://ntfy.sh/a-long-random-topic"
+token_file = "~/.config/tuios/ntfy-token"   # optional
+
+[notify.pushover]
+user_env = "PUSHOVER_USER"
+token_file = "~/.config/tuios/pushover-token"
+
+[notify.webhook]
+url = "https://hooks.example.com/tuios"
+token_env = "TUIOS_HOOK_TOKEN"              # optional, sent as a bearer token
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `enabled` | `true` | Turns every notification off when `false`. Nothing is sent without a provider. |
+| `web_url` | empty | The address of tuios-web. Each notification links to `web_url/inbox?item=ID`, which opens the Inbox on the item. See [WEB.md](WEB.md#open-the-inbox-from-a-notification). |
+| `content` | `summary` | `summary` sends the kind, the pane name and the one line the Inbox shows. `title` sends only the kind and the session. |
+| `quiet_active_seconds` | `120` | Holds a notification while you typed into a pane at an attached client in this many seconds. When you stay away that long and the item is still open, tuios sends it. `0` sends at once. |
+| `cooldown_seconds` | `60` | The shortest time between two notifications for the same pane and kind. |
+| `max_per_hour` | `30` | The most notifications in one hour. `0` sets no limit. |
+| `allow_http_redirects` | `false` | Lets a provider redirect to a plain `http` address. |
+
+`[notify.triggers]` selects the Inbox kinds that send a notification. The
+kinds that wait for you are on by default: `approval`, `plan`, `question` and
+`ask` (a question from `tuios ask-human`). The kinds that only report are off:
+`mail`, `errored` and `finished`.
+
+Each item sends one notification at most. A repeated state report, or a new
+line on the same item, sends nothing. An item from a linked host sends
+nothing here. That host sends its own.
+
+### Providers
+
+- `[notify.ntfy]`: `url` is the topic address. `priority` is 1 to 5. When it
+  is unset, an item that waits for you gets 4 and other items get 3. The
+  link goes in the `Click` header.
+- `[notify.pushover]`: your user key and an application token. `url`
+  replaces the Pushover API address, for a relay.
+- `[notify.webhook]`: tuios sends a JSON `POST` to `url` with these fields:
+  `event` (`tuios.inbox`), `kind`, `title`, `body`, `link`, `urgent`,
+  `item_id`, `session`, `window`, `harness`, and `test` for a test
+  notification. At `content = "title"` the body is empty.
+
+### Secrets
+
+Give each token in one of three ways. tuios uses the first one that is set.
+
+- `token = "..."` in config.toml.
+- `token_env = "NAME"`: an environment variable of the daemon. The daemon
+  keeps the environment of the shell that started it.
+- `token_file = "PATH"`: a file that only you can read (mode 600 or 400).
+
+Pushover uses `user`, `user_env` and `user_file` for the user key in the
+same way. tuios reads the value each time it sends, so a new token in the
+file applies at once.
+
+tuios sends each notification with `curl`, so `curl` must be on the PATH of
+the daemon. curl uses `HTTPS_PROXY`, `NO_PROXY` and the system certificates.
+tuios gives curl the address, the token and the message on its standard
+input, not as arguments, so other users cannot see them in `ps`.
+
+tuios does not write a secret to its logs or its output. The address is
+also secret on a public ntfy server, so logs and `tuios notify test` show
+only the host. A redirect to a plain `http` address is refused, unless you
+set `allow_http_redirects`.
+
+### Apply a change
+
+The daemon reads `[notify]` when it starts, and again when the file changes.
+A change that turns notifications off, or changes the triggers, applies at
+once. A new address, or a new source for a secret, waits for
+`tuios config apply` from a terminal outside tuios, or a daemon restart. A
+program in a pane can write config.toml, and this stops it from sending your
+Inbox to another address. Like `[hosts]`, `[notify]` is not in
+`list-options`, and `tuios set-config` cannot change it.
+
+Run `tuios notify test` to send a test notification through each provider.
+It says the result for each provider. See
+[CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-notify-test).
+
 ## Harnesses that report to herdr
 
 Crush, and other agents that herdr lists as reporting by themselves, report

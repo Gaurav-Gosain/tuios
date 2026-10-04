@@ -71,7 +71,7 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// appearance.preferred_shell, [agents] enabled and herdr_protocol, the
+// [notify], appearance.preferred_shell, [agents] enabled and herdr_protocol, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
 // approval policy applies to the next request; a hold already running keeps
@@ -106,6 +106,8 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
+	// A new notification destination waits like a new host does.
+	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
 	if byPerson {
 		d.manager.SetPanePermissions(perms)
@@ -138,7 +140,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host

@@ -179,8 +179,21 @@ loop.
 
 ## An alert on your phone
 
-The daemon runs `after-agent-state` even with nobody attached, so a hook can
-push to your phone when an agent needs you. With ntfy:
+The `[notify]` table sends an Inbox item to ntfy, Pushover or a webhook, with
+no script. It sends only while nobody types at an attached client, and the
+link opens tuios-web on the item. `tuios notify test` checks each provider:
+
+```toml
+[notify]
+web_url = "https://term.example.com/"
+
+[notify.ntfy]
+url = "https://ntfy.sh/your-private-topic"
+```
+
+For your own message, use a hook. The daemon runs `after-agent-state` even
+with nobody attached, so a hook can push to your phone when an agent needs
+you. With ntfy:
 
 ```sh
 #!/bin/sh

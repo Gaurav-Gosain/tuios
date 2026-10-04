@@ -749,6 +749,39 @@ for the history save are unit tests in `internal/input` and
 | A history save decoded its rows under the pane's lock | whole change, same build | unit `TestHistoryCaptureBudget` ("the capture allocated 24.7 MB under the pane's lock, the budget is 4 MB") | **caught in `internal/session`** |
 | The line cache bounded by its line count only | whole change, same build | unit `TestScrollbackCacheIsBounded` ("cache holds 102400 decoded cells after a walk of a 400-column ring, want at most 65536") | **caught in `internal/vt`** |
 
+## Push notifications for the Inbox, `[notify]`
+
+Each control cut one call site from the current tree, built the binary, and
+ran `TestNotify` (the three tests in `notify_test.go`). The fake provider is
+an HTTP server in the test process that stands in for ntfy, Pushover and a
+webhook. Each test has its positive half in the same fixture: the first test
+proves the line changed (`list-attention` shows the new line) before it counts
+that nothing more was sent, the quiet test sends an approval after the client
+left, and the held test sends the held approval itself.
+
+`TestNotifyPushesAnApprovalNobodyIsLookingAt` sets `cooldown_seconds = 0`.
+With the default cooldown of 60 seconds, the de-dupe control passed: the
+cooldown for the same pane and kind held back the second send on its own, so
+the test did not reach the per-item check it names. With no cooldown the
+per-item check is the only thing in the way, and the control fails.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The daemon sends a notification for an Inbox item | `d.notify.start()` in `Daemon.Start` (`internal/session/daemon.go`) | `TestNotifyPushesAnApprovalNobodyIsLookingAt` (no request after the approval), `TestNotifyHoldsWhileAPersonTypesAtAClient` (no request after the person left), and `TestNotifySendsAHeldItemWhenThePersonStaysAway` (no request after the quiet time) | **caught** (3 of 3) |
+| One notification per item | `if n.sent[it.ID] { return }` in `pushNotifier.note` | `TestNotifyPushesAnApprovalNobodyIsLookingAt`: 6 requests after the repeated reports and the changed line, want 3 | **caught** (with `cooldown_seconds = 0`; not caught at the default cooldown, see above) |
+| Quiet while a person types at a client | the quiet test in `pushNotifier.considerLocked` made false | `TestNotifyHoldsWhileAPersonTypesAtAClient`: 3 requests while the client was active, want 0 | **caught** |
+| A key typed into a pane counts as activity | `cs.lastInput.Store(...)` in `Daemon.handleInput` (`internal/session/daemon_handlers.go`) | `TestNotifyHoldsWhileAPersonTypesAtAClient`: 3 requests while the client was active, want 0 | **caught** |
+| A held item is sent when the person stays away | `n.armLocked(...)` in `pushNotifier.considerLocked` | `TestNotifySendsAHeldItemWhenThePersonStaysAway`: no request after the quiet time | **caught** |
+
+The test of a secret in the daemon log reads `daemon.log` at
+`TUIOS_LOG_LEVEL=trace` and first checks that the log records the ntfy send,
+so a log that is empty or in another place fails it. No control injects a
+secret into the log. `TestNotifySecretsStayOutOfDumps` in `internal/config`
+is the unit test of the redaction itself. It caught a real leak while it was
+written: fmt prints a pointer field with `%s` or `%q` through its error path,
+which skips `String` and `Format`, so a token in `[notify.ntfy]` printed whole.
+The provider tables now format themselves.
+
 ## The session-list poll tick composes no frame
 
 The poll tick stopped composing a frame to save idle CPU. The rail draws

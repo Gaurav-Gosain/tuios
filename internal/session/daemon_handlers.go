@@ -572,6 +572,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 			// it was right by accident and would have gone stale the moment
 			// those redundant syncs stopped being sent.
 			session.TouchActive()
+			cs.lastInput.Store(time.Now().UnixNano())
 		} else {
 			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
 		}

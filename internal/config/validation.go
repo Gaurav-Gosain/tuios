@@ -128,6 +128,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// Validate the notifications section (warn on a duration that would put a
 	// message back under the accessibility floor)
 	validateNotificationsConfig(cfg, result)
+	validateNotify(cfg, result)
 
 	// Keys two actions contest. The first action in each list is the one that
 	// runs; the rest never fire.

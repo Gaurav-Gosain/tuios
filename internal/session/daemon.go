@@ -123,6 +123,9 @@ type Daemon struct {
 	hostsWatcher *config.Watcher
 	// configPath is the file hostsWatcher follows.
 	configPath string
+	// notify sends the Inbox's push notifications ([notify]). See
+	// daemon_notify.go.
+	notify *pushNotifier
 	// hostsWaiting is set when a config reload changed [hosts] in a way that
 	// dials more or gives a linked machine more, and only what narrows was
 	// applied (reloadHosts, reloadLinkPolicies).
@@ -456,6 +459,10 @@ type connState struct {
 	// lastActivity is when the person at this client last gave input, from
 	// MsgClientActivity. Guarded by mu.
 	lastActivity time.Time
+	// lastInput is when this client last sent a key to a pane, in unix
+	// nanoseconds. An atomic, since it is written on every keystroke. The
+	// push notifier reads it to tell whether the person is at the desk.
+	lastInput atomic.Int64
 	// attachSeq orders the clients by when they attached, for the latest
 	// policy when no client has had input. Guarded by mu.
 	attachSeq uint64
@@ -715,6 +722,9 @@ type DaemonConfig struct {
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
+	// Notify is the [notify] table: where the Inbox's push notifications go.
+	// The zero value has no provider and sends nothing. See daemon_notify.go.
+	Notify config.NotifyConfig
 }
 
 // NewDaemon creates a new daemon instance.
@@ -761,6 +771,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.loadHooks(cfg)
+	d.notify = newPushNotifier(d, cfg.Notify)
 
 	// A daemon with no watcher is a working daemon: every transcript join falls
 	// back to reading on its pane's own output. So the error is dropped rather
@@ -1204,6 +1215,8 @@ func (d *Daemon) Start() error {
 	// The config file is followed from here on, so a host added while the daemon
 	// runs reaches the links without a restart.
 	d.startHostsWatch()
+	// The Inbox's push notifications follow the event stream from here on.
+	d.notify.start()
 
 	go d.handleSignals()
 	go d.acceptLoop()
@@ -1348,6 +1361,7 @@ func (d *Daemon) shutdown() error {
 		// The config watch ends before the links do, so a save landing during
 		// shutdown cannot dial a host the daemon is about to drop.
 		d.stopHostsWatch()
+		d.notify.stop()
 
 		// Panes running here on another machine's behalf end with the daemon
 		// that was relaying them. Their owner is on the far side of a link

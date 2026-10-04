@@ -60,7 +60,9 @@ events tells tuios when its window loses focus, and while every attached
 client's terminal is out of focus nobody counts as looking, so the hook fires
 for the shown pane too. `tuios session-info` shows this as `host focus`. Because the daemon runs it, it
 fires with nobody attached, which is how to reach a phone: `tuios --skill
-recipes` has a working ntfy hook. `TUIOS_AGENT_MESSAGE` is the agent's own text,
+recipes` has a working ntfy hook. The `[notify]` table does the same without a
+script, for Inbox items, and links to the item on tuios-web. See
+[CONFIGURATION.md](CONFIGURATION.md#push-notifications-to-your-phone). `TUIOS_AGENT_MESSAGE` is the agent's own text,
 so think before a hook sends it off the machine.
 
 `after-command-finished` fires when a pane's shell reports, through its OSC 133
