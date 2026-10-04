@@ -185,6 +185,41 @@ on a pane that holds nothing you do not. Checkpoints work on this machine's
 panes only. `[agents.checkpoints]` turns them off or sets how many a pane
 keeps (50).
 
+### Shipping an attempt: commit, merge, push, pull request
+
+```sh
+tuios ship commit -s api-fan-add-retry-backoff-http-2 -m 'Add a retry with backoff'
+tuios ship merge -s api-fan-add-retry-backoff-http-2
+tuios ship pr -s api-fan-add-retry-backoff-http-2 --draft
+tuios ship status -s api-fan-add-retry-backoff-http-2 --refresh
+tuios fan keep api-fan-add-retry-backoff-http-2 --merge --squash
+```
+
+`ship commit` (`ship-commit`) stages everything in the pane's work tree and
+commits it on its branch with the person's own git identity, signing and
+hooks. The message is yours, and nothing is added. Without `-m` it is the pane's
+last prompt. It is refused with `not_ready` while the agent works, and with
+`nothing_to_commit` on a clean tree. `ship merge` (`ship-merge`) merges the
+branch into its base in the main checkout. A conflict is undone and fails with
+`merge_conflict`, the files in the hint. A main checkout with changes, or on
+another branch, is `checkout_dirty`. Nothing is forced. `fan keep --merge`
+merges the kept attempt first, and removes nothing when that fails.
+
+`ship push` (`ship-push`) and `ship pr` (`ship-pr`) send work off the machine.
+The first call sends nothing: it is `confirm_required`, with what would be
+sent in `available` and a token in `confirm`. From a pane, or on a restricted
+connection, the call with the token then puts `Push BRANCH (SHA) to REMOTE?` in the
+person's Inbox and waits for `allow`. A timeout is `not_ready` with a
+`request_id` to wait on again. A `deny` is `forbidden`: do not ask again
+unless the person tells you to. `ship pr` runs the person's `gh`.
+`gh_unavailable` means gh is missing or not logged in, which only the person
+can fix. From a pane, `ship-commit` and `ship-merge` need `write` on a pane
+that holds nothing you do not, and `ship-status` needs `read`.
+
+The pull request shows on the session's agent rows in the rail (`PR #12 open
+pass`) and as `pr` in `worktree ls --json` and `ls --json`. The daemon reads
+an open one again every minute while a client is attached.
+
 ## One agent beside you: start-agent
 
 `start-agent` opens a pane with an agent in the session you are in and returns

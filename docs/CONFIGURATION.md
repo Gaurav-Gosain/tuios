@@ -609,15 +609,19 @@ takes two rows or more, and never a row that needs you, a finished turn not
 yet seen, a working agent, the pane you are in, one with messages queued, or
 one whose agent has subagents at work.
 
-The agent row in `[appearance.sidebar.agent_row]` has four tokens for what
+The agent row in `[appearance.sidebar.agent_row]` has five tokens for what
 tuios feeds itself: `now` (what a working agent is doing, drawn only while it
 works), `context` (`ctx 84%` in the warning ink, drawn only at 80% or more),
 `subagents` (`2 subagents`, how many subagents the agent has at work, drawn
-on any row while any run, from Claude Code's hooks) and `prompt` (the first
-line of the last prompt, not shipped on the row). The shipped `tokens` list is
-now `["session", "need", "harness", "name", "elapsed", "context", "subagents",
-"meta", "now", "message"]`; a list you wrote keeps its own order and gains
-nothing, so add `subagents` to it to see the count. The `meta` token no longer
+on any row while any run, from Claude Code's hooks), `pr` (`PR #12 open
+pass`, the pull request of the session's worktree branch and its checks, in
+the error ink for failing checks, the warning ink for pending ones and the
+success ink for passing ones and a merge, see
+[Shipping a worktree](AGENT_STATE.md#shipping-a-worktree)) and `prompt` (the
+first line of the last prompt, not shipped on the row). The shipped `tokens`
+list is now `["session", "need", "harness", "name", "elapsed", "context",
+"subagents", "pr", "meta", "now", "message"]`. A list you wrote keeps its own
+order and gains nothing. Add `subagents` or `pr` to it to see them. The `meta` token no longer
 draws the fed keys (`now`, `prompt`, `model`, `context`, `cost`, `plan`,
 `subagents`), so place any of them you want with its own token. See
 [What the second line says](AGENT_STATE.md#what-the-second-line-says).

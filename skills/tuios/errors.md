@@ -16,7 +16,8 @@ Over the socket every failure carries a stable code in the error envelope:
 `no_shell_integration`, `not_at_prompt`, `confirm_required`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
-`repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `queue_full`,
+`repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
+`merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `risk_unacknowledged`, `agents_disabled`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
@@ -41,12 +42,17 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
 | `no_notes` | From `send-review`: no unsent notes. Add one with `tuios review note`, or name sent ones with `--id` to send them again. |
 | `no_checkpoint` | From `checkpoint-diff` and `restore-checkpoint`: the pane has no checkpoint by that number. The hint lists the ones it has. Nothing was changed. |
+| `nothing_to_commit` | From `ship-commit`: the work tree has no change. From `ship-push` and `ship-pr`: the branch has no commit. Nothing was changed. |
+| `merge_conflict` | From `ship-merge`: the merge conflicted and was undone. The hint lists the files. Rebase the branch in the worktree, resolve them there, and merge again. |
+| `checkout_dirty` | From `ship-merge`: the main checkout has changes, a merge in progress, or another branch checked out. Nothing was merged. Tell the person. Do not clean their checkout. |
+| `no_remote` | From `ship-push` and `ship-pr`: no remote, or not the one named. Nothing was pushed. |
+| `gh_unavailable` | From `ship-pr` and `ship-status`: gh is not installed or not logged in. Nothing was pushed. Tell the person to run `gh auth login`. |
 | `forbidden` | Your pane's grants (`tuios --skill grants`), a link's policy on another machine, or sending as `human` from a pane. The message names what was needed. Tell the person; do not look for another way. |
 | `not_human` | Only the person may do this: `dismiss-attention`, `respond` (unless your pane holds `respond`) and `reply-approval`. Change your own state, or ask the person. |
 | `prompt_changed` | The prompt moved or was answered before `respond` landed. Nothing was pressed. |
 | `not_resumable` | The pane has no conversation `resume-agent` can bring back. Nothing was typed. |
 | `no_shell_integration`, `not_at_prompt` | From `run`: the shell sends no OSC 133 marks, or is busy. Nothing was typed. Use `send-text` and a marker, or `wait-for command-finished`. |
-| `confirm_required` | A write by selector. The hint lists the panes and a token; check them, then call again with `--confirm`. |
+| `confirm_required` | A write by selector, or a `ship-push` or `ship-pr`. The hint lists the panes, or what would be sent, and a token. Check them, then call again with the token. |
 | `protocol_mismatch` | The caller's protocol version is outside what this daemon accepts. Use a matching tuios. |
 | `unknown_host` | No host by that name. Names are matched exactly and never guessed. |
 | `host_unreachable` | The host is not answering: its link is down or does not answer. Nothing was queued except mail. `tuios hosts` says why. |

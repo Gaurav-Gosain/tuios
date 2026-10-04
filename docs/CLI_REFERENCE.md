@@ -541,7 +541,7 @@ Fan a prompt out across several agents, each in its own worktree.
 ```bash
 tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--host <host> [--clone]] [--wait] <prompt>
 tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
-tuios fan keep [<host>:]<session> [--stash | --force]
+tuios fan keep [<host>:]<session> [--stash | --force] [--merge [--squash | --ff-only] [--into <branch>]]
 tuios fan compare [[<host>:]<session>] [--no-changes] [--json]
 tuios fan verify [<host>:]<session> [--timeout <duration>] [--no-wait] [--json] -- <command>...
 tuios fan diff <session-a> <session-b> [--stat]
@@ -627,6 +627,9 @@ does: a sibling with uncommitted changes is left in place unless `--stash` or
 `--force` is passed, and the command exits 1 to say so. The daemon does the
 removal (`keep-fan`), so the TUI and the CLI share it; against a daemon from
 before that verb the CLI removes the siblings itself, with the same result.
+`--merge` first merges the kept session's branch into its base in the main
+checkout, as `tuios ship merge` does. When that merge is refused or
+conflicts, it is undone and no sibling is removed.
 
 `--host` runs the fan-out on another machine, in its checkout of the repository
 you are in, found and cloned the way `worktree new --host` does it. The agent
@@ -1941,6 +1944,77 @@ what turn N changed, against the checkpoint before it. Without N it shows the
 newest. `checkpoint restore N` saves the work tree as a safety checkpoint, then
 puts the files back as checkpoint N holds them. It prints the number of the
 safety checkpoint. Restore that number to undo the restore.
+
+### `tuios ship`
+
+Take an agent's work from its worktree to a merged change: commit it, merge
+the branch into its base, push the branch, and open a pull request. See
+[Shipping a worktree](AGENT_STATE.md#shipping-a-worktree).
+
+**Usage:**
+```bash
+tuios ship commit [-s <session>] [-w <window>] [-m <message>] [--force] [--json]
+tuios ship merge [-s <session>] [-w <window>] [--into <branch>] [--squash | --ff-only] [-m <message>] [--json]
+tuios ship push [-s <session>] [-w <window>] [--remote <name>] [--yes] [--wait <duration>] [--request <id>] [--json]
+tuios ship pr [-s <session>] [-w <window>] [--base <branch>] [--title <text> [--body <text>]] [--draft] [--remote <name>] [--yes] [--wait <duration>] [--request <id>] [--json]
+tuios ship status [-s <session>] [-w <window>] [--refresh] [--json]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session of the pane (default: this pane's, else the most recently active)
+- `-w, --window <target>`: The pane, by name or ID (default: the pane this runs in, else the focused pane)
+- `-m, --message <text>` (`commit`): The commit message. The default is the pane's last prompt, or the line its last turn ended with
+- `--force` (`commit`): Commit while the agent is working or waiting on a prompt
+- `--into <branch>` (`merge`): The branch to merge into. The default is the base the worktree was made from
+- `--squash`, `--ff-only` (`merge`): Make one commit, or only fast-forward
+- `-m, --message <text>` (`merge`): The message of the merge or squash commit
+- `--remote <name>` (`push`, `pr`): The remote. The default is the one the branch follows, else the only one, else `origin`
+- `-y, --yes` (`push`, `pr`): Do not ask before sending
+- `--wait <duration>` (`push`, `pr`): How long to wait for your answer in the Inbox, when one is needed (default 2m)
+- `--request <id>` (`push`, `pr`): Wait again for the answer to a question an earlier call put in the Inbox
+- `--base <branch>` (`pr`): The branch the pull request merges into
+- `--title <text>`, `--body <text>`, `--draft` (`pr`): The pull request's title, body and draft state. Without `--title`, gh fills the title and body from the commits
+- `--refresh` (`status`): Ask gh now
+- `--json`: Output the verb result as JSON. A failure prints `success`, `error`, `code` and, for a conflict or a dirty checkout, `files`
+
+**Examples:**
+```bash
+tuios ship commit -s api-feat-retry -m 'Add a retry to the client'
+tuios ship merge -s api-feat-retry
+tuios ship merge -s api-feat-retry --squash -m 'Add a retry to the client'
+tuios ship pr -s api-feat-retry --draft
+tuios ship status -s api-feat-retry --refresh
+```
+
+git runs in the daemon with your own environment: your name, email, signing
+setup and hooks. tuios sets no identity and adds no trailer. `ship commit`
+stages every change, untracked files included and ignored files not. When a
+hook or the signing program refuses the commit, the index goes back to what
+it was.
+
+`ship merge` merges into the main checkout. That checkout must have the
+target branch checked out and no uncommitted change to a tracked file. When
+the merge conflicts, it is undone with `git reset --merge`, and the command
+lists the files that conflict (code `merge_conflict`). Uncommitted changes in
+the worktree are not merged, and the command says how many there are.
+
+`ship push` and `ship pr` send work off this machine. The first call shows
+what would be sent: the branch, its commit, the remote, the commits and the
+pull request. The command asks `[y/N]` at a terminal. Elsewhere it needs
+`--yes`. When the command runs inside a tuios pane, the person must also allow
+it in the Inbox. The question pops up on the client that shows the pane, and
+the command waits for the answer. A push is never forced. `ship pr` needs the
+gh CLI, installed and logged in (`gh auth login`). tuios holds no GitHub token.
+
+The pull request and its checks show on the agent's row in the rail (`PR #12
+open pass`), in `tuios worktree ls`, and in the `pr` field of `ls --json` and
+`worktree ls --json`. While a client is attached, the daemon reads each open
+pull request again every minute with `gh pr view`. With no open pull request,
+or no client, nothing is read.
+
+`fan keep <session> --merge` merges the kept attempt the same way before it
+removes the others. `--squash`, `--ff-only` and `--into` choose how. When the
+merge is refused, no attempt is removed.
 
 ### `tuios set-agent-state`
 

@@ -168,6 +168,7 @@ dies with the daemon. `tuios --skill mail` has the whole contract.
 | `tuios worktree ls`, `tuios worktree diff`, `tuios fan keep SESSION` | Watch them, read what one changed, keep one and remove the rest without losing uncommitted work |
 | `tuios fan compare SESSION`, `tuios fan verify SESSION -- CMD`, `tuios fan diff A B` | Every attempt side by side with its changes and last check, one check run in all of them, and what two did differently |
 | `tuios review [SESSION]`, `tuios review note FILE:LINE 'TEXT'`, `tuios review send` | What the agent in a pane changed against its base, notes on its lines, and the notes sent to it as one message when it rests. See [Reviewing an agent's changes](#reviewing-an-agents-changes) |
+| `tuios ship commit`, `tuios ship merge`, `tuios ship pr`, `fan keep SESSION --merge` | Commit an agent's work, merge its branch into the base, push it and open a pull request. The rail shows the pull request and its checks. See [Shipping a worktree](#shipping-a-worktree) |
 | `--select 'group:fan/retry needs:you'` | Address every agent pane a selector matches, on `list-agents`, `list-attention`, `wait-for`, `send-agent-message` and `ask-agent` |
 | `--grants read,write` | On `fan`, `start-agent` and `new-window`: what the new panes may do |
 
@@ -1687,12 +1688,14 @@ opens, as `claude · opus 4.7 · 42% ctx · $1.20`.
 These are row tokens like the rest (see `[appearance.sidebar.agent_row]` in
 [CONFIGURATION.md](CONFIGURATION.md)): `now` (only while working), `context`
 (only at 80% or more), `subagents` (while any run, on any row; its number is
-the count, for a `gt` or `lt` rule) and `prompt` (the first line of the last
-prompt you gave the agent, not shipped on the row), beside `$model`, `$cost`,
-`$plan` and `$key` for any key, which draw a value on any row. The shipped
-order is `session, need, harness, name, elapsed, context, subagents, meta, now,
-message`: `now` comes last so a long command loses its tail before anything
-else does. A `tokens` list you wrote keeps its own order, and draws the count
+the count, for a `gt` or `lt` rule), `pr` (the pull request of the session's
+worktree branch and its checks, such as `PR #12 open pass`, see
+[Shipping a worktree](#shipping-a-worktree)) and `prompt` (the first line of
+the last prompt you gave the agent, not shipped on the row), beside `$model`,
+`$cost`, `$plan` and `$key` for any key, which draw a value on any row. The
+shipped order is `session, need, harness, name, elapsed, context, subagents,
+pr, meta, now, message`: `now` comes last so a long command loses its tail
+before anything else does. A `tokens` list you wrote keeps its own order, and draws the count
 once you add `subagents` to it.
 
 ### Agent metadata
@@ -3774,6 +3777,76 @@ keep = 50        # checkpoints per pane, 1 to 1000
 **Grants.** From a pane, `list-checkpoints` and `checkpoint-diff` need
 `read`. `restore-checkpoint` needs `write`. A pane can restore only a pane
 that holds no grant it does not hold.
+
+## Shipping a worktree
+
+When an agent's work in a worktree is good, take it to a merged change from
+tuios. You do not need to go to the worktree's directory.
+
+```bash
+tuios ship commit -s api-feat-retry -m 'Add a retry to the client'
+tuios ship merge -s api-feat-retry          # into the base, in the main checkout
+tuios ship pr -s api-feat-retry --draft     # push, then open a pull request with gh
+tuios ship status -s api-feat-retry         # the pull request and its checks
+tuios fan keep api-fan-retry-2 --merge      # keep one attempt, merge it, remove the others
+```
+
+The verbs are `ship-commit`, `ship-merge`, `ship-push`, `ship-pr` and
+`ship-status` ([protocol.md](protocol.md#ship-commit)). The pane is found as
+for `review-diff`. A call from inside a pane that names no pane is about that
+pane. A pane on another machine is refused.
+
+**Your identity.** git runs in the daemon with your environment. Your name,
+email, signing setup and hooks make the commit. tuios sets no identity and
+adds nothing to the message. Without `-m`, the message is the pane's last
+prompt, or the line its last turn ended with. When a hook or signing refuses
+the commit, the index goes back to what it was. A commit is refused while the
+agent is `working` or `needs_input`, unless you pass `--force`.
+
+**Merge.** The branch merges into the base the worktree was made from, in the
+main checkout. That checkout must have the base checked out and no
+uncommitted change to a tracked file (`checkout_dirty`). When the merge
+conflicts, tuios undoes it with `git reset --merge` and lists the files
+(`merge_conflict`). The main checkout is then as it was. `--squash` makes one
+commit. `--ff-only` refuses a branch that cannot be fast-forwarded. Nothing is
+forced.
+
+**Push and pull request.** These send work off this machine, so each one
+asks first. The first call answers `confirm_required` with what it would send
+and a token. The token is a hash of the branch, its commit, the remote and the
+pull request. The call goes ahead only with the token of what is there now.
+The CLI shows the list and asks `[y/N]`, or takes `--yes`. A push is never
+forced. `ship pr` runs your own `gh` (`gh pr create`, `gh pr view`). tuios
+holds no GitHub token. Without gh, or when gh is not logged in, the call stops
+with `gh_unavailable` before anything is pushed. When the branch has an open
+pull request already, the push updates it.
+
+**When the caller is not you.** A push or a pull request from a process
+inside a pane, or from a connection limited with `restrict-connection`, also
+needs your yes in the Inbox. The question pops up on the client
+that shows the pane: `Push feat/retry (abc1234) to origin?`, with `allow` and
+`deny`. The call waits for your answer, two minutes by default. When the wait
+ends first, the call fails with `not_ready` and the question stays. Call
+again with `request_id` to wait for it. Over a link, a push is refused.
+
+**The pull request on the rail.** `ship pr` and `ship status --refresh`
+record the branch's pull request on the worktree session. The agent rows of
+that session show it as the `pr` token: `PR #12 open pending`, `PR #12 open
+pass`, `PR #12 open fail` or `PR #12 merged`. The token is red for failing
+checks, amber for pending ones and green for passing ones and a merge.
+`worktree ls` shows it in a PR column, and `ls --json` and `worktree ls
+--json` carry it as `pr`.
+
+**Cost.** While a client is attached and a recorded pull request is open, one
+daemon goroutine reads each open pull request with `gh pr view` once a minute.
+It makes one gh call at a time and writes the record only when the answer
+changed. A merged or closed pull request is not read again. With no open pull
+request, with no client attached, or without gh, there is no goroutine and no
+timer.
+
+**Grants.** From a pane, `ship-commit` and `ship-merge` need `write`, on a
+pane that holds no grant the caller does not hold. `ship-push` and `ship-pr`
+need `write` and your yes in the Inbox. `ship-status` needs `read`.
 
 ## Environment
 

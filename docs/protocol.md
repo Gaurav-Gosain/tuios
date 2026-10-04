@@ -174,6 +174,18 @@ ones taken in the removed worktree. The checkpoints of panes in other
 checkouts stay. The result is unchanged. The error code `no_checkpoint` is in
 the catalog.
 
+**keep-fan can merge the kept attempt, and confirm_required has a second
+use.** `keep-fan` takes `merge`, `merge_mode` and `into`. With `merge`, the
+kept attempt's branch is first merged into its base, as `ship-merge` does, and
+the result carries it as `merge`. A merge that is refused stops the call
+before any sibling is removed. Without `merge` the verb is unchanged.
+`ship-push` and `ship-pr` answer `confirm_required` with what they would send
+and a token, as a write by `select` does. A `worktree` record, in
+`list-worktrees`, `list-sessions` and the session state, may carry `pr`. The
+new error codes `nothing_to_commit`, `merge_conflict`, `checkout_dirty`,
+`no_remote` and `gh_unavailable` are in the catalog. See
+[ship-commit](#ship-commit).
+
 **A pane counts the subagents its agent is running.** An agent that hands work
 to subagents and ends its turn reports `done` while they work, so the daemon
 keeps, per pane, the subagents its hooks reported starting and not yet
@@ -1372,7 +1384,7 @@ catalog.
 | `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `mark-attention`, `respond` and `reply-approval` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
-| `confirm_required` | A write by `select` sent nothing: it carried no `confirm` token, or a token for a different set of panes than the selector matches now. The hint lists the panes in `available` and carries their token in `confirm`. |
+| `confirm_required` | A write by `select`, or a `ship-push` or `ship-pr`, sent nothing: it carried no `confirm` token, or a token for something other than what would be sent now. The hint lists the panes, or what the push would send, in `available`, and carries the token in `confirm`. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
@@ -1387,6 +1399,11 @@ catalog.
 | `not_repo` | No git repository is under the pane or session named, so there is nothing to review. Nothing was read. |
 | `no_notes` | `send-review` found no unsent review notes for the pane. Nothing was typed. |
 | `no_checkpoint` | The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the numbers it has. |
+| `nothing_to_commit` | `ship-commit` found no change in the work tree. `ship-push` and `ship-pr` raise it for a branch with no commit. Nothing was changed. |
+| `merge_conflict` | `ship-merge` stopped on conflicts and undid the merge. The main checkout is as it was. The hint lists the files in `available`. |
+| `checkout_dirty` | `ship-merge` refused: the main checkout has uncommitted changes to tracked files, a merge or rebase in progress, is not on the branch to merge into, or the branch cannot be fast-forwarded under `ff-only`. Nothing was merged. |
+| `no_remote` | `ship-push` or `ship-pr` found no remote to push to, or not the one named. Nothing was pushed. |
+| `gh_unavailable` | `ship-pr` or `ship-status` with `refresh` needs the gh CLI, and it is not installed or not logged in. Nothing was pushed or opened. |
 | `queue_full` | The pane's delivery queue holds `[agents.queue] max` messages. Nothing was queued. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 | `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
@@ -3048,6 +3065,129 @@ A restore writes the files the pane's agent works on, so a pane without
 `admin` needs `write`, and may restore only a pane that holds nothing it does
 not, as `review-note` adds notes. Over a link it needs `write`.
 
+### ship-commit
+
+Stage every change in a pane's git work tree, untracked files included and
+ignored ones not, and commit it on the branch checked out there. The pane is
+found as for `review-diff`. A call from inside a pane that names neither
+`session` nor `window` is about the caller's own pane. git runs in the daemon
+with the daemon's environment, which is the person's: their identity, signing
+setup and hooks. The daemon sets no identity and adds nothing to the message.
+When the commit fails, the index is put back as it was.
+
+Params: `session`, `window`, `message`, `force`. Without `message`, the
+message is the pane's last prompt or the line its last turn ended with. With
+neither, the call is `invalid_params`. While the agent is `working` or
+`needs_input` the call is `not_ready`, unless `force`. Errors:
+`nothing_to_commit`, `git_failed`, `not_worktree` (a detached HEAD).
+
+```json
+{"verb": "ship-commit", "params": {"session": "api-feat-retry", "message": "Add a retry to the client"}}
+```
+
+```json
+{"result": {"type": "ship_committed", "session": "api-feat-retry", "window": "4be1c09a-...",
+ "worktree": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "branch": "feat/retry",
+ "commit": "9f2c...", "message": "Add a retry to the client"}}
+```
+
+### ship-merge
+
+Merge a worktree pane's branch into its base, in the repository's main
+checkout. The base is `into`, else the base the worktree was made from when
+that is a local branch, else the branch the main checkout is on. The main
+checkout must have that branch checked out, no uncommitted change to a
+tracked file, and no merge or rebase in progress (`checkout_dirty`). A merge
+that conflicts is undone with `git reset --merge` and fails with
+`merge_conflict`, with the files in the hint's `available`. Uncommitted
+changes in the worktree are not merged: `uncommitted` counts them. A pane in
+the main checkout is `not_worktree`.
+
+Params: `session`, `window`, `into`, `mode` and `message`. `mode` is
+`merge`, the default, which fast-forwards when it can, `squash` or `ff-only`.
+`message` is the message of a merge or squash commit.
+
+```json
+{"verb": "ship-merge", "params": {"session": "api-feat-retry", "mode": "squash"}}
+```
+
+```json
+{"result": {"type": "ship_merged", "session": "api-feat-retry", "window": "4be1c09a-...",
+ "worktree": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "repo_root": "/src/api",
+ "branch": "feat/retry", "into": "main", "mode": "squash", "before": "1a2b...", "after": "3c4d...",
+ "commits": 2, "fast_forward": false, "up_to_date": false, "uncommitted": 0}}
+```
+
+`ship-commit` and `ship-merge` write files a pane's agent works on, so a pane
+without `admin` needs `write`, and may name only a pane that holds nothing it
+does not. Over a link they need `write`.
+
+### ship-push and ship-pr
+
+`ship-push` pushes a pane's branch to a remote and sets it as the branch's
+upstream: the remote the branch follows, else the only one, else `origin`,
+or `remote`. It never forces. `ship-pr` pushes the same way, then opens a
+pull request with the person's own gh CLI (`gh pr create --head BRANCH
+[--base BASE] (--title T --body B | --fill) [--draft]`), and reads it back
+with `gh pr view BRANCH --json state,statusCheckRollup,url,number`. When the
+branch already has an open pull request, none is opened. The daemon holds no
+GitHub token.
+
+Both send work off this machine, so neither sends anything on a first call.
+It answers `confirm_required`: the hint's `available` lists what would be
+sent (the branch, its commit and the remote, the commits, and for `ship-pr`
+the pull request), and `confirm` carries a token. The token is a hash of the
+branch, its commit, the remote and its URL, and the pull request's base,
+title, body and draft flag. Call again with `confirm` set to it. A token for
+anything else is refused again with the new token.
+
+A caller the daemon cannot count as the person also needs the person's yes:
+a process inside a pane, any connection limited with `restrict-connection`, and
+a link, which is refused outright. The daemon puts the question in the Inbox
+as the caller's pane, with the answers `allow` and `deny`, and waits `wait`
+milliseconds (default 120000, at most an hour). When the wait ends first, the
+call fails with `not_ready` and the hint names the `request_id`. Call again
+with the same `confirm` and that `request_id` to wait on. A `deny`, or a
+question dismissed, is `forbidden`.
+
+Params: `session`, `window`, `remote`, `confirm`, `request_id`, `wait`, and
+for `ship-pr` `base`, `title`, `body` (needs `title`), `draft`. Errors:
+`confirm_required`, `no_remote`, `nothing_to_commit` (a branch with no
+commit), `gh_unavailable`, `git_failed`, `command_failed` (gh failed after
+the push), `not_ready`, `forbidden`.
+
+```json
+{"verb": "ship-pr", "params": {"session": "api-feat-retry", "draft": true, "confirm": "5e0b8c1d2f3a4b6c"}}
+```
+
+```json
+{"result": {"type": "ship_pr", "session": "api-feat-retry", "window": "4be1c09a-...", "branch": "feat/retry",
+ "commit": "9f2c...", "remote": "origin", "created": true,
+ "pr": {"number": 12, "url": "https://github.com/o/api/pull/12", "state": "open", "checks": "pending",
+  "passed": 1, "pending": 1, "branch": "feat/retry", "checked_at": 1791105577561633000}}}
+```
+
+The pull request is recorded on the session's `worktree` record as `pr`. Over
+a link both verbs need `write`, and are then refused by the handler.
+
+### ship-status
+
+The pull request of a pane's branch as the daemon last read it, and with
+`refresh` as gh says now. `gh` says whether the gh CLI is installed. `pr` is
+null when the daemon knows of none. A refresh that finds none clears the
+record, and one that finds one records it.
+
+While a client is attached and a recorded pull request is open, the daemon
+reads each open one again every minute, one gh call at a time, and writes
+the record only when it changed. With none open, with no client, or without
+gh, nothing runs.
+
+```json
+{"verb": "ship-status", "params": {"session": "api-feat-retry", "refresh": true}}
+```
+
+A pane without `admin` needs `read`. Over a link it needs `list`.
+
 ### compare-fan
 
 The attempts of a fan side by side: one row per session of the fan, in the
@@ -3169,7 +3309,11 @@ not part of a fan is `invalid_params`.
 Only the person or a caller with `admin` may call it: a pane without `admin`
 and any restricted connection are refused. Over a link it needs `write`.
 
-Params: `session` (required), `stash`, `force`.
+Params: `session` (required), `stash`, `force`, `merge`, `merge_mode`,
+`into`. With `merge`, the kept attempt's branch is first merged into its
+base, as [ship-merge](#ship-merge) does, with `merge_mode` and `into` as its
+`mode` and `into`. The result then carries `merge`. A merge that conflicts or
+is refused fails the call before any sibling is removed.
 
 ```json
 {"verb": "keep-fan", "params": {"session": "api-fan-retry-2"}}
@@ -4568,6 +4712,10 @@ them:
 | `list-checkpoints` | The checkpoints of a pane's work tree, one per turn that changed a file, marked `untrusted`. See [list-checkpoints](#list-checkpoints) | `read`, own session and fan group | `list` | no |
 | `checkpoint-diff` | What one turn changed, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
 | `restore-checkpoint` | Put a pane's work tree back to a checkpoint, after a safety checkpoint | `write`, only on a pane the caller could type into | `write` | no |
+| `ship-commit` | Commit every change in a pane's work tree on its branch, as the person | `write`, only on a pane the caller could type into | `write` | no |
+| `ship-merge` | Merge a worktree's branch into its base in the main checkout, undoing a conflict | `write`, only on a pane the caller could type into | `write` | no |
+| `ship-push`, `ship-pr` | Push the branch, and open a pull request with gh, after a `confirm` token | `write`, and the person's `allow` in the Inbox | refused | the person outside every pane on an unrestricted connection goes ahead with the token alone. Every other caller waits for the person in the Inbox |
+| `ship-status` | The branch's pull request and its checks | `read` | `list` | no |
 
 A connection restricted with `restrict-connection` is held the same way: with
 `read_only`, `review-note`, `send-review`, `queue-prompt`, `cancel-queued`
