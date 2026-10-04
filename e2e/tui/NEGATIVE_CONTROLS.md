@@ -772,6 +772,7 @@ per-item check is the only thing in the way, and the control fails.
 | Quiet while a person types at a client | the quiet test in `pushNotifier.considerLocked` made false | `TestNotifyHoldsWhileAPersonTypesAtAClient`: 3 requests while the client was active, want 0 | **caught** |
 | A key typed into a pane counts as activity | `cs.lastInput.Store(...)` in `Daemon.handleInput` (`internal/session/daemon_handlers.go`) | `TestNotifyHoldsWhileAPersonTypesAtAClient`: 3 requests while the client was active, want 0 | **caught** |
 | A held item is sent when the person stays away | `n.armLocked(...)` in `pushNotifier.considerLocked` | `TestNotifySendsAHeldItemWhenThePersonStaysAway`: no request after the quiet time | **caught** |
+| A notification's link opens the Inbox in tuios-web | `daemonOpts.OpenInboxItem = sessionInboxItem(...)` in `createTUIOSHandler` (`cmd/tuios-web/main.go`) | `TestNotificationLinkOpensTheInboxOnItsItem` in `cmd/tuios-web` (main module, run with `go test`): the browser with the cookie never shows the Inbox. Its positive half is the browser with no cookie, which shows no Inbox | **caught** |
 
 The test of a secret in the daemon log reads `daemon.log` at
 `TUIOS_LOG_LEVEL=trace` and first checks that the log records the ntfy send,

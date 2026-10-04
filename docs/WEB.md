@@ -57,3 +57,24 @@ tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-pass
 - With a password, sessions use WebSocket. A WebTransport connection carries
   no password, so tuios-web refuses it and the browser falls back to
   WebSocket.
+
+## Open the Inbox from a notification
+
+A push notification from the `[notify]` table links to the Inbox item when
+`notify.web_url` is the address of tuios-web. See
+[Push notifications to your phone](CONFIGURATION.md#push-notifications-to-your-phone).
+
+The link is `web_url/inbox?item=ID`. tuios-web answers it with a cookie that
+names the item, and sends the browser to the page. When the page connects,
+tuios opens the Inbox with the cursor on that item. Answer the item there as
+at any other client.
+
+- The link needs the same password as the page.
+- The cookie holds only the item number. It expires after 60 seconds.
+- An item that closed before you open the link leaves the cursor on the
+  first item.
+- Behind a reverse proxy, set `web_url` to the address with the proxy's path.
+  The link sends the browser back to that path.
+- With `--no-auth` and TLS, a browser can connect over WebTransport. Some
+  browsers do not send the cookie there. Then the Inbox does not open by
+  itself.

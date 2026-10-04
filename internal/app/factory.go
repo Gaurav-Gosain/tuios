@@ -61,6 +61,10 @@ type OSOptions struct {
 	// of the whole file over the operator's and over every other client's.
 	ConfigReadOnly bool
 
+	// OpenInboxItem opens the Inbox on this item once attached. tuios-web
+	// sets it from a notification's link. See OS.OpenInboxOn.
+	OpenInboxItem string
+
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
 	// StartInTerminalMode starts the client in terminal mode on the focused

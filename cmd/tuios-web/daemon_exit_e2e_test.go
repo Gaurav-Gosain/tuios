@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -41,6 +42,14 @@ type webExitRun struct {
 // painted its first frame.
 func startWebExitRun(t *testing.T, name string) *webExitRun {
 	t.Helper()
+	d := startWebDaemon(t)
+	return dialWebRun(t, d, serveWeb(t, name), name, nil)
+}
+
+// startWebDaemon starts a daemon in this process, in an isolated runtime
+// directory.
+func startWebDaemon(t *testing.T) *session.Daemon {
+	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
@@ -49,7 +58,13 @@ func startWebExitRun(t *testing.T, name string) *webExitRun {
 		t.Fatalf("daemon start: %v", err)
 	}
 	t.Cleanup(d.Stop)
+	return d
+}
 
+// serveWeb starts the web server in front of the daemon, with the routes and
+// middleware main installs, and returns its port.
+func serveWeb(t *testing.T, name string) string {
+	t.Helper()
 	webServerConfig.defaultSession = name
 	webServerConfig.ephemeral = false
 	webServerConfig.version = "test"
@@ -65,6 +80,7 @@ func startWebExitRun(t *testing.T, name string) *webExitRun {
 	cfg.Host = "127.0.0.1"
 	cfg.Port = port
 	cfg.AllowInsecureNoTLS = true
+	installInboxLink(&cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serveErr := make(chan error, 1)
@@ -77,12 +93,20 @@ func startWebExitRun(t *testing.T, name string) *webExitRun {
 			t.Log("web server did not shut down within timeout")
 		}
 	})
+	return port
+}
 
+// dialWebRun connects a browser's websocket, sending header with the
+// handshake, and waits for the first frame.
+func dialWebRun(t *testing.T, d *session.Daemon, port, name string, header http.Header) *webExitRun {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	url := "ws://127.0.0.1:" + port + "/ws"
 	var conn *websocket.Conn
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		c, _, derr := websocket.Dial(ctx, url, nil)
+		c, _, derr := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: header})
 		if derr == nil {
 			conn = c
 			break

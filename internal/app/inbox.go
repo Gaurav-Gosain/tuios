@@ -101,6 +101,11 @@ type InboxState struct {
 	// its reply line too.
 	pendingThread uint64
 	pendingReply  bool
+	// pendingItem is an item to put the cursor on once a listing holds it:
+	// a notification's link opened tuios-web before the first listing
+	// arrived. It is cleared when the cursor lands on it, or when the
+	// person moves the cursor first. See OpenInboxOn.
+	pendingItem string
 
 	// Peek is the prompt read over the list, nil when the list shows. See
 	// inbox_peek.go.
@@ -1053,6 +1058,14 @@ func (m *OS) clampInboxSelection() {
 		st.Selected = 0
 		return
 	}
+	if st.pendingItem != "" {
+		for i, r := range rows {
+			if r.item != nil && r.item.ID == st.pendingItem {
+				st.Selected, st.pendingItem = i, ""
+				return
+			}
+		}
+	}
 	if st.SelectedID != "" {
 		for i, r := range rows {
 			if r.item != nil && r.item.ID == st.SelectedID {
@@ -1105,6 +1118,18 @@ func (m *OS) OpenInbox(filter string) {
 	m.clampInboxSelection()
 }
 
+// OpenInboxOn shows the Inbox with the cursor on the item with this id, as
+// soon as a listing holds it. A notification's link opens tuios-web this way.
+// An item already gone leaves the cursor where OpenInbox puts it.
+func (m *OS) OpenInboxOn(id string) {
+	m.OpenInbox("")
+	if !m.ShowInbox || id == "" {
+		return
+	}
+	m.Inbox.pendingItem = id
+	m.clampInboxSelection()
+}
+
 // CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
@@ -1122,6 +1147,7 @@ func (m *OS) InboxMove(delta int) {
 	}
 	st.Selected = m.listStepSkip(st.Selected, delta, len(rows),
 		func(i int) bool { return rows[i].item != nil })
+	st.pendingItem = ""
 	m.syncInboxSelectedID()
 }
 
@@ -1130,6 +1156,7 @@ func (m *OS) InboxSelect(idx int) {
 	rows := m.inboxRows()
 	if idx >= 0 && idx < len(rows) && rows[idx].item != nil {
 		m.Inbox.Selected = idx
+		m.Inbox.pendingItem = ""
 		m.syncInboxSelectedID()
 	}
 }

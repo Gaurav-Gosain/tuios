@@ -97,5 +97,8 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// handed over. The same two calls every client makes.
 	model.WireDaemonClient(client)
 	model.RestoreAttachedSession(state)
+	if opts.OpenInboxItem != "" {
+		model.OpenInboxOn(opts.OpenInboxItem)
+	}
 	return model, nil
 }

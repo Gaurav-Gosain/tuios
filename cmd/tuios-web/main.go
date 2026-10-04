@@ -385,6 +385,9 @@ func runWebServer() error {
 	}
 	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch))
 
+	// A notification's link opens the Inbox on its item. See inboxlink.go.
+	installInboxLink(&sipConfig)
+
 	server := sip.NewServer(sipConfig)
 
 	// Log startup mode
@@ -672,6 +675,7 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	daemonOpts := opts
 	daemonOpts.SessionName = webServerConfig.defaultSession
 	daemonOpts.ViewOnly = webReadOnly
+	daemonOpts.OpenInboxItem = sessionInboxItem(sess.Context())
 	model, err := served.Attach(daemonOpts, webAppearanceOverrides(), version, app.ClientCapabilitiesOf(hostCaps), pickWebSession)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
