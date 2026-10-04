@@ -1093,6 +1093,25 @@ positive half: it still gets `ctrl+h` as `08`.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The pane mode never read | `sendKeysBytes`: `k.encode(modes)` made `k.bytes(modes.appCursor)` | `TestSendKeysEncodesKeysForThePaneMode` (the kitty pane shows `read1=08`, not `read1=1b5b3130343b3575`) | **caught** |
+## The opt-in explorers: help -i, config browse, keybinds browse
+
+`explorers_test.go` saves each frame it checks as text and PNG. Each control
+cut one call site from the branch, built a binary, and ran the named test.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| help -i does nothing | the help command's `Run`: the `!interactive` term cut, so -i prints the plain help | `TestHelpExplorer` (the child exits 0 before the explorer's title shows) | **caught** |
+| help opens an explorer on a terminal | the help command's `Run`: the plain branch also made to need a stdout that is not a terminal | `TestHelpExplorer` (`tuios help` on a terminal never exits by itself) | **caught** |
+| config browse does not set | the explorer's `Apply`: the `setConfigOption` call cut | `TestConfigExplorer` (no refusal for `sideways`, and the source never reads `session`) | **caught** |
+| keybinds browse is not wired | `addExplorers`: the keybinds `AddCommand` cut | `TestKeybindsExplorer` (the child prints the keybinds help and exits) | **caught** |
+
+The positive halves: each test leaves its explorer with `q`, and
+`TestExplorerEscLeaves` with `esc`, and both wait for the process to exit by
+itself with status 0. The "plain on a terminal" checks run `tuios help`,
+`tuios help checkpoint`, `tuios config`, `tuios list-options`, `tuios keybinds`
+and `tuios keybinds list` in a terminal and check that each exits by itself,
+never shows the alternate screen, and ends with the lines it prints with no
+terminal.
 
 ## What this harness structurally cannot observe
 
