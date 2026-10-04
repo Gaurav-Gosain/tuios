@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -719,9 +720,6 @@ func syncInstallTarget(t *syncTarget) (arg, display string) {
 		if t.res.Path != "" && !t.dirWritable {
 			return fallback(fmt.Sprintf("You cannot write the folder of %s, so sync installs to ~/.local/bin. The config still runs %s.", p, t.host.Command))
 		}
-		if t.res.Path == "" && !strings.HasPrefix(cmdArg, "H:") && !federation.SafeRemoteArg(cmdArg) {
-			return fallback("")
-		}
 		return cmdArg, p
 	}
 	p := t.res.Path
@@ -846,7 +844,7 @@ func applySyncTarget(t *syncTarget, src *syncSource) {
 		defer cancel()
 		out, stderr, err := t.runner.run(ctx, syncInstallScript(),
 			[]string{t.targetArg, b.sha, strconv.Itoa(len(b.data)), restart, t.oldArg},
-			strings.NewReader(string(b.data)))
+			bytes.NewReader(b.data))
 		f := parseSyncFacts(out)
 		if err != nil || f.has("fail") {
 			t.fail(installError(f, stderr, err))
