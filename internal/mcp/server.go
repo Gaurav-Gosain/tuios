@@ -71,8 +71,30 @@ type Options struct {
 	Log func(format string, args ...any)
 }
 
-// Protocol versions this server speaks, newest first.
-var protocolVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
+// protocolVersions are the versions a client can negotiate with initialize,
+// newest first. They are the handshake era: the version is chosen once.
+var protocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
+
+// modernProtocol is the first version without the initialize handshake. Every
+// request carries its own version and client capabilities in _meta, and every
+// result carries a resultType. A client learns the versions the server speaks
+// from server/discover.
+const modernProtocol = "2026-07-28"
+
+// batchRemovedIn is the first version that dropped JSON-RPC batching.
+const batchRemovedIn = "2025-06-18"
+
+// The _meta keys a modern request carries.
+const (
+	metaVersionKey = "io.modelcontextprotocol/protocolVersion"
+	metaCapsKey    = "io.modelcontextprotocol/clientCapabilities"
+	metaServerKey  = "io.modelcontextprotocol/serverInfo"
+)
+
+// supportedVersions is every version the server answers, newest first.
+func supportedVersions() []string {
+	return append([]string{modernProtocol}, protocolVersions...)
+}
 
 // JSON-RPC error codes.
 const (
@@ -81,6 +103,9 @@ const (
 	rpcMethodNotFound = -32601
 	rpcInvalidParams  = -32602
 	rpcInternalError  = -32603
+	// rpcUnsupportedVersion answers a request that names a protocol version
+	// the server does not speak.
+	rpcUnsupportedVersion = -32022
 )
 
 type rpcRequest struct {
@@ -93,6 +118,7 @@ type rpcRequest struct {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 type rpcResponse struct {
@@ -113,6 +139,8 @@ type Server struct {
 
 	mu       sync.Mutex
 	protocol string
+	// modern is set once a request in the stateless era arrives.
+	modern   bool
 	inflight map[string]context.CancelFunc
 	wg       sync.WaitGroup
 }
@@ -169,11 +197,23 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 }
 
 // handleBatch answers a JSON-RPC batch, which the 2025-03-26 protocol allows,
-// with one array. Calls in a batch run one after another.
+// with one array. Calls in a batch run one after another. Later versions
+// removed batching, so a batch is refused once one of them is negotiated or a
+// request in the stateless era has been seen.
 func (s *Server) handleBatch(ctx context.Context, msg []byte) {
 	var items []json.RawMessage
 	if err := json.Unmarshal(msg, &items); err != nil || len(items) == 0 {
 		s.write(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: rpcInvalidRequest, Message: "invalid batch"}})
+		return
+	}
+	refuse := s.batchesRemoved()
+	for _, it := range items {
+		if v, _ := requestVersion(it); v == modernProtocol {
+			refuse = true
+		}
+	}
+	if refuse {
+		s.write(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: rpcInvalidRequest, Message: "JSON-RPC batches are not supported by this protocol version"}})
 		return
 	}
 	var out []*rpcResponse
@@ -185,6 +225,30 @@ func (s *Server) handleBatch(ctx context.Context, msg []byte) {
 	if len(out) > 0 {
 		s.writeAny(out)
 	}
+}
+
+// batchesRemoved reports whether the negotiated version has no batching.
+func (s *Server) batchesRemoved() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.modern || (s.protocol != "" && s.protocol >= batchRemovedIn)
+}
+
+// requestVersion reads the protocol version a stateless-era request names in
+// its _meta, and whether it names the client capabilities too.
+func requestVersion(msg []byte) (version string, hasCaps bool) {
+	var r struct {
+		Params struct {
+			Meta map[string]json.RawMessage `json:"_meta"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(msg, &r) != nil {
+		return "", false
+	}
+	_ = json.Unmarshal(r.Params.Meta[metaVersionKey], &version)
+	var caps map[string]any
+	hasCaps = json.Unmarshal(r.Params.Meta[metaCapsKey], &caps) == nil && caps != nil
+	return version, hasCaps
 }
 
 func (s *Server) write(resp *rpcResponse) { s.writeAny(resp) }
@@ -216,9 +280,31 @@ func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcRespo
 		}
 		return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: rpcInvalidRequest, Message: "not a JSON-RPC 2.0 request"}}
 	}
+	// A request that names a version in _meta is in the stateless era.
+	version, hasCaps := requestVersion(msg)
+	modern := version == modernProtocol
+	if version != "" && req.Method != "server/discover" && !notification {
+		if !slices.Contains(supportedVersions(), version) {
+			return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{
+				Code: rpcUnsupportedVersion, Message: "unsupported protocol version " + version,
+				Data: map[string]any{"supported": supportedVersions(), "requested": version},
+			}}
+		}
+		if modern && !hasCaps {
+			return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: rpcInvalidParams, Message: "_meta lacks " + metaCapsKey}}
+		}
+	}
+	if modern {
+		s.mu.Lock()
+		s.modern = true
+		s.mu.Unlock()
+	}
 	reply := func(result any, rerr *rpcError) *rpcResponse {
 		if notification {
 			return nil
+		}
+		if modern && rerr == nil {
+			result = modernResult(req.Method, result)
 		}
 		return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result, Error: rerr}
 	}
@@ -241,6 +327,16 @@ func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcRespo
 		return nil
 	case "ping":
 		return reply(map[string]any{}, nil)
+	case "server/discover":
+		// The answer is the same for every version, so a client that knows
+		// none of them can still ask.
+		res := map[string]any{
+			"supportedVersions": supportedVersions(),
+			"capabilities":      s.capabilities(),
+			"instructions":      s.instructions(),
+			"_meta":             map[string]any{metaServerKey: map[string]any{"name": s.opts.Name, "version": s.opts.Version}},
+		}
+		return reply(modernResult(req.Method, res), nil)
 	case "tools/list":
 		return reply(map[string]any{"tools": s.toolList()}, nil)
 	case "tools/call":
@@ -290,6 +386,32 @@ func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcRespo
 	}
 }
 
+// capabilities is what the server offers, the same in every version.
+func (s *Server) capabilities() map[string]any {
+	return map[string]any{"tools": map[string]any{"listChanged": false}}
+}
+
+// modernResult adds what the stateless era requires of a result: resultType on
+// all of them, and a freshness hint on the list and discover results. A tool
+// list can differ between servers, so the hint says private and no caching.
+func modernResult(method string, result any) any {
+	m, ok := result.(map[string]any)
+	if !ok {
+		return result
+	}
+	out := make(map[string]any, len(m)+3)
+	for k, v := range m {
+		out[k] = v
+	}
+	out["resultType"] = "complete"
+	switch method {
+	case "tools/list", "resources/list", "prompts/list", "server/discover":
+		out["ttlMs"] = 0
+		out["cacheScope"] = "private"
+	}
+	return out
+}
+
 func (s *Server) initialize(params json.RawMessage) map[string]any {
 	var p struct {
 		ProtocolVersion string `json:"protocolVersion"`
@@ -304,7 +426,7 @@ func (s *Server) initialize(params json.RawMessage) map[string]any {
 	s.mu.Unlock()
 	return map[string]any{
 		"protocolVersion": version,
-		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+		"capabilities":    s.capabilities(),
 		"serverInfo":      map[string]any{"name": s.opts.Name, "version": s.opts.Version},
 		"instructions":    s.instructions(),
 	}
@@ -314,7 +436,7 @@ func (s *Server) initialize(params json.RawMessage) map[string]any {
 func (s *Server) structured() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.protocol != "" && s.protocol >= "2025-06-18"
+	return s.modern || (s.protocol != "" && s.protocol >= "2025-06-18")
 }
 
 func (s *Server) instructions() string {
