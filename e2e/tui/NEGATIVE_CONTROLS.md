@@ -862,6 +862,7 @@ Wikipedia URL that keeps its brackets.
 | `link_click` is read | `linkClickAllows` returns true for shift under `ctrl` | `TestLinkClickSettingIsHonoured` (the record holds the URL twice) | **caught** |
 | A closing bracket the URL did not open ends it | `urlEnd` in `internal/hints/urls.go`: the `)` and `]` cases cut | `TestHintsFindURLsInMarkdown` (the clipboard got `https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B81N8V1R)`) | **caught** |
 | `</p>` is not a path | the rooted-path check in the path pattern made false | `TestHintsFindURLsInMarkdown` ("column 1 of \"</p>\" is drawn as a hint label") | **caught** |
+| A bare URL cut by the viewport opens its whole address | `link_hover.go`, `link_emit.go` and `render_terminal.go` in `internal/app` as before the fix, so the line is read from the rows on screen only | `TestACutURLOpensWhole`: the click on the tail of a URL whose head is in the scrollback opens nothing. With that click left out, the click on the head of a URL whose tail is below a scrolled-back pane opens the address cut at the pane's last row | **caught** (2 of 2 halves) |
 | A daemon snapshot carries OSC 8 targets | n/a, never broken | none: `TestLinkOpensFromARehydratedPane` passes on both builds | **guard, not a control** |
 
 ## The session-list poll tick composes no frame

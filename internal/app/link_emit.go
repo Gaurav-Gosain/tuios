@@ -44,7 +44,23 @@ type paneBareSpan struct {
 // appendBareSpans reads rows top..bottom as one line, finds the URLs in it with
 // the shared detector, and records each one's cells per row. rows must have
 // maxY entries. The caller holds the window's I/O read lock.
+//
+// The viewport may cut the line: its first row can continue a row above the
+// viewport, and its last row can wrap onto one below, as in a pane scrolled
+// back to the middle of a long URL. The line is followed past both edges in
+// the emulator (up to linkWrapRows rows each way), so a cut URL keeps its
+// whole address. Spans are recorded only for the rows on screen.
 func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom, maxX, maxY int) [][]paneBareSpan {
+	if top == 0 {
+		for limit := top - linkWrapRows; top > limit && paneRowWraps(window, top-1); {
+			top--
+		}
+	}
+	if bottom == maxY-1 {
+		for limit := bottom + linkWrapRows; bottom < limit && paneRowWraps(window, bottom); {
+			bottom++
+		}
+	}
 	var b strings.Builder
 	var refs []linkCellRef
 	var byteAt []int
@@ -82,7 +98,9 @@ func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom
 			for j+1 <= last && refs[j+1].Y == y {
 				j++
 			}
-			rows[y] = append(rows[y], paneBareSpan{X0: refs[i].X, X1: refs[j].X, Link: link})
+			if y >= 0 && y < maxY {
+				rows[y] = append(rows[y], paneBareSpan{X0: refs[i].X, X1: refs[j].X, Link: link})
+			}
 			i = j + 1
 		}
 	}

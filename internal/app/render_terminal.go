@@ -387,6 +387,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	lineScanned := false       // the line's URLs are in bareRows
 	schemeState := 0           // characters of "://" seen in a row
 	lineHasScheme := false
+	// A logical line the viewport cuts may hold a URL whose "://" is off
+	// screen. The first line is cut when the row above the viewport wraps
+	// onto it, the last when the last row wraps onto the row below. Such a
+	// line is scanned whatever its visible rows hold, and appendBareSpans
+	// reads past the edge for the rest of the address.
+	cutAbove := findBare && paneRowWraps(window, -1)
+	cutBelow := findBare && paneRowWraps(window, maxY-1)
 	var openLink uv.Link
 	// A marked link with an id= is one link wherever its runs are, so the
 	// hover lights every run with the same address and id, not only the
@@ -951,7 +958,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			wraps := y+1 < maxY && paneRowWraps(window, y)
 			// The logical line ends on this row and holds "://": find its
 			// URLs and draw it again from its first row.
-			if !wraps && lineHasScheme && !lineScanned {
+			cut := (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow)
+			if !wraps && (lineHasScheme || cut) && !lineScanned {
 				if bareRows == nil {
 					bareRows = make([][]paneBareSpan, maxY)
 				}
