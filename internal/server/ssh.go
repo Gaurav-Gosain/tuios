@@ -37,8 +37,8 @@ type SSHServerConfig struct {
 	Ephemeral      bool   // If true, don't use daemon (old behavior)
 	Version        string // For daemon handshake
 	// AuthorizedKeysPath names the file of public keys allowed to connect.
-	// Empty searches ~/.config/tuios/authorized_keys, then
-	// ~/.ssh/authorized_keys. See auth.go.
+	// Empty reads tuios/authorized_keys under the XDG config home, and only
+	// that: ~/.ssh/authorized_keys is read only when named here. See auth.go.
 	AuthorizedKeysPath string
 	// ShowKeys turns the key display overlay on in every served session. It is
 	// the --show-keys flag `tuios ssh` registers with the rest of the interface

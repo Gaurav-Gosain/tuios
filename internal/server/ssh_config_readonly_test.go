@@ -14,11 +14,12 @@ import (
 // starts is built as an SSH client, which is what makes it ConfigReadOnly, and
 // that it takes the server's --show-keys.
 //
-// `tuios ssh` authenticates no client: the session is chosen by the SSH
-// username, and with --host 0.0.0.0 anyone who can reach the port gets a
-// session. The settings page inside it applies to that session and must not
-// decide the contents of the host's config.toml on behalf of whoever else is
-// attached, which is the same call the web client already made.
+// A `tuios ssh` client is anyone holding a key in the authorized keys file,
+// or anyone who can reach the port under --no-auth, and the session is chosen
+// by the SSH username. The settings page inside it applies to that session
+// and must not decide the contents of the host's config.toml on behalf of
+// whoever else is attached, which is the same call the web client already
+// made.
 //
 // Checked over the syntax tree rather than by starting a server, because the
 // thing that has to hold is "every place that builds one sets it", and the

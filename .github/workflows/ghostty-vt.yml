@@ -5,6 +5,10 @@
 # ships this backend by default and the go-test workflow only covers the
 # pure one. The renderer tests in internal/app failed here for weeks while
 # this job ran only the emulator's own packages.
+#
+# The paths below are every package that imports internal/vt, directly or
+# through another one. A change to one of them can break it on this backend,
+# and the job body already tests them all; the trigger has to see them too.
 name: ghostty-vt
 
 on:
@@ -16,7 +20,15 @@ on:
       - "internal/terminal/**"
       - "internal/app/**"
       - "internal/input/**"
+      - "internal/scrollback/**"
+      - "internal/tmuxcompat/**"
+      - "internal/served/**"
+      - "internal/server/**"
+      - "internal/ui/**"
+      - "internal/learn/**"
+      - "pkg/tuios/**"
       - "cmd/tuios/**"
+      - "cmd/tuios-web/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
@@ -28,7 +40,15 @@ on:
       - "internal/terminal/**"
       - "internal/app/**"
       - "internal/input/**"
+      - "internal/scrollback/**"
+      - "internal/tmuxcompat/**"
+      - "internal/served/**"
+      - "internal/server/**"
+      - "internal/ui/**"
+      - "internal/learn/**"
+      - "pkg/tuios/**"
       - "cmd/tuios/**"
+      - "cmd/tuios-web/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
