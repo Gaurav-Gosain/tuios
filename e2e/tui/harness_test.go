@@ -1205,12 +1205,14 @@ func disableTiling(t *testing.T, term *tuitest.Terminal) {
 const unixSocketPathMax = 103
 
 // longestRuntimeSocket is the longest socket tuios binds under its runtime
-// directory, relative to it: a tmux shim pane holder's socket, named by a pane
-// number of up to ten digits. The daemon's tuios.sock and its link sockets
-// (tuios.sock.link-human is the longest) are shorter. A runtime directory is
-// measured against this one, since measuring it against tuios.sock alone let
-// a root through whose daemon bound and whose pane holders could not.
-var longestRuntimeSocket = filepath.Join("tuios", "tmux", "p", "2147483647.sock")
+// directory, relative to it: a tmux shim wait-for socket, a channel hash of
+// eight hex digits and a locker named by the time in thirteen base 36
+// digits. A pane holder's socket (tmux/p/2147483647.sock), the daemon's
+// tuios.sock and its link sockets (tuios.sock.link-human is the longest) are
+// shorter. A runtime directory is measured against this one, since measuring
+// it against tuios.sock alone let a root through whose daemon bound and whose
+// pane holders could not.
+var longestRuntimeSocket = filepath.Join("tuios", "tmux", "w", "ffffffff", "l1y2p0ij32e8e7")
 
 // shortRuntimeRoot is where a runtime directory goes when the isolation root
 // is too long to hold one. Per user and per test process. It was per user

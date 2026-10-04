@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tmuxcompat"
@@ -106,6 +107,13 @@ type lazyCaller struct {
 }
 
 func (l *lazyCaller) Call(verb string, params any) (json.RawMessage, error) {
+	return l.CallWithTimeout(verb, params, 0)
+}
+
+// CallWithTimeout is Call waiting up to timeout for the answer, for a verb
+// that holds its answer until something happens (display-popup waits for
+// the popup to close). 0 is the client's default.
+func (l *lazyCaller) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	if l.client == nil {
 		c, err := dialVerb()
 		if err != nil {
@@ -118,7 +126,13 @@ func (l *lazyCaller) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		l.client = c
 	}
-	raw, err := l.client.Call(verb, params)
+	var raw json.RawMessage
+	var err error
+	if timeout > 0 {
+		raw, err = l.client.CallWithTimeout(verb, params, timeout)
+	} else {
+		raw, err = l.client.Call(verb, params)
+	}
 	if err != nil {
 		return nil, explainVerbError(verb, err)
 	}
@@ -159,6 +173,7 @@ func runTmuxShim(args []string, dir string) int {
 		AllSessions: sess == "" && window == "",
 		Window:      window,
 		Shell:       os.Getenv("SHELL"),
+		Environ:     os.Environ(),
 		Stdin:       os.Stdin,
 		Subscribe:   subscribeVerb,
 		TmuxPane:    os.Getenv("TMUX_PANE"),
@@ -214,13 +229,17 @@ tuios session is a tmux session. A tmux window is a workspace (@N), and a
 tmux pane is a tuios window (%N, a number derived from its id).
 
 Supported: split-window, new-window, send-keys, capture-pane -p,
-display-message, list-panes, list-windows, list-sessions, list-clients,
-has-session, kill-pane, kill-window, select-pane, select-window,
-rename-window, respawn-pane -k, load-buffer, set-buffer, paste-buffer,
-delete-buffer, show-options, new-session -d (outside a pane only), -V, and
-control mode (-C and -CC). set-option, set-window-option, set-hook,
-refresh-client, select-layout, resize-pane and start-server succeed and do
-nothing. Anything else fails and is recorded in the shim log.`,
+display-message, display-popup, list-panes, list-windows, list-sessions,
+list-clients, has-session, kill-pane, kill-window, select-pane, last-pane,
+select-window, next-window, previous-window, rename-window, rename-session,
+break-pane, join-pane, move-pane, respawn-pane -k, load-buffer, set-buffer,
+show-buffer, save-buffer, list-buffers, paste-buffer, delete-buffer,
+show-options, show-environment, set-environment, run-shell, if-shell,
+wait-for, new-session -d (outside a pane only), -V, and control mode (-C
+and -CC). A command name can be shortened to any prefix that names one
+command. set-option, set-window-option, set-hook, refresh-client,
+select-layout, resize-pane and start-server succeed and do nothing.
+Anything else fails and is recorded in the shim log.`,
 		Example: `  tuios tmux display-message -p '#{pane_id} #{window_id}'
   tuios tmux split-window -d -P -F '#{pane_id}'
   tuios tmux list-panes -F '#{pane_id} #{pane_title}'

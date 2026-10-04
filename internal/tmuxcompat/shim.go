@@ -80,6 +80,9 @@ type Shim struct {
 	// asks for #{pid}.
 	daemonPID int
 	pidRead   bool
+	// depth counts the command lines run inside one another by if-shell
+	// and run-shell -C.
+	depth int
 }
 
 // handler runs one command. It returns the outcome to log, detail for the
@@ -124,6 +127,8 @@ var commands = map[string]handler{
 	"list-buffers":        (*Shim).listBuffers,
 	"show-environment":    (*Shim).showEnvironment,
 	"set-environment":     (*Shim).setEnvironment,
+	"wait-for":            (*Shim).waitFor,
+	"display-popup":       (*Shim).displayPopup,
 }
 
 // specs are the flags each command accepts. A tmux flag missing here is
@@ -169,12 +174,17 @@ var specs = map[string]spec{
 	"list-buffers":        {values: "Ff"},
 	"show-environment":    {bools: "ghs", values: "t"},
 	"set-environment":     {bools: "Fghru", values: "t"},
+	"run-shell":           {bools: "bC", values: "cdt"},
+	"if-shell":            {bools: "bF", values: "t"},
+	"wait-for":            {bools: "LSU"},
+	"display-popup":       {bools: "BCE", values: "bcdehsStTwxy"},
 }
 
 // textCommands carry text as their positional arguments: keys to type or a
 // command line to run. The log records how many there were, not what they
 // said, since they can hold secrets.
-var textCommands = []string{"send-keys", "split-window", "new-window", "respawn-pane", "set-buffer", "new-session"}
+var textCommands = []string{"send-keys", "split-window", "new-window", "respawn-pane", "set-buffer", "new-session",
+	"run-shell", "if-shell", "display-popup", "set-environment"}
 
 // redact returns argv (starting "tmux") as the log records it. Only what the
 // shim can name is kept: the global flags, the name of a known tmux command,
@@ -298,6 +308,11 @@ func (s *Shim) Run(args []string) int {
 		o, d, err := s.runOne(c[0], c[1:])
 		detail = append(detail, d...)
 		outcome = worse(outcome, o)
+		if se, ok := errors.AsType[statusError](err); ok {
+			// The command's own status, already reported on stdout.
+			s.Log.Record(full, worse(outcome, OutcomeError), detail)
+			return se.code
+		}
 		if err != nil {
 			return s.fail(full, o, detail, err)
 		}
