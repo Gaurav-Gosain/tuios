@@ -94,6 +94,10 @@ question about the screen. Do not change them unless the person asks.
   lists it as `rail/custom`.
 - In the rail's files section, `Y` or the folder menu's Copy path copies a
   path to the person's clipboard.
+- When the last pane on the workspace on screen closes, the session shows
+  the workspace the person came from: the one that ran `xpanes`, else the
+  ones shown before, else the lowest with panes. `workspaces.return_when_empty
+  = false` keeps the empty workspace on screen.
 - `Ctrl+B =` (or `tuios set-layout --equalize`) gives tiled panes equal
   shares. In the master-stack layout it puts the master back at its
   configured ratio.
