@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
 // A session's place.
@@ -199,8 +201,8 @@ func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 		return "", "", false
 	}
 	if !strings.HasPrefix(raw, "file://") {
-		if filepath.IsAbs(raw) {
-			return filepath.Clean(raw), "", true
+		if p := winpath.Native(raw); filepath.IsAbs(p) {
+			return filepath.Clean(p), "", true
 		}
 		return "", "", false
 	}
@@ -209,10 +211,14 @@ func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 		return "", "", false
 	}
 	if h := strings.ToLower(u.Hostname()); h != "" && h != "localhost" && h != localHostname() {
-		// Bounded: it is shown on a rail row, and the pane wrote it.
+		// Bounded: it is shown on a rail row, and the pane wrote it. The path
+		// is another machine's, so it is not converted for this one.
 		return filepath.Clean(u.Path), ClampDisplayText(u.Hostname()), true
 	}
-	return filepath.Clean(u.Path), "", true
+	// An MSYS2 or Cygwin shell on Windows reports /c/Users/x, which a native
+	// program reads as \c\Users\x. winpath.Native makes it C:\Users\x, and
+	// leaves the path alone on every other platform.
+	return filepath.Clean(winpath.Native(u.Path)), "", true
 }
 
 // dirLabel is the short form of a directory for a row: its base name, or "~"
