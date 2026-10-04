@@ -33,7 +33,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			Name: "Window Management",
 			Bindings: generateCategoryBindings(registry, "Window Management", []string{
 				"new_window", "close_window", "rename_window",
-				"minimize_window", "restore_all", "toggle_zoom", "toggle_pip",
+				"minimize_window", "restore_all", "toggle_zoom", "toggle_pip", "toggle_spotlight",
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
 				"terminal_focus_left", "terminal_focus_right",
@@ -94,11 +94,11 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			// The list keys ride along here rather than in a tab of their own:
 			// the strip is one row wide at a desktop width, and there is no
 			// room for another tab on it.
-			Bindings: append(generateCategoryBindings(registry, "Modes", []string{
+			Bindings: append(append(generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
 				"terminal_exit_mode",
 				"toggle_help", "quit",
-			}), generateListBindings()...),
+			}), generateSpotlightOffBindings(registry, s)...), generateListBindings()...),
 		},
 		{
 			Name:     "Debug",
@@ -616,6 +616,26 @@ func generateTapeBindings(s *config.Settings) []HelpBinding {
 	return bindings
 }
 
+// generateSpotlightOffBindings lists the ways out of the spotlight: esc in
+// window mode, and the leader chord in either mode. See spotlight_exit.go.
+func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
+	out := []HelpBinding{{
+		Action:      "spotlight_off",
+		Keys:        []string{"esc"},
+		Description: "Turn off spotlight, in window mode",
+		Category:    "Modes",
+	}}
+	if keys := registry.GetKeys("prefix_toggle_spotlight"); len(keys) > 0 {
+		out = append(out, HelpBinding{
+			Action:      "spotlight_off",
+			Keys:        []string{s.LeaderKey + ", " + keys[0]},
+			Description: "Turn off spotlight, in any mode",
+			Category:    "Modes",
+		})
+	}
+	return out
+}
+
 // generatePrefixBindings generates prefix command bindings
 func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
@@ -634,7 +654,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_equalize_splits", "prefix_layout",
 		"prefix_scrollback", "prefix_screenshot", "prefix_command_palette", "prefix_session_switcher",
 		"prefix_workspace_switcher",
-		"prefix_toggle_sidebar", "prefix_explore",
+		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
 		"toggle_scratch", "paste_image",
 		"hints", "hints_all_panes", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,

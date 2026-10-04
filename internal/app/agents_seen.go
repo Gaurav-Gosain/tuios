@@ -90,6 +90,14 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		if !review {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsReviewPrefixKeybinding)
 		}
+		// While the beam is on, its row says the key turns it off.
+		if m.spotlight.on {
+			for i := range g.Bindings {
+				if g.Bindings[i].Key == config.WhichKeySidebarSpotlightKey {
+					g.Bindings[i].Description = "Sidebar/spotlight off"
+				}
+			}
+		}
 		if len(g.Bindings) > 0 {
 			out = append(out, g)
 		}

@@ -689,6 +689,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_command_palette":    "Open the command palette",
 	"prefix_file_search":        "Search files below the focused pane's directory",
 	"prefix_toggle_sidebar":     "Toggle the session sidebar",
+	"prefix_toggle_spotlight":   "Toggle spotlight",
 	"prefix_explore":            "Focus/leave sidebar",
 	"prefix_jump_notif":         "Jump to newest message",
 	"prefix_last_message":       "Show the last message in full",

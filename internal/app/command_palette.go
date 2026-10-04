@@ -1024,15 +1024,11 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Toggle spotlight",
-			Shortcut: "b",
+			Shortcut: "B",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				save := m.ToggleSpotlight()
-				state := "off"
-				if m.SpotlightOn() {
-					state = "on"
-				}
-				m.ShowNotification("Spotlight "+state, "success", s.NotificationDuration)
+				m.AnnounceSpotlight()
 				return m, save
 			},
 		},

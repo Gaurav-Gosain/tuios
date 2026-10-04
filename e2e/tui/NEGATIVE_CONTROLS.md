@@ -829,6 +829,30 @@ refused keep is followed by one that merges. A push that is not a
 fast-forward, a squash or ff-only merge, a pull request that is already
 open, and gh missing or not logged in have no end-to-end test.
 
+## The way out of the spotlight
+
+People who turned the spotlight on by mistake saw a short message and then a
+dimmed screen with no way out on it. The dock now shows a Spotlight chip with
+the key that turns it off. Esc turns it off in window mode. In terminal mode
+esc stays with the program, and leader, B turns it off. A click on the chip
+turns it off in any mode. The window-mode key moved from `b` to `B`.
+
+All seven tests in `spotlight_exit_test.go` fail on origin/main at b0cd61cb,
+because that build draws no chip. For `TestEscReachesTheProgramWhileTheSpotlightIsOn`
+that failure is only the positive half: esc already reached the pane there. The
+injected controls below cut one call site each from the current tree, built the
+binary, and ran the named tests.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Esc turns the spotlight off in window mode | the `TurnOffSpotlight` call in the esc block of `HandleWindowManagementModeKey` (`internal/input/keyboard_wm.go`) | `TestEscTurnsTheSpotlightOffInWindowMode`, `TestEscClosesAnOverlayBeforeTheSpotlight` ("did not turn the spotlight off") | **caught** |
+| An open overlay takes esc before the spotlight | the esc check moved to the top of `HandleWindowManagementModeKey`, ahead of the overlays | `TestEscClosesAnOverlayBeforeTheSpotlight` ("esc did not close the palette") | **caught** |
+| A click on the chip turns the spotlight off | the `SpotlightChipAt` branch in the dock click path (`internal/input/mouse_click.go`) | `TestClickingTheSpotlightChipTurnsItOff` | **caught** |
+| Leader, B turns it off in terminal mode | the `prefix_toggle_spotlight` default binding (`internal/config/userconfig.go`) | `TestTheLeaderChordTurnsTheSpotlightOffInTerminalMode` (the chip says "click turn off", and the chord does nothing) | **caught** |
+| Esc in terminal mode reaches the program | esc in `keyboard_terminal.go` turns the spotlight off and is not forwarded, which is what a double-esc exit does to the second esc | `TestEscReachesTheProgramWhileTheSpotlightIsOn` ("the two escs did not reach cat -v") | **caught** |
+| The chip is not dimmed | `applySpotlight` passes no lit spans (`internal/app/spotlight.go`) | `TestSpotlightKeyShowsTheChipAndTheWayOut` ("the chip label is dimmed") | **caught** |
+| The on message says how to turn it off | `spotlightMessage` returns "Spotlight is on." (`internal/app/spotlight_exit.go`) | `TestSpotlightKeyShowsTheChipAndTheWayOut` | **caught** |
+
 ## Mode legends in the dock, and messages cut at a word
 
 Hints mode said its keys in a message, and the dock cut it in the middle of a

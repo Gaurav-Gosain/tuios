@@ -244,6 +244,27 @@ pane, to unpin it. A click on the view focuses the pane. The action is
 `toggle_pip`, and `[pip]` sets the size and the corner. See
 [SESSIONS.md](SESSIONS.md#picture-in-picture).
 
+## Spotlight
+
+`B` in window mode turns the spotlight on and off. The spotlight dims the
+screen outside a circle around the pointer. `Ctrl+B B` turns it on and off in
+any mode.
+
+While the spotlight is on, the dock shows a Spotlight chip with the key that
+turns it off:
+
+| Where | Turn off the spotlight |
+| --- | --- |
+| Window mode | `Esc` |
+| Terminal mode | `Ctrl+B B` |
+| Any mode | Click the Spotlight chip in the dock |
+
+In terminal mode `Esc` goes to the program in the pane, so vim and other
+programs get it. An open dialog, menu or popup closes before `Esc` turns the
+spotlight off. The actions are `toggle_spotlight` and
+`prefix_toggle_spotlight`, and `[spotlight]` sets the size and the dimming.
+The key was `b` in earlier versions.
+
 ## Paste an image
 
 `Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios

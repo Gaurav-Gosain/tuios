@@ -272,8 +272,10 @@ func TestSpotlightKeepsTheLightUndimmed(t *testing.T) {
 }
 
 // TestSpotlightTogglesFromOneKeyInWindowMode drives the key a person presses.
-// It is b, for beam, in window mode: the beam is switched on while somebody is
+// It is B, for beam, in window mode: the beam is switched on while somebody is
 // watching the screen, and a three-keystroke chord is the wrong shape for that.
+// Capital, because a lower case b started words typed into window mode by
+// mistake.
 //
 // Pressed through the real terminal rather than read off the table, because a
 // bound key and a reachable key are different claims. The second press proves
@@ -283,17 +285,17 @@ func TestSpotlightTogglesFromOneKeyInWindowMode(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 
-	if err := term.SendKeys("b"); err != nil {
-		t.Fatalf("press b: %v", err)
+	if err := term.SendKeys("B"); err != nil {
+		t.Fatalf("press B: %v", err)
 	}
-	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
-		t.Fatalf("pressing b in window mode did not turn the spotlight on: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
+		t.Fatalf("pressing B in window mode did not turn the spotlight on: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("b"); err != nil {
-		t.Fatalf("press b again: %v", err)
+	if err := term.SendKeys("B"); err != nil {
+		t.Fatalf("press B again: %v", err)
 	}
-	if err := term.WaitForText("Spotlight: OFF", uiTimeout); err != nil {
-		t.Fatalf("pressing b again did not turn the spotlight off: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText(spotlightOffMessage, uiTimeout); err != nil {
+		t.Fatalf("pressing B again did not turn the spotlight off: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after toggling the spotlight")
 }
@@ -320,7 +322,7 @@ func TestSpotlightIsInTheCommandPalette(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("run the palette row: %v", err)
 	}
-	if err := term.WaitForText("Spotlight on", uiTimeout); err != nil {
+	if err := term.WaitForText("Spotlight is on", uiTimeout); err != nil {
 		t.Fatalf("the palette row did not turn the spotlight on: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the palette toggled the spotlight")
@@ -454,7 +456,7 @@ func TestShakingTheMouseTogglesTheSpotlight(t *testing.T) {
 	newWindow(t, term)
 
 	shakePointer(t, term, 12)
-	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
 		t.Fatalf("shaking the pointer did not turn the beam on: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after shaking the spotlight on")
@@ -480,14 +482,14 @@ func TestSweepingTheMouseLeavesTheSpotlightAlone(t *testing.T) {
 	for col := 110; col >= 10; col -= 10 {
 		mouseHover(t, term, col, 20)
 	}
-	if err := term.WaitForText("Spotlight:", noShakeBudget); err == nil {
+	if err := term.WaitForText("Spotlight is", noShakeBudget); err == nil {
 		t.Errorf("a sweep across the screen and back toggled the beam\n%s", term.Snapshot())
 	}
 
 	// The positive half, in the same fixture. Without it the check above could
 	// pass on a client whose pointer never reaches the program at all.
 	shakePointer(t, term, 12)
-	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
 		t.Fatalf("the pointer never reached the program at all: %v\n%s", err, term.Snapshot())
 	}
 }
@@ -507,7 +509,7 @@ func TestShakingTheMouseWorksWithLinkHoverOff(t *testing.T) {
 	newWindow(t, term)
 
 	shakePointer(t, term, 12)
-	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
 		t.Fatalf("shaking the pointer with links off did not turn the beam on; "+
 			"the motion filter is dropping every event the gesture needs: %v\n%s",
 			err, term.Snapshot())
@@ -523,17 +525,17 @@ func TestTheShakeGestureIsOffByDefault(t *testing.T) {
 	newWindow(t, term)
 
 	shakePointer(t, term, 12)
-	if err := term.WaitForText("Spotlight:", noShakeBudget); err == nil {
+	if err := term.WaitForText("Spotlight is", noShakeBudget); err == nil {
 		t.Errorf("the shake fired with spotlight.shake unset, which is how it ships\n%s",
 			term.Snapshot())
 	}
 
 	// The positive half, in the same fixture: this client can show a spotlight
 	// notification, it just did not have one to show.
-	if err := term.SendKeys("b"); err != nil {
-		t.Fatalf("press b: %v", err)
+	if err := term.SendKeys("B"); err != nil {
+		t.Fatalf("press B: %v", err)
 	}
-	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
 		t.Fatalf("the key did not turn the beam on: %v\n%s", err, term.Snapshot())
 	}
 }

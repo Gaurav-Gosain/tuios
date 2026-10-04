@@ -117,7 +117,7 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 			// allocation the pass makes itself is in every one of them, so
 			// this still fails for any pass that allocates.
 			frame := func() {
-				s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
+				s.apply(canvas, realCols/2, realRows/2, 10, 60, true, [2]spotlightSpan{})
 				tc.restore(canvas)
 			}
 			allocs := testing.AllocsPerRun(20, frame)
@@ -242,13 +242,13 @@ func BenchmarkSpotlightApply(b *testing.B) {
 	// BenchmarkSpotlightCanvas measures the same thing without the trick, by
 	// composing the frame each iteration; this one is the pass on its own.
 	for range 64 {
-		s.apply(canvas, cx, cy, 10, 60, true)
+		s.apply(canvas, cx, cy, 10, 60, true, [2]spotlightSpan{})
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		s.apply(canvas, cx, cy, 10, 60, true)
+		s.apply(canvas, cx, cy, 10, 60, true, [2]spotlightSpan{})
 	}
 }
 
@@ -340,7 +340,7 @@ func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
 			canvas := spotlightMixedCanvas(t, 80, 24)
 			plainSGR := strings.Count(canvas.Render(), "\x1b[")
 
-			newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
+			newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true, [2]spotlightSpan{})
 			dimmedSGR := strings.Count(canvas.Render(), "\x1b[")
 
 			// A row that crosses the beam pays a handful of style changes for
@@ -380,7 +380,7 @@ func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
 			}
 			canvas.SetCell(10, 1, &wide)
 
-			newSpotlightTestState().apply(canvas, 0, 0, 2, 60, true)
+			newSpotlightTestState().apply(canvas, 0, 0, 2, 60, true, [2]spotlightSpan{})
 
 			if placeholder := canvas.CellAt(11, 1); !placeholder.IsZero() {
 				t.Errorf("the placeholder after a wide glyph was written to: %+v", *placeholder)
@@ -414,7 +414,7 @@ func TestSpotlightDimsALightThemeDownwards(t *testing.T) {
 	canvas := lipgloss.NewCanvas(80, 24)
 	canvas.SetCell(2, 2, &uv.Cell{Content: "x", Width: 1})
 
-	newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false)
+	newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false, [2]spotlightSpan{})
 
 	style := cellStyleAt(canvas, 2, 2)
 	if got, want := spotlightBrightness(t, style.Fg), spotlightBrightness(t, theme.TerminalFg()); got >= want {

@@ -146,6 +146,9 @@ type spotlightState struct {
 	// moved yet), the beam stays here rather than jumping to the middle.
 	x, y     int
 	anchored bool
+	// chip is where the dock drew the spotlight chip last frame. See
+	// spotlight_exit.go.
+	chip spotlightChipHit
 
 	cellShade
 }
@@ -267,14 +270,17 @@ func (m *OS) applySpotlight(canvas cellCanvas) {
 	cfg := m.spotlightConfig()
 	cx, cy := m.spotlightAnchor()
 	m.spotlight.apply(canvas, cx, cy, cfg.RadiusRows(), cfg.DimPercent(),
-		cfg.EdgeStyle() == config.SpotlightEdgeSoft)
+		cfg.EdgeStyle() == config.SpotlightEdgeSoft, m.spotlightLitSpans())
 }
 
 // apply dims every cell outside the beam centred on (cx, cy).
 //
 // The ellipse is a circle on screen: a terminal cell is about twice as tall as
 // it is wide, so a radius given in rows reaches twice as many columns.
-func (s *spotlightState) apply(canvas cellCanvas, cx, cy, radius, dim int, soft bool) {
+//
+// The cells in keep stay lit wherever the beam is: they are the way out of the
+// spotlight. See spotlight_exit.go.
+func (s *spotlightState) apply(canvas cellCanvas, cx, cy, radius, dim int, soft bool, keep [2]spotlightSpan) {
 	width, height := canvas.Width(), canvas.Height()
 	if width <= 0 || height <= 0 || radius <= 0 {
 		return
@@ -297,7 +303,19 @@ func (s *spotlightState) apply(canvas cellCanvas, cx, cy, radius, dim int, soft 
 		// the flat dark level, which needs no distance computed for it at all,
 		// and on most rows that is the whole row.
 		lit, x0, x1 := spotlightRowSpan(cx, dy, rad, width)
+		// At most two runs on a row are kept lit, and on almost every row
+		// none are, so the check per cell is two compares against empty runs.
+		var k0, k1 spotlightSpan
+		if keep[0].y == y {
+			k0 = keep[0]
+		}
+		if keep[1].y == y {
+			k1 = keep[1]
+		}
 		for x := range width {
+			if (x >= k0.x0 && x < k0.x1) || (x >= k1.x0 && x < k1.x1) {
+				continue
+			}
 			cell := canvas.CellAt(x, y)
 			if cell == nil || cell.Content == "" {
 				// A zero cell is the placeholder that follows a wide glyph.

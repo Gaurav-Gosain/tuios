@@ -1,6 +1,11 @@
 package config
 
 // Keybinding is one line of a which-key panel: a key and what it does.
+// WhichKeySidebarSpotlightKey is the leader menu's row for b (sidebar) and B
+// (spotlight). The menu rewrites its description while the spotlight is on,
+// so the menu says how to turn it off.
+const WhichKeySidebarSpotlightKey = "b/B"
+
 type Keybinding struct {
 	Key         string
 	Description string
@@ -177,7 +182,9 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		// fills an 80x24 screen, and a line more pushes it off the bottom.
 		kb(WhichKeyCopyPasteKey, "Copy mode/paste image"),
 		kb("s", "Scrollback browser"),
-		kb("b", "Toggle sidebar"),
+		// One row for two keys: the leader's menu fills an 80x24 screen,
+		// and a row more pushes it off the bottom.
+		kb(WhichKeySidebarSpotlightKey, "Sidebar/spotlight"),
 		kb("e", "Focus sidebar"),
 		kb("f", "Search files"),
 	)

@@ -114,6 +114,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.NotificationClick(X, Y) {
 			return o, nil
 		}
+		// The spotlight chip turns the beam off. It is the way out a person
+		// who does not know the key can see.
+		if msg.Button == tea.MouseLeft && o.SpotlightChipAt(X, Y) {
+			save, _ := o.TurnOffSpotlight()
+			return o, save
+		}
 		// A custom component's cell runs its on-click command, the way a hook
 		// runs. It is tested here, after the blocks that own their columns
 		// unconditionally and before the ones whose columns move with the

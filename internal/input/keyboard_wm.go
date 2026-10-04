@@ -142,6 +142,22 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 	}
 
+	// Esc turns the spotlight off. It comes after every overlay and the popup
+	// above, so an open dialog, menu or popup closes first, and it is claimed
+	// on the same terms as the popup's: only while esc still means
+	// enter_window_mode, which does nothing here. See
+	// internal/app/spotlight_exit.go.
+	if key == "esc" && o.SpotlightOn() {
+		action := ""
+		if o.KeybindRegistry != nil {
+			action = lookupAction(msg, o.KeybindRegistry.GetAction)
+		}
+		if action == "" || action == "enter_window_mode" {
+			save, _ := o.TurnOffSpotlight()
+			return o, save
+		}
+	}
+
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetAction)

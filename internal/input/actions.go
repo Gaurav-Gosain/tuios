@@ -260,6 +260,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
+	d.Register("prefix_toggle_spotlight", handleToggleSpotlight)
 	d.Register("toggle_pip", handleTogglePiP)
 
 	// Multifocus actions (see multifocus_actions.go)
@@ -964,13 +965,13 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // System Action Handlers
 // ============================================================================
 
-// handleToggleSpotlight turns the beam on the focused pane's cursor on and off.
-//
-// One key in window mode rather than a chord: it is switched on while somebody
-// is watching the screen, and three keystrokes is the wrong shape for that.
+// handleToggleSpotlight turns the beam on and off. It is B in window mode and
+// leader, B in either mode; the chord is the way out of the beam in terminal
+// mode, where esc belongs to the program in the pane. See
+// internal/app/spotlight_exit.go.
 func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	save := o.ToggleSpotlight()
-	toggleNotify(o, "Spotlight", o.SpotlightOn())
+	o.AnnounceSpotlight()
 	return o, save
 }
 

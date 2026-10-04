@@ -305,12 +305,26 @@ func (m *OS) renderDockString() (string, int) {
 
 	var leftB strings.Builder
 	leftX := 0
+	// The spotlight chip follows the mode pill, or opens the block when the
+	// plan has no mode pill. See spotlight_exit.go.
+	chip := m.spotlightChip()
+	chipW := lipgloss.Width(chip)
+	m.recordSpotlightChip(0, 0, dockY)
+	if chip != "" && !m.dockPlan.Has(config.DockComponentMode) {
+		m.recordSpotlightChip(leftX, chipW, dockY)
+		leftB.WriteString(chip)
+		leftX += chipW
+	}
 	for _, name := range m.dockPlan.Left {
 		var chunk string
 		custom := false
 		switch name {
 		case config.DockComponentMode:
 			chunk = styledModeText
+			if chip != "" {
+				m.recordSpotlightChip(leftX+lipgloss.Width(chunk), chipW, dockY)
+				chunk += chip
+			}
 		case config.DockComponentWorkspaces:
 			// Both dock paths render through here, so the tab hit rects are the
 			// drawn geometry rather than a second guess at it.

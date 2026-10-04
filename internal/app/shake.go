@@ -220,10 +220,6 @@ func (m *OS) noteShakeMotion(msg tea.MouseMotionMsg, now time.Time) tea.Cmd {
 	// change. A gesture needs it more than a key does: it can happen without
 	// being meant, and a screen that darkens with no word for it reads as a
 	// fault rather than as a thing the user just did.
-	state := "OFF"
-	if m.SpotlightOn() {
-		state = "ON"
-	}
-	m.ShowNotification("Spotlight: "+state, "info", m.Settings.NotificationDuration)
+	m.AnnounceSpotlight()
 	return save
 }

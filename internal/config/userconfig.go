@@ -937,13 +937,13 @@ func DefaultConfig() *UserConfig {
 				// The log viewer and the cache stats are reached through the
 				// debug submenu (leader, D) rather than a key of their own.
 				//
-				// The spotlight is not a debug command, and a chord is the wrong
-				// shape for it: it is a thing you switch on while somebody is
-				// watching your screen, so it has to be one key. b for beam,
-				// which is the word the whole feature is written in. It is free
-				// in window mode, and the leader chord that spells the sidebar
-				// (leader, b) is a different scope, so the two do not meet.
-				"toggle_spotlight": {"b"},
+				// The spotlight is not a debug command, and it is switched on
+				// while somebody is watching the screen, so it is one key. B for
+				// beam, capital because the lower case b started words people
+				// typed into window mode by mistake ("bash", "build"), and the
+				// beam that came on dimmed the screen with no visible way out.
+				// Esc turns it off in window mode; leader, B in either mode.
+				"toggle_spotlight": {"B"},
 			},
 			// The arrow keys belong to whatever overlay is up, and each overlay
 			// takes them by key before any binding is consulted. The section
@@ -1033,10 +1033,14 @@ func DefaultConfig() *UserConfig {
 				// s is the scrollback browser, so the capture takes capital C,
 				// one shift away from the c that creates a window. Nothing here
 				// is destructive either way.
-				"prefix_screenshot":         {"C"},
-				"prefix_command_palette":    {"P"},
-				"prefix_file_search":        {"f"},
-				"prefix_toggle_sidebar":     {"b"},
+				"prefix_screenshot":      {"C"},
+				"prefix_command_palette": {"P"},
+				"prefix_file_search":     {"f"},
+				"prefix_toggle_sidebar":  {"b"},
+				// B turns the spotlight on and off from either mode. In
+				// terminal mode it is the way out of the beam, since esc
+				// belongs to the program in the pane there.
+				"prefix_toggle_spotlight":   {"B"},
 				"prefix_session_switcher":   {"S"},
 				"prefix_workspace_switcher": {"W"},
 				"prefix_layout":             {"L"},
