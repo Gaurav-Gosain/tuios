@@ -716,15 +716,27 @@ func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 // sessions' windows from the cache. A blocking refresh on the UI goroutine once
 // froze the client while the daemon was busy; a Cmd runs in its own goroutine,
 // and TryRefreshSessionList drops the request if one is already in flight.
+//
+// The rail draws other sessions from that cache, so a refresh that changed it
+// answers with foreignSessionsChangedMsg, which draws a frame. A refresh that
+// changed nothing answers with nothing and costs no frame.
 func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 	if client == nil {
 		return nil
 	}
 	return func() tea.Msg {
+		before := client.CacheGen()
 		client.TryRefreshSessionList()
-		return nil
+		if client.CacheGen() == before {
+			return nil
+		}
+		return foreignSessionsChangedMsg{}
 	}
 }
+
+// foreignSessionsChangedMsg says a session-list refresh changed the cached
+// listing: another session's windows, titles or agent rows moved.
+type foreignSessionsChangedMsg struct{}
 
 // Update handles all incoming messages and updates the application state.
 //
@@ -1380,11 +1392,23 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// windows still exist anywhere, so the client's window-keyed state is
 		// pruned here, against the listing the last refresh left behind.
 		m.pruneWindowKeyedState()
+		// Nothing on screen changed: the pruned state belongs to windows that
+		// no longer exist, and a refresh that changes the listing answers with
+		// foreignSessionsChangedMsg, which draws. Composing a frame for the
+		// tick itself cost a whole frame every three seconds at idle, with the
+		// sidebar open.
+		m.renderSkipped = true
 		after, refresh := m.foreignSessionRefreshPlan()
 		if !refresh {
 			return m, m.foreignSessionRefreshTick(after)
 		}
 		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
+
+	case foreignSessionsChangedMsg:
+		// The rail's render cache keys on the listing's generation, so this
+		// frame rebuilds the rows the refresh moved.
+		m.renderSkipped = false
+		return m, nil
 
 	case FederationHostsMsg:
 		// Storing a snapshot is the whole handler. The network work happened in

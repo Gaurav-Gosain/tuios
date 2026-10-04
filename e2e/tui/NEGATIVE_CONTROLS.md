@@ -694,6 +694,19 @@ for the history save are unit tests in `internal/input` and
 | A history save decoded its rows under the pane's lock | whole change, same build | unit `TestHistoryCaptureBudget` ("the capture allocated 24.7 MB under the pane's lock, the budget is 4 MB") | **caught in `internal/session`** |
 | The line cache bounded by its line count only | whole change, same build | unit `TestScrollbackCacheIsBounded` ("cache holds 102400 decoded cells after a walk of a 400-column ring, want at most 65536") | **caught in `internal/vt`** |
 
+## The session-list poll tick composes no frame
+
+The poll tick stopped composing a frame to save idle CPU. The rail draws
+other sessions from the listing the tick's refresh fetches, and that refresh
+answered with no message, so a change in another session reached the screen
+only when something else drew a frame. The refresh now answers with
+`foreignSessionsChangedMsg` when the listing changed. The control is the
+tree with the tick change and without that message.
+
+| Fix | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A changed listing draws a frame | `refreshForeignSessionsCmd` in `internal/app/update.go` returns nil after the refresh, as before the fix | `TestSubagentCountOnARestingRow` ("waiting for the count on the finished row": the daemon holds `3 subagents` and the rail never shows it), 3 of 3 runs. a640011 passes, since its tick drew a frame | **caught** (3 of 3 run) |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
