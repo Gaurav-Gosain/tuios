@@ -1,7 +1,6 @@
 package app
 
 import (
-	"runtime"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -31,12 +30,10 @@ import (
 // appearance.link_click. With both clicks on (the default) it names ctrl+click, because that
 // is the one most outer terminals pass on to tuios.
 //
-// A Mac is the exception. macOS reads ctrl+click as a right click, and
-// Terminal.app and iTerm2 open their own menu instead of passing it on. The
-// frame carries every link as OSC 8 (link_emit.go), so cmd+click in the outer
-// terminal opens it there. Only a client on this machine knows it is a Mac; a
-// served client keeps the default, since the viewer's machine is unknown.
-func linkLabelHint(s *config.Settings, onMac bool) string {
+// The same holds on macOS. Ghostty, kitty, WezTerm and Terminal.app all pass
+// ctrl+click on to tuios, and none of them opens the OSC 8 link on cmd+click
+// while the program reports the mouse, so the label never names cmd+click.
+func linkLabelHint(s *config.Settings) string {
 	switch s.LinkClick {
 	case config.LinkClickOff:
 		return ""
@@ -44,9 +41,6 @@ func linkLabelHint(s *config.Settings, onMac bool) string {
 		return "shift+click to open"
 	case config.LinkClickCtrl:
 		return "ctrl+click to open"
-	}
-	if onMac {
-		return "cmd+click to open"
 	}
 	return "ctrl+click to open"
 }
@@ -70,7 +64,7 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 
 	body := overlay.Truncate(sanitizeLinkText(link.URL), linkLabelMax)
 	text := body
-	if hint := linkLabelHint(&m.Settings, runtime.GOOS == "darwin" && m.Client == ClientLocal); hint != "" {
+	if hint := linkLabelHint(&m.Settings); hint != "" {
 		text += "  " + hint
 	}
 	label := tooltipLabel(text, max(renderW-2, 1), pal)
