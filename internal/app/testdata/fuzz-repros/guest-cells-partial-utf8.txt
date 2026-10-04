@@ -1,0 +1,4 @@
+# seed 0. A guest writes the first two bytes of a three-byte rune. The VT
+# decoder took the ESC of the next sequence as the third byte, so the rest of
+# that sequence printed as text and pushed the marker right.
+guest "\xe4\xb8"

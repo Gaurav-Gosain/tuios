@@ -1356,6 +1356,13 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 			i = j - 1
 			continue
 		}
+		// A byte that cannot continue a rune ends it unfinished: the parser
+		// prints U+FFFD and reads the byte again from the ground state. Seen
+		// from here that is a rune completed in the ground state followed by
+		// this byte, so the grapheme is flushed the same way.
+		if e.parser.State() == parser.Utf8State && p[i]&0xc0 != 0x80 {
+			e.lastState = parser.GroundState
+		}
 		e.parser.Advance(p[i])
 		state := e.parser.State()
 		// flush grapheme if we transitioned to a non-utf8 state or we have

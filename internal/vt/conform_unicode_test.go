@@ -125,6 +125,34 @@ func TestConform_UnicodeOnScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
+			// Only a continuation byte extends a rune. Before this, the
+			// decoder took whatever came next as the missing bytes, so a
+			// truncated rune ate the ESC of the sequence after it and the
+			// rest of that sequence printed as text.
+			name:   "a truncated rune does not swallow the escape after it",
+			in:     "a\xe4\xb8\x1b[5Gb",
+			cursor: "5,0",
+			want:   "a\ufffd  b",
+		},
+		{
+			name:   "a truncated rune does not swallow the character after it",
+			in:     "a\xe4b",
+			cursor: "3,0",
+			want:   "a\ufffdb",
+		},
+		{
+			name:   "a truncated rune does not swallow a control after it",
+			in:     "a\xe4\rb",
+			cursor: "1,0",
+			want:   "b\ufffd",
+		},
+		{
+			name:   "a lead byte after a truncated rune starts the next rune",
+			in:     "a\xe4\xe4\xb8\xadb",
+			cursor: "5,0",
+			want:   "a\ufffd\u4e2db",
+		},
+		{
 			name:   "a code point past the last plane becomes a replacement character",
 			in:     "a\xf4\x90\x80\x80b",
 			cursor: "3,0",

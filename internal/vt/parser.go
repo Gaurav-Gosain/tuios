@@ -170,6 +170,15 @@ func (p *seqParser) collectRune(b byte) {
 }
 
 func (p *seqParser) advanceUtf8(b byte) parser.Action {
+	if b&0xc0 != 0x80 {
+		// Only a continuation byte can extend a rune. Anything else ends it
+		// unfinished, and the byte is read again from the ground state: an
+		// ESC that arrives after a truncated rune still starts a sequence,
+		// rather than being taken as the rune's last byte and leaving the
+		// rest of the sequence to print as text.
+		p.abortRune()
+		return p.advance(b)
+	}
 	// Collect UTF-8 rune bytes.
 	p.collectRune(b)
 	rw := utf8ByteLen(byte(p.cmd & 0xff))
@@ -192,6 +201,18 @@ func (p *seqParser) advanceUtf8(b byte) parser.Action {
 	p.paramsLen = 0
 
 	return parser.PrintAction
+}
+
+// abortRune ends a rune that is missing bytes. It prints one U+FFFD for it,
+// which is what Unicode recommends for a maximal invalid subpart, and returns
+// to the ground state.
+func (p *seqParser) abortRune() {
+	if p.handler.Print != nil {
+		p.handler.Print(utf8.RuneError)
+	}
+	p.state = parser.GroundState
+	p.paramsLen = 0
+	p.cmd = 0
 }
 
 // inStringState reports whether the parser is collecting the payload of a
