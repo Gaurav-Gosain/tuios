@@ -168,13 +168,10 @@ func redact(argv []string) []string {
 		if i > 0 {
 			out = append(out, ";")
 		}
-		name := cmd[0]
-		if full, ok := aliases[name]; ok {
-			name = full
-		}
+		name, lookupErr := lookupCommand(cmd[0])
 		_, answered := commands[name]
 		switch {
-		case !knownCommand(name):
+		case lookupErr != nil:
 			out = append(out, "<unknown command>")
 			if len(cmd) > 1 {
 				out = append(out, fmt.Sprintf("<%d redacted>", len(cmd)-1))
@@ -211,25 +208,6 @@ func redact(argv []string) []string {
 	return out
 }
 
-// knownCommand reports whether name (an alias already resolved) is a tmux
-// command the shim knows of: one it answers, ignores or refuses, or the full
-// name behind one of tmux's aliases. Only such a name reaches the log, since
-// any other word in command position may be text a split left there.
-func knownCommand(name string) bool {
-	if _, ok := commands[name]; ok {
-		return true
-	}
-	if slices.Contains(ignoredCommands, name) || slices.Contains(refusedCommands, name) {
-		return true
-	}
-	for _, full := range aliases {
-		if full == name {
-			return true
-		}
-	}
-	return false
-}
-
 // ignoredCommands are known and do nothing here, by design: tuios owns the
 // layout, the styling and the options, so a tool setting them loses nothing
 // it needs. They succeed with any arguments.
@@ -241,65 +219,6 @@ var ignoredCommands = []string{
 	"select-layout",
 	"resize-pane",
 	"start-server",
-}
-
-// aliases are tmux's short command names.
-var aliases = map[string]string{
-	"splitw":    "split-window",
-	"neww":      "new-window",
-	"send":      "send-keys",
-	"capturep":  "capture-pane",
-	"display":   "display-message",
-	"lsp":       "list-panes",
-	"lsw":       "list-windows",
-	"ls":        "list-sessions",
-	"has":       "has-session",
-	"killp":     "kill-pane",
-	"killw":     "kill-window",
-	"selectp":   "select-pane",
-	"selectw":   "select-window",
-	"renamew":   "rename-window",
-	"respawnp":  "respawn-pane",
-	"set":       "set-option",
-	"setw":      "set-window-option",
-	"refresh":   "refresh-client",
-	"selectl":   "select-layout",
-	"resizep":   "resize-pane",
-	"start":     "start-server",
-	"killses":   "kill-session",
-	"kill-ses":  "kill-session",
-	"new":       "new-session",
-	"attach":    "attach-session",
-	"a":         "attach-session",
-	"at":        "attach-session",
-	"showw":     "show-window-options",
-	"show":      "show-options",
-	"lsc":       "list-clients",
-	"breakp":    "break-pane",
-	"joinp":     "join-pane",
-	"swapp":     "swap-pane",
-	"lastp":     "last-pane",
-	"pasteb":    "paste-buffer",
-	"loadb":     "load-buffer",
-	"deleteb":   "delete-buffer",
-	"setb":      "set-buffer",
-	"showb":     "show-buffer",
-	"run":       "run-shell",
-	"if":        "if-shell",
-	"source":    "source-file",
-	"bind":      "bind-key",
-	"unbind":    "unbind-key",
-	"wait":      "wait-for",
-	"respawnw":  "respawn-window",
-	"linkw":     "link-window",
-	"movew":     "move-window",
-	"swapw":     "swap-window",
-	"lastw":     "last-window",
-	"next":      "next-window",
-	"prev":      "previous-window",
-	"rotatew":   "rotate-window",
-	"pipep":     "pipe-pane",
-	"clearhist": "clear-history",
 }
 
 // refusedCommands end or replace tuios sessions, which the shim never does:
@@ -368,9 +287,15 @@ func worse(a, b string) string {
 	return a
 }
 
-func (s *Shim) runOne(name string, args []string) (string, []string, error) {
-	if full, ok := aliases[name]; ok {
-		name = full
+func (s *Shim) runOne(word string, args []string) (string, []string, error) {
+	name, err := lookupCommand(word)
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "unknown command") {
+			// The word may be text a split left in command position: stderr
+			// names it, the log does not.
+			err = logAs{err: err, log: "unknown command"}
+		}
+		return OutcomeUnsupported, nil, err
 	}
 	if h, ok := commands[name]; ok {
 		o, d, err := h(s, name, args)
@@ -393,13 +318,8 @@ func (s *Shim) runOne(name string, args []string) (string, []string, error) {
 	if slices.Contains(refusedCommands, name) {
 		return OutcomeUnsupported, nil, fmt.Errorf("%s: refused, the tuios tmux shim does not start, attach or end sessions", name)
 	}
-	err := fmt.Errorf("unknown command: %s", name)
-	if !knownCommand(name) {
-		// The word may be text a split left in command position: stderr
-		// names it, the log does not.
-		err = logAs{err: err, log: "unknown command"}
-	}
-	return OutcomeUnsupported, nil, err
+	// A tmux command the shim does not answer, named in full.
+	return OutcomeUnsupported, nil, fmt.Errorf("unknown command: %s", name)
 }
 
 // logAs is an error printed as err and logged as log, for an error whose

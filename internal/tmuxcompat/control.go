@@ -148,7 +148,7 @@ func (c *control) line(format string, args ...any) {
 func (c *control) command(argv []string, flags int) bool {
 	s := c.s
 	name := argv[0]
-	if full, ok := aliases[name]; ok {
+	if full, err := lookupCommand(name); err == nil {
 		name = full
 	}
 	c.num++
