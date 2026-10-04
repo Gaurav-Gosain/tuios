@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The marks a pane paints over its own output: the selection, the search
@@ -353,7 +355,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	cursorX := cursor.X
 	cursorY := cursor.Y
 
-	var builder strings.Builder
+	// A paneTextBuf rather than a strings.Builder because a logical line
+	// that turns out to hold a URL is drawn again, and the buffer is cut back
+	// to where the line began. See the end of the row loop.
+	var builder paneTextBuf
 
 	contentW := window.ContentWidth()
 	contentH := window.ContentHeight()
@@ -368,6 +373,25 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	inScrollbackMode := window.ScrollbackOffset > 0
 
 	marks := m.marks()
+
+	// Links in this frame. See link_emit.go.
+	//
+	// A detected URL is found without a second pass over the cells: the row
+	// loop watches for "://" as it reads them. A logical line (the rows one
+	// soft wrap joins) that holds one is then read as text, its URLs found,
+	// and the line drawn again with them. Most lines hold none and are drawn
+	// once, which is the whole cost of the feature on them.
+	findBare := m.Settings.Links == config.LinksAll
+	var bareRows [][]paneBareSpan
+	lineTop, lineStart := 0, 0 // the logical line's first row and its offset in builder
+	lineScanned := false       // the line's URLs are in bareRows
+	schemeState := 0           // characters of "://" seen in a row
+	lineHasScheme := false
+	var openLink uv.Link
+	// A marked link with an id= is one link wherever its runs are, so the
+	// hover lights every run with the same address and id, not only the
+	// one under the pointer.
+	hoverByID := hasLinkRun && linkRun.Marked && linkParamID(linkRun.Params) != ""
 
 	inCopyMode := window.InCopyMode()
 	// The block cursor is copy mode showing itself. A pane that is merely
@@ -594,10 +618,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	for y := range maxY {
+	for y := 0; y < maxY; y++ {
 		if y > 0 {
 			builder.WriteRune('\n')
 		}
+		if y == lineTop {
+			lineStart = builder.Len()
+		}
+		schemeState = 0
 
 		batchBuilder.Reset()
 		batchHasStyle = false
@@ -652,59 +680,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 		}
 
+		// The detected URLs on this row, if any. See link_emit.go.
+		var bareRow []paneBareSpan
+		if bareRows != nil {
+			bareRow = bareRows[y]
+		}
+
 		x := 0
 		for x < maxX {
 			var cell *uv.Cell
-
-			if showCopyCursor && x == copyModeCursorX && y == copyModeCursorY {
-				char := " "
-				var cursorCell *uv.Cell
-				charWidth := 1
-
-				if inScrollbackMode {
-					if sbRow {
-						if x < len(sbLine) {
-							cursorCell = &sbLine[x]
-							if cursorCell.Content != "" {
-								char = cursorCell.Content
-							}
-							if cursorCell.Width > 0 {
-								charWidth = cursorCell.Width
-							}
-						}
-					} else {
-						screenY := y - window.ScrollbackOffset
-						if screenY >= 0 && screenY < screen.Height() {
-							cursorCell = screen.CellAt(x, screenY)
-							if cursorCell != nil && cursorCell.Content != "" {
-								char = cursorCell.Content
-							}
-							if cursorCell != nil && cursorCell.Width > 0 {
-								charWidth = cursorCell.Width
-							}
-						}
-					}
-				} else {
-					cursorCell = screen.CellAt(x, y)
-					if cursorCell != nil && cursorCell.Content != "" {
-						char = cursorCell.Content
-					}
-					if cursorCell != nil && cursorCell.Width > 0 {
-						charWidth = cursorCell.Width
-					}
-				}
-
-				flushBatch()
-
-				builder.WriteString(renderStyledText(marks.cursor, char))
-
-				prevValid = false
-				prevIsCursor = false
-
-				x += charWidth
-				continue
-			}
-
 			if inScrollbackMode {
 				if sbRow {
 					if x < len(sbLine) {
@@ -718,6 +702,73 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 			} else {
 				cell = screen.CellAt(x, y)
+			}
+
+			// "://" in this row means the logical line may hold a URL.
+			// Read as one byte: a string compare per cell was a measurable
+			// share of the loop.
+			if findBare && !lineScanned && cell != nil {
+				var b byte
+				if len(cell.Content) == 1 {
+					b = cell.Content[0]
+				}
+				switch {
+				case b == ':':
+					schemeState = 1
+				case b == '/' && schemeState > 0:
+					schemeState++
+					if schemeState == 3 {
+						lineHasScheme = true
+					}
+				default:
+					schemeState = 0
+				}
+			}
+
+			// The link this cell belongs to, carried to the outer terminal as
+			// OSC 8. A marked link wins over a detected one. The test in front
+			// is three length checks, which is what a cell outside any link
+			// pays; a change flushes the run and writes the sequence between
+			// runs, never inside one.
+			if openLink.URL != "" || bareRow != nil || (cell != nil && cell.Link.URL != "") {
+				var cellLink uv.Link
+				if cell != nil {
+					cellLink = cell.Link
+				}
+				if cellLink.URL == "" && bareRow != nil {
+					cellLink = bareLinkFor(bareRow, x)
+				}
+				if cellLink != openLink {
+					flushBatch()
+					if openLink.URL != "" {
+						builder.WriteString(resetHyperlink)
+					}
+					if cellLink.URL != "" {
+						builder.WriteString(ansi.SetHyperlink(cellLink.URL, cellLink.Params))
+					}
+					openLink = cellLink
+				}
+			}
+
+			if showCopyCursor && x == copyModeCursorX && y == copyModeCursorY {
+				char := " "
+				charWidth := 1
+				if cell != nil && cell.Content != "" {
+					char = cell.Content
+				}
+				if cell != nil && cell.Width > 0 {
+					charWidth = cell.Width
+				}
+
+				flushBatch()
+
+				builder.WriteString(renderStyledText(marks.cursor, char))
+
+				prevValid = false
+				prevIsCursor = false
+
+				x += charWidth
+				continue
 			}
 
 			char := " "
@@ -815,7 +866,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// branches above so a run the user is selecting or searching keeps
 			// the highlight that says so. A pane the pointer is not over has
 			// hasLinkRun false and pays one boolean per cell.
-			if hasLinkRun && linkRun.Contains(x, y) {
+			if hasLinkRun && (linkRun.Contains(x, y) ||
+				(hoverByID && cell != nil && cell.Link.URL == linkRun.URL && cell.Link.Params == linkRun.Params)) {
 				flushBatch()
 
 				builder.WriteString(renderStyledText(linkHoverStyle(), char))
@@ -888,6 +940,37 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 
 		flushBatch()
+		// A link never runs past the end of its row in the frame: the
+		// compositor places rows independently.
+		if openLink.URL != "" {
+			builder.WriteString(resetHyperlink)
+			openLink = uv.Link{}
+		}
+
+		if findBare {
+			wraps := y+1 < maxY && paneRowWraps(window, y)
+			// The logical line ends on this row and holds "://": find its
+			// URLs and draw it again from its first row.
+			if !wraps && lineHasScheme && !lineScanned {
+				if bareRows == nil {
+					bareRows = make([][]paneBareSpan, maxY)
+				}
+				bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY)
+				lineScanned = true
+				builder.Truncate(lineStart)
+				y = lineTop - 1
+				// The newline in front of the first row is before lineStart,
+				// so the redrawn row must not write another.
+				if lineTop > 0 {
+					builder.Truncate(lineStart - 1)
+				}
+				continue
+			}
+			if !wraps {
+				lineTop = y + 1
+				lineScanned, lineHasScheme = false, false
+			}
+		}
 	}
 
 	content := builder.String()

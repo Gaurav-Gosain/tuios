@@ -35,7 +35,11 @@ type PaneLink struct {
 	// pane, and a run is meaningless against any other.
 	WindowID string
 	// URL is the address the link points at, exactly as the program wrote it.
+	// For a marked link it is the OSC 8 target, never the visible text.
 	URL string
+	// Params are the OSC 8 parameters of a marked link, id= included. Two
+	// runs with the same URL and an id= in the same Params are one link.
+	Params string
 	// Marked says the address came from OSC 8, so the program declared it. A
 	// bare URL found in plain text is not marked, and the two are treated
 	// differently by nothing except this field and the config that finds them.
@@ -65,7 +69,7 @@ func (l PaneLink) Contains(x, y int) bool {
 // The pointer moving from one cell of a link to the next must not repaint the
 // pane, and this is what tells the two apart.
 func (l PaneLink) Same(o PaneLink) bool {
-	return l.WindowID == o.WindowID && l.URL == o.URL &&
+	return l.WindowID == o.WindowID && l.URL == o.URL && l.Params == o.Params &&
 		l.Y0 == o.Y0 && l.X0 == o.X0 && l.Y1 == o.Y1 && l.X1 == o.X1
 }
 
@@ -155,6 +159,7 @@ func markedLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 	return PaneLink{
 		WindowID: window.ID,
 		URL:      want.URL,
+		Params:   want.Params,
 		Marked:   true,
 		Y0:       y0, X0: x0, Y1: y1, X1: x1,
 		Row: y, Col: x,
