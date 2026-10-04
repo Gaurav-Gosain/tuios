@@ -840,7 +840,7 @@ turns it off in any mode. The window-mode key moved from `b` to `B`.
 All seven tests in `spotlight_exit_test.go` fail on origin/main at b0cd61cb,
 because that build draws no chip. For `TestEscReachesTheProgramWhileTheSpotlightIsOn`
 that failure is only the positive half: esc already reached the pane there. The
-injected controls below cut one call site each from the current tree, built the
+injected controls below change one call site each from the current tree, built the
 binary, and ran the named tests.
 
 | Fix | Cut | Tests that fail | Verdict |
@@ -850,6 +850,7 @@ binary, and ran the named tests.
 | A click on the chip turns the spotlight off | the `SpotlightChipAt` branch in the dock click path (`internal/input/mouse_click.go`) | `TestClickingTheSpotlightChipTurnsItOff` | **caught** |
 | Leader, B turns it off in terminal mode | the `prefix_toggle_spotlight` default binding (`internal/config/userconfig.go`) | `TestTheLeaderChordTurnsTheSpotlightOffInTerminalMode` (the chip says "click turn off", and the chord does nothing) | **caught** |
 | Esc in terminal mode reaches the program | esc in `keyboard_terminal.go` turns the spotlight off and is not forwarded, which is what a double-esc exit does to the second esc | `TestEscReachesTheProgramWhileTheSpotlightIsOn` ("the two escs did not reach cat -v") | **caught** |
+| A single esc in terminal mode reaches the program without delay | `HandleTerminalModeKey` (`internal/input/keyboard_terminal.go`) sleeps 300 ms on esc while the spotlight is on, which is the hold a double-esc exit needs | `TestEscReachesTheProgramWhileTheSpotlightIsOn` ("a single esc took 365ms to reach the pane, a plain key 16ms; esc is held back") | **caught** |
 | The chip is not dimmed | `applySpotlight` passes no lit spans (`internal/app/spotlight.go`) | `TestSpotlightKeyShowsTheChipAndTheWayOut` ("the chip label is dimmed") | **caught** |
 | The on message says how to turn it off | `spotlightMessage` returns "Spotlight is on." (`internal/app/spotlight_exit.go`) | `TestSpotlightKeyShowsTheChipAndTheWayOut` | **caught** |
 

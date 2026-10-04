@@ -200,6 +200,20 @@ func TestEscReachesTheProgramWhileTheSpotlightIsOn(t *testing.T) {
 	// the escs means they left it on.
 	waitSpotlightChip(t, term)
 
+	// One esc on its own reaches the pane as fast as a plain key does. A
+	// double-esc exit has to hold the first esc until it knows no second one
+	// follows, and that hold is the lag this measures. The tty echoes each
+	// key as it arrives, esc as ^[, so the echo is the moment cat got it.
+	plain := echoLatency(t, term, "X", "X")
+	single := echoLatency(t, term, tuitest.Esc, "X^[")
+	t.Logf("echo of a plain key took %v, of a single esc %v", plain, single)
+	if single > plain+250*time.Millisecond {
+		t.Errorf("a single esc took %v to reach the pane, a plain key %v; esc is held back", single, plain)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("send enter: %v", err)
+	}
+
 	// Two escs 100 ms apart, inside the 300 ms a double esc would take, then
 	// a Z to mark the end. They are sent apart because a host that sends ESC
 	// ESC Z as one write has sent esc and alt+z, which is a different press.
@@ -255,4 +269,21 @@ func TestTheLeaderChordTurnsTheSpotlightOffInTerminalMode(t *testing.T) {
 	if strings.Contains(term.Screen().Text(), "BQ") {
 		t.Errorf("the chord's B reached the pane\n%s", term.Snapshot())
 	}
+}
+
+// echoLatency sends one key and returns how long the screen took to show one
+// more want than it showed before the key.
+func echoLatency(t *testing.T, term *tuitest.Terminal, key any, want string) time.Duration {
+	t.Helper()
+	before := strings.Count(term.Screen().Text(), want)
+	sent := time.Now()
+	if err := term.SendKeys(key); err != nil {
+		t.Fatalf("send %v: %v", key, err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), want) > before
+	}, 2*time.Second); err != nil {
+		t.Fatalf("the pane never showed %q after the key: %v\n%s", want, err, term.Snapshot())
+	}
+	return time.Since(sent)
 }

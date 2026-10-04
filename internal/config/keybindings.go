@@ -1,11 +1,11 @@
 package config
 
-// Keybinding is one line of a which-key panel: a key and what it does.
 // WhichKeySidebarSpotlightKey is the leader menu's row for b (sidebar) and B
 // (spotlight). The menu rewrites its description while the spotlight is on,
 // so the menu says how to turn it off.
 const WhichKeySidebarSpotlightKey = "b/B"
 
+// Keybinding is one line of a which-key panel: a key and what it does.
 type Keybinding struct {
 	Key         string
 	Description string
