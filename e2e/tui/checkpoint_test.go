@@ -140,8 +140,13 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 // restore of the safety checkpoint that undoes it would delete the file. So
 // the restore is refused, names the file, and changes nothing.
 //
-// Negative control (NEGATIVE_CONTROLS.md): with the blockingPath check cut
-// from RestoreTree, the restore succeeds and .env holds turn 1's text.
+// The refusal says nothing in the work tree was changed, so it also leaves
+// no safety checkpoint: the list and the refs are the same as before.
+//
+// Negative controls (NEGATIVE_CONTROLS.md): with the blockingPath check cut
+// from RestoreTree, the restore succeeds and .env holds turn 1's text. With
+// the DeleteCheckpoints call cut from the refusal in verbRestoreCheckpoint,
+// the list holds a safety checkpoint 3.
 func TestCheckpointRestoreKeepsIgnoredFiles(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -171,10 +176,19 @@ func TestCheckpointRestoreKeepsIgnoredFiles(t *testing.T) {
 	if err := os.WriteFile(env, []byte("TOKEN=the-persons-own\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	refsBefore := testutil.Git(t, repo, "for-each-ref", "--format=%(refname)", "refs/tuios/checkpoints/")
 
 	out, err := tr.run("checkpoint", "restore", "-s", "agent", "1")
 	if err == nil || !strings.Contains(out, ".env") {
 		t.Errorf("checkpoint restore 1 over an ignored .env = %v:\n%s\nwant a refusal that names .env", err, out)
+	}
+	// The refusal says nothing was changed, so it must leave no safety
+	// checkpoint behind either.
+	if list := tr.list(); len(list) != 2 {
+		t.Errorf("after the refused restore, checkpoint list = %+v, want only turn checkpoints 1 and 2", list)
+	}
+	if refsAfter := testutil.Git(t, repo, "for-each-ref", "--format=%(refname)", "refs/tuios/checkpoints/"); refsAfter != refsBefore {
+		t.Errorf("the refused restore changed the checkpoint refs.\nbefore:\n%s\nafter:\n%s", refsBefore, refsAfter)
 	}
 	if got := readFile(t, env); got != "TOKEN=the-persons-own\n" {
 		t.Fatalf("after the restore, .env = %q: the person's own values are gone", got)

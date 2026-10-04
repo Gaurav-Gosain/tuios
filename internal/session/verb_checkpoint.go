@@ -344,6 +344,12 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	var blocked *worktree.OverwriteError
 	switch {
 	case errors.As(err, &blocked):
+		// RestoreTree refused before it touched a file. The safety checkpoint
+		// it was compared against holds nothing new, and a refusal that says
+		// nothing was changed must not leave one behind.
+		if derr := worktree.DeleteCheckpoints(ctx, repo.root, []worktree.Checkpoint{safety}); derr != nil {
+			LogBasic("Could not remove safety checkpoint %d of window %s after a refused restore: %v", safety.N, shortWindowID(target.ID), derr)
+		}
 		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
 			Param:     "n",
 			Available: blocked.Paths,
