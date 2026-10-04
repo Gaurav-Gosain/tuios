@@ -898,6 +898,17 @@ The fix is e1af811a (#384), which landed after v0.8.5. The panes of a loaded
 layout reach the client in a state sync, and before that fix nothing
 subscribed a pane that arrived that way.
 
+## Copy path on a folder row (#414)
+
+Each control cut one line, built the binary, and ran
+`TestSidebarFolderCopyPath`.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The menu row | `fileRowMenu`: the Copy path row for a folder made `if false` | `TestSidebarFolderCopyPath/standalone` and `/daemon` (the menu never shows Copy path) | **caught** |
+| The action | `handleSidebarFileAction`: the `file_copy_path` case cut | `TestSidebarFolderCopyPath/standalone` and `/daemon` (the menu row writes nothing) | **caught** |
+| The key | `getDefaultSidebarFilesKeybinds`: `Y` cut | `TestSidebarFolderCopyPath/standalone` and `/daemon` (`Y` on the listing writes nothing) | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

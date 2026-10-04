@@ -102,7 +102,7 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			name: "a folder row",
 			open: func() { rightClickFile(t, m, "apple") },
 			want: []string{
-				"Open folder", "Copy", "Cut", "Paste (dim)", "New file or folder",
+				"Open folder", "Copy path", "Copy", "Cut", "Paste (dim)", "New file or folder",
 				"Rename", "Delete", "Delete for good", "Sidebar settings",
 			},
 		},

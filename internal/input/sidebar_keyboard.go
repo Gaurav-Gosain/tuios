@@ -229,6 +229,8 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 		return o.SidebarFileOpen()
 	case sidebarActFileEdit:
 		return o.SidebarFileEdit()
+	case sidebarActFileCopyPath:
+		return o.SidebarFileCopyPath()
 	case sidebarActFileCreate:
 		o.SidebarFileCreate()
 	case sidebarActFileRename:

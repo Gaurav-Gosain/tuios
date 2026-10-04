@@ -1407,6 +1407,9 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// row this answers and everywhere else activate does, unchanged.
 		"file_open": {"enter"},
 		"file_edit": {"shift+enter"},
+		// Enter on a folder opens it, so a folder's path needs a key of its
+		// own. Y is yank with shift, next to y for the file itself.
+		"file_copy_path": {"Y"},
 	}
 }
 

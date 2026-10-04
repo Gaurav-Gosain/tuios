@@ -522,6 +522,11 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 	if t.Name != "" && !t.IsDir && !t.Up {
 		rows = append(rows, m.item(glyphFile, "Edit", "file_edit", !canOpen))
 	}
+	// A file's first row already copies its path. A folder's opens it, so the
+	// copy is a row of its own (issue #414).
+	if t.Name != "" && t.IsDir && !t.Up {
+		rows = append(rows, m.item(glyphCopy, "Copy path", "file_copy_path", !canOpen))
+	}
 	return fileMenuTitle(t), append(rows,
 		separator(),
 		m.item(glyphCopy, "Copy", "file_copy", !hasTarget),

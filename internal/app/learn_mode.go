@@ -66,6 +66,7 @@ var learnUnavailable = map[string]string{
 	"file_paste":              learnNoteFiles,
 	"file_open":               learnNoteFiles,
 	"file_edit":               learnNoteFiles,
+	"file_copy_path":          learnNoteFiles,
 	"file_search":             learnNoteFiles,
 	"paste_clipboard":         learnNotePaste,
 	"terminal_paste_host":     learnNotePaste,

@@ -19,6 +19,10 @@ file in a new pane. The pane runs the editor set under Settings, Sidebar, File
 editor. A folder keeps its navigation action. tuios does not edit a file that is
 not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 
+`Y` copies the absolute path of the selected file or folder. The context menu
+of a folder has a Copy path row that does the same. The binding is
+`file_copy_path` in `[keybindings.sidebar_files]`.
+
 When the session runs on another machine, tuios does not check the file on your
 machine. If the editor is not on that machine, no pane opens. tuios shows a
 dock note that names the editor and the machine, so you know what to check.

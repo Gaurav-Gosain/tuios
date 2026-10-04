@@ -64,6 +64,9 @@ const (
 	// hardcoded key hint waiting to go stale.
 	sidebarActFileOpen = "file_open"
 	sidebarActFileEdit = "file_edit"
+	// file_copy_path copies the row's path whatever the row is. file_open
+	// copies a file's path too, but on a folder it opens the folder.
+	sidebarActFileCopyPath = "file_copy_path"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -236,6 +239,7 @@ func (d *ActionDispatcher) registerHandlers() {
 		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
 		sidebarActFilePaste, sidebarActFileOpen, sidebarActFileEdit,
+		sidebarActFileCopyPath,
 	} {
 		d.Register(action, makeSidebarFileHandler(action))
 	}

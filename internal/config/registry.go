@@ -429,6 +429,7 @@ var ActionDescriptions = map[string]string{
 	"file_paste":          "Files: paste into this folder",
 	"file_open":           "Files: open this folder, or copy this file's path",
 	"file_edit":           "Files: edit this text file in a new pane",
+	"file_copy_path":      "Files: copy the path of this file or folder",
 
 	// The Inbox, the prompt open over it, and the mailbox. Each acts only
 	// while its overlay is up.

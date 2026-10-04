@@ -306,6 +306,21 @@ func (m *OS) SidebarFileOpen() tea.Cmd {
 	return m.fileViewOpen(t.Dir, t.Name, t.IsDir)
 }
 
+// SidebarFileCopyPath puts the absolute path of the row the menu was opened
+// on, or of the row under the cursor, on the clipboard. It acts on a folder
+// row as on a file row. It reads nothing on disk, so like the open action it
+// asks only that the section is on screen.
+func (m *OS) SidebarFileCopyPath() tea.Cmd {
+	if !m.filesOn() {
+		return nil
+	}
+	_, path, ok := m.fileActionTarget()
+	if !ok {
+		return nil
+	}
+	return m.copyFilePath(path)
+}
+
 type fileEditMsg struct {
 	Path  string
 	Argv  []string
