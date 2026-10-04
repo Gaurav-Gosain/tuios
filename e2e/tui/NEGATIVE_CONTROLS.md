@@ -989,6 +989,21 @@ cut.
 | An unknown theme | `previewThemeColors`: the `AvailableThemes` check made `false &&` | `TestCLIRefusesNamesThatDoNotExist/--preview-theme_nope` (prints the default palette and exits 0) | **caught** |
 | A value only recorded | `runSetConfig`: the `Not applied` print cut | `TestCLIListsPrintJSON` (stderr is empty with no client attached) | **caught** |
 
+## The complete keybinds list (#434)
+
+The test is `TestKeybindsListShowsEveryScope` in `keybinds_list_test.go`. One
+build made both cuts. Each assertion reads one of them.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (4f6232b3) | `TestKeybindsListShowsEveryScope` (`keybinds list --json` exits 1 on the unknown flag) | **caught** |
+| The rail files scope | `keybindRows`: registry bindings in `sidebar.files` skipped | `TestKeybindsListShowsEveryScope` (no `file_copy_path` row on `Y`) | **caught** |
+| Actions with no key | `keybindRows`: the loop over unbound actions made to range over nothing | `TestKeybindsListShowsEveryScope` (no `close_workspace` row) | **caught** |
+
+The unit test `TestKeybindsListCoversEveryActionAndDefault` in `cmd/tuios`
+checks every action and default key on Linux and on macOS. It catches the
+same two cuts.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
