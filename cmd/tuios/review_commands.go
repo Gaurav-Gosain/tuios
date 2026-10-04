@@ -212,12 +212,18 @@ func reviewHeading(res reviewDiffResult, on string) string {
 // each is printed with its control characters left out.
 func printReview(w io.Writer, res reviewDiffResult, on string, stat bool) error {
 	fmt.Fprintln(w, reviewHeading(res, on))
-	if len(res.Files) == 0 {
+	return printDiffFiles(w, res.Files, res.Notes, stat)
+}
+
+// printDiffFiles writes the list of changed files, then unless stat each
+// file's hunks with the notes under the lines they are on.
+func printDiffFiles(w io.Writer, files []review.File, notes []review.Note, stat bool) error {
+	if len(files) == 0 {
 		_, err := fmt.Fprintln(w, "Nothing changed.")
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	for _, f := range res.Files {
+	for _, f := range files {
 		name := plainLine(f.Path)
 		if f.OldPath != "" {
 			name = plainLine(f.OldPath) + " -> " + name
@@ -239,25 +245,25 @@ func printReview(w io.Writer, res reviewDiffResult, on string, stat bool) error 
 		return nil
 	}
 	notesOn := map[string][]review.Note{}
-	for _, n := range res.Notes {
+	for _, n := range notes {
 		notesOn[n.Path] = append(notesOn[n.Path], n)
 	}
-	for _, f := range res.Files {
+	for _, f := range files {
 		if len(f.Hunks) == 0 {
 			continue
 		}
 		fmt.Fprintf(w, "\n%s\n", plainLine(f.Path))
-		notes := notesOn[f.Path]
+		onFile := notesOn[f.Path]
 		for _, h := range f.Hunks {
 			fmt.Fprintln(w, plainLine(h.Header))
-			for _, n := range notes {
+			for _, n := range onFile {
 				if n.IsHunk() && n.HunkHeader == h.Header {
 					fmt.Fprintln(w, noteLine(n))
 				}
 			}
 			for _, l := range h.Lines {
 				fmt.Fprintln(w, diffLine(l))
-				for _, n := range notes {
+				for _, n := range onFile {
 					if n.IsHunk() {
 						continue
 					}
